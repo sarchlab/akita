@@ -12,7 +12,7 @@ install_env_job:
   - export PATH=$PATH:$GOPATH/bin
   - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
-  - rsync -az ${CI_PROJECT_DIR}/ $PROJECT_DIR
+  - copy -r ${CI_PROJECT_DIR}/ $PROJECT_DIR
 
 
 build_job:
