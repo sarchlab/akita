@@ -3,3 +3,6 @@
 
 # Editor files
 .*.swp
+
+# Coverage report
+*.coverprofile

@@ -1,11 +1,28 @@
 image: golang:latest
 
 stages:
+  - install_env
   - build
+  - test
+
+install_env_job:
+  stage: install_env
+  script:
+  - echo $GOPATH
+  - export $PATH=$PATH:$GOPATH/bin
+  - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
+  - mkdir -p $PROJECT_DIR
+  - rsync -az ${CI_PROJECT_DIR}/ $PROJECT_DIR
+
 
 build_job:
   stage: build
   script: 
-  - go get ./...
-  - go test ./...
+  - cd $PROJECT_DIR && go get ./...
+  - cd $PROJECT_DIR && go build ./...
+
+test_job:
+  stage: test
+  script:
+  - cd $PROJECT_DIR && ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress
     
