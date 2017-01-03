@@ -1,4 +1,4 @@
-image: go:latest
+image: golang:latest
 
 stages:
   - build
