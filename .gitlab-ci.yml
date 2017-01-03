@@ -13,7 +13,8 @@ test_job:
   - cp -r ${CI_PROJECT_DIR}/ $PROJECT_DIR
   - cd $PROJECT_DIR && go get ./...
   - go get github.com/tools/godep
-  - cd $PROJECT_DIR && godep save ./...
+  - go get github.com/onsi/ginkgo
+  - go get github.com/onsi/gomega
   - go install github.com/onsi/ginkgo/ginkgo
   - cd $PROJECT_DIR && go build ./...
   - cd $PROJECT_DIR && ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress
