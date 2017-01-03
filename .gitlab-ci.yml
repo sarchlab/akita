@@ -1,7 +1,7 @@
 image: golang:latest
 
 before_script:
-  - export GOPATH=${pwd}
+  - export GOPATH=$(pwd)
 
 stages:
   - test
