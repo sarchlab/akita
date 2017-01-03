@@ -10,7 +10,7 @@ test_job:
   - export PATH=$PATH:$GOPATH/bin
   - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
-  - cp -r ${CI_PROJECT_DIR}/ $PROJECT_DIR
+  - cp -r ${CI_PROJECT_DIR}/ $GOPATH/src/syifan
   - echo $PROJECT_DIR
   - ls $PROJECT_DIR
   - cd $PROJECT_DIR && go get -t ./...
