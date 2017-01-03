@@ -1,0 +1,11 @@
+image: go:latest
+
+stages:
+  - build
+
+build_job:
+  stage: build
+  script: 
+  - go get ./...
+  - go test ./...
+    
