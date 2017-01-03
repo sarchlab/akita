@@ -3,7 +3,7 @@ image: golang:latest
 stages:
   - test
 
-install_env_job:
+test_job:
   stage: test
   script:
   - echo $GOPATH
@@ -11,16 +11,6 @@ install_env_job:
   - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
   - cp -r ${CI_PROJECT_DIR}/ $PROJECT_DIR
-
-
-build_job:
-  stage: test
-  script: 
   - cd $PROJECT_DIR && go get ./...
   - cd $PROJECT_DIR && go build ./...
-
-test_job:
-  stage: test
-  script:
   - cd $PROJECT_DIR && ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress
-    
