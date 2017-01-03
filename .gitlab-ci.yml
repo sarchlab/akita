@@ -1,12 +1,13 @@
 image: golang:latest
 
+before_script:
+  - export GOPATH=${pwd}
+
 stages:
-  - install_env
-  - build
   - test
 
 install_env_job:
-  stage: install_env
+  stage: test
   script:
   - echo $GOPATH
   - export PATH=$PATH:$GOPATH/bin
@@ -16,7 +17,7 @@ install_env_job:
 
 
 build_job:
-  stage: build
+  stage: test
   script: 
   - cd $PROJECT_DIR && go get ./...
   - cd $PROJECT_DIR && go build ./...
