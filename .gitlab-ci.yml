@@ -11,7 +11,9 @@ test_job:
   - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
   - cp -r ${CI_PROJECT_DIR}/ $PROJECT_DIR
-  - cd $PROJECT_DIR && go get ./...
+  - echo $PROJECT_DIR
+  - ls $PROJECT_DIR
+  - cd $PROJECT_DIR && go get -t ./...
   - go get github.com/tools/godep
   - go get github.com/onsi/ginkgo
   - go get github.com/onsi/gomega
