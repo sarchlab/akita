@@ -9,7 +9,7 @@ install_env_job:
   stage: install_env
   script:
   - echo $GOPATH
-  - export $PATH=$PATH:$GOPATH/bin
+  - export PATH=$PATH:$GOPATH/bin
   - export PROJECT_DIR=$GOPATH/src/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
   - rsync -az ${CI_PROJECT_DIR}/ $PROJECT_DIR
