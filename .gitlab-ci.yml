@@ -8,15 +8,12 @@ test_job:
   script:
   - echo $GOPATH
   - export PATH=$PATH:$GOPATH/bin
-  - export PROJECT_DIR=$GOPATH/src/gitlab.com/yifan/yaotsu
+  - export PROJECT_DIR=$GOPATH/src/gitlab.com/syifan/yaotsu
   - mkdir -p $PROJECT_DIR
   - cp -r ${CI_PROJECT_DIR}/ $GOPATH/src/gitlab.com/syifan
   - echo $PROJECT_DIR
   - ls $PROJECT_DIR
   - cd $PROJECT_DIR && go get -t ./...
-  - go get github.com/tools/godep
-  - go get github.com/onsi/ginkgo
-  - go get github.com/onsi/gomega
   - go install github.com/onsi/ginkgo/ginkgo
   - cd $PROJECT_DIR && go build ./...
   - cd $PROJECT_DIR && ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress
