@@ -8,7 +8,7 @@ test_job:
   script:
   - echo $GOPATH
   - export PATH=$PATH:$GOPATH/bin
-  - export PROJECT_DIR=$GOPATH/src/gitlab.coms/yifan/yaotsu
+  - export PROJECT_DIR=$GOPATH/src/gitlab.com/yifan/yaotsu
   - mkdir -p $PROJECT_DIR
   - cp -r ${CI_PROJECT_DIR}/ $GOPATH/src/gitlab.com/syifan
   - echo $PROJECT_DIR
