@@ -32,7 +32,7 @@ func NewStorage(capacity uint64) *Storage {
 // before. Otherwise it initilizes a storage unit in the storage object
 func (s *Storage) createOrGetStorageUnit(address uint64) ([]byte, error) {
 	if address > s.capacity {
-		return nil, errors.New("Accessing physical address beyong the storage capacity")
+		return nil, errors.New("Accessing physical address beyond the storage capacity")
 	}
 
 	baseAddr, _ := s.parseAddress(address)

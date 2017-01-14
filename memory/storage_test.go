@@ -26,4 +26,13 @@ var _ = Describe("Storage", func() {
 		Expect(res).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
+	It("should return error if accessing over the capacity", func() {
+		storage := memory.NewStorage(4096)
+		err := storage.Write(4097, []byte{1})
+		Expect(err).To(MatchError("Accessing physical address beyond the storage capacity"))
+
+		_, err = storage.Read(4097, 1)
+		Expect(err).To(MatchError("Accessing physical address beyond the storage capacity"))
+	})
+
 })
