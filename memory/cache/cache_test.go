@@ -1,10 +1,10 @@
-package memory_test
+package cache_test
 
 import "testing"
 import "github.com/onsi/gomega"
 import "github.com/onsi/ginkgo"
 
-func TestMemory(t *testing.T) {
+func TestCache(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "Memory System")
+	ginkgo.RunSpecs(t, "Cache System")
 }
