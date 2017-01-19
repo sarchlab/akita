@@ -17,6 +17,8 @@ var _ = Describe("CycleScheduler", func() {
 	})
 
 	It("should schedule event at the right time", func() {
+		engine.Reset()
+
 		event := new(eventsys.BasicEvent)
 		scheduler.Schedule(event, 1)
 

@@ -71,3 +71,8 @@ func (d *Directory) FindEmpty(reqAddr uint64) *Block {
 	// No space available, need eviction
 	return nil
 }
+
+// Reset will mark all the blocks in the directory invalid
+func (d *Directory) Reset() {
+	d.sets = make(map[uint]*Set)
+}
