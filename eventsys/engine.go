@@ -69,3 +69,11 @@ func (engine *Engine) Run() {
 		event.Happen()
 	}
 }
+
+// Reset will force remove all the events in the engine and set the engine
+// time to 0
+func (e *Engine) Reset() {
+	e.queue = make(eventQueue, 0, 1000)
+	heap.Init(&e.queue)
+	e.now = 0
+}

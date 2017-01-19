@@ -7,10 +7,27 @@ type Event interface {
 	Happen()
 }
 
+// BasicEvent is an event that does not do anything.
+type BasicEvent struct {
+	time float64
+}
+
+func (e *BasicEvent) SetTime(time float64) {
+	e.time = time
+}
+
+func (e BasicEvent) Time() float64 {
+	return e.time
+}
+
+func (e BasicEvent) Happen() {
+	// This function does not do anything
+}
+
 // A HandledEvent does not directly triggers something to happen, but it
 // relies on handlers to handle it.
 type HandledEvent struct {
-	time     float64
+	BasicEvent
 	handlers []Handler
 }
 
@@ -33,14 +50,6 @@ func (e *HandledEvent) Happen() {
 	for _, handler := range e.handlers {
 		handler.Handle(e)
 	}
-}
-
-func (e *HandledEvent) SetTime(time float64) {
-	e.time = time
-}
-
-func (e HandledEvent) Time() float64 {
-	return e.time
 }
 
 // A Handler defines the action that is associated with a HandledEvent. When
