@@ -1,7 +1,5 @@
 package requestsys
 
-import "errors"
-
 // A Connection is responsible for delievering the requests to its destination.
 type Connection interface {
 	CanSend(req *Request) bool
@@ -28,9 +26,6 @@ func NewBasicConn() *BasicConn {
 
 // linkSocket adds a socket into the connected socket list
 func (c *BasicConn) linkSocket(s *Socket) error {
-	if _, ok := c.sockets[s]; ok {
-		return errors.New("socket already connected")
-	}
 	c.sockets[s] = true
 	return nil
 }

@@ -1,9 +1,6 @@
 package requestsys
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 // A Socket is the communication outlet defined by a compoenent.
 type Socket struct {
@@ -61,11 +58,7 @@ func (s *Socket) Connect(c Connection) error {
 	}
 
 	s.conn = c
-	err := c.linkSocket(s)
-	if err != nil {
-		_ = fmt.Errorf("%s", err.Error)
-		return err
-	}
+	_ = c.linkSocket(s)
 	return nil
 }
 
@@ -76,12 +69,7 @@ func (s *Socket) Disconnect() error {
 		return errors.New("socket is not connected, cannot disconnect")
 	}
 
-	err := s.conn.unlinkSocket(s)
-	if err != nil {
-		_ = fmt.Errorf("%s", err.Error)
-		return err
-	}
-
+	_ = s.conn.unlinkSocket(s)
 	s.conn = nil
 	return nil
 }
