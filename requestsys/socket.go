@@ -2,7 +2,9 @@ package requestsys
 
 import "errors"
 
-// A Socket is the communication outlet defined by a compoenent.
+// A Socket is the gateway for a component to communication with outside world.
+// It provides an easy way for uses to rewire the connection from one
+// component to another.
 type Socket struct {
 	Name      string
 	Component Component
@@ -42,12 +44,19 @@ func (s *Socket) CanReceive(req *Request) bool {
 // Send will deliever the request to its destination using the connected
 // connection.
 func (s *Socket) Send(req *Request) error {
+	if s.conn == nil {
+		return errors.New("socket is not connected to any connection")
+	}
 	return s.conn.Send(req)
 }
 
 // Receive notifies the compoenent the arrival of the incomming request and
 // let he compoenent to process the request
 func (s *Socket) Receive(req *Request) error {
+	if s.Component == nil {
+		return errors.New("socket is not binded to any component")
+	}
+
 	return s.Component.Process(req)
 }
 

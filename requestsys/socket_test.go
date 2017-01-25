@@ -33,6 +33,16 @@ func (c *mockConn) Receive(req *requestsys.Request) error {
 	return nil
 }
 
+type mockComponent struct {
+	*requestsys.BasicComponent
+
+	canProcess bool
+}
+
+func newMockComponent() *mockComponent {
+	return &mockComponent{requestsys.NewBasicComponent("mock"), false}
+}
+
 var _ = Describe("DirectConnection", func() {
 
 	Context("The connection and disconnection", func() {
@@ -67,10 +77,28 @@ var _ = Describe("DirectConnection", func() {
 			Expect(socket.CanSend(nil)).To(Equal(false))
 		})
 
+		It("sending should return error", func() {
+			socket := new(requestsys.Socket)
+			Expect(socket.Send(nil)).NotTo(BeNil())
+		})
+
 		It("should not allow receiving", func() {
 			socket := new(requestsys.Socket)
 			Expect(socket.CanReceive(nil)).To(Equal(false))
 		})
 
+		It("receiving should return error", func() {
+			socket := new(requestsys.Socket)
+			Expect(socket.Receive(nil)).NotTo(BeNil())
+		})
+	})
+
+	Context("when connected", func() {
+		socket := new(requestsys.Socket)
+		component := newMockComponent()
+		requestsys.BindSocket(component, socket)
+		It("should check the connection for can or cannot send", func() {
+
+		})
 	})
 })
