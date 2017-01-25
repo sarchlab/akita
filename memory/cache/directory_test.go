@@ -3,7 +3,7 @@ package cache_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/syifan/yaotsu/memory/cache"
+	"gitlab.com/yaotsu/core/memory/cache"
 )
 
 var _ = Describe("Directory", func() {

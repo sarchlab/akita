@@ -1,7 +1,7 @@
 package eventsys_test
 
 import (
-	"gitlab.com/syifan/yaotsu/eventsys"
+	"gitlab.com/yaotsu/core/eventsys"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

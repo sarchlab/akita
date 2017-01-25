@@ -3,7 +3,7 @@ package memory_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/syifan/yaotsu/memory"
+	"gitlab.com/yaotsu/core/memory"
 )
 
 var _ = Describe("Storage", func() {

@@ -3,7 +3,7 @@ package eventsys_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/syifan/yaotsu/eventsys"
+	"gitlab.com/yaotsu/core/eventsys"
 )
 
 var toHappen []*testEvent

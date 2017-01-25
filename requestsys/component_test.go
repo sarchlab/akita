@@ -3,7 +3,7 @@ package requestsys_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/syifan/yaotsu/requestsys"
+	"gitlab.com/yaotsu/core/requestsys"
 )
 
 var _ = Describe("BasicComponent", func() {
