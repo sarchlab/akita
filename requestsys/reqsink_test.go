@@ -14,10 +14,14 @@ var _ = Describe("ReqSink", func() {
 	})
 
 	It("should do nothing while sending", func() {
-		reqSink.Send(nil)
+		Expect(reqSink.Send(nil)).To(BeNil())
 	})
 
 	It("should do nothing linking and unlinking socket", func() {
+		socket := requestsys.NewSocket("test_sock")
+
+		socket.Connect(reqSink)
+		socket.Disconnect()
 	})
 
 })

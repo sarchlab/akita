@@ -44,18 +44,6 @@ func (c *BasicComponent) Name() string {
 	return c.name
 }
 
-// CanProcess of BasicComponent simply return true, since it does not really
-// process any request.
-func (c *BasicComponent) CanProcess(req *Request) bool {
-	return true
-}
-
-// Process of BasicCompnent does not process the request, but discard all the
-// incomming request.
-func (c *BasicComponent) Process(req *Request) error {
-	return nil
-}
-
 // GetSocketByName returns the socket object according the socket name
 func (c *BasicComponent) GetSocketByName(name string) *Socket {
 	return c.sockets[name]

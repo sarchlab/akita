@@ -12,7 +12,8 @@ func (c *ReqSink) CanSend(req *Request) bool {
 
 // Send of ReqSink is intentionally left empty, since it simply discard the
 // request
-func (c *ReqSink) Send(req *Request) {
+func (c *ReqSink) Send(req *Request) error {
+	return nil
 }
 
 // PlugInto connects the socket with the connection
