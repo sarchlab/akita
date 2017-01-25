@@ -63,10 +63,11 @@ func (c *BasicComponent) GetSocketByName(name string) *Socket {
 
 // AddSocket registers with
 func (c *BasicComponent) AddSocket(s *Socket) {
-
+	c.sockets[s.Name] = s
 }
 
 // BindSocket associates a socket with a component
 func BindSocket(c Component, s *Socket) {
 	s.Component = c
+	c.AddSocket(s)
 }

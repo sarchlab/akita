@@ -11,11 +11,9 @@ type Socket struct {
 	conn      Connection
 }
 
-// NewSocket creates a socket for a certain compoenent
-//
-// The name of the socket will be set as ComponentName-SocketName
-func NewSocket(component Component, name string) *Socket {
-	return &Socket{component.Name() + name, component, nil}
+// NewSocket creates a new socket object
+func NewSocket(name string) *Socket {
+	return &Socket{name, nil, nil}
 }
 
 // CanSend checks if the connection can send a certain request.

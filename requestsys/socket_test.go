@@ -50,7 +50,7 @@ var _ = Describe("DirectConnection", func() {
 
 	Context("The connection and disconnection", func() {
 		It("should not connect twice", func() {
-			socket := new(requestsys.Socket)
+			socket := requestsys.NewSocket("test_sock")
 			conn := newMockConn()
 
 			err := socket.Connect(conn)
@@ -62,7 +62,7 @@ var _ = Describe("DirectConnection", func() {
 		})
 
 		It("should only disconnect once", func() {
-			socket := new(requestsys.Socket)
+			socket := requestsys.NewSocket("test_sock")
 			conn := newMockConn()
 			_ = socket.Connect(conn)
 
@@ -75,29 +75,27 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	Context("when not connected", func() {
+		socket := requestsys.NewSocket("test_sock")
+
 		It("should not allow sending", func() {
-			socket := new(requestsys.Socket)
 			Expect(socket.CanSend(nil)).To(Equal(false))
 		})
 
 		It("sending should return error", func() {
-			socket := new(requestsys.Socket)
 			Expect(socket.Send(nil)).NotTo(BeNil())
 		})
 
 		It("should not allow receiving", func() {
-			socket := new(requestsys.Socket)
 			Expect(socket.CanReceive(nil)).To(Equal(false))
 		})
 
 		It("receiving should return error", func() {
-			socket := new(requestsys.Socket)
 			Expect(socket.Receive(nil)).NotTo(BeNil())
 		})
 	})
 
 	Context("when connected", func() {
-		socket := new(requestsys.Socket)
+		socket := requestsys.NewSocket("test_sock")
 
 		component := newMockComponent()
 		requestsys.BindSocket(component, socket)
