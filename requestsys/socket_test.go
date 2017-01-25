@@ -9,27 +9,20 @@ import (
 type mockConn struct {
 	*requestsys.BasicConn
 
-	canSend    bool
-	canReceive bool
+	canSend bool
+	sent    *requestsys.Request
 }
 
 func newMockConn() *mockConn {
-	return &mockConn{requestsys.NewBasicConn(), false, false}
+	return &mockConn{requestsys.NewBasicConn(), false, nil}
 }
 
 func (c *mockConn) CanSend(req *requestsys.Request) bool {
 	return c.canSend
 }
 
-func (c *mockConn) CanReceive(req *requestsys.Request) bool {
-	return c.canReceive
-}
-
 func (c *mockConn) Send(req *requestsys.Request) error {
-	return nil
-}
-
-func (c *mockConn) Receive(req *requestsys.Request) error {
+	c.sent = req
 	return nil
 }
 
@@ -37,10 +30,20 @@ type mockComponent struct {
 	*requestsys.BasicComponent
 
 	canProcess bool
+	processed  *requestsys.Request
 }
 
 func newMockComponent() *mockComponent {
-	return &mockComponent{requestsys.NewBasicComponent("mock"), false}
+	return &mockComponent{requestsys.NewBasicComponent("mock"), false, nil}
+}
+
+func (c *mockComponent) CanProcess(req *requestsys.Request) bool {
+	return c.canProcess
+}
+
+func (c *mockComponent) Process(req *requestsys.Request) error {
+	c.processed = req
+	return nil
 }
 
 var _ = Describe("DirectConnection", func() {
@@ -95,10 +98,40 @@ var _ = Describe("DirectConnection", func() {
 
 	Context("when connected", func() {
 		socket := new(requestsys.Socket)
+
 		component := newMockComponent()
 		requestsys.BindSocket(component, socket)
-		It("should check the connection for can or cannot send", func() {
 
+		conn := newMockConn()
+		socket.Connect(conn)
+
+		It("should check the connection for can or cannot send", func() {
+			conn.canSend = true
+			Expect(socket.CanSend(nil)).To(BeTrue())
+
+			conn.canSend = false
+			Expect(socket.CanSend(nil)).To(BeFalse())
 		})
+
+		It("should check the component for can or cannot receive", func() {
+			component.canProcess = true
+			Expect(socket.CanReceive(nil)).To(BeTrue())
+
+			component.canProcess = false
+			Expect(socket.CanReceive(nil)).To(BeFalse())
+		})
+
+		It("should forward send request to the connection", func() {
+			req := new(requestsys.Request)
+			socket.Send(req)
+			Expect(conn.sent).To(BeIdenticalTo(req))
+		})
+
+		It("should let the component to process the incomming requests", func() {
+			req := new(requestsys.Request)
+			socket.Receive(req)
+			Expect(component.processed).To(BeIdenticalTo(req))
+		})
+
 	})
 })

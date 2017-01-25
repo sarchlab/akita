@@ -2,8 +2,7 @@ package requestsys
 
 // A Connection is responsible for delievering the requests to its destination.
 type Connection interface {
-	CanSend(req *Request) bool
-	Send(req *Request) error
+	Sender
 
 	// linkSocket and unlinkSocket are not exported, because they should only
 	// be called from the socket. Users should use socket.Plugin and
