@@ -17,11 +17,11 @@ func (c *ReqSink) Send(req *Request) error {
 }
 
 // PlugInto connects the socket with the connection
-func (c *ReqSink) linkSocket(s *Socket) error {
+func (c *ReqSink) linkSocket(s Socket) error {
 	return nil
 }
 
 // Disconnect remove the association between the conneciton and the socket
-func (c *ReqSink) unlinkSocket(s *Socket) error {
+func (c *ReqSink) unlinkSocket(s Socket) error {
 	return nil
 }

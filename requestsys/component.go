@@ -21,8 +21,8 @@ type Named interface {
 type Component interface {
 	Named
 
-	AddSocket(s *Socket)
-	GetSocketByName(name string) *Socket
+	AddSocket(s Socket)
+	GetSocketByName(name string) Socket
 
 	CanProcess(req *Request) bool
 	Process(req *Request) error
@@ -31,12 +31,12 @@ type Component interface {
 // BasicComponent provides some functions that other component can use
 type BasicComponent struct {
 	name    string
-	sockets map[string]*Socket
+	sockets map[string]Socket
 }
 
 // NewBasicComponent creates a new basic component
 func NewBasicComponent(name string) *BasicComponent {
-	return &BasicComponent{name, make(map[string]*Socket)}
+	return &BasicComponent{name, make(map[string]Socket)}
 }
 
 // Name returns the name of the BasicComponent
@@ -45,17 +45,17 @@ func (c *BasicComponent) Name() string {
 }
 
 // GetSocketByName returns the socket object according the socket name
-func (c *BasicComponent) GetSocketByName(name string) *Socket {
+func (c *BasicComponent) GetSocketByName(name string) Socket {
 	return c.sockets[name]
 }
 
 // AddSocket registers with
-func (c *BasicComponent) AddSocket(s *Socket) {
-	c.sockets[s.Name] = s
+func (c *BasicComponent) AddSocket(s Socket) {
+	c.sockets[s.Name()] = s
 }
 
 // BindSocket associates a socket with a component
-func BindSocket(c Component, s *Socket) {
-	s.Component = c
+func BindSocket(c Component, s Socket) {
+	s.SetComponent(c)
 	c.AddSocket(s)
 }

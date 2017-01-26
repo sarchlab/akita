@@ -14,7 +14,7 @@ var _ = Describe("BasicComponent", func() {
 	})
 
 	It("should find socket by name", func() {
-		socket := requestsys.NewSocket("test_sock")
+		socket := requestsys.NewSimpleSocket("test_sock")
 
 		retSocket := component.GetSocketByName("test_sock")
 		Expect(retSocket).To(BeNil())

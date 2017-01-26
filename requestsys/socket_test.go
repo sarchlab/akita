@@ -50,7 +50,7 @@ var _ = Describe("DirectConnection", func() {
 
 	Context("The connection and disconnection", func() {
 		It("should not connect twice", func() {
-			socket := requestsys.NewSocket("test_sock")
+			socket := requestsys.NewSimpleSocket("test_sock")
 			conn := newMockConn()
 
 			err := socket.Connect(conn)
@@ -62,7 +62,7 @@ var _ = Describe("DirectConnection", func() {
 		})
 
 		It("should only disconnect once", func() {
-			socket := requestsys.NewSocket("test_sock")
+			socket := requestsys.NewSimpleSocket("test_sock")
 			conn := newMockConn()
 			_ = socket.Connect(conn)
 
@@ -75,7 +75,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	Context("when not connected", func() {
-		socket := requestsys.NewSocket("test_sock")
+		socket := requestsys.NewSimpleSocket("test_sock")
 
 		It("should not allow sending", func() {
 			Expect(socket.CanSend(nil)).To(Equal(false))
@@ -86,16 +86,16 @@ var _ = Describe("DirectConnection", func() {
 		})
 
 		It("should not allow receiving", func() {
-			Expect(socket.CanReceive(nil)).To(Equal(false))
+			Expect(socket.CanRecv(nil)).To(Equal(false))
 		})
 
 		It("receiving should return error", func() {
-			Expect(socket.Receive(nil)).NotTo(BeNil())
+			Expect(socket.Recv(nil)).NotTo(BeNil())
 		})
 	})
 
 	Context("when connected", func() {
-		socket := requestsys.NewSocket("test_sock")
+		socket := requestsys.NewSimpleSocket("test_sock")
 
 		component := newMockComponent()
 		requestsys.BindSocket(component, socket)
@@ -113,10 +113,10 @@ var _ = Describe("DirectConnection", func() {
 
 		It("should check the component for can or cannot receive", func() {
 			component.canProcess = true
-			Expect(socket.CanReceive(nil)).To(BeTrue())
+			Expect(socket.CanRecv(nil)).To(BeTrue())
 
 			component.canProcess = false
-			Expect(socket.CanReceive(nil)).To(BeFalse())
+			Expect(socket.CanRecv(nil)).To(BeFalse())
 		})
 
 		It("should forward send request to the connection", func() {
@@ -127,7 +127,7 @@ var _ = Describe("DirectConnection", func() {
 
 		It("should let the component to process the incomming requests", func() {
 			req := new(requestsys.Request)
-			socket.Receive(req)
+			socket.Recv(req)
 			Expect(component.processed).To(BeIdenticalTo(req))
 		})
 
