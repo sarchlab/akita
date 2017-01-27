@@ -18,17 +18,16 @@ func NewDirectConnection() *DirectConnection {
 
 // CanSend of the DirectConnection only checks if the receiver can process the
 // request.
-func (c *DirectConnection) CanSend(req *Request) bool {
+func (c *DirectConnection) CanSend(req *Request) *ConnError {
 	dst, err := c.getDest(req)
 	if err != nil {
 		_ = fmt.Errorf("%v", err)
-		return false
+		return &ConnError{err.Error(), false, 0}
 	}
 
 	return dst.CanRecv(req)
 }
 
-func (c *DirectConnection) Send(req *Request) error {
+func (c *DirectConnection) Send(req *Request) *ConnError {
 	return nil
-
 }

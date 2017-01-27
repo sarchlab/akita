@@ -6,13 +6,13 @@ type ReqSink struct {
 }
 
 // CanSend of ReqSink always return true
-func (c *ReqSink) CanSend(req *Request) bool {
-	return true
+func (c *ReqSink) CanSend(req *Request) *ConnError {
+	return nil
 }
 
 // Send of ReqSink is intentionally left empty, since it simply discard the
 // request
-func (c *ReqSink) Send(req *Request) error {
+func (c *ReqSink) Send(req *Request) *ConnError {
 	return nil
 }
 

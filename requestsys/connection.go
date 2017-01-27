@@ -2,32 +2,42 @@ package requestsys
 
 import (
 	"errors"
+
+	"gitlab.com/yaotsu/core/eventsys"
 )
 
 // A Sender can send requests to their destinations
 type Sender interface {
-	CanSend(req *Request) bool
-	Send(req *Request) error
+	CanSend(req *Request) *ConnError
+	Send(req *Request) *ConnError
 }
 
 // A Receiver can receive requests
 type Receiver interface {
-	CanRecv(req *Request) bool
-	Recv(req *Request) error
+	CanRecv(req *Request) *ConnError
+	Recv(req *Request) *ConnError
 }
 
 // A ConnError is an error from the connection system.
 //
 // When a component checks if a Sender or a Reveicer CanSend or CanRecv a
 // request, if the answer is no, an ConnError will be returned together.
+//
+// Recoverable determines if a later retry can solve the problem
+// EarliestRetry give suggestions on earliest time to retry
 type ConnError struct {
 	msg           string
 	Recoverable   bool
-	EarliestRetry float64
+	EarliestRetry eventsys.VTimeInSec
 }
 
 func (e *ConnError) Error() string {
 	return e.msg
+}
+
+// NewConnError creates a new ConnError
+func NewConnError(name string, recoverable bool, earliestRetry eventsys.VTimeInSec) *ConnError {
+	return &ConnError{name, recoverable, earliestRetry}
 }
 
 // A Connectable is an object that an Connection can connect with.

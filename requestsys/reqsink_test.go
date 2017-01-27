@@ -10,7 +10,7 @@ var _ = Describe("ReqSink", func() {
 	reqSink := new(requestsys.ReqSink)
 
 	It("should always allow sending", func() {
-		Expect(reqSink.CanSend(nil)).To(BeTrue())
+		Expect(reqSink.CanSend(nil)).To(BeNil())
 	})
 
 	It("should do nothing while sending", func() {

@@ -1,57 +1,29 @@
 package requestsys_test
 
 import (
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core/requestsys"
+	"gitlab.com/yaotsu/core/requestsys/mock_requestsys"
 )
-
-type mockComponent struct {
-	*requestsys.BasicComponent
-
-	canRecv bool
-}
-
-func newMockComponent(name string) *mockComponent {
-	return &mockComponent{requestsys.NewBasicComponent(name), false}
-}
-
-func (c *mockComponent) CanRecv(req *requestsys.Request) bool {
-	return c.canRecv
-}
-
-func (c *mockComponent) Recv(req *requestsys.Request) error {
-	return nil
-}
-
-type mockConn struct {
-	*requestsys.BasicConn
-	canSend bool
-	canRecv bool
-}
-
-func newMockConn() *mockConn {
-	return &mockConn{requestsys.NewBasicConn(), false, false}
-}
-
-func (c *mockConn) CanSend(req *requestsys.Request) bool {
-	return c.canSend
-}
-
-func (c *mockConn) Send(req *requestsys.Request) error {
-	return nil
-}
-
-func (c *mockConn) CanRecv(req *requestsys.Request) bool {
-	return c.canRecv
-}
 
 var _ = Describe("BasicComponent", func() {
 
-	var component *mockComponent
+	var (
+		mockCtrl  *gomock.Controller
+		component *requestsys.BasicComponent
+		conn      *mock_requestsys.MockConnection
+	)
 
 	BeforeEach(func() {
-		component = newMockComponent("test_comp")
+		mockCtrl = gomock.NewController(GinkgoT())
+		component = requestsys.NewBasicComponent("test_comp")
+		conn = mock_requestsys.NewMockConnection(mockCtrl)
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
 	})
 
 	It("should set and get name", func() {
@@ -75,7 +47,6 @@ var _ = Describe("BasicComponent", func() {
 	It("should connect port with connection", func() {
 		component.AddPort("port")
 
-		conn := newMockConn()
 		component.Connect("port", conn)
 
 		Expect(component.GetConnection("port")).To(BeIdenticalTo(conn))
@@ -95,7 +66,6 @@ var _ = Describe("BasicComponent", func() {
 	It("should disconnect port", func() {
 		component.AddPort("port")
 
-		conn := newMockConn()
 		component.Connect("port", conn)
 		Expect(component.GetConnection("port")).To(BeIdenticalTo(conn))
 
