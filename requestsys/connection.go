@@ -1,15 +1,22 @@
 package requestsys
 
-// A Connectable is an object that an Connection can connect with.
-//
-// The only connectable object is Socket so far
-type Connectable interface {
-	IsConnected() bool
+// A Sender can send requests to their destinations
+type Sender interface {
+	CanSend(req *Request) bool
+	Send(req *Request) error
+}
 
-	// Connect to a connection. This function should invoke the Connection's
-	// Register function.
-	Connect(conn Connection) error
-	Disconnect() error
+// A Receiver can receive requests
+type Receiver interface {
+	CanRecv(req *Request) bool
+	Recv(req *Request) error
+}
+
+// A Connectable is an object that an Connection can connect with.
+type Connectable interface {
+	Connect(portName string, conn Connection) error
+	GetConnection(portName string) Connection
+	Disconnect(portName string) error
 
 	Sender
 	Receiver
@@ -26,23 +33,23 @@ type Connection interface {
 // BasicConn is dummy implementation of the connection providing some utilities
 // that all other type of connections can use
 type BasicConn struct {
-	sockets map[Component]Socket
+	connectables map[Connectable]bool
 }
 
 // NewBasicConn creates a basic connection object
 func NewBasicConn() *BasicConn {
-	c := BasicConn{make(map[Component]Socket)}
+	c := BasicConn{make(map[Connectable]bool)}
 	return &c
 }
 
 // Register adds a Connectable object in the connected list
 func (c *BasicConn) Register(s Connectable) error {
-	c.sockets[s] = true
+	c.connectables[s] = true
 	return nil
 }
 
 // Unregister removes a Connectable object from the connected list
 func (c *BasicConn) Unregister(s Connectable) error {
-	delete(c.sockets, s)
+	delete(c.connectables, s)
 	return nil
 }

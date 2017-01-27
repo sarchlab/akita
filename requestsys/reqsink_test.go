@@ -18,10 +18,8 @@ var _ = Describe("ReqSink", func() {
 	})
 
 	It("should do nothing linking and unlinking socket", func() {
-		socket := requestsys.NewSimpleSocket("test_sock")
-
-		socket.Connect(reqSink)
-		socket.Disconnect()
+		reqSink.Register(nil)
+		reqSink.Unregister(nil)
 	})
 
 })
