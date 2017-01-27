@@ -1,5 +1,9 @@
 package requestsys
 
+import (
+	"errors"
+)
+
 // A Sender can send requests to their destinations
 type Sender interface {
 	CanSend(req *Request) bool
@@ -12,13 +16,26 @@ type Receiver interface {
 	Recv(req *Request) error
 }
 
+// A ConnError is an error from the connection system.
+//
+// When a component checks if a Sender or a Reveicer CanSend or CanRecv a
+// request, if the answer is no, an ConnError will be returned together.
+type ConnError struct {
+	msg           string
+	Recoverable   bool
+	EarliestRetry float64
+}
+
+func (e *ConnError) Error() string {
+	return e.msg
+}
+
 // A Connectable is an object that an Connection can connect with.
 type Connectable interface {
 	Connect(portName string, conn Connection) error
 	GetConnection(portName string) Connection
 	Disconnect(portName string) error
 
-	Sender
 	Receiver
 }
 
@@ -52,4 +69,35 @@ func (c *BasicConn) Register(s Connectable) error {
 func (c *BasicConn) Unregister(s Connectable) error {
 	delete(c.connectables, s)
 	return nil
+}
+
+// getDest provides a simple utility function for determine the request
+func (c *BasicConn) getDest(req *Request) (Component, error) {
+	if req.To != nil {
+		if _, ok := c.connectables[req.To]; ok {
+			return req.To, nil
+		}
+
+		return nil, errors.New("Destination " + req.To.Name() + ", which " +
+			"is specified in the request, is not connected via connection.")
+	}
+
+	if len(c.connectables) != 2 {
+		return nil, errors.New("cannot get the destination, since the " +
+			"connection has more than 2 end")
+	}
+
+	for connectable := range c.connectables {
+		if connectable != req.From {
+			to, ok := connectable.(Component)
+			if !ok {
+				return nil, errors.New("Cannot convert the connetable to " +
+					"Component")
+			}
+			req.To = to
+			break
+		}
+	}
+
+	return req.To, nil
 }

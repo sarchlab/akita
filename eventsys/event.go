@@ -1,22 +1,25 @@
 package eventsys
 
+// VTimeInSec defines the time in the simulated space in the unit of second
+type VTimeInSec float64
+
 // An Event is something going to happen in the future.
 type Event interface {
-	SetTime(time float64)
-	Time() float64
+	SetTime(time VTimeInSec)
+	Time() VTimeInSec
 	Happen()
 }
 
 // BasicEvent is an event that does not do anything.
 type BasicEvent struct {
-	time float64
+	time VTimeInSec
 }
 
-func (e *BasicEvent) SetTime(time float64) {
+func (e *BasicEvent) SetTime(time VTimeInSec) {
 	e.time = time
 }
 
-func (e BasicEvent) Time() float64 {
+func (e BasicEvent) Time() VTimeInSec {
 	return e.time
 }
 

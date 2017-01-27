@@ -8,26 +8,42 @@ import (
 
 type mockComponent struct {
 	*requestsys.BasicComponent
+
+	canRecv bool
 }
 
 func newMockComponent(name string) *mockComponent {
-	return &mockComponent{requestsys.NewBasicComponent(name)}
+	return &mockComponent{requestsys.NewBasicComponent(name), false}
+}
+
+func (c *mockComponent) CanRecv(req *requestsys.Request) bool {
+	return c.canRecv
+}
+
+func (c *mockComponent) Recv(req *requestsys.Request) error {
+	return nil
 }
 
 type mockConn struct {
 	*requestsys.BasicConn
+	canSend bool
+	canRecv bool
 }
 
 func newMockConn() *mockConn {
-	return &mockConn{requestsys.NewBasicConn()}
+	return &mockConn{requestsys.NewBasicConn(), false, false}
 }
 
-func (*mockConn) CanSend(req *requestsys.Request) bool {
-	return true
+func (c *mockConn) CanSend(req *requestsys.Request) bool {
+	return c.canSend
 }
 
-func (*mockConn) Send(req *requestsys.Request) error {
+func (c *mockConn) Send(req *requestsys.Request) error {
 	return nil
+}
+
+func (c *mockConn) CanRecv(req *requestsys.Request) bool {
+	return c.canRecv
 }
 
 var _ = Describe("BasicComponent", func() {

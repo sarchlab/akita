@@ -32,7 +32,7 @@ func (eq *eventQueue) Pop() interface{} {
 // An Engine is the unit that maintains all the events and runs all the events
 // in the simulation
 type Engine struct {
-	now   float64
+	now   VTimeInSec
 	queue eventQueue
 }
 
@@ -45,13 +45,13 @@ func NewEngine() *Engine {
 }
 
 // Now returns the current time in the simuated world
-func (engine *Engine) Now() float64 {
+func (engine *Engine) Now() VTimeInSec {
 	return engine.now
 }
 
 // Schedule registers an event. The event will happen in a certain number
 // of seconds from now
-func (engine *Engine) Schedule(event Event, secFromNow float64) {
+func (engine *Engine) Schedule(event Event, secFromNow VTimeInSec) {
 	event.SetTime(secFromNow + engine.now)
 	heap.Push(&engine.queue, event)
 }
@@ -72,8 +72,8 @@ func (engine *Engine) Run() {
 
 // Reset will force remove all the events in the engine and set the engine
 // time to 0
-func (e *Engine) Reset() {
-	e.queue = make(eventQueue, 0, 1000)
-	heap.Init(&e.queue)
-	e.now = 0
+func (engine *Engine) Reset() {
+	engine.queue = make(eventQueue, 0, 1000)
+	heap.Init(&engine.queue)
+	engine.now = 0
 }

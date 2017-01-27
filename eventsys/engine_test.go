@@ -10,18 +10,18 @@ var toHappen []*testEvent
 var happened []*testEvent
 
 type testEvent struct {
-	time float64
+	time eventsys.VTimeInSec
 }
 
 func (e *testEvent) Happen() {
 	happened = append(happened, e)
 }
 
-func (e *testEvent) Time() float64 {
+func (e *testEvent) Time() eventsys.VTimeInSec {
 	return e.time
 }
 
-func (e *testEvent) SetTime(time float64) {
+func (e *testEvent) SetTime(time eventsys.VTimeInSec) {
 	e.time = time
 }
 
@@ -52,7 +52,7 @@ var _ = Describe("Engine", func() {
 			Expect(event).To(Equal(toHappen[i]))
 		}
 
-		Expect(engine.Now()).To(Equal(10.0))
+		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
 	})
 
 	It("should execute in time order", func() {
@@ -67,16 +67,16 @@ var _ = Describe("Engine", func() {
 		engine.Schedule(e3, 10)
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(0.0))
+		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(0.0)))
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(10.0))
+		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(10.0))
+		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
 
 		engine.Schedule(e4, 100)
 		engine.Run()
-		Expect(engine.Now()).To(Equal(110.0))
+		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(110.0)))
 	})
 })

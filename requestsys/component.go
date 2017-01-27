@@ -14,7 +14,7 @@ type Component interface {
 	Named
 	Connectable
 
-	AddPort(name string)
+	AddPort(name string) error
 }
 
 // BasicComponent provides some functions that other component can use
