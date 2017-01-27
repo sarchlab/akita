@@ -2,9 +2,12 @@ package requestsys
 
 // A Connectable is an object that an Connection can connect with.
 //
-// The only connectable object is Socket
+// The only connectable object is Socket so far
 type Connectable interface {
 	IsConnected() bool
+
+	// Connect to a connection. This function should invoke the Connection's
+	// Register function.
 	Connect(conn Connection) error
 	Disconnect() error
 
@@ -16,33 +19,30 @@ type Connectable interface {
 type Connection interface {
 	Sender
 
-	// linkSocket and unlinkSocket are not exported, because they should only
-	// be called from the socket. Users should use socket.Plugin and
-	// socket.Disconnect only
-	linkSocket(s Socket) error
-	unlinkSocket(s Socket) error
+	Register(s Connectable) error
+	Unregister(s Connectable) error
 }
 
 // BasicConn is dummy implementation of the connection providing some utilities
 // that all other type of connections can use
 type BasicConn struct {
-	sockets map[Socket]bool
+	sockets map[Component]Socket
 }
 
 // NewBasicConn creates a basic connection object
 func NewBasicConn() *BasicConn {
-	c := BasicConn{make(map[Socket]bool)}
+	c := BasicConn{make(map[Component]Socket)}
 	return &c
 }
 
-// linkSocket adds a socket into the connected socket list
-func (c *BasicConn) linkSocket(s Socket) error {
+// Register adds a Connectable object in the connected list
+func (c *BasicConn) Register(s Connectable) error {
 	c.sockets[s] = true
 	return nil
 }
 
-// unlinkSocket removes a socket from the list of sockets in the connection
-func (c *BasicConn) unlinkSocket(s Socket) error {
+// Unregister removes a Connectable object from the connected list
+func (c *BasicConn) Unregister(s Connectable) error {
 	delete(c.sockets, s)
 	return nil
 }

@@ -16,12 +16,13 @@ func (c *ReqSink) Send(req *Request) error {
 	return nil
 }
 
-// PlugInto connects the socket with the connection
-func (c *ReqSink) linkSocket(s Socket) error {
+// Register of a ReqSink does not do anything, it does not care who connected
+// to the system
+func (c *ReqSink) Register(s Connectable) error {
 	return nil
 }
 
-// Disconnect remove the association between the conneciton and the socket
-func (c *ReqSink) unlinkSocket(s Socket) error {
+// Unregister of a ReqSink does not do anything
+func (c *ReqSink) Unregister(s Connectable) error {
 	return nil
 }

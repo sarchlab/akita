@@ -10,7 +10,7 @@ type Socket interface {
 	Connectable
 
 	Component() Component
-	SetComponent(c Component)
+	SetComponent(c Component) error
 }
 
 // A SimpleSocket is a naive implementation of the socket interface.
@@ -74,7 +74,7 @@ func (s *SimpleSocket) Connect(c Connection) error {
 	}
 
 	s.conn = c
-	_ = c.linkSocket(s)
+	_ = c.Register(s)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (s *SimpleSocket) Disconnect() error {
 		return errors.New("socket is not connected, cannot disconnect")
 	}
 
-	_ = s.conn.unlinkSocket(s)
+	_ = s.conn.Unregister(s)
 	s.conn = nil
 	return nil
 }
@@ -104,8 +104,12 @@ func (s *SimpleSocket) Component() Component {
 }
 
 // SetComponent sets the componet that the socket is binded with
-func (s *SimpleSocket) SetComponent(c Component) {
+func (s *SimpleSocket) SetComponent(c Component) error {
+	if s.component != nil {
+		return errors.New("the socket to component binding cannot be changed")
+	}
 	s.component = c
+	return nil
 }
 
 // Name returns tha name of the socket

@@ -26,6 +26,14 @@ func (c *mockConn) Send(req *requestsys.Request) error {
 	return nil
 }
 
+func (c *mockConn) Register(s requestsys.Connectable) error {
+	return nil
+}
+
+func (c *mockConn) Unregister(s requestsys.Connectable) error {
+	return nil
+}
+
 type mockComponent struct {
 	*requestsys.BasicComponent
 
