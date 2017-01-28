@@ -19,6 +19,12 @@ func NewDirectConnection() *DirectConnection {
 // CanSend of the DirectConnection only checks if the receiver can process the
 // request.
 func (c *DirectConnection) CanSend(req *Request) *ConnError {
+	_, ok := c.BasicConn.connectables[req.From]
+	if !ok {
+		return &ConnError{"Source " + req.From.Name() + " is not connected",
+			false, 0}
+	}
+
 	dst, err := c.getDest(req)
 	if err != nil {
 		_ = fmt.Errorf("%v", err)
