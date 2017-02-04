@@ -1,46 +1,52 @@
-package event
+package event_test
 
-import "testing"
+import (
+	"testing"
 
-var called int32
+	"gitlab.com/yaotsu/core/event"
 
-type TestHandler struct{}
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+)
 
-func (t *TestHandler) Handle(e Event) {
+func TestEvent(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Event System")
+}
+
+var called int
+
+type testHandler struct{}
+
+func (t *testHandler) Handle(e event.Event) {
 	called++
-	println("handling")
 }
 
-func TestHandledEvent(t *testing.T) {
-	t.Run("no_handler", func(t *testing.T) {
+var _ = Describe("HandledEvent", func() {
+	It("should allow no handler", func() {
 		called = 0
-		e := NewHandledEvent(0)
+		e := event.NewHandledEvent()
 		e.Happen()
-		if called > 0 {
-			t.FailNow()
-		}
+		Expect(called).To(Equal(0))
+
 	})
 
-	t.Run("one_handler", func(t *testing.T) {
+	It("should allow one handler", func() {
 		called = 0
-		e := NewHandledEvent(0)
-		e.AddHandler(new(TestHandler))
+		e := event.NewHandledEvent()
+		e.AddHandler(new(testHandler))
 		e.Happen()
-		if called != 1 {
-			t.FailNow()
-		}
+		Expect(called).To(Equal(1))
 	})
 
-	t.Run("three_handler", func(t *testing.T) {
+	It("should allow multiple handlers", func() {
 		called = 0
-		e := NewHandledEvent(0)
-		e.AddHandler(new(TestHandler))
-		e.AddHandler(new(TestHandler))
-		e.AddHandler(new(TestHandler))
+		e := event.NewHandledEvent()
+		e.AddHandler(new(testHandler))
+		e.AddHandler(new(testHandler))
+		e.AddHandler(new(testHandler))
 		e.Happen()
-		if called != 3 {
-			t.FailNow()
-		}
+		Expect(called).To(Equal(3))
 	})
 
-}
+})
