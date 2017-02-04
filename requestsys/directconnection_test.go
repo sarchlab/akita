@@ -71,11 +71,34 @@ var _ = Describe("DirectConnection", func() {
 			Expect(err).NotTo(BeNil())
 			Expect(err.Recoverable).To(BeFalse())
 		})
+
+		It("should send", func() {
+			req := requestsys.Request{}
+			req.From = comp1
+			req.To = comp2
+
+			comp2.EXPECT().Recv(&req).Return(nil)
+
+			err := conn.Send(&req)
+			Expect(err).To(BeNil())
+		})
+
+		It("should return the error that the receiver return", func() {
+			req := requestsys.Request{}
+			req.From = comp1
+			req.To = comp2
+
+			err := requestsys.NewConnError("error", false, 10)
+			comp2.EXPECT().Recv(&req).Return(err)
+
+			Expect(conn.Send(&req)).To(BeIdenticalTo(err))
+
+		})
 	})
 
-	Context("when the connection is one-to-one", func() {
+	Context("when the destination is specified", func() {
 
-		It("should check the receiver for can or cannot send", func() {
+		It("should check the receiver, if the connection is one to one", func() {
 			req := requestsys.Request{}
 			req.From = comp1
 
@@ -94,23 +117,17 @@ var _ = Describe("DirectConnection", func() {
 			req.From = comp1
 
 			err := conn.CanSend(&req)
-
 			Expect(err).NotTo(BeNil())
 			Expect(err.Recoverable).To(BeFalse())
 		})
 
-	})
-
-	Context("when the destination is not known", func() {
-		It("should not allow sending", func() {
-			conn.Register(comp3)
+		It("should give error when sending", func() {
 			req := requestsys.Request{}
 			req.From = comp1
 
-			err := conn.CanSend(&req)
-			Expect(err).NotTo(BeNil())
-			Expect(err.Recoverable).To(BeFalse())
+			Expect(conn.Send(&req)).NotTo(BeNil())
 		})
 
 	})
+
 })

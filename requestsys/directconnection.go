@@ -34,6 +34,10 @@ func (c *DirectConnection) CanSend(req *Request) *ConnError {
 	return dst.CanRecv(req)
 }
 
+// Send of a DirectConnection invokes receiver's Recv method
 func (c *DirectConnection) Send(req *Request) *ConnError {
-	return nil
+	if req.To == nil {
+		return NewConnError("Destination of a request is not known.", false, 0)
+	}
+	return req.To.Recv(req)
 }
