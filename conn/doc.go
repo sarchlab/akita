@@ -1,4 +1,4 @@
-// Package requestsys defines the communication mechanism that is used in
+// Package conn defines the communication mechanism that is used in
 // Yaotsu.
 //
 // To make the communication model general, Yaotsu define all the units
@@ -12,4 +12,4 @@
 // FixedLatencyConn, and NetworkedConn.
 //
 // All the message that sent from one compoenent to another is called Request.
-package requestsys
+package conn

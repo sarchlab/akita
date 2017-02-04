@@ -1,13 +1,13 @@
-package requestsys_test
+package conn_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/requestsys"
+	"gitlab.com/yaotsu/core/conn"
 )
 
 var _ = Describe("ReqSink", func() {
-	reqSink := new(requestsys.ReqSink)
+	reqSink := new(conn.ReqSink)
 
 	It("should always allow sending", func() {
 		Expect(reqSink.CanSend(nil)).To(BeNil())

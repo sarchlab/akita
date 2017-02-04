@@ -1,15 +1,15 @@
-package eventsys_test
+package event_test
 
 import (
-	"gitlab.com/yaotsu/core/eventsys"
+	"gitlab.com/yaotsu/core/event"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("CycleScheduler", func() {
-	engine := eventsys.NewEngine()
-	scheduler := eventsys.NewCycleScheduler(engine)
+	engine := event.NewEngine()
+	scheduler := event.NewCycleScheduler(engine)
 	scheduler.SetFrequecy(1e9) // 1 GHz
 
 	It("should return correct frequency", func() {
@@ -19,7 +19,7 @@ var _ = Describe("CycleScheduler", func() {
 	It("should schedule event at the right time", func() {
 		engine.Reset()
 
-		event := new(eventsys.BasicEvent)
+		event := new(event.BasicEvent)
 		scheduler.Schedule(event, 1)
 
 		engine.Run()
@@ -30,7 +30,7 @@ var _ = Describe("CycleScheduler", func() {
 	It("should retry", func() {
 		engine.Reset()
 
-		event := new(eventsys.BasicEvent)
+		event := new(event.BasicEvent)
 		scheduler.Schedule(event, 2)
 
 		engine.Run()

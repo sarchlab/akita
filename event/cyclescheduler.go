@@ -1,4 +1,4 @@
-package eventsys
+package event
 
 type CycleScheduler struct {
 	Engine *Engine

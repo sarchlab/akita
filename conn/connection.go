@@ -1,9 +1,9 @@
-package requestsys
+package conn
 
 import (
 	"errors"
 
-	"gitlab.com/yaotsu/core/eventsys"
+	"gitlab.com/yaotsu/core/event"
 )
 
 // A Sender can send requests to their destinations
@@ -28,7 +28,7 @@ type Receiver interface {
 type ConnError struct {
 	msg           string
 	Recoverable   bool
-	EarliestRetry eventsys.VTimeInSec
+	EarliestRetry event.VTimeInSec
 }
 
 func (e *ConnError) Error() string {
@@ -36,7 +36,7 @@ func (e *ConnError) Error() string {
 }
 
 // NewConnError creates a new ConnError
-func NewConnError(name string, recoverable bool, earliestRetry eventsys.VTimeInSec) *ConnError {
+func NewConnError(name string, recoverable bool, earliestRetry event.VTimeInSec) *ConnError {
 	return &ConnError{name, recoverable, earliestRetry}
 }
 

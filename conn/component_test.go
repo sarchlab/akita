@@ -1,25 +1,25 @@
-package requestsys_test
+package conn_test
 
 import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/requestsys"
-	"gitlab.com/yaotsu/core/requestsys/mock_requestsys"
+	"gitlab.com/yaotsu/core/conn"
+	"gitlab.com/yaotsu/core/conn/mock_conn"
 )
 
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		mockCtrl  *gomock.Controller
-		component *requestsys.BasicComponent
-		conn      *mock_requestsys.MockConnection
+		mockCtrl   *gomock.Controller
+		component  *conn.BasicComponent
+		connection *mock_conn.MockConnection
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		component = requestsys.NewBasicComponent("test_comp")
-		conn = mock_requestsys.NewMockConnection(mockCtrl)
+		component = conn.NewBasicComponent("test_comp")
+		connection = mock_conn.NewMockConnection(mockCtrl)
 	})
 
 	AfterEach(func() {
@@ -47,9 +47,9 @@ var _ = Describe("BasicComponent", func() {
 	It("should connect port with connection", func() {
 		component.AddPort("port")
 
-		component.Connect("port", conn)
+		component.Connect("port", connection)
 
-		Expect(component.GetConnection("port")).To(BeIdenticalTo(conn))
+		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
 
 	})
 
@@ -66,8 +66,8 @@ var _ = Describe("BasicComponent", func() {
 	It("should disconnect port", func() {
 		component.AddPort("port")
 
-		component.Connect("port", conn)
-		Expect(component.GetConnection("port")).To(BeIdenticalTo(conn))
+		component.Connect("port", connection)
+		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
 
 		Expect(component.Disconnect("port")).To(BeNil())
 		Expect(component.GetConnection("port")).To(BeNil())

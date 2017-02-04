@@ -1,4 +1,4 @@
-package eventsys
+package event
 
 import "container/heap"
 

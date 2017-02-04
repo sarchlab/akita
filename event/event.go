@@ -1,4 +1,4 @@
-package eventsys
+package event
 
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec float64

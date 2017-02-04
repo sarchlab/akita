@@ -1,4 +1,4 @@
-package requestsys
+package conn
 
 // A ReqSink is a special type of connection. It simply ignore the requests
 // to be sent over the connection

@@ -1,37 +1,37 @@
-package eventsys_test
+package event_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/eventsys"
+	"gitlab.com/yaotsu/core/event"
 )
 
 var toHappen []*testEvent
 var happened []*testEvent
 
 type testEvent struct {
-	time eventsys.VTimeInSec
+	time event.VTimeInSec
 }
 
 func (e *testEvent) Happen() {
 	happened = append(happened, e)
 }
 
-func (e *testEvent) Time() eventsys.VTimeInSec {
+func (e *testEvent) Time() event.VTimeInSec {
 	return e.time
 }
 
-func (e *testEvent) SetTime(time eventsys.VTimeInSec) {
+func (e *testEvent) SetTime(time event.VTimeInSec) {
 	e.time = time
 }
 
 var _ = Describe("Engine", func() {
-	var engine *eventsys.Engine
+	var engine *event.Engine
 
 	BeforeEach(func() {
 		toHappen = make([]*testEvent, 0)
 		happened = make([]*testEvent, 0)
-		engine = eventsys.NewEngine()
+		engine = event.NewEngine()
 	})
 
 	It("should start with no event", func() {
@@ -52,7 +52,7 @@ var _ = Describe("Engine", func() {
 			Expect(event).To(Equal(toHappen[i]))
 		}
 
-		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
+		Expect(engine.Now()).To(Equal(event.VTimeInSec(10.0)))
 	})
 
 	It("should execute in time order", func() {
@@ -67,16 +67,16 @@ var _ = Describe("Engine", func() {
 		engine.Schedule(e3, 10)
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(0.0)))
+		Expect(engine.Now()).To(Equal(event.VTimeInSec(0.0)))
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
+		Expect(engine.Now()).To(Equal(event.VTimeInSec(10.0)))
 
 		engine.Run()
-		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(10.0)))
+		Expect(engine.Now()).To(Equal(event.VTimeInSec(10.0)))
 
 		engine.Schedule(e4, 100)
 		engine.Run()
-		Expect(engine.Now()).To(Equal(eventsys.VTimeInSec(110.0)))
+		Expect(engine.Now()).To(Equal(event.VTimeInSec(110.0)))
 	})
 })

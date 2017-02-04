@@ -1,4 +1,4 @@
-package requestsys
+package conn
 
 import (
 	"errors"
