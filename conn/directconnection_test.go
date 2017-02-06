@@ -4,6 +4,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"gitlab.com/yaotsu/core/conn"
 	"gitlab.com/yaotsu/core/conn/mock_conn"
 )
