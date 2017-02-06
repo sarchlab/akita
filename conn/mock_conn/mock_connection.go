@@ -29,9 +29,9 @@ func (_m *MockConnection) EXPECT() *_MockConnectionRecorder {
 	return _m.recorder
 }
 
-func (_m *MockConnection) CanSend(_param0 *conn.Request) *conn.ConnError {
+func (_m *MockConnection) CanSend(_param0 conn.Request) *conn.Error {
 	ret := _m.ctrl.Call(_m, "CanSend", _param0)
-	ret0, _ := ret[0].(*conn.ConnError)
+	ret0, _ := ret[0].(*conn.Error)
 	return ret0
 }
 
@@ -49,9 +49,9 @@ func (_mr *_MockConnectionRecorder) Register(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Register", arg0)
 }
 
-func (_m *MockConnection) Send(_param0 *conn.Request) *conn.ConnError {
+func (_m *MockConnection) Send(_param0 conn.Request) *conn.Error {
 	ret := _m.ctrl.Call(_m, "Send", _param0)
-	ret0, _ := ret[0].(*conn.ConnError)
+	ret0, _ := ret[0].(*conn.Error)
 	return ret0
 }
 

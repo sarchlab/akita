@@ -39,9 +39,9 @@ func (_mr *_MockComponentRecorder) AddPort(arg0 interface{}) *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "AddPort", arg0)
 }
 
-func (_m *MockComponent) CanRecv(_param0 *conn.Request) *conn.ConnError {
+func (_m *MockComponent) CanRecv(_param0 conn.Request) *conn.Error {
 	ret := _m.ctrl.Call(_m, "CanRecv", _param0)
-	ret0, _ := ret[0].(*conn.ConnError)
+	ret0, _ := ret[0].(*conn.Error)
 	return ret0
 }
 
@@ -89,9 +89,9 @@ func (_mr *_MockComponentRecorder) Name() *gomock.Call {
 	return _mr.mock.ctrl.RecordCall(_mr.mock, "Name")
 }
 
-func (_m *MockComponent) Recv(_param0 *conn.Request) *conn.ConnError {
+func (_m *MockComponent) Recv(_param0 conn.Request) *conn.Error {
 	ret := _m.ctrl.Call(_m, "Recv", _param0)
-	ret0, _ := ret[0].(*conn.ConnError)
+	ret0, _ := ret[0].(*conn.Error)
 	return ret0
 }
 
