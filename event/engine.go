@@ -60,6 +60,7 @@ func (engine *Engine) Now() VTimeInSec {
 // Schedule registers an event. The event will happen in a certain number
 // of seconds from now
 func (engine *Engine) Schedule(event Event, secFromNow VTimeInSec) {
+	// TODO: make sure always schedule a ptr rather than a value
 	event.SetTime(secFromNow + engine.now)
 	heap.Push(&engine.queue, event)
 }

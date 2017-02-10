@@ -81,8 +81,10 @@ func (c *BasicConn) Unregister(s Connectable) error {
 	return nil
 }
 
-// getDest provides a simple utility function for determine the request
+// getDest provides a simple utility function for determine the destination of a
+// request
 func (c *BasicConn) getDest(req Request) (Component, error) {
+	// If destination is given, it must be connected via the connection
 	if req.Destination() != nil {
 		if _, ok := c.connectables[req.Destination()]; ok {
 			return req.Destination(), nil
@@ -93,11 +95,14 @@ func (c *BasicConn) getDest(req Request) (Component, error) {
 			"connection.")
 	}
 
+	// If destination it not given, the destination can only be inferred from
+	// the other end of the connection.
 	if len(c.connectables) != 2 {
 		return nil, errors.New("cannot get the destination, since the " +
 			"connection has more than 2 end")
 	}
 
+	// Get the destination by the other end of the connection
 	for connectable := range c.connectables {
 		if connectable != req.Source() {
 			to, ok := connectable.(Component)
