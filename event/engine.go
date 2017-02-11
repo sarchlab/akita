@@ -1,42 +1,17 @@
 package event
 
-import "container/heap"
+// An Engine is a unit that keeps the discrete event simulation run
+type Engine interface {
 
-// EventQueue is a priority queue of events. The front of the queue is always
-// the event to happen next
-type eventQueue []Event
+	// EventChan returns a channel of events. Anyone who have the channel can
+	// send event to this channel to schedule an event.
+	EventChan() chan Event
 
-// Len returns the length of the event queue
-func (eq eventQueue) Len() int {
-	return len(eq)
+	// Run will process all the events until the simulation finishes
+	Run() error
 }
 
-// Less determines the order between two events. Less returns true if the i-th
-// event happens before the j-th event.
-func (eq eventQueue) Less(i, j int) bool {
-	return eq[i].Time() < eq[j].Time()
-}
-
-// Swap changes the position of two events in the event queue
-func (eq eventQueue) Swap(i, j int) {
-	eq[i], eq[j] = eq[j], eq[i]
-}
-
-// Push adds an event into the event queue
-func (eq *eventQueue) Push(x interface{}) {
-	event := x.(Event)
-	*eq = append(*eq, event)
-}
-
-// Pop removes and returns the next event to happen
-func (eq *eventQueue) Pop() interface{} {
-	old := *eq
-	n := len(old)
-	event := old[n-1]
-	*eq = old[0 : n-1]
-	return event
-}
-
+/*
 // An Engine is the unit that maintains all the events and runs all the events
 // in the simulation
 type Engine struct {
@@ -86,3 +61,4 @@ func (engine *Engine) Reset() {
 	heap.Init(&engine.queue)
 	engine.now = 0
 }
+*/
