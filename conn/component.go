@@ -2,6 +2,8 @@ package conn
 
 import (
 	"errors"
+
+	"gitlab.com/yaotsu/core/event"
 )
 
 // A Named object is an object that has a name
@@ -13,6 +15,7 @@ type Named interface {
 type Component interface {
 	Named
 	Connectable
+	event.Handler
 
 	AddPort(name string) error
 }

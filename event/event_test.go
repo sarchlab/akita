@@ -3,10 +3,9 @@ package event_test
 import (
 	"testing"
 
-	"gitlab.com/yaotsu/core/event"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"gitlab.com/yaotsu/core/event"
 )
 
 func TestEvent(t *testing.T) {
@@ -14,39 +13,50 @@ func TestEvent(t *testing.T) {
 	RunSpecs(t, "Event System")
 }
 
-var called int
-
-type testHandler struct{}
-
-func (t *testHandler) Handle(e event.Event) {
-	called++
+type MockEvent struct {
+	EventTime       event.VTimeInSec
+	EventHandler    event.Handler
+	EventFinishChan chan bool
 }
 
-var _ = Describe("HandledEvent", func() {
-	It("should allow no handler", func() {
-		called = 0
-		e := event.NewHandledEvent()
-		e.Happen()
-		Expect(called).To(Equal(0))
+func NewMockEvent() *MockEvent {
+	e := new(MockEvent)
+	e.EventFinishChan = make(chan bool)
+	return e
+}
 
-	})
+func (e *MockEvent) SetTime(time event.VTimeInSec) {
+	e.EventTime = time
+}
 
-	It("should allow one handler", func() {
-		called = 0
-		e := event.NewHandledEvent()
-		e.AddHandler(new(testHandler))
-		e.Happen()
-		Expect(called).To(Equal(1))
-	})
+func (e MockEvent) Time() event.VTimeInSec {
+	return e.EventTime
+}
 
-	It("should allow multiple handlers", func() {
-		called = 0
-		e := event.NewHandledEvent()
-		e.AddHandler(new(testHandler))
-		e.AddHandler(new(testHandler))
-		e.AddHandler(new(testHandler))
-		e.Happen()
-		Expect(called).To(Equal(3))
-	})
+func (e *MockEvent) SetHandler(handler event.Handler) {
+	e.EventHandler = handler
+}
 
-})
+func (e MockEvent) Handler() event.Handler {
+	return e.EventHandler
+}
+
+func (e MockEvent) FinishChan() chan bool {
+	return e.EventFinishChan
+}
+
+type MockHandler struct {
+	EventHandled []event.Event
+	HandleFunc   func(event.Event)
+}
+
+func NewMockHandler() *MockHandler {
+	return &MockHandler{make([]event.Event, 0), nil}
+}
+
+func (h *MockHandler) Handle(e event.Event) {
+	h.EventHandled = append(h.EventHandled, e)
+	if h.HandleFunc != nil {
+		h.HandleFunc(e)
+	}
+}

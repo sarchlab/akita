@@ -16,6 +16,7 @@ type Event interface {
 	SetHandler(handler Handler)
 	Handler() Handler
 
+	// When the handler finished processing the event, return on this channel
 	FinishChan() chan bool
 }
 
