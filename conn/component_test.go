@@ -1,29 +1,21 @@
 package conn_test
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/conn/mock_conn"
 )
 
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		mockCtrl   *gomock.Controller
 		component  *conn.BasicComponent
-		connection *mock_conn.MockConnection
+		connection *MockConnection
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
 		component = conn.NewBasicComponent("test_comp")
-		connection = mock_conn.NewMockConnection(mockCtrl)
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
+		connection = NewMockConnection()
 	})
 
 	It("should set and get name", func() {

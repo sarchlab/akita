@@ -1,21 +1,15 @@
 package conn
 
-import (
-	"errors"
-
-	"gitlab.com/yaotsu/core/event"
-)
+import "gitlab.com/yaotsu/core/event"
 
 // A Sender can send requests to their destinations
 type Sender interface {
-	CanSend(req Request) *Error
 	Send(req Request) *Error
 }
 
 // A Receiver can receive requests
 type Receiver interface {
-	CanRecv(req Request) *Error
-	Recv(req Request) *Error
+	Receive(req Request) *Error
 }
 
 // An Error of the conn package is an error from the connection system.
@@ -42,6 +36,7 @@ func NewError(name string, recoverable bool, earliestRetry event.VTimeInSec) *Er
 
 // A Connectable is an object that an Connection can connect with.
 type Connectable interface {
+	AddPort(name string) error
 	Connect(portName string, conn Connection) error
 	GetConnection(portName string) Connection
 	Disconnect(portName string) error
@@ -49,71 +44,11 @@ type Connectable interface {
 	Receiver
 }
 
-// A Connection is responsible for delievering the requests to its destination.
+// A Connection is responsible for delievering the requests to its
+// destination.
 type Connection interface {
 	Sender
 
-	Register(s Connectable) error
-	Unregister(s Connectable) error
-}
-
-// BasicConn is dummy implementation of the connection providing some utilities
-// that all other type of connections can use
-type BasicConn struct {
-	connectables map[Connectable]bool
-}
-
-// NewBasicConn creates a basic connection object
-func NewBasicConn() *BasicConn {
-	c := BasicConn{make(map[Connectable]bool)}
-	return &c
-}
-
-// Register adds a Connectable object in the connected list
-func (c *BasicConn) Register(s Connectable) error {
-	c.connectables[s] = true
-	return nil
-}
-
-// Unregister removes a Connectable object from the connected list
-func (c *BasicConn) Unregister(s Connectable) error {
-	delete(c.connectables, s)
-	return nil
-}
-
-// getDest provides a simple utility function for determine the destination of a
-// request
-func (c *BasicConn) getDest(req Request) (Component, error) {
-	// If destination is given, it must be connected via the connection
-	if req.Destination() != nil {
-		if _, ok := c.connectables[req.Destination()]; ok {
-			return req.Destination(), nil
-		}
-
-		return nil, errors.New("Destination " + req.Destination().Name() +
-			", which is specified in the request, is not connected via " +
-			"connection.")
-	}
-
-	// If destination it not given, the destination can only be inferred from
-	// the other end of the connection.
-	if len(c.connectables) != 2 {
-		return nil, errors.New("cannot get the destination, since the " +
-			"connection has more than 2 end")
-	}
-
-	// Get the destination by the other end of the connection
-	for connectable := range c.connectables {
-		if connectable != req.Source() {
-			to, ok := connectable.(Component)
-			if !ok {
-				return nil, errors.New("Cannot convert the connetable to " +
-					"Component")
-			}
-			req.SetDestination(to)
-			break
-		}
-	}
-
-	return req.Destination(), nil
+	Attach(s Connectable) error
+	Detach(s Connectable) error
 }

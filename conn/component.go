@@ -13,11 +13,17 @@ type Named interface {
 
 // A Component is a element that is being simulated in Yaotsu.
 type Component interface {
+	// A Component must have a name to distinguish itself
 	Named
+
+	// A Component can connect to the outside world
 	Connectable
+
+	// A Component can handle events
 	event.Handler
 
-	AddPort(name string) error
+	// Each component has an associated goroutine to process the incoming request
+	ProcessRequest()
 }
 
 // BasicComponent provides some functions that other component can use
