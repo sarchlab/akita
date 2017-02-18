@@ -54,9 +54,10 @@ func NewMockHandler() *MockHandler {
 	return &MockHandler{make([]event.Event, 0), nil}
 }
 
-func (h *MockHandler) Handle(e event.Event) {
+func (h *MockHandler) Handle(e event.Event) error {
 	h.EventHandled = append(h.EventHandled, e)
 	if h.HandleFunc != nil {
 		h.HandleFunc(e)
 	}
+	return nil
 }

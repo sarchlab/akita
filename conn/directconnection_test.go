@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"gitlab.com/yaotsu/core/conn"
+	"gitlab.com/yaotsu/core/event"
 )
 
 var _ = Describe("DirectConnection", func() {
@@ -83,12 +84,14 @@ var _ = Describe("DirectConnection", func() {
 		req := NewMockRequest()
 		req.Src = comp2
 		req.Dst = comp1
+		req.SetSendTime(2.0)
 
 		errToRet := conn.NewError("something", true, 10)
 		comp1.RecvError = errToRet
 
 		err := connection.Send(req)
 		Expect(err).To(BeIdenticalTo(errToRet))
+		Expect(req.RecvTime()).To(Equal(event.VTimeInSec(2.0)))
 	})
 
 })

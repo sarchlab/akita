@@ -1,11 +1,12 @@
 package conn_test
 
 import (
+	"testing"
+
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core/conn"
 	"gitlab.com/yaotsu/core/event"
-	"testing"
 )
 
 func TestConn(t *testing.T) {
@@ -54,26 +55,14 @@ func (c *MockComponent) Receive(req conn.Request) *conn.Error {
 	return c.RecvError
 }
 
-func (c *MockComponent) Handle(e event.Event) {
-
-}
-
-func (c *MockComponent) ProcessRequest() {
+func (c *MockComponent) Handle(e event.Event) error {
+	return nil
 }
 
 type MockRequest struct {
-	Src conn.Component
-	Dst conn.Component
+	*conn.BasicRequest
 }
 
 func NewMockRequest() *MockRequest {
-	return &MockRequest{nil, nil}
-}
-
-func (r *MockRequest) Source() conn.Component {
-	return r.Src
-}
-
-func (r *MockRequest) Destination() conn.Component {
-	return r.Dst
+	return &MockRequest{conn.NewBasicRequest()}
 }

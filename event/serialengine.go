@@ -28,11 +28,11 @@ func (e *SerialEngine) Schedule(evt Event) {
 }
 
 // Run processes all the events scheduled in the SerialEngine
-func (e *SerialEngine) Run() {
+func (e *SerialEngine) Run() error {
 	for true {
 		queue := <-e.queueChan
 		if queue.Len() == 0 {
-			return
+			return nil
 		}
 
 		evt := heap.Pop(queue).(Event)
@@ -43,4 +43,5 @@ func (e *SerialEngine) Run() {
 		go handler.Handle(evt)
 		<-evt.FinishChan()
 	}
+	return nil
 }

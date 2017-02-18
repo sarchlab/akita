@@ -21,9 +21,6 @@ type Component interface {
 
 	// A Component can handle events
 	event.Handler
-
-	// Each component has an associated goroutine to process the incoming request
-	ProcessRequest()
 }
 
 // BasicComponent provides some functions that other component can use

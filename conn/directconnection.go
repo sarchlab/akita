@@ -51,5 +51,6 @@ func (c *DirectConnection) Send(req Request) *Error {
 		return NewError("destination is not connected on this connection", false, 0)
 	}
 
+	req.SetRecvTime(req.SendTime())
 	return req.Destination().Receive(req)
 }
