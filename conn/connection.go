@@ -52,3 +52,17 @@ type Connection interface {
 	Attach(s Connectable) error
 	Detach(s Connectable) error
 }
+
+// PlugIn links a Connection with a Component port
+func PlugIn(comp Component, port string, connection Connection) error {
+	err := comp.Connect(port, connection)
+	if err != nil {
+		return err
+	}
+
+	err = connection.Attach(comp)
+	if err != nil {
+		return err
+	}
+	return nil
+}

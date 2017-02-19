@@ -12,10 +12,8 @@ func main() {
 
 	connection := conn.NewDirectConnection()
 
-	comp1.Connect("Ping", connection)
-	connection.Attach(comp1)
-	comp2.Connect("Ping", connection)
-	connection.Attach(comp2)
+	conn.PlugIn(comp1, "Ping", connection)
+	conn.PlugIn(comp2, "Ping", connection)
 
 	t := 0.0
 	for i := 0; i < 100; i++ {
