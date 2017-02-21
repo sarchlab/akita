@@ -27,7 +27,7 @@ type Component interface {
 type BasicComponent struct {
 	name        string
 	connections map[string]Connection
-	Ports       map[string]bool
+	ports       map[string]bool
 }
 
 // NewBasicComponent creates a new basic component
@@ -46,7 +46,7 @@ func (c *BasicComponent) Name() string {
 
 // Connect of BasicComponent associate a connection with a port of the component
 func (c *BasicComponent) Connect(portName string, conn Connection) error {
-	if _, ok := c.Ports[portName]; !ok {
+	if _, ok := c.ports[portName]; !ok {
 		return errors.New("Component " + c.Name() + " does not have port " +
 			portName)
 	}
@@ -62,7 +62,7 @@ func (c *BasicComponent) GetConnection(portName string) Connection {
 
 // Disconnect removes the association between the port name and the connection
 func (c *BasicComponent) Disconnect(portName string) error {
-	if _, ok := c.Ports[portName]; !ok {
+	if _, ok := c.ports[portName]; !ok {
 		return errors.New("Component " + c.Name() + " does not have port " +
 			portName)
 	}
@@ -86,10 +86,10 @@ func (c *BasicComponent) AddPort(name string) error {
 		return errors.New("cannot use empty string as port name")
 	}
 
-	if _, ok := c.Ports[name]; ok {
+	if _, ok := c.ports[name]; ok {
 		return errors.New("cannot duplicate port name " + name)
 	}
 
-	c.Ports[name] = true
+	c.ports[name] = true
 	return nil
 }

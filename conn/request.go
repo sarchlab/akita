@@ -16,10 +16,10 @@ type Request interface {
 
 // BasicRequest provides some basic setter and getter for all other requests
 type BasicRequest struct {
-	Src   Component
-	Dst   Component
-	TSend event.VTimeInSec
-	TRecv event.VTimeInSec
+	src      Component
+	dst      Component
+	sendTime event.VTimeInSec
+	recvTime event.VTimeInSec
 }
 
 // NewBasicRequest creates a new BasicRequest
@@ -27,14 +27,24 @@ func NewBasicRequest() *BasicRequest {
 	return &BasicRequest{nil, nil, 0, 0}
 }
 
+// SetSource set the component that send the request
+func (r *BasicRequest) SetSource(src Component) {
+	r.src = src
+}
+
 // Source return the source of the BasicRequest
 func (r *BasicRequest) Source() Component {
-	return r.Src
+	return r.src
+}
+
+// SetDestination sets where the request needs to be sent to
+func (r *BasicRequest) SetDestination(dst Component) {
+	r.dst = dst
 }
 
 // Destination return the source of the BasicRequest
 func (r *BasicRequest) Destination() Component {
-	return r.Dst
+	return r.dst
 }
 
 // SetSendTime set the send time of the event
@@ -42,24 +52,24 @@ func (r *BasicRequest) Destination() Component {
 // The SendTime property helps the connection and the receiver know what
 // time it is.
 func (r *BasicRequest) SetSendTime(t event.VTimeInSec) {
-	r.TSend = t
+	r.sendTime = t
 }
 
 // SendTime returns when the request is sent
 func (r *BasicRequest) SendTime() event.VTimeInSec {
-	return r.TSend
+	return r.sendTime
 }
 
 // RecvTime return the time when the request is received
 func (r *BasicRequest) RecvTime() event.VTimeInSec {
-	return r.TRecv
+	return r.recvTime
 }
 
 // SetRecvTime set the receive time of the request
 //
 // This field helps the receiver to know what time it is.
 func (r *BasicRequest) SetRecvTime(t event.VTimeInSec) {
-	r.TRecv = t
+	r.recvTime = t
 }
 
 // SwapSrcAndDst swaps the request source and the request destination
@@ -67,5 +77,5 @@ func (r *BasicRequest) SetRecvTime(t event.VTimeInSec) {
 // This function is useful when the fulfiller returns the request to the
 // sender.
 func (r *BasicRequest) SwapSrcAndDst() {
-	r.Src, r.Dst = r.Dst, r.Src
+	r.src, r.dst = r.dst, r.src
 }

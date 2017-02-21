@@ -18,10 +18,10 @@ func main() {
 	t := 0.0
 	for i := 0; i < 100; i++ {
 		evt := example.NewPingSendEvent()
-		evt.HappenTime = event.VTimeInSec(t)
+		evt.SetTime(event.VTimeInSec(t))
+		evt.SetHandler(comp1)
 		evt.From = comp1
 		evt.To = comp2
-		evt.Domain = comp1
 
 		engine.Schedule(evt)
 		t += 0.2

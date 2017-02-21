@@ -96,8 +96,8 @@ func (c *PingComponent) processPingReq(req *PingReq) *conn.Error {
 
 	evt := NewPingReturnEvent()
 	evt.Req = req
-	evt.HappenTime = req.RecvTime() + 2.0
-	evt.Domain = c
+	evt.SetTime(req.RecvTime() + 2.0)
+	evt.SetHandler(c)
 	c.Engine.Schedule(evt)
 	return nil
 }
@@ -129,7 +129,7 @@ func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
 
 		// Reschedule
 		e.Req.SwapSrcAndDst()
-		e.HappenTime = err.EarliestRetry
+		e.SetTime(err.EarliestRetry)
 		c.Engine.Schedule(e)
 	}
 
@@ -143,8 +143,8 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 	}
 
 	req := NewPingReq()
-	req.Src = e.From
-	req.Dst = e.To
+	req.SetSource(e.From)
+	req.SetDestination(e.To)
 	req.StartTime = e.Time()
 	req.SetSendTime(e.Time())
 
@@ -154,7 +154,7 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 			return err
 		}
 
-		e.HappenTime = err.EarliestRetry
+		e.SetTime(err.EarliestRetry)
 		c.Engine.Schedule(e)
 	}
 
