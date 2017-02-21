@@ -10,42 +10,6 @@ import (
 	"gitlab.com/yaotsu/core/event"
 )
 
-// A PingReq is the Ping message send from one node to another
-type PingReq struct {
-	*conn.BasicRequest
-
-	StartTime event.VTimeInSec
-	IsReply   bool
-}
-
-// NewPingReq creates a new PingReq
-func NewPingReq() *PingReq {
-	return &PingReq{conn.NewBasicRequest(), 0, false}
-}
-
-// A PingSendEvent is an event scheduled for sending a ping
-type PingSendEvent struct {
-	*event.BasicEvent
-	From *PingComponent
-	To   *PingComponent
-}
-
-// NewPingSendEvent creates a new PingSendEvent
-func NewPingSendEvent() *PingSendEvent {
-	return &PingSendEvent{event.NewBasicEvent(), nil, nil}
-}
-
-// A PingReturnEvent is an event scheduled for returning the ping request
-type PingReturnEvent struct {
-	*event.BasicEvent
-	Req *PingReq
-}
-
-// NewPingReturnEvent creates a new PingReturnEvent
-func NewPingReturnEvent() *PingReturnEvent {
-	return &PingReturnEvent{event.NewBasicEvent(), nil}
-}
-
 // A PingComponent periodically send ping request out and also respond to pings
 //
 // -----------------
@@ -109,7 +73,6 @@ func (c *PingComponent) Handle(e event.Event) error {
 		return errors.New("cannot handle event " + reflect.TypeOf(e).String())
 	case *PingReturnEvent:
 		return c.handlePingReturnEvent(e)
-
 	case *PingSendEvent:
 		return c.handlePingSendEvent(e)
 	}
