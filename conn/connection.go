@@ -36,10 +36,10 @@ func NewError(name string, recoverable bool, earliestRetry event.VTimeInSec) *Er
 
 // A Connectable is an object that an Connection can connect with.
 type Connectable interface {
-	AddPort(name string) error
-	Connect(portName string, conn Connection) error
+	AddPort(name string)
+	Connect(portName string, conn Connection)
 	GetConnection(portName string) Connection
-	Disconnect(portName string) error
+	Disconnect(portName string)
 
 	Receiver
 }
@@ -49,20 +49,12 @@ type Connectable interface {
 type Connection interface {
 	Sender
 
-	Attach(s Connectable) error
-	Detach(s Connectable) error
+	Attach(s Connectable)
+	Detach(s Connectable)
 }
 
 // PlugIn links a Connection with a Component port
-func PlugIn(comp Component, port string, connection Connection) error {
-	err := comp.Connect(port, connection)
-	if err != nil {
-		return err
-	}
-
-	err = connection.Attach(comp)
-	if err != nil {
-		return err
-	}
-	return nil
+func PlugIn(comp Component, port string, connection Connection) {
+	comp.Connect(port, connection)
+	connection.Attach(comp)
 }

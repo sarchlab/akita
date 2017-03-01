@@ -1,7 +1,7 @@
 package conn
 
 import (
-	"errors"
+	"log"
 
 	"gitlab.com/yaotsu/core/event"
 )
@@ -45,14 +45,12 @@ func (c *BasicComponent) Name() string {
 }
 
 // Connect of BasicComponent associate a connection with a port of the component
-func (c *BasicComponent) Connect(portName string, conn Connection) error {
+func (c *BasicComponent) Connect(portName string, conn Connection) {
 	if _, ok := c.ports[portName]; !ok {
-		return errors.New("Component " + c.Name() + " does not have port " +
-			portName)
+		log.Panicf("Component " + c.Name() + " does not have port " + portName)
 	}
 
 	c.connections[portName] = conn
-	return nil
 }
 
 // GetConnection returns the connection by the port name
@@ -61,18 +59,16 @@ func (c *BasicComponent) GetConnection(portName string) Connection {
 }
 
 // Disconnect removes the association between the port name and the connection
-func (c *BasicComponent) Disconnect(portName string) error {
+func (c *BasicComponent) Disconnect(portName string) {
 	if _, ok := c.ports[portName]; !ok {
-		return errors.New("Component " + c.Name() + " does not have port " +
-			portName)
+		log.Panicf("Component " + c.Name() + " does not have port " + portName)
 	}
 
 	if _, ok := c.connections[portName]; !ok {
-		return errors.New("Port " + portName + "is not connected")
+		log.Panic("Port " + portName + "is not connected")
 	}
 
 	delete(c.connections, portName)
-	return nil
 }
 
 // AddPort register a port name to the component.
@@ -81,15 +77,14 @@ func (c *BasicComponent) Disconnect(portName string) error {
 // that the connection is connecting to. When the component need to send
 // requests out, it need first get the connection by the port name, and then
 // send the request over the connection.
-func (c *BasicComponent) AddPort(name string) error {
+func (c *BasicComponent) AddPort(name string) {
 	if name == "" {
-		return errors.New("cannot use empty string as port name")
+		log.Panic("cannot use empty string as port name")
 	}
 
 	if _, ok := c.ports[name]; ok {
-		return errors.New("cannot duplicate port name " + name)
+		log.Panic("cannot duplicate port name " + name)
 	}
 
 	c.ports[name] = true
-	return nil
 }

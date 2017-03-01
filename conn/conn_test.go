@@ -24,14 +24,12 @@ func NewMockConnection() *MockConnection {
 		make([]conn.Request, 0)}
 }
 
-func (c *MockConnection) Attach(connectable conn.Connectable) error {
+func (c *MockConnection) Attach(connectable conn.Connectable) {
 	c.Connected[connectable] = true
-	return nil
 }
 
-func (c *MockConnection) Detach(connectable conn.Connectable) error {
+func (c *MockConnection) Detach(connectable conn.Connectable) {
 	c.Connected[connectable] = false
-	return nil
 }
 
 func (c *MockConnection) Send(req conn.Request) *conn.Error {

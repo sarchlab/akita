@@ -12,9 +12,8 @@ var _ = Describe("PlugIn", func() {
 		comp.AddPort("Port")
 		connection := NewMockConnection()
 
-		err := conn.PlugIn(comp, "Port", connection)
+		conn.PlugIn(comp, "Port", connection)
 
-		Expect(err).To(BeNil())
 		Expect(connection.Connected[comp]).To(BeTrue())
 		Expect(comp.GetConnection("Port")).To(BeIdenticalTo(connection))
 	})
