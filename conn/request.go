@@ -5,7 +5,9 @@ import "gitlab.com/yaotsu/core/event"
 // A Request is the message element being transferred between compoenents
 type Request interface {
 	Source() Component
+	SetSource(c Component)
 	Destination() Component
+	SetDestination(c Component)
 
 	SetSendTime(t event.VTimeInSec)
 	SendTime() event.VTimeInSec

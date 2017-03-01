@@ -6,7 +6,6 @@ import (
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/event"
 )
 
 func TestConn(t *testing.T) {
@@ -37,25 +36,6 @@ func (c *MockConnection) Detach(connectable conn.Connectable) error {
 
 func (c *MockConnection) Send(req conn.Request) *conn.Error {
 	c.ReqSent = append(c.ReqSent, req)
-	return nil
-}
-
-// MockComponent
-type MockComponent struct {
-	*conn.BasicComponent
-
-	RecvError *conn.Error
-}
-
-func NewMockComponent(name string) *MockComponent {
-	return &MockComponent{conn.NewBasicComponent(name), nil}
-}
-
-func (c *MockComponent) Receive(req conn.Request) *conn.Error {
-	return c.RecvError
-}
-
-func (c *MockComponent) Handle(e event.Event) error {
 	return nil
 }
 

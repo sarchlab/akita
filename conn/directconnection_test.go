@@ -11,16 +11,16 @@ import (
 var _ = Describe("DirectConnection", func() {
 
 	var (
-		comp1      *MockComponent
-		comp2      *MockComponent
-		comp3      *MockComponent
+		comp1      *conn.MockComponent
+		comp2      *conn.MockComponent
+		comp3      *conn.MockComponent
 		connection *conn.DirectConnection
 	)
 
 	BeforeEach(func() {
-		comp1 = NewMockComponent("comp1")
-		comp2 = NewMockComponent("comp2")
-		comp3 = NewMockComponent("comp3")
+		comp1 = conn.NewMockComponent()
+		comp2 = conn.NewMockComponent()
+		comp3 = conn.NewMockComponent()
 
 		connection = conn.NewDirectConnection()
 		connection.Attach(comp1)
@@ -87,7 +87,7 @@ var _ = Describe("DirectConnection", func() {
 		req.SetSendTime(2.0)
 
 		errToRet := conn.NewError("something", true, 10)
-		comp1.RecvError = errToRet
+		comp1.ToReceiveReq(req, errToRet)
 
 		err := connection.Send(req)
 		Expect(err).To(BeIdenticalTo(errToRet))
