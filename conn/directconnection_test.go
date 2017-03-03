@@ -28,18 +28,15 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should give error is detaching a not attached component", func() {
-		err := connection.Detach(comp3)
-		Expect(err).NotTo(BeNil())
+		Expect(func() { connection.Detach(comp3) }).To(Panic())
 	})
 
 	It("should detach", func() {
 		// Normal detaching
-		err := connection.Detach(comp1)
-		Expect(err).To(BeNil())
+		Expect(func() { connection.Detach(comp1) }).NotTo(Panic())
 
 		// Detaching again should give error
-		err = connection.Detach(comp1)
-		Expect(err).NotTo(BeNil())
+		Expect(func() { connection.Detach(comp1) }).To(Panic())
 	})
 
 	It("should give error if source is nil", func() {

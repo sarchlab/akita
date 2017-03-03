@@ -1,6 +1,6 @@
 package conn
 
-import "errors"
+import "log"
 
 // DirectConnection provides a way to connect two component directly so that
 // no latency would happen.
@@ -17,20 +17,18 @@ func NewDirectConnection() *DirectConnection {
 
 // Attach adds a Connectable object into the end point list of the
 // DirectConnection.
-func (c *DirectConnection) Attach(connectable Connectable) error {
+func (c *DirectConnection) Attach(connectable Connectable) {
 	c.EndPoints[connectable] = true
-	return nil
 }
 
 // Detach removes a Connectable from the end point list of the
 // DirectConnection
-func (c *DirectConnection) Detach(connectable Connectable) error {
+func (c *DirectConnection) Detach(connectable Connectable) {
 	if _, ok := c.EndPoints[connectable]; !ok {
-		return errors.New("connectable if not attached")
+		log.Panicf("connectable if not attached")
 	}
 
 	delete(c.EndPoints, connectable)
-	return nil
 }
 
 // Send of a DirectConnection invokes receiver's Recv method
