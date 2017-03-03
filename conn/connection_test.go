@@ -8,7 +8,7 @@ import (
 
 var _ = Describe("PlugIn", func() {
 	It("should link a connection and a component", func() {
-		comp := conn.NewMockComponent()
+		comp := conn.NewMockComponent("comp")
 		comp.AddPort("Port")
 		connection := NewMockConnection()
 

@@ -18,9 +18,9 @@ var _ = Describe("DirectConnection", func() {
 	)
 
 	BeforeEach(func() {
-		comp1 = conn.NewMockComponent()
-		comp2 = conn.NewMockComponent()
-		comp3 = conn.NewMockComponent()
+		comp1 = conn.NewMockComponent("comp1")
+		comp2 = conn.NewMockComponent("comp2")
+		comp3 = conn.NewMockComponent("comp3")
 
 		connection = conn.NewDirectConnection()
 		connection.Attach(comp1)

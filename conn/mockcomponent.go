@@ -16,9 +16,9 @@ type MockComponent struct {
 }
 
 // NewMockComponent returns the a MockComponent
-func NewMockComponent() *MockComponent {
+func NewMockComponent(name string) *MockComponent {
 	c := new(MockComponent)
-	c.BasicComponent = NewBasicComponent("mock")
+	c.BasicComponent = NewBasicComponent(name)
 	return c
 }
 
@@ -50,4 +50,9 @@ func (c *MockComponent) Receive(req Request) *Error {
 func (c *MockComponent) ToReceiveReq(req Request, err *Error) {
 	c.ReceiveErrors = append(c.ReceiveErrors, err)
 	c.ReceivedReqs = append(c.ReceivedReqs, req)
+}
+
+// AllReqReceived returns true if all the expected requests has been received
+func (c *MockComponent) AllReqReceived() bool {
+	return len(c.ReceivedReqs) == 0
 }
