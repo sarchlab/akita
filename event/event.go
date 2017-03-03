@@ -4,59 +4,69 @@ package event
 type VTimeInSec float64
 
 // An Event is something going to happen in the future.
+//
+// Different from the concept of event of traditional discrete event simulation,
+// event in Yaotsu can only be scheduled within by one event handler to
+// itself. An event that is schedule by a handler can only modify that paticular
+// handler or send requests over a Connection.
 type Event interface {
-	SetTime(time VTimeInSec)
+	// Return the time that the event should happen
 	Time() VTimeInSec
-	Happen()
+
+	// Returns the handler that can should handle the event
+	Handler() Handler
+
+	// When the handler finished processing the event, return on this channel
+	FinishChan() chan bool
 }
 
-// BasicEvent is an event that does not do anything.
+// BasicEvent provides the basic fields and getters for other events
 type BasicEvent struct {
-	time VTimeInSec
+	time       VTimeInSec
+	handler    Handler
+	finishChan chan bool
 }
 
-func (e *BasicEvent) SetTime(time VTimeInSec) {
-	e.time = time
+// NewBasicEvent creates a new BasicEvent
+func NewBasicEvent() *BasicEvent {
+	return &BasicEvent{0, nil, make(chan bool)}
 }
 
-func (e BasicEvent) Time() VTimeInSec {
+// SetTime sets when then event will happen
+func (e *BasicEvent) SetTime(t VTimeInSec) {
+	e.time = t
+}
+
+// Time returne the time that the event is going to happen
+func (e *BasicEvent) Time() VTimeInSec {
 	return e.time
 }
 
-func (e BasicEvent) Happen() {
-	// This function does not do anything
+// SetHandler sets which component will handle the event
+//
+// Yaotsu requires all the components can only schedule event for themselves.
+// Therefore, the handler in this function must be the component who schedule
+// the event. The only exception is process of kicking starting of the
+// simulation, where the kick starter can schedule to all components.
+func (e *BasicEvent) SetHandler(h Handler) {
+	e.handler = h
 }
 
-// A HandledEvent does not directly triggers something to happen, but it
-// relies on handlers to handle it.
-type HandledEvent struct {
-	BasicEvent
-	handlers []Handler
+// Handler returns the handler to handle the event
+func (e *BasicEvent) Handler() Handler {
+	return e.handler
 }
 
-// NewHandledEvent creates a new handled event
-func NewHandledEvent() *HandledEvent {
-	e := new(HandledEvent)
-	e.handlers = make([]Handler, 0, 1)
-	return e
+// FinishChan return the channel to be used to signal the completion of the
+// the event
+func (e *BasicEvent) FinishChan() chan bool {
+	return e.finishChan
 }
 
-// AddHandler register a handler to the event. When the event happens, all
-// the handlers will be involked to handle the event. There is no gurantee
-// on the order of which handler got invoked first.
-func (e *HandledEvent) AddHandler(h Handler) {
-	e.handlers = append(e.handlers, h)
-}
-
-// Happen of a HandledEvent will invoke all the handlers to handle the event.
-func (e *HandledEvent) Happen() {
-	for _, handler := range e.handlers {
-		handler.Handle(e)
-	}
-}
-
-// A Handler defines the action that is associated with a HandledEvent. When
-// a handled event happen, the handles attached with the event will be invoked.
+// A Handler defines a domain for the events.
+//
+// One event is always constraint to one Handler, which means the event can
+// only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
-	Handle(e Event)
+	Handle(e Event) error
 }

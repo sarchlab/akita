@@ -1,29 +1,21 @@
 package conn_test
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/conn/mock_conn"
 )
 
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		mockCtrl   *gomock.Controller
 		component  *conn.BasicComponent
-		connection *mock_conn.MockConnection
+		connection *MockConnection
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
 		component = conn.NewBasicComponent("test_comp")
-		connection = mock_conn.NewMockConnection(mockCtrl)
-	})
-
-	AfterEach(func() {
-		mockCtrl.Finish()
+		connection = NewMockConnection()
 	})
 
 	It("should set and get name", func() {
@@ -31,17 +23,17 @@ var _ = Describe("BasicComponent", func() {
 	})
 
 	It("should not accept empty port name", func() {
-		Expect(component.AddPort("")).NotTo(BeNil())
+		Expect(func() { component.AddPort("") }).To(Panic())
 	})
 
 	It("should not accept duplicate port name", func() {
-		Expect(component.AddPort("port1")).To(BeNil())
-		Expect(component.AddPort("port1")).NotTo(BeNil())
+		component.AddPort("port1")
+		Expect(func() { component.AddPort("port1") }).To(Panic())
 	})
 
-	It("should give error if connecting to non-exist port", func() {
+	It("should panic if connecting to non-exist port", func() {
 		component.AddPort("port")
-		Expect(component.Connect("port2", nil)).ToNot(BeNil())
+		Expect(func() { component.Connect("port2", nil) }).To(Panic())
 	})
 
 	It("should connect port with connection", func() {
@@ -50,17 +42,16 @@ var _ = Describe("BasicComponent", func() {
 		component.Connect("port", connection)
 
 		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
-
 	})
 
-	It("should give error if disconnecting a non-exist port", func() {
+	It("should panic if disconnecting a non-exist port", func() {
 		component.AddPort("port")
-		Expect(component.Disconnect("port2")).NotTo(BeNil())
+		Expect(func() { component.Disconnect("port2") }).To(Panic())
 	})
 
-	It("should give error if disconnecting a port that is not connected", func() {
+	It("should panic if disconnecting a port that is not connected", func() {
 		component.AddPort("port")
-		Expect(component.Disconnect("port")).NotTo(BeNil())
+		Expect(func() { component.Disconnect("port") }).To(Panic())
 	})
 
 	It("should disconnect port", func() {
@@ -69,7 +60,7 @@ var _ = Describe("BasicComponent", func() {
 		component.Connect("port", connection)
 		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
 
-		Expect(component.Disconnect("port")).To(BeNil())
+		component.Disconnect("port")
 		Expect(component.GetConnection("port")).To(BeNil())
 	})
 

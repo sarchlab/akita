@@ -1,43 +1,54 @@
 package conn
 
-import (
-	"fmt"
-)
+import "log"
 
 // DirectConnection provides a way to connect two component directly so that
 // no latency would happen.
 type DirectConnection struct {
-	*BasicConn
+	EndPoints map[Connectable]bool
 }
 
 // NewDirectConnection creates a new DirectConnection object
 func NewDirectConnection() *DirectConnection {
-	c := DirectConnection{NewBasicConn()}
+	c := DirectConnection{}
+	c.EndPoints = make(map[Connectable]bool)
 	return &c
 }
 
-// CanSend of the DirectConnection only checks if the receiver can process the
-// request.
-func (c *DirectConnection) CanSend(req *Request) *ConnError {
-	_, ok := c.BasicConn.connectables[req.From]
-	if !ok {
-		return &ConnError{"Source " + req.From.Name() + " is not connected",
-			false, 0}
+// Attach adds a Connectable object into the end point list of the
+// DirectConnection.
+func (c *DirectConnection) Attach(connectable Connectable) {
+	c.EndPoints[connectable] = true
+}
+
+// Detach removes a Connectable from the end point list of the
+// DirectConnection
+func (c *DirectConnection) Detach(connectable Connectable) {
+	if _, ok := c.EndPoints[connectable]; !ok {
+		log.Panicf("connectable if not attached")
 	}
 
-	dst, err := c.getDest(req)
-	if err != nil {
-		_ = fmt.Errorf("%v", err)
-		return &ConnError{err.Error(), false, 0}
-	}
-
-	return dst.CanRecv(req)
+	delete(c.EndPoints, connectable)
 }
 
 // Send of a DirectConnection invokes receiver's Recv method
-func (c *DirectConnection) Send(req *Request) *ConnError {
-	if req.To == nil {
-		return NewConnError("Destination of a request is not known.", false, 0)
+func (c *DirectConnection) Send(req Request) *Error {
+	if req.Source() == nil {
+		return NewError("source of a request is nil", false, 0)
 	}
-	return req.To.Recv(req)
+
+	if _, ok := c.EndPoints[req.Source()]; !ok {
+		return NewError("source of is not connected on this connection", false, 0)
+	}
+
+	if req.Destination() == nil {
+		return NewError("destination of a request is nil", false, 0)
+	}
+
+	if _, ok := c.EndPoints[req.Destination()]; !ok {
+		return NewError("destination is not connected on this connection", false, 0)
+	}
+
+	req.SetRecvTime(req.SendTime())
+	return req.Destination().Receive(req)
 }
