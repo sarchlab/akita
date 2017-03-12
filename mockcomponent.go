@@ -1,9 +1,7 @@
-package conn
+package core
 
 import (
 	"log"
-
-	"gitlab.com/yaotsu/core/event"
 )
 
 // A MockComponent is a very simple component that is designed only for
@@ -23,7 +21,7 @@ func NewMockComponent(name string) *MockComponent {
 }
 
 // Handle function of a MockComponent cannot handle any event
-func (c *MockComponent) Handle(evt event.Event) error {
+func (c *MockComponent) Handle(evt Event) error {
 	return nil
 }
 

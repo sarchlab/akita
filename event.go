@@ -1,4 +1,4 @@
-package event
+package core
 
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec float64

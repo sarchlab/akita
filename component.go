@@ -1,9 +1,7 @@
-package conn
+package core
 
 import (
 	"log"
-
-	"gitlab.com/yaotsu/core/event"
 )
 
 // A Named object is an object that has a name
@@ -20,7 +18,7 @@ type Component interface {
 	Connectable
 
 	// A Component can handle events
-	event.Handler
+	Handler
 }
 
 // BasicComponent provides some functions that other component can use

@@ -1,20 +1,21 @@
-package conn_test
+package core_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/conn"
+
+	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		component  *conn.BasicComponent
+		component  *core.BasicComponent
 		connection *MockConnection
 	)
 
 	BeforeEach(func() {
-		component = conn.NewBasicComponent("test_comp")
+		component = core.NewBasicComponent("test_comp")
 		connection = NewMockConnection()
 	})
 

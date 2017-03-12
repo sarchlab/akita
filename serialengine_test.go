@@ -1,18 +1,18 @@
-package event_test
+package core_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/event"
+	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("SerialEngine", func() {
 	var (
-		engine *event.SerialEngine
+		engine *core.SerialEngine
 	)
 
 	BeforeEach(func() {
-		engine = event.NewSerialEngine()
+		engine = core.NewSerialEngine()
 	})
 
 	It("should schedule events", func() {
@@ -35,10 +35,10 @@ var _ = Describe("SerialEngine", func() {
 		evt4.SetTime(5.0)
 		evt4.SetHandler(handler1)
 
-		handler1.HandleFunc = func(e event.Event) {
+		handler1.HandleFunc = func(e core.Event) {
 			e.FinishChan() <- true
 		}
-		handler2.HandleFunc = func(e event.Event) {
+		handler2.HandleFunc = func(e core.Event) {
 			engine.Schedule(evt3)
 			engine.Schedule(evt4)
 			e.FinishChan() <- true

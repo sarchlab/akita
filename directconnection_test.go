@@ -1,28 +1,27 @@
-package conn_test
+package core_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/event"
+	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("DirectConnection", func() {
 
 	var (
-		comp1      *conn.MockComponent
-		comp2      *conn.MockComponent
-		comp3      *conn.MockComponent
-		connection *conn.DirectConnection
+		comp1      *core.MockComponent
+		comp2      *core.MockComponent
+		comp3      *core.MockComponent
+		connection *core.DirectConnection
 	)
 
 	BeforeEach(func() {
-		comp1 = conn.NewMockComponent("comp1")
-		comp2 = conn.NewMockComponent("comp2")
-		comp3 = conn.NewMockComponent("comp3")
+		comp1 = core.NewMockComponent("comp1")
+		comp2 = core.NewMockComponent("comp2")
+		comp3 = core.NewMockComponent("comp3")
 
-		connection = conn.NewDirectConnection()
+		connection = core.NewDirectConnection()
 		connection.Attach(comp1)
 		connection.Attach(comp2)
 	})
@@ -83,12 +82,12 @@ var _ = Describe("DirectConnection", func() {
 		req.SetDestination(comp1)
 		req.SetSendTime(2.0)
 
-		errToRet := conn.NewError("something", true, 10)
+		errToRet := core.NewError("something", true, 10)
 		comp1.ToReceiveReq(req, errToRet)
 
 		err := connection.Send(req)
 		Expect(err).To(BeIdenticalTo(errToRet))
-		Expect(req.RecvTime()).To(Equal(event.VTimeInSec(2.0)))
+		Expect(req.RecvTime()).To(Equal(core.VTimeInSec(2.0)))
 	})
 
 })

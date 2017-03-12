@@ -1,6 +1,4 @@
-package conn
-
-import "gitlab.com/yaotsu/core/event"
+package core
 
 // A Request is the message element being transferred between compoenents
 type Request interface {
@@ -9,19 +7,19 @@ type Request interface {
 	Destination() Component
 	SetDestination(c Component)
 
-	SetSendTime(t event.VTimeInSec)
-	SendTime() event.VTimeInSec
+	SetSendTime(t VTimeInSec)
+	SendTime() VTimeInSec
 
-	SetRecvTime(t event.VTimeInSec)
-	RecvTime() event.VTimeInSec
+	SetRecvTime(t VTimeInSec)
+	RecvTime() VTimeInSec
 }
 
 // BasicRequest provides some basic setter and getter for all other requests
 type BasicRequest struct {
 	src      Component
 	dst      Component
-	sendTime event.VTimeInSec
-	recvTime event.VTimeInSec
+	sendTime VTimeInSec
+	recvTime VTimeInSec
 }
 
 // NewBasicRequest creates a new BasicRequest
@@ -53,24 +51,24 @@ func (r *BasicRequest) Destination() Component {
 //
 // The SendTime property helps the connection and the receiver know what
 // time it is.
-func (r *BasicRequest) SetSendTime(t event.VTimeInSec) {
+func (r *BasicRequest) SetSendTime(t VTimeInSec) {
 	r.sendTime = t
 }
 
 // SendTime returns when the request is sent
-func (r *BasicRequest) SendTime() event.VTimeInSec {
+func (r *BasicRequest) SendTime() VTimeInSec {
 	return r.sendTime
 }
 
 // RecvTime return the time when the request is received
-func (r *BasicRequest) RecvTime() event.VTimeInSec {
+func (r *BasicRequest) RecvTime() VTimeInSec {
 	return r.recvTime
 }
 
 // SetRecvTime set the receive time of the request
 //
 // This field helps the receiver to know what time it is.
-func (r *BasicRequest) SetRecvTime(t event.VTimeInSec) {
+func (r *BasicRequest) SetRecvTime(t VTimeInSec) {
 	r.recvTime = t
 }
 

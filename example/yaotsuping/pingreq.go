@@ -1,19 +1,18 @@
-package example
+package main
 
 import (
-	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/event"
+	"gitlab.com/yaotsu/core"
 )
 
 // A PingReq is the Ping message send from one node to another
 type PingReq struct {
-	*conn.BasicRequest
+	*core.BasicRequest
 
-	StartTime event.VTimeInSec
+	StartTime core.VTimeInSec
 	IsReply   bool
 }
 
 // NewPingReq creates a new PingReq
 func NewPingReq() *PingReq {
-	return &PingReq{conn.NewBasicRequest(), 0, false}
+	return &PingReq{core.NewBasicRequest(), 0, false}
 }

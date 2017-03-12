@@ -1,4 +1,4 @@
-package event
+package core
 
 // An Engine is a unit that keeps the discrete event simulation run
 type Engine interface {

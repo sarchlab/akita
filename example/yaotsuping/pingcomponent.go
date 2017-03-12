@@ -1,13 +1,12 @@
-package example
+package main
 
 import (
 	"errors"
 	"fmt"
 
-	"reflect"
+	"gitlab.com/yaotsu/core"
 
-	"gitlab.com/yaotsu/core/conn"
-	"gitlab.com/yaotsu/core/event"
+	"reflect"
 )
 
 // A PingComponent periodically send ping request out and also respond to pings
@@ -19,31 +18,28 @@ import (
 // -----------------
 //
 type PingComponent struct {
-	*conn.BasicComponent
+	*core.BasicComponent
 
 	NumPingsToSend int
-	Engine         event.Engine
-
-	reqChan chan conn.Request
+	Engine         core.Engine
 }
 
 // NewPingComponent creates a new PingComponent
-func NewPingComponent(name string, engine event.Engine) *PingComponent {
+func NewPingComponent(name string, engine core.Engine) *PingComponent {
 	c := &PingComponent{
-		conn.NewBasicComponent(name),
+		core.NewBasicComponent(name),
 		0,
 		engine,
-		make(chan conn.Request),
 	}
 	c.AddPort("Ping")
 	return c
 }
 
 // Receive processes incoming request
-func (c *PingComponent) Receive(req conn.Request) *conn.Error {
+func (c *PingComponent) Receive(req core.Request) *core.Error {
 	switch req := req.(type) {
 	default:
-		return conn.NewError(
+		return core.NewError(
 			"cannot process request "+reflect.TypeOf(req).String(),
 			false, 0)
 	case *PingReq:
@@ -51,7 +47,7 @@ func (c *PingComponent) Receive(req conn.Request) *conn.Error {
 	}
 }
 
-func (c *PingComponent) processPingReq(req *PingReq) *conn.Error {
+func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
 	if req.IsReply {
 		fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
 			req.RecvTime()-req.StartTime)
@@ -67,7 +63,7 @@ func (c *PingComponent) processPingReq(req *PingReq) *conn.Error {
 }
 
 // Handle handles the event for the PingComponent
-func (c *PingComponent) Handle(e event.Event) error {
+func (c *PingComponent) Handle(e core.Event) error {
 	switch e := e.(type) {
 	default:
 		return errors.New("cannot handle event " + reflect.TypeOf(e).String())
