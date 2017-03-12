@@ -1,4 +1,4 @@
-package event
+package core
 
 // EventQueue is a priority queue of events. The front of the queue is always
 // the event to happen next

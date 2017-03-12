@@ -1,18 +1,18 @@
-package conn_test
+package core_test
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/yaotsu/core/conn"
+	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("PlugIn", func() {
 	It("should link a connection and a component", func() {
-		comp := conn.NewMockComponent("comp")
+		comp := core.NewMockComponent("comp")
 		comp.AddPort("Port")
 		connection := NewMockConnection()
 
-		conn.PlugIn(comp, "Port", connection)
+		core.PlugIn(comp, "Port", connection)
 
 		Expect(connection.Connected[comp]).To(BeTrue())
 		Expect(comp.GetConnection("Port")).To(BeIdenticalTo(connection))

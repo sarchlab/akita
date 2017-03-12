@@ -1,6 +1,4 @@
-package conn
-
-import "gitlab.com/yaotsu/core/event"
+package core
 
 // A Sender can send requests to their destinations
 type Sender interface {
@@ -22,7 +20,7 @@ type Receiver interface {
 type Error struct {
 	msg           string
 	Recoverable   bool
-	EarliestRetry event.VTimeInSec
+	EarliestRetry VTimeInSec
 }
 
 func (e *Error) Error() string {
@@ -30,7 +28,7 @@ func (e *Error) Error() string {
 }
 
 // NewError creates a new ConnError
-func NewError(name string, recoverable bool, earliestRetry event.VTimeInSec) *Error {
+func NewError(name string, recoverable bool, earliestRetry VTimeInSec) *Error {
 	return &Error{name, recoverable, earliestRetry}
 }
 
