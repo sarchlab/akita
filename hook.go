@@ -7,12 +7,12 @@ import (
 
 // Hookable defines an object that accept hooks
 type Hookable interface {
-	// Accept registers a hook
-	Accept(hook Hook)
+	// AcceptHook registers a hook
+	AcceptHook(hook Hook)
 
-	// Invoke triggers all hooks that is hooked at a certain type and a certain
-	// HookPos to execute their HookFunc.
-	Invoke(item interface{}, pos HookPos)
+	// InvokeHook triggers all hooks that is hooked at a certain type and a
+	// certain HookPos to execute their HookFunc.
+	InvokeHook(item interface{}, pos HookPos)
 }
 
 // HookPos defines the enum of possible hooking positions
@@ -57,8 +57,8 @@ func NewBasicHookable() *BasicHookable {
 	return h
 }
 
-// Accept register a hook
-func (h *BasicHookable) Accept(hook Hook) {
+// AcceptHook register a hook
+func (h *BasicHookable) AcceptHook(hook Hook) {
 	h.hooks = append(h.hooks, hook)
 }
 
@@ -69,8 +69,8 @@ func (h *BasicHookable) tryInvoke(item interface{}, pos HookPos, hook Hook) {
 	}
 }
 
-// Invoke trigers the register hooks
-func (h *BasicHookable) Invoke(item interface{}, pos HookPos) {
+// InvokeHook trigers the register hooks
+func (h *BasicHookable) InvokeHook(item interface{}, pos HookPos) {
 	for _, hook := range h.hooks {
 		log.Println(reflect.TypeOf(item), hook.Type())
 		if hook.Type() == nil {

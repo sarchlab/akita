@@ -19,10 +19,14 @@ type Component interface {
 
 	// A Component can handle events
 	Handler
+
+	// A Component should be hookable
+	Hookable
 }
 
 // BasicComponent provides some functions that other component can use
 type BasicComponent struct {
+	*BasicHookable
 	name        string
 	connections map[string]Connection
 	ports       map[string]bool
@@ -31,6 +35,7 @@ type BasicComponent struct {
 // NewBasicComponent creates a new basic component
 func NewBasicComponent(name string) *BasicComponent {
 	return &BasicComponent{
+		NewBasicHookable(),
 		name,
 		make(map[string]Connection),
 		make(map[string]bool),
