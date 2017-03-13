@@ -1,6 +1,9 @@
 package core
 
-import "reflect"
+import (
+	"log"
+	"reflect"
+)
 
 // Hookable defines an object that accept hooks
 type Hookable interface {
@@ -69,10 +72,12 @@ func (h *BasicHookable) tryInvoke(item interface{}, pos HookPos, hook Hook) {
 // Invoke trigers the register hooks
 func (h *BasicHookable) Invoke(item interface{}, pos HookPos) {
 	for _, hook := range h.hooks {
+		log.Println(reflect.TypeOf(item), hook.Type())
 		if hook.Type() == nil {
 			h.tryInvoke(item, pos, hook)
-		} else if hook.Type().Kind() == reflect.Interface &&
-			reflect.TypeOf(item).Implements(hook.Type()) {
+		} else if hook.Type().Kind() == reflect.Ptr &&
+			hook.Type().Elem().Kind() == reflect.Interface &&
+			reflect.TypeOf(item).Implements(hook.Type().Elem()) {
 			h.tryInvoke(item, pos, hook)
 		} else if hook.Type() == reflect.TypeOf(item) {
 			h.tryInvoke(item, pos, hook)
