@@ -33,4 +33,14 @@ var _ = Describe("Freq", func() {
 		Expect(f.NCyclesLater(12, 102.0000000011)).To(BeNumerically("~", 102.000000014, 1e-12))
 	})
 
+	It("should get the no-earlier-than time, on tick", func() {
+		var f core.Freq = 1 * core.GHz
+		Expect(f.NoEarlierThan(102.00)).To(BeNumerically("~", 102.00, 1e-12))
+	})
+
+	It("should get the no-earlier-than time, off tick", func() {
+		var f core.Freq = 1 * core.GHz
+		Expect(f.NoEarlierThan(102.0000000011)).To(BeNumerically("~", 102.000000002, 1e-12))
+	})
+
 })
