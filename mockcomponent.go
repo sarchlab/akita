@@ -28,8 +28,11 @@ func (c *MockComponent) Handle(evt Event) error {
 // Receive of a MockComponent checks if a request is expected and returns a
 // predefined error.
 func (c *MockComponent) Receive(req Request) *Error {
-	if len(c.ReceivedReqs) == 0 || c.ReceivedReqs[0] != req {
-		log.Panicf("Request not expected %+v", req)
+	if len(c.ReceivedReqs) == 0 {
+		log.Panicln("No request is expected")
+	}
+	if c.ReceivedReqs[0] != req {
+		log.Panicln("Request not expected")
 	}
 	if len(c.ReceiveErrors) == 0 {
 		log.Panic("Not sure what error to return")
