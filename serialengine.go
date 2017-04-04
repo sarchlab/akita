@@ -4,12 +4,15 @@ import "container/heap"
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
+	paused    bool
 	queueChan chan *EventQueue
 }
 
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
+
+	e.paused = false
 
 	queue := make(EventQueue, 0, 0)
 	heap.Init(&queue)
@@ -29,7 +32,7 @@ func (e *SerialEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
-	for true {
+	for !e.paused {
 		queue := <-e.queueChan
 		if queue.Len() == 0 {
 			return nil
@@ -44,4 +47,9 @@ func (e *SerialEngine) Run() error {
 		<-evt.FinishChan()
 	}
 	return nil
+}
+
+// Pause will stop the engine from dispatching more events
+func (e *SerialEngine) Pause() {
+	e.paused = true
 }
