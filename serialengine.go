@@ -1,7 +1,5 @@
 package core
 
-import "container/heap"
-
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	paused bool
@@ -21,7 +19,7 @@ func NewSerialEngine() *SerialEngine {
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
-	heap.Push(e.queue, evt)
+	e.queue.Push(evt)
 }
 
 // Run processes all the events scheduled in the SerialEngine
@@ -31,7 +29,7 @@ func (e *SerialEngine) Run() error {
 			return nil
 		}
 
-		evt := heap.Pop(e.queue).(Event)
+		evt := e.queue.Pop()
 
 		handler := evt.Handler()
 		handler.Handle(evt)

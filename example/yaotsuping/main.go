@@ -1,13 +1,29 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
 	"math/rand"
+	"os"
+	"runtime/pprof"
 
 	"gitlab.com/yaotsu/core"
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
 func main() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
 	engine := core.NewParallelEngine()
 	connection := core.NewDirectConnection()
 
@@ -22,7 +38,7 @@ func main() {
 	}
 
 	t := 0.0
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < 1000000; i++ {
 		evt := NewPingSendEvent()
 		evt.SetTime(core.VTimeInSec(t))
 

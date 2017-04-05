@@ -37,12 +37,10 @@ var _ = Describe("ParallelEngine", func() {
 		evt4.SetHandler(handler1)
 
 		handler1.HandleFunc = func(e core.Event) {
-			// e.FinishChan() <- true
 		}
 		handler2.HandleFunc = func(e core.Event) {
 			engine.Schedule(evt3)
 			engine.Schedule(evt4)
-			// e.FinishChan() <- true
 		}
 
 		engine.Schedule(evt1)
