@@ -15,21 +15,18 @@ type Event interface {
 
 	// Returns the handler that can should handle the event
 	Handler() Handler
-
-	// When the handler finished processing the event, return on this channel
-	FinishChan() chan bool
 }
 
 // BasicEvent provides the basic fields and getters for other events
 type BasicEvent struct {
-	time       VTimeInSec
-	handler    Handler
-	finishChan chan bool
+	time    VTimeInSec
+	handler Handler
 }
 
 // NewBasicEvent creates a new BasicEvent
 func NewBasicEvent() *BasicEvent {
-	return &BasicEvent{0, nil, make(chan bool)}
+	e := new(BasicEvent)
+	return e
 }
 
 // SetTime sets when then event will happen
@@ -55,12 +52,6 @@ func (e *BasicEvent) SetHandler(h Handler) {
 // Handler returns the handler to handle the event
 func (e *BasicEvent) Handler() Handler {
 	return e.handler
-}
-
-// FinishChan return the channel to be used to signal the completion of the
-// the event
-func (e *BasicEvent) FinishChan() chan bool {
-	return e.finishChan
 }
 
 // A Handler defines a domain for the events.

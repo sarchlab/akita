@@ -9,3 +9,6 @@
 
 # Vendor
 vendor
+
+# Test file
+*.test

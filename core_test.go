@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"log"
+	"sync"
 	"testing"
 
 	"github.com/onsi/ginkgo"
@@ -80,15 +81,21 @@ func (e MockEvent) FinishChan() chan bool {
 }
 
 type MockHandler struct {
+	sync.Mutex
 	EventHandled []core.Event
 	HandleFunc   func(core.Event)
 }
 
 func NewMockHandler() *MockHandler {
-	return &MockHandler{make([]core.Event, 0), nil}
+	h := new(MockHandler)
+	h.EventHandled = make([]core.Event, 0)
+	return h
 }
 
 func (h *MockHandler) Handle(e core.Event) error {
+	h.Lock()
+	defer h.Unlock()
+
 	h.EventHandled = append(h.EventHandled, e)
 	if h.HandleFunc != nil {
 		h.HandleFunc(e)
