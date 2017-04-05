@@ -2,7 +2,6 @@ package core
 
 import (
 	"container/heap"
-	"log"
 	"sync"
 )
 
@@ -16,10 +15,11 @@ type ParallelEngine struct {
 	now             VTimeInSec
 	runningHandlers map[Handler]bool
 
-	evtCompleteChan  chan bool
-	MaxGoRoutine     int
-	evtInFlightMutex sync.Mutex
-	EvtInFlight      map[Event]bool
+	dispatchPhaseChan chan bool
+	evtCompleteChan   chan bool
+	MaxGoRoutine      int
+	evtInFlightMutex  sync.Mutex
+	numEvtInFlight    int
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -27,8 +27,7 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 
 	e.paused = false
-	e.EvtInFlight = make(map[Event]bool)
-	e.MaxGoRoutine = 60
+	e.MaxGoRoutine = 4
 	e.queue = NewEventQueue()
 	e.evtChan = make(chan Event)
 	e.runningHandlers = make(map[Handler]bool)
@@ -59,50 +58,45 @@ func (e *ParallelEngine) startEventWorker() {
 		}
 		handler := evt.Handler()
 		handler.Handle(evt)
-		// <-evt.FinishChan()
 
 		e.eventComplete(evt)
 	}
 }
 
 func (e *ParallelEngine) eventComplete(evt Event) {
-	log.Printf("Complete event %+v\n", evt)
+	<-e.dispatchPhaseChan
 
 	e.evtInFlightMutex.Lock()
-	delete(e.EvtInFlight, evt)
+	e.numEvtInFlight--
 	delete(e.runningHandlers, evt.Handler())
 	e.evtInFlightMutex.Unlock()
 
-	log.Printf("Complete event %+v\n", evt)
 	e.evtCompleteChan <- true
-	log.Printf("Complete event %+v\n", evt)
 }
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
 	defer close(e.evtChan)
 	for !e.paused {
-		log.Printf("QueueLength before round start %d", e.queue.Len())
-		log.Printf("RoundStart\n")
 		if e.queue.Len() == 0 {
 			return nil
 		}
 
+		e.dispatchPhaseChan = make(chan bool)
 		e.runEventsUntilConflict()
+		close(e.dispatchPhaseChan)
 
-		log.Printf("QueueLength after run %d", e.queue.Len())
 		// Wait for all the event to complete
 		for {
 			<-e.evtCompleteChan
 			e.evtInFlightMutex.Lock()
-			if len(e.EvtInFlight) == 0 {
+			if e.numEvtInFlight == 0 {
 				e.now = 0
 				e.evtInFlightMutex.Unlock()
 				break
 			}
 			e.evtInFlightMutex.Unlock()
 		}
-		log.Printf("NextRound\n")
 
 	}
 	return nil
@@ -111,7 +105,6 @@ func (e *ParallelEngine) Run() error {
 func (e *ParallelEngine) runEventsUntilConflict() {
 	for e.queue.Len() > 0 {
 		evt := e.popEvent()
-		log.Printf("QueueLength %d", e.queue.Len())
 		if e.canRunEvent(evt) {
 			e.runEvent(evt)
 		} else {
@@ -125,23 +118,21 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 func (e *ParallelEngine) canRunEvent(evt Event) bool {
 	e.evtInFlightMutex.Lock()
 	defer e.evtInFlightMutex.Unlock()
+	if e.numEvtInFlight >= e.MaxGoRoutine {
+		return false
+	}
 	if e.now == 0 || e.now >= evt.Time() {
 		_, handlerInUse := e.runningHandlers[evt.Handler()]
 		if !handlerInUse {
-			log.Printf("Can run event %+v", evt)
 			return true
 		}
-		log.Printf("Cannot run event, handler in use %+v", evt)
 	}
-	log.Printf("Cannot run event, time advance %+v", evt)
 	return false
 }
 
 func (e *ParallelEngine) runEvent(evt Event) {
-	log.Printf("Run event %+v\n", evt)
-
 	e.evtInFlightMutex.Lock()
-	e.EvtInFlight[evt] = true
+	e.numEvtInFlight++
 	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
 	e.evtInFlightMutex.Unlock()

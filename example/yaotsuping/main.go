@@ -1,30 +1,42 @@
 package main
 
 import (
+	"fmt"
+	"math/rand"
+
 	"gitlab.com/yaotsu/core"
 )
 
 func main() {
-	engine := core.NewSerialEngine()
-
-	comp1 := NewPingComponent("comp1", engine)
-	comp2 := NewPingComponent("comp2", engine)
-
+	engine := core.NewParallelEngine()
 	connection := core.NewDirectConnection()
 
-	core.PlugIn(comp1, "Ping", connection)
-	core.PlugIn(comp2, "Ping", connection)
+	numAgents := 100
+
+	agents := make([]*PingComponent, 0)
+	for i := 0; i < numAgents; i++ {
+		name := fmt.Sprintf("agent%d", i)
+		agent := NewPingComponent(name, engine)
+		core.PlugIn(agent, "Ping", connection)
+		agents = append(agents, agent)
+	}
 
 	t := 0.0
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 10000000; i++ {
 		evt := NewPingSendEvent()
 		evt.SetTime(core.VTimeInSec(t))
-		evt.SetHandler(comp1)
-		evt.From = comp1
-		evt.To = comp2
+
+		from := rand.Uint32() % uint32(numAgents)
+		to := rand.Uint32() % uint32(numAgents)
+
+		evt.SetHandler(agents[from])
+		evt.From = agents[from]
+		evt.To = agents[to]
 
 		engine.Schedule(evt)
-		t += 0.2
+		if i%numAgents == 0 {
+			t += 0.2
+		}
 	}
 
 	engine.Run()
