@@ -12,8 +12,7 @@ type ParallelEngine struct {
 	runningHandlers map[Handler]bool
 	waitGroup       sync.WaitGroup
 
-	MaxGoRoutine     int
-	evtInFlightMutex sync.Mutex
+	MaxGoRoutine int
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -56,9 +55,6 @@ func (e *ParallelEngine) startEventWorker() {
 }
 
 func (e *ParallelEngine) eventComplete(evt Event) {
-	// e.evtInFlightMutex.Lock()
-	// delete(e.runningHandlers, evt.Handler())
-	// e.evtInFlightMutex.Unlock()
 	e.waitGroup.Done()
 }
 
@@ -72,12 +68,9 @@ func (e *ParallelEngine) Run() error {
 
 		e.runEventsUntilConflict()
 
-		// Wait for all the event to complete
 		e.waitGroup.Wait()
-		// e.evtInFlightMutex.Lock()
 		e.runningHandlers = make(map[Handler]bool)
 		e.now = 0
-		// e.evtInFlightMutex.Unlock()
 	}
 	return nil
 }
@@ -96,9 +89,6 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 }
 
 func (e *ParallelEngine) canRunEvent(evt Event) bool {
-	// e.evtInFlightMutex.Lock()
-	// defer e.evtInFlightMutex.Unlock()
-	// log.Printf("Run event %+v", evt)
 	if e.now == 0 || e.now >= evt.Time() {
 		_, handlerInUse := e.runningHandlers[evt.Handler()]
 		if !handlerInUse {
