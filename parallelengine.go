@@ -100,10 +100,8 @@ func (e *ParallelEngine) canRunEvent(evt Event) bool {
 
 func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
-	// e.evtInFlightMutex.Lock()
 	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
-	// e.evtInFlightMutex.Unlock()
 
 	e.evtChan <- evt
 }

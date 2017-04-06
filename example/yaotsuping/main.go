@@ -13,7 +13,7 @@ import (
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
 
-func main() {
+func profileCPU() {
 	flag.Parse()
 	if *cpuprofile != "" {
 		f, err := os.Create(*cpuprofile)
@@ -24,10 +24,15 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	engine := core.NewParallelEngine()
+}
+
+func main() {
+	profileCPU()
+
+	engine := core.NewSerialEngine()
 	connection := core.NewDirectConnection()
 
-	numAgents := 100
+	numAgents := 10000
 
 	agents := make([]*PingComponent, 0)
 	for i := 0; i < numAgents; i++ {
@@ -37,22 +42,19 @@ func main() {
 		agents = append(agents, agent)
 	}
 
-	t := 0.0
-	for i := 0; i < 1000000; i++ {
+	for i := 0; i < 10000000; i++ {
 		evt := NewPingSendEvent()
-		evt.SetTime(core.VTimeInSec(t))
 
 		from := rand.Uint32() % uint32(numAgents)
 		to := rand.Uint32() % uint32(numAgents)
+		time := rand.Uint32() % 100
 
+		evt.SetTime(core.VTimeInSec(time))
 		evt.SetHandler(agents[from])
 		evt.From = agents[from]
 		evt.To = agents[to]
 
 		engine.Schedule(evt)
-		if i%numAgents == 0 {
-			t += 0.2
-		}
 	}
 
 	engine.Run()
