@@ -23,8 +23,8 @@ func NewParallelEngine() *ParallelEngine {
 	e.paused = false
 	e.MaxGoRoutine = 4
 	e.queue = NewEventQueue()
-	e.evtChan = make(chan Event)
 	e.runningHandlers = make(map[Handler]bool)
+	e.evtChan = make(chan Event, e.MaxGoRoutine*10)
 
 	for i := 0; i < e.MaxGoRoutine; i++ {
 		go e.startEventWorker()
@@ -56,9 +56,9 @@ func (e *ParallelEngine) startEventWorker() {
 }
 
 func (e *ParallelEngine) eventComplete(evt Event) {
-	e.evtInFlightMutex.Lock()
-	delete(e.runningHandlers, evt.Handler())
-	e.evtInFlightMutex.Unlock()
+	// e.evtInFlightMutex.Lock()
+	// delete(e.runningHandlers, evt.Handler())
+	// e.evtInFlightMutex.Unlock()
 	e.waitGroup.Done()
 }
 
@@ -74,20 +74,21 @@ func (e *ParallelEngine) Run() error {
 
 		// Wait for all the event to complete
 		e.waitGroup.Wait()
-		e.evtInFlightMutex.Lock()
+		// e.evtInFlightMutex.Lock()
+		e.runningHandlers = make(map[Handler]bool)
 		e.now = 0
-		e.evtInFlightMutex.Unlock()
+		// e.evtInFlightMutex.Unlock()
 	}
 	return nil
 }
 
 func (e *ParallelEngine) runEventsUntilConflict() {
 	for e.queue.Len() > 0 {
-		evt := e.popEvent()
+		evt := e.queue.Peek()
 		if e.canRunEvent(evt) {
+			e.popEvent()
 			e.runEvent(evt)
 		} else {
-			e.Schedule(evt)
 			break
 		}
 	}
@@ -95,8 +96,9 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 }
 
 func (e *ParallelEngine) canRunEvent(evt Event) bool {
-	e.evtInFlightMutex.Lock()
-	defer e.evtInFlightMutex.Unlock()
+	// e.evtInFlightMutex.Lock()
+	// defer e.evtInFlightMutex.Unlock()
+	// log.Printf("Run event %+v", evt)
 	if e.now == 0 || e.now >= evt.Time() {
 		_, handlerInUse := e.runningHandlers[evt.Handler()]
 		if !handlerInUse {
@@ -108,10 +110,10 @@ func (e *ParallelEngine) canRunEvent(evt Event) bool {
 
 func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
-	e.evtInFlightMutex.Lock()
+	// e.evtInFlightMutex.Lock()
 	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
-	e.evtInFlightMutex.Unlock()
+	// e.evtInFlightMutex.Unlock()
 
 	e.evtChan <- evt
 }

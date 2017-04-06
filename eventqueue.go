@@ -41,6 +41,14 @@ func (q *EventQueue) Len() int {
 	return len(q.events)
 }
 
+// Peek will return the next event to pop, but will not pop the next event
+func (q *EventQueue) Peek() Event {
+	q.Lock()
+	defer q.Unlock()
+	//return q.events[len(q.events)-1]
+	return q.events[0]
+}
+
 type eventHeap []Event
 
 // Len returns the length of the event queue
