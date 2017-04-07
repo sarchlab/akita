@@ -18,13 +18,13 @@ func TestCore(t *testing.T) {
 
 type MockConnection struct {
 	Connected map[core.Connectable]bool
-	ReqSent   []core.Request
+	ReqSent   []core.Req
 }
 
 func NewMockConnection() *MockConnection {
 	return &MockConnection{
 		make(map[core.Connectable]bool),
-		make([]core.Request, 0)}
+		make([]core.Req, 0)}
 }
 
 func (c *MockConnection) Attach(connectable core.Connectable) {
@@ -35,13 +35,13 @@ func (c *MockConnection) Detach(connectable core.Connectable) {
 	c.Connected[connectable] = false
 }
 
-func (c *MockConnection) Send(req core.Request) *core.Error {
+func (c *MockConnection) Send(req core.Req) *core.Error {
 	c.ReqSent = append(c.ReqSent, req)
 	return nil
 }
 
 type MockRequest struct {
-	*core.BasicRequest
+	*core.ReqBase
 }
 
 func NewMockRequest() *MockRequest {

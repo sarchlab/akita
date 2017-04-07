@@ -6,7 +6,7 @@ import (
 
 // A PingReq is the Ping message send from one node to another
 type PingReq struct {
-	*core.BasicRequest
+	*core.ReqBase
 
 	StartTime core.VTimeInSec
 	IsReply   bool

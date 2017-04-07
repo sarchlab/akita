@@ -34,8 +34,8 @@ func NewPingComponent(name string, engine core.Engine) *PingComponent {
 	return c
 }
 
-// Receive processes incoming request
-func (c *PingComponent) Receive(req core.Request) *core.Error {
+// Recv processes incoming request
+func (c *PingComponent) Recv(req core.Req) *core.Error {
 	switch req := req.(type) {
 	default:
 		return core.NewError(
@@ -102,8 +102,8 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 	}
 
 	req := NewPingReq()
-	req.SetSource(e.From)
-	req.SetDestination(e.To)
+	req.SetSrc(e.From)
+	req.SetDst(e.To)
 	req.StartTime = e.Time()
 	req.SetSendTime(e.Time())
 

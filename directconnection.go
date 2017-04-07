@@ -32,23 +32,23 @@ func (c *DirectConnection) Detach(connectable Connectable) {
 }
 
 // Send of a DirectConnection invokes receiver's Recv method
-func (c *DirectConnection) Send(req Request) *Error {
-	if req.Source() == nil {
+func (c *DirectConnection) Send(req Req) *Error {
+	if req.Src() == nil {
 		return NewError("source of a request is nil", false, 0)
 	}
 
-	if _, ok := c.EndPoints[req.Source()]; !ok {
+	if _, ok := c.EndPoints[req.Src()]; !ok {
 		return NewError("source of is not connected on this connection", false, 0)
 	}
 
-	if req.Destination() == nil {
+	if req.Dst() == nil {
 		return NewError("destination of a request is nil", false, 0)
 	}
 
-	if _, ok := c.EndPoints[req.Destination()]; !ok {
+	if _, ok := c.EndPoints[req.Dst()]; !ok {
 		return NewError("destination is not connected on this connection", false, 0)
 	}
 
 	req.SetRecvTime(req.SendTime())
-	return req.Destination().Receive(req)
+	return req.Dst().Recv(req)
 }

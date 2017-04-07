@@ -9,7 +9,7 @@ import (
 type MockComponent struct {
 	*BasicComponent
 
-	ReceivedReqs  []Request
+	ReceivedReqs  []Req
 	ReceiveErrors []*Error
 }
 
@@ -25,9 +25,9 @@ func (c *MockComponent) Handle(evt Event) error {
 	return nil
 }
 
-// Receive of a MockComponent checks if a request is expected and returns a
+// Recv of a MockComponent checks if a request is expected and returns a
 // predefined error.
-func (c *MockComponent) Receive(req Request) *Error {
+func (c *MockComponent) Recv(req Req) *Error {
 	if len(c.ReceivedReqs) == 0 {
 		log.Panicln("No request is expected")
 	}
@@ -48,7 +48,7 @@ func (c *MockComponent) Receive(req Request) *Error {
 
 // ToReceiveReq defines the request that a mock component is going to receive
 // during the test and the errors to return
-func (c *MockComponent) ToReceiveReq(req Request, err *Error) {
+func (c *MockComponent) ToReceiveReq(req Req, err *Error) {
 	c.ReceiveErrors = append(c.ReceiveErrors, err)
 	c.ReceivedReqs = append(c.ReceivedReqs, req)
 }
