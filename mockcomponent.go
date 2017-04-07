@@ -31,7 +31,7 @@ func (c *MockComponent) Recv(req Req) *Error {
 	if len(c.ReceivedReqs) == 0 {
 		log.Panicln("No request is expected")
 	}
-	if c.ReceivedReqs[0] != req {
+	if !ReqEquivalent(c.ReceivedReqs[0], req) {
 		log.Panicln("Request not expected")
 	}
 	if len(c.ReceiveErrors) == 0 {

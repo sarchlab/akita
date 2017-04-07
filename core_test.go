@@ -45,7 +45,7 @@ type MockRequest struct {
 }
 
 func NewMockRequest() *MockRequest {
-	return &MockRequest{core.NewBasicRequest()}
+	return &MockRequest{core.NewReqBase()}
 }
 
 type MockEvent struct {

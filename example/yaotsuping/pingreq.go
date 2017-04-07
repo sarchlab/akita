@@ -14,5 +14,5 @@ type PingReq struct {
 
 // NewPingReq creates a new PingReq
 func NewPingReq() *PingReq {
-	return &PingReq{core.NewBasicRequest(), 0, false}
+	return &PingReq{core.NewReqBase(), 0, false}
 }

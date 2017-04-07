@@ -1,5 +1,9 @@
 package core
 
+import (
+	"reflect"
+)
+
 // A Req is the message element being transferred between compoenents
 type Req interface {
 	Src() Component
@@ -22,8 +26,8 @@ type ReqBase struct {
 	recvTime VTimeInSec
 }
 
-// NewBasicRequest creates a new BasicRequest
-func NewBasicRequest() *ReqBase {
+// NewReqBase creates a new BasicRequest
+func NewReqBase() *ReqBase {
 	return &ReqBase{nil, nil, 0, 0}
 }
 
@@ -78,4 +82,40 @@ func (r *ReqBase) SetRecvTime(t VTimeInSec) {
 // sender.
 func (r *ReqBase) SwapSrcAndDst() {
 	r.src, r.dst = r.dst, r.src
+}
+
+// ReqEquivalent checks if two requests are equivalent to each other
+func ReqEquivalent(r1 Req, r2 Req) bool {
+	if r1 == r2 {
+		return true
+	}
+
+	if reflect.TypeOf(r1) != reflect.TypeOf(r2) {
+		return false
+	}
+
+	if r1.Src() != r2.Src() || r1.Dst() != r2.Dst() {
+		return false
+	}
+
+	reqType := reflect.TypeOf(r1)
+	r1Value := reflect.ValueOf(r1)
+	r2Value := reflect.ValueOf(r2)
+	if reqType.Kind() == reflect.Ptr {
+		reqType = reqType.Elem()
+		r1Value = r1Value.Elem()
+		r2Value = r2Value.Elem()
+	}
+	for i := 0; i < reqType.NumField(); i++ {
+		field := reqType.Field(i)
+		if field.Type == reflect.TypeOf((*ReqBase)(nil)).Elem() {
+			continue
+		}
+
+		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
+			return false
+		}
+	}
+
+	return true
 }
