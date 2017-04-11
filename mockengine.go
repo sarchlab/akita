@@ -21,3 +21,8 @@ func (e *MockEngine) Schedule(evt Event) {
 func (e *MockEngine) Run() error {
 	return nil
 }
+
+// Pause function of MockEngine is not implemented
+func (e *MockEngine) Pause() {
+
+}
