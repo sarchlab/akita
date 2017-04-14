@@ -40,7 +40,7 @@ var _ = Describe("DirectConnection", func() {
 
 	It("should give error if source is nil", func() {
 		req := NewMockRequest()
-		req.SetDestination(comp2)
+		req.SetDst(comp2)
 
 		err := connection.Send(req)
 		Expect(err).NotTo(BeNil())
@@ -49,8 +49,8 @@ var _ = Describe("DirectConnection", func() {
 
 	It("should give error if source is not connected", func() {
 		req := NewMockRequest()
-		req.SetDestination(comp2)
-		req.SetSource(comp3)
+		req.SetDst(comp2)
+		req.SetSrc(comp3)
 
 		err := connection.Send(req)
 		Expect(err).NotTo(BeNil())
@@ -59,7 +59,7 @@ var _ = Describe("DirectConnection", func() {
 
 	It("should give error if destination is nil", func() {
 		req := NewMockRequest()
-		req.SetSource(comp2)
+		req.SetSrc(comp2)
 
 		err := connection.Send(req)
 		Expect(err).NotTo(BeNil())
@@ -68,8 +68,8 @@ var _ = Describe("DirectConnection", func() {
 
 	It("should give error if destination is not connected", func() {
 		req := NewMockRequest()
-		req.SetSource(comp2)
-		req.SetDestination(comp3)
+		req.SetSrc(comp2)
+		req.SetDst(comp3)
 
 		err := connection.Send(req)
 		Expect(err).NotTo(BeNil())
@@ -78,8 +78,8 @@ var _ = Describe("DirectConnection", func() {
 
 	It("should send", func() {
 		req := NewMockRequest()
-		req.SetSource(comp2)
-		req.SetDestination(comp1)
+		req.SetSrc(comp2)
+		req.SetDst(comp1)
 		req.SetSendTime(2.0)
 
 		errToRet := core.NewError("something", true, 10)

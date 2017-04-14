@@ -1,30 +1,60 @@
 package main
 
 import (
+	"flag"
+	"fmt"
+	"log"
+	"math/rand"
+	"os"
+	"runtime/pprof"
+
 	"gitlab.com/yaotsu/core"
 )
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+
+func profileCPU() {
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+}
+
 func main() {
+	profileCPU()
+
 	engine := core.NewSerialEngine()
-
-	comp1 := NewPingComponent("comp1", engine)
-	comp2 := NewPingComponent("comp2", engine)
-
 	connection := core.NewDirectConnection()
 
-	core.PlugIn(comp1, "Ping", connection)
-	core.PlugIn(comp2, "Ping", connection)
+	numAgents := 10000
 
-	t := 0.0
-	for i := 0; i < 100; i++ {
+	agents := make([]*PingComponent, 0)
+	for i := 0; i < numAgents; i++ {
+		name := fmt.Sprintf("agent%d", i)
+		agent := NewPingComponent(name, engine)
+		core.PlugIn(agent, "Ping", connection)
+		agents = append(agents, agent)
+	}
+
+	for i := 0; i < 10000000; i++ {
 		evt := NewPingSendEvent()
-		evt.SetTime(core.VTimeInSec(t))
-		evt.SetHandler(comp1)
-		evt.From = comp1
-		evt.To = comp2
+
+		from := rand.Uint32() % uint32(numAgents)
+		to := rand.Uint32() % uint32(numAgents)
+		time := rand.Uint32() % 100
+
+		evt.SetTime(core.VTimeInSec(time))
+		evt.SetHandler(agents[from])
+		evt.From = agents[from]
+		evt.To = agents[to]
 
 		engine.Schedule(evt)
-		t += 0.2
 	}
 
 	engine.Run()

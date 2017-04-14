@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 
 	"gitlab.com/yaotsu/core"
 
@@ -11,11 +10,11 @@ import (
 
 // A PingComponent periodically send ping request out and also respond to pings
 //
-// -----------------
-// |               |
-// | PingComponent | <=> Ping
-// |               |
-// -----------------
+//     -----------------
+//     |               |
+//     | PingComponent | <=> Ping
+//     |               |
+//     -----------------
 //
 type PingComponent struct {
 	*core.BasicComponent
@@ -35,8 +34,8 @@ func NewPingComponent(name string, engine core.Engine) *PingComponent {
 	return c
 }
 
-// Receive processes incoming request
-func (c *PingComponent) Receive(req core.Request) *core.Error {
+// Recv processes incoming request
+func (c *PingComponent) Recv(req core.Req) *core.Error {
 	switch req := req.(type) {
 	default:
 		return core.NewError(
@@ -49,8 +48,10 @@ func (c *PingComponent) Receive(req core.Request) *core.Error {
 
 func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
 	if req.IsReply {
-		fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
-			req.RecvTime()-req.StartTime)
+		/*
+			fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
+				req.RecvTime()-req.StartTime)
+		*/
 		return nil
 	}
 
@@ -92,7 +93,6 @@ func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
 		c.Engine.Schedule(e)
 	}
 
-	e.FinishChan() <- true
 	return nil
 }
 
@@ -102,8 +102,8 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 	}
 
 	req := NewPingReq()
-	req.SetSource(e.From)
-	req.SetDestination(e.To)
+	req.SetSrc(e.From)
+	req.SetDst(e.To)
 	req.StartTime = e.Time()
 	req.SetSendTime(e.Time())
 
@@ -117,6 +117,5 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 		c.Engine.Schedule(e)
 	}
 
-	e.FinishChan() <- true
 	return nil
 }

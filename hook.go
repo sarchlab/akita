@@ -1,7 +1,6 @@
 package core
 
 import (
-	"log"
 	"reflect"
 )
 
@@ -72,7 +71,6 @@ func (h *BasicHookable) tryInvoke(item interface{}, pos HookPos, hook Hook) {
 // InvokeHook trigers the register hooks
 func (h *BasicHookable) InvokeHook(item interface{}, pos HookPos) {
 	for _, hook := range h.hooks {
-		log.Println(reflect.TypeOf(item), hook.Type())
 		if hook.Type() == nil {
 			h.tryInvoke(item, pos, hook)
 		} else if hook.Type().Kind() == reflect.Ptr &&

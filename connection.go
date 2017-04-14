@@ -2,12 +2,12 @@ package core
 
 // A Sender can send requests to their destinations
 type Sender interface {
-	Send(req Request) *Error
+	Send(req Req) *Error
 }
 
 // A Receiver can receive requests
 type Receiver interface {
-	Receive(req Request) *Error
+	Recv(req Req) *Error
 }
 
 // An Error of the conn package is an error from the connection system.

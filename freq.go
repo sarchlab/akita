@@ -1,6 +1,8 @@
 package core
 
-import "math"
+import (
+	"math"
+)
 
 // Freq defines the type of frequency
 type Freq float64
@@ -21,10 +23,11 @@ func (f Freq) Period() VTimeInSec {
 // NextTick returns the next tick time.
 //
 // If currTime is not on a tick time, this function returns the time of
-// next tick.
+// upcomming tick.
 func (f Freq) NextTick(currTime VTimeInSec) VTimeInSec {
 	period := f.Period()
-	return VTimeInSec((math.Floor(float64(currTime/period)) + 1) * float64(period))
+	count := math.Floor(float64((currTime + period*1e-6) / period))
+	return VTimeInSec(count+1) * period
 }
 
 // NCyclesLater returns the time after N cycles
@@ -32,4 +35,10 @@ func (f Freq) NextTick(currTime VTimeInSec) VTimeInSec {
 // This function will always return a time of an integer number of cycles
 func (f Freq) NCyclesLater(n int, currTime VTimeInSec) VTimeInSec {
 	return f.NextTick(currTime + VTimeInSec(n)*f.Period())
+}
+
+// NoEarlierThan returns the tick time that is at or right after the given time
+func (f Freq) NoEarlierThan(t VTimeInSec) VTimeInSec {
+	count := t / f.Period()
+	return VTimeInSec(math.Ceil(float64(count))) * f.Period()
 }

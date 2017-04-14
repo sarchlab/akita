@@ -6,7 +6,7 @@ import (
 
 // A PingReq is the Ping message send from one node to another
 type PingReq struct {
-	*core.BasicRequest
+	*core.ReqBase
 
 	StartTime core.VTimeInSec
 	IsReply   bool
@@ -14,5 +14,5 @@ type PingReq struct {
 
 // NewPingReq creates a new PingReq
 func NewPingReq() *PingReq {
-	return &PingReq{core.NewBasicRequest(), 0, false}
+	return &PingReq{core.NewReqBase(), 0, false}
 }
