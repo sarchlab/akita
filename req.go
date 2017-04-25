@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -92,12 +91,12 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 	}
 
 	if reflect.TypeOf(r1) != reflect.TypeOf(r2) {
-		fmt.Printf("Type mismatch\n")
+		// fmt.Printf("Type mismatch\n")
 		return false
 	}
 
 	if r1.Src() != r2.Src() || r1.Dst() != r2.Dst() {
-		fmt.Printf("Src or dst mismatch\n")
+		// fmt.Printf("Src or dst mismatch\n")
 		return false
 	}
 
@@ -116,8 +115,8 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 		}
 
 		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
-			fmt.Printf("Field %s is not deeply equal\n",
-				r1Value.Field(i).String())
+			// fmt.Printf("Field %s is not deeply equal\n",
+			// 	r1Value.Field(i).String())
 			return false
 		}
 	}
