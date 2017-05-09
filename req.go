@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -115,8 +116,8 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 		}
 
 		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
-			// fmt.Printf("Field %s is not deeply equal\n",
-			// 	r1Value.Field(i).String())
+			fmt.Printf("Field %d, %s is not deeply equal\n",
+				i, r1Value.Field(i).String())
 			return false
 		}
 	}

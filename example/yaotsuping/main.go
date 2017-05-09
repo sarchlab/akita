@@ -27,12 +27,12 @@ func profileCPU() {
 }
 
 func main() {
-	profileCPU()
+	// profileCPU()
 
-	engine := core.NewSerialEngine()
+	engine := core.NewParallelEngine()
 	connection := core.NewDirectConnection()
 
-	numAgents := 10000
+	numAgents := 4
 
 	agents := make([]*PingComponent, 0)
 	for i := 0; i < numAgents; i++ {
@@ -42,7 +42,7 @@ func main() {
 		agents = append(agents, agent)
 	}
 
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < 10000; i++ {
 		evt := NewPingSendEvent()
 
 		from := rand.Uint32() % uint32(numAgents)

@@ -7,7 +7,6 @@ import "sync"
 type ParallelEngine struct {
 	paused          bool
 	queue           *EventQueue
-	evtChan         chan Event
 	now             VTimeInSec
 	runningHandlers map[Handler]bool
 	waitGroup       sync.WaitGroup
@@ -20,14 +19,9 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 
 	e.paused = false
-	e.MaxGoRoutine = 4
+	e.MaxGoRoutine = 10
 	e.queue = NewEventQueue()
 	e.runningHandlers = make(map[Handler]bool)
-	e.evtChan = make(chan Event, e.MaxGoRoutine*10)
-
-	for i := 0; i < e.MaxGoRoutine; i++ {
-		go e.startEventWorker()
-	}
 
 	return e
 }
@@ -41,26 +35,8 @@ func (e *ParallelEngine) popEvent() Event {
 	return e.queue.Pop()
 }
 
-func (e *ParallelEngine) startEventWorker() {
-	for {
-		evt, running := <-e.evtChan
-		if !running {
-			return
-		}
-		handler := evt.Handler()
-		handler.Handle(evt)
-
-		e.eventComplete(evt)
-	}
-}
-
-func (e *ParallelEngine) eventComplete(evt Event) {
-	e.waitGroup.Done()
-}
-
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
-	defer close(e.evtChan)
 	for !e.paused {
 		if e.queue.Len() == 0 {
 			return nil
@@ -103,7 +79,15 @@ func (e *ParallelEngine) runEvent(evt Event) {
 	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
 
-	e.evtChan <- evt
+	go e.runEventGoRoutine(evt)
+
+}
+
+func (e *ParallelEngine) runEventGoRoutine(evt Event) {
+	defer e.waitGroup.Done()
+
+	handler := evt.Handler()
+	handler.Handle(evt)
 }
 
 // Pause will stop the engine from dispatching more events
