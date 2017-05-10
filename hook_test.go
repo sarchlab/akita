@@ -55,7 +55,7 @@ type SomeType2 int32
 
 var _ = Describe("BasicHookable", func() {
 	It("should allow basic hooking", func() {
-		domain := core.NewBasicHookable()
+		domain := core.NewHookableBase()
 		hook := NewMockHook(reflect.TypeOf((*SomeType)(nil)), core.BeforeEvent)
 		domain.AcceptHook(hook)
 
@@ -69,7 +69,7 @@ var _ = Describe("BasicHookable", func() {
 	})
 
 	It("should not invoke if not hooking at the exact position", func() {
-		domain := core.NewBasicHookable()
+		domain := core.NewHookableBase()
 		hook := NewMockHook(reflect.TypeOf((*SomeType)(nil)), core.BeforeEvent)
 		domain.AcceptHook(hook)
 
@@ -79,7 +79,7 @@ var _ = Describe("BasicHookable", func() {
 	})
 
 	It("should allow any position hooking", func() {
-		domain := core.NewBasicHookable()
+		domain := core.NewHookableBase()
 		hook := NewMockHook(reflect.TypeOf((*SomeType)(nil)), core.Any)
 		domain.AcceptHook(hook)
 
@@ -93,7 +93,7 @@ var _ = Describe("BasicHookable", func() {
 	})
 
 	It("should allow hooking on an interface", func() {
-		domain := core.NewBasicHookable()
+		domain := core.NewHookableBase()
 		hook := NewMockHook(reflect.TypeOf((*interface{})(nil)), core.AfterEvent)
 		domain.AcceptHook(hook)
 
@@ -108,7 +108,7 @@ var _ = Describe("BasicHookable", func() {
 	})
 
 	It("should allow hooking on any type", func() {
-		domain := core.NewBasicHookable()
+		domain := core.NewHookableBase()
 		hook := NewMockHook(nil, core.AfterEvent)
 		domain.AcceptHook(hook)
 

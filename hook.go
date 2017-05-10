@@ -43,25 +43,25 @@ type Hook interface {
 	Func(item interface{}, domain Hookable)
 }
 
-// A BasicHookable provides some utility function for other type that implment
+// A HookableBase provides some utility function for other type that implment
 // the Hookable interface.
-type BasicHookable struct {
+type HookableBase struct {
 	hooks []Hook
 }
 
-// NewBasicHookable creats a BasicHookable object
-func NewBasicHookable() *BasicHookable {
-	h := new(BasicHookable)
+// NewHookableBase creats a HookableBase object
+func NewHookableBase() *HookableBase {
+	h := new(HookableBase)
 	h.hooks = make([]Hook, 0)
 	return h
 }
 
 // AcceptHook register a hook
-func (h *BasicHookable) AcceptHook(hook Hook) {
+func (h *HookableBase) AcceptHook(hook Hook) {
 	h.hooks = append(h.hooks, hook)
 }
 
-func (h *BasicHookable) tryInvoke(item interface{}, pos HookPos, hook Hook) {
+func (h *HookableBase) tryInvoke(item interface{}, pos HookPos, hook Hook) {
 	if hook.Pos() == Any || pos == hook.Pos() {
 		hook.Func(item, h)
 		return
@@ -69,7 +69,7 @@ func (h *BasicHookable) tryInvoke(item interface{}, pos HookPos, hook Hook) {
 }
 
 // InvokeHook trigers the register hooks
-func (h *BasicHookable) InvokeHook(item interface{}, pos HookPos) {
+func (h *HookableBase) InvokeHook(item interface{}, pos HookPos) {
 	for _, hook := range h.hooks {
 		if hook.Type() == nil {
 			h.tryInvoke(item, pos, hook)
