@@ -17,7 +17,7 @@ import (
 //     -----------------
 //
 type PingComponent struct {
-	*core.BasicComponent
+	*core.ComponentBase
 
 	NumPingsToSend int
 	Engine         core.Engine
@@ -26,7 +26,7 @@ type PingComponent struct {
 // NewPingComponent creates a new PingComponent
 func NewPingComponent(name string, engine core.Engine) *PingComponent {
 	c := &PingComponent{
-		core.NewBasicComponent(name),
+		core.NewComponentBase(name),
 		0,
 		engine,
 	}

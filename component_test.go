@@ -10,12 +10,12 @@ import (
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		component  *core.BasicComponent
+		component  *core.ComponentBase
 		connection *MockConnection
 	)
 
 	BeforeEach(func() {
-		component = core.NewBasicComponent("test_comp")
+		component = core.NewComponentBase("test_comp")
 		connection = NewMockConnection()
 	})
 

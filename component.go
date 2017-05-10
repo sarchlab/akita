@@ -24,17 +24,17 @@ type Component interface {
 	Hookable
 }
 
-// BasicComponent provides some functions that other component can use
-type BasicComponent struct {
+// ComponentBase provides some functions that other component can use
+type ComponentBase struct {
 	*HookableBase
 	name        string
 	connections map[string]Connection
 	ports       map[string]bool
 }
 
-// NewBasicComponent creates a new basic component
-func NewBasicComponent(name string) *BasicComponent {
-	return &BasicComponent{
+// NewComponentBase creates a new ComponentBase
+func NewComponentBase(name string) *ComponentBase {
+	return &ComponentBase{
 		NewHookableBase(),
 		name,
 		make(map[string]Connection),
@@ -43,12 +43,12 @@ func NewBasicComponent(name string) *BasicComponent {
 }
 
 // Name returns the name of the BasicComponent
-func (c *BasicComponent) Name() string {
+func (c *ComponentBase) Name() string {
 	return c.name
 }
 
 // Connect of BasicComponent associate a connection with a port of the component
-func (c *BasicComponent) Connect(portName string, conn Connection) {
+func (c *ComponentBase) Connect(portName string, conn Connection) {
 	if _, ok := c.ports[portName]; !ok {
 		log.Panicf("Component " + c.Name() + " does not have port " + portName)
 	}
@@ -57,12 +57,12 @@ func (c *BasicComponent) Connect(portName string, conn Connection) {
 }
 
 // GetConnection returns the connection by the port name
-func (c *BasicComponent) GetConnection(portName string) Connection {
+func (c *ComponentBase) GetConnection(portName string) Connection {
 	return c.connections[portName]
 }
 
 // Disconnect removes the association between the port name and the connection
-func (c *BasicComponent) Disconnect(portName string) {
+func (c *ComponentBase) Disconnect(portName string) {
 	if _, ok := c.ports[portName]; !ok {
 		log.Panicf("Component " + c.Name() + " does not have port " + portName)
 	}
@@ -80,7 +80,7 @@ func (c *BasicComponent) Disconnect(portName string) {
 // that the connection is connecting to. When the component need to send
 // requests out, it need first get the connection by the port name, and then
 // send the request over the connection.
-func (c *BasicComponent) AddPort(name string) {
+func (c *ComponentBase) AddPort(name string) {
 	if name == "" {
 		log.Panic("cannot use empty string as port name")
 	}
