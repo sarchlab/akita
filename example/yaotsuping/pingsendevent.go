@@ -14,5 +14,5 @@ func NewPingSendEvent(
 	time core.VTimeInSec,
 	handler core.Handler,
 ) *PingSendEvent {
-	return &PingSendEvent{core.NewBasicEvent(time, handler), nil, nil}
+	return &PingSendEvent{core.NewEventBase(time, handler), nil, nil}
 }

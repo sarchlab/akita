@@ -23,8 +23,8 @@ type EventBase struct {
 	handler Handler
 }
 
-// NewBasicEvent creates a new BasicEvent
-func NewBasicEvent(t VTimeInSec, handler Handler) *EventBase {
+// NewEventBase creates a new EventBase
+func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	e := new(EventBase)
 	e.time = t
 	e.handler = handler
@@ -73,6 +73,6 @@ type TickEvent struct {
 // NewTickEvent creates a newly created TickEvent
 func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
 	evt := new(TickEvent)
-	evt.EventBase = NewBasicEvent(t, handler)
+	evt.EventBase = NewEventBase(t, handler)
 	return evt
 }

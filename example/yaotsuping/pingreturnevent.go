@@ -13,5 +13,5 @@ func NewPingReturnEvent(
 	t core.VTimeInSec,
 	handler core.Handler,
 ) *PingReturnEvent {
-	return &PingReturnEvent{core.NewBasicEvent(t, handler), nil}
+	return &PingReturnEvent{core.NewEventBase(t, handler), nil}
 }
