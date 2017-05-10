@@ -24,8 +24,10 @@ type BasicEvent struct {
 }
 
 // NewBasicEvent creates a new BasicEvent
-func NewBasicEvent() *BasicEvent {
+func NewBasicEvent(t VTimeInSec, handler Handler) *BasicEvent {
 	e := new(BasicEvent)
+	e.time = t
+	e.handler = handler
 	return e
 }
 
@@ -60,4 +62,17 @@ func (e *BasicEvent) Handler() Handler {
 // only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
 	Handle(e Event) error
+}
+
+// TickEvent is a generic event that almost all the component can use to
+// update their status.
+type TickEvent struct {
+	*BasicEvent
+}
+
+// NewTickEvent creates a newly created TickEvent
+func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
+	evt := new(TickEvent)
+	evt.BasicEvent = NewBasicEvent(t, handler)
+	return evt
 }
