@@ -43,14 +43,13 @@ func main() {
 	}
 
 	for i := 0; i < 10000; i++ {
-		evt := NewPingSendEvent()
 
 		from := rand.Uint32() % uint32(numAgents)
 		to := rand.Uint32() % uint32(numAgents)
 		time := rand.Uint32() % 100
 
-		evt.SetTime(core.VTimeInSec(time))
-		evt.SetHandler(agents[from])
+		evt := NewPingSendEvent(core.VTimeInSec(time), agents[from])
+
 		evt.From = agents[from]
 		evt.To = agents[to]
 

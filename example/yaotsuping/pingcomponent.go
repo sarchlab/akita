@@ -55,10 +55,8 @@ func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
 		return nil
 	}
 
-	evt := NewPingReturnEvent()
+	evt := NewPingReturnEvent(req.RecvTime()+2.0, c)
 	evt.Req = req
-	evt.SetTime(req.RecvTime() + 2.0)
-	evt.SetHandler(c)
 	c.Engine.Schedule(evt)
 	return nil
 }
