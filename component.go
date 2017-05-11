@@ -2,6 +2,7 @@ package core
 
 import (
 	"log"
+	"sync"
 )
 
 // A Named object is an object that has a name
@@ -27,6 +28,8 @@ type Component interface {
 // ComponentBase provides some functions that other component can use
 type ComponentBase struct {
 	*HookableBase
+	sync.Mutex
+
 	name        string
 	connections map[string]Connection
 	ports       map[string]bool
@@ -34,12 +37,12 @@ type ComponentBase struct {
 
 // NewComponentBase creates a new ComponentBase
 func NewComponentBase(name string) *ComponentBase {
-	return &ComponentBase{
-		NewHookableBase(),
-		name,
-		make(map[string]Connection),
-		make(map[string]bool),
-	}
+	c := new(ComponentBase)
+	c.name = name
+	c.HookableBase = NewHookableBase()
+	c.connections = make(map[string]Connection)
+	c.ports = make(map[string]bool)
+	return c
 }
 
 // Name returns the name of the BasicComponent
