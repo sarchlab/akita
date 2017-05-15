@@ -13,6 +13,11 @@ var _ = Describe("Freq", func() {
 		Expect(f.Period()).To(BeNumerically("==", 1e-9))
 	})
 
+	It("should get this tick", func() {
+		var f core.Freq = 1 * core.Hz
+		Expect(f.ThisTick(1)).To(BeNumerically("~", 1, 1e-12))
+	})
+
 	It("should get the next tick", func() {
 		var f core.Freq = 1 * core.GHz
 		Expect(f.NextTick(102.000000001)).To(BeNumerically("~", 102.000000002, 1e-12))
@@ -36,7 +41,7 @@ var _ = Describe("Freq", func() {
 	It("should get the n cycles later", func() {
 		var f core.Freq = 1 * core.GHz
 		Expect(f.NCyclesLater(12, 102.000000001)).To(
-			BeNumerically("~", 102.000000014, 1e-12))
+			BeNumerically("~", 102.000000013, 1e-12))
 	})
 
 	It("should get the n cycles later, if current time is not on a tick", func() {

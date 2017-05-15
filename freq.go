@@ -20,21 +20,38 @@ func (f Freq) Period() VTimeInSec {
 	return VTimeInSec(1.0 / f)
 }
 
+// ThisTick returns the current tick time
+//
+//
+//                Input
+//                (          ]
+//     |----------|----------|----------|----->
+//                           |
+//                           Output
+func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
+	period := f.Period()
+	count := math.Ceil(float64(now / period))
+	return VTimeInSec(count) * period
+}
+
 // NextTick returns the next tick time.
 //
-// If currTime is not on a tick time, this function returns the time of
-// upcomming tick.
-func (f Freq) NextTick(currTime VTimeInSec) VTimeInSec {
+//                Input
+//                [          )
+//     |----------|----------|----------|----->
+//                           |
+//                           Output
+func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 	period := f.Period()
-	count := math.Floor(float64((currTime + period*1e-6) / period))
+	count := math.Floor(float64((now + period*1e-6) / period))
 	return VTimeInSec(count+1) * period
 }
 
 // NCyclesLater returns the time after N cycles
 //
 // This function will always return a time of an integer number of cycles
-func (f Freq) NCyclesLater(n int, currTime VTimeInSec) VTimeInSec {
-	return f.NextTick(currTime + VTimeInSec(n)*f.Period())
+func (f Freq) NCyclesLater(n int, now VTimeInSec) VTimeInSec {
+	return f.ThisTick(now + VTimeInSec(n)*f.Period())
 }
 
 // NoEarlierThan returns the tick time that is at or right after the given time

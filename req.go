@@ -1,9 +1,6 @@
 package core
 
-import (
-	"fmt"
-	"reflect"
-)
+import "reflect"
 
 // A Req is the message element being transferred between compoenents
 type Req interface {
@@ -116,8 +113,8 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 		}
 
 		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
-			fmt.Printf("Field %d, %s is not deeply equal\n",
-				i, r1Value.Field(i).String())
+			// fmt.Printf("Field %d, %s is not deeply equal\n",
+			// 	i, r1Value.Field(i).String())
 			return false
 		}
 	}
