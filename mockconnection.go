@@ -1,6 +1,11 @@
 package core
 
-import "log"
+import (
+	"fmt"
+	"log"
+
+	"github.com/davecgh/go-spew/spew"
+)
 
 type expectedReq struct {
 	req Req
@@ -42,6 +47,12 @@ func (c *MockConnection) Send(req Req) *Error {
 		c.expectedReqs = c.expectedReqs[1:]
 		return err
 	}
+	fmt.Printf("Req\n")
+	spew.Dump(req)
+	fmt.Printf("not expected, the expected req is \n")
+	spew.Dump(c.expectedReqs[0])
+	fmt.Printf("\n")
+
 	return nil
 }
 
