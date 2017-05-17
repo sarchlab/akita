@@ -3,10 +3,9 @@ package core_test
 import (
 	"reflect"
 
-	"gitlab.com/yaotsu/core"
-
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
+	"gitlab.com/yaotsu/core"
 )
 
 type hookCall struct {

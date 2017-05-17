@@ -2,10 +2,9 @@ package main
 
 import (
 	"errors"
+	"reflect"
 
 	"gitlab.com/yaotsu/core"
-
-	"reflect"
 )
 
 // A PingComponent periodically send ping request out and also respond to pings

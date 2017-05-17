@@ -1,10 +1,9 @@
 package core_test
 
 import (
-	"gitlab.com/yaotsu/core"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("Freq", func() {
