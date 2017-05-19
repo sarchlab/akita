@@ -46,6 +46,7 @@ type Connectable interface {
 // destination.
 type Connection interface {
 	Sender
+	Handler
 
 	Attach(s Connectable)
 	Detach(s Connectable)

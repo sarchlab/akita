@@ -56,6 +56,11 @@ func (c *MockConnection) Send(req Req) *Error {
 	return nil
 }
 
+// Handle function of a MockConnection does not do anything
+func (c *MockConnection) Handle(evt Event) error {
+	return nil
+}
+
 // AllExpectedSent determines if all the expected requested has been actually
 // sent
 func (c *MockConnection) AllExpectedSent() bool {

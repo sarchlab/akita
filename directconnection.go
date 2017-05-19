@@ -52,3 +52,8 @@ func (c *DirectConnection) Send(req Req) *Error {
 	req.SetRecvTime(req.SendTime())
 	return req.Dst().Recv(req)
 }
+
+// Handle defines how the DirectConnection handles events
+func (c *DirectConnection) Handle(evt Event) error {
+	return nil
+}
