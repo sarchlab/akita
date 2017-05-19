@@ -30,7 +30,7 @@ func main() {
 	// profileCPU()
 
 	engine := core.NewParallelEngine()
-	connection := core.NewDirectConnection()
+	connection := core.NewDirectConnection(engine)
 
 	numAgents := 4
 

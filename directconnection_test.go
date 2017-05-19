@@ -14,14 +14,16 @@ var _ = Describe("DirectConnection", func() {
 		comp2      *core.MockComponent
 		comp3      *core.MockComponent
 		connection *core.DirectConnection
+		engine     *core.MockEngine
 	)
 
 	BeforeEach(func() {
 		comp1 = core.NewMockComponent("comp1")
 		comp2 = core.NewMockComponent("comp2")
 		comp3 = core.NewMockComponent("comp3")
+		engine = core.NewMockEngine()
 
-		connection = core.NewDirectConnection()
+		connection = core.NewDirectConnection(engine)
 		connection.Attach(comp1)
 		connection.Attach(comp2)
 	})

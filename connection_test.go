@@ -10,11 +10,10 @@ var _ = Describe("PlugIn", func() {
 	It("should link a connection and a component", func() {
 		comp := core.NewMockComponent("comp")
 		comp.AddPort("Port")
-		connection := NewMockConnection()
+		connection := core.NewMockConnection()
 
 		core.PlugIn(comp, "Port", connection)
 
-		Expect(connection.Connected[comp]).To(BeTrue())
 		Expect(comp.GetConnection("Port")).To(BeIdenticalTo(connection))
 	})
 })

@@ -6,12 +6,15 @@ import "log"
 // no latency would happen.
 type DirectConnection struct {
 	EndPoints map[Connectable]bool
+
+	engine Engine
 }
 
 // NewDirectConnection creates a new DirectConnection object
-func NewDirectConnection() *DirectConnection {
+func NewDirectConnection(engine Engine) *DirectConnection {
 	c := DirectConnection{}
 	c.EndPoints = make(map[Connectable]bool)
+	c.engine = engine
 	return &c
 }
 

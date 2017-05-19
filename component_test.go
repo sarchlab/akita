@@ -11,12 +11,12 @@ var _ = Describe("BasicComponent", func() {
 
 	var (
 		component  *core.ComponentBase
-		connection *MockConnection
+		connection *core.MockConnection
 	)
 
 	BeforeEach(func() {
 		component = core.NewComponentBase("test_comp")
-		connection = NewMockConnection()
+		connection = core.NewMockConnection()
 	})
 
 	It("should set and get name", func() {
@@ -42,8 +42,7 @@ var _ = Describe("BasicComponent", func() {
 
 		component.Connect("port", connection)
 
-		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
-	})
+		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection)) })
 
 	It("should panic if disconnecting a non-exist port", func() {
 		component.AddPort("port")
