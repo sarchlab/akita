@@ -84,12 +84,43 @@ var _ = Describe("DirectConnection", func() {
 		req.SetDst(comp1)
 		req.SetSendTime(2.0)
 
-		errToRet := core.NewError("something", true, 10)
-		comp1.ToReceiveReq(req, errToRet)
+		// errToRet := core.NewError("something", true, 10)
 
 		err := connection.Send(req)
-		Expect(err).To(BeIdenticalTo(errToRet))
-		Expect(req.RecvTime()).To(Equal(core.VTimeInSec(2.0)))
+
+		Expect(err).To(BeNil())
+		Expect(len(engine.ScheduledEvent)).To(Equal(1))
+		event := engine.ScheduledEvent[0]
+		Expect(event.Time()).To(BeNumerically("~", 2.0, 1e-12))
+	})
+
+	It("should deliver req", func() {
+		req := NewMockRequest()
+		req.SetSrc(comp2)
+		req.SetDst(comp1)
+		req.SetSendTime(2.0)
+		evt := core.NewDeliverEvent(2.0, connection, req)
+
+		comp1.ToReceiveReq(req, nil)
+		connection.Handle(evt)
+
+		Expect(comp1.AllReqReceived()).To(BeTrue())
+		Expect(req.RecvTime()).To(BeNumerically("~", 2.0, 1e-12))
+	})
+
+	It("should retry if deliver is not successful", func() {
+		req := NewMockRequest()
+		req.SetSrc(comp2)
+		req.SetDst(comp1)
+		req.SetSendTime(2.0)
+		evt := core.NewDeliverEvent(2.0, connection, req)
+
+		comp1.ToReceiveReq(req, core.NewError("something", true, 10))
+		connection.Handle(evt)
+
+		Expect(len(engine.ScheduledEvent)).To(Equal(1))
+		Expect(engine.ScheduledEvent[0].Time()).To(BeNumerically("~", 10, 1e-12))
+
 	})
 
 })
