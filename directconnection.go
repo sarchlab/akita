@@ -71,7 +71,7 @@ func (c *DirectConnection) handleDeliverEvent(evt *DeliverEvent) error {
 	req.SetRecvTime(evt.Time())
 	err := req.Dst().Recv(req)
 	if err != nil {
-		if !err .Recoverable {
+		if !err.Recoverable {
 			log.Fatal(err)
 		} else {
 			evt.SetTime(err.EarliestRetry)

@@ -1,6 +1,13 @@
 package core
 
-import "sync"
+import (
+	"runtime"
+	"sync"
+)
+
+func init() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
+}
 
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
@@ -10,8 +17,6 @@ type ParallelEngine struct {
 	now             VTimeInSec
 	runningHandlers map[Handler]bool
 	waitGroup       sync.WaitGroup
-
-	MaxGoRoutine int
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -19,7 +24,6 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 
 	e.paused = false
-	e.MaxGoRoutine = 10
 	e.queue = NewEventQueue()
 	e.runningHandlers = make(map[Handler]bool)
 
@@ -28,6 +32,14 @@ func NewParallelEngine() *ParallelEngine {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
+	// e.queue.Lock()
+	// for _, evtInList := range e.queue.events {
+	// 	if evtInList == evt {
+	// 		debug.PrintStack()
+	// 		log.Fatal("Cannot schedule two same event")
+	// 	}
+	// }
+	// e.queue.Unlock()
 	e.queue.Push(evt)
 }
 
@@ -53,11 +65,11 @@ func (e *ParallelEngine) Run() error {
 
 func (e *ParallelEngine) runEventsUntilConflict() {
 	for e.queue.Len() > 0 {
-		evt := e.queue.Peek()
+		evt := e.popEvent()
 		if e.canRunEvent(evt) {
-			e.popEvent()
 			e.runEvent(evt)
 		} else {
+			e.Schedule(evt)
 			break
 		}
 	}
