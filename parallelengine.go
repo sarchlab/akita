@@ -1,12 +1,14 @@
 package core
 
 import (
+	"log"
 	"runtime"
 	"sync"
 )
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	log.Printf("GOMAXPROCS is set to %d", runtime.NumCPU())
 }
 
 // A ParallelEngine is an event engine that is capable for scheduling event
@@ -17,6 +19,9 @@ type ParallelEngine struct {
 	now             VTimeInSec
 	runningHandlers map[Handler]bool
 	waitGroup       sync.WaitGroup
+
+	eventChan    chan Event
+	maxGoRoutine int
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -27,19 +32,30 @@ func NewParallelEngine() *ParallelEngine {
 	e.queue = NewEventQueue()
 	e.runningHandlers = make(map[Handler]bool)
 
+	e.maxGoRoutine = runtime.NumCPU() - 1
+	log.Printf("Using parallel enging with worker number %d\n", e.maxGoRoutine)
+	e.eventChan = make(chan Event, 10000)
+	for i := 0; i < e.maxGoRoutine; i++ {
+		e.startWorker()
+	}
+
 	return e
+}
+
+func (e *ParallelEngine) startWorker() {
+	go e.worker()
+}
+
+func (e *ParallelEngine) worker() {
+	for evt := range e.eventChan {
+		handler := evt.Handler()
+		handler.Handle(evt)
+		e.waitGroup.Done()
+	}
 }
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	// e.queue.Lock()
-	// for _, evtInList := range e.queue.events {
-	// 	if evtInList == evt {
-	// 		debug.PrintStack()
-	// 		log.Fatal("Cannot schedule two same event")
-	// 	}
-	// }
-	// e.queue.Unlock()
 	e.queue.Push(evt)
 }
 
@@ -49,6 +65,8 @@ func (e *ParallelEngine) popEvent() Event {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
+	defer close(e.eventChan)
+
 	for !e.paused {
 		if e.queue.Len() == 0 {
 			return nil
@@ -78,10 +96,11 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 
 func (e *ParallelEngine) canRunEvent(evt Event) bool {
 	if e.now == 0 || e.now >= evt.Time() {
-		_, handlerInUse := e.runningHandlers[evt.Handler()]
-		if !handlerInUse {
-			return true
-		}
+		return true
+		// _, handlerInUse := e.runningHandlers[evt.Handler()]
+		// if !handlerInUse {
+		// 	return true
+		// }
 	}
 	return false
 }
@@ -91,15 +110,7 @@ func (e *ParallelEngine) runEvent(evt Event) {
 	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
 
-	go e.runEventGoRoutine(evt)
-
-}
-
-func (e *ParallelEngine) runEventGoRoutine(evt Event) {
-	defer e.waitGroup.Done()
-
-	handler := evt.Handler()
-	handler.Handle(evt)
+	e.eventChan <- evt
 }
 
 // Pause will stop the engine from dispatching more events
