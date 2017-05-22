@@ -84,43 +84,56 @@ var _ = Describe("DirectConnection", func() {
 		req.SetDst(comp1)
 		req.SetSendTime(2.0)
 
-		// errToRet := core.NewError("something", true, 10)
+		errToRet := core.NewError("something", true, 10)
+		comp1.ToReceiveReq(req, errToRet)
 
 		err := connection.Send(req)
 
-		Expect(err).To(BeNil())
-		Expect(len(engine.ScheduledEvent)).To(Equal(1))
-		event := engine.ScheduledEvent[0]
-		Expect(event.Time()).To(BeNumerically("~", 2.0, 1e-12))
+		Expect(err).To(BeIdenticalTo(errToRet))
 	})
 
-	It("should deliver req", func() {
-		req := NewMockRequest()
-		req.SetSrc(comp2)
-		req.SetDst(comp1)
-		req.SetSendTime(2.0)
-		evt := core.NewDeliverEvent(2.0, connection, req)
+	// It("should send", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetSrc(comp2)
+	// 	req.SetDst(comp1)
+	// 	req.SetSendTime(2.0)
 
-		comp1.ToReceiveReq(req, nil)
-		connection.Handle(evt)
+	// 	// errToRet := core.NewError("something", true, 10)
 
-		Expect(comp1.AllReqReceived()).To(BeTrue())
-		Expect(req.RecvTime()).To(BeNumerically("~", 2.0, 1e-12))
-	})
+	// 	err := connection.Send(req)
 
-	It("should retry if deliver is not successful", func() {
-		req := NewMockRequest()
-		req.SetSrc(comp2)
-		req.SetDst(comp1)
-		req.SetSendTime(2.0)
-		evt := core.NewDeliverEvent(2.0, connection, req)
+	// 	Expect(err).To(BeNil())
+	// 	Expect(len(engine.ScheduledEvent)).To(Equal(1))
+	// 	event := engine.ScheduledEvent[0]
+	// 	Expect(event.Time()).To(BeNumerically("~", 2.0, 1e-12))
+	// })
 
-		comp1.ToReceiveReq(req, core.NewError("something", true, 10))
-		connection.Handle(evt)
+	// It("should deliver req", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetSrc(comp2)
+	// 	req.SetDst(comp1)
+	// 	req.SetSendTime(2.0)
+	// 	evt := core.NewDeliverEvent(2.0, connection, req)
 
-		Expect(len(engine.ScheduledEvent)).To(Equal(1))
-		Expect(engine.ScheduledEvent[0].Time()).To(BeNumerically("~", 10, 1e-12))
+	// 	comp1.ToReceiveReq(req, nil)
+	// 	connection.Handle(evt)
 
-	})
+	// 	Expect(comp1.AllReqReceived()).To(BeTrue())
+	// 	Expect(req.RecvTime()).To(BeNumerically("~", 2.0, 1e-12))
+	// })
+
+	// It("should retry if deliver is not successful", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetSrc(comp2)
+	// 	req.SetDst(comp1)
+	// 	req.SetSendTime(2.0)
+	// 	evt := core.NewDeliverEvent(2.0, connection, req)
+
+	// 	comp1.ToReceiveReq(req, core.NewError("something", true, 10))
+	// 	connection.Handle(evt)
+
+	// 	Expect(len(engine.ScheduledEvent)).To(Equal(1))
+	// 	Expect(engine.ScheduledEvent[0].Time()).To(BeNumerically("~", 10, 1e-12))
+	// })
 
 })

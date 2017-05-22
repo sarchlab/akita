@@ -52,6 +52,7 @@ func (c *MockConnection) Send(req Req) *Error {
 	fmt.Printf("not expected, the expected req is \n")
 	spew.Dump(c.expectedReqs[0])
 	fmt.Printf("\n")
+	log.Panic("")
 
 	return nil
 }

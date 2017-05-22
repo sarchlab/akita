@@ -52,9 +52,11 @@ func (c *DirectConnection) Send(req Req) *Error {
 		return NewError("destination is not connected on this connection", false, 0)
 	}
 
-	evt := NewDeliverEvent(req.SendTime(), c, req)
-	c.engine.Schedule(evt)
-	return nil
+	// evt := NewDeliverEvent(req.SendTime(), c, req)
+	// c.engine.Schedule(evt)
+	req.SetRecvTime(req.SendTime())
+	return req.Dst().Recv(req)
+	// return nil
 }
 
 // Handle defines how the DirectConnection handles events
