@@ -1,14 +1,13 @@
 package core
 
 import (
-	"log"
 	"runtime"
 	"sync"
 )
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	log.Printf("GOMAXPROCS is set to %d", runtime.NumCPU())
+	// log.Printf("GOMAXPROCS is set to %d", runtime.NumCPU())
 }
 
 // A ParallelEngine is an event engine that is capable for scheduling event
@@ -33,8 +32,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.runningHandlers = make(map[Handler]bool)
 
 	e.maxGoRoutine = runtime.NumCPU() - 1
-	log.Printf("Using parallel enging with worker number %d\n", e.maxGoRoutine)
-	e.eventChan = make(chan Event, 10000)
+	// log.Printf("Using parallel enging with worker number %d\n", e.maxGoRoutine) e.eventChan = make(chan Event, 10000)
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}
@@ -82,11 +80,15 @@ func (e *ParallelEngine) Run() error {
 }
 
 func (e *ParallelEngine) runEventsUntilConflict() {
+	// runWidth := 0
 	for e.queue.Len() > 0 {
 		evt := e.popEvent()
 		if e.canRunEvent(evt) {
 			e.runEvent(evt)
+			// runWidth++
+			// log.Printf("Lauching %s to %s\n", reflect.TypeOf(evt), reflect.TypeOf(evt.Handler()))
 		} else {
+			// log.Printf("Event Run width : %d\n", runWidth)
 			e.Schedule(evt)
 			break
 		}
