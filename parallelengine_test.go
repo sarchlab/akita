@@ -1,6 +1,8 @@
 package core_test
 
 import (
+	"log"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"gitlab.com/yaotsu/core"
@@ -37,10 +39,12 @@ var _ = Describe("ParallelEngine", func() {
 		evt4.SetHandler(handler1)
 
 		handler1.HandleFunc = func(e core.Event) {
+			log.Printf("Handled %f\n", e.Time())
 		}
 		handler2.HandleFunc = func(e core.Event) {
 			engine.Schedule(evt3)
 			engine.Schedule(evt4)
+			log.Printf("Handled %f\n", e.Time())
 		}
 
 		engine.Schedule(evt1)

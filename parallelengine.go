@@ -7,17 +7,15 @@ import (
 
 func init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	// log.Printf("GOMAXPROCS is set to %d", runtime.NumCPU())
 }
 
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
-	paused          bool
-	queue           *EventQueue
-	now             VTimeInSec
-	runningHandlers map[Handler]bool
-	waitGroup       sync.WaitGroup
+	paused    bool
+	queue     *EventQueue
+	now       VTimeInSec
+	waitGroup sync.WaitGroup
 
 	eventChan    chan Event
 	maxGoRoutine int
@@ -29,10 +27,9 @@ func NewParallelEngine() *ParallelEngine {
 
 	e.paused = false
 	e.queue = NewEventQueue()
-	e.runningHandlers = make(map[Handler]bool)
+	e.eventChan = make(chan Event, 10000)
 
 	e.maxGoRoutine = runtime.NumCPU() - 1
-	// log.Printf("Using parallel enging with worker number %d\n", e.maxGoRoutine) e.eventChan = make(chan Event, 10000)
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}
@@ -73,7 +70,6 @@ func (e *ParallelEngine) Run() error {
 		e.runEventsUntilConflict()
 
 		e.waitGroup.Wait()
-		e.runningHandlers = make(map[Handler]bool)
 		e.now = 0
 	}
 	return nil
@@ -109,7 +105,6 @@ func (e *ParallelEngine) canRunEvent(evt Event) bool {
 
 func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
-	e.runningHandlers[evt.Handler()] = true
 	e.now = evt.Time()
 
 	e.eventChan <- evt
