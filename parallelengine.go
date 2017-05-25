@@ -19,6 +19,9 @@ type ParallelEngine struct {
 
 	eventChan    chan Event
 	maxGoRoutine int
+
+	scheduleBuffer     []Event
+	scheduleBufferLock sync.Mutex
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -28,11 +31,13 @@ func NewParallelEngine() *ParallelEngine {
 	e.paused = false
 	e.queue = NewEventQueue()
 	e.eventChan = make(chan Event, 10000)
+	e.scheduleBuffer = make([]Event, 0, 10000)
 
 	e.maxGoRoutine = runtime.NumCPU() - 1
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}
+	// go e.scheduleWorker()
 
 	return e
 }
@@ -51,8 +56,19 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	e.queue.Push(evt)
+	// e.queue.Push(evt)
+	e.scheduleBufferLock.Lock()
+
+	e.scheduleBuffer = append(e.scheduleBuffer, evt)
+
+	e.scheduleBufferLock.Unlock()
 }
+
+// func (e *ParallelEngine) scheduleWorker() {
+// 	for evt := range e.scheduleChan {
+// 		e.queue.Push(evt)
+// 	}
+// }
 
 func (e *ParallelEngine) popEvent() Event {
 	return e.queue.Pop()
@@ -63,13 +79,20 @@ func (e *ParallelEngine) Run() error {
 	defer close(e.eventChan)
 
 	for !e.paused {
+
+		// Schedule the event from previous round
+		for _, evt := range e.scheduleBuffer {
+			e.queue.Push(evt)
+		}
+		e.scheduleBuffer = nil
+
 		if e.queue.Len() == 0 {
 			return nil
 		}
 
 		e.runEventsUntilConflict()
-
 		e.waitGroup.Wait()
+
 		e.now = 0
 	}
 	return nil
@@ -85,7 +108,7 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 			// log.Printf("Lauching %s to %s\n", reflect.TypeOf(evt), reflect.TypeOf(evt.Handler()))
 		} else {
 			// log.Printf("Event Run width : %d\n", runWidth)
-			e.Schedule(evt)
+			e.queue.Push(evt)
 			break
 		}
 	}
@@ -108,6 +131,11 @@ func (e *ParallelEngine) runEvent(evt Event) {
 	e.now = evt.Time()
 
 	e.eventChan <- evt
+	// go func(evt Event) {
+	// 	handler := evt.Handler()
+	// 	handler.Handle(evt)
+	// 	e.waitGroup.Done()
+	// }(evt)
 }
 
 // Pause will stop the engine from dispatching more events

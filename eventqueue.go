@@ -2,13 +2,12 @@ package core
 
 import (
 	"container/heap"
-	"sync"
 )
 
 // EventQueue is a priority queue of events. The front of the queue is always
 // the event to happen next
 type EventQueue struct {
-	sync.Mutex
+	// sync.Mutex
 	events eventHeap
 }
 
@@ -22,29 +21,29 @@ func NewEventQueue() *EventQueue {
 
 // Push adds an event to the event queue
 func (q *EventQueue) Push(evt Event) {
-	q.Lock()
-	defer q.Unlock()
+	// q.Lock()
+	// defer q.Unlock()
 	heap.Push(&q.events, evt)
 }
 
 // Pop returns the next earliest event
 func (q *EventQueue) Pop() Event {
-	q.Lock()
-	defer q.Unlock()
+	// q.Lock()
+	// defer q.Unlock()
 	return heap.Pop(&q.events).(Event)
 }
 
 // Len returns the number of event in the queue
 func (q *EventQueue) Len() int {
-	q.Lock()
-	defer q.Unlock()
+	// q.Lock()
+	// defer q.Unlock()
 	return len(q.events)
 }
 
 // Peek will return the next event to pop, but will not pop the next event
 func (q *EventQueue) Peek() Event {
-	q.Lock()
-	defer q.Unlock()
+	// q.Lock()
+	// defer q.Unlock()
 	//return q.events[len(q.events)-1]
 	return q.events[0]
 }
