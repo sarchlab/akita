@@ -12,16 +12,17 @@ func init() {
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
-	paused    bool
-	queue     *EventQueue
-	now       VTimeInSec
-	waitGroup sync.WaitGroup
+	paused  bool
+	queue   *EventQueue
+	now     VTimeInSec
+	nowLock sync.RWMutex
 
 	eventChan    chan Event
+	waitGroup    sync.WaitGroup
 	maxGoRoutine int
 
-	scheduleBuffer     []Event
-	scheduleBufferLock sync.Mutex
+	scheduleChan      chan Event
+	scheduleWaitGroup sync.WaitGroup
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -31,13 +32,13 @@ func NewParallelEngine() *ParallelEngine {
 	e.paused = false
 	e.queue = NewEventQueue()
 	e.eventChan = make(chan Event, 10000)
-	e.scheduleBuffer = make([]Event, 0, 10000)
+	e.scheduleChan = make(chan Event, 10000)
 
-	e.maxGoRoutine = runtime.NumCPU() - 1
+	e.maxGoRoutine = runtime.NumCPU() - 2
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}
-	// go e.scheduleWorker()
+	go e.scheduleWorker()
 
 	return e
 }
@@ -56,19 +57,22 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	// e.queue.Push(evt)
-	e.scheduleBufferLock.Lock()
+	e.nowLock.RLock()
+	if evt.Time() <= e.now {
+		e.runEvent(evt)
+	}
+	e.nowLock.RUnlock()
 
-	e.scheduleBuffer = append(e.scheduleBuffer, evt)
-
-	e.scheduleBufferLock.Unlock()
+	e.scheduleWaitGroup.Add(1)
+	e.scheduleChan <- evt
 }
 
-// func (e *ParallelEngine) scheduleWorker() {
-// 	for evt := range e.scheduleChan {
-// 		e.queue.Push(evt)
-// 	}
-// }
+func (e *ParallelEngine) scheduleWorker() {
+	for evt := range e.scheduleChan {
+		e.queue.Push(evt)
+		e.scheduleWaitGroup.Done()
+	}
+}
 
 func (e *ParallelEngine) popEvent() Event {
 	return e.queue.Pop()
@@ -77,14 +81,11 @@ func (e *ParallelEngine) popEvent() Event {
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
 	defer close(e.eventChan)
+	defer close(e.scheduleChan)
+
+	e.scheduleWaitGroup.Wait() // In case any event is scheduled before the main loop
 
 	for !e.paused {
-
-		// Schedule the event from previous round
-		for _, evt := range e.scheduleBuffer {
-			e.queue.Push(evt)
-		}
-		e.scheduleBuffer = nil
 
 		if e.queue.Len() == 0 {
 			return nil
@@ -92,22 +93,24 @@ func (e *ParallelEngine) Run() error {
 
 		e.runEventsUntilConflict()
 		e.waitGroup.Wait()
+		e.scheduleWaitGroup.Wait()
 
+		e.nowLock.Lock()
 		e.now = 0
+		e.nowLock.Unlock()
 	}
 	return nil
 }
 
 func (e *ParallelEngine) runEventsUntilConflict() {
-	// runWidth := 0
 	for e.queue.Len() > 0 {
 		evt := e.popEvent()
 		if e.canRunEvent(evt) {
+			e.nowLock.Lock()
+			e.now = evt.Time()
+			e.nowLock.Unlock()
 			e.runEvent(evt)
-			// runWidth++
-			// log.Printf("Lauching %s to %s\n", reflect.TypeOf(evt), reflect.TypeOf(evt.Handler()))
 		} else {
-			// log.Printf("Event Run width : %d\n", runWidth)
 			e.queue.Push(evt)
 			break
 		}
@@ -118,24 +121,14 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 func (e *ParallelEngine) canRunEvent(evt Event) bool {
 	if e.now == 0 || e.now >= evt.Time() {
 		return true
-		// _, handlerInUse := e.runningHandlers[evt.Handler()]
-		// if !handlerInUse {
-		// 	return true
-		// }
 	}
 	return false
 }
 
 func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
-	e.now = evt.Time()
 
 	e.eventChan <- evt
-	// go func(evt Event) {
-	// 	handler := evt.Handler()
-	// 	handler.Handle(evt)
-	// 	e.waitGroup.Done()
-	// }(evt)
 }
 
 // Pause will stop the engine from dispatching more events
