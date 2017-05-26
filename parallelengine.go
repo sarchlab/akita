@@ -34,7 +34,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.eventChan = make(chan Event, 10000)
 	e.scheduleChan = make(chan Event, 10000)
 
-	e.maxGoRoutine = runtime.NumCPU() - 2
+	e.maxGoRoutine = runtime.NumCPU()
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}

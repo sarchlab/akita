@@ -47,10 +47,8 @@ func (c *PingComponent) Recv(req core.Req) *core.Error {
 
 func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
 	if req.IsReply {
-		/*
-			fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
-				req.RecvTime()-req.StartTime)
-		*/
+		// fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
+		// 	req.RecvTime()-req.StartTime)
 		return nil
 	}
 

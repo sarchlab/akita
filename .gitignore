@@ -3,6 +3,7 @@
 
 # Editor files
 .*.swp
+*.*~
 
 # Coverage report
 *.coverprofile
@@ -13,3 +14,6 @@ vendor
 # Test file
 *.test
 debug
+
+# Prof file
+*.prof
