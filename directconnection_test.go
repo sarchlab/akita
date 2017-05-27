@@ -40,43 +40,43 @@ var _ = Describe("DirectConnection", func() {
 		Expect(func() { connection.Detach(comp1) }).To(Panic())
 	})
 
-	It("should give error if source is nil", func() {
-		req := NewMockRequest()
-		req.SetDst(comp2)
+	// It("should give error if source is nil", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetDst(comp2)
 
-		err := connection.Send(req)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Recoverable).To(BeFalse())
-	})
+	// 	err := connection.Send(req)
+	// 	Expect(err).NotTo(BeNil())
+	// 	Expect(err.Recoverable).To(BeFalse())
+	// })
 
-	It("should give error if source is not connected", func() {
-		req := NewMockRequest()
-		req.SetDst(comp2)
-		req.SetSrc(comp3)
+	// It("should give error if source is not connected", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetDst(comp2)
+	// 	req.SetSrc(comp3)
 
-		err := connection.Send(req)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Recoverable).To(BeFalse())
-	})
+	// 	err := connection.Send(req)
+	// 	Expect(err).NotTo(BeNil())
+	// 	Expect(err.Recoverable).To(BeFalse())
+	// })
 
-	It("should give error if destination is nil", func() {
-		req := NewMockRequest()
-		req.SetSrc(comp2)
+	// It("should give error if destination is nil", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetSrc(comp2)
 
-		err := connection.Send(req)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Recoverable).To(BeFalse())
-	})
+	// 	err := connection.Send(req)
+	// 	Expect(err).NotTo(BeNil())
+	// 	Expect(err.Recoverable).To(BeFalse())
+	// })
 
-	It("should give error if destination is not connected", func() {
-		req := NewMockRequest()
-		req.SetSrc(comp2)
-		req.SetDst(comp3)
+	// It("should give error if destination is not connected", func() {
+	// 	req := NewMockRequest()
+	// 	req.SetSrc(comp2)
+	// 	req.SetDst(comp3)
 
-		err := connection.Send(req)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Recoverable).To(BeFalse())
-	})
+	// 	err := connection.Send(req)
+	// 	Expect(err).NotTo(BeNil())
+	// 	Expect(err.Recoverable).To(BeFalse())
+	// })
 
 	It("should send", func() {
 		req := NewMockRequest()

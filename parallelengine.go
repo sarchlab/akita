@@ -16,9 +16,7 @@ import (
 // in a parallel fashion
 type ParallelEngine struct {
 	paused bool
-	// queue   EventQueue
-	now     VTimeInSec
-	nowLock sync.RWMutex
+	now    VTimeInSec
 
 	eventChan    chan Event
 	waitGroup    sync.WaitGroup
@@ -33,14 +31,14 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 
 	e.paused = false
-	e.eventChan = make(chan Event, 10000)
+	e.eventChan = make(chan Event, 1000)
 
 	e.maxGoRoutine = runtime.NumCPU() * 2
 	for i := 0; i < e.maxGoRoutine; i++ {
 		e.startWorker()
 	}
 
-	numQueues := e.maxGoRoutine
+	numQueues := e.maxGoRoutine * 2
 	e.queues = make([]EventQueue, 0, numQueues)
 	e.queueChan = make(chan EventQueue, numQueues)
 	for i := 0; i < numQueues; i++ {
@@ -66,16 +64,13 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	e.nowLock.RLock()
 	if evt.Time() < e.now {
 		log.Fatalf("Time inverse, evt %s @ %.10f, now %.10f",
 			reflect.TypeOf(evt), evt.Time(), e.now)
 	} else if evt.Time() == e.now {
 		e.runEvent(evt)
-		e.nowLock.RUnlock()
 		return
 	}
-	e.nowLock.RUnlock()
 
 	queue := <-e.queueChan
 	queue.Push(evt)
@@ -117,18 +112,13 @@ func (e *ParallelEngine) hasMoreEvents() bool {
 func (e *ParallelEngine) runEventsUntilConflict() {
 
 	triggerTime := e.triggerTime()
-	e.nowLock.Lock()
 	e.now = triggerTime
-	e.nowLock.Unlock()
 
 	for _, queue := range e.queues {
 		for queue.Len() > 0 {
 			evt := queue.Peek()
 			if evt.Time() == triggerTime {
-				evt2 := queue.Pop()
-				if evt2 != evt {
-					log.Fatal("Peek != Pop")
-				}
+				queue.Pop()
 				e.runEvent(evt)
 			} else if evt.Time() < triggerTime {
 				log.Fatalf("Time inverse, evt %s time %.10f, trigger time %.10f",
@@ -157,18 +147,6 @@ func (e *ParallelEngine) triggerTime() VTimeInSec {
 	}
 	return earliest
 }
-
-// func (e *ParallelEngine) canRunEvent(evt Event) bool {
-// 	if e.now == 0 || e.now >= evt.Time() {
-// 		// for _, h := range e.runningHandler {
-// 		// 	if h == evt.Handler() {
-// 		// 		return false
-// 		// 	}
-// 		// }
-// 		return true
-// 	}
-// 	return false
-// }
 
 func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
