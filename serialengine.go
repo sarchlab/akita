@@ -3,7 +3,7 @@ package core
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	paused bool
-	queue  *EventQueue
+	queue  EventQueue
 }
 
 // NewSerialEngine creates a SerialEngine
