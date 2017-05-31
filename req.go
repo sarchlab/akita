@@ -14,6 +14,9 @@ type Req interface {
 
 	SetRecvTime(t VTimeInSec)
 	RecvTime() VTimeInSec
+
+	// All requests are simply events that can be scheduled to the receiver
+	Event
 }
 
 // ReqBase provides some basic setter and getter for all other requests
@@ -72,6 +75,16 @@ func (r *ReqBase) RecvTime() VTimeInSec {
 // This field helps the receiver to know what time it is.
 func (r *ReqBase) SetRecvTime(t VTimeInSec) {
 	r.recvTime = t
+}
+
+// Time returns the recv time of a request
+func (r *ReqBase) Time() VTimeInSec {
+	return r.recvTime
+}
+
+// Handler returns the receiver of the request
+func (r *ReqBase) Handler() Handler {
+	return r.dst
 }
 
 // SwapSrcAndDst swaps the request source and the request destination
