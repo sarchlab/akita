@@ -40,7 +40,7 @@ func (h *MockHook) AllExpectedCalled() {
 	gomega.Expect(h.expectedCalls).To(gomega.BeEmpty())
 }
 
-func (h *MockHook) Func(item interface{}, domain core.Hookable) {
+func (h *MockHook) Func(item interface{}, domain core.Hookable, info interface{}) {
 	gomega.Expect(h.expectedCalls).NotTo(gomega.BeEmpty())
 	gomega.Expect(h.expectedCalls[0].item).To(gomega.BeIdenticalTo(item))
 	gomega.Expect(h.expectedCalls[0].domain).To(gomega.BeIdenticalTo(domain))
@@ -62,7 +62,7 @@ var _ = Describe("BasicHookable", func() {
 
 		hook.ExpectHookCall(item, domain)
 
-		domain.InvokeHook(item, core.BeforeEvent)
+		domain.InvokeHook(item, domain, core.BeforeEvent, nil)
 
 		hook.AllExpectedCalled()
 	})
@@ -74,7 +74,7 @@ var _ = Describe("BasicHookable", func() {
 
 		item := new(SomeType)
 
-		domain.InvokeHook(item, core.AfterEvent)
+		domain.InvokeHook(item, domain, core.AfterEvent, nil)
 	})
 
 	It("should allow any position hooking", func() {
@@ -86,8 +86,8 @@ var _ = Describe("BasicHookable", func() {
 
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item, domain)
-		domain.InvokeHook(item, core.AfterEvent)
-		domain.InvokeHook(item, core.BeforeEvent)
+		domain.InvokeHook(item, domain, core.AfterEvent, nil)
+		domain.InvokeHook(item, domain, core.BeforeEvent, nil)
 		hook.AllExpectedCalled()
 	})
 
@@ -101,8 +101,8 @@ var _ = Describe("BasicHookable", func() {
 
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item2, domain)
-		domain.InvokeHook(item, core.AfterEvent)
-		domain.InvokeHook(item2, core.AfterEvent)
+		domain.InvokeHook(item, domain, core.AfterEvent, nil)
+		domain.InvokeHook(item2, domain, core.AfterEvent, nil)
 		hook.AllExpectedCalled()
 	})
 
@@ -118,9 +118,9 @@ var _ = Describe("BasicHookable", func() {
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item2, domain)
 		hook.ExpectHookCall(item3, domain)
-		domain.InvokeHook(item, core.AfterEvent)
-		domain.InvokeHook(item2, core.AfterEvent)
-		domain.InvokeHook(item3, core.AfterEvent)
+		domain.InvokeHook(item, domain, core.AfterEvent, nil)
+		domain.InvokeHook(item2, domain, core.AfterEvent, nil)
+		domain.InvokeHook(item3, domain, core.AfterEvent, nil)
 		hook.AllExpectedCalled()
 	})
 
