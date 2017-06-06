@@ -15,6 +15,8 @@ import (
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
+	*HookableBase
+
 	paused bool
 	now    VTimeInSec
 
@@ -29,6 +31,7 @@ type ParallelEngine struct {
 // NewParallelEngine creates a ParallelEngine
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
+	e.HookableBase = NewHookableBase()
 
 	e.paused = false
 	e.eventChan = make(chan Event, 1000)
@@ -56,8 +59,10 @@ func (e *ParallelEngine) startWorker() {
 
 func (e *ParallelEngine) worker() {
 	for evt := range e.eventChan {
+		e.InvokeHook(evt, e, BeforeEvent, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
+		e.InvokeHook(evt, e, AfterEvent, nil)
 		e.waitGroup.Done()
 	}
 }

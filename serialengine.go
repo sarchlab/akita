@@ -2,6 +2,8 @@ package core
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
+	*HookableBase
+
 	paused bool
 	queue  EventQueue
 }
@@ -9,6 +11,7 @@ type SerialEngine struct {
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
+	e.HookableBase = NewHookableBase()
 
 	e.paused = false
 
@@ -31,8 +34,10 @@ func (e *SerialEngine) Run() error {
 
 		evt := e.queue.Pop()
 
+		e.InvokeHook(evt, e, BeforeEvent, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
+		e.InvokeHook(evt, e, AfterEvent, nil)
 	}
 	return nil
 }

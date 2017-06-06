@@ -37,7 +37,7 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 		log.Fatal("invalid time")
 	}
 	period := f.Period()
-	count := math.Ceil(float64(now / period))
+	count := math.Ceil(float64((now - period*1e-6) / period))
 	return VTimeInSec(count) * period
 }
 
@@ -74,4 +74,16 @@ func (f Freq) NoEarlierThan(t VTimeInSec) VTimeInSec {
 	}
 	count := t / f.Period()
 	return VTimeInSec(math.Ceil(float64(count))) * f.Period()
+}
+
+// HalfTick returns the time in middle of two ticks
+//
+//                Input
+//                (          ]
+//     |----------|----------|----------|----->
+//                                |
+//                                Output
+//
+func (f Freq) HalfTick(t VTimeInSec) VTimeInSec {
+	return f.ThisTick(t) + f.Period()/2
 }
