@@ -46,6 +46,7 @@ type Connectable interface {
 // destination.
 type Connection interface {
 	Sender
+	Handler
 
 	Attach(s Connectable)
 	Detach(s Connectable)
@@ -55,4 +56,36 @@ type Connection interface {
 func PlugIn(comp Component, port string, connection Connection) {
 	comp.Connect(port, connection)
 	connection.Attach(comp)
+}
+
+// DeferredSend is an event that is designed for sending some
+// information later.
+//
+// In discrete event simulation field, it is very common for sending
+// some information right after an event. The request cannot be sent
+// right at the event time due to the contention of resources.
+// Therefore, DeferredSend provides a convenient data structure for this
+// common pattern
+type DeferredSend struct {
+	*EventBase
+
+	Req Req
+}
+
+// NewDeferredSend creates a new DefferedSend event
+func NewDeferredSend(req Req) *DeferredSend {
+	ds := new(DeferredSend)
+	ds.EventBase = NewEventBase(req.SendTime(), req.Src())
+	ds.Req = req
+	return ds
+}
+
+// Time of the DeferredSend is always equal to the send time of the request
+func (e *DeferredSend) Time() VTimeInSec {
+	return e.Req.SendTime()
+}
+
+// SetTime sets the request sene time
+func (e *DeferredSend) SetTime(t VTimeInSec) {
+	e.Req.SetSendTime(t)
 }

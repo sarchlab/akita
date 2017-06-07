@@ -2,12 +2,15 @@ package core
 
 // MockEngine is created to simplify the unit tests of other packages
 type MockEngine struct {
+	*HookableBase
+
 	ScheduledEvent []Event
 }
 
 // NewMockEngine returns a new mock engine
 func NewMockEngine() *MockEngine {
 	e := new(MockEngine)
+	e.HookableBase = NewHookableBase()
 	e.ScheduledEvent = make([]Event, 0)
 	return e
 }

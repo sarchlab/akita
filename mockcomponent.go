@@ -7,7 +7,7 @@ import (
 // A MockComponent is a very simple component that is designed only for
 // simplify the unit tests.
 type MockComponent struct {
-	*BasicComponent
+	*ComponentBase
 
 	ReceivedReqs  []Req
 	ReceiveErrors []*Error
@@ -16,7 +16,7 @@ type MockComponent struct {
 // NewMockComponent returns the a MockComponent
 func NewMockComponent(name string) *MockComponent {
 	c := new(MockComponent)
-	c.BasicComponent = NewBasicComponent(name)
+	c.ComponentBase = NewComponentBase(name)
 	return c
 }
 

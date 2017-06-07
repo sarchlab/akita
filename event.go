@@ -17,25 +17,27 @@ type Event interface {
 	Handler() Handler
 }
 
-// BasicEvent provides the basic fields and getters for other events
-type BasicEvent struct {
+// EventBase provides the basic fields and getters for other events
+type EventBase struct {
 	time    VTimeInSec
 	handler Handler
 }
 
-// NewBasicEvent creates a new BasicEvent
-func NewBasicEvent() *BasicEvent {
-	e := new(BasicEvent)
+// NewEventBase creates a new EventBase
+func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
+	e := new(EventBase)
+	e.time = t
+	e.handler = handler
 	return e
 }
 
 // SetTime sets when then event will happen
-func (e *BasicEvent) SetTime(t VTimeInSec) {
+func (e *EventBase) SetTime(t VTimeInSec) {
 	e.time = t
 }
 
 // Time returne the time that the event is going to happen
-func (e *BasicEvent) Time() VTimeInSec {
+func (e *EventBase) Time() VTimeInSec {
 	return e.time
 }
 
@@ -45,12 +47,12 @@ func (e *BasicEvent) Time() VTimeInSec {
 // Therefore, the handler in this function must be the component who schedule
 // the event. The only exception is process of kicking starting of the
 // simulation, where the kick starter can schedule to all components.
-func (e *BasicEvent) SetHandler(h Handler) {
+func (e *EventBase) SetHandler(h Handler) {
 	e.handler = h
 }
 
 // Handler returns the handler to handle the event
-func (e *BasicEvent) Handler() Handler {
+func (e *EventBase) Handler() Handler {
 	return e.handler
 }
 
@@ -60,4 +62,17 @@ func (e *BasicEvent) Handler() Handler {
 // only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
 	Handle(e Event) error
+}
+
+// TickEvent is a generic event that almost all the component can use to
+// update their status.
+type TickEvent struct {
+	*EventBase
+}
+
+// NewTickEvent creates a newly created TickEvent
+func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
+	evt := new(TickEvent)
+	evt.EventBase = NewEventBase(t, handler)
+	return evt
 }

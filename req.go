@@ -1,9 +1,6 @@
 package core
 
-import (
-	"fmt"
-	"reflect"
-)
+import "reflect"
 
 // A Req is the message element being transferred between compoenents
 type Req interface {
@@ -17,6 +14,9 @@ type Req interface {
 
 	SetRecvTime(t VTimeInSec)
 	RecvTime() VTimeInSec
+
+	// All requests are simply events that can be scheduled to the receiver
+	Event
 }
 
 // ReqBase provides some basic setter and getter for all other requests
@@ -77,6 +77,16 @@ func (r *ReqBase) SetRecvTime(t VTimeInSec) {
 	r.recvTime = t
 }
 
+// Time returns the recv time of a request
+func (r *ReqBase) Time() VTimeInSec {
+	return r.recvTime
+}
+
+// Handler returns the receiver of the request
+func (r *ReqBase) Handler() Handler {
+	return r.dst
+}
+
 // SwapSrcAndDst swaps the request source and the request destination
 //
 // This function is useful when the fulfiller returns the request to the
@@ -92,12 +102,12 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 	}
 
 	if reflect.TypeOf(r1) != reflect.TypeOf(r2) {
-		fmt.Printf("Type mismatch\n")
+		// fmt.Printf("Type mismatch\n")
 		return false
 	}
 
 	if r1.Src() != r2.Src() || r1.Dst() != r2.Dst() {
-		fmt.Printf("Src or dst mismatch\n")
+		// fmt.Printf("Src or dst mismatch\n")
 		return false
 	}
 
@@ -116,8 +126,8 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 		}
 
 		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
-			fmt.Printf("Field %s is not deeply equal\n",
-				r1Value.Field(i).String())
+			// fmt.Printf("Field %d, %s is not deeply equal\n",
+			// 	i, r1Value.Field(i).String())
 			return false
 		}
 	}

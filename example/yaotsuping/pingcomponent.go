@@ -2,10 +2,9 @@ package main
 
 import (
 	"errors"
+	"reflect"
 
 	"gitlab.com/yaotsu/core"
-
-	"reflect"
 )
 
 // A PingComponent periodically send ping request out and also respond to pings
@@ -17,7 +16,7 @@ import (
 //     -----------------
 //
 type PingComponent struct {
-	*core.BasicComponent
+	*core.ComponentBase
 
 	NumPingsToSend int
 	Engine         core.Engine
@@ -26,7 +25,7 @@ type PingComponent struct {
 // NewPingComponent creates a new PingComponent
 func NewPingComponent(name string, engine core.Engine) *PingComponent {
 	c := &PingComponent{
-		core.NewBasicComponent(name),
+		core.NewComponentBase(name),
 		0,
 		engine,
 	}
@@ -48,17 +47,13 @@ func (c *PingComponent) Recv(req core.Req) *core.Error {
 
 func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
 	if req.IsReply {
-		/*
-			fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
-				req.RecvTime()-req.StartTime)
-		*/
+		// fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
+		// 	req.RecvTime()-req.StartTime)
 		return nil
 	}
 
-	evt := NewPingReturnEvent()
+	evt := NewPingReturnEvent(req.RecvTime()+2.0, c)
 	evt.Req = req
-	evt.SetTime(req.RecvTime() + 2.0)
-	evt.SetHandler(c)
 	c.Engine.Schedule(evt)
 	return nil
 }

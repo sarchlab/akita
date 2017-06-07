@@ -2,8 +2,9 @@ package core_test
 
 import (
 	"log"
-	"sync"
 	"testing"
+
+	"sync"
 
 	"github.com/onsi/ginkgo"
 	"github.com/onsi/gomega"
@@ -16,30 +17,6 @@ func TestCore(t *testing.T) {
 	ginkgo.RunSpecs(t, "Yaotsu Core")
 }
 
-type MockConnection struct {
-	Connected map[core.Connectable]bool
-	ReqSent   []core.Req
-}
-
-func NewMockConnection() *MockConnection {
-	return &MockConnection{
-		make(map[core.Connectable]bool),
-		make([]core.Req, 0)}
-}
-
-func (c *MockConnection) Attach(connectable core.Connectable) {
-	c.Connected[connectable] = true
-}
-
-func (c *MockConnection) Detach(connectable core.Connectable) {
-	c.Connected[connectable] = false
-}
-
-func (c *MockConnection) Send(req core.Req) *core.Error {
-	c.ReqSent = append(c.ReqSent, req)
-	return nil
-}
-
 type MockRequest struct {
 	*core.ReqBase
 }
@@ -49,14 +26,12 @@ func NewMockRequest() *MockRequest {
 }
 
 type MockEvent struct {
-	EventTime       core.VTimeInSec
-	EventHandler    core.Handler
-	EventFinishChan chan bool
+	EventTime    core.VTimeInSec
+	EventHandler core.Handler
 }
 
 func NewMockEvent() *MockEvent {
 	e := new(MockEvent)
-	e.EventFinishChan = make(chan bool)
 	return e
 }
 
@@ -74,10 +49,6 @@ func (e *MockEvent) SetHandler(handler core.Handler) {
 
 func (e MockEvent) Handler() core.Handler {
 	return e.EventHandler
-}
-
-func (e MockEvent) FinishChan() chan bool {
-	return e.EventFinishChan
 }
 
 type MockHandler struct {
