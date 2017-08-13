@@ -1,0 +1,117 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"reflect"
+
+	"gitlab.com/yaotsu/core"
+)
+
+// A PingComponent periodically send ping request out and also respond to pings
+//
+//     -----------------
+//     |               |
+//     | PingComponent | <=> Ping
+//     |               |
+//     -----------------
+//
+type PingComponent struct {
+	*core.ComponentBase
+
+	NumPingsToSend int
+	Engine         core.Engine
+}
+
+// NewPingComponent creates a new PingComponent
+func NewPingComponent(name string, engine core.Engine) *PingComponent {
+	c := &PingComponent{
+		core.NewComponentBase(name),
+		0,
+		engine,
+	}
+	c.AddPort("Ping")
+	return c
+}
+
+// Recv processes incoming request
+func (c *PingComponent) Recv(req core.Req) *core.Error {
+	switch req := req.(type) {
+	default:
+		return core.NewError(
+			"cannot process request "+reflect.TypeOf(req).String(),
+			false, 0)
+	case *PingReq:
+		return c.processPingReq(req)
+	}
+}
+
+func (c *PingComponent) processPingReq(req *PingReq) *core.Error {
+	if req.IsReply {
+		fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
+			req.RecvTime()-req.StartTime)
+		return nil
+	}
+
+	evt := NewPingReturnEvent(req.RecvTime()+2.0, c)
+	evt.Req = req
+	c.Engine.Schedule(evt)
+	return nil
+}
+
+// Handle handles the event for the PingComponent
+func (c *PingComponent) Handle(e core.Event) error {
+	switch e := e.(type) {
+	default:
+		return errors.New("cannot handle event " + reflect.TypeOf(e).String())
+	case *PingReturnEvent:
+		return c.handlePingReturnEvent(e)
+	case *PingSendEvent:
+		return c.handlePingSendEvent(e)
+	}
+}
+
+func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
+	e.Req.SwapSrcAndDst()
+	e.Req.IsReply = true
+
+	// Send the reply
+	e.Req.SetSendTime(e.Time())
+	err := c.GetConnection("Ping").Send(e.Req)
+	if err != nil {
+		if !err.Recoverable {
+			return err
+		}
+
+		// Reschedule
+		e.Req.SwapSrcAndDst()
+		e.SetTime(err.EarliestRetry)
+		c.Engine.Schedule(e)
+	}
+
+	return nil
+}
+
+func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
+	if e.From != c {
+		panic("Ping event is not scheduled for the current component")
+	}
+
+	req := NewPingReq()
+	req.SetSrc(e.From)
+	req.SetDst(e.To)
+	req.StartTime = e.Time()
+	req.SetSendTime(e.Time())
+
+	err := c.GetConnection("Ping").Send(req)
+	if err != nil {
+		if !err.Recoverable {
+			return err
+		}
+
+		e.SetTime(err.EarliestRetry)
+		c.Engine.Schedule(e)
+	}
+
+	return nil
+}
