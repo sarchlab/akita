@@ -1,22 +1,20 @@
-package core_test
+package core
 
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"gitlab.com/yaotsu/core"
 )
 
 var _ = Describe("BasicComponent", func() {
 
 	var (
-		component  *core.ComponentBase
-		connection *core.MockConnection
+		component  *ComponentBase
+		connection *MockConnection
 	)
 
 	BeforeEach(func() {
-		component = core.NewComponentBase("test_comp")
-		connection = core.NewMockConnection()
+		component = NewComponentBase("test_comp")
+		connection = NewMockConnection()
 	})
 
 	It("should set and get name", func() {
@@ -42,7 +40,8 @@ var _ = Describe("BasicComponent", func() {
 
 		component.Connect("port", connection)
 
-		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection)) })
+		Expect(component.GetConnection("port")).To(BeIdenticalTo(connection))
+	})
 
 	It("should panic if disconnecting a non-exist port", func() {
 		component.AddPort("port")
