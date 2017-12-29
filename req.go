@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -98,19 +99,31 @@ func (r *ReqBase) SwapSrcAndDst() {
 }
 
 // ReqEquivalent checks if two requests are equivalent to each other
-func ReqEquivalent(r1 Req, r2 Req) bool {
+func ReqEquivalent(r1 Req, r2 Req) (bool, string) {
 	if r1 == r2 {
-		return true
+		return true, ""
 	}
 
 	if reflect.TypeOf(r1) != reflect.TypeOf(r2) {
 		// fmt.Printf("Type mismatch\n")
-		return false
+		return false, "Type mismatch"
 	}
 
-	if r1.Src() != r2.Src() || r1.Dst() != r2.Dst() {
-		// fmt.Printf("Src or dst mismatch\n")
-		return false
+	if r1.Src() != r2.Src() {
+		return false, "Src mismatch"
+	}
+
+	if r1.Dst() != r2.Dst() {
+		return false, "Dst mismatch"
+	}
+
+	if r1.SendTime() != r2.SendTime() {
+		return false, fmt.Sprintf("SendTime mismatch, %f vs %f",
+			r1.SendTime(), r2.SendTime())
+	}
+
+	if r1.RecvTime() != r2.RecvTime() {
+		return false, "RecvTime mismatch"
 	}
 
 	reqType := reflect.TypeOf(r1)
@@ -123,16 +136,18 @@ func ReqEquivalent(r1 Req, r2 Req) bool {
 	}
 	for i := 0; i < reqType.NumField(); i++ {
 		field := reqType.Field(i)
-		if field.Type == reflect.TypeOf((*ReqBase)(nil)).Elem() {
+
+		// The ReqBase is tested
+		if field.Type == reflect.TypeOf((*ReqBase)(nil)) {
 			continue
 		}
 
 		if !reflect.DeepEqual(r1Value.Field(i).Interface(), r2Value.Field(i).Interface()) {
-			// fmt.Printf("Field %d, %s is not deeply equal\n",
-			// 	i, r1Value.Field(i).String())
-			return false
+			reason := fmt.Sprintf("Field %d, %s is not deeply equal\n",
+				i, r1Value.Field(i).String())
+			return false, reason
 		}
 	}
 
-	return true
+	return true, ""
 }

@@ -1,10 +1,7 @@
 package core
 
 import (
-	"fmt"
 	"log"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 type expectedReq struct {
@@ -42,19 +39,21 @@ func (c *MockConnection) Send(req Req) *Error {
 	if len(c.expectedReqs) == 0 {
 		log.Panicf("Req %+v not expected", req)
 	}
-	if ReqEquivalent(req, c.expectedReqs[0].req) {
+
+	match, reason := ReqEquivalent(req, c.expectedReqs[0].req)
+	if match {
 		err := c.expectedReqs[0].err
 		c.expectedReqs = c.expectedReqs[1:]
 		return err
 	}
-	fmt.Printf("Req\n")
-	spew.Dump(req)
-	fmt.Printf("not expected, the expected req is \n")
-	spew.Dump(c.expectedReqs[0])
-	fmt.Printf("\n")
-	log.Panic("")
+
+	log.Panic("Request not exptected: " + reason + "\n")
 
 	return nil
+}
+
+func (c *MockConnection) dumpReq(req Req) {
+
 }
 
 // Handle function of a MockConnection does not do anything
