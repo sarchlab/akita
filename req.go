@@ -1,6 +1,8 @@
 package core
 
-import "reflect"
+import (
+	"reflect"
+)
 
 // A Req is the message element being transferred between compoenents
 type Req interface {
