@@ -36,6 +36,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.HookableBase = core.NewHookableBase()
 
 	e.paused = false
+	e.now = -1
 	e.eventChan = make(chan core.Event, 1000)
 
 	e.maxGoRoutine = runtime.NumCPU() * 2
