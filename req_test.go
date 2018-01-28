@@ -19,13 +19,15 @@ var _ = Describe("ReqEquivalent", func() {
 
 	It("should be true if the same req", func() {
 		req := NewReqBase()
-		Expect(ReqEquivalent(req, req)).To(BeTrue())
+		res, _ := ReqEquivalent(req, req)
+		Expect(res).To(BeTrue())
 	})
 
 	It("should be false if different type", func() {
 		r1 := NewReqBase()
 		r2 := new(mockReq)
-		Expect(ReqEquivalent(r1, r2)).To(BeFalse())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeFalse())
 	})
 
 	It("should match source", func() {
@@ -36,7 +38,8 @@ var _ = Describe("ReqEquivalent", func() {
 
 		r1.SetSrc(c1)
 		r2.SetSrc(c2)
-		Expect(ReqEquivalent(r1, r2)).To(BeFalse())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeFalse())
 	})
 
 	It("should match destination", func() {
@@ -47,7 +50,8 @@ var _ = Describe("ReqEquivalent", func() {
 
 		r1.SetDst(c1)
 		r2.SetDst(c2)
-		Expect(ReqEquivalent(r1, r2)).To(BeFalse())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeFalse())
 	})
 
 	It("should match other field", func() {
@@ -57,7 +61,8 @@ var _ = Describe("ReqEquivalent", func() {
 		r1.Data = 1
 		r2.Data = 2
 
-		Expect(ReqEquivalent(r1, r2)).To(BeFalse())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeFalse())
 	})
 
 	It("should match", func() {
@@ -67,7 +72,8 @@ var _ = Describe("ReqEquivalent", func() {
 		r1.Data = 1
 		r2.Data = 1
 
-		Expect(ReqEquivalent(r1, r2)).To(BeTrue())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeTrue())
 	})
 
 	It("should match nested field", func() {
@@ -82,7 +88,8 @@ var _ = Describe("ReqEquivalent", func() {
 		r1.Data2 = 1
 		r2.Data2 = 1
 
-		Expect(ReqEquivalent(r1, r2)).To(BeFalse())
+		res, _ := ReqEquivalent(r1, r2)
+		Expect(res).To(BeFalse())
 	})
 
 })
