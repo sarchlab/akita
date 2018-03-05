@@ -38,5 +38,5 @@ func (h *EventLogger) Func(
 ) {
 	evt := item.(core.Event)
 	h.Logger.Printf("%.10f, %s -> %s", evt.Time(), reflect.TypeOf(evt),
-		reflect.TypeOf(evt.Handler()))
+		evt.Handler().(core.Component).Name())
 }
