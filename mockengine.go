@@ -5,6 +5,7 @@ type MockEngine struct {
 	*HookableBase
 
 	ScheduledEvent []Event
+	Time           VTimeInSec
 }
 
 // NewMockEngine returns a new mock engine
@@ -28,4 +29,9 @@ func (e *MockEngine) Run() error {
 // Pause function of MockEngine is not implemented
 func (e *MockEngine) Pause() {
 
+}
+
+// CurrentTime returns the current time.
+func (e *MockEngine) CurrentTime() VTimeInSec {
+	return e.Time
 }
