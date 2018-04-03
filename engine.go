@@ -5,7 +5,7 @@ type Engine interface {
 	// Engines are hookable for all the requests
 	Hookable
 
-	// Schedule registers an event to be happen in the future
+	// Schedule registers an event to happen in the future
 	Schedule(e Event)
 
 	// Run will process all the events until the simulation finishes
@@ -13,4 +13,7 @@ type Engine interface {
 
 	// Pause will temporarily stops the engine from triggering more events.
 	Pause()
+
+	// CurrentTime will return the time at which the engine is at.
+	CurrentTime() VTimeInSec
 }
