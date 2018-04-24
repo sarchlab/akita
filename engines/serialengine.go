@@ -6,6 +6,7 @@ import "gitlab.com/yaotsu/core"
 type SerialEngine struct {
 	*core.HookableBase
 
+	time   core.VTimeInSec
 	paused bool
 	queue  EventQueue
 }
@@ -36,15 +37,23 @@ func (e *SerialEngine) Run() error {
 
 		evt := e.queue.Pop()
 
+		e.time = evt.Time()
+
 		e.InvokeHook(evt, e, core.BeforeEvent, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
 		e.InvokeHook(evt, e, core.AfterEvent, nil)
 	}
+
 	return nil
 }
 
 // Pause will stop the engine from dispatching more events
 func (e *SerialEngine) Pause() {
 	e.paused = true
+}
+
+// CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
+func (e *SerialEngine) CurrentTime() core.VTimeInSec {
+	return e.time
 }

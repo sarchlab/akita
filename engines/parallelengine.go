@@ -166,3 +166,8 @@ func (e *ParallelEngine) runEvent(evt core.Event) {
 func (e *ParallelEngine) Pause() {
 	e.paused = true
 }
+
+// CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
+func (e *ParallelEngine) CurrentTime() core.VTimeInSec {
+	return e.now
+}
