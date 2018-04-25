@@ -55,7 +55,7 @@ func (f Freq) NextTick(now core.VTimeInSec) core.VTimeInSec {
 		log.Fatal("invalid time")
 	}
 	period := f.Period()
-	count := math.Floor(float64((now + period*1e-6) / period))
+	count := math.Floor(float64((now + period*0.2) / period))
 	return core.VTimeInSec(count+1) * period
 }
 

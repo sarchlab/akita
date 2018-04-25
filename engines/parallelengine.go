@@ -4,8 +4,9 @@ import (
 	"log"
 	"math"
 	"reflect"
-	"runtime"
 	"sync"
+
+	"runtime"
 
 	"gitlab.com/yaotsu/core"
 )
@@ -39,10 +40,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.now = -1
 	e.eventChan = make(chan core.Event, 1000)
 
-	e.maxGoRoutine = runtime.NumCPU() * 2
-	for i := 0; i < e.maxGoRoutine; i++ {
-		e.startWorker()
-	}
+	e.spawnWorkers()
 
 	numQueues := e.maxGoRoutine * 2
 	e.queues = make([]EventQueue, 0, numQueues)
@@ -56,8 +54,12 @@ func NewParallelEngine() *ParallelEngine {
 	return e
 }
 
-func (e *ParallelEngine) startWorker() {
-	go e.worker()
+func (e *ParallelEngine) spawnWorkers() {
+	e.maxGoRoutine = runtime.NumCPU() * 2
+	for i := 0; i < e.maxGoRoutine; i++ {
+		go e.worker()
+	}
+
 }
 
 func (e *ParallelEngine) worker() {
@@ -87,15 +89,12 @@ func (e *ParallelEngine) Schedule(evt core.Event) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
-	defer close(e.eventChan)
-
 	for !e.paused {
-		e.emptyQueueChan()
-
 		if !e.hasMoreEvents() {
 			return nil
 		}
 
+		e.emptyQueueChan()
 		e.runEventsUntilConflict()
 		e.waitGroup.Wait()
 	}

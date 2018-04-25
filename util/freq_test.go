@@ -26,9 +26,14 @@ var _ = Describe("Freq", func() {
 		Expect(f.NextTick(0.000000031)).To(BeNumerically("~", 0.000000032, 1e-12))
 	})
 
-	It("should get the next tick 2", func() {
+	It("should get the next tick 3", func() {
 		var f Freq = 1 * GHz
 		Expect(f.NextTick(0.000000017)).To(BeNumerically("~", 0.000000018, 1e-12))
+	})
+
+	It("should get the next tick 3", func() {
+		var f Freq = 1 * GHz
+		Expect(f.NextTick(16)).To(BeNumerically("~", 16.000000001, 1e-12))
 	})
 
 	It("should get the next tick, if currTime is not on a tick", func() {
