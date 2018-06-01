@@ -3,6 +3,8 @@ package core
 import (
 	"fmt"
 	"reflect"
+
+	"github.com/rs/xid"
 )
 
 // A Req is the message element being transferred between compoenents
@@ -24,6 +26,7 @@ type Req interface {
 
 // ReqBase provides some basic setter and getter for all other requests
 type ReqBase struct {
+	ID       string
 	src      Component
 	dst      Component
 	sendTime VTimeInSec
@@ -32,7 +35,9 @@ type ReqBase struct {
 
 // NewReqBase creates a new BasicRequest
 func NewReqBase() *ReqBase {
-	return &ReqBase{nil, nil, 0, 0}
+	r := new(ReqBase)
+	r.ID = xid.New().String()
+	return r
 }
 
 // SetSrc set the component that send the request

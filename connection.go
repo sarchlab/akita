@@ -18,13 +18,13 @@ type Receiver interface {
 // Recoverable determines if a later retry can solve the problem
 // EarliestRetry give suggestions on earliest time to retry
 type Error struct {
-	msg           string
+	Message       string
 	Recoverable   bool
 	EarliestRetry VTimeInSec
 }
 
 func (e *Error) Error() string {
-	return e.msg
+	return e.Message
 }
 
 // NewError creates a new ConnError

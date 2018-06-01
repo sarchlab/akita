@@ -1,5 +1,7 @@
 package core
 
+import "github.com/rs/xid"
+
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec float64
 
@@ -19,6 +21,7 @@ type Event interface {
 
 // EventBase provides the basic fields and getters for other events
 type EventBase struct {
+	ID      string
 	time    VTimeInSec
 	handler Handler
 }
@@ -26,6 +29,7 @@ type EventBase struct {
 // NewEventBase creates a new EventBase
 func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	e := new(EventBase)
+	e.ID = xid.New().String()
 	e.time = t
 	e.handler = handler
 	return e
