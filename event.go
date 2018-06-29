@@ -62,16 +62,3 @@ func (e *EventBase) Handler() Handler {
 type Handler interface {
 	Handle(e Event) error
 }
-
-// TickEvent is a generic event that almost all the component can use to
-// update their status.
-type TickEvent struct {
-	*EventBase
-}
-
-// NewTickEvent creates a newly created TickEvent
-func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
-	evt := new(TickEvent)
-	evt.EventBase = NewEventBase(t, handler)
-	return evt
-}
