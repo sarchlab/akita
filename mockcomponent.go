@@ -10,13 +10,14 @@ type MockComponent struct {
 	*ComponentBase
 
 	ReceivedReqs  []Req
-	ReceiveErrors []*Error
+	ReceiveErrors []*SendError
 }
 
 // NewMockComponent returns the a MockComponent
 func NewMockComponent(name string) *MockComponent {
 	c := new(MockComponent)
 	c.ComponentBase = NewComponentBase(name)
+	c.AddPort("ToOutside")
 	return c
 }
 
@@ -27,7 +28,7 @@ func (c *MockComponent) Handle(evt Event) error {
 
 // Recv of a MockComponent checks if a request is expected and returns a
 // predefined error.
-func (c *MockComponent) Recv(req Req) *Error {
+func (c *MockComponent) Recv(req Req) *SendError {
 	if len(c.ReceivedReqs) == 0 {
 		log.Panicln("No request is expected")
 	}
@@ -50,7 +51,7 @@ func (c *MockComponent) Recv(req Req) *Error {
 
 // ToReceiveReq defines the request that a mock component is going to receive
 // during the test and the errors to return
-func (c *MockComponent) ToReceiveReq(req Req, err *Error) {
+func (c *MockComponent) ToReceiveReq(req Req, err *SendError) {
 	c.ReceiveErrors = append(c.ReceiveErrors, err)
 	c.ReceivedReqs = append(c.ReceivedReqs, req)
 }

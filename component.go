@@ -12,16 +12,9 @@ type Named interface {
 
 // A Component is a element that is being simulated in Yaotsu.
 type Component interface {
-	// A Component must have a name to distinguish itself
 	Named
-
-	// A Component can connect to the outside world
 	Connectable
-
-	// A Component can handle events
 	Handler
-
-	// A Component should be hookable
 	Hookable
 }
 
@@ -79,7 +72,7 @@ func (c *ComponentBase) Disconnect(portName string) {
 
 // AddPort register a port name to the component.
 //
-// After defining the port names, all the connections must specify which port
+// After defining the port names, all the conns must specify which port
 // that the connection is connecting to. When the component need to send
 // requests out, it need first get the connection by the port name, and then
 // send the request over the connection.

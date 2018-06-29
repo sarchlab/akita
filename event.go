@@ -6,11 +6,6 @@ import "github.com/rs/xid"
 type VTimeInSec float64
 
 // An Event is something going to happen in the future.
-//
-// Different from the concept of event of traditional discrete event simulation,
-// event in Yaotsu can only be scheduled within by one event handler to
-// itself. An event that is schedule by a handler can only modify that paticular
-// handler or send requests over a Connection.
 type Event interface {
 	// Return the time that the event should happen
 	Time() VTimeInSec
