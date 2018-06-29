@@ -44,6 +44,10 @@ func (c *DirectConnection) NotifyAvailable(now VTimeInSec, comp Connectable) {
 	c.Lock()
 	defer c.Unlock()
 
+	if c.receiverBusy[comp] == false {
+		return
+	}
+
 	c.receiverBusy[comp] = false
 	buf := c.reqBuf[comp]
 	if len(buf) > 0 {

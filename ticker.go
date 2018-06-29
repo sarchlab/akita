@@ -38,5 +38,5 @@ func (t *Ticker) TickLater(now VTimeInSec) {
 	}
 
 	t.tick.SetTime(t.freq.NextTick(now))
-	t.engine.Schedule(t)
+	t.engine.Schedule(t.tick)
 }

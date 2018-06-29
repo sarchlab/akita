@@ -38,6 +38,10 @@ func (q *IncomingQueue) Pop() Req {
 	q.Lock()
 	defer q.Unlock()
 
+	if len(q.queue) == 0 {
+		return nil
+	}
+
 	req := q.queue[0]
 	q.queue = q.queue[1:]
 	return req
