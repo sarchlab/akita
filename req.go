@@ -7,7 +7,7 @@ import (
 	"github.com/rs/xid"
 )
 
-// A Req is the message element being transferred between compoenents
+// A Req is the message element being transferred between components
 type Req interface {
 	Src() Component
 	SetSrc(c Component)
