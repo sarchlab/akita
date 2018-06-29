@@ -21,6 +21,7 @@ type Connectable interface {
 	Connect(portName string, conn Connection)
 	GetConnection(portName string) Connection
 	Disconnect(portName string)
+	NotifyAvailable(now VTimeInSec, conn Connection)
 
 	Receiver
 }

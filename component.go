@@ -26,6 +26,7 @@ type ComponentBase struct {
 	name        string
 	connections map[string]Connection
 	ports       map[string]bool
+	portBusy    map[string]bool
 }
 
 // NewComponentBase creates a new ComponentBase
@@ -35,6 +36,7 @@ func NewComponentBase(name string) *ComponentBase {
 	c.HookableBase = NewHookableBase()
 	c.connections = make(map[string]Connection)
 	c.ports = make(map[string]bool)
+	c.portBusy = make(map[string]bool)
 	return c
 }
 
@@ -86,4 +88,24 @@ func (c *ComponentBase) AddPort(name string) {
 	}
 
 	c.ports[name] = true
+}
+
+// MarkBusy marks a port as busy and the component can avoid sending
+// to the port later
+func (c *ComponentBase) MarkBusy(port string) {
+	c.portBusy[port] = true
+}
+
+// NotifyAvailable marks a connection to to not busy anymore
+func (c *ComponentBase) NotifyAvailable(now VTimeInSec, conn Connection) {
+	for port, connection := range c.connections {
+		if connection == conn {
+			c.portBusy[port] = false
+		}
+	}
+}
+
+// IsPortBusy checks if a certain port is busy or not
+func (c *ComponentBase) IsPortBusy(port string) bool {
+	return c.portBusy[port]
 }

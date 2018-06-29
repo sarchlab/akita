@@ -33,10 +33,12 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 }
 
 func (t *Ticker) TickLater(now VTimeInSec) {
-	if t.tick.Time() >= now {
+	time := t.freq.NextTick(now)
+
+	if t.tick.Time() >= time {
 		return
 	}
 
-	t.tick.SetTime(t.freq.NextTick(now))
+	t.tick.SetTime(time)
 	t.engine.Schedule(t.tick)
 }
