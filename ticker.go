@@ -21,7 +21,8 @@ type Ticker struct {
 	handler Handler
 	freq    Freq
 	engine  Engine
-	tick    *TickEvent
+
+	nextTickTime VTimeInSec
 }
 
 func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
@@ -31,7 +32,7 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 	ticker.engine = engine
 	ticker.freq = freq
 
-	ticker.tick = NewTickEvent(-1, handler)
+	ticker.nextTickTime = -1
 	return ticker
 }
 
@@ -41,10 +42,11 @@ func (t *Ticker) TickLater(now VTimeInSec) {
 
 	time := t.freq.NextTick(now)
 
-	if t.tick.Time() >= time {
+	if t.nextTickTime >= time {
 		return
 	}
 
-	t.tick.SetTime(time)
-	t.engine.Schedule(t.tick)
+	t.nextTickTime = time
+	tick := NewTickEvent(time, t.handler)
+	t.engine.Schedule(tick)
 }
