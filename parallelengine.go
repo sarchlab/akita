@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"runtime"
+	"fmt"
 )
 
 // func init() {
@@ -36,7 +37,7 @@ func NewParallelEngine() *ParallelEngine {
 
 	e.paused = false
 	e.now = -1
-	e.eventChan = make(chan Event, 1000)
+	e.eventChan = make(chan Event, 10000)
 
 	e.spawnWorkers()
 
@@ -44,7 +45,8 @@ func NewParallelEngine() *ParallelEngine {
 	e.queues = make([]EventQueue, 0, numQueues)
 	e.queueChan = make(chan EventQueue, numQueues)
 	for i := 0; i < numQueues; i++ {
-		queue := NewEventQueue()
+		//queue := NewEventQueue()
+		queue := NewInsertionQueue()
 		e.queueChan <- queue
 		e.queues = append(e.queues, queue)
 	}
@@ -72,13 +74,16 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
+	fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
 	if evt.Time() < e.now {
-		log.Panicf("Time inverse, evt %s @ %.10f, now %.10f",
+		log.Panicf("cannot schedule event in the past, evt %s @ %.10f, now %.10f",
 			reflect.TypeOf(evt), evt.Time(), e.now)
-	} else if evt.Time() == e.now {
-		e.runEvent(evt)
-		return
 	}
+
+	//if evt.Time() == e.now {
+	//	e.runEvent(evt)
+	//	return
+	//}
 
 	queue := <-e.queueChan
 	queue.Push(evt)
@@ -126,7 +131,7 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 				queue.Pop()
 				e.runEvent(evt)
 			} else if evt.Time() < triggerTime {
-				log.Panicf("Time inverse, evt %s time %.10f, trigger time %.10f",
+				log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
 					reflect.TypeOf(evt), evt.Time(), triggerTime)
 			} else {
 				break

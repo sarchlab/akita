@@ -30,33 +30,33 @@ func NewEventQueue() *EventQueueImpl {
 
 // Push adds an event to the event queue
 func (q *EventQueueImpl) Push(evt Event) {
-	// q.Lock()
+	q.Lock()
 	heap.Push(&q.events, evt)
-	// q.Unlock()
+	q.Unlock()
 }
 
 // Pop returns the next earliest event
 func (q *EventQueueImpl) Pop() Event {
-	// q.Lock()
+	q.Lock()
 	e := heap.Pop(&q.events).(Event)
-	// q.Unlock()
+	q.Unlock()
 	return e
 }
 
 // Len returns the number of event in the queue
 func (q *EventQueueImpl) Len() int {
-	// q.Lock()
+	q.Lock()
 	l := q.events.Len()
-	// q.Unlock()
+	q.Unlock()
 	return l
 }
 
 // Peek returns the event in front of the queue without removing it from the
 // queue
 func (q *EventQueueImpl) Peek() Event {
-	// q.Lock()
+	q.Lock()
 	evt := q.events[0]
-	// q.Unlock()
+	q.Unlock()
 	return evt
 }
 
