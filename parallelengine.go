@@ -73,7 +73,7 @@ func (e *ParallelEngine) worker() {
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
 	if evt.Time() < e.now {
-		log.Fatalf("Time inverse, evt %s @ %.10f, now %.10f",
+		log.Panicf("Time inverse, evt %s @ %.10f, now %.10f",
 			reflect.TypeOf(evt), evt.Time(), e.now)
 	} else if evt.Time() == e.now {
 		e.runEvent(evt)
@@ -126,7 +126,7 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 				queue.Pop()
 				e.runEvent(evt)
 			} else if evt.Time() < triggerTime {
-				log.Fatalf("Time inverse, evt %s time %.10f, trigger time %.10f",
+				log.Panicf("Time inverse, evt %s time %.10f, trigger time %.10f",
 					reflect.TypeOf(evt), evt.Time(), triggerTime)
 			} else {
 				break

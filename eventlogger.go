@@ -35,6 +35,9 @@ func (h *EventLogger) Func(
 	info interface{},
 ) {
 	evt := item.(Event)
-	h.Logger.Printf("%.10f, %s -> %s", evt.Time(), reflect.TypeOf(evt),
-		evt.Handler().(Component).Name())
+	comp, ok := evt.Handler().(Component)
+	if ok {
+		h.Logger.Printf("%.10f, %s -> %s", evt.Time(), reflect.TypeOf(evt),
+			comp.Name())
+	}
 }

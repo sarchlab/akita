@@ -1,5 +1,7 @@
 package core
 
+import "sync"
+
 // TickEvent is a generic event that almost all the component can use to
 // update their status.
 type TickEvent struct {
@@ -15,6 +17,7 @@ func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
 
 // Ticker is a tool that helps a component that executes in a tick-tick fashion
 type Ticker struct {
+	sync.Mutex
 	handler Handler
 	freq    Freq
 	engine  Engine
@@ -33,6 +36,9 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 }
 
 func (t *Ticker) TickLater(now VTimeInSec) {
+	t.Lock()
+	defer t.Unlock()
+
 	time := t.freq.NextTick(now)
 
 	if t.tick.Time() >= time {

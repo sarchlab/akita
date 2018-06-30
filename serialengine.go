@@ -1,5 +1,7 @@
 package core
 
+import "log"
+
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	*HookableBase
@@ -16,13 +18,17 @@ func NewSerialEngine() *SerialEngine {
 
 	e.paused = false
 
-	e.queue = NewEventQueue()
+	//e.queue = NewEventQueue()
 
+	e.queue = NewInsertionQueue()
 	return e
 }
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
+	if evt.Time() < e.time {
+		log.Panic("scheudling an event earlier than current time")
+	}
 	e.queue.Push(evt)
 }
 
@@ -35,6 +41,9 @@ func (e *SerialEngine) Run() error {
 
 		evt := e.queue.Pop()
 
+		if evt.Time() < e.time {
+			log.Panic("Time inverse")
+		}
 		e.time = evt.Time()
 
 		e.InvokeHook(evt, e, BeforeEvent, nil)
