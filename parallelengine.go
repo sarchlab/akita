@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"sync"
 
-	"runtime"
 	"fmt"
+	"runtime"
 )
 
 // func init() {
@@ -45,8 +45,8 @@ func NewParallelEngine() *ParallelEngine {
 	e.queues = make([]EventQueue, 0, numQueues)
 	e.queueChan = make(chan EventQueue, numQueues)
 	for i := 0; i < numQueues; i++ {
-		//queue := NewEventQueue()
-		queue := NewInsertionQueue()
+		queue := NewEventQueue()
+		//queue := NewInsertionQueue()
 		e.queueChan <- queue
 		e.queues = append(e.queues, queue)
 	}
@@ -151,7 +151,7 @@ func (e *ParallelEngine) triggerTime() VTimeInSec {
 		}
 
 		evt := q.Peek()
-		if evt.Time() <= earliest {
+		if evt.Time() < earliest {
 			earliest = evt.Time()
 		}
 	}

@@ -1,9 +1,9 @@
 package core
 
 import (
+	"fmt"
 	"log"
 	"reflect"
-	"fmt"
 )
 
 // A SerialEngine is an Engine that always run events one after another.
@@ -22,8 +22,8 @@ func NewSerialEngine() *SerialEngine {
 
 	e.paused = false
 
-	//e.queue = NewEventQueue()
-	e.queue = NewInsertionQueue()
+	e.queue = NewEventQueue()
+	//e.queue = NewInsertionQueue()
 
 	return e
 }

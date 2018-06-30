@@ -20,17 +20,20 @@ type Req interface {
 	SetRecvTime(t VTimeInSec)
 	RecvTime() VTimeInSec
 
+	SetEventTime(t VTimeInSec)
+
 	// All requests are simply events that can be scheduled to the receiver
 	Event
 }
 
 // ReqBase provides some basic setter and getter for all other requests
 type ReqBase struct {
-	ID       string
-	src      *Port
-	dst      *Port
-	sendTime VTimeInSec
-	recvTime VTimeInSec
+	ID        string
+	src       *Port
+	dst       *Port
+	sendTime  VTimeInSec
+	recvTime  VTimeInSec
+	eventTime VTimeInSec
 }
 
 // NewReqBase creates a new BasicRequest
@@ -85,9 +88,13 @@ func (r *ReqBase) SetRecvTime(t VTimeInSec) {
 	r.recvTime = t
 }
 
+func (r *ReqBase) SetEventTime(t VTimeInSec) {
+	r.eventTime = t
+}
+
 // Time returns the recv time of a request
 func (r *ReqBase) Time() VTimeInSec {
-	return r.recvTime
+	return r.eventTime
 }
 
 // Handler returns the receiver of the request

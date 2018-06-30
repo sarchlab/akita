@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	_ "net/http/pprof"
 	"reflect"
@@ -30,7 +29,8 @@ func main() {
 	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
 	// }()
 
-	engine := core.NewSerialEngine()
+	//engine := core.NewSerialEngine()
+	engine := core.NewParallelEngine()
 	connection := core.NewDirectConnection(engine)
 
 	numAgents := 4
@@ -39,15 +39,15 @@ func main() {
 	for i := 0; i < numAgents; i++ {
 		name := fmt.Sprintf("agent%d", i)
 		agent := NewPingComponent(name, engine)
-		connection.PlugIn(agent, "Ping")
+		connection.PlugIn(agent.ToOut)
 		agents = append(agents, agent)
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 10000; i++ {
 
 		from := rand.Uint32() % uint32(numAgents)
 		to := rand.Uint32() % uint32(numAgents)
-		time := rand.Uint32() % 100
+		time := rand.Float64() / 1e8
 
 		evt := NewPingSendEvent(core.VTimeInSec(time), agents[from])
 
@@ -73,31 +73,41 @@ type PingComponent struct {
 
 	NumPingsToSend int
 	Engine         core.Engine
+	ToOut          *core.Port
+	Freq           core.Freq
+}
+
+func (c *PingComponent) NotifyRecv(now core.VTimeInSec, port *core.Port) {
+	req := port.Retrieve(now)
+	core.ProcessReqAsEvent(req, c.Engine, c.Freq)
 }
 
 // NewPingComponent creates a new PingComponent
 func NewPingComponent(name string, engine core.Engine) *PingComponent {
-	c := &PingComponent{
-		core.NewComponentBase(name),
-		0,
-		engine,
-	}
-	c.AddPort("Ping")
+	c := new(PingComponent)
+	c.ComponentBase = core.NewComponentBase(name)
+	c.Engine = engine
+	c.Freq = 1 * core.GHz
+
+	c.ToOut = core.NewPort(c)
 	return c
 }
 
-// Recv processes incoming request
-func (c *PingComponent) Recv(req core.Req) *core.SendError {
-	switch req := req.(type) {
+// Handle handles the event for the PingComponent
+func (c *PingComponent) Handle(e core.Event) error {
+	switch e := e.(type) {
 	default:
-		log.Panicf("cannot process request %s", reflect.TypeOf(req))
+		return errors.New("cannot handle event " + reflect.TypeOf(e).String())
 	case *PingReq:
-		return c.processPingReq(req)
+		return c.processPingReq(e)
+	case *PingReturnEvent:
+		return c.handlePingReturnEvent(e)
+	case *PingSendEvent:
+		return c.handlePingSendEvent(e)
 	}
-	return nil
 }
 
-func (c *PingComponent) processPingReq(req *PingReq) *core.SendError {
+func (c *PingComponent) processPingReq(req *PingReq) error {
 	if req.IsReply {
 		fmt.Printf("Component %s: ping time=%f s\n", c.Name(),
 			req.RecvTime()-req.StartTime)
@@ -110,25 +120,13 @@ func (c *PingComponent) processPingReq(req *PingReq) *core.SendError {
 	return nil
 }
 
-// Handle handles the event for the PingComponent
-func (c *PingComponent) Handle(e core.Event) error {
-	switch e := e.(type) {
-	default:
-		return errors.New("cannot handle event " + reflect.TypeOf(e).String())
-	case *PingReturnEvent:
-		return c.handlePingReturnEvent(e)
-	case *PingSendEvent:
-		return c.handlePingSendEvent(e)
-	}
-}
-
 func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
 	e.Req.SwapSrcAndDst()
 	e.Req.IsReply = true
 
 	// Send the reply
 	e.Req.SetSendTime(e.Time())
-	err := c.GetConnection("Ping").Send(e.Req)
+	err := c.ToOut.Send(e.Req)
 	if err != nil {
 		// Reschedule
 		e.Req.SwapSrcAndDst()
@@ -145,12 +143,12 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 	}
 
 	req := NewPingReq()
-	req.SetSrc(e.From)
-	req.SetDst(e.To)
+	req.SetSrc(e.From.ToOut)
+	req.SetDst(e.To.ToOut)
 	req.StartTime = e.Time()
 	req.SetSendTime(e.Time())
 
-	err := c.GetConnection("Ping").Send(req)
+	err := c.ToOut.Send(req)
 	if err != nil {
 		e.SetTime(e.Time() + 0.01)
 		c.Engine.Schedule(e)

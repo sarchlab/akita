@@ -3,6 +3,6 @@ package core
 // ProcessReqAsEvent reschedules the request as an event at next clock cycle
 // determined by frequency.
 func ProcessReqAsEvent(request Req, engine Engine, freq Freq) {
-	request.SetRecvTime(freq.NextTick(request.RecvTime()))
+	request.SetEventTime(freq.NextTick(request.RecvTime()))
 	engine.Schedule(request)
 }
