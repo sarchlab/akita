@@ -46,7 +46,7 @@ type Hook interface {
 	Func(item interface{}, domain Hookable, info interface{})
 }
 
-// A HookableBase provides some utility function for other type that implment
+// A HookableBase provides some utility function for other type that implement
 // the Hookable interface.
 type HookableBase struct {
 	hooks []Hook

@@ -9,47 +9,47 @@ import (
 type DirectConnection struct {
 	sync.Mutex
 
-	endPoints    map[Connectable]bool
-	reqBuf       map[Connectable][]Req
-	receiverBusy map[Connectable]bool
+	endPoints    map[*Port]bool
+	reqBuf       map[*Port][]Req
+	receiverBusy map[*Port]bool
 
 	engine Engine
 }
 
-func (c *DirectConnection) PlugIn(comp Connectable, port string) {
+func (c *DirectConnection) PlugIn(port *Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.endPoints[comp] = true
-	c.receiverBusy[comp] = false
-	c.reqBuf[comp] = make([]Req, 0)
-	comp.Connect(port, c)
+	c.endPoints[port] = true
+	c.receiverBusy[port] = false
+	c.reqBuf[port] = make([]Req, 0)
+	port.Conn = c
 }
 
-func (c *DirectConnection) Unplug(comp Connectable, port string) {
+func (c *DirectConnection) Unplug(port *Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	if _, ok := c.endPoints[comp]; !ok {
+	if _, ok := c.endPoints[port]; !ok {
 		log.Panicf("connectable if not attached")
 	}
 
-	delete(c.endPoints, comp)
-	delete(c.reqBuf, comp)
-	delete(c.receiverBusy, comp)
-	comp.Disconnect(port)
+	delete(c.endPoints, port)
+	delete(c.reqBuf, port)
+	delete(c.receiverBusy, port)
+	port.Conn = nil
 }
 
-func (c *DirectConnection) NotifyAvailable(now VTimeInSec, comp Connectable) {
+func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port *Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	if c.receiverBusy[comp] == false {
+	if c.receiverBusy[port] == false {
 		return
 	}
 
-	c.receiverBusy[comp] = false
-	buf := c.reqBuf[comp]
+	c.receiverBusy[port] = false
+	buf := c.reqBuf[port]
 	if len(buf) > 0 {
 		evt := NewDeliverEvent(now, c, buf[0])
 		c.engine.Schedule(evt)
@@ -116,9 +116,9 @@ func (c *DirectConnection) handleDeliverEvent(evt *DeliverEvent) error {
 func NewDirectConnection(engine Engine) *DirectConnection {
 	c := DirectConnection{}
 
-	c.endPoints = make(map[Connectable]bool)
-	c.receiverBusy = make(map[Connectable]bool)
-	c.reqBuf = make(map[Connectable][]Req)
+	c.endPoints = make(map[*Port]bool)
+	c.receiverBusy = make(map[*Port]bool)
+	c.reqBuf = make(map[*Port][]Req)
 
 	c.engine = engine
 	return &c

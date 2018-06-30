@@ -17,7 +17,7 @@ var _ = Describe("EventQueueImpl", func(){
 	})
 
 	It("should pop in order", func() {
-		numEvents := 10000
+		numEvents := 100
 		for i := 0; i < numEvents; i++ {
 			event := newMockEvent()
 			event.SetTime(VTimeInSec(rand.Float64()/1e8))
@@ -37,13 +37,14 @@ var _ = Describe("EventQueueImpl", func(){
 		event1.SetTime(0.0000002620)
 		queue.Push(event1)
 
-		for i := 0 ; i < 10000; i++ {
+		numEvents := 100
+		for i := 0 ; i < numEvents; i++ {
 			event2 := newMockEvent()
 			event2.SetTime(0.0000002610)
 			queue.Push(event2)
 		}
 
-		for i := 0 ; i < 10000; i++ {
+		for i := 0 ; i < numEvents; i++ {
 			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
 		}
 
@@ -69,7 +70,7 @@ var _ = Describe("Insertion Queue", func(){
 	})
 
 	It("should pop in order", func() {
-		numEvents := 10000
+		numEvents := 100
 		for i := 0; i < numEvents; i++ {
 			event := newMockEvent()
 			event.SetTime(VTimeInSec(rand.Float64()/1e8))
@@ -89,13 +90,14 @@ var _ = Describe("Insertion Queue", func(){
 		event1.SetTime(0.0000002620)
 		queue.Push(event1)
 
-		for i := 0 ; i < 10000; i++ {
+		numEvents := 100
+		for i := 0 ; i < numEvents; i++ {
 			event2 := newMockEvent()
 			event2.SetTime(0.0000002610)
 			queue.Push(event2)
 		}
 
-		for i := 0 ; i < 10000; i++ {
+		for i := 0 ; i < numEvents; i++ {
 			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
 		}
 

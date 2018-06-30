@@ -9,10 +9,10 @@ import (
 
 // A Req is the message element being transferred between components
 type Req interface {
-	Src() Component
-	SetSrc(c Component)
-	Dst() Component
-	SetDst(c Component)
+	Src() *Port
+	SetSrc(c *Port)
+	Dst() *Port
+	SetDst(c *Port)
 
 	SetSendTime(t VTimeInSec)
 	SendTime() VTimeInSec
@@ -27,8 +27,8 @@ type Req interface {
 // ReqBase provides some basic setter and getter for all other requests
 type ReqBase struct {
 	ID       string
-	src      Component
-	dst      Component
+	src      *Port
+	dst      *Port
 	sendTime VTimeInSec
 	recvTime VTimeInSec
 }
@@ -41,22 +41,22 @@ func NewReqBase() *ReqBase {
 }
 
 // SetSrc set the component that send the request
-func (r *ReqBase) SetSrc(src Component) {
+func (r *ReqBase) SetSrc(src *Port) {
 	r.src = src
 }
 
 // Src return the source of the BasicRequest
-func (r *ReqBase) Src() Component {
+func (r *ReqBase) Src() *Port {
 	return r.src
 }
 
 // SetDst sets where the request needs to be sent to
-func (r *ReqBase) SetDst(dst Component) {
+func (r *ReqBase) SetDst(dst *Port) {
 	r.dst = dst
 }
 
 // Dst return the source of the BasicRequest
-func (r *ReqBase) Dst() Component {
+func (r *ReqBase) Dst() *Port {
 	return r.dst
 }
 
@@ -92,7 +92,7 @@ func (r *ReqBase) Time() VTimeInSec {
 
 // Handler returns the receiver of the request
 func (r *ReqBase) Handler() Handler {
-	return r.dst
+	return r.dst.Comp
 }
 
 // SwapSrcAndDst swaps the request source and the request destination

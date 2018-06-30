@@ -10,27 +10,11 @@ func NewSendError() *SendError {
 	return e
 }
 
-// A Receiver can receive requests
-type Receiver interface {
-	Recv(req Req) *SendError
-}
-
-// A Connectable is an object that an Connection can connect with.
-type Connectable interface {
-	AddPort(name string)
-	Connect(portName string, conn Connection)
-	GetConnection(portName string) Connection
-	Disconnect(portName string)
-	NotifyAvailable(now VTimeInSec, conn Connection)
-
-	Receiver
-}
-
 // A Connection is responsible for delivering the requests to its destination.
 type Connection interface {
 	Send(req Req) *SendError
 
-	PlugIn(comp Connectable, port string)
-	Unplug(comp Connectable, port string)
-	NotifyAvailable(now VTimeInSec, comp Connectable)
+	PlugIn(port *Port)
+	Unplug(port *Port)
+	NotifyAvailable(now VTimeInSec, port *Port)
 }
