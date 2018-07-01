@@ -30,11 +30,6 @@ func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	return e
 }
 
-// SetTime sets when then event will happen
-func (e *EventBase) SetTime(t VTimeInSec) {
-	e.time = t
-}
-
 // Time returne the time that the event is going to happen
 func (e *EventBase) Time() VTimeInSec {
 	return e.time

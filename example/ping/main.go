@@ -121,6 +121,7 @@ func (c *PingComponent) processPingReq(req *PingReq) error {
 }
 
 func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
+	now := e.Time()
 	e.Req.SwapSrcAndDst()
 	e.Req.IsReply = true
 
@@ -130,17 +131,15 @@ func (c *PingComponent) handlePingReturnEvent(e *PingReturnEvent) error {
 	if err != nil {
 		// Reschedule
 		e.Req.SwapSrcAndDst()
-		e.SetTime(e.Time() + 0.01)
-		c.Engine.Schedule(e)
+		newEvent := NewPingReturnEvent(c.Freq.NextTick(now), c)
+		c.Engine.Schedule(newEvent)
 	}
 
 	return nil
 }
 
 func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
-	if e.From != c {
-		panic("Ping event is not scheduled for the current component")
-	}
+	now := e.Time()
 
 	req := NewPingReq()
 	req.SetSrc(e.From.ToOut)
@@ -150,8 +149,8 @@ func (c *PingComponent) handlePingSendEvent(e *PingSendEvent) error {
 
 	err := c.ToOut.Send(req)
 	if err != nil {
-		e.SetTime(e.Time() + 0.01)
-		c.Engine.Schedule(e)
+		newEvt := NewPingSendEvent(c.Freq.NextTick(now), c)
+		c.Engine.Schedule(newEvt)
 	}
 
 	return nil
