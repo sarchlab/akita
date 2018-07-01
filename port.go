@@ -34,6 +34,7 @@ func (p *Port) Recv(req Req) *SendError {
 
 	if len(p.Buf) >= p.BufCapacity {
 		p.PortBusy = true
+		p.Unlock()
 		return NewSendError()
 	}
 
@@ -50,6 +51,10 @@ func (p *Port) Recv(req Req) *SendError {
 func (p *Port) Retrieve(now VTimeInSec) Req {
 	p.Lock()
 	defer p.Unlock()
+
+	if len(p.Buf) == 0 {
+		return nil
+	}
 
 	req := p.Buf[0]
 	p.Buf = p.Buf[1:]
