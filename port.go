@@ -67,6 +67,14 @@ func (p *Port) Retrieve(now VTimeInSec) Req {
 	return req
 }
 
+// Peek returns the first request in the port without removing it.
+func (p *Port) Peek() Req {
+	if len(p.Buf) == 0 {
+		return nil
+	}
+	return p.Buf[0]
+}
+
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
 func (p *Port) NotifyAvailable() {

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"log"
 	"reflect"
 )
@@ -34,7 +33,7 @@ func (e *SerialEngine) Schedule(evt Event) {
 		log.Panic("scheudling an event earlier than current time")
 	}
 	e.queue.Push(evt)
-	fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
+	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
 }
 
 // Run processes all the events scheduled in the SerialEngine

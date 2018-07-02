@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"sync"
 
-	"fmt"
 	"runtime"
 )
 
@@ -74,7 +73,7 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
+	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
 	if evt.Time() < e.now {
 		log.Panicf("cannot schedule event in the past, evt %s @ %.10f, now %.10f",
 			reflect.TypeOf(evt), evt.Time(), e.now)
