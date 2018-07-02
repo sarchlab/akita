@@ -16,6 +16,7 @@ type Component interface {
 	Hookable
 
 	NotifyRecv(now VTimeInSec, port *Port)
+	NotifyPortFree(now VTimeInSec, port *Port)
 }
 
 // ComponentBase provides some functions that other component can use

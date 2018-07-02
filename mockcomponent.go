@@ -11,6 +11,17 @@ type MockComponent struct {
 	ToOutside *Port
 }
 
+func (c *MockComponent) NotifyRecv(now VTimeInSec, port *Port) {
+}
+
+func (c *MockComponent) NotifyPortFree(now VTimeInSec, port *Port) {
+}
+
+// Handle function of a MockComponent cannot handle any event
+func (c *MockComponent) Handle(evt Event) error {
+	return nil
+}
+
 // NewMockComponent returns the a MockComponent
 func NewMockComponent(name string) *MockComponent {
 	c := new(MockComponent)
@@ -19,13 +30,4 @@ func NewMockComponent(name string) *MockComponent {
 	c.ToOutside = NewPort(c)
 
 	return c
-}
-
-func (c *MockComponent) NotifyRecv(now VTimeInSec, port *Port) {
-
-}
-
-// Handle function of a MockComponent cannot handle any event
-func (c *MockComponent) Handle(evt Event) error {
-	return nil
 }

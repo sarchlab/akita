@@ -77,6 +77,10 @@ type PingComponent struct {
 	Freq           core.Freq
 }
 
+func (c *PingComponent) NotifyPortFree(now core.VTimeInSec, port *core.Port) {
+	panic("implement me")
+}
+
 func (c *PingComponent) NotifyRecv(now core.VTimeInSec, port *core.Port) {
 	req := port.Retrieve(now)
 	core.ProcessReqAsEvent(req, c.Engine, c.Freq)

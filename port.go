@@ -2,7 +2,7 @@ package core
 
 import "sync"
 
-// A Port is owned by a commponent and is used to plugin connections
+// A Port is owned by a component and is used to plugin connections
 type Port struct {
 	sync.Mutex
 
@@ -77,8 +77,9 @@ func (p *Port) Peek() Req {
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *Port) NotifyAvailable() {
+func (p *Port) NotifyAvailable(now VTimeInSec) {
 	p.ConnBusy = false
+	p.Comp.NotifyPortFree(now, p)
 }
 
 // NewPort creates a new port that works for the provided component
