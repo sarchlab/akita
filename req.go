@@ -21,6 +21,7 @@ type Req interface {
 	RecvTime() VTimeInSec
 
 	SetEventTime(t VTimeInSec)
+	GetID() string
 
 	// All requests are simply events that can be scheduled to the receiver
 	Event
@@ -100,6 +101,11 @@ func (r *ReqBase) Time() VTimeInSec {
 // Handler returns the receiver of the request
 func (r *ReqBase) Handler() Handler {
 	return r.dst.Comp
+}
+
+// GetID returns the ID of the request
+func (r *ReqBase) GetID() string {
+	return r.ID
 }
 
 // SwapSrcAndDst swaps the request source and the request destination
