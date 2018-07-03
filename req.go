@@ -7,12 +7,12 @@ import (
 	"github.com/rs/xid"
 )
 
-// A Req is the message element being transferred between compoenents
+// A Req is the message element being transferred between components
 type Req interface {
-	Src() Component
-	SetSrc(c Component)
-	Dst() Component
-	SetDst(c Component)
+	Src() *Port
+	SetSrc(c *Port)
+	Dst() *Port
+	SetDst(c *Port)
 
 	SetSendTime(t VTimeInSec)
 	SendTime() VTimeInSec
@@ -20,17 +20,21 @@ type Req interface {
 	SetRecvTime(t VTimeInSec)
 	RecvTime() VTimeInSec
 
+	SetEventTime(t VTimeInSec)
+	GetID() string
+
 	// All requests are simply events that can be scheduled to the receiver
 	Event
 }
 
 // ReqBase provides some basic setter and getter for all other requests
 type ReqBase struct {
-	ID       string
-	src      Component
-	dst      Component
-	sendTime VTimeInSec
-	recvTime VTimeInSec
+	ID        string
+	src       *Port
+	dst       *Port
+	sendTime  VTimeInSec
+	recvTime  VTimeInSec
+	eventTime VTimeInSec
 }
 
 // NewReqBase creates a new BasicRequest
@@ -41,22 +45,22 @@ func NewReqBase() *ReqBase {
 }
 
 // SetSrc set the component that send the request
-func (r *ReqBase) SetSrc(src Component) {
+func (r *ReqBase) SetSrc(src *Port) {
 	r.src = src
 }
 
 // Src return the source of the BasicRequest
-func (r *ReqBase) Src() Component {
+func (r *ReqBase) Src() *Port {
 	return r.src
 }
 
 // SetDst sets where the request needs to be sent to
-func (r *ReqBase) SetDst(dst Component) {
+func (r *ReqBase) SetDst(dst *Port) {
 	r.dst = dst
 }
 
 // Dst return the source of the BasicRequest
-func (r *ReqBase) Dst() Component {
+func (r *ReqBase) Dst() *Port {
 	return r.dst
 }
 
@@ -85,14 +89,23 @@ func (r *ReqBase) SetRecvTime(t VTimeInSec) {
 	r.recvTime = t
 }
 
+func (r *ReqBase) SetEventTime(t VTimeInSec) {
+	r.eventTime = t
+}
+
 // Time returns the recv time of a request
 func (r *ReqBase) Time() VTimeInSec {
-	return r.recvTime
+	return r.eventTime
 }
 
 // Handler returns the receiver of the request
 func (r *ReqBase) Handler() Handler {
-	return r.dst
+	return r.dst.Comp
+}
+
+// GetID returns the ID of the request
+func (r *ReqBase) GetID() string {
+	return r.ID
 }
 
 // SwapSrcAndDst swaps the request source and the request destination

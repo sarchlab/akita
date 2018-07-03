@@ -6,11 +6,6 @@ import "github.com/rs/xid"
 type VTimeInSec float64
 
 // An Event is something going to happen in the future.
-//
-// Different from the concept of event of traditional discrete event simulation,
-// event in Yaotsu can only be scheduled within by one event handler to
-// itself. An event that is schedule by a handler can only modify that paticular
-// handler or send requests over a Connection.
 type Event interface {
 	// Return the time that the event should happen
 	Time() VTimeInSec
@@ -33,11 +28,6 @@ func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	e.time = t
 	e.handler = handler
 	return e
-}
-
-// SetTime sets when then event will happen
-func (e *EventBase) SetTime(t VTimeInSec) {
-	e.time = t
 }
 
 // Time returne the time that the event is going to happen
@@ -66,17 +56,4 @@ func (e *EventBase) Handler() Handler {
 // only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
 	Handle(e Event) error
-}
-
-// TickEvent is a generic event that almost all the component can use to
-// update their status.
-type TickEvent struct {
-	*EventBase
-}
-
-// NewTickEvent creates a newly created TickEvent
-func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
-	evt := new(TickEvent)
-	evt.EventBase = NewEventBase(t, handler)
-	return evt
 }

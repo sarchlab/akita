@@ -6,13 +6,25 @@ import (
 
 type expectedReq struct {
 	req Req
-	err *Error
+	err *SendError
 }
 
 // MockConnection provides an easy mock function to be used in the unit test
 // system
 type MockConnection struct {
 	expectedReqs []*expectedReq
+}
+
+func (c *MockConnection) PlugIn(port *Port) {
+	port.Conn = c
+}
+
+func (c *MockConnection) Unplug(port *Port) {
+	port.Conn = c
+}
+
+func (c *MockConnection) NotifyAvailable(now VTimeInSec, port *Port) {
+	panic("implement me")
 }
 
 // NewMockConnection returns a newly created MockConnection
@@ -22,20 +34,14 @@ func NewMockConnection() *MockConnection {
 	return c
 }
 
-// Attach function of a MockConnection does not do anything
-func (c *MockConnection) Attach(s Connectable) {}
-
-// Detach function of a MockConnection does not do anything
-func (c *MockConnection) Detach(s Connectable) {}
-
 // ExpectSend register an req that is to be sent from the connection later.
 // The send function will check if a request is expected or not.
-func (c *MockConnection) ExpectSend(req Req, err *Error) {
+func (c *MockConnection) ExpectSend(req Req, err *SendError) {
 	c.expectedReqs = append(c.expectedReqs, &expectedReq{req, err})
 }
 
 // Send function of a MockConnection will check if the request is expected
-func (c *MockConnection) Send(req Req) *Error {
+func (c *MockConnection) Send(req Req) *SendError {
 	if len(c.expectedReqs) == 0 {
 		log.Panicf("Req %+v not expected", req)
 	}
