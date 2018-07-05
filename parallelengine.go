@@ -35,7 +35,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.HookableBase = NewHookableBase()
 
 	e.paused = false
-	e.now = -1
+	e.now = 0
 	e.eventChan = make(chan Event, 10000)
 
 	e.spawnWorkers()
