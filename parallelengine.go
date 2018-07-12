@@ -80,7 +80,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 	}
 
 	if evt.Time() == e.now {
-		e.runEvent(evt)
+		e.runEventWithTempWorker(evt)
 		return
 	}
 
@@ -161,6 +161,19 @@ func (e *ParallelEngine) runEvent(evt Event) {
 	e.waitGroup.Add(1)
 
 	e.eventChan <- evt
+}
+
+func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
+	e.waitGroup.Add(1)
+	go e.tempWorkerRun(evt)
+}
+
+func (e *ParallelEngine) tempWorkerRun(evt Event) {
+	e.InvokeHook(evt, e, BeforeEvent, nil)
+	handler := evt.Handler()
+	handler.Handle(evt)
+	e.InvokeHook(evt, e, AfterEvent, nil)
+	e.waitGroup.Done()
 }
 
 // Pause will stop the engine from dispatching more events
