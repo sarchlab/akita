@@ -30,7 +30,6 @@ func (p *Port) Send(req Req) *SendError {
 // Recv is used to deliver a request to a component
 func (p *Port) Recv(req Req) *SendError {
 	p.Lock()
-
 	if len(p.Buf) >= p.BufCapacity {
 		p.PortBusy = true
 		p.Unlock()
@@ -49,9 +48,9 @@ func (p *Port) Recv(req Req) *SendError {
 // Retrieve is used by the component to take a request from the incoming buffer
 func (p *Port) Retrieve(now VTimeInSec) Req {
 	p.Lock()
-	defer p.Unlock()
 
 	if len(p.Buf) == 0 {
+		p.Unlock()
 		return nil
 	}
 
@@ -60,17 +59,23 @@ func (p *Port) Retrieve(now VTimeInSec) Req {
 
 	if p.PortBusy == true {
 		p.PortBusy = false
+		p.Unlock()
 		p.Conn.NotifyAvailable(now, p)
+		return req
 	}
 
+	p.Unlock()
 	return req
 }
 
 // Peek returns the first request in the port without removing it.
 func (p *Port) Peek() Req {
+	p.Lock()
 	if len(p.Buf) == 0 {
+		p.Unlock()
 		return nil
 	}
+	p.Unlock()
 	return p.Buf[0]
 }
 

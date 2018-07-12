@@ -38,9 +38,10 @@ func NewParallelEngine() *ParallelEngine {
 	e.now = 0
 	e.eventChan = make(chan Event, 10000)
 
-	e.spawnWorkers()
+	e.maxGoRoutine = runtime.GOMAXPROCS(0)
+	numQueues := runtime.GOMAXPROCS(0)
 
-	numQueues := e.maxGoRoutine * 2
+	e.spawnWorkers()
 	e.queues = make([]EventQueue, 0, numQueues)
 	e.queueChan = make(chan EventQueue, numQueues)
 	for i := 0; i < numQueues; i++ {
@@ -54,7 +55,6 @@ func NewParallelEngine() *ParallelEngine {
 }
 
 func (e *ParallelEngine) spawnWorkers() {
-	e.maxGoRoutine = runtime.GOMAXPROCS(0) * 2
 	for i := 0; i < e.maxGoRoutine; i++ {
 		go e.worker()
 	}
@@ -128,7 +128,8 @@ func (e *ParallelEngine) runEventsUntilConflict() {
 			evt := queue.Peek()
 			if evt.Time() == triggerTime {
 				queue.Pop()
-				e.runEvent(evt)
+				//e.runEvent(evt)
+				e.runEventWithTempWorker(evt)
 			} else if evt.Time() < triggerTime {
 				log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
 					reflect.TypeOf(evt), evt.Time(), triggerTime)
