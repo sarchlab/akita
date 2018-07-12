@@ -54,7 +54,7 @@ func NewParallelEngine() *ParallelEngine {
 }
 
 func (e *ParallelEngine) spawnWorkers() {
-	e.maxGoRoutine = runtime.NumCPU() * 2
+	e.maxGoRoutine = runtime.GOMAXPROCS(0) * 10
 	for i := 0; i < e.maxGoRoutine; i++ {
 		go e.worker()
 	}
@@ -80,8 +80,8 @@ func (e *ParallelEngine) Schedule(evt Event) {
 	}
 
 	//if evt.Time() == e.now {
-	//	e.runEvent(evt)
-	//	return
+	//e.runEvent(evt)
+	//return
 	//}
 
 	queue := <-e.queueChan
