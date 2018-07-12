@@ -54,7 +54,7 @@ func NewParallelEngine() *ParallelEngine {
 }
 
 func (e *ParallelEngine) spawnWorkers() {
-	e.maxGoRoutine = runtime.GOMAXPROCS(0) * 10
+	e.maxGoRoutine = runtime.GOMAXPROCS(0) * 2
 	for i := 0; i < e.maxGoRoutine; i++ {
 		go e.worker()
 	}
