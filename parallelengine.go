@@ -79,10 +79,10 @@ func (e *ParallelEngine) Schedule(evt Event) {
 			reflect.TypeOf(evt), evt.Time(), e.now)
 	}
 
-	//if evt.Time() == e.now {
-	//e.runEvent(evt)
-	//return
-	//}
+	if evt.Time() == e.now {
+		e.runEvent(evt)
+		return
+	}
 
 	queue := <-e.queueChan
 	queue.Push(evt)

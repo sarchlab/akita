@@ -41,38 +41,46 @@ func (c *DirectConnection) Unplug(port *Port) {
 }
 
 func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port *Port) {
-	c.Lock()
-	defer c.Unlock()
+	//c.Lock()
+	//defer c.Unlock()
 
-	if c.receiverBusy[port] == false {
-		return
+	//if c.receiverBusy[port] == false {
+	//	return
+	//}
+	//
+	//c.receiverBusy[port] = false
+	//buf := c.reqBuf[port]
+	//if len(buf) > 0 {
+	//	evt := NewDeliverEvent(now, c, buf[0])
+	//	c.engine.Schedule(evt)
+	//}
+
+	for p := range c.endPoints {
+		p.NotifyAvailable(now)
 	}
 
-	c.receiverBusy[port] = false
-	buf := c.reqBuf[port]
-	if len(buf) > 0 {
-		evt := NewDeliverEvent(now, c, buf[0])
-		c.engine.Schedule(evt)
-	}
 }
 
 // Send of a DirectConnection schedules a DeliveryEvent immediately
 func (c *DirectConnection) Send(req Req) *SendError {
-	c.Lock()
-	defer c.Unlock()
+	//c.Lock()
+	//defer c.Unlock()
+	//
+	//dst := req.Dst()
+	//buf := c.reqBuf[dst]
+	//buf = append(buf, req)
+	//c.reqBuf[dst] = buf
+	//
+	//if c.receiverBusy[dst] || len(buf) > 1 {
+	//	return nil
+	//}
+	//
+	//evt := NewDeliverEvent(req.SendTime(), c, req)
+	//c.engine.Schedule(evt)
+	//return nil
 
-	dst := req.Dst()
-	buf := c.reqBuf[dst]
-	buf = append(buf, req)
-	c.reqBuf[dst] = buf
-
-	if c.receiverBusy[dst] || len(buf) > 1 {
-		return nil
-	}
-
-	evt := NewDeliverEvent(req.SendTime(), c, req)
-	c.engine.Schedule(evt)
-	return nil
+	req.SetRecvTime(req.SendTime())
+	return req.Dst().Recv(req)
 }
 
 // Handle defines how the DirectConnection handles events

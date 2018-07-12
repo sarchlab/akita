@@ -18,12 +18,11 @@ type Port struct {
 
 // Send is used to send a request out from a component
 func (p *Port) Send(req Req) *SendError {
-	p.Lock()
-	defer p.Unlock()
-
 	err := p.Conn.Send(req)
 	if err != nil {
+		p.Lock()
 		p.ConnBusy = true
+		p.Unlock()
 	}
 	return err
 }
