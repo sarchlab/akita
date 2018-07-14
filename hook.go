@@ -4,12 +4,12 @@ import (
 	"reflect"
 )
 
-// Hookable defines an object that accept hooks
+// Hookable defines an object that accept Hooks
 type Hookable interface {
 	// AcceptHook registers a hook
 	AcceptHook(hook Hook)
 
-	// InvokeHook triggers all hooks that is hooked at a certain type and a
+	// InvokeHook triggers all Hooks that is hooked at a certain type and a
 	// certain HookPos to execute their HookFunc.
 	InvokeHook(item interface{}, domain Hookable, pos HookPos, info interface{})
 }
@@ -31,9 +31,9 @@ const (
 type Hook interface {
 
 	// Determines what type of item that the hook applies to.
-	// For example, a component can receive a hook that hooks either to a event,
+	// For example, a component can receive a hook that Hooks either to a event,
 	// or a Request.
-	// Type can be nil. A nil Type means that this hook hooks to anything.
+	// Type can be nil. A nil Type means that this hook Hooks to anything.
 	Type() reflect.Type
 
 	// The Pos determines when the Hookfunc should be invoked.
@@ -49,19 +49,19 @@ type Hook interface {
 // A HookableBase provides some utility function for other type that implement
 // the Hookable interface.
 type HookableBase struct {
-	hooks []Hook
+	Hooks []Hook
 }
 
 // NewHookableBase creats a HookableBase object
 func NewHookableBase() *HookableBase {
 	h := new(HookableBase)
-	h.hooks = make([]Hook, 0)
+	h.Hooks = make([]Hook, 0)
 	return h
 }
 
 // AcceptHook register a hook
 func (h *HookableBase) AcceptHook(hook Hook) {
-	h.hooks = append(h.hooks, hook)
+	h.Hooks = append(h.Hooks, hook)
 }
 
 func (h *HookableBase) tryInvoke(
@@ -77,14 +77,14 @@ func (h *HookableBase) tryInvoke(
 	}
 }
 
-// InvokeHook trigers the register hooks
+// InvokeHook trigers the register Hooks
 func (h *HookableBase) InvokeHook(
 	item interface{},
 	domain Hookable,
 	pos HookPos,
 	info interface{},
 ) {
-	for _, hook := range h.hooks {
+	for _, hook := range h.Hooks {
 		if hook.Type() == nil {
 			h.tryInvoke(item, domain, pos, hook, info)
 		} else if hook.Type().Kind() == reflect.Ptr &&
