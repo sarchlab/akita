@@ -23,6 +23,9 @@ type Req interface {
 	SetEventTime(t VTimeInSec)
 	GetID() string
 
+	SetByteSize(byteSize int)
+	ByteSize() int
+
 	// All requests are simply events that can be scheduled to the receiver
 	Event
 }
@@ -35,6 +38,7 @@ type ReqBase struct {
 	sendTime  VTimeInSec
 	recvTime  VTimeInSec
 	eventTime VTimeInSec
+	byteSize  int
 }
 
 // NewReqBase creates a new BasicRequest
@@ -106,6 +110,14 @@ func (r *ReqBase) Handler() Handler {
 // GetID returns the ID of the request
 func (r *ReqBase) GetID() string {
 	return r.ID
+}
+
+func (r *ReqBase) SetByteSize(byteSize int) {
+	r.byteSize = byteSize
+}
+
+func (r *ReqBase) ByteSize() int {
+	return r.byteSize
 }
 
 // SwapSrcAndDst swaps the request source and the request destination
