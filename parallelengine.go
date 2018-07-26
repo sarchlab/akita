@@ -79,7 +79,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 			reflect.TypeOf(evt), evt.Time(), e.now)
 	}
 
-	if evt.Time() == e.now {
+	if evt.Time() == e.now && e.now != 0 {
 		e.runEventWithTempWorker(evt)
 		return
 	}
@@ -91,7 +91,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *ParallelEngine) Run() error {
-	for !e.paused {
+	for {
 		if !e.hasMoreEvents() {
 			return nil
 		}
@@ -170,6 +170,10 @@ func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 }
 
 func (e *ParallelEngine) tempWorkerRun(evt Event) {
+	if evt.Time() < e.now {
+		log.Panic("running event in the past")
+	}
+
 	e.InvokeHook(evt, e, BeforeEvent, nil)
 	handler := evt.Handler()
 	handler.Handle(evt)

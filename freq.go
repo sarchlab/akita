@@ -38,7 +38,8 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 	}
 	period := f.Period()
 	count := math.Ceil(math.Round(float64(now/period)*10) / 10)
-	return VTimeInSec(count) * period
+	res := VTimeInSec(count) * period
+	return res
 }
 
 // NextTick returns the next tick time.
