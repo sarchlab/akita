@@ -37,7 +37,7 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 		log.Panic("invalid time")
 	}
 	period := f.Period()
-	count := math.Ceil(math.Round(float64(now/period)*10) / 10)
+	count := math.Ceil(math.Round(float64(now/(period/10))) / 10)
 	res := VTimeInSec(count) * period
 	return res
 }
@@ -54,7 +54,7 @@ func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 		log.Panic("invalid time")
 	}
 	period := f.Period()
-	count := math.Floor(float64((now + period*0.2) / period))
+	count := math.Floor(math.Round(float64((now+period)/(period/10))) / 10)
 	return VTimeInSec(count+1) * period
 }
 
