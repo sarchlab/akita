@@ -41,6 +41,16 @@ func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port *Port) {
 
 // Send of a DirectConnection schedules a DeliveryEvent immediately
 func (c *DirectConnection) Send(req Req) *SendError {
+	if _, found := c.endPoints[req.Dst()]; !found {
+		log.Panicf("destination %s not connected, "+
+			"req ID %s, "+
+			"request from %s",
+			req.Dst().Comp.Name(),
+			req.GetID(),
+			req.Dst().Comp.Name(),
+		)
+	}
+
 	req.SetRecvTime(req.SendTime())
 	return req.Dst().Recv(req)
 }

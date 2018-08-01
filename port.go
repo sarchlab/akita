@@ -1,6 +1,8 @@
 package core
 
-import "sync"
+import (
+	"sync"
+)
 
 // A Port is owned by a component and is used to plugin connections
 type Port struct {

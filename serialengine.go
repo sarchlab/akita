@@ -30,7 +30,7 @@ func NewSerialEngine() *SerialEngine {
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
 	if evt.Time() < e.time {
-		log.Panic("scheudling an event earlier than current time")
+		log.Panic("scheduling an event earlier than current time")
 	}
 	e.queue.Push(evt)
 	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
