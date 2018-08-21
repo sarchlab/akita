@@ -92,6 +92,6 @@ func (p *Port) NotifyAvailable(now VTimeInSec) {
 func NewPort(comp Component) *Port {
 	p := new(Port)
 	p.Comp = comp
-	p.BufCapacity = 409600
+	p.BufCapacity = 1
 	return p
 }
