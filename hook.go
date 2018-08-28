@@ -52,7 +52,7 @@ type HookableBase struct {
 	Hooks []Hook
 }
 
-// NewHookableBase creats a HookableBase object
+// NewHookableBase creates a HookableBase object
 func NewHookableBase() *HookableBase {
 	h := new(HookableBase)
 	h.Hooks = make([]Hook, 0)
@@ -77,7 +77,7 @@ func (h *HookableBase) tryInvoke(
 	}
 }
 
-// InvokeHook trigers the register Hooks
+// InvokeHook triggers the register Hooks
 func (h *HookableBase) InvokeHook(
 	item interface{},
 	domain Hookable,
