@@ -5,13 +5,14 @@ package core
 type MockComponent struct {
 	*ComponentBase
 
-	ReceivedReqs  []Req
-	ReceiveErrors []*SendError
+	ReceivedReqs []Req
 
 	ToOutside *Port
 }
 
 func (c *MockComponent) NotifyRecv(now VTimeInSec, port *Port) {
+	req := port.Retrieve(now)
+	c.ReceivedReqs = append(c.ReceivedReqs, req)
 }
 
 func (c *MockComponent) NotifyPortFree(now VTimeInSec, port *Port) {
