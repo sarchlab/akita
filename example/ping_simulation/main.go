@@ -61,13 +61,7 @@ func main() {
 }
 
 // A PingComponent periodically send ping request out and also respond to pings
-//
-//     -----------------
-//     |               |
-//     | PingComponent | <=> Ping
-//     |               |
-//     -----------------
-//
+
 type PingComponent struct {
 	*akita.ComponentBase
 
