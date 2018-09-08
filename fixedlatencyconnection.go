@@ -1,4 +1,4 @@
-package core
+package akita
 
 //// FixedLatencyConnection provides a way to connect two component directly so that
 //// fixed latency would happen.

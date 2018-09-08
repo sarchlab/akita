@@ -1,4 +1,4 @@
-package core
+package akita
 
 // MockEngine is created to simplify the unit tests of other packages
 type MockEngine struct {

@@ -1,4 +1,4 @@
-package core
+package akita
 
 // SendError marks a failure send or receive
 type SendError struct {

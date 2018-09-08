@@ -1,4 +1,4 @@
-package core
+package akita
 
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {

@@ -1,4 +1,4 @@
-package core
+package akita
 
 // DeliverEvent is the event that moves the request from the connection
 // to the destination

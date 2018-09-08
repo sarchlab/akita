@@ -1,4 +1,4 @@
-package core
+package akita
 
 import "github.com/rs/xid"
 

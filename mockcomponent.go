@@ -1,4 +1,4 @@
-package core
+package akita
 
 // A MockComponent is a very simple component that is designed only for
 // simplify the unit tests.

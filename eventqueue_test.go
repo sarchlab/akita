@@ -1,12 +1,13 @@
-package core
+package akita
 
 import (
+	"math/rand"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"math/rand"
 )
 
-var _ = Describe("EventQueueImpl", func(){
+var _ = Describe("EventQueueImpl", func() {
 
 	var (
 		queue *EventQueueImpl
@@ -20,7 +21,7 @@ var _ = Describe("EventQueueImpl", func(){
 		numEvents := 100
 		for i := 0; i < numEvents; i++ {
 			event := newMockEvent()
-			event.SetTime(VTimeInSec(rand.Float64()/1e8))
+			event.SetTime(VTimeInSec(rand.Float64() / 1e8))
 			queue.Push(event)
 		}
 
@@ -38,13 +39,13 @@ var _ = Describe("EventQueueImpl", func(){
 		queue.Push(event1)
 
 		numEvents := 100
-		for i := 0 ; i < numEvents; i++ {
+		for i := 0; i < numEvents; i++ {
 			event2 := newMockEvent()
 			event2.SetTime(0.0000002610)
 			queue.Push(event2)
 		}
 
-		for i := 0 ; i < numEvents; i++ {
+		for i := 0; i < numEvents; i++ {
 			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
 		}
 
@@ -59,7 +60,7 @@ var _ = Describe("EventQueueImpl", func(){
 
 })
 
-var _ = Describe("Insertion Queue", func(){
+var _ = Describe("Insertion Queue", func() {
 
 	var (
 		queue *InsertionQueue
@@ -73,7 +74,7 @@ var _ = Describe("Insertion Queue", func(){
 		numEvents := 100
 		for i := 0; i < numEvents; i++ {
 			event := newMockEvent()
-			event.SetTime(VTimeInSec(rand.Float64()/1e8))
+			event.SetTime(VTimeInSec(rand.Float64() / 1e8))
 			queue.Push(event)
 		}
 
@@ -91,13 +92,13 @@ var _ = Describe("Insertion Queue", func(){
 		queue.Push(event1)
 
 		numEvents := 100
-		for i := 0 ; i < numEvents; i++ {
+		for i := 0; i < numEvents; i++ {
 			event2 := newMockEvent()
 			event2.SetTime(0.0000002610)
 			queue.Push(event2)
 		}
 
-		for i := 0 ; i < numEvents; i++ {
+		for i := 0; i < numEvents; i++ {
 			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
 		}
 

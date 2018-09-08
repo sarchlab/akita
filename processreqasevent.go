@@ -1,4 +1,4 @@
-package core
+package akita
 
 // ProcessReqAsEvent reschedules the request as an event at next clock cycle
 // determined by frequency.
