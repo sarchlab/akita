@@ -12,7 +12,7 @@ import (
 func TestCore(t *testing.T) {
 	log.SetOutput(ginkgo.GinkgoWriter)
 	gomega.RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "Yaotsu Core")
+	ginkgo.RunSpecs(t, "Akita")
 }
 
 type mockRequest struct {
