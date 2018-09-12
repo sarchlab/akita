@@ -12,6 +12,7 @@ type expectedReq struct {
 // MockConnection provides an easy mock function to be used in the unit test
 // system
 type MockConnection struct {
+	*HookableBase
 	expectedReqs []*expectedReq
 }
 
@@ -30,6 +31,7 @@ func (c *MockConnection) NotifyAvailable(now VTimeInSec, port *Port) {
 // NewMockConnection returns a newly created MockConnection
 func NewMockConnection() *MockConnection {
 	c := new(MockConnection)
+	c.HookableBase = NewHookableBase()
 	c.expectedReqs = make([]*expectedReq, 0)
 	return c
 }

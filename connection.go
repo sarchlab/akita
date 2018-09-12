@@ -12,6 +12,8 @@ func NewSendError() *SendError {
 
 // A Connection is responsible for delivering the requests to its destination.
 type Connection interface {
+	Hookable
+
 	Send(req Req) *SendError
 
 	PlugIn(port *Port)

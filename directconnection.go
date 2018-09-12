@@ -8,6 +8,7 @@ import (
 // DirectConnection connects two components without latency
 type DirectConnection struct {
 	sync.Mutex
+	*HookableBase
 
 	endPoints map[*Port]bool
 	engine    Engine
@@ -62,10 +63,9 @@ func (c *DirectConnection) Handle(evt Event) error {
 
 // NewDirectConnection creates a new DirectConnection object
 func NewDirectConnection(engine Engine) *DirectConnection {
-	c := DirectConnection{}
-
+	c := new(DirectConnection)
+	c.HookableBase = NewHookableBase()
 	c.endPoints = make(map[*Port]bool)
-
 	c.engine = engine
-	return &c
+	return c
 }
