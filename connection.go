@@ -1,8 +1,7 @@
 package akita
 
 // SendError marks a failure send or receive
-type SendError struct {
-}
+type SendError struct{}
 
 // NewSendError creates a SendError
 func NewSendError() *SendError {
@@ -20,3 +19,8 @@ type Connection interface {
 	Unplug(port *Port)
 	NotifyAvailable(now VTimeInSec, port *Port)
 }
+
+var ConnStartSendHookPos = struct{ name string }{"Conn Start Send"}
+var ConnStartTransHookPos = struct{ name string }{"Conn Start Trans"}
+var ConnDoneTransHookPos = struct{ name string }{"Conn Done Trans"}
+var ConnDeliverHookPos = struct{ name string }{"Conn Deliver"}
