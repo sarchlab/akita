@@ -25,7 +25,7 @@ func (h *EventLogger) Type() reflect.Type {
 // Pos of a PrintEventHook suggests that it should be called before the
 // event handling.
 func (h *EventLogger) Pos() HookPos {
-	return BeforeEvent
+	return BeforeEventHookPos
 }
 
 // Func writes the event information into the logger

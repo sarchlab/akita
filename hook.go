@@ -15,17 +15,19 @@ type Hookable interface {
 }
 
 // HookPos defines the enum of possible hooking positions
-type HookPos int
+type HookPos interface{}
 
-// Enumeration of possible hook poses
-const (
-	Any HookPos = iota
-	BeforeEvent
-	AfterEvent
-	OnRecvReq
-	OnFulfillReq
-	StatusChange
-)
+// AnyHookPos is a special hook position that can be used by both the hook
+// and the hookable. If the hookable triggers type of AnyHookPos, all the hooks
+// are triggered. If a hook declares that it listens to AnyHookPos,
+// any type of hook position can trigger the hook.
+var AnyHookPos = &struct{ name string }{"Any"}
+
+// BeforeEventHookPos is a hook position that triggers before handling an event
+var BeforeEventHookPos = &struct{ name string }{"BeforeEvent"}
+
+// AfterEventHookPos is a hook position that triggers after handling an event
+var AfterEventHookPos = &struct{ name string }{"AfterEvent"}
 
 // Hook is a short piece of program that can be invoked by a hookable object.
 type Hook interface {
@@ -71,7 +73,7 @@ func (h *HookableBase) tryInvoke(
 	hook Hook,
 	info interface{},
 ) {
-	if hook.Pos() == Any || pos == hook.Pos() {
+	if hook.Pos() == AnyHookPos || pos == hook.Pos() {
 		hook.Func(item, domain, info)
 		return
 	}

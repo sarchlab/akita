@@ -63,10 +63,10 @@ func (e *ParallelEngine) spawnWorkers() {
 
 func (e *ParallelEngine) worker() {
 	for evt := range e.eventChan {
-		e.InvokeHook(evt, e, BeforeEvent, nil)
+		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
-		e.InvokeHook(evt, e, AfterEvent, nil)
+		e.InvokeHook(evt, e, AfterEventHookPos, nil)
 		e.waitGroup.Done()
 	}
 }
@@ -174,10 +174,10 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 		log.Panic("running event in the past")
 	}
 
-	e.InvokeHook(evt, e, BeforeEvent, nil)
+	e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 	handler := evt.Handler()
 	handler.Handle(evt)
-	e.InvokeHook(evt, e, AfterEvent, nil)
+	e.InvokeHook(evt, e, AfterEventHookPos, nil)
 	e.waitGroup.Done()
 }
 
