@@ -44,7 +44,7 @@ func (e *SerialEngine) Run() error {
 		}
 
 		evt := e.queue.Pop()
-		e.InvokeHook(evt, e, BeforeEvent, nil)
+		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		if evt.Time() < e.time {
 			log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
 				reflect.TypeOf(evt), evt.Time(), e.time)
@@ -53,7 +53,7 @@ func (e *SerialEngine) Run() error {
 
 		handler := evt.Handler()
 		handler.Handle(evt)
-		e.InvokeHook(evt, e, AfterEvent, nil)
+		e.InvokeHook(evt, e, AfterEventHookPos, nil)
 	}
 
 	return nil

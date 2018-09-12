@@ -54,45 +54,45 @@ type someType2 int32
 var _ = Describe("BasicHookable", func() {
 	It("should allow basic hooking", func() {
 		domain := NewHookableBase()
-		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), BeforeEvent)
+		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), BeforeEventHookPos)
 		domain.AcceptHook(hook)
 
 		item := new(someType)
 
 		hook.ExpectHookCall(item, domain)
 
-		domain.InvokeHook(item, domain, BeforeEvent, nil)
+		domain.InvokeHook(item, domain, BeforeEventHookPos, nil)
 
 		hook.AllExpectedCalled()
 	})
 
 	It("should not invoke if not hooking at the exact position", func() {
 		domain := NewHookableBase()
-		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), BeforeEvent)
+		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), BeforeEventHookPos)
 		domain.AcceptHook(hook)
 
 		item := new(someType)
 
-		domain.InvokeHook(item, domain, AfterEvent, nil)
+		domain.InvokeHook(item, domain, AfterEventHookPos, nil)
 	})
 
 	It("should allow any position hooking", func() {
 		domain := NewHookableBase()
-		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), Any)
+		hook := NewMockHook(reflect.TypeOf((*someType)(nil)), AnyHookPos)
 		domain.AcceptHook(hook)
 
 		item := new(someType)
 
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item, domain)
-		domain.InvokeHook(item, domain, AfterEvent, nil)
-		domain.InvokeHook(item, domain, BeforeEvent, nil)
+		domain.InvokeHook(item, domain, AfterEventHookPos, nil)
+		domain.InvokeHook(item, domain, BeforeEventHookPos, nil)
 		hook.AllExpectedCalled()
 	})
 
 	It("should allow hooking on an interface", func() {
 		domain := NewHookableBase()
-		hook := NewMockHook(reflect.TypeOf((*interface{})(nil)), AfterEvent)
+		hook := NewMockHook(reflect.TypeOf((*interface{})(nil)), AfterEventHookPos)
 		domain.AcceptHook(hook)
 
 		item := new(someType)
@@ -100,14 +100,14 @@ var _ = Describe("BasicHookable", func() {
 
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item2, domain)
-		domain.InvokeHook(item, domain, AfterEvent, nil)
-		domain.InvokeHook(item2, domain, AfterEvent, nil)
+		domain.InvokeHook(item, domain, AfterEventHookPos, nil)
+		domain.InvokeHook(item2, domain, AfterEventHookPos, nil)
 		hook.AllExpectedCalled()
 	})
 
 	It("should allow hooking on any type", func() {
 		domain := NewHookableBase()
-		hook := NewMockHook(nil, AfterEvent)
+		hook := NewMockHook(nil, AfterEventHookPos)
 		domain.AcceptHook(hook)
 
 		item := new(someType)
@@ -117,9 +117,9 @@ var _ = Describe("BasicHookable", func() {
 		hook.ExpectHookCall(item, domain)
 		hook.ExpectHookCall(item2, domain)
 		hook.ExpectHookCall(item3, domain)
-		domain.InvokeHook(item, domain, AfterEvent, nil)
-		domain.InvokeHook(item2, domain, AfterEvent, nil)
-		domain.InvokeHook(item3, domain, AfterEvent, nil)
+		domain.InvokeHook(item, domain, AfterEventHookPos, nil)
+		domain.InvokeHook(item2, domain, AfterEventHookPos, nil)
+		domain.InvokeHook(item3, domain, AfterEventHookPos, nil)
 		hook.AllExpectedCalled()
 	})
 
