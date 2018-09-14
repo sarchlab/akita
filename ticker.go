@@ -22,7 +22,7 @@ type Ticker struct {
 	sync.Mutex
 	handler Handler
 	Freq    Freq
-	engine  Engine
+	Engine  Engine
 
 	nextTickTime VTimeInSec
 }
@@ -31,7 +31,7 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 	ticker := new(Ticker)
 
 	ticker.handler = handler
-	ticker.engine = engine
+	ticker.Engine = engine
 	ticker.Freq = freq
 
 	ticker.nextTickTime = -1
@@ -50,7 +50,7 @@ func (t *Ticker) TickLater(now VTimeInSec) {
 
 	t.nextTickTime = time
 	tick := NewTickEvent(time, t.handler)
-	t.engine.Schedule(tick)
+	t.Engine.Schedule(tick)
 }
 
 // A Ticking Component is a component that mainly updates its states in a
