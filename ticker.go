@@ -19,7 +19,7 @@ func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
 
 // Ticker is a tool that helps a component that executes in a tick-tick fashion
 type Ticker struct {
-	sync.Mutex
+	lock    sync.Mutex
 	handler Handler
 	Freq    Freq
 	Engine  Engine
@@ -39,8 +39,8 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 }
 
 func (t *Ticker) TickLater(now VTimeInSec) {
-	t.Lock()
-	defer t.Unlock()
+	t.lock.Lock()
+	defer t.lock.Unlock()
 
 	time := t.Freq.NextTick(now)
 
