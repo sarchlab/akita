@@ -84,7 +84,9 @@ func (p *Port) Peek() Req {
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
 func (p *Port) NotifyAvailable(now VTimeInSec) {
+	p.Lock()
 	p.ConnBusy = false
+	p.Unlock()
 	p.Comp.NotifyPortFree(now, p)
 }
 
