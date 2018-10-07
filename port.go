@@ -87,7 +87,10 @@ func (p *Port) NotifyAvailable(now VTimeInSec) {
 	p.Lock()
 	p.ConnBusy = false
 	p.Unlock()
-	p.Comp.NotifyPortFree(now, p)
+
+	if p.Comp != nil {
+		p.Comp.NotifyPortFree(now, p)
+	}
 }
 
 // NewPort creates a new port that works for the provided component
