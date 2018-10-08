@@ -5,6 +5,9 @@ package akita
 func ProcessReqAsEvent(request Req, engine Engine, freq Freq) {
 	recvTime := request.RecvTime()
 	eventTime := freq.ThisTick(recvTime)
+	if eventTime < recvTime {
+		eventTime = recvTime
+	}
 	request.SetEventTime(eventTime)
 	engine.Schedule(request)
 }
