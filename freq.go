@@ -24,6 +24,11 @@ func (f Freq) Period() VTimeInSec {
 	return VTimeInSec(1.0 / f)
 }
 
+// Cycle converts a time to the number of cycles passed since time 0.
+func (f Freq) Cycle(time VTimeInSec) uint64 {
+	return uint64(math.Round(float64(time) * float64(f)))
+}
+
 // ThisTick returns the current tick time
 //
 //
@@ -36,9 +41,8 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
-	period := f.Period()
-	count := math.Ceil(float64(now / period))
-	return VTimeInSec(count) * period
+	count := math.Ceil(math.Round(float64(now)*10*float64(f)) / 10)
+	return VTimeInSec(float64(count) / float64(f))
 }
 
 // NextTick returns the next tick time.
@@ -52,9 +56,8 @@ func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
-	period := f.Period()
-	count := math.Floor(math.Round(float64(now*10/period)) / 10)
-	return VTimeInSec(count+1) * period
+	count := math.Floor(math.Round(float64(now)*10*float64(f)) / 10)
+	return VTimeInSec(float64(count+1) / float64(f))
 }
 
 // NCyclesLater returns the time after N cycles
@@ -64,7 +67,7 @@ func (f Freq) NCyclesLater(n int, now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
-	return f.ThisTick(now + VTimeInSec(n)*f.Period())
+	return f.ThisTick(now + VTimeInSec(Freq(n)/f))
 }
 
 // NoEarlierThan returns the tick time that is at or right after the given time
