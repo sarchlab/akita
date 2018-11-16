@@ -5,7 +5,21 @@ import (
 )
 
 // A Port is owned by a component and is used to plugin connections
-type Port struct {
+type Port interface {
+	SetConnection(conn Connection)
+	Component() Component
+
+	// For connection
+	Recv(req Req) *SendError
+	NotifyAvailable(now VTimeInSec)
+
+	// For component
+	Send(req Req) *SendError
+	Retrieve(now VTimeInSec) Req
+	Peek() Req
+}
+
+type portImpl struct {
 	sync.Mutex
 
 	Buf         []Req
@@ -18,8 +32,16 @@ type Port struct {
 	Comp Component
 }
 
+func (p *portImpl) SetConnection(conn Connection) {
+	p.Conn = conn
+}
+
+func (p *portImpl) Component() Component {
+	return p.Comp
+}
+
 // Send is used to send a request out from a component
-func (p *Port) Send(req Req) *SendError {
+func (p *portImpl) Send(req Req) *SendError {
 	err := p.Conn.Send(req)
 	if err != nil {
 		p.Lock()
@@ -30,7 +52,7 @@ func (p *Port) Send(req Req) *SendError {
 }
 
 // Recv is used to deliver a request to a component
-func (p *Port) Recv(req Req) *SendError {
+func (p *portImpl) Recv(req Req) *SendError {
 	p.Lock()
 	if len(p.Buf) >= p.BufCapacity {
 		p.PortBusy = true
@@ -48,7 +70,7 @@ func (p *Port) Recv(req Req) *SendError {
 }
 
 // Retrieve is used by the component to take a request from the incoming buffer
-func (p *Port) Retrieve(now VTimeInSec) Req {
+func (p *portImpl) Retrieve(now VTimeInSec) Req {
 	p.Lock()
 
 	if len(p.Buf) == 0 {
@@ -71,7 +93,7 @@ func (p *Port) Retrieve(now VTimeInSec) Req {
 }
 
 // Peek returns the first request in the port without removing it.
-func (p *Port) Peek() Req {
+func (p *portImpl) Peek() Req {
 	p.Lock()
 	if len(p.Buf) == 0 {
 		p.Unlock()
@@ -83,7 +105,7 @@ func (p *Port) Peek() Req {
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *Port) NotifyAvailable(now VTimeInSec) {
+func (p *portImpl) NotifyAvailable(now VTimeInSec) {
 	p.Lock()
 	p.ConnBusy = false
 	p.Unlock()
@@ -94,8 +116,8 @@ func (p *Port) NotifyAvailable(now VTimeInSec) {
 }
 
 // NewPort creates a new port that works for the provided component
-func NewPort(comp Component) *Port {
-	p := new(Port)
+func NewPort(comp Component) Port {
+	p := new(portImpl)
 	p.Comp = comp
 	p.BufCapacity = 1
 	return p

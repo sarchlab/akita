@@ -7,8 +7,8 @@ import (
 var _ = Describe("DirectConnection", func() {
 
 	var (
-		port1      *Port
-		port2      *Port
+		port1      Port
+		port2      Port
 		connection *DirectConnection
 		engine     *MockEngine
 	)

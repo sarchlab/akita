@@ -15,9 +15,9 @@ type Connection interface {
 
 	Send(req Req) *SendError
 
-	PlugIn(port *Port)
-	Unplug(port *Port)
-	NotifyAvailable(now VTimeInSec, port *Port)
+	PlugIn(port Port)
+	Unplug(port Port)
+	NotifyAvailable(now VTimeInSec, port Port)
 }
 
 var ConnStartSendHookPos = struct{ name string }{"Conn Start Send"}
