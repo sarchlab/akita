@@ -67,15 +67,15 @@ type PingComponent struct {
 
 	NumPingsToSend int
 	Engine         akita.Engine
-	ToOut          *akita.Port
+	ToOut          akita.Port
 	Freq           akita.Freq
 }
 
-func (c *PingComponent) NotifyPortFree(now akita.VTimeInSec, port *akita.Port) {
+func (c *PingComponent) NotifyPortFree(now akita.VTimeInSec, port akita.Port) {
 	panic("implement me")
 }
 
-func (c *PingComponent) NotifyRecv(now akita.VTimeInSec, port *akita.Port) {
+func (c *PingComponent) NotifyRecv(now akita.VTimeInSec, port akita.Port) {
 	req := port.Retrieve(now)
 	akita.ProcessReqAsEvent(req, c.Engine, c.Freq)
 }
