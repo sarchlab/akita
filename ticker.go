@@ -72,11 +72,11 @@ type TickingComponent struct {
 	NeedTick bool
 }
 
-func (c *TickingComponent) NotifyPortFree(now VTimeInSec, port *Port) {
+func (c *TickingComponent) NotifyPortFree(now VTimeInSec, port Port) {
 	c.Ticker.TickLater(now)
 }
 
-func (c *TickingComponent) NotifyRecv(now VTimeInSec, port *Port) {
+func (c *TickingComponent) NotifyRecv(now VTimeInSec, port Port) {
 	c.Ticker.TickLater(now)
 }
 
