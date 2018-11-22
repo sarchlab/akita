@@ -2,18 +2,23 @@ package akita
 
 import (
 	"sync"
+
+	"github.com/rs/xid"
 )
 
 // TickEvent is a generic event that almost all the component can use to
 // update their status.
 type TickEvent struct {
-	*EventBase
+	EventBase
 }
 
 // NewTickEvent creates a newly created TickEvent
 func NewTickEvent(t VTimeInSec, handler Handler) *TickEvent {
 	evt := new(TickEvent)
-	evt.EventBase = NewEventBase(t, handler)
+	evt.EventBase = EventBase{}
+	evt.EventBase.ID = xid.New().String()
+	evt.EventBase.handler = handler
+	evt.EventBase.time = t
 	return evt
 }
 
@@ -40,17 +45,21 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 
 func (t *Ticker) TickLater(now VTimeInSec) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
 
 	time := t.Freq.NextTick(now)
 
 	if t.nextTickTime >= time {
+		t.lock.Unlock()
 		return
 	}
 
 	t.nextTickTime = time
-	tick := NewTickEvent(time, t.handler)
+	tick := TickEvent{}
+	tick.ID = xid.New().String()
+	tick.time = time
+	tick.handler = t.handler
 	t.Engine.Schedule(tick)
+	t.lock.Unlock()
 }
 
 // A Ticking Component is a component that mainly updates its states in a
