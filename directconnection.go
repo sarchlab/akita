@@ -10,19 +10,19 @@ type DirectConnection struct {
 	sync.Mutex
 	*HookableBase
 
-	endPoints map[*Port]bool
+	endPoints map[Port]bool
 	engine    Engine
 }
 
-func (c *DirectConnection) PlugIn(port *Port) {
+func (c *DirectConnection) PlugIn(port Port) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.endPoints[port] = true
-	port.Conn = c
+	port.SetConnection(c)
 }
 
-func (c *DirectConnection) Unplug(port *Port) {
+func (c *DirectConnection) Unplug(port Port) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -31,10 +31,10 @@ func (c *DirectConnection) Unplug(port *Port) {
 	}
 
 	delete(c.endPoints, port)
-	port.Conn = nil
+	port.SetConnection(c)
 }
 
-func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port *Port) {
+func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
 	for p := range c.endPoints {
 		p.NotifyAvailable(now)
 	}
@@ -46,15 +46,15 @@ func (c *DirectConnection) Send(req Req) *SendError {
 		log.Panic("destination is null")
 	}
 
-	if _, found := c.endPoints[req.Dst()]; !found {
-		log.Panicf("destination %s not connected, "+
-			"req ID %s, "+
-			"request from %s",
-			req.Dst().Comp.Name(),
-			req.GetID(),
-			req.Dst().Comp.Name(),
-		)
-	}
+	// if _, found := c.endPoints[req.Dst()]; !found {
+	// 	log.Panicf("destination %s not connected, "+
+	// 		"req ID %s, "+
+	// 		"request from %s",
+	// 		req.Dst().Comp.Name(),
+	// 		req.GetID(),
+	// 		req.Dst().Comp.Name(),
+	// 	)
+	// }
 
 	req.SetRecvTime(req.SendTime())
 	return req.Dst().Recv(req)
@@ -69,7 +69,7 @@ func (c *DirectConnection) Handle(evt Event) error {
 func NewDirectConnection(engine Engine) *DirectConnection {
 	c := new(DirectConnection)
 	c.HookableBase = NewHookableBase()
-	c.endPoints = make(map[*Port]bool)
+	c.endPoints = make(map[Port]bool)
 	c.engine = engine
 	return c
 }

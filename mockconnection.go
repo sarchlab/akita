@@ -16,15 +16,15 @@ type MockConnection struct {
 	expectedReqs []*expectedReq
 }
 
-func (c *MockConnection) PlugIn(port *Port) {
-	port.Conn = c
+func (c *MockConnection) PlugIn(port Port) {
+	port.SetConnection(c)
 }
 
-func (c *MockConnection) Unplug(port *Port) {
-	port.Conn = c
+func (c *MockConnection) Unplug(port Port) {
+	port.SetConnection(c)
 }
 
-func (c *MockConnection) NotifyAvailable(now VTimeInSec, port *Port) {
+func (c *MockConnection) NotifyAvailable(now VTimeInSec, port Port) {
 	panic("implement me")
 }
 

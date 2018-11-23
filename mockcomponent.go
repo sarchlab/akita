@@ -7,15 +7,15 @@ type MockComponent struct {
 
 	ReceivedReqs []Req
 
-	ToOutside *Port
+	ToOutside Port
 }
 
-func (c *MockComponent) NotifyRecv(now VTimeInSec, port *Port) {
+func (c *MockComponent) NotifyRecv(now VTimeInSec, port Port) {
 	req := port.Retrieve(now)
 	c.ReceivedReqs = append(c.ReceivedReqs, req)
 }
 
-func (c *MockComponent) NotifyPortFree(now VTimeInSec, port *Port) {
+func (c *MockComponent) NotifyPortFree(now VTimeInSec, port Port) {
 }
 
 // Handle function of a MockComponent cannot handle any event

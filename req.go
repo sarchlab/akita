@@ -9,10 +9,10 @@ import (
 
 // A Req is the message element being transferred between components
 type Req interface {
-	Src() *Port
-	SetSrc(c *Port)
-	Dst() *Port
-	SetDst(c *Port)
+	Src() Port
+	SetSrc(c Port)
+	Dst() Port
+	SetDst(c Port)
 
 	SetSendTime(t VTimeInSec)
 	SendTime() VTimeInSec
@@ -33,8 +33,8 @@ type Req interface {
 // ReqBase provides some basic setter and getter for all other requests
 type ReqBase struct {
 	ID        string
-	src       *Port
-	dst       *Port
+	src       Port
+	dst       Port
 	sendTime  VTimeInSec
 	recvTime  VTimeInSec
 	eventTime VTimeInSec
@@ -49,22 +49,22 @@ func NewReqBase() *ReqBase {
 }
 
 // SetSrc set the component that send the request
-func (r *ReqBase) SetSrc(src *Port) {
+func (r *ReqBase) SetSrc(src Port) {
 	r.src = src
 }
 
 // Src return the source of the BasicRequest
-func (r *ReqBase) Src() *Port {
+func (r *ReqBase) Src() Port {
 	return r.src
 }
 
 // SetDst sets where the request needs to be sent to
-func (r *ReqBase) SetDst(dst *Port) {
+func (r *ReqBase) SetDst(dst Port) {
 	r.dst = dst
 }
 
 // Dst return the source of the BasicRequest
-func (r *ReqBase) Dst() *Port {
+func (r *ReqBase) Dst() Port {
 	return r.dst
 }
 
@@ -104,7 +104,7 @@ func (r *ReqBase) Time() VTimeInSec {
 
 // Handler returns the receiver of the request
 func (r *ReqBase) Handler() Handler {
-	return r.dst.Comp
+	return r.dst.Component()
 }
 
 // GetID returns the ID of the request
