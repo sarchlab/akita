@@ -33,8 +33,8 @@ var _ = Describe("ReqEquivalent", func() {
 	It("should match source", func() {
 		r1 := NewReqBase()
 		r2 := NewReqBase()
-		p1 := NewPort(nil)
-		p2 := NewPort(nil)
+		p1 := NewLimitNumReqPort(nil, 1)
+		p2 := NewLimitNumReqPort(nil, 1)
 
 		r1.SetSrc(p1)
 		r2.SetSrc(p2)
@@ -45,8 +45,8 @@ var _ = Describe("ReqEquivalent", func() {
 	It("should match destination", func() {
 		r1 := NewReqBase()
 		r2 := NewReqBase()
-		p1 := NewPort(nil)
-		p2 := NewPort(nil)
+		p1 := NewLimitNumReqPort(nil, 1)
+		p2 := NewLimitNumReqPort(nil, 1)
 
 		r1.SetDst(p1)
 		r2.SetDst(p2)
@@ -79,8 +79,8 @@ var _ = Describe("ReqEquivalent", func() {
 	It("should match nested field", func() {
 		r1 := new(mockReqAdv)
 		r2 := new(mockReqAdv)
-		p1 := NewPort(nil)
-		p2 := NewPort(nil)
+		p1 := NewLimitNumReqPort(nil, 1)
+		p2 := NewLimitNumReqPort(nil, 1)
 
 		r1.SetSrc(p1)
 		r2.SetSrc(p2)

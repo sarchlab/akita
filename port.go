@@ -19,7 +19,9 @@ type Port interface {
 	Peek() Req
 }
 
-type portImpl struct {
+// LimitNumReqPort is a type of port that can hold at most a certain number
+// of requests.
+type LimitNumReqPort struct {
 	sync.Mutex
 
 	Buf         []Req
@@ -32,16 +34,18 @@ type portImpl struct {
 	Comp Component
 }
 
-func (p *portImpl) SetConnection(conn Connection) {
+// SetConnection sets which connection plugged in to this port.
+func (p *LimitNumReqPort) SetConnection(conn Connection) {
 	p.Conn = conn
 }
 
-func (p *portImpl) Component() Component {
+// Component returns the owner component of the port.
+func (p *LimitNumReqPort) Component() Component {
 	return p.Comp
 }
 
 // Send is used to send a request out from a component
-func (p *portImpl) Send(req Req) *SendError {
+func (p *LimitNumReqPort) Send(req Req) *SendError {
 	err := p.Conn.Send(req)
 	if err != nil {
 		p.Lock()
@@ -52,7 +56,7 @@ func (p *portImpl) Send(req Req) *SendError {
 }
 
 // Recv is used to deliver a request to a component
-func (p *portImpl) Recv(req Req) *SendError {
+func (p *LimitNumReqPort) Recv(req Req) *SendError {
 	p.Lock()
 	if len(p.Buf) >= p.BufCapacity {
 		p.PortBusy = true
@@ -70,7 +74,7 @@ func (p *portImpl) Recv(req Req) *SendError {
 }
 
 // Retrieve is used by the component to take a request from the incoming buffer
-func (p *portImpl) Retrieve(now VTimeInSec) Req {
+func (p *LimitNumReqPort) Retrieve(now VTimeInSec) Req {
 	p.Lock()
 
 	if len(p.Buf) == 0 {
@@ -93,7 +97,7 @@ func (p *portImpl) Retrieve(now VTimeInSec) Req {
 }
 
 // Peek returns the first request in the port without removing it.
-func (p *portImpl) Peek() Req {
+func (p *LimitNumReqPort) Peek() Req {
 	p.Lock()
 	if len(p.Buf) == 0 {
 		p.Unlock()
@@ -105,7 +109,7 @@ func (p *portImpl) Peek() Req {
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *portImpl) NotifyAvailable(now VTimeInSec) {
+func (p *LimitNumReqPort) NotifyAvailable(now VTimeInSec) {
 	p.Lock()
 	p.ConnBusy = false
 	p.Unlock()
@@ -115,10 +119,10 @@ func (p *portImpl) NotifyAvailable(now VTimeInSec) {
 	}
 }
 
-// NewPort creates a new port that works for the provided component
-func NewPort(comp Component) Port {
-	p := new(portImpl)
+// NewLimitNumReqPort creates a new port that works for the provided component
+func NewLimitNumReqPort(comp Component, capacity int) *LimitNumReqPort {
+	p := new(LimitNumReqPort)
 	p.Comp = comp
-	p.BufCapacity = 1
+	p.BufCapacity = capacity
 	return p
 }

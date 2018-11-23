@@ -14,8 +14,8 @@ var _ = Describe("DirectConnection", func() {
 	)
 
 	BeforeEach(func() {
-		port1 = NewPort(nil)
-		port2 = NewPort(nil)
+		port1 = NewLimitNumReqPort(nil, 1)
+		port2 = NewLimitNumReqPort(nil, 1)
 		engine = NewMockEngine()
 
 		connection = NewDirectConnection(engine)
