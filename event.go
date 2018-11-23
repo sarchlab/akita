@@ -30,23 +30,23 @@ func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	return e
 }
 
-// Time returne the time that the event is going to happen
-func (e *EventBase) Time() VTimeInSec {
+// Time return the time that the event is going to happen
+func (e EventBase) Time() VTimeInSec {
 	return e.time
 }
 
 // SetHandler sets which component will handle the event
 //
-// Yaotsu requires all the components can only schedule event for themselves.
+// Akita requires all the components can only schedule event for themselves.
 // Therefore, the handler in this function must be the component who schedule
 // the event. The only exception is process of kicking starting of the
 // simulation, where the kick starter can schedule to all components.
-func (e *EventBase) SetHandler(h Handler) {
+func (e EventBase) SetHandler(h Handler) {
 	e.handler = h
 }
 
 // Handler returns the handler to handle the event
-func (e *EventBase) Handler() Handler {
+func (e EventBase) Handler() Handler {
 	return e.handler
 }
 
