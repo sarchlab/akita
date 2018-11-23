@@ -28,7 +28,7 @@ func NewMockComponent(name string) *MockComponent {
 	c := new(MockComponent)
 	c.ComponentBase = NewComponentBase(name)
 
-	c.ToOutside = NewPort(c)
+	c.ToOutside = NewLimitNumReqPort(c, 1)
 
 	return c
 }
