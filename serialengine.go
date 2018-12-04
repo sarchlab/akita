@@ -9,17 +9,20 @@ import (
 type SerialEngine struct {
 	*HookableBase
 
-	time   VTimeInSec
-	paused bool
-	queue  EventQueue
+	time  VTimeInSec
+	queue EventQueue
+
+	postSimHandlers []Handler
+}
+
+func (e *SerialEngine) RegisterPostSimulationHandler(handler Handler) {
+	e.postSimHandlers = append(e.postSimHandlers, handler)
 }
 
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
 	e.HookableBase = NewHookableBase()
-
-	e.paused = false
 
 	e.queue = NewEventQueue()
 	//e.queue = NewInsertionQueue()
@@ -38,33 +41,34 @@ func (e *SerialEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
-	for !e.paused {
+	for {
 		if e.queue.Len() == 0 {
+			e.triggerPostSimulationHandlers()
 			return nil
 		}
 
 		evt := e.queue.Pop()
-		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		if evt.Time() < e.time {
 			log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
 				reflect.TypeOf(evt), evt.Time(), e.time)
 		}
 		e.time = evt.Time()
 
+		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
 		e.InvokeHook(evt, e, AfterEventHookPos, nil)
 	}
-
-	return nil
 }
 
-// Pause will stop the engine from dispatching more events
-func (e *SerialEngine) Pause() {
-	e.paused = true
+func (e *SerialEngine) triggerPostSimulationHandlers() {
+	for _, h := range e.postSimHandlers {
+		h.Handle(*NewTickEvent(e.time, h))
+	}
 }
 
-// CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
+// CurrentTime returns the current time at which the engine is at.
+// Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.time
 }

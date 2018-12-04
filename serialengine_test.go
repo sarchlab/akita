@@ -23,7 +23,7 @@ var _ = Describe("SerialEngine", func() {
 		evt4 := newMockEvent()
 
 		// Four events to be scheduled. Evt1 and Evt2 are directly scheduled,
-		// while evt2 schdules evt3 and evt4. They should be executed
+		// while evt2 schedules evt3 and evt4. They should be executed
 		// in the global time order
 		evt1.SetTime(4.0)
 		evt1.SetHandler(handler1)

@@ -8,6 +8,10 @@ type MockEngine struct {
 	Time           VTimeInSec
 }
 
+func (e *MockEngine) RegisterPostSimulationHandler(handler Handler) {
+	panic("implement me")
+}
+
 // NewMockEngine returns a new mock engine
 func NewMockEngine() *MockEngine {
 	e := new(MockEngine)
@@ -24,11 +28,6 @@ func (e *MockEngine) Schedule(evt Event) {
 // Run function of a MockEngine does not do anything
 func (e *MockEngine) Run() error {
 	return nil
-}
-
-// Pause function of MockEngine is not implemented
-func (e *MockEngine) Pause() {
-
 }
 
 // CurrentTime returns the current time.
