@@ -1,6 +1,7 @@
 package akita
 
 import (
+	"log"
 	"sync"
 )
 
@@ -17,6 +18,21 @@ type Port interface {
 	Send(req Req) *SendError
 	Retrieve(now VTimeInSec) Req
 	Peek() Req
+}
+
+// PortEndSimulationChecker checks if the port buffer is empty at the end of
+// the simulation. If the port is not empty, there is something wrong in the
+// simulation.
+type PortEndSimulationChecker struct {
+	Port Port
+}
+
+// Handle checks if the port is empty or not.
+func (c *PortEndSimulationChecker) Handle(e Event) error {
+	if c.Port.Peek() != nil {
+		log.Panic("port is not free")
+	}
+	return nil
 }
 
 // LimitNumReqPort is a type of port that can hold at most a certain number

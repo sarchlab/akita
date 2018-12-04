@@ -9,17 +9,18 @@ import (
 type SerialEngine struct {
 	*HookableBase
 
-	time   VTimeInSec
-	paused bool
-	queue  EventQueue
+	time  VTimeInSec
+	queue EventQueue
+}
+
+func (e *SerialEngine) RegisterPostSimulationHandler(handler Handler) {
+	panic("implement me")
 }
 
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
 	e.HookableBase = NewHookableBase()
-
-	e.paused = false
 
 	e.queue = NewEventQueue()
 	//e.queue = NewInsertionQueue()
@@ -38,7 +39,7 @@ func (e *SerialEngine) Schedule(evt Event) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
-	for !e.paused {
+	for {
 		if e.queue.Len() == 0 {
 			return nil
 		}
@@ -59,12 +60,8 @@ func (e *SerialEngine) Run() error {
 	return nil
 }
 
-// Pause will stop the engine from dispatching more events
-func (e *SerialEngine) Pause() {
-	e.paused = true
-}
-
-// CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
+// CurrentTime returns the current time at which the engine is at.
+// Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.time
 }
