@@ -11,10 +11,12 @@ type SerialEngine struct {
 
 	time  VTimeInSec
 	queue EventQueue
+
+	postSimHandlers []Handler
 }
 
 func (e *SerialEngine) RegisterPostSimulationHandler(handler Handler) {
-	panic("implement me")
+	e.postSimHandlers = append(e.postSimHandlers, handler)
 }
 
 // NewSerialEngine creates a SerialEngine
@@ -41,23 +43,28 @@ func (e *SerialEngine) Schedule(evt Event) {
 func (e *SerialEngine) Run() error {
 	for {
 		if e.queue.Len() == 0 {
+			e.triggerPostSimulationHandlers()
 			return nil
 		}
 
 		evt := e.queue.Pop()
-		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		if evt.Time() < e.time {
 			log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
 				reflect.TypeOf(evt), evt.Time(), e.time)
 		}
 		e.time = evt.Time()
 
+		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		handler := evt.Handler()
 		handler.Handle(evt)
 		e.InvokeHook(evt, e, AfterEventHookPos, nil)
 	}
+}
 
-	return nil
+func (e *SerialEngine) triggerPostSimulationHandlers() {
+	for _, h := range e.postSimHandlers {
+		h.Handle(*NewTickEvent(e.time, h))
+	}
 }
 
 // CurrentTime returns the current time at which the engine is at.

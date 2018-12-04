@@ -27,6 +27,8 @@ type ParallelEngine struct {
 
 	queues    []EventQueue
 	queueChan chan EventQueue
+
+	postSimHandlers []Handler
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -71,6 +73,10 @@ func (e *ParallelEngine) worker() {
 	}
 }
 
+func (e *ParallelEngine) RegisterPostSimulationHandler(handler Handler) {
+	e.postSimHandlers = append(e.postSimHandlers, handler)
+}
+
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
 	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
@@ -93,6 +99,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 func (e *ParallelEngine) Run() error {
 	for {
 		if !e.hasMoreEvents() {
+			e.triggerPostSimulationHandlers()
 			return nil
 		}
 
@@ -181,9 +188,15 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	e.waitGroup.Done()
 }
 
-// Pause will stop the engine from dispatching more events
-func (e *ParallelEngine) Pause() {
-	e.paused = true
+func (e *ParallelEngine) triggerPostSimulationHandlers() {
+	for _, h := range e.postSimHandlers {
+		e.waitGroup.Add(1)
+		go func() {
+			h.Handle(*NewTickEvent(e.now, h))
+			e.waitGroup.Done()
+		}()
+		e.waitGroup.Wait()
+	}
 }
 
 // CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
