@@ -119,8 +119,9 @@ func (p *LimitNumReqPort) Peek() Req {
 		p.Unlock()
 		return nil
 	}
+	req := p.Buf[0]
 	p.Unlock()
-	return p.Buf[0]
+	return req
 }
 
 // NotifyAvailable is called by the connection to notify the port that the
