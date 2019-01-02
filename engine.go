@@ -20,7 +20,7 @@ type Engine interface {
 
 	// RegisterSimulationEndHandler registers a handler that perform some
 	// actions after the simulation is finished.
-	RegisterSimulationEndHandler(now VTimeInSec)
+	RegisterSimulationEndHandler(handler SimulationEndHandler)
 
 	// Finished invokes all the registered SimulationEndHandler
 	Finished()
