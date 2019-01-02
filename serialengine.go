@@ -7,22 +7,17 @@ import (
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
-	*HookableBase
+	HookableBase
 
 	time  VTimeInSec
 	queue EventQueue
 
-	postSimHandlers []Handler
-}
-
-func (e *SerialEngine) RegisterPostSimulationHandler(handler Handler) {
-	e.postSimHandlers = append(e.postSimHandlers, handler)
+	simulationEndHandlers []SimulationEndHandler
 }
 
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
-	e.HookableBase = NewHookableBase()
 
 	e.queue = NewEventQueue()
 	//e.queue = NewInsertionQueue()
@@ -43,7 +38,6 @@ func (e *SerialEngine) Schedule(evt Event) {
 func (e *SerialEngine) Run() error {
 	for {
 		if e.queue.Len() == 0 {
-			e.triggerPostSimulationHandlers()
 			return nil
 		}
 
@@ -61,14 +55,24 @@ func (e *SerialEngine) Run() error {
 	}
 }
 
-func (e *SerialEngine) triggerPostSimulationHandlers() {
-	for _, h := range e.postSimHandlers {
-		h.Handle(*NewTickEvent(e.time, h))
-	}
-}
-
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.time
+}
+
+// RegisterSimulationEndHandler invokes all the registered simulation end
+// handler.
+func (e *SerialEngine) RegisterSimulationEndHandler(
+	handler SimulationEndHandler,
+) {
+	e.simulationEndHandlers = append(e.simulationEndHandlers, handler)
+}
+
+// Finished should be called after the simulation ends. This function
+// calls all the registered SimulationEndHandler.
+func (e *SerialEngine) Finished() {
+	for _, h := range e.simulationEndHandlers {
+		h.Handle(e.time)
+	}
 }

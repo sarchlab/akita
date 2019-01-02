@@ -55,6 +55,16 @@ func (mr *MockEngineMockRecorder) CurrentTime() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTime", reflect.TypeOf((*MockEngine)(nil).CurrentTime))
 }
 
+// Finished mocks base method
+func (m *MockEngine) Finished() {
+	m.ctrl.Call(m, "Finished")
+}
+
+// Finished indicates an expected call of Finished
+func (mr *MockEngineMockRecorder) Finished() *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finished", reflect.TypeOf((*MockEngine)(nil).Finished))
+}
+
 // InvokeHook mocks base method
 func (m *MockEngine) InvokeHook(arg0 interface{}, arg1 akita.Hookable, arg2 akita.HookPos, arg3 interface{}) {
 	m.ctrl.Call(m, "InvokeHook", arg0, arg1, arg2, arg3)
@@ -65,14 +75,14 @@ func (mr *MockEngineMockRecorder) InvokeHook(arg0, arg1, arg2, arg3 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeHook", reflect.TypeOf((*MockEngine)(nil).InvokeHook), arg0, arg1, arg2, arg3)
 }
 
-// RegisterPostSimulationHandler mocks base method
-func (m *MockEngine) RegisterPostSimulationHandler(arg0 akita.Handler) {
-	m.ctrl.Call(m, "RegisterPostSimulationHandler", arg0)
+// RegisterSimulationEndHandler mocks base method
+func (m *MockEngine) RegisterSimulationEndHandler(arg0 akita.SimulationEndHandler) {
+	m.ctrl.Call(m, "RegisterSimulationEndHandler", arg0)
 }
 
-// RegisterPostSimulationHandler indicates an expected call of RegisterPostSimulationHandler
-func (mr *MockEngineMockRecorder) RegisterPostSimulationHandler(arg0 interface{}) *gomock.Call {
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterPostSimulationHandler", reflect.TypeOf((*MockEngine)(nil).RegisterPostSimulationHandler), arg0)
+// RegisterSimulationEndHandler indicates an expected call of RegisterSimulationEndHandler
+func (mr *MockEngineMockRecorder) RegisterSimulationEndHandler(arg0 interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSimulationEndHandler", reflect.TypeOf((*MockEngine)(nil).RegisterSimulationEndHandler), arg0)
 }
 
 // Run mocks base method
