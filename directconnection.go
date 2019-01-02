@@ -14,6 +14,7 @@ type DirectConnection struct {
 	engine    Engine
 }
 
+// PlugIn marks the port connects to this DirectConnection.
 func (c *DirectConnection) PlugIn(port Port) {
 	c.Lock()
 	defer c.Unlock()
@@ -22,6 +23,7 @@ func (c *DirectConnection) PlugIn(port Port) {
 	port.SetConnection(c)
 }
 
+// Unplug marks the port no longer connects to this DirectConnection.
 func (c *DirectConnection) Unplug(port Port) {
 	c.Lock()
 	defer c.Unlock()

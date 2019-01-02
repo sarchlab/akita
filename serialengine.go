@@ -7,7 +7,7 @@ import (
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
-	*HookableBase
+	HookableBase
 
 	time  VTimeInSec
 	queue EventQueue
@@ -18,7 +18,6 @@ type SerialEngine struct {
 // NewSerialEngine creates a SerialEngine
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
-	e.HookableBase = NewHookableBase()
 
 	e.queue = NewEventQueue()
 	//e.queue = NewInsertionQueue()

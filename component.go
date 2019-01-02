@@ -21,7 +21,7 @@ type Component interface {
 
 // ComponentBase provides some functions that other component can use
 type ComponentBase struct {
-	*HookableBase
+	HookableBase
 	sync.Mutex
 	name string
 }
@@ -30,7 +30,7 @@ type ComponentBase struct {
 func NewComponentBase(name string) *ComponentBase {
 	c := new(ComponentBase)
 	c.name = name
-	c.HookableBase = NewHookableBase()
+	// c.HookableBase = NewHookableBase()
 	return c
 }
 
