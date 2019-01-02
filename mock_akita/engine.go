@@ -76,7 +76,7 @@ func (mr *MockEngineMockRecorder) InvokeHook(arg0, arg1, arg2, arg3 interface{})
 }
 
 // RegisterSimulationEndHandler mocks base method
-func (m *MockEngine) RegisterSimulationEndHandler(arg0 akita.VTimeInSec) {
+func (m *MockEngine) RegisterSimulationEndHandler(arg0 akita.SimulationEndHandler) {
 	m.ctrl.Call(m, "RegisterSimulationEndHandler", arg0)
 }
 
