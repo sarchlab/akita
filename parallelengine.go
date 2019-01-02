@@ -9,14 +9,10 @@ import (
 	"runtime"
 )
 
-// func init() {
-// 	runtime.GOMAXPROCS(runtime.NumCPU())
-// }
-
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
-	*HookableBase
+	HookableBase
 
 	paused bool
 	now    VTimeInSec
@@ -28,13 +24,13 @@ type ParallelEngine struct {
 	queues    []EventQueue
 	queueChan chan EventQueue
 
-	postSimHandlers []Handler
+	simulationEndHandlers []SimulationEndHandler
 }
 
 // NewParallelEngine creates a ParallelEngine
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
-	e.HookableBase = NewHookableBase()
+	// e.HookableBase = NewHookableBase()
 
 	e.paused = false
 	e.now = 0
@@ -73,10 +69,6 @@ func (e *ParallelEngine) worker() {
 	}
 }
 
-func (e *ParallelEngine) RegisterPostSimulationHandler(handler Handler) {
-	e.postSimHandlers = append(e.postSimHandlers, handler)
-}
-
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
 	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
@@ -99,7 +91,6 @@ func (e *ParallelEngine) Schedule(evt Event) {
 func (e *ParallelEngine) Run() error {
 	for {
 		if !e.hasMoreEvents() {
-			e.triggerPostSimulationHandlers()
 			return nil
 		}
 
@@ -188,18 +179,23 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	e.waitGroup.Done()
 }
 
-func (e *ParallelEngine) triggerPostSimulationHandlers() {
-	for _, h := range e.postSimHandlers {
-		e.waitGroup.Add(1)
-		go func() {
-			h.Handle(*NewTickEvent(e.now, h))
-			e.waitGroup.Done()
-		}()
-		e.waitGroup.Wait()
-	}
-}
-
 // CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInSec {
 	return e.now
+}
+
+// RegisterSimulationEndHandler registers a handler to be called after the
+// simulation ends.
+func (e *ParallelEngine) RegisterSimulationEndHandler(
+	handler SimulationEndHandler,
+) {
+	e.simulationEndHandlers = append(e.simulationEndHandlers, handler)
+}
+
+// Finished should be called after the simulation compeletes. It calls
+// all the registered SimulationEndHandler
+func (e *ParallelEngine) Finished() {
+	for _, h := range e.simulationEndHandlers {
+		h.Handle(e.now)
+	}
 }

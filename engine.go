@@ -1,5 +1,10 @@
 package akita
 
+// A SimulationEndHandler is a handler that is called after the simulation ends.
+type SimulationEndHandler interface {
+	Handle(now VTimeInSec)
+}
+
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable
@@ -13,7 +18,10 @@ type Engine interface {
 	// CurrentTime will return the time at which the engine is at.
 	CurrentTime() VTimeInSec
 
-	// Register an event handler that handles a event at the end of the
-	// simulation.
-	RegisterPostSimulationHandler(handler Handler)
+	// RegisterSimulationEndHandler registers a handler that perform some
+	// actions after the simulation is finished.
+	RegisterSimulationEndHandler(now VTimeInSec)
+
+	// Finished invokes all the registered SimulationEndHandler
+	Finished()
 }
