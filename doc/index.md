@@ -8,7 +8,7 @@ The framework is composed of 4 main parts: the Event system, the Component Syste
 
 1. [The Event System](./event_system.md)
 1. [The Component System](./component_system.md)
-1. [The Connection System](./conection_system)
-1. [The Hook System](./hook_system)
-1. [Testing](./testing)
-1. [Coding Guideline](./coding_guideline)
+1. [The Connection System](./conection_system.md)
+1. [The Hook System](./hook_system.md)
+1. [Testing](./testing.md)
+1. [Coding Guideline](./coding_guideline.md)
