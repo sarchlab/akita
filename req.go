@@ -2,6 +2,7 @@ package akita
 
 import (
 	"github.com/rs/xid"
+	"math/rand"
 )
 
 // A Req is the message element being transferred between components
@@ -10,6 +11,8 @@ type Req interface {
 	SetSrc(c Port)
 	Dst() Port
 	SetDst(c Port)
+	TC() int
+	SetTC() 
 
 	SetSendTime(t VTimeInSec)
 	SendTime() VTimeInSec
@@ -32,16 +35,19 @@ type ReqBase struct {
 	ID        string
 	src       Port
 	dst       Port
+	tClass    int
 	sendTime  VTimeInSec
 	recvTime  VTimeInSec
 	eventTime VTimeInSec
 	byteSize  int
+	
 }
 
 // NewReqBase creates a new BasicRequest
 func NewReqBase() *ReqBase {
 	r := new(ReqBase)
 	r.ID = xid.New().String()
+	r.tClass = rand.Int() %  8
 	return r
 }
 
@@ -64,6 +70,18 @@ func (r *ReqBase) SetDst(dst Port) {
 func (r *ReqBase) Dst() Port {
 	return r.dst
 }
+
+// SetTC sets the traffic class of the BasicRequest
+func (r *ReqBase) SetTC() {
+	r.tClass = 0
+}
+
+// TC return the traffic class of the BasicRequest
+func (r *ReqBase) TC() int {
+	return r.tClass
+}
+
+
 
 // SetSendTime set the send time of the event
 //
