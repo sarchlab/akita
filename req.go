@@ -11,6 +11,9 @@ type Req interface {
 	Dst() Port
 	SetDst(c Port)
 
+	TrafficClass() int
+	SetTrafficClass(tc int)
+
 	SetSendTime(t VTimeInSec)
 	SendTime() VTimeInSec
 
@@ -32,6 +35,7 @@ type ReqBase struct {
 	ID        string
 	src       Port
 	dst       Port
+	tc        int
 	sendTime  VTimeInSec
 	recvTime  VTimeInSec
 	eventTime VTimeInSec
@@ -63,6 +67,16 @@ func (r *ReqBase) SetDst(dst Port) {
 // Dst return the source of the BasicRequest
 func (r *ReqBase) Dst() Port {
 	return r.dst
+}
+
+// SetTrafficClass sets the traffic class of the BasicRequest
+func (r *ReqBase) SetTrafficClass(tc int) {
+	r.tc = tc
+}
+
+// TrafficClass return the traffic class of the BasicRequest
+func (r *ReqBase) TrafficClass() int {
+	return r.tc
 }
 
 // SetSendTime set the send time of the event

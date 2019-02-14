@@ -15,13 +15,13 @@ func TestCore(t *testing.T) {
 	ginkgo.RunSpecs(t, "Akita")
 }
 
-type mockRequest struct {
-	*ReqBase
-}
-
-func newMockRequest() *mockRequest {
-	return &mockRequest{NewReqBase()}
-}
+//type mockRequest struct {
+//	*ReqBase
+//}
+//
+//func newMockRequest() *mockRequest {
+//	return &mockRequest{NewReqBase()}
+//}
 
 type mockEvent struct {
 	EventTime    VTimeInSec
