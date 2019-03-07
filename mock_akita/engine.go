@@ -35,16 +35,31 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 
 // AcceptHook mocks base method
 func (m *MockEngine) AcceptHook(arg0 akita.Hook) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", arg0)
 }
 
 // AcceptHook indicates an expected call of AcceptHook
 func (mr *MockEngineMockRecorder) AcceptHook(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptHook", reflect.TypeOf((*MockEngine)(nil).AcceptHook), arg0)
+}
+
+// Continue mocks base method
+func (m *MockEngine) Continue() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Continue")
+}
+
+// Continue indicates an expected call of Continue
+func (mr *MockEngineMockRecorder) Continue() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Continue", reflect.TypeOf((*MockEngine)(nil).Continue))
 }
 
 // CurrentTime mocks base method
 func (m *MockEngine) CurrentTime() akita.VTimeInSec {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CurrentTime")
 	ret0, _ := ret[0].(akita.VTimeInSec)
 	return ret0
@@ -52,41 +67,61 @@ func (m *MockEngine) CurrentTime() akita.VTimeInSec {
 
 // CurrentTime indicates an expected call of CurrentTime
 func (mr *MockEngineMockRecorder) CurrentTime() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTime", reflect.TypeOf((*MockEngine)(nil).CurrentTime))
 }
 
 // Finished mocks base method
 func (m *MockEngine) Finished() {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Finished")
 }
 
 // Finished indicates an expected call of Finished
 func (mr *MockEngineMockRecorder) Finished() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finished", reflect.TypeOf((*MockEngine)(nil).Finished))
 }
 
 // InvokeHook mocks base method
 func (m *MockEngine) InvokeHook(arg0 interface{}, arg1 akita.Hookable, arg2 akita.HookPos, arg3 interface{}) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "InvokeHook", arg0, arg1, arg2, arg3)
 }
 
 // InvokeHook indicates an expected call of InvokeHook
 func (mr *MockEngineMockRecorder) InvokeHook(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeHook", reflect.TypeOf((*MockEngine)(nil).InvokeHook), arg0, arg1, arg2, arg3)
+}
+
+// Pause mocks base method
+func (m *MockEngine) Pause() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Pause")
+}
+
+// Pause indicates an expected call of Pause
+func (mr *MockEngineMockRecorder) Pause() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pause", reflect.TypeOf((*MockEngine)(nil).Pause))
 }
 
 // RegisterSimulationEndHandler mocks base method
 func (m *MockEngine) RegisterSimulationEndHandler(arg0 akita.SimulationEndHandler) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterSimulationEndHandler", arg0)
 }
 
 // RegisterSimulationEndHandler indicates an expected call of RegisterSimulationEndHandler
 func (mr *MockEngineMockRecorder) RegisterSimulationEndHandler(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSimulationEndHandler", reflect.TypeOf((*MockEngine)(nil).RegisterSimulationEndHandler), arg0)
 }
 
 // Run mocks base method
 func (m *MockEngine) Run() error {
+	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Run")
 	ret0, _ := ret[0].(error)
 	return ret0
@@ -94,15 +129,18 @@ func (m *MockEngine) Run() error {
 
 // Run indicates an expected call of Run
 func (mr *MockEngineMockRecorder) Run() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockEngine)(nil).Run))
 }
 
 // Schedule mocks base method
 func (m *MockEngine) Schedule(arg0 akita.Event) {
+	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Schedule", arg0)
 }
 
 // Schedule indicates an expected call of Schedule
 func (mr *MockEngineMockRecorder) Schedule(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Schedule", reflect.TypeOf((*MockEngine)(nil).Schedule), arg0)
 }
