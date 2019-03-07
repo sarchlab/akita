@@ -15,6 +15,12 @@ type Engine interface {
 	// Run will process all the events until the simulation finishes
 	Run() error
 
+	// Pause will pause the simulation until continue is called.
+	Pause()
+
+	// Continue will continue the paused simulation
+	Continue()
+
 	// CurrentTime will return the time at which the engine is at.
 	CurrentTime() VTimeInSec
 

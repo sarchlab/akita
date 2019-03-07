@@ -1,6 +1,8 @@
 package akita
 
 import (
+	"math/rand"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -51,4 +53,19 @@ var _ = Describe("SerialEngine", func() {
 		Expect(handler1.EventHandled[2]).To(BeIdenticalTo(evt4))
 		Expect(handler2.EventHandled[0]).To(BeIdenticalTo(evt2))
 	})
+
+	Measure("Event triggerring speed", func(b Benchmarker) {
+		handler := newMockHandler()
+		handler.HandleFunc = func(e Event) {}
+
+		for i := 0; i < 100000; i++ {
+			evt := newMockEvent()
+			time := VTimeInSec(float64(rand.Uint64()%100) * 0.01)
+			evt.SetTime(time)
+			evt.SetHandler(handler)
+			engine.Schedule(evt)
+		}
+
+		b.Time("runtime", func() { engine.Run() })
+	}, 10)
 })

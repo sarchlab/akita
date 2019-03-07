@@ -10,9 +10,10 @@ import (
 type SerialEngine struct {
 	HookableBase
 
-	timeLock sync.RWMutex
-	time     VTimeInSec
-	queue    EventQueue
+	timeLock  sync.RWMutex
+	time      VTimeInSec
+	queue     EventQueue
+	pauseLock sync.Mutex
 
 	simulationEndHandlers []SimulationEndHandler
 }
@@ -45,6 +46,8 @@ func (e *SerialEngine) Run() error {
 			return nil
 		}
 
+		e.pauseLock.Lock()
+
 		evt := e.queue.Pop()
 		e.timeLock.RLock()
 		if evt.Time() < e.time {
@@ -63,7 +66,19 @@ func (e *SerialEngine) Run() error {
 		handler := evt.Handler()
 		handler.Handle(evt)
 		e.InvokeHook(evt, e, AfterEventHookPos, nil)
+
+		e.pauseLock.Unlock()
 	}
+}
+
+// Pause pervents the SerialEngine to trigger more events.
+func (e *SerialEngine) Pause() {
+	e.pauseLock.Lock()
+}
+
+// Continue allows the SerialEngine to trigger more events.
+func (e *SerialEngine) Continue() {
+	e.pauseLock.Unlock()
 }
 
 // CurrentTime returns the current time at which the engine is at.

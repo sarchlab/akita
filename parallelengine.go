@@ -14,8 +14,9 @@ import (
 type ParallelEngine struct {
 	HookableBase
 
-	paused bool
-	now    VTimeInSec
+	pauseLock sync.Mutex
+	nowLock   sync.RWMutex
+	now       VTimeInSec
 
 	eventChan    chan Event
 	waitGroup    sync.WaitGroup
@@ -32,7 +33,6 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 	// e.HookableBase = NewHookableBase()
 
-	e.paused = false
 	e.now = 0
 	e.eventChan = make(chan Event, 10000)
 
@@ -71,16 +71,21 @@ func (e *ParallelEngine) worker() {
 
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
+
+	e.nowLock.RLock()
 	if evt.Time() < e.now {
-		log.Panicf("cannot schedule event in the past, evt %s @ %.10f, now %.10f",
+		e.nowLock.RUnlock()
+		log.Panicf(
+			"cannot schedule event in the past, evt %s @ %.10f, now %.10f",
 			reflect.TypeOf(evt), evt.Time(), e.now)
 	}
 
 	if evt.Time() == e.now && e.now != 0 {
+		e.nowLock.RUnlock()
 		e.runEventWithTempWorker(evt)
 		return
 	}
+	e.nowLock.RUnlock()
 
 	queue := <-e.queueChan
 	queue.Push(evt)
@@ -95,10 +100,12 @@ func (e *ParallelEngine) Run() error {
 		}
 
 		e.emptyQueueChan()
+
+		e.pauseLock.Lock()
 		e.runEventsUntilConflict()
 		e.waitGroup.Wait()
+		e.pauseLock.Unlock()
 	}
-	return nil
 }
 
 func (e *ParallelEngine) emptyQueueChan() {
@@ -117,9 +124,10 @@ func (e *ParallelEngine) hasMoreEvents() bool {
 }
 
 func (e *ParallelEngine) runEventsUntilConflict() {
-
 	triggerTime := e.triggerTime()
+	e.nowLock.Lock()
 	e.now = triggerTime
+	e.nowLock.Unlock()
 
 	for _, queue := range e.queues {
 		for queue.Len() > 0 {
@@ -179,9 +187,24 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	e.waitGroup.Done()
 }
 
-// CurrentTime returns the current time at which the engine is at. Specifically, the run time of the current event.
+// Pause will prevent the engine to move forward. For events that is scheduled
+// at the same time, they may still be triggered.
+func (e *ParallelEngine) Pause() {
+	e.pauseLock.Lock()
+}
+
+// Continue allows the engine to continue to make progress.
+func (e *ParallelEngine) Continue() {
+	e.pauseLock.Unlock()
+}
+
+// CurrentTime returns the current time at which the engine is at.
+// Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInSec {
-	return e.now
+	e.nowLock.RLock()
+	t := e.now
+	e.nowLock.RUnlock()
+	return t
 }
 
 // RegisterSimulationEndHandler registers a handler to be called after the
