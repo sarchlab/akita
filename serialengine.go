@@ -3,14 +3,16 @@ package akita
 import (
 	"log"
 	"reflect"
+	"sync"
 )
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	HookableBase
 
-	time  VTimeInSec
-	queue EventQueue
+	timeLock sync.RWMutex
+	time     VTimeInSec
+	queue    EventQueue
 
 	simulationEndHandlers []SimulationEndHandler
 }
@@ -27,11 +29,13 @@ func NewSerialEngine() *SerialEngine {
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
+	e.timeLock.RLock()
 	if evt.Time() < e.time {
+		e.timeLock.RUnlock()
 		log.Panic("scheduling an event earlier than current time")
 	}
+	e.timeLock.RUnlock()
 	e.queue.Push(evt)
-	//fmt.Printf("Schedule event %.10f, %s\n", evt.Time(), reflect.TypeOf(evt))
 }
 
 // Run processes all the events scheduled in the SerialEngine
@@ -42,11 +46,18 @@ func (e *SerialEngine) Run() error {
 		}
 
 		evt := e.queue.Pop()
+		e.timeLock.RLock()
 		if evt.Time() < e.time {
-			log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
-				reflect.TypeOf(evt), evt.Time(), e.time)
+			e.timeLock.RUnlock()
+			log.Panicf(
+				"cannot run event in the past, evt %s @ %.10f, now %.10f",
+				reflect.TypeOf(evt), evt.Time(), e.time,
+			)
 		}
+		e.timeLock.RUnlock()
+		e.timeLock.Lock()
 		e.time = evt.Time()
+		e.timeLock.Unlock()
 
 		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
 		handler := evt.Handler()
@@ -58,7 +69,10 @@ func (e *SerialEngine) Run() error {
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
-	return e.time
+	e.timeLock.RLock()
+	t := e.time
+	e.timeLock.RUnlock()
+	return t
 }
 
 // RegisterSimulationEndHandler invokes all the registered simulation end
