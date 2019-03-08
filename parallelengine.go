@@ -99,9 +99,8 @@ func (e *ParallelEngine) Run() error {
 			return nil
 		}
 
-		e.emptyQueueChan()
-
 		e.pauseLock.Lock()
+		e.emptyQueueChan()
 		e.runEventsUntilConflict()
 		e.waitGroup.Wait()
 		e.pauseLock.Unlock()
