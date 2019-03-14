@@ -6,9 +6,15 @@ The framework is composed of 4 main parts: the Event system, the Component Syste
 
 ## Table of Contents
 
-1. [The Event System](./event_system.md)
-1. [The Component System](./component_system.md)
-1. [The Connection System](./connection_system.md)
-1. [The Hook System](./hook_system.md)
-1. [Testing](./testing.md)
-1. [Coding Guideline](./coding_guideline.md)
+1. Use and Contribution
+
+    1. [Go Modules](./gomod.md)
+    1. [Testing](./testing.md)
+    1. [Coding Guideline](./coding_guideline.md)
+
+1. Understanding Akita
+
+    1. [The Event System](./event_system.md)
+    1. [The Component System](./component_system.md)
+    1. [The Connection System](./connection_system.md)
+    1. [The Hook System](./hook_system.md)
