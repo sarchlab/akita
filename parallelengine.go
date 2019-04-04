@@ -33,7 +33,6 @@ func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 	// e.HookableBase = NewHookableBase()
 
-	e.now = 0
 	e.eventChan = make(chan Event, 10000)
 
 	e.maxGoRoutine = runtime.GOMAXPROCS(0)
@@ -61,31 +60,53 @@ func (e *ParallelEngine) spawnWorkers() {
 
 func (e *ParallelEngine) worker() {
 	for evt := range e.eventChan {
-		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
+		now := e.readNow()
+
+		hookCtx := HookCtx{
+			Domain: e,
+			Now:    now,
+			Pos:    HookPosBeforeEvent,
+			Item:   evt,
+		}
+		e.InvokeHook(&hookCtx)
+
 		handler := evt.Handler()
 		handler.Handle(evt)
-		e.InvokeHook(evt, e, AfterEventHookPos, nil)
+
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(&hookCtx)
+
 		e.waitGroup.Done()
 	}
 }
 
+func (e *ParallelEngine) readNow() VTimeInSec {
+	var now VTimeInSec
+	e.nowLock.RLock()
+	now = e.now
+	e.nowLock.RUnlock()
+	return now
+}
+
+func (e *ParallelEngine) writeNow(t VTimeInSec) {
+	e.nowLock.Lock()
+	e.now = t
+	e.nowLock.Unlock()
+}
+
 // Schedule register an event to be happen in the future
 func (e *ParallelEngine) Schedule(evt Event) {
-
-	e.nowLock.RLock()
-	if evt.Time() < e.now {
-		e.nowLock.RUnlock()
+	now := e.readNow()
+	if evt.Time() < now {
 		log.Panicf(
 			"cannot schedule event in the past, evt %s @ %.10f, now %.10f",
-			reflect.TypeOf(evt), evt.Time(), e.now)
+			reflect.TypeOf(evt), evt.Time(), now)
 	}
 
-	if evt.Time() == e.now && e.now != 0 {
-		e.nowLock.RUnlock()
+	if evt.Time() == now && now != 0 {
 		e.runEventWithTempWorker(evt)
 		return
 	}
-	e.nowLock.RUnlock()
 
 	queue := <-e.queueChan
 	queue.Push(evt)
@@ -124,9 +145,7 @@ func (e *ParallelEngine) hasMoreEvents() bool {
 
 func (e *ParallelEngine) runEventsUntilConflict() {
 	triggerTime := e.triggerTime()
-	e.nowLock.Lock()
-	e.now = triggerTime
-	e.nowLock.Unlock()
+	e.writeNow(triggerTime)
 
 	for _, queue := range e.queues {
 		for queue.Len() > 0 {
@@ -175,14 +194,26 @@ func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 }
 
 func (e *ParallelEngine) tempWorkerRun(evt Event) {
-	if evt.Time() < e.now {
+	now := e.readNow()
+
+	if evt.Time() < now {
 		log.Panic("running event in the past")
 	}
 
-	e.InvokeHook(evt, e, BeforeEventHookPos, nil)
+	hookCtx := HookCtx{
+		Domain: e,
+		Now:    now,
+		Pos:    HookPosBeforeEvent,
+		Item:   evt,
+	}
+	e.InvokeHook(&hookCtx)
+
 	handler := evt.Handler()
 	handler.Handle(evt)
-	e.InvokeHook(evt, e, AfterEventHookPos, nil)
+
+	hookCtx.Pos = HookPosAfterEvent
+	e.InvokeHook(&hookCtx)
+
 	e.waitGroup.Done()
 }
 
@@ -200,10 +231,7 @@ func (e *ParallelEngine) Continue() {
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInSec {
-	e.nowLock.RLock()
-	t := e.now
-	e.nowLock.RUnlock()
-	return t
+	return e.readNow()
 }
 
 // RegisterSimulationEndHandler registers a handler to be called after the
@@ -217,7 +245,8 @@ func (e *ParallelEngine) RegisterSimulationEndHandler(
 // Finished should be called after the simulation compeletes. It calls
 // all the registered SimulationEndHandler
 func (e *ParallelEngine) Finished() {
+	now := e.readNow()
 	for _, h := range e.simulationEndHandlers {
-		h.Handle(e.now)
+		h.Handle(now)
 	}
 }
