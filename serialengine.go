@@ -30,13 +30,24 @@ func NewSerialEngine() *SerialEngine {
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
-	e.timeLock.RLock()
-	if evt.Time() < e.time {
-		e.timeLock.RUnlock()
+	now := e.readNow()
+	if evt.Time() < now {
 		log.Panic("scheduling an event earlier than current time")
 	}
-	e.timeLock.RUnlock()
 	e.queue.Push(evt)
+}
+
+func (e *SerialEngine) readNow() VTimeInSec {
+	e.timeLock.RLock()
+	t := e.time
+	e.timeLock.RUnlock()
+	return t
+}
+
+func (e *SerialEngine) writeNow(t VTimeInSec) {
+	e.timeLock.Lock()
+	e.time = t
+	e.timeLock.Unlock()
 }
 
 // Run processes all the events scheduled in the SerialEngine
@@ -49,23 +60,29 @@ func (e *SerialEngine) Run() error {
 		e.pauseLock.Lock()
 
 		evt := e.queue.Pop()
-		e.timeLock.RLock()
-		if evt.Time() < e.time {
-			e.timeLock.RUnlock()
+		now := e.readNow()
+		if evt.Time() < now {
 			log.Panicf(
 				"cannot run event in the past, evt %s @ %.10f, now %.10f",
-				reflect.TypeOf(evt), evt.Time(), e.time,
+				reflect.TypeOf(evt), evt.Time(), now,
 			)
 		}
-		e.timeLock.RUnlock()
-		e.timeLock.Lock()
-		e.time = evt.Time()
-		e.timeLock.Unlock()
+		e.writeNow(evt.Time())
+		now = evt.Time()
 
-		e.InvokeHook(evt, e, BeforeEventHookPos, nil)
+		hookCtx := HookCtx{
+			Domain: e,
+			Now:    now,
+			Pos:    HookPosBeforeEvent,
+			Item:   evt,
+		}
+		e.InvokeHook(&hookCtx)
+
 		handler := evt.Handler()
 		handler.Handle(evt)
-		e.InvokeHook(evt, e, AfterEventHookPos, nil)
+
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(&hookCtx)
 
 		e.pauseLock.Unlock()
 	}
@@ -84,10 +101,7 @@ func (e *SerialEngine) Continue() {
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
-	e.timeLock.RLock()
-	t := e.time
-	e.timeLock.RUnlock()
-	return t
+	return e.readNow()
 }
 
 // RegisterSimulationEndHandler invokes all the registered simulation end
@@ -101,7 +115,8 @@ func (e *SerialEngine) RegisterSimulationEndHandler(
 // Finished should be called after the simulation ends. This function
 // calls all the registered SimulationEndHandler.
 func (e *SerialEngine) Finished() {
+	now := e.readNow()
 	for _, h := range e.simulationEndHandlers {
-		h.Handle(e.time)
+		h.Handle(now)
 	}
 }

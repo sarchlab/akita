@@ -17,24 +17,17 @@ func NewEventLogger(logger *log.Logger) *EventLogger {
 	return h
 }
 
-// Type always return the type of Event
-func (h *EventLogger) Type() reflect.Type {
-	return reflect.TypeOf((Event)(nil))
-}
-
-// Pos of a PrintEventHook suggests that it should be called before the
-// event handling.
-func (h *EventLogger) Pos() HookPos {
-	return BeforeEventHookPos
-}
-
 // Func writes the event information into the logger
-func (h *EventLogger) Func(
-	item interface{},
-	domain Hookable,
-	info interface{},
-) {
-	evt := item.(Event)
+func (h *EventLogger) Func(ctx *HookCtx) {
+	if ctx.Pos != HookPosBeforeEvent {
+		return
+	}
+
+	evt, ok := ctx.Item.(Event)
+	if !ok {
+		return
+	}
+
 	comp, ok := evt.Handler().(Component)
 	if ok {
 		h.Logger.Printf("%.10f, %s -> %s",
