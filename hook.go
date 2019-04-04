@@ -19,9 +19,6 @@ type HookCtx struct {
 type Hookable interface {
 	// AcceptHook registers a hook
 	AcceptHook(hook Hook)
-
-	// InvokeHook triggers all Hooks
-	InvokeHook(ctx *HookCtx)
 }
 
 // HookPosBeforeEvent is a hook position that triggers before handling an event

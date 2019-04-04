@@ -8,7 +8,7 @@ aHookable.AcceptHook(aHook)
 
 ## Implementing Hookables
 
-A hookable is anything that implements the `Hookable` interface, including the `AcceptHook` and the `InvokeHook` functions. However, in most of cases, a hookable implementation can simply embed the HookableBase class to expose these two function implementations and  users do not need to implement these two functions. Here is an example of how to write a hookable class.
+A hookable is anything that can accept hooks by implementing the `AcceptHook` function. In most of cases, a hookable implementation can simply embed the HookableBase class that already have a default implementation of the `AcceptHook` function. Users do not need to implement the function again. So the example below is a minimal example of how to write a hookable class.
 
 ```go
 type SomeHookableComponent struct {
@@ -18,7 +18,7 @@ type SomeHookableComponent struct {
 }
 ```
 
-A hookable needs to call hooks explicitly. For example, when you write a component, you probably want to invoke hooks before and after handling an event. So you may want to implement the `Handle` function like the following:
+The `HookableBase` class also provides another function called `InvokeHooks`.  A hookable object can use this function to invoke all hooks explicitly. For example, when writing a component, you probably want to invoke hooks before and after handling an event. So you may want to implement the `Handle` function like the following:
 
 ```go
 func (c *SomeHookableComponent) Handle(evt akita.Event) {
@@ -37,7 +37,7 @@ func (c *SomeHookableComponent) Handle(evt akita.Event) {
 }
 ```
 
-In this example, we see that before the component handles the event, it calles the `InvokeHook` function with an argument called `ctx`. When this function is called, all the hooks that attach to the hookable object will be triggered. The hookable object invokes hooks, providing the `HookCtx` object that carries all the information related to the point that the hook is invoked. The `Domain` field in the `HookCtx` struct is the hookable object. The `Now` field is the virtual time that the hook is called. Finally, the `Pos` and the `Item` is related to the reason why the hook is called.
+In this example, we see that before the component handles the event, it calls the `InvokeHook` function with an argument called `ctx` (short for context). The `InvokeHook` function simply triggeres all the hooks, providing the `ctx` information, in the order that are applied. The `HookCtx` object that carries all the information related to the point that the hook is invoked. The `Domain` field in the `HookCtx` struct is the hookable object. The `Now` field is the virtual time that the hook is invoked. Finally, the `Pos` and the `Item` denotes the reason why the hook is called.
 
 Examples of `HookPos` include `HookPosBeforeEvent` and `HookPosAfterEvent` , which are to be used before and after the event handling, respectively. Users can also define customized hook position as a global variable as follows.
 
@@ -47,8 +47,8 @@ var InstReadStartHookPos = &HookPos{"InstReadStart"}
 
 ## Implementing Hooks
 
-Implemenging the hook involves implementing the `Func` function. Generally, the `Func` function first check the `Item` and the `Pos` fields in the `HookCtx` to see if the hook is interested in the triggering point. Then, the rest of the `Func` function defines what action that the hook performs. For example, logger hooks may write the information into a log file a tracer hook may insert a record into a database and a fault injection hook may alter the value of a register.
+Implemenging the hook involes defining a new hook struct and implementing the `Func` method. Generally, the `Func` method first check the `Item` and the `Pos` fields in the `HookCtx` to see if the hook is interested in this contexts. If the context is interesting, the rest of the `Func` function defines what action that the hook performs. For example, logger hooks may write the information into a log file; a tracer hook may insert a record into a database; and a fault-injection hook may alter the value of a register.
 
 ## Predefined Hook
 
-Project Akita and each simulator model provide predefined hooks. In project Akita, we provide the `EventLogger` hook. It can be applied to any Component or any event-driven simulation engine. If it is hooked to an event-driven simulation engine, it logs all the events triggered. If it hooks to a Component, it logs the events handled by the component.
+Akita and each simulator model provide predefined hooks. In Akita repo, we provide the `EventLogger` hook. It can be applied to any Component or the event-driven simulation engine. If it is hooked to an event-driven simulation engine, it logs all the events triggered. If it hooks to a Component,it logs the events handled by the component.
