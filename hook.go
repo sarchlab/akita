@@ -2,7 +2,7 @@ package akita
 
 // HookPos defines the enum of possible hooking positions
 type HookPos struct {
-	name string
+	Name string
 }
 
 // HookCtx is the context that holds all the information about the site that a
@@ -22,10 +22,10 @@ type Hookable interface {
 }
 
 // HookPosBeforeEvent is a hook position that triggers before handling an event
-var HookPosBeforeEvent = &HookPos{name: "BeforeEvent"}
+var HookPosBeforeEvent = &HookPos{Name: "BeforeEvent"}
 
 // HookPosAfterEvent is a hook position that triggers after handling an event
-var HookPosAfterEvent = &HookPos{name: "AfterEvent"}
+var HookPosAfterEvent = &HookPos{Name: "AfterEvent"}
 
 // Hook is a short piece of program that can be invoked by a hookable object.
 type Hook interface {
