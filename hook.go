@@ -36,24 +36,24 @@ type Hook interface {
 // A HookableBase provides some utility function for other type that implement
 // the Hookable interface.
 type HookableBase struct {
-	hooks []Hook
+	Hooks []Hook
 }
 
 // NewHookableBase creates a HookableBase object
 func NewHookableBase() *HookableBase {
 	h := new(HookableBase)
-	h.hooks = make([]Hook, 0)
+	h.Hooks = make([]Hook, 0)
 	return h
 }
 
 // AcceptHook register a hook
 func (h *HookableBase) AcceptHook(hook Hook) {
-	h.hooks = append(h.hooks, hook)
+	h.Hooks = append(h.Hooks, hook)
 }
 
 // InvokeHook triggers the register Hooks
 func (h *HookableBase) InvokeHook(ctx *HookCtx) {
-	for _, hook := range h.hooks {
+	for _, hook := range h.Hooks {
 		hook.Func(ctx)
 	}
 }
