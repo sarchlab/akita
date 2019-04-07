@@ -36,6 +36,8 @@ func (c *DirectConnection) Unplug(port Port) {
 	port.SetConnection(c)
 }
 
+// NotifyAvailable is called by a port to notify that the connection can
+// deliver to the port again.
 func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
 	for p := range c.endPoints {
 		p.NotifyAvailable(now)

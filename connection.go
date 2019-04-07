@@ -20,7 +20,14 @@ type Connection interface {
 	NotifyAvailable(now VTimeInSec, port Port)
 }
 
-var ConnStartSendHookPos = struct{ name string }{"Conn Start Send"}
-var ConnStartTransHookPos = struct{ name string }{"Conn Start Trans"}
-var ConnDoneTransHookPos = struct{ name string }{"Conn Done Trans"}
-var ConnDeliverHookPos = struct{ name string }{"Conn Deliver"}
+// HookPosConnStartSend marks a connection accept to send a request
+var HookPosConnStartSend = &HookPos{Name: "Conn Start Send"}
+
+// HookPosConnStartTrans marks a connection start to transmit a request
+var HookPosConnStartTrans = &HookPos{Name: "Conn Start Trans"}
+
+// HookPosConnDoneTrans marks a connection complete transmitting a request
+var HookPosConnDoneTrans = &HookPos{Name: "Conn Done Trans"}
+
+// HookPosConnDeliver marks a connection delivered a request
+var HookPosConnDeliver = &HookPos{Name: "Conn Deliver"}
