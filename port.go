@@ -36,7 +36,7 @@ func (c *PortEndSimulationChecker) Handle(e Event) error {
 }
 
 // LimitNumMsgPort is a type of port that can hold at most a certain number
-// of msguests.
+// of messages.
 type LimitNumMsgPort struct {
 	sync.Mutex
 
@@ -60,7 +60,7 @@ func (p *LimitNumMsgPort) Component() Component {
 	return p.Comp
 }
 
-// Send is used to send a msguest out from a component
+// Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	err := p.Conn.Send(msg)
 	if err != nil {
@@ -71,7 +71,7 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	return err
 }
 
-// Recv is used to deliver a msguest to a component
+// Recv is used to deliver a message to a component
 func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	p.Lock()
 	if len(p.Buf) >= p.BufCapacity {
@@ -89,7 +89,7 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	return nil
 }
 
-// Retrieve is used by the component to take a msguest from the incoming buffer
+// Retrieve is used by the component to take a message from the incoming buffer
 func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.Lock()
 
@@ -112,7 +112,7 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	return msg
 }
 
-// Peek returns the first msguest in the port without removing it.
+// Peek returns the first message in the port without removing it.
 func (p *LimitNumMsgPort) Peek() Msg {
 	p.Lock()
 	if len(p.Buf) == 0 {

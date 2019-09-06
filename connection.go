@@ -9,7 +9,7 @@ func NewSendError() *SendError {
 	return e
 }
 
-// A Connection is responsible for delivering the msguests to its destination.
+// A Connection is responsible for delivering messages to its destination.
 type Connection interface {
 	Hookable
 
@@ -20,14 +20,14 @@ type Connection interface {
 	NotifyAvailable(now VTimeInSec, port Port)
 }
 
-// HookPosConnStartSend marks a connection accept to send a msguest
+// HookPosConnStartSend marks a connection accept to send a message.
 var HookPosConnStartSend = &HookPos{Name: "Conn Start Send"}
 
-// HookPosConnStartTrans marks a connection start to transmit a msguest
+// HookPosConnStartTrans marks a connection start to transmit a message.
 var HookPosConnStartTrans = &HookPos{Name: "Conn Start Trans"}
 
-// HookPosConnDoneTrans marks a connection complete transmitting a msguest
+// HookPosConnDoneTrans marks a connection complete transmitting a message.
 var HookPosConnDoneTrans = &HookPos{Name: "Conn Done Trans"}
 
-// HookPosConnDeliver marks a connection delivered a msguest
+// HookPosConnDeliver marks a connection delivered a message.
 var HookPosConnDeliver = &HookPos{Name: "Conn Deliver"}
