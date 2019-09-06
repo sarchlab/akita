@@ -13,7 +13,7 @@ func NewSendError() *SendError {
 type Connection interface {
 	Hookable
 
-	Send(req Req) *SendError
+	Send(msg Msg) *SendError
 
 	PlugIn(port Port)
 	Unplug(port Port)
