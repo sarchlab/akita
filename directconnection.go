@@ -50,13 +50,13 @@ func (c *DirectConnection) Send(msg Msg) *SendError {
 		log.Panic("destination is null")
 	}
 
-	// if _, found := c.endPoints[req.Dst()]; !found {
+	// if _, found := c.endPoints[msg.Dst()]; !found {
 	// 	log.Panicf("destination %s not connected, "+
-	// 		"req ID %s, "+
-	// 		"request from %s",
-	// 		req.Dst().Comp.Name(),
-	// 		req.GetID(),
-	// 		req.Dst().Comp.Name(),
+	// 		"msg ID %s, "+
+	// 		"msguest from %s",
+	// 		msg.Dst().Comp.Name(),
+	// 		msg.GetID(),
+	// 		msg.Dst().Comp.Name(),
 	// 	)
 	// }
 

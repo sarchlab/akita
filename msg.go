@@ -4,7 +4,7 @@ package akita
 type Msg interface {
 	Meta() *MsgMeta
 
-	// All requests are simply events that can be scheduled to the receiver
+	// All messages are simply events that can be scheduled to the receiver.
 	Event
 }
 
