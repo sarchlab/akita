@@ -16,7 +16,7 @@ Assuming all the tests work at the beginning and you want to add or change a fea
 
 If all the changes in both the test code and the production code are simple enough, you should be switching between the test code and the production code very fast. Usually, each cycle should be around one to five minutes. By doing this, you can guarantee that any error you made must happen in the code that you changed in the past one to five minutes. Also, a common case is that when someone else modified some other part of the code, your code may stop working. With proper unit testing, this would not happen, as any piece of code you wrote are protected with the tests and you know that is all the tests pass, your code behaves exactly as you want.
 
-The statement above is the ideal case, there are still problems cannot be solved by testing. We loosely follow the TDD laws and try our best to improve the test coverage. So what code needs to be tested and what code is OK to leave not to be tested? A rule of thumb is that if the code "has logic", then you need to test it. For example, the code that emulates an instruction and changes the register state, the code that handles one request and generates some other requests is considered as "has logic" and need to be tested, while the code that glues components together by setting the connections is considered not to "have logic" and does not have to have tests.
+The statement above is the ideal case, there are still problems cannot be solved by testing. We loosely follow the TDD laws and try our best to improve the test coverage. So what code needs to be tested and what code is OK to leave not to be tested? A rule of thumb is that if the code "has logic", then you need to test it. For example, the code that emulates an instruction and changes the register state, the code that handles one message and generates some other messages is considered as "has logic" and need to be tested, while the code that glues components together by setting the connections is considered not to "have logic" and does not have to have tests.
 
 ## Unit Testing
 
@@ -72,7 +72,7 @@ var _ = Describe("Adder", func() {
 
 Writing a unit test like above is easy, as the adder function has no dependency to other code. However, in real code, a struct usually depends on many other structs and you may need to assume that other parts of the code are working properly so that you can test your code. This assumption usually does not hold as the change in another piece of code may break your test easily. Also, the dependency struct may have dependencies by themselves and testing one struct may become a test for the whole simulator.
 
-To solve this problem, we need to break down the dependency chain. The main principle here is called Dependency Inversion Principle. Using Go terminology to understand this principle, your struct should not depend on another struct but should only depend on interfaces . With this requirement, one struct may only talk to interfaces rather than other structs, allowing the freedom to replace the structs that follow the same interface.
+To solve this problem, we need to break down the dependency chain. The main principle here is called Dependency Inversion Principle. Using Go terminology to understand this principle, your struct should not depend on another struct but should only depend on interfaces. With this requirement, one struct may only talk to interfaces rather than other structs, allowing the freedom to replace the structs that follow the same interface.
 
 Then, the question is that how a struct know which detail struct to use on each interface? We use dependency injection. For example, in this code:
 
@@ -100,7 +100,7 @@ func NewSampleComponent(p Printer) *SampleComponent {
 
 the `SampleComponent` depends on a printer to print some value. The `SampleComponent` only knows that there is a printer available, but it does not know what exact type of printer it has. We inject the concrete printer from the `NewSampleComponent` function. This `NewSampleComponent` function should be called by a `Builder` function or struct, which usually serves as a configuration for Akita. By doing this, the `Builder` defines how the `SampleComponent` can print values.
 
-Other than the flexibility of configuration, we simplify how we write unit tests. For example, in Akita, a component needs to send a request out and schedule events. In this case, we need to provide a special version of `Engine` and `Port`s for the component in the test environment. Suppose we want to have a component that forwards requests from the input port to the output port, we can write the test like this.
+Other than the flexibility of configuration, we simplify how we write unit tests. For example, in Akita, a component needs to send messages out and schedule events. In this case, we need to provide a special version of the `Engine` and the `Port` for testing purposes. Suppose we want to have a component that forwards messages from the input port to the output port, we can write the test like this.
 
 ```go
 package test
@@ -138,11 +138,11 @@ var _ = Describe("Forwarder", func() {
     })
 
     It("should forward", func(){
-        req := NewSomeReq();
-        inputPort.EXPECT().Peek().Return(req)
-        inputPort.EXPECT().Retrieve(akita.VTimeInSec(6)).Return(req)
+        msg := NewSomeMsg();
+        inputPort.EXPECT().Peek().Return(msg)
+        inputPort.EXPECT().Retrieve(akita.VTimeInSec(6)).Return(msg)
         engine.EXPECT().Schedule(gomock.Any())
-        outputPort.EXPECT().Send(req).Return(nil)
+        outputPort.EXPECT().Send(msg).Return(nil)
 
         forwarder.Forward(6) // the argument is the current time;
     })

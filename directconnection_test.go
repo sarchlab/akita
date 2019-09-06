@@ -13,8 +13,8 @@ var _ = Describe("DirectConnection", func() {
 	)
 
 	BeforeEach(func() {
-		port1 = NewLimitNumReqPort(nil, 1)
-		port2 = NewLimitNumReqPort(nil, 1)
+		port1 = NewLimitNumMsgPort(nil, 1)
+		port2 = NewLimitNumMsgPort(nil, 1)
 
 		connection.PlugIn(port1)
 		connection.PlugIn(port2)

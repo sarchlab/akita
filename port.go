@@ -11,13 +11,13 @@ type Port interface {
 	Component() Component
 
 	// For connection
-	Recv(req Req) *SendError
+	Recv(msg Msg) *SendError
 	NotifyAvailable(now VTimeInSec)
 
 	// For component
-	Send(req Req) *SendError
-	Retrieve(now VTimeInSec) Req
-	Peek() Req
+	Send(msg Msg) *SendError
+	Retrieve(now VTimeInSec) Msg
+	Peek() Msg
 }
 
 // PortEndSimulationChecker checks if the port buffer is empty at the end of
@@ -35,12 +35,12 @@ func (c *PortEndSimulationChecker) Handle(e Event) error {
 	return nil
 }
 
-// LimitNumReqPort is a type of port that can hold at most a certain number
-// of requests.
-type LimitNumReqPort struct {
+// LimitNumMsgPort is a type of port that can hold at most a certain number
+// of messages.
+type LimitNumMsgPort struct {
 	sync.Mutex
 
-	Buf         []Req
+	Buf         []Msg
 	BufCapacity int
 	PortBusy    bool
 
@@ -51,18 +51,18 @@ type LimitNumReqPort struct {
 }
 
 // SetConnection sets which connection plugged in to this port.
-func (p *LimitNumReqPort) SetConnection(conn Connection) {
+func (p *LimitNumMsgPort) SetConnection(conn Connection) {
 	p.Conn = conn
 }
 
 // Component returns the owner component of the port.
-func (p *LimitNumReqPort) Component() Component {
+func (p *LimitNumMsgPort) Component() Component {
 	return p.Comp
 }
 
-// Send is used to send a request out from a component
-func (p *LimitNumReqPort) Send(req Req) *SendError {
-	err := p.Conn.Send(req)
+// Send is used to send a message out from a component
+func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
+	err := p.Conn.Send(msg)
 	if err != nil {
 		p.Lock()
 		p.ConnBusy = true
@@ -71,8 +71,8 @@ func (p *LimitNumReqPort) Send(req Req) *SendError {
 	return err
 }
 
-// Recv is used to deliver a request to a component
-func (p *LimitNumReqPort) Recv(req Req) *SendError {
+// Recv is used to deliver a message to a component
+func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	p.Lock()
 	if len(p.Buf) >= p.BufCapacity {
 		p.PortBusy = true
@@ -80,17 +80,17 @@ func (p *LimitNumReqPort) Recv(req Req) *SendError {
 		return NewSendError()
 	}
 
-	p.Buf = append(p.Buf, req)
+	p.Buf = append(p.Buf, msg)
 	p.Unlock()
 
 	if p.Comp != nil {
-		p.Comp.NotifyRecv(req.RecvTime(), p)
+		p.Comp.NotifyRecv(msg.Meta().RecvTime, p)
 	}
 	return nil
 }
 
-// Retrieve is used by the component to take a request from the incoming buffer
-func (p *LimitNumReqPort) Retrieve(now VTimeInSec) Req {
+// Retrieve is used by the component to take a message from the incoming buffer
+func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.Lock()
 
 	if len(p.Buf) == 0 {
@@ -98,35 +98,35 @@ func (p *LimitNumReqPort) Retrieve(now VTimeInSec) Req {
 		return nil
 	}
 
-	req := p.Buf[0]
+	msg := p.Buf[0]
 	p.Buf = p.Buf[1:]
 
 	if p.PortBusy == true {
 		p.PortBusy = false
 		p.Unlock()
 		p.Conn.NotifyAvailable(now, p)
-		return req
+		return msg
 	}
 
 	p.Unlock()
-	return req
+	return msg
 }
 
-// Peek returns the first request in the port without removing it.
-func (p *LimitNumReqPort) Peek() Req {
+// Peek returns the first message in the port without removing it.
+func (p *LimitNumMsgPort) Peek() Msg {
 	p.Lock()
 	if len(p.Buf) == 0 {
 		p.Unlock()
 		return nil
 	}
-	req := p.Buf[0]
+	msg := p.Buf[0]
 	p.Unlock()
-	return req
+	return msg
 }
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *LimitNumReqPort) NotifyAvailable(now VTimeInSec) {
+func (p *LimitNumMsgPort) NotifyAvailable(now VTimeInSec) {
 	p.Lock()
 	p.ConnBusy = false
 	p.Unlock()
@@ -136,9 +136,9 @@ func (p *LimitNumReqPort) NotifyAvailable(now VTimeInSec) {
 	}
 }
 
-// NewLimitNumReqPort creates a new port that works for the provided component
-func NewLimitNumReqPort(comp Component, capacity int) *LimitNumReqPort {
-	p := new(LimitNumReqPort)
+// NewLimitNumMsgPort creates a new port that works for the provided component
+func NewLimitNumMsgPort(comp Component, capacity int) *LimitNumMsgPort {
+	p := new(LimitNumMsgPort)
 	p.Comp = comp
 	p.BufCapacity = capacity
 	return p

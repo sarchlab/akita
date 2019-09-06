@@ -45,23 +45,23 @@ func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
 }
 
 // Send of a DirectConnection schedules a DeliveryEvent immediately
-func (c *DirectConnection) Send(req Req) *SendError {
-	if req.Dst() == nil {
+func (c *DirectConnection) Send(msg Msg) *SendError {
+	if msg.Meta().Dst == nil {
 		log.Panic("destination is null")
 	}
 
-	// if _, found := c.endPoints[req.Dst()]; !found {
+	// if _, found := c.endPoints[msg.Dst()]; !found {
 	// 	log.Panicf("destination %s not connected, "+
-	// 		"req ID %s, "+
-	// 		"request from %s",
-	// 		req.Dst().Comp.Name(),
-	// 		req.GetID(),
-	// 		req.Dst().Comp.Name(),
+	// 		"msg ID %s, "+
+	// 		"msguest from %s",
+	// 		msg.Dst().Comp.Name(),
+	// 		msg.GetID(),
+	// 		msg.Dst().Comp.Name(),
 	// 	)
 	// }
 
-	req.SetRecvTime(req.SendTime())
-	return req.Dst().Recv(req)
+	msg.Meta().RecvTime = msg.Meta().SendTime
+	return msg.Meta().Dst.Recv(msg)
 }
 
 // Handle defines how the DirectConnection handles events
