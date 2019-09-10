@@ -32,6 +32,7 @@ type Ticker struct {
 	nextTickTime VTimeInSec
 }
 
+// NewTicker creates a new ticker
 func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 	ticker := new(Ticker)
 
@@ -43,6 +44,7 @@ func NewTicker(handler Handler, engine Engine, freq Freq) *Ticker {
 	return ticker
 }
 
+// TickLater will continue with ticking.
 func (t *Ticker) TickLater(now VTimeInSec) {
 	t.lock.Lock()
 
@@ -62,7 +64,7 @@ func (t *Ticker) TickLater(now VTimeInSec) {
 	t.lock.Unlock()
 }
 
-// A Ticking Component is a component that mainly updates its states in a
+// A TickingComponent is a component that mainly updates its states in a
 // cycle-based fashion.
 //
 // A TickingComponent represents a pattern that can be used to avoid busy
@@ -81,10 +83,12 @@ type TickingComponent struct {
 	NeedTick bool
 }
 
+// NotifyPortFree triggers the TickingComponent to continue to tick.
 func (c *TickingComponent) NotifyPortFree(now VTimeInSec, port Port) {
 	c.Ticker.TickLater(now)
 }
 
+// NotifyRecv triggers the TickingComponent to continue to tick.
 func (c *TickingComponent) NotifyRecv(now VTimeInSec, port Port) {
 	c.Ticker.TickLater(now)
 }
