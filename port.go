@@ -10,6 +10,9 @@ type Port interface {
 	SetConnection(conn Connection)
 	Component() Component
 
+	// Embed interface
+	Named
+
 	// For connection
 	Recv(msg Msg) *SendError
 	NotifyAvailable(now VTimeInSec)
@@ -42,6 +45,7 @@ type LimitNumMsgPort struct {
 
 	Buf         []Msg
 	BufCapacity int
+	name        string
 	PortBusy    bool
 
 	Conn     Connection
@@ -58,6 +62,11 @@ func (p *LimitNumMsgPort) SetConnection(conn Connection) {
 // Component returns the owner component of the port.
 func (p *LimitNumMsgPort) Component() Component {
 	return p.Comp
+}
+
+// Retrieve the name of the port
+func (p *LimitNumMsgPort) Name() string {
+	return p.name
 }
 
 // Send is used to send a message out from a component
@@ -137,9 +146,10 @@ func (p *LimitNumMsgPort) NotifyAvailable(now VTimeInSec) {
 }
 
 // NewLimitNumMsgPort creates a new port that works for the provided component
-func NewLimitNumMsgPort(comp Component, capacity int) *LimitNumMsgPort {
+func NewLimitNumMsgPort(comp Component, capacity int, name string) *LimitNumMsgPort {
 	p := new(LimitNumMsgPort)
 	p.Comp = comp
 	p.BufCapacity = capacity
+	p.name = name
 	return p
 }
