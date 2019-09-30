@@ -64,7 +64,7 @@ func (p *LimitNumMsgPort) Component() Component {
 	return p.Comp
 }
 
-// Retrieve the name of the port
+// Name returns the name of the port.
 func (p *LimitNumMsgPort) Name() string {
 	return p.name
 }
