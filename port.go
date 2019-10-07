@@ -100,10 +100,9 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 		return NewSendError()
 	}
 
-	now := msg.Time()
 	hookCtx := HookCtx{
 		Domain: p,
-		Now:    now,
+		Now:    msg.Time(),
 		Pos:    HookPosPortMsgRecvd,
 		Item:   msg,
 	}
@@ -128,10 +127,9 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	msg := p.Buf[0]
 	p.Buf = p.Buf[1:]
 
-	now := msg.Time()
 	hookCtx := HookCtx{
 		Domain: p,
-		Now:    now,
+		Now:    msg.Time(),
 		Pos:    HookPosPortMsgRetrieve,
 		Item:   msg,
 	}
