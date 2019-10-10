@@ -12,6 +12,7 @@ type Port interface {
 
 	// Embed interface
 	Named
+	Hookable
 
 	// For connection
 	Recv(msg Msg) *SendError
@@ -51,8 +52,16 @@ type LimitNumMsgPort struct {
 	Conn     Connection
 	ConnBusy bool
 
+	*HookableBase
+
 	Comp Component
 }
+
+// HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
+var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
+
+// HookPosPortMsgRetrieve marks when an outbound message is sent over a connection
+var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg  Retrieve"}
 
 // SetConnection sets which connection plugged in to this port.
 func (p *LimitNumMsgPort) SetConnection(conn Connection) {
@@ -71,12 +80,14 @@ func (p *LimitNumMsgPort) Name() string {
 
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
+
 	err := p.Conn.Send(msg)
 	if err != nil {
 		p.Lock()
 		p.ConnBusy = true
 		p.Unlock()
 	}
+
 	return err
 }
 
@@ -89,9 +100,16 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 		return NewSendError()
 	}
 
+	hookCtx := HookCtx{
+		Domain: p,
+		Now:    msg.Time(),
+		Pos:    HookPosPortMsgRecvd,
+		Item:   msg,
+	}
+	p.InvokeHook(&hookCtx)
+
 	p.Buf = append(p.Buf, msg)
 	p.Unlock()
-
 	if p.Comp != nil {
 		p.Comp.NotifyRecv(msg.Meta().RecvTime, p)
 	}
@@ -101,7 +119,6 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 // Retrieve is used by the component to take a message from the incoming buffer
 func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.Lock()
-
 	if len(p.Buf) == 0 {
 		p.Unlock()
 		return nil
@@ -109,6 +126,14 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 
 	msg := p.Buf[0]
 	p.Buf = p.Buf[1:]
+
+	hookCtx := HookCtx{
+		Domain: p,
+		Now:    msg.Time(),
+		Pos:    HookPosPortMsgRetrieve,
+		Item:   msg,
+	}
+	p.InvokeHook(&hookCtx)
 
 	if p.PortBusy == true {
 		p.PortBusy = false
