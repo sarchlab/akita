@@ -52,7 +52,7 @@ type LimitNumMsgPort struct {
 	Conn     Connection
 	ConnBusy bool
 
-	*HookableBase
+	HookableBase
 
 	Comp Component
 }
