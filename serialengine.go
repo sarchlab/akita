@@ -79,7 +79,7 @@ func (e *SerialEngine) Run() error {
 		e.InvokeHook(&hookCtx)
 
 		handler := evt.Handler()
-		handler.Handle(evt)
+		_ = handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent
 		e.InvokeHook(&hookCtx)
@@ -88,7 +88,7 @@ func (e *SerialEngine) Run() error {
 	}
 }
 
-// Pause pervents the SerialEngine to trigger more events.
+// Pause prevents the SerialEngine to trigger more events.
 func (e *SerialEngine) Pause() {
 	e.pauseLock.Lock()
 }

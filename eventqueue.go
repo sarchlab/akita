@@ -23,7 +23,7 @@ type EventQueueImpl struct {
 // NewEventQueue creates and returns a newly created EventQueue
 func NewEventQueue() *EventQueueImpl {
 	q := new(EventQueueImpl)
-	q.events = make([]Event, 0, 0)
+	q.events = make([]Event, 0)
 	heap.Init(&q.events)
 	return q
 }
@@ -110,46 +110,45 @@ func NewInsertionQueue() *InsertionQueue {
 func (q *InsertionQueue) Push(evt Event) {
 	var ele *list.Element
 
-	// Search
-	// q.lock.RLock()
-	// q.lock.Lock()
+	q.lock.RLock()
 	for ele = q.l.Front(); ele != nil; ele = ele.Next() {
 		if ele.Value.(Event).Time() > evt.Time() {
 			break
 		}
 	}
-	// q.lock.RUnlock()
+	q.lock.RUnlock()
 
 	// Insertion
+	q.lock.Lock()
 	if ele != nil {
 		q.l.InsertBefore(evt, ele)
 	} else {
 		q.l.PushBack(evt)
 	}
-	// q.lock.Unlock()
+	q.lock.Unlock()
 }
 
 // Pop returns the event with the smallest time, and removes it from the queue
 func (q *InsertionQueue) Pop() Event {
-	// q.lock.Lock()
+	q.lock.Lock()
 	evt := q.l.Remove(q.l.Front())
-	// q.lock.Unlock()
+	q.lock.Unlock()
 	return evt.(Event)
 }
 
 // Len return the number of events in the queue
 func (q *InsertionQueue) Len() int {
-	// q.lock.RLock()
+	q.lock.RLock()
 	l := q.l.Len()
-	// q.lock.RUnlock()
+	q.lock.RUnlock()
 	return l
 }
 
 // Peek returns the event at the front of the queue without removing it from
 // the queue.
 func (q *InsertionQueue) Peek() Event {
-	// q.lock.RLock()
+	q.lock.RLock()
 	evt := q.l.Front().Value.(Event)
-	// q.lock.RUnlock()
+	q.lock.RUnlock()
 	return evt
 }

@@ -55,7 +55,6 @@ func (e *ParallelEngine) spawnWorkers() {
 	for i := 0; i < e.maxGoRoutine; i++ {
 		go e.worker()
 	}
-
 }
 
 func (e *ParallelEngine) worker() {
@@ -71,7 +70,7 @@ func (e *ParallelEngine) worker() {
 		e.InvokeHook(&hookCtx)
 
 		handler := evt.Handler()
-		handler.Handle(evt)
+		_ = handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent
 		e.InvokeHook(&hookCtx)
@@ -182,11 +181,11 @@ func (e *ParallelEngine) triggerTime() VTimeInSec {
 	return earliest
 }
 
-func (e *ParallelEngine) runEvent(evt Event) {
-	e.waitGroup.Add(1)
+// func (e *ParallelEngine) runEvent(evt Event) {
+// 	e.waitGroup.Add(1)
 
-	e.eventChan <- evt
-}
+// 	e.eventChan <- evt
+// }
 
 func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 	e.waitGroup.Add(1)
@@ -209,7 +208,7 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	e.InvokeHook(&hookCtx)
 
 	handler := evt.Handler()
-	handler.Handle(evt)
+	_ = handler.Handle(evt)
 
 	hookCtx.Pos = HookPosAfterEvent
 	e.InvokeHook(&hookCtx)

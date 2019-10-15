@@ -80,7 +80,6 @@ func (p *LimitNumMsgPort) Name() string {
 
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
-
 	err := p.Conn.Send(msg)
 	if err != nil {
 		p.Lock()
@@ -135,7 +134,7 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	}
 	p.InvokeHook(&hookCtx)
 
-	if p.PortBusy == true {
+	if p.PortBusy {
 		p.PortBusy = false
 		p.Unlock()
 		p.Conn.NotifyAvailable(now, p)

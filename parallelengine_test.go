@@ -50,15 +50,16 @@ var _ = Describe("ParallelEngine", func() {
 		engine.Schedule(evt1)
 		engine.Schedule(evt2)
 
-		engine.Run()
+		err := engine.Run()
 
+		Expect(err).To(BeNil())
 		Expect(handler1.EventHandled).To(ContainElement(evt1))
 		Expect(handler1.EventHandled).To(ContainElement(evt4))
 		Expect(handler2.EventHandled[0]).To(BeIdenticalTo(evt2))
 		Expect(handler3.EventHandled).To(ContainElement(evt3))
 	})
 
-	Measure("Event triggerring speed", func(b Benchmarker) {
+	Measure("Event triggering speed", func(b Benchmarker) {
 		handler := newMockHandler()
 		handler.HandleFunc = func(e Event) {}
 
@@ -70,6 +71,8 @@ var _ = Describe("ParallelEngine", func() {
 			engine.Schedule(evt)
 		}
 
-		b.Time("runtime", func() { engine.Run() })
+		b.Time("runtime", func() {
+			_ = engine.Run()
+		})
 	}, 10)
 })
