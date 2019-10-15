@@ -2,17 +2,18 @@ package akita
 
 import (
 	"log"
+	"math"
 	"sync"
 )
 
 // A Port is owned by a component and is used to plugin connections
 type Port interface {
-	SetConnection(conn Connection)
-	Component() Component
-
 	// Embed interface
 	Named
 	Hookable
+
+	SetConnection(conn Connection)
+	Component() Component
 
 	// For connection
 	Recv(msg Msg) *SendError
@@ -21,7 +22,7 @@ type Port interface {
 	// For component
 	Send(msg Msg) *SendError
 	Retrieve(now VTimeInSec) Msg
-	Peek() Msg
+	Peek(now VTimeInSec) Msg
 }
 
 // PortEndSimulationChecker checks if the port buffer is empty at the end of
@@ -33,7 +34,7 @@ type PortEndSimulationChecker struct {
 
 // Handle checks if the port is empty or not.
 func (c *PortEndSimulationChecker) Handle(e Event) error {
-	if c.Port.Peek() != nil {
+	if c.Port.Peek(VTimeInSec(math.MaxFloat64)) != nil {
 		log.Panic("port is not free")
 	}
 	return nil
@@ -118,14 +119,18 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 // Retrieve is used by the component to take a message from the incoming buffer
 func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.Lock()
+	defer p.Unlock()
+
 	if len(p.Buf) == 0 {
-		p.Unlock()
 		return nil
 	}
 
 	msg := p.Buf[0]
-	p.Buf = p.Buf[1:]
+	if msg.Meta().RecvTime >= now {
+		return nil
+	}
 
+	p.Buf = p.Buf[1:]
 	hookCtx := HookCtx{
 		Domain: p,
 		Now:    msg.Time(),
@@ -136,24 +141,27 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 
 	if p.PortBusy {
 		p.PortBusy = false
-		p.Unlock()
 		p.Conn.NotifyAvailable(now, p)
-		return msg
 	}
 
-	p.Unlock()
 	return msg
 }
 
 // Peek returns the first message in the port without removing it.
-func (p *LimitNumMsgPort) Peek() Msg {
+func (p *LimitNumMsgPort) Peek(now VTimeInSec) Msg {
 	p.Lock()
+	defer p.Unlock()
+
 	if len(p.Buf) == 0 {
-		p.Unlock()
 		return nil
 	}
+
 	msg := p.Buf[0]
-	p.Unlock()
+
+	if msg.Meta().RecvTime >= now {
+		return nil
+	}
+
 	return msg
 }
 
