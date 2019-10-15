@@ -46,7 +46,7 @@ var _ = Describe("SerialEngine", func() {
 		engine.Schedule(evt1)
 		engine.Schedule(evt2)
 
-		engine.Run()
+		_ = engine.Run()
 
 		Expect(handler1.EventHandled[0]).To(BeIdenticalTo(evt3))
 		Expect(handler1.EventHandled[1]).To(BeIdenticalTo(evt1))
@@ -54,7 +54,7 @@ var _ = Describe("SerialEngine", func() {
 		Expect(handler2.EventHandled[0]).To(BeIdenticalTo(evt2))
 	})
 
-	Measure("Event triggerring speed", func(b Benchmarker) {
+	Measure("Event triggering speed", func(b Benchmarker) {
 		handler := newMockHandler()
 		handler.HandleFunc = func(e Event) {}
 
@@ -66,6 +66,6 @@ var _ = Describe("SerialEngine", func() {
 			engine.Schedule(evt)
 		}
 
-		b.Time("runtime", func() { engine.Run() })
+		b.Time("runtime", func() { _ = engine.Run() })
 	}, 10)
 })

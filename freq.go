@@ -42,7 +42,7 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 		log.Panic("invalid time")
 	}
 	count := math.Ceil(math.Round(float64(now)*10*float64(f)) / 10)
-	return VTimeInSec(float64(count) / float64(f))
+	return VTimeInSec(count / float64(f))
 }
 
 // NextTick returns the next tick time.
@@ -57,7 +57,7 @@ func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 		log.Panic("invalid time")
 	}
 	count := math.Floor(math.Round(float64(now)*10*float64(f)) / 10)
-	return VTimeInSec(float64(count+1) / float64(f))
+	return VTimeInSec((count + 1) / float64(f))
 }
 
 // NCyclesLater returns the time after N cycles

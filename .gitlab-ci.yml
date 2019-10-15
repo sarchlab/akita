@@ -1,19 +1,24 @@
 image: golang:latest
 
 stages:
+  - build
   - test
+
+build:
+  stage: build
+  script: 
+    - go build ./...
+
+lint:
+  stage: build
+  script:
+    - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v1.20.0
+    - golangci-lint run
 
 test_job:
   stage: test
   script:
-  - echo $GOPATH
-  - export PATH=$PATH:$GOPATH/bin
-  - export PROJECT_DIR=$GOPATH/src/gitlab.com/akita/akita
-  - mkdir -p $PROJECT_DIR
-  - cp -r ${CI_PROJECT_DIR}/ $GOPATH/src/gitlab.com/akita/
-  - echo $PROJECT_DIR
-  - ls $PROJECT_DIR
-  - cd $PROJECT_DIR && go get -t ./...
-  - go install github.com/onsi/ginkgo/ginkgo
-  - cd $PROJECT_DIR && go build ./...
-  - cd $PROJECT_DIR && ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress
+    - go install github.com/onsi/ginkgo/ginkgo
+    - ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress --skip="Stress" --skipMeasurements -coverprofile=cover.out
+    - go tool cover -func=cover.out > coverage.out
+    - tail coverage.out
