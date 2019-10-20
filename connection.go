@@ -15,7 +15,9 @@ type Connection interface {
 
 	Send(msg Msg) *SendError
 
-	PlugIn(port Port)
+	// PlugIn connects a port to the connection. The connection should reserve
+	// a buffer that can hold `sourceSideBufSize` messages.
+	PlugIn(port Port, sourceSideBufSize int)
 	Unplug(port Port)
 	NotifyAvailable(now VTimeInSec, port Port)
 }

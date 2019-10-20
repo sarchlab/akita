@@ -1,78 +1,112 @@
 package akita
 
 import (
-	"log"
 	"math/rand"
 
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("ParallelEngine", func() {
 	var (
-		engine *ParallelEngine
+		mockCtrl *gomock.Controller
+		engine   *ParallelEngine
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewParallelEngine()
 	})
 
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
+
 	It("should schedule events", func() {
-		handler1 := newMockHandler()
-		handler2 := newMockHandler()
-		handler3 := newMockHandler()
-		evt1 := newMockEvent()
-		evt2 := newMockEvent()
-		evt3 := newMockEvent()
-		evt4 := newMockEvent()
+		handler1 := NewMockHandler(mockCtrl)
+		handler2 := NewMockHandler(mockCtrl)
+		evt1 := NewMockEvent(mockCtrl)
+		evt2 := NewMockEvent(mockCtrl)
+		evt3 := NewMockEvent(mockCtrl)
+		evt4 := NewMockEvent(mockCtrl)
 
-		// Four events to be scheduled. Evt1 and Evt2 are directly scheduled,
-		// while evt2 schdules evt3 and evt4. They should be executed
-		// in the global time order
-		evt1.SetTime(4.0)
-		evt1.SetHandler(handler1)
-		evt2.SetTime(2.0)
-		evt2.SetHandler(handler2)
-		evt3.SetTime(3.0)
-		evt3.SetHandler(handler3)
-		evt4.SetTime(3.0)
-		evt4.SetHandler(handler1)
-
-		handler1.HandleFunc = func(e Event) {
-			log.Printf("Handled %f\n", e.Time())
-		}
-		handler2.HandleFunc = func(e Event) {
+		evt1.EXPECT().Time().Return(VTimeInSec(4.0)).AnyTimes()
+		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt1.EXPECT().IsSecondary().Return(false).AnyTimes()
+		evt2.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
+		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
+		evt3.EXPECT().Time().Return(VTimeInSec(3.0)).AnyTimes()
+		evt3.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
+		evt4.EXPECT().Time().Return(VTimeInSec(5.0)).AnyTimes()
+		evt4.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt4.EXPECT().IsSecondary().Return(false).AnyTimes()
+		handleEvt2 := handler2.EXPECT().Handle(evt2).Do(func(e Event) {
 			engine.Schedule(evt3)
 			engine.Schedule(evt4)
-			log.Printf("Handled %f\n", e.Time())
-		}
+		})
+		handleEvt3 := handler1.EXPECT().
+			Handle(evt3).Do(func(e Event) {}).After(handleEvt2)
+		handleEvt1 := handler1.EXPECT().
+			Handle(evt1).Do(func(e Event) {}).After(handleEvt3)
+		handler1.EXPECT().
+			Handle(evt4).Do(func(e Event) {}).After(handleEvt1)
 
 		engine.Schedule(evt1)
 		engine.Schedule(evt2)
 
-		err := engine.Run()
+		_ = engine.Run()
+	})
 
-		Expect(err).To(BeNil())
-		Expect(handler1.EventHandled).To(ContainElement(evt1))
-		Expect(handler1.EventHandled).To(ContainElement(evt4))
-		Expect(handler2.EventHandled[0]).To(BeIdenticalTo(evt2))
-		Expect(handler3.EventHandled).To(ContainElement(evt3))
+	It("should consider secondary events", func() {
+		handler1 := NewMockHandler(mockCtrl)
+		handler2 := NewMockHandler(mockCtrl)
+		handler3 := NewMockHandler(mockCtrl)
+		evt1 := NewMockEvent(mockCtrl)
+		evt2 := NewMockEvent(mockCtrl)
+		evt3 := NewMockEvent(mockCtrl)
+
+		evt1.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt1.EXPECT().IsSecondary().Return(true).AnyTimes()
+		evt2.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
+		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
+		evt3.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt3.EXPECT().Handler().Return(handler3).AnyTimes()
+		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
+
+		handleEvt2 := handler2.EXPECT().Handle(evt2)
+		handleEvt3 := handler3.EXPECT().Handle(evt3)
+		handler1.EXPECT().
+			Handle(evt1).Do(func(e Event) {}).
+			After(handleEvt2).
+			After(handleEvt3)
+
+		engine.Schedule(evt1)
+		engine.Schedule(evt2)
+		engine.Schedule(evt3)
+
+		_ = engine.Run()
 	})
 
 	Measure("Event triggering speed", func(b Benchmarker) {
-		handler := newMockHandler()
-		handler.HandleFunc = func(e Event) {}
+		handler := NewMockHandler(mockCtrl)
+		handler.EXPECT().Handle(gomock.Any()).Do(func(e Event) {
+			for i := 0; i < 1000; i++ {
+			}
+		}).AnyTimes()
 
-		for i := 0; i < 100000; i++ {
-			evt := newMockEvent()
-			time := VTimeInSec(float64(rand.Uint64()%100) * 0.01)
-			evt.SetTime(time)
-			evt.SetHandler(handler)
+		for i := 0; i < 10000; i++ {
+			evt := NewMockEvent(mockCtrl)
+			time := VTimeInSec(float64(rand.Uint64()%10) * 0.01)
+			evt.EXPECT().Time().Return(time).AnyTimes()
+			evt.EXPECT().Handler().Return(handler).AnyTimes()
+			evt.EXPECT().IsSecondary().Return(false).AnyTimes()
 			engine.Schedule(evt)
 		}
 
-		b.Time("runtime", func() {
-			_ = engine.Run()
-		})
+		b.Time("runtime", func() { _ = engine.Run() })
 	}, 10)
 })

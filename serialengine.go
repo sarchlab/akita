@@ -10,10 +10,11 @@ import (
 type SerialEngine struct {
 	HookableBase
 
-	timeLock  sync.RWMutex
-	time      VTimeInSec
-	queue     EventQueue
-	pauseLock sync.Mutex
+	timeLock       sync.RWMutex
+	time           VTimeInSec
+	queue          EventQueue
+	secondaryQueue EventQueue
+	pauseLock      sync.Mutex
 
 	simulationEndHandlers []SimulationEndHandler
 }
@@ -23,6 +24,7 @@ func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
 
 	e.queue = NewEventQueue()
+	e.secondaryQueue = NewEventQueue()
 	//e.queue = NewInsertionQueue()
 
 	return e
@@ -34,6 +36,12 @@ func (e *SerialEngine) Schedule(evt Event) {
 	if evt.Time() < now {
 		log.Panic("scheduling an event earlier than current time")
 	}
+
+	if evt.IsSecondary() {
+		e.secondaryQueue.Push(evt)
+		return
+	}
+
 	e.queue.Push(evt)
 }
 
@@ -53,13 +61,13 @@ func (e *SerialEngine) writeNow(t VTimeInSec) {
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
 	for {
-		if e.queue.Len() == 0 {
+		if e.noMoreEvent() {
 			return nil
 		}
 
 		e.pauseLock.Lock()
 
-		evt := e.queue.Pop()
+		evt := e.nextEvent()
 		now := e.readNow()
 		if evt.Time() < now {
 			log.Panicf(
@@ -68,7 +76,6 @@ func (e *SerialEngine) Run() error {
 			)
 		}
 		e.writeNow(evt.Time())
-		now = evt.Time()
 
 		hookCtx := HookCtx{
 			Domain: e,
@@ -86,6 +93,31 @@ func (e *SerialEngine) Run() error {
 
 		e.pauseLock.Unlock()
 	}
+}
+
+func (e *SerialEngine) noMoreEvent() bool {
+	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
+}
+
+func (e *SerialEngine) nextEvent() Event {
+	if e.queue.Len() == 0 {
+		return e.secondaryQueue.Pop()
+	}
+
+	if e.secondaryQueue.Len() == 0 {
+		return e.queue.Pop()
+	}
+
+	primaryEvt := e.queue.Peek()
+	secondaryEvt := e.secondaryQueue.Peek()
+
+	if primaryEvt.Time() <= secondaryEvt.Time() {
+		e.queue.Pop()
+		return primaryEvt
+	}
+
+	e.secondaryQueue.Pop()
+	return secondaryEvt
 }
 
 // Pause prevents the SerialEngine to trigger more events.

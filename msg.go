@@ -27,3 +27,8 @@ func (m MsgMeta) Handler() Handler {
 func (m MsgMeta) Time() VTimeInSec {
 	return m.EventTime
 }
+
+// IsSecondary always returns true. Message-based events are all primary events.
+func (m MsgMeta) IsSecondary() bool {
+	return false
+}

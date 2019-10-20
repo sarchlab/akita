@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"runtime"
+
+	"github.com/onsi/ginkgo"
 )
 
 // A ParallelEngine is an event engine that is capable for scheduling event
@@ -14,16 +16,19 @@ import (
 type ParallelEngine struct {
 	HookableBase
 
-	pauseLock sync.Mutex
-	nowLock   sync.RWMutex
-	now       VTimeInSec
+	pauseLock              sync.Mutex
+	nowLock                sync.RWMutex
+	now                    VTimeInSec
+	runningSecondaryEvents bool
 
 	eventChan    chan Event
 	waitGroup    sync.WaitGroup
 	maxGoRoutine int
 
-	queues    []EventQueue
-	queueChan chan EventQueue
+	queues             []EventQueue
+	queueChan          chan EventQueue
+	secondaryQueues    []EventQueue
+	secondaryQueueChan chan EventQueue
 
 	simulationEndHandlers []SimulationEndHandler
 }
@@ -31,53 +36,58 @@ type ParallelEngine struct {
 // NewParallelEngine creates a ParallelEngine
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
-	// e.HookableBase = NewHookableBase()
 
 	e.eventChan = make(chan Event, 10000)
 
 	e.maxGoRoutine = runtime.GOMAXPROCS(0)
 	numQueues := runtime.GOMAXPROCS(0)
 
-	e.spawnWorkers()
+	// e.spawnWorkers()
 	e.queues = make([]EventQueue, 0, numQueues)
 	e.queueChan = make(chan EventQueue, numQueues)
+	e.secondaryQueues = make([]EventQueue, 0, numQueues)
+	e.secondaryQueueChan = make(chan EventQueue, numQueues)
 	for i := 0; i < numQueues; i++ {
 		queue := NewEventQueue()
 		//queue := NewInsertionQueue()
 		e.queueChan <- queue
 		e.queues = append(e.queues, queue)
+
+		secondaryQueue := NewEventQueue()
+		e.secondaryQueueChan <- secondaryQueue
+		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
 	}
 
 	return e
 }
 
-func (e *ParallelEngine) spawnWorkers() {
-	for i := 0; i < e.maxGoRoutine; i++ {
-		go e.worker()
-	}
-}
+// func (e *ParallelEngine) spawnWorkers() {
+// 	for i := 0; i < e.maxGoRoutine; i++ {
+// 		go e.worker()
+// 	}
+// }
 
-func (e *ParallelEngine) worker() {
-	for evt := range e.eventChan {
-		now := e.readNow()
+// func (e *ParallelEngine) worker() {
+// 	for evt := range e.eventChan {
+// 		now := e.readNow()
 
-		hookCtx := HookCtx{
-			Domain: e,
-			Now:    now,
-			Pos:    HookPosBeforeEvent,
-			Item:   evt,
-		}
-		e.InvokeHook(&hookCtx)
+// 		hookCtx := HookCtx{
+// 			Domain: e,
+// 			Now:    now,
+// 			Pos:    HookPosBeforeEvent,
+// 			Item:   evt,
+// 		}
+// 		e.InvokeHook(&hookCtx)
 
-		handler := evt.Handler()
-		_ = handler.Handle(evt)
+// 		handler := evt.Handler()
+// 		_ = handler.Handle(evt)
 
-		hookCtx.Pos = HookPosAfterEvent
-		e.InvokeHook(&hookCtx)
+// 		hookCtx.Pos = HookPosAfterEvent
+// 		e.InvokeHook(&hookCtx)
 
-		e.waitGroup.Done()
-	}
-}
+// 		e.waitGroup.Done()
+// 	}
+// }
 
 func (e *ParallelEngine) readNow() VTimeInSec {
 	var now VTimeInSec
@@ -102,8 +112,10 @@ func (e *ParallelEngine) Schedule(evt Event) {
 			reflect.TypeOf(evt), evt.Time(), now)
 	}
 
-	if evt.Time() == now && now != 0 {
-		e.runEventWithTempWorker(evt)
+	if evt.IsSecondary() {
+		queue := <-e.secondaryQueueChan
+		queue.Push(evt)
+		e.secondaryQueueChan <- queue
 		return
 	}
 
@@ -120,20 +132,76 @@ func (e *ParallelEngine) Run() error {
 		}
 
 		e.pauseLock.Lock()
-		e.emptyQueueChan()
-		e.runEventsUntilConflict()
-		e.waitGroup.Wait()
+		e.determineWhatToRun()
+		e.runRound()
+
 		e.pauseLock.Unlock()
 	}
 }
 
-func (e *ParallelEngine) emptyQueueChan() {
-	for range e.queues {
-		<-e.queueChan
+func (e *ParallelEngine) determineWhatToRun() {
+	primaryTime := e.earliestTimeInQueueGroup(e.queues)
+	secondaryTime := e.earliestTimeInQueueGroup(e.secondaryQueues)
+
+	if primaryTime <= secondaryTime {
+		e.runningSecondaryEvents = false
+		e.writeNow(primaryTime)
+		return
+	}
+
+	e.runningSecondaryEvents = true
+	e.writeNow(secondaryTime)
+}
+
+func (e *ParallelEngine) earliestTimeInQueueGroup(
+	queues []EventQueue,
+) VTimeInSec {
+	earliestTime := VTimeInSec(math.MaxFloat64)
+	for _, q := range queues {
+		if q.Len() == 0 {
+			continue
+		}
+
+		t := q.Peek().Time()
+		if t < earliestTime {
+			earliestTime = t
+		}
+	}
+	return earliestTime
+}
+
+func (e *ParallelEngine) runRound() {
+	queues := e.queues
+	queueChan := e.queueChan
+
+	if e.runningSecondaryEvents {
+		queues = e.secondaryQueues
+		queueChan = e.secondaryQueueChan
+	}
+
+	e.emptyQueueChan(queues, queueChan)
+	e.runEventsUntilConflict(queues, queueChan)
+	e.waitGroup.Wait()
+}
+
+func (e *ParallelEngine) emptyQueueChan(
+	queues []EventQueue,
+	queueChan chan EventQueue,
+) {
+	for range queues {
+		<-queueChan
 	}
 }
 
 func (e *ParallelEngine) hasMoreEvents() bool {
+	if e.hasMorePrimaryEvents() || e.hasMoreSecondaryEvents() {
+		return true
+	}
+
+	return false
+}
+
+func (e *ParallelEngine) hasMorePrimaryEvents() bool {
 	for _, q := range e.queues {
 		if q.Len() > 0 {
 			return true
@@ -142,43 +210,37 @@ func (e *ParallelEngine) hasMoreEvents() bool {
 	return false
 }
 
-func (e *ParallelEngine) runEventsUntilConflict() {
-	triggerTime := e.triggerTime()
-	e.writeNow(triggerTime)
+func (e *ParallelEngine) hasMoreSecondaryEvents() bool {
+	for _, q := range e.secondaryQueues {
+		if q.Len() > 0 {
+			return true
+		}
+	}
+	return false
+}
 
-	for _, queue := range e.queues {
+func (e *ParallelEngine) runEventsUntilConflict(
+	queues []EventQueue,
+	queueChan chan EventQueue,
+) {
+	now := e.readNow()
+	for _, queue := range queues {
 		for queue.Len() > 0 {
 			evt := queue.Peek()
-			if evt.Time() == triggerTime {
+			if evt.Time() == now {
 				queue.Pop()
 				//e.runEvent(evt)
 				e.runEventWithTempWorker(evt)
-			} else if evt.Time() < triggerTime {
-				log.Panicf("cannot run event in the past, evt %s @ %.10f, now %.10f",
-					reflect.TypeOf(evt), evt.Time(), triggerTime)
+			} else if evt.Time() < now {
+				log.Panicf(
+					"cannot run event in the past, evt %s @ %.10f, now %.10f",
+					reflect.TypeOf(evt), evt.Time(), now)
 			} else {
 				break
 			}
 		}
-		e.queueChan <- queue
+		queueChan <- queue
 	}
-}
-
-func (e *ParallelEngine) triggerTime() VTimeInSec {
-	var earliest VTimeInSec
-
-	earliest = math.MaxFloat64
-	for _, q := range e.queues {
-		if q.Len() == 0 {
-			continue
-		}
-
-		evt := q.Peek()
-		if evt.Time() < earliest {
-			earliest = evt.Time()
-		}
-	}
-	return earliest
 }
 
 // func (e *ParallelEngine) runEvent(evt Event) {
@@ -193,6 +255,8 @@ func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 }
 
 func (e *ParallelEngine) tempWorkerRun(evt Event) {
+	defer ginkgo.GinkgoRecover()
+
 	now := e.readNow()
 
 	if evt.Time() < now {
