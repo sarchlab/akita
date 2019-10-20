@@ -1,7 +1,5 @@
 package akita
 
-import "github.com/rs/xid"
-
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec float64
 
@@ -12,21 +10,27 @@ type Event interface {
 
 	// Returns the handler that can should handle the event
 	Handler() Handler
+
+	// IsSecondary tells if the event is a secondary event. Secondary event are
+	// handled after all same-time primary events are handled.
+	IsSecondary() bool
 }
 
 // EventBase provides the basic fields and getters for other events
 type EventBase struct {
-	ID      string
-	time    VTimeInSec
-	handler Handler
+	ID        string
+	time      VTimeInSec
+	handler   Handler
+	secondary bool
 }
 
 // NewEventBase creates a new EventBase
 func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	e := new(EventBase)
-	e.ID = xid.New().String()
+	e.ID = GetIDGenerator().Generate()
 	e.time = t
 	e.handler = handler
+	e.secondary = false
 	return e
 }
 
@@ -35,7 +39,7 @@ func (e EventBase) Time() VTimeInSec {
 	return e.time
 }
 
-// SetHandler sets which component will handle the event
+// SetHandler sets which handler that handles the event.
 //
 // Akita requires all the components can only schedule event for themselves.
 // Therefore, the handler in this function must be the component who schedule
@@ -45,9 +49,14 @@ func (e EventBase) SetHandler(h Handler) {
 	e.handler = h
 }
 
-// Handler returns the handler to handle the event
+// Handler returns the handler to handle the event.
 func (e EventBase) Handler() Handler {
 	return e.handler
+}
+
+// IsSecondary returns true if the event is a secondary event.
+func (e EventBase) IsSecondary() bool {
+	return e.secondary
 }
 
 // A Handler defines a domain for the events.

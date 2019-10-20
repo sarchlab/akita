@@ -1,79 +1,145 @@
 package akita
 
-import (
-	"log"
-	"sync"
-)
+type directConnectionEnd struct {
+	port    Port
+	buf     []Msg
+	bufSize int
+	busy    bool
+}
 
 // DirectConnection connects two components without latency
 type DirectConnection struct {
-	sync.Mutex
-	*HookableBase
+	*TickingComponent
 
-	endPoints map[Port]bool
-	engine    Engine
+	engine     Engine
+	nextPortID int
+	ports      []Port
+	ends       map[Port]*directConnectionEnd
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *DirectConnection) PlugIn(port Port) {
+func (c *DirectConnection) PlugIn(port Port, sourceSideBufSize int) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.endPoints[port] = true
+	c.ports = append(c.ports, port)
+	end := &directConnectionEnd{}
+	end.port = port
+	end.bufSize = sourceSideBufSize
+	c.ends[port] = end
+
 	port.SetConnection(c)
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
 func (c *DirectConnection) Unplug(port Port) {
-	c.Lock()
-	defer c.Unlock()
-
-	if _, ok := c.endPoints[port]; !ok {
-		log.Panicf("connectable if not attached")
-	}
-
-	delete(c.endPoints, port)
-	port.SetConnection(c)
+	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
 func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
-	for p := range c.endPoints {
-		p.NotifyAvailable(now)
-	}
+	c.TickNow(now)
 }
 
 // Send of a DirectConnection schedules a DeliveryEvent immediately
 func (c *DirectConnection) Send(msg Msg) *SendError {
-	if msg.Meta().Dst == nil {
-		log.Panic("destination is null")
+	c.Lock()
+	defer c.Unlock()
+
+	c.msgMustBeValid(msg)
+
+	srcEnd := c.ends[msg.Meta().Src]
+
+	if len(srcEnd.buf) >= srcEnd.bufSize {
+		srcEnd.busy = true
+		return NewSendError()
 	}
 
-	// if _, found := c.endPoints[msg.Dst()]; !found {
-	// 	log.Panicf("destination %s not connected, "+
-	// 		"msg ID %s, "+
-	// 		"msguest from %s",
-	// 		msg.Dst().Comp.Name(),
-	// 		msg.GetID(),
-	// 		msg.Dst().Comp.Name(),
-	// 	)
-	// }
+	srcEnd.buf = append(srcEnd.buf, msg)
 
-	msg.Meta().RecvTime = msg.Meta().SendTime
-	return msg.Meta().Dst.Recv(msg)
-}
+	c.TickNow(msg.Meta().SendTime)
 
-// Handle defines how the DirectConnection handles events
-func (c *DirectConnection) Handle(evt Event) error {
 	return nil
 }
 
+func (c *DirectConnection) msgMustBeValid(msg Msg) {
+	c.portMustNotBeNil(msg.Meta().Src)
+	c.portMustNotBeNil(msg.Meta().Dst)
+	c.portMustBeConnected(msg.Meta().Src)
+	c.portMustBeConnected(msg.Meta().Dst)
+	c.srcDstMustNotBeTheSame(msg)
+}
+
+func (c *DirectConnection) portMustNotBeNil(port Port) {
+	if port == nil {
+		panic("src or dst is not given")
+	}
+}
+
+func (c *DirectConnection) portMustBeConnected(port Port) {
+	if _, connected := c.ends[port]; !connected {
+		panic("src or dst is not connected")
+	}
+}
+
+func (c *DirectConnection) srcDstMustNotBeTheSame(msg Msg) {
+	if msg.Meta().Src == msg.Meta().Dst {
+		panic("sending back to src")
+	}
+}
+
+func (c *DirectConnection) Tick(now VTimeInSec) bool {
+	madeProgress := false
+	for i := 0; i < len(c.ports); i++ {
+		portID := (i + c.nextPortID) % len(c.ports)
+		port := c.ports[portID]
+		end := c.ends[port]
+		madeProgress = c.forwardMany(end, now) || madeProgress
+	}
+
+	c.nextPortID = (c.nextPortID + 1) % len(c.ports)
+	return madeProgress
+}
+
+func (c *DirectConnection) forwardMany(
+	end *directConnectionEnd,
+	now VTimeInSec,
+) bool {
+	madeProgress := false
+	for {
+		if len(end.buf) == 0 {
+			break
+		}
+
+		head := end.buf[0]
+		head.Meta().RecvTime = now
+
+		err := head.Meta().Dst.Recv(head)
+		if err != nil {
+			break
+		}
+
+		madeProgress = true
+		end.buf = end.buf[1:]
+
+		if end.busy {
+			end.port.NotifyAvailable(now)
+			end.busy = false
+		}
+	}
+
+	return madeProgress
+}
+
 // NewDirectConnection creates a new DirectConnection object
-func NewDirectConnection(engine Engine) *DirectConnection {
+func NewDirectConnection(
+	name string,
+	engine Engine,
+	freq Freq,
+) *DirectConnection {
 	c := new(DirectConnection)
-	c.HookableBase = NewHookableBase()
-	c.endPoints = make(map[Port]bool)
-	c.engine = engine
+	c.TickingComponent = NewSecondaryTickingComponent(name, engine, freq, c)
+	c.ends = make(map[Port]*directConnectionEnd)
 	return c
 }

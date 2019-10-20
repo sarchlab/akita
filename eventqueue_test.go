@@ -3,25 +3,34 @@ package akita
 import (
 	"math/rand"
 
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("EventQueueImpl", func() {
-
 	var (
-		queue *EventQueueImpl
+		mockCtrl *gomock.Controller
+		queue    *EventQueueImpl
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
 		queue = NewEventQueue()
 	})
 
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
+
 	It("should pop in order", func() {
 		numEvents := 100
 		for i := 0; i < numEvents; i++ {
-			event := newMockEvent()
-			event.SetTime(VTimeInSec(rand.Float64() / 1e8))
+			event := NewMockEvent(mockCtrl)
+			event.EXPECT().
+				Time().
+				Return(VTimeInSec(rand.Float64() / 1e8)).
+				AnyTimes()
 			queue.Push(event)
 		}
 
@@ -32,49 +41,31 @@ var _ = Describe("EventQueueImpl", func() {
 			now = event.Time()
 		}
 	})
-
-	It("should pop in order", func() {
-		event1 := newMockEvent()
-		event1.SetTime(0.0000002620)
-		queue.Push(event1)
-
-		numEvents := 100
-		for i := 0; i < numEvents; i++ {
-			event2 := newMockEvent()
-			event2.SetTime(0.0000002610)
-			queue.Push(event2)
-		}
-
-		for i := 0; i < numEvents; i++ {
-			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
-		}
-
-		event3 := newMockEvent()
-		event3.SetTime(0.0000002610)
-		queue.Push(event3)
-
-		Expect(queue.Pop()).To(BeIdenticalTo(event3))
-		Expect(queue.Pop()).To(BeIdenticalTo(event1))
-
-	})
-
 })
 
 var _ = Describe("Insertion Queue", func() {
-
 	var (
-		queue *InsertionQueue
+		mockCtrl *gomock.Controller
+		queue    *InsertionQueue
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
 		queue = NewInsertionQueue()
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
 	})
 
 	It("should pop in order", func() {
 		numEvents := 100
 		for i := 0; i < numEvents; i++ {
-			event := newMockEvent()
-			event.SetTime(VTimeInSec(rand.Float64() / 1e8))
+			event := NewMockEvent(mockCtrl)
+			event.EXPECT().
+				Time().
+				Return(VTimeInSec(rand.Float64() / 1e8)).
+				AnyTimes()
 			queue.Push(event)
 		}
 
@@ -85,30 +76,4 @@ var _ = Describe("Insertion Queue", func() {
 			now = event.Time()
 		}
 	})
-
-	It("should pop in order", func() {
-		event1 := newMockEvent()
-		event1.SetTime(0.0000002620)
-		queue.Push(event1)
-
-		numEvents := 100
-		for i := 0; i < numEvents; i++ {
-			event2 := newMockEvent()
-			event2.SetTime(0.0000002610)
-			queue.Push(event2)
-		}
-
-		for i := 0; i < numEvents; i++ {
-			Expect(queue.Pop().Time()).To(Equal(VTimeInSec(0.0000002610)))
-		}
-
-		event3 := newMockEvent()
-		event3.SetTime(0.0000002610)
-		queue.Push(event3)
-
-		Expect(queue.Pop()).To(BeIdenticalTo(event3))
-		Expect(queue.Pop()).To(BeIdenticalTo(event1))
-
-	})
-
 })

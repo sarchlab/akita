@@ -5,8 +5,6 @@ type SimulationEndHandler interface {
 	Handle(now VTimeInSec)
 }
 
-//go:generate mockgen -destination mock_akita/engine.go gitlab.com/akita/akita Engine
-
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable
