@@ -3,6 +3,7 @@ package akita
 import (
 	"fmt"
 	"math/rand"
+	"time"
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
@@ -223,6 +224,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewSerialEngine()
 		connection = NewDirectConnection("conn", engine, 1)
+		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
 			agents = append(agents, a)
@@ -260,15 +262,16 @@ var _ = Describe("Direct Connection Integration", func() {
 	})
 
 	It("should run deterministicly", func() {
-		time1 := directConnectionTest()
-		time2 := directConnectionTest()
+		seed := time.Now().UTC().UnixNano()
+		time1 := directConnectionTest(seed)
+		time2 := directConnectionTest(seed)
 
 		Expect(time1).To(Equal(time2))
 	})
 })
 
-func directConnectionTest() VTimeInSec {
-	rand.Seed(0)
+func directConnectionTest(seed int64) VTimeInSec {
+	rand.Seed(seed)
 	numAgents := 100
 	numMsgsPerAgent := 1000
 	engine := NewSerialEngine()
