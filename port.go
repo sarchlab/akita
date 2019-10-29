@@ -122,7 +122,7 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.buf = p.buf[1:]
 	hookCtx := HookCtx{
 		Domain: p,
-		Now:    msg.Time(),
+		Now:    now,
 		Pos:    HookPosPortMsgRetrieve,
 		Item:   msg,
 	}
