@@ -7,8 +7,6 @@ import (
 	"sync"
 
 	"runtime"
-
-	"github.com/onsi/ginkgo"
 )
 
 // A ParallelEngine is an event engine that is capable for scheduling event
@@ -255,8 +253,6 @@ func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 }
 
 func (e *ParallelEngine) tempWorkerRun(evt Event) {
-	defer ginkgo.GinkgoRecover()
-
 	now := e.readNow()
 
 	if evt.Time() < now {
