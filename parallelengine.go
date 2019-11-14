@@ -265,13 +265,13 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 		Pos:    HookPosBeforeEvent,
 		Item:   evt,
 	}
-	e.InvokeHook(&hookCtx)
+	e.InvokeHook(hookCtx)
 
 	handler := evt.Handler()
 	_ = handler.Handle(evt)
 
 	hookCtx.Pos = HookPosAfterEvent
-	e.InvokeHook(&hookCtx)
+	e.InvokeHook(hookCtx)
 
 	e.waitGroup.Done()
 }

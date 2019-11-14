@@ -100,7 +100,7 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 		Pos:    HookPosPortMsgRecvd,
 		Item:   msg,
 	}
-	p.InvokeHook(&hookCtx)
+	p.InvokeHook(hookCtx)
 
 	p.buf = append(p.buf, msg)
 	if p.comp != nil {
@@ -126,7 +126,7 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 		Pos:    HookPosPortMsgRetrieve,
 		Item:   msg,
 	}
-	p.InvokeHook(&hookCtx)
+	p.InvokeHook(hookCtx)
 
 	p.portBusyLock.Lock()
 	if p.portBusy {

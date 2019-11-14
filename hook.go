@@ -30,7 +30,7 @@ var HookPosAfterEvent = &HookPos{Name: "AfterEvent"}
 // Hook is a short piece of program that can be invoked by a hookable object.
 type Hook interface {
 	// Func determines what to do if hook is invoked.
-	Func(ctx *HookCtx)
+	Func(ctx HookCtx)
 }
 
 // A HookableBase provides some utility function for other type that implement
@@ -52,7 +52,7 @@ func (h *HookableBase) AcceptHook(hook Hook) {
 }
 
 // InvokeHook triggers the register Hooks
-func (h *HookableBase) InvokeHook(ctx *HookCtx) {
+func (h *HookableBase) InvokeHook(ctx HookCtx) {
 	for _, hook := range h.Hooks {
 		hook.Func(ctx)
 	}
