@@ -18,7 +18,7 @@ func NewEventLogger(logger *log.Logger) *EventLogger {
 }
 
 // Func writes the event information into the logger
-func (h *EventLogger) Func(ctx *HookCtx) {
+func (h *EventLogger) Func(ctx HookCtx) {
 	if ctx.Pos != HookPosBeforeEvent {
 		return
 	}

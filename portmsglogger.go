@@ -18,7 +18,7 @@ func NewPortMsgLogger(logger *log.Logger) *PortMsgLogger {
 }
 
 // Func writes the message information into the logger
-func (h *PortMsgLogger) Func(ctx *HookCtx) {
+func (h *PortMsgLogger) Func(ctx HookCtx) {
 	msg, ok := ctx.Item.(Msg)
 	if !ok {
 		return

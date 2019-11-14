@@ -83,13 +83,13 @@ func (e *SerialEngine) Run() error {
 			Pos:    HookPosBeforeEvent,
 			Item:   evt,
 		}
-		e.InvokeHook(&hookCtx)
+		e.InvokeHook(hookCtx)
 
 		handler := evt.Handler()
 		_ = handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent
-		e.InvokeHook(&hookCtx)
+		e.InvokeHook(hookCtx)
 
 		e.pauseLock.Unlock()
 	}
