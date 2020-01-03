@@ -85,12 +85,12 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 // Recv is used to deliver a message to a component
 func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	p.bufLock.Lock()
-	defer p.bufLock.Unlock()
 
 	if len(p.buf) >= p.bufCapacity {
 		p.portBusyLock.Lock()
 		p.portBusy = true
 		p.portBusyLock.Unlock()
+		p.bufLock.Unlock()
 		return NewSendError()
 	}
 
@@ -103,6 +103,8 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	p.InvokeHook(hookCtx)
 
 	p.buf = append(p.buf, msg)
+	p.bufLock.Unlock()
+
 	if p.comp != nil {
 		p.comp.NotifyRecv(msg.Meta().RecvTime, p)
 	}
