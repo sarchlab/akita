@@ -132,7 +132,7 @@ func (p PingAgent) NotifyPortFree(now akita.VTimeInSec, port akita.Port) {
 	// Do nothing
 }
 
-func Example_ping_with_events() {
+func Example_pingWithEvents() {
 	engine := akita.NewSerialEngine()
 	agentA := NewPingAgent("AgentA", engine)
 	agentB := NewPingAgent("AgentB", engine)
