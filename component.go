@@ -9,7 +9,7 @@ type Named interface {
 	Name() string
 }
 
-// A Component is a element that is being simulated in Yaotsu.
+// A Component is a element that is being simulated in Akita.
 type Component interface {
 	Named
 	Handler
