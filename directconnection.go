@@ -11,7 +11,6 @@ type directConnectionEnd struct {
 type DirectConnection struct {
 	*TickingComponent
 
-	engine     Engine
 	nextPortID int
 	ports      []Port
 	ends       map[Port]*directConnectionEnd
@@ -89,6 +88,7 @@ func (c *DirectConnection) srcDstMustNotBeTheSame(msg Msg) {
 	}
 }
 
+// Tick updates the states of the connection and delivers messages.
 func (c *DirectConnection) Tick(now VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(c.ports); i++ {

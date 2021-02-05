@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<header>
+    <meta charset="UTF-8"> 
+    <title>Akita Monitoring Tool</title>
+    <link rel="stylesheet" href="src/reset.css">
+    <link rel="stylesheet" href="src/style.css">
+</header>
+
+<body>
+    <nav id="navbar" class="navbar navbar-dark bg-dark">
+        <a class="navbar-brand" href="/">Akita Monitoring Tool</a>
+
+        <form class="form-inline my-2 my-lg-0">
+            <div class="input-group">
+                <div class="input-group-prepend">
+                    <button id="run-button" class="btn btn-success"
+                        type="submit">
+                        <i class="fas fa-repeat"></i>
+                    </button>
+                    <button id="continue-button" class="btn btn-success"
+                        type="submit">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button id="pause-button" class="btn btn-danger">
+                        <i class="fas fa-pause"></i>
+                    </button>
+                </div>
+                <div class="input-group-append">
+                    <label id="now-label" class="input-group-text">
+                        0
+                    </label>
+                </div>
+            </div>
+
+
+        </form>
+    </nav>
+
+    <div id="main-container" class="main-container" class="container-fluid">
+        <div id="tree-container"
+            class="horizontal-block component-tree-container"></div>
+        <div id="vertical-divider" class="horizontal-block vertical-divider">
+            <div class="divider-button">
+                <i class="fas fa-caret-left"></i>
+            </div>
+        </div>
+        <div id="detail-container"
+            class="horizontal-block component-detail-container"></div>
+    </div>
+
+    <script src="dist/bundle.js"></script>
+</body>

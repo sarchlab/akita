@@ -25,6 +25,7 @@ type Ticker interface {
 	Tick(now VTimeInSec) bool
 }
 
+// TickScheduler can help schedule tick events.
 type TickScheduler struct {
 	lock      sync.Mutex
 	handler   Handler
@@ -35,6 +36,7 @@ type TickScheduler struct {
 	nextTickTime VTimeInSec
 }
 
+// NewTickScheduler creates a scheduler for tick events.
 func NewTickScheduler(
 	handler Handler,
 	engine Engine,
@@ -50,6 +52,8 @@ func NewTickScheduler(
 	return ticker
 }
 
+// NewSecondaryTickScheduler creates a scheduler that always schedule secondary
+// tick events.
 func NewSecondaryTickScheduler(
 	handler Handler,
 	engine Engine,
@@ -66,6 +70,7 @@ func NewSecondaryTickScheduler(
 	return ticker
 }
 
+// TickNow schedule a Tick event at the current time.
 func (t *TickScheduler) TickNow(now VTimeInSec) {
 	t.lock.Lock()
 	time := now
@@ -84,6 +89,7 @@ func (t *TickScheduler) TickNow(now VTimeInSec) {
 	t.lock.Unlock()
 }
 
+// TickLater will schedule a tick event at the cycle after the now time.
 func (t *TickScheduler) TickLater(now VTimeInSec) {
 	t.lock.Lock()
 	time := t.Freq.NextTick(now)

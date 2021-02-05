@@ -14,7 +14,12 @@ type SerialEngine struct {
 	time           VTimeInSec
 	queue          EventQueue
 	secondaryQueue EventQueue
-	pauseLock      sync.Mutex
+
+	isPaused     bool
+	isPausedLock sync.Mutex
+	pauseLock    sync.Mutex
+
+	singleRunLock sync.Mutex
 
 	simulationEndHandlers []SimulationEndHandler
 }
@@ -60,6 +65,9 @@ func (e *SerialEngine) writeNow(t VTimeInSec) {
 
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
+	e.singleRunLock.Lock()
+	defer e.singleRunLock.Unlock()
+
 	for {
 		if e.noMoreEvent() {
 			return nil
@@ -122,12 +130,28 @@ func (e *SerialEngine) nextEvent() Event {
 
 // Pause prevents the SerialEngine to trigger more events.
 func (e *SerialEngine) Pause() {
+	e.isPausedLock.Lock()
+	defer e.isPausedLock.Unlock()
+
+	if e.isPaused {
+		return
+	}
+
 	e.pauseLock.Lock()
+	e.isPaused = true
 }
 
 // Continue allows the SerialEngine to trigger more events.
 func (e *SerialEngine) Continue() {
+	e.isPausedLock.Lock()
+	defer e.isPausedLock.Unlock()
+
+	if !e.isPaused {
+		return
+	}
+
 	e.pauseLock.Unlock()
+	e.isPaused = false
 }
 
 // CurrentTime returns the current time at which the engine is at.

@@ -177,8 +177,7 @@ type agent struct {
 	msgsOut []Msg
 	msgsIn  []Msg
 
-	cyclesSinceLastRecv int
-	OutPort             Port
+	OutPort Port
 }
 
 func newAgent(engine Engine, freq Freq, name string) *agent {
