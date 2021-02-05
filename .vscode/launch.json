@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Test gitlab.com/akita/akita/monitoring",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/monitoring"
+        },
+        {
             "name": "Test gitlab.com/akita/akita",
             "type": "go",
             "request": "launch",

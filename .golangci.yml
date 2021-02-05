@@ -45,7 +45,6 @@ run:
   # the dependency descriptions in go.mod.
   # modules-download-mode: release
 
-
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle|code-climate, default is "colored-line-number"
@@ -56,7 +55,6 @@ output:
 
   # print linter name in the end of issue text, default is true
   print-linter-name: true
-
 
 # all available settings of specific linters
 linters-settings:
@@ -76,7 +74,7 @@ linters-settings:
 
     # path to a file containing a list of functions to exclude from checking
     # see https://github.com/kisielk/errcheck#excluding-functions for details
-    exclude: /path/to/file.txt
+    # exclude: /path/to/file.txt
 
   funlen:
     lines: 60
@@ -209,7 +207,7 @@ linters-settings:
     max-blank-identifiers: 2
 
   whitespace:
-    multi-if: false   # Enforces newlines (or comments) after every multi-line if statement
+    multi-if: false # Enforces newlines (or comments) after every multi-line if statement
     multi-func: false # Enforces newlines (or comments) after every multi-line function signature
 
   wsl:
@@ -229,6 +227,7 @@ linters-settings:
 linters:
   disable-all: true
   enable:
+    - golint
     - bodyclose
     - govet
     - stylecheck
@@ -241,8 +240,13 @@ linters:
     - scopelint
     - unconvert
     - whitespace
+    - gosimple
+    - structcheck
+    - errcheck
+    - deadcode
+    - ineffassign
+    - unused
   fast: false
-
 
 issues:
   # List of regexps of issue texts to exclude, empty list by default.
