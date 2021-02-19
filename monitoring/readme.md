@@ -15,5 +15,4 @@ You can use a web browser to access the monitoring tool hosted at the given port
 1. Make sure you have NodeJS and npm installed.
 2. In the web folder, type `npm install` to install dependencies.
 3. In the web folder, run `npm run watch` to use webpack to build static assets.
-4. In the monitoring folder, run `go generate` to pack the static assets as part of the program. (This will be changed after Go 1.16).
-5. Recompile your simulation with `go build` before running our simulation. You need to repeat step 3-5 if you make changes to the frontend code.
+4. Recompile your simulation with `go build` before running the simulation so that changes to the frontend can take effect.

@@ -4,6 +4,7 @@ export class UIManager {
     treeContainer: HTMLElement
     verticalDivider: HTMLElement
     detailContainer: HTMLElement
+    progressBarGroupContainer: HTMLElement
     treeContainerWidthPercent: number
 
 
@@ -17,6 +18,7 @@ export class UIManager {
         this.treeContainer = document.getElementById("tree-container")
         this.verticalDivider = document.getElementById("vertical-divider")
         this.detailContainer = document.getElementById("detail-container")
+        this.progressBarGroupContainer = document.getElementById("progress-bar-group")
     }
 
     resize() {
@@ -24,9 +26,12 @@ export class UIManager {
         const windowWidth = window.innerWidth;
 
         const navHeight = this.navBar.offsetHeight;
-        const containerHeight = windowHeight - navHeight;
+        const progressBarGroupHeight =
+            this.progressBarGroupContainer.offsetHeight
+        const containerHeight =
+            windowHeight - navHeight - progressBarGroupHeight;
 
-        const verticalDividerWidth = 5;
+        const verticalDividerWidth = 6;
         let treeWidth = windowWidth * this.treeContainerWidthPercent;
         if (treeWidth > windowWidth - verticalDividerWidth) {
             treeWidth = windowWidth - verticalDividerWidth;
