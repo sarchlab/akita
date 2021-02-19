@@ -4,9 +4,15 @@
     overflow-y: scroll
 }
 
+.vertical-divider {
+  background:#eeeeee;
+  width: 6px;
+}
+
 .divider-button {
   margin: 0;
   position: absolute;
+  width: 6px;
   top: 50%;
   -ms-transform: translateY(-50%);
   transform: translateY(-50%);
@@ -64,4 +70,13 @@
 
 .field-value{
   padding: 4px 6px;
+}
+
+.progress-bar-group {
+  border-top: #dddddd solid 3px;
+  padding: 4px;
+}
+
+.progress-complex{
+  display:flex;
 }

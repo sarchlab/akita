@@ -9,20 +9,23 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/gorilla/mux"
 	"github.com/syifan/goseth"
 	"gitlab.com/akita/akita"
+	"gitlab.com/akita/akita/monitoring/web"
 )
-
-//go:generate esc -private -pkg $GOPACKAGE -prefix web -o esc.go -ignore "(node_modules|api)" web
 
 // Monitor can turn a simulation into a server and allows external monitoring
 // controlling of the simulation.
 type Monitor struct {
 	engine     akita.Engine
 	components []akita.Component
+
+	progressBarsLock sync.Mutex
+	progressBars     []*ProgressBar
 }
 
 // NewMonitor creates a new Monitor
@@ -40,11 +43,43 @@ func (m *Monitor) RegisterComponent(c akita.Component) {
 	m.components = append(m.components, c)
 }
 
+// CreateProgressBar creates a new progress bar.
+func (m *Monitor) CreateProgressBar(name string, total uint64) *ProgressBar {
+	bar := &ProgressBar{
+		ID:    akita.GetIDGenerator().Generate(),
+		Name:  name,
+		Total: total,
+	}
+
+	m.progressBarsLock.Lock()
+	defer m.progressBarsLock.Unlock()
+
+	m.progressBars = append(m.progressBars, bar)
+
+	return bar
+}
+
+// CompleteProgressBar removes a bar to be shown on the webpage.
+func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
+	m.progressBarsLock.Lock()
+	defer m.progressBarsLock.Unlock()
+
+	newBars := make([]*ProgressBar, len(m.progressBars)-1)
+	for _, b := range m.progressBars {
+		if b != pb {
+			newBars = append(newBars, b)
+		}
+	}
+
+	m.progressBars = newBars
+}
+
 // StartServer starts the monitor as a web server.
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
 
-	fs := http.FileServer(_escFS(false))
+	fs := http.FS(web.Assets)
+	fServer := http.FileServer(fs)
 	r.HandleFunc("/api/pause", m.pauseEngine)
 	r.HandleFunc("/api/continue", m.continueEngine)
 	r.HandleFunc("/api/now", m.now)
@@ -53,7 +88,8 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/list_components", m.listComponents)
 	r.HandleFunc("/api/component/{name}", m.listComponentDetails)
 	r.HandleFunc("/api/field/{json}", m.listFieldValue)
-	r.PathPrefix("/").Handler(fs)
+	r.HandleFunc("/api/progress", m.listProgressBars)
+	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
 
 	listener, err := net.Listen("tcp", ":0")
@@ -232,6 +268,14 @@ func (m *Monitor) findComponentOr404(
 	}
 
 	return component
+}
+
+func (m *Monitor) listProgressBars(w http.ResponseWriter, r *http.Request) {
+	bytes, err := json.Marshal(m.progressBars)
+	dieOnErr(err)
+
+	_, err = w.Write(bytes)
+	dieOnErr(err)
 }
 
 func dieOnErr(err error) {
