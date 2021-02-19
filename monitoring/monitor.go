@@ -64,7 +64,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBarsLock.Lock()
 	defer m.progressBarsLock.Unlock()
 
-	newBars := make([]*ProgressBar, len(m.progressBars)-1)
+	newBars := make([]*ProgressBar, 0, len(m.progressBars)-1)
 	for _, b := range m.progressBars {
 		if b != pb {
 			newBars = append(newBars, b)
