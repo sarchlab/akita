@@ -27,6 +27,8 @@ export class ProgressBarManager {
                 res.forEach((pBar) => {
                     this.showOrUpdateProgressBar(pBar)
                 })
+
+                this.removeCompletedProgressBar(res)
             })
     }
 
@@ -45,15 +47,27 @@ export class ProgressBarManager {
 
         this.pBarDoms.set(pBar.id, dom)
 
-        this.container.appendChild(dom.dom)
-        this.uiManager.resize()
-        dom.resize()
+        dom.show(this.container, this.uiManager)
 
         return dom
     }
 
     removeCompletedProgressBar(pBars: Array<ProgressBar>) {
+        this.pBarDoms.forEach((dom, key) => {
+            let found = false
+            for (let i = 0; i < pBars.length; i++) {
+                if (pBars[i].id == key) {
+                    found = true
+                }
+            }
 
+            if (!found) {
+                this.pBarDoms.delete(key)
+                dom.remove().then(() => {
+                    this.uiManager.resize()
+                })
+            }
+        })
     }
 }
 
@@ -94,6 +108,19 @@ class ProgressBarDom {
         this.dom.appendChild(this.progressBar)
     }
 
+    async show(container: HTMLElement, uiManager: UIManager) {
+        container.appendChild(this.dom)
+        uiManager.resize()
+        this.resize()
+
+        const distance = window.innerHeight - this.dom.offsetTop
+
+        this.dom.animate(
+            { transform: `translate(0, ${distance}px)` },
+            { duration: 200, easing: "ease-in-out", direction: "reverse" }
+        )
+    }
+
     resize() {
         this.progressBar.style.width =
             `${this.dom.offsetWidth - this.label.offsetWidth - 20}px`
@@ -115,9 +142,22 @@ class ProgressBarDom {
         this.unfinishedDom.style.width =
             `${unfinished / pBar.total * 100}%`
         this.unfinishedDom.innerHTML = `${unfinished}`
-
     }
 
+    async remove(): Promise<void> {
+        const distance = window.innerHeight - this.dom.offsetTop;
+
+        return this.dom.
+            animate(
+                { transform: `translate(0, ${distance}px)` },
+                { duration: 200, easing: "ease-in-out" }
+            ).finished.
+            then(
+                () => {
+                    this.dom.remove()
+                }
+            )
+    }
 }
 
 interface ProgressBar {
