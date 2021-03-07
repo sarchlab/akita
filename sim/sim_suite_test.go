@@ -13,5 +13,5 @@ import (
 func TestCore(t *testing.T) {
 	log.SetOutput(ginkgo.GinkgoWriter)
 	gomega.RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "Sim")
+	ginkgo.RunSpecs(t, "Sim Suite")
 }
