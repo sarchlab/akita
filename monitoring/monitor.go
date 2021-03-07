@@ -15,7 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/syifan/goseth"
 	"gitlab.com/akita/akita/monitoring/web"
-	"gitlab.com/akita/v2/sim"
+	"gitlab.com/akita/akita/v2/sim"
 )
 
 // Monitor can turn a simulation into a server and allows external monitoring
