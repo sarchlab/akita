@@ -1,4 +1,4 @@
-package akita
+package sim
 
 import (
 	"fmt"
@@ -163,12 +163,6 @@ var _ = Describe("DirectConnection", func() {
 		Expect(msg1.RecvTime).To(Equal(VTimeInSec(10)))
 		Expect(msg2.RecvTime).To(Equal(VTimeInSec(10)))
 	})
-
-	// It("should notify all other ends when one end becomes available", func() {
-	// 	port2.EXPECT().NotifyAvailable(VTimeInSec(10))
-	// 	connection.NotifyAvailable(10, port1)
-	// })
-
 })
 
 type agent struct {

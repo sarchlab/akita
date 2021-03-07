@@ -1,4 +1,4 @@
-package akita
+package sim
 
 // A SimulationEndHandler is a handler that is called after the simulation ends.
 type SimulationEndHandler interface {

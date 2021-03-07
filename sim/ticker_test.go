@@ -1,4 +1,4 @@
-package akita
+package sim
 
 import (
 	"github.com/golang/mock/gomock"

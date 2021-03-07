@@ -1,4 +1,4 @@
-package akita
+package sim
 
 type directConnectionEnd struct {
 	port    Port

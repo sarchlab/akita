@@ -1,4 +1,4 @@
-package akita_test
+package sim_test
 
 import (
 	"fmt"

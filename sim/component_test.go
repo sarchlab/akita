@@ -1,4 +1,4 @@
-package akita
+package sim
 
 import (
 	. "github.com/onsi/ginkgo"

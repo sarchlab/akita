@@ -1,4 +1,4 @@
-package akita
+package sim
 
 import (
 	"container/heap"

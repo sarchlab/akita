@@ -1,4 +1,4 @@
-package akita
+package sim
 
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {

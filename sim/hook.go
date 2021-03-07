@@ -1,4 +1,4 @@
-package akita
+package sim
 
 // HookPos defines the enum of possible hooking positions
 type HookPos struct {

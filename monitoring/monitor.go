@@ -14,15 +14,15 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/syifan/goseth"
-	"gitlab.com/akita/akita"
 	"gitlab.com/akita/akita/monitoring/web"
+	"gitlab.com/akita/v2/sim"
 )
 
 // Monitor can turn a simulation into a server and allows external monitoring
 // controlling of the simulation.
 type Monitor struct {
-	engine     akita.Engine
-	components []akita.Component
+	engine     sim.Engine
+	components []sim.Component
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
@@ -34,19 +34,19 @@ func NewMonitor() *Monitor {
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
-func (m *Monitor) RegisterEngine(e akita.Engine) {
+func (m *Monitor) RegisterEngine(e sim.Engine) {
 	m.engine = e
 }
 
 // RegisterComponent register a component to be monitored.
-func (m *Monitor) RegisterComponent(c akita.Component) {
+func (m *Monitor) RegisterComponent(c sim.Component) {
 	m.components = append(m.components, c)
 }
 
 // CreateProgressBar creates a new progress bar.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *ProgressBar {
 	bar := &ProgressBar{
-		ID:    akita.GetIDGenerator().Generate(),
+		ID:    sim.GetIDGenerator().Generate(),
 		Name:  name,
 		Total: total,
 	}
@@ -143,7 +143,7 @@ func (m *Monitor) listComponents(w http.ResponseWriter, r *http.Request) {
 }
 
 type tickingComponent interface {
-	TickLater(now akita.VTimeInSec)
+	TickLater(now sim.VTimeInSec)
 }
 
 func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
@@ -253,8 +253,8 @@ func (m *Monitor) walkFields(
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
 	name string,
-) akita.Component {
-	var component akita.Component
+) sim.Component {
+	var component sim.Component
 	for _, c := range m.components {
 		if c.Name() == name {
 			component = c
