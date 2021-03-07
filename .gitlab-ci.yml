@@ -18,8 +18,9 @@ lint:
 test_job:
   stage: test
   script:
-    - go install github.com/onsi/ginkgo/ginkgo
     - go get github.com/onsi/ginkgo/ginkgo/outline@v1.15.0
-    - ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress --skip="Stress" --skipMeasurements -coverprofile=cover.out
+    - go install github.com/onsi/ginkgo/ginkgo
+    - ginkgo -r --randomizeAllSpecs --randomizeSuites --failOnPending --cover --trace --race --progress --skip="Stress" --skipMeasurements
+    - go test -coverprofile=cover.out ./...
     - go tool cover -func=cover.out > coverage.out
     - tail coverage.out
