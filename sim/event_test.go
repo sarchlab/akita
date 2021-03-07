@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"math/rand"
 
-	"gitlab.com/akita/akita"
+	"gitlab.com/akita/akita/v2/sim"
 )
 
 type SplitEvent struct {
-	time    akita.VTimeInSec
-	handler akita.Handler
+	time    sim.VTimeInSec
+	handler sim.Handler
 }
 
-func (e SplitEvent) Time() akita.VTimeInSec {
+func (e SplitEvent) Time() sim.VTimeInSec {
 	return e.time
 }
-func (e SplitEvent) Handler() akita.Handler {
+func (e SplitEvent) Handler() sim.Handler {
 	return e.handler
 }
 func (e SplitEvent) IsSecondary() bool {
@@ -24,13 +24,13 @@ func (e SplitEvent) IsSecondary() bool {
 
 type SplitHandler struct {
 	total  int
-	engine akita.Engine
+	engine sim.Engine
 }
 
-func (h *SplitHandler) Handle(evt akita.Event) error {
+func (h *SplitHandler) Handle(evt sim.Event) error {
 	h.total++
 	now := evt.Time()
-	nextTime := now + akita.VTimeInSec(rand.Float64()*2+0.5)
+	nextTime := now + sim.VTimeInSec(rand.Float64()*2+0.5)
 	if nextTime < 10.0 {
 		nextEvt := SplitEvent{
 			time:    nextTime,
@@ -38,7 +38,7 @@ func (h *SplitHandler) Handle(evt akita.Event) error {
 		}
 		h.engine.Schedule(nextEvt)
 	}
-	nextTime = now + akita.VTimeInSec(rand.Float64()*2+0.5)
+	nextTime = now + sim.VTimeInSec(rand.Float64()*2+0.5)
 	if nextTime < 10.0 {
 		nextEvt := SplitEvent{
 			time:    nextTime,
@@ -51,7 +51,7 @@ func (h *SplitHandler) Handle(evt akita.Event) error {
 
 func ExampleEvent() {
 	rand.Seed(1)
-	engine := akita.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	splitHandler := SplitHandler{
 		total:  0,
 		engine: engine,

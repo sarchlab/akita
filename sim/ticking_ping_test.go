@@ -3,7 +3,7 @@ package sim_test
 import (
 	"fmt"
 
-	"gitlab.com/akita/akita"
+	"gitlab.com/akita/akita/v2/sim"
 )
 
 type pingTransaction struct {
@@ -12,29 +12,29 @@ type pingTransaction struct {
 }
 
 type TickingPingAgent struct {
-	*akita.TickingComponent
+	*sim.TickingComponent
 
-	OutPort akita.Port
+	OutPort sim.Port
 
 	currentTransactions []*pingTransaction
-	startTime           []akita.VTimeInSec
+	startTime           []sim.VTimeInSec
 	numPingNeedToSend   int
 	nextSeqID           int
-	pingDst             akita.Port
+	pingDst             sim.Port
 }
 
 func NewTickingPingAgent(
 	name string,
-	engine akita.Engine,
-	freq akita.Freq,
+	engine sim.Engine,
+	freq sim.Freq,
 ) *TickingPingAgent {
 	a := &TickingPingAgent{}
-	a.TickingComponent = akita.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = akita.NewLimitNumMsgPort(a, 4, a.Name()+".OutPort")
+	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
+	a.OutPort = sim.NewLimitNumMsgPort(a, 4, a.Name()+".OutPort")
 	return a
 }
 
-func (a *TickingPingAgent) Tick(now akita.VTimeInSec) bool {
+func (a *TickingPingAgent) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = a.sendRsp(now) || madeProgress
@@ -45,7 +45,7 @@ func (a *TickingPingAgent) Tick(now akita.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (a *TickingPingAgent) processInput(now akita.VTimeInSec) bool {
+func (a *TickingPingAgent) processInput(now sim.VTimeInSec) bool {
 	msg := a.OutPort.Peek()
 	if msg == nil {
 		return false
@@ -64,7 +64,7 @@ func (a *TickingPingAgent) processInput(now akita.VTimeInSec) bool {
 }
 
 func (a *TickingPingAgent) processingPingMsg(
-	now akita.VTimeInSec,
+	now sim.VTimeInSec,
 	ping *PingMsg,
 ) {
 	trans := &pingTransaction{
@@ -76,7 +76,7 @@ func (a *TickingPingAgent) processingPingMsg(
 }
 
 func (a *TickingPingAgent) processingPingRsp(
-	now akita.VTimeInSec,
+	now sim.VTimeInSec,
 	msg *PingRsp,
 ) {
 	seqID := msg.SeqID
@@ -98,7 +98,7 @@ func (a *TickingPingAgent) countDown() bool {
 	return madeProgress
 }
 
-func (a *TickingPingAgent) sendRsp(now akita.VTimeInSec) bool {
+func (a *TickingPingAgent) sendRsp(now sim.VTimeInSec) bool {
 	if len(a.currentTransactions) == 0 {
 		return false
 	}
@@ -125,7 +125,7 @@ func (a *TickingPingAgent) sendRsp(now akita.VTimeInSec) bool {
 	return true
 }
 
-func (a *TickingPingAgent) sendPing(now akita.VTimeInSec) bool {
+func (a *TickingPingAgent) sendPing(now sim.VTimeInSec) bool {
 	if a.numPingNeedToSend == 0 {
 		return false
 	}
@@ -150,10 +150,10 @@ func (a *TickingPingAgent) sendPing(now akita.VTimeInSec) bool {
 }
 
 func Example_pingWithTicking() {
-	engine := akita.NewSerialEngine()
-	agentA := NewTickingPingAgent("AgentA", engine, 1*akita.Hz)
-	agentB := NewTickingPingAgent("AgentB", engine, 1*akita.Hz)
-	conn := akita.NewDirectConnection("Conn", engine, 1*akita.GHz)
+	engine := sim.NewSerialEngine()
+	agentA := NewTickingPingAgent("AgentA", engine, 1*sim.Hz)
+	agentB := NewTickingPingAgent("AgentB", engine, 1*sim.Hz)
+	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
 
 	conn.PlugIn(agentA.OutPort, 1)
 	conn.PlugIn(agentB.OutPort, 1)

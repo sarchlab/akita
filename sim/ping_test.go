@@ -4,57 +4,57 @@ import (
 	"fmt"
 	"reflect"
 
-	"gitlab.com/akita/akita"
+	"gitlab.com/akita/akita/v2/sim"
 )
 
 type PingMsg struct {
-	akita.MsgMeta
+	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingMsg) Meta() *akita.MsgMeta {
+func (p *PingMsg) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
 type PingRsp struct {
-	akita.MsgMeta
+	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingRsp) Meta() *akita.MsgMeta {
+func (p *PingRsp) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
 type StartPingEvent struct {
-	*akita.EventBase
-	Dst akita.Port
+	*sim.EventBase
+	Dst sim.Port
 }
 
 type RspPingEvent struct {
-	*akita.EventBase
+	*sim.EventBase
 	pingMsg *PingMsg
 }
 
 type PingAgent struct {
-	*akita.ComponentBase
+	*sim.ComponentBase
 
-	Engine  akita.Engine
-	OutPort akita.Port
+	Engine  sim.Engine
+	OutPort sim.Port
 
-	startTime []akita.VTimeInSec
+	startTime []sim.VTimeInSec
 	nextSeqID int
 }
 
-func NewPingAgent(name string, engine akita.Engine) *PingAgent {
+func NewPingAgent(name string, engine sim.Engine) *PingAgent {
 	agent := &PingAgent{Engine: engine}
-	agent.ComponentBase = akita.NewComponentBase(name)
-	agent.OutPort = akita.NewLimitNumMsgPort(agent, 4, name+".OutPort")
+	agent.ComponentBase = sim.NewComponentBase(name)
+	agent.OutPort = sim.NewLimitNumMsgPort(agent, 4, name+".OutPort")
 	return agent
 }
 
-func (p *PingAgent) Handle(e akita.Event) error {
+func (p *PingAgent) Handle(e sim.Event) error {
 	p.Lock()
 	defer p.Unlock()
 
@@ -97,7 +97,7 @@ func (p *PingAgent) RspPing(evt RspPingEvent) {
 	p.OutPort.Send(rsp)
 }
 
-func (p *PingAgent) NotifyRecv(now akita.VTimeInSec, port akita.Port) {
+func (p *PingAgent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
 	p.Lock()
 	defer p.Unlock()
 
@@ -112,15 +112,15 @@ func (p *PingAgent) NotifyRecv(now akita.VTimeInSec, port akita.Port) {
 	}
 }
 
-func (p *PingAgent) processPingMsg(now akita.VTimeInSec, msg *PingMsg) {
+func (p *PingAgent) processPingMsg(now sim.VTimeInSec, msg *PingMsg) {
 	rspEvent := RspPingEvent{
-		EventBase: akita.NewEventBase(now+2, p),
+		EventBase: sim.NewEventBase(now+2, p),
 		pingMsg:   msg,
 	}
 	p.Engine.Schedule(rspEvent)
 }
 
-func (p *PingAgent) processPingRsp(now akita.VTimeInSec, msg *PingRsp) {
+func (p *PingAgent) processPingRsp(now sim.VTimeInSec, msg *PingRsp) {
 	seqID := msg.SeqID
 	startTime := p.startTime[seqID]
 	duration := now - startTime
@@ -128,25 +128,25 @@ func (p *PingAgent) processPingRsp(now akita.VTimeInSec, msg *PingRsp) {
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 }
 
-func (p PingAgent) NotifyPortFree(now akita.VTimeInSec, port akita.Port) {
+func (p PingAgent) NotifyPortFree(now sim.VTimeInSec, port sim.Port) {
 	// Do nothing
 }
 
 func Example_pingWithEvents() {
-	engine := akita.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	agentA := NewPingAgent("AgentA", engine)
 	agentB := NewPingAgent("AgentB", engine)
-	conn := akita.NewDirectConnection("Conn", engine, 1*akita.GHz)
+	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
 
 	conn.PlugIn(agentA.OutPort, 1)
 	conn.PlugIn(agentB.OutPort, 1)
 
 	e1 := StartPingEvent{
-		EventBase: akita.NewEventBase(1, agentA),
+		EventBase: sim.NewEventBase(1, agentA),
 		Dst:       agentB.OutPort,
 	}
 	e2 := StartPingEvent{
-		EventBase: akita.NewEventBase(3, agentA),
+		EventBase: sim.NewEventBase(3, agentA),
 		Dst:       agentB.OutPort,
 	}
 	engine.Schedule(e1)

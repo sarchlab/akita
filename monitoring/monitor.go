@@ -14,7 +14,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/syifan/goseth"
-	"gitlab.com/akita/akita/monitoring/web"
+	"gitlab.com/akita/akita/v2/monitoring/web"
 	"gitlab.com/akita/akita/v2/sim"
 )
 

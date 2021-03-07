@@ -7,7 +7,6 @@ require (
 	github.com/onsi/gomega v1.10.5
 	github.com/rs/xid v1.2.1
 	github.com/syifan/goseth v0.0.3
-	gitlab.com/akita/akita v1.12.1
 )
 
 // replace github.com/syifan/goseth => ../goseth
