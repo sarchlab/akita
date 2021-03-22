@@ -22,11 +22,6 @@ export function listComponents() {
                     newElement.style.display = 'none'
                     btn.appendChild(newElement)
                 }
-                //btn.addEventListener("dblclick",
-                 //   () => {
-                  //      const detailView = new ComponentDetailView(compName)
-                   //     detailView.populate()
-                    //})
 
                 function collapse(event:any){
                     const detailView = new ComponentDetailView(compName)
