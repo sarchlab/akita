@@ -133,63 +133,6 @@ function display(tree: Node, container: HTMLElement) {
     } else {
         displayComponent(tree, container)
     }
-
-
-    // //If the next 'node' is a map
-    // if (tree.get(name) instanceof Map) {
-
-    //     //If the next 'node' is an array
-    // } else {
-    //     let btn = document.createElement("div")
-    //     //initial string
-    //     btn.innerHTML = name
-    //     btn.style.textIndent = indent + 'px'
-    //     btn.style.cursor = 'pointer'
-    //     if (indent == 0) {
-    //         btn.style.display = 'block'
-    //     } else {
-    //         btn.style.display = 'none'
-    //     }
-    //     function collapseInner(event: any) {
-    //         //This is things like driver and MMU
-    //         if (indent == 0) {
-    //             const detailView = new ComponentDetailView(name)
-    //             detailView.populate()
-    //             //If the indent is greater than 0, check whether the array length is < 2
-    //         } else if (tree.get(name).length < 2) {
-    //             const detailView = new ComponentDetailView(strng + '.' + name)
-    //             detailView.populate()
-    //         }
-    //         for (let j = 0; j < event.target.children.length; j++) {
-    //             if (event.target.children[j].style.display == 'block') {
-    //                 event.target.children[j].style.display = 'none !important'
-    //             } else {
-    //                 event.target.children[j].style.display = 'block !important'
-    //             }
-    //         }
-    //     }
-    //     btn.addEventListener("click", collapseInner)
-    //     container.appendChild(btn)
-    //     //Create the last set of leafs, if the array is > 1
-    //     if (tree.get(name).length >= 2 && tree.get(name)[0] != name) {
-    //         for (let com of tree.get(name)) {
-    //             let btnInner = document.createElement("div")
-    //             //initial string
-    //             btnInner.innerHTML = com
-    //             btnInner.style.display = 'none'
-    //             btnInner.style.cursor = 'pointer'
-    //             btnInner.style.textIndent = (indent + 25) + 'px'
-    //             let compName = strng + '.' + name + '.' + com
-    //             function displayComp() {
-    //                 console.log(compName)
-    //                 const detailView = new ComponentDetailView(compName)
-    //                 detailView.populate()
-    //             }
-    //             btnInner.addEventListener("click", displayComp)
-    //             btn.appendChild(btnInner)
-    //         }
-    //     }
-    // }
 }
 
 export function listComponents() {
