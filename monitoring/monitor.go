@@ -225,8 +225,6 @@ func (m *Monitor) walkFields(
 
 	for len(fieldNames) > 0 {
 		switch elem.Kind() {
-		case reflect.String:
-			elem = elem.String()
 		case reflect.Ptr, reflect.Interface:
 			elem = elem.Elem()
 		case reflect.Struct:
