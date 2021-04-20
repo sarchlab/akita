@@ -23,9 +23,11 @@ func (h *PortMsgLogger) Func(ctx HookCtx) {
 	if !ok {
 		return
 	}
-	if ctx.Pos == HookPosPortMsgRecvd {
-		h.Logger.Printf("%.10f,", ctx.Now)
-	} else if ctx.Pos == HookPosPortMsgRetrieve {
-		h.Logger.Printf("%.10f,%s,%s\n", ctx.Now, reflect.TypeOf(msg), msg.Meta().ID)
-	}
+
+	h.Logger.Printf("%.10f,%s,%s,%s,%s,%s,%s\n",
+		ctx.Now, ctx.Domain.(Port).Name(),
+		ctx.Pos.Name,
+		msg.Meta().Src.Name(),
+		msg.Meta().Dst.Name(),
+		reflect.TypeOf(msg), msg.Meta().ID)
 }

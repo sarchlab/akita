@@ -39,11 +39,14 @@ type LimitNumMsgPort struct {
 	portBusyLock sync.RWMutex
 }
 
+// HookPosPortMsgSend marks when a message is sent out from the port.
+var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
+
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
 var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
 
 // HookPosPortMsgRetrieve marks when an outbound message is sent over a connection
-var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg  Retrieve"}
+var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
 
 // SetConnection sets which connection plugged in to this port.
 func (p *LimitNumMsgPort) SetConnection(conn Connection) {
@@ -63,6 +66,17 @@ func (p *LimitNumMsgPort) Name() string {
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	err := p.conn.Send(msg)
+
+	if err != nil {
+		hookCtx := HookCtx{
+			Domain: p,
+			Now:    msg.Meta().SendTime,
+			Pos:    HookPosPortMsgSend,
+			Item:   msg,
+		}
+		p.InvokeHook(hookCtx)
+	}
+
 	return err
 }
 
