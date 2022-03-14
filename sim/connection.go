@@ -13,6 +13,7 @@ func NewSendError() *SendError {
 type Connection interface {
 	Hookable
 
+	CanSend(src Port) bool
 	Send(msg Msg) *SendError
 
 	// PlugIn connects a port to the connection. The connection should reserve

@@ -9,7 +9,6 @@ type HookPos struct {
 // hook is triggered
 type HookCtx struct {
 	Domain Hookable
-	Now    VTimeInSec
 	Pos    *HookPos
 	Item   interface{}
 	Detail interface{}

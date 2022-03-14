@@ -87,7 +87,6 @@ func (e *SerialEngine) Run() error {
 
 		hookCtx := HookCtx{
 			Domain: e,
-			Now:    now,
 			Pos:    HookPosBeforeEvent,
 			Item:   evt,
 		}

@@ -227,7 +227,7 @@ linters-settings:
 linters:
   disable-all: true
   enable:
-    - golint
+    - revive
     - bodyclose
     - govet
     - stylecheck
@@ -237,7 +237,7 @@ linters:
     - misspell
     - nakedret
     - prealloc
-    - scopelint
+    - exportloopref
     - unconvert
     - whitespace
     - gosimple

@@ -41,6 +41,22 @@ func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
 	c.TickNow(now)
 }
 
+// CanSend checks if the direct message can send a message from the port.
+func (c *DirectConnection) CanSend(src Port) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	end := c.ends[src]
+
+	canSend := len(end.buf) < end.bufSize
+
+	if !canSend {
+		end.busy = true
+	}
+
+	return canSend
+}
+
 // Send of a DirectConnection schedules a DeliveryEvent immediately
 func (c *DirectConnection) Send(msg Msg) *SendError {
 	c.Lock()
