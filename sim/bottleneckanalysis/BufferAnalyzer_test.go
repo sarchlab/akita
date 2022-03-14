@@ -4,7 +4,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"gitlab.com/akita/akita/v2/sim"
+	"gitlab.com/akita/akita/v3/sim"
 )
 
 var _ = Describe("BufferAnalyzer", func() {
