@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/tebeka/atexit"
-	"gitlab.com/akita/akita/v2/sim"
+	"gitlab.com/akita/akita/v3/sim"
 )
 
 // BufferAnalyzer can use buffer levels to analyze the bottleneck of the system.

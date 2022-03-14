@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"gitlab.com/akita/akita/v2/sim"
+	"gitlab.com/akita/akita/v3/sim"
 )
 
 type PingMsg struct {

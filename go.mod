@@ -1,4 +1,4 @@
-module gitlab.com/akita/akita/v2
+module gitlab.com/akita/akita/v3
 
 require (
 	github.com/golang/mock v1.4.4
