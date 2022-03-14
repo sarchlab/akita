@@ -7,6 +7,7 @@ require (
 	github.com/onsi/gomega v1.10.5
 	github.com/rs/xid v1.2.1
 	github.com/syifan/goseth v0.0.4
+	github.com/tebeka/atexit v0.3.0
 )
 
 // replace github.com/syifan/goseth => ../goseth

@@ -1,5 +1,15 @@
 package sim
 
+// TimeTeller can be used to get the current time.
+type TimeTeller interface {
+	CurrentTime() VTimeInSec
+}
+
+// EventScheduler can be used to schedule future events.
+type EventScheduler interface {
+	Schedule(e Event)
+}
+
 // A SimulationEndHandler is a handler that is called after the simulation ends.
 type SimulationEndHandler interface {
 	Handle(now VTimeInSec)
@@ -8,9 +18,8 @@ type SimulationEndHandler interface {
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable
-
-	// Schedule registers an event to happen in the future
-	Schedule(e Event)
+	TimeTeller
+	EventScheduler
 
 	// Run will process all the events until the simulation finishes
 	Run() error
@@ -20,9 +29,6 @@ type Engine interface {
 
 	// Continue will continue the paused simulation
 	Continue()
-
-	// CurrentTime will return the time at which the engine is at.
-	CurrentTime() VTimeInSec
 
 	// RegisterSimulationEndHandler registers a handler that perform some
 	// actions after the simulation is finished.

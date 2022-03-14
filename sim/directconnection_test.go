@@ -209,8 +209,8 @@ var _ = Describe("Direct Connection Integration", func() {
 		engine          Engine
 		connection      *DirectConnection
 		agents          []*agent
-		numAgents       int = 10
-		numMsgsPerAgent int = 1000
+		numAgents       = 10
+		numMsgsPerAgent = 1000
 	)
 
 	BeforeEach(func() {

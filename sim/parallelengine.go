@@ -261,7 +261,6 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 
 	hookCtx := HookCtx{
 		Domain: e,
-		Now:    now,
 		Pos:    HookPosBeforeEvent,
 		Item:   evt,
 	}

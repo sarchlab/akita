@@ -18,6 +18,7 @@ type Port interface {
 	NotifyAvailable(now VTimeInSec)
 
 	// For component
+	CanSend() bool
 	Send(msg Msg) *SendError
 	Retrieve(now VTimeInSec) Msg
 	Peek() Msg
@@ -32,9 +33,8 @@ type LimitNumMsgPort struct {
 	comp Component
 	conn Connection
 
-	buf          []Msg
+	buf          Buffer
 	bufLock      sync.RWMutex
-	bufCapacity  int
 	portBusy     bool
 	portBusyLock sync.RWMutex
 }
@@ -63,6 +63,11 @@ func (p *LimitNumMsgPort) Name() string {
 	return p.name
 }
 
+// CanSend checks if the port can send a message without error.
+func (p *LimitNumMsgPort) CanSend() bool {
+	return p.conn.CanSend(p)
+}
+
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	err := p.conn.Send(msg)
@@ -70,7 +75,6 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	if err != nil {
 		hookCtx := HookCtx{
 			Domain: p,
-			Now:    msg.Meta().SendTime,
 			Pos:    HookPosPortMsgSend,
 			Item:   msg,
 		}
@@ -84,7 +88,7 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	p.bufLock.Lock()
 
-	if len(p.buf) >= p.bufCapacity {
+	if !p.buf.CanPush() {
 		p.portBusyLock.Lock()
 		p.portBusy = true
 		p.portBusyLock.Unlock()
@@ -94,13 +98,12 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 
 	hookCtx := HookCtx{
 		Domain: p,
-		Now:    msg.Meta().RecvTime,
 		Pos:    HookPosPortMsgRecvd,
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
 
-	p.buf = append(p.buf, msg)
+	p.buf.Push(msg)
 	p.bufLock.Unlock()
 
 	if p.comp != nil {
@@ -114,15 +117,14 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.bufLock.Lock()
 	defer p.bufLock.Unlock()
 
-	if len(p.buf) == 0 {
+	item := p.buf.Pop()
+	if item == nil {
 		return nil
 	}
 
-	msg := p.buf[0]
-	p.buf = p.buf[1:]
+	msg := item.(Msg)
 	hookCtx := HookCtx{
 		Domain: p,
-		Now:    now,
 		Pos:    HookPosPortMsgRetrieve,
 		Item:   msg,
 	}
@@ -143,11 +145,12 @@ func (p *LimitNumMsgPort) Peek() Msg {
 	p.bufLock.RLock()
 	defer p.bufLock.RUnlock()
 
-	if len(p.buf) == 0 {
+	item := p.buf.Peek()
+	if item == nil {
 		return nil
 	}
 
-	msg := p.buf[0]
+	msg := item.(Msg)
 	return msg
 }
 
@@ -167,7 +170,21 @@ func NewLimitNumMsgPort(
 ) *LimitNumMsgPort {
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.bufCapacity = capacity
+	p.buf = NewBuffer("Buf", capacity)
+	p.name = name
+	return p
+}
+
+// NewLimitNumMsgPortWithExternalBuffer creates a new port that works for the
+// provided component and uses the provided buffer.
+func NewLimitNumMsgPortWithExternalBuffer(
+	comp Component,
+	buf Buffer,
+	name string,
+) *LimitNumMsgPort {
+	p := new(LimitNumMsgPort)
+	p.comp = comp
+	p.buf = buf
 	p.name = name
 	return p
 }

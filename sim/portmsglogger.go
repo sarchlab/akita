@@ -8,12 +8,17 @@ import (
 // PortMsgLogger is a hook for logging messages as they go across a Port
 type PortMsgLogger struct {
 	LogHookBase
+	TimeTeller
 }
 
 // NewPortMsgLogger returns a new PortMsgLogger which will write into the logger
-func NewPortMsgLogger(logger *log.Logger) *PortMsgLogger {
+func NewPortMsgLogger(
+	logger *log.Logger,
+	timeTeller TimeTeller,
+) *PortMsgLogger {
 	h := new(PortMsgLogger)
 	h.Logger = logger
+	h.TimeTeller = timeTeller
 	return h
 }
 
@@ -25,7 +30,8 @@ func (h *PortMsgLogger) Func(ctx HookCtx) {
 	}
 
 	h.Logger.Printf("%.10f,%s,%s,%s,%s,%s,%s\n",
-		ctx.Now, ctx.Domain.(Port).Name(),
+		h.CurrentTime(),
+		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,
 		msg.Meta().Src.Name(),
 		msg.Meta().Dst.Name(),

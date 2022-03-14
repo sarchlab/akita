@@ -18,5 +18,12 @@
             "mode": "test",
             "program": "${workspaceFolder}"
         },
+        {
+            "name": "Test gitlab.com/akita/v2/sim/bottleneckanalysis",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/sim/bottleneckanalysis"
+        },
     ]
 }
