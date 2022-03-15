@@ -6,8 +6,8 @@ require (
 	github.com/golang/snappy v0.0.2 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/gorilla/mux v1.8.0
-	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.16.0
+	github.com/onsi/ginkgo/v2 v2.1.3
+	github.com/onsi/gomega v1.17.0
 	github.com/rs/xid v1.2.1
 	github.com/syifan/goseth v0.0.4
 	github.com/tebeka/atexit v0.3.0
