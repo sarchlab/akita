@@ -4,7 +4,8 @@ import (
 	"math/rand"
 
 	gomock "github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega/gmeasure"
 )
 
 var _ = Describe("ParallelEngine", func() {
@@ -91,22 +92,26 @@ var _ = Describe("ParallelEngine", func() {
 		_ = engine.Run()
 	})
 
-	Measure("Event triggering speed", func(b Benchmarker) {
-		handler := NewMockHandler(mockCtrl)
-		handler.EXPECT().Handle(gomock.Any()).Do(func(e Event) {
-			for i := 0; i < 1000; i++ {
+	It("mesure triggering speed", func() {
+		experiment := gmeasure.NewExperiment("Parallel Engine Triggering Speed")
+		AddReportEntry(experiment.Name, experiment)
+
+		experiment.MeasureDuration("runtime", func() {
+			handler := NewMockHandler(mockCtrl)
+			handler.EXPECT().Handle(gomock.Any()).Do(func(e Event) {
+				for i := 0; i < 1000; i++ {
+				}
+			}).AnyTimes()
+
+			for i := 0; i < 10000; i++ {
+				evt := NewMockEvent(mockCtrl)
+				time := VTimeInSec(float64(rand.Uint64()%10) * 0.01)
+				evt.EXPECT().Time().Return(time).AnyTimes()
+				evt.EXPECT().Handler().Return(handler).AnyTimes()
+				evt.EXPECT().IsSecondary().Return(false).AnyTimes()
+				engine.Schedule(evt)
 			}
-		}).AnyTimes()
+		})
 
-		for i := 0; i < 10000; i++ {
-			evt := NewMockEvent(mockCtrl)
-			time := VTimeInSec(float64(rand.Uint64()%10) * 0.01)
-			evt.EXPECT().Time().Return(time).AnyTimes()
-			evt.EXPECT().Handler().Return(handler).AnyTimes()
-			evt.EXPECT().IsSecondary().Return(false).AnyTimes()
-			engine.Schedule(evt)
-		}
-
-		b.Time("runtime", func() { _ = engine.Run() })
-	}, 10)
+	})
 })

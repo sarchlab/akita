@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	gomock "github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/gmeasure"
 	"gitlab.com/akita/akita/v3/sim"
 )
 
@@ -117,8 +118,11 @@ var _ = Describe("BusyTimeTracer", func() {
 		Expect(t.BusyTime()).To(BeNumerically("~", 2.5, 0.01))
 	})
 
-	Measure("It should have a good performance", func(b Benchmarker) {
-		runtime := b.Time("runtime", func() {
+	It("measure busy time tracer", func() {
+		experiment := gmeasure.NewExperiment("Busy Time Tracer Performance")
+		AddReportEntry(experiment.Name, experiment)
+
+		experiment.MeasureDuration("runtime", func() {
 			for i := 0; i < 10000; i++ {
 				taskID := fmt.Sprintf("%d", i)
 
@@ -138,7 +142,5 @@ var _ = Describe("BusyTimeTracer", func() {
 
 			Expect(t.BusyTime()).To(BeNumerically("~", 10000, 0.01))
 		})
-
-		Expect(runtime.Seconds()).To(BeNumerically("<", 1))
-	}, 10)
+	})
 })

@@ -57,7 +57,7 @@ You can define another file for tests
 package test
 
 import (
-    . "github.com/onsi/ginkgo"
+    . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
 )
 
@@ -107,7 +107,7 @@ package test
 
 import (
     "github.com/golang/mock/gomock"
-    . "github.com/onsi/ginkgo"
+    . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
     "gitlab.com/akita/akita"
     "gitlab.com/akita/akita/mock_akita"
