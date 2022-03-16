@@ -1,34 +1,33 @@
 .horizontal-block {
-    display: inline-block;
-    vertical-align: top;
-    overflow-y: scroll
+  display: flex;
+  vertical-align: top;
+  overflow-y: scroll;
+
 }
+
+.horizontal-container {
+  padding: 8px;
+}
+
 
 .vertical-divider {
-  background:#eeeeee;
-  width: 6px;
-}
-
-.divider-button {
-  margin: 0;
-  position: absolute;
-  width: 6px;
-  top: 50%;
-  -ms-transform: translateY(-50%);
-  transform: translateY(-50%);
+  background: #eeeeee;
+  width: 150px;
+  cursor: move;
+  user-select: none;
 }
 
 .main-container {
   overflow: hidden;
-  display:flex;
+  display: flex;
+  /* position: absolute; */
 }
 
 #now-label {
-  display:block;
+  display: block;
   width: 12em;
   text-align: left;
 }
-
 
 .detail-table tr:nth-child(even) {
   background-color: #f2f2f2;
@@ -42,8 +41,9 @@
 .component-container {
   margin: 4px;
   border-radius: 10px;
-  border: solid 1px #eeeeee;
+  border: solid 1px #ffffff;
   overflow: hidden;
+  width: 100%;
 }
 
 .component-header {
@@ -51,24 +51,21 @@
   color: #ffffff;
   padding: 8px 15px;
   font-size: 1.5em;
-  display:flex;
+  display: flex;
   justify-content: space-between;
 }
 
-.component-detail-container {
-  padding: 1px 8px;
-}
 
 .detail-table {
-  width:100%;
+  width: 100%;
   margin: 4px;
 }
 
-.field-value:empty{
-  display:none
+.field-value:empty {
+  display: none;
 }
 
-.field-value{
+.field-value {
   padding: 4px 6px;
 }
 
@@ -77,6 +74,28 @@
   padding: 4px;
 }
 
-.progress-complex{
-  display:flex;
+.progress-complex {
+  display: flex;
+}
+
+.table th {
+  font-weight: bold;
+  background-color: #f9f9f9
+}
+
+.buffer-table th {
+  padding: 0.2rem;
+}
+
+.buffer-table td {
+  padding: 0.2rem;
+}
+
+.buffer-value {
+  width: 60px;
+  text-align: right;
+}
+
+.buffer-name {
+  width: 400px;
 }

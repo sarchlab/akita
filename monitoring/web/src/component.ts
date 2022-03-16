@@ -9,7 +9,7 @@ export class ComponentDetailView {
         fetch(`/api/component/${this.name}`)
             .then(res => res.json())
             .then((res: any) => {
-                const container = document.getElementById('detail-container')
+                const container = document.getElementById('central-pane')
                 const object = res["dict"][res["root"]]
 
                 this.showComponent(object, container)
