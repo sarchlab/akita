@@ -140,6 +140,6 @@ export function listComponents() {
         .then(res => res.json())
         .then((res: Array<string>) => {
             let tree = createTree(res);
-            display(tree, document.getElementById('tree-container'))
+            display(tree, document.getElementById('left-pane'))
         })
 }

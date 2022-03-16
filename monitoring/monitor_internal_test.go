@@ -5,6 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gitlab.com/akita/akita/v3/sim"
 )
 
 type sampleStruct struct {
@@ -14,14 +15,50 @@ type sampleStruct struct {
 	field4 []sampleStruct
 }
 
-var _ = Describe("Monitor", func() {
+type sampleComponent struct {
+	*sim.ComponentBase
 
+	buffer sim.Buffer
+}
+
+func (c *sampleComponent) Handle(evt sim.Event) error {
+	return nil
+}
+
+func (c *sampleComponent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
+	// Do nothing
+}
+
+func (c *sampleComponent) NotifyPortFree(now sim.VTimeInSec, port sim.Port) {
+	// Do nothing
+}
+
+func newSampleComponent() *sampleComponent {
+	c := &sampleComponent{
+		ComponentBase: sim.NewComponentBase("Comp"),
+		buffer:        sim.NewBuffer("Comp.Buf", 10),
+	}
+
+	c.AddPort("Port1", sim.NewLimitNumMsgPort(c, 2, "Comp.Port1"))
+
+	return c
+}
+
+var _ = Describe("Monitor", func() {
 	var (
 		m *Monitor
 	)
 
 	BeforeEach(func() {
 		m = &Monitor{}
+	})
+
+	It("should register components and internal buffers", func() {
+		c := newSampleComponent()
+		m.RegisterComponent(c)
+
+		Expect(m.components).To(HaveLen(1))
+		Expect(m.buffers).To(HaveLen(2))
 	})
 
 	It("should walk int fields", func() {

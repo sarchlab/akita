@@ -5,11 +5,20 @@
 </header>
 
 <body>
+
     <nav id="navbar" class="navbar navbar-dark bg-dark">
         <a class="navbar-brand" href="/">Akita Monitoring Tool</a>
 
         <form class="form-inline my-2 my-lg-0">
-            <div class="input-group">
+            <!-- <div class="input-group mr-3">
+                <div class="input-group-prepend"> -->
+            <button class="btn btn-success" id="hang-analyzer-btn">
+                <i class="fa-solid fa-sign-hanging"></i>
+            </button>
+            <!-- </div>
+            </div> -->
+
+            <div class="input-group ml-3">
                 <div class="input-group-prepend">
                     <button id="run-button" class="btn btn-success"
                         type="submit">
@@ -25,7 +34,6 @@
                 </div>
                 <div class="input-group-append">
                     <label id="now-label" class="input-group-text">
-                        0
                     </label>
                 </div>
             </div>
@@ -35,18 +43,20 @@
     </nav>
 
     <div id="main-container" class="main-container" class="container-fluid">
-        <div id="tree-container"
-            class="horizontal-block component-tree-container"></div>
-        <div id="vertical-divider" class="horizontal-block vertical-divider">
-            <div class="divider-button">
-                <i class="fas fa-caret-left"></i>
-            </div>
+        <div id="left-pane" class="horizontal-block horizontal-container">
         </div>
-        <div id="detail-container"
-            class="horizontal-block component-detail-container"></div>
+        <div id="vertical-divider-left"
+            class="horizontal-block vertical-divider">
+        </div>
+        <div id="central-pane" class="horizontal-block horizontal-container ">
+        </div>
+        <div id="vertical-divider-right"
+            class="horizontal-block vertical-divider">
+        </div>
+        <div id="right-pane" class="horizontal-block horizontal-container">
+        </div>
     </div>
 
     <div id="progress-bar-group" class="progress-bar-group"></div>
-
     <script src="dist/bundle.js"></script>
 </body>

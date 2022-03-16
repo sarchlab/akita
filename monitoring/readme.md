@@ -15,4 +15,4 @@ You can use a web browser to access the monitoring tool hosted at the given port
 1. Make sure you have NodeJS and npm installed.
 2. In the web folder, type `npm install` to install dependencies.
 3. In the web folder, run `npm run watch` to use webpack to build static assets.
-4. Recompile your simulation with `go build` before running the simulation so that changes to the frontend can take effect.
+4. Set environment variable `AKITA_MONITOR_DEV` to the `true` to enable the development. In development mode, your modification to the frontend code will be reflected without recompiling the simulation. 

@@ -170,7 +170,7 @@ func NewLimitNumMsgPort(
 ) *LimitNumMsgPort {
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.buf = NewBuffer("Buf", capacity)
+	p.buf = NewBuffer(name+".Buf", capacity)
 	p.name = name
 	return p
 }

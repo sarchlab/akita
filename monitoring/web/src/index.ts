@@ -14,16 +14,19 @@ import { UIManager } from './ui_manager'
 import { listComponents } from './component_tree'
 import { EngineController } from './engine_control'
 import { ProgressBarManager } from './progress_bar'
+import { HangAnalyzer } from './hang_analyzer'
 
 class App {
     uiManager: UIManager
     engineController: EngineController
     progressBarManager: ProgressBarManager
+    hangAnalyzer: HangAnalyzer
 
     constructor() {
         this.uiManager = new UIManager();
         this.engineController = new EngineController();
         this.progressBarManager = new ProgressBarManager(this.uiManager);
+        this.hangAnalyzer = new HangAnalyzer();
     }
 
     start() {
@@ -32,6 +35,7 @@ class App {
 
         this.engineController.bindDom()
         this.progressBarManager.binDom()
+        this.hangAnalyzer.bindDom()
 
         window.addEventListener("resize", () => {
             this.uiManager.resize();

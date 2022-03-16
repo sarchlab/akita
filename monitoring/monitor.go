@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 type Monitor struct {
 	engine     sim.Engine
 	components []sim.Component
+	buffers    []sim.Buffer
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
@@ -41,6 +43,34 @@ func (m *Monitor) RegisterEngine(e sim.Engine) {
 // RegisterComponent register a component to be monitored.
 func (m *Monitor) RegisterComponent(c sim.Component) {
 	m.components = append(m.components, c)
+
+	m.registerBuffers(c)
+}
+
+func (m *Monitor) registerBuffers(c sim.Component) {
+	m.registerComponentOrPortBuffers(c)
+
+	for _, p := range c.Ports() {
+		m.registerComponentOrPortBuffers(p)
+	}
+}
+
+func (m *Monitor) registerComponentOrPortBuffers(c any) {
+	v := reflect.ValueOf(c).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+
+		fieldType := field.Type()
+		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
+
+		if fieldType == bufferType {
+			fieledRef := reflect.NewAt(
+				field.Type(),
+				unsafe.Pointer(field.UnsafeAddr()),
+			).Elem().Interface().(sim.Buffer)
+			m.buffers = append(m.buffers, fieledRef)
+		}
+	}
 }
 
 // CreateProgressBar creates a new progress bar.
@@ -78,7 +108,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
 
-	fs := http.FS(web.Assets)
+	fs := web.GetAssets()
 	fServer := http.FileServer(fs)
 	r.HandleFunc("/api/pause", m.pauseEngine)
 	r.HandleFunc("/api/continue", m.continueEngine)
@@ -88,6 +118,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/list_components", m.listComponents)
 	r.HandleFunc("/api/component/{name}", m.listComponentDetails)
 	r.HandleFunc("/api/field/{json}", m.listFieldValue)
+	r.HandleFunc("/api/hangdetector/buffers", m.hangdetectorBuffers)
 	r.HandleFunc("/api/progress", m.listProgressBars)
 	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
@@ -206,6 +237,30 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 		elem.Type(), unsafe.Pointer(elem.UnsafeAddr())).Elem()
 	err = serializer.Serialize(elemCopy.Interface(), w)
 	dieOnErr(err)
+}
+
+func (m *Monitor) hangdetectorBuffers(w http.ResponseWriter, r *http.Request) {
+	sortedBuffers := make([]sim.Buffer, len(m.buffers))
+	copy(sortedBuffers, m.buffers)
+	sort.Slice(sortedBuffers, func(i, j int) bool {
+		return sortedBuffers[i].Size() > sortedBuffers[j].Size()
+	})
+
+	fmt.Fprintf(w, "[")
+	for i, b := range sortedBuffers {
+		if i > 0 {
+			fmt.Fprint(w, ",")
+		}
+
+		fmt.Fprintf(w, "{\"buffer\":\"%s\",\"level\":%d,\"cap\":%d}",
+			b.Name(), b.Size(), b.Capacity())
+
+		if i > 50 {
+			break
+		}
+	}
+
+	fmt.Fprint(w, "]")
 }
 
 type fieldFormatError struct {
