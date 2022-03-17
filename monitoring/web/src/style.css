@@ -1,8 +1,16 @@
+body {
+  overflow: hidden;
+}
+
 .horizontal-block {
-  display: flex;
+  display: inline-block;
   vertical-align: top;
   overflow-y: scroll;
+  scrollbar-width: none;
+}
 
+.horizontal-block::-webkit-scrollbar {
+  display: none;
 }
 
 .horizontal-container {
