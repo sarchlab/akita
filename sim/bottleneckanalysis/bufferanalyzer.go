@@ -342,9 +342,7 @@ func (b BufferAnalyzerBuilder) Build() *BufferAnalyzer {
 		}
 	}
 
-	if err = os.MkdirAll(b.dirPath, 0755); err != nil {
-		panic(err)
-	}
+	b.prepareDirectory(err)
 
 	ba := &BufferAnalyzer{
 		dirPath:    b.dirPath,
@@ -365,4 +363,22 @@ func (b BufferAnalyzerBuilder) Build() *BufferAnalyzer {
 	ba.bufferListFileOpen = true
 
 	return ba
+}
+
+func (b BufferAnalyzerBuilder) prepareDirectory(err error) {
+	err = os.MkdirAll(b.dirPath, 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	file, err := filepath.Glob("buffer*.csv")
+	if err != nil {
+		panic(err)
+	}
+	for _, f := range file {
+		err = os.Remove(f)
+		if err != nil {
+			panic(err)
+		}
+	}
 }
