@@ -103,7 +103,11 @@ func (b *BufferAnalyzer) AddBuffer(buf sim.Buffer) {
 
 	fmt.Fprintf(b.bufferListFile, "%d,%s,%d\n",
 		bufInfo.id, buf.Name(), buf.Capacity())
+}
 
+// AddPort adds a port to be analyzed.
+func (b *BufferAnalyzer) AddPort(port any) {
+	b.addComponentOrPortBuffers(port)
 }
 
 // AddComponent adds all the ports of a component to analyze.
