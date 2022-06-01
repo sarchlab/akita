@@ -28,6 +28,7 @@ var _ = Describe("BufferAnalyzer", func() {
 	})
 
 	It("should calculate average buffer level", func() {
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.0))
 		buf := bufferAnalyzer.CreateBuffer("Buf", 10)
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0))
@@ -49,6 +50,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		bufferAnalyzer.period = 0.1
 		bufferAnalyzer.usePeriod = true
 
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.0))
 		buf := bufferAnalyzer.CreateBuffer("Buf", 10)
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0))

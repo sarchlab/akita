@@ -140,7 +140,11 @@ func (b *BufferAnalyzer) addComponentOrPortBuffers(c interface{}) {
 // Func is a function that records buffer level change.
 func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 	if b.bufferListFileOpen {
-		b.bufferListFile.Close()
+		err := b.bufferListFile.Close()
+		if err != nil {
+			panic(err)
+		}
+
 		b.bufferListFileOpen = false
 	}
 
@@ -244,8 +248,12 @@ func (b *BufferAnalyzer) changeTraceFile(time float64) {
 	var err error
 
 	if b.currentTraceFileOpen {
-		b.currentTraceFile.Close()
+		err = b.currentTraceFile.Close()
+		if err != nil {
+			panic(err)
+		}
 	}
+
 	b.currentTraceFile, err = os.OpenFile(
 		fmt.Sprintf("%s/buffer_level_%.10f.csv", b.dirPath, time),
 		os.O_CREATE|os.O_WRONLY,
