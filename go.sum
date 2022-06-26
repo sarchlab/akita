@@ -36,8 +36,8 @@ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+
 github.com/stretchr/testify v1.5.1/go.mod h1:5W2xD1RspED5o8YsWQXVCued0rvSQ+mT+I5cxcmMvtA=
 github.com/stretchr/testify v1.6.1 h1:hDPOHmpOpP40lSULcqw7IrRb/u7w6RpDC9399XyoNd0=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
-github.com/syifan/goseth v0.1.0 h1:cgVSdDpppa06u1osJp0pzq8sY+KeF67cBUtuNH1xQ/w=
-github.com/syifan/goseth v0.1.0/go.mod h1:ZEJbYajt2wLV8Vx27sDzpobh8YlqNI6VljTlOK5rBPM=
+github.com/syifan/goseth v0.1.1 h1:nLkLsO4nO+fPEZMc6blzDHjQOadWEldEUUtwzXn3DDg=
+github.com/syifan/goseth v0.1.1/go.mod h1:ZEJbYajt2wLV8Vx27sDzpobh8YlqNI6VljTlOK5rBPM=
 github.com/tebeka/atexit v0.3.0 h1:jleL99H7Ywt80oJKR+VWmJNnezcCOG0CuzcN3CIpsdI=
 github.com/tebeka/atexit v0.3.0/go.mod h1:WJmSUSmMT7WoR7etUOaGBVXk+f5/ZJ+67qwuedq7Fbs=
 github.com/tidwall/pretty v1.0.0 h1:HsD+QiTn7sK6flMKIvNmpqz1qrpP3Ps6jOKIKMooyg4=
