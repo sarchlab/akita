@@ -18,3 +18,7 @@ debug
 
 # Prof file
 *.prof
+
+.DS_Store
+
+.vscode/*.log

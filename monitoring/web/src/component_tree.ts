@@ -1,4 +1,6 @@
 import { ComponentDetailView } from "./component"
+import { Monitor } from "./monitor"
+import { UIManager } from "./ui_manager"
 
 const layerIndentation = 25
 
@@ -69,11 +71,18 @@ function createTree(
     return tree
 }
 
-function displayDomain(domain: Node, container: HTMLElement) {
+function displayDomain(domain: Node, container: HTMLElement, monitor: Monitor) {
     const layer = domain.layer()
 
     let btn = document.createElement("div")
-    btn.innerHTML = domain.name
+    btn.innerHTML = `
+        <span class="field-title-chevron-right">
+            <i class="fa-solid fa-chevron-right fa-xs"></i>
+        </span>
+        <span class="field-title-chevron-down hidden">
+            <i class="fa-solid fa-chevron-down fa-xs"></i>
+        </span>
+        <span>${domain.name}</span>`
     btn.style.cursor = 'pointer'
     btn.style.textIndent = ((layer - 1) * layerIndentation) + 'px'
     btn.style.userSelect = 'none'
@@ -88,58 +97,79 @@ function displayDomain(domain: Node, container: HTMLElement) {
     btn.appendChild(subContainer)
 
     for (let child of domain.children.values()) {
-        display(child, subContainer)
+        display(child, subContainer, monitor)
     }
 
     btn.addEventListener("click", (event: Event) => {
-        if (subContainer.style.display == 'block') {
-            subContainer.style.display = 'none'
-        } else {
-            subContainer.style.display = 'block'
-        }
-
         event.stopImmediatePropagation()
         event.stopPropagation()
         event.preventDefault()
+
+        if (subContainer.style.display == 'block') {
+            subContainer.style.display = 'none'
+            btn.querySelector('.field-title-chevron-down')
+                .classList.add('hidden')
+            btn.querySelector('.field-title-chevron-right')
+                .classList.remove('hidden')
+        } else {
+            subContainer.style.display = 'block'
+            btn.querySelector('.field-title-chevron-down')
+                .classList.remove('hidden')
+            btn.querySelector('.field-title-chevron-right')
+                .classList.add('hidden')
+        }
     })
 }
 
 function displayComponent(
     component: Node,
     container: HTMLElement,
+    monitor: Monitor,
 ) {
     const layer = component.layer()
 
     let btn = document.createElement("div")
-    btn.innerHTML = component.name
+    btn.innerHTML = `
+        <span class="field-title-circle">
+            <i class="fa-solid fa-circle fa-2xs"></i>
+        </span>
+        <span>${component.name}</span>
+    `
     btn.style.textIndent = ((layer - 1) * layerIndentation) + 'px'
     btn.style.cursor = 'pointer'
 
     container.appendChild(btn)
 
     btn.addEventListener("click", (event: Event) => {
-        const detailView = new ComponentDetailView(component.fullName())
-        detailView.populate()
-
         event.stopImmediatePropagation()
         event.stopPropagation()
         event.preventDefault()
+
+        const detailView = new ComponentDetailView(
+            component.fullName(), monitor)
+        detailView.populate()
     })
 }
 
-function display(tree: Node, container: HTMLElement) {
+function display(
+    tree: Node,
+    container: HTMLElement,
+    monitor: Monitor,
+) {
     if (tree.children.size > 0) {
-        displayDomain(tree, container)
+        displayDomain(tree, container, monitor)
     } else {
-        displayComponent(tree, container)
+        displayComponent(tree, container, monitor)
     }
 }
 
-export function listComponents() {
+export function listComponents(monitor: Monitor) {
     fetch("/api/list_components")
         .then(res => res.json())
         .then((res: Array<string>) => {
             let tree = createTree(res);
-            display(tree, document.getElementById('left-pane'))
+            for (let child of tree.children.values()) {
+                display(child, document.getElementById("left-pane"), monitor)
+            }
         })
 }

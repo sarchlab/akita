@@ -37,6 +37,7 @@ export class ProgressBarManager {
 
         if (dom == null) {
             dom = this.createProgressBarDom(pBar)
+            this.uiManager.adjustProgressBarGroupHeight()
         }
 
         dom.set(pBar)
@@ -64,7 +65,7 @@ export class ProgressBarManager {
             if (!found) {
                 this.pBarDoms.delete(key)
                 dom.remove().then(() => {
-                    this.uiManager.resize()
+                    this.uiManager.adjustProgressBarGroupHeight()
                 })
             }
         })

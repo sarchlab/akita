@@ -1,6 +1,7 @@
 export class UIManager {
     isLeftVerticalBarDragging: Boolean = false
     isRightVerticalBarDragging: Boolean = false
+    isMonitorGroupDividerDragging: Boolean = false
 
     navBar: HTMLElement
     mainContainer: HTMLElement
@@ -10,14 +11,22 @@ export class UIManager {
     verticalDividerLeft: HTMLElement
     verticalDividerRight: HTMLElement
     progressBarGroupContainer: HTMLElement
+    mainContainerHeight: number = 0
+    monitorGroupHeight: number = 0
     leftPaneWidth: number
     rightPaneWidth: number
     verticalDividerWidth: number = 8;
+    horizontalDividerHeight: number = 6;
+    navBarHeight: number = 56
 
 
     constructor() {
         this.leftPaneWidth = 200
         this.rightPaneWidth = 700
+        // this.monitorGroupHeight = window.innerHeight -
+        //     this.navBarHeight -
+        //     this.horizontalDividerHeight -
+        //     this.progressBarGroupContainer.offsetHeight
     }
 
     assignElements() {
@@ -37,34 +46,57 @@ export class UIManager {
 
         this.verticalDividerLeft.addEventListener(
             'mousedown',
-            this.leftDividerMouseDownHandler.bind(this),
+            this.leftVerticalDividerMouseDownHandler.bind(this),
         )
 
         this.verticalDividerRight.addEventListener(
             'mousedown',
-            this.rightDividerMouseDownHandler.bind(this),
+            this.rightVerticalDividerMouseDownHandler.bind(this),
         )
 
-        this.mainContainer.addEventListener(
+        document.addEventListener(
             'mousemove',
-            this.dividerMouseMoveHandler.bind(this),
+            (e) => {
+                this.verticalDividerMouseMoveHandler(e)
+                this.horizontalDividerMouseMoveHandler(e)
+            }
         )
 
-        this.mainContainer.addEventListener(
+        document.addEventListener(
             'mouseup',
-            this.dividerMouseUpHandler.bind(this),
+            (e) => {
+                this.verticalDividerMouseUpHandler(e)
+                this.horizontalDividerMouseUpHandler(e)
+            }
+
         )
+
+        document.getElementById("monitor-group-divider").addEventListener(
+            'mousedown',
+            this.monitorGroupDividerMouseDownHandler.bind(this),
+        )
+
+        this.mainContainerHeight = window.innerHeight -
+            this.navBarHeight -
+            this.horizontalDividerHeight -
+            this.progressBarGroupContainer.offsetHeight
+
+        this.resize()
     }
 
-    leftDividerMouseDownHandler(e: MouseEvent) {
+    leftVerticalDividerMouseDownHandler(e: MouseEvent) {
         this.isLeftVerticalBarDragging = true;
     }
 
-    rightDividerMouseDownHandler(e: MouseEvent) {
+    rightVerticalDividerMouseDownHandler(e: MouseEvent) {
         this.isRightVerticalBarDragging = true;
     }
 
-    dividerMouseMoveHandler(e: MouseEvent) {
+    monitorGroupDividerMouseDownHandler(e: MouseEvent) {
+        this.isMonitorGroupDividerDragging = true;
+    }
+
+    verticalDividerMouseMoveHandler(e: MouseEvent) {
         if (this.isLeftVerticalBarDragging) {
             this.leftPaneWidth = e.clientX - this.verticalDividerWidth / 2
             this.resize();
@@ -78,37 +110,117 @@ export class UIManager {
         }
     }
 
-    dividerMouseUpHandler(e: MouseEvent) {
+    horizontalDividerMouseMoveHandler(e: MouseEvent) {
+        if (this.isMonitorGroupDividerDragging) {
+            this.mainContainerHeight =
+                e.clientY - this.navBarHeight -
+                this.horizontalDividerHeight / 2
+
+            this.monitorGroupHeight =
+                window.innerHeight -
+                this.mainContainerHeight -
+                this.navBarHeight - this.horizontalDividerHeight -
+                this.progressBarGroupContainer.offsetHeight
+
+            const maxMainContainerHeight = window.innerHeight -
+                this.navBarHeight -
+                this.horizontalDividerHeight -
+                this.progressBarGroupContainer.offsetHeight
+            if (this.mainContainerHeight > maxMainContainerHeight) {
+                this.mainContainerHeight = maxMainContainerHeight
+            }
+
+            this.resize();
+        }
+    }
+
+    verticalDividerMouseUpHandler(e: MouseEvent) {
         this.isLeftVerticalBarDragging = false;
         this.isRightVerticalBarDragging = false
     }
 
-    resize() {
-        const windowHeight = window.innerHeight;
-        const windowWidth = window.innerWidth;
+    horizontalDividerMouseUpHandler(e: MouseEvent) {
+        this.isMonitorGroupDividerDragging = false;
+    }
 
-        const navHeight = this.navBar.offsetHeight;
-        const progressBarGroupHeight =
+    adjustProgressBarGroupHeight() {
+        this.mainContainerHeight = window.innerHeight -
+            this.navBarHeight -
+            this.horizontalDividerHeight -
+            this.monitorGroupHeight -
             this.progressBarGroupContainer.offsetHeight
-        const containerHeight =
-            windowHeight - navHeight - progressBarGroupHeight;
+        this.resize();
+    }
+
+    popUpMonitorGroup() {
+        this.monitorGroupHeight = 200
+        this.mainContainerHeight = window.innerHeight -
+            this.navBarHeight -
+            this.horizontalDividerHeight -
+            this.monitorGroupHeight -
+            this.progressBarGroupContainer.offsetHeight
+        this.resize();
+    }
+
+    collapseMonitorGroup() {
+        this.monitorGroupHeight = 0
+        this.mainContainerHeight = window.innerHeight -
+            this.navBarHeight -
+            this.horizontalDividerHeight -
+            this.progressBarGroupContainer.offsetHeight
+        this.resize();
+    }
+
+    resize() {
+        const windowWidth = window.innerWidth;
 
         const detailContainerWidth = windowWidth -
             this.leftPaneWidth - this.rightPaneWidth -
             this.verticalDividerWidth * 2;
 
-        this.mainContainer.style.height = `${containerHeight}px`
+        this.mainContainer.style.height = `${this.mainContainerHeight}px`
         this.mainContainer.style.width = `${windowWidth}px`
-        this.leftPane.style.height = `${containerHeight}px`;
+        this.leftPane.style.height = `${this.mainContainerHeight}px`;
         this.leftPane.style.width = `${this.leftPaneWidth}px`;
-        this.centralPane.style.height = `${containerHeight}px`;
+        this.centralPane.style.height = `${this.mainContainerHeight}px`;
         this.centralPane.style.width = `${detailContainerWidth}px`;
-        this.rightPane.style.height = `${containerHeight}px`;
+        this.rightPane.style.height = `${this.mainContainerHeight}px`;
         this.rightPane.style.width = `${this.rightPaneWidth}px`;
 
-        this.verticalDividerLeft.style.height = `${containerHeight}px`;
-        this.verticalDividerLeft.style.width = `${this.verticalDividerWidth}px`;
-        this.verticalDividerRight.style.height = `${containerHeight}px`;
-        this.verticalDividerRight.style.width = `${this.verticalDividerWidth}px`;
+        this.verticalDividerLeft.style.height =
+            `${this.mainContainerHeight}px`;
+        this.verticalDividerLeft.style.width =
+            `${this.verticalDividerWidth}px`;
+        this.verticalDividerRight.style.height =
+            `${this.mainContainerHeight}px`;
+        this.verticalDividerRight.style.width =
+            `${this.verticalDividerWidth}px`;
+
+        this.resizeMonitorGroup()
+    }
+
+    private resizeMonitorGroup() {
+        const container = document.getElementById("monitor-group-container")
+
+        container.style.height = `${this.monitorGroupHeight}px`
+
+        const widgets = container.querySelectorAll(".monitor-widget")
+
+        const widgetMargin = 10
+        const windowWidth = window.innerWidth
+        const marginCount = widgets.length + 1
+        const widgetWidth = (windowWidth - widgetMargin * marginCount) / widgets.length
+
+        for (let i = 0; i < widgets.length; i++) {
+            const widget = widgets[i] as HTMLElement
+            widget.style.width = `${widgetWidth}px`
+            widget.style.height = `${this.monitorGroupHeight - 10}px`
+
+            const chart: HTMLElement = widget.querySelector('.chart')
+            const widgetTitle: HTMLElement = widget.querySelector('.title')
+            const widgetTitleHeight = widgetTitle.offsetHeight
+            chart.style.height =
+                `${this.monitorGroupHeight - 18 - widgetTitleHeight}px`
+        }
     }
 }

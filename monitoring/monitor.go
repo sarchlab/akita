@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
@@ -126,7 +127,9 @@ func (m *Monitor) StartServer() {
 	listener, err := net.Listen("tcp", ":0")
 	dieOnErr(err)
 
-	fmt.Printf("Monitoring simulation with http://localhost:%d\n",
+	fmt.Fprintf(
+		os.Stderr,
+		"Monitoring simulation with http://localhost:%d\n",
 		listener.Addr().(*net.TCPAddr).Port)
 
 	go func() {
@@ -202,8 +205,11 @@ func (m *Monitor) listComponentDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serializer := goseth.NewInteractiveSerializer()
-	err := serializer.Serialize(component, w)
+	serializer := goseth.NewSerializer()
+	serializer.SetRoot(component)
+	serializer.SetMaxDepth(1)
+	err := serializer.Serialize(w)
+
 	dieOnErr(err)
 }
 
@@ -222,20 +228,21 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := req.CompName
-	fields := req.FieldName
+	fields := strings.Split(req.FieldName, ".")
 
 	component := m.findComponentOr404(w, name)
 	if component == nil {
 		return
 	}
 
-	elem, err := m.walkFields(component, fields)
+	serializer := goseth.NewSerializer()
+	serializer.SetRoot(component)
+	serializer.SetMaxDepth(1)
+
+	err = serializer.SetEntryPoint(fields)
 	dieOnErr(err)
 
-	serializer := goseth.NewInteractiveSerializer()
-	elemCopy := reflect.NewAt(
-		elem.Type(), unsafe.Pointer(elem.UnsafeAddr())).Elem()
-	err = serializer.Serialize(elemCopy.Interface(), w)
+	err = serializer.Serialize(w)
 	dieOnErr(err)
 }
 

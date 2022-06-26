@@ -6,7 +6,7 @@ import './style.css'
 
 import '@fortawesome/fontawesome-free/js/fontawesome'
 import '@fortawesome/fontawesome-free/js/solid'
-// import '@fortawesome/fontawesome-free/js/regular'
+import '@fortawesome/fontawesome-free/js/regular'
 // import '@fortawesome/fontawesome-free/js/brands'
 
 import './component_tree'
@@ -15,9 +15,11 @@ import { listComponents } from './component_tree'
 import { EngineController } from './engine_control'
 import { ProgressBarManager } from './progress_bar'
 import { HangAnalyzer } from './hang_analyzer'
+import { Monitor } from './monitor'
 
 class App {
     uiManager: UIManager
+    monitor: Monitor
     engineController: EngineController
     progressBarManager: ProgressBarManager
     hangAnalyzer: HangAnalyzer
@@ -27,6 +29,7 @@ class App {
         this.engineController = new EngineController();
         this.progressBarManager = new ProgressBarManager(this.uiManager);
         this.hangAnalyzer = new HangAnalyzer();
+        this.monitor = new Monitor(this.uiManager);
     }
 
     start() {
@@ -41,7 +44,7 @@ class App {
             this.uiManager.resize();
         });
 
-        listComponents()
+        listComponents(this.monitor)
     }
 }
 
