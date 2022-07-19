@@ -182,13 +182,13 @@ class Widget {
 
 		const xScale = d3.scaleLinear()
 			.domain([
-				d3.min(this.data, (d) => d.time),
-				d3.max(this.data, (d) => d.time),
+				d3.min(this.data, (d: any) => d.time),
+				d3.max(this.data, (d: any) => d.time),
 			])
 			.range([0, contentWidth])
 
 		const yScale = d3.scaleLinear()
-			.domain([0, d3.max(this.data, (d) => d.value)])
+			.domain([0, d3.max(this.data, (d: any) => d.value)])
 			.range([contentHeight, 0])
 
 		const xAxis = d3.axisBottom(xScale)
@@ -209,23 +209,23 @@ class Widget {
 		const bars = barGroup.selectAll('rect')
 			.data(this.data, (d: DataPoint) => d.time)
 
-		const enterbars = bars.enter().append('rect')
+		const enterBars = bars.enter().append('rect')
 			.attr('class', 'bar')
-			.attr('x', (d) => xScale(d.time) + padding + yAxisWidth)
-			.attr('y', (d) => padding + contentHeight)
+			.attr('x', (d: any) => xScale(d.time) + padding + yAxisWidth)
+			.attr('y', () => padding + contentHeight)
 			.attr('width', contentWidth / this.data.length)
 			.attr('height', 0)
 			.attr('fill', '#666666')
 
-		const updatebars = bars.merge(enterbars)
+		bars.merge(enterBars)
 			.transition()
-			.attr('x', (d) => xScale(d.time) + padding + yAxisWidth)
-			.attr('y', (d) => padding + yScale(d.value))
+			.attr('x', (d: any) => xScale(d.time) + padding + yAxisWidth)
+			.attr('y', (d: any) => padding + yScale(d.value))
 			.attr('width', contentWidth / this.data.length)
-			.attr('height', (d) => contentHeight - yScale(d.value))
+			.attr('height', (d: any) => contentHeight - yScale(d.value))
 			.attr('fill', '#666666')
 
-		const exitbars = bars.exit().remove()
+		bars.exit().remove()
 	}
 
 }

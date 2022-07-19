@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-//go:embed index.html dist/bundle.js
+//go:embed index.html dist/bundle.js profile.proto
 var staticAssets embed.FS
 
 // GetAssets returns the static assets
