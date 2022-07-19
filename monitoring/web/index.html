@@ -10,6 +10,40 @@
         <a class="navbar-brand" href="/">Akita Monitoring Tool</a>
 
         <form class="form-inline my-2 my-lg-0">
+            <!-- <div class="input-group mr-3 ml-3">
+                <div class="input-group-prepend">
+                    <button id="debug-button" class="btn btn-outline-primary"
+                        type="button">
+                        <span>Debug</span>
+                    </button>
+                </div>
+
+                <div class="input-group-append">
+                    <button id="profile-button" class="btn btn-outline-primary"
+                        type="button">
+                        <span>Profile</span>
+                    </button>
+                </div>
+            </div> -->
+
+            <div class="input-group mr-3 ml-3">
+                <div class="input-group-prepend">
+                    <button class="btn btn-primary" type="button">
+                        <span class="resource-type">CPU</span>
+                        <span id="cpu-usage"></span>
+                    </button>
+                    <button class="btn btn-primary" type="button">
+                        <span class="resource-type">Mem</span>
+                        <span id="mem-usage"></span>
+                    </button>
+                </div>
+                <div class="input-group-append">
+                    <button id="profile-button" class="btn btn-primary"
+                        type="button">
+                        <i class="fa-solid fa-clock"></i>
+                    </button>
+                </div>
+            </div>
             <!-- <div class="input-group mr-3">
                 <div class="input-group-prepend"> -->
             <button class="btn btn-success" id="hang-analyzer-btn">
@@ -42,7 +76,7 @@
         </form>
     </nav>
 
-    <div id="main-container" class="main-container">
+    <div id="debug-tool-container" class="main-container">
         <div id="left-pane" class="horizontal-block horizontal-container">
         </div>
         <div id="vertical-divider-left"

@@ -19,19 +19,19 @@ export class UIManager {
     horizontalDividerHeight: number = 6;
     navBarHeight: number = 56
 
+    debugButton: HTMLElement
+    profileButton: HTMLElement
+    mode = 'debug'
+
 
     constructor() {
         this.leftPaneWidth = 200
         this.rightPaneWidth = 700
-        // this.monitorGroupHeight = window.innerHeight -
-        //     this.navBarHeight -
-        //     this.horizontalDividerHeight -
-        //     this.progressBarGroupContainer.offsetHeight
     }
 
     assignElements() {
         this.navBar = document.getElementById("navbar")
-        this.mainContainer = document.getElementById("main-container")
+        this.mainContainer = document.getElementById("debug-tool-container")
         this.leftPane = document.getElementById("left-pane")
         this.centralPane = document.getElementById("central-pane")
         this.rightPane = document.getElementById("right-pane")
@@ -76,11 +76,22 @@ export class UIManager {
             this.monitorGroupDividerMouseDownHandler.bind(this),
         )
 
+        // this.debugButton = document.getElementById("debug-button")
+        // this.profileButton = document.getElementById("profile-button")
+
+        // this.debugButton.addEventListener('click', () => {
+        //     this.switchMode('debug')
+        // })
+        // this.profileButton.addEventListener('click', () => {
+        //     this.switchMode('profile')
+        // })
+
         this.mainContainerHeight = window.innerHeight -
             this.navBarHeight -
             this.horizontalDividerHeight -
             this.progressBarGroupContainer.offsetHeight
 
+        // this.switchMode('debug')
         this.resize()
     }
 
@@ -223,4 +234,27 @@ export class UIManager {
                 `${this.monitorGroupHeight - 18 - widgetTitleHeight}px`
         }
     }
+
+    // private switchMode(mode: string) {
+    //     this.mode = mode
+    //     this.setModeSwitchingButtonStyle()
+    //     this.resize()
+    // }
+
+    // setModeSwitchingButtonStyle() {
+    //     switch (this.mode) {
+    //         case 'debug':
+    //             this.debugButton.classList.remove('btn-outline-primary')
+    //             this.debugButton.classList.add('btn-primary')
+    //             this.profileButton.classList.remove('btn-primary')
+    //             this.profileButton.classList.add('btn-outline-primary')
+    //             break
+    //         case 'profile':
+    //             this.debugButton.classList.remove('btn-primary')
+    //             this.debugButton.classList.add('btn-outline-primary')
+    //             this.profileButton.classList.remove('btn-outline-primary')
+    //             this.profileButton.classList.add('btn-primary')
+    //             break
+    //     }
+    // }
 }

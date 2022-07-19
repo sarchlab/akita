@@ -183,7 +183,7 @@ export class ComponentDetailView {
         const kind = dict[object[key]]['k']
         keyChain += `.${key}`
 
-        if (isDirectKind(kind)) {
+        if (!isDirectKind(kind)) {
             const valueContainer = document.createElement('div')
             valueContainer.classList.add("field-sub-container")
             valueContainer.classList.add('collapsed')

@@ -26,6 +26,7 @@
     "@fortawesome/free-regular-svg-icons": "^6.1.0",
     "@fortawesome/free-solid-svg-icons": "^6.1.0",
     "@types/d3": "^7.4.0",
+    "@types/protobufjs": "^6.0.0",
     "bootstrap": "^4.6.0",
     "d3": "^7.4.5",
     "font-awesome": "^4.7.0",

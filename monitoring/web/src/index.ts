@@ -16,16 +16,19 @@ import { EngineController } from './engine_control'
 import { ProgressBarManager } from './progress_bar'
 import { HangAnalyzer } from './hang_analyzer'
 import { Monitor } from './monitor'
+import { ResourceMonitor } from './resource'
 
 class App {
     uiManager: UIManager
     monitor: Monitor
+    resourceMonitor: ResourceMonitor
     engineController: EngineController
     progressBarManager: ProgressBarManager
     hangAnalyzer: HangAnalyzer
 
     constructor() {
         this.uiManager = new UIManager();
+        this.resourceMonitor = new ResourceMonitor();
         this.engineController = new EngineController();
         this.progressBarManager = new ProgressBarManager(this.uiManager);
         this.hangAnalyzer = new HangAnalyzer();

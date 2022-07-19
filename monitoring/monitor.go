@@ -1,6 +1,7 @@
 package monitoring
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,13 +9,20 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
+	// Enable profiling
+	_ "net/http/pprof"
+
+	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
+	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 	"gitlab.com/akita/akita/v3/monitoring/web"
 	"gitlab.com/akita/akita/v3/sim"
@@ -121,6 +129,8 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/field/{json}", m.listFieldValue)
 	r.HandleFunc("/api/hangdetector/buffers", m.hangdetectorBuffers)
 	r.HandleFunc("/api/progress", m.listProgressBars)
+	r.HandleFunc("/api/resource", m.listResources)
+	r.HandleFunc("/api/profile", m.collectProfile)
 	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
 
@@ -334,6 +344,54 @@ func (m *Monitor) findComponentOr404(
 
 func (m *Monitor) listProgressBars(w http.ResponseWriter, r *http.Request) {
 	bytes, err := json.Marshal(m.progressBars)
+	dieOnErr(err)
+
+	_, err = w.Write(bytes)
+	dieOnErr(err)
+}
+
+type resourceRsp struct {
+	CPUPercent float64 `json:"cpu_percent"`
+	MemorySize uint64  `json:"memory_size"`
+}
+
+func (m *Monitor) listResources(w http.ResponseWriter, r *http.Request) {
+	pid := os.Getpid()
+	process, err := process.NewProcess(int32(pid))
+	dieOnErr(err)
+
+	cpuPercent, err := process.CPUPercent()
+	dieOnErr(err)
+
+	memorySize, err := process.MemoryInfo()
+	dieOnErr(err)
+
+	rsp := resourceRsp{
+		CPUPercent: cpuPercent,
+		MemorySize: memorySize.RSS,
+	}
+
+	bytes, err := json.Marshal(rsp)
+	dieOnErr(err)
+
+	_, err = w.Write(bytes)
+	dieOnErr(err)
+}
+
+func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
+	buf := bytes.NewBuffer(nil)
+
+	err := pprof.StartCPUProfile(buf)
+	dieOnErr(err)
+
+	time.Sleep(time.Second)
+
+	pprof.StopCPUProfile()
+
+	prof, err := profile.ParseData(buf.Bytes())
+	dieOnErr(err)
+
+	bytes, err := json.Marshal(prof)
 	dieOnErr(err)
 
 	_, err = w.Write(bytes)
