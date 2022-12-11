@@ -98,6 +98,20 @@ func (mr *MockPortMockRecorder) NotifyAvailable(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockPort)(nil).NotifyAvailable), arg0)
 }
 
+// NumHooks mocks base method.
+func (m *MockPort) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockPortMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockPort)(nil).NumHooks))
+}
+
 // Peek mocks base method.
 func (m *MockPort) Peek() Msg {
 	m.ctrl.T.Helper()
@@ -237,6 +251,20 @@ func (m *MockEngine) Finished() {
 func (mr *MockEngineMockRecorder) Finished() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finished", reflect.TypeOf((*MockEngine)(nil).Finished))
+}
+
+// NumHooks mocks base method.
+func (m *MockEngine) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockEngineMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockEngine)(nil).NumHooks))
 }
 
 // Pause mocks base method.
@@ -415,6 +443,20 @@ func (mr *MockConnectionMockRecorder) NotifyAvailable(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockConnection)(nil).NotifyAvailable), arg0, arg1)
 }
 
+// NumHooks mocks base method.
+func (m *MockConnection) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockConnectionMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockConnection)(nil).NumHooks))
+}
+
 // PlugIn mocks base method.
 func (m *MockConnection) PlugIn(arg0 Port, arg1 int) {
 	m.ctrl.T.Helper()
@@ -564,6 +606,20 @@ func (m *MockComponent) NotifyRecv(arg0 VTimeInSec, arg1 Port) {
 func (mr *MockComponentMockRecorder) NotifyRecv(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyRecv", reflect.TypeOf((*MockComponent)(nil).NotifyRecv), arg0, arg1)
+}
+
+// NumHooks mocks base method.
+func (m *MockComponent) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockComponentMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockComponent)(nil).NumHooks))
 }
 
 // Ports mocks base method.
@@ -741,6 +797,20 @@ func (m *MockBuffer) Name() string {
 func (mr *MockBufferMockRecorder) Name() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockBuffer)(nil).Name))
+}
+
+// NumHooks mocks base method.
+func (m *MockBuffer) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockBufferMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockBuffer)(nil).NumHooks))
 }
 
 // Peek mocks base method.

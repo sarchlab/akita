@@ -1,12 +1,12 @@
 package sim
 
-// HookPos defines the enum of possible hooking positions
+// HookPos defines the enum of possible hooking positions.
 type HookPos struct {
 	Name string
 }
 
 // HookCtx is the context that holds all the information about the site that a
-// hook is triggered
+// hook is triggered.
 type HookCtx struct {
 	Domain Hookable
 	Pos    *HookPos
@@ -14,16 +14,19 @@ type HookCtx struct {
 	Detail interface{}
 }
 
-// Hookable defines an object that accept Hooks
+// Hookable defines an object that accept Hooks.
 type Hookable interface {
-	// AcceptHook registers a hook
+	// AcceptHook registers a hook.
 	AcceptHook(hook Hook)
+
+	// NumHooks returns the number of hooks registered.
+	NumHooks() int
 }
 
-// HookPosBeforeEvent is a hook position that triggers before handling an event
+// HookPosBeforeEvent is a hook position that triggers before handling an event.
 var HookPosBeforeEvent = &HookPos{Name: "BeforeEvent"}
 
-// HookPosAfterEvent is a hook position that triggers after handling an event
+// HookPosAfterEvent is a hook position that triggers after handling an event.
 var HookPosAfterEvent = &HookPos{Name: "AfterEvent"}
 
 // Hook is a short piece of program that can be invoked by a hookable object.
@@ -38,19 +41,24 @@ type HookableBase struct {
 	Hooks []Hook
 }
 
-// NewHookableBase creates a HookableBase object
+// NewHookableBase creates a HookableBase object.
 func NewHookableBase() *HookableBase {
 	h := new(HookableBase)
 	h.Hooks = make([]Hook, 0)
 	return h
 }
 
-// AcceptHook register a hook
+// NumHooks returns the number of hooks registered.
+func (h *HookableBase) NumHooks() int {
+	return len(h.Hooks)
+}
+
+// AcceptHook register a hook.
 func (h *HookableBase) AcceptHook(hook Hook) {
 	h.Hooks = append(h.Hooks, hook)
 }
 
-// InvokeHook triggers the register Hooks
+// InvokeHook triggers the register Hooks.
 func (h *HookableBase) InvokeHook(ctx HookCtx) {
 	for _, hook := range h.Hooks {
 		hook.Func(ctx)

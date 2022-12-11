@@ -31,20 +31,44 @@ func StartTask(
 	what string,
 	detail interface{},
 ) {
-	task := Task{
-		ID:       id,
-		ParentID: parentID,
-		Kind:     kind,
-		What:     what,
-		Where:    domain.Name(),
-		Detail:   detail,
+	StartTaskWithSpecificLocation(
+		id,
+		parentID,
+		domain,
+		kind,
+		what,
+		domain.Name(),
+		detail,
+	)
+}
+
+func allRequiredFieldsMustBeNotEmpty(
+	id string,
+	domain NamedHookable,
+	kind string,
+	what string,
+) {
+	if id == "" {
+		panic("id must not be empty")
 	}
-	ctx := sim.HookCtx{
-		Domain: domain,
-		Item:   task,
-		Pos:    HookPosTaskStart,
+
+	if domain == nil {
+		panic("domain must not be nil")
 	}
-	domain.InvokeHook(ctx)
+
+	if kind == "" {
+		panic("kind must not be empty")
+	}
+
+	if what == "" {
+		panic("what must not be empty")
+	}
+}
+
+func domainMustHaveName(domain NamedHookable) {
+	if domain.Name() == "" {
+		panic("domain must have a name")
+	}
 }
 
 // StartTaskWithSpecificLocation notifies the hooks that hook to the domain
@@ -59,6 +83,13 @@ func StartTaskWithSpecificLocation(
 	location string,
 	detail interface{},
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
+	allRequiredFieldsMustBeNotEmpty(id, domain, kind, what)
+	domainMustHaveName(domain)
+
 	task := Task{
 		ID:       id,
 		ParentID: parentID,
@@ -81,6 +112,10 @@ func AddTaskStep(
 	domain NamedHookable,
 	what string,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	step := TaskStep{
 		What: what,
 	}
@@ -101,6 +136,10 @@ func EndTask(
 	id string,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	task := Task{
 		ID: id,
 	}
