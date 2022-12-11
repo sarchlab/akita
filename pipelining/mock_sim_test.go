@@ -99,6 +99,20 @@ func (mr *MockBufferMockRecorder) Name() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockBuffer)(nil).Name))
 }
 
+// NumHooks mocks base method.
+func (m *MockBuffer) NumHooks() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NumHooks")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// NumHooks indicates an expected call of NumHooks.
+func (mr *MockBufferMockRecorder) NumHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockBuffer)(nil).NumHooks))
+}
+
 // Peek mocks base method.
 func (m *MockBuffer) Peek() interface{} {
 	m.ctrl.T.Helper()
