@@ -48,6 +48,8 @@ func (b Builder) WithPostPipelineBuffer(buf sim.Buffer) Builder {
 
 // Build builds a pipeline.
 func (b Builder) Build(name string) Pipeline {
+	sim.NameMustBeValid(name)
+
 	p := &pipelineImpl{
 		name:            name,
 		width:           b.width,

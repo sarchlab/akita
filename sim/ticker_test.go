@@ -18,7 +18,7 @@ var _ = Describe("Ticking Component", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
 		ticker = NewMockTicker(mockCtrl)
-		tc = NewTickingComponent("tc", engine, 1, ticker)
+		tc = NewTickingComponent("TC", engine, 1, ticker)
 	})
 
 	AfterEach(func() {

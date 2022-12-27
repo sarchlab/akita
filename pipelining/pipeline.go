@@ -39,6 +39,8 @@ func NewPipeline(
 	numStage, cyclePerStage int,
 	postPipelineBuf sim.Buffer,
 ) Pipeline {
+	sim.NameMustBeValid(name)
+
 	p := &pipelineImpl{
 		width:           1,
 		numStage:        numStage,

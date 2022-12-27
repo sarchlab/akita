@@ -3,9 +3,9 @@ module gitlab.com/akita/akita/v3
 require (
 	github.com/go-sql-driver/mysql v1.7.0
 	github.com/golang/mock v1.6.0
-	github.com/google/pprof v0.0.0-20221203041831-ce31453925ec
+	github.com/google/pprof v0.0.0-20221219190121-3cb0bae90811
 	github.com/gorilla/mux v1.8.0
-	github.com/onsi/ginkgo/v2 v2.6.0
+	github.com/onsi/ginkgo/v2 v2.6.1
 	github.com/onsi/gomega v1.24.1
 	github.com/rs/xid v1.4.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
@@ -30,7 +30,7 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	golang.org/x/crypto v0.4.0 // indirect
-	golang.org/x/net v0.4.0 // indirect
+	golang.org/x/net v0.3.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.3.0 // indirect
 	golang.org/x/text v0.5.0 // indirect

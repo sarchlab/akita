@@ -30,7 +30,7 @@ var _ = Describe("Pipeline", func() {
 			WithNumStage(100).
 			WithCyclePerStage(2).
 			WithPostPipelineBuffer(postPipelineBuffer).
-			Build("pipeline")
+			Build("Pipeline")
 	})
 
 	AfterEach(func() {
@@ -104,7 +104,7 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 			WithNumStage(0).
 			WithCyclePerStage(2).
 			WithPostPipelineBuffer(postPipelineBuffer).
-			Build("pipeline")
+			Build("Pipeline")
 	})
 
 	AfterEach(func() {
