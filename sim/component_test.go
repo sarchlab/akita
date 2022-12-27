@@ -12,10 +12,10 @@ var _ = Describe("BasicComponent", func() {
 	)
 
 	BeforeEach(func() {
-		component = NewComponentBase("test_comp")
+		component = NewComponentBase("TestComp")
 	})
 
 	It("should set and get name", func() {
-		Expect(component.Name()).To(Equal("test_comp"))
+		Expect(component.Name()).To(Equal("TestComp"))
 	})
 })

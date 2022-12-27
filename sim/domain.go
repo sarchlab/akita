@@ -9,6 +9,8 @@ type Domain struct {
 
 // NewDomain creates a new Domain
 func NewDomain(name string) *Domain {
+	NameMustBeValid(name)
+
 	d := new(Domain)
 
 	d.name = name

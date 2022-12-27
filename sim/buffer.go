@@ -26,6 +26,8 @@ type Buffer interface {
 
 // NewBuffer creates a default buffer object.
 func NewBuffer(name string, capacity int) Buffer {
+	NameMustBeValid(name)
+
 	return &bufferImpl{
 		name:     name,
 		capacity: capacity,

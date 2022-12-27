@@ -25,7 +25,7 @@ var _ = Describe("DirectConnection", func() {
 		port1 = NewMockPort(mockCtrl)
 		port2 = NewMockPort(mockCtrl)
 		engine = NewMockEngine(mockCtrl)
-		connection = NewDirectConnection("direct", engine, 1)
+		connection = NewDirectConnection("Direct", engine, 1)
 
 		port1.EXPECT().SetConnection(connection)
 		connection.PlugIn(port1, 4)
@@ -216,10 +216,10 @@ var _ = Describe("Direct Connection Integration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewSerialEngine()
-		connection = NewDirectConnection("conn", engine, 1)
+		connection = NewDirectConnection("Conn", engine, 1)
 		agents = nil
 		for i := 0; i < numAgents; i++ {
-			a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
+			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort, 1)
 		}
@@ -268,7 +268,7 @@ func directConnectionTest(seed int64) VTimeInSec {
 	numAgents := 100
 	numMsgsPerAgent := 1000
 	engine := NewSerialEngine()
-	connection := NewDirectConnection("conn", engine, 1)
+	connection := NewDirectConnection("Conn", engine, 1)
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {

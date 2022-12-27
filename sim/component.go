@@ -31,6 +31,8 @@ type ComponentBase struct {
 
 // NewComponentBase creates a new ComponentBase
 func NewComponentBase(name string) *ComponentBase {
+	NameMustBeValid(name)
+
 	c := new(ComponentBase)
 	c.name = name
 	c.PortOwnerBase = NewPortOwnerBase()

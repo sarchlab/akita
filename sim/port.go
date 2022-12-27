@@ -182,6 +182,8 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	buf Buffer,
 	name string,
 ) *LimitNumMsgPort {
+	NameMustBeValid(name)
+
 	p := new(LimitNumMsgPort)
 	p.comp = comp
 	p.buf = buf

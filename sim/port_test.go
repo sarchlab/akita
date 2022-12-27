@@ -26,7 +26,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 		mockController = gomock.NewController(GinkgoT())
 		comp = NewMockComponent(mockController)
 		conn = NewMockConnection(mockController)
-		port = NewLimitNumMsgPort(comp, 4, "port")
+		port = NewLimitNumMsgPort(comp, 4, "Port")
 		port.SetConnection(conn)
 	})
 
@@ -39,7 +39,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 	})
 
 	It("should return name", func() {
-		Expect(port.Name()).To(Equal("port"))
+		Expect(port.Name()).To(Equal("Port"))
 	})
 
 	It("should set connection", func() {
