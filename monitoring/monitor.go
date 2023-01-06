@@ -114,7 +114,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 }
 
 // StartServer starts the monitor as a web server.
-func (m *Monitor) StartServer() {
+func (m *Monitor) StartServer(portNum int) {
 	r := mux.NewRouter()
 
 	fs := web.GetAssets()
@@ -134,7 +134,12 @@ func (m *Monitor) StartServer() {
 	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
 
-	listener, err := net.Listen("tcp", ":0")
+	actualPort := ":0"
+	if(portNum != 0 && len(portNum) > 4) {
+		actualPort = ":" + strconv.Itoa(portNum)
+	}
+
+	listener, err := net.Listen("tcp", actualPort)
 	dieOnErr(err)
 
 	fmt.Fprintf(
