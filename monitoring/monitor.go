@@ -135,7 +135,7 @@ func (m *Monitor) StartServer(portNum int) {
 	http.Handle("/", r)
 
 	actualPort := ":0"
-	if(portNum != 0 && len(portNum) > 4) {
+	if portNum != 0 && len(portNum) > 4 {
 		actualPort = ":" + strconv.Itoa(portNum)
 	}
 
