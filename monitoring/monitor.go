@@ -113,8 +113,8 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBars = newBars
 }
 
-// StartServer starts the monitor as a web server.
-func (m *Monitor) StartServer() {
+// StartServer starts the monitor as a web server with a custom port if wanted.
+func (m *Monitor) StartServer(portNum int) {
 	r := mux.NewRouter()
 
 	fs := web.GetAssets()
@@ -134,7 +134,17 @@ func (m *Monitor) StartServer() {
 	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
 
-	listener, err := net.Listen("tcp", ":0")
+	actualPort := ":0"
+	if portNum >= 1000 {
+		actualPort = ":" + strconv.Itoa(portNum)
+	} else {
+		fmt.Fprintf(
+			os.Stderr,
+			"!! Custom port number was not greater than 1000. Using random port...",
+		)
+	}
+
+	listener, err := net.Listen("tcp", actualPort)
 	dieOnErr(err)
 
 	fmt.Fprintf(
