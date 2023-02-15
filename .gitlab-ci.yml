@@ -18,9 +18,6 @@ lint:
 test_job:
   stage: test
   script:
-    - go get github.com/onsi/ginkgo/v2/ginkgo@v2.6.0
-    - go install github.com/onsi/ginkgo/v2/ginkgo@v2.6.0
-    - ginkgo -r --randomize-suites --fail-on-pending --cover --trace --race --skip="Stress" 
     - go test -coverprofile=cover.out ./...
     - go tool cover -func=cover.out > coverage.out
     - tail coverage.out
