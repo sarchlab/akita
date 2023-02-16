@@ -34,6 +34,7 @@ type Monitor struct {
 	engine     sim.Engine
 	components []sim.Component
 	buffers    []sim.Buffer
+	portNumber int
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
@@ -42,6 +43,20 @@ type Monitor struct {
 // NewMonitor creates a new Monitor
 func NewMonitor() *Monitor {
 	return &Monitor{}
+}
+
+// WithPortNumber sets the port number of the monitor.
+func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
+	if portNumber < 1000 {
+		fmt.Fprintf(os.Stderr,
+			"Port number %d is assigned to the monitoring server, "+
+				"which is not allowed. Using a random port instead.\n", portNumber)
+		portNumber = 0
+	}
+
+	m.portNumber = portNumber
+
+	return m
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
@@ -114,7 +129,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 }
 
 // StartServer starts the monitor as a web server with a custom port if wanted.
-func (m *Monitor) StartServer(portNum int) {
+func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
 
 	fs := web.GetAssets()
@@ -135,13 +150,8 @@ func (m *Monitor) StartServer(portNum int) {
 	http.Handle("/", r)
 
 	actualPort := ":0"
-	if portNum >= 1000 {
-		actualPort = ":" + strconv.Itoa(portNum)
-	} else {
-		fmt.Fprintf(
-			os.Stderr,
-			"!! Custom port number was not greater than 1000. Using random port...",
-		)
+	if m.portNumber > 1000 {
+		actualPort = ":" + strconv.Itoa(m.portNumber)
 	}
 
 	listener, err := net.Listen("tcp", actualPort)
