@@ -1,7 +1,7 @@
 
 import './reset.css'
-import 'bootstrap'
-import 'bootstrap/dist/css/bootstrap.min.css'
+import { Button } from 'bootstrap'
+import './styles.scss'
 import './style.css'
 
 import '@fortawesome/fontawesome-free/js/fontawesome'

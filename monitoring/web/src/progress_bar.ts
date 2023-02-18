@@ -3,10 +3,12 @@ import { UIManager } from "ui_manager"
 export class ProgressBarManager {
     uiManager: UIManager
     container: HTMLElement
-    pBarDoms: Map<string, ProgressBarDom>
+    progressDoms: Map<string, ProgressDom>
+    mode = 'bar'
+    maxProgressBars = 2
 
     constructor(uiManager: UIManager) {
-        this.pBarDoms = new Map()
+        this.progressDoms = new Map()
         this.uiManager = uiManager
     }
 
@@ -24,16 +26,50 @@ export class ProgressBarManager {
                     return
                 }
 
-                res.forEach((pBar) => {
-                    this.showOrUpdateProgressBar(pBar)
-                })
-
-                this.removeCompletedProgressBar(res)
+                this.renderProgress(res)
             })
     }
 
-    showOrUpdateProgressBar(pBar: ProgressBar) {
-        let dom = this.pBarDoms.get(pBar.id)
+    renderProgress(pBars: Array<ProgressBar>) {
+        if (this.mode == 'bar' && pBars.length > this.maxProgressBars) {
+            this.mode = 'pie'
+            this.removeAllProgressDoms()
+        }
+
+        if (this.mode == 'pie' && pBars.length <= this.maxProgressBars) {
+            this.mode = 'bar'
+            this.removeAllProgressDoms()
+        }
+
+
+
+        if (this.mode == 'bar') {
+            this.renderProgressAsBars(pBars)
+        }
+
+        if (this.mode == 'pie') {
+            this.renderProgressAsPies(pBars)
+        }
+    }
+
+    renderProgressAsBars(pBars: Array<ProgressBar>) {
+        pBars.forEach((pBar) => {
+            this.showOrUpdateProgressBarAsBar(pBar)
+        })
+
+        this.removeCompletedProgressDoms(pBars)
+    }
+
+    renderProgressAsPies(pBars: Array<ProgressBar>) {
+        pBars.forEach((pBar) => {
+            this.showOrUpdateProgressBarAsPie(pBar)
+        })
+
+        this.removeCompletedProgressDoms(pBars)
+    }
+
+    showOrUpdateProgressBarAsBar(pBar: ProgressBar) {
+        let dom = this.progressDoms.get(pBar.id)
 
         if (dom == null) {
             dom = this.createProgressBarDom(pBar)
@@ -43,18 +79,49 @@ export class ProgressBarManager {
         dom.set(pBar)
     }
 
+    showOrUpdateProgressBarAsPie(pBar: ProgressBar) {
+        let dom = this.progressDoms.get(pBar.id)
+
+        if (dom == null) {
+            dom = this.createProgressPieDom(pBar)
+            this.uiManager.adjustProgressBarGroupHeight()
+        }
+
+        dom.set(pBar)
+    }
+
+
     createProgressBarDom(pBar: ProgressBar): ProgressBarDom {
         const dom = new ProgressBarDom(pBar)
 
-        this.pBarDoms.set(pBar.id, dom)
+        this.progressDoms.set(pBar.id, dom)
 
         dom.show(this.container, this.uiManager)
 
         return dom
     }
 
-    removeCompletedProgressBar(pBars: Array<ProgressBar>) {
-        this.pBarDoms.forEach((dom, key) => {
+    createProgressPieDom(pBar: ProgressBar): ProgressPieDom {
+        const dom = new ProgressPieDom(pBar)
+
+        this.progressDoms.set(pBar.id, dom)
+
+        dom.show(this.container, this.uiManager)
+
+        return dom
+    }
+
+    removeAllProgressDoms() {
+        this.progressDoms.forEach((dom, key) => {
+            this.progressDoms.delete(key)
+            dom.remove().then(() => {
+                this.uiManager.adjustProgressBarGroupHeight()
+            })
+        })
+    }
+
+    removeCompletedProgressDoms(pBars: Array<ProgressBar>) {
+        this.progressDoms.forEach((dom, key) => {
             let found = false
             for (let i = 0; i < pBars.length; i++) {
                 if (pBars[i].id == key) {
@@ -63,12 +130,105 @@ export class ProgressBarManager {
             }
 
             if (!found) {
-                this.pBarDoms.delete(key)
+                this.progressDoms.delete(key)
                 dom.remove().then(() => {
                     this.uiManager.adjustProgressBarGroupHeight()
                 })
             }
         })
+    }
+}
+
+interface ProgressDom {
+    set(pBar: ProgressBar): void
+    remove(): Promise<void>
+    show(container: HTMLElement, uiManager: UIManager): void
+}
+
+class ProgressPieDom {
+    dom: HTMLElement
+    tooltip: HTMLElement
+    progressPie: HTMLElement
+
+    constructor(pBar: ProgressBar) {
+        this.dom = document.createElement('div')
+        this.dom.classList.add('progress-pie-complex')
+
+        this.progressPie = document.createElement('div')
+        this.progressPie.classList.add('progress-pie')
+        this.dom.appendChild(this.progressPie)
+
+        this.createTooltip(pBar)
+    }
+
+    private createTooltip(pBar: ProgressBar) {
+        this.tooltip = document.createElement('div')
+        this.tooltip.classList.add('progress-pie-tooltip')
+        this.tooltip.innerHTML = `
+            <div class="progress-pie-tooltip-title">${pBar.name}</div>
+            <div class="progress-pie-tooltip-content">
+                Finished: ${pBar.finished},
+                In Progress: ${pBar.in_progress},
+                Total: ${pBar.total}
+            </div>
+        `
+        this.dom.appendChild(this.tooltip)
+
+        this.dom.addEventListener('mouseover', () => {
+            this.tooltip.style.display = 'block'
+        })
+
+        this.dom.addEventListener('mousemove', (e) => {
+            this.tooltip.style.left = `${e.clientX}px`
+            this.tooltip.style.top = `${e.clientY - this.tooltip.offsetHeight}px`
+        })
+
+        this.dom.addEventListener('mouseout', () => {
+            this.tooltip.style.display = 'none'
+        })
+    }
+
+    async show(container: HTMLElement, uiManager: UIManager) {
+        container.appendChild(this.dom)
+
+        await this.dom.animate(
+            { transform: `scale(0)` },
+            { duration: 200, easing: "ease-in-out" }
+        ).finished
+    }
+
+    resize() {
+
+    }
+
+    async remove() {
+        const distance = window.innerHeight - this.dom.offsetTop
+
+        await this.dom.animate(
+            { transform: `translate(0, ${distance}px)` },
+            { duration: 200, easing: "ease-in-out" }
+        ).finished
+
+        this.dom.remove()
+    }
+
+    set(pBar: ProgressBar) {
+        const finished = pBar.finished
+        const inProgress = pBar.in_progress
+        const total = pBar.total
+
+        const finishedPercent = finished / total
+        const finishedDegree = finishedPercent * 360
+        const inProgressPercent = inProgress / total
+        const inProgressDegree = inProgressPercent * 360
+
+        this.progressPie.style.backgroundImage = `
+            conic-gradient(
+                #28a745 ${finishedDegree}deg,
+                #007bff ${finishedDegree}deg ${finishedDegree + inProgressDegree}deg,
+                #e9ecef ${finishedDegree + inProgressDegree}deg
+            )
+        `
     }
 }
 

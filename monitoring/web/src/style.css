@@ -83,7 +83,6 @@ body {
 
 .field-title-circle {
   font-size: 0.8em;
-  margin-right: 0.5em;
 }
 
 .field-title-non-expandable {
@@ -145,10 +144,43 @@ body {
 .progress-bar-group {
   border-top: #dddddd solid 3px;
   padding: 4px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
 }
 
 .progress-complex {
   display: flex;
+  width:100%;
+}
+
+.progress-pie-complex {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  margin-top:10px;
+  margin-left:10px;
+}
+
+.progress-pie-tooltip {
+  position: absolute;
+  width: fit-content;
+  z-index: 1;
+  display: none;
+  background-color: #ffffff;
+  border: solid 1px #cccccc;
+  padding: 4px;
+  font-size: 0.8em;
+  border-radius: 5px;
+  box-shadow: #444444 0px 0px 5px;
+}
+
+.progress-pie {
+  width: 80%;
+  height: 80%;
+  margin: auto;
+  border-radius: 50%;
+  border: 1px solid #333333;
 }
 
 .table th {
