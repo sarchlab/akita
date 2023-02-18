@@ -8,12 +8,12 @@ import (
 // A ProgressBar is a tracker of the progress
 type ProgressBar struct {
 	sync.Mutex
-	ID         string    `json:"id,omitempty"`
-	Name       string    `json:"name,omitempty"`
-	StartTime  time.Time `json:"start_time,omitempty"`
-	Total      uint64    `json:"total,omitempty"`
-	Finished   uint64    `json:"finished,omitempty"`
-	InProgress uint64    `json:"in_progress,omitempty"`
+	ID         string    `json:"id"`
+	Name       string    `json:"name"`
+	StartTime  time.Time `json:"start_time"`
+	Total      uint64    `json:"total"`
+	Finished   uint64    `json:"finished"`
+	InProgress uint64    `json:"in_progress"`
 }
 
 // IncrementInProgress adds the number of in-progress element.

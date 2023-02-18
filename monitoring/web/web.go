@@ -11,24 +11,24 @@ import (
 	"strings"
 )
 
-//go:embed index.html dist/bundle.js profile.proto
+//go:embed index.html dist/bundle.js
 var staticAssets embed.FS
 
 // GetAssets returns the static assets
 func GetAssets() http.FileSystem {
 	if isDevelopmentMode() {
-		_, assestPath, _, ok := runtime.Caller(1)
+		_, assetPath, _, ok := runtime.Caller(1)
 		if !ok {
 			panic("error getting path")
 		}
 
-		assestPath = path.Join(path.Dir(assestPath), "/web")
+		assetPath = path.Join(path.Dir(assetPath), "/web")
 
 		// path := path.Join(path.Dir(filename), "../config/settings.toml")
 
-		fmt.Printf("In monitoring tool development mode, serving assets from %s\n", assestPath)
+		fmt.Printf("In monitoring tool development mode, serving assets from %s\n", assetPath)
 
-		return http.Dir(assestPath)
+		return http.Dir(assetPath)
 	}
 
 	return http.FS(staticAssets)

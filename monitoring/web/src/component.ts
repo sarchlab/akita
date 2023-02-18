@@ -249,7 +249,7 @@ export class ComponentDetailView {
         if (isDirectKind(kind)) {
             fieldTitle.innerHTML +=
                 `<span class="field-title-circle">
-                    <i class="fa-solid fa-circle fa-2xs"></i>
+                    -
                 </span>`
         } else {
             fieldTitle.innerHTML = `

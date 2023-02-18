@@ -3,6 +3,7 @@ package monitoring
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -142,7 +143,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/list_components", m.listComponents)
 	r.HandleFunc("/api/component/{name}", m.listComponentDetails)
 	r.HandleFunc("/api/field/{json}", m.listFieldValue)
-	r.HandleFunc("/api/hangdetector/buffers", m.hangdetectorBuffers)
+	r.HandleFunc("/api/hangdetector/buffers", m.hangDetectorBuffers)
 	r.HandleFunc("/api/progress", m.listProgressBars)
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
@@ -276,12 +277,15 @@ func (m *Monitor) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func (m *Monitor) hangdetectorBuffers(w http.ResponseWriter, r *http.Request) {
-	sortedBuffers := make([]sim.Buffer, len(m.buffers))
-	copy(sortedBuffers, m.buffers)
-	sort.Slice(sortedBuffers, func(i, j int) bool {
-		return sortedBuffers[i].Size() > sortedBuffers[j].Size()
-	})
+func (m *Monitor) hangDetectorBuffers(w http.ResponseWriter, r *http.Request) {
+	sortMethod, limit, offset, err := m.buffersParseParams(r, w)
+	if err != nil {
+		w.WriteHeader(400)
+		fmt.Fprintf(w, "Error: %s", err)
+		return
+	}
+
+	sortedBuffers := m.sortAndSelectBuffers(sortMethod, limit, offset)
 
 	fmt.Fprintf(w, "[")
 	for i, b := range sortedBuffers {
@@ -291,13 +295,95 @@ func (m *Monitor) hangdetectorBuffers(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Fprintf(w, "{\"buffer\":\"%s\",\"level\":%d,\"cap\":%d}",
 			b.Name(), b.Size(), b.Capacity())
-
-		if i > 50 {
-			break
-		}
 	}
 
 	fmt.Fprint(w, "]")
+}
+
+func (*Monitor) buffersParseParams(
+	r *http.Request,
+	w http.ResponseWriter,
+) (sort string, limit, offset int, err error) {
+	sortMethod := r.URL.Query().Get("sort")
+	if sortMethod == "" {
+		sortMethod = "percent"
+	}
+	if sortMethod != "level" && sortMethod != "percent" {
+		errStr := fmt.Sprintf(
+			"Invalid sort method: %s. Allowed values are `level` and `percent`",
+			sortMethod)
+		return "", 0, 0, errors.New(errStr)
+	}
+
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr == "" {
+		limitStr = "0"
+	}
+	limitNumber, err := strconv.Atoi(limitStr)
+	if err != nil {
+		return sortMethod, 0, 0, err
+	}
+
+	offsetStr := r.URL.Query().Get("offset")
+	if offsetStr == "" {
+		offsetStr = "0"
+	}
+	offsetNumber, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		return sortMethod, limitNumber, 0, err
+	}
+
+	return sortMethod, limitNumber, offsetNumber, nil
+}
+
+func bufferPercent(b sim.Buffer) float64 {
+	return float64(b.Size()) / float64(b.Capacity())
+}
+
+func (m *Monitor) sortAndSelectBuffers(
+	sortMethod string,
+	limit, offset int,
+) []sim.Buffer {
+	sortedBuffers := make([]sim.Buffer, len(m.buffers))
+	copy(sortedBuffers, m.buffers)
+
+	if sortMethod == "level" {
+		sort.Slice(sortedBuffers, func(i, j int) bool {
+			sizeI := sortedBuffers[i].Size()
+			sizeJ := sortedBuffers[j].Size()
+			percentI := bufferPercent(sortedBuffers[i])
+			percentJ := bufferPercent(sortedBuffers[j])
+
+			if sizeI > sizeJ {
+				return true
+			} else if sizeI < sizeJ {
+				return false
+			} else {
+				return percentI > percentJ
+			}
+		})
+	} else if sortMethod == "percent" {
+		sort.Slice(sortedBuffers, func(i, j int) bool {
+			sizeI := sortedBuffers[i].Size()
+			sizeJ := sortedBuffers[j].Size()
+			percentI := bufferPercent(sortedBuffers[i])
+			percentJ := bufferPercent(sortedBuffers[j])
+
+			if percentI > percentJ {
+				return true
+			} else if percentI < percentJ {
+				return false
+			} else {
+				return sizeI > sizeJ
+			}
+		})
+	} else {
+		panic("Invalid sort method " + sortMethod)
+	}
+
+	sortedBuffers = sortedBuffers[offset : offset+limit]
+
+	return sortedBuffers
 }
 
 type fieldFormatError struct {

@@ -80,7 +80,7 @@ function displayDomain(domain: Node, container: HTMLElement, monitor: Monitor) {
             <i class="fa-solid fa-chevron-right fa-xs"></i>
         </span>
         <span class="field-title-chevron-down hidden">
-            <i class="fa-solid fa-chevron-down fa-xs"></i>
+            <i class="fa-solid fa-chevron-down fa-xs" > </i>
         </span>
         <span>${domain.name}</span>`
     btn.style.cursor = 'pointer'
@@ -96,14 +96,14 @@ function displayDomain(domain: Node, container: HTMLElement, monitor: Monitor) {
     }
     btn.appendChild(subContainer)
 
-    for (let child of domain.children.values()) {
-        display(child, subContainer, monitor)
-    }
-
     btn.addEventListener("click", (event: Event) => {
         event.stopImmediatePropagation()
         event.stopPropagation()
         event.preventDefault()
+
+        for (let child of domain.children.values()) {
+            display(child, subContainer, monitor)
+        }
 
         if (subContainer.style.display == 'block') {
             subContainer.style.display = 'none'
@@ -130,10 +130,9 @@ function displayComponent(
 
     let btn = document.createElement("div")
     btn.innerHTML = `
-        <span class="field-title-circle">
-            <i class="fa-solid fa-circle fa-2xs"></i>
+        <span class="field-title">
+            - ${component.name}
         </span>
-        <span>${component.name}</span>
     `
     btn.style.textIndent = ((layer - 1) * layerIndentation) + 'px'
     btn.style.cursor = 'pointer'
