@@ -83,7 +83,7 @@ func (t *MongoDBTracer) StartTask(task Task) {
 }
 
 // StepTask marks a milestone during the executing of a task.
-func (t *MongoDBTracer) StepTask(task Task) {
+func (t *MongoDBTracer) StepTask(_ Task) {
 	// Do nothing for now
 }
 

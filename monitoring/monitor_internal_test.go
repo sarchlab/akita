@@ -21,15 +21,15 @@ type sampleComponent struct {
 	buffer sim.Buffer
 }
 
-func (c *sampleComponent) Handle(evt sim.Event) error {
+func (c *sampleComponent) Handle(_ sim.Event) error {
 	return nil
 }
 
-func (c *sampleComponent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
+func (c *sampleComponent) NotifyRecv(_ sim.VTimeInSec, _ sim.Port) {
 	// Do nothing
 }
 
-func (c *sampleComponent) NotifyPortFree(now sim.VTimeInSec, port sim.Port) {
+func (c *sampleComponent) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
 	// Do nothing
 }
 

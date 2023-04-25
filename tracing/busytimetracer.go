@@ -85,7 +85,7 @@ func (t *BusyTimeTracer) StartTask(task Task) {
 }
 
 // StepTask does nothing
-func (t *BusyTimeTracer) StepTask(task Task) {
+func (t *BusyTimeTracer) StepTask(_ Task) {
 	// Do nothing
 }
 

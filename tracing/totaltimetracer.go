@@ -52,7 +52,7 @@ func (t *TotalTimeTracer) StartTask(task Task) {
 }
 
 // StepTask does nothing
-func (t *TotalTimeTracer) StepTask(task Task) {
+func (t *TotalTimeTracer) StepTask(_ Task) {
 	// Do nothing
 }
 

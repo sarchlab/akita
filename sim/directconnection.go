@@ -31,13 +31,13 @@ func (c *DirectConnection) PlugIn(port Port, sourceSideBufSize int) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *DirectConnection) Unplug(port Port) {
+func (c *DirectConnection) Unplug(_ Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *DirectConnection) NotifyAvailable(now VTimeInSec, port Port) {
+func (c *DirectConnection) NotifyAvailable(now VTimeInSec, _ Port) {
 	c.TickNow(now)
 }
 

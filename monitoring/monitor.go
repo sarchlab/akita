@@ -169,24 +169,24 @@ func (m *Monitor) StartServer() {
 	}()
 }
 
-func (m *Monitor) pauseEngine(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engine.Pause()
 	_, err := w.Write(nil)
 	dieOnErr(err)
 }
 
-func (m *Monitor) continueEngine(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engine.Continue()
 	_, err := w.Write(nil)
 	dieOnErr(err)
 }
 
-func (m *Monitor) now(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
 	now := m.engine.CurrentTime()
 	fmt.Fprintf(w, "{\"now\":%.10f}", now)
 }
 
-func (m *Monitor) run(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	go func() {
 		err := m.engine.Run()
 		if err != nil {
@@ -195,7 +195,7 @@ func (m *Monitor) run(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-func (m *Monitor) listComponents(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(w, "[")
 	for i, c := range m.components {
 		if i > 0 {
@@ -302,7 +302,7 @@ func (m *Monitor) hangDetectorBuffers(w http.ResponseWriter, r *http.Request) {
 
 func (*Monitor) buffersParseParams(
 	r *http.Request,
-	w http.ResponseWriter,
+	_ http.ResponseWriter,
 ) (sort string, limit, offset int, err error) {
 	sortMethod := r.URL.Query().Get("sort")
 	if sortMethod == "" {
@@ -448,7 +448,7 @@ func (m *Monitor) findComponentOr404(
 	return component
 }
 
-func (m *Monitor) listProgressBars(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) listProgressBars(w http.ResponseWriter, _ *http.Request) {
 	bytes, err := json.Marshal(m.progressBars)
 	dieOnErr(err)
 
@@ -461,7 +461,7 @@ type resourceRsp struct {
 	MemorySize uint64  `json:"memory_size"`
 }
 
-func (m *Monitor) listResources(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) listResources(w http.ResponseWriter, _ *http.Request) {
 	pid := os.Getpid()
 	process, err := process.NewProcess(int32(pid))
 	dieOnErr(err)
@@ -484,7 +484,7 @@ func (m *Monitor) listResources(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
+func (m *Monitor) collectProfile(w http.ResponseWriter, _ *http.Request) {
 	buf := bytes.NewBuffer(nil)
 
 	err := pprof.StartCPUProfile(buf)

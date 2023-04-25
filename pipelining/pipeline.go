@@ -109,7 +109,7 @@ func (p *pipelineImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
 }
 
 func (p *pipelineImpl) tryMoveToPostPipelineBuffer(
-	now sim.VTimeInSec,
+	_ sim.VTimeInSec,
 	stage *pipelineStageInfo,
 ) (succeed bool) {
 	if !p.postPipelineBuf.CanPush() {
@@ -157,7 +157,7 @@ func (p *pipelineImpl) CanAccept() bool {
 
 // Accept adds an element to the pipeline. If the first pipeline stage is
 // currently occupied, this function panics.
-func (p *pipelineImpl) Accept(now sim.VTimeInSec, elem PipelineItem) {
+func (p *pipelineImpl) Accept(_ sim.VTimeInSec, elem PipelineItem) {
 	if p.numStage == 0 {
 		p.postPipelineBuf.Push(elem)
 		return

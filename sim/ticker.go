@@ -121,7 +121,7 @@ type TickingComponent struct {
 // NotifyPortFree triggers the TickingComponent to start ticking again.
 func (c *TickingComponent) NotifyPortFree(
 	now VTimeInSec,
-	port Port,
+	_ Port,
 ) {
 	c.TickLater(now)
 }
@@ -129,7 +129,7 @@ func (c *TickingComponent) NotifyPortFree(
 // NotifyRecv triggers the TickingComponent to start ticking again.
 func (c *TickingComponent) NotifyRecv(
 	now VTimeInSec,
-	port Port,
+	_ Port,
 ) {
 	c.TickLater(now)
 }

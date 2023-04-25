@@ -61,7 +61,7 @@ func (t *AverageTimeTracer) StartTask(task Task) {
 }
 
 // StepTask does nothing
-func (t *AverageTimeTracer) StepTask(task Task) {
+func (t *AverageTimeTracer) StepTask(_ Task) {
 	// Do nothing
 }
 

@@ -2,6 +2,7 @@ package sim
 
 import (
 	"math/rand"
+	"time"
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -100,8 +101,7 @@ var _ = Describe("SerialEngine", func() {
 		experiment.MeasureDuration("runtime", func() {
 			handler := NewMockHandler(mockCtrl)
 			handler.EXPECT().Handle(gomock.Any()).Do(func(e Event) {
-				for i := 0; i < 1000; i++ {
-				}
+				time.Sleep(time.Duration(rand.Uint64()%10) * time.Millisecond)
 			}).AnyTimes()
 
 			for i := 0; i < 10000; i++ {

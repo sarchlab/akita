@@ -161,7 +161,7 @@ func (t *MySQLTracer) StartTask(task Task) {
 }
 
 // StepTask marks a milestone during the execution of a task.
-func (t *MySQLTracer) StepTask(task Task) {
+func (t *MySQLTracer) StepTask(_ Task) {
 	// Do nothing for now
 }
 

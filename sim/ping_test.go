@@ -128,7 +128,7 @@ func (p *PingAgent) processPingRsp(now sim.VTimeInSec, msg *PingRsp) {
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 }
 
-func (p PingAgent) NotifyPortFree(now sim.VTimeInSec, port sim.Port) {
+func (p PingAgent) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
 	// Do nothing
 }
 

@@ -27,7 +27,7 @@ func (t *JSONTracer) StartTask(task Task) {
 }
 
 // StepTask records the moment that a task reaches a milestone
-func (t *JSONTracer) StepTask(task Task) {
+func (t *JSONTracer) StepTask(_ Task) {
 	// Do nothing right now
 }
 
