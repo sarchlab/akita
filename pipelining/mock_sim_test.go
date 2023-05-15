@@ -85,6 +85,20 @@ func (mr *MockBufferMockRecorder) Clear() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockBuffer)(nil).Clear))
 }
 
+// Hooks mocks base method.
+func (m *MockBuffer) Hooks() []sim.Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]sim.Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockBufferMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockBuffer)(nil).Hooks))
+}
+
 // Name mocks base method.
 func (m *MockBuffer) Name() string {
 	m.ctrl.T.Helper()

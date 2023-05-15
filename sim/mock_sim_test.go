@@ -72,6 +72,20 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockPort)(nil).Component))
 }
 
+// Hooks mocks base method.
+func (m *MockPort) Hooks() []Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockPortMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockPort)(nil).Hooks))
+}
+
 // Name mocks base method.
 func (m *MockPort) Name() string {
 	m.ctrl.T.Helper()
@@ -253,6 +267,20 @@ func (mr *MockEngineMockRecorder) Finished() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finished", reflect.TypeOf((*MockEngine)(nil).Finished))
 }
 
+// Hooks mocks base method.
+func (m *MockEngine) Hooks() []Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockEngineMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockEngine)(nil).Hooks))
+}
+
 // NumHooks mocks base method.
 func (m *MockEngine) NumHooks() int {
 	m.ctrl.T.Helper()
@@ -431,6 +459,20 @@ func (mr *MockConnectionMockRecorder) CanSend(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSend", reflect.TypeOf((*MockConnection)(nil).CanSend), arg0)
 }
 
+// Hooks mocks base method.
+func (m *MockConnection) Hooks() []Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockConnectionMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockConnection)(nil).Hooks))
+}
+
 // NotifyAvailable mocks base method.
 func (m *MockConnection) NotifyAvailable(arg0 VTimeInSec, arg1 Port) {
 	m.ctrl.T.Helper()
@@ -568,6 +610,20 @@ func (m *MockComponent) Handle(arg0 Event) error {
 func (mr *MockComponentMockRecorder) Handle(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockComponent)(nil).Handle), arg0)
+}
+
+// Hooks mocks base method.
+func (m *MockComponent) Hooks() []Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockComponentMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockComponent)(nil).Hooks))
 }
 
 // Name mocks base method.
@@ -783,6 +839,20 @@ func (m *MockBuffer) Clear() {
 func (mr *MockBufferMockRecorder) Clear() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockBuffer)(nil).Clear))
+}
+
+// Hooks mocks base method.
+func (m *MockBuffer) Hooks() []Hook {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Hooks")
+	ret0, _ := ret[0].([]Hook)
+	return ret0
+}
+
+// Hooks indicates an expected call of Hooks.
+func (mr *MockBufferMockRecorder) Hooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockBuffer)(nil).Hooks))
 }
 
 // Name mocks base method.

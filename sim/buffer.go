@@ -58,7 +58,7 @@ func (b *bufferImpl) Push(e interface{}) {
 
 	b.elements = append(b.elements, e)
 
-	if len(b.Hooks) > 0 {
+	if b.NumHooks() > 0 {
 		b.InvokeHook(HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPush,
@@ -76,7 +76,7 @@ func (b *bufferImpl) Pop() interface{} {
 	e := b.elements[0]
 	b.elements = b.elements[1:]
 
-	if len(b.Hooks) > 0 {
+	if b.NumHooks() > 0 {
 		b.InvokeHook(HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPush,

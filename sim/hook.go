@@ -21,6 +21,9 @@ type Hookable interface {
 
 	// NumHooks returns the number of hooks registered.
 	NumHooks() int
+
+	// Hooks returns all the hooks registered.
+	Hooks() []Hook
 }
 
 // HookPosBeforeEvent is a hook position that triggers before handling an event.
@@ -38,29 +41,43 @@ type Hook interface {
 // A HookableBase provides some utility function for other type that implement
 // the Hookable interface.
 type HookableBase struct {
-	Hooks []Hook
+	hookList []Hook
 }
 
 // NewHookableBase creates a HookableBase object.
 func NewHookableBase() *HookableBase {
 	h := new(HookableBase)
-	h.Hooks = make([]Hook, 0)
+	h.hookList = make([]Hook, 0)
 	return h
 }
 
 // NumHooks returns the number of hooks registered.
 func (h *HookableBase) NumHooks() int {
-	return len(h.Hooks)
+	return len(h.hookList)
+}
+
+// Hooks returns all the hooks registered.
+func (h *HookableBase) Hooks() []Hook {
+	return h.hookList
 }
 
 // AcceptHook register a hook.
 func (h *HookableBase) AcceptHook(hook Hook) {
-	h.Hooks = append(h.Hooks, hook)
+	h.mustNotHaveDuplicatedHook(hook)
+	h.hookList = append(h.hookList, hook)
+}
+
+func (h *HookableBase) mustNotHaveDuplicatedHook(hook Hook) {
+	for _, h := range h.hookList {
+		if h == hook {
+			panic("duplicated hook")
+		}
+	}
 }
 
 // InvokeHook triggers the register Hooks.
 func (h *HookableBase) InvokeHook(ctx HookCtx) {
-	for _, hook := range h.Hooks {
+	for _, hook := range h.hookList {
 		hook.Func(ctx)
 	}
 }
