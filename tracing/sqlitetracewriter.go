@@ -12,24 +12,23 @@ import (
 	"github.com/tebeka/atexit"
 )
 
-// SQLiteWriter is a writer that writes trace data to a SQLite database.
-type SQLiteWriter struct {
+// SQLiteTraceWriter is a writer that writes trace data to a SQLite database.
+type SQLiteTraceWriter struct {
 	*sync.Mutex
 	*sql.DB
 	statement *sql.Stmt
 
 	dbName           string
 	tasksToWriteToDB []Task
-	taskByID         map[string]Task
 	batchSize        int
 }
 
-// NewSQLiteWriter creates a new SQLiteWriter.
-func NewSQLiteWriter() *SQLiteWriter {
-	w := &SQLiteWriter{
+// NewSQLiteTraceWriter creates a new SQLiteWriter.
+func NewSQLiteTraceWriter(path string) *SQLiteTraceWriter {
+	w := &SQLiteTraceWriter{
+		dbName:    path,
 		Mutex:     &sync.Mutex{},
 		batchSize: 100000,
-		taskByID:  make(map[string]Task),
 	}
 
 	atexit.Register(func() { w.Flush() })
@@ -38,19 +37,13 @@ func NewSQLiteWriter() *SQLiteWriter {
 }
 
 // Init establishes a connection to the database.
-func (t *SQLiteWriter) Init() {
+func (t *SQLiteTraceWriter) Init() {
 	t.createDatabase()
 	t.prepareStatement()
 }
 
 // Write writes a task to the database.
-func (t *SQLiteWriter) Write(task Task) {
-	if _, ok := t.taskByID[task.ID]; ok {
-		panic(fmt.Sprintf("task %s already exists", task.ID))
-	}
-
-	t.taskByID[task.ID] = task
-
+func (t *SQLiteTraceWriter) Write(task Task) {
 	t.tasksToWriteToDB = append(t.tasksToWriteToDB, task)
 	if len(t.tasksToWriteToDB) >= t.batchSize {
 		t.Flush()
@@ -58,7 +51,7 @@ func (t *SQLiteWriter) Write(task Task) {
 }
 
 // Flush writes all the buffered tasks to the database.
-func (t *SQLiteWriter) Flush() {
+func (t *SQLiteTraceWriter) Flush() {
 	t.Lock()
 	defer t.Unlock()
 
@@ -89,12 +82,20 @@ func (t *SQLiteWriter) Flush() {
 	t.tasksToWriteToDB = nil
 }
 
-func (t *SQLiteWriter) createDatabase() {
-	dbName := "akita_trace_" + xid.New().String()
-	t.dbName = dbName
-	fmt.Fprintf(os.Stderr, "Trace is Collected in Database: %s\n", dbName)
+func (t *SQLiteTraceWriter) createDatabase() {
+	if t.dbName == "" {
+		t.dbName = "akita_trace_" + xid.New().String()
+	}
 
-	db, err := sql.Open("sqlite3", "./"+dbName+".sqlite3")
+	filename := t.dbName + ".sqlite3"
+	_, err := os.Stat(filename)
+	if err == nil {
+		panic(fmt.Errorf("file %s already exists", filename))
+	}
+
+	fmt.Fprintf(os.Stderr, "Trace is Collected in Database: %s\n", filename)
+
+	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
 		panic(err)
 	}
@@ -104,7 +105,7 @@ func (t *SQLiteWriter) createDatabase() {
 	t.createTable()
 }
 
-func (t *SQLiteWriter) createTable() {
+func (t *SQLiteTraceWriter) createTable() {
 	t.mustExecute(`
 		create table trace
 		(
@@ -154,7 +155,7 @@ func (t *SQLiteWriter) createTable() {
 	`)
 }
 
-func (t *SQLiteWriter) prepareStatement() {
+func (t *SQLiteTraceWriter) prepareStatement() {
 	sqlStr := `INSERT INTO trace VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	stmt, err := t.Prepare(sqlStr)
@@ -165,7 +166,7 @@ func (t *SQLiteWriter) prepareStatement() {
 	t.statement = stmt
 }
 
-func (t *SQLiteWriter) mustExecute(query string) sql.Result {
+func (t *SQLiteTraceWriter) mustExecute(query string) sql.Result {
 	res, err := t.Exec(query)
 	if err != nil {
 		fmt.Printf("Failed to execute: %s\n", query)
