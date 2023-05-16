@@ -14,19 +14,19 @@ import (
 	"github.com/tebeka/atexit"
 )
 
-// MySQLWriter is a task tracer that can store the tasks into a MySQL
+// MySQLTraceWriter is a task tracer that can store the tasks into a MySQL
 // database.
-type MySQLWriter struct {
+type MySQLTraceWriter struct {
 	dbConnection
 	tasksToWriteToDB []Task
 	batchSize        int
 }
 
-// NewMySQLWriter returns a new MySQLWriter.
+// NewMySQLTraceWriter returns a new MySQLWriter.
 // The init function must be called before using the backend.
-func NewMySQLWriter() *MySQLWriter {
-	t := &MySQLWriter{
-		batchSize: 4000,
+func NewMySQLTraceWriter() *MySQLTraceWriter {
+	t := &MySQLTraceWriter{
+		batchSize: 100000,
 	}
 
 	atexit.Register(func() { t.Flush() })
@@ -35,12 +35,12 @@ func NewMySQLWriter() *MySQLWriter {
 }
 
 // Init establishes a connection to MySQL and creates a database.
-func (t *MySQLWriter) Init() {
+func (t *MySQLTraceWriter) Init() {
 	t.dbConnection.init("")
 	t.createDatabase()
 }
 
-func (t *MySQLWriter) createDatabase() {
+func (t *MySQLTraceWriter) createDatabase() {
 	dbName := "akita_trace_" + xid.New().String()
 	t.dbName = dbName
 	log.Printf("Trace is Collected in Database: %s\n", dbName)
@@ -51,7 +51,7 @@ func (t *MySQLWriter) createDatabase() {
 	t.createTable()
 }
 
-func (t *MySQLWriter) createTable() {
+func (t *MySQLTraceWriter) createTable() {
 	t.mustExecute(`
 		create table trace
 		(
@@ -106,7 +106,7 @@ func (t *MySQLWriter) createTable() {
 }
 
 // Write writes the task into the database.
-func (t *MySQLWriter) Write(task Task) {
+func (t *MySQLTraceWriter) Write(task Task) {
 	t.tasksToWriteToDB = append(t.tasksToWriteToDB, task)
 	if len(t.tasksToWriteToDB) > t.batchSize {
 		t.Flush()
@@ -114,7 +114,7 @@ func (t *MySQLWriter) Write(task Task) {
 }
 
 // Flush writes all the tasks in the buffer into the database.
-func (t *MySQLWriter) Flush() {
+func (t *MySQLTraceWriter) Flush() {
 	sqlStr := `INSERT INTO trace VALUES`
 	vals := []interface{}{}
 

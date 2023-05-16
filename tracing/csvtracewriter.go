@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rs/xid"
 	"github.com/tebeka/atexit"
 )
 
-// CSVTracerBackend is a task tracer that can store the tasks into a CSV file.
-type CSVTracerBackend struct {
+// CSVTraceWriter is a task tracer that can store the tasks into a CSV file.
+type CSVTraceWriter struct {
 	path string
 	file *os.File
 
@@ -16,9 +17,9 @@ type CSVTracerBackend struct {
 	bufferSize int
 }
 
-// NewCSVTracerBackend creates a new CSVTracerBackend.
-func NewCSVTracerBackend(path string) *CSVTracerBackend {
-	return &CSVTracerBackend{
+// NewCSVTraceWriter creates a new CSVTracerBackend.
+func NewCSVTraceWriter(path string) *CSVTraceWriter {
+	return &CSVTraceWriter{
 		path:       path,
 		bufferSize: 1000,
 	}
@@ -26,8 +27,18 @@ func NewCSVTracerBackend(path string) *CSVTracerBackend {
 
 // Init creates the tracing csv file. If the file already exists, it will be
 // overwritten.
-func (t *CSVTracerBackend) Init() {
-	file, err := os.Create(t.path)
+func (t *CSVTraceWriter) Init() {
+	if t.path == "" {
+		t.path = "akita_trace_" + xid.New().String()
+	}
+
+	filename := t.path + ".csv"
+	_, err := os.Stat(filename)
+	if err == nil {
+		panic(fmt.Errorf("file %s already exists", filename))
+	}
+
+	file, err := os.Create(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +56,7 @@ func (t *CSVTracerBackend) Init() {
 }
 
 // Write writes a task to the CSV file.
-func (t *CSVTracerBackend) Write(task Task) {
+func (t *CSVTraceWriter) Write(task Task) {
 	t.tasks = append(t.tasks, task)
 	if len(t.tasks) >= t.bufferSize {
 		t.Flush()
@@ -53,7 +64,7 @@ func (t *CSVTracerBackend) Write(task Task) {
 }
 
 // Flush flushes the tasks to the CSV file.
-func (t *CSVTracerBackend) Flush() {
+func (t *CSVTraceWriter) Flush() {
 	for _, task := range t.tasks {
 		fmt.Fprintf(t.file, "%s, %s, %s, %s, %s, %.10f, %.10f\n",
 			task.ID,
