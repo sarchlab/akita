@@ -10,15 +10,16 @@ type TaskStep struct {
 
 // A Task is a task
 type Task struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parent_id"`
-	Kind      string         `json:"kind"`
-	What      string         `json:"what"`
-	Where     string         `json:"where"`
-	StartTime sim.VTimeInSec `json:"start_time"`
-	EndTime   sim.VTimeInSec `json:"end_time"`
-	Steps     []TaskStep     `json:"steps"`
-	Detail    interface{}    `json:"-"`
+	ID         string         `json:"id"`
+	ParentID   string         `json:"parent_id"`
+	Kind       string         `json:"kind"`
+	What       string         `json:"what"`
+	Where      string         `json:"where"`
+	StartTime  sim.VTimeInSec `json:"start_time"`
+	EndTime    sim.VTimeInSec `json:"end_time"`
+	Steps      []TaskStep     `json:"steps"`
+	Detail     interface{}    `json:"-"`
+	ParentTask *Task          `json:"-"`
 }
 
 // TaskFilter is a function that can filter interesting tasks. If this function

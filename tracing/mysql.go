@@ -151,6 +151,179 @@ func (t *MySQLTraceWriter) Flush() {
 	t.tasksToWriteToDB = nil
 }
 
+// MySQLTraceReader can read tasks from a MySQL database.
+type MySQLTraceReader struct {
+	dbConnection
+
+	dbName string
+}
+
+// NewMySQLTraceReader returns a new MySQLTraceReader.
+// The Init function must be called before using the reader.
+func NewMySQLTraceReader(dbName string) *MySQLTraceReader {
+	r := &MySQLTraceReader{
+		dbName: dbName,
+	}
+
+	return r
+}
+
+// Init establishes a connection to MySQL.
+func (r *MySQLTraceReader) Init() {
+	r.dbConnection.init(r.dbName)
+}
+
+// ListComponents returns a list of components in the trace.
+func (r *MySQLTraceReader) ListComponents() []string {
+	var components []string
+
+	rows, err := r.Query("SELECT DISTINCT location FROM tasks")
+	if err != nil {
+		panic(err)
+	}
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	for rows.Next() {
+		var component string
+		err := rows.Scan(&component)
+		if err != nil {
+			panic(err)
+		}
+		components = append(components, component)
+	}
+
+	return components
+}
+
+// ListTasks returns a list of tasks in the trace according to the given query.
+func (r *MySQLTraceReader) ListTasks(query TaskQuery) []Task {
+	sqlStr := r.prepareTaskQueryStr(query)
+
+	rows, err := r.Query(sqlStr)
+	if err != nil {
+		panic(err)
+	}
+
+	tasks := []Task{}
+	for rows.Next() {
+		t := Task{}
+		pt := Task{}
+
+		err := rows.Scan(
+			&t.ID,
+			&t.ParentID,
+			&t.Kind,
+			&t.What,
+			&t.Where,
+			&t.StartTime,
+			&t.EndTime,
+			&pt.ID,
+			&pt.ParentID,
+			&pt.Kind,
+			&pt.What,
+			&pt.Where,
+			&pt.StartTime,
+			&pt.EndTime,
+		)
+		if err != nil {
+			panic(err)
+		}
+
+		t.ParentTask = &pt
+
+		tasks = append(tasks, t)
+	}
+
+	return tasks
+}
+
+func (r *MySQLTraceReader) prepareTaskQueryStr(query TaskQuery) string {
+	sqlStr := `
+		SELECT 
+			t.task_id, 
+			t.parent_id,
+			t.kind,
+			t.what,
+			t.location,
+			t.start_time,
+			t.end_time
+	`
+
+	if query.EnableParentTask {
+		sqlStr += `,
+			pt.task_id,
+			pt.parent_id,
+			pt.kind,
+			pt.what,
+			pt.location,
+			pt.start_time,
+			pt.end_time
+		`
+	}
+
+	sqlStr += `
+		FROM trace t
+	`
+
+	if query.EnableParentTask {
+		sqlStr += `
+			LEFT JOIN trace pt
+			ON t.parent_id = pt.task_id
+		`
+	}
+
+	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
+
+	return sqlStr
+}
+
+func (*MySQLTraceReader) addQueryConditionsToQueryStr(
+	sqlStr string,
+	query TaskQuery,
+) string {
+	sqlStr += `
+		WHERE 1=1
+	`
+
+	if query.ID != "" {
+		sqlStr += `
+			AND t.task_id = '` + query.ID + `'
+		`
+	}
+
+	if query.ParentID != "" {
+		sqlStr += `
+			AND t.parent_id = '` + query.ParentID + `'
+		`
+	}
+
+	if query.Kind != "" {
+		sqlStr += `
+			AND t.kind = '` + query.Kind + `'
+		`
+	}
+
+	if query.Where != "" {
+		sqlStr += `
+			AND t.location = '` + query.Where + `'
+		`
+	}
+
+	if query.EnableTimeRange {
+		sqlStr += fmt.Sprintf(
+			"AND t.end_time > %.15f AND t.start_time < %.15f",
+			query.StartTime,
+			query.EndTime)
+	}
+
+	return sqlStr
+}
+
 type dbConnection struct {
 	*sql.DB
 
