@@ -1,8 +1,9 @@
 package tracing
 
 import (
+	"github/sarchlab/akita/v3/sim"
+
 	"github.com/tebeka/atexit"
-	"gitlab.com/akita/akita/v3/sim"
 )
 
 // TracerBackend is a backend that can store tasks.

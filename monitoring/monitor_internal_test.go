@@ -3,9 +3,10 @@ package monitoring
 import (
 	"reflect"
 
+	"github/sarchlab/akita/v3/sim"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"gitlab.com/akita/akita/v3/sim"
 )
 
 type sampleStruct struct {

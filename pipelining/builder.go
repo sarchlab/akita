@@ -1,6 +1,6 @@
 package pipelining
 
-import "gitlab.com/akita/akita/v3/sim"
+import "github/sarchlab/akita/v3/sim"
 
 // A Builder can build pipelines.
 type Builder struct {

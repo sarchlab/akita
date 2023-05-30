@@ -21,12 +21,13 @@ import (
 	// Enable profiling
 	_ "net/http/pprof"
 
+	"github/sarchlab/akita/v3/monitoring/web"
+	"github/sarchlab/akita/v3/sim"
+
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
-	"gitlab.com/akita/akita/v3/monitoring/web"
-	"gitlab.com/akita/akita/v3/sim"
 )
 
 // Monitor can turn a simulation into a server and allows external monitoring

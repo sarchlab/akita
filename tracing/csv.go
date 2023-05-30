@@ -9,9 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github/sarchlab/akita/v3/sim"
+
 	"github.com/rs/xid"
 	"github.com/tebeka/atexit"
-	"gitlab.com/akita/akita/v3/sim"
 )
 
 // CSVTraceWriter is a task tracer that can store the tasks into a CSV file.

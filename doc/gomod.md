@@ -14,7 +14,7 @@ Experiments usually require the user to start a new repo to hold the starting co
 module gitlab.com/syifan/multi_gpu_experiments
 
 require (
-	gitlab.com/akita/akita v1.2.3
+	github/sarchlab/akita v1.2.3
 	gitlab.com/akita/gcn3 v1.2.2
 	gitlab.com/akita/mem v1.1.2
 	gitlab.com/akita/noc v1.1.1
@@ -35,7 +35,7 @@ However, editing multiple repos sequentially is not always a solution. For examp
 module gitlab.com/syifan/multi_gpu_experiments
 
 require (
-	gitlab.com/akita/akita v1.2.3
+	github/sarchlab/akita v1.2.3
 	gitlab.com/akita/gcn3 v1.2.2
 	gitlab.com/akita/mem v1.1.2
 	gitlab.com/akita/noc v1.1.1

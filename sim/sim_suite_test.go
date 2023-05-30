@@ -8,7 +8,7 @@ import (
 	"github.com/onsi/gomega"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -self_package=gitlab.com/akita/akita/v3/sim -package $GOPACKAGE -write_package_comment=false gitlab.com/akita/akita/v3/sim Port,Engine,Event,Connection,Component,Handler,Ticker,Buffer
+//go:generate mockgen -destination "mock_sim_test.go" -self_package=github/sarchlab/akita/v3/sim -package $GOPACKAGE -write_package_comment=false github/sarchlab/akita/v3/sim Port,Engine,Event,Connection,Component,Handler,Ticker,Buffer
 
 func TestCore(t *testing.T) {
 	log.SetOutput(ginkgo.GinkgoWriter)
