@@ -11,9 +11,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: latest
+          go-version: 'stable'
 
       - name: Build
         run: go build ./...
@@ -26,9 +26,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: latest
+          go-version: 'stable'
 
       - name: Install golangci-lint
         run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin
@@ -44,9 +44,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
-          go-version: latest
+          go-version: 'stable'
 
       - name: Unit Test
         run: |
