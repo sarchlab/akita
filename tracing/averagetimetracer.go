@@ -3,7 +3,7 @@ package tracing
 import (
 	"sync"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 // AverageTimeTracer can collect the total time of executing a certain type of

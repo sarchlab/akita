@@ -17,7 +17,7 @@ export class ComponentDetailView {
                 const container = document.getElementById('central-pane')
                 const object = res["dict"][res["r"]]
 
-                this.showComponent(object, res["dict"], container)
+                this.showComponent(object, res["dict"], container!)
             })
     }
 
@@ -88,6 +88,7 @@ export class ComponentDetailView {
                 break;
             case VarKind.Map:
                 this.showMap(s['v'], dict, keyChain, container, fieldPrefix)
+                break;
             case VarKind.Slice:
                 this.showSlice(s['v'], dict, keyChain, container, fieldPrefix)
                 break;
@@ -213,7 +214,7 @@ export class ComponentDetailView {
                 }
             })
         } else {
-            cell.addEventListener('click', (e: Event) => {
+            cell.addEventListener('click', (_: Event) => {
                 // e.stopPropagation()
             })
         }
@@ -286,7 +287,7 @@ export class ComponentDetailView {
         }
 
         if (this.isMonitorableKind(kind)) {
-            fieldTitle.querySelector('.flag-button')
+            fieldTitle.querySelector('.flag-button')!
                 .addEventListener('click', (e: Event) => {
                     e.stopPropagation()
                     const selected = this.toggleFlag(fieldTitle)
@@ -306,13 +307,13 @@ export class ComponentDetailView {
         const regularFlag = button.querySelector('.field-title-flag-regular')
         const solidFlag = button.querySelector('.field-title-flag-solid')
 
-        if (regularFlag.classList.contains('hidden')) {
-            regularFlag.classList.remove('hidden')
-            solidFlag.classList.add('hidden')
+        if (regularFlag!.classList.contains('hidden')) {
+            regularFlag!.classList.remove('hidden')
+            solidFlag!.classList.add('hidden')
             return false
         } else {
-            regularFlag.classList.add('hidden')
-            solidFlag.classList.remove('hidden')
+            regularFlag!.classList.add('hidden')
+            solidFlag!.classList.remove('hidden')
             return true
         }
     }

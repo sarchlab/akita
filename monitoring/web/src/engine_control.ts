@@ -1,8 +1,8 @@
 export class EngineController {
-    continueButton: HTMLElement
-    pauseButton: HTMLElement
-    runButton: HTMLElement
-    nowLabel: HTMLElement
+    continueButton: HTMLElement | null = null
+    pauseButton: HTMLElement | null = null
+    runButton: HTMLElement | null = null
+    nowLabel: HTMLElement | null = null
 
     bindDom() {
         this.runButton = document.getElementById('run-button')
@@ -12,13 +12,13 @@ export class EngineController {
 
         window.setInterval(() => { this.updateTime() }, 1000)
 
-        this.runButton.addEventListener('click', (e: Event) => {
+        this.runButton!.addEventListener('click', (e: Event) => {
             this.run(e)
         })
-        this.continueButton.addEventListener('click', (e: Event) => {
+        this.continueButton!.addEventListener('click', (e: Event) => {
             this.continue(e)
         })
-        this.pauseButton.addEventListener('click', (e: Event) => {
+        this.pauseButton!.addEventListener('click', (e: Event) => {
             this.pause(e)
         })
     }
@@ -27,7 +27,7 @@ export class EngineController {
         fetch('/api/now')
             .then(res => res.json())
             .then((res: any) => {
-                this.nowLabel.innerHTML = res.now
+                this.nowLabel!.innerHTML = res.now
             })
     }
 

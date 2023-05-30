@@ -109,8 +109,8 @@ import (
     "github.com/golang/mock/gomock"
     . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
-    "github/sarchlab/akita"
-    "github/sarchlab/akita/mock_akita"
+    "github.com/sarchlab/akita"
+    "github.com/sarchlab/akita/mock_akita"
 )
 
 var _ = Describe("Forwarder", func() {
@@ -163,7 +163,7 @@ go install github.com/golang/mock/mockgen
 Suppose we want to mock the `Port` interface, we can simply run:
 
 ```bash
-mockgen github/sarchlab/akita Port > mock_akita/mock_port.go
+mockgen github.com/sarchlab/akita Port > mock_akita/mock_port.go
 ```
 
 ## Integration Testing

@@ -3,7 +3,7 @@ package tracing
 import (
 	"fmt"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"

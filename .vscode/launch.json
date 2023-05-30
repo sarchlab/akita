@@ -5,14 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Test github/sarchlab/akita/monitoring",
+            "name": "Test github.com/sarchlab/akita/monitoring",
             "type": "go",
             "request": "launch",
             "mode": "test",
             "program": "${workspaceFolder}/monitoring"
         },
         {
-            "name": "Test github/sarchlab/akita",
+            "name": "Test github.com/sarchlab/akita",
             "type": "go",
             "request": "launch",
             "mode": "test",

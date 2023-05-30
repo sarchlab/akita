@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 // BufferAnalyzer can use buffer levels to analyze the bottleneck of the system.

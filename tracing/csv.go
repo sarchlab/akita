@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 
 	"github.com/rs/xid"
 	"github.com/tebeka/atexit"

@@ -3,7 +3,7 @@ package sim_test
 import (
 	"fmt"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 type pingTransaction struct {

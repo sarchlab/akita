@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 type SplitEvent struct {

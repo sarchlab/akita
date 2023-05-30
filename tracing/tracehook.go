@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 // CollectTrace let the tracer to collect trace from a domain

@@ -7,7 +7,7 @@ export class ResourceMonitor {
 			this.refreshResourceUsage();
 		}, 1000);
 
-		document.getElementById("profile-button")
+		document.getElementById("profile-button")!
 			.addEventListener("click", () => {
 				this.getProfilingResult();
 			})
@@ -17,8 +17,8 @@ export class ResourceMonitor {
 		fetch('/api/resource').
 			then(res => res.json()).
 			then(data => {
-				const cpuSpan = document.getElementById('cpu-usage');
-				const memSpan = document.getElementById('mem-usage');
+				const cpuSpan = document.getElementById('cpu-usage')!;
+				const memSpan = document.getElementById('mem-usage')!;
 
 				cpuSpan.innerHTML = this.formatCPUPercent(data.cpu_percent);
 				memSpan.innerHTML = this.formatBytes(data.memory_size);
@@ -101,14 +101,14 @@ export class ResourceMonitor {
 	}
 
 	visualizePProfNetwork(network: PProfNetwork) {
-		const rightPane = document.getElementById('right-pane');
+		const rightPane = document.getElementById('right-pane')!;
 		rightPane.innerHTML = '<div id="pprof-tooltip"><div>';
 
 		const svg = document.createElementNS(
-			'http://www.w3.org/2000/svg', 'svg');
+			'http://www.w3.org/2000/svg', 'svg')!;
 		rightPane.appendChild(svg);
 
-		const d3SVG = d3.select(svg);
+		const d3SVG = d3.select<SVGElement, unknown>(svg);
 		d3SVG.attr('width', '100%');
 		d3SVG.attr('height', '100%');
 		d3SVG.attr('overflow', 'scroll');
@@ -128,21 +128,23 @@ export class ResourceMonitor {
 
 		const nodeGroup = d3SVG.append('g').attr('id', 'pprof-nodes');
 		const edgeGroup = d3SVG.append('g').attr('id', 'pprof-edges');
-		d3SVG.call(d3.zoom().on('zoom', (e) => {
-			nodeGroup.attr('transform', e.transform);
-			edgeGroup.attr('transform', e.transform);
-		}));
+		d3SVG.call(
+			d3.zoom<SVGElement, unknown>().
+				on('zoom', (e) => {
+					nodeGroup.attr('transform', e.transform);
+					edgeGroup.attr('transform', e.transform);
+				}));
 
 		const colorScale = d3.scaleSequential(
 			d3.interpolateOranges).domain([0, 1]);
 
 
 		// Create the nodes.
-		const node = nodeGroup.selectAll('rect')
+		const node = nodeGroup.selectAll<SVGRectElement, PProfNode>('rect')
 			.data(network.nodes, (d: PProfNode) => d.func.ID)
 			.enter().append('g')
 			.attr('class', 'pprof-node')
-			.attr('transform', (d: PProfNode, i) => {
+			.attr('transform', (_: PProfNode, i) => {
 				return `translate(0, ${i * 30})`;
 			});
 
@@ -161,8 +163,8 @@ export class ResourceMonitor {
 			.attr('class', 'pprof-node-rect')
 			.on("mouseover", (e: MouseEvent, d: PProfNode) => {
 				this.showTooltip(e, d, network)
-			}).on("mouseout", (e: MouseEvent, d: PProfNode) => {
-				this.hideTooltip(e, d)
+			}).on("mouseout", () => {
+				this.hideTooltip()
 			});
 
 		node.append('rect')
@@ -180,8 +182,8 @@ export class ResourceMonitor {
 			.attr('class', 'pprof-node-rect')
 			.on("mouseover", (e: MouseEvent, d: PProfNode) => {
 				this.showTooltip(e, d, network)
-			}).on("mouseout", (e: MouseEvent, d: PProfNode) => {
-				this.hideTooltip(e, d)
+			}).on("mouseout", () => {
+				this.hideTooltip()
 			});
 
 		node.append('text')
@@ -195,7 +197,7 @@ export class ResourceMonitor {
 			})
 
 		// Add edges
-		edgeGroup.selectAll('path')
+		edgeGroup.selectAll<SVGPathElement, PProfEdge>('path')
 			.data(network.edges.values())
 			.enter().append('path')
 			.attr('d', (d: PProfEdge) => {
@@ -213,7 +215,7 @@ export class ResourceMonitor {
 				// }
 
 				return `M ${x1} ${y1} A ${r} ${r} 0 0 ${direction} ${x2} ${y2}`;
-			}).attr('stroke', (d: PProfEdge) => {
+			}).attr('stroke', (_: PProfEdge) => {
 				// return colorScale(d.timePercentage);
 				return '#999999';
 			}).attr('stroke-width', (d: PProfEdge) => {
@@ -224,7 +226,7 @@ export class ResourceMonitor {
 	}
 
 	showTooltip(e: MouseEvent, d: PProfNode, network: PProfNetwork) {
-		const tooltip = document.getElementById('pprof-tooltip');
+		const tooltip = document.getElementById('pprof-tooltip')!;
 		tooltip.innerHTML = `
 			<div>${d.func['Name']}</div>
 			<div>Time: ${d.timePercentage * 100}%</div>
@@ -242,8 +244,8 @@ export class ResourceMonitor {
 			}).attr('opacity', '.3');
 	}
 
-	hideTooltip(e: MouseEvent, d: PProfNode) {
-		const tooltip = document.getElementById('pprof-tooltip');
+	hideTooltip() {
+		const tooltip = document.getElementById('pprof-tooltip')!;
 		tooltip.style.display = 'none';
 
 		const edgeGroup = d3.select('#pprof-edges');
@@ -285,13 +287,13 @@ class PProfNetwork {
 }
 
 class PProfNode {
-	index: number;
+	index: number = 0;
 	func: any;
 	selfTime: number;
 	time: number
 	edges: Array<PProfEdge>;
-	timePercentage: number;
-	selfTimePercentage: number;
+	timePercentage: number = 0;
+	selfTimePercentage: number = 0;
 
 	constructor(func: any) {
 		this.func = func;
@@ -307,7 +309,7 @@ class PProfNode {
 
 class PProfEdge {
 	time: number;
-	timePercentage: number;
+	timePercentage: number = 0;
 	caller: PProfNode;
 	callee: PProfNode;
 

@@ -1,7 +1,7 @@
 package tracing
 
 import (
-	"github/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim"
 
 	"github.com/tebeka/atexit"
 )

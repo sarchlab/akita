@@ -4,8 +4,8 @@ package pipelining
 import (
 	"reflect"
 
-	"github/sarchlab/akita/v3/sim"
-	"github/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/tracing"
 )
 
 // PipelineItem is an item that can pass through a pipeline.

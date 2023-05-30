@@ -3,8 +3,8 @@ package tracing_test
 import (
 	"fmt"
 
-	"github/sarchlab/akita/v3/sim"
-	"github/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/tracing"
 )
 
 type SampleTimeTeller struct {
