@@ -4,10 +4,10 @@
 package tracing
 
 import (
+	sim "github/sarchlab/akita/v3/sim"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github/sarchlab/akita/v3/sim"
 )
 
 // MockNamedHookable is a mock of NamedHookable interface.

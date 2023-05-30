@@ -4,10 +4,10 @@
 package tracing
 
 import (
+	sim "github/sarchlab/akita/v3/sim"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github/sarchlab/akita/v3/sim"
 )
 
 // MockTimeTeller is a mock of TimeTeller interface.

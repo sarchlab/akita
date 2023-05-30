@@ -4,10 +4,10 @@
 package pipelining
 
 import (
+	sim "github/sarchlab/akita/v3/sim"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github/sarchlab/akita/v3/sim"
 )
 
 // MockBuffer is a mock of Buffer interface.
