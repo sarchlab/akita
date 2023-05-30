@@ -4,7 +4,7 @@ on: push
 
 jobs:
   compile:
-    name: Compile
+    name: Compile Akita
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,7 +19,7 @@ jobs:
         run: go build ./...
 
   lint:
-    name: Lint
+    name: Lint Akita
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -38,7 +38,7 @@ jobs:
           args: --timeout=10m
 
   unit_test:
-    name: Unit Test
+    name: Unit Test Akita
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,7 +49,7 @@ jobs:
         with:
           go-version: 'stable'
 
-      - name: Unit Test
+      - name: Unit Test Akita
         run: |
           go test -coverprofile=cover.out ./...
           go tool cover -func=cover.out > coverage.out
