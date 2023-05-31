@@ -116,6 +116,9 @@ func (s *bankStage) finalizeWriteTrans(
 	blockSize := 1 << s.cache.log2BlockSize
 
 	data, err := s.cache.storage.Read(block.CacheAddress, uint64(blockSize))
+	if err != nil {
+		panic(err)
+	}
 
 	offset := write.Address - block.Tag
 	for i := 0; i < len(write.Data); i++ {

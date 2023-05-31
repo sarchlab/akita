@@ -44,7 +44,6 @@ type AddressTranslator struct {
 	transactions        []*transaction
 	inflightReqToBottom []reqToBottom
 
-	isWaitingForGL0InvCompletion   bool
 	isWaitingOnGL0InvalidateRsp    bool
 	currentGL0InvReq               *mem.GL0InvalidateReq
 	totalRequestsUponGL0InvArrival int
@@ -98,7 +97,7 @@ func (t *AddressTranslator) doGL0Invalidate(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	if t.isWaitingOnGL0InvalidateRsp == true {
+	if t.isWaitingOnGL0InvalidateRsp {
 		return false
 	}
 

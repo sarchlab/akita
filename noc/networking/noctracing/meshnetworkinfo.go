@@ -4,11 +4,9 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/rs/xid"
 )
@@ -357,10 +355,6 @@ func MakeMeshInfo(width, height uint16, timeSliceUnit float64) *MeshInfo {
 	return m
 }
 
-//
-// Utility Functions
-//
-
 func writeStringToFile(data, file string) {
 	f, err := os.Create(file)
 	if err != nil {
@@ -368,10 +362,18 @@ func writeStringToFile(data, file string) {
 	}
 
 	writer := bufio.NewWriter(f)
-	defer f.Close()
+	defer func() {
+		err = f.Close()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	fmt.Fprintln(writer, data)
-	writer.Flush()
+	err = writer.Flush()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func dumpJSONToBytes(v interface{}) []byte {
@@ -380,38 +382,6 @@ func dumpJSONToBytes(v interface{}) []byte {
 		panic(err)
 	}
 	return output
-}
-
-func checkFileExist(file string) bool {
-	_, err := os.Stat(file)
-	return !os.IsNotExist(err)
-}
-
-func readStringFileToJSON(file string, v interface{}) {
-	content, err := ioutil.ReadFile(file)
-	if err != nil {
-		panic(err)
-	}
-	// pointer of pointer is allowed in the 2rd parameter of `json.Unmarshal`
-	if err := json.Unmarshal(content, &v); err != nil {
-		panic(err)
-	}
-}
-
-func parseUintDecimal(str string) uint {
-	result, err := strconv.ParseUint(str, 10, 64)
-	if err != nil {
-		panic(err)
-	}
-	return uint(result)
-}
-
-func parseUint16Decimal(str string) uint16 {
-	result, err := strconv.ParseUint(str, 10, 16)
-	if err != nil {
-		panic(err)
-	}
-	return uint16(result)
 }
 
 //

@@ -54,15 +54,6 @@ func (mmu *MMU) Tick(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (mmu *MMU) trace(now sim.VTimeInSec, what string) {
-	ctx := sim.HookCtx{
-		Domain: mmu,
-		Item:   what,
-	}
-
-	mmu.InvokeHook(ctx)
-}
-
 func (mmu *MMU) walkPageTable(now sim.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(mmu.walkingTranslations); i++ {

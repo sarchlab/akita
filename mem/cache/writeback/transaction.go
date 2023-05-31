@@ -40,7 +40,6 @@ type transaction struct {
 	evictingData      []byte
 	evictingDirtyMask []bool
 	evictionWriteReq  *mem.WriteReq
-	evictionDone      *mem.WriteDoneRsp
 	mshrEntry         *cache.MSHREntry
 }
 

@@ -21,7 +21,10 @@ func main() {
 	createNetwork(engine, t)
 	t.GenerateMsgs(1000)
 
-	engine.Run()
+	err := engine.Run()
+	if err != nil {
+		panic(err)
+	}
 
 	t.MustHaveReceivedAllMsgs()
 	t.ReportBandwidthAchieved(engine.CurrentTime())

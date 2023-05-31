@@ -1,9 +1,5 @@
 package networkconnector
 
-import (
-	"fmt"
-)
-
 // FloydWarshallRouter is a simple router that always establish route that
 // involves the least number of hops.
 type FloydWarshallRouter struct{}
@@ -95,34 +91,34 @@ func (r FloydWarshallRouter) tableToRoute(table [][]routeInfo, nodes []Node) {
 	}
 }
 
-func (r FloydWarshallRouter) dumpTable(table [][]routeInfo) {
-	fmt.Println("")
-	for i := range table {
-		for j := range table[i] {
-			cell := ""
-			cell += fmt.Sprintf("%d ", table[i][j].distance)
-			if table[i][j].nextHop != nil {
-				cell += fmt.Sprintf("%s->%s->%s\t",
-					table[i][j].src.Name(),
-					table[i][j].nextHop.RemoteNode.Name(),
-					table[i][j].dst.Name(),
-				)
-			} else {
-				cell += fmt.Sprintf("%s->XXX->%s\t",
-					table[i][j].src.Name(),
-					table[i][j].dst.Name(),
-				)
-			}
+// func (r FloydWarshallRouter) dumpTable(table [][]routeInfo) {
+// 	fmt.Println("")
+// 	for i := range table {
+// 		for j := range table[i] {
+// 			cell := ""
+// 			cell += fmt.Sprintf("%d ", table[i][j].distance)
+// 			if table[i][j].nextHop != nil {
+// 				cell += fmt.Sprintf("%s->%s->%s\t",
+// 					table[i][j].src.Name(),
+// 					table[i][j].nextHop.RemoteNode.Name(),
+// 					table[i][j].dst.Name(),
+// 				)
+// 			} else {
+// 				cell += fmt.Sprintf("%s->XXX->%s\t",
+// 					table[i][j].src.Name(),
+// 					table[i][j].dst.Name(),
+// 				)
+// 			}
 
-			for i := len(cell); i < 100; i++ {
-				cell += " "
-			}
+// 			for i := len(cell); i < 100; i++ {
+// 				cell += " "
+// 			}
 
-			fmt.Print(cell)
-		}
-		fmt.Printf("\n")
-	}
-}
+// 			fmt.Print(cell)
+// 		}
+// 		fmt.Printf("\n")
+// 	}
+// }
 
 func findRemote(l []Remote, t Node) (r *Remote) {
 	for _, r := range l {

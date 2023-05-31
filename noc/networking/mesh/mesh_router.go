@@ -1,151 +1,141 @@
 package mesh
 
-import (
-	"fmt"
-	"strconv"
-	"strings"
-	"sync"
+// // A meshRouter is a routing table that particularly works with mesh networks.
+// type meshRouter struct {
+// 	x, y, z int
+// }
 
-	"github.com/sarchlab/akita/v3/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v3/sim"
-)
+// // EstablishRoute creates routes for the tables.
+// func (r meshRouter) EstablishRoute(nodes []networkconnector.Node) {
+// 	eps := make([]networkconnector.Node, 0, len(nodes)/2)
+// 	sws := make([]networkconnector.Node, 0, len(nodes)/2)
 
-// A meshRouter is a routing table that particularly works with mesh networks.
-type meshRouter struct {
-	x, y, z int
-}
+// 	for _, n := range nodes {
+// 		tokens := strings.Split(n.Name(), ".")
 
-// EstablishRoute creates routes for the tables.
-func (r meshRouter) EstablishRoute(nodes []networkconnector.Node) {
-	eps := make([]networkconnector.Node, 0, len(nodes)/2)
-	sws := make([]networkconnector.Node, 0, len(nodes)/2)
+// 		switch {
+// 		case strings.Contains(tokens[1], "EP"):
+// 			eps = append(eps, n)
+// 		case strings.Contains(tokens[1], "SW"):
+// 			sws = append(sws, n)
+// 		}
+// 	}
 
-	for _, n := range nodes {
-		tokens := strings.Split(n.Name(), ".")
+// 	wg := &sync.WaitGroup{}
+// 	for i, sw := range sws {
+// 		wg.Add(1)
+// 		go func(sw networkconnector.Node, i int) {
+// 			r.RouteSwitch(sw, eps)
+// 			fmt.Printf("Routing table created %d/%d\n", i+1, len(sws))
+// 			wg.Done()
+// 		}(sw, i)
+// 	}
+// 	wg.Wait()
+// }
 
-		switch {
-		case strings.Contains(tokens[1], "EP"):
-			eps = append(eps, n)
-		case strings.Contains(tokens[1], "SW"):
-			sws = append(sws, n)
-		}
-	}
+// // RouteSwitch create a routing table for a switch.
+// func (r meshRouter) RouteSwitch(
+// 	n networkconnector.Node,
+// 	eps []networkconnector.Node,
+// ) {
+// 	top, bottom, left, right, front, back := r.getPortOnEachDirection(n)
+// 	r.createRouteForEndPoints(eps, top, bottom, left, right, front, back, n)
+// }
 
-	wg := &sync.WaitGroup{}
-	for i, sw := range sws {
-		wg.Add(1)
-		go func(sw networkconnector.Node, i int) {
-			r.RouteSwitch(sw, eps)
-			fmt.Printf("Routing table created %d/%d\n", i+1, len(sws))
-			wg.Done()
-		}(sw, i)
-	}
-	wg.Wait()
-}
+// func (r meshRouter) getPortOnEachDirection(n networkconnector.Node) (
+// 	top, bottom, left, right, front, back sim.Port,
+// ) {
+// 	swX, swY, swZ := r.epNameToCoordinate(n.Name())
 
-// RouteSwitch create a routing table for a switch.
-func (r meshRouter) RouteSwitch(
-	n networkconnector.Node,
-	eps []networkconnector.Node,
-) {
-	top, bottom, left, right, front, back := r.getPortOnEachDirection(n)
-	r.createRouteForEndPoints(eps, top, bottom, left, right, front, back, n)
-}
+// 	remotes := n.ListRemotes()
+// 	for _, remote := range remotes {
+// 		remoteName := remote.RemoteNode.Name()
+// 		if strings.Contains(remoteName, "EP") {
+// 			n.Table().DefineDefaultRoute(remote.LocalPort)
+// 			continue
+// 		}
 
-func (r meshRouter) getPortOnEachDirection(n networkconnector.Node) (
-	top, bottom, left, right, front, back sim.Port,
-) {
-	swX, swY, swZ := r.epNameToCoordinate(n.Name())
+// 		remoteX, remoteY, remoteZ := r.epNameToCoordinate(remoteName)
 
-	remotes := n.ListRemotes()
-	for _, remote := range remotes {
-		remoteName := remote.RemoteNode.Name()
-		if strings.Contains(remoteName, "EP") {
-			n.Table().DefineDefaultRoute(remote.LocalPort)
-			continue
-		}
+// 		switch {
+// 		case remoteZ == swZ+1:
+// 			front = remote.LocalPort
+// 		case remoteZ == swZ-1:
+// 			back = remote.LocalPort
+// 		case remoteY == swY+1:
+// 			top = remote.LocalPort
+// 		case remoteY == swY-1:
+// 			bottom = remote.LocalPort
+// 		case remoteX == swX+1:
+// 			right = remote.LocalPort
+// 		case remoteX == swX-1:
+// 			left = remote.LocalPort
+// 		default:
+// 			msg := fmt.Sprintf("unexpected remote: %s, current node %s",
+// 				remoteName, n.Name())
+// 			panic(msg)
+// 		}
+// 	}
+// 	return top, bottom, left, right, front, back
+// }
 
-		remoteX, remoteY, remoteZ := r.epNameToCoordinate(remoteName)
+// func (r meshRouter) createRouteForEndPoints(
+// 	eps []networkconnector.Node,
+// 	top, bottom, left, right, front, back sim.Port,
+// 	n networkconnector.Node,
+// ) {
+// 	swX, swY, swZ := r.epNameToCoordinate(n.Name())
+// 	for _, ep := range eps {
+// 		epPort := ep.ListRemotes()[0].LocalPort
+// 		epX, epY, epZ := r.epNameToCoordinate(ep.Name())
 
-		switch {
-		case remoteZ == swZ+1:
-			front = remote.LocalPort
-		case remoteZ == swZ-1:
-			back = remote.LocalPort
-		case remoteY == swY+1:
-			top = remote.LocalPort
-		case remoteY == swY-1:
-			bottom = remote.LocalPort
-		case remoteX == swX+1:
-			right = remote.LocalPort
-		case remoteX == swX-1:
-			left = remote.LocalPort
-		default:
-			msg := fmt.Sprintf("unexpected remote: %s, current node %s",
-				remoteName, n.Name())
-			panic(msg)
-		}
-	}
-	return top, bottom, left, right, front, back
-}
+// 		nextHopPort := r.epCoordToForwardPort(
+// 			epX, epY, epZ,
+// 			swX, swY, swZ,
+// 			top, bottom, left, right, front, back, epPort,
+// 		)
 
-func (r meshRouter) createRouteForEndPoints(
-	eps []networkconnector.Node,
-	top, bottom, left, right, front, back sim.Port,
-	n networkconnector.Node,
-) {
-	swX, swY, swZ := r.epNameToCoordinate(n.Name())
-	for _, ep := range eps {
-		epPort := ep.ListRemotes()[0].LocalPort
-		epX, epY, epZ := r.epNameToCoordinate(ep.Name())
+// 		// fmt.Printf("%s -> %s -> ... -> %s\n",
+// 		// 	n.Name(), nextHopPort.Name(), epPort.Name())
 
-		nextHopPort := r.epCoordToForwardPort(
-			epX, epY, epZ,
-			swX, swY, swZ,
-			top, bottom, left, right, front, back, epPort,
-		)
+// 		n.Table().DefineRoute(epPort, nextHopPort)
+// 	}
+// }
 
-		// fmt.Printf("%s -> %s -> ... -> %s\n",
-		// 	n.Name(), nextHopPort.Name(), epPort.Name())
+// func (meshRouter) epCoordToForwardPort(
+// 	epX, epY, epZ int,
+// 	swX, swY, swZ int,
+// 	top, bottom, left, right, front, back, localEPPort sim.Port,
+// ) sim.Port {
+// 	var nextHopPort sim.Port
+// 	switch {
+// 	case epZ < swZ:
+// 		nextHopPort = back
+// 	case epZ > swZ:
+// 		nextHopPort = front
+// 	case epY < swY:
+// 		nextHopPort = bottom
+// 	case epY > swY:
+// 		nextHopPort = top
+// 	case epX < swX:
+// 		nextHopPort = left
+// 	case epX > swX:
+// 		nextHopPort = right
+// 	case epX == swX && epY == swY && epZ == swZ:
+// 		nextHopPort = localEPPort
+// 	default:
+// 		panic("unknown endpoint")
+// 	}
+// 	return nextHopPort
+// }
 
-		n.Table().DefineRoute(epPort, nextHopPort)
-	}
-}
+// func (r meshRouter) epNameToCoordinate(
+// 	epName string,
+// ) (int, int, int) {
+// 	tokens := strings.Split(epName, "_")
+// 	x, _ := strconv.Atoi(tokens[1])
+// 	y, _ := strconv.Atoi(tokens[2])
+// 	z, _ := strconv.Atoi(tokens[3])
 
-func (meshRouter) epCoordToForwardPort(
-	epX, epY, epZ int,
-	swX, swY, swZ int,
-	top, bottom, left, right, front, back, localEPPort sim.Port,
-) sim.Port {
-	var nextHopPort sim.Port
-	switch {
-	case epZ < swZ:
-		nextHopPort = back
-	case epZ > swZ:
-		nextHopPort = front
-	case epY < swY:
-		nextHopPort = bottom
-	case epY > swY:
-		nextHopPort = top
-	case epX < swX:
-		nextHopPort = left
-	case epX > swX:
-		nextHopPort = right
-	case epX == swX && epY == swY && epZ == swZ:
-		nextHopPort = localEPPort
-	default:
-		panic("unknown endpoint")
-	}
-	return nextHopPort
-}
-
-func (r meshRouter) epNameToCoordinate(
-	epName string,
-) (int, int, int) {
-	tokens := strings.Split(epName, "_")
-	x, _ := strconv.Atoi(tokens[1])
-	y, _ := strconv.Atoi(tokens[2])
-	z, _ := strconv.Atoi(tokens[3])
-
-	return x, y, z
-}
+// 	return x, y, z
+// }

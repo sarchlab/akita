@@ -5,14 +5,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type mockAccessReq struct {
-	address uint64
-}
-
-func (r *mockAccessReq) GetAddress() uint64 {
-	return r.address
-}
-
 var _ = Describe("MSHRImpl", func() {
 
 	var (

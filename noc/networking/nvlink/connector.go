@@ -24,10 +24,9 @@ type deviceNode struct {
 // Connector can connect devices into a network that includes PCIe, NVLink,
 // and ethernet network.
 type Connector struct {
-	networkName      string
-	freq             sim.Freq
-	encodingOverhead float64
-	flitByteSize     int
+	networkName  string
+	freq         sim.Freq
+	flitByteSize int
 
 	pcieBandwidth     uint64
 	pcieSwitchLatency int

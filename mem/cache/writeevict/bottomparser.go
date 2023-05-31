@@ -101,7 +101,7 @@ func (p *bottomParser) mergeMSHRData(
 		write := trans.write
 		offset := write.Address - mshrEntry.Block.Tag
 		for i := 0; i < len(write.Data); i++ {
-			if write.DirtyMask[i] == true {
+			if write.DirtyMask[i] {
 				data[offset+uint64(i)] = write.Data[i]
 				dirtyMask[offset+uint64(i)] = true
 			}

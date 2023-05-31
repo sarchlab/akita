@@ -152,10 +152,7 @@ func (c *coalescer) isReqLastInWave(req mem.AccessReq) bool {
 
 func (c *coalescer) canReqCoalesce(req mem.AccessReq) bool {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
-	if req.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize {
-		return true
-	}
-	return false
+	return req.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
 }
 
 func (c *coalescer) coalesceAndSend(now sim.VTimeInSec) bool {
@@ -212,7 +209,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 		w := t.write
 		offset := int(w.Address - cachelineID)
 		for i := 0; i < len(w.Data); i++ {
-			if w.DirtyMask == nil || w.DirtyMask[i] == true {
+			if w.DirtyMask == nil || w.DirtyMask[i] {
 				write.Data[i+offset] = w.Data[i]
 				write.DirtyMask[i+offset] = true
 			}

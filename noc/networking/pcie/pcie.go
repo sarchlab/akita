@@ -6,17 +6,9 @@ import (
 
 	"github.com/sarchlab/akita/v3/monitoring"
 	"github.com/sarchlab/akita/v3/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/sarchlab/akita/v3/tracing"
 )
-
-type switchNode struct {
-	parentSwitchNode   *switchNode
-	currSwitch         *switching.Switch
-	localPortToParent  sim.Port
-	remotePortToParent sim.Port
-}
 
 // Connector can connect devices into a PCIe network.
 type Connector struct {

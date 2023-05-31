@@ -35,7 +35,6 @@ type Builder struct {
 	numBank              int
 	numRow               int
 	numCol               int
-	bitOrderHighToLow    []addressmapping.LocationItem
 
 	burstCycle int
 	tAL        int

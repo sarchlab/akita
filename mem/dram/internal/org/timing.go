@@ -12,10 +12,6 @@ type TimeTableEntry struct {
 	MinCycleInBetween int
 }
 
-func (t TimeTable) getTimeAfter(cmdKind signal.CommandKind) []TimeTableEntry {
-	return t[cmdKind]
-}
-
 // MakeTimeTable creates a new TimeTable.
 func MakeTimeTable() TimeTable {
 	return make([][]TimeTableEntry, signal.NumCmdKind)

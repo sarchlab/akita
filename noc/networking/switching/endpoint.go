@@ -39,7 +39,7 @@ type EndPoint struct {
 }
 
 // CanSend returns whether the endpoint can send a message.
-func (ep *EndPoint) CanSend(src sim.Port) bool {
+func (ep *EndPoint) CanSend(_ sim.Port) bool {
 	ep.Lock()
 	defer ep.Unlock()
 
@@ -73,12 +73,12 @@ func (ep *EndPoint) PlugIn(port sim.Port, srcBufCap int) {
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (ep *EndPoint) NotifyAvailable(now sim.VTimeInSec, port sim.Port) {
+func (ep *EndPoint) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
 	ep.TickLater(now)
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (ep *EndPoint) Unplug(port sim.Port) {
+func (ep *EndPoint) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
@@ -138,7 +138,7 @@ func (ep *EndPoint) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (ep *EndPoint) prepareFlits(now sim.VTimeInSec) bool {
+func (ep *EndPoint) prepareFlits(_ sim.VTimeInSec) bool {
 	madeProgress := false
 
 	for {
@@ -204,7 +204,7 @@ func (ep *EndPoint) recv(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (ep *EndPoint) assemble(now sim.VTimeInSec) bool {
+func (ep *EndPoint) assemble(_ sim.VTimeInSec) bool {
 	madeProgress := false
 
 	for e := ep.assemblingMsgs.Front(); e != nil; e = e.Next() {

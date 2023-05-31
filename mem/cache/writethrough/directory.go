@@ -240,10 +240,7 @@ func (d *directory) partialWriteMiss(
 
 	ok := d.fetchFromBottom(now, trans, victim)
 	if !ok {
-		if sentThisCycle {
-			return true
-		}
-		return false
+		return sentThisCycle
 	}
 
 	d.buf.Pop()

@@ -175,11 +175,8 @@ func (tlb *TLB) sendRspToTop(
 		Build()
 
 	err := tlb.topPort.Send(rsp)
-	if err == nil {
-		return true
-	}
 
-	return false
+	return err == nil
 }
 
 func (tlb *TLB) processTLBMSHRHit(

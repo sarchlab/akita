@@ -354,7 +354,11 @@ func (s *bankStage) finalizeBankWriteFetched(
 	block := mshrEntry.Block
 	s.cache.mshrStageBuffer.Push(mshrEntry)
 
-	s.cache.storage.Write(block.CacheAddress, mshrEntry.Data)
+	err := s.cache.storage.Write(block.CacheAddress, mshrEntry.Data)
+	if err != nil {
+		panic(err)
+	}
+
 	block.IsLocked = false
 	block.IsValid = true
 

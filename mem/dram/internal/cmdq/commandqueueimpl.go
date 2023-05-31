@@ -66,11 +66,7 @@ func (q *CommandQueueImpl) CanAccept(cmd *signal.Command) bool {
 	queueIndex := q.getQueueIndex(cmd)
 	queue := q.Queues[queueIndex]
 
-	if len(queue) < q.CapacityPerQueue {
-		return true
-	}
-
-	return false
+	return len(queue) < q.CapacityPerQueue
 }
 
 // Accept adds a new command in the command queue.

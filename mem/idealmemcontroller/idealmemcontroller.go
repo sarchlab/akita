@@ -176,7 +176,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 			panic(err)
 		}
 		for i := 0; i < len(req.Data); i++ {
-			if req.DirtyMask[i] == true {
+			if req.DirtyMask[i] {
 				data[i] = req.Data[i]
 			}
 		}

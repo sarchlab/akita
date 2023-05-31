@@ -98,15 +98,15 @@ func (s *Switch) flitTaskID(flit *messaging.Flit) string {
 
 func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 	for _, port := range s.ports {
-		complex := s.portToComplexMapping[port]
+		pc := s.portToComplexMapping[port]
 
-		for i := 0; i < complex.numInputChannel; i++ {
+		for i := 0; i < pc.numInputChannel; i++ {
 			item := port.Peek()
 			if item == nil {
 				break
 			}
 
-			if !complex.pipeline.CanAccept() {
+			if !pc.pipeline.CanAccept() {
 				break
 			}
 
@@ -115,7 +115,7 @@ func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 				taskID: s.flitTaskID(flit),
 				flit:   flit,
 			}
-			complex.pipeline.Accept(now, pipelineItem)
+			pc.pipeline.Accept(now, pipelineItem)
 			port.Retrieve(now)
 			madeProgress = true
 
@@ -136,20 +136,20 @@ func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 
 func (s *Switch) movePipeline(now sim.VTimeInSec) (madeProgress bool) {
 	for _, port := range s.ports {
-		complex := s.portToComplexMapping[port]
-		madeProgress = complex.pipeline.Tick(now) || madeProgress
+		pc := s.portToComplexMapping[port]
+		madeProgress = pc.pipeline.Tick(now) || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (s *Switch) route(now sim.VTimeInSec) (madeProgress bool) {
+func (s *Switch) route(_ sim.VTimeInSec) (madeProgress bool) {
 	for _, port := range s.ports {
-		complex := s.portToComplexMapping[port]
-		routeBuf := complex.routeBuffer
-		forwardBuf := complex.forwardBuffer
+		pc := s.portToComplexMapping[port]
+		routeBuf := pc.routeBuffer
+		forwardBuf := pc.forwardBuffer
 
-		for i := 0; i < complex.numInputChannel; i++ {
+		for i := 0; i < pc.numInputChannel; i++ {
 			item := routeBuf.Peek()
 			if item == nil {
 				break
@@ -203,21 +203,21 @@ func (s *Switch) forward(now sim.VTimeInSec) (madeProgress bool) {
 
 func (s *Switch) sendOut(now sim.VTimeInSec) (madeProgress bool) {
 	for _, port := range s.ports {
-		complex := s.portToComplexMapping[port]
-		sendOutBuf := complex.sendOutBuffer
+		pc := s.portToComplexMapping[port]
+		sendOutBuf := pc.sendOutBuffer
 
-		for i := 0; i < complex.numOutputChannel; i++ {
+		for i := 0; i < pc.numOutputChannel; i++ {
 			item := sendOutBuf.Peek()
 			if item == nil {
 				break
 			}
 
 			flit := item.(*messaging.Flit)
-			flit.Meta().Src = complex.localPort
-			flit.Meta().Dst = complex.remotePort
+			flit.Meta().Src = pc.localPort
+			flit.Meta().Dst = pc.remotePort
 			flit.Meta().SendTime = now
 
-			err := complex.localPort.Send(flit)
+			err := pc.localPort.Send(flit)
 			if err == nil {
 				sendOutBuf.Pop()
 				madeProgress = true
@@ -240,18 +240,13 @@ func (s *Switch) assignFlitOutputBuf(f *messaging.Flit) {
 			s.Name(), f.Msg.Meta().Dst))
 	}
 
-	complex := s.portToComplexMapping[outPort]
+	pc := s.portToComplexMapping[outPort]
 
-	f.OutputBuf = complex.sendOutBuffer
+	f.OutputBuf = pc.sendOutBuffer
 	if f.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
 			s.Name(), f.Msg.Meta().Dst))
 	}
-}
-
-func (s *Switch) setFlitNextHopDst(f *messaging.Flit) {
-	f.Src = f.Dst
-	f.Dst = s.portToComplexMapping[f.Src].remotePort
 }
 
 // SwitchBuilder can build switches

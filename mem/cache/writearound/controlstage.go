@@ -148,10 +148,5 @@ func (s *controlStage) doCacheRestart(now sim.VTimeInSec, req *cache.RestartReq)
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	if s.currFlushReq.DiscardInflight == false {
-		if len(s.cache.transactions) != 0 {
-			return true
-		}
-	}
-	return false
+	return !s.currFlushReq.DiscardInflight && len(s.cache.transactions) != 0
 }

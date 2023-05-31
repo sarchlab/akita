@@ -94,10 +94,7 @@ func (m *mshrImpl) AllEntries() []*MSHREntry {
 
 // IsFull returns true if no more MSHR entries can be added
 func (m *mshrImpl) IsFull() bool {
-	if len(m.entries) >= m.capacity {
-		return true
-	}
-	return false
+	return len(m.entries) >= m.capacity
 }
 
 func (m *mshrImpl) Reset() {
