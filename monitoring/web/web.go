@@ -25,14 +25,12 @@ func GetAssets() http.FileSystem {
 
 		assetPath = path.Join(path.Dir(assetPath), "/dist")
 
-		// path := path.Join(path.Dir(filename), "../config/settings.toml")
-
 		fmt.Printf("In monitoring tool development mode, serving assets from %s\n", assetPath)
 
 		return http.Dir(assetPath)
 	}
 
-	subFS, err := fs.Sub(staticAssets, "/dist")
+	subFS, err := fs.Sub(staticAssets, "dist")
 	if err != nil {
 		panic(err)
 	}
