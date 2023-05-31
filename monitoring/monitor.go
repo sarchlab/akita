@@ -21,11 +21,10 @@ import (
 	// Enable profiling
 	_ "net/http/pprof"
 
-	"github.com/sarchlab/akita/v3/sim"
-
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
-	"github.com/sarchlab/akita/v3/monitoring/web/dist"
+	"github.com/sarchlab/akita/v3/monitoring/web"
+	"github.com/sarchlab/akita/v3/sim"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -134,7 +133,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
 
-	fs := dist.GetAssets()
+	fs := web.GetAssets()
 	fServer := http.FileServer(fs)
 	r.HandleFunc("/api/pause", m.pauseEngine)
 	r.HandleFunc("/api/continue", m.continueEngine)

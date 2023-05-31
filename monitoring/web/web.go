@@ -1,9 +1,10 @@
-// Package dist includes the static web pages for the monitoring tool.
-package dist
+// Package web includes the static web pages for the monitoring tool.
+package web
 
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -11,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed index.html assets/*
+//go:embed dist/*
 var staticAssets embed.FS
 
 // GetAssets returns the static assets
@@ -22,7 +23,7 @@ func GetAssets() http.FileSystem {
 			panic("error getting path")
 		}
 
-		assetPath = path.Join(path.Dir(assetPath), "/web")
+		assetPath = path.Join(path.Dir(assetPath), "/dist")
 
 		// path := path.Join(path.Dir(filename), "../config/settings.toml")
 
@@ -31,7 +32,12 @@ func GetAssets() http.FileSystem {
 		return http.Dir(assetPath)
 	}
 
-	return http.FS(staticAssets)
+	subFS, err := fs.Sub(staticAssets, "/dist")
+	if err != nil {
+		panic(err)
+	}
+
+	return http.FS(subFS)
 }
 
 // isDevelopmentMode returns true if environment variable AKITA_MONITOR_DEV is
