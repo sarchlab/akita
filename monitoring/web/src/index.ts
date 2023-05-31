@@ -1,6 +1,5 @@
 
 import './reset.css'
-import { Button } from 'bootstrap'
 import './styles.scss'
 import './style.css'
 

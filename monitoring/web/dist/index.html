@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<header>
+    <meta charset="UTF-8">
+    <title>Akita Monitoring Tool</title>
+</header>
+
+<script type="module" crossorigin src="/assets/index-702f2fca.js"></script>
+<link rel="stylesheet" href="/assets/index-d610f457.css">
+
+<body>
+
+    <nav id="navbar" class="navbar navbar-dark bg-dark">
+        <a class="navbar-brand" href="/">AkitaRTM</a>
+
+        <div class="btn-toolbar my-2 my-lg-0">
+            <div class="btn-group me-3 ms-3" role="group">
+                <button class="btn btn-primary" type="button">
+                    <span class="resource-type">CPU</span>
+                    <span id="cpu-usage"></span>
+                </button>
+                <button class="btn btn-primary" type="button">
+                    <span class="resource-type">Mem</span>
+                    <span id="mem-usage"></span>
+                </button>
+                <button id="profile-button" class="btn btn-primary"
+                    type="button">
+                    <i class="fa-solid fa-clock"></i>
+                </button>
+            </div>
+
+            <button class="btn btn-success" id="hang-analyzer-btn">
+                <i class="fa-solid fa-sign-hanging"></i>
+            </button>
+
+            <div class="input-group ms-3 me-2">
+                <button id="run-button" class="btn btn-success" type="submit">
+                    <i class="fas fa-repeat"></i>
+                </button>
+                <button id="continue-button" class="btn btn-success"
+                    type="submit">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button id="pause-button" class="btn btn-danger">
+                    <i class="fas fa-pause"></i>
+                </button>
+                <label id="now-label" class="input-group-text">
+                </label>
+            </div>
+        </div>
+    </nav>
+
+    <div id="debug-tool-container" class="main-container">
+        <div id="left-pane" class="horizontal-block horizontal-container">
+        </div>
+        <div id="vertical-divider-left"
+            class="horizontal-block vertical-divider">
+        </div>
+        <div id="central-pane" class="horizontal-block horizontal-container ">
+        </div>
+        <div id="vertical-divider-right"
+            class="horizontal-block vertical-divider">
+        </div>
+        <div id="right-pane" class="horizontal-block horizontal-container">
+        </div>
+    </div>
+
+    <div id="monitor-group" class="monitor-group">
+        <div id="monitor-group-divider" class="horizontal-divider"></div>
+        <div id="monitor-group-container" class="monitor-group-container">
+        </div>
+    </div>
+
+    <div id="progress-bar-group" class="progress-bar-group"></div>
+    
+</body>

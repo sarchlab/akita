@@ -1,15 +1,14 @@
 import { ComponentDetailView } from "./component"
 import { Monitor } from "./monitor"
-import { UIManager } from "./ui_manager"
 
 const layerIndentation = 25
 
 class Node {
     name: string
-    parent: Node
+    parent: Node | null
     children: Map<string, Node>
 
-    constructor(name: string, parent: Node) {
+    constructor(name: string, parent: Node | null) {
         this.name = name
         this.parent = parent
         this.children = new Map<string, Node>()
@@ -55,7 +54,7 @@ function addNodeToTree(tree: Node, compName: string) {
             node.children.set(t, new Node(t, node))
         }
 
-        node = node.children.get(t)
+        node = node.children.get(t)!
     }
 }
 
@@ -107,15 +106,15 @@ function displayDomain(domain: Node, container: HTMLElement, monitor: Monitor) {
 
         if (subContainer.style.display == 'block') {
             subContainer.style.display = 'none'
-            btn.querySelector('.field-title-chevron-down')
+            btn.querySelector('.field-title-chevron-down')!
                 .classList.add('hidden')
-            btn.querySelector('.field-title-chevron-right')
+            btn.querySelector('.field-title-chevron-right')!
                 .classList.remove('hidden')
         } else {
             subContainer.style.display = 'block'
-            btn.querySelector('.field-title-chevron-down')
+            btn.querySelector('.field-title-chevron-down')!
                 .classList.remove('hidden')
-            btn.querySelector('.field-title-chevron-right')
+            btn.querySelector('.field-title-chevron-right')!
                 .classList.add('hidden')
         }
     })
@@ -168,7 +167,7 @@ export function listComponents(monitor: Monitor) {
         .then((res: Array<string>) => {
             let tree = createTree(res);
             for (let child of tree.children.values()) {
-                display(child, document.getElementById("left-pane"), monitor)
+                display(child, document.getElementById("left-pane")!, monitor)
             }
         })
 }

@@ -10,7 +10,7 @@ export class Monitor {
 	constructor(uiManager: UIManager) {
 		this.uiManager = uiManager
 		this.monitorGroupContainer =
-			document.getElementById("monitor-group-container")
+			document.getElementById("monitor-group-container")!
 		this.widgets = []
 	}
 
@@ -38,7 +38,7 @@ export class Monitor {
 
 		widget.stopMonitor()
 
-		const widgetDom = widget.dom
+		const widgetDom = widget.dom!
 		widgetDom.remove()
 
 		this.widgets = this.widgets.filter((w) => w != widget)
@@ -50,7 +50,7 @@ export class Monitor {
 		this.uiManager.resize()
 	}
 
-	getWidget(component: string, field: string): Widget {
+	getWidget(component: string, field: string): Widget | null {
 		for (let i = 0; i < this.widgets.length; i++) {
 			const widget = this.widgets[i]
 			if (widget.component == component && widget.field == field) {
@@ -76,9 +76,9 @@ class Widget {
 	component: string
 	field: string
 	monitor: Monitor
-	dom: HTMLElement
+	dom: HTMLElement | null = null
 	data: Array<DataPoint>
-	interval: NodeJS.Timeout
+	interval: number = 0
 
 
 	constructor(component: string, field: string, monitor: Monitor) {
@@ -169,7 +169,7 @@ class Widget {
 	}
 
 	render() {
-		const svgDom = this.dom.querySelector("svg")
+		const svgDom = this.dom!.querySelector("svg")!
 		const svg = d3.select(svgDom)
 		const canvasWidth = svgDom.clientWidth
 		const canvasHeight = svgDom.clientHeight
@@ -206,7 +206,7 @@ class Widget {
 		yAxisDom.call(yAxis as any)
 
 		const barGroup = svg.select('.bar-group')
-		const bars = barGroup.selectAll('rect')
+		const bars = barGroup.selectAll<SVGRectElement, DataPoint>('rect')
 			.data(this.data, (d: DataPoint) => d.time)
 
 		const enterBars = bars.enter().append('rect')

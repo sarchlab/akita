@@ -1,8 +1,8 @@
-import { UIManager } from "ui_manager"
+import { UIManager } from "./ui_manager"
 
 export class ProgressBarManager {
     uiManager: UIManager
-    container: HTMLElement
+    container: HTMLElement | null = null
     progressDoms: Map<string, ProgressDom>
     mode = 'bar'
     maxProgressBars = 2
@@ -96,7 +96,7 @@ export class ProgressBarManager {
 
         this.progressDoms.set(pBar.id, dom)
 
-        dom.show(this.container, this.uiManager)
+        dom.show(this.container!, this.uiManager)
 
         return dom
     }
@@ -106,7 +106,7 @@ export class ProgressBarManager {
 
         this.progressDoms.set(pBar.id, dom)
 
-        dom.show(this.container, this.uiManager)
+        dom.show(this.container!)
 
         return dom
     }
@@ -147,7 +147,7 @@ interface ProgressDom {
 
 class ProgressPieDom {
     dom: HTMLElement
-    tooltip: HTMLElement
+    tooltip: HTMLElement | null = null
     progressPie: HTMLElement
 
     constructor(pBar: ProgressBar) {
@@ -175,20 +175,20 @@ class ProgressPieDom {
         this.dom.appendChild(this.tooltip)
 
         this.dom.addEventListener('mouseover', () => {
-            this.tooltip.style.display = 'block'
+            this.tooltip!.style.display = 'block'
         })
 
         this.dom.addEventListener('mousemove', (e) => {
-            this.tooltip.style.left = `${e.clientX}px`
-            this.tooltip.style.top = `${e.clientY - this.tooltip.offsetHeight}px`
+            this.tooltip!.style.left = `${e.clientX}px`
+            this.tooltip!.style.top = `${e.clientY - this.tooltip!.offsetHeight}px`
         })
 
         this.dom.addEventListener('mouseout', () => {
-            this.tooltip.style.display = 'none'
+            this.tooltip!.style.display = 'none'
         })
     }
 
-    async show(container: HTMLElement, uiManager: UIManager) {
+    async show(container: HTMLElement) {
         container.appendChild(this.dom)
 
         await this.dom.animate(

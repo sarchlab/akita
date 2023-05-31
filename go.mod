@@ -1,4 +1,4 @@
-module gitlab.com/akita/akita/v3
+module github.com/sarchlab/akita/v3
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1

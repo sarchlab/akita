@@ -1,12 +1,10 @@
-import { sort } from "d3"
-
 export class HangAnalyzer {
 	running: boolean = false
 	sort = "level"
-	intervalHandle: number
+	intervalHandle: number = 0
 
 	bindDom() {
-		const btn = document.getElementById("hang-analyzer-btn")
+		const btn = document.getElementById("hang-analyzer-btn")!
 		btn.addEventListener('click', (e: Event) => {
 			this.prepareDom()
 			this.startAnalyzing()
@@ -18,7 +16,7 @@ export class HangAnalyzer {
 	}
 
 	prepareDom() {
-		const container = document.getElementById('right-pane')
+		const container = document.getElementById('right-pane')!
 		container.innerHTML = ""
 
 		const toolbar = document.createElement("div")
@@ -46,7 +44,7 @@ export class HangAnalyzer {
 		sortOptions.appendChild(sortByPercentBtn)
 		sortByPercentBtn.innerHTML = "Percent"
 
-		sortBySizeBtn.addEventListener("click", (e: Event) => {
+		sortBySizeBtn.addEventListener("click", (_: Event) => {
 			this.sort = "level"
 
 			this.showBufferList()
@@ -58,7 +56,7 @@ export class HangAnalyzer {
 
 		})
 
-		sortByPercentBtn.addEventListener("click", (e: Event) => {
+		sortByPercentBtn.addEventListener("click", (_: Event) => {
 			this.sort = "percent"
 			this.showBufferList()
 
@@ -73,7 +71,7 @@ export class HangAnalyzer {
 		autoRefreshBtn.innerHTML = "Stop Refresh"
 		toolbar.appendChild(autoRefreshBtn)
 
-		autoRefreshBtn.addEventListener("click", (e: Event) => {
+		autoRefreshBtn.addEventListener("click", (_: Event) => {
 			if (this.running) {
 				this.stopAnalyzing()
 				autoRefreshBtn.classList.remove('btn-primary')
@@ -111,7 +109,7 @@ export class HangAnalyzer {
 		fetch(`/api/hangdetector/buffers?sort=${this.sort}&limit=40`)
 			.then(res => res.json())
 			.then((res: any) => {
-				const bufferTable = document.getElementById("buffer-table")
+				const bufferTable = document.getElementById("buffer-table")!
 				bufferTable.innerHTML = ""
 
 				const header = document.createElement("tr")
