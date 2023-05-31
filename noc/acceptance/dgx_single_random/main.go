@@ -46,7 +46,10 @@ func main() {
 			t.RegisterAgent(agents[j])
 			t.GenerateMsgs(2000)
 
-			engine.Run()
+			err := engine.Run()
+			if err != nil {
+				panic(err)
+			}
 
 			t.MustHaveReceivedAllMsgs()
 			t.ReportBandwidthAchieved(engine.CurrentTime())

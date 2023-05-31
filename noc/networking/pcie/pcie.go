@@ -12,12 +12,11 @@ import (
 
 // Connector can connect devices into a PCIe network.
 type Connector struct {
-	freq             sim.Freq
-	bandwidth        uint64
-	encodingOverhead float64
-	flitByteSize     int
-	switchLatency    int
-	connector        networkconnector.Connector
+	freq          sim.Freq
+	bandwidth     uint64
+	flitByteSize  int
+	switchLatency int
+	connector     networkconnector.Connector
 }
 
 // NewConnector creates a new connector that can help configure PCIe networks.

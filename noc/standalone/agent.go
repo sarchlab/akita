@@ -69,7 +69,10 @@ func (a *Agent) Handle(e sim.Event) error {
 	case *StartSendEvent:
 		a.handleStartSendEvent(e)
 	case sim.TickEvent:
-		a.TickingComponent.Handle(e)
+		err := a.TickingComponent.Handle(e)
+		if err != nil {
+			return err
+		}
 	default:
 		log.Panicf("cannot handle event of type %s", reflect.TypeOf(e))
 	}

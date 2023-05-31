@@ -482,26 +482,26 @@ func (c *Connector) createRoutingNodeList() []Node {
 	return nodes
 }
 
-func (c *Connector) dumpRoute() {
-	fmt.Println("")
-	for _, swNode := range c.switches {
-		for _, epNode := range c.devices {
-			for _, port := range epNode.ports {
-				nextHopPort := swNode.sw.GetRoutingTable().FindPort(port)
+// func (c *Connector) dumpRoute() {
+// 	fmt.Println("")
+// 	for _, swNode := range c.switches {
+// 		for _, epNode := range c.devices {
+// 			for _, port := range epNode.ports {
+// 				nextHopPort := swNode.sw.GetRoutingTable().FindPort(port)
 
-				var nextHop Node
-				for _, remote := range swNode.remotes {
-					if remote.LocalPort == nextHopPort {
-						nextHop = remote.RemoteNode
-					}
-				}
+// 				var nextHop Node
+// 				for _, remote := range swNode.remotes {
+// 					if remote.LocalPort == nextHopPort {
+// 						nextHop = remote.RemoteNode
+// 					}
+// 				}
 
-				fmt.Printf("%s -> %s -> %s --- %s\n",
-					swNode.Name(),
-					nextHopPort.Name(),
-					nextHop.Name(),
-					port.Name())
-			}
-		}
-	}
-}
+// 				fmt.Printf("%s -> %s -> %s --- %s\n",
+// 					swNode.Name(),
+// 					nextHopPort.Name(),
+// 					nextHop.Name(),
+// 					port.Name())
+// 			}
+// 		}
+// 	}
+// }

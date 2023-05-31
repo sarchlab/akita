@@ -8,7 +8,6 @@ import (
 
 	"github.com/sarchlab/akita/v3/monitoring"
 	"github.com/sarchlab/akita/v3/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/sarchlab/akita/v3/tracing"
 )
@@ -16,7 +15,6 @@ import (
 // A deviceNode represents a switch associated with the device and
 // and NVLink switch.
 type deviceNode struct {
-	endpoint       *switching.EndPoint
 	deviceSwitchID int
 	nvlinkSwitchID int
 }
@@ -24,7 +22,6 @@ type deviceNode struct {
 // Connector can connect devices into a network that includes PCIe, NVLink,
 // and ethernet network.
 type Connector struct {
-	networkName  string
 	freq         sim.Freq
 	flitByteSize int
 
