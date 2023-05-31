@@ -1,5 +1,28 @@
-# Project Akita
+# Akita
 
-Project Akita is a framework for computer architecture simulators. This repository is an architecture-agnostic simulator framework that defines essential concepts like Component and Events. 
+[![Akita Test](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml)
+[![AkitaRTM Test](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml)
 
-Please see [here](doc/index.md) for detailed documentations.
+Akita is a computer architecture simulation engine. Like a game engine, a simulator engine is not a simulator, but rather a framework for building simulators. Akita is designed to be modular and extensible, allowing for easy experimentation with new computer architecture design ideas.
+
+## Communication
+
+[<img src="https://img.shields.io/badge/slack-Akita-blue.svg?logo=slack">](https://join.slack.com/t/projectakita/shared_invite/zt-adiqifj8-0h0oJnIX~cYxbdFwmDOQJg) 
+[<img src="https://img.shields.io/badge/reddit-MGPUSim-blue.svg?logo=redit">](https://www.reddit.com/r/mgpusim/) 
+
+## Sub-Projects
+
+### Akita
+
+The simulator engine itself is located under the packages including:
+
+* `github.com/sarchlab/akita/sim`
+* `github.com/sarchlab/akita/pipelining`
+
+### AkitaRTM
+
+AkitaRTM stands for Real-Time Monitoring (RTM) tool for Akita. It is a web-based tool that can be used to monitor the execution of a simulator developed with Akita. It is located under the `github.com/sarchlab/akita/monitoring` package.
+
+### First-Party Components
+
+Akita provides several generic first-party components that can be used to build simulators, located under the `github.com/sarchlab/akita/mem` and `github.com/sarchlab/akita/noc` packages. As the name suggests, the `mem` package contains memory components (e.g., caches, tlb, dram controller), while the `noc` package contains network-on-chip components (e.g., switches).
