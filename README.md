@@ -1,5 +1,10 @@
 # Akita
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sarchlab/akita/v3.svg)](https://pkg.go.dev/github.com/sarchlab/akita/v3)
+[![Go Report Card](https://goreportcard.com/badge/github.com/sarchlab/akita/v3)](https://goreportcard.com/report/github.com/sarchlab/akita/v3)
+
+
+
 [![Akita Test](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml)
 [![AkitaRTM Test](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml)
 
@@ -25,4 +30,4 @@ AkitaRTM stands for Real-Time Monitoring (RTM) tool for Akita. It is a web-based
 
 ### First-Party Components
 
-Akita provides several generic first-party components that can be used to build simulators, located under the `github.com/sarchlab/akita/mem` and `github.com/sarchlab/akita/noc` packages. As the name suggests, the `mem` package contains memory components (e.g., caches, tlb, dram controller), while the `noc` package contains network-on-chip components (e.g., switches).
+Akita provides several generic first-party components that can be used to build simulators, located under the `github.com/sarchlab/akita/mem` and `github.com/sarchlab/akita/noc` packages. As the name suggests, the `mem` package contains memory components (e.g., caches, TLB, DRAM controller), while the `noc` package contains network-on-chip components (e.g., switches).
