@@ -24,6 +24,9 @@ jobs:
           version: 'latest'
           args: --timeout=10m
 
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo
+
       - name: Unit Test
         run: ginkgo -r
 
