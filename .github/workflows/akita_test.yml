@@ -5,7 +5,7 @@ on: push
 jobs:
   akitartm_compile:
     name:  AkitaRTM Compilation
-    runs-on: unbuntu-latest
+    runs-on: ubuntu-latest
     steps: 
       - name: Checkout
         uses: actions/checkout@v2
