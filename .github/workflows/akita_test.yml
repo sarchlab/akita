@@ -3,7 +3,7 @@ name: Akita Test
 on: push
 
 jobs:
-  compile:
+  compile-lint-test:
     name: Compile Akita
     runs-on: self-hosted
     steps:
@@ -18,48 +18,20 @@ jobs:
       - name: Build
         run: go build ./...
 
-  lint:
-    name: Lint Akita
-    runs-on: self-hosted
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 'stable'
-          cache: false
-
-      - name: Install golangci-lint
+      - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: 'latest'
           args: --timeout=10m
 
-  unit_test:
-    name: Unit Test Akita
-    runs-on: self-hosted
-    needs: [compile, lint]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 'stable'
-
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
-  
       - name: Unit Test
         run: ginkgo -r
+
 
   noc_acceptance_test:
     name: NoC Acceptance Test
     runs-on: self-hosted
-    needs: unit_test
+    needs: compile-lint-test
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -81,7 +53,7 @@ jobs:
   mem_acceptance_test:
     name: Mem Acceptance Test
     runs-on: self-hosted
-    needs: unit_test
+    needs: compile-lint-test
     steps:
       - name: Checkout
         uses: actions/checkout@v2
