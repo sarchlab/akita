@@ -5,7 +5,7 @@ on: push
 jobs:
   compile:
     name: Compile AkitaRTM
-    runs-on: self-hosted
+    runs-on: unbuntu-latest
     steps: 
       - name: Checkout
         uses: actions/checkout@v2

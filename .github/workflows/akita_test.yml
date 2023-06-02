@@ -5,7 +5,8 @@ on: push
 jobs:
   compile-lint-test:
     name: Compile Akita
-    runs-on: self-hosted
+    runs-on: 
+      group: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -33,7 +34,8 @@ jobs:
 
   noc_acceptance_test:
     name: NoC Acceptance Test
-    runs-on: self-hosted
+    runs-on: 
+      group: Marin
     needs: compile-lint-test
     steps:
       - name: Checkout
@@ -44,10 +46,10 @@ jobs:
         with:
           go-version: 'stable'
 
-      # - name: Setup Python
-      #   uses: actions/setup-python@v4
-      #   with:
-      #     python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
         
       - name: Run Acceptance Test
         working-directory: ./noc/acceptance
@@ -55,7 +57,8 @@ jobs:
 
   mem_acceptance_test:
     name: Mem Acceptance Test
-    runs-on: self-hosted
+    runs-on: 
+      group: Marin
     needs: compile-lint-test
     steps:
       - name: Checkout
@@ -66,10 +69,10 @@ jobs:
         with:
           go-version: 'stable'
 
-      # - name: Setup Python
-      #   uses: actions/setup-python@v4
-      #   with:
-      #     python-version: '3.10'
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
         
       - name: Run Acceptance Test
         working-directory: ./mem/
