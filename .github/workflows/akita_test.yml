@@ -3,8 +3,28 @@ name: Akita Test
 on: push
 
 jobs:
-  compile:
-    name: Compile Akita
+  akitartm_compile:
+    name:  AkitaRTM Compilation
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: 16.x
+
+      - name: Install dependencies
+        working-directory: ./monitoring/web
+        run: npm install
+
+      - name: Build
+        working-directory: ./monitoring/web
+        run: npm run build
+
+  akita_compile:
+    name: Akita Compilation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -18,29 +38,23 @@ jobs:
       - name: Build
         run: go build ./...
 
-  lint:
-    name: Lint Akita
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 'stable'
-          cache: false
-
-      - name: Install golangci-lint
+      - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: 'latest'
           args: --timeout=10m
 
-  unit_test:
-    name: Unit Test Akita
-    runs-on: ubuntu-latest
-    needs: [compile, lint]
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo
+
+      - name: Unit Test
+        run: ginkgo -r
+
+  akita_unit_test:
+    name: Akita Unit Test
+    needs: akita_compile
+    runs-on: 
+      group: Marin
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -52,14 +66,16 @@ jobs:
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
-  
+
       - name: Unit Test
         run: ginkgo -r
 
+
   noc_acceptance_test:
     name: NoC Acceptance Test
-    runs-on: ubuntu-latest
-    needs: unit_test
+    runs-on: 
+      group: Marin
+    needs: akita_unit_test
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -80,8 +96,9 @@ jobs:
 
   mem_acceptance_test:
     name: Mem Acceptance Test
-    runs-on: ubuntu-latest
-    needs: unit_test
+    runs-on: 
+      group: Marin
+    needs: akita_unit_test
     steps:
       - name: Checkout
         uses: actions/checkout@v2
