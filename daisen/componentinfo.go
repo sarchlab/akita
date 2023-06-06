@@ -29,7 +29,7 @@ func httpComponentNames(w http.ResponseWriter, r *http.Request) {
 	rsp, err := json.Marshal(componentNames)
 	dieOnErr(err)
 
-	_, err = w.Write([]byte(rsp))
+	_, err = w.Write(rsp)
 	dieOnErr(err)
 }
 
@@ -69,17 +69,7 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		compInfo = calculateTimeWeightedTaskCount(
 			compName, infoType,
 			startTime, endTime, int(numDots),
-			func(t tracing.Task) bool {
-				if t.Kind != "req_in" {
-					return false
-				}
-
-				if t.ParentTask == nil {
-					return false
-				}
-
-				return true
-			},
+			taskIsReqIn,
 			func(t tracing.Task) float64 {
 				return float64(t.ParentTask.StartTime)
 			},
@@ -102,8 +92,12 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	rsp, err := json.Marshal(compInfo)
 	dieOnErr(err)
 
-	_, err = w.Write([]byte(rsp))
+	_, err = w.Write(rsp)
 	dieOnErr(err)
+}
+
+func taskIsReqIn(t tracing.Task) bool {
+	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
 func calculateReqIn(
@@ -283,7 +277,6 @@ func calculateTimeWeightedTaskCount(
 	filter taskFilter,
 	increaseTime, decreaseTime taskTime,
 ) *ComponentInfo {
-
 	info := &ComponentInfo{
 		Name:      compName,
 		InfoType:  infoType,
@@ -385,7 +378,7 @@ func taskToTimeStamps(
 	tasks []tracing.Task,
 	taskStart, taskEnd taskTime,
 ) []timestamp {
-	var timestamps timestamps
+	timestampList := make(timestamps, 0, len(tasks)*2)
 
 	for _, t := range tasks {
 		timestampStart := timestamp{
@@ -397,12 +390,12 @@ func taskToTimeStamps(
 			time: taskEnd(t),
 		}
 
-		timestamps = append(timestamps, timestampStart, timestampEnd)
+		timestampList = append(timestampList, timestampStart, timestampEnd)
 	}
 
-	sort.Sort(timestamps)
+	sort.Sort(timestampList)
 
-	return timestamps
+	return timestampList
 }
 
 func getTasksInBin(

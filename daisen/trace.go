@@ -45,6 +45,6 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 	rsp, err := json.Marshal(tasks)
 	dieOnErr(err)
 
-	_, err = w.Write([]byte(rsp))
+	_, err = w.Write(rsp)
 	dieOnErr(err)
 }

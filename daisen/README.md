@@ -19,7 +19,7 @@ Run `./daisen -[trace-format] [trace_file]`. The trace format can be `sqlite3` o
 
 ## Development
 
-The regular start server method always uses the production build of the frontend. If you want to develop the frontend, you can run `npm run dev` in the `github.com/sarchlab/akita/daisen/static` directory. This will start a development server for the frontend. By default, the vite,js development server will listen to port 5173.
+The regular start server method always uses the production build of the frontend. If you want to develop the frontend, you can run `npm run dev` in the `github.com/sarchlab/akita/daisen/static` directory. This will start a development server for the frontend. By default, the vite.js development server will listen to port 5173.
 
 Then, you can run `./daisen -[trace-format] [trace_file]` to start the API server. Make sure your API server is listening on port 3001. 
 

@@ -6,7 +6,6 @@
 
 
 [![Akita Test](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akita_test.yml)
-[![AkitaRTM Test](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml/badge.svg)](https://github.com/sarchlab/akita/actions/workflows/akitartm_test.yml)
 
 Akita is a computer architecture simulation engine. Like a game engine, a simulator engine is not a simulator, but rather a framework for building simulators. Akita is designed to be modular and extensible, allowing for easy experimentation with new computer architecture design ideas.
 
