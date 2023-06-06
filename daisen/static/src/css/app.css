@@ -1,0 +1,188 @@
+@import url("https://fonts.googleapis.com/css?family=Asap&display=swap");
+
+html {
+  height: 100%;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#container {
+  width: 100%;
+  height: 100%;
+  /* overflow: hidden; */
+}
+
+.main-body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+#inner-container {
+  display: flex;
+}
+
+.row {
+  align-items: flex-start;
+}
+
+.column {
+  display: inline-block;
+  overflow: hidden;
+  /* margin-right: 5px;
+    margin-left: -10px;
+    height: 720px; */
+}
+
+.side-column {
+  background: #eeeeee;
+  padding: 5px;
+  height: 100%;
+  user-select: none;
+}
+
+.curr-task-info {
+  width: 100%;
+  min-height: 20px;
+  background: #d9d9d9;
+  display: none;
+  width: 330;
+  border-radius: 4px;
+  box-shadow: 0 1px 6px -6px #dddddd;
+  padding: 8px;
+}
+
+.curr-task-info.showing {
+  display: block;
+  /* font-family: 'Asap', sans-serif; */
+  font-size: 16px;
+}
+
+.curr-task-info dl {
+  margin-bottom: 0 !important;
+}
+
+.status-bar {
+  height: 20px;
+}
+
+.top-nav>h1 {
+  font-size: 30px;
+  font-family: "Lacquer", sans-serif;
+  text-align: left;
+  position: absolute;
+  left: 10px;
+  top: 10;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+.top-name>button {
+  text-align: center;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+#mouse-coordinate {
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  position: fixed;
+  pointer-events: none;
+}
+
+.location-label {
+  font-size: 3.2em;
+  opacity: 0.4;
+  color: #000000;
+  pointer-events: none;
+  text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff,
+    1px 1px 0 #ffffff;
+}
+
+.dashboard {
+  overflow-y: scroll;
+}
+
+.dashboard .widget {
+  border: 1px solid #999999;
+  border-radius: 4px;
+  padding: 8px;
+  padding-top: 4px;
+  overflow: hidden;
+  margin-top: 5px;
+  margin-left: 5px;
+  min-width: 150px;
+  min-height: 80px;
+}
+
+.dashboard .widget .title-bar {
+  height: 20px;
+  display: flex;
+  margin-bottom: 10px;
+  align-items: baseline;
+}
+
+/* .dashboard .widget .title-bar h6 {} */
+
+.dashboard .widget .title-bar .btn {
+  /* width: 20;
+  height: 20; */
+  margin-left: auto;
+  color: #999999;
+  width: 20px;
+  height: 20px;
+}
+
+.circle-primary {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 0.3em;
+  background: #d7191c;
+  margin-right: 4px;
+}
+
+.circle-secondary {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 0.3em;
+  background: #2c7bb6;
+  margin-right: 4px;
+}
+
+.dashboard .widget .y-axis-left text {
+  fill: #d7191c;
+}
+
+.dashboard .widget .y-axis-left line {
+  stroke: #d7191c;
+}
+
+.dashboard .widget .y-axis-left path {
+  stroke: #d7191c;
+}
+
+.dashboard .widget .y-axis-right text {
+  fill: #2c7bb6;
+}
+
+.dashboard .widget .y-axis-right line {
+  stroke: #2c7bb6;
+}
+
+.dashboard .widget .y-axis-right path {
+  stroke: #2c7bb6;
+}

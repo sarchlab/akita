@@ -193,20 +193,74 @@ func (r *CSVTraceReader) ListTasks(query TaskQuery) []Task {
 	return tasks
 }
 
-func (*CSVTraceReader) keepTask(task Task, query TaskQuery) bool {
+func (r *CSVTraceReader) keepTask(task Task, query TaskQuery) bool {
+	if !r.meetIDRequirement(task, query) {
+		return false
+	}
+
+	if !r.meetParentIDRequirement(task, query) {
+		return false
+	}
+
+	if !r.meetKindRequirement(task, query) {
+		return false
+	}
+
+	if !r.meetWhereRequirement(task, query) {
+		return false
+	}
+
+	if !r.meetTimeRangeRequirement(task, query) {
+		return false
+	}
+
+	return true
+}
+
+func (*CSVTraceReader) meetIDRequirement(task Task, query TaskQuery) bool {
+	if query.ID != "" && task.ID != query.ID {
+		return false
+	}
+
+	return true
+}
+
+func (*CSVTraceReader) meetParentIDRequirement(
+	task Task,
+	query TaskQuery,
+) bool {
+	if query.ParentID != "" && task.ParentID != query.ParentID {
+		return false
+	}
+
+	return true
+}
+
+func (*CSVTraceReader) meetKindRequirement(task Task, query TaskQuery) bool {
+	if query.Kind != "" && task.Kind != query.Kind {
+		return false
+	}
+
+	return true
+}
+
+func (*CSVTraceReader) meetWhereRequirement(task Task, query TaskQuery) bool {
 	if query.Where != "" && task.Where != query.Where {
 		return false
 	}
 
+	return true
+}
+
+func (*CSVTraceReader) meetTimeRangeRequirement(
+	task Task,
+	query TaskQuery,
+) bool {
 	if query.EnableTimeRange {
 		if float64(task.EndTime) < query.StartTime ||
 			float64(task.StartTime) > query.EndTime {
 			return false
 		}
-	}
-
-	if query.Kind != "" && task.Kind != query.Kind {
-		return false
 	}
 
 	return true

@@ -23,6 +23,26 @@ jobs:
         working-directory: ./monitoring/web
         run: npm run build
 
+  daisen_compile:
+    name:  Daisen Compilation
+    runs-on: ubuntu-latest
+    steps: 
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: 16.x
+
+      - name: Install dependencies
+        working-directory: ./daisen/static
+        run: npm install
+
+      - name: Build
+        working-directory: ./daisen/static
+        run: npm run build
+
   akita_compile:
     name: Akita Compilation
     runs-on: ubuntu-latest
