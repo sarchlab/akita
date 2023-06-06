@@ -5,6 +5,19 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Daisen Server",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/daisen",
+            "args": [
+                "-csv=sample_trace_small.csv"
+            ],
+            "env": {
+                "AKITA_DAISEN_DEV_SERVER": "http://localhost:5173"
+            }
+        },
+        {
             "name": "Test github.com/sarchlab/akita/monitoring",
             "type": "go",
             "request": "launch",

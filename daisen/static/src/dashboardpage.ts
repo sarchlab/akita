@@ -12,7 +12,7 @@ class DashboardPage {
   layout() {
     const [_, containerHeight] = this._containerDim();
     this._container = document.getElementById("inner-container");
-    this._container.style.height = (containerHeight - 60).toString();
+    this._container.style.height = (containerHeight - 60).toString() + "px";
 
     const dashboardCanvas = this._getDashboard();
     const pageContainer = this._getPageContainer(dashboardCanvas);
@@ -44,8 +44,8 @@ class DashboardPage {
     }
 
     const [containerWidth, containerHeight] = this._containerDim();
-    dashboardCanvas.style.width = containerWidth.toString();
-    dashboardCanvas.style.height = containerHeight.toString();
+    dashboardCanvas.style.width = containerWidth.toString() + "px";
+    dashboardCanvas.style.height = containerHeight.toString() + "px";
 
     return dashboardCanvas;
   }
@@ -64,8 +64,10 @@ class DashboardPage {
       dashboardCanvas.appendChild(pageContainer);
     }
 
-    pageContainer.style.width = dashboardCanvas.offsetWidth.toString();
-    pageContainer.style.height = (dashboardCanvas.offsetHeight - 78).toString();
+    pageContainer.style.width =
+      dashboardCanvas.offsetWidth.toString() + "px";
+    pageContainer.style.height =
+      (dashboardCanvas.offsetHeight - 78).toString() + "px";
 
     return pageContainer;
   }

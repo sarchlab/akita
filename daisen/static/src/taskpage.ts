@@ -132,7 +132,7 @@ export class TaskPage implements ZoomHandler {
   layout() {
     this._container = document.getElementById("inner-container");
     const containerHeight = window.innerHeight - 76;
-    this._container.style.height = containerHeight.toString();
+    this._container.style.height = containerHeight.toString() + "px";
 
     this._layoutLeftColumn();
     this._layoutRightColumn();
@@ -149,8 +149,10 @@ export class TaskPage implements ZoomHandler {
       this._rightColumn.classList.add("side-column");
       this._container.appendChild(this._rightColumn);
     }
-    this._rightColumn.style.width = this._rightColumnWidth.toString();
-    this._rightColumn.style.height = this._container.offsetHeight.toString();
+    this._rightColumn.style.width =
+      this._rightColumnWidth.toString() + "px";
+    this._rightColumn.style.height =
+      this._container.offsetHeight.toString() + "px";
     // const marginLeft = -5;
     // this._rightColumn.style.marginLeft = marginLeft.toString();
 
@@ -179,9 +181,9 @@ export class TaskPage implements ZoomHandler {
     }
     this._leftColumnWidth =
       this._container.offsetWidth - this._rightColumnWidth - 1;
-    this._leftColumn.style.width = this._leftColumnWidth.toString();
+    this._leftColumn.style.width = this._leftColumnWidth.toString() + "px";
     const height = this._container.offsetHeight;
-    this._leftColumn.style.height = height.toString();
+    this._leftColumn.style.height = height.toString() + "px";
 
     this._layoutTaskView();
     this._layoutComponentView();
@@ -196,9 +198,10 @@ export class TaskPage implements ZoomHandler {
       );
       this._leftColumn.appendChild(this._componentViewCanvas);
     }
-    this._componentViewCanvas.style.width = this._leftColumn.offsetWidth.toString();
+    this._componentViewCanvas.style.width =
+      this._leftColumn.offsetWidth.toString() + "px";
     const height = this._leftColumn.offsetHeight - 200;
-    this._componentViewCanvas.style.height = height.toString();
+    this._componentViewCanvas.style.height = height.toString() + "px";
   }
 
   _layoutTaskView() {
@@ -211,8 +214,9 @@ export class TaskPage implements ZoomHandler {
 
       this._leftColumn.appendChild(this._taskViewCanvas);
     }
-    this._taskViewCanvas.style.width = this._leftColumn.offsetWidth.toString();
-    this._taskViewCanvas.style.height = "200";
+    this._taskViewCanvas.style.width =
+      this._leftColumn.offsetWidth.toString() + "px";
+    this._taskViewCanvas.style.height = "200px";
     // (this._leftColumn.offsetHeight / 2);
   }
 
@@ -258,9 +262,9 @@ export class TaskPage implements ZoomHandler {
     const traceRsps = await Promise.all([
       fetch(
         `/api/trace?` +
-          `where=${task.where}` +
-          `&starttime=${this._startTime}` +
-          `&endtime=${this._endTime}`
+        `where=${task.where}` +
+        `&starttime=${this._startTime}` +
+        `&endtime=${this._endTime}`
       )
     ]);
     const sameLocationTasks = await traceRsps[0].json();
@@ -297,9 +301,9 @@ export class TaskPage implements ZoomHandler {
     const rsps = await Promise.all([
       fetch(
         `/api/trace?` +
-          `where=${name}` +
-          `&starttime=${this._startTime}` +
-          `&endtime=${this._endTime}`
+        `where=${name}` +
+        `&starttime=${this._startTime}` +
+        `&endtime=${this._endTime}`
       )
     ]);
     const sameLocationTasks = await rsps[0].json();
@@ -334,3 +338,5 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 }
+
+export default TaskPage;

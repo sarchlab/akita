@@ -152,7 +152,7 @@ class Widget implements ZoomHandler {
   }
 
   _setWidgetWidth(width: number) {
-    this._div.style.width = width.toString();
+    this._div.style.width = width.toString() + "px";
     this._widgetWidth = width - 8;
     this._graphWidth = this._widgetWidth;
     this._graphContentWidth = this._graphWidth - 2 * this._yAxisWidth;
@@ -164,7 +164,7 @@ class Widget implements ZoomHandler {
   }
 
   _setWidgetHeight(height: number) {
-    this._div.style.height = height.toString();
+    this._div.style.height = height.toString() + "px";
     this._widgetHeight = height - 14;
     this._graphHeight = this._widgetHeight - this._titleHeight;
     this._graphContentHeight =

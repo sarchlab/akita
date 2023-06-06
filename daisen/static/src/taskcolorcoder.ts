@@ -4,7 +4,7 @@ import { Task } from "./task";
 export class TaskColorCoder {
   private _colorMap: Object;
 
-  constructor() {}
+  constructor() { }
 
   recode(tasks: Array<Task>) {
     this._colorMap = {};
@@ -48,3 +48,5 @@ export class TaskColorCoder {
     return this._colorMap;
   }
 }
+
+export default TaskColorCoder;
