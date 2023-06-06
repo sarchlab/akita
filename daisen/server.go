@@ -4,10 +4,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/sarchlab/akita/v3/daisen/static"
@@ -101,31 +99,6 @@ func startAPIServer() {
 }
 
 func serveStatic(w http.ResponseWriter, r *http.Request) {
-	devServerURL, devMode := devServer()
-
-	if devMode {
-		url := devServerURL + r.URL.Path
-		rsp, err := http.Get(url)
-		dieOnErr(err)
-		defer func() {
-			innerErr := rsp.Body.Close()
-			dieOnErr(innerErr)
-		}()
-
-		if rsp.StatusCode != http.StatusOK {
-			http.NotFound(w, r)
-			return
-		}
-
-		body, err := ioutil.ReadAll(rsp.Body)
-		dieOnErr(err)
-
-		_, err = w.Write(body)
-		dieOnErr(err)
-
-		return
-	}
-
 	f, err := fs.Open(r.URL.Path)
 	if err != nil {
 		http.NotFound(w, r)
@@ -140,25 +113,6 @@ func serveStatic(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
-	devServerURL, devMode := devServer()
-
-	if devMode {
-		rsp, err := http.Get(devServerURL + "/index.html")
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer func() {
-			innerErr := rsp.Body.Close()
-			dieOnErr(innerErr)
-		}()
-
-		_, err = io.Copy(w, rsp.Body)
-		dieOnErr(err)
-
-		return
-	}
-
 	var err error
 	f, err := fs.Open("index.html")
 	dieOnErr(err)
@@ -174,15 +128,4 @@ func dieOnErr(err error) {
 	if err != nil {
 		log.Panic(err)
 	}
-}
-
-func devServer() (string, bool) {
-	evName := "AKITA_DAISEN_DEV_SERVER"
-	evValue, exist := os.LookupEnv(evName)
-
-	if !exist {
-		return "", false
-	}
-
-	return evValue, true
 }
