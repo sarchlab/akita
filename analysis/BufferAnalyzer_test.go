@@ -1,4 +1,4 @@
-package bottleneckanalysis
+package analysis
 
 import (
 	"github.com/sarchlab/akita/v3/sim"

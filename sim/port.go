@@ -72,7 +72,7 @@ func (p *LimitNumMsgPort) CanSend() bool {
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	err := p.conn.Send(msg)
 
-	if err != nil {
+	if err == nil {
 		hookCtx := HookCtx{
 			Domain: p,
 			Pos:    HookPosPortMsgSend,

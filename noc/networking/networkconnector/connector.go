@@ -3,13 +3,13 @@ package networkconnector
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v3/analysis"
 	"github.com/sarchlab/akita/v3/monitoring"
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
 	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/bottleneckanalysis"
 	"github.com/sarchlab/akita/v3/tracing"
 )
 
@@ -68,7 +68,7 @@ type Connector struct {
 	router         Router
 	visTracer      tracing.Tracer
 	nocTracer      tracing.Tracer
-	bufferAnalyzer *bottleneckanalysis.BufferAnalyzer
+	bufferAnalyzer *analysis.BufferAnalyzer
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -133,7 +133,7 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 
 // WithBufferAnalyzer sets the buffer analyzer that can record the buffer levels in the network.
 func (c Connector) WithBufferAnalyzer(
-	b *bottleneckanalysis.BufferAnalyzer,
+	b *analysis.BufferAnalyzer,
 ) Connector {
 	c.bufferAnalyzer = b
 	return c
