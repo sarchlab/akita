@@ -3,11 +3,37 @@ package analysis
 import (
 	"log"
 	"math"
+	"os"
 
 	"github.com/sarchlab/akita/v3/sim"
 )
 
 // PortBandwidthLogger is a hook for logging messages as they go across a Port
+type PortAnalyzer struct {
+	dirPath    string
+	timeTeller sim.TimeTeller
+	lastTime   float64
+	period     float64
+	usePeriod  float64
+
+	ports map[string]*portInfo
+
+	portListFileOpen     bool
+	portListFile         *os.File
+	currentTraceFileOpen bool
+	currentTraceFile     *os.File
+}
+
+type portInfo struct {
+	name string
+	port sim.Port
+
+	startTime sim.VTimeInSec
+	endTime   sim.VTimeInSec
+
+	messageCounter      map[sim.VTimeInSec]int64
+	trafficBytesCounter map[sim.VTimeInSec]int64
+}
 type PortBandwidthLogger struct {
 	sim.LogHookBase
 	sim.TimeTeller
@@ -127,7 +153,7 @@ func (h *PortBandwidthLogger) oneInterval(
 	if has != false {
 		h.logger.Printf("%.10f, %s,%s, %d, %d\n",
 			floorEndTime,
-			ctx.Domain.(Port).Name(),
+			ctx.Domain.(sim.Port).Name(),
 			ctx.Pos.Name,
 			h.messageCounter[h.startTime],
 			h.trafficBytesCounter[h.startTime])
