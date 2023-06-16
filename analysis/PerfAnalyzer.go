@@ -1,29 +1,55 @@
 package analysis
 
 import (
-	"log"
+	"encoding/csv"
+	"fmt"
+	"os"
 	"reflect"
 	"unsafe"
 
 	"github.com/sarchlab/akita/v3/sim"
 )
 
+// PerfAnalyzerEntry is a single entry in the performance database.
+type PerfAnalyzerEntry struct {
+	Start sim.VTimeInSec
+	End   sim.VTimeInSec
+	Where string
+	What  string
+	Value float64
+	Unit  string
+}
+
+// PerfLogger is the interface that provide the service that can record
+// performance data entries.
+type PerfLogger interface {
+	AddDataEntry(entry PerfAnalyzerEntry)
+}
+
+// PerfAnalyzer can report performance metrics during simulation.
 type PerfAnalyzer struct {
-	dirPath string
+	period sim.VTimeInSec
 
-	dbFilename string
-
-	components []sim.Component
-	buffers    []sim.Buffer
-	ports      []sim.Port
-	portNumber int
+	dbFile    *os.File
+	csvWriter *csv.Writer
 
 	engine sim.Engine
 }
 
-//This function creates a new PerfAnalyzer with configuration parameters. If we need many parameters, consider using a builder with With functions.
+// NewPerfAnalyzer creates a new PerfAnalyzer with configuration parameters.
 func NewPerfAnalyzer(dbFilename string, period sim.VTimeInSec) *PerfAnalyzer {
-	p := &PerfAnalyzer{}
+	p := &PerfAnalyzer{
+		period: period,
+	}
+
+	var err error
+	p.dbFile, err = os.Create(dbFilename)
+	if err != nil {
+		panic(err)
+	}
+	p.csvWriter = csv.NewWriter(p.dbFile)
+	p.csvWriter.Write(
+		[]string{"Start", "End", "Where", "What", "Value", "Unit"})
 
 	return p
 }
@@ -35,8 +61,6 @@ func (p *PerfAnalyzer) RegisterEngine(e sim.Engine) {
 
 // RegisterComponent register a component to be monitored.
 func (p *PerfAnalyzer) RegisterComponent(c sim.Component) {
-	p.components = append(p.components, c)
-
 	p.registerBuffers(c)
 	p.registerPorts(c)
 }
@@ -58,73 +82,40 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
 
 		if fieldType == bufferType {
-			fieledRef := reflect.NewAt(
+			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
 			).Elem().Interface().(sim.Buffer)
-			p.buffers = append(p.buffers, fieledRef)
+
+			bufferAnalyzer := MakeBufferAnalyzerBuilder().
+				WithTimeTeller(p.engine).
+				WithDirectoryPath(".").
+				WithPeriod(float64(p.period)).
+				Build()
+			fieldRef.AcceptHook(bufferAnalyzer)
 		}
 	}
 }
 
 func (p *PerfAnalyzer) registerPorts(c sim.Component) {
-	p.registerPort(c)
-
 	for _, port := range c.Ports() {
-		p.registerPort(port)
-
-		interval := float64(0.000001)
-		p.collectHooks(port, interval)
+		portAnalyzer := NewPortAnalyzer(
+			p.engine, p, p.period,
+		)
+		port.AcceptHook(portAnalyzer)
 	}
 }
 
-func (p *PerfAnalyzer) collectHooks(port sim.Port, interval float64) {
-	name := port.Name()
-
-	logger := log.New(p.portFile, "", 0)
-
-	port.AcceptHook(sim.portDeFenXiQi(
-		name,
-		sim.VTimeInSec(interval),
-		p.engine,
-		logger))
-
-}
-
-func (p *PerfAnalyzer) registerPort(c any) {
-	v := reflect.ValueOf(c).Elem()
-	for i := 0; i < v.NumField(); i++ {
-		field := v.Field(i)
-
-		fieldType := field.Type()
-		portType := reflect.TypeOf((*sim.Port)(nil)).Elem()
-
-		if fieldType == portType && !field.IsNil() {
-			fieledRef := reflect.NewAt(
-				field.Type(),
-				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Port)
-			p.ports = append(p.ports, fieledRef)
-		}
-	}
-}
-
-//This method adds data to the SQLite database.
-func AddDataEntry(time sim.VTimeInSec, where, what string, value float64) {
-
-}
-
-func (p PerfAnalyzer) WithPathDir(path string) PerfAnalyzer {
-	p.dirPath = path
-	return p
-}
-
-func (p PerfAnalyzer) WithDBFileName(name string) PerfAnalyzer {
-	p.dbFilename = name
-	return p
-}
-
-func (p PerfAnalyzer) WithEngine(engine sim.Engine) PerfAnalyzer {
-	p.engine = engine
-	return p
+// AddDataEntry adds a data entry to the database. It directly writes into the
+// CSV file.
+func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
+	p.csvWriter.Write(
+		[]string{
+			fmt.Sprintf("%.10f", entry.Start),
+			fmt.Sprintf("%.10f", entry.End),
+			entry.Where,
+			entry.What,
+			fmt.Sprintf("%.10f", entry.Value),
+			entry.Unit,
+		})
 }

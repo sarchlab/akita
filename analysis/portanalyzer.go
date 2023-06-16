@@ -1,191 +1,218 @@
 package analysis
 
 import (
-	"log"
 	"math"
-	"os"
 
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/tebeka/atexit"
 )
 
-// PortBandwidthLogger is a hook for logging messages as they go across a Port
+// PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
-	dirPath    string
-	timeTeller sim.TimeTeller
-	lastTime   float64
-	period     float64
-	usePeriod  float64
-
-	ports map[string]*portInfo
-
-	portListFileOpen     bool
-	portListFile         *os.File
-	currentTraceFileOpen bool
-	currentTraceFile     *os.File
-}
-
-type portInfo struct {
-	name string
-	port sim.Port
-
-	startTime sim.VTimeInSec
-	endTime   sim.VTimeInSec
-
-	messageCounter      map[sim.VTimeInSec]int64
-	trafficBytesCounter map[sim.VTimeInSec]int64
-}
-type PortBandwidthLogger struct {
-	sim.LogHookBase
 	sim.TimeTeller
+	PerfLogger
 
-	name      string
-	startTime sim.VTimeInSec
-	endTime   sim.VTimeInSec
-	interval  sim.VTimeInSec
+	lastTime sim.VTimeInSec
+	period   sim.VTimeInSec
 
-	messageCounter      map[sim.VTimeInSec]int64
-	trafficBytesCounter map[sim.VTimeInSec]int64
-
-	logger *log.Logger
+	port           sim.Port
+	outTrafficByte uint64
+	outTrafficMsg  uint64
+	inTrafficByte  uint64
+	inTrafficMsg   uint64
 }
 
-// NewPortMsgLogger returns a new PortMsgLogger which will write into the logger
-func NewPortBandwidthLogger(
-	name string,
-	interval sim.VTimeInSec,
-	timeTeller sim.TimeTeller,
-	logger *log.Logger,
-) *PortBandwidthLogger {
-	h := new(PortBandwidthLogger)
+func NewPortAnalyzer(
+	tt sim.TimeTeller,
+	perfLogger PerfLogger,
+	period sim.VTimeInSec,
+) *PortAnalyzer {
+	h := &PortAnalyzer{
+		TimeTeller: tt,
+		PerfLogger: perfLogger,
+		period:     period,
+	}
 
-	h.name = name
-	h.logger = logger
-	h.TimeTeller = timeTeller
-	h.interval = interval
-	h.startTime = 0
-	h.endTime = h.CurrentTime()
-	h.messageCounter = make(map[sim.VTimeInSec]int64)
-	h.trafficBytesCounter = make(map[sim.VTimeInSec]int64)
+	atexit.Register(func() {
+		h.summarizePeriod()
+	})
 
 	return h
 }
 
 // Func writes the message information into the logger
-func (h *PortBandwidthLogger) Func(ctx sim.HookCtx) {
+func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	msg, ok := ctx.Item.(sim.Msg)
 	if !ok {
 		return
 	}
 
 	now := h.CurrentTime()
+	lastPeriodEndTime := h.periodEndTime(h.lastTime)
 
-	floorEndTime := sim.VTimeInSec(math.Round(math.Floor(float64(now/h.interval))*float64(h.interval)*1e10) / 1e10)
-	h.messageCount(floorEndTime)
-	h.trafficBytesCount(msg, floorEndTime)
-
-	diff := sim.VTimeInSec(math.Round(float64(floorEndTime-h.startTime)*1e10) / 1e10)
-
-	msgID := msg.Meta().ID
-	if msgID == "END" {
-		h.lastMsg(floorEndTime, ctx)
-	} else if diff >= 2*h.interval {
-		h.moreThanTwoInterval(floorEndTime, ctx)
-	} else if diff >= h.interval {
-		h.oneInterval(floorEndTime, ctx)
+	if now > lastPeriodEndTime {
+		h.summarizePeriod()
 	}
-}
 
-func (h *PortBandwidthLogger) messageCount(
-	floorEndTime sim.VTimeInSec,
-) {
-	_, has := h.messageCounter[floorEndTime]
-	if has == false {
-		h.messageCounter[floorEndTime] = 1
-	}
-	h.messageCounter[floorEndTime] = h.messageCounter[floorEndTime] + 1
-}
-
-func (h *PortBandwidthLogger) trafficBytesCount(
-	msg sim.Msg,
-	floorEndTime sim.VTimeInSec,
-) {
-	_, has := h.trafficBytesCounter[floorEndTime]
-	if has == false {
-		h.trafficBytesCounter[floorEndTime] = int64(msg.Meta().TrafficBytes)
-	}
-	h.trafficBytesCounter[floorEndTime] =
-		h.trafficBytesCounter[floorEndTime] + int64(msg.Meta().TrafficBytes)
-}
-
-func (h *PortBandwidthLogger) lastMsg(
-	floorEndTime sim.VTimeInSec,
-	ctx sim.HookCtx,
-) {
-	msg, _ := ctx.Item.(sim.Msg)
-	for time, _ := range h.messageCounter {
-		if time < floorEndTime {
-			h.logger.Printf("%.10f, %s,%s, %d, %d\n",
-				time,
-				ctx.Domain.(sim.Port).Name(),
-				ctx.Pos.Name,
-				h.messageCounter[time],
-				h.trafficBytesCounter[time])
-			delete(h.messageCounter, time)
-			delete(h.trafficBytesCounter, time)
-		} else {
-			h.logger.Printf("%.10f, %s,%s, %d, %d\n",
-				msg.Meta().RecvTime,
-				ctx.Domain.(sim.Port).Name(),
-				ctx.Pos.Name,
-				h.messageCounter[floorEndTime]-1,
-				h.trafficBytesCounter[floorEndTime])
-			delete(h.messageCounter, time)
-			delete(h.trafficBytesCounter, time)
-		}
-	}
-}
-
-func (h *PortBandwidthLogger) oneInterval(
-	floorEndTime sim.VTimeInSec,
-	ctx sim.HookCtx,
-) {
-	_, has := h.messageCounter[h.startTime]
-	if has != false {
-		h.logger.Printf("%.10f, %s,%s, %d, %d\n",
-			floorEndTime,
-			ctx.Domain.(sim.Port).Name(),
-			ctx.Pos.Name,
-			h.messageCounter[h.startTime],
-			h.trafficBytesCounter[h.startTime])
-
-		delete(h.messageCounter, h.startTime)
-		delete(h.trafficBytesCounter, h.startTime)
-
-		h.startTime = sim.VTimeInSec(floorEndTime)
+	h.lastTime = now
+	if msg.Meta().Dst == h.port {
+		h.inTrafficByte += uint64(msg.Meta().TrafficBytes)
+		h.inTrafficMsg++
 	} else {
-		h.startTime = floorEndTime
+		h.outTrafficByte += uint64(msg.Meta().TrafficBytes)
+		h.outTrafficMsg++
 	}
 }
 
-func (h *PortBandwidthLogger) moreThanTwoInterval(
-	floorEndTime sim.VTimeInSec,
-	ctx sim.HookCtx,
-) {
-	_, has := h.messageCounter[h.startTime]
-	if has != false {
+func (h *PortAnalyzer) summarizePeriod() {
+	startTime := h.periodStartTime(h.lastTime)
+	endTime := h.periodEndTime(h.lastTime)
 
-		h.logger.Printf("%.10f, %s,%s, %d, %d\n",
-			h.startTime+h.interval,
-			ctx.Domain.(sim.Port).Name(),
-			ctx.Pos.Name,
-			h.messageCounter[h.startTime],
-			h.trafficBytesCounter[h.startTime])
+	if h.inTrafficMsg > 0 {
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start: startTime,
+			End:   endTime,
+			Where: h.port.Name(),
+			What:  "IncomingByte",
+			Value: float64(h.inTrafficByte),
+			Unit:  "Byte",
+		})
 
-		delete(h.messageCounter, h.startTime)
-		delete(h.trafficBytesCounter, h.startTime)
-
-		h.startTime = sim.VTimeInSec(floorEndTime)
-	} else {
-		h.startTime = floorEndTime
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start: startTime,
+			End:   endTime,
+			Where: h.port.Name(),
+			What:  "IncomingMsg",
+			Value: float64(h.inTrafficMsg),
+			Unit:  "Msg",
+		})
 	}
+
+	if h.outTrafficMsg > 0 {
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start: startTime,
+			End:   endTime,
+			Where: h.port.Name(),
+			What:  "OutGoingByte",
+			Value: float64(h.outTrafficByte),
+			Unit:  "Byte",
+		})
+
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start: startTime,
+			End:   endTime,
+			Where: h.port.Name(),
+			What:  "OutGoingMsg",
+			Value: float64(h.outTrafficMsg),
+			Unit:  "Msg",
+		})
+	}
+
+	h.inTrafficByte = 0
+	h.inTrafficMsg = 0
+	h.outTrafficByte = 0
+	h.outTrafficMsg = 0
 }
+
+func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
+	return sim.VTimeInSec(math.Floor(float64(t / h.period)))
+}
+
+func (h *PortAnalyzer) periodEndTime(t sim.VTimeInSec) sim.VTimeInSec {
+	return h.periodStartTime(t) + h.period
+}
+
+// func (h *PortAnalyzer) messageCount(
+// 	floorEndTime sim.VTimeInSec,
+// ) {
+// 	_, has := h.messageCounter[floorEndTime]
+// 	if has == false {
+// 		h.messageCounter[floorEndTime] = 1
+// 	}
+// 	h.messageCounter[floorEndTime] = h.messageCounter[floorEndTime] + 1
+// }
+
+// func (h *PortAnalyzer) trafficBytesCount(
+// 	msg sim.Msg,
+// 	floorEndTime sim.VTimeInSec,
+// ) {
+// 	_, has := h.trafficBytesCounter[floorEndTime]
+// 	if has == false {
+// 		h.trafficBytesCounter[floorEndTime] = int64(msg.Meta().TrafficBytes)
+// 	}
+// 	h.trafficBytesCounter[floorEndTime] =
+// 		h.trafficBytesCounter[floorEndTime] + int64(msg.Meta().TrafficBytes)
+// }
+
+// func (h *PortAnalyzer) lastMsg(
+// 	floorEndTime sim.VTimeInSec,
+// 	ctx sim.HookCtx,
+// ) {
+// 	msg, _ := ctx.Item.(sim.Msg)
+// 	for time, _ := range h.messageCounter {
+// 		if time < floorEndTime {
+// 			h.logger.Printf("%.10f, %s,%s, %d, %d\n",
+// 				time,
+// 				ctx.Domain.(sim.Port).Name(),
+// 				ctx.Pos.Name,
+// 				h.messageCounter[time],
+// 				h.trafficBytesCounter[time])
+// 			delete(h.messageCounter, time)
+// 			delete(h.trafficBytesCounter, time)
+// 		} else {
+// 			h.logger.Printf("%.10f, %s,%s, %d, %d\n",
+// 				msg.Meta().RecvTime,
+// 				ctx.Domain.(sim.Port).Name(),
+// 				ctx.Pos.Name,
+// 				h.messageCounter[floorEndTime]-1,
+// 				h.trafficBytesCounter[floorEndTime])
+// 			delete(h.messageCounter, time)
+// 			delete(h.trafficBytesCounter, time)
+// 		}
+// 	}
+// }
+
+// func (h *PortBandwidthLogger) oneInterval(
+// 	floorEndTime sim.VTimeInSec,
+// 	ctx sim.HookCtx,
+// ) {
+// 	_, has := h.messageCounter[h.startTime]
+// 	if has != false {
+// 		h.logger.Printf("%.10f, %s,%s, %d, %d\n",
+// 			floorEndTime,
+// 			ctx.Domain.(sim.Port).Name(),
+// 			ctx.Pos.Name,
+// 			h.messageCounter[h.startTime],
+// 			h.trafficBytesCounter[h.startTime])
+
+// 		delete(h.messageCounter, h.startTime)
+// 		delete(h.trafficBytesCounter, h.startTime)
+
+// 		h.startTime = sim.VTimeInSec(floorEndTime)
+// 	} else {
+// 		h.startTime = floorEndTime
+// 	}
+// }
+
+// func (h *PortBandwidthLogger) moreThanTwoInterval(
+// 	floorEndTime sim.VTimeInSec,
+// 	ctx sim.HookCtx,
+// ) {
+// 	_, has := h.messageCounter[h.startTime]
+// 	if has != false {
+
+// 		h.logger.Printf("%.10f, %s,%s, %d, %d\n",
+// 			h.startTime+h.interval,
+// 			ctx.Domain.(sim.Port).Name(),
+// 			ctx.Pos.Name,
+// 			h.messageCounter[h.startTime],
+// 			h.trafficBytesCounter[h.startTime])
+
+// 		delete(h.messageCounter, h.startTime)
+// 		delete(h.trafficBytesCounter, h.startTime)
+
+// 		h.startTime = sim.VTimeInSec(floorEndTime)
+// 	} else {
+// 		h.startTime = floorEndTime
+// 	}
+// }

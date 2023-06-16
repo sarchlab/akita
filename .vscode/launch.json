@@ -32,6 +32,13 @@
             "program": "${workspaceFolder}"
         },
         {
+            "name": "Test github.com/sarchlab/analysis",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/analysis"
+        },
+        {
             "name": "Test gitlab.com/akita/v3/sim/bottleneckanalysis",
             "type": "go",
             "request": "launch",
