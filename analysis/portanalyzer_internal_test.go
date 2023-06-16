@@ -83,6 +83,40 @@ var _ = Describe("Port Analyzer", func() {
 		})
 	})
 
+	It("should log traffic if only a middle period has value", func() {
+		msg := &sampleMsg{
+			meta: sim.MsgMeta{
+				TrafficBytes: 100,
+			},
+		}
+
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(20.5))
+		portAnalyzer.Func(sim.HookCtx{
+			Item:   msg,
+			Domain: port,
+		})
+
+		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
+			Start: 20.0,
+			End:   21.0,
+			Where: "PortName",
+			What:  "OutGoingByte",
+			Value: 100.0,
+			Unit:  "Byte",
+		})
+
+		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
+			Start: 20.0,
+			End:   21.0,
+			Where: "PortName",
+			What:  "OutGoingMsg",
+			Value: 1.0,
+			Unit:  "Msg",
+		})
+
+		portAnalyzer.summarizePeriod()
+	})
+
 	It("should log incoming and outgoing traffic", func() {
 		outMsg := &sampleMsg{
 			meta: sim.MsgMeta{
