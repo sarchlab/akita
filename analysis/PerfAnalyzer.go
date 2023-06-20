@@ -7,6 +7,9 @@ import (
 	"reflect"
 	"unsafe"
 
+	// "reflect"
+	// "unsafe"
+
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -37,20 +40,33 @@ type PerfAnalyzer struct {
 }
 
 // NewPerfAnalyzer creates a new PerfAnalyzer with configuration parameters.
-func NewPerfAnalyzer(dbFilename string, period sim.VTimeInSec) *PerfAnalyzer {
+func NewPerfAnalyzer(dbFilename string, period sim.VTimeInSec, engine sim.Engine) *PerfAnalyzer {
 	p := &PerfAnalyzer{
 		period: period,
 	}
+
+	p.engine = engine
 
 	var err error
 	p.dbFile, err = os.Create(dbFilename)
 	if err != nil {
 		panic(err)
 	}
-	p.csvWriter = csv.NewWriter(p.dbFile)
-	p.csvWriter.Write(
-		[]string{"Start", "End", "Where", "What", "Value", "Unit"})
 
+	p.dbFile, err = os.OpenFile(dbFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		panic(err)
+	}
+	// defer p.dbFile.Close()
+
+	p.csvWriter = csv.NewWriter(p.dbFile)
+
+	header := []string{"Start", "End", "Where", "What", "Value", "Unit"}
+	err = p.csvWriter.Write(header)
+	if err != nil {
+		panic(err)
+	}
+	p.csvWriter.Flush()
 	return p
 }
 
@@ -61,7 +77,7 @@ func (p *PerfAnalyzer) RegisterEngine(e sim.Engine) {
 
 // RegisterComponent register a component to be monitored.
 func (p *PerfAnalyzer) RegisterComponent(c sim.Component) {
-	p.registerBuffers(c)
+	// p.registerBuffers(c)
 	p.registerPorts(c)
 }
 
@@ -74,6 +90,8 @@ func (p *PerfAnalyzer) registerBuffers(c sim.Component) {
 }
 
 func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
+	lastTime := 0.0
+	usePeriod := false
 	v := reflect.ValueOf(c).Elem()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
@@ -87,11 +105,9 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 				unsafe.Pointer(field.UnsafeAddr()),
 			).Elem().Interface().(sim.Buffer)
 
-			bufferAnalyzer := MakeBufferAnalyzerBuilder().
-				WithTimeTeller(p.engine).
-				WithDirectoryPath(".").
-				WithPeriod(float64(p.period)).
-				Build()
+			bufferAnalyzer := NewBufferAnalyzer(
+				p.engine, usePeriod, p, float64(p.period), lastTime,
+			)
 			fieldRef.AcceptHook(bufferAnalyzer)
 		}
 	}
@@ -100,7 +116,7 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 func (p *PerfAnalyzer) registerPorts(c sim.Component) {
 	for _, port := range c.Ports() {
 		portAnalyzer := NewPortAnalyzer(
-			p.engine, p, p.period,
+			port, p.engine, p, p.period,
 		)
 		port.AcceptHook(portAnalyzer)
 	}
@@ -118,4 +134,5 @@ func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 			fmt.Sprintf("%.10f", entry.Value),
 			entry.Unit,
 		})
+	p.csvWriter.Flush()
 }

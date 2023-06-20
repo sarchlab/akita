@@ -23,11 +23,13 @@ type PortAnalyzer struct {
 }
 
 func NewPortAnalyzer(
+	port sim.Port,
 	tt sim.TimeTeller,
 	perfLogger PerfLogger,
 	period sim.VTimeInSec,
 ) *PortAnalyzer {
 	h := &PortAnalyzer{
+		port:       port,
 		TimeTeller: tt,
 		PerfLogger: perfLogger,
 		period:     period,
@@ -115,7 +117,7 @@ func (h *PortAnalyzer) summarizePeriod() {
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
-	return sim.VTimeInSec(math.Floor(float64(t / h.period)))
+	return sim.VTimeInSec(math.Floor(float64(t/h.period))) * h.period
 }
 
 func (h *PortAnalyzer) periodEndTime(t sim.VTimeInSec) sim.VTimeInSec {

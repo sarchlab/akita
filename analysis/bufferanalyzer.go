@@ -1,34 +1,28 @@
 package analysis
 
 import (
-	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"reflect"
 	"unsafe"
 
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/tebeka/atexit"
 )
 
 // BufferAnalyzer can use buffer levels to analyze the bottleneck of the system.
 type BufferAnalyzer struct {
-	dirPath    string
 	timeTeller sim.TimeTeller
-	lastTime   float64
-	period     float64
-	usePeriod  bool
+	PerfLogger
 
-	buffers map[string]*bufferInfo // map of buffer name to buffer
+	lastTime  float64
+	period    float64
+	usePeriod bool
 
-	bufferListFileOpen   bool
-	bufferListFile       *os.File
-	currentTraceFileOpen bool
-	currentTraceFile     *os.File
+	buffer *bufferInfo
 }
 
 type bufferInfo struct {
-	id                           int
+	// id                           int
 	buf                          sim.Buffer
 	lastBufLevel                 int
 	lastRecordTime               float64
@@ -37,43 +31,145 @@ type bufferInfo struct {
 	activeInLastPeriod           bool
 }
 
-func (b bufferInfo) getAverageBufLevel() float64 {
-	sum := 0.0
-	durationSum := 0.0
-	for level, duration := range b.bufLevelToDuration {
-		sum += float64(level) * duration
-		durationSum += duration
+// NewBufferAnalyzer
+func NewBufferAnalyzer(
+	tt sim.TimeTeller,
+	usePeriod bool,
+	perfLogger PerfLogger,
+	period float64,
+	lastTime float64,
+) *BufferAnalyzer {
+	bufferInfo := &bufferInfo{
+		buf:                          nil,
+		lastBufLevel:                 0,
+		lastRecordTime:               0.0,
+		bufLevelToDuration:           make(map[int]float64),
+		lastPeriodBufLevelToDuration: make(map[int]float64),
+		activeInLastPeriod:           false,
 	}
 
-	if durationSum == 0.0 {
-		return 0.0
+	b := &BufferAnalyzer{
+		PerfLogger: perfLogger,
+		timeTeller: tt,
+		usePeriod:  usePeriod,
+		period:     period,
+		lastTime:   0.0,
+		buffer:     bufferInfo,
 	}
 
-	return sum / durationSum
+	atexit.Register(func() {
+		b.Report()
+	})
+
+	return b
 }
 
-func (b bufferInfo) getAverageBufLevelInPeriod() float64 {
-	sum := 0.0
-	durationSum := 0.0
-	for level, duration := range b.lastPeriodBufLevelToDuration {
-		sum += float64(level) * duration
-		durationSum += duration
+// Func is a function that records buffer level change.
+func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
+	buf := ctx.Domain.(sim.Buffer)
+	now := float64(b.timeTeller.CurrentTime())
+
+	if b.usePeriod {
+		if math.Floor(now/b.period) != math.Floor(b.lastTime/b.period) {
+			b.reportPeriod()
+			b.resetPeriod()
+		}
 	}
 
-	if durationSum == 0.0 {
-		return 0.0
+	bufInfo := b.buffer
+	if bufInfo.buf == nil {
+		panic("buffer not created by BufferAnalyzer")
 	}
 
-	return sum / durationSum
+	duration := now - bufInfo.lastRecordTime
+	currentLevel := buf.Size()
+
+	bufInfo.bufLevelToDuration[bufInfo.lastBufLevel] += duration
+
+	if b.usePeriod {
+		periodStartTime := math.Floor(now/b.period) * b.period
+		durationInPeriod := now - periodStartTime
+
+		if duration > durationInPeriod {
+			duration = durationInPeriod
+		}
+
+		bufInfo.lastPeriodBufLevelToDuration[bufInfo.lastBufLevel] += duration
+	}
+
+	bufInfo.activeInLastPeriod = true
+	bufInfo.lastRecordTime = now
+	bufInfo.lastBufLevel = currentLevel
+
+	b.lastTime = now
 }
 
-// CreateBuffer creates a buffer to be analyzed
-func (b *BufferAnalyzer) CreateBuffer(name string, capacity int) sim.Buffer {
-	buf := sim.NewBuffer(name, capacity)
+func (b *BufferAnalyzer) reportPeriod() {
+	now := float64(b.timeTeller.CurrentTime())
+	lastPeriodEndTime := b.lastPeriodEndTime(now)
 
-	b.AddBuffer(buf)
+	b.terminatePeriod(b.buffer, lastPeriodEndTime)
 
-	return buf
+	b.dumpPeriodReport(lastPeriodEndTime)
+}
+
+func (b *BufferAnalyzer) lastPeriodEndTime(now float64) float64 {
+	return math.Floor(now/b.period) * b.period
+}
+
+func (b *BufferAnalyzer) terminatePeriod(
+	bufInfo *bufferInfo,
+	periodEndTime float64,
+) {
+	bufInfo.bufLevelToDuration[bufInfo.lastBufLevel] +=
+		periodEndTime - bufInfo.lastRecordTime
+	bufInfo.lastRecordTime = periodEndTime
+}
+
+func (b *BufferAnalyzer) dumpPeriodReport(time float64) {
+	if b.buffer.activeInLastPeriod {
+		b.reportBufferInfoPeriodly(b.buffer, time)
+	}
+}
+
+func (b *BufferAnalyzer) reportBufferInfoPeriodly(
+	buffer *bufferInfo,
+	period float64,
+) {
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(period),
+		End:   sim.VTimeInSec(period),
+		Where: b.buffer.buf.Name(),
+		What:  "lastBufLevel",
+		Value: float64(b.buffer.lastBufLevel),
+		Unit:  "BuffInfo",
+	})
+
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(period),
+		End:   sim.VTimeInSec(period),
+		Where: b.buffer.buf.Name(),
+		What:  "AverageBufLevel",
+		Value: b.getAverageBufLevel(),
+		Unit:  "BuffInfo",
+	})
+
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(period),
+		End:   sim.VTimeInSec(period),
+		Where: b.buffer.buf.Name(),
+		What:  "AverageBufLevelInPeriod",
+		Value: b.getAverageBufLevelInPeriod(),
+		Unit:  "BuffInfo",
+	})
+}
+
+func (b *BufferAnalyzer) resetPeriod() {
+	now := float64(b.timeTeller.CurrentTime())
+	b.buffer.lastPeriodBufLevelToDuration = make(map[int]float64)
+	b.buffer.lastBufLevel = b.buffer.buf.Size()
+	b.buffer.lastRecordTime = now
+	b.buffer.activeInLastPeriod = false
 }
 
 // CreateBufferedPort creates a port with an incoming buffer that is monitored
@@ -92,17 +188,13 @@ func (b *BufferAnalyzer) CreateBufferedPort(
 func (b *BufferAnalyzer) AddBuffer(buf sim.Buffer) {
 	buf.AcceptHook(b)
 	bufInfo := &bufferInfo{
-		id:                           len(b.buffers),
 		buf:                          buf,
 		lastBufLevel:                 buf.Size(),
 		lastRecordTime:               float64(b.timeTeller.CurrentTime()),
 		bufLevelToDuration:           make(map[int]float64),
 		lastPeriodBufLevelToDuration: make(map[int]float64),
 	}
-	b.buffers[buf.Name()] = bufInfo
-
-	fmt.Fprintf(b.bufferListFile, "%d,%s,%d\n",
-		bufInfo.id, buf.Name(), buf.Capacity())
+	b.buffer = bufInfo
 }
 
 // AddPort adds a port to be analyzed.
@@ -137,57 +229,8 @@ func (b *BufferAnalyzer) addComponentOrPortBuffers(c interface{}) {
 	}
 }
 
-// Func is a function that records buffer level change.
-func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
-	if b.bufferListFileOpen {
-		err := b.bufferListFile.Close()
-		if err != nil {
-			panic(err)
-		}
-
-		b.bufferListFileOpen = false
-	}
-
-	buf := ctx.Domain.(sim.Buffer)
-	now := float64(b.timeTeller.CurrentTime())
-
-	if b.usePeriod {
-		if math.Floor(now/b.period) != math.Floor(b.lastTime/b.period) {
-			b.reportPeriod()
-			b.resetPeriod()
-		}
-	}
-
-	bufInfo, ok := b.buffers[buf.Name()]
-	if !ok {
-		panic("buffer not created by BufferAnalyzer")
-	}
-
-	duration := now - bufInfo.lastRecordTime
-	currentLevel := buf.Size()
-
-	bufInfo.bufLevelToDuration[bufInfo.lastBufLevel] += duration
-
-	if b.usePeriod {
-		periodStartTime := math.Floor(now/b.period) * b.period
-		durationInPeriod := now - periodStartTime
-
-		if duration > durationInPeriod {
-			duration = durationInPeriod
-		}
-
-		bufInfo.lastPeriodBufLevelToDuration[bufInfo.lastBufLevel] += duration
-	}
-
-	bufInfo.activeInLastPeriod = true
-	bufInfo.lastRecordTime = now
-	bufInfo.lastBufLevel = currentLevel
-
-	b.lastTime = now
-}
-
 func (b *BufferAnalyzer) getBufAverageLevel(name string) float64 {
-	return b.buffers[name].getAverageBufLevel()
+	return b.getAverageBufLevel()
 }
 
 func (b *BufferAnalyzer) getInPeriodBufAverageLevel(name string) float64 {
@@ -195,97 +238,20 @@ func (b *BufferAnalyzer) getInPeriodBufAverageLevel(name string) float64 {
 		panic("period mode not enabled")
 	}
 
-	return b.buffers[name].getAverageBufLevelInPeriod()
+	return b.getAverageBufLevelInPeriod()
 }
 
-func (b *BufferAnalyzer) lastPeriodEndTime(now float64) float64 {
-	return math.Floor(now/b.period) * b.period
-}
+// func (b *BufferAnalyzer) reportBufInfo(bufInfo *bufferInfo) {
+// 	// fmt.Fprintln(b.logger.Writer(),
+// 	// 	"name, time, current, average, period average, capacity")
 
-func (b *BufferAnalyzer) reportPeriod() {
-	now := float64(b.timeTeller.CurrentTime())
-	lastPeriodEndTime := b.lastPeriodEndTime(now)
-
-	for _, bufInfo := range b.buffers {
-		b.terminatePeriod(bufInfo, lastPeriodEndTime)
-	}
-
-	b.dumpPeriodReport(lastPeriodEndTime)
-}
-
-func (b *BufferAnalyzer) terminatePeriod(
-	bufInfo *bufferInfo,
-	periodEndTime float64,
-) {
-	bufInfo.bufLevelToDuration[bufInfo.lastBufLevel] +=
-		periodEndTime - bufInfo.lastRecordTime
-	bufInfo.lastRecordTime = periodEndTime
-}
-
-func (b *BufferAnalyzer) resetPeriod() {
-	now := float64(b.timeTeller.CurrentTime())
-	for _, bufInfo := range b.buffers {
-		bufInfo.lastPeriodBufLevelToDuration = make(map[int]float64)
-		bufInfo.lastBufLevel = bufInfo.buf.Size()
-		bufInfo.lastRecordTime = now
-		bufInfo.activeInLastPeriod = false
-	}
-}
-
-func (b *BufferAnalyzer) dumpPeriodReport(time float64) {
-	b.changeTraceFile(time)
-
-	for _, bufInfo := range b.buffers {
-		if !bufInfo.activeInLastPeriod {
-			continue
-		}
-
-		b.reportBufInfo(bufInfo)
-	}
-}
-
-func (b *BufferAnalyzer) changeTraceFile(time float64) {
-	var err error
-
-	if b.currentTraceFileOpen {
-		err = b.currentTraceFile.Close()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	b.currentTraceFile, err = os.OpenFile(
-		fmt.Sprintf("%s/buffer_level_%.10f.csv", b.dirPath, time),
-		os.O_CREATE|os.O_WRONLY,
-		0644,
-	)
-
-	if err != nil {
-		panic(err)
-	}
-
-	b.currentTraceFileOpen = true
-}
-
-func (b *BufferAnalyzer) reportWithTime(time float64) {
-	b.changeTraceFile(time)
-
-	for _, bufInfo := range b.buffers {
-		b.reportBufInfo(bufInfo)
-	}
-}
-
-func (b *BufferAnalyzer) reportBufInfo(bufInfo *bufferInfo) {
-	// fmt.Fprintln(b.logger.Writer(),
-	// 	"name, time, current, average, period average, capacity")
-
-	fmt.Fprintf(b.currentTraceFile,
-		"%d, %d, %.10f, %.10f\n",
-		bufInfo.id,
-		bufInfo.lastBufLevel,
-		bufInfo.getAverageBufLevel(),
-		bufInfo.getAverageBufLevelInPeriod())
-}
+// 	fmt.Fprintf(
+// 		"%s, %d, %.10f, %.10f\n",
+// 		b.buffer.buf.Name(),
+// 		b.buffer.lastBufLevel,
+// 		b.getAverageBufLevel(),
+// 		b.getAverageBufLevelInPeriod())
+// }
 
 // Report will dump the buffer level information.
 func (b *BufferAnalyzer) Report() {
@@ -293,104 +259,94 @@ func (b *BufferAnalyzer) Report() {
 	b.reportWithTime(now)
 }
 
-// BufferAnalyzerBuilder can build an buffer analyzer
-type BufferAnalyzerBuilder struct {
-	dirPath    string
-	timeTeller sim.TimeTeller
-	usePeriod  bool
-	period     float64
-}
+func (b *BufferAnalyzer) reportWithTime(time float64) {
+	vTime := sim.VTimeInSec(time)
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(vTime),
+		End:   sim.VTimeInSec(vTime),
+		Where: b.buffer.buf.Name(),
+		What:  "lastBufLevel",
+		Value: float64(b.buffer.lastBufLevel),
+		Unit:  "BuffInfo",
+	})
 
-// MakeBufferAnalyzerBuilder returns a new BufferAnalyzerBuilder with default
-// parameters.
-func MakeBufferAnalyzerBuilder() BufferAnalyzerBuilder {
-	return BufferAnalyzerBuilder{
-		dirPath:    ".",
-		timeTeller: nil,
-		usePeriod:  false,
-		period:     0.0,
-	}
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(vTime),
+		End:   sim.VTimeInSec(vTime),
+		Where: b.buffer.buf.Name(),
+		What:  "AverageBufLevel",
+		Value: b.getAverageBufLevel(),
+		Unit:  "BuffInfo",
+	})
+
+	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+		Start: sim.VTimeInSec(vTime),
+		End:   sim.VTimeInSec(vTime),
+		Where: b.buffer.buf.Name(),
+		What:  "AverageBufLevelInPeriod",
+		Value: b.getAverageBufLevelInPeriod(),
+		Unit:  "BuffInfo",
+	})
 }
 
 // WithTimeTeller sets the time teller to be used by the buffer analyzer.
-func (b BufferAnalyzerBuilder) WithTimeTeller(
-	timeTeller sim.TimeTeller,
-) BufferAnalyzerBuilder {
-	b.timeTeller = timeTeller
-	return b
-}
-
-// WithDirectoryPath sets the directory path that stores the
-func (b BufferAnalyzerBuilder) WithDirectoryPath(
-	path string,
-) BufferAnalyzerBuilder {
-	b.dirPath = path
-	return b
-}
+// func (b BufferAnalyzerBuilder) WithTimeTeller(
+// 	timeTeller sim.TimeTeller,
+// ) BufferAnalyzerBuilder {
+// 	b.timeTeller = timeTeller
+// 	return b
+// }
 
 // WithPeriod sets the period to be used by the buffer analyzer. Sets the period
 // to 0 or negative will disable periodic reporting.
-func (b BufferAnalyzerBuilder) WithPeriod(
-	period float64,
-) BufferAnalyzerBuilder {
-	if period > 0 {
-		b.usePeriod = true
-		b.period = period
-	} else {
-		b.usePeriod = false
+// func (b BufferAnalyzerBuilder) WithPeriod(
+// 	period float64,
+// ) BufferAnalyzerBuilder {
+// 	if period > 0 {
+// 		b.usePeriod = true
+// 		b.period = period
+// 	} else {
+// 		b.usePeriod = false
+// 	}
+
+// 	return b
+// }
+
+func (b *BufferAnalyzer) getAverageBufLevelInPeriod() float64 {
+	sum := 0.0
+	durationSum := 0.0
+	for level, duration := range b.buffer.lastPeriodBufLevelToDuration {
+		sum += float64(level) * duration
+		durationSum += duration
 	}
 
-	return b
+	if durationSum == 0.0 {
+		return 0.0
+	}
+
+	return sum / durationSum
 }
 
-// Build with build the buffer analyzer.
-func (b BufferAnalyzerBuilder) Build() *BufferAnalyzer {
-	var err error
-
-	if !filepath.IsAbs(b.dirPath) {
-		b.dirPath, err = filepath.Abs(b.dirPath)
-		if err != nil {
-			panic(err)
-		}
+func (b *BufferAnalyzer) getAverageBufLevel() float64 {
+	sum := 0.0
+	durationSum := 0.0
+	for level, duration := range b.buffer.bufLevelToDuration {
+		sum += float64(level) * duration
+		durationSum += duration
 	}
 
-	b.prepareDirectory(err)
-
-	ba := &BufferAnalyzer{
-		dirPath:    b.dirPath,
-		timeTeller: b.timeTeller,
-		usePeriod:  b.usePeriod,
-		period:     b.period,
-		lastTime:   0.0,
-		buffers:    make(map[string]*bufferInfo),
+	if durationSum == 0.0 {
+		return 0.0
 	}
 
-	ba.bufferListFile, err = os.OpenFile(
-		ba.dirPath+"/buffer_list.csv",
-		os.O_CREATE|os.O_WRONLY,
-		0644)
-	if err != nil {
-		panic(err)
-	}
-	ba.bufferListFileOpen = true
-
-	return ba
+	return sum / durationSum
 }
 
-func (b BufferAnalyzerBuilder) prepareDirectory(err error) {
-	err = os.MkdirAll(b.dirPath, 0755)
-	if err != nil {
-		panic(err)
-	}
+// CreateBuffer creates a buffer to be analyzed
+func (b *BufferAnalyzer) CreateBuffer(name string, capacity int) sim.Buffer {
+	buf := sim.NewBuffer(name, capacity)
 
-	file, err := filepath.Glob("buffer*.csv")
-	if err != nil {
-		panic(err)
-	}
-	for _, f := range file {
-		err = os.Remove(f)
-		if err != nil {
-			panic(err)
-		}
-	}
+	b.AddBuffer(buf)
+
+	return buf
 }
