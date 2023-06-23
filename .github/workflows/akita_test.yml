@@ -4,9 +4,9 @@ on: push
 
 jobs:
   akitartm_compile:
-    name:  AkitaRTM Compilation
+    name: AkitaRTM Compilation
     runs-on: ubuntu-latest
-    steps: 
+    steps:
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -24,9 +24,9 @@ jobs:
         run: npm run build
 
   daisen_compile:
-    name:  Daisen Compilation
+    name: Daisen Compilation
     runs-on: ubuntu-latest
-    steps: 
+    steps:
       - name: Checkout
         uses: actions/checkout@v2
 
@@ -53,7 +53,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: 'stable'
+          go-version: "stable"
 
       - name: Build
         run: go build ./...
@@ -61,7 +61,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: 'latest'
+          version: "latest"
           args: --timeout=10m
 
       - name: Install Ginkgo
@@ -73,7 +73,7 @@ jobs:
   akita_unit_test:
     name: Akita Unit Test
     needs: akita_compile
-    runs-on: 
+    runs-on:
       group: Marin
     steps:
       - name: Checkout
@@ -82,7 +82,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: 'stable'
+          go-version: "stable"
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
@@ -90,11 +90,9 @@ jobs:
       - name: Unit Test
         run: ginkgo -r
 
-
   noc_acceptance_test:
     name: NoC Acceptance Test
-    runs-on: 
-      group: Marin
+    runs-on: Github-Large-1
     needs: akita_unit_test
     steps:
       - name: Checkout
@@ -103,21 +101,20 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: 'stable'
+          go-version: "stable"
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-        
+          python-version: "3.10"
+
       - name: Run Acceptance Test
         working-directory: ./noc/acceptance
         run: python acceptance_test.py
 
   mem_acceptance_test:
     name: Mem Acceptance Test
-    runs-on: 
-      group: Marin
+    runs-on: Github-Large-1
     needs: akita_unit_test
     steps:
       - name: Checkout
@@ -126,15 +123,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: 'stable'
+          go-version: "stable"
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-        
+          python-version: "3.10"
+
       - name: Run Acceptance Test
         working-directory: ./mem/
         run: python acceptance_test.py
-
-
