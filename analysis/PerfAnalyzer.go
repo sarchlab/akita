@@ -7,9 +7,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	// "reflect"
-	// "unsafe"
-
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -117,18 +114,23 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 
 func (p *PerfAnalyzer) registerPorts(c sim.Component) {
 	for _, port := range c.Ports() {
-		portAnalyzer := NewPortAnalyzer(
-			port, p.engine, p, p.period,
-		)
-
-		port.AcceptHook(portAnalyzer)
+		p.RegisterPort(port)
 	}
+}
+
+// RegisterPort registers a port to be monitored.
+func (p *PerfAnalyzer) RegisterPort(port sim.Port) {
+	portAnalyzer := NewPortAnalyzer(
+		port, p.engine, p, p.period,
+	)
+
+	port.AcceptHook(portAnalyzer)
 }
 
 // AddDataEntry adds a data entry to the database. It directly writes into the
 // CSV file.
 func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
-	p.csvWriter.Write(
+	err := p.csvWriter.Write(
 		[]string{
 			fmt.Sprintf("%.10f", entry.Start),
 			fmt.Sprintf("%.10f", entry.End),
@@ -137,5 +139,9 @@ func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 			fmt.Sprintf("%.10f", entry.Value),
 			entry.Unit,
 		})
+	if err != nil {
+		panic(err)
+	}
+
 	p.csvWriter.Flush()
 }
