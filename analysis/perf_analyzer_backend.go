@@ -31,7 +31,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 	p := &CSVBackend{}
 
 	var err error
-	p.dbFile, err = os.Create(dbFilename)
+	p.dbFile, err = os.Create(dbFilename + ".csv")
 	if err != nil {
 		panic(err)
 	}
@@ -99,11 +99,15 @@ func NewSQLitePerfAnalyzerBackend(
 		batchSize: 50000,
 	}
 
-	p.createDatabase(dbFilename)
+	p.createDatabase(dbFilename + ".sqlite3")
 	p.prepareStatement()
 
 	atexit.Register(func() {
 		p.Flush()
+		err := p.Close()
+		if err != nil {
+			panic(err)
+		}
 	})
 
 	return p
@@ -155,7 +159,10 @@ func (p *SQLiteBackend) createDatabase(dbFilename string) {
 
 	_, err = os.Stat(dbFilename)
 	if err == nil {
-		panic(fmt.Sprintf("file %s already exists", dbFilename))
+		err = os.Remove(dbFilename)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	p.DB, err = sql.Open("sqlite3", dbFilename)
@@ -164,13 +171,6 @@ func (p *SQLiteBackend) createDatabase(dbFilename string) {
 	}
 
 	p.createTable()
-
-	atexit.Register(func() {
-		err := p.DB.Close()
-		if err != nil {
-			panic(err)
-		}
-	})
 }
 
 func (p *SQLiteBackend) createTable() {

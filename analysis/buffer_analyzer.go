@@ -43,6 +43,12 @@ func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 
 func (b *BufferAnalyzer) summarize() {
 	now := b.CurrentTime()
+
+	if !b.usePeriod {
+		b.summarizePeriod(now, 0, now)
+		return
+	}
+
 	periodStartTime := b.periodStartTime(b.lastTime)
 	periodEndTime := b.periodEndTime(b.lastTime)
 
@@ -74,6 +80,10 @@ func (b *BufferAnalyzer) summarizePeriod(
 	}
 
 	avgLevel := sumLevel / sumDuration
+
+	if avgLevel == 0 {
+		return
+	}
 
 	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
 		Start: periodStartTime,

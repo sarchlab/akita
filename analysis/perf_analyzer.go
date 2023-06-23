@@ -117,6 +117,7 @@ type PerfAnalyzerBuilder struct {
 	usePeriod   bool
 	period      sim.VTimeInSec
 	backendType string
+	dbFilename  string
 }
 
 // MakePerfAnalyzerBuilder creates a new PerfAnalyzerBuilder.
@@ -125,6 +126,7 @@ func MakePerfAnalyzerBuilder() PerfAnalyzerBuilder {
 		usePeriod:   false,
 		period:      0,
 		backendType: "csv",
+		dbFilename:  "perf",
 	}
 }
 
@@ -143,13 +145,21 @@ func (b PerfAnalyzerBuilder) WithSQLiteBackend() PerfAnalyzerBuilder {
 	return b
 }
 
+// WithDBFilename sets the filename of the database file.
+func (b PerfAnalyzerBuilder) WithDBFilename(
+	filename string,
+) PerfAnalyzerBuilder {
+	b.dbFilename = filename
+	return b
+}
+
 // Build creates a PerfAnalyzer.
 func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	var backend PerfAnalyzerBackend
 	if b.backendType == "csv" {
-		backend = NewCSVPerfAnalyzerBackend("perf.csv")
+		backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
 	} else if b.backendType == "sqlite" {
-		backend = NewSQLitePerfAnalyzerBackend("perf.db")
+		backend = NewSQLitePerfAnalyzerBackend(b.dbFilename)
 	} else {
 		panic("Unknown backend type")
 	}

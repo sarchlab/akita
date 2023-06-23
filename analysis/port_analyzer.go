@@ -51,11 +51,17 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 
 func (h *PortAnalyzer) summarize() {
 	now := h.CurrentTime()
-	startTime := h.periodStartTime(h.lastTime)
-	endTime := h.periodEndTime(h.lastTime)
 
-	if endTime > now {
-		endTime = now
+	startTime := sim.VTimeInSec(0)
+	endTime := now
+
+	if h.usePeriod {
+		startTime = h.periodStartTime(h.lastTime)
+		endTime = h.periodEndTime(h.lastTime)
+
+		if endTime > now {
+			endTime = now
+		}
 	}
 
 	if h.inTrafficMsg > 0 {
