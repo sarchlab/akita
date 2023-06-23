@@ -25,16 +25,18 @@ type PortAnalyzer struct {
 
 // Func writes the message information into the logger
 func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
+	now := h.CurrentTime()
 	msg, ok := ctx.Item.(sim.Msg)
 	if !ok {
 		return
 	}
 
-	now := h.CurrentTime()
-	lastPeriodEndTime := h.periodEndTime(h.lastTime)
+	if h.usePeriod {
+		lastPeriodEndTime := h.periodEndTime(h.lastTime)
 
-	if now > lastPeriodEndTime {
-		h.summarize()
+		if now > lastPeriodEndTime {
+			h.summarize()
+		}
 	}
 
 	h.lastTime = now

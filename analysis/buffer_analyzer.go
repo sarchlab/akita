@@ -27,11 +27,13 @@ func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 	buf := ctx.Domain.(sim.Buffer)
 	currLevel := buf.Size()
 
-	lastPeriodEndTime := b.periodEndTime(b.lastTime)
+	if b.usePeriod {
+		lastPeriodEndTime := b.periodEndTime(b.lastTime)
 
-	if now > lastPeriodEndTime {
-		b.summarize()
-		b.resetPeriod()
+		if now > lastPeriodEndTime {
+			b.summarize()
+			b.resetPeriod()
+		}
 	}
 
 	b.bufLevelToDuration[b.lastBufLevel] += now - b.lastTime
