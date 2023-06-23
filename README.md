@@ -22,6 +22,7 @@ The simulator engine itself is located under the packages including:
 
 * `github.com/sarchlab/akita/sim`
 * `github.com/sarchlab/akita/pipelining`
+* `gitlab.com/sarchlab/akita/analysis`
 
 ### AkitaRTM
 
