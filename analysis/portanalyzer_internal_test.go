@@ -37,7 +37,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger = NewMockPerfLogger(mockCtrl)
 
 		portAnalyzer = NewPortAnalyzer(
-			timeTeller, portLogger, 1)
+			port, timeTeller, portLogger, 1)
 		portAnalyzer.port = port
 	})
 

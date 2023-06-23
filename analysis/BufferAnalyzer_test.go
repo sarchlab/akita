@@ -1,27 +1,31 @@
 package analysis
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
-
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+
+	// . "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 var _ = Describe("BufferAnalyzer", func() {
 	var (
 		mockCtrl       *gomock.Controller
 		timeTeller     *MockTimeTeller
+		logger         *MockPerfLogger
+		buffer         *MockBuffer
 		bufferAnalyzer *BufferAnalyzer
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		timeTeller = NewMockTimeTeller(mockCtrl)
+		logger = NewMockPerfLogger(mockCtrl)
+		buffer = NewMockBuffer(mockCtrl)
+		buffer.EXPECT().Name().Return("Buffer").AnyTimes()
 
-		bufferAnalyzer = MakeBufferAnalyzerBuilder().
-			WithTimeTeller(timeTeller).
-			Build()
+		bufferAnalyzer = NewBufferAnalyzer(
+			buffer, timeTeller, logger, 1)
 	})
 
 	AfterEach(func() {
@@ -29,40 +33,71 @@ var _ = Describe("BufferAnalyzer", func() {
 	})
 
 	It("should calculate average buffer level", func() {
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.0))
-		buf := bufferAnalyzer.CreateBuffer("Buf", 10)
+		timeTeller.EXPECT().
+			CurrentTime().
+			Return(sim.VTimeInSec(0.1))
+		buffer.EXPECT().Size().Return(1)
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(20))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(30))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(40))
+		bufferAnalyzer.Func(sim.HookCtx{
+			Domain: buffer,
+			Item:   gomock.Nil(),
+			Pos:    sim.HookPosBufPush,
+		})
 
-		buf.Push(1)
-		buf.Push(1)
-		buf.Push(1)
-		buf.Push(1)
-		buf.Push(1)
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
+		buffer.EXPECT().Size().Return(2)
+		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
+			Start: 0.0,
+			End:   1.0,
+			Where: "Buffer",
+			What:  "BufferLevel",
+			Value: 0.9,
+			Unit:  "",
+		})
 
-		Expect(bufferAnalyzer.getBufAverageLevel("Buf")).To(Equal(float64(2.5)))
+		bufferAnalyzer.Func(sim.HookCtx{
+			Domain: buffer,
+			Item:   gomock.Nil(),
+			Pos:    sim.HookPosBufPush,
+		})
 	})
 
-	It("should calculate per-period buffer level", func() {
-		bufferAnalyzer.period = 0.1
-		bufferAnalyzer.usePeriod = true
+	It("should report multiple periods together", func() {
+		timeTeller.EXPECT().
+			CurrentTime().
+			Return(sim.VTimeInSec(0.1))
+		buffer.EXPECT().Size().Return(1)
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.0))
-		buf := bufferAnalyzer.CreateBuffer("Buf", 10)
+		bufferAnalyzer.Func(sim.HookCtx{
+			Domain: buffer,
+			Item:   gomock.Nil(),
+			Pos:    sim.HookPosBufPush,
+		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.049))
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(0.098))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1)).AnyTimes()
+		buffer.EXPECT().Size().Return(2)
+		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
+			Start: 0.0,
+			End:   1.0,
+			Where: "Buffer",
+			What:  "BufferLevel",
+			Value: 0.9,
+			Unit:  "",
+		})
 
-		buf.Push(1)
-		buf.Push(1)
-		buf.Push(1)
+		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
+			Start: 1.0,
+			End:   2.0,
+			Where: "Buffer",
+			What:  "BufferLevel",
+			Value: 1,
+			Unit:  "",
+		})
 
-		Expect(bufferAnalyzer.getInPeriodBufAverageLevel("Buf")).
-			To(BeNumerically("~", 1.5, 0.01))
+		bufferAnalyzer.Func(sim.HookCtx{
+			Domain: buffer,
+			Item:   gomock.Nil(),
+			Pos:    sim.HookPosBufPush,
+		})
 	})
 })

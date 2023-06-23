@@ -7,8 +7,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github.com/sarchlab/akita/v3/sim"
 	signal "github.com/sarchlab/akita/v3/mem/dram/internal/signal"
+	sim "github.com/sarchlab/akita/v3/sim"
 )
 
 // MockCommandQueue is a mock of CommandQueue interface.

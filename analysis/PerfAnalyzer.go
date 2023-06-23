@@ -40,7 +40,11 @@ type PerfAnalyzer struct {
 }
 
 // NewPerfAnalyzer creates a new PerfAnalyzer with configuration parameters.
-func NewPerfAnalyzer(dbFilename string, period sim.VTimeInSec, engine sim.Engine) *PerfAnalyzer {
+func NewPerfAnalyzer(
+	dbFilename string,
+	period sim.VTimeInSec,
+	engine sim.Engine,
+) *PerfAnalyzer {
 	p := &PerfAnalyzer{
 		period: period,
 	}
@@ -53,11 +57,11 @@ func NewPerfAnalyzer(dbFilename string, period sim.VTimeInSec, engine sim.Engine
 		panic(err)
 	}
 
-	p.dbFile, err = os.OpenFile(dbFilename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	p.dbFile, err = os.OpenFile(dbFilename,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(err)
 	}
-	// defer p.dbFile.Close()
 
 	p.csvWriter = csv.NewWriter(p.dbFile)
 
@@ -77,7 +81,7 @@ func (p *PerfAnalyzer) RegisterEngine(e sim.Engine) {
 
 // RegisterComponent register a component to be monitored.
 func (p *PerfAnalyzer) RegisterComponent(c sim.Component) {
-	// p.registerBuffers(c)
+	p.registerBuffers(c)
 	p.registerPorts(c)
 }
 
@@ -90,8 +94,6 @@ func (p *PerfAnalyzer) registerBuffers(c sim.Component) {
 }
 
 func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
-	lastTime := 0.0
-	usePeriod := false
 	v := reflect.ValueOf(c).Elem()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
@@ -106,7 +108,7 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 			).Elem().Interface().(sim.Buffer)
 
 			bufferAnalyzer := NewBufferAnalyzer(
-				p.engine, usePeriod, p, float64(p.period), lastTime,
+				fieldRef, p.engine, p, p.period,
 			)
 			fieldRef.AcceptHook(bufferAnalyzer)
 		}
@@ -118,6 +120,7 @@ func (p *PerfAnalyzer) registerPorts(c sim.Component) {
 		portAnalyzer := NewPortAnalyzer(
 			port, p.engine, p, p.period,
 		)
+
 		port.AcceptHook(portAnalyzer)
 	}
 }
