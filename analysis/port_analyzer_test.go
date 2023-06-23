@@ -36,9 +36,12 @@ var _ = Describe("Port Analyzer", func() {
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		portLogger = NewMockPerfLogger(mockCtrl)
 
-		portAnalyzer = NewPortAnalyzer(
-			port, timeTeller, portLogger, 1)
-		portAnalyzer.port = port
+		portAnalyzer = MakePortAnalyzerBuilder().
+			WithPerfLogger(portLogger).
+			WithTimeTeller(timeTeller).
+			WithPeriod(1).
+			WithPort(port).
+			Build()
 	})
 
 	AfterEach(func() {
@@ -58,7 +61,7 @@ var _ = Describe("Port Analyzer", func() {
 			Domain: port,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
@@ -90,7 +93,7 @@ var _ = Describe("Port Analyzer", func() {
 			},
 		}
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(20.5))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(20.5)).Times(2)
 		portAnalyzer.Func(sim.HookCtx{
 			Item:   msg,
 			Domain: port,
@@ -114,7 +117,11 @@ var _ = Describe("Port Analyzer", func() {
 			Unit:  "Msg",
 		})
 
-		portAnalyzer.summarizePeriod()
+		timeTeller.EXPECT().
+			CurrentTime().
+			Return(sim.VTimeInSec(26.5)).
+			AnyTimes()
+		portAnalyzer.summarize()
 	})
 
 	It("should log incoming and outgoing traffic", func() {
@@ -141,7 +148,7 @@ var _ = Describe("Port Analyzer", func() {
 			Domain: port,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
@@ -197,7 +204,7 @@ var _ = Describe("Port Analyzer", func() {
 			Domain: port,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
@@ -235,7 +242,7 @@ var _ = Describe("Port Analyzer", func() {
 			Domain: port,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1))
+		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
@@ -261,7 +268,7 @@ var _ = Describe("Port Analyzer", func() {
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 3.0,
-			End:   4.0,
+			End:   3.1,
 			Where: "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
@@ -270,13 +277,13 @@ var _ = Describe("Port Analyzer", func() {
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 3.0,
-			End:   4.0,
+			End:   3.1,
 			Where: "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
 		})
 
-		portAnalyzer.summarizePeriod()
+		portAnalyzer.summarize()
 	})
 })

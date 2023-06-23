@@ -9,37 +9,18 @@ import (
 
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
-	sim.TimeTeller
 	PerfLogger
+	sim.TimeTeller
 
-	lastTime sim.VTimeInSec
-	period   sim.VTimeInSec
+	usePeriod bool
+	period    sim.VTimeInSec
+	port      sim.Port
 
-	port           sim.Port
+	lastTime       sim.VTimeInSec
 	outTrafficByte uint64
 	outTrafficMsg  uint64
 	inTrafficByte  uint64
 	inTrafficMsg   uint64
-}
-
-func NewPortAnalyzer(
-	port sim.Port,
-	tt sim.TimeTeller,
-	perfLogger PerfLogger,
-	period sim.VTimeInSec,
-) *PortAnalyzer {
-	h := &PortAnalyzer{
-		port:       port,
-		TimeTeller: tt,
-		PerfLogger: perfLogger,
-		period:     period,
-	}
-
-	atexit.Register(func() {
-		h.summarizePeriod()
-	})
-
-	return h
 }
 
 // Func writes the message information into the logger
@@ -53,7 +34,7 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	lastPeriodEndTime := h.periodEndTime(h.lastTime)
 
 	if now > lastPeriodEndTime {
-		h.summarizePeriod()
+		h.summarize()
 	}
 
 	h.lastTime = now
@@ -66,9 +47,14 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	}
 }
 
-func (h *PortAnalyzer) summarizePeriod() {
+func (h *PortAnalyzer) summarize() {
+	now := h.CurrentTime()
 	startTime := h.periodStartTime(h.lastTime)
 	endTime := h.periodEndTime(h.lastTime)
+
+	if endTime > now {
+		endTime = now
+	}
 
 	if h.inTrafficMsg > 0 {
 		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
@@ -122,4 +108,72 @@ func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
 
 func (h *PortAnalyzer) periodEndTime(t sim.VTimeInSec) sim.VTimeInSec {
 	return h.periodStartTime(t) + h.period
+}
+
+// PortAnalyzerBuilder can build a PortAnalyzer.
+type PortAnalyzerBuilder struct {
+	perfLogger PerfLogger
+	timeTeller sim.TimeTeller
+	usePeriod  bool
+	period     sim.VTimeInSec
+	port       sim.Port
+}
+
+// MakePortAnalyzerBuilder creates a PortAnalyzerBuilder.
+func MakePortAnalyzerBuilder() PortAnalyzerBuilder {
+	return PortAnalyzerBuilder{}
+}
+
+// WithPerfLogger sets the logger to be used by the PortAnalyzer.
+func (b PortAnalyzerBuilder) WithPerfLogger(l PerfLogger) PortAnalyzerBuilder {
+	b.perfLogger = l
+	return b
+}
+
+// WithTimeTeller sets the TimeTeller to be used by the PortAnalyzer.
+func (b PortAnalyzerBuilder) WithTimeTeller(
+	t sim.TimeTeller,
+) PortAnalyzerBuilder {
+	b.timeTeller = t
+	return b
+}
+
+// WithPeriod sets the period to be used by the PortAnalyzer.
+func (b PortAnalyzerBuilder) WithPeriod(p sim.VTimeInSec) PortAnalyzerBuilder {
+	b.usePeriod = true
+	b.period = p
+	return b
+}
+
+// WithPort sets the port to be used by the PortAnalyzer.
+func (b PortAnalyzerBuilder) WithPort(p sim.Port) PortAnalyzerBuilder {
+	b.port = p
+	return b
+}
+
+// Build creates a PortAnalyzer.
+func (b PortAnalyzerBuilder) Build() *PortAnalyzer {
+	if b.perfLogger == nil {
+		panic("PortAnalyzer requires a PerfLogger")
+	}
+
+	if b.timeTeller == nil {
+		panic("PortAnalyzer requires a TimeTeller")
+	}
+
+	if b.port == nil {
+		panic("PortAnalyzer requires a Port")
+	}
+
+	a := &PortAnalyzer{
+		PerfLogger: b.perfLogger,
+		TimeTeller: b.timeTeller,
+		usePeriod:  b.usePeriod,
+		period:     b.period,
+		port:       b.port,
+	}
+
+	atexit.Register(func() { a.summarize() })
+
+	return a
 }

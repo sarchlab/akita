@@ -1,9 +1,6 @@
 package analysis
 
 import (
-	"encoding/csv"
-	"fmt"
-	"os"
 	"reflect"
 	"unsafe"
 
@@ -28,47 +25,10 @@ type PerfLogger interface {
 
 // PerfAnalyzer can report performance metrics during simulation.
 type PerfAnalyzer struct {
-	period sim.VTimeInSec
-
-	dbFile    *os.File
-	csvWriter *csv.Writer
-
-	engine sim.Engine
-}
-
-// NewPerfAnalyzer creates a new PerfAnalyzer with configuration parameters.
-func NewPerfAnalyzer(
-	dbFilename string,
-	period sim.VTimeInSec,
-	engine sim.Engine,
-) *PerfAnalyzer {
-	p := &PerfAnalyzer{
-		period: period,
-	}
-
-	p.engine = engine
-
-	var err error
-	p.dbFile, err = os.Create(dbFilename)
-	if err != nil {
-		panic(err)
-	}
-
-	p.dbFile, err = os.OpenFile(dbFilename,
-		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		panic(err)
-	}
-
-	p.csvWriter = csv.NewWriter(p.dbFile)
-
-	header := []string{"Start", "End", "Where", "What", "Value", "Unit"}
-	err = p.csvWriter.Write(header)
-	if err != nil {
-		panic(err)
-	}
-	p.csvWriter.Flush()
-	return p
+	usePeriod bool
+	period    sim.VTimeInSec
+	engine    sim.Engine
+	backend   PerfAnalyzerBackend
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
@@ -78,11 +38,11 @@ func (p *PerfAnalyzer) RegisterEngine(e sim.Engine) {
 
 // RegisterComponent register a component to be monitored.
 func (p *PerfAnalyzer) RegisterComponent(c sim.Component) {
-	p.registerBuffers(c)
-	p.registerPorts(c)
+	p.registerComponentBuffers(c)
+	p.registerComponentPorts(c)
 }
 
-func (p *PerfAnalyzer) registerBuffers(c sim.Component) {
+func (p *PerfAnalyzer) registerComponentBuffers(c sim.Component) {
 	p.registerComponentOrPortBuffers(c)
 
 	for _, port := range c.Ports() {
@@ -104,15 +64,27 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 				unsafe.Pointer(field.UnsafeAddr()),
 			).Elem().Interface().(sim.Buffer)
 
-			bufferAnalyzer := NewBufferAnalyzer(
-				fieldRef, p.engine, p, p.period,
-			)
-			fieldRef.AcceptHook(bufferAnalyzer)
+			p.RegisterBuffer(fieldRef)
 		}
 	}
 }
 
-func (p *PerfAnalyzer) registerPorts(c sim.Component) {
+func (p *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
+	bufferAnalyzerBuilder := MakeBufferAnalyzerBuilder().
+		WithTimeTeller(p.engine).
+		WithPerfLogger(p).
+		WithBuffer(buf)
+
+	if p.usePeriod {
+		bufferAnalyzerBuilder.WithPeriod(p.period)
+	}
+
+	bufferAnalyzer := bufferAnalyzerBuilder.Build()
+
+	buf.AcceptHook(bufferAnalyzer)
+}
+
+func (p *PerfAnalyzer) registerComponentPorts(c sim.Component) {
 	for _, port := range c.Ports() {
 		p.RegisterPort(port)
 	}
@@ -120,9 +92,16 @@ func (p *PerfAnalyzer) registerPorts(c sim.Component) {
 
 // RegisterPort registers a port to be monitored.
 func (p *PerfAnalyzer) RegisterPort(port sim.Port) {
-	portAnalyzer := NewPortAnalyzer(
-		port, p.engine, p, p.period,
-	)
+	portAnalyzerBuilder := MakePortAnalyzerBuilder().
+		WithTimeTeller(p.engine).
+		WithPerfLogger(p).
+		WithPort(port)
+
+	if p.usePeriod {
+		portAnalyzerBuilder.WithPeriod(p.period)
+	}
+
+	portAnalyzer := portAnalyzerBuilder.Build()
 
 	port.AcceptHook(portAnalyzer)
 }
@@ -130,18 +109,53 @@ func (p *PerfAnalyzer) RegisterPort(port sim.Port) {
 // AddDataEntry adds a data entry to the database. It directly writes into the
 // CSV file.
 func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
-	err := p.csvWriter.Write(
-		[]string{
-			fmt.Sprintf("%.10f", entry.Start),
-			fmt.Sprintf("%.10f", entry.End),
-			entry.Where,
-			entry.What,
-			fmt.Sprintf("%.10f", entry.Value),
-			entry.Unit,
-		})
-	if err != nil {
-		panic(err)
+	p.backend.AddDataEntry(entry)
+}
+
+// PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
+type PerfAnalyzerBuilder struct {
+	usePeriod   bool
+	period      sim.VTimeInSec
+	backendType string
+}
+
+// MakePerfAnalyzerBuilder creates a new PerfAnalyzerBuilder.
+func MakePerfAnalyzerBuilder() PerfAnalyzerBuilder {
+	return PerfAnalyzerBuilder{
+		usePeriod:   false,
+		period:      0,
+		backendType: "csv",
+	}
+}
+
+// WithPeriod sets the period of the PerfAnalyzer.
+func (b PerfAnalyzerBuilder) WithPeriod(
+	period sim.VTimeInSec,
+) PerfAnalyzerBuilder {
+	b.usePeriod = true
+	b.period = period
+	return b
+}
+
+// WithSQLiteBackend sets the backend of the PerfAnalyzer to be a SQLite.
+func (b PerfAnalyzerBuilder) WithSQLiteBackend() PerfAnalyzerBuilder {
+	b.backendType = "sqlite"
+	return b
+}
+
+// Build creates a PerfAnalyzer.
+func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
+	var backend PerfAnalyzerBackend
+	if b.backendType == "csv" {
+		backend = NewCSVPerfAnalyzerBackend("perf.csv")
+	} else if b.backendType == "sqlite" {
+		backend = NewSQLitePerfAnalyzerBackend("perf.db")
+	} else {
+		panic("Unknown backend type")
 	}
 
-	p.csvWriter.Flush()
+	return &PerfAnalyzer{
+		period:  b.period,
+		backend: backend,
+	}
 }

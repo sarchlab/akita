@@ -4,42 +4,26 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/tebeka/atexit"
 )
 
 // BufferAnalyzer can periodically record the buffer level of a buffer.
 type BufferAnalyzer struct {
 	PerfLogger
-	timeTeller sim.TimeTeller
+	sim.TimeTeller
 
-	buf                sim.Buffer
-	period             sim.VTimeInSec
+	buf       sim.Buffer
+	usePeriod bool
+	period    sim.VTimeInSec
+
 	lastTime           sim.VTimeInSec
 	lastBufLevel       int
 	bufLevelToDuration map[int]sim.VTimeInSec
 }
 
-// NewBufferAnalyzer creates a buffer analyzer.
-func NewBufferAnalyzer(
-	buffer sim.Buffer,
-	tt sim.TimeTeller,
-	perfLogger PerfLogger,
-	period sim.VTimeInSec,
-) *BufferAnalyzer {
-	b := &BufferAnalyzer{
-		buf:                buffer,
-		PerfLogger:         perfLogger,
-		timeTeller:         tt,
-		period:             period,
-		lastTime:           0.0,
-		bufLevelToDuration: make(map[int]sim.VTimeInSec),
-	}
-
-	return b
-}
-
 // Func is a function that records buffer level change.
 func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
-	now := b.timeTeller.CurrentTime()
+	now := b.CurrentTime()
 	buf := ctx.Domain.(sim.Buffer)
 	currLevel := buf.Size()
 
@@ -56,7 +40,7 @@ func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 }
 
 func (b *BufferAnalyzer) summarize() {
-	now := b.timeTeller.CurrentTime()
+	now := b.CurrentTime()
 	periodStartTime := b.periodStartTime(b.lastTime)
 	periodEndTime := b.periodEndTime(b.lastTime)
 
@@ -100,7 +84,7 @@ func (b *BufferAnalyzer) summarizePeriod(
 }
 
 func (b *BufferAnalyzer) resetPeriod() {
-	now := b.timeTeller.CurrentTime()
+	now := b.CurrentTime()
 
 	b.bufLevelToDuration = make(map[int]sim.VTimeInSec)
 
@@ -121,4 +105,88 @@ func minTime(a, b sim.VTimeInSec) sim.VTimeInSec {
 	}
 
 	return b
+}
+
+// BufferAnalyzerBuilder can build a BufferAnalyzer.
+type BufferAnalyzerBuilder struct {
+	perfLogger PerfLogger
+	timeTeller sim.TimeTeller
+	usePeriod  bool
+	period     sim.VTimeInSec
+	buffer     sim.Buffer
+}
+
+// MakeBufferAnalyzerBuilder creates a BufferAnalyzerBuilder.
+func MakeBufferAnalyzerBuilder() BufferAnalyzerBuilder {
+	return BufferAnalyzerBuilder{
+		perfLogger: nil,
+		timeTeller: nil,
+		usePeriod:  false,
+		period:     0.0,
+	}
+}
+
+// WithPerfLogger sets the PerfLogger to use.
+func (b BufferAnalyzerBuilder) WithPerfLogger(
+	perfLogger PerfLogger,
+) BufferAnalyzerBuilder {
+	b.perfLogger = perfLogger
+	return b
+}
+
+// WithTimeTeller sets the TimeTeller to use.
+func (b BufferAnalyzerBuilder) WithTimeTeller(
+	timeTeller sim.TimeTeller,
+) BufferAnalyzerBuilder {
+	b.timeTeller = timeTeller
+	return b
+}
+
+// WithPeriod sets the period to use.
+func (b BufferAnalyzerBuilder) WithPeriod(
+	period sim.VTimeInSec,
+) BufferAnalyzerBuilder {
+	b.usePeriod = true
+	b.period = period
+	return b
+}
+
+// WithBuffer sets the buffer to use.
+func (b BufferAnalyzerBuilder) WithBuffer(
+	buffer sim.Buffer,
+) BufferAnalyzerBuilder {
+	b.buffer = buffer
+	return b
+}
+
+// Build creates a BufferAnalyzer.
+func (b BufferAnalyzerBuilder) Build() *BufferAnalyzer {
+	if b.perfLogger == nil {
+		panic("perfLogger is not set")
+	}
+
+	if b.timeTeller == nil {
+		panic("timeTeller is not set")
+	}
+
+	if b.buffer == nil {
+		panic("buffer is not set")
+	}
+
+	analyzer := &BufferAnalyzer{
+		PerfLogger:         b.perfLogger,
+		TimeTeller:         b.timeTeller,
+		buf:                b.buffer,
+		usePeriod:          b.usePeriod,
+		period:             b.period,
+		lastTime:           0.0,
+		lastBufLevel:       0,
+		bufLevelToDuration: make(map[int]sim.VTimeInSec),
+	}
+
+	atexit.Register(func() {
+		analyzer.summarize()
+	})
+
+	return analyzer
 }
