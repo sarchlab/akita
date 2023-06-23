@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/sarchlab/akita/v3/analysis"
 	"github.com/sarchlab/akita/v3/monitoring"
 	"github.com/sarchlab/akita/v3/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/bottleneckanalysis"
 	"github.com/sarchlab/akita/v3/tracing"
 )
 
@@ -102,12 +102,12 @@ func (c *Connector) WithMonitor(monitor *monitoring.Monitor) *Connector {
 	return c
 }
 
-// WithBufferAnalyzer sets that buffer analyzer that can be used to record the
+// WithPerfAnalyzer sets that buffer analyzer that can be used to record the
 // buffer level in the mesh.
-func (c *Connector) WithBufferAnalyzer(
-	analyzer *bottleneckanalysis.BufferAnalyzer,
+func (c *Connector) WithPerfAnalyzer(
+	analyzer *analysis.PerfAnalyzer,
 ) *Connector {
-	c.connector = c.connector.WithBufferAnalyzer(analyzer)
+	c.connector = c.connector.WithPerfAnalyzer(analyzer)
 	return c
 }
 

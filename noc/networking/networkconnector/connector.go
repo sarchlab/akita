@@ -3,13 +3,13 @@ package networkconnector
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v3/analysis"
 	"github.com/sarchlab/akita/v3/monitoring"
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
 	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/bottleneckanalysis"
 	"github.com/sarchlab/akita/v3/tracing"
 )
 
@@ -60,15 +60,15 @@ type SwitchToSwitchLinkParameter struct {
 
 // Connector can build complex network topologies.
 type Connector struct {
-	name           string
-	engine         sim.Engine
-	monitor        *monitoring.Monitor
-	defaultFreq    sim.Freq
-	flitSize       int
-	router         Router
-	visTracer      tracing.Tracer
-	nocTracer      tracing.Tracer
-	bufferAnalyzer *bottleneckanalysis.BufferAnalyzer
+	name         string
+	engine       sim.Engine
+	monitor      *monitoring.Monitor
+	defaultFreq  sim.Freq
+	flitSize     int
+	router       Router
+	visTracer    tracing.Tracer
+	nocTracer    tracing.Tracer
+	perfAnalyzer *analysis.PerfAnalyzer
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -131,11 +131,11 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 	return c
 }
 
-// WithBufferAnalyzer sets the buffer analyzer that can record the buffer levels in the network.
-func (c Connector) WithBufferAnalyzer(
-	b *bottleneckanalysis.BufferAnalyzer,
+// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels in the network.
+func (c Connector) WithPerfAnalyzer(
+	a *analysis.PerfAnalyzer,
 ) Connector {
-	c.bufferAnalyzer = b
+	c.perfAnalyzer = a
 	return c
 }
 
@@ -186,8 +186,8 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 		tracing.CollectTrace(sw, c.visTracer)
 	}
 
-	if c.bufferAnalyzer != nil {
-		c.bufferAnalyzer.AddComponent(sw)
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterComponent(sw)
 	}
 
 	node := &switchNode{
@@ -377,9 +377,9 @@ func (c *Connector) connectPorts(
 		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
 	}
 
-	if c.bufferAnalyzer != nil {
-		c.bufferAnalyzer.AddPort(left)
-		c.bufferAnalyzer.AddPort(right)
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterPort(left)
+		c.perfAnalyzer.RegisterPort(right)
 	}
 
 	return conn
