@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	// Need to use MySQL connections.
+	// Need to use SQLite connections.
 	_ "github.com/mattn/go-sqlite3"
+
 	"github.com/rs/xid"
 	"github.com/tebeka/atexit"
 )
