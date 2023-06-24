@@ -24,8 +24,12 @@ var _ = Describe("BufferAnalyzer", func() {
 		buffer = NewMockBuffer(mockCtrl)
 		buffer.EXPECT().Name().Return("Buffer").AnyTimes()
 
-		bufferAnalyzer = NewBufferAnalyzer(
-			buffer, timeTeller, logger, 1)
+		bufferAnalyzer = MakeBufferAnalyzerBuilder().
+			WithPerfLogger(logger).
+			WithTimeTeller(timeTeller).
+			WithPeriod(1).
+			WithBuffer(buffer).
+			Build()
 	})
 
 	AfterEach(func() {
