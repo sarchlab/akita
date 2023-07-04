@@ -32,25 +32,25 @@ type PerfAnalyzer struct {
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
-func (p *PerfAnalyzer) RegisterEngine(e sim.Engine) {
-	p.engine = e
+func (b *PerfAnalyzer) RegisterEngine(e sim.Engine) {
+	b.engine = e
 }
 
 // RegisterComponent register a component to be monitored.
-func (p *PerfAnalyzer) RegisterComponent(c sim.Component) {
-	p.registerComponentBuffers(c)
-	p.registerComponentPorts(c)
+func (b *PerfAnalyzer) RegisterComponent(c sim.Component) {
+	b.registerComponentBuffers(c)
+	b.registerComponentPorts(c)
 }
 
-func (p *PerfAnalyzer) registerComponentBuffers(c sim.Component) {
-	p.registerComponentOrPortBuffers(c)
+func (b *PerfAnalyzer) registerComponentBuffers(c sim.Component) {
+	b.registerComponentOrPortBuffers(c)
 
 	for _, port := range c.Ports() {
-		p.registerComponentOrPortBuffers(port)
+		b.registerComponentOrPortBuffers(port)
 	}
 }
 
-func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
+func (b *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 	v := reflect.ValueOf(c).Elem()
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
@@ -64,19 +64,19 @@ func (p *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 				unsafe.Pointer(field.UnsafeAddr()),
 			).Elem().Interface().(sim.Buffer)
 
-			p.RegisterBuffer(fieldRef)
+			b.RegisterBuffer(fieldRef)
 		}
 	}
 }
 
-func (p *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
+func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	bufferAnalyzerBuilder := MakeBufferAnalyzerBuilder().
-		WithTimeTeller(p.engine).
-		WithPerfLogger(p).
+		WithTimeTeller(b.engine).
+		WithPerfLogger(b).
 		WithBuffer(buf)
 
-	if p.usePeriod {
-		bufferAnalyzerBuilder.WithPeriod(p.period)
+	if b.usePeriod {
+		bufferAnalyzerBuilder.WithPeriod(b.period)
 	}
 
 	bufferAnalyzer := bufferAnalyzerBuilder.Build()
@@ -84,21 +84,21 @@ func (p *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	buf.AcceptHook(bufferAnalyzer)
 }
 
-func (p *PerfAnalyzer) registerComponentPorts(c sim.Component) {
+func (b *PerfAnalyzer) registerComponentPorts(c sim.Component) {
 	for _, port := range c.Ports() {
-		p.RegisterPort(port)
+		b.RegisterPort(port)
 	}
 }
 
 // RegisterPort registers a port to be monitored.
-func (p *PerfAnalyzer) RegisterPort(port sim.Port) {
+func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 	portAnalyzerBuilder := MakePortAnalyzerBuilder().
-		WithTimeTeller(p.engine).
-		WithPerfLogger(p).
+		WithTimeTeller(b.engine).
+		WithPerfLogger(b).
 		WithPort(port)
 
-	if p.usePeriod {
-		portAnalyzerBuilder.WithPeriod(p.period)
+	if b.usePeriod {
+		portAnalyzerBuilder.WithPeriod(b.period)
 	}
 
 	portAnalyzer := portAnalyzerBuilder.Build()
@@ -108,8 +108,8 @@ func (p *PerfAnalyzer) RegisterPort(port sim.Port) {
 
 // AddDataEntry adds a data entry to the database. It directly writes into the
 // CSV file.
-func (p *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
-	p.backend.AddDataEntry(entry)
+func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
+	b.backend.AddDataEntry(entry)
 }
 
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
@@ -118,6 +118,7 @@ type PerfAnalyzerBuilder struct {
 	period      sim.VTimeInSec
 	backendType string
 	dbFilename  string
+	engine      sim.Engine
 }
 
 // MakePerfAnalyzerBuilder creates a new PerfAnalyzerBuilder.
@@ -146,11 +147,18 @@ func (b PerfAnalyzerBuilder) WithSQLiteBackend() PerfAnalyzerBuilder {
 }
 
 // WithDBFilename sets the filename of the database file.
-func (b PerfAnalyzerBuilder) WithDBFilename(
+func (p PerfAnalyzerBuilder) WithDBFilename(
 	filename string,
 ) PerfAnalyzerBuilder {
-	b.dbFilename = filename
-	return b
+	p.dbFilename = filename
+	return p
+}
+
+func (p PerfAnalyzerBuilder) WithEngine(
+	engine sim.Engine,
+) PerfAnalyzerBuilder {
+	p.engine = engine
+	return p
 }
 
 // Build creates a PerfAnalyzer.
@@ -167,5 +175,6 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	return &PerfAnalyzer{
 		period:  b.period,
 		backend: backend,
+		engine:  b.engine,
 	}
 }
