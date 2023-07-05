@@ -147,18 +147,18 @@ func (b PerfAnalyzerBuilder) WithSQLiteBackend() PerfAnalyzerBuilder {
 }
 
 // WithDBFilename sets the filename of the database file.
-func (p PerfAnalyzerBuilder) WithDBFilename(
+func (b PerfAnalyzerBuilder) WithDBFilename(
 	filename string,
 ) PerfAnalyzerBuilder {
-	p.dbFilename = filename
-	return p
+	b.dbFilename = filename
+	return b
 }
 
-func (p PerfAnalyzerBuilder) WithEngine(
+func (b PerfAnalyzerBuilder) WithEngine(
 	engine sim.Engine,
 ) PerfAnalyzerBuilder {
-	p.engine = engine
-	return p
+	b.engine = engine
+	return b
 }
 
 // Build creates a PerfAnalyzer.

@@ -36,6 +36,10 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	if h.usePeriod {
 		lastPeriodEndTime := h.periodEndTime(h.lastTime)
 
+		if strings.Contains(msg.Meta().Src.Name(), "RDMA") {
+			fmt.Printf("1\n")
+		}
+
 		if now > lastPeriodEndTime {
 			if strings.Contains(msg.Meta().Src.Name(), "RDMA") {
 				fmt.Printf("1\n")
