@@ -50,14 +50,6 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 		panic(err)
 	}
 
-	atexit.Register(func() {
-		p.csvWriter.Flush()
-		err := p.dbFile.Close()
-		if err != nil {
-			panic(err)
-		}
-	})
-
 	return p
 }
 
