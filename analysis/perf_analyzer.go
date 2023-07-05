@@ -85,8 +85,10 @@ func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 }
 
 func (b *PerfAnalyzer) registerComponentPorts(c sim.Component) {
+	b.registerComponentOrPorts(c)
+
 	for _, port := range c.Ports() {
-		b.RegisterPort(port)
+		b.registerComponentOrPortBuffers(port)
 	}
 }
 
@@ -176,5 +178,24 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		period:  b.period,
 		backend: backend,
 		engine:  b.engine,
+	}
+}
+
+func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
+	v := reflect.ValueOf(c).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+
+		fieldType := field.Type()
+		portType := reflect.TypeOf((*sim.Port)(nil)).Elem()
+
+		if fieldType == portType && !field.IsNil() {
+			fieldRef := reflect.NewAt(
+				field.Type(),
+				unsafe.Pointer(field.UnsafeAddr()),
+			).Elem().Interface().(sim.Port)
+
+			b.RegisterPort(fieldRef)
+		}
 	}
 }
