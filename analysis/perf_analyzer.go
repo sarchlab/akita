@@ -97,6 +97,7 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 	portAnalyzerBuilder := MakePortAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).
+		WithPeriod(b.period).
 		WithPort(port)
 
 	if b.usePeriod {
@@ -175,9 +176,10 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	}
 
 	return &PerfAnalyzer{
-		period:  b.period,
-		backend: backend,
-		engine:  b.engine,
+		period:    b.period,
+		backend:   backend,
+		engine:    b.engine,
+		usePeriod: b.usePeriod,
 	}
 }
 
