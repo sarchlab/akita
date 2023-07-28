@@ -36,6 +36,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 		panic(err)
 	}
 
+	dbFilename = dbFilename + ".csv"
 	p.dbFile, err = os.OpenFile(dbFilename,
 		os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
