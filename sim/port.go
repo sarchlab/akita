@@ -190,3 +190,45 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	p.name = name
 	return p
 }
+
+// RemotePort is a type of port that can route messages to different target ports
+// based on the routing logic implemented inside.
+type RemotePort struct {
+	*LimitNumMsgPort
+	routingLogic func(Msg) Port
+}
+
+// Send is used to send a message out from a component to the port specified by routing logic
+func (rp *RemotePort) Send(msg Msg) *SendError {
+	targetPort := rp.routingLogic(msg)
+
+	if targetPort == nil {
+		return NewSendError()
+	}
+
+	err := targetPort.Recv(msg)
+	if err == nil {
+		hookCtx := HookCtx{
+			Domain: rp,
+			Pos:    HookPosPortMsgSend,
+			Item:   msg,
+		}
+		rp.InvokeHook(hookCtx)
+	}
+
+	return err
+}
+
+// Recv is used to deliver a message received from other ports back to the component
+func (rp *RemotePort) Recv(msg Msg) *SendError {
+	return rp.LimitNumMsgPort.Recv(msg)
+}
+
+// NewRemotePort creates a new remote port with specified routing logic.
+func NewRemotePort(comp Component, capacity int, name string, routingLogic func(Msg) Port) *RemotePort {
+	rp := &RemotePort{
+		LimitNumMsgPort: NewLimitNumMsgPort(comp, capacity, name),
+		routingLogic:    routingLogic,
+	}
+	return rp
+}
