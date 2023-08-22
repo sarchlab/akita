@@ -14,6 +14,37 @@ func (m *sampleMsg) Meta() *MsgMeta {
 	return &m.MsgMeta
 }
 
+var _ = Describe("RemotePort", func() {
+	var (
+		mockController *gomock.Controller
+		comp           *MockComponent
+		conn           *MockConnection
+		routingLogic   func(Msg) Port
+		port           *RemotePort
+	)
+
+	BeforeEach(func() {
+		mockController = gomock.NewController(GinkgoT())
+		comp = NewMockComponent(mockController)
+		conn = NewMockConnection(mockController)
+
+		// routingLogic function
+		routingLogic = func(msg Msg) Port {
+			//Implement logic to return the appropriate port here, depending on message properties.
+			//For example, we will simply return the connected port.
+			return msg.Meta().Dst
+		}
+		// Create a Remote Port Instance with the routingLogic Function
+		port = NewRemotePort(comp, 4, "RemotePort", routingLogic)
+		port.SetConnection(conn)
+	})
+	AfterEach(func() {
+		mockController.Finish()
+	})
+
+	// Add test cases...
+})
+
 var _ = Describe("LimitNumMsgPort", func() {
 	var (
 		mockController *gomock.Controller

@@ -225,7 +225,12 @@ func (rp *RemotePort) Recv(msg Msg) *SendError {
 }
 
 // NewRemotePort creates a new remote port with specified routing logic.
-func NewRemotePort(comp Component, capacity int, name string, routingLogic func(Msg) Port) *RemotePort {
+func NewRemotePort(
+	comp Component,
+	capacity int,
+	name string,
+	routingLogic func(Msg) Port,
+) *RemotePort {
 	rp := &RemotePort{
 		LimitNumMsgPort: NewLimitNumMsgPort(comp, capacity, name),
 		routingLogic:    routingLogic,
