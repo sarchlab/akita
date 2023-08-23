@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"github.com/sarchlab/akita/v3/mem/mem"
 	"sync"
 )
 
@@ -191,22 +192,14 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	return p
 }
 
-// RemotePort is a type of port that can route messages to different target ports
-// based on the routing logic implemented inside.
+// RemotePort is a type of port that can route messages to different target ports with duplication
 type RemotePort struct {
 	*LimitNumMsgPort
-	routingLogic func(Msg) Port
 }
 
-// Send is used to send a message out from a component to the port specified by routing logic
+// Send is used to send a message out from a component to the port
 func (rp *RemotePort) Send(msg Msg) *SendError {
-	targetPort := rp.routingLogic(msg)
-
-	if targetPort == nil {
-		return NewSendError()
-	}
-
-	err := targetPort.Recv(msg)
+	err := rp.Recv(msg)
 	if err == nil {
 		hookCtx := HookCtx{
 			Domain: rp,
@@ -224,16 +217,49 @@ func (rp *RemotePort) Recv(msg Msg) *SendError {
 	return rp.LimitNumMsgPort.Recv(msg)
 }
 
+// Route returns the destination Port for a given req
+func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
+
+	if req.Meta().Dst == nil {
+		panic("Dst returned nil")
+	}
+	switch req := req.(type) {
+	case *mem.ReadReq:
+		return rp.duplicateReadReq(req)
+	case *mem.WriteReq:
+		return rp.duplicateWriteReq(req)
+	default:
+		panic("unsupported type")
+	}
+
+}
+func (rp *RemotePort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
+	return mem.ReadReqBuilder{}.
+		WithAddress(req.Address).
+		WithByteSize(req.AccessByteSize).
+		WithPID(req.PID).
+		WithDst(req.Dst).
+		Build()
+}
+
+func (rp *RemotePort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
+	return mem.WriteReqBuilder{}.
+		WithAddress(req.Address).
+		WithPID(req.PID).
+		WithData(req.Data).
+		WithDirtyMask(req.DirtyMask).
+		WithDst(req.Dst).
+		Build()
+}
+
 // NewRemotePort creates a new remote port with specified routing logic.
 func NewRemotePort(
 	comp Component,
 	capacity int,
 	name string,
-	routingLogic func(Msg) Port,
 ) *RemotePort {
 	rp := &RemotePort{
 		LimitNumMsgPort: NewLimitNumMsgPort(comp, capacity, name),
-		routingLogic:    routingLogic,
 	}
 	return rp
 }

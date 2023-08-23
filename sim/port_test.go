@@ -19,7 +19,6 @@ var _ = Describe("RemotePort", func() {
 		mockController *gomock.Controller
 		comp           *MockComponent
 		conn           *MockConnection
-		routingLogic   func(Msg) Port
 		port           *RemotePort
 	)
 
@@ -27,22 +26,33 @@ var _ = Describe("RemotePort", func() {
 		mockController = gomock.NewController(GinkgoT())
 		comp = NewMockComponent(mockController)
 		conn = NewMockConnection(mockController)
-
-		// routingLogic function
-		routingLogic = func(msg Msg) Port {
-			//Implement logic to return the appropriate port here, depending on message properties.
-			//For example, we will simply return the connected port.
-			return msg.Meta().Dst
-		}
-		// Create a Remote Port Instance with the routingLogic Function
-		port = NewRemotePort(comp, 4, "RemotePort", routingLogic)
+		port = NewRemotePort(comp, 10, "RemotePort")
 		port.SetConnection(conn)
 	})
 	AfterEach(func() {
 		mockController.Finish()
 	})
 
-	// Add test cases...
+	It("should return component", func() {
+		Expect(port.Component()).To(BeIdenticalTo(comp))
+	})
+
+	It("should return name", func() {
+		Expect(port.Name()).To(Equal("RemotePort"))
+	})
+
+	It("should set connection", func() {
+		Expect(port.conn).To(BeIdenticalTo(conn))
+	})
+
+	It("should send successfully", func() {
+		msg := &sampleMsg{}
+		conn.EXPECT().Send(msg).Return(nil)
+
+		err := port.Send(msg)
+
+		Expect(err).To(BeNil())
+	})
 })
 
 var _ = Describe("LimitNumMsgPort", func() {
