@@ -2,8 +2,6 @@ package sim
 
 import (
 	gomock "github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 )
 
 type sampleMsg struct {
@@ -52,6 +50,11 @@ var _ = Describe("RemotePort", func() {
 		err := port.Send(msg)
 
 		Expect(err).To(BeNil())
+	})
+	It("should return nil when retrieving empty port", func() {
+		msg := port.Retrieve(10)
+
+		Expect(msg).To(BeNil())
 	})
 })
 
@@ -136,7 +139,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 
 		Expect(msg).To(BeNil())
 	})
-
+	2
 	It("should allow component to peek message", func() {
 		msg := &sampleMsg{}
 		port.buf.Push(msg)

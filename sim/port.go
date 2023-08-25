@@ -192,13 +192,35 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	return p
 }
 
+type RemotePort interface {
+	// Embed interface
+	Named
+	Hookable
+
+	SetConnection(conn Connection)
+	Component() Component
+
+	// For connection
+	Recv(msg Msg) *SendError
+	NotifyAvailable(now VTimeInSec)
+
+	// For component
+	CanSend() bool
+	Send(msg Msg) *SendError
+	Retrieve(now VTimeInSec) Msg
+	Peek() Msg
+
+	duplicateReadReq(req *mem.ReadReq) *mem.ReadReq
+	duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq
+}
+
 // RemotePort is a type of port that can route messages to different target ports with duplication
-type RemotePort struct {
+type impPort struct {
 	*LimitNumMsgPort
 }
 
 // Send is used to send a message out from a component to the port
-func (rp *RemotePort) Send(msg Msg) *SendError {
+func (rp *impPort) Send(msg Msg) *SendError {
 	err := rp.Recv(msg)
 	if err == nil {
 		hookCtx := HookCtx{
@@ -213,12 +235,12 @@ func (rp *RemotePort) Send(msg Msg) *SendError {
 }
 
 // Recv is used to deliver a message received from other ports back to the component
-func (rp *RemotePort) Recv(msg Msg) *SendError {
+func (rp *impPort) Recv(msg Msg) *SendError {
 	return rp.LimitNumMsgPort.Recv(msg)
 }
 
 // Route returns the destination Port for a given req
-func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
+func (rp *impPort) Route(req mem.AccessReq) mem.AccessReq {
 
 	if req.Meta().Dst == nil {
 		panic("Dst returned nil")
@@ -233,7 +255,7 @@ func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
 	}
 
 }
-func (rp *RemotePort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
+func (rp *impPort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
 	return mem.ReadReqBuilder{}.
 		WithAddress(req.Address).
 		WithByteSize(req.AccessByteSize).
@@ -242,7 +264,7 @@ func (rp *RemotePort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
 		Build()
 }
 
-func (rp *RemotePort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
+func (rp *impPort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
 	return mem.WriteReqBuilder{}.
 		WithAddress(req.Address).
 		WithPID(req.PID).
@@ -253,12 +275,12 @@ func (rp *RemotePort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
 }
 
 // NewRemotePort creates a new remote port with specified routing logic.
-func NewRemotePort(
+func NewimpPort(
 	comp Component,
 	capacity int,
 	name string,
-) *RemotePort {
-	rp := &RemotePort{
+) *impPort {
+	rp := &impPort{
 		LimitNumMsgPort: NewLimitNumMsgPort(comp, capacity, name),
 	}
 	return rp
