@@ -192,96 +192,52 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	return p
 }
 
-type RemotePort interface {
-	// Embed interface
-	Named
-	Hookable
-
-	SetConnection(conn Connection)
-	Component() Component
-
-	// For connection
-	Recv(msg Msg) *SendError
-	NotifyAvailable(now VTimeInSec)
-
-	// For component
-	CanSend() bool
-	Send(msg Msg) *SendError
-	Retrieve(now VTimeInSec) Msg
-	Peek() Msg
-
-	duplicateReadReq(req *mem.ReadReq) *mem.ReadReq
-	duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq
-}
-
-// RemotePort is a type of port that can route messages to different target ports with duplication
-type impPort struct {
+type RemotePort struct {
 	*LimitNumMsgPort
 }
 
-// Send is used to send a message out from a component to the port
-func (rp *impPort) Send(msg Msg) *SendError {
-	err := rp.Recv(msg)
-	if err == nil {
-		hookCtx := HookCtx{
-			Domain: rp,
-			Pos:    HookPosPortMsgSend,
-			Item:   msg,
-		}
-		rp.InvokeHook(hookCtx)
-	}
-
-	return err
-}
-
-// Recv is used to deliver a message received from other ports back to the component
-func (rp *impPort) Recv(msg Msg) *SendError {
-	return rp.LimitNumMsgPort.Recv(msg)
-}
-
-// Route returns the destination Port for a given req
-func (rp *impPort) Route(req mem.AccessReq) mem.AccessReq {
+func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
 
 	if req.Meta().Dst == nil {
-		panic("Dst returned nil")
+		panic("Destination is not set in request")
 	}
-	switch req := req.(type) {
-	case *mem.ReadReq:
-		return rp.duplicateReadReq(req)
-	case *mem.WriteReq:
-		return rp.duplicateWriteReq(req)
-	default:
-		panic("unsupported type")
+	if req.Meta().Dst.Name() == "L2.ToTop" && req.Meta().Src.Name() == "ToL2" {
+		//requests should be duplicated
+		switch req := req.(type) {
+		case *mem.ReadReq:
+			return rp.duplicateReadReq(req)
+		case *mem.WriteReq:
+			return rp.duplicateWriteReq(req)
+		default:
+			panic("unsupported type")
+		}
+	} else {
+		switch req := req.(type) {
+		case *mem.ReadReq:
+			return rp.duplicateReadReq(req)
+		case *mem.WriteReq:
+			return rp.duplicateWriteReq(req)
+		default:
+			panic("unsupported type")
+		}
 	}
-
 }
-func (rp *impPort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
+
+func (rp *RemotePort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
 	return mem.ReadReqBuilder{}.
 		WithAddress(req.Address).
 		WithByteSize(req.AccessByteSize).
 		WithPID(req.PID).
-		WithDst(req.Dst).
+		WithDst(req.Dst). // Assuming DstList is the field with multiple destinations.
 		Build()
 }
 
-func (rp *impPort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
+func (rp *RemotePort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
 	return mem.WriteReqBuilder{}.
 		WithAddress(req.Address).
 		WithPID(req.PID).
 		WithData(req.Data).
 		WithDirtyMask(req.DirtyMask).
-		WithDst(req.Dst).
+		WithDst(req.Dst). // Assuming DstList is the field with multiple destinations.
 		Build()
-}
-
-// NewRemotePort creates a new remote port with specified routing logic.
-func NewimpPort(
-	comp Component,
-	capacity int,
-	name string,
-) *impPort {
-	rp := &impPort{
-		LimitNumMsgPort: NewLimitNumMsgPort(comp, capacity, name),
-	}
-	return rp
 }
