@@ -200,18 +200,8 @@ func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
 
 	if req.Meta().Dst == nil {
 		panic("Destination is not set in request")
-	}
-	if req.Meta().Dst.Name() == "L2.ToTop" && req.Meta().Src.Name() == "ToL2" {
-		//requests should be duplicated
-		switch req := req.(type) {
-		case *mem.ReadReq:
-			return rp.duplicateReadReq(req)
-		case *mem.WriteReq:
-			return rp.duplicateWriteReq(req)
-		default:
-			panic("unsupported type")
-		}
 	} else {
+		//requests should be duplicated
 		switch req := req.(type) {
 		case *mem.ReadReq:
 			return rp.duplicateReadReq(req)
