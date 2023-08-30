@@ -194,40 +194,27 @@ func NewLimitNumMsgPortWithExternalBuffer(
 
 type RemotePort struct {
 	*LimitNumMsgPort
+	destinations map[string]Component // map of destination names to Components
 }
 
+// Route routes a memory access request to the appropriate destination.
 func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
+	// Determine the appropriate destination based on the request.
+	// This logic will depend on how you want to route requests.
+	dstName := determineDestination(req)
+	dst := rp.destinations[dstName]
 
-	if req.Meta().Dst == nil {
-		panic("Destination is not set in request")
-	} else {
-		//requests should be duplicated
-		switch req := req.(type) {
-		case *mem.ReadReq:
-			return rp.duplicateReadReq(req)
-		case *mem.WriteReq:
-			return rp.duplicateWriteReq(req)
-		default:
-			panic("unsupported type")
-		}
+	if dst == nil {
+		panic("destination not found")
 	}
+
+	newReq := req
+	newReq.Meta().Dst = dst.GetPortByName(dstName)
+
+	return newReq
 }
 
-func (rp *RemotePort) duplicateReadReq(req *mem.ReadReq) *mem.ReadReq {
-	return mem.ReadReqBuilder{}.
-		WithAddress(req.Address).
-		WithByteSize(req.AccessByteSize).
-		WithPID(req.PID).
-		WithDst(req.Dst). // Assuming DstList is the field with multiple destinations.
-		Build()
-}
-
-func (rp *RemotePort) duplicateWriteReq(req *mem.WriteReq) *mem.WriteReq {
-	return mem.WriteReqBuilder{}.
-		WithAddress(req.Address).
-		WithPID(req.PID).
-		WithData(req.Data).
-		WithDirtyMask(req.DirtyMask).
-		WithDst(req.Dst). // Assuming DstList is the field with multiple destinations.
-		Build()
+func determineDestination(req mem.AccessReq) string {
+	// This function returns the name of the destination as a string.
+	return "Default"
 }

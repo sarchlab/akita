@@ -20,6 +20,46 @@ type Component interface {
 	NotifyPortFree(now VTimeInSec, port Port)
 }
 
+func (c Component) SetConnection(conn Connection) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) Component() Component {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) Recv(msg Msg) *SendError {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) NotifyAvailable(now VTimeInSec) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) CanSend() bool {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) Send(msg Msg) *SendError {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) Retrieve(now VTimeInSec) Msg {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (c Component) Peek() Msg {
+	//TODO implement me
+	panic("implement me")
+}
+
 // ComponentBase provides some functions that other component can use.
 type ComponentBase struct {
 	sync.Mutex

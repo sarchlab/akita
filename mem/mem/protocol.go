@@ -65,6 +65,15 @@ type ReadReqBuilder struct {
 	info               interface{}
 }
 
+type ReadRemoteReqBuilder struct {
+	sendTime           sim.VTimeInSec
+	src, dst           sim.RemotePort
+	pid                vm.PID
+	address, byteSize  uint64
+	canWaitForCoalesce bool
+	info               interface{}
+}
+
 // WithSendTime sets the send time of the request to build.
 func (b ReadReqBuilder) WithSendTime(t sim.VTimeInSec) ReadReqBuilder {
 	b.sendTime = t
@@ -165,6 +174,17 @@ func (r *WriteReq) GetPID() vm.PID {
 type WriteReqBuilder struct {
 	sendTime           sim.VTimeInSec
 	src, dst           sim.Port
+	pid                vm.PID
+	info               interface{}
+	address            uint64
+	data               []byte
+	dirtyMask          []bool
+	canWaitForCoalesce bool
+}
+
+type WriteRemoteReqBuilder struct {
+	sendTime           sim.VTimeInSec
+	src, dst           sim.RemotePort
 	pid                vm.PID
 	info               interface{}
 	address            uint64
