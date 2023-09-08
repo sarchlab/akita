@@ -3,6 +3,7 @@ package internal
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/google/btree"
 	"github.com/sarchlab/akita/v3/mem/vm"
@@ -20,7 +21,7 @@ type Set interface {
 func NewSet(numWays int) Set {
 	s := &setImpl{}
 	s.blocks = make([]*block, numWays)
-	s.visitTree = btree.New(2)
+	s.visitList = make([]*block, 0, numWays)
 	s.vAddrWayIDMap = make(map[string]int)
 	for i := range s.blocks {
 		b := &block{}
@@ -44,7 +45,7 @@ func (b *block) Less(anotherBlock btree.Item) bool {
 type setImpl struct {
 	blocks        []*block
 	vAddrWayIDMap map[string]int
-	visitTree     *btree.BTree
+	visitList     []*block
 	visitCount    uint64
 }
 
@@ -83,19 +84,35 @@ func (s *setImpl) Evict() (wayID int, ok bool) {
 		return 0, false
 	}
 
-	wayID = s.visitTree.DeleteMin().(*block).wayID
+	// wayID = s.visitTree.DeleteMin().(*block).wayID
+	leastVisited := s.visitList[0]
+	wayID = leastVisited.wayID
+	s.visitList = s.visitList[1:]
 	return wayID, true
 }
 
 func (s *setImpl) Visit(wayID int) {
 	block := s.blocks[wayID]
-	s.visitTree.Delete(block)
+
+	for i, b := range s.visitList {
+		if b.wayID == wayID {
+			s.visitList = append(s.visitList[:i], s.visitList[i+1:]...)
+		}
+	}
 
 	s.visitCount++
 	block.lastVisit = s.visitCount
-	s.visitTree.ReplaceOrInsert(block)
+
+	index := sort.Search(len(s.visitList), func(i int) bool {
+		return s.visitList[i].lastVisit > block.lastVisit
+	})
+
+	s.visitList = append(s.visitList, nil)
+	copy(s.visitList[index+1:], s.visitList[index:])
+	s.visitList[index] = block
+
 }
 
 func (s *setImpl) hasNothingToEvict() bool {
-	return s.visitTree.Len() == 0
+	return len(s.visitList) == 0
 }
