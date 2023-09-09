@@ -109,7 +109,6 @@ func (s *setImpl) Visit(wayID int) {
 	s.visitList = append(s.visitList, nil)
 	copy(s.visitList[index+1:], s.visitList[index:])
 	s.visitList[index] = block
-
 }
 
 func (s *setImpl) hasNothingToEvict() bool {
