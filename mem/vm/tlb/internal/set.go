@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/google/btree"
 	"github.com/sarchlab/akita/v3/mem/vm"
 )
 
@@ -38,8 +37,8 @@ type block struct {
 	lastVisit uint64
 }
 
-func (b *block) Less(anotherBlock btree.Item) bool {
-	return b.lastVisit < anotherBlock.(*block).lastVisit
+func (b *block) Less(anotherBlock *block) bool {
+	return b.lastVisit < anotherBlock.lastVisit
 }
 
 type setImpl struct {
