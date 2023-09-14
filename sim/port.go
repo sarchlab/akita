@@ -1,7 +1,6 @@
 package sim
 
 import (
-	"github.com/sarchlab/akita/v3/mem/mem"
 	"sync"
 )
 
@@ -194,9 +193,10 @@ func NewLimitNumMsgPortWithExternalBuffer(
 
 type RemotePort struct {
 	*LimitNumMsgPort
-	destinations map[string]Component // map of destination names to Components
+	//destinations map[string]Component // map of destination names to Components
 }
 
+/*
 // Route routes a memory access request to the appropriate destination.
 func (rp *RemotePort) Route(req mem.AccessReq) mem.AccessReq {
 	// Determine the appropriate destination based on the request.
@@ -218,3 +218,4 @@ func determineDestination(req mem.AccessReq) string {
 	// This function returns the name of the destination as a string.
 	return "Default"
 }
+*/

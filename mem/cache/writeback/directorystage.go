@@ -1,7 +1,10 @@
 package writeback
 
 import (
+	"encoding/csv"
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
@@ -156,6 +159,28 @@ func (ds *directoryStage) handleReadHit(
 	// 	block.SetID, block.WayID,
 	// 	nil,
 	// )
+	// Open the file in append mode.
+	file, err := os.OpenFile("cache_events.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open cache_events.csv: %s", err)
+	}
+	defer file.Close()
+
+	// Create a new CSV writer writing to the opened file.
+	csvWriter := csv.NewWriter(file)
+	defer csvWriter.Flush()
+
+	record := []string{
+		fmt.Sprintf("%.10f", now),
+		ds.cache.Name(),
+		"read-hit",
+		fmt.Sprintf("%04X", trans.read.Address),
+		fmt.Sprintf("%d", block.SetID),
+		fmt.Sprintf("%d", block.WayID),
+	}
+	if err := csvWriter.Write(record); err != nil {
+		log.Fatalf("error writing record to csv: %s", err)
+	}
 
 	return ds.readFromBank(trans, block)
 }
@@ -184,7 +209,7 @@ func (ds *directoryStage) handleReadMiss(
 	// 	victim.SetID, victim.WayID,
 	// 	nil,
 	// )
-
+	// Open the file in append mode.
 	if ds.needEviction(victim) {
 		ok := ds.evict(now, trans, victim)
 		if ok {
@@ -193,6 +218,7 @@ func (ds *directoryStage) handleReadMiss(
 				ds.cache,
 				"read-miss",
 			)
+
 		}
 
 		return ok
@@ -425,6 +451,28 @@ func (ds *directoryStage) evict(
 	// 	victim.SetID, victim.WayID,
 	// 	nil,
 	// )
+	// Open the file in append mode.
+	file, err := os.OpenFile("cache_events.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("Failed to open cache_events.csv: %s", err)
+	}
+	defer file.Close()
+
+	// Create a new CSV writer writing to the opened file.
+	csvWriter := csv.NewWriter(file)
+	defer csvWriter.Flush()
+
+	record := []string{
+		fmt.Sprintf("%.10f", now),
+		ds.cache.Name(),
+		"victim",
+		fmt.Sprintf("%04X", trans.read.Address),
+		fmt.Sprintf("%d", victim.SetID),
+		fmt.Sprintf("%d", victim.WayID),
+	}
+	if err := csvWriter.Write(record); err != nil {
+		log.Fatalf("error writing record to csv: %s", err)
+	}
 
 	return true
 }
