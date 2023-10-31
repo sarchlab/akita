@@ -270,6 +270,9 @@ func (c *Connector) createEndPointWithName(
 		tracing.CollectTrace(endPoint, c.visTracer)
 	}
 
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterComponent(endPoint)
+	}
 	epPort := sim.NewLimitNumMsgPort(endPoint,
 		param.DeviceEndParam.IncomingBufSize,
 		endPoint.Name()+".NetworkPort")
@@ -371,6 +374,10 @@ func (c *Connector) connectPorts(
 
 	if c.visTracer != nil {
 		tracing.CollectTrace(conn.(tracing.NamedHookable), c.visTracer)
+	}
+
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterComponent(conn)
 	}
 
 	if c.nocTracer != nil {
