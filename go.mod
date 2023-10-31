@@ -33,4 +33,5 @@ require (
 
 // replace github.com/syifan/goseth => ../goseth
 
+
 go 1.20
