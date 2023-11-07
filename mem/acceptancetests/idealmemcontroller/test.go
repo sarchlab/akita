@@ -51,8 +51,12 @@ func main() {
 	agent.MaxAddress = *maxAddressFlag
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
-	dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
-	dram.Latency = 100
+	// dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
+	dram := idealmemcontroller.MakeBuilder().
+		WithEngine(engine).
+		WithCapacity(4 * mem.GB).
+		WithLatency(100).
+		Build("DRAM")
 	agent.LowModule = dram.GetPortByName("Top")
 
 	if *traceFileFlag != "" {
