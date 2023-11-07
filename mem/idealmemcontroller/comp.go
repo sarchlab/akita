@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v3/mem/mem"
+	"github.com/sarchlab/akita/v3/pipelining"
 	"github.com/sarchlab/akita/v3/sim"
 
 	"github.com/sarchlab/akita/v3/tracing"
@@ -12,7 +13,6 @@ import (
 
 type readRespondEvent struct {
 	*sim.EventBase
-
 	req *mem.ReadReq
 }
 
@@ -24,7 +24,6 @@ func newReadRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 
 type writeRespondEvent struct {
 	*sim.EventBase
-
 	req *mem.WriteReq
 }
 
@@ -34,8 +33,15 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 	return &writeRespondEvent{sim.NewEventBase(time, handler), req}
 }
 
+type msgItem struct {
+	msg sim.Msg
+}
+
+func (m msgItem) TaskID() string {
+	return m.msg.Meta().ID
+}
+
 // An Comp is an ideal memory controller that can perform read and write
-//
 // Ideal memory controller always respond to the request in a fixed number of
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
@@ -47,6 +53,20 @@ type Comp struct {
 	AddressConverter   mem.AddressConverter
 	MaxNumTransaction  int
 	currNumTransaction int
+
+	pipeline         pipelining.Pipeline
+	postPipelineBuf  sim.Buffer
+	numStage         int
+	numCyclePerStage int
+	width            int
+}
+
+func (c *Comp) CanAcceptMsg() bool {
+	return c.pipeline.CanAccept()
+}
+
+func (c *Comp) AcceptMsg(msg *sim.Msg, now sim.VTimeInSec) {
+	c.pipeline.Accept(now, msgItem{msg: *msg})
 }
 
 // Handle defines how the Comp handles event
@@ -65,16 +85,57 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
-// Tick updates ideal memory controller state.
 func (c *Comp) Tick(now sim.VTimeInSec) bool {
+	madeProgress := false
+
 	if c.currNumTransaction >= c.MaxNumTransaction {
 		return false
 	}
 
+	for i := 0; i < c.width; i++ {
+		madeProgress = c.msgFromPortToPipeline(now) || madeProgress
+	}
+	madeProgress = c.pipeline.Tick(now) || madeProgress
+
+	for i := 0; i < c.width; i++ {
+		madeProgress = c.upDateMemCtrl(now) || madeProgress
+	}
+
+	return madeProgress
+}
+
+func (c *Comp) msgFromPortToPipeline(now sim.VTimeInSec) bool {
 	msg := c.topPort.Retrieve(now)
+
 	if msg == nil {
 		return false
 	}
+
+	if !c.pipeline.CanAccept() {
+		return false
+	}
+
+	c.pipeline.Accept(now, msgItem{msg: msg})
+	return false
+}
+
+// Tick updates ideal memory controller state.
+func (c *Comp) upDateMemCtrl(now sim.VTimeInSec) bool {
+	if c.currNumTransaction >= c.MaxNumTransaction {
+		return false
+	}
+
+	// for i := 0; i < c.width; i++ {
+	// 	msg := c.topPort.Retrieve(now)
+	// 	if msg == nil {
+	// 		return false
+	// 	}
+	item := c.postPipelineBuf.Peek()
+	if item == nil {
+		return false
+	}
+
+	msg := item.(msgItem).msg
 
 	tracing.TraceReqReceive(msg, c)
 	c.currNumTransaction++
@@ -89,7 +150,6 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
 	}
-
 	return false
 }
 
@@ -128,6 +188,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 		Build()
 
 	networkErr := c.topPort.Send(rsp)
+
 	if networkErr != nil {
 		retry := newReadRespondEvent(c.Freq.NextTick(now), c, req)
 		c.Engine.Schedule(retry)
@@ -135,6 +196,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+	c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
@@ -187,28 +249,14 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+	c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
 	return nil
 }
 
-// New creates a new ideal memory controller
-func New(
-	name string,
-	engine sim.Engine,
-	capacity uint64,
-) *Comp {
-	c := new(Comp)
-
-	c.TickingComponent = sim.NewTickingComponent(name, engine, 1*sim.GHz, c)
-	c.Latency = 100
-	c.MaxNumTransaction = 8
-
-	c.Storage = mem.NewStorage(capacity)
-
-	c.topPort = sim.NewLimitNumMsgPort(c, 16, name+".TopPort")
-	c.AddPort("Top", c.topPort)
-
-	return c
+func (c *Comp) Reset() {
+	c.pipeline.Clear()
+	c.postPipelineBuf.Clear()
 }

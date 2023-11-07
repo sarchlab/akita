@@ -24,7 +24,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine = NewMockEngine(mockCtrl)
 		port = NewMockPort(mockCtrl)
 
-		memController = New("MemCtrl", engine, 1*mem.MB)
+		memController = MakeBuilder().
+			WithEngine(engine).
+			WithCapacity(1 * mem.MB).
+			Build("MemCtrl")
 		memController.Freq = 1000 * sim.MHz
 		memController.Latency = 10
 		memController.topPort = port
