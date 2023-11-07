@@ -197,7 +197,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	// c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
@@ -250,7 +249,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	// c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
