@@ -25,7 +25,7 @@ type Builder struct {
 // MakeBuilder returns a new Builder
 func MakeBuilder() Builder {
 	return Builder{
-		width:             64,
+		// width:             64,
 		latency:           100,
 		maxNumTransaction: 8,
 		freq:              1 * sim.GHz,

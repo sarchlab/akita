@@ -34,11 +34,11 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 }
 
 type msgItem struct {
-	msg sim.Msg
+	ms *sim.Msg
 }
 
 func (m msgItem) TaskID() string {
-	return m.msg.Meta().ID
+	return (*m.ms).Meta().ID
 }
 
 // An Comp is an ideal memory controller that can perform read and write
@@ -65,9 +65,9 @@ func (c *Comp) CanAcceptMsg() bool {
 	return c.pipeline.CanAccept()
 }
 
-func (c *Comp) AcceptMsg(msg *sim.Msg, now sim.VTimeInSec) {
-	c.pipeline.Accept(now, msgItem{msg: *msg})
-}
+// func (c *Comp) AcceptMsg(msg *sim.Msg, now sim.VTimeInSec) {
+// 	c.pipeline.Accept(now, msgItem{msg: msg.(*)})
+// }
 
 // Handle defines how the Comp handles event
 func (c *Comp) Handle(e sim.Event) error {
@@ -115,15 +115,15 @@ func (c *Comp) msgFromPortToPipeline(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	c.pipeline.Accept(now, msgItem{msg: msg})
+	c.pipeline.Accept(now, msgItem{ms: &msg})
 	return false
 }
 
 // Tick updates ideal memory controller state.
 func (c *Comp) upDateMemCtrl(now sim.VTimeInSec) bool {
-	if c.currNumTransaction >= c.MaxNumTransaction {
-		return false
-	}
+	// if c.currNumTransaction >= c.MaxNumTransaction {
+	// 	return false
+	// }
 
 	// for i := 0; i < c.width; i++ {
 	// 	msg := c.topPort.Retrieve(now)
@@ -135,12 +135,11 @@ func (c *Comp) upDateMemCtrl(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	msg := item.(msgItem).msg
-
-	tracing.TraceReqReceive(msg, c)
+	req := item.(msgItem).ms
+	tracing.TraceReqReceive(*req, c)
 	c.currNumTransaction++
 
-	switch msg := msg.(type) {
+	switch msg := (*req).(type) {
 	case *mem.ReadReq:
 		c.handleReadReq(now, msg)
 		return true
@@ -157,12 +156,14 @@ func (c *Comp) handleReadReq(now sim.VTimeInSec, req *mem.ReadReq) {
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newReadRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
+	c.postPipelineBuf.Pop()
 }
 
 func (c *Comp) handleWriteReq(now sim.VTimeInSec, req *mem.WriteReq) {
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newWriteRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
+	c.postPipelineBuf.Pop()
 }
 
 func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
@@ -196,7 +197,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.postPipelineBuf.Pop()
+	// c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
@@ -249,7 +250,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.postPipelineBuf.Pop()
+	// c.postPipelineBuf.Pop()
 	c.currNumTransaction--
 	c.TickLater(now)
 
