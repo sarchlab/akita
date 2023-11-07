@@ -74,7 +74,7 @@ jobs:
     name: Akita Unit Test
     needs: akita_compile
     runs-on:
-      group: Marin
+      group: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
