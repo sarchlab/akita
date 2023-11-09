@@ -64,7 +64,7 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 	return b
 }
 
-// WithCapacity sets the capacity of the memory controller
+// WithNewStorage sets the capacity of the memory controller
 func (b Builder) WithNewStorage(capacity uint64) Builder {
 	b.capacity = capacity
 	return b

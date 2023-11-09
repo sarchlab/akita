@@ -51,7 +51,6 @@ func main() {
 	agent.MaxAddress = *maxAddressFlag
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
-	// dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
