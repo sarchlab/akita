@@ -1,4 +1,4 @@
-package sim_test
+package ticking_ping
 
 import (
 	"fmt"

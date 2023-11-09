@@ -1,4 +1,4 @@
-package sim_test
+package ping
 
 import "github.com/sarchlab/akita/v3/sim"
 
