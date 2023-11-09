@@ -84,7 +84,7 @@ func connectToDB() {
 }
 
 func startAPIServer() {
-	http.HandleFunc("/", serveStatic)
+	http.Handle("/", http.FileServer(fs))
 	http.HandleFunc("/dashboard", serveIndex)
 	http.HandleFunc("/component", serveIndex)
 	http.HandleFunc("/task", serveIndex)
@@ -95,20 +95,6 @@ func startAPIServer() {
 
 	fmt.Printf("Listening %s\n", *httpFlag)
 	err := http.ListenAndServe(*httpFlag, nil)
-	dieOnErr(err)
-}
-
-func serveStatic(w http.ResponseWriter, r *http.Request) {
-	f, err := fs.Open(r.URL.Path)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	p, err := io.ReadAll(f)
-	dieOnErr(err)
-
-	_, err = w.Write(p)
 	dieOnErr(err)
 }
 

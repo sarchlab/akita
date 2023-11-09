@@ -33,7 +33,6 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 
 	if h.usePeriod {
 		lastPeriodEndTime := h.periodEndTime(h.lastTime)
-
 		if now > lastPeriodEndTime {
 			h.summarize()
 		}

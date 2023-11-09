@@ -1,4 +1,4 @@
-package sim_test
+package ping
 
 import (
 	"fmt"
@@ -37,7 +37,7 @@ type RspPingEvent struct {
 	pingMsg *PingMsg
 }
 
-type PingAgent struct {
+type Comp struct {
 	*sim.ComponentBase
 
 	Engine  sim.Engine
@@ -47,95 +47,97 @@ type PingAgent struct {
 	nextSeqID int
 }
 
-func NewPingAgent(name string, engine sim.Engine) *PingAgent {
-	agent := &PingAgent{Engine: engine}
-	agent.ComponentBase = sim.NewComponentBase(name)
-	agent.OutPort = sim.NewLimitNumMsgPort(agent, 4, name+".OutPort")
-	return agent
-}
+// func NewPingAgent(name string, engine sim.Engine) *PingAgent {
+// 	agent := &PingAgent{Engine: engine}
+// 	agent.ComponentBase = sim.NewComponentBase(name)
+// 	agent.OutPort = sim.NewLimitNumMsgPort(agent, 4, name+".OutPort")
+// 	return agent
+// }
 
-func (p *PingAgent) Handle(e sim.Event) error {
-	p.Lock()
-	defer p.Unlock()
+func (c *Comp) Handle(e sim.Event) error {
+	c.Lock()
+	defer c.Unlock()
 
 	switch e := e.(type) {
 	case StartPingEvent:
-		p.StartPing(e)
+		c.StartPing(e)
 	case RspPingEvent:
-		p.RspPing(e)
+		c.RspPing(e)
 	default:
 		panic("cannot handle event of type " + reflect.TypeOf(e).String())
 	}
 	return nil
 }
 
-func (p *PingAgent) StartPing(evt StartPingEvent) {
+func (c *Comp) StartPing(evt StartPingEvent) {
 	pingMsg := &PingMsg{
-		SeqID: p.nextSeqID,
+		SeqID: c.nextSeqID,
 	}
 
-	pingMsg.Src = p.OutPort
+	pingMsg.Src = c.OutPort
 	pingMsg.Dst = evt.Dst
 	pingMsg.SendTime = evt.Time()
 
-	p.OutPort.Send(pingMsg)
+	c.OutPort.Send(pingMsg)
 
-	p.startTime = append(p.startTime, evt.Time())
+	c.startTime = append(c.startTime, evt.Time())
 
-	p.nextSeqID++
+	c.nextSeqID++
 }
 
-func (p *PingAgent) RspPing(evt RspPingEvent) {
+func (c *Comp) RspPing(evt RspPingEvent) {
 	msg := evt.pingMsg
 	rsp := &PingRsp{
 		SeqID: msg.SeqID,
 	}
 	rsp.SendTime = evt.Time()
-	rsp.Src = p.OutPort
+	rsp.Src = c.OutPort
 	rsp.Dst = msg.Src
 
-	p.OutPort.Send(rsp)
+	c.OutPort.Send(rsp)
 }
 
-func (p *PingAgent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
-	p.Lock()
-	defer p.Unlock()
+func (c *Comp) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
+	c.Lock()
+	defer c.Unlock()
 
 	msg := port.Retrieve(now)
 	switch msg := msg.(type) {
 	case *PingMsg:
-		p.processPingMsg(now, msg)
+		c.processPingMsg(now, msg)
 	case *PingRsp:
-		p.processPingRsp(now, msg)
+		c.processPingRsp(now, msg)
 	default:
 		panic("cannot process msg of type " + reflect.TypeOf(msg).String())
 	}
 }
 
-func (p *PingAgent) processPingMsg(now sim.VTimeInSec, msg *PingMsg) {
+func (c *Comp) processPingMsg(now sim.VTimeInSec, msg *PingMsg) {
 	rspEvent := RspPingEvent{
-		EventBase: sim.NewEventBase(now+2, p),
+		EventBase: sim.NewEventBase(now+2, c),
 		pingMsg:   msg,
 	}
-	p.Engine.Schedule(rspEvent)
+	c.Engine.Schedule(rspEvent)
 }
 
-func (p *PingAgent) processPingRsp(now sim.VTimeInSec, msg *PingRsp) {
+func (c *Comp) processPingRsp(now sim.VTimeInSec, msg *PingRsp) {
 	seqID := msg.SeqID
-	startTime := p.startTime[seqID]
+	startTime := c.startTime[seqID]
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 }
 
-func (p PingAgent) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
+func (c Comp) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
 	// Do nothing
 }
 
 func Example_pingWithEvents() {
 	engine := sim.NewSerialEngine()
-	agentA := NewPingAgent("AgentA", engine)
-	agentB := NewPingAgent("AgentB", engine)
+	// agentA := NewPingAgent("AgentA", engine)
+	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
+	// agentB := NewPingAgent("AgentB", engine)
+	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
 	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
 
 	conn.PlugIn(agentA.OutPort, 1)
