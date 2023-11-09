@@ -92,7 +92,7 @@ func buildEnvironment() {
 	// dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
-		WithCapacity(4 * mem.GB).
+		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
 	lowModuleFinder.LowModule = dram.GetPortByName("Top")
 

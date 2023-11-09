@@ -28,7 +28,7 @@ var _ = Describe("Cache", func() {
 		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithCapacity(4 * mem.GB).
+			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
 
 		lowModuleFinder = &mem.SingleLowModuleFinder{

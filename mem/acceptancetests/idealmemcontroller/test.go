@@ -54,7 +54,7 @@ func main() {
 	// dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
-		WithCapacity(4 * mem.GB).
+		WithNewStorage(4 * mem.GB).
 		WithLatency(100).
 		Build("DRAM")
 	agent.LowModule = dram.GetPortByName("Top")

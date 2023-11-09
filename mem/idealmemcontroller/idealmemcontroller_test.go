@@ -26,7 +26,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		memController = MakeBuilder().
 			WithEngine(engine).
-			WithCapacity(1 * mem.MB).
+			WithNewStorage(1 * mem.MB).
 			Build("MemCtrl")
 		memController.Freq = 1000 * sim.MHz
 		memController.Latency = 10

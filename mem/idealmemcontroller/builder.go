@@ -15,6 +15,7 @@ type Builder struct {
 	engine            sim.Engine
 	clsize            int
 	topBufSize        int
+	storage           *mem.Storage
 
 	numCyclePerStage int
 	numStage         int
@@ -64,7 +65,7 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 }
 
 // WithCapacity sets the capacity of the memory controller
-func (b Builder) WithCapacity(capacity uint64) Builder {
+func (b Builder) WithNewStorage(capacity uint64) Builder {
 	b.capacity = capacity
 	return b
 }
@@ -111,6 +112,12 @@ func (b Builder) WithTopBufSize(topBufSize int) Builder {
 	return b
 }
 
+// WithStorage sets the storage of the memory controller
+func (b Builder) WithStorage(storage *mem.Storage) Builder {
+	b.storage = storage
+	return b
+}
+
 // Build builds a new Comp
 func (b Builder) Build(
 	name string,
@@ -121,16 +128,17 @@ func (b Builder) Build(
 		width:             b.clPerCycle,
 		numCyclePerStage:  b.numCyclePerStage,
 		numStage:          b.numStage,
-
-		// clsize:            b.clsize,
-
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
 	c.Latency = b.latency
 	c.MaxNumTransaction = b.maxNumTransaction
 
-	c.Storage = mem.NewStorage(b.capacity)
+	if b.storage == nil {
+		c.Storage = mem.NewStorage(b.capacity)
+	} else {
+		c.Storage = b.storage
+	}
 
 	c.postPipelineBuf = sim.NewBuffer(c.Name()+
 		".PostPipelineBuf",

@@ -64,7 +64,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithCapacity(4 * mem.GB).
+			WithNewStorage(4 * mem.GB).
 			WithFreq(1 * sim.GHz).
 			WithLatency(200).
 			WithClPerCycle(1).
