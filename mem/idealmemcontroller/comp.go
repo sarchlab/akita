@@ -34,11 +34,11 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 }
 
 type msgItem struct {
-	ms *sim.Msg
+	msg sim.Msg
 }
 
 func (m msgItem) TaskID() string {
-	return (*m.ms).Meta().ID
+	return (m.msg).Meta().ID
 }
 
 // An Comp is an ideal memory controller that can perform read and write
@@ -95,6 +95,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	for i := 0; i < c.width; i++ {
 		madeProgress = c.msgFromPortToPipeline(now) || madeProgress
 	}
+
 	madeProgress = c.pipeline.Tick(now) || madeProgress
 
 	for i := 0; i < c.width; i++ {
@@ -115,31 +116,22 @@ func (c *Comp) msgFromPortToPipeline(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	c.pipeline.Accept(now, msgItem{ms: &msg})
+	c.pipeline.Accept(now, msgItem{msg: msg})
 	return false
 }
 
 // Tick updates ideal memory controller state.
 func (c *Comp) upDateMemCtrl(now sim.VTimeInSec) bool {
-	// if c.currNumTransaction >= c.MaxNumTransaction {
-	// 	return false
-	// }
-
-	// for i := 0; i < c.width; i++ {
-	// 	msg := c.topPort.Retrieve(now)
-	// 	if msg == nil {
-	// 		return false
-	// 	}
 	item := c.postPipelineBuf.Peek()
 	if item == nil {
 		return false
 	}
 
-	req := item.(msgItem).ms
-	tracing.TraceReqReceive(*req, c)
+	req := item.(msgItem).msg
+	tracing.TraceReqReceive(req, c)
 	c.currNumTransaction++
 
-	switch msg := (*req).(type) {
+	switch msg := (req).(type) {
 	case *mem.ReadReq:
 		c.handleReadReq(now, msg)
 		return true

@@ -13,26 +13,25 @@ type Builder struct {
 	freq              sim.Freq
 	capacity          uint64
 	engine            sim.Engine
-	clsize            int
+	cacheLineSize     int
 	topBufSize        int
 	storage           *mem.Storage
 
-	numCyclePerStage int
-	numStage         int
-	clPerCycle       int
-	pipeBufSize      int
+	numCyclePerStage  int
+	numStage          int
+	cacheLinePerCycle int
+	pipeBufSize       int
 }
 
 // MakeBuilder returns a new Builder
 func MakeBuilder() Builder {
 	return Builder{
-		// width:             64,
 		latency:           100,
 		maxNumTransaction: 8,
 		freq:              1 * sim.GHz,
 		capacity:          4 * mem.GB,
-		clsize:            64,
-		clPerCycle:        1,
+		cacheLineSize:     64,
+		cacheLinePerCycle: 1,
 		topBufSize:        16,
 		numCyclePerStage:  0,
 		numStage:          0,
@@ -71,8 +70,8 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 }
 
 // WithClSize sets the cache line size of the memory controller
-func (b Builder) WithClSize(clsize int) Builder {
-	b.clsize = clsize
+func (b Builder) WithcacheLineSize(cacheLineSize int) Builder {
+	b.cacheLineSize = cacheLineSize
 	return b
 }
 
@@ -95,8 +94,8 @@ func (b Builder) WithNumStage(numStage int) Builder {
 }
 
 // WithClPerCycle sets the number of cache lines per cycle
-func (b Builder) WithClPerCycle(clPerCycle int) Builder {
-	b.clPerCycle = clPerCycle
+func (b Builder) WithCacheLinePerCycle(cacheLinePerCycle int) Builder {
+	b.cacheLinePerCycle = cacheLinePerCycle
 	return b
 }
 
@@ -125,7 +124,7 @@ func (b Builder) Build(
 	c := &Comp{
 		Latency:           b.latency,
 		MaxNumTransaction: b.maxNumTransaction,
-		width:             b.clPerCycle,
+		width:             b.cacheLinePerCycle,
 		numCyclePerStage:  b.numCyclePerStage,
 		numStage:          b.numStage,
 	}
@@ -147,7 +146,7 @@ func (b Builder) Build(
 	c.pipeline = pipelining.MakeBuilder().
 		WithNumStage(b.numStage).
 		WithCyclePerStage(b.numCyclePerStage).
-		WithPipelineWidth(b.clPerCycle).
+		WithPipelineWidth(b.cacheLinePerCycle).
 		WithPostPipelineBuffer(c.postPipelineBuf).
 		Build(c.Name() + ".Pipeline")
 
