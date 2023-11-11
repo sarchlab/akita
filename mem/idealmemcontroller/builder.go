@@ -70,7 +70,7 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 	return b
 }
 
-// WithcacheLineSize sets the cache line size of the memory controller
+// WithCacheLineSize sets the cache line size of the memory controller
 func (b Builder) WithCacheLineSize(cacheLineSize int) Builder {
 	b.cacheLineSize = cacheLineSize
 	return b
