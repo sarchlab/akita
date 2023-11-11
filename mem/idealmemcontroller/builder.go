@@ -16,6 +16,7 @@ type Builder struct {
 	cacheLineSize     int
 	topBufSize        int
 	storage           *mem.Storage
+	addressConverter  mem.AddressConverter
 
 	numCyclePerStage  int
 	numStage          int
@@ -69,8 +70,8 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 	return b
 }
 
-// WithClSize sets the cache line size of the memory controller
-func (b Builder) WithcacheLineSize(cacheLineSize int) Builder {
+// WithcacheLineSize sets the cache line size of the memory controller
+func (b Builder) WithCacheLineSize(cacheLineSize int) Builder {
 	b.cacheLineSize = cacheLineSize
 	return b
 }
@@ -93,7 +94,7 @@ func (b Builder) WithNumStage(numStage int) Builder {
 	return b
 }
 
-// WithClPerCycle sets the number of cache lines per cycle
+// WithCacheLinePerCycle sets the number of cache lines per cycle
 func (b Builder) WithCacheLinePerCycle(cacheLinePerCycle int) Builder {
 	b.cacheLinePerCycle = cacheLinePerCycle
 	return b
@@ -117,13 +118,19 @@ func (b Builder) WithStorage(storage *mem.Storage) Builder {
 	return b
 }
 
+// WithAddressConverter sets the address converter of the memory controller
+func (b Builder) WithAddressConverter(addressConverter mem.AddressConverter) Builder {
+	b.addressConverter = addressConverter
+	return b
+}
+
 // Build builds a new Comp
 func (b Builder) Build(
 	name string,
 ) *Comp {
 	c := &Comp{
 		Latency:           b.latency,
-		MaxNumTransaction: b.maxNumTransaction,
+		maxNumTransaction: b.maxNumTransaction,
 		width:             b.cacheLinePerCycle,
 		numCyclePerStage:  b.numCyclePerStage,
 		numStage:          b.numStage,
@@ -131,7 +138,8 @@ func (b Builder) Build(
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
 	c.Latency = b.latency
-	c.MaxNumTransaction = b.maxNumTransaction
+	c.maxNumTransaction = b.maxNumTransaction
+	c.addressConverter = b.addressConverter
 
 	if b.storage == nil {
 		c.Storage = mem.NewStorage(b.capacity)

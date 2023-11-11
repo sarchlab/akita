@@ -50,8 +50,8 @@ type Comp struct {
 	topPort            sim.Port
 	Storage            *mem.Storage
 	Latency            int
-	AddressConverter   mem.AddressConverter
-	MaxNumTransaction  int
+	addressConverter   mem.AddressConverter
+	maxNumTransaction  int
 	currNumTransaction int
 
 	pipeline         pipelining.Pipeline
@@ -88,7 +88,7 @@ func (c *Comp) Handle(e sim.Event) error {
 func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
-	if c.currNumTransaction >= c.MaxNumTransaction {
+	if c.currNumTransaction >= c.maxNumTransaction {
 		return false
 	}
 
@@ -163,8 +163,8 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	req := e.req
 
 	addr := req.Address
-	if c.AddressConverter != nil {
-		addr = c.AddressConverter.ConvertExternalToInternal(addr)
+	if c.addressConverter != nil {
+		addr = c.addressConverter.ConvertExternalToInternal(addr)
 	}
 
 	data, err := c.Storage.Read(addr, req.AccessByteSize)
@@ -215,8 +215,8 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 	addr := req.Address
 
-	if c.AddressConverter != nil {
-		addr = c.AddressConverter.ConvertExternalToInternal(addr)
+	if c.addressConverter != nil {
+		addr = c.addressConverter.ConvertExternalToInternal(addr)
 	}
 
 	if req.DirtyMask == nil {
