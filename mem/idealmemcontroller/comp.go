@@ -99,7 +99,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress = c.pipeline.Tick(now) || madeProgress
 
 	for i := 0; i < c.width; i++ {
-		madeProgress = c.upDateMemCtrl(now) || madeProgress
+		madeProgress = c.updateMemCtrl(now) || madeProgress
 	}
 
 	return madeProgress
@@ -121,7 +121,7 @@ func (c *Comp) msgFromPortToPipeline(now sim.VTimeInSec) bool {
 }
 
 // Tick updates ideal memory controller state.
-func (c *Comp) upDateMemCtrl(now sim.VTimeInSec) bool {
+func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 	item := c.postPipelineBuf.Peek()
 	if item == nil {
 		return false
