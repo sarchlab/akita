@@ -67,7 +67,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithNewStorage(4 * mem.GB).
 			WithFreq(1 * sim.GHz).
 			WithLatency(200).
-			WithCacheLinePerCycle(1).
 			Build("DRAM")
 
 		lowModuleFinder.LowModule = dram.GetPortByName("Top")
@@ -162,7 +161,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle read miss, mshr hit", func() {
-		dram.Reset()
 		dram.Storage.Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,

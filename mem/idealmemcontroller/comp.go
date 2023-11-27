@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/pipelining"
 	"github.com/sarchlab/akita/v3/sim"
 
 	"github.com/sarchlab/akita/v3/tracing"
@@ -33,14 +32,6 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 	return &writeRespondEvent{sim.NewEventBase(time, handler), req}
 }
 
-type msgItem struct {
-	msg sim.Msg
-}
-
-func (m msgItem) TaskID() string {
-	return (m.msg).Meta().ID
-}
-
 // An Comp is an ideal memory controller that can perform read and write
 // Ideal memory controller always respond to the request in a fixed number of
 // cycles. There is no limitation on the concurrency of this unit.
@@ -54,20 +45,8 @@ type Comp struct {
 	maxNumTransaction  int
 	currNumTransaction int
 
-	pipeline         pipelining.Pipeline
-	postPipelineBuf  sim.Buffer
-	numStage         int
-	numCyclePerStage int
-	width            int
+	width int
 }
-
-func (c *Comp) CanAcceptMsg() bool {
-	return c.pipeline.CanAccept()
-}
-
-// func (c *Comp) AcceptMsg(msg *sim.Msg, now sim.VTimeInSec) {
-// 	c.pipeline.Accept(now, msgItem{msg: msg.(*)})
-// }
 
 // Handle defines how the Comp handles event
 func (c *Comp) Handle(e sim.Event) error {
@@ -88,16 +67,6 @@ func (c *Comp) Handle(e sim.Event) error {
 func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
-	if c.currNumTransaction >= c.maxNumTransaction {
-		return false
-	}
-
-	for i := 0; i < c.width; i++ {
-		madeProgress = c.msgFromPortToPipeline(now) || madeProgress
-	}
-
-	madeProgress = c.pipeline.Tick(now) || madeProgress
-
 	for i := 0; i < c.width; i++ {
 		madeProgress = c.updateMemCtrl(now) || madeProgress
 	}
@@ -105,33 +74,16 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) msgFromPortToPipeline(now sim.VTimeInSec) bool {
+// Tick updates ideal memory controller state.
+func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 	msg := c.topPort.Retrieve(now)
-
 	if msg == nil {
 		return false
 	}
 
-	if !c.pipeline.CanAccept() {
-		return false
-	}
+	tracing.TraceReqReceive(msg, c)
 
-	c.pipeline.Accept(now, msgItem{msg: msg})
-	return false
-}
-
-// Tick updates ideal memory controller state.
-func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
-	item := c.postPipelineBuf.Peek()
-	if item == nil {
-		return false
-	}
-
-	req := item.(msgItem).msg
-	tracing.TraceReqReceive(req, c)
-	c.currNumTransaction++
-
-	switch msg := (req).(type) {
+	switch msg := (msg).(type) {
 	case *mem.ReadReq:
 		c.handleReadReq(now, msg)
 		return true
@@ -148,14 +100,12 @@ func (c *Comp) handleReadReq(now sim.VTimeInSec, req *mem.ReadReq) {
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newReadRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
-	c.postPipelineBuf.Pop()
 }
 
 func (c *Comp) handleWriteReq(now sim.VTimeInSec, req *mem.WriteReq) {
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newWriteRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
-	c.postPipelineBuf.Pop()
 }
 
 func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
@@ -189,7 +139,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.currNumTransaction--
 	c.TickLater(now)
 
 	return nil
@@ -241,13 +190,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.currNumTransaction--
 	c.TickLater(now)
 
 	return nil
-}
-
-func (c *Comp) Reset() {
-	c.pipeline.Clear()
-	c.postPipelineBuf.Clear()
 }

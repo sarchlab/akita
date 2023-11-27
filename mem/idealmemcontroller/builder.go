@@ -2,12 +2,11 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/pipelining"
 	"github.com/sarchlab/akita/v3/sim"
 )
 
 type Builder struct {
-	width             uint64
+	width             int
 	latency           int
 	maxNumTransaction int
 	freq              sim.Freq
@@ -17,11 +16,6 @@ type Builder struct {
 	topBufSize        int
 	storage           *mem.Storage
 	addressConverter  mem.AddressConverter
-
-	numCyclePerStage  int
-	numStage          int
-	cacheLinePerCycle int
-	pipeBufSize       int
 }
 
 // MakeBuilder returns a new Builder
@@ -32,16 +26,13 @@ func MakeBuilder() Builder {
 		freq:              1 * sim.GHz,
 		capacity:          4 * mem.GB,
 		cacheLineSize:     64,
-		cacheLinePerCycle: 1,
+		width:             1,
 		topBufSize:        16,
-		numCyclePerStage:  0,
-		numStage:          0,
-		pipeBufSize:       16,
 	}
 }
 
 // WithWidth sets the width of the memory controller
-func (b Builder) WithWidth(width uint64) Builder {
+func (b Builder) WithWidth(width int) Builder {
 	b.width = width
 	return b
 }
@@ -82,30 +73,6 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 	return b
 }
 
-// WithNumCyclePerStage sets the number of cycles per stage
-func (b Builder) WithNumCyclePerStage(numCyclePerStage int) Builder {
-	b.numCyclePerStage = numCyclePerStage
-	return b
-}
-
-// WithNumStage sets the number of stages
-func (b Builder) WithNumStage(numStage int) Builder {
-	b.numStage = numStage
-	return b
-}
-
-// WithCacheLinePerCycle sets the number of cache lines per cycle
-func (b Builder) WithCacheLinePerCycle(cacheLinePerCycle int) Builder {
-	b.cacheLinePerCycle = cacheLinePerCycle
-	return b
-}
-
-// WithPipeBufSize sets the size of the post pipeline buffer
-func (b Builder) WithPipeBufSize(pipeBufSize int) Builder {
-	b.pipeBufSize = pipeBufSize
-	return b
-}
-
 // WithTopBufSize sets the size of the top buffer
 func (b Builder) WithTopBufSize(topBufSize int) Builder {
 	b.topBufSize = topBufSize
@@ -131,9 +98,7 @@ func (b Builder) Build(
 	c := &Comp{
 		Latency:           b.latency,
 		maxNumTransaction: b.maxNumTransaction,
-		width:             b.cacheLinePerCycle,
-		numCyclePerStage:  b.numCyclePerStage,
-		numStage:          b.numStage,
+		width:             b.width,
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
@@ -146,17 +111,6 @@ func (b Builder) Build(
 	} else {
 		c.Storage = b.storage
 	}
-
-	c.postPipelineBuf = sim.NewBuffer(c.Name()+
-		".PostPipelineBuf",
-		b.pipeBufSize)
-
-	c.pipeline = pipelining.MakeBuilder().
-		WithNumStage(b.numStage).
-		WithCyclePerStage(b.numCyclePerStage).
-		WithPipelineWidth(b.cacheLinePerCycle).
-		WithPostPipelineBuffer(c.postPipelineBuf).
-		Build(c.Name() + ".Pipeline")
 
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
