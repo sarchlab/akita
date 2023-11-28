@@ -38,12 +38,10 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 type Comp struct {
 	*sim.TickingComponent
 
-	topPort            sim.Port
-	Storage            *mem.Storage
-	Latency            int
-	addressConverter   mem.AddressConverter
-	maxNumTransaction  int
-	currNumTransaction int
+	topPort          sim.Port
+	Storage          *mem.Storage
+	Latency          int
+	addressConverter mem.AddressConverter
 
 	width int
 }

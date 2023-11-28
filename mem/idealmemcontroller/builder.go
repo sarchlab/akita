@@ -6,28 +6,26 @@ import (
 )
 
 type Builder struct {
-	width             int
-	latency           int
-	maxNumTransaction int
-	freq              sim.Freq
-	capacity          uint64
-	engine            sim.Engine
-	cacheLineSize     int
-	topBufSize        int
-	storage           *mem.Storage
-	addressConverter  mem.AddressConverter
+	width            int
+	latency          int
+	freq             sim.Freq
+	capacity         uint64
+	engine           sim.Engine
+	cacheLineSize    int
+	topBufSize       int
+	storage          *mem.Storage
+	addressConverter mem.AddressConverter
 }
 
 // MakeBuilder returns a new Builder
 func MakeBuilder() Builder {
 	return Builder{
-		latency:           100,
-		maxNumTransaction: 8,
-		freq:              1 * sim.GHz,
-		capacity:          4 * mem.GB,
-		cacheLineSize:     64,
-		width:             1,
-		topBufSize:        16,
+		latency:       100,
+		freq:          1 * sim.GHz,
+		capacity:      4 * mem.GB,
+		cacheLineSize: 64,
+		width:         1,
+		topBufSize:    16,
 	}
 }
 
@@ -40,12 +38,6 @@ func (b Builder) WithWidth(width int) Builder {
 // WithLatency sets the latency of the memory controller
 func (b Builder) WithLatency(latency int) Builder {
 	b.latency = latency
-	return b
-}
-
-// WithMaxNumTransaction sets the maximum number of transactions that can be
-func (b Builder) WithMaxNumTransaction(maxNumTransaction int) Builder {
-	b.maxNumTransaction = maxNumTransaction
 	return b
 }
 
@@ -96,14 +88,12 @@ func (b Builder) Build(
 	name string,
 ) *Comp {
 	c := &Comp{
-		Latency:           b.latency,
-		maxNumTransaction: b.maxNumTransaction,
-		width:             b.width,
+		Latency: b.latency,
+		width:   b.width,
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
 	c.Latency = b.latency
-	c.maxNumTransaction = b.maxNumTransaction
 	c.addressConverter = b.addressConverter
 
 	if b.storage == nil {
