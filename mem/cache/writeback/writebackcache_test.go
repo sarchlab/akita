@@ -62,9 +62,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.directory = directory
 		cacheModule.storage = storage
 
-		dram = idealmemcontroller.New("Dram", engine, 4*mem.GB)
-		dram.Freq = 1 * sim.GHz
-		dram.Latency = 200
+		dram = idealmemcontroller.MakeBuilder().
+			WithEngine(engine).
+			WithNewStorage(4 * mem.GB).
+			WithFreq(1 * sim.GHz).
+			WithLatency(200).
+			Build("DRAM")
 
 		lowModuleFinder.LowModule = dram.GetPortByName("Top")
 

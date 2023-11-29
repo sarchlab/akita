@@ -89,7 +89,10 @@ func buildEnvironment() {
 		tracing.CollectTrace(writeBackCache, tracer)
 	}
 
-	dram := idealmemcontroller.New("DRAM", engine, 4*mem.GB)
+	dram := idealmemcontroller.MakeBuilder().
+		WithEngine(engine).
+		WithNewStorage(4 * mem.GB).
+		Build("DRAM")
 	lowModuleFinder.LowModule = dram.GetPortByName("Top")
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")

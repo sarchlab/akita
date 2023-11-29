@@ -28,7 +28,10 @@ var _ = Describe("Cache", func() {
 		cuPort = NewMockPort(mockCtrl)
 		engine = sim.NewSerialEngine()
 		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
-		dram = idealmemcontroller.New("DRAM", engine, 4*mem.GB)
+		dram = idealmemcontroller.MakeBuilder().
+			WithEngine(engine).
+			WithNewStorage(4 * mem.GB).
+			Build("DRAM")
 		lowModuleFinder = &mem.SingleLowModuleFinder{
 			LowModule: dram.GetPortByName("Top"),
 		}
