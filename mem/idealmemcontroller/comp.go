@@ -81,7 +81,7 @@ func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 
 	tracing.TraceReqReceive(msg, c)
 
-	switch msg := (msg).(type) {
+	switch msg := msg.(type) {
 	case *mem.ReadReq:
 		c.handleReadReq(now, msg)
 		return true
