@@ -72,7 +72,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-// Tick updates ideal memory controller state.
+// updateMemCtrl updates ideal memory controller state.
 func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 	msg := c.topPort.Retrieve(now)
 	if msg == nil {
