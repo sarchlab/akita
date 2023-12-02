@@ -6,13 +6,14 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/sim"
 )
 
 var _ = Describe("Bank Stage", func() {
 	var (
 		mockCtrl          *gomock.Controller
-		cacheModule       *Cache
+		cacheModule       *Comp
 		pipeline          *MockPipeline
 		postPipelineBuf   *bufferImpl
 		dirInBuf          *MockBuffer

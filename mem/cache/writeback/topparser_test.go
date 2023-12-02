@@ -11,7 +11,7 @@ import (
 var _ = Describe("TopParser", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		parser   *topParser
 		port     *MockPort
 		buf      *MockBuffer

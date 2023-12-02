@@ -8,7 +8,7 @@ import (
 )
 
 type mshrStage struct {
-	cache *Cache
+	cache *Comp
 
 	processingMSHREntry *cache.MSHREntry
 }

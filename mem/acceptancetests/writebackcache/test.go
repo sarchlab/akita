@@ -6,6 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/sim"
 
 	"time"

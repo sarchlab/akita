@@ -18,7 +18,7 @@ var _ = Describe("Address Translator", func() {
 		ctrlPort        *MockPort
 		lowModuleFinder *MockLowModuleFinder
 
-		t *AddressTranslator
+		t *Comp
 	)
 
 	BeforeEach(func() {

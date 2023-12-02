@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/pipelining"
 	"github.com/sarchlab/akita/v3/sim"
 )
@@ -145,8 +146,8 @@ func (b Builder) WithBankLatency(n int) Builder {
 }
 
 // Build creates a usable writeback cache.
-func (b Builder) Build(name string) *Cache {
-	cache := new(Cache)
+func (b Builder) Build(name string) *Comp {
+	cache := new(Comp)
 	cache.TickingComponent = sim.NewTickingComponent(
 		name, b.engine, b.freq, cache)
 
@@ -159,7 +160,7 @@ func (b Builder) Build(name string) *Cache {
 	return cache
 }
 
-func (b *Builder) configureCache(cacheModule *Cache) {
+func (b *Builder) configureCache(cacheModule *Comp) {
 	blockSize := 1 << b.log2BlockSize
 	vimctimFinder := cache.NewLRUVictimFinder()
 	numSet := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
@@ -187,7 +188,7 @@ func (b *Builder) configureCache(cacheModule *Cache) {
 	cacheModule.evictingList = make(map[uint64]bool)
 }
 
-func (b *Builder) createPorts(cache *Cache) {
+func (b *Builder) createPorts(cache *Comp) {
 	cache.topPort = sim.NewLimitNumMsgPort(cache,
 		cache.numReqPerCycle*2, cache.Name()+".ToTop")
 	cache.AddPort("Top", cache.topPort)
@@ -201,7 +202,7 @@ func (b *Builder) createPorts(cache *Cache) {
 	cache.AddPort("Control", cache.controlPort)
 }
 
-func (b *Builder) createPortSenders(cache *Cache) {
+func (b *Builder) createPortSenders(cache *Comp) {
 	cache.topSender = sim.NewBufferedSender(
 		cache.topPort,
 		sim.NewBuffer(cache.Name()+".TopSenderBuffer",
@@ -223,7 +224,7 @@ func (b *Builder) createPortSenders(cache *Cache) {
 	)
 }
 
-func (b *Builder) createInternalStages(cache *Cache) {
+func (b *Builder) createInternalStages(cache *Comp) {
 	cache.topParser = &topParser{cache: cache}
 	b.buildDirectoryStage(cache)
 	b.buildBankStages(cache)
@@ -237,7 +238,7 @@ func (b *Builder) createInternalStages(cache *Cache) {
 	}
 }
 
-func (b *Builder) buildDirectoryStage(cache *Cache) {
+func (b *Builder) buildDirectoryStage(cache *Comp) {
 	buf := sim.NewBuffer(
 		cache.Name()+".DirectoryStageBuffer",
 		b.numReqPerCycle,
@@ -256,7 +257,7 @@ func (b *Builder) buildDirectoryStage(cache *Cache) {
 	}
 }
 
-func (b *Builder) buildBankStages(cache *Cache) {
+func (b *Builder) buildBankStages(cache *Comp) {
 	cache.bankStages = make([]*bankStage, 1)
 
 	laneWidth := b.numReqPerCycle
@@ -284,7 +285,7 @@ func (b *Builder) buildBankStages(cache *Cache) {
 	}
 }
 
-func (b *Builder) createInternalBuffers(cache *Cache) {
+func (b *Builder) createInternalBuffers(cache *Comp) {
 	cache.dirStageBuffer = sim.NewBuffer(
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,

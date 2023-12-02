@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -17,7 +18,7 @@ const (
 )
 
 // A Cache in the writeback package is a cache that performs the write-back policy.
-type Cache struct {
+type Comp struct {
 	*sim.TickingComponent
 
 	topPort     sim.Port
@@ -54,12 +55,12 @@ type Cache struct {
 }
 
 // SetLowModuleFinder sets the LowModuleFinder used by the cache.
-func (c *Cache) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
 // Tick updates the internal states of the Cache.
-func (c *Cache) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = c.controlPortSender.Tick(now) || madeProgress
@@ -73,7 +74,7 @@ func (c *Cache) Tick(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Cache) runPipeline(now sim.VTimeInSec) bool {
+func (c *Comp) runPipeline(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = c.runStage(now, c.topSender) || madeProgress
@@ -91,7 +92,7 @@ func (c *Cache) runPipeline(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Cache) runStage(now sim.VTimeInSec, stage sim.Ticker) bool {
+func (c *Comp) runStage(now sim.VTimeInSec, stage sim.Ticker) bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
 		madeProgress = stage.Tick(now) || madeProgress
@@ -99,7 +100,7 @@ func (c *Cache) runStage(now sim.VTimeInSec, stage sim.Ticker) bool {
 	return madeProgress
 }
 
-func (c *Cache) discardInflightTransactions(now sim.VTimeInSec) {
+func (c *Comp) discardInflightTransactions(now sim.VTimeInSec) {
 	sets := c.directory.GetSets()
 	for _, set := range sets {
 		for _, block := range set.Blocks {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/mem/mem"
 	"github.com/sarchlab/akita/v3/sim"
 
 	"os"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/sarchlab/akita/v3/mem/acceptancetests"
 	"github.com/sarchlab/akita/v3/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v3/mem/mem"
 	"github.com/sarchlab/akita/v3/mem/trace"
 	"github.com/sarchlab/akita/v3/tracing"
 )

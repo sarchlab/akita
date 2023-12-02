@@ -34,7 +34,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		directory        *cache.DirectoryImpl
 		lowModuleFinder  *mem.SingleLowModuleFinder
 		storage          *mem.Storage
-		cacheModule      *Cache
+		cacheModule      *Comp
 		dram             *idealmemcontroller.Comp
 		conn             *sim.DirectConnection
 		agentPort        *MockPort

@@ -15,7 +15,7 @@ var _ = Describe("DirectoryStage", func() {
 	var (
 		mockCtrl          *gomock.Controller
 		ds                *directoryStage
-		cacheModule       *Cache
+		cacheModule       *Comp
 		mshr              *MockMSHR
 		dirBuf            *MockBuffer
 		pipeline          *MockPipeline

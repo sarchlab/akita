@@ -38,7 +38,7 @@ func (p Protocol) isHBM() bool {
 }
 
 // A MemController handles read and write requests.
-type MemController struct {
+type Comp struct {
 	*sim.TickingComponent
 
 	topPort sim.Port
@@ -55,7 +55,7 @@ type MemController struct {
 }
 
 // Tick updates memory controller's internal state.
-func (c *MemController) Tick(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) Tick(now sim.VTimeInSec) (madeProgress bool) {
 	madeProgress = c.respond(now) || madeProgress
 	madeProgress = c.respond(now) || madeProgress
 	madeProgress = c.channel.Tick(now) || madeProgress
@@ -65,7 +65,7 @@ func (c *MemController) Tick(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *MemController) parseTop(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) parseTop(now sim.VTimeInSec) (madeProgress bool) {
 	msg := c.topPort.Peek()
 	if msg == nil {
 		return false
@@ -109,7 +109,7 @@ func (c *MemController) parseTop(now sim.VTimeInSec) (madeProgress bool) {
 	return true
 }
 
-func (c *MemController) assignTransInternalAddress(trans *signal.Transaction) {
+func (c *Comp) assignTransInternalAddress(trans *signal.Transaction) {
 	if c.addrConverter != nil {
 		trans.InternalAddress = c.addrConverter.ConvertExternalToInternal(
 			trans.GlobalAddress())
@@ -119,7 +119,7 @@ func (c *MemController) assignTransInternalAddress(trans *signal.Transaction) {
 	trans.InternalAddress = trans.GlobalAddress()
 }
 
-func (c *MemController) issue(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) issue(now sim.VTimeInSec) (madeProgress bool) {
 	cmd := c.cmdQueue.GetCommandToIssue(now)
 	if cmd == nil {
 		return false
@@ -131,7 +131,7 @@ func (c *MemController) issue(now sim.VTimeInSec) (madeProgress bool) {
 	return true
 }
 
-func (c *MemController) respond(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) respond(now sim.VTimeInSec) (madeProgress bool) {
 	for i, t := range c.inflightTransactions {
 		if t.IsCompleted() {
 			done := c.finalizeTransaction(now, t, i)
@@ -144,7 +144,7 @@ func (c *MemController) respond(now sim.VTimeInSec) (madeProgress bool) {
 	return false
 }
 
-func (c *MemController) finalizeTransaction(
+func (c *Comp) finalizeTransaction(
 	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,
@@ -164,7 +164,7 @@ func (c *MemController) finalizeTransaction(
 	return done
 }
 
-func (c *MemController) finalizeWriteTrans(
+func (c *Comp) finalizeWriteTrans(
 	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,
@@ -194,7 +194,7 @@ func (c *MemController) finalizeWriteTrans(
 	return false
 }
 
-func (c *MemController) finalizeReadTrans(
+func (c *Comp) finalizeReadTrans(
 	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,

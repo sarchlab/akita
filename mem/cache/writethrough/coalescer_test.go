@@ -12,7 +12,7 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		topPort  *MockPort
 		dirBuf   *MockBuffer
 		c        coalescer
@@ -22,7 +22,7 @@ var _ = Describe("Coalescer", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
 		dirBuf = NewMockBuffer(mockCtrl)
-		cache = &Cache{
+		cache = &Comp{
 			log2BlockSize:         6,
 			topPort:               topPort,
 			dirBuf:                dirBuf,

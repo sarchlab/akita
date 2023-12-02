@@ -79,8 +79,8 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 }
 
 // Build creates a new TLB
-func (b Builder) Build(name string) *TLB {
-	tlb := &TLB{}
+func (b Builder) Build(name string) *Comp {
+	tlb := &Comp{}
 	tlb.TickingComponent =
 		sim.NewTickingComponent(name, b.engine, b.freq, tlb)
 
@@ -98,16 +98,16 @@ func (b Builder) Build(name string) *TLB {
 	return tlb
 }
 
-func (b Builder) createPorts(name string, tlb *TLB) {
-	tlb.topPort = sim.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
+func (b Builder) createPorts(name string, c *Comp) {
+	c.topPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
 		name+".TopPort")
-	tlb.AddPort("Top", tlb.topPort)
+	c.AddPort("Top", c.topPort)
 
-	tlb.bottomPort = sim.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
+	c.bottomPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
 		name+".BottomPort")
-	tlb.AddPort("Bottom", tlb.bottomPort)
+	c.AddPort("Bottom", c.bottomPort)
 
-	tlb.controlPort = sim.NewLimitNumMsgPort(tlb, 1,
+	c.controlPort = sim.NewLimitNumMsgPort(c, 1,
 		name+".ControlPort")
-	tlb.AddPort("Control", tlb.controlPort)
+	c.AddPort("Control", c.controlPort)
 }

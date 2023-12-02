@@ -22,7 +22,7 @@ var _ = Describe("Directory", func() {
 		pipeline        *MockPipeline
 		buf             *MockBuffer
 		d               *directory
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {
@@ -36,7 +36,7 @@ var _ = Describe("Directory", func() {
 		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
-		c = &Cache{
+		c = &Comp{
 			log2BlockSize:    6,
 			bottomPort:       bottomPort,
 			directory:        dir,

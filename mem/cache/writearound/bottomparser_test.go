@@ -17,7 +17,7 @@ var _ = Describe("Bottom Parser", func() {
 		bankBuf    *MockBuffer
 		mshr       *MockMSHR
 		p          *bottomParser
-		c          *Cache
+		c          *Comp
 	)
 
 	BeforeEach(func() {
@@ -25,7 +25,7 @@ var _ = Describe("Bottom Parser", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
-		c = &Cache{
+		c = &Comp{
 			log2BlockSize:    6,
 			bottomPort:       bottomPort,
 			mshr:             mshr,
