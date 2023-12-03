@@ -17,7 +17,7 @@ const (
 	cacheStatePaused
 )
 
-// A Cache in the writeback package is a cache that performs the write-back policy.
+// Comp in the writeback package is a cache that performs the write-back policy.
 type Comp struct {
 	*sim.TickingComponent
 

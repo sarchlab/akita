@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v3/sim"
 )
 
-// A Cache is a customized L1 cache the for R9nano GPUs.
+// Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
 	*sim.TickingComponent
 

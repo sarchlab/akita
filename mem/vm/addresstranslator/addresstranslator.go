@@ -23,7 +23,7 @@ type reqToBottom struct {
 	reqToBottom mem.AccessReq
 }
 
-// AddressTranslator is a component that forwards the read/write requests with
+// Comp is an AddressTranslator that forwards the read/write requests with
 // the address translated from virtual to physical.
 type Comp struct {
 	*sim.TickingComponent

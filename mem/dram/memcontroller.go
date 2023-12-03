@@ -37,7 +37,7 @@ func (p Protocol) isHBM() bool {
 	return p == HBM || p == HBM2
 }
 
-// A MemController handles read and write requests.
+// Comp is a MemController handles read and write requests.
 type Comp struct {
 	*sim.TickingComponent
 

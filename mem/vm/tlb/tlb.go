@@ -10,7 +10,7 @@ import (
 	"github.com/sarchlab/akita/v3/tracing"
 )
 
-// A TLB is a cache that maintains some page information.
+// Comp is a cache(TLB) that maintains some page information.
 type Comp struct {
 	*sim.TickingComponent
 

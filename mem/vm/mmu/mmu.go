@@ -16,7 +16,7 @@ type transaction struct {
 	migration *vm.PageMigrationReqToDriver
 }
 
-// MMU is the default mmu implementation. It is also an akita Component.
+// Comp is the default mmu implementation. It is also an akita Component.
 type Comp struct {
 	sim.TickingComponent
 
