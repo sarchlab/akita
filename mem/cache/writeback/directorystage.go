@@ -20,7 +20,7 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directoryStage struct {
-	cache    *Cache
+	cache    *Comp
 	pipeline pipelining.Pipeline
 	buf      sim.Buffer
 }

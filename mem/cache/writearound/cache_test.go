@@ -20,7 +20,7 @@ var _ = Describe("Cache", func() {
 		lowModuleFinder mem.LowModuleFinder
 		dram            *idealmemcontroller.Comp
 		cuPort          *MockPort
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {

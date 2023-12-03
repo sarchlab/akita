@@ -10,7 +10,7 @@ import (
 )
 
 type flusher struct {
-	cache *Cache
+	cache *Comp
 
 	blockToEvict    []*cache.Block
 	processingFlush *cache.FlushReq

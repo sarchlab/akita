@@ -79,8 +79,8 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 }
 
 // Build returns a new AddressTranslator
-func (b Builder) Build(name string) *AddressTranslator {
-	t := &AddressTranslator{}
+func (b Builder) Build(name string) *Comp {
+	t := &Comp{}
 	t.TickingComponent = sim.NewTickingComponent(
 		name, b.engine, b.freq, t)
 
@@ -95,7 +95,7 @@ func (b Builder) Build(name string) *AddressTranslator {
 	return t
 }
 
-func (b Builder) createPorts(name string, t *AddressTranslator) {
+func (b Builder) createPorts(name string, t *Comp) {
 	t.topPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
 		name+".TopPort")
 	t.AddPort("Top", t.topPort)

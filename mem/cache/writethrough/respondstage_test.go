@@ -11,7 +11,7 @@ import (
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -19,7 +19,7 @@ var _ = Describe("Respond Stage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
-		cache = &Cache{
+		cache = &Comp{
 			topPort: topPort,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(

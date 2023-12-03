@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -17,7 +18,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline        *MockPipeline
 		postPipelineBuf *MockBuffer
 		s               *bankStage
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {
@@ -26,7 +27,7 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 		pipeline = NewMockPipeline(mockCtrl)
 		postPipelineBuf = NewMockBuffer(mockCtrl)
-		c = &Cache{
+		c = &Comp{
 			bankLatency:   10,
 			bankBufs:      []sim.Buffer{inBuf},
 			storage:       storage,

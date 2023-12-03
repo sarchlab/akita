@@ -11,7 +11,7 @@ import (
 var _ = Describe("MSHR Stage", func() {
 	var (
 		mockCtrl    *gomock.Controller
-		cacheModule *Cache
+		cacheModule *Comp
 		ms          *mshrStage
 		inBuf       *MockBuffer
 		mshr        *MockMSHR

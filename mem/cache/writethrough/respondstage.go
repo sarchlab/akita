@@ -7,7 +7,7 @@ import (
 )
 
 type respondStage struct {
-	cache *Cache
+	cache *Comp
 }
 
 func (s *respondStage) Tick(now sim.VTimeInSec) bool {

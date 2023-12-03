@@ -29,7 +29,7 @@ var _ = Describe("DRAM Integration", func() {
 		mockCtrl *gomock.Controller
 		engine   sim.Engine
 		srcPort  *MockPort
-		memCtrl  *MemController
+		memCtrl  *Comp
 		conn     *sim.DirectConnection
 	)
 

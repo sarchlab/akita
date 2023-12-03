@@ -8,7 +8,7 @@ import (
 )
 
 type writeBufferStage struct {
-	cache *Cache
+	cache *Comp
 
 	writeBufferCapacity int
 	maxInflightFetch    int

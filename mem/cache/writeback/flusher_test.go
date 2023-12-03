@@ -23,7 +23,7 @@ var _ = Describe("Flusher", func() {
 		bottomPortSender  *MockBufferedSender
 		controlPortSender *MockBufferedSender
 		mshr              *MockMSHR
-		cacheModule       *Cache
+		cacheModule       *Comp
 		f                 *flusher
 	)
 

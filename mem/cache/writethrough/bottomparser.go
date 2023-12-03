@@ -8,7 +8,7 @@ import (
 )
 
 type bottomParser struct {
-	cache *Cache
+	cache *Comp
 }
 
 func (p *bottomParser) Tick(now sim.VTimeInSec) bool {

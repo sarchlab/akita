@@ -15,7 +15,7 @@ func (t *bankTransaction) TaskID() string {
 }
 
 type bankStage struct {
-	cache          *Cache
+	cache          *Comp
 	bankID         int
 	numReqPerCycle int
 

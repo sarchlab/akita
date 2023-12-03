@@ -21,7 +21,7 @@ var _ = Describe("MemController", func() {
 		channel             *MockChannel
 		storage             *mem.Storage
 
-		memCtrl *MemController
+		memCtrl *Comp
 	)
 
 	BeforeEach(func() {

@@ -12,7 +12,7 @@ type controlStage struct {
 	ctrlPort     sim.Port
 	transactions *[]*transaction
 	directory    cache.Directory
-	cache        *Cache
+	cache        *Comp
 	coalescer    *coalescer
 	bankStages   []*bankStage
 

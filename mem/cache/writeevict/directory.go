@@ -17,7 +17,7 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directory struct {
-	cache *Cache
+	cache *Comp
 
 	pipeline pipelining.Pipeline
 	buf      sim.Buffer

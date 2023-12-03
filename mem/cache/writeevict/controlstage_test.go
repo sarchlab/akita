@@ -18,7 +18,7 @@ var _ = Describe("Control Stage", func() {
 		transactions []*transaction
 		directory    *MockDirectory
 		s            *controlStage
-		cacheComp    *Cache
+		cacheComp    *Comp
 		inBuf        *MockBuffer
 		mshr         *MockMSHR
 		c            *coalescer
@@ -36,7 +36,7 @@ var _ = Describe("Control Stage", func() {
 
 		transactions = nil
 
-		cacheComp = &Cache{
+		cacheComp = &Comp{
 			topPort:               topPort,
 			bottomPort:            bottomPort,
 			dirBuf:                inBuf,

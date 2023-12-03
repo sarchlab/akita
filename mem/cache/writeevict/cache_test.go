@@ -7,6 +7,7 @@ import (
 	. "github.com/sarchlab/akita/v3/mem/cache/writeevict"
 	"github.com/sarchlab/akita/v3/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v3/mem/mem"
+
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -18,7 +19,7 @@ var _ = Describe("Cache", func() {
 		lowModuleFinder mem.LowModuleFinder
 		dram            *idealmemcontroller.Comp
 		cuPort          *MockPort
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {

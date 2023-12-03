@@ -17,7 +17,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline        *MockPipeline
 		postPipelineBuf *MockBuffer
 		s               *bankStage
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {
@@ -26,7 +26,7 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 		pipeline = NewMockPipeline(mockCtrl)
 		postPipelineBuf = NewMockBuffer(mockCtrl)
-		c = &Cache{
+		c = &Comp{
 			bankLatency:   10,
 			bankBufs:      []sim.Buffer{inBuf},
 			storage:       storage,

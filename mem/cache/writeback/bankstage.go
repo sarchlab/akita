@@ -12,7 +12,7 @@ import (
 )
 
 type bankStage struct {
-	cache  *Cache
+	cache  *Comp
 	bankID int
 
 	pipeline                   pipelining.Pipeline

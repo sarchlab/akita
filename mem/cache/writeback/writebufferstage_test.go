@@ -12,7 +12,7 @@ import (
 var _ = Describe("Write Buffer Stage", func() {
 	var (
 		mockCtrl          *gomock.Controller
-		cacheModule       *Cache
+		cacheModule       *Comp
 		writeBufferBuffer *MockBuffer
 		bankBuffer        *MockBuffer
 		directory         *MockDirectory

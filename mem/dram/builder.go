@@ -392,8 +392,8 @@ func (b Builder) WithRFCb(cycle int) Builder {
 }
 
 // Build builds a new MemController.
-func (b Builder) Build(name string) *MemController {
-	m := &MemController{
+func (b Builder) Build(name string) *Comp {
+	m := &Comp{
 		addrConverter: b.addrConverter,
 		storage:       b.storage,
 	}
@@ -451,7 +451,7 @@ func (b Builder) attachTracers(hookable tracing.NamedHookable) {
 	}
 }
 
-func (b Builder) buildChannel(name string, m *MemController) {
+func (b Builder) buildChannel(name string, m *Comp) {
 	timing := b.generateTiming()
 	channel := &org.ChannelImpl{
 		Timing: timing,

@@ -17,7 +17,7 @@ var _ = Describe("MMU", func() {
 		migrationPort *MockPort
 		topSender     *MockBufferedSender
 		pageTable     *MockPageTable
-		mmu           *MMU
+		mmu           *Comp
 	)
 
 	BeforeEach(func() {
@@ -362,7 +362,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		mmu        *MMU
+		mmu        *Comp
 		agent      *MockPort
 		connection sim.Connection
 	)
