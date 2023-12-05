@@ -38,7 +38,7 @@ var _ = Describe("Switch", func() {
 		dstPort                    *MockPort
 		routingTable               *MockTable
 		arbiter                    *MockArbiter
-		sw                         *Switch
+		sw                         *Comp
 	)
 
 	BeforeEach(func() {
@@ -51,7 +51,7 @@ var _ = Describe("Switch", func() {
 		routingTable = NewMockTable(mockCtrl)
 		arbiter = NewMockArbiter(mockCtrl)
 		arbiter.EXPECT().AddBuffer(gomock.Any()).AnyTimes()
-		sw = SwitchBuilder{}.
+		sw = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
 			WithRoutingTable(routingTable).

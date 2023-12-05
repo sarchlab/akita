@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v3/noc/messaging"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -15,7 +16,7 @@ var _ = Describe("End Point", func() {
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
-		endPoint          *EndPoint
+		endPoint          *endpoint.Comp
 	)
 
 	BeforeEach(func() {
@@ -27,7 +28,7 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
-		endPoint = MakeEndPointBuilder().
+		endPoint = endpoint.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
 			WithFlitByteSize(32).

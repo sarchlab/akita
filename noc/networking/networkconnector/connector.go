@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
 	"github.com/sarchlab/akita/v3/noc/networking/switching"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/sarchlab/akita/v3/tracing"
 )
@@ -171,7 +172,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	arbiter := arbitration.NewXBarArbiter()
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
-	sw := switching.SwitchBuilder{}.
+	sw := switching.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
 		WithArbiter(arbiter).
@@ -253,7 +254,7 @@ func (c *Connector) createEndPointWithName(
 	name string,
 ) *deviceNode {
 	fullName := fmt.Sprintf("%s.%s", c.name, name)
-	endPoint := switching.MakeEndPointBuilder().
+	endPoint := endpoint.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
 		WithFlitByteSize(c.flitSize).
@@ -295,7 +296,7 @@ func (c *Connector) createEndPoint(
 }
 
 func (c *Connector) connectEndPointWithSwitch(
-	swNode *switchNode, endPoint *switching.EndPoint,
+	swNode *switchNode, endPoint *endpoint.Comp,
 	param DeviceToSwitchLinkParameter,
 ) (*sim.LimitNumMsgPort, namedHookableConnection) {
 	sw := swNode.sw

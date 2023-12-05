@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
 	"github.com/sarchlab/akita/v3/noc/networking/switching"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -40,7 +41,7 @@ type Node interface {
 }
 
 type switchNode struct {
-	sw      *switching.Switch
+	sw      *switching.Comp
 	remotes []Remote
 }
 
@@ -58,7 +59,7 @@ func (sn *switchNode) Table() routing.Table {
 
 type deviceNode struct {
 	ports    []sim.Port
-	endPoint *switching.EndPoint
+	endPoint *endpoint.Comp
 	sw       *switchNode
 	remote   Remote
 }
