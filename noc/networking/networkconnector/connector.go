@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 	"github.com/sarchlab/akita/v3/tracing"
 )
 
@@ -352,7 +353,7 @@ func (c *Connector) connectPorts(
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = sim.NewDirectConnection(connName, c.engine, c.defaultFreq)
+		conn = directconnection.MakeBuilder().WithEngine(c.engine).WithFreq(c.defaultFreq).Build(connName)
 	} else {
 		conn = messaging.MakeChannelBuilder().
 			WithEngine(c.engine).

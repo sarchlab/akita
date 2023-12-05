@@ -1,4 +1,4 @@
-package sim
+package directconnection
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 var _ = Describe("DirectConnection", func() {
@@ -17,7 +18,7 @@ var _ = Describe("DirectConnection", func() {
 		port1      *MockPort
 		port2      *MockPort
 		engine     *MockEngine
-		connection *DirectConnection
+		connection *Comp
 	)
 
 	BeforeEach(func() {
@@ -25,7 +26,7 @@ var _ = Describe("DirectConnection", func() {
 		port1 = NewMockPort(mockCtrl)
 		port2 = NewMockPort(mockCtrl)
 		engine = NewMockEngine(mockCtrl)
-		connection = NewDirectConnection("Direct", engine, 1)
+		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Direct")
 
 		port1.EXPECT().SetConnection(connection)
 		connection.PlugIn(port1, 4)
@@ -69,8 +70,8 @@ var _ = Describe("DirectConnection", func() {
 		msg.Src = port1
 		msg.Dst = port2
 
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt TickEvent) {
-			Expect(evt.Time()).To(Equal(VTimeInSec(10)))
+		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
+			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
 			Expect(evt.IsSecondary()).To(BeTrue())
 		})
 
@@ -90,8 +91,8 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Src = port2
 		msg2.Dst = port1
 
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt TickEvent) {
-			Expect(evt.Time()).To(Equal(VTimeInSec(10)))
+		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
+			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
 			Expect(evt.IsSecondary()).To(BeTrue())
 		})
 
@@ -116,8 +117,8 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Src = port2
 		msg2.Dst = port1
 
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt TickEvent) {
-			Expect(evt.Time()).To(Equal(VTimeInSec(10)))
+		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
+			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
 			Expect(evt.IsSecondary()).To(BeTrue())
 		})
 
@@ -131,7 +132,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		tick := MakeTickEvent(10, connection)
+		tick := sim.MakeTickEvent(10, connection)
 
 		msg1 := &sampleMsg{}
 		msg1.SendTime = 10
@@ -149,9 +150,9 @@ var _ = Describe("DirectConnection", func() {
 
 		port1.EXPECT().Recv(msg2).Return(nil)
 		port2.EXPECT().Recv(msg1).Return(nil)
-		port2.EXPECT().NotifyAvailable(VTimeInSec(10))
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt TickEvent) {
-			Expect(evt.Time()).To(Equal(VTimeInSec(11)))
+		port2.EXPECT().NotifyAvailable(sim.VTimeInSec(10))
+		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
+			Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
 			Expect(evt.IsSecondary()).To(BeTrue())
 		})
 
@@ -160,28 +161,28 @@ var _ = Describe("DirectConnection", func() {
 		Expect(connection.ends[port1].buf).To(HaveLen(0))
 		Expect(connection.ends[port2].buf).To(HaveLen(0))
 		Expect(connection.ends[port2].busy).To(BeFalse())
-		Expect(msg1.RecvTime).To(Equal(VTimeInSec(10)))
-		Expect(msg2.RecvTime).To(Equal(VTimeInSec(10)))
+		Expect(msg1.RecvTime).To(Equal(sim.VTimeInSec(10)))
+		Expect(msg2.RecvTime).To(Equal(sim.VTimeInSec(10)))
 	})
 })
 
 type agent struct {
-	*TickingComponent
+	*sim.TickingComponent
 
-	msgsOut []Msg
-	msgsIn  []Msg
+	msgsOut []sim.Msg
+	msgsIn  []sim.Msg
 
-	OutPort Port
+	OutPort sim.Port
 }
 
-func newAgent(engine Engine, freq Freq, name string) *agent {
+func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	a := new(agent)
-	a.TickingComponent = NewTickingComponent(name, engine, freq, a)
-	a.OutPort = NewLimitNumMsgPort(a, 4, name+".OutPort")
+	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
+	a.OutPort = sim.NewLimitNumMsgPort(a, 4, name+".OutPort")
 	return a
 }
 
-func (a *agent) Tick(now VTimeInSec) bool {
+func (a *agent) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	msgIn := a.OutPort.Retrieve(now)
@@ -206,8 +207,8 @@ func (a *agent) Tick(now VTimeInSec) bool {
 var _ = Describe("Direct Connection Integration", func() {
 	var (
 		mockCtrl        *gomock.Controller
-		engine          Engine
-		connection      *DirectConnection
+		engine          sim.Engine
+		connection      *Comp
 		agents          []*agent
 		numAgents       = 10
 		numMsgsPerAgent = 1000
@@ -215,8 +216,8 @@ var _ = Describe("Direct Connection Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = NewSerialEngine()
-		connection = NewDirectConnection("Conn", engine, 1)
+		engine = sim.NewSerialEngine()
+		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
@@ -263,12 +264,12 @@ var _ = Describe("Direct Connection Integration", func() {
 	})
 })
 
-func directConnectionTest(seed int64) VTimeInSec {
+func directConnectionTest(seed int64) sim.VTimeInSec {
 	rand.Seed(seed)
 	numAgents := 100
 	numMsgsPerAgent := 1000
-	engine := NewSerialEngine()
-	connection := NewDirectConnection("Conn", engine, 1)
+	engine := sim.NewSerialEngine()
+	connection := MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {

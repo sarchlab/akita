@@ -8,6 +8,7 @@ import (
 	. "github.com/sarchlab/akita/v3/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v3/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 
 	"github.com/sarchlab/akita/v3/mem/mem"
 )
@@ -27,7 +28,7 @@ var _ = Describe("Cache", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		cuPort = NewMockPort(mockCtrl)
 		engine = sim.NewSerialEngine()
-		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		dram = idealmemcontroller.New("DRAM", engine, 4*mem.GB)
 		lowModuleFinder = &mem.SingleLowModuleFinder{
 			LowModule: dram.GetPortByName("Top"),

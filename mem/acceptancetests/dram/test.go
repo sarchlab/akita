@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v3/mem/dram"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 
 	"os"
 	"time"
@@ -44,7 +45,7 @@ func main() {
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
-	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 	agent := acceptancetests.NewMemAccessAgent(engine)
 	agent.MaxAddress = *maxAddressFlag
