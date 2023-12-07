@@ -40,14 +40,16 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should be panic if msg src is nil", func() {
-		msg := &sampleMsg{}
+		// msg := &sampleMsg{}
+		msg := sim.NewSampleMsg()
 		msg.Src = nil
 
 		Expect(func() { connection.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic is src is not connected", func() {
-		msg := &sampleMsg{}
+		// msg := &sampleMsg{}
+		msg := sim.NewSampleMsg()
 		msg.Src = NewMockPort(mockCtrl)
 		msg.Dst = NewMockPort(mockCtrl)
 
@@ -57,7 +59,8 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
-		msg := &sampleMsg{}
+		// msg := &sampleMsg{}
+		msg := sim.NewSampleMsg()
 		msg.Src = port1
 		msg.Dst = port1
 
@@ -65,7 +68,8 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should buffer the message and schedule tick when a message is sent", func() {
-		msg := &sampleMsg{}
+		// msg := &sampleMsg{}
+		msg := sim.NewSampleMsg()
 		msg.SendTime = 10
 		msg.Src = port1
 		msg.Dst = port2
@@ -81,12 +85,14 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should only tick once for all the messages sent at the same time ", func() {
-		msg1 := &sampleMsg{}
+		// msg1 := &sampleMsg{}
+		msg1 := sim.NewSampleMsg()
 		msg1.SendTime = 10
 		msg1.Src = port1
 		msg1.Dst = port2
 
-		msg2 := &sampleMsg{}
+		// msg2 := &sampleMsg{}
+		msg2 := sim.NewSampleMsg()
 		msg2.SendTime = 10
 		msg2.Src = port2
 		msg2.Dst = port1
@@ -104,13 +110,15 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should fail sending if local buffer is full", func() {
-		msg1 := &sampleMsg{}
+		// msg1 := &sampleMsg{}
+		msg1 := sim.NewSampleMsg()
 		msg1.ID = "1"
 		msg1.SendTime = 10
 		msg1.Src = port2
 		msg1.Dst = port1
 
-		msg2 := &sampleMsg{}
+		// msg2 := &sampleMsg{}
+		msg2 := sim.NewSampleMsg()
 		msg1.ID = "2"
 		msg1.SendTime = 10
 		msg2.SendTime = 10
@@ -134,12 +142,14 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		tick := sim.MakeTickEvent(10, connection)
 
-		msg1 := &sampleMsg{}
+		// msg1 := &sampleMsg{}
+		msg1 := sim.NewSampleMsg()
 		msg1.SendTime = 10
 		msg1.Src = port1
 		msg1.Dst = port2
 
-		msg2 := &sampleMsg{}
+		// msg2 := &sampleMsg{}
+		msg2 := sim.NewSampleMsg()
 		msg2.SendTime = 10
 		msg2.Src = port2
 		msg2.Dst = port1
@@ -233,14 +243,15 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := &sampleMsg{}
+				// msg := &sampleMsg{}
+				msg := sim.NewSampleMsg()
 				msg.Src = agent.OutPort
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort
 				}
 				msg.ID = fmt.Sprintf("%s(%d)->%s",
-					agent.name, i, msg.Dst.Component().Name())
+					agent.Name(), i, msg.Dst.Component().Name())
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater(0)
@@ -280,14 +291,15 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 
 	for _, agent := range agents {
 		for i := 0; i < numMsgsPerAgent; i++ {
-			msg := &sampleMsg{}
+			// msg := &sampleMsg{}
+			msg := sim.NewSampleMsg()
 			msg.Src = agent.OutPort
 			msg.Dst = agents[rand.Intn(len(agents))].OutPort
 			for msg.Dst == msg.Src {
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort
 			}
 			msg.ID = fmt.Sprintf("%s(%d)->%s",
-				agent.name, i, msg.Dst.Component().Name())
+				agent.Name(), i, msg.Dst.Component().Name())
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}
 		agent.TickLater(0)

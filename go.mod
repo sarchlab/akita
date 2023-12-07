@@ -3,7 +3,7 @@ module github.com/sarchlab/akita/v3
 require (
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang/mock v1.6.0
-	github.com/google/pprof v0.0.0-20231203200248-ad67f76aa53d
+	github.com/google/pprof v0.0.0-20231205033806-a5a03c77bf08
 	github.com/gorilla/mux v1.8.1
 	github.com/mattn/go-sqlite3 v1.14.18
 	github.com/onsi/ginkgo/v2 v2.13.2

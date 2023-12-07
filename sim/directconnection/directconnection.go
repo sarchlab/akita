@@ -1,3 +1,4 @@
+// Package directconnection provides directconnection
 package directconnection
 
 import (

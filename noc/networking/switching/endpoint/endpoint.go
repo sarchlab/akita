@@ -1,3 +1,4 @@
+// Package endpoint provides endpoint
 package endpoint
 
 import (
