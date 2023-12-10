@@ -5,8 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/sarchlab/akita/v3/sim/directconnection"
 )
@@ -42,7 +42,7 @@ type Node interface {
 }
 
 type switchNode struct {
-	sw      *switching.Comp
+	sw      *switches.Comp
 	remotes []Remote
 }
 

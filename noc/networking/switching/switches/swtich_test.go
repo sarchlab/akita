@@ -1,4 +1,4 @@
-package switching
+package switches
 
 import (
 	gomock "github.com/golang/mock/gomock"
@@ -28,6 +28,14 @@ func createMockPortComplex(ctrl *gomock.Controller) portComplex {
 	}
 
 	return pc
+}
+
+type sampleMsg struct {
+	sim.MsgMeta
+}
+
+func (m *sampleMsg) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
 }
 
 var _ = Describe("Switch", func() {

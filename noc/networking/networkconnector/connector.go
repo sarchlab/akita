@@ -8,8 +8,8 @@ import (
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
 	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/sarchlab/akita/v3/sim/directconnection"
 	"github.com/sarchlab/akita/v3/tracing"
@@ -173,7 +173,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	arbiter := arbitration.NewXBarArbiter()
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
-	sw := switching.MakeBuilder().
+	sw := switches.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
 		WithArbiter(arbiter).
@@ -307,7 +307,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		param.SwitchEndParam.IncomingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
 	endPoint.DefaultSwitchDst = swPort
-	switching.MakeSwitchPortAdder(sw).
+	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).
 		WithNumInputChannel(param.SwitchEndParam.NumInputChannel).
@@ -414,14 +414,14 @@ func (c *Connector) ConnectSwitches(
 	rightPort = sim.NewLimitNumMsgPort(rightSwitch,
 		param.RightEndParam.IncomingBufSize, rightPortName)
 
-	switching.MakeSwitchPortAdder(leftSwitch).
+	switches.MakeSwitchPortAdder(leftSwitch).
 		WithPorts(leftPort, rightPort).
 		WithLatency(param.LeftEndParam.Latency).
 		WithNumInputChannel(param.LeftEndParam.NumInputChannel).
 		WithNumOutputChannel(param.LeftEndParam.NumOutputChannel).
 		AddPort()
 
-	switching.MakeSwitchPortAdder(rightSwitch).
+	switches.MakeSwitchPortAdder(rightSwitch).
 		WithPorts(rightPort, leftPort).
 		WithLatency(param.RightEndParam.Latency).
 		WithNumInputChannel(param.RightEndParam.NumInputChannel).

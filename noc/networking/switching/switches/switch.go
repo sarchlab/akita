@@ -1,4 +1,4 @@
-package switching
+package switches
 
 import (
 	"fmt"
@@ -15,6 +15,11 @@ type flitPipelineItem struct {
 	taskID string
 	flit   *messaging.Flit
 }
+
+// func NewFlitPipelineItem(taskID string, flit *messaging.Flit) flitPipelineItem {
+// 	f := flitPipelineItem{taskID: taskID, flit: flit}
+// 	return f
+// }
 
 func (f flitPipelineItem) TaskID() string {
 	return f.taskID

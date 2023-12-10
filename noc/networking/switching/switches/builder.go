@@ -1,4 +1,4 @@
-package switching
+package switches
 
 import (
 	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
