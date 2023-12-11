@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v3/mem/vm"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 )
 
 var _ = Describe("MMU", func() {
@@ -374,7 +375,7 @@ var _ = Describe("MMU Integration", func() {
 		builder := MakeBuilder().WithEngine(engine)
 		mmu = builder.Build("MMU")
 		agent = NewMockPort(mockCtrl)
-		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)
 		connection.PlugIn(agent, 10)

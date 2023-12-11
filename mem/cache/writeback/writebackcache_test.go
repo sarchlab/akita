@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v3/mem/mem"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -36,7 +37,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		storage          *mem.Storage
 		cacheModule      *Comp
 		dram             *idealmemcontroller.Comp
-		conn             *sim.DirectConnection
+		conn             *directconnection.Comp
 		agentPort        *MockPort
 		controlAgentPort *MockPort
 	)
@@ -68,7 +69,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		lowModuleFinder.LowModule = dram.GetPortByName("Top")
 
-		conn = sim.NewDirectConnection("Connection", engine, 1*sim.GHz)
+		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Connection")
 		conn.PlugIn(cacheModule.topPort, 10)
 		conn.PlugIn(cacheModule.bottomPort, 10)
 		conn.PlugIn(cacheModule.controlPort, 10)

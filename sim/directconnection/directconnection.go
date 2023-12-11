@@ -1,23 +1,28 @@
-package sim
+// Package directconnection provides directconnection
+package directconnection
+
+import (
+	"github.com/sarchlab/akita/v3/sim"
+)
 
 type directConnectionEnd struct {
-	port    Port
-	buf     []Msg
+	port    sim.Port
+	buf     []sim.Msg
 	bufSize int
 	busy    bool
 }
 
-// DirectConnection connects two components without latency
-type DirectConnection struct {
-	*TickingComponent
+// Comp is a DirectConnection connects two components without latency
+type Comp struct {
+	*sim.TickingComponent
 
 	nextPortID int
-	ports      []Port
-	ends       map[Port]*directConnectionEnd
+	ports      []sim.Port
+	ends       map[sim.Port]*directConnectionEnd
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *DirectConnection) PlugIn(port Port, sourceSideBufSize int) {
+func (c *Comp) PlugIn(port sim.Port, sourceSideBufSize int) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -31,18 +36,18 @@ func (c *DirectConnection) PlugIn(port Port, sourceSideBufSize int) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *DirectConnection) Unplug(_ Port) {
+func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *DirectConnection) NotifyAvailable(now VTimeInSec, _ Port) {
+func (c *Comp) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
 	c.TickNow(now)
 }
 
 // CanSend checks if the direct message can send a message from the port.
-func (c *DirectConnection) CanSend(src Port) bool {
+func (c *Comp) CanSend(src sim.Port) bool {
 	c.Lock()
 	defer c.Unlock()
 
@@ -58,7 +63,7 @@ func (c *DirectConnection) CanSend(src Port) bool {
 }
 
 // Send of a DirectConnection schedules a DeliveryEvent immediately
-func (c *DirectConnection) Send(msg Msg) *SendError {
+func (c *Comp) Send(msg sim.Msg) *sim.SendError {
 	c.Lock()
 	defer c.Unlock()
 
@@ -68,7 +73,7 @@ func (c *DirectConnection) Send(msg Msg) *SendError {
 
 	if len(srcEnd.buf) >= srcEnd.bufSize {
 		srcEnd.busy = true
-		return NewSendError()
+		return sim.NewSendError()
 	}
 
 	srcEnd.buf = append(srcEnd.buf, msg)
@@ -78,7 +83,7 @@ func (c *DirectConnection) Send(msg Msg) *SendError {
 	return nil
 }
 
-func (c *DirectConnection) msgMustBeValid(msg Msg) {
+func (c *Comp) msgMustBeValid(msg sim.Msg) {
 	c.portMustNotBeNil(msg.Meta().Src)
 	c.portMustNotBeNil(msg.Meta().Dst)
 	c.portMustBeConnected(msg.Meta().Src)
@@ -86,26 +91,26 @@ func (c *DirectConnection) msgMustBeValid(msg Msg) {
 	c.srcDstMustNotBeTheSame(msg)
 }
 
-func (c *DirectConnection) portMustNotBeNil(port Port) {
+func (c *Comp) portMustNotBeNil(port sim.Port) {
 	if port == nil {
 		panic("src or dst is not given")
 	}
 }
 
-func (c *DirectConnection) portMustBeConnected(port Port) {
+func (c *Comp) portMustBeConnected(port sim.Port) {
 	if _, connected := c.ends[port]; !connected {
 		panic("src or dst is not connected")
 	}
 }
 
-func (c *DirectConnection) srcDstMustNotBeTheSame(msg Msg) {
+func (c *Comp) srcDstMustNotBeTheSame(msg sim.Msg) {
 	if msg.Meta().Src == msg.Meta().Dst {
 		panic("sending back to src")
 	}
 }
 
 // Tick updates the states of the connection and delivers messages.
-func (c *DirectConnection) Tick(now VTimeInSec) bool {
+func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(c.ports); i++ {
 		portID := (i + c.nextPortID) % len(c.ports)
@@ -118,9 +123,9 @@ func (c *DirectConnection) Tick(now VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *DirectConnection) forwardMany(
+func (c *Comp) forwardMany(
 	end *directConnectionEnd,
-	now VTimeInSec,
+	now sim.VTimeInSec,
 ) bool {
 	madeProgress := false
 	for {
@@ -146,16 +151,4 @@ func (c *DirectConnection) forwardMany(
 	}
 
 	return madeProgress
-}
-
-// NewDirectConnection creates a new DirectConnection object
-func NewDirectConnection(
-	name string,
-	engine Engine,
-	freq Freq,
-) *DirectConnection {
-	c := new(DirectConnection)
-	c.TickingComponent = NewSecondaryTickingComponent(name, engine, freq, c)
-	c.ends = make(map[Port]*directConnectionEnd)
-	return c
 }

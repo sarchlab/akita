@@ -5,8 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v3/noc/messaging"
 	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v3/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 )
 
 // Remote records the link between two nodes.
@@ -23,7 +25,7 @@ type Remote struct {
 // Bandwidth returns the bandwidth of the link.
 func (r Remote) Bandwidth(flitSize int) float64 {
 	switch l := r.Link.(type) {
-	case *sim.DirectConnection:
+	case *directconnection.Comp:
 		return math.Inf(1)
 	case *messaging.Channel:
 		return float64(l.Freq) * float64(flitSize)
@@ -40,7 +42,7 @@ type Node interface {
 }
 
 type switchNode struct {
-	sw      *switching.Switch
+	sw      *switches.Comp
 	remotes []Remote
 }
 
@@ -58,7 +60,7 @@ func (sn *switchNode) Table() routing.Table {
 
 type deviceNode struct {
 	ports    []sim.Port
-	endPoint *switching.EndPoint
+	endPoint *endpoint.Comp
 	sw       *switchNode
 	remote   Remote
 }

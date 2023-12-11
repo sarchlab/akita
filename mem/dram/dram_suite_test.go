@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v3/mem/mem"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 
 	"github.com/golang/mock/gomock"
 
@@ -30,7 +31,7 @@ var _ = Describe("DRAM Integration", func() {
 		engine   sim.Engine
 		srcPort  *MockPort
 		memCtrl  *Comp
-		conn     *sim.DirectConnection
+		conn     *directconnection.Comp
 	)
 
 	BeforeEach(func() {
@@ -41,7 +42,7 @@ var _ = Describe("DRAM Integration", func() {
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 
-		conn = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		srcPort.EXPECT().SetConnection(conn)
 		conn.PlugIn(memCtrl.topPort, 1)
 		conn.PlugIn(srcPort, 1)

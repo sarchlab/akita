@@ -58,6 +58,19 @@ func (p *LimitNumMsgPort) Component() Component {
 	return p.comp
 }
 
+type sampleMsg struct {
+	MsgMeta
+}
+
+func NewSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *MsgMeta {
+	return &m.MsgMeta
+}
+
 // Name returns the name of the port.
 func (p *LimitNumMsgPort) Name() string {
 	return p.name

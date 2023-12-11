@@ -1,4 +1,5 @@
-package switching
+// Package switches provides implementations of Switches.
+package switches
 
 import (
 	"fmt"
@@ -15,6 +16,11 @@ type flitPipelineItem struct {
 	taskID string
 	flit   *messaging.Flit
 }
+
+// func NewFlitPipelineItem(taskID string, flit *messaging.Flit) flitPipelineItem {
+// 	f := flitPipelineItem{taskID: taskID, flit: flit}
+// 	return f
+// }
 
 func (f flitPipelineItem) TaskID() string {
 	return f.taskID
@@ -53,8 +59,8 @@ type portComplex struct {
 	numOutputChannel int
 }
 
-// Switch is an Akita component that can forward request to destination.
-type Switch struct {
+// Comp is an Akita component(Switch) that can forward request to destination.
+type Comp struct {
 	*sim.TickingComponent
 
 	ports                []sim.Port
@@ -64,41 +70,41 @@ type Switch struct {
 }
 
 // addPort adds a new port on the switch.
-func (s *Switch) addPort(complex portComplex) {
-	s.ports = append(s.ports, complex.localPort)
-	s.portToComplexMapping[complex.localPort] = complex
-	s.arbiter.AddBuffer(complex.forwardBuffer)
+func (c *Comp) addPort(complex portComplex) {
+	c.ports = append(c.ports, complex.localPort)
+	c.portToComplexMapping[complex.localPort] = complex
+	c.arbiter.AddBuffer(complex.forwardBuffer)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
-func (s *Switch) GetRoutingTable() routing.Table {
-	return s.routingTable
+func (c *Comp) GetRoutingTable() routing.Table {
+	return c.routingTable
 }
 
 // Tick update the Switch's state.
-func (s *Switch) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
-	madeProgress = s.sendOut(now) || madeProgress
-	madeProgress = s.forward(now) || madeProgress
-	madeProgress = s.route(now) || madeProgress
-	madeProgress = s.movePipeline(now) || madeProgress
-	madeProgress = s.startProcessing(now) || madeProgress
+	madeProgress = c.sendOut(now) || madeProgress
+	madeProgress = c.forward(now) || madeProgress
+	madeProgress = c.route(now) || madeProgress
+	madeProgress = c.movePipeline(now) || madeProgress
+	madeProgress = c.startProcessing(now) || madeProgress
 
 	return madeProgress
 }
 
-func (s *Switch) flitParentTaskID(flit *messaging.Flit) string {
+func (c *Comp) flitParentTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_e2e"
 }
 
-func (s *Switch) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + s.Name()
+func (c *Comp) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + c.Name()
 }
 
-func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
-	for _, port := range s.ports {
-		pc := s.portToComplexMapping[port]
+func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
+	for _, port := range c.ports {
+		pc := c.portToComplexMapping[port]
 
 		for i := 0; i < pc.numInputChannel; i++ {
 			item := port.Peek()
@@ -112,7 +118,7 @@ func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 
 			flit := item.(*messaging.Flit)
 			pipelineItem := flitPipelineItem{
-				taskID: s.flitTaskID(flit),
+				taskID: c.flitTaskID(flit),
 				flit:   flit,
 			}
 			pc.pipeline.Accept(now, pipelineItem)
@@ -120,9 +126,9 @@ func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 			madeProgress = true
 
 			tracing.StartTask(
-				s.flitTaskID(flit),
-				s.flitParentTaskID(flit),
-				s, "flit", "flit_inside_sw",
+				c.flitTaskID(flit),
+				c.flitParentTaskID(flit),
+				c, "flit", "flit_inside_sw",
 				flit,
 			)
 
@@ -134,18 +140,18 @@ func (s *Switch) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (s *Switch) movePipeline(now sim.VTimeInSec) (madeProgress bool) {
-	for _, port := range s.ports {
-		pc := s.portToComplexMapping[port]
+func (c *Comp) movePipeline(now sim.VTimeInSec) (madeProgress bool) {
+	for _, port := range c.ports {
+		pc := c.portToComplexMapping[port]
 		madeProgress = pc.pipeline.Tick(now) || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (s *Switch) route(_ sim.VTimeInSec) (madeProgress bool) {
-	for _, port := range s.ports {
-		pc := s.portToComplexMapping[port]
+func (c *Comp) route(_ sim.VTimeInSec) (madeProgress bool) {
+	for _, port := range c.ports {
+		pc := c.portToComplexMapping[port]
 		routeBuf := pc.routeBuffer
 		forwardBuf := pc.forwardBuffer
 
@@ -161,7 +167,7 @@ func (s *Switch) route(_ sim.VTimeInSec) (madeProgress bool) {
 
 			pipelineItem := item.(flitPipelineItem)
 			flit := pipelineItem.flit
-			s.assignFlitOutputBuf(flit)
+			c.assignFlitOutputBuf(flit)
 			routeBuf.Pop()
 			forwardBuf.Push(flit)
 			madeProgress = true
@@ -174,8 +180,8 @@ func (s *Switch) route(_ sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (s *Switch) forward(now sim.VTimeInSec) (madeProgress bool) {
-	inputBuffers := s.arbiter.Arbitrate(now)
+func (c *Comp) forward(now sim.VTimeInSec) (madeProgress bool) {
+	inputBuffers := c.arbiter.Arbitrate(now)
 
 	for _, buf := range inputBuffers {
 		for {
@@ -201,9 +207,9 @@ func (s *Switch) forward(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (s *Switch) sendOut(now sim.VTimeInSec) (madeProgress bool) {
-	for _, port := range s.ports {
-		pc := s.portToComplexMapping[port]
+func (c *Comp) sendOut(now sim.VTimeInSec) (madeProgress bool) {
+	for _, port := range c.ports {
+		pc := c.portToComplexMapping[port]
 		sendOutBuf := pc.sendOutBuffer
 
 		for i := 0; i < pc.numOutputChannel; i++ {
@@ -225,7 +231,7 @@ func (s *Switch) sendOut(now sim.VTimeInSec) (madeProgress bool) {
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
 				// now, s.Name(), flit.ID)
 
-				tracing.EndTask(s.flitTaskID(flit), s)
+				tracing.EndTask(c.flitTaskID(flit), c)
 			}
 		}
 	}
@@ -233,96 +239,25 @@ func (s *Switch) sendOut(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (s *Switch) assignFlitOutputBuf(f *messaging.Flit) {
-	outPort := s.routingTable.FindPort(f.Msg.Meta().Dst)
+func (c *Comp) assignFlitOutputBuf(f *messaging.Flit) {
+	outPort := c.routingTable.FindPort(f.Msg.Meta().Dst)
 	if outPort == nil {
 		panic(fmt.Sprintf("%s: no output port for %s",
-			s.Name(), f.Msg.Meta().Dst))
+			c.Name(), f.Msg.Meta().Dst))
 	}
 
-	pc := s.portToComplexMapping[outPort]
+	pc := c.portToComplexMapping[outPort]
 
 	f.OutputBuf = pc.sendOutBuffer
 	if f.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
-			s.Name(), f.Msg.Meta().Dst))
-	}
-}
-
-// SwitchBuilder can build switches
-type SwitchBuilder struct {
-	engine       sim.Engine
-	freq         sim.Freq
-	routingTable routing.Table
-	arbiter      arbitration.Arbiter
-}
-
-// WithEngine sets the engine that the switch to build uses.
-func (b SwitchBuilder) WithEngine(engine sim.Engine) SwitchBuilder {
-	b.engine = engine
-	return b
-}
-
-// WithFreq sets the frequency that the switch to build works at.
-func (b SwitchBuilder) WithFreq(freq sim.Freq) SwitchBuilder {
-	b.freq = freq
-	return b
-}
-
-// WithArbiter sets the arbiter to be used by the switch to build.
-func (b SwitchBuilder) WithArbiter(arbiter arbitration.Arbiter) SwitchBuilder {
-	b.arbiter = arbiter
-	return b
-}
-
-// WithRoutingTable sets the routing table to be used by the switch to build.
-func (b SwitchBuilder) WithRoutingTable(rt routing.Table) SwitchBuilder {
-	b.routingTable = rt
-	return b
-}
-
-// Build creates a new switch
-func (b SwitchBuilder) Build(name string) *Switch {
-	b.engineMustBeGiven()
-	b.freqMustNotBeZero()
-	b.routingTableMustBeGiven()
-	b.arbiterMustBeGiven()
-
-	s := &Switch{}
-	s.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, s)
-	s.routingTable = b.routingTable
-	s.arbiter = b.arbiter
-	s.portToComplexMapping = make(map[sim.Port]portComplex)
-	return s
-}
-
-func (b SwitchBuilder) engineMustBeGiven() {
-	if b.engine == nil {
-		panic("engine of switch is not given")
-	}
-}
-
-func (b SwitchBuilder) freqMustNotBeZero() {
-	if b.freq == 0 {
-		panic("switch frequency cannot be 0")
-	}
-}
-
-func (b SwitchBuilder) routingTableMustBeGiven() {
-	if b.routingTable == nil {
-		panic("switch requires a routing table to operate")
-	}
-}
-
-func (b SwitchBuilder) arbiterMustBeGiven() {
-	if b.arbiter == nil {
-		panic("switch requires an arbiter to operate")
+			c.Name(), f.Msg.Meta().Dst))
 	}
 }
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
-	sw               *Switch
+	sw               *Comp
 	localPort        sim.Port
 	remotePort       sim.Port
 	latency          int
@@ -332,7 +267,7 @@ type SwitchPortAdder struct {
 
 // MakeSwitchPortAdder creates a SwitchPortAdder that can add ports for the
 // provided switch.
-func MakeSwitchPortAdder(sw *Switch) SwitchPortAdder {
+func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
 	return SwitchPortAdder{
 		sw:               sw,
 		numInputChannel:  1,

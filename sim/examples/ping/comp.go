@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 )
 
 type PingMsg struct {
@@ -138,7 +139,7 @@ func Example_pingWithEvents() {
 	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
 	// agentB := NewPingAgent("AgentB", engine)
 	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
-	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 	conn.PlugIn(agentA.OutPort, 1)
 	conn.PlugIn(agentB.OutPort, 1)

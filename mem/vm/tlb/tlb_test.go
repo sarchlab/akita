@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v3/mem/vm"
 	"github.com/sarchlab/akita/v3/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v3/sim/directconnection"
 )
 
 var _ = Describe("TLB", func() {
@@ -349,7 +350,7 @@ var _ = Describe("TLB Integration", func() {
 		engine = sim.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
 		agent = NewMockPort(mockCtrl)
-		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
 		tlb.LowModule = lowModule
 

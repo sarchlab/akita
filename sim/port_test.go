@@ -6,14 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-type sampleMsg struct {
-	MsgMeta
-}
-
-func (m *sampleMsg) Meta() *MsgMeta {
-	return &m.MsgMeta
-}
-
 var _ = Describe("LimitNumMsgPort", func() {
 	var (
 		mockController *gomock.Controller
