@@ -1,8 +1,8 @@
 package arbitration
 
 import (
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // NewXBarArbiter creates a new XBar arbiter.

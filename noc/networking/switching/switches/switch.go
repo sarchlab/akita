@@ -4,12 +4,12 @@ package switches
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
-	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/pipelining"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
+	"github.com/sarchlab/akita/v4/noc/networking/routing"
+	"github.com/sarchlab/akita/v4/pipelining"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type flitPipelineItem struct {

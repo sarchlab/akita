@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	signal "github.com/sarchlab/akita/v3/mem/dram/internal/signal"
+	signal "github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 // MockCommandCreator is a mock of CommandCreator interface.

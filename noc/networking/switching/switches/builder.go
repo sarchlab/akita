@@ -1,9 +1,9 @@
 package switches
 
 import (
-	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
-	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
+	"github.com/sarchlab/akita/v4/noc/networking/routing"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Builder can help building switches

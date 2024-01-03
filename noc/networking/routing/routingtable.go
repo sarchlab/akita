@@ -1,6 +1,6 @@
 package routing
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // Table is a routing table that can find the next-hop port according to the
 // final destination.

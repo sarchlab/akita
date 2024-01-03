@@ -23,8 +23,8 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
-	"github.com/sarchlab/akita/v3/monitoring/web"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/monitoring/web"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )

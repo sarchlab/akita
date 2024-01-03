@@ -8,8 +8,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	signal "github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	sim "github.com/sarchlab/akita/v3/sim"
+	signal "github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	sim "github.com/sarchlab/akita/v4/sim"
 )
 
 // MockBank is a mock of Bank interface.

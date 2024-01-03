@@ -4,8 +4,8 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	cache2 "github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/sim"
+	cache2 "github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Control Stage", func() {

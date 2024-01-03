@@ -1,8 +1,8 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A FlushReq asks the TLB to invalidate certain entries. It will also not block all incoming and outgoing ports

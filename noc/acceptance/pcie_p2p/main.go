@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/noc/acceptance"
-	"github.com/sarchlab/akita/v3/noc/networking/pcie"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/acceptance"
+	"github.com/sarchlab/akita/v4/noc/networking/pcie"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
 )
 

@@ -3,7 +3,7 @@ package standalone
 import (
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A TrafficInjector can inject traffic to a network.

@@ -3,8 +3,8 @@ package mesh_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	// . "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/noc/networking/mesh"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/networking/mesh"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Connector", func() {

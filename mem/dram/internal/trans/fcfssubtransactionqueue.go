@@ -1,9 +1,9 @@
 package trans
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A FCFSSubTransactionQueue returns sub-transactions in a

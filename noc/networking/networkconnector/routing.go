@@ -3,12 +3,12 @@ package networkconnector
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
-	"github.com/sarchlab/akita/v3/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/noc/networking/routing"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
 // Remote records the link between two nodes.

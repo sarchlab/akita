@@ -4,7 +4,7 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // TrafficMsg is a type of msg that only used in standalone network test.

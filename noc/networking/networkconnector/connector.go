@@ -3,16 +3,16 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/analysis"
-	"github.com/sarchlab/akita/v3/monitoring"
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
-	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching/endpoint"
-	"github.com/sarchlab/akita/v3/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/directconnection"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/analysis"
+	"github.com/sarchlab/akita/v4/monitoring"
+	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
+	"github.com/sarchlab/akita/v4/noc/networking/routing"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameter that associated with an end of a

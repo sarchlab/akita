@@ -1,9 +1,9 @@
 package cmdq
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/org"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/org"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Queue is a list of commands that needs to be executed by either a bank or a

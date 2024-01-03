@@ -11,15 +11,15 @@ import (
 
 	"os"
 
-	"github.com/sarchlab/akita/v3/mem/acceptancetests"
-	"github.com/sarchlab/akita/v3/mem/cache/writeevict"
-	"github.com/sarchlab/akita/v3/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim/directconnection"
+	"github.com/sarchlab/akita/v4/mem/acceptancetests"
+	"github.com/sarchlab/akita/v4/mem/cache/writeevict"
+	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
 
-	"github.com/sarchlab/akita/v3/mem/trace"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/trace"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")

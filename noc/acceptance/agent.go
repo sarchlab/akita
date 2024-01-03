@@ -3,7 +3,7 @@ package acceptance
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Agent can send and receive request.

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
 type PingMsg struct {
