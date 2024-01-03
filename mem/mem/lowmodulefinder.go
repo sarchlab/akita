@@ -1,6 +1,6 @@
 package mem
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // LowModuleFinder helps a cache unit or a akita to find the low module that
 // should hold the data at a certain address

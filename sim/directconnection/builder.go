@@ -1,6 +1,6 @@
 package directconnection
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // Builder can help building directconnection.
 type Builder struct {

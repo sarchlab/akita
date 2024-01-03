@@ -2,7 +2,7 @@ package cache
 
 import (
 	"github.com/rs/xid"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // FlushReq is the request send to a cache unit to request it to flush all

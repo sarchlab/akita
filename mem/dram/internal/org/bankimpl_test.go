@@ -3,7 +3,7 @@ package org
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 var _ = Describe("Bank", func() {

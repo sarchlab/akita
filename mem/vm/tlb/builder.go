@@ -1,6 +1,6 @@
 package tlb
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // A Builder can build TLBs
 type Builder struct {

@@ -1,6 +1,6 @@
 package ping
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 type Builder struct {
 	name   string

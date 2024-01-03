@@ -1,7 +1,7 @@
 package arbitration
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Arbiter can determine which buffer can send a message out

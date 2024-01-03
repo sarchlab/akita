@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -source bank.go -destination mock_bank_test.go -self_package github.com/sarchlab/akita/v3/mem/dram/internal/org -package $GOPACKAGE
+//go:generate mockgen -source bank.go -destination mock_bank_test.go -self_package github.com/sarchlab/akita/v4/mem/dram/internal/org -package $GOPACKAGE
 
 func TestOrg(t *testing.T) {
 	RegisterFailHandler(Fail)

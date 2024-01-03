@@ -3,7 +3,7 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Flit is the smallest trasferring unit on a network.

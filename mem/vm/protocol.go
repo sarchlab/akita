@@ -2,7 +2,7 @@
 package vm
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A TranslationReq asks the receiver component to translate the request.
