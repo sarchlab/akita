@@ -64,6 +64,8 @@ func (c *Connector) WithBandwidth(bytePerSecond uint64) *Connector {
 		panic("flit size is 0")
 	}
 
+	c.connector = c.connector.WithFlitSize(c.flitByteSize)
+
 	return c
 }
 
