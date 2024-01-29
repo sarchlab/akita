@@ -35,7 +35,7 @@ type LimitNumMsgPort struct {
 
 	incomingBuf     Buffer
 	incomingBufLock sync.RWMutex
-	portBusy        bool
+	incomingBufBusy bool
 	portBusyLock    sync.RWMutex
 }
 
@@ -103,7 +103,7 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 
 	if !p.incomingBuf.CanPush() {
 		p.portBusyLock.Lock()
-		p.portBusy = true
+		p.incomingBufBusy = true
 		p.portBusyLock.Unlock()
 		p.incomingBufLock.Unlock()
 		return NewSendError()
@@ -144,8 +144,8 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	p.InvokeHook(hookCtx)
 
 	p.portBusyLock.Lock()
-	if p.portBusy {
-		p.portBusy = false
+	if p.incomingBufBusy {
+		p.incomingBufBusy = false
 		p.conn.NotifyAvailable(now, p)
 	}
 	p.portBusyLock.Unlock()
