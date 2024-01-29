@@ -71,11 +71,11 @@ var _ = Describe("LimitNumMsgPort", func() {
 	It("should fail to receive when buffer is full", func() {
 		msg := &sampleMsg{}
 		msg.RecvTime = 10
-		port.buf = NewBuffer("Buf", 4)
-		port.buf.Push(msg)
-		port.buf.Push(msg)
-		port.buf.Push(msg)
-		port.buf.Push(msg)
+		port.incomingBuf = NewBuffer("Buf", 4)
+		port.incomingBuf.Push(msg)
+		port.incomingBuf.Push(msg)
+		port.incomingBuf.Push(msg)
+		port.incomingBuf.Push(msg)
 
 		errRet := port.Recv(msg)
 
@@ -90,7 +90,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 
 	It("should allow component to peek message", func() {
 		msg := &sampleMsg{}
-		port.buf.Push(msg)
+		port.incomingBuf.Push(msg)
 
 		msgRet := port.Peek()
 
@@ -105,7 +105,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 
 	It("should allow component to retrieve message", func() {
 		msg := &sampleMsg{}
-		port.buf.Push(msg)
+		port.incomingBuf.Push(msg)
 
 		msgRet := port.Retrieve(10)
 

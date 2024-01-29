@@ -33,10 +33,10 @@ type LimitNumMsgPort struct {
 	comp Component
 	conn Connection
 
-	buf          Buffer
-	bufLock      sync.RWMutex
-	portBusy     bool
-	portBusyLock sync.RWMutex
+	incomingBuf     Buffer
+	incomingBufLock sync.RWMutex
+	portBusy        bool
+	portBusyLock    sync.RWMutex
 }
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -99,13 +99,13 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 
 // Recv is used to deliver a message to a component
 func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
-	p.bufLock.Lock()
+	p.incomingBufLock.Lock()
 
-	if !p.buf.CanPush() {
+	if !p.incomingBuf.CanPush() {
 		p.portBusyLock.Lock()
 		p.portBusy = true
 		p.portBusyLock.Unlock()
-		p.bufLock.Unlock()
+		p.incomingBufLock.Unlock()
 		return NewSendError()
 	}
 
@@ -116,8 +116,8 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.buf.Push(msg)
-	p.bufLock.Unlock()
+	p.incomingBuf.Push(msg)
+	p.incomingBufLock.Unlock()
 
 	if p.comp != nil {
 		p.comp.NotifyRecv(msg.Meta().RecvTime, p)
@@ -127,10 +127,10 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 
 // Retrieve is used by the component to take a message from the incoming buffer
 func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
-	p.bufLock.Lock()
-	defer p.bufLock.Unlock()
+	p.incomingBufLock.Lock()
+	defer p.incomingBufLock.Unlock()
 
-	item := p.buf.Pop()
+	item := p.incomingBuf.Pop()
 	if item == nil {
 		return nil
 	}
@@ -155,10 +155,10 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 
 // Peek returns the first message in the port without removing it.
 func (p *LimitNumMsgPort) Peek() Msg {
-	p.bufLock.RLock()
-	defer p.bufLock.RUnlock()
+	p.incomingBufLock.RLock()
+	defer p.incomingBufLock.RUnlock()
 
-	item := p.buf.Peek()
+	item := p.incomingBuf.Peek()
 	if item == nil {
 		return nil
 	}
@@ -183,7 +183,7 @@ func NewLimitNumMsgPort(
 ) *LimitNumMsgPort {
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.buf = NewBuffer(name+".Buf", capacity)
+	p.incomingBuf = NewBuffer(name+".Buf", capacity)
 	p.name = name
 	return p
 }
@@ -199,7 +199,7 @@ func NewLimitNumMsgPortWithExternalBuffer(
 
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.buf = buf
+	p.incomingBuf = buf
 	p.name = name
 	return p
 }
