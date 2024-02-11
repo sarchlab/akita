@@ -44,17 +44,6 @@ type Comp struct {
 	pingDst             sim.Port
 }
 
-// func NewTickingPingAgent(
-// 	name string,
-// 	engine sim.Engine,
-// 	freq sim.Freq,
-// ) *Comp {
-// 	a := &TickingPingAgent{}
-// 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-// 	a.OutPort = sim.NewLimitNumMsgPort(a, 4, a.Name()+".OutPort")
-// 	return a
-// }
-
 func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
@@ -67,7 +56,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 }
 
 func (c *Comp) processInput(now sim.VTimeInSec) bool {
-	msg := c.OutPort.Peek()
+	msg := c.OutPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -93,7 +82,7 @@ func (c *Comp) processingPingMsg(
 		cycleLeft: 2,
 	}
 	c.currentTransactions = append(c.currentTransactions, trans)
-	c.OutPort.Retrieve(now)
+	c.OutPort.RetrieveIncoming(now)
 }
 
 func (c *Comp) processingPingRsp(
@@ -105,7 +94,7 @@ func (c *Comp) processingPingRsp(
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
-	c.OutPort.Retrieve(now)
+	c.OutPort.RetrieveIncoming(now)
 }
 
 func (c *Comp) countDown() bool {
