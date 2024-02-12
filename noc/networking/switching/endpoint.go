@@ -213,6 +213,7 @@ func (ep *EndPoint) assemble(_ sim.VTimeInSec) bool {
 		next := e.Next()
 
 		if assemblingMsg.numFlitArrived < assemblingMsg.numFlitRequired {
+			e = next
 			continue
 		}
 
