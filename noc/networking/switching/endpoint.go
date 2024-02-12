@@ -207,7 +207,8 @@ func (ep *EndPoint) recv(now sim.VTimeInSec) bool {
 func (ep *EndPoint) assemble(_ sim.VTimeInSec) bool {
 	madeProgress := false
 
-	for e := ep.assemblingMsgs.Front(); e != nil; {
+	e := ep.assemblingMsgs.Front()
+	for e != nil {
 		assemblingMsg := e.Value.(*msgToAssemble)
 
 		next := e.Next()
