@@ -207,8 +207,10 @@ func (ep *EndPoint) recv(now sim.VTimeInSec) bool {
 func (ep *EndPoint) assemble(_ sim.VTimeInSec) bool {
 	madeProgress := false
 
-	for e := ep.assemblingMsgs.Front(); e != nil; e = e.Next() {
+	for e := ep.assemblingMsgs.Front(); e != nil; {
 		assemblingMsg := e.Value.(*msgToAssemble)
+
+		next := e.Next()
 
 		if assemblingMsg.numFlitArrived < assemblingMsg.numFlitRequired {
 			continue
@@ -217,6 +219,8 @@ func (ep *EndPoint) assemble(_ sim.VTimeInSec) bool {
 		ep.assembledMsgs = append(ep.assembledMsgs, assemblingMsg.msg)
 		ep.assemblingMsgs.Remove(e)
 		delete(ep.assemblingMsgTable, assemblingMsg.msg.Meta().ID)
+
+		e = next
 
 		madeProgress = true
 	}
