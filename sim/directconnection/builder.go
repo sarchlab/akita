@@ -25,6 +25,5 @@ func (b Builder) WithFreq(f sim.Freq) Builder {
 func (b Builder) Build(name string) *Comp {
 	c := new(Comp)
 	c.TickingComponent = sim.NewSecondaryTickingComponent(name, b.engine, b.freq, c)
-	c.ends = make(map[sim.Port]*directConnectionEnd)
 	return c
 }
