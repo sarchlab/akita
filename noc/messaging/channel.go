@@ -11,7 +11,6 @@ import (
 
 type channelEnd struct {
 	port            sim.Port
-	srcSideBuf      sim.Buffer
 	postPipelineBuf sim.Buffer
 	pipeline        pipelining.Pipeline
 	busy            bool
@@ -46,10 +45,6 @@ func (c *Channel) PlugIn(port sim.Port, sourceSideBufSize int) {
 
 	end := &channelEnd{
 		port: port,
-		srcSideBuf: sim.NewBuffer(
-			c.Name()+"."+bufSide+"SrcBuf",
-			sourceSideBufSize,
-		),
 		postPipelineBuf: sim.NewBuffer(
 			c.Name()+"."+bufSide+"PostPipelineBuf",
 			sourceSideBufSize,
@@ -86,42 +81,10 @@ func (c *Channel) NotifyAvailable(now sim.VTimeInSec, port sim.Port) {
 	c.TickLater(now)
 }
 
-// CanSend returns true if the channel can send a message from a port.
-func (c *Channel) CanSend(port sim.Port) bool {
-	c.Lock()
-	defer c.Unlock()
-
-	canSend := c.ends[port].srcSideBuf.CanPush()
-
-	if !canSend {
-		c.ends[port].busy = true
-	}
-
-	return canSend
-}
-
-// Send of a Channel schedules a DeliveryEvent immediately
-func (c *Channel) Send(msg sim.Msg) *sim.SendError {
-	c.Lock()
-	defer c.Unlock()
-
-	c.msgMustBeValid(msg)
-
-	srcEnd := c.ends[msg.Meta().Src]
-
-	if !srcEnd.srcSideBuf.CanPush() {
-		srcEnd.busy = true
-		return sim.NewSendError()
-	}
-
-	srcEnd.srcSideBuf.Push(msg)
-
-	// fmt.Printf("%.10f, %s, send, %s\n",
-	// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID)
-
-	c.TickNow(msg.Meta().SendTime)
-
-	return nil
+// NotifySend is called by a port to notify that the connection can start
+// to tick now
+func (c *Channel) NotifySend(now sim.VTimeInSec) {
+	c.TickNow(now)
 }
 
 // Tick moves the messages in the channel forward and delivers messages when
@@ -161,12 +124,12 @@ func (c *Channel) moveMsgOneEnd(now sim.VTimeInSec, end *channelEnd) bool {
 
 	madeProgress = end.pipeline.Tick(now) || madeProgress
 
-	for end.srcSideBuf.Size() > 0 {
+	for end.port.PeekOutgoing() != nil {
 		if !end.pipeline.CanAccept() {
 			break
 		}
 
-		msg := end.srcSideBuf.Pop().(sim.Msg)
+		msg := end.port.RetrieveOutgoing()
 		end.pipeline.Accept(now, msgPipeTask{msg: msg})
 
 		if end.busy {
@@ -230,7 +193,7 @@ func (c *Channel) deliverOneEnd(
 		msg := msgTask.msg
 		msg.Meta().RecvTime = now
 
-		err := dstEnd.port.Recv(msg)
+		err := dstEnd.port.Deliver(msg)
 		if err != nil {
 			break
 		}
@@ -245,32 +208,6 @@ func (c *Channel) deliverOneEnd(
 	}
 
 	return madeProgress
-}
-
-func (c *Channel) msgMustBeValid(msg sim.Msg) {
-	c.portMustNotBeNil(msg.Meta().Src)
-	c.portMustNotBeNil(msg.Meta().Dst)
-	c.portMustBeConnected(msg.Meta().Src)
-	c.portMustBeConnected(msg.Meta().Dst)
-	c.srcDstMustNotBeTheSame(msg)
-}
-
-func (c *Channel) portMustNotBeNil(port sim.Port) {
-	if port == nil {
-		panic("src or dst is not given")
-	}
-}
-
-func (c *Channel) portMustBeConnected(port sim.Port) {
-	if _, connected := c.ends[port]; !connected {
-		panic("src or dst is not connected")
-	}
-}
-
-func (c *Channel) srcDstMustNotBeTheSame(msg sim.Msg) {
-	if msg.Meta().Src == msg.Meta().Dst {
-		panic("sending back to src")
-	}
 }
 
 // ChannelBuilder can build channels.
