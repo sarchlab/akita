@@ -15,7 +15,7 @@ func (p *topParser) Tick(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	req := p.cache.topPort.Peek()
+	req := p.cache.topPort.PeekIncoming()
 	if req == nil {
 		return false
 	}
@@ -39,7 +39,7 @@ func (p *topParser) Tick(now sim.VTimeInSec) bool {
 
 	tracing.TraceReqReceive(req, p.cache)
 
-	p.cache.topPort.Retrieve(now)
+	p.cache.topPort.RetrieveIncoming(now)
 
 	return true
 }

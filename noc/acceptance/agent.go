@@ -62,7 +62,7 @@ func (a *Agent) send(now sim.VTimeInSec) bool {
 func (a *Agent) recv(now sim.VTimeInSec) bool {
 	madeProgress := false
 	for _, port := range a.AgentPorts {
-		msg := port.Retrieve(now)
+		msg := port.RetrieveIncoming(now)
 		if msg != nil {
 			a.test.receiveMsg(msg, port)
 			a.recvBytes += uint64(msg.Meta().TrafficBytes)

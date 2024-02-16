@@ -259,7 +259,7 @@ func (c *Comp) sendTranlationRsp(
 }
 
 func (c *Comp) processMigrationReturn(now sim.VTimeInSec) bool {
-	item := c.migrationPort.Peek()
+	item := c.migrationPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
@@ -289,7 +289,7 @@ func (c *Comp) processMigrationReturn(now sim.VTimeInSec) bool {
 	page.IsPinned = true
 	c.pageTable.Update(page)
 
-	c.migrationPort.Retrieve(now)
+	c.migrationPort.RetrieveIncoming(now)
 
 	return true
 }
@@ -299,7 +299,7 @@ func (c *Comp) parseFromTop(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	req := c.topPort.Retrieve(now)
+	req := c.topPort.RetrieveIncoming(now)
 	if req == nil {
 		return false
 	}

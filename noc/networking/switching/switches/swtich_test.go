@@ -86,9 +86,9 @@ var _ = Describe("Switch", func() {
 			WithMsg(msg).
 			Build()
 
-		port1.EXPECT().Peek().Return(flit)
-		port1.EXPECT().Retrieve(gomock.Any())
-		port2.EXPECT().Peek().Return(nil)
+		port1.EXPECT().PeekIncoming().Return(flit)
+		port1.EXPECT().RetrieveIncoming(gomock.Any())
+		port2.EXPECT().PeekIncoming().Return(nil)
 		port1Pipeline.EXPECT().CanAccept().Return(true)
 		port1Pipeline.
 			EXPECT().
@@ -115,8 +115,8 @@ var _ = Describe("Switch", func() {
 			WithMsg(msg).
 			Build()
 
-		port1.EXPECT().Peek().Return(flit)
-		port2.EXPECT().Peek().Return(nil)
+		port1.EXPECT().PeekIncoming().Return(flit)
+		port2.EXPECT().PeekIncoming().Return(nil)
 		port1Pipeline.EXPECT().CanAccept().Return(false)
 
 		madeProgress := sw.startProcessing(10)

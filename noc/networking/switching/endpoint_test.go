@@ -46,7 +46,7 @@ var _ = Describe("End Point", func() {
 		msg := &sampleMsg{}
 		msg.TrafficBytes = 33
 
-		networkPort.EXPECT().Peek().Return(nil).AnyTimes()
+		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
 		engine.EXPECT().Schedule(gomock.Any())
 		endPoint.Send(msg)
@@ -100,11 +100,11 @@ var _ = Describe("End Point", func() {
 			WithMsg(msg).
 			Build()
 
-		networkPort.EXPECT().Peek().Return(flit0)
-		networkPort.EXPECT().Peek().Return(flit1)
-		networkPort.EXPECT().Peek().Return(nil).Times(3)
-		networkPort.EXPECT().Retrieve(gomock.Any()).Times(2)
-		devicePort.EXPECT().Recv(msg)
+		networkPort.EXPECT().PeekIncoming().Return(flit0)
+		networkPort.EXPECT().PeekIncoming().Return(flit1)
+		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
+		networkPort.EXPECT().RetrieveIncoming(gomock.Any()).Times(2)
+		devicePort.EXPECT().Deliver(msg)
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())

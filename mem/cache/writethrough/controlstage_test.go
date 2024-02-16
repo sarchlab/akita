@@ -59,7 +59,7 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		ctrlPort.EXPECT().Peek().Return(nil)
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
 		madeProgress := s.Tick(10)
 
@@ -72,7 +72,7 @@ var _ = Describe("Control Stage", func() {
 		flushReq := cache2.FlushReqBuilder{}.Build()
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
-		ctrlPort.EXPECT().Peek().Return(flushReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
 		madeProgress := s.Tick(10)
 
@@ -90,13 +90,13 @@ var _ = Describe("Control Stage", func() {
 			Expect(rsp.RspTo).To(Equal(flushReq.ID))
 		})
 
-		topPort.EXPECT().Peek().Return(nil)
-		bottomPort.EXPECT().Peek().Return(nil)
+		topPort.EXPECT().PeekIncoming().Return(nil)
+		bottomPort.EXPECT().PeekIncoming().Return(nil)
 		inBuf.EXPECT().Pop()
 		directory.EXPECT().Reset()
 		mshr.EXPECT().Reset()
 
-		ctrlPort.EXPECT().Peek().Return(flushReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
 		madeProgress := s.Tick(10)
 

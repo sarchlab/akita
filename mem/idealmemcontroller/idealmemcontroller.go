@@ -72,7 +72,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	msg := c.topPort.Retrieve(now)
+	msg := c.topPort.RetrieveIncoming(now)
 	if msg == nil {
 		return false
 	}

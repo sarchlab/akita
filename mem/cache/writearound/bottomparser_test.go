@@ -42,7 +42,7 @@ var _ = Describe("Bottom Parser", func() {
 	})
 
 	It("should do nothing if no respond", func() {
-		bottomPort.EXPECT().Peek().Return(nil)
+		bottomPort.EXPECT().PeekIncoming().Return(nil)
 		madeProgress := p.Tick(12)
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -81,8 +81,8 @@ var _ = Describe("Bottom Parser", func() {
 				WithRspTo(writeToBottom.ID).
 				Build()
 
-			bottomPort.EXPECT().Peek().Return(done)
-			bottomPort.EXPECT().Retrieve(gomock.Any())
+			bottomPort.EXPECT().PeekIncoming().Return(done)
+			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
 
 			madeProgress := p.Tick(12)
 
@@ -208,7 +208,7 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should stall is bank is busy", func() {
-			bottomPort.EXPECT().Peek().Return(dataReady)
+			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bankBuf.EXPECT().CanPush().Return(false)
 
 			madeProgress := p.Tick(12)
@@ -217,8 +217,8 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should send transaction to bank", func() {
-			bottomPort.EXPECT().Peek().Return(dataReady)
-			bottomPort.EXPECT().Retrieve(gomock.Any())
+			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
+			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
@@ -241,8 +241,8 @@ var _ = Describe("Bottom Parser", func() {
 			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans2)
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, postCTrans2)
 
-			bottomPort.EXPECT().Peek().Return(dataReady)
-			bottomPort.EXPECT().Retrieve(gomock.Any())
+			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
+			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)

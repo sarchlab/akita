@@ -57,9 +57,9 @@ var _ = Describe("Cache", func() {
 			WithAddress(0x100).
 			WithByteSize(4).
 			Build()
-		c.GetPortByName("Top").Recv(read)
+		c.GetPortByName("Top").Deliver(read)
 
-		cuPort.EXPECT().Recv(gomock.Any()).
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -76,7 +76,7 @@ var _ = Describe("Cache", func() {
 			WithAddress(0x100).
 			WithByteSize(4).
 			Build()
-		c.GetPortByName("Top").Recv(read1)
+		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := mem.ReadReqBuilder{}.
 			WithSendTime(1).
@@ -85,13 +85,13 @@ var _ = Describe("Cache", func() {
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
-		c.GetPortByName("Top").Recv(read2)
+		c.GetPortByName("Top").Deliver(read2)
 
-		cuPort.EXPECT().Recv(gomock.Any()).
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
-		cuPort.EXPECT().Recv(gomock.Any()).
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -109,8 +109,8 @@ var _ = Describe("Cache", func() {
 			WithByteSize(4).
 			Build()
 		read1.RecvTime = 0
-		c.GetPortByName("Top").Recv(read1)
-		cuPort.EXPECT().Recv(gomock.Any()).
+		c.GetPortByName("Top").Deliver(read1)
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -125,8 +125,8 @@ var _ = Describe("Cache", func() {
 			WithByteSize(4).
 			Build()
 		read2.RecvTime = t1
-		c.GetPortByName("Top").Recv(read2)
-		cuPort.EXPECT().Recv(gomock.Any()).
+		c.GetPortByName("Top").Deliver(read2)
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -145,8 +145,8 @@ var _ = Describe("Cache", func() {
 			WithData([]byte{1, 2, 3, 4}).
 			Build()
 		write.RecvTime = 0
-		c.GetPortByName("Top").Recv(write)
-		cuPort.EXPECT().Recv(gomock.Any()).
+		c.GetPortByName("Top").Deliver(write)
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(done *mem.WriteDoneRsp) {
 				Expect(done.RespondTo).To(Equal(write.ID))
 			})
@@ -176,8 +176,8 @@ var _ = Describe("Cache", func() {
 				}).
 			Build()
 		write.RecvTime = 0
-		c.GetPortByName("Top").Recv(write)
-		cuPort.EXPECT().Recv(gomock.Any()).
+		c.GetPortByName("Top").Deliver(write)
+		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(done *mem.WriteDoneRsp) {
 				Expect(done.RespondTo).To(Equal(write.ID))
 			})

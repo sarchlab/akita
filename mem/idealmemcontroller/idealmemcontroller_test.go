@@ -50,7 +50,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
-		port.EXPECT().Retrieve(gomock.Any()).Return(readReq)
+		port.EXPECT().RetrieveIncoming(gomock.Any()).Return(readReq)
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
@@ -69,7 +69,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithData([]byte{0, 1, 2, 3}).
 			WithDirtyMask([]bool{false, false, true, false}).
 			Build()
-		port.EXPECT().Retrieve(gomock.Any()).Return(writeReq)
+		port.EXPECT().RetrieveIncoming(gomock.Any()).Return(writeReq)
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))

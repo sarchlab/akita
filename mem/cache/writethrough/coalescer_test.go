@@ -38,7 +38,7 @@ var _ = Describe("Coalescer", func() {
 	})
 
 	It("should do nothing if no req", func() {
-		topPort.EXPECT().Peek().Return(nil)
+		topPort.EXPECT().PeekIncoming().Return(nil)
 		madeProgress := c.Tick(10)
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -65,10 +65,10 @@ var _ = Describe("Coalescer", func() {
 				CanWaitForCoalesce().
 				Build()
 
-			topPort.EXPECT().Peek().Return(read1)
-			topPort.EXPECT().Retrieve(gomock.Any())
-			topPort.EXPECT().Peek().Return(read2)
-			topPort.EXPECT().Retrieve(gomock.Any())
+			topPort.EXPECT().PeekIncoming().Return(read1)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any())
+			topPort.EXPECT().PeekIncoming().Return(read2)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any())
 			c.Tick(10)
 			c.Tick(11)
 		})
@@ -89,8 +89,8 @@ var _ = Describe("Coalescer", func() {
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming(gomock.Any())
 
 				madeProgress := c.Tick(13)
 
@@ -110,7 +110,7 @@ var _ = Describe("Coalescer", func() {
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
-				topPort.EXPECT().Peek().Return(read3)
+				topPort.EXPECT().PeekIncoming().Return(read3)
 
 				madeProgress := c.Tick(13)
 
@@ -140,8 +140,8 @@ var _ = Describe("Coalescer", func() {
 						Expect(trans.read.PID).To(Equal(vm.PID(1)))
 						Expect(trans.read.AccessByteSize).To(Equal(uint64(64)))
 					})
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming(gomock.Any())
 
 				madeProgress := c.Tick(13)
 
@@ -161,7 +161,7 @@ var _ = Describe("Coalescer", func() {
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
-				topPort.EXPECT().Peek().Return(read3)
+				topPort.EXPECT().PeekIncoming().Return(read3)
 
 				madeProgress := c.Tick(13)
 
@@ -191,8 +191,8 @@ var _ = Describe("Coalescer", func() {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
 					})
 
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming(gomock.Any())
 				madeProgress := c.Tick(13)
 
 				Expect(madeProgress).To(BeTrue())
@@ -212,7 +212,7 @@ var _ = Describe("Coalescer", func() {
 				dirBuf.EXPECT().CanPush().
 					Return(false)
 
-				topPort.EXPECT().Peek().Return(read3)
+				topPort.EXPECT().PeekIncoming().Return(read3)
 				madeProgress := c.Tick(13)
 
 				Expect(madeProgress).To(BeFalse())
@@ -236,7 +236,7 @@ var _ = Describe("Coalescer", func() {
 							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 						})
 					dirBuf.EXPECT().CanPush().Return(false)
-					topPort.EXPECT().Peek().Return(read3)
+					topPort.EXPECT().PeekIncoming().Return(read3)
 
 					madeProgress := c.Tick(13)
 
@@ -275,9 +275,9 @@ var _ = Describe("Coalescer", func() {
 				}).
 				Build()
 
-			topPort.EXPECT().Peek().Return(write1)
-			topPort.EXPECT().Peek().Return(write2)
-			topPort.EXPECT().Retrieve(gomock.Any()).Times(2)
+			topPort.EXPECT().PeekIncoming().Return(write1)
+			topPort.EXPECT().PeekIncoming().Return(write2)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Times(2)
 			dirBuf.EXPECT().CanPush().Return(true)
 			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
 				Expect(trans.write.Address).To(Equal(uint64(0x100)))

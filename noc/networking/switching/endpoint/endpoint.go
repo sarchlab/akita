@@ -78,6 +78,12 @@ func (c *Comp) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
 	c.TickLater(now)
 }
 
+// NotifySend is called by a port to notify the connection there are
+// messages waiting to be sent, can start tick
+func (c *Comp) NotifySend(now sim.VTimeInSec) {
+	c.TickLater(now)
+}
+
 // Unplug removes the association of a port and an endpoint.
 func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
@@ -171,7 +177,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	for i := 0; i < c.numInputChannels; i++ {
-		received := c.NetworkPort.Peek()
+		received := c.NetworkPort.PeekIncoming()
 		if received == nil {
 			return madeProgress
 		}
@@ -192,7 +198,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 		assembling := assemblingElem.Value.(*msgToAssemble)
 		assembling.numFlitArrived++
 
-		c.NetworkPort.Retrieve(now)
+		c.NetworkPort.RetrieveIncoming(now)
 
 		c.logFlitE2ETask(flit, true)
 
@@ -232,7 +238,7 @@ func (c *Comp) tryDeliver(now sim.VTimeInSec) bool {
 		msg := c.assembledMsgs[0]
 		msg.Meta().RecvTime = now
 
-		err := msg.Meta().Dst.Recv(msg)
+		err := msg.Meta().Dst.Deliver(msg)
 		if err != nil {
 			return madeProgress
 		}

@@ -107,7 +107,7 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 		pc := c.portToComplexMapping[port]
 
 		for i := 0; i < pc.numInputChannel; i++ {
-			item := port.Peek()
+			item := port.PeekIncoming()
 			if item == nil {
 				break
 			}
@@ -122,7 +122,7 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 				flit:   flit,
 			}
 			pc.pipeline.Accept(now, pipelineItem)
-			port.Retrieve(now)
+			port.RetrieveIncoming(now)
 			madeProgress = true
 
 			tracing.StartTask(

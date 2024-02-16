@@ -59,7 +59,7 @@ type Agent struct {
 
 // NotifyRecv notifies that a port has received a message.
 func (a *Agent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
-	a.ToOut.Retrieve(now)
+	a.ToOut.RetrieveIncoming(now)
 	a.TickLater(now)
 }
 
