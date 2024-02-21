@@ -350,6 +350,8 @@ var _ = Describe("TLB Integration", func() {
 		engine = sim.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
 		agent = NewMockPort(mockCtrl)
+		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
 		tlb.LowModule = lowModule

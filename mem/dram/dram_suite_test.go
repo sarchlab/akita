@@ -41,6 +41,7 @@ var _ = Describe("DRAM Integration", func() {
 			WithEngine(engine).
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
+		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		srcPort.EXPECT().SetConnection(conn)

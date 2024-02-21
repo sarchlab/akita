@@ -26,6 +26,8 @@ var _ = Describe("Cache", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		cuPort = NewMockPort(mockCtrl)
+		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
 		engine = sim.NewSerialEngine()
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		dram = idealmemcontroller.New("DRAM", engine, 4*mem.GB)

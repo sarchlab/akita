@@ -263,14 +263,20 @@ func NewLimitNumMsgPortWithExternalBuffer(
 }
 
 func (p *LimitNumMsgPort) msgMustBeValid(msg Msg) {
-	portMustNotBeNil(msg.Meta().Src)
-	portMustNotBeNil(msg.Meta().Dst)
+	portMustBeMsgSrc(p, msg)
+	dstMustNotBeNil(msg.Meta().Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
-func portMustNotBeNil(port Port) {
+func portMustBeMsgSrc(port Port, msg Msg) {
+	if port != msg.Meta().Src {
+		panic("sending port is not msg src")
+	}
+}
+
+func dstMustNotBeNil(port Port) {
 	if port == nil {
-		panic("src or dst is not gien")
+		panic("dst is not gien")
 	}
 }
 

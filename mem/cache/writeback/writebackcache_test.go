@@ -46,8 +46,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		agentPort = NewMockPort(mockCtrl)
 		agentPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
+		agentPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
 		controlAgentPort = NewMockPort(mockCtrl)
 		controlAgentPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
+		controlAgentPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		engine = sim.NewSerialEngine()
 		directory = cache.NewDirectory(1024, 4, 64, victimFinder)

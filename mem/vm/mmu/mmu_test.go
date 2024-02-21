@@ -375,6 +375,8 @@ var _ = Describe("MMU Integration", func() {
 		builder := MakeBuilder().WithEngine(engine)
 		mmu = builder.Build("MMU")
 		agent = NewMockPort(mockCtrl)
+		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)
