@@ -67,11 +67,11 @@ func (c *Comp) forwardMany(
 ) bool {
 	madeProgress := false
 	for {
-		if port.PeekOutgoing() == nil {
+		head := port.PeekOutgoing()
+		if head == nil {
 			break
 		}
 
-		head := port.PeekOutgoing()
 		head.Meta().RecvTime = now
 
 		err := head.Meta().Dst.Deliver(head)

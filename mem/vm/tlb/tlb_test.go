@@ -349,7 +349,10 @@ var _ = Describe("TLB Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = sim.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
-		lowModule.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		lowModuleCall := lowModule.EXPECT().
+			PeekOutgoing().
+			Return(nil).
+			AnyTimes()
 		agent = NewMockPort(mockCtrl)
 		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
@@ -380,8 +383,7 @@ var _ = Describe("TLB Integration", func() {
 					WithPage(page).
 					WithRspTo(req.ID).
 					Build()
-				// lowModule.Send(rsp)
-				// call.Return(rsp).Times(1)
+				lowModuleCall.Times(0)
 				lowModule.EXPECT().PeekOutgoing().Return(rsp)
 				lowModule.EXPECT().RetrieveOutgoing().Return(rsp)
 				lowModule.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
@@ -393,7 +395,7 @@ var _ = Describe("TLB Integration", func() {
 		mockCtrl.Finish()
 	})
 
-	FIt("should do tlb miss", func() {
+	It("should do tlb miss", func() {
 		req := vm.TranslationReqBuilder{}.
 			WithSendTime(10).
 			WithSrc(agent).
