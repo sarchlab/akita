@@ -60,7 +60,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
-	FIt("should send successfully", func() {
+	It("should send successfully", func() {
 		dst := NewLimitNumMsgPort(comp, 4, "Port")
 		msg := &sampleMsg{}
 		msg.SendTime = 10
@@ -71,7 +71,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 		err := port.Send(msg)
 
 		Expect(err).To(BeNil())
-		Expect(port.outgoingBuf).To(ContainElement(msg))
+		Expect(port.PeekOutgoing()).To(BeIdenticalTo(msg))
 	})
 
 	It("should propagate error when outgoing buff is full", func() {

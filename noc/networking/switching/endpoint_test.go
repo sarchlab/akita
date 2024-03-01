@@ -49,7 +49,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
 		engine.EXPECT().Schedule(gomock.Any())
-		endPoint.Send(msg)
+		msg.Src.Send(msg)
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())

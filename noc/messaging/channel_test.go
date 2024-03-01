@@ -52,19 +52,11 @@ var _ = Describe("Channel", func() {
 		c.right.pipeline = dstPipeline
 	})
 
-	It("should send", func() {
-		msg := &testMsg{}
-		msg.Src = src
-		msg.Dst = dst
-
-		engine.EXPECT().Schedule(gomock.Any())
-
-		msg.Src.Send(msg)
-	})
-
 	It("should tick", func() {
 		srcPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
 		dstPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
+		src.EXPECT().PeekOutgoing().Return(nil)
+		dst.EXPECT().PeekOutgoing().Return(nil)
 
 		madeProgress := c.Tick(1)
 
@@ -78,6 +70,8 @@ var _ = Describe("Channel", func() {
 
 		srcPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
 		dstPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
+		src.EXPECT().PeekOutgoing().Return(nil)
+		dst.EXPECT().PeekOutgoing().Return(nil)
 		c.left.postPipelineBuf.Push(msgPipeTask{msg})
 
 		dst.EXPECT().Deliver(gomock.Any()).Do(func(msg *testMsg) {
@@ -90,22 +84,25 @@ var _ = Describe("Channel", func() {
 		Expect(c.left.postPipelineBuf.Size()).To(Equal(0))
 	})
 
-	// It("should move message to pipeline", func() {
-	// 	msg := &testMsg{}
-	// 	msg.Src = src
-	// 	msg.Dst = dst
+	It("should move message to pipeline", func() {
+		msg := &testMsg{}
+		msg.Src = src
+		msg.Dst = dst
 
-	// 	c.left.srcSideBuf.Push(msg)
-	// 	srcPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
-	// 	dstPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
-	// 	srcPipeline.EXPECT().CanAccept().Return(true)
-	// 	srcPipeline.EXPECT().
-	// 		Accept(sim.VTimeInSec(1.0), msgPipeTask{msg: msg})
+		src.EXPECT().PeekOutgoing().Return(msg)
+		src.EXPECT().RetrieveOutgoing().Return(msg)
+		src.EXPECT().PeekOutgoing().Return(nil)
+		dst.EXPECT().PeekOutgoing().Return(nil)
+		srcPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
+		dstPipeline.EXPECT().Tick(sim.VTimeInSec(1.0))
+		srcPipeline.EXPECT().CanAccept().Return(true)
+		srcPipeline.EXPECT().
+			Accept(sim.VTimeInSec(1.0), msgPipeTask{msg: msg})
 
-	// 	madeProgress := c.Tick(1)
+		madeProgress := c.Tick(1)
 
-	// 	Expect(madeProgress).To(BeTrue())
-	// })
+		Expect(madeProgress).To(BeTrue())
+	})
 })
 
 var _ = Describe("Channel Integration", func() {

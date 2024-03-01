@@ -59,7 +59,7 @@ var _ = Describe("Monitor", func() {
 		m.RegisterComponent(c)
 
 		Expect(m.components).To(HaveLen(1))
-		Expect(m.buffers).To(HaveLen(2))
+		Expect(m.buffers).To(HaveLen(3))
 	})
 
 	It("should walk int fields", func() {
