@@ -1,13 +1,20 @@
-package switching
+package endpoint
 
 import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v4/sim"
 )
+
+type sampleMsg struct {
+	sim.MsgMeta
+}
+
+func (m *sampleMsg) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
+}
 
 var _ = Describe("End Point", func() {
 	var (
@@ -16,7 +23,7 @@ var _ = Describe("End Point", func() {
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
-		endPoint          *endpoint.Comp
+		endPoint          *Comp
 	)
 
 	BeforeEach(func() {
@@ -28,7 +35,7 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
-		endPoint = endpoint.MakeBuilder().
+		endPoint = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
 			WithFlitByteSize(32).
