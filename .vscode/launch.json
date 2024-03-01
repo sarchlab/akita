@@ -45,5 +45,12 @@
             "mode": "test",
             "program": "${workspaceFolder}/sim/bottleneckanalysis"
         },
+        {
+            "name": "Test github.com/sarchlab/akita/v4/mem/vm/tlb",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/mem/vm/tlb"
+        },
     ]
 }

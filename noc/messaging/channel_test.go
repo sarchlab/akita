@@ -145,7 +145,12 @@ var _ = Describe("Channel Integration", func() {
 			Expect(msg.RecvTime).To(Equal(sim.VTimeInSec(101)))
 		})
 
-		msg.Src.Send(msg)
+		src.EXPECT().PeekOutgoing().Return(msg)
+		dst.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		src.EXPECT().RetrieveOutgoing().Return(msg)
+		src.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
+		c.NotifySend(0)
 
 		engine.Run()
 	})

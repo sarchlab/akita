@@ -30,7 +30,15 @@ func (c *Comp) Unplug(_ sim.Port) {
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *Comp) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
+func (c *Comp) NotifyAvailable(now sim.VTimeInSec, p sim.Port) {
+	for _, port := range c.ports {
+		if port == p {
+			continue
+		}
+
+		port.NotifyAvailable(now)
+	}
+
 	c.TickNow(now)
 }
 
@@ -63,8 +71,6 @@ func (c *Comp) forwardMany(
 			break
 		}
 
-		outgoingBufBusy := !port.CanSend()
-
 		head := port.PeekOutgoing()
 		head.Meta().RecvTime = now
 
@@ -75,10 +81,6 @@ func (c *Comp) forwardMany(
 
 		madeProgress = true
 		port.RetrieveOutgoing()
-
-		if outgoingBufBusy {
-			port.NotifyAvailable(now)
-		}
 	}
 
 	return madeProgress
