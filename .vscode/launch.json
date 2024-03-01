@@ -52,5 +52,12 @@
             "mode": "test",
             "program": "${workspaceFolder}/mem/vm/tlb"
         },
+        {
+            "name": "Test github.com/sarchlab/akita/v4/noc/networking/switching/endpoint",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/noc/networking/switching/endpoint"
+        },
     ]
 }

@@ -51,12 +51,14 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := &sampleMsg{}
+		msg.Src = devicePort
 		msg.TrafficBytes = 33
 
 		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
-		engine.EXPECT().Schedule(gomock.Any())
-		msg.Src.Send(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(msg)
+		devicePort.EXPECT().RetrieveOutgoing().Return(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())
@@ -102,7 +104,7 @@ var _ = Describe("End Point", func() {
 			WithMsg(msg).
 			Build()
 		flit1 := messaging.FlitBuilder{}.
-			WithSeqID(0).
+			WithSeqID(1).
 			WithNumFlitInMsg(2).
 			WithMsg(msg).
 			Build()
@@ -112,6 +114,7 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
 		networkPort.EXPECT().RetrieveIncoming(gomock.Any()).Times(2)
 		devicePort.EXPECT().Deliver(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())
