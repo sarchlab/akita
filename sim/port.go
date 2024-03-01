@@ -145,7 +145,8 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	return nil
 }
 
-// Retrieve is used by the component to take a message from the incoming buffer
+// RetrieveIncoming is used by the component to take a message from the incoming
+// buffer
 func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -171,7 +172,8 @@ func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
 	return msg
 }
 
-// Retrieve is used by the component to take a message from the outgoing buffer
+// RetrieveOutgoing is used by the component to take a message from the outgoing
+// buffer
 func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -196,7 +198,8 @@ func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
 	return msg
 }
 
-// Peek returns the first message in the incoming buffer without removing it.
+// PeekIncoming returns the first message in the incoming buffer without
+// removing it.
 func (p *LimitNumMsgPort) PeekIncoming() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -210,7 +213,8 @@ func (p *LimitNumMsgPort) PeekIncoming() Msg {
 	return msg
 }
 
-// Peek returns the first message in the outgoing buffer without removing it.
+// PeekOutgoing returns the first message in the outgoing buffer without
+// removing it.
 func (p *LimitNumMsgPort) PeekOutgoing() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()

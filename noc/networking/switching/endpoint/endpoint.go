@@ -132,7 +132,6 @@ func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
 	}
 
 	return madeProgress
-
 }
 
 func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
