@@ -5,6 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "noc/acceptance/one_on_one",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/noc/acceptance/one_to_one"
+        },
+        {
             "name": "Daisen Server",
             "type": "go",
             "request": "launch",

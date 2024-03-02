@@ -22,3 +22,5 @@ debug
 .DS_Store
 
 .vscode/*.log
+
+__debug_bin*

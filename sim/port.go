@@ -36,11 +36,8 @@ type LimitNumMsgPort struct {
 	comp Component
 	conn Connection
 
-	incomingBuf     Buffer
-	incomingBufBusy bool
-
-	outgoingBuf     Buffer
-	outgoingBufBusy bool
+	incomingBuf Buffer
+	outgoingBuf Buffer
 }
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -87,10 +84,6 @@ func (p *LimitNumMsgPort) CanSend() bool {
 
 	canSend := p.outgoingBuf.CanPush()
 
-	if !canSend {
-		p.outgoingBufBusy = true
-	}
-
 	return canSend
 }
 
@@ -102,7 +95,6 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	p.msgMustBeValid(msg)
 
 	if !p.outgoingBuf.CanPush() {
-		p.outgoingBufBusy = true
 		return NewSendError()
 	}
 
@@ -125,7 +117,6 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	defer p.lock.Unlock()
 
 	if !p.incomingBuf.CanPush() {
-		p.incomingBufBusy = true
 		return NewSendError()
 	}
 
@@ -164,8 +155,7 @@ func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
 	}
 	p.InvokeHook(hookCtx)
 
-	if p.incomingBufBusy {
-		p.incomingBufBusy = false
+	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
 		p.conn.NotifyAvailable(now, p)
 	}
 
@@ -191,8 +181,8 @@ func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
 	}
 	p.InvokeHook(hookCtx)
 
-	if p.outgoingBufBusy {
-		p.outgoingBufBusy = false
+	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
+		p.comp.NotifyPortFree(msg.Meta().SendTime, p)
 	}
 
 	return msg
@@ -280,7 +270,7 @@ func portMustBeMsgSrc(port Port, msg Msg) {
 
 func dstMustNotBeNil(port Port) {
 	if port == nil {
-		panic("dst is not gien")
+		panic("dst is not given")
 	}
 }
 
