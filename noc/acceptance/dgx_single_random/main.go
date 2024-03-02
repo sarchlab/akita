@@ -34,7 +34,7 @@ func main() {
 	go startProfilingServer()
 
 	for i := 0; i < 9; i++ {
-		for j := 0; j < 9; j++ {
+		for j := i + 1; j < 9; j++ {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
 			rand.Seed(1)
 
@@ -80,7 +80,10 @@ func createNetwork(
 	return agents
 }
 
-func createAgents(engine sim.Engine, test *acceptance.Test) []*acceptance.Agent {
+func createAgents(
+	engine sim.Engine,
+	test *acceptance.Test,
+) []*acceptance.Agent {
 	freq := 1.0 * sim.GHz
 	var agents []*acceptance.Agent
 	for i := 0; i < 9; i++ {
@@ -93,7 +96,10 @@ func createAgents(engine sim.Engine, test *acceptance.Test) []*acceptance.Agent 
 	return agents
 }
 
-func createPCIeNetwork(connector *nvlink.Connector, agents []*acceptance.Agent) []int {
+func createPCIeNetwork(
+	connector *nvlink.Connector,
+	agents []*acceptance.Agent,
+) []int {
 	rootComplexID := connector.AddRootComplex(agents[0].AgentPorts)
 	switch1ID := connector.AddPCIeSwitch()
 	switch2ID := connector.AddPCIeSwitch()
