@@ -39,28 +39,6 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl.Finish()
 	})
 
-	// It("should only tick once for all the messages sent at the same time ", func() {
-	// 	msg1 := sim.NewSampleMsg()
-	// 	msg1.SendTime = 10
-	// 	msg1.Src = port1
-	// 	msg1.Dst = port2
-	// 	msg2 := sim.NewSampleMsg()
-	// 	msg2.SendTime = 10
-	// 	msg2.Src = port2
-	// 	msg2.Dst = port1
-
-	// 	engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-	// 		Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
-	// 		Expect(evt.IsSecondary()).To(BeTrue())
-	// 	})
-
-	// 	connection.Send(msg1)
-	// 	connection.Send(msg2)
-
-	// 	Expect(connection.ends[port1].buf).To(ContainElement(msg1))
-	// 	Expect(connection.ends[port2].buf).To(ContainElement(msg1))
-	// })
-
 	It("should forward when handling tick event", func() {
 		tick := sim.MakeTickEvent(10, connection)
 
@@ -74,23 +52,22 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Src = port2
 		msg2.Dst = port1
 
-		port1.EXPECT().PeekOutgoing().Return(msg1).Times(2)
+		port1.EXPECT().PeekOutgoing().Return(msg1)
 		port1.EXPECT().PeekOutgoing().Return(nil)
 		port1.EXPECT().RetrieveOutgoing().Return(msg1)
-		port1.EXPECT().CanSend().Return(true)
 		port1.EXPECT().Deliver(msg2).Return(nil)
 
-		port2.EXPECT().PeekOutgoing().Return(msg2).Times(2)
+		port2.EXPECT().PeekOutgoing().Return(msg2)
 		port2.EXPECT().PeekOutgoing().Return(nil)
 		port2.EXPECT().RetrieveOutgoing().Return(msg2)
-		port2.EXPECT().CanSend().Return(false)
 		port2.EXPECT().Deliver(msg1).Return(nil)
-		port2.EXPECT().NotifyAvailable(sim.VTimeInSec(10))
 
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-			Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
-			Expect(evt.IsSecondary()).To(BeTrue())
-		})
+		engine.EXPECT().
+			Schedule(gomock.Any()).
+			Do(func(evt sim.TickEvent) {
+				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
+				Expect(evt.IsSecondary()).To(BeTrue())
+			})
 
 		connection.Handle(tick)
 

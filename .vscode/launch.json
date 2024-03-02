@@ -32,11 +32,18 @@
             "program": "${workspaceFolder}/monitoring"
         },
         {
-            "name": "Test github.com/sarchlab/akita",
+            "name": "Test github.com/sarchlab/akita/v4/sim",
             "type": "go",
             "request": "launch",
             "mode": "test",
-            "program": "${workspaceFolder}"
+            "program": "${workspaceFolder}/sim"
+        },
+        {
+            "name": "Test github.com/sarchlab/akita/v4/sim/directconnection",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/sim/directconnection"
         },
         {
             "name": "Test github.com/sarchlab/analysis",
