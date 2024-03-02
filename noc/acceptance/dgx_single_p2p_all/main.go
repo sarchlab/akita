@@ -33,24 +33,28 @@ func main() {
 
 	go startProfilingServer()
 
-	rand.Seed(1)
+	for i := 0; i < 9; i++ {
+		for j := i + 1; j < 9; j++ {
+			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
+			rand.Seed(1)
 
-	engine := sim.NewSerialEngine()
-	t := acceptance.NewTest()
+			engine := sim.NewSerialEngine()
+			t := acceptance.NewTest()
 
-	agents := createNetwork(engine, t)
-	for _, agent := range agents {
-		t.RegisterAgent(agent)
+			agents := createNetwork(engine, t)
+			t.RegisterAgent(agents[i])
+			t.RegisterAgent(agents[j])
+			t.GenerateMsgs(2000)
+
+			err := engine.Run()
+			if err != nil {
+				panic(err)
+			}
+
+			t.MustHaveReceivedAllMsgs()
+			t.ReportBandwidthAchieved(engine.CurrentTime())
+		}
 	}
-	t.GenerateMsgs(20000)
-
-	err := engine.Run()
-	if err != nil {
-		panic(err)
-	}
-
-	t.MustHaveReceivedAllMsgs()
-	t.ReportBandwidthAchieved(engine.CurrentTime())
 
 	atexit.Exit(0)
 }
