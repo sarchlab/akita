@@ -100,9 +100,9 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 		if err == nil {
 			c.flitsToSend = c.flitsToSend[1:]
 
-			fmt.Printf("%.10f, %s, ep send, %s, %d\n",
-				c.Engine.CurrentTime(), c.Name(),
-				flit.Meta().ID, len(c.flitsToSend))
+			// fmt.Printf("%.10f, %s, ep send, %s, %d\n",
+			// 	c.Engine.CurrentTime(), c.Name(),
+			// 	flit.Meta().ID, len(c.flitsToSend))
 
 			if len(c.flitsToSend) == 0 {
 				for _, p := range c.DevicePorts {
@@ -117,7 +117,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) prepareMsg(now sim.VTimeInSec) bool {
+func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(c.DevicePorts); i++ {
 		port := c.DevicePorts[i]
@@ -128,8 +128,8 @@ func (c *Comp) prepareMsg(now sim.VTimeInSec) bool {
 		msg := port.RetrieveOutgoing()
 		c.msgOutBuf = append(c.msgOutBuf, msg)
 
-		fmt.Printf("%.10f, %s, ep send msg, msg-%s\n",
-			now, c.Name(), msg.Meta().ID)
+		// fmt.Printf("%.10f, %s, ep send msg, msg-%s\n",
+		// 	now, c.Name(), msg.Meta().ID)
 
 		madeProgress = true
 	}
@@ -149,9 +149,9 @@ func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
 		c.msgOutBuf = c.msgOutBuf[1:]
 		c.flitsToSend = append(c.flitsToSend, c.msgToFlits(msg)...)
 
-		fmt.Printf("%.10f, %s, ep send, msg-%s, %d\n",
-			c.Engine.CurrentTime(), c.Name(), msg.Meta().ID,
-			len(c.flitsToSend))
+		// fmt.Printf("%.10f, %s, ep send, msg-%s, %d\n",
+		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID,
+		// 	len(c.flitsToSend))
 
 		for _, flit := range c.flitsToSend {
 			c.logFlitE2ETask(flit, false)

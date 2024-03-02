@@ -1,25 +1,28 @@
-package mesh
+package main
 
 import (
+	"flag"
 	"fmt"
+	"math/rand"
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
+	"github.com/sarchlab/akita/v4/noc/networking/mesh"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-func Example() {
+func main() {
+	flag.Parse()
+	rand.Seed(1)
+
 	meshWidth := 5
 	meshHeight := 5
 	numMessages := 2000
 
-	// monitor := monitoring.NewMonitor()
-	// monitor.StartServer()
-
 	test := acceptance.NewTest()
 	engine := sim.NewSerialEngine()
-	// monitor.RegisterEngine(engine)
+
 	freq := 1 * sim.GHz
-	connector := NewConnector().
+	connector := mesh.NewConnector().
 		// WithMonitor(monitor).
 		WithEngine(engine).
 		WithFreq(freq)
@@ -43,10 +46,11 @@ func Example() {
 
 	test.GenerateMsgs(uint64(numMessages))
 
-	engine.Run()
+	err := engine.Run()
+	if err != nil {
+		panic(err)
+	}
 
 	test.MustHaveReceivedAllMsgs()
 	fmt.Println("passed!")
-
-	// Output: passed!
 }
