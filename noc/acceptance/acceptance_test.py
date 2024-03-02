@@ -50,6 +50,7 @@ def main():
     tests = [
         Test("one_to_one"),
         Test("one_switch"),
+        Test("three_agent_one_switch"),
         Test("pcie_p2p"),
         Test("pcie_random"),
         Test("dgx_single_p2p"),
