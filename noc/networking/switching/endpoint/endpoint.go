@@ -117,7 +117,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) prepareMsg(now sim.VTimeInSec) bool {
+func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(c.DevicePorts); i++ {
 		port := c.DevicePorts[i]

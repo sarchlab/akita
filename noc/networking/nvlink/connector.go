@@ -218,7 +218,7 @@ func (c *Connector) ConnectSwitchesWithPCIeLink(switchAID, switchBID int) {
 				NumOutputChannel: 1,
 			},
 			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false,
+				IsIdeal:       true,
 				Frequency:     c.freq,
 				NumStage:      20,
 				CyclePerStage: 1,
@@ -303,7 +303,7 @@ func (c *Connector) connectDeviceSwitchWithPCIeSwitch(
 				NumOutputChannel: 1,
 			},
 			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false,
+				IsIdeal:       true,
 				Frequency:     c.freq,
 				NumStage:      20,
 				CyclePerStage: 1,
@@ -367,7 +367,7 @@ func (c *Connector) ConnectDevicesWithNVLink(
 				NumOutputChannel: 1,
 			},
 			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false,
+				IsIdeal:       true,
 				Frequency:     sim.Freq(freq),
 				NumStage:      20,
 				CyclePerStage: 1,
