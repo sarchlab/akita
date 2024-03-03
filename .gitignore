@@ -15,6 +15,7 @@ vendor
 *.test
 debug
 *.out
+*.debug
 
 # Prof file
 *.prof

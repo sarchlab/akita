@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring"
-	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
@@ -355,14 +354,15 @@ func (c *Connector) connectPorts(
 	if linkParam.IsIdeal {
 		conn = directconnection.MakeBuilder().WithEngine(c.engine).WithFreq(c.defaultFreq).Build(connName)
 	} else {
-		conn = messaging.MakeChannelBuilder().
-			WithEngine(c.engine).
-			WithPipelineParameters(
-				linkParam.NumStage,
-				linkParam.CyclePerStage,
-				linkParam.PipelineWidth).
-			WithFreq(linkParam.Frequency).
-			Build(connName)
+		panic("non-ideal (with latency) connection is not implemented.")
+		// conn = messaging.MakeChannelBuilder().
+		// 	WithEngine(c.engine).
+		// 	WithPipelineParameters(
+		// 		linkParam.NumStage,
+		// 		linkParam.CyclePerStage,
+		// 		linkParam.PipelineWidth).
+		// 	WithFreq(linkParam.Frequency).
+		// 	Build(connName)
 	}
 	conn.PlugIn(left, leftBufSize)
 	conn.PlugIn(right, rightBufSize)

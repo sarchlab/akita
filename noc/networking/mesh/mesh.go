@@ -364,7 +364,7 @@ func (c *Connector) createLink(
 				PortName:         DirectionB,
 			},
 			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false, // Use channel model for NoC tracing
+				IsIdeal:       true,
 				Frequency:     c.freq * sim.Freq(c.linkTransferPerCycle),
 				NumStage:      1,
 				CyclePerStage: 1,

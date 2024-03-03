@@ -100,7 +100,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 		if err == nil {
 			c.flitsToSend = c.flitsToSend[1:]
 
-			// fmt.Printf("%.10f, %s, ep send, %s, %d\n",
+			// fmt.Printf("%.10f, %s, ep send flit, %s, %d\n",
 			// 	c.Engine.CurrentTime(), c.Name(),
 			// 	flit.Meta().ID, len(c.flitsToSend))
 
@@ -117,7 +117,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
+func (c *Comp) prepareMsg(now sim.VTimeInSec) bool {
 	madeProgress := false
 	for i := 0; i < len(c.DevicePorts); i++ {
 		port := c.DevicePorts[i]
@@ -147,13 +147,14 @@ func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
 
 		msg := c.msgOutBuf[0]
 		c.msgOutBuf = c.msgOutBuf[1:]
-		c.flitsToSend = append(c.flitsToSend, c.msgToFlits(msg)...)
+		flits := c.msgToFlits(msg)
+		c.flitsToSend = append(c.flitsToSend, flits...)
 
-		// fmt.Printf("%.10f, %s, ep send, msg-%s, %d\n",
-		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID,
+		// fmt.Printf("%.10f, %s, ep create flit, msg-%s, %d, %d\n",
+		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID, len(flits),
 		// 	len(c.flitsToSend))
 
-		for _, flit := range c.flitsToSend {
+		for _, flit := range flits {
 			c.logFlitE2ETask(flit, false)
 		}
 
@@ -193,7 +194,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 		madeProgress = true
 
 		// fmt.Printf("%.10f, %s, ep received flit %s\n",
-		// 	now, ep.Name(), flit.ID)
+		// 	now, c.Name(), flit.ID)
 	}
 
 	return madeProgress
@@ -212,6 +213,9 @@ func (c *Comp) assemble(_ sim.VTimeInSec) bool {
 		c.assembledMsgs = append(c.assembledMsgs, assemblingMsg.msg)
 		c.assemblingMsgs.Remove(e)
 		delete(c.assemblingMsgTable, assemblingMsg.msg.Meta().ID)
+
+		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
+		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)
 
 		madeProgress = true
 	}
@@ -232,7 +236,7 @@ func (c *Comp) tryDeliver(now sim.VTimeInSec) bool {
 		}
 
 		// fmt.Printf("%.10f, %s, delivered, %s\n",
-		// 	now, ep.Name(), msg.Meta().ID)
+		// 	now, c.Name(), msg.Meta().ID)
 		c.logMsgE2ETask(msg, true)
 
 		c.assembledMsgs = c.assembledMsgs[1:]

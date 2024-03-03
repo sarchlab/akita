@@ -68,6 +68,13 @@
             "program": "${workspaceFolder}/noc/acceptance/dgx_single_random"
         },
         {
+            "name": "noc/acceptance/mesh",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/noc/acceptance/mesh"
+        },
+        {
             "name": "Daisen Server",
             "type": "go",
             "request": "launch",
