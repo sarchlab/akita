@@ -3,7 +3,6 @@ package networkconnector
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
@@ -24,11 +23,11 @@ type Remote struct {
 
 // Bandwidth returns the bandwidth of the link.
 func (r Remote) Bandwidth(flitSize int) float64 {
-	switch l := r.Link.(type) {
+	switch r.Link.(type) {
 	case *directconnection.Comp:
 		return math.Inf(1)
-	case *messaging.Channel:
-		return float64(l.Freq) * float64(flitSize)
+	// case *messaging.Channel:
+	// 	return float64(l.Freq) * float64(flitSize)
 	default:
 		panic("unknown link type")
 	}

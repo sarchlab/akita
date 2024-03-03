@@ -39,7 +39,7 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should return if no req to parse", func() {
-		port.EXPECT().Peek().Return(nil)
+		port.EXPECT().PeekIncoming().Return(nil)
 		ret := parser.Tick(10)
 		Expect(ret).To(BeFalse())
 	})
@@ -56,7 +56,7 @@ var _ = Describe("TopParser", func() {
 			WithAddress(0x100).
 			WithByteSize(64).
 			Build()
-		port.EXPECT().Peek().Return(read)
+		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(false)
 
 		ret := parser.Tick(10)
@@ -71,12 +71,12 @@ var _ = Describe("TopParser", func() {
 			WithByteSize(64).
 			Build()
 
-		port.EXPECT().Peek().Return(read)
+		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(true)
 		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
 			Expect(t.read).To(BeIdenticalTo(read))
 		})
-		port.EXPECT().Retrieve(sim.VTimeInSec(10)).Return(read)
+		port.EXPECT().RetrieveIncoming(sim.VTimeInSec(10)).Return(read)
 
 		parser.Tick(10)
 
@@ -89,12 +89,12 @@ var _ = Describe("TopParser", func() {
 			WithAddress(0x100).
 			Build()
 
-		port.EXPECT().Peek().Return(write)
+		port.EXPECT().PeekIncoming().Return(write)
 		buf.EXPECT().CanPush().Return(true)
 		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
 			Expect(t.write).To(BeIdenticalTo(write))
 		})
-		port.EXPECT().Retrieve(sim.VTimeInSec(10)).Return(write)
+		port.EXPECT().RetrieveIncoming(sim.VTimeInSec(10)).Return(write)
 
 		parser.Tick(10)
 

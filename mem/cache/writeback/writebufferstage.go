@@ -265,7 +265,7 @@ func (wb *writeBufferStage) write(now sim.VTimeInSec) bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp(now sim.VTimeInSec) bool {
-	msg := wb.cache.bottomPort.Peek()
+	msg := wb.cache.bottomPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -306,7 +306,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	bankBuf.Push(trans)
 
 	wb.removeInflightFetch(trans)
-	wb.cache.bottomPort.Retrieve(now)
+	wb.cache.bottomPort.RetrieveIncoming(now)
 
 	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache)
 
@@ -387,7 +387,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				wb.inflightEviction[:i],
 				wb.inflightEviction[i+1:]...,
 			)
-			wb.cache.bottomPort.Retrieve(now)
+			wb.cache.bottomPort.RetrieveIncoming(now)
 			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache)
 
 			return true

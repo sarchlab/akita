@@ -571,7 +571,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		It("should do nothing if no return ", func() {
 			now := sim.VTimeInSec(10)
 
-			bottomPort.EXPECT().Peek().Return(nil)
+			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
 			madeProgress := wbStage.processReturnRsp(now)
 
@@ -581,8 +581,8 @@ var _ = Describe("Write Buffer Stage", func() {
 		It("should remove inflight eviction", func() {
 			now := sim.VTimeInSec(10)
 
-			bottomPort.EXPECT().Peek().Return(writeDone)
-			bottomPort.EXPECT().Retrieve(now)
+			bottomPort.EXPECT().PeekIncoming().Return(writeDone)
+			bottomPort.EXPECT().RetrieveIncoming(now)
 
 			madeProgress := wbStage.processReturnRsp(now)
 
@@ -630,7 +630,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				Build()
 
 			wbStage.inflightFetch = append(wbStage.inflightFetch, fetch)
-			bottomPort.EXPECT().Peek().Return(dataReady)
+			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 		})
 
 		It("should stall if bank buffer is full", func() {
@@ -648,7 +648,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 			bankBuffer.EXPECT().CanPush().Return(true)
 			bankBuffer.EXPECT().Push(fetch)
-			bottomPort.EXPECT().Retrieve(now)
+			bottomPort.EXPECT().RetrieveIncoming(now)
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
 			madeProgress := wbStage.processReturnRsp(now)
@@ -676,7 +676,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 			bankBuffer.EXPECT().CanPush().Return(true)
 			bankBuffer.EXPECT().Push(fetch)
-			bottomPort.EXPECT().Retrieve(now)
+			bottomPort.EXPECT().RetrieveIncoming(now)
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
 			madeProgress := wbStage.processReturnRsp(now)

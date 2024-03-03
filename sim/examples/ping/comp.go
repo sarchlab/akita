@@ -102,7 +102,7 @@ func (c *Comp) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	msg := port.Retrieve(now)
+	msg := port.RetrieveIncoming(now)
 	switch msg := msg.(type) {
 	case *PingMsg:
 		c.processPingMsg(now, msg)

@@ -51,7 +51,7 @@ var _ = Describe("MemController", func() {
 
 	Context("parse top", func() {
 		It("should do nothing if no message", func() {
-			topPort.EXPECT().Peek().Return(nil)
+			topPort.EXPECT().PeekIncoming().Return(nil)
 
 			madeProgress := memCtrl.parseTop(10)
 
@@ -63,7 +63,7 @@ var _ = Describe("MemController", func() {
 				WithAddress(0x1000).
 				Build()
 
-			topPort.EXPECT().Peek().Return(read)
+			topPort.EXPECT().PeekIncoming().Return(read)
 			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
 			subTransSplitter.EXPECT().
 				Split(gomock.Any()).
@@ -83,8 +83,8 @@ var _ = Describe("MemController", func() {
 				WithAddress(0x1000).
 				Build()
 
-			topPort.EXPECT().Peek().Return(read)
-			topPort.EXPECT().Retrieve(gomock.Any()).Return(read)
+			topPort.EXPECT().PeekIncoming().Return(read)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(read)
 			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
 			subTransSplitter.EXPECT().
 				Split(gomock.Any()).

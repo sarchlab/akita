@@ -1,13 +1,20 @@
-package switching
+package endpoint
 
 import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v4/sim"
 )
+
+type sampleMsg struct {
+	sim.MsgMeta
+}
+
+func (m *sampleMsg) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
+}
 
 var _ = Describe("End Point", func() {
 	var (
@@ -16,7 +23,7 @@ var _ = Describe("End Point", func() {
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
-		endPoint          *endpoint.Comp
+		endPoint          *Comp
 	)
 
 	BeforeEach(func() {
@@ -28,7 +35,7 @@ var _ = Describe("End Point", func() {
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
-		endPoint = endpoint.MakeBuilder().
+		endPoint = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
 			WithFlitByteSize(32).
@@ -44,12 +51,14 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := &sampleMsg{}
+		msg.Src = devicePort
 		msg.TrafficBytes = 33
 
-		networkPort.EXPECT().Peek().Return(nil).AnyTimes()
+		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
-		engine.EXPECT().Schedule(gomock.Any())
-		endPoint.Send(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(msg)
+		devicePort.EXPECT().RetrieveOutgoing().Return(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())
@@ -95,16 +104,17 @@ var _ = Describe("End Point", func() {
 			WithMsg(msg).
 			Build()
 		flit1 := messaging.FlitBuilder{}.
-			WithSeqID(0).
+			WithSeqID(1).
 			WithNumFlitInMsg(2).
 			WithMsg(msg).
 			Build()
 
-		networkPort.EXPECT().Peek().Return(flit0)
-		networkPort.EXPECT().Peek().Return(flit1)
-		networkPort.EXPECT().Peek().Return(nil).Times(3)
-		networkPort.EXPECT().Retrieve(gomock.Any()).Times(2)
-		devicePort.EXPECT().Recv(msg)
+		networkPort.EXPECT().PeekIncoming().Return(flit0)
+		networkPort.EXPECT().PeekIncoming().Return(flit1)
+		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
+		networkPort.EXPECT().RetrieveIncoming(gomock.Any()).Times(2)
+		devicePort.EXPECT().Deliver(msg)
+		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		madeProgress := endPoint.Tick(10)
 		Expect(madeProgress).To(BeTrue())

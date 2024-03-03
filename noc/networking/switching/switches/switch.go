@@ -17,11 +17,6 @@ type flitPipelineItem struct {
 	flit   *messaging.Flit
 }
 
-// func NewFlitPipelineItem(taskID string, flit *messaging.Flit) flitPipelineItem {
-// 	f := flitPipelineItem{taskID: taskID, flit: flit}
-// 	return f
-// }
-
 func (f flitPipelineItem) TaskID() string {
 	return f.taskID
 }
@@ -107,7 +102,7 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 		pc := c.portToComplexMapping[port]
 
 		for i := 0; i < pc.numInputChannel; i++ {
-			item := port.Peek()
+			item := port.PeekIncoming()
 			if item == nil {
 				break
 			}
@@ -122,7 +117,7 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 				flit:   flit,
 			}
 			pc.pipeline.Accept(now, pipelineItem)
-			port.Retrieve(now)
+			port.RetrieveIncoming(now)
 			madeProgress = true
 
 			tracing.StartTask(
@@ -133,7 +128,7 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 			)
 
 			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
-			// 	now, s.Name(), flit.ID)
+			// 	now, c.Name(), flit.ID)
 		}
 	}
 
@@ -173,7 +168,7 @@ func (c *Comp) route(_ sim.VTimeInSec) (madeProgress bool) {
 			madeProgress = true
 
 			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
-			// 	now, s.Name(), flit.ID)
+			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
 		}
 	}
 
@@ -200,7 +195,7 @@ func (c *Comp) forward(now sim.VTimeInSec) (madeProgress bool) {
 			madeProgress = true
 
 			// fmt.Printf("%.10f, %s, switch forward flit, %s\n",
-			// now, s.Name(), item.(*messaging.Flit).ID)
+			// 	now, c.Name(), item.(*messaging.Flit).ID)
 		}
 	}
 
@@ -229,7 +224,7 @@ func (c *Comp) sendOut(now sim.VTimeInSec) (madeProgress bool) {
 				madeProgress = true
 
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
-				// now, s.Name(), flit.ID)
+				// 	now, c.Name(), flit.ID)
 
 				tracing.EndTask(c.flitTaskID(flit), c)
 			}

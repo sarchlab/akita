@@ -12,7 +12,7 @@ type bottomParser struct {
 }
 
 func (p *bottomParser) Tick(now sim.VTimeInSec) bool {
-	item := p.cache.bottomPort.Peek()
+	item := p.cache.bottomPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
@@ -33,7 +33,7 @@ func (p *bottomParser) processDoneRsp(
 ) bool {
 	trans := p.findTransactionByWriteToBottomID(done.GetRspTo())
 	if trans == nil || trans.fetchAndWrite {
-		p.cache.bottomPort.Retrieve(now)
+		p.cache.bottomPort.RetrieveIncoming(now)
 		return true
 	}
 
@@ -42,7 +42,7 @@ func (p *bottomParser) processDoneRsp(
 	}
 
 	p.removeTransaction(trans)
-	p.cache.bottomPort.Retrieve(now)
+	p.cache.bottomPort.RetrieveIncoming(now)
 
 	tracing.TraceReqFinalize(trans.writeToBottom, p.cache)
 	tracing.EndTask(trans.id, p.cache)
@@ -56,7 +56,7 @@ func (p *bottomParser) processDataReady(
 ) bool {
 	trans := p.findTransactionByReadToBottomID(dr.GetRspTo())
 	if trans == nil {
-		p.cache.bottomPort.Retrieve(now)
+		p.cache.bottomPort.RetrieveIncoming(now)
 		return true
 	}
 	pid := trans.readToBottom.PID
@@ -79,7 +79,7 @@ func (p *bottomParser) processDataReady(
 	trans.writeFetchedDirtyMask = dirtyMask
 	bankBuf.Push(trans)
 	p.removeTransaction(trans)
-	p.cache.bottomPort.Retrieve(now)
+	p.cache.bottomPort.RetrieveIncoming(now)
 
 	tracing.TraceReqFinalize(trans.readToBottom, p.cache)
 

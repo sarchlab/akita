@@ -381,6 +381,14 @@ func (m *Monitor) sortAndSelectBuffers(
 		panic("Invalid sort method " + sortMethod)
 	}
 
+	if offset >= len(sortedBuffers) {
+		return []sim.Buffer{}
+	}
+
+	if offset+limit > len(sortedBuffers) {
+		limit = len(sortedBuffers) - offset
+	}
+
 	sortedBuffers = sortedBuffers[offset : offset+limit]
 
 	return sortedBuffers

@@ -78,8 +78,8 @@ func (s *controlStage) hardResetCache(now sim.VTimeInSec) {
 }
 
 func (s *controlStage) flushPort(port sim.Port, now sim.VTimeInSec) {
-	for port.Peek() != nil {
-		port.Retrieve(now)
+	for port.PeekIncoming() != nil {
+		port.RetrieveIncoming(now)
 	}
 }
 
@@ -89,7 +89,7 @@ func (s *controlStage) flushBuffer(buffer sim.Buffer) {
 }
 
 func (s *controlStage) processNewRequest(now sim.VTimeInSec) bool {
-	req := s.ctrlPort.Peek()
+	req := s.ctrlPort.PeekIncoming()
 	if req == nil {
 		return false
 	}
@@ -115,7 +115,7 @@ func (s *controlStage) startCacheFlush(
 	}
 
 	s.currFlushReq = req
-	s.ctrlPort.Retrieve(now)
+	s.ctrlPort.RetrieveIncoming(now)
 
 	return true
 }
@@ -123,14 +123,14 @@ func (s *controlStage) startCacheFlush(
 func (s *controlStage) doCacheRestart(now sim.VTimeInSec, req *cache.RestartReq) bool {
 	s.cache.isPaused = false
 
-	s.ctrlPort.Retrieve(now)
+	s.ctrlPort.RetrieveIncoming(now)
 
-	for s.cache.topPort.Peek() != nil {
-		s.cache.topPort.Retrieve(now)
+	for s.cache.topPort.PeekIncoming() != nil {
+		s.cache.topPort.RetrieveIncoming(now)
 	}
 
-	for s.cache.bottomPort.Peek() != nil {
-		s.cache.bottomPort.Retrieve(now)
+	for s.cache.bottomPort.PeekIncoming() != nil {
+		s.cache.bottomPort.RetrieveIncoming(now)
 	}
 
 	rsp := cache.RestartRspBuilder{}.

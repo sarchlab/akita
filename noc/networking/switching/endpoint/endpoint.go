@@ -31,7 +31,6 @@ type Comp struct {
 	flitByteSize      int
 	encodingOverhead  float64
 	msgOutBuf         []sim.Msg
-	msgOutBufSize     int
 	flitsToSend       []*messaging.Flit
 
 	assemblingMsgTable map[string]*list.Element
@@ -39,42 +38,20 @@ type Comp struct {
 	assembledMsgs      []sim.Msg
 }
 
-// CanSend returns whether the endpoint can send a message.
-func (c *Comp) CanSend(_ sim.Port) bool {
-	c.Lock()
-	defer c.Unlock()
-
-	return len(c.msgOutBuf) < c.msgOutBufSize
-}
-
-// Send initiates a message sending process. It breaks down the message into
-// flits and send the flits to the external connections.
-func (c *Comp) Send(msg sim.Msg) *sim.SendError {
-	c.Lock()
-	defer c.Unlock()
-
-	if len(c.msgOutBuf) >= c.msgOutBufSize {
-		return &sim.SendError{}
-	}
-
-	c.msgOutBuf = append(c.msgOutBuf, msg)
-
-	c.TickLater(msg.Meta().SendTime)
-
-	c.logMsgE2ETask(msg, false)
-
-	return nil
-}
-
 // PlugIn connects a port to the endpoint.
 func (c *Comp) PlugIn(port sim.Port, srcBufCap int) {
 	port.SetConnection(c)
 	c.DevicePorts = append(c.DevicePorts, port)
-	c.msgOutBufSize = srcBufCap
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
 func (c *Comp) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
+	c.TickLater(now)
+}
+
+// NotifySend is called by a port to notify the connection there are
+// messages waiting to be sent, can start tick
+func (c *Comp) NotifySend(now sim.VTimeInSec) {
 	c.TickLater(now)
 }
 
@@ -91,6 +68,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	madeProgress = c.sendFlitOut(now) || madeProgress
+	madeProgress = c.prepareMsg(now) || madeProgress
 	madeProgress = c.prepareFlits(now) || madeProgress
 	madeProgress = c.tryDeliver(now) || madeProgress
 	madeProgress = c.assemble(now) || madeProgress
@@ -122,9 +100,9 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 		if err == nil {
 			c.flitsToSend = c.flitsToSend[1:]
 
-			// fmt.Printf("%.10f, %s, ep send, %s, %d\n",
-			// 	ep.Engine.CurrentTime(), ep.Name(),
-			// 	flit.Meta().ID, len(ep.flitsToSend))
+			// fmt.Printf("%.10f, %s, ep send flit, %s, %d\n",
+			// 	c.Engine.CurrentTime(), c.Name(),
+			// 	flit.Meta().ID, len(c.flitsToSend))
 
 			if len(c.flitsToSend) == 0 {
 				for _, p := range c.DevicePorts {
@@ -139,6 +117,26 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
+func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
+	madeProgress := false
+	for i := 0; i < len(c.DevicePorts); i++ {
+		port := c.DevicePorts[i]
+		if port.PeekOutgoing() == nil {
+			continue
+		}
+
+		msg := port.RetrieveOutgoing()
+		c.msgOutBuf = append(c.msgOutBuf, msg)
+
+		// fmt.Printf("%.10f, %s, ep send msg, msg-%s\n",
+		// 	now, c.Name(), msg.Meta().ID)
+
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
 func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
 	madeProgress := false
 
@@ -147,19 +145,16 @@ func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
 			return madeProgress
 		}
 
-		if len(c.msgOutBuf) > c.numOutputChannels {
-			return madeProgress
-		}
-
 		msg := c.msgOutBuf[0]
 		c.msgOutBuf = c.msgOutBuf[1:]
-		c.flitsToSend = append(c.flitsToSend, c.msgToFlits(msg)...)
+		flits := c.msgToFlits(msg)
+		c.flitsToSend = append(c.flitsToSend, flits...)
 
-		// fmt.Printf("%.10f, %s, ep send, msg-%s, %d\n",
-		// 	ep.Engine.CurrentTime(), ep.Name(), msg.Meta().ID,
-		// 	len(ep.flitsToSend))
+		// fmt.Printf("%.10f, %s, ep create flit, msg-%s, %d, %d\n",
+		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID, len(flits),
+		// 	len(c.flitsToSend))
 
-		for _, flit := range c.flitsToSend {
+		for _, flit := range flits {
 			c.logFlitE2ETask(flit, false)
 		}
 
@@ -171,7 +166,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	for i := 0; i < c.numInputChannels; i++ {
-		received := c.NetworkPort.Peek()
+		received := c.NetworkPort.PeekIncoming()
 		if received == nil {
 			return madeProgress
 		}
@@ -192,14 +187,14 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 		assembling := assemblingElem.Value.(*msgToAssemble)
 		assembling.numFlitArrived++
 
-		c.NetworkPort.Retrieve(now)
+		c.NetworkPort.RetrieveIncoming(now)
 
 		c.logFlitE2ETask(flit, true)
 
 		madeProgress = true
 
 		// fmt.Printf("%.10f, %s, ep received flit %s\n",
-		// 	now, ep.Name(), flit.ID)
+		// 	now, c.Name(), flit.ID)
 	}
 
 	return madeProgress
@@ -219,6 +214,9 @@ func (c *Comp) assemble(_ sim.VTimeInSec) bool {
 		c.assemblingMsgs.Remove(e)
 		delete(c.assemblingMsgTable, assemblingMsg.msg.Meta().ID)
 
+		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
+		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)
+
 		madeProgress = true
 	}
 
@@ -232,13 +230,13 @@ func (c *Comp) tryDeliver(now sim.VTimeInSec) bool {
 		msg := c.assembledMsgs[0]
 		msg.Meta().RecvTime = now
 
-		err := msg.Meta().Dst.Recv(msg)
+		err := msg.Meta().Dst.Deliver(msg)
 		if err != nil {
 			return madeProgress
 		}
 
 		// fmt.Printf("%.10f, %s, delivered, %s\n",
-		// 	now, ep.Name(), msg.Meta().ID)
+		// 	now, c.Name(), msg.Meta().ID)
 		c.logMsgE2ETask(msg, true)
 
 		c.assembledMsgs = c.assembledMsgs[1:]
@@ -327,126 +325,3 @@ func (c *Comp) msgToFlits(msg sim.Msg) []*messaging.Flit {
 
 	return flits
 }
-
-// // EndPointBuilder can build End Points.
-// type EndPointBuilder struct {
-// 	engine                   sim.Engine
-// 	freq                     sim.Freq
-// 	numInputChannels         int
-// 	numOutputChannels        int
-// 	flitByteSize             int
-// 	encodingOverhead         float64
-// 	flitAssemblingBufferSize int
-// 	networkPortBufferSize    int
-// 	devicePorts              []sim.Port
-// }
-
-// // MakeEndPointBuilder creates a new EndPointBuilder with default
-// // configurations.
-// func MakeEndPointBuilder() EndPointBuilder {
-// 	return EndPointBuilder{
-// 		flitByteSize:             32,
-// 		flitAssemblingBufferSize: 64,
-// 		networkPortBufferSize:    4,
-// 		freq:                     1 * sim.GHz,
-// 		numInputChannels:         1,
-// 		numOutputChannels:        1,
-// 	}
-// }
-
-// // WithEngine sets the engine of the End Point to build.
-// func (b EndPointBuilder) WithEngine(e sim.Engine) EndPointBuilder {
-// 	b.engine = e
-// 	return b
-// }
-
-// // WithFreq sets the frequency of the End Point to built.
-// func (b EndPointBuilder) WithFreq(freq sim.Freq) EndPointBuilder {
-// 	b.freq = freq
-// 	return b
-// }
-
-// // WithNumInputChannels sets the number of input channels of the End Point
-// // to build.
-// func (b EndPointBuilder) WithNumInputChannels(num int) EndPointBuilder {
-// 	b.numInputChannels = num
-// 	return b
-// }
-
-// // WithNumOutputChannels sets the number of output channels of the End Point
-// // to build.
-// func (b EndPointBuilder) WithNumOutputChannels(num int) EndPointBuilder {
-// 	b.numOutputChannels = num
-// 	return b
-// }
-
-// // WithFlitByteSize sets the flit byte size that the End Point supports.
-// func (b EndPointBuilder) WithFlitByteSize(n int) EndPointBuilder {
-// 	b.flitByteSize = n
-// 	return b
-// }
-
-// // WithEncodingOverhead sets the encoding overhead.
-// func (b EndPointBuilder) WithEncodingOverhead(o float64) EndPointBuilder {
-// 	b.encodingOverhead = o
-// 	return b
-// }
-
-// // WithNetworkPortBufferSize sets the network port buffer size of the end point.
-// func (b EndPointBuilder) WithNetworkPortBufferSize(n int) EndPointBuilder {
-// 	b.networkPortBufferSize = n
-// 	return b
-// }
-
-// // WithDevicePorts sets a list of ports that communicate directly through the
-// // End Point.
-// func (b EndPointBuilder) WithDevicePorts(ports []sim.Port) EndPointBuilder {
-// 	b.devicePorts = ports
-// 	return b
-// }
-
-// // Build creates a new End Point.
-// func (b EndPointBuilder) Build(name string) *EndPoint {
-// 	b.engineMustBeGiven()
-// 	b.freqMustBeGiven()
-// 	b.flitByteSizeMustBeGiven()
-
-// 	ep := &EndPoint{}
-// 	ep.TickingComponent = sim.NewTickingComponent(
-// 		name, b.engine, b.freq, ep)
-// 	ep.flitByteSize = b.flitByteSize
-
-// 	ep.numInputChannels = b.numInputChannels
-// 	ep.numOutputChannels = b.numOutputChannels
-
-// 	ep.assemblingMsgs = list.New()
-// 	ep.assemblingMsgTable = make(map[string]*list.Element)
-
-// 	ep.NetworkPort = sim.NewLimitNumMsgPort(
-// 		ep, b.networkPortBufferSize,
-// 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
-
-// 	for _, dp := range b.devicePorts {
-// 		ep.PlugIn(dp, 1)
-// 	}
-
-// 	return ep
-// }
-
-// func (b EndPointBuilder) engineMustBeGiven() {
-// 	if b.engine == nil {
-// 		panic("engine is not given")
-// 	}
-// }
-
-// func (b EndPointBuilder) freqMustBeGiven() {
-// 	if b.freq == 0 {
-// 		panic("freq must be given")
-// 	}
-// }
-
-// func (b EndPointBuilder) flitByteSizeMustBeGiven() {
-// 	if b.flitByteSize == 0 {
-// 		panic("flit byte size must be given")
-// 	}
-// }

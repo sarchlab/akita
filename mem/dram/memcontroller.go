@@ -66,7 +66,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) (madeProgress bool) {
 }
 
 func (c *Comp) parseTop(now sim.VTimeInSec) (madeProgress bool) {
-	msg := c.topPort.Peek()
+	msg := c.topPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -88,7 +88,7 @@ func (c *Comp) parseTop(now sim.VTimeInSec) (madeProgress bool) {
 
 	c.subTransactionQueue.Push(trans)
 	c.inflightTransactions = append(c.inflightTransactions, trans)
-	c.topPort.Retrieve(now)
+	c.topPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(msg, c)
 	for _, st := range trans.SubTransactions {

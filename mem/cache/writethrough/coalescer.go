@@ -19,7 +19,7 @@ func (c *coalescer) Reset() {
 }
 
 func (c *coalescer) Tick(now sim.VTimeInSec) bool {
-	req := c.cache.topPort.Peek()
+	req := c.cache.topPort.PeekIncoming()
 	if req == nil {
 		return false
 	}
@@ -68,7 +68,7 @@ func (c *coalescer) processGL0InvalidateReq(
 
 	err := c.cache.topPort.Send(rsp)
 	if err == nil {
-		c.cache.topPort.Retrieve(now)
+		c.cache.topPort.RetrieveIncoming(now)
 		return true
 	}
 	return false
@@ -81,7 +81,7 @@ func (c *coalescer) processReqCoalescable(
 	trans := c.createTransaction(req, now)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
-	c.cache.topPort.Retrieve(now)
+	c.cache.topPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(req, c.cache)
 	return true
@@ -100,7 +100,7 @@ func (c *coalescer) processReqNoncoalescable(
 	trans := c.createTransaction(req, now)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
-	c.cache.topPort.Retrieve(now)
+	c.cache.topPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(req, c.cache)
 	return true
@@ -118,7 +118,7 @@ func (c *coalescer) processReqLastInWaveCoalescable(
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.coalesceAndSend(now)
-	c.cache.topPort.Retrieve(now)
+	c.cache.topPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(req, c.cache)
 	return true
@@ -141,7 +141,7 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.coalesceAndSend(now)
-	c.cache.topPort.Retrieve(now)
+	c.cache.topPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(req, c.cache)
 	return true

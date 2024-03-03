@@ -92,7 +92,7 @@ func (f *flusher) processFlush(now sim.VTimeInSec) bool {
 }
 
 func (f *flusher) extractFromPort(now sim.VTimeInSec) bool {
-	item := f.cache.controlPort.Peek()
+	item := f.cache.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
@@ -119,7 +119,7 @@ func (f *flusher) startProcessingFlush(
 	}
 
 	f.cache.state = cacheStatePreFlushing
-	f.cache.controlPort.Retrieve(now)
+	f.cache.controlPort.RetrieveIncoming(now)
 
 	tracing.TraceReqReceive(req, f.cache)
 
@@ -147,7 +147,7 @@ func (f *flusher) handleCacheRestart(
 		Build()
 	f.cache.controlPortSender.Send(rsp)
 
-	f.cache.controlPort.Retrieve(now)
+	f.cache.controlPort.RetrieveIncoming(now)
 
 	return true
 }

@@ -72,7 +72,7 @@ var _ = Describe("Flusher", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		controlPort.EXPECT().Peek().Return(nil)
+		controlPort.EXPECT().PeekIncoming().Return(nil)
 		ret := f.Tick(10)
 		Expect(ret).To(BeFalse())
 	})
@@ -80,8 +80,8 @@ var _ = Describe("Flusher", func() {
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
 			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
-			controlPort.EXPECT().Peek().Return(req)
-			controlPort.EXPECT().Retrieve(gomock.Any())
+			controlPort.EXPECT().PeekIncoming().Return(req)
+			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
 
 			ret := f.Tick(10)
 
@@ -291,8 +291,8 @@ var _ = Describe("Flusher", func() {
 				}},
 			}
 
-			controlPort.EXPECT().Peek().Return(req)
-			controlPort.EXPECT().Retrieve(gomock.Any())
+			controlPort.EXPECT().PeekIncoming().Return(req)
+			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
 			directory.EXPECT().GetSets().Return(sets)
 			bankBuf.EXPECT().Clear()
 			dirBuf.EXPECT().Clear()
@@ -300,7 +300,7 @@ var _ = Describe("Flusher", func() {
 			cacheModule.dirStage.buf.(*MockBuffer).EXPECT().Clear()
 			mshrStageBuf.EXPECT().Clear()
 			writeBufferBuf.EXPECT().Clear()
-			topPort.EXPECT().Retrieve(gomock.Any()).Return(nil)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
 			topPortSender.EXPECT().Clear()
 
 			// bottomPortSender.EXPECT().Clear()
@@ -317,7 +317,7 @@ var _ = Describe("Flusher", func() {
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
 			req := cache.RestartReqBuilder{}.WithSendTime(10).Build()
-			controlPort.EXPECT().Peek().Return(req)
+			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPortSender.EXPECT().CanSend(1).Return(false)
 
 			madeProgress := f.Tick(10)
@@ -327,12 +327,12 @@ var _ = Describe("Flusher", func() {
 
 		It("should restart", func() {
 			req := cache.RestartReqBuilder{}.WithSendTime(10).Build()
-			controlPort.EXPECT().Peek().Return(req)
-			controlPort.EXPECT().Retrieve(gomock.Any())
+			controlPort.EXPECT().PeekIncoming().Return(req)
+			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
 			controlPortSender.EXPECT().Send(gomock.Any())
 			controlPortSender.EXPECT().CanSend(1).Return(true)
-			topPort.EXPECT().Retrieve(gomock.Any()).Return(nil)
-			bottomPort.EXPECT().Retrieve(gomock.Any()).Return(nil)
+			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
+			bottomPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
 
 			madeProgress := f.Tick(10)
 

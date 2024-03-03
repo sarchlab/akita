@@ -14,14 +14,16 @@ type Port interface {
 	Component() Component
 
 	// For connection
-	Recv(msg Msg) *SendError
+	Deliver(msg Msg) *SendError
 	NotifyAvailable(now VTimeInSec)
+	RetrieveOutgoing() Msg
+	PeekOutgoing() Msg
 
 	// For component
 	CanSend() bool
 	Send(msg Msg) *SendError
-	Retrieve(now VTimeInSec) Msg
-	Peek() Msg
+	RetrieveIncoming(now VTimeInSec) Msg
+	PeekIncoming() Msg
 }
 
 // LimitNumMsgPort is a type of port that can hold at most a certain number
@@ -29,14 +31,13 @@ type Port interface {
 type LimitNumMsgPort struct {
 	HookableBase
 
+	lock sync.Mutex
 	name string
 	comp Component
 	conn Connection
 
-	buf          Buffer
-	bufLock      sync.RWMutex
-	portBusy     bool
-	portBusyLock sync.RWMutex
+	incomingBuf Buffer
+	outgoingBuf Buffer
 }
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -78,34 +79,44 @@ func (p *LimitNumMsgPort) Name() string {
 
 // CanSend checks if the port can send a message without error.
 func (p *LimitNumMsgPort) CanSend() bool {
-	return p.conn.CanSend(p)
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	canSend := p.outgoingBuf.CanPush()
+
+	return canSend
 }
 
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
-	err := p.conn.Send(msg)
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	if err == nil {
-		hookCtx := HookCtx{
-			Domain: p,
-			Pos:    HookPosPortMsgSend,
-			Item:   msg,
-		}
-		p.InvokeHook(hookCtx)
+	p.msgMustBeValid(msg)
+
+	if !p.outgoingBuf.CanPush() {
+		return NewSendError()
 	}
 
-	return err
+	p.outgoingBuf.Push(msg)
+	hookCtx := HookCtx{
+		Domain: p,
+		Pos:    HookPosPortMsgSend,
+		Item:   msg,
+	}
+	p.InvokeHook(hookCtx)
+
+	p.conn.NotifySend(msg.Meta().SendTime)
+
+	return nil
 }
 
-// Recv is used to deliver a message to a component
-func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
-	p.bufLock.Lock()
+// Deliver is used to deliver a message to a component
+func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	if !p.buf.CanPush() {
-		p.portBusyLock.Lock()
-		p.portBusy = true
-		p.portBusyLock.Unlock()
-		p.bufLock.Unlock()
+	if !p.incomingBuf.CanPush() {
 		return NewSendError()
 	}
 
@@ -116,21 +127,22 @@ func (p *LimitNumMsgPort) Recv(msg Msg) *SendError {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.buf.Push(msg)
-	p.bufLock.Unlock()
+	p.incomingBuf.Push(msg)
 
 	if p.comp != nil {
 		p.comp.NotifyRecv(msg.Meta().RecvTime, p)
 	}
+
 	return nil
 }
 
-// Retrieve is used by the component to take a message from the incoming buffer
-func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
-	p.bufLock.Lock()
-	defer p.bufLock.Unlock()
+// RetrieveIncoming is used by the component to take a message from the incoming
+// buffer
+func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	item := p.buf.Pop()
+	item := p.incomingBuf.Pop()
 	if item == nil {
 		return nil
 	}
@@ -143,22 +155,61 @@ func (p *LimitNumMsgPort) Retrieve(now VTimeInSec) Msg {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.portBusyLock.Lock()
-	if p.portBusy {
-		p.portBusy = false
+	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
 		p.conn.NotifyAvailable(now, p)
 	}
-	p.portBusyLock.Unlock()
 
 	return msg
 }
 
-// Peek returns the first message in the port without removing it.
-func (p *LimitNumMsgPort) Peek() Msg {
-	p.bufLock.RLock()
-	defer p.bufLock.RUnlock()
+// RetrieveOutgoing is used by the component to take a message from the outgoing
+// buffer
+func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 
-	item := p.buf.Peek()
+	item := p.outgoingBuf.Pop()
+	if item == nil {
+		return nil
+	}
+
+	msg := item.(Msg)
+	hookCtx := HookCtx{
+		Domain: p,
+		Pos:    HookPosPortMsgRetrieve,
+		Item:   msg,
+	}
+	p.InvokeHook(hookCtx)
+
+	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
+		p.comp.NotifyPortFree(msg.Meta().SendTime, p)
+	}
+
+	return msg
+}
+
+// PeekIncoming returns the first message in the incoming buffer without
+// removing it.
+func (p *LimitNumMsgPort) PeekIncoming() Msg {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	item := p.incomingBuf.Peek()
+	if item == nil {
+		return nil
+	}
+
+	msg := item.(Msg)
+	return msg
+}
+
+// PeekOutgoing returns the first message in the outgoing buffer without
+// removing it.
+func (p *LimitNumMsgPort) PeekOutgoing() Msg {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	item := p.outgoingBuf.Peek()
 	if item == nil {
 		return nil
 	}
@@ -183,7 +234,8 @@ func NewLimitNumMsgPort(
 ) *LimitNumMsgPort {
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.buf = NewBuffer(name+".Buf", capacity)
+	p.incomingBuf = NewBuffer(name+".IncomingBuf", capacity)
+	p.outgoingBuf = NewBuffer(name+".OutgoingBuf", capacity)
 	p.name = name
 	return p
 }
@@ -199,7 +251,31 @@ func NewLimitNumMsgPortWithExternalBuffer(
 
 	p := new(LimitNumMsgPort)
 	p.comp = comp
-	p.buf = buf
+	p.incomingBuf = buf
 	p.name = name
 	return p
+}
+
+func (p *LimitNumMsgPort) msgMustBeValid(msg Msg) {
+	portMustBeMsgSrc(p, msg)
+	dstMustNotBeNil(msg.Meta().Dst)
+	srcDstMustNotBeTheSame(msg)
+}
+
+func portMustBeMsgSrc(port Port, msg Msg) {
+	if port != msg.Meta().Src {
+		panic("sending port is not msg src")
+	}
+}
+
+func dstMustNotBeNil(port Port) {
+	if port == nil {
+		panic("dst is not given")
+	}
+}
+
+func srcDstMustNotBeTheSame(msg Msg) {
+	if msg.Meta().Src == msg.Meta().Dst {
+		panic("sending back to src")
+	}
 }

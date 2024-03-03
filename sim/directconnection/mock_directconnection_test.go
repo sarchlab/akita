@@ -74,6 +74,20 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockPort)(nil).Component))
 }
 
+// Deliver mocks base method.
+func (m *MockPort) Deliver(arg0 sim.Msg) *sim.SendError {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Deliver", arg0)
+	ret0, _ := ret[0].(*sim.SendError)
+	return ret0
+}
+
+// Deliver indicates an expected call of Deliver.
+func (mr *MockPortMockRecorder) Deliver(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deliver", reflect.TypeOf((*MockPort)(nil).Deliver), arg0)
+}
+
 // Hooks mocks base method.
 func (m *MockPort) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
@@ -128,46 +142,60 @@ func (mr *MockPortMockRecorder) NumHooks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NumHooks", reflect.TypeOf((*MockPort)(nil).NumHooks))
 }
 
-// Peek mocks base method.
-func (m *MockPort) Peek() sim.Msg {
+// PeekIncoming mocks base method.
+func (m *MockPort) PeekIncoming() sim.Msg {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Peek")
+	ret := m.ctrl.Call(m, "PeekIncoming")
 	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
-// Peek indicates an expected call of Peek.
-func (mr *MockPortMockRecorder) Peek() *gomock.Call {
+// PeekIncoming indicates an expected call of PeekIncoming.
+func (mr *MockPortMockRecorder) PeekIncoming() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Peek", reflect.TypeOf((*MockPort)(nil).Peek))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekIncoming", reflect.TypeOf((*MockPort)(nil).PeekIncoming))
 }
 
-// Recv mocks base method.
-func (m *MockPort) Recv(arg0 sim.Msg) *sim.SendError {
+// PeekOutgoing mocks base method.
+func (m *MockPort) PeekOutgoing() sim.Msg {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Recv", arg0)
-	ret0, _ := ret[0].(*sim.SendError)
-	return ret0
-}
-
-// Recv indicates an expected call of Recv.
-func (mr *MockPortMockRecorder) Recv(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Recv", reflect.TypeOf((*MockPort)(nil).Recv), arg0)
-}
-
-// Retrieve mocks base method.
-func (m *MockPort) Retrieve(arg0 sim.VTimeInSec) sim.Msg {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Retrieve", arg0)
+	ret := m.ctrl.Call(m, "PeekOutgoing")
 	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
-// Retrieve indicates an expected call of Retrieve.
-func (mr *MockPortMockRecorder) Retrieve(arg0 interface{}) *gomock.Call {
+// PeekOutgoing indicates an expected call of PeekOutgoing.
+func (mr *MockPortMockRecorder) PeekOutgoing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockPort)(nil).Retrieve), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PeekOutgoing", reflect.TypeOf((*MockPort)(nil).PeekOutgoing))
+}
+
+// RetrieveIncoming mocks base method.
+func (m *MockPort) RetrieveIncoming(arg0 sim.VTimeInSec) sim.Msg {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetrieveIncoming", arg0)
+	ret0, _ := ret[0].(sim.Msg)
+	return ret0
+}
+
+// RetrieveIncoming indicates an expected call of RetrieveIncoming.
+func (mr *MockPortMockRecorder) RetrieveIncoming(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveIncoming", reflect.TypeOf((*MockPort)(nil).RetrieveIncoming), arg0)
+}
+
+// RetrieveOutgoing mocks base method.
+func (m *MockPort) RetrieveOutgoing() sim.Msg {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetrieveOutgoing")
+	ret0, _ := ret[0].(sim.Msg)
+	return ret0
+}
+
+// RetrieveOutgoing indicates an expected call of RetrieveOutgoing.
+func (mr *MockPortMockRecorder) RetrieveOutgoing() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveOutgoing", reflect.TypeOf((*MockPort)(nil).RetrieveOutgoing))
 }
 
 // Send mocks base method.
@@ -447,20 +475,6 @@ func (mr *MockConnectionMockRecorder) AcceptHook(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptHook", reflect.TypeOf((*MockConnection)(nil).AcceptHook), arg0)
 }
 
-// CanSend mocks base method.
-func (m *MockConnection) CanSend(arg0 sim.Port) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CanSend", arg0)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// CanSend indicates an expected call of CanSend.
-func (mr *MockConnectionMockRecorder) CanSend(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CanSend", reflect.TypeOf((*MockConnection)(nil).CanSend), arg0)
-}
-
 // Hooks mocks base method.
 func (m *MockConnection) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
@@ -487,6 +501,18 @@ func (mr *MockConnectionMockRecorder) NotifyAvailable(arg0, arg1 interface{}) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockConnection)(nil).NotifyAvailable), arg0, arg1)
 }
 
+// NotifySend mocks base method.
+func (m *MockConnection) NotifySend(arg0 sim.VTimeInSec) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "NotifySend", arg0)
+}
+
+// NotifySend indicates an expected call of NotifySend.
+func (mr *MockConnectionMockRecorder) NotifySend(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifySend", reflect.TypeOf((*MockConnection)(nil).NotifySend), arg0)
+}
+
 // NumHooks mocks base method.
 func (m *MockConnection) NumHooks() int {
 	m.ctrl.T.Helper()
@@ -511,20 +537,6 @@ func (m *MockConnection) PlugIn(arg0 sim.Port, arg1 int) {
 func (mr *MockConnectionMockRecorder) PlugIn(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlugIn", reflect.TypeOf((*MockConnection)(nil).PlugIn), arg0, arg1)
-}
-
-// Send mocks base method.
-func (m *MockConnection) Send(arg0 sim.Msg) *sim.SendError {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Send", arg0)
-	ret0, _ := ret[0].(*sim.SendError)
-	return ret0
-}
-
-// Send indicates an expected call of Send.
-func (mr *MockConnectionMockRecorder) Send(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockConnection)(nil).Send), arg0)
 }
 
 // Unplug mocks base method.

@@ -39,98 +39,6 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl.Finish()
 	})
 
-	It("should be panic if msg src is nil", func() {
-		msg := sim.NewSampleMsg()
-		msg.Src = nil
-
-		Expect(func() { connection.Send(msg) }).To(Panic())
-	})
-
-	It("should be panic is src is not connected", func() {
-		msg := sim.NewSampleMsg()
-		msg.Src = NewMockPort(mockCtrl)
-		msg.Dst = NewMockPort(mockCtrl)
-
-		Expect(func() {
-			connection.Send(msg)
-		}).To(Panic())
-	})
-
-	It("should be panic if msg src is the same as dst", func() {
-		msg := sim.NewSampleMsg()
-		msg.Src = port1
-		msg.Dst = port1
-
-		Expect(func() { connection.Send(msg) }).To(Panic())
-	})
-
-	It("should buffer the message and schedule tick when a message is sent", func() {
-		msg := sim.NewSampleMsg()
-		msg.SendTime = 10
-		msg.Src = port1
-		msg.Dst = port2
-
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
-			Expect(evt.IsSecondary()).To(BeTrue())
-		})
-
-		connection.Send(msg)
-
-		Expect(connection.ends[port1].buf).To(ContainElement(msg))
-	})
-
-	It("should only tick once for all the messages sent at the same time ", func() {
-		msg1 := sim.NewSampleMsg()
-		msg1.SendTime = 10
-		msg1.Src = port1
-		msg1.Dst = port2
-
-		msg2 := sim.NewSampleMsg()
-		msg2.SendTime = 10
-		msg2.Src = port2
-		msg2.Dst = port1
-
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
-			Expect(evt.IsSecondary()).To(BeTrue())
-		})
-
-		connection.Send(msg1)
-		connection.Send(msg2)
-
-		Expect(connection.ends[port1].buf).To(ContainElement(msg1))
-		Expect(connection.ends[port2].buf).To(ContainElement(msg1))
-	})
-
-	It("should fail sending if local buffer is full", func() {
-		msg1 := sim.NewSampleMsg()
-		msg1.ID = "1"
-		msg1.SendTime = 10
-		msg1.Src = port2
-		msg1.Dst = port1
-
-		msg2 := sim.NewSampleMsg()
-		msg1.ID = "2"
-		msg1.SendTime = 10
-		msg2.SendTime = 10
-		msg2.Src = port2
-		msg2.Dst = port1
-
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-			Expect(evt.Time()).To(Equal(sim.VTimeInSec(10)))
-			Expect(evt.IsSecondary()).To(BeTrue())
-		})
-
-		err1 := connection.Send(msg1)
-		err2 := connection.Send(msg2)
-
-		Expect(connection.ends[port2].buf).To(ContainElement(msg1))
-		Expect(connection.ends[port2].buf).NotTo(ContainElement(msg2))
-		Expect(err1).To(BeNil())
-		Expect(err2).NotTo(BeNil())
-	})
-
 	It("should forward when handling tick event", func() {
 		tick := sim.MakeTickEvent(10, connection)
 
@@ -144,23 +52,25 @@ var _ = Describe("DirectConnection", func() {
 		msg2.Src = port2
 		msg2.Dst = port1
 
-		connection.ends[port1].buf = append(connection.ends[port1].buf, msg1)
-		connection.ends[port2].buf = append(connection.ends[port2].buf, msg2)
-		connection.ends[port2].busy = true
+		port1.EXPECT().PeekOutgoing().Return(msg1)
+		port1.EXPECT().PeekOutgoing().Return(nil)
+		port1.EXPECT().RetrieveOutgoing().Return(msg1)
+		port1.EXPECT().Deliver(msg2).Return(nil)
 
-		port1.EXPECT().Recv(msg2).Return(nil)
-		port2.EXPECT().Recv(msg1).Return(nil)
-		port2.EXPECT().NotifyAvailable(sim.VTimeInSec(10))
-		engine.EXPECT().Schedule(gomock.Any()).Do(func(evt sim.TickEvent) {
-			Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
-			Expect(evt.IsSecondary()).To(BeTrue())
-		})
+		port2.EXPECT().PeekOutgoing().Return(msg2)
+		port2.EXPECT().PeekOutgoing().Return(nil)
+		port2.EXPECT().RetrieveOutgoing().Return(msg2)
+		port2.EXPECT().Deliver(msg1).Return(nil)
+
+		engine.EXPECT().
+			Schedule(gomock.Any()).
+			Do(func(evt sim.TickEvent) {
+				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
+				Expect(evt.IsSecondary()).To(BeTrue())
+			})
 
 		connection.Handle(tick)
 
-		Expect(connection.ends[port1].buf).To(HaveLen(0))
-		Expect(connection.ends[port2].buf).To(HaveLen(0))
-		Expect(connection.ends[port2].busy).To(BeFalse())
 		Expect(msg1.RecvTime).To(Equal(sim.VTimeInSec(10)))
 		Expect(msg2.RecvTime).To(Equal(sim.VTimeInSec(10)))
 	})
@@ -185,7 +95,7 @@ func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 func (a *agent) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
-	msgIn := a.OutPort.Retrieve(now)
+	msgIn := a.OutPort.RetrieveIncoming(now)
 	if msgIn != nil {
 		a.msgsIn = append(a.msgsIn, msgIn)
 		madeProgress = true

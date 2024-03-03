@@ -51,7 +51,7 @@ var _ = Describe("MMU", func() {
 				WithDeviceID(0).
 				Build()
 			toTop.EXPECT().
-				Retrieve(sim.VTimeInSec(10)).
+				RetrieveIncoming(sim.VTimeInSec(10)).
 				Return(translationReq)
 
 			mmu.parseFromTop(10)
@@ -317,7 +317,7 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should do nothing if no respond", func() {
-			migrationPort.EXPECT().Peek().Return(nil)
+			migrationPort.EXPECT().PeekIncoming().Return(nil)
 
 			madeProgress := mmu.processMigrationReturn(10)
 
@@ -325,7 +325,7 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should stall if send to top failed", func() {
-			migrationPort.EXPECT().Peek().Return(migrationDone)
+			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topSender.EXPECT().CanSend(1).Return(false)
 
 			madeProgress := mmu.processMigrationReturn(10)
@@ -335,13 +335,13 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should send rsp to top", func() {
-			migrationPort.EXPECT().Peek().Return(migrationDone)
+			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topSender.EXPECT().CanSend(1).Return(true)
 			topSender.EXPECT().Send(gomock.Any()).
 				Do(func(rsp *vm.TranslationRsp) {
 					Expect(rsp.Page).To(Equal(page))
 				})
-			migrationPort.EXPECT().Retrieve(gomock.Any())
+			migrationPort.EXPECT().RetrieveIncoming(gomock.Any())
 
 			updatedPage := page
 			updatedPage.IsMigrating = false
@@ -375,6 +375,8 @@ var _ = Describe("MMU Integration", func() {
 		builder := MakeBuilder().WithEngine(engine)
 		mmu = builder.Build("MMU")
 		agent = NewMockPort(mockCtrl)
+		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)
@@ -406,9 +408,9 @@ var _ = Describe("MMU Integration", func() {
 			WithDeviceID(0).
 			Build()
 		req.RecvTime = 10
-		mmu.topPort.Recv(req)
+		mmu.topPort.Deliver(req)
 
-		agent.EXPECT().Recv(gomock.Any()).
+		agent.EXPECT().Deliver(gomock.Any()).
 			Do(func(rsp *vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
 				Expect(rsp.RespondTo).To(Equal(req.ID))

@@ -73,7 +73,7 @@ func (a *MemAccessAgent) Tick(now sim.VTimeInSec) bool {
 }
 
 func (a *MemAccessAgent) processMsgRsp(now sim.VTimeInSec) bool {
-	msg := a.memPort.Retrieve(now)
+	msg := a.memPort.RetrieveIncoming(now)
 	if msg == nil {
 		return false
 	}

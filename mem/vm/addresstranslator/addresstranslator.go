@@ -124,7 +124,7 @@ func (c *Comp) translate(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	item := c.topPort.Peek()
+	item := c.topPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
@@ -160,7 +160,7 @@ func (c *Comp) translate(now sim.VTimeInSec) bool {
 	tracing.TraceReqReceive(req, c)
 	tracing.TraceReqInitiate(transReq, c, tracing.MsgIDAtReceiver(req, c))
 
-	c.topPort.Retrieve(now)
+	c.topPort.RetrieveIncoming(now)
 
 	return true
 }
@@ -176,13 +176,13 @@ func (c *Comp) handleGL0InvalidateReq(
 	c.currentGL0InvReq = req
 	c.totalRequestsUponGL0InvArrival =
 		len(c.transactions) + len(c.inflightReqToBottom)
-	c.topPort.Retrieve(now)
+	c.topPort.RetrieveIncoming(now)
 
 	return true
 }
 
 func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
-	rsp := c.translationPort.Peek()
+	rsp := c.translationPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
@@ -190,7 +190,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 	transRsp := rsp.(*vm.TranslationRsp)
 	transaction := c.findTranslationByReqID(transRsp.RespondTo)
 	if transaction == nil {
-		c.translationPort.Retrieve(now)
+		c.translationPort.RetrieveIncoming(now)
 		return true
 	}
 
@@ -216,7 +216,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 		c.removeExistingTranslation(transaction)
 	}
 
-	c.translationPort.Retrieve(now)
+	c.translationPort.RetrieveIncoming(now)
 
 	tracing.TraceReqFinalize(transaction.translationReq, c)
 	tracing.TraceReqInitiate(translatedReq, c,
@@ -227,7 +227,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 
 //nolint:funlen,gocyclo
 func (c *Comp) respond(now sim.VTimeInSec) bool {
-	rsp := c.bottomPort.Peek()
+	rsp := c.bottomPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
@@ -313,7 +313,7 @@ func (c *Comp) respond(now sim.VTimeInSec) bool {
 		}
 	}
 
-	c.bottomPort.Retrieve(now)
+	c.bottomPort.RetrieveIncoming(now)
 	return true
 }
 
@@ -423,7 +423,7 @@ func (c *Comp) removeReqToBottomByID(id string) {
 }
 
 func (c *Comp) handleCtrlRequest(now sim.VTimeInSec) bool {
-	req := c.ctrlPort.Peek()
+	req := c.ctrlPort.PeekIncoming()
 	if req == nil {
 		return false
 	}
@@ -455,7 +455,7 @@ func (c *Comp) handleFlushReq(
 		return false
 	}
 
-	c.ctrlPort.Retrieve(now)
+	c.ctrlPort.RetrieveIncoming(now)
 
 	c.transactions = nil
 	c.inflightReqToBottom = nil
@@ -481,18 +481,18 @@ func (c *Comp) handleRestartReq(
 		return false
 	}
 
-	for c.topPort.Retrieve(now) != nil {
+	for c.topPort.RetrieveIncoming(now) != nil {
 	}
 
-	for c.bottomPort.Retrieve(now) != nil {
+	for c.bottomPort.RetrieveIncoming(now) != nil {
 	}
 
-	for c.translationPort.Retrieve(now) != nil {
+	for c.translationPort.RetrieveIncoming(now) != nil {
 	}
 
 	c.isFlushing = false
 
-	c.ctrlPort.Retrieve(now)
+	c.ctrlPort.RetrieveIncoming(now)
 
 	return true
 }
