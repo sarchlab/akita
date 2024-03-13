@@ -356,6 +356,7 @@ func MakeEndPointBuilder() EndPointBuilder {
 		freq:                     1 * sim.GHz,
 		numInputChannels:         1,
 		numOutputChannels:        1,
+		encodingOverhead:         0.25,
 	}
 }
 
@@ -426,6 +427,8 @@ func (b EndPointBuilder) Build(name string) *EndPoint {
 
 	ep.assemblingMsgs = list.New()
 	ep.assemblingMsgTable = make(map[string]*list.Element)
+
+	ep.encodingOverhead = b.encodingOverhead
 
 	ep.NetworkPort = sim.NewLimitNumMsgPort(
 		ep, b.networkPortBufferSize,
