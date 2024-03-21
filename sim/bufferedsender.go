@@ -25,7 +25,7 @@ type BufferedSender interface {
 	Clear()
 
 	// Tick tries to send one message out. If successful, Tick returns true.
-	Tick(now VTimeInSec) bool
+	Tick() bool
 }
 
 // NewBufferedSender creates a new BufferedSender with certain buffer capacity
@@ -62,14 +62,13 @@ func (s *bufferedSenderImpl) Clear() {
 	s.buffer.Clear()
 }
 
-func (s *bufferedSenderImpl) Tick(now VTimeInSec) bool {
+func (s *bufferedSenderImpl) Tick() bool {
 	item := s.buffer.Peek()
 	if item == nil {
 		return false
 	}
 
 	msg := item.(Msg)
-	msg.Meta().SendTime = now
 	err := s.port.Send(msg)
 	if err != nil {
 		return false

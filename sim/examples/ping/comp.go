@@ -77,7 +77,6 @@ func (c *Comp) StartPing(evt StartPingEvent) {
 
 	pingMsg.Src = c.OutPort
 	pingMsg.Dst = evt.Dst
-	pingMsg.SendTime = evt.Time()
 
 	c.OutPort.Send(pingMsg)
 
@@ -91,45 +90,45 @@ func (c *Comp) RspPing(evt RspPingEvent) {
 	rsp := &PingRsp{
 		SeqID: msg.SeqID,
 	}
-	rsp.SendTime = evt.Time()
 	rsp.Src = c.OutPort
 	rsp.Dst = msg.Src
 
 	c.OutPort.Send(rsp)
 }
 
-func (c *Comp) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
+func (c *Comp) NotifyRecv(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	msg := port.RetrieveIncoming(now)
+	msg := port.RetrieveIncoming()
 	switch msg := msg.(type) {
 	case *PingMsg:
-		c.processPingMsg(now, msg)
+		c.processPingMsg(msg)
 	case *PingRsp:
-		c.processPingRsp(now, msg)
+		c.processPingRsp(msg)
 	default:
 		panic("cannot process msg of type " + reflect.TypeOf(msg).String())
 	}
 }
 
-func (c *Comp) processPingMsg(now sim.VTimeInSec, msg *PingMsg) {
+func (c *Comp) processPingMsg(msg *PingMsg) {
 	rspEvent := RspPingEvent{
-		EventBase: sim.NewEventBase(now+2, c),
+		EventBase: sim.NewEventBase(c.CurrentTime()+2, c),
 		pingMsg:   msg,
 	}
 	c.Engine.Schedule(rspEvent)
 }
 
-func (c *Comp) processPingRsp(now sim.VTimeInSec, msg *PingRsp) {
+func (c *Comp) processPingRsp(msg *PingRsp) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
+	now := c.CurrentTime()
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 }
 
-func (c Comp) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
+func (c Comp) NotifyPortFree(_ sim.Port) {
 	// Do nothing
 }
 
@@ -159,4 +158,8 @@ func Example_pingWithEvents() {
 	// Output:
 	// Ping 0, 2.00
 	// Ping 1, 2.00
+}
+
+func (c *Comp) CurrentTime() sim.VTimeInSec {
+	return c.Engine.CurrentTime()
 }

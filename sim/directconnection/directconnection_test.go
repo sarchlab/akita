@@ -40,15 +40,16 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		tick := sim.MakeTickEvent(10, connection)
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		// engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(11))
+
+		tick := sim.MakeTickEvent(connection.TickScheduler)
 
 		msg1 := sim.NewSampleMsg()
-		msg1.SendTime = 10
 		msg1.Src = port1
 		msg1.Dst = port2
 
 		msg2 := sim.NewSampleMsg()
-		msg2.SendTime = 10
 		msg2.Src = port2
 		msg2.Dst = port1
 
@@ -70,9 +71,6 @@ var _ = Describe("DirectConnection", func() {
 			})
 
 		connection.Handle(tick)
-
-		Expect(msg1.RecvTime).To(Equal(sim.VTimeInSec(10)))
-		Expect(msg2.RecvTime).To(Equal(sim.VTimeInSec(10)))
 	})
 })
 
@@ -92,18 +90,16 @@ func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	return a
 }
 
-func (a *agent) Tick(now sim.VTimeInSec) bool {
+func (a *agent) Tick() bool {
 	madeProgress := false
 
-	msgIn := a.OutPort.RetrieveIncoming(now)
+	msgIn := a.OutPort.RetrieveIncoming()
 	if msgIn != nil {
 		a.msgsIn = append(a.msgsIn, msgIn)
 		madeProgress = true
 	}
 
 	if len(a.msgsOut) > 0 {
-		head := a.msgsOut[0]
-		head.Meta().SendTime = now
 		err := a.OutPort.Send(a.msgsOut[0])
 		if err == nil {
 			madeProgress = true
@@ -153,7 +149,7 @@ var _ = Describe("Direct Connection Integration", func() {
 					agent.Name(), i, msg.Dst.Component().Name())
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
-			agent.TickLater(0)
+			agent.TickLater()
 		}
 
 		engine.Run()
@@ -200,7 +196,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 				agent.Name(), i, msg.Dst.Component().Name())
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}
-		agent.TickLater(0)
+		agent.TickLater()
 	}
 
 	engine.Run()

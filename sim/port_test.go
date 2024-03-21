@@ -63,10 +63,9 @@ var _ = Describe("LimitNumMsgPort", func() {
 	It("should send successfully", func() {
 		dst := NewLimitNumMsgPort(comp, 4, "Port")
 		msg := &sampleMsg{}
-		msg.SendTime = 10
 		msg.Src = port
 		msg.Dst = dst
-		conn.EXPECT().NotifySend(msg.SendTime)
+		conn.EXPECT().NotifySend()
 
 		err := port.Send(msg)
 
@@ -92,9 +91,8 @@ var _ = Describe("LimitNumMsgPort", func() {
 
 	It("should deliver when successful", func() {
 		msg := &sampleMsg{}
-		msg.RecvTime = 10
 
-		comp.EXPECT().NotifyRecv(VTimeInSec(10), port)
+		comp.EXPECT().NotifyRecv(port)
 
 		errRet := port.Deliver(msg)
 
@@ -103,7 +101,6 @@ var _ = Describe("LimitNumMsgPort", func() {
 
 	It("should fail to deliver when incoming buffer is full", func() {
 		msg := &sampleMsg{}
-		msg.RecvTime = 10
 		port.incomingBuf = NewBuffer("Buf", 4)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
@@ -146,7 +143,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 	})
 
 	It("should return nil when retrieving empty incoming buffer", func() {
-		msg := port.RetrieveIncoming(10)
+		msg := port.RetrieveIncoming()
 
 		Expect(msg).To(BeNil())
 	})
@@ -155,7 +152,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 		msg := &sampleMsg{}
 		port.incomingBuf.Push(msg)
 
-		msgRet := port.RetrieveIncoming(10)
+		msgRet := port.RetrieveIncoming()
 
 		Expect(msgRet).To(BeIdenticalTo(msg))
 	})

@@ -44,18 +44,18 @@ type Comp struct {
 	pingDst             sim.Port
 }
 
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.sendRsp(now) || madeProgress
-	madeProgress = c.sendPing(now) || madeProgress
+	madeProgress = c.sendRsp() || madeProgress
+	madeProgress = c.sendPing() || madeProgress
 	madeProgress = c.countDown() || madeProgress
-	madeProgress = c.processInput(now) || madeProgress
+	madeProgress = c.processInput() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) processInput(now sim.VTimeInSec) bool {
+func (c *Comp) processInput() bool {
 	msg := c.OutPort.PeekIncoming()
 	if msg == nil {
 		return false
@@ -63,9 +63,9 @@ func (c *Comp) processInput(now sim.VTimeInSec) bool {
 
 	switch msg := msg.(type) {
 	case *PingMsg:
-		c.processingPingMsg(now, msg)
+		c.processingPingMsg(msg)
 	case *PingRsp:
-		c.processingPingRsp(now, msg)
+		c.processingPingRsp(msg)
 	default:
 		panic("unknown message type")
 	}
@@ -74,7 +74,6 @@ func (c *Comp) processInput(now sim.VTimeInSec) bool {
 }
 
 func (c *Comp) processingPingMsg(
-	now sim.VTimeInSec,
 	ping *PingMsg,
 ) {
 	trans := &pingTransaction{
@@ -82,19 +81,19 @@ func (c *Comp) processingPingMsg(
 		cycleLeft: 2,
 	}
 	c.currentTransactions = append(c.currentTransactions, trans)
-	c.OutPort.RetrieveIncoming(now)
+	c.OutPort.RetrieveIncoming()
 }
 
 func (c *Comp) processingPingRsp(
-	now sim.VTimeInSec,
 	msg *PingRsp,
 ) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
-	duration := now - startTime
+	currentTime := c.CurrentTime()
+	duration := currentTime - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
-	c.OutPort.RetrieveIncoming(now)
+	c.OutPort.RetrieveIncoming()
 }
 
 func (c *Comp) countDown() bool {
@@ -108,7 +107,7 @@ func (c *Comp) countDown() bool {
 	return madeProgress
 }
 
-func (c *Comp) sendRsp(now sim.VTimeInSec) bool {
+func (c *Comp) sendRsp() bool {
 	if len(c.currentTransactions) == 0 {
 		return false
 	}
@@ -121,7 +120,6 @@ func (c *Comp) sendRsp(now sim.VTimeInSec) bool {
 	rsp := &PingRsp{
 		SeqID: trans.req.SeqID,
 	}
-	rsp.SendTime = now
 	rsp.Src = c.OutPort
 	rsp.Dst = trans.req.Src
 
@@ -135,7 +133,7 @@ func (c *Comp) sendRsp(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (c *Comp) sendPing(now sim.VTimeInSec) bool {
+func (c *Comp) sendPing() bool {
 	if c.numPingNeedToSend == 0 {
 		return false
 	}
@@ -145,14 +143,13 @@ func (c *Comp) sendPing(now sim.VTimeInSec) bool {
 	}
 	pingMsg.Src = c.OutPort
 	pingMsg.Dst = c.pingDst
-	pingMsg.SendTime = now
 
 	err := c.OutPort.Send(pingMsg)
 	if err != nil {
 		return false
 	}
 
-	c.startTime = append(c.startTime, now)
+	c.startTime = append(c.startTime, c.CurrentTime())
 	c.numPingNeedToSend--
 	c.nextSeqID++
 
@@ -173,10 +170,14 @@ func Example_pingWithTicking() {
 	agentA.pingDst = agentB.OutPort
 	agentA.numPingNeedToSend = 2
 
-	agentA.TickLater(0)
+	agentA.TickLater()
 
 	engine.Run()
 	// Output:
 	// Ping 0, 5.00
 	// Ping 1, 5.00
+}
+
+func (c *Comp) CurrentTime() sim.VTimeInSec {
+	return c.Engine.CurrentTime()
 }

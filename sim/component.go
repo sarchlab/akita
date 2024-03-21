@@ -16,8 +16,8 @@ type Component interface {
 	Hookable
 	PortOwner
 
-	NotifyRecv(now VTimeInSec, port Port)
-	NotifyPortFree(now VTimeInSec, port Port)
+	NotifyRecv(port Port)
+	NotifyPortFree(port Port)
 }
 
 // ComponentBase provides some functions that other component can use.

@@ -117,15 +117,15 @@ func (mr *MockPortMockRecorder) Name() *gomock.Call {
 }
 
 // NotifyAvailable mocks base method.
-func (m *MockPort) NotifyAvailable(arg0 sim.VTimeInSec) {
+func (m *MockPort) NotifyAvailable() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyAvailable", arg0)
+	m.ctrl.Call(m, "NotifyAvailable")
 }
 
 // NotifyAvailable indicates an expected call of NotifyAvailable.
-func (mr *MockPortMockRecorder) NotifyAvailable(arg0 interface{}) *gomock.Call {
+func (mr *MockPortMockRecorder) NotifyAvailable() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockPort)(nil).NotifyAvailable), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockPort)(nil).NotifyAvailable))
 }
 
 // NumHooks mocks base method.
@@ -171,17 +171,17 @@ func (mr *MockPortMockRecorder) PeekOutgoing() *gomock.Call {
 }
 
 // RetrieveIncoming mocks base method.
-func (m *MockPort) RetrieveIncoming(arg0 sim.VTimeInSec) sim.Msg {
+func (m *MockPort) RetrieveIncoming() sim.Msg {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetrieveIncoming", arg0)
+	ret := m.ctrl.Call(m, "RetrieveIncoming")
 	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
 // RetrieveIncoming indicates an expected call of RetrieveIncoming.
-func (mr *MockPortMockRecorder) RetrieveIncoming(arg0 interface{}) *gomock.Call {
+func (mr *MockPortMockRecorder) RetrieveIncoming() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveIncoming", reflect.TypeOf((*MockPort)(nil).RetrieveIncoming), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveIncoming", reflect.TypeOf((*MockPort)(nil).RetrieveIncoming))
 }
 
 // RetrieveOutgoing mocks base method.
@@ -490,27 +490,27 @@ func (mr *MockConnectionMockRecorder) Hooks() *gomock.Call {
 }
 
 // NotifyAvailable mocks base method.
-func (m *MockConnection) NotifyAvailable(arg0 sim.VTimeInSec, arg1 sim.Port) {
+func (m *MockConnection) NotifyAvailable(arg0 sim.Port) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyAvailable", arg0, arg1)
+	m.ctrl.Call(m, "NotifyAvailable", arg0)
 }
 
 // NotifyAvailable indicates an expected call of NotifyAvailable.
-func (mr *MockConnectionMockRecorder) NotifyAvailable(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockConnectionMockRecorder) NotifyAvailable(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockConnection)(nil).NotifyAvailable), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyAvailable", reflect.TypeOf((*MockConnection)(nil).NotifyAvailable), arg0)
 }
 
 // NotifySend mocks base method.
-func (m *MockConnection) NotifySend(arg0 sim.VTimeInSec) {
+func (m *MockConnection) NotifySend() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifySend", arg0)
+	m.ctrl.Call(m, "NotifySend")
 }
 
 // NotifySend indicates an expected call of NotifySend.
-func (mr *MockConnectionMockRecorder) NotifySend(arg0 interface{}) *gomock.Call {
+func (mr *MockConnectionMockRecorder) NotifySend() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifySend", reflect.TypeOf((*MockConnection)(nil).NotifySend), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifySend", reflect.TypeOf((*MockConnection)(nil).NotifySend))
 }
 
 // NumHooks mocks base method.
@@ -655,27 +655,27 @@ func (mr *MockComponentMockRecorder) Name() *gomock.Call {
 }
 
 // NotifyPortFree mocks base method.
-func (m *MockComponent) NotifyPortFree(arg0 sim.VTimeInSec, arg1 sim.Port) {
+func (m *MockComponent) NotifyPortFree(arg0 sim.Port) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyPortFree", arg0, arg1)
+	m.ctrl.Call(m, "NotifyPortFree", arg0)
 }
 
 // NotifyPortFree indicates an expected call of NotifyPortFree.
-func (mr *MockComponentMockRecorder) NotifyPortFree(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockComponentMockRecorder) NotifyPortFree(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyPortFree", reflect.TypeOf((*MockComponent)(nil).NotifyPortFree), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyPortFree", reflect.TypeOf((*MockComponent)(nil).NotifyPortFree), arg0)
 }
 
 // NotifyRecv mocks base method.
-func (m *MockComponent) NotifyRecv(arg0 sim.VTimeInSec, arg1 sim.Port) {
+func (m *MockComponent) NotifyRecv(arg0 sim.Port) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyRecv", arg0, arg1)
+	m.ctrl.Call(m, "NotifyRecv", arg0)
 }
 
 // NotifyRecv indicates an expected call of NotifyRecv.
-func (mr *MockComponentMockRecorder) NotifyRecv(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockComponentMockRecorder) NotifyRecv(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyRecv", reflect.TypeOf((*MockComponent)(nil).NotifyRecv), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyRecv", reflect.TypeOf((*MockComponent)(nil).NotifyRecv), arg0)
 }
 
 // NumHooks mocks base method.
@@ -767,17 +767,17 @@ func (m *MockTicker) EXPECT() *MockTickerMockRecorder {
 }
 
 // Tick mocks base method.
-func (m *MockTicker) Tick(arg0 sim.VTimeInSec) bool {
+func (m *MockTicker) Tick() bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Tick", arg0)
+	ret := m.ctrl.Call(m, "Tick")
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // Tick indicates an expected call of Tick.
-func (mr *MockTickerMockRecorder) Tick(arg0 interface{}) *gomock.Call {
+func (mr *MockTickerMockRecorder) Tick() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockTicker)(nil).Tick), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tick", reflect.TypeOf((*MockTicker)(nil).Tick))
 }
 
 // MockBuffer is a mock of Buffer interface.

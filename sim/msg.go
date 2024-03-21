@@ -7,11 +7,10 @@ type Msg interface {
 
 // MsgMeta contains the meta data that is attached to every message.
 type MsgMeta struct {
-	ID                 string
-	Src, Dst           Port
-	SendTime, RecvTime VTimeInSec
-	TrafficClass       int
-	TrafficBytes       int
+	ID           string
+	Src, Dst     Port
+	TrafficClass int
+	TrafficBytes int
 }
 
 // Rsp is a special message that is used to indicate the completion of a
@@ -42,7 +41,6 @@ func (r *GeneralRsp) GetRspTo() string {
 // GeneralRspBuilder can build general response messages.
 type GeneralRspBuilder struct {
 	Src, Dst     Port
-	SendTime     VTimeInSec
 	TrafficClass int
 	TrafficBytes int
 	OriginalReq  Msg
@@ -57,12 +55,6 @@ func (c GeneralRspBuilder) WithSrc(src Port) GeneralRspBuilder {
 // WithDst sets the destination of the general response message.
 func (c GeneralRspBuilder) WithDst(dst Port) GeneralRspBuilder {
 	c.Dst = dst
-	return c
-}
-
-// WithSendTime sets the send time of the general response message.
-func (c GeneralRspBuilder) WithSendTime(sendTime VTimeInSec) GeneralRspBuilder {
-	c.SendTime = sendTime
 	return c
 }
 
@@ -90,7 +82,6 @@ func (c GeneralRspBuilder) Build() *GeneralRsp {
 		MsgMeta: MsgMeta{
 			Src:          c.Src,
 			Dst:          c.Dst,
-			SendTime:     c.SendTime,
 			TrafficClass: c.TrafficClass,
 			TrafficBytes: c.TrafficBytes,
 			ID:           GetIDGenerator().Generate(),
@@ -120,7 +111,6 @@ func (c *ControlMsg) Meta() *MsgMeta {
 // ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
 	Src, Dst                           Port
-	SendTime                           VTimeInSec
 	TrafficClass                       int
 	TrafficBytes                       int
 	Reset, Disable, Enable, ClearPorts bool
@@ -135,12 +125,6 @@ func (c ControlMsgBuilder) WithSrc(src Port) ControlMsgBuilder {
 // WithDst sets the destination of the control message.
 func (c ControlMsgBuilder) WithDst(dst Port) ControlMsgBuilder {
 	c.Dst = dst
-	return c
-}
-
-// WithSendTime sets the send time of the control message.
-func (c ControlMsgBuilder) WithSendTime(sendTime VTimeInSec) ControlMsgBuilder {
-	c.SendTime = sendTime
 	return c
 }
 
@@ -186,7 +170,6 @@ func (c ControlMsgBuilder) Build() *ControlMsg {
 		MsgMeta: MsgMeta{
 			Src:          c.Src,
 			Dst:          c.Dst,
-			SendTime:     c.SendTime,
 			TrafficClass: c.TrafficClass,
 			TrafficBytes: c.TrafficBytes,
 			ID:           GetIDGenerator().Generate(),
