@@ -7,6 +7,14 @@ import (
 	"github.com/tebeka/atexit"
 )
 
+type PortAnalyzerEntry struct {
+	Linker         string
+	OutTrafficByte int64
+	OutTrafficMsg  int64
+	InTrafficByte  int64
+	InTrafficMsg   int64
+}
+
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
 	PerfLogger
@@ -16,15 +24,13 @@ type PortAnalyzer struct {
 	period    sim.VTimeInSec
 	port      sim.Port
 
-	lastTime       sim.VTimeInSec
-	outTrafficByte uint64
-	outTrafficMsg  uint64
-	inTrafficByte  uint64
-	inTrafficMsg   uint64
+	lastTime          sim.VTimeInSec
+	PortAnalyzerTable map[string]PortAnalyzerEntry
 }
 
 // Func writes the message information into the logger
 func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
+
 	now := h.CurrentTime()
 	msg, ok := ctx.Item.(sim.Msg)
 	if !ok {
@@ -38,14 +44,29 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		}
 	}
 
+	if h.PortAnalyzerTable == nil {
+		h.PortAnalyzerTable = make(map[string]PortAnalyzerEntry)
+	}
+
+	// comp := h.port.Name()
+	dst := msg.Meta().Dst.Name()
+	entry, ok := h.PortAnalyzerTable[dst]
+	if !ok {
+		h.PortAnalyzerTable[dst] = PortAnalyzerEntry{Linker: dst}
+	}
+	entry = h.PortAnalyzerTable[dst]
+
 	h.lastTime = now
 	if msg.Meta().Dst == h.port {
-		h.inTrafficByte += uint64(msg.Meta().TrafficBytes)
-		h.inTrafficMsg++
+		entry.Linker = msg.Meta().Src.Name()
+		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.InTrafficMsg++
 	} else {
-		h.outTrafficByte += uint64(msg.Meta().TrafficBytes)
-		h.outTrafficMsg++
+		entry.Linker = msg.Meta().Dst.Name()
+		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.OutTrafficMsg++
 	}
+	h.PortAnalyzerTable[dst] = entry
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -63,50 +84,49 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	if h.inTrafficMsg > 0 {
+	for dst, entry := range h.PortAnalyzerTable {
 		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "IncomingByte",
-			Value: float64(h.inTrafficByte),
-			Unit:  "Byte",
+			Start:  startTime,
+			End:    endTime,
+			Src:    h.port.Name(),
+			Linker: entry.Linker,
+			Dir:    "Incoming",
+			Value:  float64(entry.InTrafficByte),
+			Unit:   "Byte",
 		})
 
 		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "IncomingMsg",
-			Value: float64(h.inTrafficMsg),
-			Unit:  "Msg",
+			Start:  startTime,
+			End:    endTime,
+			Src:    h.port.Name(),
+			Linker: entry.Linker,
+			Dir:    "Incoming",
+			Value:  float64(entry.InTrafficMsg),
+			Unit:   "Msg",
 		})
+
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start:  startTime,
+			End:    endTime,
+			Src:    h.port.Name(),
+			Linker: entry.Linker,
+			Dir:    "OutGoing",
+			Value:  float64(entry.OutTrafficByte),
+			Unit:   "Byte",
+		})
+
+		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+			Start:  startTime,
+			End:    endTime,
+			Src:    h.port.Name(),
+			Linker: entry.Linker,
+			Dir:    "OutGoing",
+			Value:  float64(entry.OutTrafficMsg),
+			Unit:   "Msg",
+		})
+
+		delete(h.PortAnalyzerTable, dst)
 	}
-
-	if h.outTrafficMsg > 0 {
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "OutGoingByte",
-			Value: float64(h.outTrafficByte),
-			Unit:  "Byte",
-		})
-
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "OutGoingMsg",
-			Value: float64(h.outTrafficMsg),
-			Unit:  "Msg",
-		})
-	}
-
-	h.inTrafficByte = 0
-	h.inTrafficMsg = 0
-	h.outTrafficByte = 0
-	h.outTrafficMsg = 0
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {

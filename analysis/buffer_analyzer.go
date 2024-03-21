@@ -86,12 +86,13 @@ func (b *BufferAnalyzer) summarizePeriod(
 	}
 
 	b.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-		Start: periodStartTime,
-		End:   periodEndTime,
-		Where: b.buf.Name(),
-		What:  "BufferLevel",
-		Value: avgLevel,
-		Unit:  "",
+		Start:  periodStartTime,
+		End:    periodEndTime,
+		Src:    b.buf.Name(),
+		Linker: "",
+		Dir:    "BufferLevel",
+		Value:  avgLevel,
+		Unit:   "",
 	})
 }
 

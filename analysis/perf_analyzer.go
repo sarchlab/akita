@@ -9,12 +9,13 @@ import (
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
-	Start sim.VTimeInSec
-	End   sim.VTimeInSec
-	Where string
-	What  string
-	Value float64
-	Unit  string
+	Start  sim.VTimeInSec
+	End    sim.VTimeInSec
+	Src    string
+	Linker string
+	Dir    string
+	Value  float64
+	Unit   string
 }
 
 // PerfLogger is the interface that provide the service that can record

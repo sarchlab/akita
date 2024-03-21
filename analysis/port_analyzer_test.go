@@ -65,7 +65,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -74,7 +74,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -102,7 +102,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 20.0,
 			End:   21.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -111,7 +111,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 20.0,
 			End:   21.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -152,7 +152,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -161,7 +161,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -170,7 +170,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "IncomingByte",
 			Value: 10000.0,
 			Unit:  "Byte",
@@ -179,7 +179,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "IncomingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -208,7 +208,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -217,7 +217,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -246,7 +246,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -255,7 +255,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 0.0,
 			End:   1.0,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
@@ -269,7 +269,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 3.0,
 			End:   3.1,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingByte",
 			Value: 100.0,
 			Unit:  "Byte",
@@ -278,7 +278,7 @@ var _ = Describe("Port Analyzer", func() {
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start: 3.0,
 			End:   3.1,
-			Where: "PortName",
+			Src:   "PortName",
 			What:  "OutGoingMsg",
 			Value: 1.0,
 			Unit:  "Msg",
