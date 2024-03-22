@@ -85,46 +85,48 @@ func (h *PortAnalyzer) summarize() {
 	}
 
 	for dst, entry := range h.PortAnalyzerTable {
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start:  startTime,
-			End:    endTime,
-			Src:    h.port.Name(),
-			Linker: entry.Linker,
-			Dir:    "Incoming",
-			Value:  float64(entry.InTrafficByte),
-			Unit:   "Byte",
-		})
 
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start:  startTime,
-			End:    endTime,
-			Src:    h.port.Name(),
-			Linker: entry.Linker,
-			Dir:    "Incoming",
-			Value:  float64(entry.InTrafficMsg),
-			Unit:   "Msg",
-		})
+		if entry.InTrafficMsg != 0 {
+			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+				Start:  startTime,
+				End:    endTime,
+				Src:    h.port.Name(),
+				Linker: entry.Linker,
+				Dir:    "Incoming",
+				Value:  float64(entry.InTrafficByte),
+				Unit:   "Byte",
+			})
 
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start:  startTime,
-			End:    endTime,
-			Src:    h.port.Name(),
-			Linker: entry.Linker,
-			Dir:    "OutGoing",
-			Value:  float64(entry.OutTrafficByte),
-			Unit:   "Byte",
-		})
+			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+				Start:  startTime,
+				End:    endTime,
+				Src:    h.port.Name(),
+				Linker: entry.Linker,
+				Dir:    "Incoming",
+				Value:  float64(entry.InTrafficMsg),
+				Unit:   "Msg",
+			})
+		} else {
+			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+				Start:  startTime,
+				End:    endTime,
+				Src:    h.port.Name(),
+				Linker: entry.Linker,
+				Dir:    "Outgoing",
+				Value:  float64(entry.OutTrafficByte),
+				Unit:   "Byte",
+			})
 
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start:  startTime,
-			End:    endTime,
-			Src:    h.port.Name(),
-			Linker: entry.Linker,
-			Dir:    "OutGoing",
-			Value:  float64(entry.OutTrafficMsg),
-			Unit:   "Msg",
-		})
-
+			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
+				Start:  startTime,
+				End:    endTime,
+				Src:    h.port.Name(),
+				Linker: entry.Linker,
+				Dir:    "Outgoing",
+				Value:  float64(entry.OutTrafficMsg),
+				Unit:   "Msg",
+			})
+		}
 		delete(h.PortAnalyzerTable, dst)
 	}
 }
@@ -203,4 +205,8 @@ func (b PortAnalyzerBuilder) Build() *PortAnalyzer {
 	atexit.Register(func() { a.summarize() })
 
 	return a
+}
+
+func (h *PortAnalyzer) getCurrentTraffic() string {
+	return "PortAnalyzer"
 }

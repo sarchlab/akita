@@ -20,9 +20,11 @@ var _ = Describe("Port Analyzer", func() {
 	var (
 		mockCtrl *gomock.Controller
 
-		port       *MockPort
-		timeTeller *MockTimeTeller
-		portLogger *MockPerfLogger
+		port          *MockPort
+		incommingPort *MockPort
+		outgoingPort  *MockPort
+		timeTeller    *MockTimeTeller
+		portLogger    *MockPerfLogger
 
 		portAnalyzer *PortAnalyzer
 	)
@@ -32,6 +34,12 @@ var _ = Describe("Port Analyzer", func() {
 
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().Name().Return("PortName").AnyTimes()
+
+		incommingPort = NewMockPort(mockCtrl)
+		incommingPort.EXPECT().Name().Return("IncomingPort").AnyTimes()
+
+		outgoingPort = NewMockPort(mockCtrl)
+		outgoingPort.EXPECT().Name().Return("OutgoingPort").AnyTimes()
 
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		portLogger = NewMockPerfLogger(mockCtrl)
@@ -52,6 +60,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -66,7 +76,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -75,7 +86,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -90,6 +102,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Dst:          port,
+				Src:          incommingPort,
 			},
 		}
 
@@ -103,7 +117,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  20.0,
 			End:    21.0,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "IncomingPort",
+			Dir:    "Incoming",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -112,7 +127,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  20.0,
 			End:    21.0,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "IncomingPort",
+			Dir:    "Incoming",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -129,12 +145,14 @@ var _ = Describe("Port Analyzer", func() {
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 		inMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port,
+				Src:          incommingPort,
 			},
 		}
 
@@ -153,7 +171,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -162,7 +181,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -171,7 +191,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "IncomingByte",
+			Linker: "IncomingPort",
+			Dir:    "Incoming",
 			Value:  10000.0,
 			Unit:   "Byte",
 		})
@@ -180,7 +201,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "IncomingMsg",
+			Linker: "IncomingPort",
+			Dir:    "Incoming",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -195,6 +217,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -209,7 +233,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -218,7 +243,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -233,6 +259,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -247,7 +275,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -256,7 +285,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  0.0,
 			End:    1.0,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  1.0,
 			Unit:   "Msg",
 		})
@@ -270,7 +300,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  3.0,
 			End:    3.1,
 			Src:    "PortName",
-			Linker: "OutGoingByte",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  100.0,
 			Unit:   "Byte",
 		})
@@ -279,7 +310,8 @@ var _ = Describe("Port Analyzer", func() {
 			Start:  3.0,
 			End:    3.1,
 			Src:    "PortName",
-			Linker: "OutGoingMsg",
+			Linker: "OutgoingPort",
+			Dir:    "Outgoing",
 			Value:  1.0,
 			Unit:   "Msg",
 		})

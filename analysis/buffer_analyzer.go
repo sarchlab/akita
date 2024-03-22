@@ -89,8 +89,7 @@ func (b *BufferAnalyzer) summarizePeriod(
 		Start:  periodStartTime,
 		End:    periodEndTime,
 		Src:    b.buf.Name(),
-		Linker: "",
-		Dir:    "BufferLevel",
+		Linker: "BufferLevel",
 		Value:  avgLevel,
 		Unit:   "",
 	})
