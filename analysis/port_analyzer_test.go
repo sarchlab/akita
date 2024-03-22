@@ -63,21 +63,21 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -100,21 +100,21 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 20.0,
-			End:   21.0,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  20.0,
+			End:    21.0,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 20.0,
-			End:   21.0,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  20.0,
+			End:    21.0,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		timeTeller.EXPECT().
@@ -150,39 +150,39 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "IncomingByte",
-			Value: 10000.0,
-			Unit:  "Byte",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "IncomingByte",
+			Value:  10000.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "IncomingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "IncomingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -206,21 +206,21 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -244,21 +244,21 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  0.0,
+			End:    1.0,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -267,21 +267,21 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 3.0,
-			End:   3.1,
-			Src:   "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:  3.0,
+			End:    3.1,
+			Src:    "PortName",
+			Linker: "OutGoingByte",
+			Value:  100.0,
+			Unit:   "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 3.0,
-			End:   3.1,
-			Src:   "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:  3.0,
+			End:    3.1,
+			Src:    "PortName",
+			Linker: "OutGoingMsg",
+			Value:  1.0,
+			Unit:   "Msg",
 		})
 
 		portAnalyzer.summarize()
