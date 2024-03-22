@@ -30,7 +30,6 @@ type PortAnalyzer struct {
 
 // Func writes the message information into the logger
 func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
-
 	now := h.CurrentTime()
 	msg, ok := ctx.Item.(sim.Msg)
 	if !ok {
@@ -85,7 +84,6 @@ func (h *PortAnalyzer) summarize() {
 	}
 
 	for dst, entry := range h.PortAnalyzerTable {
-
 		if entry.InTrafficMsg != 0 {
 			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
 				Start:  startTime,

@@ -84,7 +84,6 @@ func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	}
 
 	bufferAnalyzer := bufferAnalyzerBuilder.Build()
-
 	buf.AcceptHook(bufferAnalyzer)
 }
 
@@ -120,7 +119,6 @@ func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 
 	key := entry.Src + entry.Linker + entry.Dir
 	b.dataTable[key] = entry
-
 }
 
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
