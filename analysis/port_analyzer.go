@@ -49,12 +49,12 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	}
 
 	// comp := h.port.Name()
-	dst := msg.Meta().Dst.Name()
-	entry, ok := h.PortAnalyzerTable[dst]
+	linker := msg.Meta().Dst.Name()
+	entry, ok := h.PortAnalyzerTable[linker]
 	if !ok {
-		h.PortAnalyzerTable[dst] = PortAnalyzerEntry{Linker: dst}
+		h.PortAnalyzerTable[linker] = PortAnalyzerEntry{Linker: linker}
 	}
-	entry = h.PortAnalyzerTable[dst]
+	entry = h.PortAnalyzerTable[linker]
 
 	h.lastTime = now
 	if msg.Meta().Dst == h.port {
@@ -66,7 +66,7 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.OutTrafficMsg++
 	}
-	h.PortAnalyzerTable[dst] = entry
+	h.PortAnalyzerTable[linker] = entry
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -205,8 +205,4 @@ func (b PortAnalyzerBuilder) Build() *PortAnalyzer {
 	atexit.Register(func() { a.summarize() })
 
 	return a
-}
-
-func (h *PortAnalyzer) getCurrentTraffic() string {
-	return "PortAnalyzer"
 }

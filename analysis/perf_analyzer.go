@@ -1,6 +1,8 @@
 package analysis
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"unsafe"
 
@@ -30,6 +32,7 @@ type PerfAnalyzer struct {
 	period    sim.VTimeInSec
 	engine    sim.Engine
 	backend   PerfAnalyzerBackend
+	dataTable map[string]PerfAnalyzerEntry
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
@@ -114,6 +117,10 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 // CSV file.
 func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 	b.backend.AddDataEntry(entry)
+
+	key := entry.Src + entry.Linker + entry.Dir
+	b.dataTable[key] = entry
+
 }
 
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
@@ -176,6 +183,8 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		panic("Unknown backend type")
 	}
 
+	b.Build().dataTable = make(map[string]PerfAnalyzerEntry)
+
 	return &PerfAnalyzer{
 		period:    b.period,
 		backend:   backend,
@@ -201,4 +210,38 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 			b.RegisterPort(fieldRef)
 		}
 	}
+}
+
+type lifetimeBackend struct {
+	dataTable map[string]PerfAnalyzerEntry
+}
+
+func NewLifetimeBackend(b *PerfAnalyzer) *lifetimeBackend {
+	return &lifetimeBackend{
+		dataTable: make(map[string]PerfAnalyzerEntry),
+	}
+}
+
+func (p *lifetimeBackend) GetCurrentTraffic(comp string) string {
+	dataTable := []map[string]string{}
+
+	for _, data := range p.dataTable {
+		if data.Src == comp {
+			dataTable = append(dataTable, map[string]string{
+				"start":  fmt.Sprintf("%.9f", data.Start),
+				"end":    fmt.Sprintf("%.9f", data.End),
+				"src":    data.Src,
+				"linker": data.Linker,
+				"dir":    data.Dir,
+				"value":  fmt.Sprintf("%.9f", data.Value),
+				"unit":   data.Unit,
+			})
+		}
+	}
+
+	output, err := json.Marshal(dataTable)
+	if err != nil {
+		panic(err)
+	}
+	return string(output)
 }
