@@ -43,29 +43,29 @@ func (c *Comp) reset() {
 }
 
 // Tick defines how TLB update states at each cycle
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.performCtrlReq(now) || madeProgress
+	madeProgress = c.performCtrlReq() || madeProgress
 
 	if !c.isPaused {
 		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.respondMSHREntry(now) || madeProgress
+			madeProgress = c.respondMSHREntry() || madeProgress
 		}
 
 		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.lookup(now) || madeProgress
+			madeProgress = c.lookup() || madeProgress
 		}
 
 		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.parseBottom(now) || madeProgress
+			madeProgress = c.parseBottom() || madeProgress
 		}
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) respondMSHREntry(now sim.VTimeInSec) bool {
+func (c *Comp) respondMSHREntry() bool {
 	if c.respondingMSHREntry == nil {
 		return false
 	}
@@ -74,7 +74,6 @@ func (c *Comp) respondMSHREntry(now sim.VTimeInSec) bool {
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
 	rspToTop := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -94,7 +93,7 @@ func (c *Comp) respondMSHREntry(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (c *Comp) lookup(now sim.VTimeInSec) bool {
+func (c *Comp) lookup() bool {
 	msg := c.topPort.PeekIncoming()
 	if msg == nil {
 		return false
@@ -104,32 +103,31 @@ func (c *Comp) lookup(now sim.VTimeInSec) bool {
 
 	mshrEntry := c.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
-		return c.processTLBMSHRHit(now, mshrEntry, req)
+		return c.processTLBMSHRHit(mshrEntry, req)
 	}
 
 	setID := c.vAddrToSetID(req.VAddr)
 	set := c.Sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
 	if found && page.Valid {
-		return c.handleTranslationHit(now, req, setID, wayID, page)
+		return c.handleTranslationHit(req, setID, wayID, page)
 	}
 
-	return c.handleTranslationMiss(now, req)
+	return c.handleTranslationMiss(req)
 }
 
 func (c *Comp) handleTranslationHit(
-	now sim.VTimeInSec,
 	req *vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-	ok := c.sendRspToTop(now, req, page)
+	ok := c.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
 
 	c.visit(setID, wayID)
-	c.topPort.RetrieveIncoming(now)
+	c.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, c)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "hit")
@@ -139,16 +137,15 @@ func (c *Comp) handleTranslationHit(
 }
 
 func (c *Comp) handleTranslationMiss(
-	now sim.VTimeInSec,
 	req *vm.TranslationReq,
 ) bool {
 	if c.mshr.IsFull() {
 		return false
 	}
 
-	fetched := c.fetchBottom(now, req)
+	fetched := c.fetchBottom(req)
 	if fetched {
-		c.topPort.RetrieveIncoming(now)
+		c.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, c)
 		tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "miss")
 		return true
@@ -162,12 +159,10 @@ func (c *Comp) vAddrToSetID(vAddr uint64) (setID int) {
 }
 
 func (c *Comp) sendRspToTop(
-	now sim.VTimeInSec,
 	req *vm.TranslationReq,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -180,22 +175,20 @@ func (c *Comp) sendRspToTop(
 }
 
 func (c *Comp) processTLBMSHRHit(
-	now sim.VTimeInSec,
 	mshrEntry *mshrEntry,
 	req *vm.TranslationReq,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
-	c.topPort.RetrieveIncoming(now)
+	c.topPort.RetrieveIncoming()
 	tracing.TraceReqReceive(req, c)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "mshr-hit")
 
 	return true
 }
 
-func (c *Comp) fetchBottom(now sim.VTimeInSec, req *vm.TranslationReq) bool {
+func (c *Comp) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.bottomPort).
 		WithDst(c.LowModule).
 		WithPID(req.PID).
@@ -217,7 +210,7 @@ func (c *Comp) fetchBottom(now sim.VTimeInSec, req *vm.TranslationReq) bool {
 	return true
 }
 
-func (c *Comp) parseBottom(now sim.VTimeInSec) bool {
+func (c *Comp) parseBottom() bool {
 	if c.respondingMSHREntry != nil {
 		return false
 	}
@@ -232,7 +225,7 @@ func (c *Comp) parseBottom(now sim.VTimeInSec) bool {
 
 	mshrEntryPresent := c.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		c.bottomPort.RetrieveIncoming(now)
+		c.bottomPort.RetrieveIncoming()
 		return true
 	}
 
@@ -250,25 +243,25 @@ func (c *Comp) parseBottom(now sim.VTimeInSec) bool {
 	mshrEntry.page = page
 
 	c.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
-	c.bottomPort.RetrieveIncoming(now)
+	c.bottomPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, c)
 
 	return true
 }
 
-func (c *Comp) performCtrlReq(now sim.VTimeInSec) bool {
+func (c *Comp) performCtrlReq() bool {
 	item := c.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
-	item = c.controlPort.RetrieveIncoming(now)
+	item = c.controlPort.RetrieveIncoming()
 
 	switch req := item.(type) {
 	case *FlushReq:
-		return c.handleTLBFlush(now, req)
+		return c.handleTLBFlush(req)
 	case *RestartReq:
-		return c.handleTLBRestart(now, req)
+		return c.handleTLBRestart(req)
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
@@ -281,11 +274,10 @@ func (c *Comp) visit(setID, wayID int) {
 	set.Visit(wayID)
 }
 
-func (c *Comp) handleTLBFlush(now sim.VTimeInSec, req *FlushReq) bool {
+func (c *Comp) handleTLBFlush(req *FlushReq) bool {
 	rsp := FlushRspBuilder{}.
 		WithSrc(c.controlPort).
 		WithDst(req.Src).
-		WithSendTime(now).
 		Build()
 
 	err := c.controlPort.Send(rsp)
@@ -310,9 +302,8 @@ func (c *Comp) handleTLBFlush(now sim.VTimeInSec, req *FlushReq) bool {
 	return true
 }
 
-func (c *Comp) handleTLBRestart(now sim.VTimeInSec, req *RestartReq) bool {
+func (c *Comp) handleTLBRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.controlPort).
 		WithDst(req.Src).
 		Build()
@@ -324,12 +315,12 @@ func (c *Comp) handleTLBRestart(now sim.VTimeInSec, req *RestartReq) bool {
 
 	c.isPaused = false
 
-	for c.topPort.RetrieveIncoming(now) != nil {
-		c.topPort.RetrieveIncoming(now)
+	for c.topPort.RetrieveIncoming() != nil {
+		c.topPort.RetrieveIncoming()
 	}
 
-	for c.bottomPort.RetrieveIncoming(now) != nil {
-		c.bottomPort.RetrieveIncoming(now)
+	for c.bottomPort.RetrieveIncoming() != nil {
+		c.bottomPort.RetrieveIncoming()
 	}
 
 	return true

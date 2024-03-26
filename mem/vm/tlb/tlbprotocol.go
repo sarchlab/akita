@@ -19,18 +19,9 @@ func (r *FlushReq) Meta() *sim.MsgMeta {
 
 // FlushReqBuilder can build AT flush requests
 type FlushReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	vAddrs   []uint64
 	pid      vm.PID
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b FlushReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) FlushReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -63,7 +54,6 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.VAddr = b.vAddrs
 	r.PID = b.pid
 	return r
@@ -81,16 +71,7 @@ func (r *FlushRsp) Meta() *sim.MsgMeta {
 
 // FlushRspBuilder can build AT flush rsp
 type FlushRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b FlushRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) FlushRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -111,7 +92,6 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 
 	return r
 }
@@ -128,16 +108,7 @@ func (r *RestartReq) Meta() *sim.MsgMeta {
 
 // RestartReqBuilder can build TLB restart requests.
 type RestartReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b RestartReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) RestartReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -158,7 +129,6 @@ func (b RestartReqBuilder) Build() *RestartReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 
 	return r
 }
@@ -175,16 +145,7 @@ func (r *RestartRsp) Meta() *sim.MsgMeta {
 
 // RestartRspBuilder can build AT flush rsp
 type RestartRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b RestartRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) RestartRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -205,7 +166,6 @@ func (b RestartRspBuilder) Build() *RestartRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 
 	return r
 }
