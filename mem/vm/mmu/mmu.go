@@ -42,19 +42,19 @@ type Comp struct {
 }
 
 // Tick defines how the MMU update state each cycle
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.topSender.Tick(now) || madeProgress
-	madeProgress = c.sendMigrationToDriver(now) || madeProgress
-	madeProgress = c.walkPageTable(now) || madeProgress
-	madeProgress = c.processMigrationReturn(now) || madeProgress
-	madeProgress = c.parseFromTop(now) || madeProgress
+	madeProgress = c.topSender.Tick() || madeProgress
+	madeProgress = c.sendMigrationToDriver() || madeProgress
+	madeProgress = c.walkPageTable() || madeProgress
+	madeProgress = c.processMigrationReturn() || madeProgress
+	madeProgress = c.parseFromTop() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) walkPageTable(now sim.VTimeInSec) bool {
+func (c *Comp) walkPageTable() bool {
 	madeProgress := false
 	for i := 0; i < len(c.walkingTranslations); i++ {
 		if c.walkingTranslations[i].cycleLeft > 0 {
@@ -63,7 +63,7 @@ func (c *Comp) walkPageTable(now sim.VTimeInSec) bool {
 			continue
 		}
 
-		madeProgress = c.finalizePageWalk(now, i) || madeProgress
+		madeProgress = c.finalizePageWalk(i) || madeProgress
 	}
 
 	tmp := c.walkingTranslations[:0]
@@ -79,7 +79,6 @@ func (c *Comp) walkPageTable(now sim.VTimeInSec) bool {
 }
 
 func (c *Comp) finalizePageWalk(
-	now sim.VTimeInSec,
 	walkingIndex int,
 ) bool {
 	req := c.walkingTranslations[walkingIndex].req
@@ -99,7 +98,7 @@ func (c *Comp) finalizePageWalk(
 		return c.addTransactionToMigrationQueue(walkingIndex)
 	}
 
-	return c.doPageWalkHit(now, walkingIndex)
+	return c.doPageWalkHit(walkingIndex)
 }
 
 func (c *Comp) addTransactionToMigrationQueue(walkingIndex int) bool {
@@ -135,7 +134,6 @@ func (c *Comp) pageNeedMigrate(walking transaction) bool {
 }
 
 func (c *Comp) doPageWalkHit(
-	now sim.VTimeInSec,
 	walkingIndex int,
 ) bool {
 	if !c.topSender.CanSend(1) {
@@ -144,7 +142,6 @@ func (c *Comp) doPageWalkHit(
 	walking := c.walkingTranslations[walkingIndex]
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(walking.req.Src).
 		WithRspTo(walking.req.ID).
@@ -159,9 +156,7 @@ func (c *Comp) doPageWalkHit(
 	return true
 }
 
-func (c *Comp) sendMigrationToDriver(
-	now sim.VTimeInSec,
-) (madeProgress bool) {
+func (c *Comp) sendMigrationToDriver() (madeProgress bool) {
 	if len(c.migrationQueue) == 0 {
 		return false
 	}
@@ -175,7 +170,7 @@ func (c *Comp) sendMigrationToDriver(
 	trans.page = page
 
 	if req.DeviceID == page.DeviceID || page.IsPinned {
-		c.sendTranlationRsp(now, trans)
+		c.sendTranlationRsp(trans)
 		c.migrationQueue = c.migrationQueue[1:]
 		c.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 
@@ -196,7 +191,7 @@ func (c *Comp) sendMigrationToDriver(
 		append(c.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
-		now, c.migrationPort, c.MigrationServiceProvider)
+		c.migrationPort, c.MigrationServiceProvider)
 	migrationReq.PID = page.PID
 	migrationReq.PageSize = page.PageSize
 	migrationReq.CurrPageHostGPU = page.DeviceID
@@ -240,14 +235,12 @@ func (c *Comp) markPageAsNotMigratingIfNotInTheMigrationQueue(
 }
 
 func (c *Comp) sendTranlationRsp(
-	now sim.VTimeInSec,
 	trans transaction,
 ) (madeProgress bool) {
 	req := trans.req
 	page := trans.page
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -258,7 +251,7 @@ func (c *Comp) sendTranlationRsp(
 	return true
 }
 
-func (c *Comp) processMigrationReturn(now sim.VTimeInSec) bool {
+func (c *Comp) processMigrationReturn() bool {
 	item := c.migrationPort.PeekIncoming()
 	if item == nil {
 		return false
@@ -275,7 +268,6 @@ func (c *Comp) processMigrationReturn(now sim.VTimeInSec) bool {
 	}
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -289,17 +281,17 @@ func (c *Comp) processMigrationReturn(now sim.VTimeInSec) bool {
 	page.IsPinned = true
 	c.pageTable.Update(page)
 
-	c.migrationPort.RetrieveIncoming(now)
+	c.migrationPort.RetrieveIncoming()
 
 	return true
 }
 
-func (c *Comp) parseFromTop(now sim.VTimeInSec) bool {
+func (c *Comp) parseFromTop() bool {
 	if len(c.walkingTranslations) >= c.maxRequestsInFlight {
 		return false
 	}
 
-	req := c.topPort.RetrieveIncoming(now)
+	req := c.topPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
