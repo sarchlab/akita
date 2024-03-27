@@ -55,17 +55,17 @@ type Comp struct {
 }
 
 // Tick updates memory controller's internal state.
-func (c *Comp) Tick(now sim.VTimeInSec) (madeProgress bool) {
-	madeProgress = c.respond(now) || madeProgress
-	madeProgress = c.respond(now) || madeProgress
-	madeProgress = c.channel.Tick(now) || madeProgress
-	madeProgress = c.issue(now) || madeProgress
-	madeProgress = c.subTransactionQueue.Tick(now) || madeProgress
-	madeProgress = c.parseTop(now) || madeProgress
+func (c *Comp) Tick() (madeProgress bool) {
+	madeProgress = c.respond() || madeProgress
+	madeProgress = c.respond() || madeProgress
+	madeProgress = c.channel.Tick() || madeProgress
+	madeProgress = c.issue() || madeProgress
+	madeProgress = c.subTransactionQueue.Tick() || madeProgress
+	madeProgress = c.parseTop() || madeProgress
 	return madeProgress
 }
 
-func (c *Comp) parseTop(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) parseTop() (madeProgress bool) {
 	msg := c.topPort.PeekIncoming()
 	if msg == nil {
 		return false
@@ -88,7 +88,7 @@ func (c *Comp) parseTop(now sim.VTimeInSec) (madeProgress bool) {
 
 	c.subTransactionQueue.Push(trans)
 	c.inflightTransactions = append(c.inflightTransactions, trans)
-	c.topPort.RetrieveIncoming(now)
+	c.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, c)
 	for _, st := range trans.SubTransactions {
@@ -119,22 +119,22 @@ func (c *Comp) assignTransInternalAddress(trans *signal.Transaction) {
 	trans.InternalAddress = trans.GlobalAddress()
 }
 
-func (c *Comp) issue(now sim.VTimeInSec) (madeProgress bool) {
-	cmd := c.cmdQueue.GetCommandToIssue(now)
+func (c *Comp) issue() (madeProgress bool) {
+	cmd := c.cmdQueue.GetCommandToIssue()
 	if cmd == nil {
 		return false
 	}
 
-	c.channel.StartCommand(now, cmd)
-	c.channel.UpdateTiming(now, cmd)
+	c.channel.StartCommand(cmd)
+	c.channel.UpdateTiming(cmd)
 
 	return true
 }
 
-func (c *Comp) respond(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) respond() (madeProgress bool) {
 	for i, t := range c.inflightTransactions {
 		if t.IsCompleted() {
-			done := c.finalizeTransaction(now, t, i)
+			done := c.finalizeTransaction(t, i)
 			if done {
 				return true
 			}
@@ -145,17 +145,16 @@ func (c *Comp) respond(now sim.VTimeInSec) (madeProgress bool) {
 }
 
 func (c *Comp) finalizeTransaction(
-	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
 	if t.Write != nil {
-		done = c.finalizeWriteTrans(now, t, i)
+		done = c.finalizeWriteTrans(t, i)
 		if done {
 			tracing.TraceReqComplete(t.Write, c)
 		}
 	} else {
-		done = c.finalizeReadTrans(now, t, i)
+		done = c.finalizeReadTrans(t, i)
 		if done {
 			tracing.TraceReqComplete(t.Read, c)
 		}
@@ -165,7 +164,6 @@ func (c *Comp) finalizeTransaction(
 }
 
 func (c *Comp) finalizeWriteTrans(
-	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
@@ -178,7 +176,6 @@ func (c *Comp) finalizeWriteTrans(
 		WithSrc(c.topPort).
 		WithDst(t.Write.Src).
 		WithRspTo(t.Write.ID).
-		WithSendTime(now).
 		Build()
 	sendErr := c.topPort.Send(writeDone)
 	if sendErr == nil {
@@ -195,7 +192,6 @@ func (c *Comp) finalizeWriteTrans(
 }
 
 func (c *Comp) finalizeReadTrans(
-	now sim.VTimeInSec,
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
@@ -209,7 +205,6 @@ func (c *Comp) finalizeReadTrans(
 		WithDst(t.Read.Src).
 		WithData(data).
 		WithRspTo(t.Read.ID).
-		WithSendTime(now).
 		Build()
 	sendErr := c.topPort.Send(dataReady)
 	if sendErr == nil {
