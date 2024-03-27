@@ -215,13 +215,13 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	for _, data := range b.dataTable {
 		if data.Src == comp {
 			dataTable = append(dataTable, map[string]string{
-				"start":  fmt.Sprintf("%.9f", data.Start),
-				"end":    fmt.Sprintf("%.9f", data.End),
-				"src":    data.Src,    // local port
-				"linker": data.Linker, // remote port
-				"dir":    data.Dir,
-				"value":  fmt.Sprintf("%.9f", data.Value),
-				"unit":   data.Unit,
+				"start":      fmt.Sprintf("%.9f", data.Start),
+				"end":        fmt.Sprintf("%.9f", data.End),
+				"localPort":  data.Src,    // localPort
+				"remotePort": data.Linker, // remote port
+				"dir":        data.Dir,
+				"value":      fmt.Sprintf("%.9f", data.Value),
+				"unit":       data.Unit,
 			})
 		}
 	}
