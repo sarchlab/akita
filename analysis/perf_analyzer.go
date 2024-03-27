@@ -188,7 +188,6 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		usePeriod: b.usePeriod,
 		dataTable: make(map[string]PerfAnalyzerEntry),
 	}
-
 }
 
 func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
