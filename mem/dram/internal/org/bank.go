@@ -2,7 +2,6 @@ package org
 
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -11,10 +10,9 @@ type Bank interface {
 	tracing.NamedHookable
 
 	GetReadyCommand(
-		now sim.VTimeInSec,
 		cmd *signal.Command,
 	) *signal.Command
-	StartCommand(now sim.VTimeInSec, cmd *signal.Command)
+	StartCommand(cmd *signal.Command)
 	UpdateTiming(cmdKind signal.CommandKind, cycleNeeded int)
-	Tick(now sim.VTimeInSec) bool
+	Tick() bool
 }
