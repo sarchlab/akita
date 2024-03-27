@@ -117,7 +117,7 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 	b.backend.AddDataEntry(entry)
 
-	key := entry.Src + entry.Linker + entry.Dir
+	key := entry.Src + entry.Linker + entry.Dir + entry.Unit
 	b.dataTable[key] = entry
 }
 
@@ -181,14 +181,14 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		panic("Unknown backend type")
 	}
 
-	b.Build().dataTable = make(map[string]PerfAnalyzerEntry)
-
 	return &PerfAnalyzer{
 		period:    b.period,
 		backend:   backend,
 		engine:    b.engine,
 		usePeriod: b.usePeriod,
+		dataTable: make(map[string]PerfAnalyzerEntry),
 	}
+
 }
 
 func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
@@ -210,26 +210,16 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 	}
 }
 
-type lifetimeBackend struct {
-	dataTable map[string]PerfAnalyzerEntry
-}
-
-func NewLifetimeBackend(b *PerfAnalyzer) *lifetimeBackend {
-	return &lifetimeBackend{
-		dataTable: make(map[string]PerfAnalyzerEntry),
-	}
-}
-
-func (p *lifetimeBackend) GetCurrentTraffic(comp string) string {
+func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	dataTable := []map[string]string{}
 
-	for _, data := range p.dataTable {
+	for _, data := range b.dataTable {
 		if data.Src == comp {
 			dataTable = append(dataTable, map[string]string{
 				"start":  fmt.Sprintf("%.9f", data.Start),
 				"end":    fmt.Sprintf("%.9f", data.End),
-				"src":    data.Src,
-				"linker": data.Linker,
+				"src":    data.Src,    // local port
+				"linker": data.Linker, // remote port
 				"dir":    data.Dir,
 				"value":  fmt.Sprintf("%.9f", data.Value),
 				"unit":   data.Unit,
