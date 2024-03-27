@@ -119,7 +119,6 @@ func (b ReadReqBuilder) Build() *ReadReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.TrafficBytes = accessReqByteOverhead
 	r.Address = b.address
 	r.PID = b.pid
@@ -233,7 +232,6 @@ func (b WriteReqBuilder) Build() *WriteReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.PID = b.pid
 	r.Info = b.info
 	r.Address = b.address
@@ -309,7 +307,6 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.TrafficBytes = len(b.data) + accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Data = b.data
@@ -374,7 +371,6 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.TrafficBytes = accessRspByteOverhead
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	return r
 }
@@ -450,7 +446,6 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Src = b.src
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
-	m.SendTime = b.sendTime
 
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
@@ -524,7 +519,6 @@ func (b GL0InvalidateReqBuilder) Build() *GL0InvalidateReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	return r
 }
 
@@ -611,7 +605,6 @@ func (b GL0InvalidateRspBuilder) Build() *GL0InvalidateRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	return r
 }
