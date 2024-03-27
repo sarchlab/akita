@@ -57,18 +57,11 @@ func (r *ReadReq) GetPID() vm.PID {
 
 // ReadReqBuilder can build read requests.
 type ReadReqBuilder struct {
-	sendTime           sim.VTimeInSec
 	src, dst           sim.Port
 	pid                vm.PID
 	address, byteSize  uint64
 	canWaitForCoalesce bool
 	info               interface{}
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b ReadReqBuilder) WithSendTime(t sim.VTimeInSec) ReadReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -162,7 +155,6 @@ func (r *WriteReq) GetPID() vm.PID {
 
 // WriteReqBuilder can build read requests.
 type WriteReqBuilder struct {
-	sendTime           sim.VTimeInSec
 	src, dst           sim.Port
 	pid                vm.PID
 	info               interface{}
@@ -170,12 +162,6 @@ type WriteReqBuilder struct {
 	data               []byte
 	dirtyMask          []bool
 	canWaitForCoalesce bool
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b WriteReqBuilder) WithSendTime(t sim.VTimeInSec) WriteReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -263,18 +249,9 @@ func (r *DataReadyRsp) GetRspTo() string {
 
 // DataReadyRspBuilder can build data ready responds.
 type DataReadyRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
 	data     []byte
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b DataReadyRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) DataReadyRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -333,17 +310,8 @@ func (r *WriteDoneRsp) GetRspTo() string {
 
 // WriteDoneRspBuilder can build data ready responds.
 type WriteDoneRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b WriteDoneRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) WriteDoneRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -393,19 +361,10 @@ func (m *ControlMsg) Meta() *sim.MsgMeta {
 
 // A ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
-	sendTime            sim.VTimeInSec
 	src, dst            sim.Port
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b ControlMsgBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) ControlMsgBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -482,17 +441,8 @@ func (r *GL0InvalidateReq) GetPID() vm.PID {
 
 // GL0InvalidateReqBuilder can build new GL0InvalidReq.
 type GL0InvalidateReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	PID      vm.PID
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b GL0InvalidateReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) GL0InvalidateReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -556,18 +506,9 @@ func (r *GL0InvalidateRsp) GetRspTo() string {
 
 // GL0InvalidateRspBuilder can build new GL0 Invalid Rsp Builder
 type GL0InvalidateRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	PID      vm.PID
 	rspTo    string
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b GL0InvalidateRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) GL0InvalidateRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
