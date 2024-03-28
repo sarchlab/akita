@@ -23,6 +23,7 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
+	"github.com/sarchlab/akita/v3/analysis"
 	"github.com/sarchlab/akita/v3/monitoring/web"
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/shirou/gopsutil/process"
@@ -32,10 +33,11 @@ import (
 // Monitor can turn a simulation into a server and allows external monitoring
 // controlling of the simulation.
 type Monitor struct {
-	engine     sim.Engine
-	components []sim.Component
-	buffers    []sim.Buffer
-	portNumber int
+	engine       sim.Engine
+	components   []sim.Component
+	buffers      []sim.Buffer
+	portNumber   int
+	perfAnalyzer *analysis.PerfAnalyzer
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
@@ -63,6 +65,11 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 // RegisterEngine registers the engine that is used in the simulation.
 func (m *Monitor) RegisterEngine(e sim.Engine) {
 	m.engine = e
+}
+
+// RegisterPerfAnalyzer sets the performance analyzer to be used in the monitor.
+func (m *Monitor) RegisterPerfAnalyzer(pa *analysis.PerfAnalyzer) {
+	m.perfAnalyzer = pa
 }
 
 // RegisterComponent register a component to be monitored.
@@ -147,6 +154,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/progress", m.listProgressBars)
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
+	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
 	r.PathPrefix("/").Handler(fServer)
 	http.Handle("/", r)
 
@@ -508,4 +516,18 @@ func dieOnErr(err error) {
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
+	name := mux.Vars(r)["name"]
+
+	// component := m.findComponentOr404(w, name)
+	// if component == nil {
+	// 	return
+	// }
+
+	backend := m.perfAnalyzer.GetCurrentTraffic(name)
+
+	_, err := w.Write([]byte(backend))
+	dieOnErr(err)
 }

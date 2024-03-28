@@ -1,7 +1,11 @@
 package analysis
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
+	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/sarchlab/akita/v3/sim"
@@ -9,12 +13,13 @@ import (
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
-	Start sim.VTimeInSec
-	End   sim.VTimeInSec
-	Where string
-	What  string
-	Value float64
-	Unit  string
+	Start  sim.VTimeInSec
+	End    sim.VTimeInSec
+	Src    string
+	Linker string
+	Dir    string
+	Value  float64
+	Unit   string
 }
 
 // PerfLogger is the interface that provide the service that can record
@@ -29,6 +34,9 @@ type PerfAnalyzer struct {
 	period    sim.VTimeInSec
 	engine    sim.Engine
 	backend   PerfAnalyzerBackend
+	dataTable map[string]PerfAnalyzerEntry
+
+	mu sync.Mutex
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
@@ -80,7 +88,6 @@ func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	}
 
 	bufferAnalyzer := bufferAnalyzerBuilder.Build()
-
 	buf.AcceptHook(bufferAnalyzer)
 }
 
@@ -113,6 +120,11 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 // CSV file.
 func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 	b.backend.AddDataEntry(entry)
+
+	b.mu.Lock()
+	key := entry.Src + entry.Linker + entry.Dir + entry.Unit
+	b.dataTable[key] = entry
+	defer b.mu.Unlock()
 }
 
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
@@ -180,6 +192,7 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		backend:   backend,
 		engine:    b.engine,
 		usePeriod: b.usePeriod,
+		dataTable: make(map[string]PerfAnalyzerEntry),
 	}
 }
 
@@ -200,4 +213,43 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 			b.RegisterPort(fieldRef)
 		}
 	}
+}
+
+func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
+	dataTable := []map[string]string{}
+	time := b.engine.CurrentTime()
+	b.mu.Lock()
+	for _, data := range b.dataTable {
+		if strings.Contains(data.Src, comp) {
+			if float64(data.End) >= float64(time)-float64(b.period) {
+				dataTable = append(dataTable, map[string]string{
+					"start":      fmt.Sprintf("%.9f", data.Start),
+					"end":        fmt.Sprintf("%.9f", data.End),
+					"localPort":  data.Src,
+					"remotePort": data.Linker,
+					"dir":        data.Dir,
+					"value":      fmt.Sprintf("%.0f", data.Value),
+					"unit":       data.Unit,
+				})
+			} else {
+				dataTable = append(dataTable, map[string]string{
+					"start":      fmt.Sprintf("%.9f", data.Start),
+					"end":        fmt.Sprintf("%.9f", data.End),
+					"localPort":  data.Src,
+					"remotePort": data.Linker,
+					"dir":        data.Dir,
+					"value":      "0",
+					"unit":       data.Unit,
+				})
+			}
+		}
+	}
+	defer b.mu.Unlock()
+
+	output, err := json.Marshal(dataTable)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(output)
 }
