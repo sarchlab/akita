@@ -77,14 +77,14 @@ func (c *Comp) GetRoutingTable() routing.Table {
 }
 
 // Tick update the Switch's state.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.sendOut(now) || madeProgress
-	madeProgress = c.forward(now) || madeProgress
-	madeProgress = c.route(now) || madeProgress
-	madeProgress = c.movePipeline(now) || madeProgress
-	madeProgress = c.startProcessing(now) || madeProgress
+	madeProgress = c.sendOut() || madeProgress
+	madeProgress = c.forward() || madeProgress
+	madeProgress = c.route() || madeProgress
+	madeProgress = c.movePipeline() || madeProgress
+	madeProgress = c.startProcessing() || madeProgress
 
 	return madeProgress
 }
@@ -97,7 +97,7 @@ func (c *Comp) flitTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_" + c.Name()
 }
 
-func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) startProcessing() (madeProgress bool) {
 	for _, port := range c.ports {
 		pc := c.portToComplexMapping[port]
 
@@ -116,8 +116,8 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 				taskID: c.flitTaskID(flit),
 				flit:   flit,
 			}
-			pc.pipeline.Accept(now, pipelineItem)
-			port.RetrieveIncoming(now)
+			pc.pipeline.Accept(pipelineItem)
+			port.RetrieveIncoming()
 			madeProgress = true
 
 			tracing.StartTask(
@@ -135,16 +135,16 @@ func (c *Comp) startProcessing(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) movePipeline(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) movePipeline() (madeProgress bool) {
 	for _, port := range c.ports {
 		pc := c.portToComplexMapping[port]
-		madeProgress = pc.pipeline.Tick(now) || madeProgress
+		madeProgress = pc.pipeline.Tick() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) route(_ sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) route() (madeProgress bool) {
 	for _, port := range c.ports {
 		pc := c.portToComplexMapping[port]
 		routeBuf := pc.routeBuffer
@@ -175,8 +175,8 @@ func (c *Comp) route(_ sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) forward(now sim.VTimeInSec) (madeProgress bool) {
-	inputBuffers := c.arbiter.Arbitrate(now)
+func (c *Comp) forward() (madeProgress bool) {
+	inputBuffers := c.arbiter.Arbitrate()
 
 	for _, buf := range inputBuffers {
 		for {
@@ -202,7 +202,7 @@ func (c *Comp) forward(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) sendOut(now sim.VTimeInSec) (madeProgress bool) {
+func (c *Comp) sendOut() (madeProgress bool) {
 	for _, port := range c.ports {
 		pc := c.portToComplexMapping[port]
 		sendOutBuf := pc.sendOutBuffer
@@ -216,7 +216,6 @@ func (c *Comp) sendOut(now sim.VTimeInSec) (madeProgress bool) {
 			flit := item.(*messaging.Flit)
 			flit.Meta().Src = pc.localPort
 			flit.Meta().Dst = pc.remotePort
-			flit.Meta().SendTime = now
 
 			err := pc.localPort.Send(flit)
 			if err == nil {

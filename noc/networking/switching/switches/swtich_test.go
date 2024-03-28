@@ -87,17 +87,17 @@ var _ = Describe("Switch", func() {
 			Build()
 
 		port1.EXPECT().PeekIncoming().Return(flit)
-		port1.EXPECT().RetrieveIncoming(gomock.Any())
+		port1.EXPECT().RetrieveIncoming()
 		port2.EXPECT().PeekIncoming().Return(nil)
 		port1Pipeline.EXPECT().CanAccept().Return(true)
 		port1Pipeline.
 			EXPECT().
-			Accept(sim.VTimeInSec(10), gomock.Any()).
-			Do(func(now sim.VTimeInSec, i flitPipelineItem) {
+			Accept(gomock.Any()).
+			Do(func(i flitPipelineItem) {
 				Expect(i.flit).To(Equal(flit))
 			})
 
-		madeProgress := sw.startProcessing(10)
+		madeProgress := sw.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -119,7 +119,7 @@ var _ = Describe("Switch", func() {
 		port2.EXPECT().PeekIncoming().Return(nil)
 		port1Pipeline.EXPECT().CanAccept().Return(false)
 
-		madeProgress := sw.startProcessing(10)
+		madeProgress := sw.startProcessing()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -128,10 +128,10 @@ var _ = Describe("Switch", func() {
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 		port2Pipeline := portComplex2.pipeline.(*MockPipeline)
 
-		port1Pipeline.EXPECT().Tick(sim.VTimeInSec(10)).Return(false)
-		port2Pipeline.EXPECT().Tick(sim.VTimeInSec(10)).Return(true)
+		port1Pipeline.EXPECT().Tick().Return(false)
+		port2Pipeline.EXPECT().Tick().Return(true)
 
-		madeProgress := sw.movePipeline(10)
+		madeProgress := sw.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -156,7 +156,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer1.EXPECT().Push(flit)
 		routingTable.EXPECT().FindPort(dstPort).Return(portComplex2.localPort)
 
-		madeProgress := sw.route(10)
+		madeProgress := sw.route()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(flit.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
@@ -179,7 +179,7 @@ var _ = Describe("Switch", func() {
 		routeBuffer2.EXPECT().Peek().Return(nil)
 		forwardBuffer1.EXPECT().CanPush().Return(false)
 
-		madeProgress := sw.route(10)
+		madeProgress := sw.route()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -198,7 +198,7 @@ var _ = Describe("Switch", func() {
 		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
-			Arbitrate(sim.VTimeInSec(10)).
+			Arbitrate().
 			Return([]sim.Buffer{forwardBuffer1, forwardBuffer2})
 		forwardBuffer1.EXPECT().Peek().Return(flit)
 		forwardBuffer1.EXPECT().Peek().Return(nil)
@@ -207,7 +207,7 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().CanPush().Return(true)
 		sendOutBuffer2.EXPECT().Push(flit)
 
-		madeProgress := sw.forward(10)
+		madeProgress := sw.forward()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -226,13 +226,13 @@ var _ = Describe("Switch", func() {
 		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
-			Arbitrate(sim.VTimeInSec(10)).
+			Arbitrate().
 			Return([]sim.Buffer{forwardBuffer1, forwardBuffer2})
 		forwardBuffer1.EXPECT().Peek().Return(flit)
 		forwardBuffer2.EXPECT().Peek().Return(nil)
 		sendOutBuffer2.EXPECT().CanPush().Return(false)
 
-		madeProgress := sw.forward(10)
+		madeProgress := sw.forward()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -255,12 +255,11 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().Pop()
 		localPort2.EXPECT().Send(flit).Return(nil)
 
-		madeProgress := sw.sendOut(10)
+		madeProgress := sw.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
 		Expect(flit.Src).To(BeIdenticalTo(portComplex2.localPort))
-		Expect(flit.SendTime).To(Equal(sim.VTimeInSec(10)))
 	})
 
 	It("should wait ifport is busy flits out", func() {
@@ -280,11 +279,10 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
 		localPort2.EXPECT().Send(flit).Return(&sim.SendError{})
 
-		madeProgress := sw.sendOut(10)
+		madeProgress := sw.sendOut()
 
 		Expect(madeProgress).To(BeFalse())
 		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
 		Expect(flit.Src).To(BeIdenticalTo(portComplex2.localPort))
-		Expect(flit.SendTime).To(Equal(sim.VTimeInSec(10)))
 	})
 })
