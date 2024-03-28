@@ -45,7 +45,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 
 	p.csvWriter = csv.NewWriter(p.dbFile)
 
-	header := []string{"Start", "End", "Rsc", "Linker", "Direction", "Value", "Unit"}
+	header := []string{"Start", "End", "Where", "What", "EntryType", "Value", "Unit"}
 	err = p.csvWriter.Write(header)
 	if err != nil {
 		panic(err)
@@ -59,9 +59,9 @@ func (p *CSVBackend) AddDataEntry(entry PerfAnalyzerEntry) {
 	err := p.csvWriter.Write([]string{
 		fmt.Sprintf("%.10f", entry.Start),
 		fmt.Sprintf("%.10f", entry.End),
-		entry.Src,
-		entry.Linker,
-		entry.Dir,
+		entry.Where,
+		entry.What,
+		entry.EntryType,
 		fmt.Sprintf("%.10f", entry.Value),
 		entry.Unit,
 	})
@@ -135,9 +135,9 @@ func (p *SQLiteBackend) Flush() {
 		_, err = tx.Stmt(p.statement).Exec(
 			entry.Start,
 			entry.End,
-			entry.Src,
-			entry.Linker,
-			entry.Dir,
+			entry.Where,
+			entry.What,
+			entry.EntryType,
 			entry.Value,
 			entry.Unit,
 		)
@@ -174,9 +174,9 @@ func (p *SQLiteBackend) createTable() {
 		id integer not null primary key,
 		start real,
 		end real,
-		rsc text,
-		linker text,
-		dir text,
+		where text,
+		what text,
+		entryType text,
 		value real,
 		unit text
 	);
@@ -192,7 +192,7 @@ func (p *SQLiteBackend) prepareStatement() {
 	var err error
 
 	sqlStmt := `
-	insert into perf(start, end, rsc_, linker_, dir, value, unit)
+	insert into perf(start, end, where_, what_, entryType, value, unit)
 	values(?, ?, ?, ?, ?, ?, ?)
 	`
 

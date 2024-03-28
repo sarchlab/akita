@@ -13,13 +13,13 @@ import (
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
-	Start  sim.VTimeInSec
-	End    sim.VTimeInSec
-	Src    string
-	Linker string
-	Dir    string
-	Value  float64
-	Unit   string
+	Start     sim.VTimeInSec
+	End       sim.VTimeInSec
+	Where     string
+	What      string
+	EntryType string
+	Value     float64
+	Unit      string
 }
 
 // PerfLogger is the interface that provide the service that can record
@@ -30,11 +30,11 @@ type PerfLogger interface {
 
 // PerfAnalyzer can report performance metrics during simulation.
 type PerfAnalyzer struct {
-	usePeriod bool
-	period    sim.VTimeInSec
-	engine    sim.Engine
-	backend   PerfAnalyzerBackend
-	dataTable map[string]PerfAnalyzerEntry
+	usePeriod     bool
+	period        sim.VTimeInSec
+	engine        sim.Engine
+	backend       PerfAnalyzerBackend
+	portDataTable map[string]PerfAnalyzerEntry
 
 	mu sync.Mutex
 }
@@ -122,8 +122,8 @@ func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 	b.backend.AddDataEntry(entry)
 
 	b.mu.Lock()
-	key := entry.Src + entry.Linker + entry.Dir + entry.Unit
-	b.dataTable[key] = entry
+	key := entry.Where + entry.What + entry.EntryType + entry.Unit
+	b.portDataTable[key] = entry
 	defer b.mu.Unlock()
 }
 
@@ -188,11 +188,11 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	}
 
 	return &PerfAnalyzer{
-		period:    b.period,
-		backend:   backend,
-		engine:    b.engine,
-		usePeriod: b.usePeriod,
-		dataTable: make(map[string]PerfAnalyzerEntry),
+		period:        b.period,
+		backend:       backend,
+		engine:        b.engine,
+		usePeriod:     b.usePeriod,
+		portDataTable: make(map[string]PerfAnalyzerEntry),
 	}
 }
 
@@ -219,15 +219,15 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	dataTable := []map[string]string{}
 	time := b.engine.CurrentTime()
 	b.mu.Lock()
-	for _, data := range b.dataTable {
-		if strings.Contains(data.Src, comp) {
+	for _, data := range b.portDataTable {
+		if strings.Contains(data.Where, comp) {
 			if float64(data.End) >= float64(time)-float64(b.period) {
 				dataTable = append(dataTable, map[string]string{
 					"start":      fmt.Sprintf("%.9f", data.Start),
 					"end":        fmt.Sprintf("%.9f", data.End),
-					"localPort":  data.Src,
-					"remotePort": data.Linker,
-					"dir":        data.Dir,
+					"localPort":  data.Where,
+					"remotePort": data.What,
+					"dir":        data.EntryType,
 					"value":      fmt.Sprintf("%.0f", data.Value),
 					"unit":       data.Unit,
 				})
@@ -235,9 +235,9 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 				dataTable = append(dataTable, map[string]string{
 					"start":      fmt.Sprintf("%.9f", data.Start),
 					"end":        fmt.Sprintf("%.9f", data.End),
-					"localPort":  data.Src,
-					"remotePort": data.Linker,
-					"dir":        data.Dir,
+					"localPort":  data.What,
+					"remotePort": data.Where,
+					"dir":        data.EntryType,
 					"value":      "0",
 					"unit":       data.Unit,
 				})

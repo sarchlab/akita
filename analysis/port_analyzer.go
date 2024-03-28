@@ -8,7 +8,7 @@ import (
 )
 
 type PortAnalyzerEntry struct {
-	Linker         string
+	What           string
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -47,25 +47,24 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		h.PortAnalyzerTable = make(map[string]PortAnalyzerEntry)
 	}
 
-	// comp := h.port.Name()
-	linker := msg.Meta().Dst.Name()
-	entry, ok := h.PortAnalyzerTable[linker]
+	what := msg.Meta().Dst.Name()
+	entry, ok := h.PortAnalyzerTable[what]
 	if !ok {
-		h.PortAnalyzerTable[linker] = PortAnalyzerEntry{Linker: linker}
+		h.PortAnalyzerTable[what] = PortAnalyzerEntry{What: what}
 	}
-	entry = h.PortAnalyzerTable[linker]
+	entry = h.PortAnalyzerTable[what]
 
 	h.lastTime = now
 	if msg.Meta().Dst == h.port {
-		entry.Linker = msg.Meta().Src.Name()
+		entry.What = msg.Meta().Src.Name()
 		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.InTrafficMsg++
 	} else {
-		entry.Linker = msg.Meta().Dst.Name()
+		entry.What = msg.Meta().Dst.Name()
 		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.OutTrafficMsg++
 	}
-	h.PortAnalyzerTable[linker] = entry
+	h.PortAnalyzerTable[what] = entry
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -86,43 +85,43 @@ func (h *PortAnalyzer) summarize() {
 	for dst, entry := range h.PortAnalyzerTable {
 		if entry.InTrafficMsg != 0 {
 			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:  startTime,
-				End:    endTime,
-				Src:    h.port.Name(),
-				Linker: entry.Linker,
-				Dir:    "Incoming",
-				Value:  float64(entry.InTrafficByte),
-				Unit:   "Byte",
+				Start:     startTime,
+				End:       endTime,
+				Where:     h.port.Name(),
+				What:      entry.What,
+				EntryType: "Incoming",
+				Value:     float64(entry.InTrafficByte),
+				Unit:      "Byte",
 			})
 
 			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:  startTime,
-				End:    endTime,
-				Src:    h.port.Name(),
-				Linker: entry.Linker,
-				Dir:    "Incoming",
-				Value:  float64(entry.InTrafficMsg),
-				Unit:   "Msg",
+				Start:     startTime,
+				End:       endTime,
+				Where:     h.port.Name(),
+				What:      entry.What,
+				EntryType: "Incoming",
+				Value:     float64(entry.InTrafficMsg),
+				Unit:      "Msg",
 			})
 		} else {
 			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:  startTime,
-				End:    endTime,
-				Src:    h.port.Name(),
-				Linker: entry.Linker,
-				Dir:    "Outgoing",
-				Value:  float64(entry.OutTrafficByte),
-				Unit:   "Byte",
+				Start:     startTime,
+				End:       endTime,
+				Where:     h.port.Name(),
+				What:      entry.What,
+				EntryType: "Outgoing",
+				Value:     float64(entry.OutTrafficByte),
+				Unit:      "Byte",
 			})
 
 			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:  startTime,
-				End:    endTime,
-				Src:    h.port.Name(),
-				Linker: entry.Linker,
-				Dir:    "Outgoing",
-				Value:  float64(entry.OutTrafficMsg),
-				Unit:   "Msg",
+				Start:     startTime,
+				End:       endTime,
+				Where:     h.port.Name(),
+				What:      entry.What,
+				EntryType: "Outgoing",
+				Value:     float64(entry.OutTrafficMsg),
+				Unit:      "Msg",
 			})
 		}
 		delete(h.PortAnalyzerTable, dst)
