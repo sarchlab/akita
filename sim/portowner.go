@@ -3,6 +3,7 @@ package sim
 import (
 	"fmt"
 	"os"
+	"sort"
 )
 
 // A PortOwner is an element that can communicate with others through ports.
@@ -54,10 +55,18 @@ func (po PortOwnerBase) GetPortByName(name string) Port {
 
 // Ports returns a slices of all the ports owned by the PortOwner.
 func (po PortOwnerBase) Ports() []Port {
+	portList := make([]string, 0, len(po.ports))
+
+	for k := range po.ports {
+		portList = append(portList, k)
+	}
+
+	sort.Strings(portList)
+
 	list := make([]Port, 0, len(po.ports))
 
-	for _, p := range po.ports {
-		list = append(list, p)
+	for _, port := range portList {
+		list = append(list, po.ports[port])
 	}
 
 	return list
