@@ -58,9 +58,9 @@ type Agent struct {
 }
 
 // NotifyRecv notifies that a port has received a message.
-func (a *Agent) NotifyRecv(now sim.VTimeInSec, port sim.Port) {
-	a.ToOut.RetrieveIncoming(now)
-	a.TickLater(now)
+func (a *Agent) NotifyRecv(port sim.Port) {
+	a.ToOut.RetrieveIncoming()
+	a.TickLater()
 }
 
 // Handle defines how an agent handles events.
@@ -81,21 +81,20 @@ func (a *Agent) Handle(e sim.Event) error {
 
 func (a *Agent) handleStartSendEvent(e *StartSendEvent) {
 	a.Buffer = append(a.Buffer, e.Msg)
-	a.TickLater(e.Time())
+	a.TickLater()
 }
 
 // Tick attempts to send a message out.
-func (a *Agent) Tick(now sim.VTimeInSec) bool {
-	return a.sendDataOut(now)
+func (a *Agent) Tick() bool {
+	return a.sendDataOut()
 }
 
-func (a *Agent) sendDataOut(now sim.VTimeInSec) bool {
+func (a *Agent) sendDataOut() bool {
 	if len(a.Buffer) == 0 {
 		return false
 	}
 
 	msg := a.Buffer[0]
-	msg.Meta().SendTime = now
 	err := a.ToOut.Send(msg)
 	if err == nil {
 		a.Buffer = a.Buffer[1:]

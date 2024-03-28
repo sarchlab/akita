@@ -89,7 +89,7 @@ func createAgents(
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 1, test)
-		agent.TickLater(0)
+		agent.TickLater()
 		agents = append(agents, agent)
 		//test.RegisterAgent(agent)
 	}
