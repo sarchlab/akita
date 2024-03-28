@@ -28,6 +28,10 @@ type CSVBackend struct {
 
 // NewCSVPerfAnalyzerBackend creates a new CSVPerfAnalyzerBackend.
 func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
+	if dbFilename == "" {
+		return nil
+	}
+
 	p := &CSVBackend{}
 
 	var err error

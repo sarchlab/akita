@@ -34,6 +34,7 @@ type PerfAnalyzer struct {
 	period        sim.VTimeInSec
 	engine        sim.Engine
 	backend       PerfAnalyzerBackend
+	backendFlag   bool
 	portDataTable map[string]PerfAnalyzerEntry
 
 	mu sync.Mutex
@@ -119,7 +120,9 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 // AddDataEntry adds a data entry to the database. It directly writes into the
 // CSV file.
 func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
-	b.backend.AddDataEntry(entry)
+	if b.backendFlag {
+		b.backend.AddDataEntry(entry)
+	}
 
 	b.mu.Lock()
 	key := entry.Where + entry.What + entry.EntryType + entry.Unit
@@ -179,12 +182,18 @@ func (b PerfAnalyzerBuilder) WithEngine(
 // Build creates a PerfAnalyzer.
 func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	var backend PerfAnalyzerBackend
-	if b.backendType == "csv" {
-		backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
-	} else if b.backendType == "sqlite" {
-		backend = NewSQLitePerfAnalyzerBackend(b.dbFilename)
+	var backendFlag bool
+	if b.dbFilename != "" {
+		backendFlag = true
+		if b.backendType == "csv" {
+			backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
+		} else if b.backendType == "sqlite" {
+			backend = NewSQLitePerfAnalyzerBackend(b.dbFilename)
+		} else {
+			panic("Unknown backend type")
+		}
 	} else {
-		panic("Unknown backend type")
+		backendFlag = false
 	}
 
 	return &PerfAnalyzer{
@@ -192,6 +201,7 @@ func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 		backend:       backend,
 		engine:        b.engine,
 		usePeriod:     b.usePeriod,
+		backendFlag:   backendFlag,
 		portDataTable: make(map[string]PerfAnalyzerEntry),
 	}
 }
