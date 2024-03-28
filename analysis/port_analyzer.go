@@ -7,8 +7,8 @@ import (
 	"github.com/tebeka/atexit"
 )
 
-type PortAnalyzerEntry struct {
-	What           string
+type portAnalyzerEntry struct {
+	remotePortName string
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -24,8 +24,8 @@ type PortAnalyzer struct {
 	period    sim.VTimeInSec
 	port      sim.Port
 
-	lastTime          sim.VTimeInSec
-	PortAnalyzerTable map[string]PortAnalyzerEntry
+	lastTime           sim.VTimeInSec
+	remoteToTrafficMap map[string]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
@@ -43,28 +43,39 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		}
 	}
 
-	if h.PortAnalyzerTable == nil {
-		h.PortAnalyzerTable = make(map[string]PortAnalyzerEntry)
+	if h.remoteToTrafficMap == nil {
+		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 	}
 
-	what := msg.Meta().Dst.Name()
-	entry, ok := h.PortAnalyzerTable[what]
+	remotePortName := msg.Meta().Dst.Name()
+	if h.isIncoming(msg) {
+		remotePortName = msg.Meta().Src.Name()
+	}
+
+	entry, ok := h.remoteToTrafficMap[remotePortName]
 	if !ok {
-		h.PortAnalyzerTable[what] = PortAnalyzerEntry{What: what}
+		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
+			remotePortName: remotePortName,
+		}
 	}
-	entry = h.PortAnalyzerTable[what]
 
-	h.lastTime = now
-	if msg.Meta().Dst == h.port {
-		entry.What = msg.Meta().Src.Name()
+	entry = h.remoteToTrafficMap[remotePortName]
+
+	if h.isIncoming(msg) {
 		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.InTrafficMsg++
 	} else {
-		entry.What = msg.Meta().Dst.Name()
 		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.OutTrafficMsg++
 	}
-	h.PortAnalyzerTable[what] = entry
+
+	h.remoteToTrafficMap[remotePortName] = entry
+
+	h.lastTime = now
+}
+
+func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
+	return msg.Meta().Dst == h.port
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -82,50 +93,41 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	for dst, entry := range h.PortAnalyzerTable {
-		if entry.InTrafficMsg != 0 {
-			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:     startTime,
-				End:       endTime,
-				Where:     h.port.Name(),
-				What:      entry.What,
-				EntryType: "Incoming",
-				Value:     float64(entry.InTrafficByte),
-				Unit:      "Byte",
-			})
-
-			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:     startTime,
-				End:       endTime,
-				Where:     h.port.Name(),
-				What:      entry.What,
-				EntryType: "Incoming",
-				Value:     float64(entry.InTrafficMsg),
-				Unit:      "Msg",
-			})
-		} else {
-			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:     startTime,
-				End:       endTime,
-				Where:     h.port.Name(),
-				What:      entry.What,
-				EntryType: "Outgoing",
-				Value:     float64(entry.OutTrafficByte),
-				Unit:      "Byte",
-			})
-
-			h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-				Start:     startTime,
-				End:       endTime,
-				Where:     h.port.Name(),
-				What:      entry.What,
-				EntryType: "Outgoing",
-				Value:     float64(entry.OutTrafficMsg),
-				Unit:      "Msg",
-			})
+	for _, entry := range h.remoteToTrafficMap {
+		perfEntry := PerfAnalyzerEntry{
+			Start:       startTime,
+			End:         endTime,
+			Where:       h.port.Name(),
+			WhereRemote: entry.remotePortName,
+			EntryType:   "Traffic",
 		}
-		delete(h.PortAnalyzerTable, dst)
+
+		if entry.InTrafficMsg != 0 {
+			perfEntry.What = "Incoming"
+
+			perfEntry.Value = float64(entry.InTrafficByte)
+			perfEntry.Unit = "Byte"
+			h.PerfLogger.AddDataEntry(perfEntry)
+
+			perfEntry.Value = float64(entry.InTrafficMsg)
+			perfEntry.Unit = "Msg"
+			h.PerfLogger.AddDataEntry(perfEntry)
+		}
+
+		if entry.OutTrafficMsg != 0 {
+			perfEntry.What = "Outgoing"
+
+			perfEntry.Value = float64(entry.OutTrafficByte)
+			perfEntry.Unit = "Byte"
+			h.PerfLogger.AddDataEntry(perfEntry)
+
+			perfEntry.Value = float64(entry.OutTrafficMsg)
+			perfEntry.Unit = "Msg"
+			h.PerfLogger.AddDataEntry(perfEntry)
+		}
 	}
+
+	h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {

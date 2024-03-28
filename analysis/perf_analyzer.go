@@ -13,13 +13,14 @@ import (
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
-	Start     sim.VTimeInSec
-	End       sim.VTimeInSec
-	Where     string
-	What      string
-	EntryType string
-	Value     float64
-	Unit      string
+	EntryType   string
+	Start       sim.VTimeInSec
+	End         sim.VTimeInSec
+	Where       string
+	WhereRemote string
+	What        string
+	Value       float64
+	Unit        string
 }
 
 // PerfLogger is the interface that provide the service that can record
@@ -228,33 +229,28 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	dataTable := []map[string]string{}
 	time := b.engine.CurrentTime()
+
 	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	for _, data := range b.portDataTable {
 		if strings.Contains(data.Where, comp) {
-			if float64(data.End) >= float64(time)-float64(b.period) {
-				dataTable = append(dataTable, map[string]string{
-					"start":      fmt.Sprintf("%.9f", data.Start),
-					"end":        fmt.Sprintf("%.9f", data.End),
-					"localPort":  data.Where,
-					"remotePort": data.What,
-					"dir":        data.EntryType,
-					"value":      fmt.Sprintf("%.0f", data.Value),
-					"unit":       data.Unit,
-				})
-			} else {
-				dataTable = append(dataTable, map[string]string{
-					"start":      fmt.Sprintf("%.9f", data.Start),
-					"end":        fmt.Sprintf("%.9f", data.End),
-					"localPort":  data.Where,
-					"remotePort": data.What,
-					"dir":        data.EntryType,
-					"value":      "0",
-					"unit":       data.Unit,
-				})
+			entry := map[string]string{
+				"start":      fmt.Sprintf("%.9f", data.Start),
+				"end":        fmt.Sprintf("%.9f", data.End),
+				"localPort":  data.Where,
+				"remotePort": data.WhereRemote,
+				"value":      fmt.Sprintf("%.0f", data.Value),
+				"unit":       data.Unit,
 			}
+
+			if float64(data.End) < float64(time)-float64(b.period) {
+				entry["value"] = "0"
+			}
+
+			dataTable = append(dataTable, entry)
 		}
 	}
-	defer b.mu.Unlock()
 
 	output, err := json.Marshal(dataTable)
 	if err != nil {
