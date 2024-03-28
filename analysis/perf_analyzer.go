@@ -1,7 +1,11 @@
 package analysis
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
+	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/sarchlab/akita/v3/sim"
@@ -9,12 +13,14 @@ import (
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
-	Start sim.VTimeInSec
-	End   sim.VTimeInSec
-	Where string
-	What  string
-	Value float64
-	Unit  string
+	EntryType   string
+	Start       sim.VTimeInSec
+	End         sim.VTimeInSec
+	Where       string
+	WhereRemote string
+	What        string
+	Value       float64
+	Unit        string
 }
 
 // PerfLogger is the interface that provide the service that can record
@@ -25,10 +31,13 @@ type PerfLogger interface {
 
 // PerfAnalyzer can report performance metrics during simulation.
 type PerfAnalyzer struct {
-	usePeriod bool
-	period    sim.VTimeInSec
-	engine    sim.Engine
-	backend   PerfAnalyzerBackend
+	usePeriod     bool
+	period        sim.VTimeInSec
+	engine        sim.Engine
+	backend       PerfAnalyzerBackend
+	portDataTable map[string]PerfAnalyzerEntry
+
+	mu sync.Mutex
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
@@ -80,7 +89,6 @@ func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	}
 
 	bufferAnalyzer := bufferAnalyzerBuilder.Build()
-
 	buf.AcceptHook(bufferAnalyzer)
 }
 
@@ -112,7 +120,15 @@ func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
 // AddDataEntry adds a data entry to the database. It directly writes into the
 // CSV file.
 func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
-	b.backend.AddDataEntry(entry)
+	if b.backend != nil {
+		b.backend.AddDataEntry(entry)
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	key := entry.Where + entry.What + entry.EntryType + entry.Unit
+	b.portDataTable[key] = entry
 }
 
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
@@ -167,19 +183,22 @@ func (b PerfAnalyzerBuilder) WithEngine(
 // Build creates a PerfAnalyzer.
 func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	var backend PerfAnalyzerBackend
-	if b.backendType == "csv" {
-		backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
-	} else if b.backendType == "sqlite" {
-		backend = NewSQLitePerfAnalyzerBackend(b.dbFilename)
-	} else {
-		panic("Unknown backend type")
+	if b.dbFilename != "" {
+		if b.backendType == "csv" {
+			backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
+		} else if b.backendType == "sqlite" {
+			backend = NewSQLitePerfAnalyzerBackend(b.dbFilename)
+		} else {
+			panic("Unknown backend type")
+		}
 	}
 
 	return &PerfAnalyzer{
-		period:    b.period,
-		backend:   backend,
-		engine:    b.engine,
-		usePeriod: b.usePeriod,
+		period:        b.period,
+		backend:       backend,
+		engine:        b.engine,
+		usePeriod:     b.usePeriod,
+		portDataTable: make(map[string]PerfAnalyzerEntry),
 	}
 }
 
@@ -200,4 +219,38 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 			b.RegisterPort(fieldRef)
 		}
 	}
+}
+
+func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
+	dataTable := []map[string]string{}
+	time := b.engine.CurrentTime()
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	for _, data := range b.portDataTable {
+		if strings.Contains(data.Where, comp) {
+			entry := map[string]string{
+				"start":      fmt.Sprintf("%.9f", data.Start),
+				"end":        fmt.Sprintf("%.9f", data.End),
+				"localPort":  data.Where,
+				"remotePort": data.WhereRemote,
+				"value":      fmt.Sprintf("%.0f", data.Value),
+				"unit":       data.Unit,
+			}
+
+			if float64(data.End) < float64(time)-float64(b.period) {
+				entry["value"] = "0"
+			}
+
+			dataTable = append(dataTable, entry)
+		}
+	}
+
+	output, err := json.Marshal(dataTable)
+	if err != nil {
+		panic(err)
+	}
+
+	return string(output)
 }
