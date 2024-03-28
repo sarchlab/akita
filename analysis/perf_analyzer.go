@@ -245,8 +245,8 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 				dataTable = append(dataTable, map[string]string{
 					"start":      fmt.Sprintf("%.9f", data.Start),
 					"end":        fmt.Sprintf("%.9f", data.End),
-					"localPort":  data.What,
-					"remotePort": data.Where,
+					"localPort":  data.Where,
+					"remotePort": data.What,
 					"dir":        data.EntryType,
 					"value":      "0",
 					"unit":       data.Unit,
