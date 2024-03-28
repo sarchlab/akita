@@ -242,7 +242,6 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 					"unit":       data.Unit,
 				})
 			}
-
 		}
 	}
 	defer b.mu.Unlock()
