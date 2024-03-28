@@ -238,7 +238,7 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 					"localPort":  data.Src,
 					"remotePort": data.Linker,
 					"dir":        data.Dir,
-					"value":      fmt.Sprintf("0"),
+					"value":      "0",
 					"unit":       data.Unit,
 				})
 			}
