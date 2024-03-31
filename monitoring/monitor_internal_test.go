@@ -26,11 +26,11 @@ func (c *sampleComponent) Handle(_ sim.Event) error {
 	return nil
 }
 
-func (c *sampleComponent) NotifyRecv(_ sim.VTimeInSec, _ sim.Port) {
+func (c *sampleComponent) NotifyRecv(_ sim.Port) {
 	// Do nothing
 }
 
-func (c *sampleComponent) NotifyPortFree(_ sim.VTimeInSec, _ sim.Port) {
+func (c *sampleComponent) NotifyPortFree(_ sim.Port) {
 	// Do nothing
 }
 
