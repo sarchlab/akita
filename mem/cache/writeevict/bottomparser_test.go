@@ -43,14 +43,13 @@ var _ = Describe("Bottom Parser", func() {
 
 	It("should do nothing if no respond", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
-		madeProgress := p.Tick(12)
+		madeProgress := p.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
 
 	Context("write done", func() {
 		It("should handle write done", func() {
 			write1 := mem.WriteReqBuilder{}.
-				WithSendTime(4).
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
@@ -58,7 +57,6 @@ var _ = Describe("Bottom Parser", func() {
 				write: write1,
 			}
 			write2 := mem.WriteReqBuilder{}.
-				WithSendTime(4).
 				WithAddress(0x104).
 				WithPID(1).
 				Build()
@@ -66,7 +64,6 @@ var _ = Describe("Bottom Parser", func() {
 				write: write2,
 			}
 			writeToBottom := mem.WriteReqBuilder{}.
-				WithSendTime(4).
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
@@ -77,14 +74,13 @@ var _ = Describe("Bottom Parser", func() {
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans)
 			done := mem.WriteDoneRspBuilder{}.
-				WithSendTime(11).
 				WithRspTo(writeToBottom.ID).
 				Build()
 
 			bottomPort.EXPECT().PeekIncoming().Return(done)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
+			bottomPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := p.Tick(12)
+			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(preCTrans1.done).To(BeTrue())
@@ -110,25 +106,21 @@ var _ = Describe("Bottom Parser", func() {
 
 		BeforeEach(func() {
 			read1 = mem.ReadReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(4).
 				Build()
 			read2 = mem.ReadReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x104).
 				WithPID(1).
 				WithByteSize(4).
 				Build()
 			write1 = mem.WriteReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x108).
 				WithPID(1).
 				WithData([]byte{9, 9, 9, 9}).
 				Build()
 			write2 = mem.WriteReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x10C).
 				WithPID(1).
 				WithData([]byte{9, 9, 9, 9}).
@@ -140,20 +132,17 @@ var _ = Describe("Bottom Parser", func() {
 			preCTrans4 = &transaction{write: write2}
 
 			postCRead = mem.ReadReqBuilder{}.
-				WithSendTime(0).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(64).
 				Build()
 			readToBottom = mem.ReadReqBuilder{}.
-				WithSendTime(2).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(64).
 				Build()
 
 			dataReady = mem.DataReadyRspBuilder{}.
-				WithSendTime(4).
 				WithRspTo(readToBottom.ID).
 				WithData([]byte{
 					1, 2, 3, 4, 5, 6, 7, 8,
@@ -182,7 +171,6 @@ var _ = Describe("Bottom Parser", func() {
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, postCTrans1)
 
 			postCWrite = mem.WriteReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x100).
 				WithPID(1).
 				WithData([]byte{
@@ -211,14 +199,14 @@ var _ = Describe("Bottom Parser", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bankBuf.EXPECT().CanPush().Return(false)
 
-			madeProgress := p.Tick(12)
+			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should send transaction to bank", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
+			bottomPort.EXPECT().RetrieveIncoming()
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
@@ -227,7 +215,7 @@ var _ = Describe("Bottom Parser", func() {
 					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
 				})
 
-			madeProgress := p.Tick(12)
+			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(preCTrans1.done).To(BeTrue())
@@ -242,7 +230,7 @@ var _ = Describe("Bottom Parser", func() {
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, postCTrans2)
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
+			bottomPort.EXPECT().RetrieveIncoming()
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
@@ -271,7 +259,7 @@ var _ = Describe("Bottom Parser", func() {
 					}))
 				})
 
-			madeProgress := p.Tick(12)
+			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(preCTrans1.done).To(BeTrue())

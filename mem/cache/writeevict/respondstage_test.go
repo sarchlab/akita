@@ -40,7 +40,6 @@ var _ = Describe("Respond Stage", func() {
 
 		BeforeEach(func() {
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(5).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(4).
@@ -54,7 +53,7 @@ var _ = Describe("Respond Stage", func() {
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -68,7 +67,7 @@ var _ = Describe("Respond Stage", func() {
 					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 				})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(cache.transactions).NotTo(ContainElement((trans)))
@@ -83,7 +82,6 @@ var _ = Describe("Respond Stage", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(5).
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
@@ -95,7 +93,7 @@ var _ = Describe("Respond Stage", func() {
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -108,7 +106,7 @@ var _ = Describe("Respond Stage", func() {
 					Expect(done.RespondTo).To(Equal(write.ID))
 				})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(cache.transactions).NotTo(ContainElement((trans)))
