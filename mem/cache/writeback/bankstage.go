@@ -121,21 +121,21 @@ func (e bankPipelineElem) TaskID() string {
 	return e.trans.req().Meta().ID + "_write_back_bank_pipeline"
 }
 
-func (s *bankStage) Tick(now sim.VTimeInSec) (madeProgress bool) {
+func (s *bankStage) Tick() (madeProgress bool) {
 	for i := 0; i < s.cache.numReqPerCycle; i++ {
-		madeProgress = s.finalizeTrans(now) || madeProgress
+		madeProgress = s.finalizeTrans() || madeProgress
 	}
 
-	madeProgress = s.pipeline.Tick(now) || madeProgress
+	madeProgress = s.pipeline.Tick() || madeProgress
 
 	for i := 0; i < s.cache.numReqPerCycle; i++ {
-		madeProgress = s.pullFromBuf(now) || madeProgress
+		madeProgress = s.pullFromBuf() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (s *bankStage) Reset(now sim.VTimeInSec) {
+func (s *bankStage) Reset() {
 	s.cache.dirToBankBuffers[s.bankID].Clear()
 	s.pipeline.Clear()
 	s.postPipelineBuf.Clear()
@@ -143,7 +143,7 @@ func (s *bankStage) Reset(now sim.VTimeInSec) {
 	// s.currentTrans = nil
 }
 
-func (s *bankStage) pullFromBuf(now sim.VTimeInSec) bool {
+func (s *bankStage) pullFromBuf() bool {
 	if !s.pipeline.CanAccept() {
 		return false
 	}
@@ -151,7 +151,7 @@ func (s *bankStage) pullFromBuf(now sim.VTimeInSec) bool {
 	inBuf := s.cache.writeBufferToBankBuffers[s.bankID]
 	trans := inBuf.Pop()
 	if trans != nil {
-		s.pipeline.Accept(now, bankPipelineElem{trans: trans.(*transaction)})
+		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
 		s.inflightTransCount++
 		return true
 	}
@@ -176,7 +176,7 @@ func (s *bankStage) pullFromBuf(now sim.VTimeInSec) bool {
 			return true
 		}
 
-		s.pipeline.Accept(now, bankPipelineElem{trans: trans.(*transaction)})
+		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
 		s.inflightTransCount++
 
 		switch t.action {
@@ -190,7 +190,7 @@ func (s *bankStage) pullFromBuf(now sim.VTimeInSec) bool {
 	return false
 }
 
-func (s *bankStage) finalizeTrans(now sim.VTimeInSec) bool {
+func (s *bankStage) finalizeTrans() bool {
 	for i := 0; i < s.postPipelineBuf.Size(); i++ {
 		trans := s.postPipelineBuf.Get(i).(bankPipelineElem).trans
 
@@ -198,13 +198,13 @@ func (s *bankStage) finalizeTrans(now sim.VTimeInSec) bool {
 
 		switch trans.action {
 		case bankReadHit:
-			done = s.finalizeReadHit(now, trans)
+			done = s.finalizeReadHit(trans)
 		case bankWriteHit:
-			done = s.finalizeWriteHit(now, trans)
+			done = s.finalizeWriteHit(trans)
 		case bankWriteFetched:
-			done = s.finalizeBankWriteFetched(now, trans)
+			done = s.finalizeBankWriteFetched(trans)
 		case bankEvictAndFetch, bankEvictAndWrite, bankEvict:
-			done = s.finalizeBankEviction(now, trans)
+			done = s.finalizeBankEviction(trans)
 		default:
 			panic("bank action not supported")
 		}
@@ -219,10 +219,7 @@ func (s *bankStage) finalizeTrans(now sim.VTimeInSec) bool {
 	return false
 }
 
-func (s *bankStage) finalizeReadHit(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	if !s.cache.topSender.CanSend(1) {
 		return false
 	}
@@ -238,13 +235,12 @@ func (s *bankStage) finalizeReadHit(
 		panic(err)
 	}
 
-	s.removeTransaction(now, trans)
+	s.removeTransaction(trans)
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 	block.ReadCount--
 
 	dataReady := mem.DataReadyRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(s.cache.topPort).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
@@ -265,10 +261,7 @@ func (s *bankStage) finalizeReadHit(
 	return true
 }
 
-func (s *bankStage) finalizeWriteHit(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	if !s.cache.topSender.CanSend(1) {
 		return false
 	}
@@ -285,12 +278,11 @@ func (s *bankStage) finalizeWriteHit(
 	block.IsDirty = true
 	block.DirtyMask = dirtyMask
 
-	s.removeTransaction(now, trans)
+	s.removeTransaction(trans)
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 
 	done := mem.WriteDoneRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(s.cache.topPort).
 		WithDst(write.Src).
 		WithRspTo(write.ID).
@@ -343,7 +335,6 @@ func (s *bankStage) writeData(
 }
 
 func (s *bankStage) finalizeBankWriteFetched(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if !s.cache.mshrStageBuffer.CanPush() {
@@ -377,7 +368,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 	return true
 }
 
-func (s *bankStage) removeTransaction(now sim.VTimeInSec, trans *transaction) {
+func (s *bankStage) removeTransaction(trans *transaction) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			// fmt.Printf("%.10f, %s, trans %s removed in bank stage.\n",
@@ -389,6 +380,8 @@ func (s *bankStage) removeTransaction(now sim.VTimeInSec, trans *transaction) {
 		}
 	}
 
+	now := s.cache.Engine.CurrentTime()
+
 	fmt.Printf("%.10f, %s, Transaction %s not found\n",
 		now, s.cache.Name(), trans.id)
 
@@ -396,7 +389,6 @@ func (s *bankStage) removeTransaction(now sim.VTimeInSec, trans *transaction) {
 }
 
 func (s *bankStage) finalizeBankEviction(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if !s.cache.writeBufferBuffer.CanPush() {

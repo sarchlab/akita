@@ -101,13 +101,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -137,13 +135,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithData([]byte{9, 9, 9, 9}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -174,23 +170,19 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read1 := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read1.RecvTime = 10
 		cacheModule.topPort.Deliver(read1)
 
 		read2 := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10008).
 			WithByteSize(4).
 			Build()
-		read2.RecvTime = 10
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -225,33 +217,27 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			})
 
 		read1 := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read1.RecvTime = 10
 		cacheModule.topPort.Deliver(read1)
 
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10008).
 			WithData([]byte{9, 9, 9, 9}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		read2 := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10008).
 			WithByteSize(4).
 			Build()
-		read2.RecvTime = 10
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -290,13 +276,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(dr *mem.DataReadyRsp) {
@@ -323,23 +307,19 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithData([]byte{9, 9, 9, 9}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10000).
 			WithByteSize(8).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -360,7 +340,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should handle write miss, mshr miss, w/o fetch, w/o eviction", func() {
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10000).
@@ -375,17 +354,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -428,13 +404,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		}
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithByteSize(4).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(dr *mem.DataReadyRsp) {
@@ -463,23 +437,19 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			set.Blocks[i].IsDirty = true
 		}
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10004).
 			WithData([]byte{9, 9, 9, 9}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10000).
 			WithByteSize(8).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(done *mem.WriteDoneRsp) {
@@ -502,7 +472,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		}
 
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10000).
@@ -517,17 +486,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}).
 			Build()
-		write.RecvTime = 10
 		cacheModule.topPort.Deliver(write)
 
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x10000).
 			WithByteSize(8).
 			Build()
-		read.RecvTime = 10
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(done *mem.WriteDoneRsp) {
@@ -544,31 +510,25 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 	It("should flush", func() {
 		write1 := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x100000).
 			WithData([]byte{1, 2, 3, 4}).
 			Build()
-		write1.RecvTime = 10
 		cacheModule.topPort.Deliver(write1)
 
 		write2 := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agentPort).
 			WithDst(cacheModule.topPort).
 			WithAddress(0x100000).
 			WithData([]byte{1, 2, 3, 4}).
 			Build()
-		write2.RecvTime = 10
 		cacheModule.topPort.Deliver(write2)
 
 		flush := cache.FlushReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(controlAgentPort).
 			WithDst(cacheModule.controlPort).
 			Build()
-		flush.RecvTime = 10
 		cacheModule.controlPort.Deliver(flush)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).AnyTimes()

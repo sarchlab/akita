@@ -60,47 +60,47 @@ func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 }
 
 // Tick updates the internal states of the Cache.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.controlPortSender.Tick(now) || madeProgress
+	madeProgress = c.controlPortSender.Tick() || madeProgress
 
 	if c.state != cacheStatePaused {
-		madeProgress = c.runPipeline(now) || madeProgress
+		madeProgress = c.runPipeline() || madeProgress
 	}
 
-	madeProgress = c.flusher.Tick(now) || madeProgress
+	madeProgress = c.flusher.Tick() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runPipeline(now sim.VTimeInSec) bool {
+func (c *Comp) runPipeline() bool {
 	madeProgress := false
 
-	madeProgress = c.runStage(now, c.topSender) || madeProgress
-	madeProgress = c.runStage(now, c.bottomSender) || madeProgress
-	madeProgress = c.runStage(now, c.mshrStage) || madeProgress
+	madeProgress = c.runStage(c.topSender) || madeProgress
+	madeProgress = c.runStage(c.bottomSender) || madeProgress
+	madeProgress = c.runStage(c.mshrStage) || madeProgress
 
 	for _, bs := range c.bankStages {
-		madeProgress = bs.Tick(now) || madeProgress
+		madeProgress = bs.Tick() || madeProgress
 	}
 
-	madeProgress = c.runStage(now, c.writeBuffer) || madeProgress
-	madeProgress = c.runStage(now, c.dirStage) || madeProgress
-	madeProgress = c.runStage(now, c.topParser) || madeProgress
+	madeProgress = c.runStage(c.writeBuffer) || madeProgress
+	madeProgress = c.runStage(c.dirStage) || madeProgress
+	madeProgress = c.runStage(c.topParser) || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runStage(now sim.VTimeInSec, stage sim.Ticker) bool {
+func (c *Comp) runStage(stage sim.Ticker) bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = stage.Tick(now) || madeProgress
+		madeProgress = stage.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Comp) discardInflightTransactions(now sim.VTimeInSec) {
+func (c *Comp) discardInflightTransactions() {
 	sets := c.directory.GetSets()
 	for _, set := range sets {
 		for _, block := range set.Blocks {
@@ -109,14 +109,14 @@ func (c *Comp) discardInflightTransactions(now sim.VTimeInSec) {
 		}
 	}
 
-	c.dirStage.Reset(now)
+	c.dirStage.Reset()
 	for _, bs := range c.bankStages {
-		bs.Reset(now)
+		bs.Reset()
 	}
-	c.mshrStage.Reset(now)
-	c.writeBuffer.Reset(now)
+	c.mshrStage.Reset()
+	c.writeBuffer.Reset()
 
-	clearPort(c.topPort, now)
+	clearPort(c.topPort)
 
 	c.topSender.Clear()
 

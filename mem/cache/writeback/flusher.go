@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -16,22 +15,22 @@ type flusher struct {
 	processingFlush *cache.FlushReq
 }
 
-func (f *flusher) Tick(now sim.VTimeInSec) bool {
+func (f *flusher) Tick() bool {
 	if f.processingFlush != nil && f.cache.state == cacheStatePreFlushing {
-		return f.processPreFlushing(now)
+		return f.processPreFlushing()
 	}
 
 	madeProgress := false
 	if f.processingFlush != nil && f.cache.state == cacheStateFlushing {
-		madeProgress = f.finalizeFlushing(now) || madeProgress
-		madeProgress = f.processFlush(now) || madeProgress
+		madeProgress = f.finalizeFlushing() || madeProgress
+		madeProgress = f.processFlush() || madeProgress
 		return madeProgress
 	}
 
-	return f.extractFromPort(now)
+	return f.extractFromPort()
 }
 
-func (f *flusher) processPreFlushing(now sim.VTimeInSec) bool {
+func (f *flusher) processPreFlushing() bool {
 	if f.existInflightTransaction() {
 		return false
 	}
@@ -61,7 +60,7 @@ func (f *flusher) prepareBlockToFlushList() {
 	}
 }
 
-func (f *flusher) processFlush(now sim.VTimeInSec) bool {
+func (f *flusher) processFlush() bool {
 	if len(f.blockToEvict) == 0 {
 		return false
 	}
@@ -91,7 +90,7 @@ func (f *flusher) processFlush(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (f *flusher) extractFromPort(now sim.VTimeInSec) bool {
+func (f *flusher) extractFromPort() bool {
 	item := f.cache.controlPort.PeekIncoming()
 	if item == nil {
 		return false
@@ -99,9 +98,9 @@ func (f *flusher) extractFromPort(now sim.VTimeInSec) bool {
 
 	switch req := item.(type) {
 	case *cache.FlushReq:
-		return f.startProcessingFlush(now, req)
+		return f.startProcessingFlush(req)
 	case *cache.RestartReq:
-		return f.handleCacheRestart(now, req)
+		return f.handleCacheRestart(req)
 	default:
 		log.Panicf("Cannot process request of %s", reflect.TypeOf(req))
 	}
@@ -110,16 +109,15 @@ func (f *flusher) extractFromPort(now sim.VTimeInSec) bool {
 }
 
 func (f *flusher) startProcessingFlush(
-	now sim.VTimeInSec,
 	req *cache.FlushReq,
 ) bool {
 	f.processingFlush = req
 	if req.DiscardInflight {
-		f.cache.discardInflightTransactions(now)
+		f.cache.discardInflightTransactions()
 	}
 
 	f.cache.state = cacheStatePreFlushing
-	f.cache.controlPort.RetrieveIncoming(now)
+	f.cache.controlPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, f.cache)
 
@@ -127,32 +125,30 @@ func (f *flusher) startProcessingFlush(
 }
 
 func (f *flusher) handleCacheRestart(
-	now sim.VTimeInSec,
 	req *cache.RestartReq,
 ) bool {
 	if !f.cache.controlPortSender.CanSend(1) {
 		return false
 	}
 
-	clearPort(f.cache.topPort, now)
-	clearPort(f.cache.bottomPort, now)
+	clearPort(f.cache.topPort)
+	clearPort(f.cache.bottomPort)
 
 	f.cache.state = cacheStateRunning
 
 	rsp := cache.RestartRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(f.cache.controlPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		Build()
 	f.cache.controlPortSender.Send(rsp)
 
-	f.cache.controlPort.RetrieveIncoming(now)
+	f.cache.controlPort.RetrieveIncoming()
 
 	return true
 }
 
-func (f *flusher) finalizeFlushing(now sim.VTimeInSec) bool {
+func (f *flusher) finalizeFlushing() bool {
 	if len(f.blockToEvict) > 0 {
 		return false
 	}
@@ -166,7 +162,6 @@ func (f *flusher) finalizeFlushing(now sim.VTimeInSec) bool {
 	}
 
 	rsp := cache.FlushRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(f.cache.controlPort).
 		WithDst(f.processingFlush.Src).
 		WithRspTo(f.processingFlush.ID).

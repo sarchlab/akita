@@ -73,17 +73,17 @@ var _ = Describe("Flusher", func() {
 
 	It("should do nothing if no request", func() {
 		controlPort.EXPECT().PeekIncoming().Return(nil)
-		ret := f.Tick(10)
+		ret := f.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
+			controlPort.EXPECT().RetrieveIncoming()
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeIdenticalTo(req))
@@ -94,10 +94,10 @@ var _ = Describe("Flusher", func() {
 			cacheModule.state = cacheStatePreFlushing
 			cacheModule.inFlightTransactions = append(
 				cacheModule.inFlightTransactions, &transaction{})
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeFalse())
 		})
@@ -105,7 +105,7 @@ var _ = Describe("Flusher", func() {
 		It("should move to flush stage if no inflight transaction", func() {
 			cacheModule.state = cacheStatePreFlushing
 			cacheModule.inFlightTransactions = nil
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 
 			sets := []cache.Set{
@@ -120,7 +120,7 @@ var _ = Describe("Flusher", func() {
 			}
 			directory.EXPECT().GetSets().Return(sets)
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(cacheModule.state).To(Equal(cacheStateFlushing))
@@ -129,7 +129,7 @@ var _ = Describe("Flusher", func() {
 
 		It("should stall if bank buffer is full", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 
 			blocks := []*cache.Block{{Tag: 0x0}, {Tag: 0x40}}
@@ -137,14 +137,14 @@ var _ = Describe("Flusher", func() {
 
 			bankBuf.EXPECT().CanPush().Return(false)
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeFalse())
 		})
 
 		It("should send read for eviction to bank", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 
 			blocks := []*cache.Block{
@@ -171,7 +171,7 @@ var _ = Describe("Flusher", func() {
 				Expect(trans.evictingDirtyMask).To(Equal(blocks[0].DirtyMask))
 			})
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(f.blockToEvict).NotTo(ContainElement(blocks[0]))
@@ -180,48 +180,48 @@ var _ = Describe("Flusher", func() {
 
 		It("should wait for bank buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
 			bankBuf.EXPECT().Size().Return(1)
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should wait for bank stage", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			cacheModule.bankStages[0].inflightTransCount = 1
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should wait for write buffer buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			writeBufferBuf.EXPECT().Size().Return(1)
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should wait for write buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -229,14 +229,14 @@ var _ = Describe("Flusher", func() {
 			writeBufferBuf.EXPECT().Size().Return(0)
 			cacheModule.writeBuffer.inflightEviction = make([]*transaction, 1)
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should stall is controlPort sender is busy", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -245,14 +245,14 @@ var _ = Describe("Flusher", func() {
 
 			controlPortSender.EXPECT().CanSend(1).Return(false)
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeFalse())
 		})
 
 		It("should send response if all the blocks are evicted", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.WithSendTime(8).Build()
+			req := cache.FlushReqBuilder{}.Build()
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -266,7 +266,7 @@ var _ = Describe("Flusher", func() {
 					Expect(rsp.RspTo).To(Equal(req.ID))
 				})
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeNil())
@@ -277,7 +277,6 @@ var _ = Describe("Flusher", func() {
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
 			req := cache.FlushReqBuilder{}.
-				WithSendTime(8).
 				DiscardInflight().
 				Build()
 			sets := []cache.Set{
@@ -292,7 +291,7 @@ var _ = Describe("Flusher", func() {
 			}
 
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
+			controlPort.EXPECT().RetrieveIncoming()
 			directory.EXPECT().GetSets().Return(sets)
 			bankBuf.EXPECT().Clear()
 			dirBuf.EXPECT().Clear()
@@ -300,12 +299,12 @@ var _ = Describe("Flusher", func() {
 			cacheModule.dirStage.buf.(*MockBuffer).EXPECT().Clear()
 			mshrStageBuf.EXPECT().Clear()
 			writeBufferBuf.EXPECT().Clear()
-			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
+			topPort.EXPECT().RetrieveIncoming().Return(nil)
 			topPortSender.EXPECT().Clear()
 
 			// bottomPortSender.EXPECT().Clear()
 
-			ret := f.Tick(10)
+			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeIdenticalTo(req))
@@ -316,25 +315,25 @@ var _ = Describe("Flusher", func() {
 
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
-			req := cache.RestartReqBuilder{}.WithSendTime(10).Build()
+			req := cache.RestartReqBuilder{}.Build()
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPortSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should restart", func() {
-			req := cache.RestartReqBuilder{}.WithSendTime(10).Build()
+			req := cache.RestartReqBuilder{}.Build()
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming(gomock.Any())
+			controlPort.EXPECT().RetrieveIncoming()
 			controlPortSender.EXPECT().Send(gomock.Any())
 			controlPortSender.EXPECT().CanSend(1).Return(true)
-			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
+			topPort.EXPECT().RetrieveIncoming().Return(nil)
+			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := f.Tick(10)
+			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(cacheModule.state).To(Equal(cacheStateRunning))

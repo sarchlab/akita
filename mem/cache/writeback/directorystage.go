@@ -25,19 +25,17 @@ type directoryStage struct {
 	buf      sim.Buffer
 }
 
-func (ds *directoryStage) Tick(now sim.VTimeInSec) (madeProgress bool) {
-	madeProgress = ds.acceptNewTransaction(now) || madeProgress
+func (ds *directoryStage) Tick() (madeProgress bool) {
+	madeProgress = ds.acceptNewTransaction() || madeProgress
 
-	madeProgress = ds.pipeline.Tick(now) || madeProgress
+	madeProgress = ds.pipeline.Tick() || madeProgress
 
-	madeProgress = ds.processTransaction(now) || madeProgress
+	madeProgress = ds.processTransaction() || madeProgress
 
 	return madeProgress
 }
 
-func (ds *directoryStage) processTransaction(
-	now sim.VTimeInSec,
-) bool {
+func (ds *directoryStage) processTransaction() bool {
 	madeProgress := false
 
 	for i := 0; i < ds.cache.numReqPerCycle; i++ {
@@ -55,17 +53,17 @@ func (ds *directoryStage) processTransaction(
 		}
 
 		if trans.read != nil {
-			madeProgress = ds.doRead(now, trans) || madeProgress
+			madeProgress = ds.doRead(trans) || madeProgress
 			continue
 		}
 
-		madeProgress = ds.doWrite(now, trans) || madeProgress
+		madeProgress = ds.doWrite(trans) || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (ds *directoryStage) acceptNewTransaction(now sim.VTimeInSec) bool {
+func (ds *directoryStage) acceptNewTransaction() bool {
 	madeProgress := false
 
 	for i := 0; i < ds.cache.numReqPerCycle; i++ {
@@ -79,7 +77,7 @@ func (ds *directoryStage) acceptNewTransaction(now sim.VTimeInSec) bool {
 		}
 
 		trans := item.(*transaction)
-		ds.pipeline.Accept(now, dirPipelineItem{trans})
+		ds.pipeline.Accept(dirPipelineItem{trans})
 		ds.cache.dirStageBuffer.Pop()
 
 		madeProgress = true
@@ -88,35 +86,31 @@ func (ds *directoryStage) acceptNewTransaction(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (ds *directoryStage) Reset(now sim.VTimeInSec) {
+func (ds *directoryStage) Reset() {
 	ds.pipeline.Clear()
 	ds.buf.Clear()
 	ds.cache.dirStageBuffer.Clear()
 }
 
-func (ds *directoryStage) doRead(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (ds *directoryStage) doRead(trans *transaction) bool {
 	cachelineID, _ := getCacheLineID(
 		trans.read.Address, ds.cache.log2BlockSize)
 
 	mshrEntry := ds.cache.mshr.Query(trans.read.PID, cachelineID)
 	if mshrEntry != nil {
-		return ds.handleReadMSHRHit(now, trans, mshrEntry)
+		return ds.handleReadMSHRHit(trans, mshrEntry)
 	}
 
 	block := ds.cache.directory.Lookup(
 		trans.read.PID, cachelineID)
 	if block != nil {
-		return ds.handleReadHit(now, trans, block)
+		return ds.handleReadHit(trans, block)
 	}
 
-	return ds.handleReadMiss(now, trans)
+	return ds.handleReadMiss(trans)
 }
 
 func (ds *directoryStage) handleReadMSHRHit(
-	now sim.VTimeInSec,
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
@@ -134,7 +128,6 @@ func (ds *directoryStage) handleReadMSHRHit(
 }
 
 func (ds *directoryStage) handleReadHit(
-	now sim.VTimeInSec,
 	trans *transaction,
 	block *cache.Block,
 ) bool {
@@ -160,10 +153,7 @@ func (ds *directoryStage) handleReadHit(
 	return ds.readFromBank(trans, block)
 }
 
-func (ds *directoryStage) handleReadMiss(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 	req := trans.read
 	cacheLineID, _ := getCacheLineID(req.Address, ds.cache.log2BlockSize)
 
@@ -186,7 +176,7 @@ func (ds *directoryStage) handleReadMiss(
 	// )
 
 	if ds.needEviction(victim) {
-		ok := ds.evict(now, trans, victim)
+		ok := ds.evict(trans, victim)
 		if ok {
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(trans.read, ds.cache),
@@ -198,7 +188,7 @@ func (ds *directoryStage) handleReadMiss(
 		return ok
 	}
 
-	ok := ds.fetch(now, trans, victim)
+	ok := ds.fetch(trans, victim)
 	if ok {
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.read, ds.cache),
@@ -210,16 +200,13 @@ func (ds *directoryStage) handleReadMiss(
 	return ok
 }
 
-func (ds *directoryStage) doWrite(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (ds *directoryStage) doWrite(trans *transaction) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
 	mshrEntry := ds.cache.mshr.Query(write.PID, cachelineID)
 	if mshrEntry != nil {
-		ok := ds.doWriteMSHRHit(now, trans, mshrEntry)
+		ok := ds.doWriteMSHRHit(trans, mshrEntry)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
 			ds.cache,
@@ -243,7 +230,7 @@ func (ds *directoryStage) doWrite(
 		return ok
 	}
 
-	ok := ds.doWriteMiss(now, trans)
+	ok := ds.doWriteMiss(trans)
 	if ok {
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
@@ -256,7 +243,6 @@ func (ds *directoryStage) doWrite(
 }
 
 func (ds *directoryStage) doWriteMSHRHit(
-	now sim.VTimeInSec,
 	trans *transaction,
 	mshrEntry *cache.MSHREntry,
 ) bool {
@@ -278,19 +264,16 @@ func (ds *directoryStage) doWriteHit(
 	return ds.writeToBank(trans, block)
 }
 
-func (ds *directoryStage) doWriteMiss(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
 	write := trans.write
 
 	if ds.isWritingFullLine(write) {
-		return ds.writeFullLineMiss(now, trans)
+		return ds.writeFullLineMiss(trans)
 	}
-	return ds.writePartialLineMiss(now, trans)
+	return ds.writePartialLineMiss(trans)
 }
 
-func (ds *directoryStage) writeFullLineMiss(now sim.VTimeInSec, trans *transaction) bool {
+func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
@@ -300,16 +283,13 @@ func (ds *directoryStage) writeFullLineMiss(now sim.VTimeInSec, trans *transacti
 	}
 
 	if ds.needEviction(victim) {
-		return ds.evict(now, trans, victim)
+		return ds.evict(trans, victim)
 	}
 
 	return ds.writeToBank(trans, victim)
 }
 
-func (ds *directoryStage) writePartialLineMiss(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
@@ -331,10 +311,10 @@ func (ds *directoryStage) writePartialLineMiss(
 	// )
 
 	if ds.needEviction(victim) {
-		return ds.evict(now, trans, victim)
+		return ds.evict(trans, victim)
 	}
 
-	return ds.fetch(now, trans, victim)
+	return ds.fetch(trans, victim)
 }
 
 func (ds *directoryStage) readFromBank(
@@ -387,7 +367,6 @@ func (ds *directoryStage) writeToBank(
 }
 
 func (ds *directoryStage) evict(
-	now sim.VTimeInSec,
 	trans *transaction,
 	victim *cache.Block,
 ) bool {
@@ -481,7 +460,6 @@ func (ds *directoryStage) evictionNeedFetch(t *transaction) bool {
 }
 
 func (ds *directoryStage) fetch(
-	now sim.VTimeInSec,
 	trans *transaction,
 	block *cache.Block,
 ) bool {

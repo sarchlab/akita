@@ -19,9 +19,9 @@ func bankID(block *cache.Block, wayAssocitivity, numBanks int) int {
 	return (block.SetID*wayAssocitivity + block.WayID) % numBanks
 }
 
-func clearPort(p sim.Port, now sim.VTimeInSec) {
+func clearPort(p sim.Port) {
 	for {
-		item := p.RetrieveIncoming(now)
+		item := p.RetrieveIncoming()
 		if item == nil {
 			return
 		}
