@@ -70,6 +70,28 @@ body {
   justify-content: space-between;
 }
 
+.sankey-container {
+  margin: 4px;
+  border-radius: 10px;
+  border: solid 1px #000;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+.sankey-header {
+  background-color: #444444;
+  color: #ffffff;
+  padding: 8px 15px;
+  font-size: 1.5em;
+  display: block;
+  justify-content: space-between;
+}
+
+.sankey-diagram {
+  width: 680px;
+  height: 370px
+}
 
 .detail-table {
   width: 100%;

@@ -1,5 +1,7 @@
 import { VarKind, isContainerKind, isDirectKind } from "./gotypes"
 import { Monitor } from "./monitor"
+import * as d3 from "d3"
+import * as sankey from "d3-sankey"
 
 export class ComponentDetailView {
     name: string
@@ -18,6 +20,14 @@ export class ComponentDetailView {
                 const object = res["dict"][res["r"]]
 
                 this.showComponent(object, res["dict"], container!)
+            })
+
+            fetch(`/api/traffic/${this.name}`)
+            .then(res => res.json())
+            .then((res: any) => {
+                const container = document.getElementById('right-pane')
+
+                this.showSankey(res, container!)
             })
     }
 
@@ -58,7 +68,42 @@ export class ComponentDetailView {
         componentDetailContainer.classList.add('component-detail-container')
         componentContainer.appendChild(componentDetailContainer)
 
+        if (!dict) {
+            dict = []
+        }
+
         this.showContent(comp, dict, "", componentDetailContainer, "")
+    }
+
+    showSankey(dict: any, container: HTMLElement) {
+        container.innerHTML = ""
+
+        const sankeyContainer = document.createElement("div");
+        sankeyContainer.classList.add("sankey-container")
+        container.appendChild(sankeyContainer)
+
+        const sankeyHeader = document.createElement("div")
+        sankeyHeader.classList.add("sankey-header")
+        sankeyHeader.innerHTML = `
+            <div class="sankey-name">${this.name} Data Flows</div>
+        `
+
+        sankeyContainer.appendChild(sankeyHeader)
+
+        if (dict.length === 0) {
+            sankeyHeader.innerHTML = `
+            <div class="sankey-name">No Data for ${this.name}</div>`
+            return
+        }
+
+        const canvas = document.createElement('svg')
+        canvas.classList.add("sankey-diagram")
+        sankeyContainer.appendChild(canvas)
+
+        canvas.setAttribute('width', '680')
+        canvas.setAttribute('height', '370')
+
+        this.drawSankey(dict, canvas)
     }
 
     showContent(
@@ -354,5 +399,74 @@ export class ComponentDetailView {
                     container,
                     `${field}.`)
             })
+    }
+
+    drawSankey(data: any, target: HTMLElement) {
+        const canvas = d3.select<HTMLElement, unknown>(target)
+
+        const canvasDims = target.getBoundingClientRect()
+        const canvasHeight = canvasDims.height
+        const canvasWidth = canvasDims.width
+
+        const sankGen = sankey.sankey()
+        .nodeWidth(4)
+        .nodePadding(20)
+        .extent([[0, 0], [680, 370]])
+        .nodeId((d: any) => d.name)
+
+        console.log(canvasDims)
+
+        // Grab every unique port
+        let ports = [...new Set(data.map((entry: any) => entry.localPort).concat(data.map((entry: any) => entry.remotePort)))]
+        ports = ports.map((entry: any) => {return {"name": entry}})
+
+        let linksRaw = data.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
+        // There's a Map.groupBy function, but it doesn't work in safari
+        let linksMap = this.groupByLinks(linksRaw)
+        let links = []
+        for (let entry of linksMap.entries()) {
+            let parsed = entry[0].split('|')
+            let value = entry[1]
+            links.push({"source": parsed[0], "target": parsed[1], "value": value})
+        }
+
+        let outputs = sankGen({"nodes": ports, "links": links})
+
+        const color = d3.scaleOrdinal(["Perished"], ["#da4f81"]).unknown("#ccc");
+
+        canvas.append("g")
+            .selectAll("rect")
+            .data(outputs.nodes)
+            .join("rect")
+              .attr("x", (d: any) => d.x0)
+              .attr("y", (d: any) => d.y0)
+              .attr("height", (d: any) => d.y1 - d.y0)
+              .attr("width", (d: any) => d.x1 - d.x0)
+            .append("title")
+              .text((d: any) => `${d.name}`);
+
+        canvas.append("g")
+            .attr("fill", "none")
+            .selectAll("g")
+            .data(outputs.links)
+            .join("path")
+              .attr("d", sankey.sankeyLinkHorizontal())
+              .attr("stroke", 'blue')
+              .attr("stroke-width", (d: any) => d.width)
+              .style("mix-blend-mode", "multiply")
+    }
+
+    groupByLinks(array: any) {
+        let outputMap = new Map<string, number>()
+        for (const entry of array) {
+            let keyString = `${entry.source}|${entry.target}`
+            let thisValue = outputMap.get(keyString)
+            if (thisValue === undefined) {
+                outputMap.set(keyString, Number.parseInt(entry.value))
+            } else {
+                outputMap.set(keyString, thisValue + Number.parseInt(entry.value))
+            }
+        }
+        return outputMap
     }
 }

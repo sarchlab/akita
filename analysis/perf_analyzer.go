@@ -229,7 +229,7 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	defer b.mu.Unlock()
 
 	for _, data := range b.portDataTable {
-		if strings.Contains(data.Where, comp) {
+		if strings.Contains(data.Where, comp) || strings.Contains(data.WhereRemote, comp) { // Need to extra verify thtis doesn't break things
 			entry := map[string]string{
 				"start":      fmt.Sprintf("%.9f", data.Start),
 				"end":        fmt.Sprintf("%.9f", data.End),
