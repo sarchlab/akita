@@ -10,7 +10,7 @@ type topParser struct {
 	cache *Comp
 }
 
-func (p *topParser) Tick(now sim.VTimeInSec) bool {
+func (p *topParser) Tick() bool {
 	if p.cache.state != cacheStateRunning {
 		return false
 	}
@@ -39,7 +39,7 @@ func (p *topParser) Tick(now sim.VTimeInSec) bool {
 
 	tracing.TraceReqReceive(req, p.cache)
 
-	p.cache.topPort.RetrieveIncoming(now)
+	p.cache.topPort.RetrieveIncoming()
 
 	return true
 }

@@ -20,19 +20,10 @@ func (r *TranslationReq) Meta() *sim.MsgMeta {
 
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b TranslationReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) TranslationReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -71,7 +62,6 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
@@ -98,18 +88,9 @@ func (r *TranslationRsp) GetRspTo() string {
 
 // TranslationRspBuilder can build translation requests
 type TranslationRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
 	page     Page
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b TranslationRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) TranslationRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the respond to build.
@@ -142,7 +123,6 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	r.Page = b.page
 	return r
@@ -175,11 +155,9 @@ func (m *PageMigrationReqToDriver) Meta() *sim.MsgMeta {
 
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	time sim.VTimeInSec,
 	src, dst sim.Port,
 ) *PageMigrationReqToDriver {
 	cmd := new(PageMigrationReqToDriver)
-	cmd.SendTime = time
 	cmd.Src = src
 	cmd.Dst = dst
 	return cmd
@@ -202,11 +180,9 @@ func (m *PageMigrationRspFromDriver) Meta() *sim.MsgMeta {
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	time sim.VTimeInSec,
 	src, dst sim.Port,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)
-	cmd.SendTime = time
 	cmd.Src = src
 	cmd.Dst = dst
 	return cmd

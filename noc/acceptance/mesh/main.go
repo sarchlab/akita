@@ -45,7 +45,7 @@ func main() {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
 			agent := acceptance.NewAgent(engine, freq, name, 1, test)
-			agent.TickLater(0)
+			agent.TickLater()
 
 			monitor.RegisterComponent(agent)
 

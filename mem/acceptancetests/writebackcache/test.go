@@ -101,7 +101,7 @@ func buildEnvironment() {
 	conn.PlugIn(writeBackCache.GetPortByName("Top"), 16)
 	conn.PlugIn(dram.GetPortByName("Top"), 16)
 
-	agent.TickLater(0)
+	agent.TickLater()
 }
 
 func runSimulation() {

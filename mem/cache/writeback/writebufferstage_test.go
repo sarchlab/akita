@@ -60,13 +60,13 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	It("should reset", func() {
 		writeBufferBuffer.EXPECT().Clear()
-		wbStage.Reset(10)
+		wbStage.Reset()
 	})
 
 	It("should do nothing if there is no transaction", func() {
 		writeBufferBuffer.EXPECT().Peek().Return(nil)
 
-		madeProgress := wbStage.processNewTransaction(10)
+		madeProgress := wbStage.processNewTransaction()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -123,7 +123,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			writeBufferBuffer.EXPECT().Peek().Return(trans)
 			bankBuffer.EXPECT().CanPush().Return(false)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(trans.fetchedData).To(BeNil())
@@ -137,7 +137,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			bankBuffer.EXPECT().Push(trans)
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.fetchedData).To(Equal(eviction.evictingData))
@@ -158,7 +158,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			bankBuffer.EXPECT().Push(trans)
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.fetchedData).To(Equal(eviction.evictingData))
@@ -190,7 +190,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			bankBuffer.EXPECT().Push(trans)
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.fetchedData).To(Equal(eviction.evictingData))
@@ -242,7 +242,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				wbStage.maxInflightFetch,
 			)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -250,7 +250,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		It("should stall if cannot send", func() {
 			bottomSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -273,7 +273,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				})
 			writeBufferBuffer.EXPECT().Pop()
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.fetchReadReq).To(BeIdenticalTo(fetchReq))
@@ -324,7 +324,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				wbStage.writeBufferCapacity,
 			)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(wbStage.pendingEvictions).NotTo(ContainElement(trans))
@@ -340,7 +340,7 @@ var _ = Describe("Write Buffer Stage", func() {
 						Expect(trans.action).To(Equal(bankWriteHit))
 					})
 
-				madeProgress := wbStage.processNewTransaction(10)
+				madeProgress := wbStage.processNewTransaction()
 
 				Expect(madeProgress).To(BeTrue())
 				Expect(wbStage.pendingEvictions).To(ContainElement(trans))
@@ -387,7 +387,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				wbStage.writeBufferCapacity,
 			)
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(wbStage.pendingEvictions).NotTo(ContainElement(trans))
@@ -396,7 +396,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		It("should put the new write in write buffer", func() {
 			writeBufferBuffer.EXPECT().Pop()
 
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(wbStage.pendingEvictions).To(ContainElement(trans))
@@ -439,7 +439,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should first try to evict", func() {
-			madeProgress := wbStage.processNewTransaction(10)
+			madeProgress := wbStage.processNewTransaction()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(wbStage.pendingEvictions).To(ContainElement(trans))
@@ -486,38 +486,34 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should do nothing if there is nothing to evict", func() {
-			now := sim.VTimeInSec(10)
 			wbStage.pendingEvictions = nil
 
-			madeProgress := wbStage.write(now)
+			madeProgress := wbStage.write()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should stall if too many inflight evictions", func() {
-			now := sim.VTimeInSec(10)
 			wbStage.inflightEviction = make(
 				[]*transaction,
 				wbStage.maxInflightEviction,
 			)
 
-			madeProgress := wbStage.write(now)
+			madeProgress := wbStage.write()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should stall is buffered sender is full", func() {
-			now := sim.VTimeInSec(10)
 
 			bottomSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := wbStage.write(now)
+			madeProgress := wbStage.write()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should send write requests to bottom", func() {
-			now := sim.VTimeInSec(10)
 			dramPort := NewMockPort(mockCtrl)
 			var writeReq *mem.WriteReq
 			lowModuleFinder.EXPECT().Find(uint64(0x1000)).Return(dramPort)
@@ -536,7 +532,7 @@ var _ = Describe("Write Buffer Stage", func() {
 					Expect(write.DirtyMask).To(Equal(trans.evictingDirtyMask))
 				})
 
-			madeProgress := wbStage.write(now)
+			madeProgress := wbStage.write()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.evictionWriteReq).To(BeIdenticalTo(writeReq))
@@ -569,22 +565,18 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should do nothing if no return ", func() {
-			now := sim.VTimeInSec(10)
-
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := wbStage.processReturnRsp(now)
+			madeProgress := wbStage.processReturnRsp()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should remove inflight eviction", func() {
-			now := sim.VTimeInSec(10)
-
 			bottomPort.EXPECT().PeekIncoming().Return(writeDone)
-			bottomPort.EXPECT().RetrieveIncoming(now)
+			bottomPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := wbStage.processReturnRsp(now)
+			madeProgress := wbStage.processReturnRsp()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(wbStage.inflightEviction).NotTo(ContainElement(eviction))
@@ -634,24 +626,20 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should stall if bank buffer is full", func() {
-			now := sim.VTimeInSec(10)
-
 			bankBuffer.EXPECT().CanPush().Return(false)
 
-			madeProgress := wbStage.processReturnRsp(now)
+			madeProgress := wbStage.processReturnRsp()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should send fetched data to bank", func() {
-			now := sim.VTimeInSec(10)
-
 			bankBuffer.EXPECT().CanPush().Return(true)
 			bankBuffer.EXPECT().Push(fetch)
-			bottomPort.EXPECT().RetrieveIncoming(now)
+			bottomPort.EXPECT().RetrieveIncoming()
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
-			madeProgress := wbStage.processReturnRsp(now)
+			madeProgress := wbStage.processReturnRsp()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(fetch.fetchedData).To(Equal(data))
@@ -672,14 +660,12 @@ var _ = Describe("Write Buffer Stage", func() {
 				writeTrans,
 			)
 
-			now := sim.VTimeInSec(10)
-
 			bankBuffer.EXPECT().CanPush().Return(true)
 			bankBuffer.EXPECT().Push(fetch)
-			bottomPort.EXPECT().RetrieveIncoming(now)
+			bottomPort.EXPECT().RetrieveIncoming()
 			mshr.EXPECT().Remove(mshrEntry.PID, mshrEntry.Address)
 
-			madeProgress := wbStage.processReturnRsp(now)
+			madeProgress := wbStage.processReturnRsp()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(fetch.fetchedData).To(Equal(data))

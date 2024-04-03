@@ -3,7 +3,6 @@ package cmdq
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/org"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Queue is a list of commands that needs to be executed by either a bank or a
@@ -20,12 +19,10 @@ type CommandQueueImpl struct {
 
 // GetCommandToIssue returns the next command ready to issue. It returns nil
 // if there if no command ready.
-func (q *CommandQueueImpl) GetCommandToIssue(
-	now sim.VTimeInSec,
-) *signal.Command {
+func (q *CommandQueueImpl) GetCommandToIssue() *signal.Command {
 	for i := 0; i < len(q.Queues); i++ {
 		queueIndex, _ := q.getNextQueue()
-		readyCmd := q.getFirstReadyInQueue(now, queueIndex)
+		readyCmd := q.getFirstReadyInQueue(queueIndex)
 
 		if readyCmd != nil {
 			return readyCmd
@@ -43,11 +40,10 @@ func (q *CommandQueueImpl) getNextQueue() (queueIndex int, queue Queue) {
 }
 
 func (q *CommandQueueImpl) getFirstReadyInQueue(
-	now sim.VTimeInSec,
 	queueIndex int,
 ) *signal.Command {
 	for i, cmd := range q.Queues[queueIndex] {
-		readyCmd := q.Channel.GetReadyCommand(now, cmd)
+		readyCmd := q.Channel.GetReadyCommand(cmd)
 
 		if readyCmd != nil {
 			if cmd.Kind == readyCmd.Kind {

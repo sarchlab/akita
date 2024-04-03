@@ -42,13 +42,12 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should do nothing if there is no entry in input buffer", func() {
 		inBuf.EXPECT().Pop().Return(nil)
-		ret := ms.Tick(10)
+		ret := ms.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should stall if topSender is busy", func() {
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(6).
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
@@ -68,7 +67,7 @@ var _ = Describe("MSHR Stage", func() {
 		inBuf.EXPECT().Pop().Return(mshrEntry)
 		topSender.EXPECT().CanSend(1).Return(false)
 
-		ret := ms.Tick(10)
+		ret := ms.Tick()
 
 		Expect(ret).To(BeFalse())
 		Expect(ms.processingMSHREntry).To(BeIdenticalTo(mshrEntry))
@@ -77,7 +76,6 @@ var _ = Describe("MSHR Stage", func() {
 	It("should send data ready to top", func() {
 		block := &cache.Block{Tag: 0x100}
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(6).
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
@@ -105,7 +103,7 @@ var _ = Describe("MSHR Stage", func() {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 
-		ret := ms.Tick(10)
+		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
 		Expect(ms.processingMSHREntry).To(BeNil())
@@ -115,7 +113,6 @@ var _ = Describe("MSHR Stage", func() {
 	It("should send write done to top", func() {
 		block := &cache.Block{Tag: 0x100}
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(6).
 			WithAddress(0x104).
 			WithData([]byte{9, 9, 9, 9}).
 			Build()
@@ -145,7 +142,7 @@ var _ = Describe("MSHR Stage", func() {
 				Expect(done.RespondTo).To(Equal(write.ID))
 			})
 
-		ret := ms.Tick(10)
+		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
 		Expect(ms.processingMSHREntry).To(BeNil())
@@ -155,7 +152,6 @@ var _ = Describe("MSHR Stage", func() {
 	It("should discard the request if it is no longer inflight", func() {
 		block := &cache.Block{Tag: 0x100}
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(6).
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
@@ -177,7 +173,7 @@ var _ = Describe("MSHR Stage", func() {
 		inBuf.EXPECT().Pop().Return(mshrEntry)
 		topSender.EXPECT().CanSend(1).Return(true)
 
-		ret := ms.Tick(10)
+		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
 		Expect(ms.processingMSHREntry).To(BeNil())

@@ -61,7 +61,7 @@ var _ = Describe("Control Stage", func() {
 	It("should do nothing if no request", func() {
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -74,7 +74,7 @@ var _ = Describe("Control Stage", func() {
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -98,7 +98,7 @@ var _ = Describe("Control Stage", func() {
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(s.currFlushReq).To(BeNil())

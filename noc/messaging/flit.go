@@ -22,16 +22,9 @@ func (f *Flit) Meta() *sim.MsgMeta {
 
 // FlitBuilder can build flits
 type FlitBuilder struct {
-	sendTime            sim.VTimeInSec
 	src, dst            sim.Port
 	msg                 sim.Msg
 	seqID, numFlitInMsg int
-}
-
-// WithSendTime sets the send time of the request to build
-func (b FlitBuilder) WithSendTime(t sim.VTimeInSec) FlitBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the src of the request to send
@@ -70,7 +63,6 @@ func (b FlitBuilder) Build() *Flit {
 	f.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		b.seqID, b.msg.Meta().ID,
 		sim.GetIDGenerator().Generate())
-	f.SendTime = b.sendTime
 	f.Src = b.src
 	f.Dst = b.dst
 	f.Msg = b.msg

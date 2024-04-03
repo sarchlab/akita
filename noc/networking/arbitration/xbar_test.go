@@ -75,7 +75,7 @@ var _ = Describe("XBar", func() {
 		buf3.EXPECT().Peek().Return(flit3)
 		buf4.EXPECT().Peek().Return(flit4)
 
-		bufs := xbar.Arbitrate(10)
+		bufs := xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(3))
 		Expect(bufs[0]).To(BeIdenticalTo(buf1))
 		Expect(bufs[1]).To(BeIdenticalTo(buf3))
@@ -86,7 +86,7 @@ var _ = Describe("XBar", func() {
 		buf3.EXPECT().Peek().Return(nil)
 		buf4.EXPECT().Peek().Return(nil)
 
-		bufs = xbar.Arbitrate(10)
+		bufs = xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(1))
 		Expect(bufs[0]).To(BeIdenticalTo(buf2))
 	})

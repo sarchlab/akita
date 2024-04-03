@@ -31,12 +31,11 @@ func (f Freq) Cycle(time VTimeInSec) uint64 {
 
 // ThisTick returns the current tick time
 //
-//
-//                Input
-//                (          ]
-//     |----------|----------|----------|----->
-//                           |
-//                           Output
+//	           Input
+//	           (          ]
+//	|----------|----------|----------|----->
+//	                      |
+//	                      Output
 func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
@@ -47,11 +46,11 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 
 // NextTick returns the next tick time.
 //
-//                Input
-//                [          )
-//     |----------|----------|----------|----->
-//                           |
-//                           Output
+//	           Input
+//	           [          )
+//	|----------|----------|----------|----->
+//	                      |
+//	                      Output
 func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
@@ -81,12 +80,11 @@ func (f Freq) NoEarlierThan(t VTimeInSec) VTimeInSec {
 
 // HalfTick returns the time in middle of two ticks
 //
-//                Input
-//                (          ]
-//     |----------|----------|----------|----->
-//                                |
-//                                Output
-//
+//	           Input
+//	           (          ]
+//	|----------|----------|----------|----->
+//	                           |
+//	                           Output
 func (f Freq) HalfTick(t VTimeInSec) VTimeInSec {
 	return f.ThisTick(t) + f.Period()/2
 }

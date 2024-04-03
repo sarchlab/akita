@@ -38,24 +38,24 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should stall if too many transactions are running", func() {
 		memController.currNumTransaction = 8
 
-		madeProgress := memController.Tick(10)
+		madeProgress := memController.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
 
 	It("should process read request", func() {
 		readReq := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
-		port.EXPECT().RetrieveIncoming(gomock.Any()).Return(readReq)
+		port.EXPECT().RetrieveIncoming().Return(readReq)
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
 
-		madeProgress := memController.Tick(10)
+		madeProgress := memController.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(memController.currNumTransaction).To(Equal(1))
@@ -63,18 +63,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should process write request", func() {
 		writeReq := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithData([]byte{0, 1, 2, 3}).
 			WithDirtyMask([]bool{false, false, true, false}).
 			Build()
-		port.EXPECT().RetrieveIncoming(gomock.Any()).Return(writeReq)
+		port.EXPECT().RetrieveIncoming().Return(writeReq)
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
 
-		madeProgress := memController.Tick(10)
+		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
 		Expect(memController.currNumTransaction).To(Equal(1))
 	})
@@ -85,7 +85,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.currNumTransaction = 1
 
 		readReq := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithByteSize(4).
@@ -95,6 +94,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine.EXPECT().Schedule(gomock.Any())
 		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.DataReadyRsp{}))
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		memController.Handle(event)
 
@@ -106,7 +106,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Storage.Write(0, data)
 
 		readReq := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithByteSize(4).
@@ -126,7 +125,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should handle write respond event without write mask", func() {
 		data := []byte{1, 2, 3, 4}
 		writeReq := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithData(data).
@@ -136,6 +134,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine.EXPECT().Schedule(gomock.Any())
 		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		memController.Handle(event)
 
@@ -150,7 +149,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		dirtyMask := []bool{false, true, false, false}
 
 		writeReq := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithData(data).
@@ -160,6 +158,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine.EXPECT().Schedule(gomock.Any())
 		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		memController.Handle(event)
 		retData, _ := memController.Storage.Read(0, 4)
@@ -179,7 +178,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			true, true, true, true, false, false, false, false,
 		}
 		writeReq := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithData(data).
@@ -203,7 +201,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		data := []byte{1, 2, 3, 4}
 
 		writeReq := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithDst(memController.topPort).
 			WithAddress(0).
 			WithData(data).

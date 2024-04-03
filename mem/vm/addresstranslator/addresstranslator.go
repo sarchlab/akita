@@ -60,39 +60,39 @@ func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 }
 
 // Tick updates state at each cycle.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
 	if !c.isFlushing {
-		madeProgress = c.runPipeline(now)
+		madeProgress = c.runPipeline()
 	}
 
-	madeProgress = c.handleCtrlRequest(now) || madeProgress
+	madeProgress = c.handleCtrlRequest() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runPipeline(now sim.VTimeInSec) bool {
+func (c *Comp) runPipeline() bool {
 	madeProgress := false
 
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.respond(now) || madeProgress
+		madeProgress = c.respond() || madeProgress
 	}
 
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.parseTranslation(now) || madeProgress
+		madeProgress = c.parseTranslation() || madeProgress
 	}
 
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.translate(now) || madeProgress
+		madeProgress = c.translate() || madeProgress
 	}
 
-	madeProgress = c.doGL0Invalidate(now) || madeProgress
+	madeProgress = c.doGL0Invalidate() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) doGL0Invalidate(now sim.VTimeInSec) bool {
+func (c *Comp) doGL0Invalidate() bool {
 	if c.currentGL0InvReq == nil {
 		return false
 	}
@@ -106,7 +106,6 @@ func (c *Comp) doGL0Invalidate(now sim.VTimeInSec) bool {
 			WithPID(c.currentGL0InvReq.PID).
 			WithSrc(c.bottomPort).
 			WithDst(c.lowModuleFinder.Find(0)).
-			WithSendTime(now).
 			Build()
 
 		err := c.bottomPort.Send(req)
@@ -119,7 +118,7 @@ func (c *Comp) doGL0Invalidate(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (c *Comp) translate(now sim.VTimeInSec) bool {
+func (c *Comp) translate() bool {
 	if c.currentGL0InvReq != nil {
 		return false
 	}
@@ -131,7 +130,7 @@ func (c *Comp) translate(now sim.VTimeInSec) bool {
 
 	switch req := item.(type) {
 	case *mem.GL0InvalidateReq:
-		return c.handleGL0InvalidateReq(now, req)
+		return c.handleGL0InvalidateReq(req)
 	}
 
 	req := item.(mem.AccessReq)
@@ -139,7 +138,6 @@ func (c *Comp) translate(now sim.VTimeInSec) bool {
 	vPageID := c.addrToPageID(vAddr)
 
 	transReq := vm.TranslationReqBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.translationPort).
 		WithDst(c.translationProvider).
 		WithPID(req.GetPID()).
@@ -160,13 +158,12 @@ func (c *Comp) translate(now sim.VTimeInSec) bool {
 	tracing.TraceReqReceive(req, c)
 	tracing.TraceReqInitiate(transReq, c, tracing.MsgIDAtReceiver(req, c))
 
-	c.topPort.RetrieveIncoming(now)
+	c.topPort.RetrieveIncoming()
 
 	return true
 }
 
 func (c *Comp) handleGL0InvalidateReq(
-	now sim.VTimeInSec,
 	req *mem.GL0InvalidateReq,
 ) bool {
 	if c.currentGL0InvReq != nil {
@@ -176,12 +173,12 @@ func (c *Comp) handleGL0InvalidateReq(
 	c.currentGL0InvReq = req
 	c.totalRequestsUponGL0InvArrival =
 		len(c.transactions) + len(c.inflightReqToBottom)
-	c.topPort.RetrieveIncoming(now)
+	c.topPort.RetrieveIncoming()
 
 	return true
 }
 
-func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
+func (c *Comp) parseTranslation() bool {
 	rsp := c.translationPort.PeekIncoming()
 	if rsp == nil {
 		return false
@@ -190,7 +187,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 	transRsp := rsp.(*vm.TranslationRsp)
 	transaction := c.findTranslationByReqID(transRsp.RespondTo)
 	if transaction == nil {
-		c.translationPort.RetrieveIncoming(now)
+		c.translationPort.RetrieveIncoming()
 		return true
 	}
 
@@ -200,7 +197,6 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 	translatedReq := c.createTranslatedReq(
 		reqFromTop,
 		transaction.translationRsp.Page)
-	translatedReq.Meta().SendTime = now
 	err := c.bottomPort.Send(translatedReq)
 	if err != nil {
 		return false
@@ -216,7 +212,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 		c.removeExistingTranslation(transaction)
 	}
 
-	c.translationPort.RetrieveIncoming(now)
+	c.translationPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(transaction.translationReq, c)
 	tracing.TraceReqInitiate(translatedReq, c,
@@ -226,7 +222,7 @@ func (c *Comp) parseTranslation(now sim.VTimeInSec) bool {
 }
 
 //nolint:funlen,gocyclo
-func (c *Comp) respond(now sim.VTimeInSec) bool {
+func (c *Comp) respond() bool {
 	rsp := c.bottomPort.PeekIncoming()
 	if rsp == nil {
 		return false
@@ -245,7 +241,6 @@ func (c *Comp) respond(now sim.VTimeInSec) bool {
 			reqToBottomCombo = c.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			drToTop := mem.DataReadyRspBuilder{}.
-				WithSendTime(now).
 				WithSrc(c.topPort).
 				WithDst(reqFromTop.Meta().Src).
 				WithRspTo(reqFromTop.Meta().ID).
@@ -259,7 +254,6 @@ func (c *Comp) respond(now sim.VTimeInSec) bool {
 			reqToBottomCombo = c.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			rspToTop = mem.WriteDoneRspBuilder{}.
-				WithSendTime(now).
 				WithSrc(c.topPort).
 				WithDst(reqFromTop.Meta().Src).
 				WithRspTo(reqFromTop.Meta().ID).
@@ -271,7 +265,6 @@ func (c *Comp) respond(now sim.VTimeInSec) bool {
 			log.Panicf("Cannot have rsp without req")
 		}
 		rspToTop = mem.GL0InvalidateRspBuilder{}.
-			WithSendTime(now).
 			WithSrc(c.topPort).
 			WithDst(gl0InvalidateReq.Src).
 			WithRspTo(gl0InvalidateReq.Meta().ID).
@@ -313,7 +306,7 @@ func (c *Comp) respond(now sim.VTimeInSec) bool {
 		}
 	}
 
-	c.bottomPort.RetrieveIncoming(now)
+	c.bottomPort.RetrieveIncoming()
 	return true
 }
 
@@ -422,7 +415,7 @@ func (c *Comp) removeReqToBottomByID(id string) {
 	panic("req to bottom not found")
 }
 
-func (c *Comp) handleCtrlRequest(now sim.VTimeInSec) bool {
+func (c *Comp) handleCtrlRequest() bool {
 	req := c.ctrlPort.PeekIncoming()
 	if req == nil {
 		return false
@@ -431,22 +424,20 @@ func (c *Comp) handleCtrlRequest(now sim.VTimeInSec) bool {
 	msg := req.(*mem.ControlMsg)
 
 	if msg.DiscardTransations {
-		return c.handleFlushReq(now, msg)
+		return c.handleFlushReq(msg)
 	} else if msg.Restart {
-		return c.handleRestartReq(now, msg)
+		return c.handleRestartReq(msg)
 	}
 
 	panic("never")
 }
 
 func (c *Comp) handleFlushReq(
-	now sim.VTimeInSec,
 	req *mem.ControlMsg,
 ) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(c.ctrlPort).
 		WithDst(req.Src).
-		WithSendTime(now).
 		ToNotifyDone().
 		Build()
 
@@ -455,7 +446,7 @@ func (c *Comp) handleFlushReq(
 		return false
 	}
 
-	c.ctrlPort.RetrieveIncoming(now)
+	c.ctrlPort.RetrieveIncoming()
 
 	c.transactions = nil
 	c.inflightReqToBottom = nil
@@ -465,13 +456,11 @@ func (c *Comp) handleFlushReq(
 }
 
 func (c *Comp) handleRestartReq(
-	now sim.VTimeInSec,
 	req *mem.ControlMsg,
 ) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(c.ctrlPort).
 		WithDst(req.Src).
-		WithSendTime(now).
 		ToNotifyDone().
 		Build()
 
@@ -481,18 +470,18 @@ func (c *Comp) handleRestartReq(
 		return false
 	}
 
-	for c.topPort.RetrieveIncoming(now) != nil {
+	for c.topPort.RetrieveIncoming() != nil {
 	}
 
-	for c.bottomPort.RetrieveIncoming(now) != nil {
+	for c.bottomPort.RetrieveIncoming() != nil {
 	}
 
-	for c.translationPort.RetrieveIncoming(now) != nil {
+	for c.translationPort.RetrieveIncoming() != nil {
 	}
 
 	c.isFlushing = false
 
-	c.ctrlPort.RetrieveIncoming(now)
+	c.ctrlPort.RetrieveIncoming()
 
 	return true
 }

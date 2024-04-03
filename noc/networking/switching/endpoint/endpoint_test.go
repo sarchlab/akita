@@ -60,24 +60,22 @@ var _ = Describe("End Point", func() {
 		devicePort.EXPECT().RetrieveOutgoing().Return(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
-		madeProgress := endPoint.Tick(10)
+		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.SendTime).To(Equal(sim.VTimeInSec(11)))
 			Expect(flit.Src).To(Equal(networkPort))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort))
 			Expect(flit.SeqID).To(Equal(0))
 			Expect(flit.NumFlitInMsg).To(Equal(2))
 			Expect(flit.Msg).To(BeIdenticalTo(msg))
 		})
-		devicePort.EXPECT().NotifyAvailable(gomock.Any())
+		devicePort.EXPECT().NotifyAvailable()
 
-		madeProgress = endPoint.Tick(11)
+		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.SendTime).To(Equal(sim.VTimeInSec(12)))
 			Expect(flit.Src).To(Equal(networkPort))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort))
 			Expect(flit.SeqID).To(Equal(1))
@@ -85,11 +83,11 @@ var _ = Describe("End Point", func() {
 			Expect(flit.Msg).To(BeIdenticalTo(msg))
 		})
 
-		madeProgress = endPoint.Tick(12)
+		madeProgress = endPoint.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick(13)
+		madeProgress = endPoint.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -112,23 +110,23 @@ var _ = Describe("End Point", func() {
 		networkPort.EXPECT().PeekIncoming().Return(flit0)
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
 		networkPort.EXPECT().PeekIncoming().Return(nil).Times(3)
-		networkPort.EXPECT().RetrieveIncoming(gomock.Any()).Times(2)
+		networkPort.EXPECT().RetrieveIncoming().Times(2)
 		devicePort.EXPECT().Deliver(msg)
 		devicePort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
-		madeProgress := endPoint.Tick(10)
+		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick(11)
+		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick(12)
+		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick(13)
+		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		madeProgress = endPoint.Tick(14)
+		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
 })

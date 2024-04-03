@@ -30,31 +30,31 @@ func (c *Comp) Unplug(_ sim.Port) {
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *Comp) NotifyAvailable(now sim.VTimeInSec, p sim.Port) {
+func (c *Comp) NotifyAvailable(p sim.Port) {
 	for _, port := range c.ports {
 		if port == p {
 			continue
 		}
 
-		port.NotifyAvailable(now)
+		port.NotifyAvailable()
 	}
 
-	c.TickNow(now)
+	c.TickNow()
 }
 
 // NotifySend is called by a port to notify that the connection can start
 // to tick now
-func (c *Comp) NotifySend(now sim.VTimeInSec) {
-	c.TickNow(now)
+func (c *Comp) NotifySend() {
+	c.TickNow()
 }
 
 // Tick updates the states of the connection and delivers messages.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 	for i := 0; i < len(c.ports); i++ {
 		portID := (i + c.nextPortID) % len(c.ports)
 		port := c.ports[portID]
-		madeProgress = c.forwardMany(port, now) || madeProgress
+		madeProgress = c.forwardMany(port) || madeProgress
 	}
 
 	c.nextPortID = (c.nextPortID + 1) % len(c.ports)
@@ -63,7 +63,6 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 
 func (c *Comp) forwardMany(
 	port sim.Port,
-	now sim.VTimeInSec,
 ) bool {
 	madeProgress := false
 	for {
@@ -71,8 +70,6 @@ func (c *Comp) forwardMany(
 		if head == nil {
 			break
 		}
-
-		head.Meta().RecvTime = now
 
 		err := head.Meta().Dst.Deliver(head)
 		if err != nil {

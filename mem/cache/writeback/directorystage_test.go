@@ -54,7 +54,7 @@ var _ = Describe("DirectoryStage", func() {
 			buf:      buf,
 		}
 
-		pipeline.EXPECT().Tick(gomock.Any()).AnyTimes()
+		pipeline.EXPECT().Tick().AnyTimes()
 	})
 
 	AfterEach(func() {
@@ -66,7 +66,7 @@ var _ = Describe("DirectoryStage", func() {
 		dirBuf.EXPECT().Peek().Return(nil)
 		buf.EXPECT().Peek().Return(nil)
 
-		ret := ds.Tick(10)
+		ret := ds.Tick()
 
 		Expect(ret).To(BeFalse())
 	})
@@ -79,7 +79,6 @@ var _ = Describe("DirectoryStage", func() {
 
 		BeforeEach(func() {
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(64).
@@ -108,7 +107,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should add to MSHR", func() {
 				buf.EXPECT().Pop()
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(mshrEntry.Requests).To(HaveLen(1))
@@ -136,7 +135,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall is bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -144,7 +143,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall if block is locked", func() {
 				block.IsLocked = true
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -159,7 +158,7 @@ var _ = Describe("DirectoryStage", func() {
 				buf.EXPECT().Pop()
 				directory.EXPECT().Visit(block)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.ReadCount).To(Equal(1))
@@ -175,7 +174,7 @@ var _ = Describe("DirectoryStage", func() {
 				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 				mshr.EXPECT().IsFull().Return(true)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -205,7 +204,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall if WriteBuffer buffer if full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -224,7 +223,7 @@ var _ = Describe("DirectoryStage", func() {
 				buf.EXPECT().Pop()
 				directory.EXPECT().Visit(block)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.Tag).To(Equal(uint64(0x100)))
@@ -272,7 +271,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall if bank buffer is full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -280,7 +279,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall if victim is locked", func() {
 				block.IsLocked = true
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -299,7 +298,7 @@ var _ = Describe("DirectoryStage", func() {
 				mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 				buf.EXPECT().Pop()
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.Tag).To(Equal(uint64(0x100)))
@@ -348,7 +347,6 @@ var _ = Describe("DirectoryStage", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
@@ -377,7 +375,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should add to MSHR", func() {
 				buf.EXPECT().Pop()
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(mshrEntry.Requests).To(HaveLen(1))
@@ -407,7 +405,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall is bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -415,7 +413,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall is block is loked", func() {
 				block.IsLocked = true
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -423,7 +421,7 @@ var _ = Describe("DirectoryStage", func() {
 			It("should stall if block is being read", func() {
 				block.ReadCount = 1
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -437,7 +435,7 @@ var _ = Describe("DirectoryStage", func() {
 				buf.EXPECT().Pop()
 				directory.EXPECT().Visit(block)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.IsLocked).To(BeTrue())
@@ -476,20 +474,20 @@ var _ = Describe("DirectoryStage", func() {
 
 			It("should stall if victim is locked", func() {
 				block.IsLocked = true
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
 			It("should stall if victim is being read", func() {
 				block.ReadCount = 1
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
 			It("should stall is bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeFalse())
 			})
@@ -503,7 +501,7 @@ var _ = Describe("DirectoryStage", func() {
 				buf.EXPECT().Pop()
 				directory.EXPECT().Visit(block)
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.IsLocked).To(BeTrue())
@@ -537,7 +535,7 @@ var _ = Describe("DirectoryStage", func() {
 
 			It("should stall if evictor buffer is full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
@@ -553,7 +551,7 @@ var _ = Describe("DirectoryStage", func() {
 					})
 				buf.EXPECT().Pop()
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.Tag).To(Equal(uint64(0x100)))
@@ -585,7 +583,7 @@ var _ = Describe("DirectoryStage", func() {
 
 			It("should stall if mshr is full", func() {
 				mshr.EXPECT().IsFull().Return(true)
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
@@ -593,7 +591,7 @@ var _ = Describe("DirectoryStage", func() {
 				mshr.EXPECT().IsFull().Return(false)
 				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
 				block.IsLocked = true
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
@@ -601,7 +599,7 @@ var _ = Describe("DirectoryStage", func() {
 				mshr.EXPECT().IsFull().Return(false)
 				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
 				bankBuf.EXPECT().CanPush().Return(false)
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
@@ -621,7 +619,7 @@ var _ = Describe("DirectoryStage", func() {
 				mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 				buf.EXPECT().Pop()
 
-				ret := ds.Tick(10)
+				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(block.PID).To(Equal(vm.PID(1)))

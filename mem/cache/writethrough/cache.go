@@ -47,62 +47,62 @@ func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 }
 
 // Tick update the state of the cache
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	madeProgress := false
 
 	if !c.isPaused {
-		madeProgress = c.runPipeline(now) || madeProgress
+		madeProgress = c.runPipeline() || madeProgress
 	}
 
-	madeProgress = c.controlStage.Tick(now) || madeProgress
+	madeProgress = c.controlStage.Tick() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runPipeline(now sim.VTimeInSec) bool {
+func (c *Comp) runPipeline() bool {
 	madeProgress := false
-	madeProgress = c.tickRespondStage(now) || madeProgress
-	madeProgress = c.tickParseBottomStage(now) || madeProgress
-	madeProgress = c.tickBankStage(now) || madeProgress
-	madeProgress = c.tickDirectoryStage(now) || madeProgress
-	madeProgress = c.tickCoalesceState(now) || madeProgress
+	madeProgress = c.tickRespondStage() || madeProgress
+	madeProgress = c.tickParseBottomStage() || madeProgress
+	madeProgress = c.tickBankStage() || madeProgress
+	madeProgress = c.tickDirectoryStage() || madeProgress
+	madeProgress = c.tickCoalesceState() || madeProgress
 	return madeProgress
 }
 
-func (c *Comp) tickRespondStage(now sim.VTimeInSec) bool {
+func (c *Comp) tickRespondStage() bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.respondStage.Tick(now) || madeProgress
+		madeProgress = c.respondStage.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Comp) tickParseBottomStage(now sim.VTimeInSec) bool {
+func (c *Comp) tickParseBottomStage() bool {
 	madeProgress := false
 
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.parseBottomStage.Tick(now) || madeProgress
+		madeProgress = c.parseBottomStage.Tick() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) tickBankStage(now sim.VTimeInSec) bool {
+func (c *Comp) tickBankStage() bool {
 	madeProgress := false
 	for _, bs := range c.bankStages {
-		madeProgress = bs.Tick(now) || madeProgress
+		madeProgress = bs.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Comp) tickDirectoryStage(now sim.VTimeInSec) bool {
-	return c.directoryStage.Tick(now)
+func (c *Comp) tickDirectoryStage() bool {
+	return c.directoryStage.Tick()
 }
 
-func (c *Comp) tickCoalesceState(now sim.VTimeInSec) bool {
+func (c *Comp) tickCoalesceState() bool {
 	madeProgress := false
 	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.coalesceStage.Tick(now) || madeProgress
+		madeProgress = c.coalesceStage.Tick() || madeProgress
 	}
 	return madeProgress
 }

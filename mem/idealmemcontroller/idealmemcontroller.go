@@ -67,12 +67,12 @@ func (c *Comp) Handle(e sim.Event) error {
 }
 
 // Tick updates ideal memory controller state.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	if c.currNumTransaction >= c.MaxNumTransaction {
 		return false
 	}
 
-	msg := c.topPort.RetrieveIncoming(now)
+	msg := c.topPort.RetrieveIncoming()
 	if msg == nil {
 		return false
 	}
@@ -82,10 +82,10 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
-		c.handleReadReq(now, msg)
+		c.handleReadReq(msg)
 		return true
 	case *mem.WriteReq:
-		c.handleWriteReq(now, msg)
+		c.handleWriteReq(msg)
 		return true
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
@@ -94,13 +94,15 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	return false
 }
 
-func (c *Comp) handleReadReq(now sim.VTimeInSec, req *mem.ReadReq) {
+func (c *Comp) handleReadReq(req *mem.ReadReq) {
+	now := c.CurrentTime()
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newReadRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
 }
 
-func (c *Comp) handleWriteReq(now sim.VTimeInSec, req *mem.WriteReq) {
+func (c *Comp) handleWriteReq(req *mem.WriteReq) {
+	now := c.CurrentTime()
 	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
 	respondEvent := newWriteRespondEvent(timeToSchedule, c, req)
 	c.Engine.Schedule(respondEvent)
@@ -121,7 +123,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	rsp := mem.DataReadyRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -137,7 +138,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 
 	tracing.TraceReqComplete(req, c)
 	c.currNumTransaction--
-	c.TickLater(now)
+	c.TickLater()
 
 	return nil
 }
@@ -147,7 +148,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	req := e.req
 
 	rsp := mem.WriteDoneRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -189,9 +189,13 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 	tracing.TraceReqComplete(req, c)
 	c.currNumTransaction--
-	c.TickLater(now)
+	c.TickLater()
 
 	return nil
+}
+
+func (c *Comp) CurrentTime() sim.VTimeInSec {
+	return c.Engine.CurrentTime()
 }
 
 // New creates a new ideal memory controller

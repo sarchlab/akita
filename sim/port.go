@@ -15,14 +15,14 @@ type Port interface {
 
 	// For connection
 	Deliver(msg Msg) *SendError
-	NotifyAvailable(now VTimeInSec)
+	NotifyAvailable()
 	RetrieveOutgoing() Msg
 	PeekOutgoing() Msg
 
 	// For component
 	CanSend() bool
 	Send(msg Msg) *SendError
-	RetrieveIncoming(now VTimeInSec) Msg
+	RetrieveIncoming() Msg
 	PeekIncoming() Msg
 }
 
@@ -106,7 +106,7 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	}
 	p.InvokeHook(hookCtx)
 
-	p.conn.NotifySend(msg.Meta().SendTime)
+	p.conn.NotifySend()
 
 	return nil
 }
@@ -130,7 +130,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	p.incomingBuf.Push(msg)
 
 	if p.comp != nil {
-		p.comp.NotifyRecv(msg.Meta().RecvTime, p)
+		p.comp.NotifyRecv(p)
 	}
 
 	return nil
@@ -138,7 +138,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 
 // RetrieveIncoming is used by the component to take a message from the incoming
 // buffer
-func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
+func (p *LimitNumMsgPort) RetrieveIncoming() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -156,7 +156,7 @@ func (p *LimitNumMsgPort) RetrieveIncoming(now VTimeInSec) Msg {
 	p.InvokeHook(hookCtx)
 
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
-		p.conn.NotifyAvailable(now, p)
+		p.conn.NotifyAvailable(p)
 	}
 
 	return msg
@@ -182,7 +182,7 @@ func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
 	p.InvokeHook(hookCtx)
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
-		p.comp.NotifyPortFree(msg.Meta().SendTime, p)
+		p.comp.NotifyPortFree(p)
 	}
 
 	return msg
@@ -220,9 +220,9 @@ func (p *LimitNumMsgPort) PeekOutgoing() Msg {
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *LimitNumMsgPort) NotifyAvailable(now VTimeInSec) {
+func (p *LimitNumMsgPort) NotifyAvailable() {
 	if p.comp != nil {
-		p.comp.NotifyPortFree(now, p)
+		p.comp.NotifyPortFree(p)
 	}
 }
 

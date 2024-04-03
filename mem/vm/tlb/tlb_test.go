@@ -44,7 +44,7 @@ var _ = Describe("TLB", func() {
 	It("should do nothing if there is no req in TopPort", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := tlb.lookup(10)
+		madeProgress := tlb.lookup()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -68,7 +68,6 @@ var _ = Describe("TLB", func() {
 				Return(wayID, page, true)
 
 			req = vm.TranslationReqBuilder{}.
-				WithSendTime(5).
 				WithPID(1).
 				WithVAddr(uint64(0x100)).
 				WithDeviceID(1).
@@ -77,12 +76,12 @@ var _ = Describe("TLB", func() {
 
 		It("should respond to top", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming(gomock.Any())
+			topPort.EXPECT().RetrieveIncoming()
 			topPort.EXPECT().Send(gomock.Any())
 
 			set.EXPECT().Visit(wayID)
 
-			madeProgress := tlb.lookup(10)
+			madeProgress := tlb.lookup()
 
 			Expect(madeProgress).To(BeTrue())
 		})
@@ -92,7 +91,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().Send(gomock.Any()).
 				Return(&sim.SendError{})
 
-			madeProgress := tlb.lookup(10)
+			madeProgress := tlb.lookup()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -119,7 +118,6 @@ var _ = Describe("TLB", func() {
 				AnyTimes()
 
 			req = vm.TranslationReqBuilder{}.
-				WithSendTime(5).
 				WithPID(1).
 				WithVAddr(0x100).
 				WithDeviceID(1).
@@ -128,7 +126,7 @@ var _ = Describe("TLB", func() {
 
 		It("should fetch from bottom and add entry to MSHR", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming(gomock.Any())
+			topPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(req *vm.TranslationReq) {
 					Expect(req.VAddr).To(Equal(uint64(0x100)))
@@ -137,7 +135,7 @@ var _ = Describe("TLB", func() {
 				}).
 				Return(nil)
 
-			madeProgress := tlb.lookup(10)
+			madeProgress := tlb.lookup()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).To(Equal(true))
@@ -146,9 +144,9 @@ var _ = Describe("TLB", func() {
 		It("should find the entry in MSHR and not request from bottom", func() {
 			tlb.mshr.Add(1, 0x100)
 			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming(gomock.Any())
+			topPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := tlb.lookup(10)
+			madeProgress := tlb.lookup()
 			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).
 				To(Equal(true))
 			Expect(madeProgress).To(BeTrue())
@@ -159,7 +157,7 @@ var _ = Describe("TLB", func() {
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Return(&sim.SendError{})
 
-			madeProgress := tlb.lookup(10)
+			madeProgress := tlb.lookup()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -177,13 +175,11 @@ var _ = Describe("TLB", func() {
 		BeforeEach(func() {
 			wayID = 1
 			req = vm.TranslationReqBuilder{}.
-				WithSendTime(5).
 				WithPID(1).
 				WithVAddr(0x100).
 				WithDeviceID(1).
 				Build()
 			fetchBottom = vm.TranslationReqBuilder{}.
-				WithSendTime(5).
 				WithPID(1).
 				WithVAddr(0x100).
 				WithDeviceID(1).
@@ -195,7 +191,6 @@ var _ = Describe("TLB", func() {
 				Valid: true,
 			}
 			rsp = vm.TranslationRspBuilder{}.
-				WithSendTime(5).
 				WithRspTo(fetchBottom.ID).
 				WithPage(page).
 				Build()
@@ -204,7 +199,7 @@ var _ = Describe("TLB", func() {
 		It("should do nothing if no return", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := tlb.parseBottom(10)
+			madeProgress := tlb.parseBottom()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -214,14 +209,14 @@ var _ = Describe("TLB", func() {
 			mshrEntry.Requests = append(mshrEntry.Requests, req)
 			tlb.respondingMSHREntry = mshrEntry
 
-			madeProgress := tlb.parseBottom(10)
+			madeProgress := tlb.parseBottom()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should parse respond from bottom", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(rsp)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any())
+			bottomPort.EXPECT().RetrieveIncoming()
 			mshrEntry := tlb.mshr.Add(1, 0x100)
 			mshrEntry.Requests = append(mshrEntry.Requests, req)
 			mshrEntry.reqToBottom = &vm.TranslationReq{}
@@ -236,7 +231,7 @@ var _ = Describe("TLB", func() {
 			// 		Expect(rsp.RespondTo).To(Equal(req.ID))
 			// 	})
 
-			madeProgress := tlb.parseBottom(10)
+			madeProgress := tlb.parseBottom()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.respondingMSHREntry).NotTo(BeNil())
@@ -251,7 +246,7 @@ var _ = Describe("TLB", func() {
 
 			topPort.EXPECT().Send(gomock.Any()).Return(nil)
 
-			madeProgress := tlb.respondMSHREntry(10)
+			madeProgress := tlb.respondMSHREntry()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(HaveLen(0))
@@ -276,7 +271,7 @@ var _ = Describe("TLB", func() {
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tlb.performCtrlReq(10)
+			madeProgress := tlb.performCtrlReq()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -284,7 +279,6 @@ var _ = Describe("TLB", func() {
 			flushReq := FlushReqBuilder{}.
 				WithSrc(nil).
 				WithDst(nil).
-				WithSendTime(10).
 				WithVAddrs([]uint64{0x1000}).
 				WithPID(1).
 				Build()
@@ -303,10 +297,10 @@ var _ = Describe("TLB", func() {
 				Valid: false,
 			})
 			controlPort.EXPECT().PeekIncoming().Return(flushReq)
-			controlPort.EXPECT().RetrieveIncoming(sim.VTimeInSec(10)).Return(flushReq)
+			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
 
-			madeProgress := tlb.performCtrlReq(10)
+			madeProgress := tlb.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeTrue())
@@ -316,17 +310,16 @@ var _ = Describe("TLB", func() {
 			restartReq := RestartReqBuilder{}.
 				WithSrc(nil).
 				WithDst(nil).
-				WithSendTime(10).
 				Build()
 			controlPort.EXPECT().PeekIncoming().
 				Return(restartReq)
-			controlPort.EXPECT().RetrieveIncoming(sim.VTimeInSec(10)).
+			controlPort.EXPECT().RetrieveIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming(gomock.Any()).Return(nil)
+			topPort.EXPECT().RetrieveIncoming().Return(nil)
+			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := tlb.performCtrlReq(10)
+			madeProgress := tlb.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeFalse())
@@ -377,7 +370,6 @@ var _ = Describe("TLB Integration", func() {
 		lowModule.EXPECT().Deliver(gomock.Any()).
 			Do(func(req *vm.TranslationReq) {
 				rsp := vm.TranslationRspBuilder{}.
-					WithSendTime(req.RecvTime + 1).
 					WithSrc(lowModule).
 					WithDst(req.Src).
 					WithPage(page).
@@ -397,14 +389,12 @@ var _ = Describe("TLB Integration", func() {
 
 	It("should do tlb miss", func() {
 		req := vm.TranslationReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agent).
 			WithDst(tlb.topPort).
 			WithPID(1).
 			WithVAddr(0x1000).
 			WithDeviceID(1).
 			Build()
-		req.RecvTime = 10
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
@@ -416,16 +406,14 @@ var _ = Describe("TLB Integration", func() {
 	})
 
 	It("should have faster hit than miss", func() {
-		time1 := sim.VTimeInSec(10)
+		time1 := engine.CurrentTime()
 		req := vm.TranslationReqBuilder{}.
-			WithSendTime(time1).
 			WithSrc(agent).
 			WithDst(tlb.topPort).
 			WithPID(1).
 			WithVAddr(0x1000).
 			WithDeviceID(1).
 			Build()
-		req.RecvTime = time1
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
@@ -437,7 +425,6 @@ var _ = Describe("TLB Integration", func() {
 
 		time2 := engine.CurrentTime()
 
-		req.RecvTime = time2
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).

@@ -41,7 +41,7 @@ var _ = Describe("Bank", func() {
 			b.cyclesToCmdAvailable[signal.CmdKindRead] = 2
 			b.cyclesToCmdAvailable[signal.CmdKindPrecharge] = 1
 
-			madeProgress := b.Tick(10)
+			madeProgress := b.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 
@@ -69,7 +69,7 @@ var _ = Describe("Bank", func() {
 				}
 				b.cyclesToCmdAvailable[signal.CmdKindActivate] = 0
 
-				readyCmd := b.GetReadyCommand(10, readCmd)
+				readyCmd := b.GetReadyCommand(readCmd)
 
 				Expect(readyCmd.Kind).To(Equal(signal.CmdKindActivate))
 				Expect(readyCmd.SubTrans).To(BeIdenticalTo(subTrans))
@@ -84,7 +84,7 @@ var _ = Describe("Bank", func() {
 				}
 				cmd.Row = 1
 
-				b.StartCommand(10, cmd)
+				b.StartCommand(cmd)
 
 				Expect(b.state).To(Equal(BankStateOpen))
 				Expect(b.openRow).To(Equal(uint64(1)))
@@ -112,7 +112,7 @@ var _ = Describe("Bank", func() {
 				b.openRow = 6
 				b.cyclesToCmdAvailable[signal.CmdKindRead] = 0
 
-				cmd := b.GetReadyCommand(10, readCmd)
+				cmd := b.GetReadyCommand(readCmd)
 
 				Expect(cmd.Kind).To(Equal(signal.CmdKindRead))
 			})
@@ -121,7 +121,7 @@ var _ = Describe("Bank", func() {
 				b.openRow = 7
 				b.cyclesToCmdAvailable[signal.CmdKindPrecharge] = 0
 
-				cmd := b.GetReadyCommand(10, readCmd)
+				cmd := b.GetReadyCommand(readCmd)
 
 				Expect(cmd.Kind).To(Equal(signal.CmdKindPrecharge))
 			})
@@ -135,7 +135,7 @@ var _ = Describe("Bank", func() {
 				}
 				cmd.Row = 1
 
-				b.StartCommand(10, cmd)
+				b.StartCommand(cmd)
 
 				Expect(b.state).To(Equal(BankStateClosed))
 			})

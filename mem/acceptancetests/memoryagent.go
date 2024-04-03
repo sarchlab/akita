@@ -54,26 +54,26 @@ func (a *MemAccessAgent) checkReadResult(
 }
 
 // Tick updates the states of the agent and issues new read and write requests.
-func (a *MemAccessAgent) Tick(now sim.VTimeInSec) bool {
+func (a *MemAccessAgent) Tick() bool {
 	madeProgress := false
 
-	madeProgress = a.processMsgRsp(now) || madeProgress
+	madeProgress = a.processMsgRsp() || madeProgress
 
 	if a.ReadLeft == 0 && a.WriteLeft == 0 {
 		return madeProgress
 	}
 
 	if a.shouldRead() {
-		madeProgress = a.doRead(now) || madeProgress
+		madeProgress = a.doRead() || madeProgress
 	} else {
-		madeProgress = a.doWrite(now) || madeProgress
+		madeProgress = a.doWrite() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (a *MemAccessAgent) processMsgRsp(now sim.VTimeInSec) bool {
-	msg := a.memPort.RetrieveIncoming(now)
+func (a *MemAccessAgent) processMsgRsp() bool {
+	msg := a.memPort.RetrieveIncoming()
 	if msg == nil {
 		return false
 	}
@@ -82,7 +82,7 @@ func (a *MemAccessAgent) processMsgRsp(now sim.VTimeInSec) bool {
 	case *mem.WriteDoneRsp:
 		if dumpLog {
 			write := a.PendingWriteReq[msg.RespondTo]
-			log.Printf("%.10f, agent, write complete, 0x%X\n", now, write.Address)
+			log.Printf("%.10f, agent, write complete, 0x%X\n", a.CurrentTime(), write.Address)
 		}
 
 		delete(a.PendingWriteReq, msg.RespondTo)
@@ -93,7 +93,7 @@ func (a *MemAccessAgent) processMsgRsp(now sim.VTimeInSec) bool {
 
 		if dumpLog {
 			log.Printf("%.10f, agent, read complete, 0x%X, %v\n",
-				now, req.Address, msg.Data)
+				a.CurrentTime(), req.Address, msg.Data)
 		}
 
 		a.checkReadResult(req, msg)
@@ -122,7 +122,7 @@ func (a *MemAccessAgent) shouldRead() bool {
 	return dice > 0.5
 }
 
-func (a *MemAccessAgent) doRead(now sim.VTimeInSec) bool {
+func (a *MemAccessAgent) doRead() bool {
 	address := a.randomReadAddress()
 
 	if a.isAddressInPendingReq(address) {
@@ -136,7 +136,6 @@ func (a *MemAccessAgent) doRead(now sim.VTimeInSec) bool {
 		WithByteSize(4).
 		WithPID(1).
 		Build()
-	readReq.SendTime = now
 
 	err := a.memPort.Send(readReq)
 	if err == nil {
@@ -144,7 +143,7 @@ func (a *MemAccessAgent) doRead(now sim.VTimeInSec) bool {
 		a.ReadLeft--
 
 		if dumpLog {
-			log.Printf("%.10f, agent, read, 0x%X\n", now, address)
+			log.Printf("%.10f, agent, read, 0x%X\n", a.CurrentTime(), address)
 		}
 		return true
 	}
@@ -199,7 +198,7 @@ func bytesToUint32(data []byte) uint32 {
 	return a
 }
 
-func (a *MemAccessAgent) doWrite(now sim.VTimeInSec) bool {
+func (a *MemAccessAgent) doWrite() bool {
 	address := rand.Uint64() % (a.MaxAddress / 4) * 4
 	data := rand.Uint32()
 
@@ -214,7 +213,6 @@ func (a *MemAccessAgent) doWrite(now sim.VTimeInSec) bool {
 		WithPID(1).
 		WithData(uint32ToBytes(data)).
 		Build()
-	writeReq.SendTime = now
 
 	err := a.memPort.Send(writeReq)
 	if err == nil {
@@ -224,7 +222,7 @@ func (a *MemAccessAgent) doWrite(now sim.VTimeInSec) bool {
 
 		if dumpLog {
 			log.Printf("%.10f, agent, write, 0x%X, %v\n",
-				now, address, writeReq.Data)
+				a.CurrentTime(), address, writeReq.Data)
 		}
 
 		return true

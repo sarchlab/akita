@@ -48,11 +48,11 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		pipeline.EXPECT().Tick(sim.VTimeInSec(10)).Return(false)
+		pipeline.EXPECT().Tick().Return(false)
 		inBuf.EXPECT().Peek().Return(nil)
 		postPipelineBuf.EXPECT().Peek().Return(nil)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -62,16 +62,16 @@ var _ = Describe("Bankstage", func() {
 
 		inBuf.EXPECT().Peek().Return(trans)
 		inBuf.EXPECT().Pop()
-		pipeline.EXPECT().Tick(sim.VTimeInSec(10)).Return(false)
+		pipeline.EXPECT().Tick().Return(false)
 		pipeline.EXPECT().CanAccept().Return(true)
 		pipeline.EXPECT().
-			Accept(sim.VTimeInSec(10), gomock.Any()).
-			Do(func(now sim.VTimeInSec, t *bankTransaction) {
+			Accept(gomock.Any()).
+			Do(func(t *bankTransaction) {
 				Expect(t.transaction).To(BeIdenticalTo(trans))
 			})
 		postPipelineBuf.EXPECT().Peek().Return(nil)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -100,12 +100,10 @@ var _ = Describe("Bankstage", func() {
 				ReadCount:    1,
 			}
 			preCRead1 = mem.ReadReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x104).
 				WithByteSize(4).
 				Build()
 			preCRead2 = mem.ReadReqBuilder{}.
-				WithSendTime(2).
 				WithAddress(0x108).
 				WithByteSize(8).
 				Build()
@@ -132,11 +130,11 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should read", func() {
-			pipeline.EXPECT().Tick(sim.VTimeInSec(10))
+			pipeline.EXPECT().Tick()
 			inBuf.EXPECT().Peek().Return(nil)
 			postPipelineBuf.EXPECT().Pop()
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(preCTrans1.data).To(Equal([]byte{5, 6, 7, 8}))
@@ -163,7 +161,6 @@ var _ = Describe("Bankstage", func() {
 			}
 
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x100).
 				WithData([]byte{
 					1, 2, 3, 4, 5, 6, 7, 8,
@@ -198,11 +195,11 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should write", func() {
-			pipeline.EXPECT().Tick(sim.VTimeInSec(10))
+			pipeline.EXPECT().Tick()
 			inBuf.EXPECT().Peek().Return(nil)
 			postPipelineBuf.EXPECT().Pop()
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(block.IsLocked).To(BeFalse())
@@ -255,11 +252,11 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should write fetched", func() {
-			pipeline.EXPECT().Tick(sim.VTimeInSec(10))
+			pipeline.EXPECT().Tick()
 			inBuf.EXPECT().Peek().Return(nil)
 			postPipelineBuf.EXPECT().Pop()
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			// Expect(s.currTrans).To(BeNil())

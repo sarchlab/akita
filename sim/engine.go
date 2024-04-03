@@ -7,6 +7,8 @@ type TimeTeller interface {
 
 // EventScheduler can be used to schedule future events.
 type EventScheduler interface {
+	TimeTeller
+
 	Schedule(e Event)
 }
 
@@ -18,7 +20,6 @@ type SimulationEndHandler interface {
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable
-	TimeTeller
 	EventScheduler
 
 	// Run will process all the events until the simulation finishes

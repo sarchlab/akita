@@ -45,14 +45,14 @@ func (c *Comp) PlugIn(port sim.Port, srcBufCap int) {
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (c *Comp) NotifyAvailable(now sim.VTimeInSec, _ sim.Port) {
-	c.TickLater(now)
+func (c *Comp) NotifyAvailable(_ sim.Port) {
+	c.TickLater()
 }
 
 // NotifySend is called by a port to notify the connection there are
 // messages waiting to be sent, can start tick
-func (c *Comp) NotifySend(now sim.VTimeInSec) {
-	c.TickLater(now)
+func (c *Comp) NotifySend() {
+	c.TickLater()
 }
 
 // Unplug removes the association of a port and an endpoint.
@@ -61,18 +61,18 @@ func (c *Comp) Unplug(_ sim.Port) {
 }
 
 // Tick update the endpoint state.
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
+func (c *Comp) Tick() bool {
 	c.Lock()
 	defer c.Unlock()
 
 	madeProgress := false
 
-	madeProgress = c.sendFlitOut(now) || madeProgress
-	madeProgress = c.prepareMsg(now) || madeProgress
-	madeProgress = c.prepareFlits(now) || madeProgress
-	madeProgress = c.tryDeliver(now) || madeProgress
-	madeProgress = c.assemble(now) || madeProgress
-	madeProgress = c.recv(now) || madeProgress
+	madeProgress = c.sendFlitOut() || madeProgress
+	madeProgress = c.prepareMsg() || madeProgress
+	madeProgress = c.prepareFlits() || madeProgress
+	madeProgress = c.tryDeliver() || madeProgress
+	madeProgress = c.assemble() || madeProgress
+	madeProgress = c.recv() || madeProgress
 
 	return madeProgress
 }
@@ -85,7 +85,7 @@ func (c *Comp) flitTaskID(flit sim.Msg) string {
 	return fmt.Sprintf("%s_e2e", flit.Meta().ID)
 }
 
-func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
+func (c *Comp) sendFlitOut() bool {
 	madeProgress := false
 
 	for i := 0; i < c.numOutputChannels; i++ {
@@ -94,7 +94,6 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 		}
 
 		flit := c.flitsToSend[0]
-		flit.SendTime = now
 		err := c.NetworkPort.Send(flit)
 
 		if err == nil {
@@ -106,7 +105,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 
 			if len(c.flitsToSend) == 0 {
 				for _, p := range c.DevicePorts {
-					p.NotifyAvailable(now)
+					p.NotifyAvailable()
 				}
 			}
 
@@ -117,7 +116,7 @@ func (c *Comp) sendFlitOut(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
+func (c *Comp) prepareMsg() bool {
 	madeProgress := false
 	for i := 0; i < len(c.DevicePorts); i++ {
 		port := c.DevicePorts[i]
@@ -137,7 +136,7 @@ func (c *Comp) prepareMsg(_ sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
+func (c *Comp) prepareFlits() bool {
 	madeProgress := false
 
 	for {
@@ -162,7 +161,7 @@ func (c *Comp) prepareFlits(_ sim.VTimeInSec) bool {
 	}
 }
 
-func (c *Comp) recv(now sim.VTimeInSec) bool {
+func (c *Comp) recv() bool {
 	madeProgress := false
 
 	for i := 0; i < c.numInputChannels; i++ {
@@ -187,7 +186,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 		assembling := assemblingElem.Value.(*msgToAssemble)
 		assembling.numFlitArrived++
 
-		c.NetworkPort.RetrieveIncoming(now)
+		c.NetworkPort.RetrieveIncoming()
 
 		c.logFlitE2ETask(flit, true)
 
@@ -200,7 +199,7 @@ func (c *Comp) recv(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) assemble(_ sim.VTimeInSec) bool {
+func (c *Comp) assemble() bool {
 	madeProgress := false
 
 	for e := c.assemblingMsgs.Front(); e != nil; e = e.Next() {
@@ -223,12 +222,11 @@ func (c *Comp) assemble(_ sim.VTimeInSec) bool {
 	return madeProgress
 }
 
-func (c *Comp) tryDeliver(now sim.VTimeInSec) bool {
+func (c *Comp) tryDeliver() bool {
 	madeProgress := false
 
 	for len(c.assembledMsgs) > 0 {
 		msg := c.assembledMsgs[0]
-		msg.Meta().RecvTime = now
 
 		err := msg.Meta().Dst.Deliver(msg)
 		if err != nil {

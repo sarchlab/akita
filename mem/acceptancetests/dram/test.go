@@ -69,7 +69,7 @@ func main() {
 	conn.PlugIn(agent.GetPortByName("Mem"), 16)
 	conn.PlugIn(memCtrl.GetPortByName("Top"), 1)
 
-	agent.TickLater(0)
+	agent.TickLater()
 
 	err := engine.Run()
 	if err != nil {

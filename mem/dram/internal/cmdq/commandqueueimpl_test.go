@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("CommandQueueImpl", func() {
@@ -63,13 +62,13 @@ var _ = Describe("CommandQueueImpl", func() {
 		q.Queues[1] = append(q.Queues[1], cmd3)
 
 		channel.EXPECT().
-			GetReadyCommand(sim.VTimeInSec(10), cmd1).
+			GetReadyCommand(cmd1).
 			Return(nil)
 		channel.EXPECT().
-			GetReadyCommand(sim.VTimeInSec(10), cmd2).
+			GetReadyCommand(cmd2).
 			Return(cmd2)
 
-		readyCmd := q.GetCommandToIssue(10)
+		readyCmd := q.GetCommandToIssue()
 
 		Expect(readyCmd).To(BeIdenticalTo(cmd2))
 		Expect(q.Queues[0]).NotTo(ContainElement(cmd2))

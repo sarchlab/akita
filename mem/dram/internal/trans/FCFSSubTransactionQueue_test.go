@@ -90,7 +90,7 @@ var _ = Describe("FCFSSubTransactionQueue", func() {
 		cmdQueue.EXPECT().CanAccept(cmd).Return(true)
 		cmdQueue.EXPECT().Accept(cmd)
 
-		madeProgress := queue.Tick(10)
+		madeProgress := queue.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(queue.Queue).NotTo(ContainElement(subTrans))
