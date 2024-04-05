@@ -27,8 +27,6 @@ type ParallelEngine struct {
 	queueChan          chan EventQueue
 	secondaryQueues    []EventQueue
 	secondaryQueueChan chan EventQueue
-
-	simulationEndHandlers []SimulationEndHandler
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -290,21 +288,4 @@ func (e *ParallelEngine) Continue() {
 // Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
-}
-
-// RegisterSimulationEndHandler registers a handler to be called after the
-// simulation ends.
-func (e *ParallelEngine) RegisterSimulationEndHandler(
-	handler SimulationEndHandler,
-) {
-	e.simulationEndHandlers = append(e.simulationEndHandlers, handler)
-}
-
-// Finished should be called after the simulation compeletes. It calls
-// all the registered SimulationEndHandler
-func (e *ParallelEngine) Finished() {
-	now := e.readNow()
-	for _, h := range e.simulationEndHandlers {
-		h.Handle(now)
-	}
 }

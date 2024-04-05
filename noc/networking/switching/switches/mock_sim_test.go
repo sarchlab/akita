@@ -284,18 +284,6 @@ func (mr *MockEngineMockRecorder) CurrentTime() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTime", reflect.TypeOf((*MockEngine)(nil).CurrentTime))
 }
 
-// Finished mocks base method.
-func (m *MockEngine) Finished() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Finished")
-}
-
-// Finished indicates an expected call of Finished.
-func (mr *MockEngineMockRecorder) Finished() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Finished", reflect.TypeOf((*MockEngine)(nil).Finished))
-}
-
 // Hooks mocks base method.
 func (m *MockEngine) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
@@ -334,18 +322,6 @@ func (m *MockEngine) Pause() {
 func (mr *MockEngineMockRecorder) Pause() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pause", reflect.TypeOf((*MockEngine)(nil).Pause))
-}
-
-// RegisterSimulationEndHandler mocks base method.
-func (m *MockEngine) RegisterSimulationEndHandler(arg0 sim.SimulationEndHandler) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterSimulationEndHandler", arg0)
-}
-
-// RegisterSimulationEndHandler indicates an expected call of RegisterSimulationEndHandler.
-func (mr *MockEngineMockRecorder) RegisterSimulationEndHandler(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSimulationEndHandler", reflect.TypeOf((*MockEngine)(nil).RegisterSimulationEndHandler), arg0)
 }
 
 // Run mocks base method.
