@@ -76,6 +76,11 @@ export class ComponentDetailView {
     }
 
     showSankey(dict: any, container: HTMLElement) {
+        let hangAnalyzerBtn = document.querySelector('.auto-refresh-btn')
+        if (hangAnalyzerBtn !== null && hangAnalyzerBtn.classList.contains('btn-primary')) {
+            hangAnalyzerBtn.click()
+        }
+
         container.innerHTML = ""
 
         const sankeyContainer = document.createElement("div");
@@ -411,23 +416,28 @@ export class ComponentDetailView {
         const sankGen = sankey.sankey()
         .nodeWidth(4)
         .nodePadding(20)
-        .extent([[0, 0], [680, 370]])
+        .extent([[0, 0], [canvasWidth, canvasHeight]])
         .nodeId((d: any) => d.name)
 
-        console.log(canvasDims)
+        let dataSpecified = data.map((entry: any) => {
+            let output = entry
+            output.localPort = entry.localPort + " (Source)"
+            output.remotePort = entry.remotePort + " (Destination)"
+            return output
+        })
 
         // Grab every unique port
-        let ports = [...new Set(data.map((entry: any) => entry.localPort).concat(data.map((entry: any) => entry.remotePort)))]
+        let ports = [...new Set(dataSpecified.map((entry: any) => entry.localPort).concat(dataSpecified.map((entry: any) => entry.remotePort)))]
         ports = ports.map((entry: any) => {return {"name": entry}})
 
-        let linksRaw = data.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
+        let linksRaw = dataSpecified.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
         // There's a Map.groupBy function, but it doesn't work in safari
         let linksMap = this.groupByLinks(linksRaw)
         let links = []
         for (let entry of linksMap.entries()) {
             let parsed = entry[0].split('|')
             let value = entry[1]
-            links.push({"source": parsed[0], "target": parsed[1], "value": value})
+            links.push({"source": parsed[0], "target": parsed[1], "value": value, "names": parsed})
         }
 
         let outputs = sankGen({"nodes": ports, "links": links})
@@ -442,6 +452,9 @@ export class ComponentDetailView {
               .attr("y", (d: any) => d.y0)
               .attr("height", (d: any) => d.y1 - d.y0)
               .attr("width", (d: any) => d.x1 - d.x0)
+              .attr("stroke", 'black')
+              .attr("stroke-width", "2")
+              .attr('fill', 'black')
             .append("title")
               .text((d: any) => `${d.name}`);
 
@@ -451,9 +464,25 @@ export class ComponentDetailView {
             .data(outputs.links)
             .join("path")
               .attr("d", sankey.sankeyLinkHorizontal())
-              .attr("stroke", 'blue')
+              .attr("stroke", (d: any) => color(d.names[0]))
               .attr("stroke-width", (d: any) => d.width)
               .style("mix-blend-mode", "multiply")
+            .append("title")
+              .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+
+        canvas.append("g")
+            .style("font", "10px sans-serif")
+            .selectAll("text")
+            .data(outputs.nodes)
+            .join("text")
+                .attr("x", (d: any) => d.x0 < canvasWidth / 2 ? d.x1 + 6 : d.x0 - 6)
+                .attr("y", (d: any) => (d.y1 + d.y0) / 2)
+                .attr("dy", "0.35em")
+                .attr("text-anchor", (d: any) => d.x0 < canvasWidth / 2 ? "start" : "end")
+                .text((d: any) => d.name)
+            .append("tspan")
+                .attr("fill-opacity", 0.7)
+                .text((d: any) => ` ${d.value.toLocaleString()}`);
     }
 
     groupByLinks(array: any) {

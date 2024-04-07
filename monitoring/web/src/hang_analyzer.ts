@@ -67,7 +67,7 @@ export class HangAnalyzer {
 		})
 
 		const autoRefreshBtn = document.createElement("button")
-		autoRefreshBtn.classList.add("btn", "btn-primary", "ms-3")
+		autoRefreshBtn.classList.add("btn", "btn-primary", "ms-3", "auto-refresh-btn")
 		autoRefreshBtn.innerHTML = "Stop Refresh"
 		toolbar.appendChild(autoRefreshBtn)
 
