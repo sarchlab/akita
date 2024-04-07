@@ -208,7 +208,7 @@ func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
 }
 
 type tickingComponent interface {
-	TickLater(now sim.VTimeInSec)
+	TickLater()
 }
 
 func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
@@ -224,7 +224,7 @@ func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 	}
 
-	tickingComp.TickLater(m.engine.CurrentTime())
+	tickingComp.TickLater()
 	w.WriteHeader(200)
 }
 

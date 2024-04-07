@@ -11,11 +11,11 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(tickScheduler *TickScheduler) TickEvent {
+func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
 	evt := TickEvent{}
 	evt.ID = GetIDGenerator().Generate()
-	evt.handler = tickScheduler.handler
-	evt.time = tickScheduler.nextTickTime
+	evt.handler = handler
+	evt.time = time
 	evt.secondary = false
 	return evt
 }
@@ -79,7 +79,7 @@ func (t *TickScheduler) TickNow() {
 	}
 
 	t.nextTickTime = t.Freq.ThisTick(time)
-	tick := MakeTickEvent(t)
+	tick := MakeTickEvent(t.handler, t.nextTickTime)
 	if t.secondary {
 		tick.secondary = true
 	}
@@ -98,7 +98,7 @@ func (t *TickScheduler) TickLater() {
 	}
 
 	t.nextTickTime = time
-	tick := MakeTickEvent(t)
+	tick := MakeTickEvent(t.handler, t.nextTickTime)
 	if t.secondary {
 		tick.secondary = true
 	}

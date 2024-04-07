@@ -20,8 +20,6 @@ type SerialEngine struct {
 	pauseLock    sync.Mutex
 
 	singleRunLock sync.Mutex
-
-	simulationEndHandlers []SimulationEndHandler
 }
 
 // NewSerialEngine creates a SerialEngine
@@ -157,21 +155,4 @@ func (e *SerialEngine) Continue() {
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
-}
-
-// RegisterSimulationEndHandler invokes all the registered simulation end
-// handler.
-func (e *SerialEngine) RegisterSimulationEndHandler(
-	handler SimulationEndHandler,
-) {
-	e.simulationEndHandlers = append(e.simulationEndHandlers, handler)
-}
-
-// Finished should be called after the simulation ends. This function
-// calls all the registered SimulationEndHandler.
-func (e *SerialEngine) Finished() {
-	now := e.readNow()
-	for _, h := range e.simulationEndHandlers {
-		h.Handle(now)
-	}
 }
