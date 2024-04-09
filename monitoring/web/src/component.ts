@@ -455,6 +455,10 @@ export class ComponentDetailView {
               .attr("stroke", 'black')
               .attr("stroke-width", "2")
               .attr('fill', 'black')
+              .on('click', (event: Event, d: any) => {
+                let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
+                comp.populate()
+              })
             .append("title")
               .text((d: any) => `${d.name}`);
 
