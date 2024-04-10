@@ -101,12 +101,12 @@ export class ComponentDetailView {
             return
         }
 
-        const canvas = document.createElement('svg')
+        const canvas = document.createElementNS("http://www.w3.org/2000/svg", 'svg')
         canvas.classList.add("sankey-diagram")
         sankeyContainer.appendChild(canvas)
 
-        canvas.setAttribute('width', '680')
-        canvas.setAttribute('height', '370')
+        canvas.setAttribute('width', '100%')
+        canvas.setAttribute('height', '90%')
 
         this.drawSankey(dict, canvas)
     }
@@ -406,8 +406,8 @@ export class ComponentDetailView {
             })
     }
 
-    drawSankey(data: any, target: HTMLElement) {
-        const canvas = d3.select<HTMLElement, unknown>(target)
+    drawSankey(data: any, target: SVGSVGElement) {
+        const canvas = d3.select<SVGSVGElement, unknown>(target)
 
         const canvasDims = target.getBoundingClientRect()
         const canvasHeight = canvasDims.height
