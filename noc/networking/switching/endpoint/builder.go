@@ -30,6 +30,7 @@ func MakeBuilder() Builder {
 		freq:                     1 * sim.GHz,
 		numInputChannels:         1,
 		numOutputChannels:        1,
+		encodingOverhead:         0.25,
 	}
 }
 
@@ -101,12 +102,14 @@ func (b Builder) Build(name string) *Comp {
 	ep.assemblingMsgs = list.New()
 	ep.assemblingMsgTable = make(map[string]*list.Element)
 
+	ep.encodingOverhead = b.encodingOverhead
+
 	ep.NetworkPort = sim.NewLimitNumMsgPort(
 		ep, b.networkPortBufferSize,
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
 
 	for _, dp := range b.devicePorts {
-		ep.PlugIn(dp, 1)
+		ep.PlugIn(dp, ep.numInputChannels)
 	}
 
 	return ep

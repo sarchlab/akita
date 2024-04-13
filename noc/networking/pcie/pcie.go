@@ -64,6 +64,8 @@ func (c *Connector) WithBandwidth(bytePerSecond uint64) *Connector {
 		panic("flit size is 0")
 	}
 
+	c.connector = c.connector.WithFlitSize(c.flitByteSize)
+
 	return c
 }
 
@@ -78,7 +80,7 @@ func (c *Connector) WithVersion(version int, width int) *Connector {
 	}
 
 	linkBandwidth := linkBandwidthTable[version]
-	totalBandwidth := linkBandwidth * uint64(width)
+	totalBandwidth := linkBandwidth * uint64(width) / 8
 
 	return c.WithBandwidth(totalBandwidth)
 }

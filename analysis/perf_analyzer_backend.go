@@ -28,6 +28,10 @@ type CSVBackend struct {
 
 // NewCSVPerfAnalyzerBackend creates a new CSVPerfAnalyzerBackend.
 func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
+	if dbFilename == "" {
+		return nil
+	}
+
 	p := &CSVBackend{}
 
 	var err error
@@ -45,7 +49,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 
 	p.csvWriter = csv.NewWriter(p.dbFile)
 
-	header := []string{"Start", "End", "Where", "What", "Value", "Unit"}
+	header := []string{"Start", "End", "Where", "What", "EntryType", "Value", "Unit"}
 	err = p.csvWriter.Write(header)
 	if err != nil {
 		panic(err)
@@ -61,6 +65,7 @@ func (p *CSVBackend) AddDataEntry(entry PerfAnalyzerEntry) {
 		fmt.Sprintf("%.10f", entry.End),
 		entry.Where,
 		entry.What,
+		entry.EntryType,
 		fmt.Sprintf("%.10f", entry.Value),
 		entry.Unit,
 	})
@@ -136,6 +141,7 @@ func (p *SQLiteBackend) Flush() {
 			entry.End,
 			entry.Where,
 			entry.What,
+			entry.EntryType,
 			entry.Value,
 			entry.Unit,
 		)
@@ -172,8 +178,9 @@ func (p *SQLiteBackend) createTable() {
 		id integer not null primary key,
 		start real,
 		end real,
-		where_ text,
+		where text,
 		what text,
+		entryType text,
 		value real,
 		unit text
 	);
@@ -189,8 +196,8 @@ func (p *SQLiteBackend) prepareStatement() {
 	var err error
 
 	sqlStmt := `
-	insert into perf(start, end, where_, what, value, unit)
-	values(?, ?, ?, ?, ?, ?)
+	insert into perf(start, end, where_, what_, entryType, value, unit)
+	values(?, ?, ?, ?, ?, ?, ?)
 	`
 
 	p.statement, err = p.Prepare(sqlStmt)
