@@ -31,7 +31,10 @@ var _ = Describe("Cache", func() {
 
 		engine = sim.NewSerialEngine()
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-		dram = idealmemcontroller.New("DRAM", engine, 4*mem.GB)
+		dram = idealmemcontroller.MakeBuilder().
+			WithEngine(engine).
+			WithNewStorage(4 * mem.GB).
+			Build("DRAM")
 		lowModuleFinder = &mem.SingleLowModuleFinder{
 			LowModule: dram.GetPortByName("Top"),
 		}

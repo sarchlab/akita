@@ -251,7 +251,7 @@ func (wb *writeBufferStage) write() bool {
 	// 	trans.accessReq().Meta().ID,
 	// 	trans.evictingAddr, trans.evictingAddr,
 	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.evictingData,
+	// 	trans.evictingData,findInflightFetchByFetchReadReqID
 	// )
 
 	return true

@@ -13,7 +13,6 @@ import (
 
 type readRespondEvent struct {
 	*sim.EventBase
-
 	req *mem.ReadReq
 }
 
@@ -25,7 +24,6 @@ func newReadRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 
 type writeRespondEvent struct {
 	*sim.EventBase
-
 	req *mem.WriteReq
 }
 
@@ -36,18 +34,17 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 }
 
 // An Comp is an ideal memory controller that can perform read and write
-//
 // Ideal memory controller always respond to the request in a fixed number of
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
 	*sim.TickingComponent
 
-	topPort            sim.Port
-	Storage            *mem.Storage
-	Latency            int
-	AddressConverter   mem.AddressConverter
-	MaxNumTransaction  int
-	currNumTransaction int
+	topPort          sim.Port
+	Storage          *mem.Storage
+	Latency          int
+	addressConverter mem.AddressConverter
+
+	width int
 }
 
 // Handle defines how the Comp handles event
@@ -68,17 +65,12 @@ func (c *Comp) Handle(e sim.Event) error {
 
 // Tick updates ideal memory controller state.
 func (c *Comp) Tick() bool {
-	if c.currNumTransaction >= c.MaxNumTransaction {
-		return false
-	}
-
 	msg := c.topPort.RetrieveIncoming()
 	if msg == nil {
 		return false
 	}
 
 	tracing.TraceReqReceive(msg, c)
-	c.currNumTransaction++
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
@@ -113,8 +105,8 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	req := e.req
 
 	addr := req.Address
-	if c.AddressConverter != nil {
-		addr = c.AddressConverter.ConvertExternalToInternal(addr)
+	if c.addressConverter != nil {
+		addr = c.addressConverter.ConvertExternalToInternal(addr)
 	}
 
 	data, err := c.Storage.Read(addr, req.AccessByteSize)
@@ -130,6 +122,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 		Build()
 
 	networkErr := c.topPort.Send(rsp)
+
 	if networkErr != nil {
 		retry := newReadRespondEvent(c.Freq.NextTick(now), c, req)
 		c.Engine.Schedule(retry)
@@ -137,7 +130,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.currNumTransaction--
 	c.TickLater()
 
 	return nil
@@ -162,8 +154,8 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 	addr := req.Address
 
-	if c.AddressConverter != nil {
-		addr = c.AddressConverter.ConvertExternalToInternal(addr)
+	if c.addressConverter != nil {
+		addr = c.addressConverter.ConvertExternalToInternal(addr)
 	}
 
 	if req.DirtyMask == nil {
@@ -188,7 +180,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-	c.currNumTransaction--
 	c.TickLater()
 
 	return nil
@@ -196,24 +187,4 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 func (c *Comp) CurrentTime() sim.VTimeInSec {
 	return c.Engine.CurrentTime()
-}
-
-// New creates a new ideal memory controller
-func New(
-	name string,
-	engine sim.Engine,
-	capacity uint64,
-) *Comp {
-	c := new(Comp)
-
-	c.TickingComponent = sim.NewTickingComponent(name, engine, 1*sim.GHz, c)
-	c.Latency = 100
-	c.MaxNumTransaction = 8
-
-	c.Storage = mem.NewStorage(capacity)
-
-	c.topPort = sim.NewLimitNumMsgPort(c, 16, name+".TopPort")
-	c.AddPort("Top", c.topPort)
-
-	return c
 }

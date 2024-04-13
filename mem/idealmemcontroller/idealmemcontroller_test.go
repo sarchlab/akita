@@ -25,7 +25,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine = NewMockEngine(mockCtrl)
 		port = NewMockPort(mockCtrl)
 
-		memController = New("MemCtrl", engine, 1*mem.MB)
+		memController = MakeBuilder().
+			WithEngine(engine).
+			WithNewStorage(1 * mem.MB).
+			Build("MemCtrl")
 		memController.Freq = 1000 * sim.MHz
 		memController.Latency = 10
 		memController.topPort = port
@@ -33,14 +36,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	AfterEach(func() {
 		mockCtrl.Finish()
-	})
-
-	It("should stall if too many transactions are running", func() {
-		memController.currNumTransaction = 8
-
-		madeProgress := memController.Tick()
-
-		Expect(madeProgress).To(BeFalse())
 	})
 
 	It("should process read request", func() {
@@ -58,7 +53,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		madeProgress := memController.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(memController.currNumTransaction).To(Equal(1))
 	})
 
 	It("should process write request", func() {
@@ -76,13 +70,11 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
-		Expect(memController.currNumTransaction).To(Equal(1))
 	})
 
 	It("should handle read respond event", func() {
 		data := []byte{1, 2, 3, 4}
 		memController.Storage.Write(0, data)
-		memController.currNumTransaction = 1
 
 		readReq := mem.ReadReqBuilder{}.
 			WithDst(memController.topPort).
@@ -97,8 +89,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		memController.Handle(event)
-
-		Expect(memController.currNumTransaction).To(Equal(0))
 	})
 
 	It("should retry read if send DataReady failed", func() {
@@ -130,7 +120,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithData(data).
 			Build()
 		event := newWriteRespondEvent(11, memController, writeReq)
-		memController.currNumTransaction = 1
 
 		engine.EXPECT().Schedule(gomock.Any())
 		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
@@ -140,7 +129,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		retData, _ := memController.Storage.Read(0, 4)
 		Expect(retData).To(Equal([]byte{1, 2, 3, 4}))
-		Expect(memController.currNumTransaction).To(Equal(0))
 	})
 
 	It("should handle write respond event", func() {
