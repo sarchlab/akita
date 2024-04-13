@@ -202,16 +202,22 @@ func (c *Comp) recv() bool {
 func (c *Comp) assemble() bool {
 	madeProgress := false
 
-	for e := c.assemblingMsgs.Front(); e != nil; e = e.Next() {
+	e := c.assemblingMsgs.Front()
+	for e != nil {
 		assemblingMsg := e.Value.(*msgToAssemble)
 
+		next := e.Next()
+
 		if assemblingMsg.numFlitArrived < assemblingMsg.numFlitRequired {
+			e = next
 			continue
 		}
 
 		c.assembledMsgs = append(c.assembledMsgs, assemblingMsg.msg)
 		c.assemblingMsgs.Remove(e)
 		delete(c.assemblingMsgTable, assemblingMsg.msg.Meta().ID)
+
+		e = next
 
 		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
 		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)

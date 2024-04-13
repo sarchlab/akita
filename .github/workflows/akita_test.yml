@@ -1,6 +1,6 @@
 name: Akita Test
 
-on: push
+on: [push, pull_request]
 
 jobs:
   akitartm_compile:

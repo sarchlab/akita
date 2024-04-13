@@ -106,7 +106,7 @@ func (b Builder) Build(name string) *Comp {
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
 
 	for _, dp := range b.devicePorts {
-		ep.PlugIn(dp, 1)
+		ep.PlugIn(dp, ep.numInputChannels)
 	}
 
 	return ep
