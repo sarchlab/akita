@@ -20,11 +20,12 @@ var _ = Describe("Port Analyzer", func() {
 	var (
 		mockCtrl *gomock.Controller
 
-		port       *MockPort
-		timeTeller *MockTimeTeller
-		portLogger *MockPerfLogger
-
-		portAnalyzer *PortAnalyzer
+		port          *MockPort
+		incommingPort *MockPort
+		outgoingPort  *MockPort
+		timeTeller    *MockTimeTeller
+		portLogger    *MockPerfLogger
+		portAnalyzer  *PortAnalyzer
 	)
 
 	BeforeEach(func() {
@@ -32,6 +33,12 @@ var _ = Describe("Port Analyzer", func() {
 
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().Name().Return("PortName").AnyTimes()
+
+		incommingPort = NewMockPort(mockCtrl)
+		incommingPort.EXPECT().Name().Return("IncomingPort").AnyTimes()
+
+		outgoingPort = NewMockPort(mockCtrl)
+		outgoingPort.EXPECT().Name().Return("OutgoingPort").AnyTimes()
 
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		portLogger = NewMockPerfLogger(mockCtrl)
@@ -52,6 +59,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -63,21 +72,25 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -90,6 +103,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Dst:          port,
+				Src:          incommingPort,
 			},
 		}
 
@@ -100,21 +115,25 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 20.0,
-			End:   21.0,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       20.0,
+			End:         21.0,
+			Where:       "PortName",
+			WhereRemote: "IncomingPort",
+			What:        "Incoming",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 20.0,
-			End:   21.0,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       20.0,
+			End:         21.0,
+			Where:       "PortName",
+			WhereRemote: "IncomingPort",
+			What:        "Incoming",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		timeTeller.EXPECT().
@@ -129,12 +148,14 @@ var _ = Describe("Port Analyzer", func() {
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 		inMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port,
+				Src:          incommingPort,
 			},
 		}
 
@@ -150,39 +171,47 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "IncomingByte",
-			Value: 10000.0,
-			Unit:  "Byte",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "IncomingPort",
+			What:        "Incoming",
+			EntryType:   "Traffic",
+			Value:       10000.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "IncomingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "IncomingPort",
+			What:        "Incoming",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -195,6 +224,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -206,21 +237,25 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -233,6 +268,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+				Src:          port,
+				Dst:          outgoingPort,
 			},
 		}
 
@@ -244,21 +281,25 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1)).AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       0.0,
+			End:         1.0,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portAnalyzer.Func(sim.HookCtx{
@@ -267,21 +308,25 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 3.0,
-			End:   3.1,
-			Where: "PortName",
-			What:  "OutGoingByte",
-			Value: 100.0,
-			Unit:  "Byte",
+			Start:       3.0,
+			End:         3.1,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       100.0,
+			Unit:        "Byte",
 		})
 
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 3.0,
-			End:   3.1,
-			Where: "PortName",
-			What:  "OutGoingMsg",
-			Value: 1.0,
-			Unit:  "Msg",
+			Start:       3.0,
+			End:         3.1,
+			Where:       "PortName",
+			WhereRemote: "OutgoingPort",
+			What:        "Outgoing",
+			EntryType:   "Traffic",
+			Value:       1.0,
+			Unit:        "Msg",
 		})
 
 		portAnalyzer.summarize()

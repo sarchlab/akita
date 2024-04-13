@@ -51,12 +51,13 @@ var _ = Describe("BufferAnalyzer", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
 		buffer.EXPECT().Size().Return(2)
 		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "Buffer",
-			What:  "BufferLevel",
-			Value: 0.9,
-			Unit:  "",
+			Start:     0.0,
+			End:       1.0,
+			Where:     "Buffer",
+			What:      "Level",
+			EntryType: "Buffer",
+			Value:     0.9,
+			Unit:      "",
 		})
 
 		bufferAnalyzer.Func(sim.HookCtx{
@@ -81,21 +82,23 @@ var _ = Describe("BufferAnalyzer", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1)).AnyTimes()
 		buffer.EXPECT().Size().Return(2)
 		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 0.0,
-			End:   1.0,
-			Where: "Buffer",
-			What:  "BufferLevel",
-			Value: 0.9,
-			Unit:  "",
+			Start:     0.0,
+			End:       1.0,
+			Where:     "Buffer",
+			What:      "Level",
+			EntryType: "Buffer",
+			Value:     0.9,
+			Unit:      "",
 		})
 
 		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
-			Start: 1.0,
-			End:   2.0,
-			Where: "Buffer",
-			What:  "BufferLevel",
-			Value: 1,
-			Unit:  "",
+			Start:     1.0,
+			End:       2.0,
+			Where:     "Buffer",
+			What:      "Level",
+			EntryType: "Buffer",
+			Value:     1,
+			Unit:      "",
 		})
 
 		bufferAnalyzer.Func(sim.HookCtx{

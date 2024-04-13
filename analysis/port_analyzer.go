@@ -7,6 +7,14 @@ import (
 	"github.com/tebeka/atexit"
 )
 
+type portAnalyzerEntry struct {
+	remotePortName string
+	OutTrafficByte int64
+	OutTrafficMsg  int64
+	InTrafficByte  int64
+	InTrafficMsg   int64
+}
+
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
 	PerfLogger
@@ -16,11 +24,8 @@ type PortAnalyzer struct {
 	period    sim.VTimeInSec
 	port      sim.Port
 
-	lastTime       sim.VTimeInSec
-	outTrafficByte uint64
-	outTrafficMsg  uint64
-	inTrafficByte  uint64
-	inTrafficMsg   uint64
+	lastTime           sim.VTimeInSec
+	remoteToTrafficMap map[string]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
@@ -38,14 +43,39 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		}
 	}
 
-	h.lastTime = now
-	if msg.Meta().Dst == h.port {
-		h.inTrafficByte += uint64(msg.Meta().TrafficBytes)
-		h.inTrafficMsg++
-	} else {
-		h.outTrafficByte += uint64(msg.Meta().TrafficBytes)
-		h.outTrafficMsg++
+	if h.remoteToTrafficMap == nil {
+		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 	}
+
+	remotePortName := msg.Meta().Dst.Name()
+	if h.isIncoming(msg) {
+		remotePortName = msg.Meta().Src.Name()
+	}
+
+	entry, ok := h.remoteToTrafficMap[remotePortName]
+	if !ok {
+		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
+			remotePortName: remotePortName,
+		}
+	}
+
+	entry = h.remoteToTrafficMap[remotePortName]
+
+	if h.isIncoming(msg) {
+		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.InTrafficMsg++
+	} else {
+		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.OutTrafficMsg++
+	}
+
+	h.remoteToTrafficMap[remotePortName] = entry
+
+	h.lastTime = now
+}
+
+func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
+	return msg.Meta().Dst == h.port
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -63,50 +93,40 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	if h.inTrafficMsg > 0 {
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "IncomingByte",
-			Value: float64(h.inTrafficByte),
-			Unit:  "Byte",
-		})
+	for _, entry := range h.remoteToTrafficMap {
+		perfEntry := PerfAnalyzerEntry{
+			Start:       startTime,
+			End:         endTime,
+			Where:       h.port.Name(),
+			WhereRemote: entry.remotePortName,
+			EntryType:   "Traffic",
+		}
 
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "IncomingMsg",
-			Value: float64(h.inTrafficMsg),
-			Unit:  "Msg",
-		})
+		if entry.InTrafficMsg != 0 {
+			perfEntry.What = "Incoming"
+			perfEntry.Value = float64(entry.InTrafficByte)
+			perfEntry.Unit = "Byte"
+			h.PerfLogger.AddDataEntry(perfEntry)
+
+			perfEntry.Value = float64(entry.InTrafficMsg)
+			perfEntry.Unit = "Msg"
+			h.PerfLogger.AddDataEntry(perfEntry)
+		}
+
+		if entry.OutTrafficMsg != 0 {
+			perfEntry.What = "Outgoing"
+
+			perfEntry.Value = float64(entry.OutTrafficByte)
+			perfEntry.Unit = "Byte"
+			h.PerfLogger.AddDataEntry(perfEntry)
+
+			perfEntry.Value = float64(entry.OutTrafficMsg)
+			perfEntry.Unit = "Msg"
+			h.PerfLogger.AddDataEntry(perfEntry)
+		}
 	}
 
-	if h.outTrafficMsg > 0 {
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "OutGoingByte",
-			Value: float64(h.outTrafficByte),
-			Unit:  "Byte",
-		})
-
-		h.PerfLogger.AddDataEntry(PerfAnalyzerEntry{
-			Start: startTime,
-			End:   endTime,
-			Where: h.port.Name(),
-			What:  "OutGoingMsg",
-			Value: float64(h.outTrafficMsg),
-			Unit:  "Msg",
-		})
-	}
-
-	h.inTrafficByte = 0
-	h.inTrafficMsg = 0
-	h.outTrafficByte = 0
-	h.outTrafficMsg = 0
+	h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
