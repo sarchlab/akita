@@ -1,20 +1,38 @@
 package tracing
 
 import (
-	"log"
+	"fmt"
 	"sync"
 )
 
+// TaskPrinter can print tasks with a format.
+type TaskPrinter interface {
+	Print(task Task)
+}
+
+type defaultTaskPrinter struct {
+}
+
+func (p *defaultTaskPrinter) Print(task Task) {
+	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Where)
+}
+
 // BackTraceTracer can record tasks incomplete tasks
 type BackTraceTracer struct {
+	printer      TaskPrinter
 	tracingTasks map[string]Task
 	lock         sync.Mutex
 }
 
 // NewBackTraceTracer creates a new BackTraceTracer
-func NewBackTraceTracer() *BackTraceTracer {
+func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	t := &BackTraceTracer{
+		printer:      printer,
 		tracingTasks: make(map[string]Task),
+	}
+
+	if t.printer == nil {
+		t.printer = &defaultTaskPrinter{}
 	}
 
 	return t
@@ -39,7 +57,7 @@ func (t *BackTraceTracer) EndTask(task Task) {
 }
 
 func (t *BackTraceTracer) DumpBackTrace(task Task) {
-	log.Printf("Task %s", task.ID)
+	t.printer.Print(task)
 
 	if task.ParentID == "" {
 		return

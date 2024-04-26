@@ -1,17 +1,27 @@
 package tracing
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("BackTraceTracer", func() {
 	var (
-		t *BackTraceTracer
+		mockCtrl        *gomock.Controller
+		mockTaskPrinter *MockTaskPrinter
+		t               *BackTraceTracer
 	)
 
 	BeforeEach(func() {
-		t = NewBackTraceTracer()
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockTaskPrinter = NewMockTaskPrinter(mockCtrl)
+
+		t = NewBackTraceTracer(mockTaskPrinter)
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
 	})
 
 	It("should trace a single task", func() {
@@ -64,6 +74,8 @@ var _ = Describe("BackTraceTracer", func() {
 	It("should print single tasks", func() {
 		t.StartTask(Task{ID: "1"})
 
+		mockTaskPrinter.EXPECT().Print(Task{ID: "1"})
+
 		t.DumpBackTrace(Task{ID: "1"})
 	})
 
@@ -71,6 +83,14 @@ var _ = Describe("BackTraceTracer", func() {
 		t.StartTask(Task{ID: "1"})
 		t.StartTask(Task{ID: "2", ParentID: "1"})
 		t.StartTask(Task{ID: "3", ParentID: "2"})
+
+		e3 := mockTaskPrinter.EXPECT().
+			Print(Task{ID: "3", ParentID: "2"})
+		e2 := mockTaskPrinter.EXPECT().
+			Print(Task{ID: "2", ParentID: "1"}).
+			After(e3)
+		mockTaskPrinter.EXPECT().Print(Task{ID: "1"}).
+			After(e2)
 
 		t.DumpBackTrace(Task{ID: "3", ParentID: "2"})
 	})
