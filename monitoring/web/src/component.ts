@@ -6,6 +6,9 @@ import * as sankey from "d3-sankey"
 export class ComponentDetailView {
     name: string
     monitor: Monitor
+    running: Boolean = false
+    intervalHandle: number = 0
+    measurementMode: string = "Byte"
 
     constructor(name: string, monitor: Monitor) {
         this.name = name
@@ -20,14 +23,9 @@ export class ComponentDetailView {
                 const object = res["dict"][res["r"]]
 
                 this.showComponent(object, res["dict"], container!)
-            })
 
-            fetch(`/api/traffic/${this.name}`)
-            .then(res => res.json())
-            .then((res: any) => {
-                const container = document.getElementById('right-pane')
-
-                this.showSankey(res, container!)
+                const sankeyContainer = document.getElementById('right-pane')
+                this.showSankey(sankeyContainer!)
             })
     }
 
@@ -75,7 +73,7 @@ export class ComponentDetailView {
         this.showContent(comp, dict, "", componentDetailContainer, "")
     }
 
-    showSankey(dict: any, container: HTMLElement) {
+    showSankey(container: HTMLElement) {
         let hangAnalyzerBtn = document.querySelector('.auto-refresh-btn')
         if (hangAnalyzerBtn !== null && hangAnalyzerBtn.classList.contains('btn-primary')) {
             hangAnalyzerBtn.click()
@@ -83,23 +81,13 @@ export class ComponentDetailView {
 
         container.innerHTML = ""
 
+        const toolbar = document.createElement("div")
+		toolbar.classList.add("btn-toolbar", "mb-3")
+		container.appendChild(toolbar)
+
         const sankeyContainer = document.createElement("div");
         sankeyContainer.classList.add("sankey-container")
         container.appendChild(sankeyContainer)
-
-        const sankeyHeader = document.createElement("div")
-        sankeyHeader.classList.add("sankey-header")
-        sankeyHeader.innerHTML = `
-            <div class="sankey-name">${this.name} Data Flows</div>
-        `
-
-        sankeyContainer.appendChild(sankeyHeader)
-
-        if (dict.length === 0) {
-            sankeyHeader.innerHTML = `
-            <div class="sankey-name">No Data for ${this.name}</div>`
-            return
-        }
 
         const canvas = document.createElementNS("http://www.w3.org/2000/svg", 'svg')
         canvas.classList.add("sankey-diagram")
@@ -108,8 +96,93 @@ export class ComponentDetailView {
         canvas.setAttribute('width', '100%')
         canvas.setAttribute('height', '90%')
 
-        this.drawSankey(dict, canvas)
+		const groupType = document.createElement("div")
+		groupType.classList.add("input-group")
+		groupType.setAttribute("role", "group")
+		groupType.innerHTML = `<div class="input-group-text">Measure the Volume of:</div>`
+		toolbar.appendChild(groupType)
+
+        const dataVolumeBtn = document.createElement("button")
+		dataVolumeBtn.classList.add("btn", "btn-primary")
+		dataVolumeBtn.innerHTML = "Bytes"
+		groupType.appendChild(dataVolumeBtn)
+
+		const msgVolumeBtn = document.createElement("button")
+		msgVolumeBtn.classList.add("btn", "btn-outline-primary")
+		msgVolumeBtn.innerHTML = "Messages"
+        groupType.appendChild(msgVolumeBtn)
+
+        dataVolumeBtn.addEventListener("click", (_: Event) => {
+			this.measurementMode = "Byte"
+
+			this.getDataAndDrawSankey(canvas)
+
+			dataVolumeBtn.classList.remove('btn-outline-primary')
+			dataVolumeBtn.classList.add('btn-primary')
+			msgVolumeBtn.classList.remove('btn-primary')
+			msgVolumeBtn.classList.add('btn-outline-primary')
+
+		})
+
+		msgVolumeBtn.addEventListener("click", (_: Event) => {
+			this.measurementMode = "Msg"
+			this.getDataAndDrawSankey(canvas)
+
+			msgVolumeBtn.classList.remove('btn-outline-primary')
+			msgVolumeBtn.classList.add('btn-primary')
+			dataVolumeBtn.classList.remove('btn-primary')
+			dataVolumeBtn.classList.add('btn-outline-primary')
+		})
+
+        const autoRefreshBtn = document.createElement("button")
+		autoRefreshBtn.classList.add("btn", "btn-outline-primary", "ms-3", "auto-sankey-refresh-btn")
+		autoRefreshBtn.innerHTML = "Stop Refresh"
+		toolbar.appendChild(autoRefreshBtn)
+
+		autoRefreshBtn.addEventListener("click", (_: Event) => {
+			if (this.running) {
+				autoRefreshBtn.classList.remove('btn-primary')
+				autoRefreshBtn.classList.add('btn-outline-primary')
+				autoRefreshBtn.innerHTML = "Auto Refresh"
+
+                this.stopAnalyzing()
+			} else {
+				autoRefreshBtn.classList.remove('btn-outline-primary')
+				autoRefreshBtn.classList.add('btn-primary')
+				autoRefreshBtn.innerHTML = "Stop Refresh"
+
+                this.startAnalyzing(canvas)
+			}
+		})
+
+        this.startAnalyzing(canvas)
     }
+
+    getDataAndDrawSankey(canvas: SVGSVGElement) {
+        fetch(`/api/traffic/${this.name}`)
+        .then(res => res.json())
+        .then((res: any) => {
+            this.drawSankey(res, canvas)
+        })
+    }
+
+    startAnalyzing(canvas: SVGSVGElement) {
+		this.getDataAndDrawSankey(canvas)
+
+		if (!this.running) {
+			this.intervalHandle = window.setInterval(() => {
+				this.getDataAndDrawSankey(canvas)
+			}, 2000)
+			this.running = true
+		}
+	}
+
+	stopAnalyzing() {
+		if (this.running) {
+			window.clearInterval(this.intervalHandle)
+			this.running = false
+		}
+	}
 
     showContent(
         s: any, dict: any,
@@ -409,28 +482,30 @@ export class ComponentDetailView {
     drawSankey(data: any, target: SVGSVGElement) {
         const canvas = d3.select<SVGSVGElement, unknown>(target)
 
+        canvas.selectAll("*").remove()
+
         const canvasDims = target.getBoundingClientRect()
         const canvasHeight = canvasDims.height
         const canvasWidth = canvasDims.width
 
-        const sankGen = sankey.sankey()
-        .nodeWidth(4)
+        // Originate: This component is the source of the data
+        // Terminate: This component is the destination of the data
+
+        const sankOriginates = sankey.sankey()
+        .nodeWidth(10)
         .nodePadding(20)
-        .extent([[0, 0], [canvasWidth, canvasHeight]])
+        .extent([[canvasWidth * 2 / 3, canvasHeight / 3], [canvasWidth, canvasHeight * 2 / 3]])
         .nodeId((d: any) => d.name)
 
-        let dataSpecified = data.map((entry: any) => {
-            let output = entry
-            output.localPort = entry.localPort + " (Source)"
-            output.remotePort = entry.remotePort + " (Destination)"
-            return output
-        })
+        const sankTermiates = sankey.sankey()
+        .nodeWidth(10)
+        .nodePadding(20)
+        .extent([[0, canvasHeight / 3], [canvasWidth / 3, canvasHeight * 2 / 3]])
+        .nodeId((d: any) => d.name)
 
-        // Grab every unique port
-        let ports = [...new Set(dataSpecified.map((entry: any) => entry.localPort).concat(dataSpecified.map((entry: any) => entry.remotePort)))]
-        ports = ports.map((entry: any) => {return {"name": entry}})
+        let filteredData = data.filter((entry: any) => entry.unit === this.measurementMode)
 
-        let linksRaw = dataSpecified.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
+        let linksRaw = filteredData.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
         // There's a Map.groupBy function, but it doesn't work in safari
         let linksMap = this.groupByLinks(linksRaw)
         let links = []
@@ -440,53 +515,122 @@ export class ComponentDetailView {
             links.push({"source": parsed[0], "target": parsed[1], "value": value, "names": parsed})
         }
 
-        let outputs = sankGen({"nodes": ports, "links": links})
+        let linksOriginate = links.filter((entry: any) => {
+            return entry.source.includes(this.name)
+        })
+        let portsOriginate = [...new Set(linksOriginate.map((entry: any) => entry.source).concat(linksOriginate.map((entry: any) => entry.target)))]
+        portsOriginate = portsOriginate.map((entry: any) => {return {"name": entry}})
 
-        const color = d3.scaleOrdinal(["Perished"], ["#da4f81"]).unknown("#ccc");
+        let linksTerminate = links.filter((entry: any) => {
+            return entry.target.includes(this.name)
+        })
+        let portsTerminate = [...new Set(linksTerminate.map((entry: any) => entry.source).concat(linksTerminate.map((entry: any) => entry.target)))]
+        portsTerminate = portsTerminate.map((entry: any) => {return {"name": entry}})
 
-        canvas.append("g")
-            .selectAll("rect")
-            .data(outputs.nodes)
-            .join("rect")
-              .attr("x", (d: any) => d.x0)
-              .attr("y", (d: any) => d.y0)
-              .attr("height", (d: any) => d.y1 - d.y0)
-              .attr("width", (d: any) => d.x1 - d.x0)
-              .attr("stroke", 'black')
-              .attr("stroke-width", "2")
-              .attr('fill', 'black')
-              .on('click', (event: Event, d: any) => {
-                let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
-                comp.populate()
-              })
-            .append("title")
-              .text((d: any) => `${d.name}`);
+        // center rect
+        canvas
+            .append("rect")
+            .attr("x", canvasWidth / 3)
+            .attr("y", canvasHeight / 3)
+            .attr("width", canvasWidth / 3)
+            .attr("height", canvasHeight / 3)
+            .attr("fill", "Khaki")
+            .attr("stroke", "DarkKhaki")
+            .attr("stroke-width", "2")
 
-        canvas.append("g")
-            .attr("fill", "none")
-            .selectAll("g")
-            .data(outputs.links)
-            .join("path")
-              .attr("d", sankey.sankeyLinkHorizontal())
-              .attr("stroke", (d: any) => color(d.names[0]))
-              .attr("stroke-width", (d: any) => d.width)
-              .style("mix-blend-mode", "multiply")
-            .append("title")
-              .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+        if (portsOriginate.length > 0 && linksOriginate.length > 0) {
+            let outputsOriginate = sankOriginates({"nodes": portsOriginate, "links": linksOriginate})
 
-        canvas.append("g")
-            .style("font", "10px sans-serif")
-            .selectAll("text")
-            .data(outputs.nodes)
-            .join("text")
-                .attr("x", (d: any) => d.x0 < canvasWidth / 2 ? d.x1 + 6 : d.x0 - 6)
-                .attr("y", (d: any) => (d.y1 + d.y0) / 2)
-                .attr("dy", "0.35em")
-                .attr("text-anchor", (d: any) => d.x0 < canvasWidth / 2 ? "start" : "end")
-                .text((d: any) => d.name)
-            .append("tspan")
-                .attr("fill-opacity", 0.7)
-                .text((d: any) => ` ${d.value.toLocaleString()}`);
+            outputsOriginate.nodes = outputsOriginate.nodes.map((entry: any) => {
+                if (entry.name.includes(this.name)) return entry
+                let output = entry
+                let height = output.y1 - output.y0
+                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height * 3 / 2)
+                output.y1 = output.y0 + height
+                return output
+            })
+    
+            outputsOriginate.links = outputsOriginate.links.map((entry: any) => {
+                let output = entry
+                output.y1 = (entry.target.y0 + entry.target.y1) / 2
+                return output
+            })
+
+            canvas.append("g")
+                .selectAll("rect")
+                .data(outputsOriginate.nodes)
+                .join("rect")
+                  .attr("x", (d: any) => d.x0)
+                  .attr("y", (d: any) => d.y0)
+                  .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
+                  .attr("width", (d: any) => d.x1 - d.x0)
+                  .attr('fill', 'black')
+                  .on('click', (event: Event, d: any) => {
+                    let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
+                    comp.populate()
+                  })
+                .append("title")
+                  .text((d: any) => `${d.name}`);
+
+            canvas.append("g")
+              .attr("fill", "none")
+              .selectAll("g")
+              .data(outputsOriginate.links)
+              .join("path")
+                .attr("d", sankey.sankeyLinkHorizontal())
+                .attr("stroke", "gray")
+                .attr("stroke-width", (d: any) => Math.max(d.width, 1))
+                .style("mix-blend-mode", "multiply")
+              .append("title")
+                .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+        }
+
+        if (portsTerminate.length > 0 && linksTerminate.length > 0) {
+            let outputsTerminate = sankTermiates({"nodes": portsTerminate, "links": linksTerminate})
+
+            outputsTerminate.nodes = outputsTerminate.nodes.map((entry: any) => {
+                if (entry.name.includes(this.name)) return entry
+                let output = entry
+                let height = output.y1 - output.y0
+                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height * 3 / 2)
+                output.y1 = output.y0 + height
+                return output
+            })
+
+            outputsTerminate.links = outputsTerminate.links.map((entry: any) => {
+                let output = entry
+                output.y0 = (entry.source.y0 + entry.source.y1) / 2
+                return output
+            })
+        
+            canvas.append("g")
+                .selectAll("rect")
+                .data(outputsTerminate.nodes)
+                .join("rect")
+                  .attr("x", (d: any) => d.x0)
+                  .attr("y", (d: any) => d.y0)
+                  .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
+                  .attr("width", (d: any) => d.x1 - d.x0)
+                  .attr('fill', 'black')
+                  .on('click', (event: Event, d: any) => {
+                    let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
+                    comp.populate()
+                  })
+                .append("title")
+                  .text((d: any) => `${d.name}`);
+                  
+            canvas.append("g")
+                .attr("fill", "none")
+                .selectAll("g")
+                .data(outputsTerminate.links)
+                .join("path")
+                  .attr("d", sankey.sankeyLinkHorizontal())
+                  .attr("stroke", "gray")
+                  .attr("stroke-width", (d: any) => Math.max(d.width, 1))
+                  .style("mix-blend-mode", "multiply")
+                .append("title")
+                  .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+        }
     }
 
     groupByLinks(array: any) {

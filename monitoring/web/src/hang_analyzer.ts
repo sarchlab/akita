@@ -16,6 +16,11 @@ export class HangAnalyzer {
 	}
 
 	prepareDom() {
+		let sankeyAnalyzerBtn = document.querySelector('.auto-sankey-refresh-btn')
+        if (sankeyAnalyzerBtn !== null && sankeyAnalyzerBtn.classList.contains('btn-primary')) {
+            sankeyAnalyzerBtn.click()
+        }
+
 		const container = document.getElementById('right-pane')!
 		container.innerHTML = ""
 
