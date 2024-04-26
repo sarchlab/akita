@@ -94,4 +94,17 @@ var _ = Describe("BackTraceTracer", func() {
 
 		t.DumpBackTrace(Task{ID: "3", ParentID: "2"})
 	})
+
+	It("should print three tasks", func() {
+		t.StartTask(Task{ID: "1"})
+		t.StartTask(Task{ID: "2", ParentID: "1"})
+		t.StartTask(Task{ID: "3", ParentID: "2"})
+
+		t.EndTask(Task{ID: "2", ParentID: "1"})
+
+		mockTaskPrinter.EXPECT().
+			Print(Task{ID: "3", ParentID: "2"})
+
+		t.DumpBackTrace(Task{ID: "3", ParentID: "2"})
+	})
 })

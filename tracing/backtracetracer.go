@@ -63,5 +63,10 @@ func (t *BackTraceTracer) DumpBackTrace(task Task) {
 		return
 	}
 
-	t.DumpBackTrace(t.tracingTasks[task.ParentID])
+	parentTask, ok := t.tracingTasks[task.ParentID]
+	if !ok {
+		return
+	}
+
+	t.DumpBackTrace(parentTask)
 }
