@@ -537,6 +537,14 @@ export class ComponentDetailView {
             .attr("fill", "Khaki")
             .attr("stroke", "DarkKhaki")
             .attr("stroke-width", "2")
+        
+        canvas
+            .append("text")
+            .attr("x", canvasWidth / 2)
+            .attr("y", canvasHeight / 4)
+            .attr("text-anchor", "middle")
+            .text(this.name)
+            .attr("style", "font-size: 1.5em")
 
         if (portsOriginate.length > 0 && linksOriginate.length > 0) {
             let outputsOriginate = sankOriginates({"nodes": portsOriginate, "links": linksOriginate})
@@ -573,16 +581,36 @@ export class ComponentDetailView {
                   .text((d: any) => `${d.name}`);
 
             canvas.append("g")
-              .attr("fill", "none")
-              .selectAll("g")
-              .data(outputsOriginate.links)
-              .join("path")
-                .attr("d", sankey.sankeyLinkHorizontal())
-                .attr("stroke", "gray")
-                .attr("stroke-width", (d: any) => Math.max(d.width, 1))
-                .style("mix-blend-mode", "multiply")
-              .append("title")
-                .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+                .attr("fill", "none")
+                .selectAll("g")
+                .data(outputsOriginate.links)
+                .join("path")
+                  .attr("d", sankey.sankeyLinkHorizontal())
+                  .attr("stroke", "lightblue")
+                  .attr("stroke-width", (d: any) => Math.max(d.width, 1))
+                  .style("mix-blend-mode", "multiply")
+                .append("title")
+                  .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+
+            canvas.append("g")
+                .attr("font-size", "1em")
+                .selectAll("text")
+                .data(outputsOriginate.nodes.filter((item: any) => item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x0 - 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "end")
+                  .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
+
+            canvas.append("g")
+                .attr("font-size", ".66em")
+                .selectAll("text")
+                .data(outputsOriginate.nodes.filter((item: any) => !item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x0 - 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "end")
+                  .text((d: any) => d.name)
         }
 
         if (portsTerminate.length > 0 && linksTerminate.length > 0) {
@@ -625,11 +653,31 @@ export class ComponentDetailView {
                 .data(outputsTerminate.links)
                 .join("path")
                   .attr("d", sankey.sankeyLinkHorizontal())
-                  .attr("stroke", "gray")
+                  .attr("stroke", "lightgreen")
                   .attr("stroke-width", (d: any) => Math.max(d.width, 1))
                   .style("mix-blend-mode", "multiply")
                 .append("title")
                   .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
+            
+            canvas.append("g")
+                .attr("font-size", "1em")
+                .selectAll("text")
+                .data(outputsTerminate.nodes.filter((item: any) => item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x1 + 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "start")
+                  .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
+
+            canvas.append("g")
+                .attr("font-size", "0.66em")
+                .selectAll("text")
+                .data(outputsTerminate.nodes.filter((item: any) => !item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x1 + 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "start")
+                  .text((d: any) => d.name)
         }
     }
 
