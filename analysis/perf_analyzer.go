@@ -229,7 +229,7 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	defer b.mu.Unlock()
 
 	for _, data := range b.portDataTable {
-		if strings.Contains(data.Where, comp) || strings.Contains(data.WhereRemote, comp) { // May be important, but definitely causes circular links
+		if strings.Contains(data.Where, comp) || strings.Contains(data.WhereRemote, comp) {
 			entry := map[string]string{
 				"start":      fmt.Sprintf("%.9f", data.Start),
 				"end":        fmt.Sprintf("%.9f", data.End),

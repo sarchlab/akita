@@ -94,12 +94,12 @@ export class ComponentDetailView {
         sankeyContainer.appendChild(canvas)
 
         canvas.setAttribute('width', '100%')
-        canvas.setAttribute('height', '90%')
+        canvas.setAttribute('height', '100%')
 
 		const groupType = document.createElement("div")
 		groupType.classList.add("input-group")
 		groupType.setAttribute("role", "group")
-		groupType.innerHTML = `<div class="input-group-text">Measure the Volume of:</div>`
+		groupType.innerHTML = `<div class="input-group-text">Measure the # of:</div>`
 		toolbar.appendChild(groupType)
 
         const dataVolumeBtn = document.createElement("button")
@@ -505,7 +505,7 @@ export class ComponentDetailView {
 
         let filteredData = data.filter((entry: any) => entry.unit === this.measurementMode)
 
-        let linksRaw = filteredData.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}}).filter((entry: any) => entry.value > 0)
+        let linksRaw = filteredData.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}})
         // There's a Map.groupBy function, but it doesn't work in safari
         let linksMap = this.groupByLinks(linksRaw)
         let links = []
@@ -524,7 +524,8 @@ export class ComponentDetailView {
         let linksTerminate = links.filter((entry: any) => {
             return entry.target.includes(this.name)
         })
-        let portsTerminate = [...new Set(linksTerminate.map((entry: any) => entry.source).concat(linksTerminate.map((entry: any) => entry.target)))]
+        // Because of how port data is handled, we need to add originating ports so they are registered on the left side
+        let portsTerminate = [...new Set(linksTerminate.map((entry: any) => entry.source).concat(linksTerminate.map((entry: any) => entry.target)).concat(linksOriginate.map((entry: any) => entry.source)))]
         portsTerminate = portsTerminate.map((entry: any) => {return {"name": entry}}).sort((first: any, second: any) => first.name > second.name ? -1 : 1)
 
         // center rect
@@ -549,12 +550,19 @@ export class ComponentDetailView {
         if (portsOriginate.length > 0 && linksOriginate.length > 0) {
             let outputsOriginate = sankOriginates({"nodes": portsOriginate, "links": linksOriginate})
 
+            let originateOwnPorts = outputsOriginate.nodes.filter((entry: any) => entry.name.includes(this.name))
+
             outputsOriginate.nodes = outputsOriginate.nodes.map((entry: any) => {
-                if (entry.name.includes(this.name)) return entry
                 let output = entry
-                let height = output.y1 - output.y0
-                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height / 2)
-                output.y1 = output.y0 + height
+                if (entry.name.includes(this.name)) {
+                    let height = (canvasHeight / 3 - 4) / originateOwnPorts.length
+                    output.y0 = canvasHeight / 3 + (((canvasHeight / 3) / originateOwnPorts.length) * originateOwnPorts.indexOf(entry))
+                    output.y1 = output.y0 + height
+                } else {
+                    let height = output.y1 - output.y0
+                    output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - height - 10
+                    output.y1 = output.y0 + height
+                }
                 return output
             })
     
@@ -570,7 +578,7 @@ export class ComponentDetailView {
                 .join("rect")
                   .attr("x", (d: any) => d.x0)
                   .attr("y", (d: any) => d.y0)
-                  .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
+                  .attr("height", (d: any) => d.y1 > d.y0 ? Math.max(d.y1 - d.y0, 1) : 0)
                   .attr("width", (d: any) => d.x1 - d.x0)
                   .attr('fill', 'black')
                   .on('click', (_: Event, d: any) => {
@@ -583,11 +591,23 @@ export class ComponentDetailView {
             canvas.append("g")
                 .attr("fill", "none")
                 .selectAll("g")
-                .data(outputsOriginate.links)
+                .data(outputsOriginate.links.filter((d: any) => d.width > 0))
                 .join("path")
-                  .attr("d", sankey.sankeyLinkHorizontal())
-                  .attr("stroke", "lightblue")
-                  .attr("stroke-width", (d: any) => Math.max(d.width, 1))
+                  .attr("d", (d: any) => {
+                    let xMidpoint = (d.source.x1 + d.target.x0) / 2
+                    let yMidpointTop = (d.source.y0 + d.target.y0*5) / 6
+                    let yMidpointBottom = (d.source.y1*5 + d.target.y1) / 6
+                    return `M${d.source.x1},${d.source.y0}
+                    C${xMidpoint},${d.source.y0},
+                    ${xMidpoint},${yMidpointTop},
+                    ${d.target.x0},${d.target.y0}
+                    L${d.target.x0},${d.target.y1}
+                    C${xMidpoint},${d.target.y1},
+                    ${xMidpoint},${yMidpointBottom},
+                    ${d.source.x1},${d.source.y1}
+                    `
+                  })
+                  .attr("fill", "lightblue")
                   .style("mix-blend-mode", "multiply")
                 .append("title")
                   .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
@@ -622,7 +642,7 @@ export class ComponentDetailView {
                 .attr("font-size", ".66em")
                 .attr("font-weight", "bold")
                 .selectAll("text")
-                .data(outputsOriginate.nodes.filter((item: any) => !item.name.includes(this.name)))
+                .data(outputsOriginate.nodes.filter((item: any) => !item.name.includes(this.name) && item.y1 > item.y0))
                 .join("text")
                   .attr("x", (d: any) => d.x0 - 5)
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
@@ -633,12 +653,19 @@ export class ComponentDetailView {
         if (portsTerminate.length > 0 && linksTerminate.length > 0) {
             let outputsTerminate = sankTermiates({"nodes": portsTerminate, "links": linksTerminate})
 
+            let terminateOwnPorts = outputsTerminate.nodes.filter((entry: any) => entry.name.includes(this.name))
+
             outputsTerminate.nodes = outputsTerminate.nodes.map((entry: any) => {
-                if (entry.name.includes(this.name)) return entry
                 let output = entry
-                let height = output.y1 - output.y0
-                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height / 2)
-                output.y1 = output.y0 + height
+                if (entry.name.includes(this.name)) {
+                    let height = (canvasHeight / 3 - 4) / terminateOwnPorts.length
+                    output.y0 = canvasHeight / 3 + (((canvasHeight / 3) / terminateOwnPorts.length) * terminateOwnPorts.indexOf(entry))
+                    output.y1 = output.y0 + height
+                } else {
+                    let height = output.y1 - output.y0
+                    output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - height - 10
+                    output.y1 = output.y0 + height
+                }
                 return output
             })
 
@@ -654,7 +681,7 @@ export class ComponentDetailView {
                 .join("rect")
                   .attr("x", (d: any) => d.x0)
                   .attr("y", (d: any) => d.y0)
-                  .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
+                  .attr("height", (d: any) => d.y1 > d.y0 ? Math.max(d.y1 - d.y0, 1) : 0)
                   .attr("width", (d: any) => d.x1 - d.x0)
                   .attr('fill', 'black')
                   .on('click', (_: Event, d: any) => {
@@ -667,11 +694,23 @@ export class ComponentDetailView {
             canvas.append("g")
                 .attr("fill", "none")
                 .selectAll("g")
-                .data(outputsTerminate.links)
+                .data(outputsTerminate.links.filter((d: any) => d.width > 0))
                 .join("path")
-                  .attr("d", sankey.sankeyLinkHorizontal())
-                  .attr("stroke", "lightgreen")
-                  .attr("stroke-width", (d: any) => Math.max(d.width, 1))
+                  .attr("d", (d: any) => {
+                    let xMidpoint = (d.source.x1 + d.target.x0) / 2
+                    let yMidpointTop = (d.source.y0 + d.target.y0*5) / 6
+                    let yMidpointBottom = (d.source.y1*5 + d.target.y1) / 6
+                    return `M${d.source.x1},${d.source.y0}
+                    C${xMidpoint},${d.source.y0},
+                    ${xMidpoint},${yMidpointTop},
+                    ${d.target.x0},${d.target.y0}
+                    L${d.target.x0},${d.target.y1}
+                    C${xMidpoint},${d.target.y1},
+                    ${xMidpoint},${yMidpointBottom},
+                    ${d.source.x1},${d.source.y1}
+                    `
+                  })
+                  .attr("fill", "lightgreen")
                   .style("mix-blend-mode", "multiply")
                 .append("title")
                   .text((d: any) => `${d.names.join(" → ")}\n${d.value.toLocaleString()}`);
@@ -706,7 +745,7 @@ export class ComponentDetailView {
                 .attr("font-size", "0.66em")
                 .attr("font-weight", "bold")
                 .selectAll("text")
-                .data(outputsTerminate.nodes.filter((item: any) => !item.name.includes(this.name)))
+                .data(outputsTerminate.nodes.filter((item: any) => !item.name.includes(this.name) && item.y1 > item.y0))
                 .join("text")
                   .attr("x", (d: any) => d.x1 + 5)
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
