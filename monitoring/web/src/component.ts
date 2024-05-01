@@ -519,13 +519,13 @@ export class ComponentDetailView {
             return entry.source.includes(this.name)
         })
         let portsOriginate = [...new Set(linksOriginate.map((entry: any) => entry.source).concat(linksOriginate.map((entry: any) => entry.target)))]
-        portsOriginate = portsOriginate.map((entry: any) => {return {"name": entry}})
+        portsOriginate = portsOriginate.map((entry: any) => {return {"name": entry}}).sort((first: any, second: any) => first.name > second.name ? -1 : 1)
 
         let linksTerminate = links.filter((entry: any) => {
             return entry.target.includes(this.name)
         })
         let portsTerminate = [...new Set(linksTerminate.map((entry: any) => entry.source).concat(linksTerminate.map((entry: any) => entry.target)))]
-        portsTerminate = portsTerminate.map((entry: any) => {return {"name": entry}})
+        portsTerminate = portsTerminate.map((entry: any) => {return {"name": entry}}).sort((first: any, second: any) => first.name > second.name ? -1 : 1)
 
         // center rect
         canvas
@@ -553,7 +553,7 @@ export class ComponentDetailView {
                 if (entry.name.includes(this.name)) return entry
                 let output = entry
                 let height = output.y1 - output.y0
-                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height * 3 / 2)
+                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height / 2)
                 output.y1 = output.y0 + height
                 return output
             })
@@ -573,7 +573,7 @@ export class ComponentDetailView {
                   .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
                   .attr("width", (d: any) => d.x1 - d.x0)
                   .attr('fill', 'black')
-                  .on('click', (event: Event, d: any) => {
+                  .on('click', (_: Event, d: any) => {
                     let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
                     comp.populate()
                   })
@@ -601,9 +601,26 @@ export class ComponentDetailView {
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
                   .attr("text-anchor", "end")
                   .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
+            
+            canvas.append("g")
+                .attr("font-size", "1em")
+                .selectAll("text")
+                .data(outputsOriginate.nodes.filter((item: any) => item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x1 + 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "start")
+                  .text((d: any) => {
+                    if (this.measurementMode === "Msg") {
+                        return `${d.value} Msg/μs`
+                    } else {
+                        return `${Math.round(d.value * 1e5 / (1 << 30))} GB/s`
+                    }
+                  })
 
             canvas.append("g")
                 .attr("font-size", ".66em")
+                .attr("font-weight", "bold")
                 .selectAll("text")
                 .data(outputsOriginate.nodes.filter((item: any) => !item.name.includes(this.name)))
                 .join("text")
@@ -620,7 +637,7 @@ export class ComponentDetailView {
                 if (entry.name.includes(this.name)) return entry
                 let output = entry
                 let height = output.y1 - output.y0
-                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height * 3 / 2)
+                output.y0 = (canvasHeight / 2) + ((output.y0 + (height / 2) - (canvasHeight / 2)) * 3) - (height / 2)
                 output.y1 = output.y0 + height
                 return output
             })
@@ -630,7 +647,7 @@ export class ComponentDetailView {
                 output.y0 = (entry.source.y0 + entry.source.y1) / 2
                 return output
             })
-        
+
             canvas.append("g")
                 .selectAll("rect")
                 .data(outputsTerminate.nodes)
@@ -640,7 +657,7 @@ export class ComponentDetailView {
                   .attr("height", (d: any) => Math.max(d.y1 - d.y0, 1))
                   .attr("width", (d: any) => d.x1 - d.x0)
                   .attr('fill', 'black')
-                  .on('click', (event: Event, d: any) => {
+                  .on('click', (_: Event, d: any) => {
                     let comp = new ComponentDetailView(d.name.substring(0, d.name.lastIndexOf('.')), this.monitor)
                     comp.populate()
                   })
@@ -668,9 +685,26 @@ export class ComponentDetailView {
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
                   .attr("text-anchor", "start")
                   .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
+            
+            canvas.append("g")
+                .attr("font-size", "1em")
+                .selectAll("text")
+                .data(outputsTerminate.nodes.filter((item: any) => item.name.includes(this.name)))
+                .join("text")
+                  .attr("x", (d: any) => d.x0 - 5)
+                  .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
+                  .attr("text-anchor", "end")
+                  .text((d: any) => {
+                    if (this.measurementMode === "Msg") {
+                        return `${d.value} Msg/μs`
+                    } else {
+                        return `${Math.round(d.value * 1e5 / (1 << 30))} GB/s`
+                    }
+                  })
 
             canvas.append("g")
                 .attr("font-size", "0.66em")
+                .attr("font-weight", "bold")
                 .selectAll("text")
                 .data(outputsTerminate.nodes.filter((item: any) => !item.name.includes(this.name)))
                 .join("text")
