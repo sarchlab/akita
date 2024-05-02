@@ -9,6 +9,11 @@ export class ComponentDetailView {
     running: Boolean = false
     intervalHandle: number = 0
     measurementMode: string = "Byte"
+    accumulationMode: string = "Last"
+    sankeyCumulative: any = {
+        epochs: new Set<Number>(),
+        linkValues: new Map<string, Number>(), // Source|Dest|Type
+    }
 
     constructor(name: string, monitor: Monitor) {
         this.name = name
@@ -74,7 +79,7 @@ export class ComponentDetailView {
     }
 
     showSankey(container: HTMLElement) {
-        let hangAnalyzerBtn = document.querySelector('.auto-refresh-btn')
+        let hangAnalyzerBtn = document.querySelector<HTMLElement>('.auto-refresh-btn')
         if (hangAnalyzerBtn !== null && hangAnalyzerBtn.classList.contains('btn-primary')) {
             hangAnalyzerBtn.click()
         }
@@ -99,7 +104,7 @@ export class ComponentDetailView {
 		const groupType = document.createElement("div")
 		groupType.classList.add("input-group")
 		groupType.setAttribute("role", "group")
-		groupType.innerHTML = `<div class="input-group-text">Measure the # of:</div>`
+		groupType.innerHTML = `<div class="input-group-text">Count By:</div>`
 		toolbar.appendChild(groupType)
 
         const dataVolumeBtn = document.createElement("button")
@@ -126,12 +131,52 @@ export class ComponentDetailView {
 
 		msgVolumeBtn.addEventListener("click", (_: Event) => {
 			this.measurementMode = "Msg"
+
 			this.getDataAndDrawSankey(canvas)
 
 			msgVolumeBtn.classList.remove('btn-outline-primary')
 			msgVolumeBtn.classList.add('btn-primary')
 			dataVolumeBtn.classList.remove('btn-primary')
 			dataVolumeBtn.classList.add('btn-outline-primary')
+		})
+
+        const epochType = document.createElement("div")
+		epochType.classList.add("input-group")
+		epochType.setAttribute("role", "group")
+		epochType.innerHTML = `<div class="input-group-text">Show Data From:</div>`
+		toolbar.appendChild(epochType)
+
+        const lastEpochDataBtn = document.createElement("button")
+		lastEpochDataBtn.classList.add("btn", "btn-primary")
+		lastEpochDataBtn.innerHTML = "Last Epoch"
+		epochType.appendChild(lastEpochDataBtn)
+
+		const cumulativeDataBtn = document.createElement("button")
+		cumulativeDataBtn.classList.add("btn", "btn-outline-primary")
+		cumulativeDataBtn.innerHTML = "All"
+        epochType.appendChild(cumulativeDataBtn)
+
+        lastEpochDataBtn.addEventListener("click", (_: Event) => {
+			this.accumulationMode = "Last"
+
+			this.getDataAndDrawSankey(canvas)
+
+			lastEpochDataBtn.classList.remove('btn-outline-primary')
+			lastEpochDataBtn.classList.add('btn-primary')
+			cumulativeDataBtn.classList.remove('btn-primary')
+			cumulativeDataBtn.classList.add('btn-outline-primary')
+
+		})
+
+		cumulativeDataBtn.addEventListener("click", (_: Event) => {
+			this.accumulationMode = "Cumulative"
+
+			this.getDataAndDrawSankey(canvas)
+
+			cumulativeDataBtn.classList.remove('btn-outline-primary')
+			cumulativeDataBtn.classList.add('btn-primary')
+			lastEpochDataBtn.classList.remove('btn-primary')
+			lastEpochDataBtn.classList.add('btn-outline-primary')
 		})
 
         const autoRefreshBtn = document.createElement("button")
@@ -503,17 +548,36 @@ export class ComponentDetailView {
         .extent([[0, canvasHeight / 3], [canvasWidth / 3, canvasHeight * 2 / 3]])
         .nodeId((d: any) => d.name)
 
-        let filteredData = data.filter((entry: any) => entry.unit === this.measurementMode)
+        this.sankeyCumulative.epochs.add(data.find((entry: any) => entry.value > 0).start)
 
-        let linksRaw = filteredData.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value}})
+        let linksRaw = data.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value, "type": entry.unit}})
         // There's a Map.groupBy function, but it doesn't work in safari
         let linksMap = this.groupByLinks(linksRaw)
         let links = []
         for (let entry of linksMap.entries()) {
             let parsed = entry[0].split('|')
             let value = entry[1]
-            links.push({"source": parsed[0], "target": parsed[1], "value": value, "names": parsed})
+            if (this.sankeyCumulative.linkValues.has(entry[0])) {
+                let toStore = this.sankeyCumulative.linkValues.get(entry[0]) + value
+                if (this.accumulationMode === "Cumulative") {
+                    value = toStore
+                }
+                this.sankeyCumulative.linkValues.set(entry[0], toStore)
+            } else {
+                this.sankeyCumulative.linkValues.set(entry[0], value)
+            }
+
+            links.push({"source": parsed[0], "target": parsed[1], "value": value, "names": [parsed[0], parsed[1]], "type": parsed[2], "fullName": entry[0]})
         }
+        if (links.length < this.sankeyCumulative.linkValues.size) {
+            this.sankeyCumulative.linkValues.forEach((value: any, key: any) => {
+                if (!links.find((d: any) => d.fullName === key)) {
+                    let parsed = key.split('|')
+                    links.push({"source": parsed[0], "target": parsed[1], "value": value, "names": [parsed[0], parsed[1]], "type": parsed[2], "fullName": key})
+                }
+            });
+        }
+        links = links.filter((d: any) => d.type === this.measurementMode)
 
         let linksOriginate = links.filter((entry: any) => {
             return entry.source.includes(this.name)
@@ -631,10 +695,14 @@ export class ComponentDetailView {
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
                   .attr("text-anchor", "start")
                   .text((d: any) => {
+                    let output = d.value
+                    if (this.accumulationMode === "Cumulative") {
+                        output /= this.sankeyCumulative.epochs.size
+                    }
                     if (this.measurementMode === "Msg") {
-                        return `${d.value} Msg/μs`
+                        return `${Math.round(output)} Msg/μs`
                     } else {
-                        return `${Math.round(d.value * 1e5 / (1 << 30))} GB/s`
+                        return `${(output * 1e5 / (1 << 30)).toFixed(2)} GB/s`
                     }
                   })
 
@@ -734,10 +802,14 @@ export class ComponentDetailView {
                   .attr("y", (d: any) => (d.y0 + d.y1) / 2 + 4)
                   .attr("text-anchor", "end")
                   .text((d: any) => {
+                    let output = d.value
+                    if (this.accumulationMode === "Cumulative") {
+                        output /= this.sankeyCumulative.epochs.size
+                    }
                     if (this.measurementMode === "Msg") {
-                        return `${d.value} Msg/μs`
+                        return `${Math.round(output)} Msg/μs`
                     } else {
-                        return `${Math.round(d.value * 1e5 / (1 << 30))} GB/s`
+                        return `${(output * 1e5 / (1 << 30)).toFixed(2)} GB/s`
                     }
                   })
 
@@ -757,7 +829,7 @@ export class ComponentDetailView {
     groupByLinks(array: any) {
         let outputMap = new Map<string, number>()
         for (const entry of array) {
-            let keyString = `${entry.source}|${entry.target}`
+            let keyString = `${entry.source}|${entry.target}|${entry.type}`
             let thisValue = outputMap.get(keyString)
             if (thisValue === undefined) {
                 outputMap.set(keyString, Number.parseInt(entry.value))
