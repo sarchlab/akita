@@ -553,7 +553,7 @@ export class ComponentDetailView {
         let linksRaw = data.map((entry: any) => {return {"source": entry.localPort, "target": entry.remotePort, "value": entry.value, "type": entry.unit}})
         // There's a Map.groupBy function, but it doesn't work in safari
         let linksMap = this.groupByLinks(linksRaw)
-        let links = []
+        let links: any[] = []
         for (let entry of linksMap.entries()) {
             let parsed = entry[0].split('|')
             let value = entry[1]
@@ -687,7 +687,8 @@ export class ComponentDetailView {
                   .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
             
             canvas.append("g")
-                .attr("font-size", "1em")
+                .attr("font-size", ".66em")
+                .attr("font-weight", "bold")
                 .selectAll("text")
                 .data(outputsOriginate.nodes.filter((item: any) => item.name.includes(this.name)))
                 .join("text")
@@ -794,7 +795,8 @@ export class ComponentDetailView {
                   .text((d: any) => d.name.slice(d.name.lastIndexOf(".") + 1))
             
             canvas.append("g")
-                .attr("font-size", "1em")
+                .attr("font-size", ".66em")
+                .attr("font-weight", "bold")
                 .selectAll("text")
                 .data(outputsTerminate.nodes.filter((item: any) => item.name.includes(this.name)))
                 .join("text")

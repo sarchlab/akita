@@ -16,7 +16,7 @@ export class HangAnalyzer {
 	}
 
 	prepareDom() {
-		let sankeyAnalyzerBtn = document.querySelector('.auto-sankey-refresh-btn')
+		let sankeyAnalyzerBtn = document.querySelector<HTMLElement>('.auto-sankey-refresh-btn')
         if (sankeyAnalyzerBtn !== null && sankeyAnalyzerBtn.classList.contains('btn-primary')) {
             sankeyAnalyzerBtn.click()
         }
