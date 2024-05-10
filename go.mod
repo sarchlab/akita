@@ -1,9 +1,9 @@
 module github.com/sarchlab/akita/v4
 
 require (
-	github.com/go-sql-driver/mysql v1.7.1
+	github.com/go-sql-driver/mysql v1.8.1
 	github.com/golang/mock v1.6.0
-	github.com/google/pprof v0.0.0-20240207164012-fb44976bdcd5
+	github.com/google/pprof v0.0.0-20240409012703-83162a5b38cd
 	github.com/gorilla/mux v1.8.1
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/ginkgo/v2 v2.15.0
@@ -15,6 +15,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
@@ -24,7 +25,7 @@ require (
 	github.com/tklauser/numcpus v0.7.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	golang.org/x/net v0.21.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.18.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
