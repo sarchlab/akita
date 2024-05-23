@@ -47,6 +47,7 @@ func NewTickScheduler(
 	ticker.handler = handler
 	ticker.Engine = engine
 	ticker.Freq = freq
+	ticker.nextTickTime = -1 // This will make sure the first tick is scheduled
 
 	return ticker
 }
@@ -64,6 +65,7 @@ func NewSecondaryTickScheduler(
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.secondary = true
+	ticker.nextTickTime = -1 // This will make sure the first tick is scheduled
 
 	return ticker
 }
