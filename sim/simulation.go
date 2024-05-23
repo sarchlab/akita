@@ -2,6 +2,7 @@ package sim
 
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
+	engine        Engine
 	components    []Component
 	compNameIndex map[string]int
 	ports         []Port
@@ -14,6 +15,16 @@ func NewSimulation() *Simulation {
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
 	}
+}
+
+// RegisterEngine registers the engine used in the simulation.
+func (s *Simulation) RegisterEngine(e Engine) {
+	s.engine = e
+}
+
+// GetEngine returns the engine used in the simulation.
+func (s *Simulation) GetEngine() Engine {
+	return s.engine
 }
 
 // RegisterComponent registers a component with the simulation.
