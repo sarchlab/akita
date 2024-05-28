@@ -79,22 +79,10 @@ class Dashboard {
       if (window.innerWidth > 768) {
         dropdownCanvas.classList.remove('active');
         dropdownCanvas.style.display = 'none';
-        this._toolBar.style.display = 'flex';
-        this._canvas.style.display = 'flex';
       } else {
         this._toolBar.style.display = 'none';
-        // this._canvas.style.display = 'none';
       }
     });
-  
-    if (window.innerWidth <= 768) {
-      this._toolBar.style.display = 'none';
-      // this._canvas.style.display = 'none';
-    } else {
-      this._toolBar.style.display = 'flex';
-      this._canvas.style.display = 'flex';
-    }
-  
   
     this._addZoomResetButton(this._toolBar);
     this._addFilterUI(this._toolBar);

@@ -72,6 +72,13 @@ body {
   flex-direction: column;
 }
 
+#dashboard-btn,
+#dashboard-filter-group,
+#primary-selector-group,
+#secondary-selector-group {
+  margin-top: 20px;
+}
+
 .dropdown-canvas #dashboard-btn {
   text-align: left;
   margin-bottom: 10px;
@@ -83,6 +90,7 @@ body {
   margin-bottom: 10px;
   margin-left: 16px; 
 }
+
 .dropdown-canvas .custom-select,
 .dropdown-canvas .input-group {
   width: calc(100% - 20px);
@@ -96,6 +104,7 @@ body {
   align-items: center;
   justify-content: flex-start;
 }
+
 @media (max-width: 768px) {
   .burger-menu {
     display: block;
