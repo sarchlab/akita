@@ -400,10 +400,30 @@ class Dashboard {
     ul.classList.add("pagination");
     nav.appendChild(ul);
 
+    const pageInfo = document.createElement("div");
+    pageInfo.classList.add("page-info");
+  
+    const paginationContainer = document.createElement("div");
+    paginationContainer.classList.add("pagination-container");
+    paginationContainer.appendChild(nav);
+    paginationContainer.appendChild(pageInfo);
+
     this._pageBtnContainer.innerHTML = "";
-    this._pageBtnContainer.appendChild(nav);
+    this._pageBtnContainer.appendChild(paginationContainer);
+    // pageInfo.classList.add("page-info");
+    // pageInfo.style.marginLeft = "10px";
+
+    // this._pageBtnContainer.innerHTML = "";
+    // this._pageBtnContainer.appendChild(nav);
+    // this._pageBtnContainer.appendChild(pageInfo);
 
     this._addPageButtons(ul);
+    this._updatePageInfo(pageInfo);
+  }
+
+  _updatePageInfo(pageInfo: HTMLDivElement) {
+    const numPages = Math.ceil(this._filteredNames.length / (this._numRow * this._numCol));
+    pageInfo.innerHTML = `Page ${this._currPage} of ${numPages - 1}`;
   }
 
   _addPageButtons(ul: HTMLUListElement) {
@@ -527,6 +547,8 @@ class Dashboard {
 
     this._addPaginationControl();
     this._renderPage();
+    const pageInfo = this._pageBtnContainer.querySelector('.page-info') as HTMLDivElement;
+    this._updatePageInfo(pageInfo);
   }
 
   _renderPage() {

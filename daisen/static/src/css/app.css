@@ -28,6 +28,17 @@ body {
   display: flex;
 }
 
+.pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color:#2c7bb6
+}
+
+.page-info {
+  margin-left: 10px;
+}
+
 .row {
   align-items: flex-start;
 }
