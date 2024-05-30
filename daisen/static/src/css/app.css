@@ -76,7 +76,8 @@ body {
 #dashboard-filter-group,
 #primary-selector-group,
 #secondary-selector-group {
-  margin-top: 20px;
+  margin-top: 8px;
+  margin-bottom: 3px;
 }
 
 .dropdown-canvas #dashboard-btn {
