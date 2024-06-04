@@ -79,9 +79,11 @@ class Dashboard {
       if (window.innerWidth > 768) {
         dropdownCanvas.classList.remove('active');
         dropdownCanvas.style.display = 'none';
+        this._toolBar.style.display = 'flex';
       } else {
         this._toolBar.style.display = 'none';
       }
+      this._resize();
     });
   
     this._addZoomResetButton(this._toolBar);
@@ -440,12 +442,6 @@ class Dashboard {
     this._pageBtnContainer.appendChild(paginationContainer);
 
     this._addPageButtons(ul);
-    this._updatePageInfo(pageInfo);
-  }
-
-  _updatePageInfo(pageInfo: HTMLDivElement) {
-    const numPages = Math.ceil(this._filteredNames.length / (this._numRow * this._numCol));
-    pageInfo.innerHTML = `Page ${this._currPage} of ${numPages - 1}`;
   }
 
   _addPageButtons(ul: HTMLUListElement) {
@@ -570,7 +566,6 @@ class Dashboard {
     this._addPaginationControl();
     this._renderPage();
     const pageInfo = this._pageBtnContainer.querySelector('.page-info') as HTMLDivElement;
-    this._updatePageInfo(pageInfo);
   }
 
   _renderPage() {
