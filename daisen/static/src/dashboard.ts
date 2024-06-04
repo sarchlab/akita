@@ -568,7 +568,6 @@ class Dashboard {
     this._addPaginationControl();
     this._renderPage();
     const pageInfo = this._pageBtnContainer.querySelector('.page-info') as HTMLDivElement;
-    this._updatePageInfo(pageInfo);
   }
 
   _renderPage() {
