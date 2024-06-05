@@ -40,6 +40,14 @@ func (r *ReadReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned ReadReq with different ID
+func (r *ReadReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetByteSize returns the number of byte that the request is accessing.
 func (r *ReadReq) GetByteSize() uint64 {
 	return r.AccessByteSize
@@ -136,6 +144,14 @@ type WriteReq struct {
 // Meta returns the meta data attached to a request.
 func (r *WriteReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned WriteReq with different ID
+func (r *WriteReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetByteSize returns the number of byte that the request is writing.
@@ -242,6 +258,14 @@ func (r *DataReadyRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned DataReadyRsp with different ID
+func (r *DataReadyRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetRspTo returns the ID if the request that the respond is responding to.
 func (r *DataReadyRsp) GetRspTo() string {
 	return r.RespondTo
@@ -303,6 +327,14 @@ func (r *WriteDoneRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned WriteDoneRsp with different ID
+func (r *WriteDoneRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetRspTo returns the ID of the request that the respond is responding to.
 func (r *WriteDoneRsp) GetRspTo() string {
 	return r.RespondTo
@@ -357,6 +389,14 @@ type ControlMsg struct {
 // Meta returns the meta data assocated with the ControlMsg.
 func (m *ControlMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
+}
+
+// Clone returns cloned ControlMsg with different ID
+func (m *ControlMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // A ControlMsgBuilder can build control messages.
@@ -424,6 +464,14 @@ func (r *GL0InvalidateReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned GL0InvalidateReq with different ID
+func (r *GL0InvalidateReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetByteSize returns the number of byte that the request is accessing.
 func (r *GL0InvalidateReq) GetByteSize() uint64 {
 	return 0
@@ -482,6 +530,14 @@ type GL0InvalidateRsp struct {
 // Meta returns the meta data associated with the message.
 func (r *GL0InvalidateRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned GL0InvalidateRsp with different ID
+func (r *GL0InvalidateRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetByteSize returns the number of byte that the request is accessing.

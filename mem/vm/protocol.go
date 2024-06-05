@@ -18,6 +18,14 @@ func (r *TranslationReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned TranslationReq with different ID
+func (r *TranslationReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
 	src, dst sim.Port
@@ -79,6 +87,14 @@ type TranslationRsp struct {
 // Meta returns the meta data associated with the message.
 func (r *TranslationRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned TranslationRsp with different ID
+func (r *TranslationRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetRspTo returns the request ID that the respond is responding to.
@@ -153,6 +169,11 @@ func (m *PageMigrationReqToDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned PageMigrationReqToDriver with different ID
+func (m *PageMigrationReqToDriver) Clone() sim.Msg {
+	return m
+}
+
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
 	src, dst sim.Port,
@@ -176,6 +197,11 @@ type PageMigrationRspFromDriver struct {
 // Meta returns the meta data associated with the message.
 func (m *PageMigrationRspFromDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
+}
+
+// Clone returns cloned PageMigrationRspFromDriver with different ID
+func (m *PageMigrationRspFromDriver) Clone() sim.Msg {
+	return m
 }
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
