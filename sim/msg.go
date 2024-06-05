@@ -3,6 +3,7 @@ package sim
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
 	Meta() *MsgMeta
+	Clone() Msg
 }
 
 // MsgMeta contains the meta data that is attached to every message.
@@ -31,6 +32,14 @@ type GeneralRsp struct {
 // Meta returns the meta data of the message.
 func (r *GeneralRsp) Meta() *MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned GeneralRsp with different ID
+func (r *GeneralRsp) Clone() Msg {
+	cloneMsg := *r
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetRspTo returns the ID of the original request.
@@ -106,6 +115,14 @@ type ControlMsg struct {
 // Meta returns the meta data of the control message.
 func (c *ControlMsg) Meta() *MsgMeta {
 	return &c.MsgMeta
+}
+
+// Clone returns cloned ControlMsg with different ID
+func (c *ControlMsg) Clone() Msg {
+	cloneMsg := *c
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // ControlMsgBuilder can build control messages.

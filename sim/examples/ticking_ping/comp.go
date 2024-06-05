@@ -17,6 +17,13 @@ func (p *PingMsg) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
+func (p *PingMsg) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 type PingRsp struct {
 	sim.MsgMeta
 
@@ -25,6 +32,13 @@ type PingRsp struct {
 
 func (p *PingRsp) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
+}
+
+func (p *PingRsp) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 type pingTransaction struct {

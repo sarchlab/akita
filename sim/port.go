@@ -72,6 +72,10 @@ func (m *sampleMsg) Meta() *MsgMeta {
 	return &m.MsgMeta
 }
 
+func (m *sampleMsg) Clone() Msg {
+	return m
+}
+
 // Name returns the name of the port.
 func (p *LimitNumMsgPort) Name() string {
 	return p.name
