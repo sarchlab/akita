@@ -236,6 +236,16 @@ body {
   height: 20px;
 }
 
+.dashboard .widget .title-bar {
+  text-decoration: underline; 
+  cursor: pointer; 
+  transition: color 0.3s ease;
+}
+
+.dashboard .widget .title-bar h6:hover {
+  color: #007BFF;
+}
+
 .circle-primary {
   width: 0.6em;
   height: 0.6em;

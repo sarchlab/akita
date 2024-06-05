@@ -1,5 +1,6 @@
 import * as d3 from "d3";
 import Dashboard from "./dashboard";
+import TaskPage from "./taskpage";
 import { ZoomHandler, MouseEventHandler } from "./mouseeventhandler";
 
 class TimeValue {
@@ -19,6 +20,8 @@ class Widget implements ZoomHandler {
   _canvas: HTMLDivElement;
   _svg: SVGElement;
   _mouseEventHandler: MouseEventHandler;
+  _thumbnail: HTMLDivElement;
+  _taskPage: TaskPage;
 
   _numDots: number;
   _startTime: number;
@@ -64,7 +67,7 @@ class Widget implements ZoomHandler {
     this._graphPaddingTop = 5;
     this._xAxisHeight = 30;
     this._graphContentHeight =
-      this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
+    this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
 
     this._startTime = 0;
     this._endTime = 0;
@@ -224,7 +227,7 @@ class Widget implements ZoomHandler {
 
     this._createSaveButton(titleBar);
   }
-
+  
   _createSaveButton(titleBar: HTMLDivElement) {
     const btn = document.createElement("div");
     btn.classList.add("btn");
