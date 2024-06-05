@@ -547,7 +547,7 @@ class Dashboard {
     }
     li.innerHTML = `
             <a class="page-link">
-                ${pageNum}
+                ${pageNum + 1}
             </a>
         `;
 
