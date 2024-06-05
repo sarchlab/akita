@@ -456,27 +456,53 @@ class Dashboard {
 
     this._addPrevPageButton(ul, this._currPage);
 
-    let offset = -2;
-    if (this._currPage <= 1) {
-      offset = -this._currPage;
-    }
-    if (this._currPage == numPages - 2) {
-      offset = -3;
-    }
-    if (this._currPage == numPages - 1) {
-      offset = -4;
+    this._addNumPageButton(ul, 0);
+
+    if (this._currPage > 2) {
+      this._addEllipsis(ul);
     }
 
-    for (let i = 0; i < 5; i++) {
-      const pageNum = this._currPage + i + offset;
-      if (pageNum < 0 || pageNum >= numPages) {
-        continue;
-      }
+    for (let i = Math.max(1, this._currPage - 1); i <= Math.min(numPages - 2, this._currPage + 1); i++) {
+      this._addNumPageButton(ul, i);
+    }
 
-      this._addNumPageButton(ul, pageNum);
+    if (this._currPage < numPages - 3) {
+      this._addEllipsis(ul);
+    }
+
+    if (numPages > 1) {
+      this._addNumPageButton(ul, numPages - 1);
     }
 
     this._addNextPageButton(ul, this._currPage, numPages);
+    // let offset = -2;
+    // if (this._currPage <= 1) {
+    //   offset = -this._currPage;
+    // }
+    // if (this._currPage == numPages - 2) {
+    //   offset = -3;
+    // }
+    // if (this._currPage == numPages - 1) {
+    //   offset = -4;
+    // }
+
+    // for (let i = 0; i < 5; i++) {
+    //   const pageNum = this._currPage + i + offset;
+    //   if (pageNum < 0 || pageNum >= numPages) {
+    //     continue;
+    //   }
+
+    //   this._addNumPageButton(ul, pageNum);
+    // }
+
+    // this._addNextPageButton(ul, this._currPage, numPages);
+  }
+
+  _addEllipsis(ul: HTMLUListElement) {
+    const li = document.createElement("li");
+    li.classList.add("page-item", "disabled");
+    li.innerHTML = `<a class="page-link">...</a>`;
+    ul.appendChild(li);
   }
 
   _showNoComponentInfo() {
@@ -545,7 +571,7 @@ class Dashboard {
     }
     li.innerHTML = `
             <a class="page-link">
-                ${pageNum}
+                ${pageNum + 1}
             </a>
         `;
 
