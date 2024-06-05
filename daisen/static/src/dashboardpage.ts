@@ -22,6 +22,7 @@ class DashboardPage {
 
     this._dashboard.setCanvas(pageContainer, pageBtnContainer, toolBar);
     // this._dashboard.resize();
+    
   }
 
   _containerDim(): [number, number] {
