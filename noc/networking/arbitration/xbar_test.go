@@ -16,6 +16,10 @@ func (m *SampleMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+func (m *SampleMsg) Clone() sim.Msg {
+	return m
+}
+
 var _ = Describe("XBar", func() {
 	var (
 		mockCtrl         *gomock.Controller
