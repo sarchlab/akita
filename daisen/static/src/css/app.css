@@ -106,13 +106,13 @@ body {
   justify-content: flex-start;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1300px) {
   .burger-menu {
     display: block;
   }
 
   .tool-bar {
-    display: none;
+    display: flex;
   }
 }
 
