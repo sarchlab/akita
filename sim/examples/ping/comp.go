@@ -3,6 +3,7 @@ package ping
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
@@ -22,6 +23,12 @@ func (p *PingMsg) Clone() sim.Msg {
 	return p
 }
 
+func (p *PingMsg) GenerateRsp() sim.Rsp {
+	rsp := &PingRsp{}
+
+	return rsp
+}
+
 type PingRsp struct {
 	sim.MsgMeta
 
@@ -34,6 +41,10 @@ func (p *PingRsp) Meta() *sim.MsgMeta {
 
 func (p *PingRsp) Clone() sim.Msg {
 	return p
+}
+
+func (p *PingRsp) GetRspTo() string {
+	return strconv.Itoa(p.SeqID)
 }
 
 type StartPingEvent struct {
@@ -55,13 +66,6 @@ type Comp struct {
 	startTime []sim.VTimeInSec
 	nextSeqID int
 }
-
-// func NewPingAgent(name string, engine sim.Engine) *PingAgent {
-// 	agent := &PingAgent{Engine: engine}
-// 	agent.ComponentBase = sim.NewComponentBase(name)
-// 	agent.OutPort = sim.NewLimitNumMsgPort(agent, 4, name+".OutPort")
-// 	return agent
-// }
 
 func (c *Comp) Handle(e sim.Event) error {
 	c.Lock()

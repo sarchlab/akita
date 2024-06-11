@@ -2,6 +2,7 @@ package ticking_ping
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
@@ -24,6 +25,12 @@ func (p *PingMsg) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+func (p *PingRsp) GenerateRsp() sim.Rsp {
+	rsp := &PingRsp{}
+
+	return rsp
+}
+
 type PingRsp struct {
 	sim.MsgMeta
 
@@ -39,6 +46,10 @@ func (p *PingRsp) Clone() sim.Msg {
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
 	return &cloneMsg
+}
+
+func (p *PingRsp) GetRspTo() string {
+	return strconv.Itoa(p.SeqID)
 }
 
 type pingTransaction struct {

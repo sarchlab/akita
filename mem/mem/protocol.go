@@ -48,6 +48,18 @@ func (r *ReadReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+// GenerateRsp generate DataReadyRsp to ReadReq
+func (r *ReadReq) GenerateRsp(data []byte) sim.Rsp {
+	rsp := DataReadyRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithData(data).
+		Build()
+
+	return rsp
+}
+
 // GetByteSize returns the number of byte that the request is accessing.
 func (r *ReadReq) GetByteSize() uint64 {
 	return r.AccessByteSize
@@ -152,6 +164,17 @@ func (r *WriteReq) Clone() sim.Msg {
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
 	return &cloneMsg
+}
+
+// GenerateRsp generate WriteDoneRsp to the original WriteReq
+func (r *WriteReq) GenerateRsp() sim.Rsp {
+	rsp := WriteDoneRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
 }
 
 // GetByteSize returns the number of byte that the request is writing.
@@ -470,6 +493,17 @@ func (r *GL0InvalidateReq) Clone() sim.Msg {
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
 	return &cloneMsg
+}
+
+func (r *GL0InvalidateReq) GenerateRsp(pid vm.PID) sim.Rsp {
+	rsp := GL0InvalidateRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithPID(pid).
+		Build()
+
+	return rsp
 }
 
 // GetByteSize returns the number of byte that the request is accessing.

@@ -27,6 +27,16 @@ func (r *FlushReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+func (r *FlushReq) GenerateRsp() sim.Rsp {
+	rsp := FlushRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
+}
+
 // FlushReqBuilder can build flush requests.
 type FlushReqBuilder struct {
 	src, dst                sim.Port
@@ -100,6 +110,10 @@ func (r *FlushRsp) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+func (r *FlushRsp) GetRspTo() string {
+	return r.RspTo
+}
+
 // FlushRspBuilder can build data ready responds.
 type FlushRspBuilder struct {
 	src, dst sim.Port
@@ -153,6 +167,16 @@ func (r *RestartReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+func (r *RestartReq) GenerateRsp() sim.Rsp {
+	rsp := RestartRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
+}
+
 // RestartReqBuilder can build data ready responds.
 type RestartReqBuilder struct {
 	src, dst sim.Port
@@ -197,6 +221,10 @@ func (r *RestartRsp) Clone() sim.Msg {
 	cloneMsg.ID = xid.New().String()
 
 	return &cloneMsg
+}
+
+func (r *RestartRsp) GetRspTo() string {
+	return r.RspTo
 }
 
 // RestartRspBuilder can build data ready responds.

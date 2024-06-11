@@ -4,6 +4,7 @@ package sim
 type Msg interface {
 	Meta() *MsgMeta
 	Clone() Msg
+	// GenerateRsp() Rsp
 }
 
 // MsgMeta contains the meta data that is attached to every message.
@@ -123,6 +124,19 @@ func (c *ControlMsg) Clone() Msg {
 	cloneMsg.ID = GetIDGenerator().Generate()
 
 	return &cloneMsg
+}
+
+// GenerateRsp generate response to the original request
+func (c *ControlMsg) GenerateRsp() Rsp {
+	rsp := GeneralRspBuilder{}.
+		WithSrc(c.Dst).
+		WithDst(c.Src).
+		WithTrafficClass(c.TrafficClass).
+		WithTrafficBytes(c.TrafficBytes).
+		WithOriginalReq(c).
+		Build()
+
+	return rsp
 }
 
 // ControlMsgBuilder can build control messages.
