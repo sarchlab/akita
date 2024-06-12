@@ -100,8 +100,13 @@ class Dashboard {
       } else {
         this._toolBar.style.display = 'none';
       }
+      const paginationContainer = this._canvas.querySelector('.pagination-container') as HTMLElement;
+      if (paginationContainer) {
+        paginationContainer.style.left = '50%';
+        paginationContainer.style.transform = 'translateX(-50%)';
+      }
       this._resize();
-    }, 200));
+    }, 200)); 
 
     this._addZoomResetButton(this._toolBar);
     this._addFilterUI(this._toolBar);
@@ -171,6 +176,7 @@ class Dashboard {
   }
 
   _widgetHeight(): number {
+    this._resetNumRowCol();
     const numGap = this._numRow + 1;
     const marginTop = 5;
     const gapSpace = numGap * marginTop;
@@ -467,10 +473,10 @@ class Dashboard {
     paginationContainer.classList.add("pagination-container");
     paginationContainer.appendChild(nav);
     paginationContainer.appendChild(pageInfo);
-
-    this._pageBtnContainer.innerHTML = "";
-    this._pageBtnContainer.appendChild(paginationContainer);
-
+    if (this._canvas.querySelector('.pagination-container')) {
+      this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
+    }
+    this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
   }
 
@@ -643,6 +649,7 @@ class Dashboard {
 
       widget.render(true);
     });
+    this._addPaginationControl();
   }
 
 }

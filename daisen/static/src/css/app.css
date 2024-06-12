@@ -29,16 +29,23 @@ body {
 }
 
 .pagination-container {
-  position: fixed;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  color:#2c7bb6
+  justify-content: center;
+  color:#2c7bb6;
+  margin-top: 0px;
+  margin-bottom: 40px;
+  position: relative;
+  width: 100%;
+}
+
+.canvas-container {
+  position: relative;
+  width: 100%;
 }
 
 .page-info {
   margin-left: 10px;
-  margin-bottom: -10px;
 }
 
 .burger-menu {
