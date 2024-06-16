@@ -73,7 +73,10 @@ func (m *sampleMsg) Meta() *MsgMeta {
 }
 
 func (m *sampleMsg) Clone() Msg {
-	return m
+	cloneMsg := *m
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // Name returns the name of the port.

@@ -22,6 +22,11 @@ type Rsp interface {
 	GetRspTo() string
 }
 
+type Request interface {
+	Msg
+	GenerateRsp() Rsp
+}
+
 // GeneralRsp is a general response message that is used to indicate the
 // completion of a request.
 type GeneralRsp struct {

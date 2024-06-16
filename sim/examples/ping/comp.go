@@ -3,7 +3,6 @@ package ping
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
@@ -25,6 +24,7 @@ func (p *PingMsg) Clone() sim.Msg {
 
 func (p *PingMsg) GenerateRsp() sim.Rsp {
 	rsp := &PingRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
 
 	return rsp
 }
@@ -44,7 +44,7 @@ func (p *PingRsp) Clone() sim.Msg {
 }
 
 func (p *PingRsp) GetRspTo() string {
-	return strconv.Itoa(p.SeqID)
+	return p.ID
 }
 
 type StartPingEvent struct {

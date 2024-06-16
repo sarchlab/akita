@@ -28,7 +28,12 @@ func (r *TranslationReq) Clone() sim.Msg {
 
 // GenerateRsp generates response to originral translation request
 func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
-	rsp := TranslationRspBuilder{}.WithSrc(r.Dst).WithDst(r.Src).WithRspTo(r.ID).WithPage(page).Build()
+	rsp := TranslationRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithPage(page).
+		Build()
 
 	return rsp
 }

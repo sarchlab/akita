@@ -20,7 +20,9 @@ func (m *TrafficMsg) Meta() *sim.MsgMeta {
 
 // Clone returns cloned TrafficMsg
 func (m *TrafficMsg) Clone() sim.Msg {
-	return m
+	clone_msg := NewTrafficMsg(m.Src, m.Dst, m.TrafficBytes)
+
+	return clone_msg
 }
 
 // NewTrafficMsg creates a new traffic message
