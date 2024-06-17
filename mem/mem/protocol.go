@@ -457,57 +457,56 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) ToDrain() ControlMsgBuilder {
-	b.drain = true
+func (b ControlMsgBuilder) WithDrain(flag bool) ControlMsgBuilder {
+	b.drain = flag
 	return b
 }
 
-func (b ControlMsgBuilder) ToValid() ControlMsgBuilder {
-	if b.invalid {
-		panic("Cannot set both valid and invalid bits")
+func (b ControlMsgBuilder) WithValid(flag bool) ControlMsgBuilder {
+	b.valid = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithInvalid(flag bool) ControlMsgBuilder {
+	b.valid = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
+	b.enable = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithDisable(flag bool) ControlMsgBuilder {
+	b.disable = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
+	b.reset = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
+	b.pause = flag
+	return b
+}
+
+func (b *ControlMsgBuilder) checkconflits() {
+	if b.disable == b.enable {
+		panic("cannot set enable and disable with the same value")
 	}
-	b.valid = true
-	return b
-}
 
-func (b ControlMsgBuilder) ToInvalid() ControlMsgBuilder {
-	if b.valid {
-		panic("Cannot set both valid and invalid bits")
+	if b.valid == b.invalid {
+		panic("cannot set valid and invalid with the same value")
 	}
-	b.valid = true
-	return b
-}
-
-func (b ControlMsgBuilder) ToEnable() ControlMsgBuilder {
-	if b.disable {
-		panic("Cannot set both enable and disable bits")
-	}
-	b.enable = true
-	return b
-}
-
-func (b ControlMsgBuilder) ToDisable() ControlMsgBuilder {
-	if b.enable {
-		panic("Cannot set both enable and disable bits")
-	}
-	b.disable = true
-	return b
-}
-
-func (b ControlMsgBuilder) ToReset() ControlMsgBuilder {
-	b.reset = true
-	return b
-}
-
-func (b ControlMsgBuilder) ToPause() ControlMsgBuilder {
-	b.pause = true
-	return b
 }
 
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
 	m.ID = sim.GetIDGenerator().Generate()
+	b.checkconflits()
 	m.Src = b.src
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
