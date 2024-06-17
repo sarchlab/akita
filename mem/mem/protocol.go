@@ -388,6 +388,13 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
+	Drain              bool
+	Valid              bool
+	Invalid            bool
+	Enable             bool
+	Disable            bool
+	Reset              bool
+	Pause              bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -402,6 +409,13 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
+	drain               bool
+	valid               bool
+	invalid             bool
+	enable              bool
+	disable             bool
+	reset               bool
+	pause               bool
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -443,6 +457,53 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
+func (b ControlMsgBuilder) ToDrain() ControlMsgBuilder {
+	b.drain = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToValid() ControlMsgBuilder {
+	if b.invalid {
+		panic("Cannot set both valid and invalid bits")
+	}
+	b.valid = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToInvalid() ControlMsgBuilder {
+	if b.valid {
+		panic("Cannot set both valid and invalid bits")
+	}
+	b.valid = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToEnable() ControlMsgBuilder {
+	if b.disable {
+		panic("Cannot set both enable and disable bits")
+	}
+	b.enable = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToDisable() ControlMsgBuilder {
+	if b.enable {
+		panic("Cannot set both enable and disable bits")
+	}
+	b.disable = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToReset() ControlMsgBuilder {
+	b.reset = true
+	return b
+}
+
+func (b ControlMsgBuilder) ToPause() ControlMsgBuilder {
+	b.pause = true
+	return b
+}
+
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
@@ -455,6 +516,13 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
+	m.Pause = b.pause
+	m.Drain = b.drain
+	m.Valid = b.valid
+	m.Invalid = b.invalid
+	m.Enable = b.enable
+	m.Disable = b.disable
+	m.Reset = b.reset
 
 	return m
 }
