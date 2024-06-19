@@ -153,13 +153,13 @@ class Dashboard {
     const height = window.innerHeight;
     this._numCol = rowColTable[this._numWidget][0];
     this._numRow = rowColTable[this._numWidget][1];
-    if (width >= 800) {
+    if (width >= 1200) {
       this._numCol = 4;
     }
-    if (width < 800 && width >= 500) {
+    if (width < 1200 && width >= 800) {
       this._numCol = 3;
     }
-    if (width < 500) {
+    if (width < 800) {
       this._numCol = 2;
     }
     console.log(width, height);
