@@ -462,16 +462,6 @@ func (b ControlMsgBuilder) WithDrain(flag bool) ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) WithValid(flag bool) ControlMsgBuilder {
-	b.valid = flag
-	return b
-}
-
-func (b ControlMsgBuilder) WithInvalid(flag bool) ControlMsgBuilder {
-	b.valid = flag
-	return b
-}
-
 func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
 	b.enable = flag
 	return b
@@ -496,10 +486,6 @@ func (b *ControlMsgBuilder) checkconflits() {
 	if b.disable == b.enable {
 		panic("cannot set enable and disable with the same value")
 	}
-
-	if b.valid == b.invalid {
-		panic("cannot set valid and invalid with the same value")
-	}
 }
 
 // Build creates a new ControlMsg.
@@ -517,8 +503,6 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.NotifyDone = b.notifyDone
 	m.Pause = b.pause
 	m.Drain = b.drain
-	m.Valid = b.valid
-	m.Invalid = b.invalid
 	m.Enable = b.enable
 	m.Disable = b.disable
 	m.Reset = b.reset
