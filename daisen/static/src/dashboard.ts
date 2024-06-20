@@ -2,6 +2,17 @@ import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
 
+function throttle(func: (...args: any[]) => void, limit: number) {
+  let inThrottle: boolean;
+  return function(this: any, ...args: any[]) {
+    if (!inThrottle) {
+      func.apply(this, args);
+      inThrottle = true;
+      setTimeout(() => (inThrottle = false), limit);
+    }
+  };
+}
+
 class YAxisOption {
   optionValue: string;
   html: string;
@@ -26,6 +37,8 @@ class Dashboard {
   _endTime: number;
   _widgets: Array<Widget>;
   _yAxisOptions: Array<YAxisOption>;
+  _initialWidth: number;
+  _initialHeight: number;
 
   constructor() {
     this._numWidget = 16;
@@ -41,6 +54,8 @@ class Dashboard {
       { optionValue: "PendingReqOut", html: "Pending Request Out" },
       { optionValue: "-", html: " - " },
     ];
+    this._initialWidth = window.innerWidth;
+    this._initialHeight = window.innerHeight;
   }
 
   setCanvas(
@@ -52,6 +67,8 @@ class Dashboard {
     this._pageBtnContainer = pageBtnContainer;
     this._toolBar = toolBar;
   
+    this._canvas.classList.add('canvas-container');
+    
     const burgerMenu = document.createElement('div');
     burgerMenu.classList.add('burger-menu');
     burgerMenu.innerHTML = `
@@ -75,17 +92,22 @@ class Dashboard {
       dropdownCanvas.style.display = isActive ? 'block' : 'none';
     });
   
-    window.addEventListener('resize', () => {
-      if (window.innerWidth > 768) {
+    window.addEventListener('resize', throttle(() => {
+      if (window.innerWidth > 1300) {
         dropdownCanvas.classList.remove('active');
         dropdownCanvas.style.display = 'none';
         this._toolBar.style.display = 'flex';
       } else {
         this._toolBar.style.display = 'none';
       }
+      const paginationContainer = this._canvas.querySelector('.pagination-container') as HTMLElement;
+      if (paginationContainer) {
+        paginationContainer.style.left = '50%';
+        paginationContainer.style.transform = 'translateX(-50%)';
+      }
       this._resize();
-    });
-  
+    }, 200)); 
+
     this._addZoomResetButton(this._toolBar);
     this._addFilterUI(this._toolBar);
     this._addPrimarySelector(this._toolBar);
@@ -95,9 +117,11 @@ class Dashboard {
     this._addPrimarySelector(dropdownCanvas);
     this._addSecondarySelector(dropdownCanvas);
     this._resize();
+
   }
 
   _resize() {
+    this._resetNumRowCol();
     const width = this._widgetWidth();
     const height = this._widgetHeight();
     this._widgets.forEach((w: Widget) => {
@@ -125,9 +149,20 @@ class Dashboard {
       [4, 4],
       [4, 4],
     ];
-
-    this._numRow = rowColTable[this._numWidget][0];
-    this._numCol = rowColTable[this._numWidget][1];
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    this._numCol = rowColTable[this._numWidget][0];
+    this._numRow = rowColTable[this._numWidget][1];
+    if (width >= 1200) {
+      this._numCol = 4;
+    }
+    if (width < 1200 && width >= 800) {
+      this._numCol = 3;
+    }
+    if (width < 800) {
+      this._numCol = 2;
+    }
+    console.log(width, height);
   }
 
   _widgetWidth(): number {
@@ -142,7 +177,7 @@ class Dashboard {
 
   _widgetHeight(): number {
     this._resetNumRowCol();
-    const numGap = this._numCol + 1;
+    const numGap = this._numRow + 1;
     const marginTop = 5;
     const gapSpace = numGap * marginTop;
     const widgetSpace = this._canvas.offsetHeight - gapSpace;
@@ -248,6 +283,7 @@ class Dashboard {
     };
   
     container.appendChild(selectorGroup);
+    this._canvas.classList.add('canvas-container');
   }
   
   _addSecondarySelector(container: HTMLElement) {
@@ -437,10 +473,10 @@ class Dashboard {
     paginationContainer.classList.add("pagination-container");
     paginationContainer.appendChild(nav);
     paginationContainer.appendChild(pageInfo);
-
-    this._pageBtnContainer.innerHTML = "";
-    this._pageBtnContainer.appendChild(paginationContainer);
-
+    if (this._canvas.querySelector('.pagination-container')) {
+      this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
+    }
+    this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
   }
 
@@ -613,7 +649,9 @@ class Dashboard {
 
       widget.render(true);
     });
+    this._addPaginationControl();
   }
+
 }
 
 export default Dashboard;
