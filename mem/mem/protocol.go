@@ -389,12 +389,11 @@ type ControlMsg struct {
 	Restart            bool
 	NotifyDone         bool
 	Drain              bool
-	Valid              bool
-	Invalid            bool
 	Enable             bool
-	Disable            bool
 	Reset              bool
 	Pause              bool
+	// Disable            bool
+
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -410,12 +409,11 @@ type ControlMsgBuilder struct {
 	restart             bool
 	notifyDone          bool
 	drain               bool
-	valid               bool
-	invalid             bool
 	enable              bool
-	disable             bool
 	reset               bool
 	pause               bool
+	// disable             bool
+
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -467,10 +465,10 @@ func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) WithDisable(flag bool) ControlMsgBuilder {
-	b.disable = flag
-	return b
-}
+// func (b ControlMsgBuilder) WithDisable(flag bool) ControlMsgBuilder {
+// 	b.disable = flag
+// 	return b
+// }
 
 func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
 	b.reset = flag
@@ -482,17 +480,17 @@ func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
 	return b
 }
 
-func (b *ControlMsgBuilder) checkconflits() {
-	if b.disable == b.enable {
-		panic("cannot set enable and disable with the same value")
-	}
-}
+// func (b *ControlMsgBuilder) checkconflits() {
+// 	if b.disable == b.enable {
+// 		panic("cannot set enable and disable with the same value")
+// 	}
+// }
 
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
 	m.ID = sim.GetIDGenerator().Generate()
-	b.checkconflits()
+	// b.checkconflits()
 	m.Src = b.src
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
@@ -504,7 +502,7 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Pause = b.pause
 	m.Drain = b.drain
 	m.Enable = b.enable
-	m.Disable = b.disable
+	// m.Disable = b.disable
 	m.Reset = b.reset
 
 	return m
@@ -664,5 +662,161 @@ func (b GL0InvalidateRspBuilder) Build() *GL0InvalidateRsp {
 	r.Dst = b.dst
 	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
+	return r
+}
+
+func (r *DrainRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+func (b DrainRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) DrainRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b DrainRspBuilder) WithSrc(src sim.Port) DrainRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b DrainRspBuilder) WithDst(dst sim.Port) DrainRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b DrainRspBuilder) Build() *DrainRsp {
+	r := &DrainRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.SendTime = b.sendTime
+	return r
+}
+
+type DrainReq struct {
+	sim.MsgMeta
+}
+
+func (r *DrainReq) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type DrainReqBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b DrainReqBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) DrainReqBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b DrainReqBuilder) WithSrc(src sim.Port) DrainReqBuilder {
+	b.src = src
+	return b
+}
+
+func (b DrainReqBuilder) WithDst(dst sim.Port) DrainReqBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b DrainReqBuilder) Build() *DrainReq {
+	r := &DrainReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.SendTime = b.sendTime
+	return r
+}
+
+type RestartReq struct {
+	sim.MsgMeta
+}
+
+func (r *RestartReq) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type RestartReqBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b RestartReqBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) RestartReqBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b RestartReqBuilder) WithSrc(src sim.Port) RestartReqBuilder {
+	b.src = src
+	return b
+}
+
+func (b RestartReqBuilder) WithDst(dst sim.Port) RestartReqBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b RestartReqBuilder) Build() *RestartReq {
+	r := &RestartReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.SendTime = b.sendTime
+	return r
+}
+
+type DrainRsp struct {
+	sim.MsgMeta
+}
+
+type DrainRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+type RestartRsp struct {
+	sim.MsgMeta
+}
+
+func (r *RestartRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type RestartRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b RestartRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) RestartRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b RestartRspBuilder) WithSrc(src sim.Port) RestartRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b RestartRspBuilder) WithDst(dst sim.Port) RestartRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b RestartRspBuilder) Build() *RestartRsp {
+	r := &RestartRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.SendTime = b.sendTime
 	return r
 }
