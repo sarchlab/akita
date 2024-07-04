@@ -85,11 +85,7 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 		madeProgress = c.processControlSignals(now) || madeProgress
 		if c.enable {
 			if c.reset {
-				madeProgress = c.handleReset(now) || madeProgress
-			} else if c.pause {
-				madeProgress = c.handlePauseProcess(now) || madeProgress
-			} else if c.drain {
-				madeProgress = c.handleDrain(now, i) || madeProgress
+				madeProgress = c.updateCtrls(now, i) || madeProgress
 			} else {
 				madeProgress = c.updateMemCtrl(now) || madeProgress
 			}
@@ -97,6 +93,19 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	}
 	return madeProgress
 }
+
+func (c *Comp) updateCtrls(now sim.VTimeInSec, i int) bool {
+	madeProgress := false
+	if c.reset {
+		madeProgress = c.handleReset(now) || madeProgress
+	} else if c.pause {
+		madeProgress = c.handlePauseProcess(now) || madeProgress
+	} else if c.drain {
+		madeProgress = c.handleDrain(now, i) || madeProgress
+	}
+	return madeProgress
+}
+
 func (c *Comp) processControlSignals(now sim.VTimeInSec) bool {
 	msg := c.CtrlPort.Retrieve(now)
 	if msg == nil {
