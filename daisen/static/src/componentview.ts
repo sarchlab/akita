@@ -103,7 +103,7 @@ class ComponentView {
       .attr("width", this._canvasWidth)
       .attr("height", this._canvasHeight);
     
-      const svgElement = svg.node() as SVGElement;
+    const svgElement = svg.node() as SVGElement;
 
     this._updateTimeScale();
     this._renderData();
@@ -376,30 +376,17 @@ class ComponentView {
   }
 
   _showLocation(task: Task) {
-    const svg = d3.select(this._canvas).select("svg");
-    let locationLabel = svg.select(".location-label");
-    if (locationLabel.empty()) {
-      locationLabel = svg
-        .append("text")
-        .attr("x", 5)
-        .attr("y", 40 + this._marginTop)
-        .attr("class", "location-label")
-        .attr(
-          "style",
-          "font-size: 3.2em; opacity: 0.4; color: #000000; pointer-events: none; text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff,1px 1px 0 #ffffff;"
-        );
+    const locationLabel = document.getElementById("location-label");
+    if (locationLabel) {
+        locationLabel.textContent = task["where"];
     }
-
-    locationLabel.text(task["where"]);
   }
 
   _removeLocation() {
-    const svg = d3.select(this._canvas).select("svg");
-    const locationLabel = svg.select(".location-label");
-    if (locationLabel.empty()) {
-      return;
+    const locationLabel = document.getElementById("location-label");
+    if (locationLabel) {
+        locationLabel.textContent = "";
     }
-    locationLabel.text("");
   }
 
   setWidgetDimensions(width: number, height: number) {

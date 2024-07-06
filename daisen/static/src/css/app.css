@@ -192,14 +192,14 @@ body {
   pointer-events: none;
 }
 
-.location-label {
+/* .location-label {
   font-size: 3.2em;
   opacity: 0.4;
   color: #000000;
   pointer-events: none;
   text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff,
     1px 1px 0 #ffffff;
-}
+} */
 
 .dashboard {
   overflow-y: scroll;
