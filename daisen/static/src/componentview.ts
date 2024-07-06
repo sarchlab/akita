@@ -80,11 +80,8 @@ class ComponentView {
 
     this._startTime = 0;
     this._endTime = 0;
-    this._primaryAxis = "ReqInCount";
-    this._secondaryAxis = "AvgLatency";
-    this._xScale = null;
-    this._primaryAxis = "ReqInCount";
-    this._secondaryAxis = "AvgLatency";
+    this._primaryAxis = "ConcurrentTask";
+    this._secondaryAxis = "ConcurrentTask";
     this._xScale = null;
   }
 
@@ -413,11 +410,7 @@ class ComponentView {
 
   _fetchAndRenderAxisData(svg: SVGElement, isSecondary: boolean) {
     const params = new URLSearchParams();
-    if (isSecondary) {
-      params.set("info_type", this._secondaryAxis);
-    } else {
-      params.set("info_type", this._primaryAxis);
-    }
+    params.set("info_type", "ConcurrentTask");
     params.set("where", this._componentName);
     console.log('Fetching data with componentName:', this._componentName);
     params.set("start_time", this._startTime.toString());
