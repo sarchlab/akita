@@ -153,6 +153,9 @@ class ComponentView {
   
     this._taskRenderer.setXScale(this._xScale);
     this._drawXAxis();
+    if (this._primaryYScale) {
+      this._drawYAxis(this._svg, this._primaryYScale);
+    }
   }
 
   _drawXAxis() {
@@ -443,7 +446,7 @@ class ComponentView {
       this._primaryYScale = yScale;
     }
 
-    this._drawYAxis(svg, yScale, isSecondary);
+    this._drawYAxis(svg, yScale);
     this._renderDataCurve(svg, data, yScale, isSecondary);
   }
 
@@ -467,28 +470,26 @@ class ComponentView {
   _drawYAxis(
     svg: SVGElement,
     yScale: d3.ScaleLinear<number, number>,
-    isSecondary: boolean
   ) {
     const canvas = d3.select(svg);
 
-    let yAxis = d3.axisLeft(yScale);
-    let xOffset = this._yAxisWidth;
-    let axisClass = "y-axis-left";
-    if (isSecondary) {
-      yAxis = d3.axisRight(yScale);
-      xOffset += this._graphContentWidth;
-      axisClass = "y-axis-right";
+    const yAxisLeft = d3.axisLeft(yScale);
+    let yAxisLeftGroup = canvas.select(".y-axis-left");
+    if (yAxisLeftGroup.empty()) {
+        yAxisLeftGroup = canvas.append("g").attr("class", "y-axis-left");
     }
+    yAxisLeftGroup
+        .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
+        .call(yAxisLeft.ticks(5, ".1e"));
 
-    let yAxisGroup = canvas.select("." + axisClass);
-    if (yAxisGroup.empty()) {
-      yAxisGroup = canvas.append("g").attr("class", axisClass);
+    const yAxisRight = d3.axisRight(yScale);
+    let yAxisRightGroup = canvas.select(".y-axis-right");
+    if (yAxisRightGroup.empty()) {
+        yAxisRightGroup = canvas.append("g").attr("class", "y-axis-right");
     }
-    yAxisGroup.attr(
-      "transform",
-      `translate(${xOffset}, ${this._graphPaddingTop})`
-    );
-    yAxisGroup.call(yAxis.ticks(5, ".1e"));
+    yAxisRightGroup
+        .attr("transform", `translate(${this._canvasWidth - this._marginRight - 35}, ${this._graphPaddingTop})`)
+        .call(yAxisRight.ticks(5, ".1e"));
   }
 
   _isPrimaryAxisSkipped() {
