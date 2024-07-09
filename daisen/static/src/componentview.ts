@@ -72,7 +72,7 @@ class ComponentView {
     this._graphContentWidth = this._widgetWidth - 2 * this._yAxisWidth;
     this._titleHeight = 20;
     this._graphHeight = this._widgetHeight - this._titleHeight;
-    this._graphPaddingTop = 5;
+    this._graphPaddingTop = 0;
     this._xAxisHeight = 30;
     this._graphContentHeight =
     this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
@@ -165,6 +165,12 @@ class ComponentView {
       .setScale(this._xScale)
       .renderTop(-15)
       .renderBottom();
+
+    this._xAxisDrawer
+    .setCanvasHeight(this._canvasHeight)
+    .setCanvasWidth(this._canvasWidth)
+    .setScale(this._xScale)
+    .renderCustom(this._canvasHeight / 2 - 50); 
   }
 
   updateXAxis() {
@@ -202,9 +208,9 @@ class ComponentView {
     const tree = this.rearrangeAsTree(<Array<Task>>tasks);
     const initDim = new Dim();
     initDim.x = 0;
-    initDim.y = this._marginTop;
+    initDim.y = 0;
     initDim.width = this._canvasWidth;
-    initDim.height = this._canvasHeight - this._marginTop - this._marginBottom;
+    initDim.height = (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 2;
     initDim.startTime = this._startTime;
     initDim.endTime = this._endTime;
     this.assignDimension(tree, initDim);
@@ -298,7 +304,7 @@ class ComponentView {
     }
 
     const taskHeight = parentLevelHeight / (globalMaxY + 1);
-    const paddedTaskHeight = this.padTaskHeight(taskHeight);
+    const paddedTaskHeight = this.padTaskHeight(taskHeight) / 2;
 
     tasksOfLevel.forEach(t => {
       const paddedDim = Object.assign({}, t.dim);
@@ -419,9 +425,6 @@ class ComponentView {
         }
         this._renderAxisData(svg, rsp, isSecondary);
       })
-      .catch((error) => {
-        console.error('Error fetching data:', error);
-      });
   }
 
 
@@ -449,7 +452,7 @@ class ComponentView {
     const yScale = d3
       .scaleLinear()
       .domain([0, max])
-      .range([this._canvasHeight - this._xAxisHeight, this._marginTop]);
+      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + (this._canvasHeight - this._xAxisHeight - this._marginTop) / 2 - 15]);
 
     return yScale;
   }
