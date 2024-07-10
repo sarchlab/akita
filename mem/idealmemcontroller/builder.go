@@ -88,8 +88,17 @@ func (b Builder) Build(
 	name string,
 ) *Comp {
 	c := &Comp{
-		Latency: b.latency,
-		width:   b.width,
+		Latency:           b.latency,
+		width:             b.width,
+		isDraining:        false,
+		pauseIncomingReqs: false,
+		enable:            true,
+		isEnable:          true,
+		pause:             false,
+		isPause:           false,
+		drain:             false,
+		reset:             false,
+		isReset:           false,
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
@@ -104,6 +113,8 @@ func (b Builder) Build(
 
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
+	c.CtrlPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".CtrlPort")
+	c.AddPort("Control", c.CtrlPort)
 
 	return c
 }

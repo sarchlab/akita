@@ -40,11 +40,27 @@ type Comp struct {
 	*sim.TickingComponent
 
 	topPort          sim.Port
+	CtrlPort         sim.Port
 	Storage          *mem.Storage
 	Latency          int
 	addressConverter mem.AddressConverter
 
+	isDraining        bool
+	pauseIncomingReqs bool
+	currentDrainRsp   *mem.ControlMsg
+	currentPauseRsp   *mem.ControlMsg
+	currentResetRsp   *mem.ControlMsg
+	currentEnableRsp  *mem.ControlMsg
+
 	width int
+
+	enable   bool
+	isEnable bool
+	pause    bool
+	isPause  bool
+	drain    bool
+	reset    bool
+	isReset  bool
 }
 
 // Handle defines how the Comp handles event
@@ -63,8 +79,163 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
-// Tick updates ideal memory controller state.
 func (c *Comp) Tick() bool {
+	madeProgress := false
+
+	for i := 0; i < c.width; i++ {
+		madeProgress = c.processControlSignals() || madeProgress
+		if c.enable {
+			if c.reset {
+				madeProgress = c.updateCtrls(i) || madeProgress
+			} else {
+				madeProgress = c.updateMemCtrl() || madeProgress
+			}
+		}
+	}
+	return madeProgress
+}
+
+func (c *Comp) updateCtrls(i int) bool {
+	madeProgress := false
+	if c.reset {
+		madeProgress = c.handleReset() || madeProgress
+	} else if c.pause {
+		madeProgress = c.handlePauseProcess() || madeProgress
+	} else if c.drain {
+		madeProgress = c.handleDrain(i) || madeProgress
+	}
+	return madeProgress
+}
+
+func (c *Comp) processControlSignals() bool {
+	msg := c.CtrlPort.RetrieveIncoming()
+	if msg == nil {
+		return false
+	}
+
+	tracing.TraceReqReceive(msg, c)
+
+	switch msgType := msg.(type) {
+	case *mem.ControlMsg:
+		c.handelControlMsg(msgType)
+	}
+
+	return true
+}
+
+func (c *Comp) handelControlMsg(msg *mem.ControlMsg) {
+	if c.enable != msg.Enable {
+		c.currentEnableRsp = msg
+		c.enable = msg.Enable
+	}
+
+	if c.pause != msg.Pause {
+		c.currentPauseRsp = msg
+		c.pause = msg.Pause
+	}
+
+	if c.drain != msg.Drain {
+		c.currentDrainRsp = msg
+		c.drain = msg.Drain
+
+		if c.drain {
+			c.pauseIncomingReqs = true
+			c.isDraining = true
+		}
+	}
+
+	if c.reset != msg.Reset {
+		c.currentResetRsp = msg
+		c.reset = msg.Reset
+	}
+}
+
+func (c *Comp) handleReset() bool {
+	resetCompleteRsp := sim.GeneralRspBuilder{}.
+		WithSrc(c.CtrlPort).
+		WithDst(c.currentResetRsp.Src).
+		WithOriginalReq(c.currentResetRsp).
+		Build()
+	err := c.CtrlPort.Send(resetCompleteRsp)
+
+	if err != nil {
+		return false
+	}
+
+	c.isDraining = false
+	c.pauseIncomingReqs = false
+	c.enable = true
+	c.isEnable = true
+	c.pause = false
+	c.isPause = false
+	c.drain = false
+	c.reset = false
+	c.isReset = false
+
+	return true
+}
+
+func (c *Comp) handlePauseProcess() bool {
+	if !c.isPause {
+		// responsePauseReq := mem.PauseRspBuilder{}.
+		// 	WithSendTime(now).
+		// 	WithSrc(c.CtrlPort).
+		// 	WithDst(c.currentPauseRsp.Src).
+		// 	Build()
+		responsePauseReq := sim.GeneralRspBuilder{}.
+			WithSrc(c.CtrlPort).
+			WithDst(c.currentPauseRsp.Src).
+			WithOriginalReq(c.currentPauseRsp).
+			Build()
+
+		err := c.CtrlPort.Send(responsePauseReq)
+
+		if err != nil {
+			return false
+		}
+
+		c.isPause = true
+	}
+
+	return true
+}
+
+func (c *Comp) handleDrain(i int) bool {
+	madeProgress := false
+	if c.fullyDrained(i) {
+		// drainCompleteRsp := mem.DrainRspBuilder{}.
+		// 	WithSendTime(now).
+		// 	WithSrc(c.CtrlPort).
+		// 	WithDst(c.currentDrainRsp.Src).
+		// 	Build()
+
+		drainCompleteRsp := sim.GeneralRspBuilder{}.
+			WithSrc(c.CtrlPort).
+			WithDst(c.currentDrainRsp.Src).
+			WithOriginalReq(c.currentDrainRsp).
+			Build()
+
+		err := c.CtrlPort.Send(drainCompleteRsp)
+		if err != nil {
+			return false
+		}
+		c.isDraining = false
+		return true
+	}
+
+	madeProgress = c.updateMemCtrl()
+	return madeProgress
+}
+
+func (c *Comp) fullyDrained(i int) bool {
+	if (i == c.width-1) || c.topPort.PeekIncoming() == nil {
+		return true
+	}
+	return false
+}
+
+// updateMemCtrl updates ideal memory controller state.
+func (c *Comp) updateMemCtrl() bool {
 	msg := c.topPort.RetrieveIncoming()
 	if msg == nil {
 		return false

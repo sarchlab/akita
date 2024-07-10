@@ -352,6 +352,10 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
+	Drain              bool
+	Enable             bool
+	Reset              bool
+	Pause              bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -365,6 +369,10 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
+	drain               bool
+	enable              bool
+	reset               bool
+	pause               bool
 }
 
 // WithSrc sets the source of the request to build.
@@ -398,6 +406,26 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
+func (b ControlMsgBuilder) WithDrain(flag bool) ControlMsgBuilder {
+	b.drain = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
+	b.enable = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
+	b.reset = flag
+	return b
+}
+
+func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
+	b.pause = flag
+	return b
+}
+
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
@@ -409,6 +437,10 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
+	m.Pause = b.pause
+	m.Drain = b.drain
+	m.Enable = b.enable
+	m.Reset = b.reset
 
 	return m
 }
@@ -548,4 +580,318 @@ func (b GL0InvalidateRspBuilder) Build() *GL0InvalidateRsp {
 	r.Dst = b.dst
 	r.RespondTo = b.rspTo
 	return r
+}
+
+func (r *DrainRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+func (b DrainRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) DrainRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b DrainRspBuilder) WithSrc(src sim.Port) DrainRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b DrainRspBuilder) WithDst(dst sim.Port) DrainRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b DrainRspBuilder) Build() *DrainRsp {
+	r := &DrainRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type DrainReq struct {
+	sim.MsgMeta
+}
+
+func (r *DrainReq) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type DrainReqBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b DrainReqBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) DrainReqBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b DrainReqBuilder) WithSrc(src sim.Port) DrainReqBuilder {
+	b.src = src
+	return b
+}
+
+func (b DrainReqBuilder) WithDst(dst sim.Port) DrainReqBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b DrainReqBuilder) Build() *DrainReq {
+	r := &DrainReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type RestartReq struct {
+	sim.MsgMeta
+}
+
+func (r *RestartReq) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type RestartReqBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b RestartReqBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) RestartReqBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b RestartReqBuilder) WithSrc(src sim.Port) RestartReqBuilder {
+	b.src = src
+	return b
+}
+
+func (b RestartReqBuilder) WithDst(dst sim.Port) RestartReqBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b RestartReqBuilder) Build() *RestartReq {
+	r := &RestartReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type DrainRsp struct {
+	sim.MsgMeta
+}
+
+type DrainRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+type RestartRsp struct {
+	sim.MsgMeta
+}
+
+func (r *RestartRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type RestartRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b RestartRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) RestartRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b RestartRspBuilder) WithSrc(src sim.Port) RestartRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b RestartRspBuilder) WithDst(dst sim.Port) RestartRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b RestartRspBuilder) Build() *RestartRsp {
+	r := &RestartRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type PauseRsp struct {
+	sim.MsgMeta
+}
+
+func (r *PauseRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type PauseRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b PauseRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) PauseRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b PauseRspBuilder) WithSrc(src sim.Port) PauseRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b PauseRspBuilder) WithDst(dst sim.Port) PauseRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b PauseRspBuilder) Build() *PauseRsp {
+	r := &PauseRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type ResetRsp struct {
+	sim.MsgMeta
+}
+
+func (r *ResetRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+type ResetRspBuilder struct {
+	sendTime sim.VTimeInSec
+	src, dst sim.Port
+}
+
+func (b ResetRspBuilder) WithSendTime(
+	t sim.VTimeInSec,
+) ResetRspBuilder {
+	b.sendTime = t
+	return b
+}
+
+func (b ResetRspBuilder) WithSrc(src sim.Port) ResetRspBuilder {
+	b.src = src
+	return b
+}
+
+func (b ResetRspBuilder) WithDst(dst sim.Port) ResetRspBuilder {
+	b.dst = dst
+	return b
+}
+
+func (b ResetRspBuilder) Build() *ResetRsp {
+	r := &ResetRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	return r
+}
+
+type MsgMeta struct {
+	ID           string
+	Src, Dst     sim.Port
+	TrafficClass int
+	TrafficBytes int
+}
+
+// Rsp is a special message that is used to indicate the completion of a
+// request.
+type Rsp interface {
+	sim.Msg
+	GetRspTo() string
+}
+
+// GeneralRsp is a general response message that is used to indicate the
+// completion of a request.
+type GeneralRsp struct {
+	MsgMeta
+
+	OriginalReq sim.Msg
+}
+
+// Meta returns the meta data of the message.
+func (r *GeneralRsp) Meta() *MsgMeta {
+	return &r.MsgMeta
+}
+
+// GetRspTo returns the ID of the original request.
+func (r *GeneralRsp) GetRspTo() string {
+	return r.OriginalReq.Meta().ID
+}
+
+// GeneralRspBuilder can build general response messages.
+type GeneralRspBuilder struct {
+	Src, Dst     sim.Port
+	TrafficClass int
+	TrafficBytes int
+	OriginalReq  sim.Msg
+}
+
+// WithSrc sets the source of the general response message.
+func (c GeneralRspBuilder) WithSrc(src sim.Port) GeneralRspBuilder {
+	c.Src = src
+	return c
+}
+
+// WithDst sets the destination of the general response message.
+func (c GeneralRspBuilder) WithDst(dst sim.Port) GeneralRspBuilder {
+	c.Dst = dst
+	return c
+}
+
+// WithTrafficClass sets the traffic class of the general response message.
+func (c GeneralRspBuilder) WithTrafficClass(trafficClass int) GeneralRspBuilder {
+	c.TrafficClass = trafficClass
+	return c
+}
+
+// WithTrafficBytes sets the traffic bytes of the general response message.
+func (c GeneralRspBuilder) WithTrafficBytes(trafficBytes int) GeneralRspBuilder {
+	c.TrafficBytes = trafficBytes
+	return c
+}
+
+// WithOriginalReq sets the original request of the general response message.
+func (c GeneralRspBuilder) WithOriginalReq(originalReq sim.Msg) GeneralRspBuilder {
+	c.OriginalReq = originalReq
+	return c
+}
+
+// Build creates a new general response message.
+func (c GeneralRspBuilder) Build() *GeneralRsp {
+	rsp := &GeneralRsp{
+		MsgMeta: MsgMeta{
+			Src:          c.Src,
+			Dst:          c.Dst,
+			TrafficClass: c.TrafficClass,
+			TrafficBytes: c.TrafficBytes,
+			ID:           sim.GetIDGenerator().Generate(),
+		},
+		OriginalReq: c.OriginalReq,
+	}
+
+	return rsp
 }
