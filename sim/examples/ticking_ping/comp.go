@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
 type PingMsg struct {
@@ -34,6 +33,7 @@ type pingTransaction struct {
 
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	OutPort sim.Port
 
@@ -45,27 +45,35 @@ type Comp struct {
 }
 
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.sendRsp() || madeProgress
-	madeProgress = c.sendPing() || madeProgress
-	madeProgress = c.countDown() || madeProgress
-	madeProgress = c.processInput() || madeProgress
+	madeProgress = m.sendRsp() || madeProgress
+	madeProgress = m.sendPing() || madeProgress
+	madeProgress = m.countDown() || madeProgress
+	madeProgress = m.processInput() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) processInput() bool {
-	msg := c.OutPort.PeekIncoming()
+func (m *middleware) processInput() bool {
+	msg := m.OutPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
 	switch msg := msg.(type) {
 	case *PingMsg:
-		c.processingPingMsg(msg)
+		m.processingPingMsg(msg)
 	case *PingRsp:
-		c.processingPingRsp(msg)
+		m.processingPingRsp(msg)
 	default:
 		panic("unknown message type")
 	}
@@ -73,32 +81,32 @@ func (c *Comp) processInput() bool {
 	return true
 }
 
-func (c *Comp) processingPingMsg(
+func (m *middleware) processingPingMsg(
 	ping *PingMsg,
 ) {
 	trans := &pingTransaction{
 		req:       ping,
 		cycleLeft: 2,
 	}
-	c.currentTransactions = append(c.currentTransactions, trans)
-	c.OutPort.RetrieveIncoming()
+	m.currentTransactions = append(m.currentTransactions, trans)
+	m.OutPort.RetrieveIncoming()
 }
 
-func (c *Comp) processingPingRsp(
+func (m *middleware) processingPingRsp(
 	msg *PingRsp,
 ) {
 	seqID := msg.SeqID
-	startTime := c.startTime[seqID]
-	currentTime := c.CurrentTime()
+	startTime := m.startTime[seqID]
+	currentTime := m.CurrentTime()
 	duration := currentTime - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
-	c.OutPort.RetrieveIncoming()
+	m.OutPort.RetrieveIncoming()
 }
 
-func (c *Comp) countDown() bool {
+func (m *middleware) countDown() bool {
 	madeProgress := false
-	for _, trans := range c.currentTransactions {
+	for _, trans := range m.currentTransactions {
 		if trans.cycleLeft > 0 {
 			trans.cycleLeft--
 			madeProgress = true
@@ -107,12 +115,12 @@ func (c *Comp) countDown() bool {
 	return madeProgress
 }
 
-func (c *Comp) sendRsp() bool {
-	if len(c.currentTransactions) == 0 {
+func (m *middleware) sendRsp() bool {
+	if len(m.currentTransactions) == 0 {
 		return false
 	}
 
-	trans := c.currentTransactions[0]
+	trans := m.currentTransactions[0]
 	if trans.cycleLeft > 0 {
 		return false
 	}
@@ -120,64 +128,38 @@ func (c *Comp) sendRsp() bool {
 	rsp := &PingRsp{
 		SeqID: trans.req.SeqID,
 	}
-	rsp.Src = c.OutPort
+	rsp.Src = m.OutPort
 	rsp.Dst = trans.req.Src
 
-	err := c.OutPort.Send(rsp)
+	err := m.OutPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	c.currentTransactions = c.currentTransactions[1:]
+	m.currentTransactions = m.currentTransactions[1:]
 
 	return true
 }
 
-func (c *Comp) sendPing() bool {
-	if c.numPingNeedToSend == 0 {
+func (m *middleware) sendPing() bool {
+	if m.numPingNeedToSend == 0 {
 		return false
 	}
 
 	pingMsg := &PingMsg{
-		SeqID: c.nextSeqID,
+		SeqID: m.nextSeqID,
 	}
-	pingMsg.Src = c.OutPort
-	pingMsg.Dst = c.pingDst
+	pingMsg.Src = m.OutPort
+	pingMsg.Dst = m.pingDst
 
-	err := c.OutPort.Send(pingMsg)
+	err := m.OutPort.Send(pingMsg)
 	if err != nil {
 		return false
 	}
 
-	c.startTime = append(c.startTime, c.CurrentTime())
-	c.numPingNeedToSend--
-	c.nextSeqID++
+	m.startTime = append(m.startTime, m.CurrentTime())
+	m.numPingNeedToSend--
+	m.nextSeqID++
 
 	return true
-}
-
-func Example_pingWithTicking() {
-	engine := sim.NewSerialEngine()
-	// agentA := NewTickingPingAgent("AgentA", engine, 1*sim.Hz)
-	agentA := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentA")
-	// agentB := NewTickingPingAgent("AgentB", engine, 1*sim.Hz)
-	agentB := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
-
-	agentA.pingDst = agentB.OutPort
-	agentA.numPingNeedToSend = 2
-
-	agentA.TickLater()
-
-	engine.Run()
-	// Output:
-	// Ping 0, 5.00
-	// Ping 1, 5.00
-}
-
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
 }
