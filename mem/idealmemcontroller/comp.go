@@ -83,7 +83,6 @@ func (c *Comp) Tick() bool {
 		madeProgress = c.processControlSignals() || madeProgress
 
 		if c.enable {
-
 			if c.reset {
 				madeProgress = c.updateCtrls(i) || madeProgress
 			} else {
@@ -199,7 +198,6 @@ func (c *Comp) handleDrain(i int) bool {
 	madeProgress := false
 
 	if c.fullyDrained(i) {
-
 		drainCompleteRsp := sim.GeneralRspBuilder{}.
 			WithSrc(c.CtrlPort).
 			WithDst(c.currentDrainReq.Src).
@@ -340,7 +338,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 			panic(err)
 		}
 		for i := 0; i < len(req.Data); i++ {
-
 			if req.DirtyMask[i] {
 				data[i] = req.Data[i]
 			}
