@@ -1,4 +1,4 @@
-package ticking_ping
+package tickingping
 
 import "github.com/sarchlab/akita/v4/sim"
 
