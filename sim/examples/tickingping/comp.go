@@ -1,4 +1,4 @@
-package ticking_ping
+package tickingping
 
 import (
 	"fmt"
