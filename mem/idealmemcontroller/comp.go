@@ -45,22 +45,19 @@ type Comp struct {
 	Latency          int
 	addressConverter mem.AddressConverter
 
-	isDraining        bool
-	pauseIncomingReqs bool
-	currentDrainRsp   *mem.ControlMsg
-	currentPauseRsp   *mem.ControlMsg
-	currentResetRsp   *mem.ControlMsg
-	currentEnableRsp  *mem.ControlMsg
+	isDraining       bool
+	currentDrainReq  *mem.ControlMsg
+	currentPauseReq  *mem.ControlMsg
+	currentResetReq  *mem.ControlMsg
+	currentEnableReq *mem.ControlMsg
 
 	width int
 
-	enable   bool
-	isEnable bool
-	pause    bool
-	isPause  bool
-	drain    bool
-	reset    bool
-	isReset  bool
+	enable  bool
+	pause   bool
+	isPause bool
+	drain   bool
+	reset   bool
 }
 
 // Handle defines how the Comp handles event
@@ -84,7 +81,9 @@ func (c *Comp) Tick() bool {
 
 	for i := 0; i < c.width; i++ {
 		madeProgress = c.processControlSignals() || madeProgress
+
 		if c.enable {
+
 			if c.reset {
 				madeProgress = c.updateCtrls(i) || madeProgress
 			} else {
@@ -92,11 +91,13 @@ func (c *Comp) Tick() bool {
 			}
 		}
 	}
+
 	return madeProgress
 }
 
 func (c *Comp) updateCtrls(i int) bool {
 	madeProgress := false
+
 	if c.reset {
 		madeProgress = c.handleReset() || madeProgress
 	} else if c.pause {
@@ -104,11 +105,13 @@ func (c *Comp) updateCtrls(i int) bool {
 	} else if c.drain {
 		madeProgress = c.handleDrain(i) || madeProgress
 	}
+
 	return madeProgress
 }
 
 func (c *Comp) processControlSignals() bool {
 	msg := c.CtrlPort.RetrieveIncoming()
+
 	if msg == nil {
 		return false
 	}
@@ -117,35 +120,34 @@ func (c *Comp) processControlSignals() bool {
 
 	switch msgType := msg.(type) {
 	case *mem.ControlMsg:
-		c.handelControlMsg(msgType)
+		c.handleControlMsg(msgType)
 	}
 
 	return true
 }
 
-func (c *Comp) handelControlMsg(msg *mem.ControlMsg) {
+func (c *Comp) handleControlMsg(msg *mem.ControlMsg) {
 	if c.enable != msg.Enable {
-		c.currentEnableRsp = msg
+		c.currentEnableReq = msg
 		c.enable = msg.Enable
 	}
 
 	if c.pause != msg.Pause {
-		c.currentPauseRsp = msg
+		c.currentPauseReq = msg
 		c.pause = msg.Pause
 	}
 
 	if c.drain != msg.Drain {
-		c.currentDrainRsp = msg
+		c.currentDrainReq = msg
 		c.drain = msg.Drain
 
 		if c.drain {
-			c.pauseIncomingReqs = true
 			c.isDraining = true
 		}
 	}
 
 	if c.reset != msg.Reset {
-		c.currentResetRsp = msg
+		c.currentResetReq = msg
 		c.reset = msg.Reset
 	}
 }
@@ -153,8 +155,8 @@ func (c *Comp) handelControlMsg(msg *mem.ControlMsg) {
 func (c *Comp) handleReset() bool {
 	resetCompleteRsp := sim.GeneralRspBuilder{}.
 		WithSrc(c.CtrlPort).
-		WithDst(c.currentResetRsp.Src).
-		WithOriginalReq(c.currentResetRsp).
+		WithDst(c.currentResetReq.Src).
+		WithOriginalReq(c.currentResetReq).
 		Build()
 	err := c.CtrlPort.Send(resetCompleteRsp)
 
@@ -162,30 +164,23 @@ func (c *Comp) handleReset() bool {
 		return false
 	}
 
+	c.drain = false
 	c.isDraining = false
-	c.pauseIncomingReqs = false
-	c.enable = true
-	c.isEnable = true
+
 	c.pause = false
 	c.isPause = false
-	c.drain = false
+
 	c.reset = false
-	c.isReset = false
 
 	return true
 }
 
 func (c *Comp) handlePauseProcess() bool {
 	if !c.isPause {
-		// responsePauseReq := mem.PauseRspBuilder{}.
-		// 	WithSendTime(now).
-		// 	WithSrc(c.CtrlPort).
-		// 	WithDst(c.currentPauseRsp.Src).
-		// 	Build()
 		responsePauseReq := sim.GeneralRspBuilder{}.
 			WithSrc(c.CtrlPort).
-			WithDst(c.currentPauseRsp.Src).
-			WithOriginalReq(c.currentPauseRsp).
+			WithDst(c.currentPauseReq.Src).
+			WithOriginalReq(c.currentPauseReq).
 			Build()
 
 		err := c.CtrlPort.Send(responsePauseReq)
@@ -202,20 +197,17 @@ func (c *Comp) handlePauseProcess() bool {
 
 func (c *Comp) handleDrain(i int) bool {
 	madeProgress := false
+
 	if c.fullyDrained(i) {
-		// drainCompleteRsp := mem.DrainRspBuilder{}.
-		// 	WithSendTime(now).
-		// 	WithSrc(c.CtrlPort).
-		// 	WithDst(c.currentDrainRsp.Src).
-		// 	Build()
 
 		drainCompleteRsp := sim.GeneralRspBuilder{}.
 			WithSrc(c.CtrlPort).
-			WithDst(c.currentDrainRsp.Src).
-			WithOriginalReq(c.currentDrainRsp).
+			WithDst(c.currentDrainReq.Src).
+			WithOriginalReq(c.currentDrainReq).
 			Build()
 
 		err := c.CtrlPort.Send(drainCompleteRsp)
+
 		if err != nil {
 			return false
 		}
@@ -224,6 +216,7 @@ func (c *Comp) handleDrain(i int) bool {
 	}
 
 	madeProgress = c.updateMemCtrl()
+
 	return madeProgress
 }
 
@@ -231,12 +224,14 @@ func (c *Comp) fullyDrained(i int) bool {
 	if (i == c.width-1) || c.topPort.PeekIncoming() == nil {
 		return true
 	}
+
 	return false
 }
 
 // updateMemCtrl updates ideal memory controller state.
 func (c *Comp) updateMemCtrl() bool {
 	msg := c.topPort.RetrieveIncoming()
+
 	if msg == nil {
 		return false
 	}
@@ -276,11 +271,13 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	req := e.req
 
 	addr := req.Address
+
 	if c.addressConverter != nil {
 		addr = c.addressConverter.ConvertExternalToInternal(addr)
 	}
 
 	data, err := c.Storage.Read(addr, req.AccessByteSize)
+
 	if err != nil {
 		log.Panic(err)
 	}
@@ -317,6 +314,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 		Build()
 
 	networkErr := c.topPort.Send(rsp)
+
 	if networkErr != nil {
 		retry := newWriteRespondEvent(c.Freq.NextTick(now), c, req)
 		c.Engine.Schedule(retry)
@@ -331,20 +329,24 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 	if req.DirtyMask == nil {
 		err := c.Storage.Write(addr, req.Data)
+
 		if err != nil {
 			log.Panic(err)
 		}
 	} else {
 		data, err := c.Storage.Read(addr, uint64(len(req.Data)))
+
 		if err != nil {
 			panic(err)
 		}
 		for i := 0; i < len(req.Data); i++ {
+
 			if req.DirtyMask[i] {
 				data[i] = req.Data[i]
 			}
 		}
 		err = c.Storage.Write(addr, data)
+
 		if err != nil {
 			panic(err)
 		}
