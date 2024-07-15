@@ -471,15 +471,6 @@ class ComponentView {
     yAxisLeftGroup
         .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
         .call(yAxisLeft.ticks(5, ".1e"));
-
-    const yAxisRight = d3.axisRight(yScale);
-    let yAxisRightGroup = canvas.select(".y-axis-right");
-    if (yAxisRightGroup.empty()) {
-        yAxisRightGroup = canvas.append("g").attr("class", "y-axis-right");
-    }
-    yAxisRightGroup
-        .attr("transform", `translate(${this._canvasWidth - this._marginRight - 35}, ${this._graphPaddingTop})`)
-        .call(yAxisRight.ticks(5, ".1e"));
   }
 
   _isPrimaryAxisSkipped() {
