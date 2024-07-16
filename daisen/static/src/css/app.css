@@ -284,3 +284,9 @@ body {
 .dashboard .widget .y-axis-right path {
   stroke: #2c7bb6;
 }
+
+.location-label {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: bold;
+}
