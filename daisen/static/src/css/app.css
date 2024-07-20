@@ -200,15 +200,6 @@ body {
   pointer-events: none;
 }
 
-.location-label {
-  font-size: 3.2em;
-  opacity: 0.4;
-  color: #000000;
-  pointer-events: none;
-  text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff,
-    1px 1px 0 #ffffff;
-}
-
 .dashboard {
   overflow-y: scroll;
   margin-top: 5px;
@@ -292,4 +283,10 @@ body {
 
 .dashboard .widget .y-axis-right path {
   stroke: #2c7bb6;
+}
+
+.location-label {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: bold;
 }

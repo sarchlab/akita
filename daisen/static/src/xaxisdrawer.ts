@@ -90,6 +90,36 @@ class XAxisDrawer {
 
     return this;
   }
+
+  renderCustom(yOffset: number) {
+    const xAxis = d3.axisBottom(this._xScale);
+    const svg = d3.select(this._canvas).select("svg");
+    let xAxisGroup = svg.select(".x-axis-custom");
+    let rect = null;
+    if (xAxisGroup.empty()) {
+      xAxisGroup = svg.append("g").attr("class", "x-axis-custom");
+      rect = xAxisGroup.append("rect");
+    } else {
+      rect = xAxisGroup.select("rect");
+    }
+  
+    console.log("SVG width:", this._canvasWidth);
+    console.log("SVG height:", this._canvasHeight);
+    console.log("xScale domain:", this._xScale.domain());
+    console.log("xScale range:", this._xScale.range());
+  
+    xAxisGroup
+      .attr("transform", `translate(${this._marginLeft}, ${yOffset})`)
+      .call(xAxis.ticks(12, "s"));
+  
+    rect
+      .attr("fill", "none") 
+      .attr("height", this._axisHeight)
+      .attr("width", this._canvasWidth)
+      .attr("x", 0)
+      .attr("y", -this._axisHeight); 
+  }
+  
 }
 
 export default XAxisDrawer;

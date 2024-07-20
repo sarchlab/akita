@@ -3,7 +3,7 @@ import Dashboard from "./dashboard";
 import TaskPage from "./taskpage";
 import { ZoomHandler, MouseEventHandler } from "./mouseeventhandler";
 
-class TimeValue {
+export class TimeValue {
   time: number;
   value: number;
 
@@ -13,7 +13,12 @@ class TimeValue {
   }
 }
 
-class Widget implements ZoomHandler {
+type DataObject = {
+  info_type: string;
+  data: TimeValue[];
+};
+
+export class Widget implements ZoomHandler {
   _dashboard: Dashboard;
   _componentName: string;
   _div: HTMLDivElement;
@@ -44,6 +49,7 @@ class Widget implements ZoomHandler {
   _graphPaddingTop: number;
 
   _xScale: d3.ScaleLinear<number, number>;
+  _yScale: d3.ScaleLinear<number, number>;
   _primaryYScale: d3.ScaleLinear<number, number>;
   _secondaryYScale: d3.ScaleLinear<number, number>;
 
@@ -76,9 +82,36 @@ class Widget implements ZoomHandler {
     this._xScale = null;
   }
 
+  setSVG(svg: SVGElement) {
+    this._svg = svg;
+  }
+  
+  public async initialize(): Promise<void> {
+    this._svg = await this.loadSvgElement();
+  }
+
+  private async loadSvgElement(): Promise<SVGElement> {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svgElement.setAttribute("width", "100");
+            svgElement.setAttribute("height", "50");
+            resolve(svgElement);
+        }, 1000);
+    });
+  }
+  setDimensions(width: number, height: number) {
+    this._widgetWidth = width;
+    this._widgetHeight = height;
+    this._graphWidth = this._widgetWidth;
+    this._graphContentWidth = this._widgetWidth - 2 * this._yAxisWidth;
+    this._graphHeight = this._widgetHeight - this._titleHeight;
+    this._graphContentHeight = this._graphHeight - 
+    this._xAxisHeight - this._graphPaddingTop;
+  }
+  
   resize(width: number, height: number) {
-    this._setWidgetWidth(width);
-    this._setWidgetHeight(height);
+    this.setDimensions(width, height);
     this._renderXAxis(this._svg);
     if (!this._isPrimaryAxisSkipped()) {
       this._renderDataCurve(
@@ -89,7 +122,7 @@ class Widget implements ZoomHandler {
       );
       this._drawYAxis(this._svg, this._primaryYScale, false);
     }
-
+  
     if (!this._isSecondaryAxisSkipped()) {
       this._renderDataCurve(
         this._svg,
@@ -119,6 +152,10 @@ class Widget implements ZoomHandler {
       .range([0, this._graphContentWidth]);
   }
 
+  setYScale(yScale: d3.ScaleLinear<number, number>) {
+    this._yScale = yScale;
+  }
+  
   temporaryTimeShift(startTime: number, endTime: number) {
     this.setXAxis(startTime, endTime);
     this._renderXAxis(this._svg);
@@ -199,6 +236,10 @@ class Widget implements ZoomHandler {
     this._fetchAndRenderAxisData(svg, false);
   }
 
+  setXScale(xScale: d3.ScaleLinear<number, number>) {
+    this._xScale = xScale;
+  }
+  
   createWidget(width: number, height: number) {
     const div = document.createElement("div");
 
@@ -253,7 +294,7 @@ class Widget implements ZoomHandler {
   }
 
   _createSVG(div: HTMLDivElement) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg") as SVGSVGElement;;
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", this._widgetHeight.toString());
     div.appendChild(svg);
@@ -295,7 +336,6 @@ class Widget implements ZoomHandler {
     params.set("start_time", this._startTime.toString());
     params.set("end_time", this._endTime.toString());
     params.set("num_dots", this._numDots.toString());
-
     fetch(`/api/compinfo?${params.toString()}`)
       .then((rsp) => rsp.json())
       .then((rsp) => {

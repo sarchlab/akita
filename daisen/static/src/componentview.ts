@@ -4,6 +4,12 @@ import TaskRenderer from "./taskrenderer";
 import XAxisDrawer from "./xaxisdrawer";
 import { ScaleLinear } from "d3";
 import { Task, Dim } from "./task";
+import { Widget, TimeValue } from "./widget";
+
+type DataObject = {
+  info_type: string;
+  data: TimeValue[];
+};
 
 class ComponentView {
   _yIndexAssigner: TaskYIndexAssigner;
@@ -20,22 +26,70 @@ class ComponentView {
   _endTime: number;
   _xScale: ScaleLinear<number, number>;
   _tasks: Array<Task>;
+  _widget: Widget;
+  _graphContentWidth: number;
+  _graphContentHeight: number;
+  _graphWidth: number;
+  _graphHeight: number;
+  _titleHeight: number;
+  _graphPaddingTop: number;
+  _widgetHeight: number;
+  _widgetWidth: number;
+  _yAxisWidth: number;
+  _xAxisHeight: number;
+  _primaryAxis: string;
+  _secondaryAxis: string;
+  _numDots:number;
+  _componentName: string;
+  _svg: SVGElement;
+  _yScale: d3.ScaleLinear<number, number>;
+  _primaryYScale: d3.ScaleLinear<number, number>;
+  _secondaryYScale: d3.ScaleLinear<number, number>;
+  _primaryAxisData: object;
+  _secondaryAxisData: object;
 
   constructor(
     yIndexAssigner: TaskYIndexAssigner,
     taskRenderer: TaskRenderer,
-    xAxisDrawer: XAxisDrawer
+    xAxisDrawer: XAxisDrawer,
+    widget: Widget
   ) {
     this._yIndexAssigner = yIndexAssigner;
     this._taskRenderer = taskRenderer;
     this._xAxisDrawer = xAxisDrawer;
+    this._widget = widget; 
 
     this._marginTop = 5;
     this._marginLeft = 5;
     this._marginRight = 5;
     this._marginBottom = 20;
+
+    this._numDots = 40;
+    this._widgetHeight = 100;
+    this._widgetWidth = 0;
+    this._yAxisWidth = 55;
+    this._graphWidth = this._widgetWidth;
+    this._graphContentWidth = this._widgetWidth - 2 * this._yAxisWidth;
+    this._titleHeight = 20;
+    this._graphHeight = this._widgetHeight - this._titleHeight;
+    this._graphPaddingTop = 0;
+    this._xAxisHeight = 30;
+    this._graphContentHeight =
+    this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
+    this._componentName = this._widget._componentName;
+
+    this._startTime = 0;
+    this._endTime = 0;
+    this._primaryAxis = "ConcurrentTask";
+    this._secondaryAxis = "ConcurrentTask";
+    this._xScale = null;
   }
 
+  setComponentName(componentName: string) {
+    this._componentName = componentName;
+    console.log('Component Name set to:', this._componentName);
+  }
+  
   setCanvas(canvas: HTMLElement, tooltip: HTMLElement) {
     this._canvas = canvas;
     this._canvasWidth = this._canvas.offsetWidth;
@@ -44,13 +98,20 @@ class ComponentView {
     this._taskRenderer.setCanvas(canvas, tooltip);
     this._xAxisDrawer.setCanvas(canvas);
 
-    d3.select(this._canvas)
-      .select("svg")
+    const svg = d3.select(this._canvas)
+      .select<SVGSVGElement>("svg")
       .attr("width", this._canvasWidth)
       .attr("height", this._canvasHeight);
+    
+    const svgElement = svg.node() as SVGElement;
 
     this._updateTimeScale();
     this._renderData();
+
+    this._fetchAndRenderAxisData(svgElement, false);
+    if (!this._isSecondaryAxisSkipped()) {
+      this._fetchAndRenderAxisData(svgElement, true);
+    }
   }
 
   updateLayout() {
@@ -63,20 +124,38 @@ class ComponentView {
     this._updateTimeScale();
   }
 
+  setPrimaryAxis(axis: string) {
+    this._primaryAxis = axis;
+    console.log('Primary Axis set to:', this._primaryAxis);
+  }
+
+  setSecondaryAxis(axis: string) {
+    this._secondaryAxis = axis;
+    console.log('Secondary Axis set to:', this._secondaryAxis);
+  }
+  
   setTimeAxis(startTime: number, endTime: number) {
     this._startTime = startTime;
     this._endTime = endTime;
     this._updateTimeScale();
+    this._widget.setXAxis(startTime, endTime);
+    this._fetchAndRenderAxisData(this._svg, false);
+    if (!this._isSecondaryAxisSkipped()) {
+      this._fetchAndRenderAxisData(this._svg, true);
+    }
   }
 
   _updateTimeScale() {
     this._xScale = d3
-      .scaleLinear()
-      .domain([this._startTime, this._endTime])
-      .range([0, this._canvasWidth]);
+    .scaleLinear()
+    .domain([this._startTime, this._endTime])
+    .range([0, this._canvasWidth - this._marginLeft - this._marginRight]);
+  
     this._taskRenderer.setXScale(this._xScale);
-
     this._drawXAxis();
+    if (this._primaryYScale) {
+      this._drawYAxis(this._svg, this._primaryYScale);
+    }
   }
 
   _drawXAxis() {
@@ -86,6 +165,12 @@ class ComponentView {
       .setScale(this._xScale)
       .renderTop(-15)
       .renderBottom();
+
+    this._xAxisDrawer
+    .setCanvasHeight(this._canvasHeight)
+    .setCanvasWidth(this._canvasWidth)
+    .setScale(this._xScale)
+    .renderCustom(this._canvasHeight / 2 - 50); 
   }
 
   updateXAxis() {
@@ -100,11 +185,17 @@ class ComponentView {
     this._tasks = tasks;
 
     this._renderData();
-
     if (tasks.length > 0) {
       this._showLocation(tasks[0]);
     } else {
       this._removeLocation();
+    }
+    if (this._canvas) {
+      const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
+      this._fetchAndRenderAxisData(svg, false);
+      if (!this._isSecondaryAxisSkipped()) {
+        this._fetchAndRenderAxisData(svg, true);
+      }
     }
   }
 
@@ -117,9 +208,9 @@ class ComponentView {
     const tree = this.rearrangeAsTree(<Array<Task>>tasks);
     const initDim = new Dim();
     initDim.x = 0;
-    initDim.y = this._marginTop;
+    initDim.y = 0;
     initDim.width = this._canvasWidth;
-    initDim.height = this._canvasHeight - this._marginTop - this._marginBottom;
+    initDim.height = (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 2;
     initDim.startTime = this._startTime;
     initDim.endTime = this._endTime;
     this.assignDimension(tree, initDim);
@@ -213,7 +304,7 @@ class ComponentView {
     }
 
     const taskHeight = parentLevelHeight / (globalMaxY + 1);
-    const paddedTaskHeight = this.padTaskHeight(taskHeight);
+    const paddedTaskHeight = this.padTaskHeight(taskHeight) / 2;
 
     tasksOfLevel.forEach(t => {
       const paddedDim = Object.assign({}, t.dim);
@@ -291,30 +382,173 @@ class ComponentView {
   }
 
   _showLocation(task: Task) {
-    const svg = d3.select(this._canvas).select("svg");
-    let locationLabel = svg.select(".location-label");
-    if (locationLabel.empty()) {
-      locationLabel = svg
-        .append("text")
-        .attr("x", 5)
-        .attr("y", 40 + this._marginTop)
-        .attr("class", "location-label")
-        .attr(
-          "style",
-          "font-size: 3.2em; opacity: 0.4; color: #000000; pointer-events: none; text-shadow: -1px -1px 0 #ffffff, 1px -1px 0 #ffffff, -1px 1px 0 #ffffff,1px 1px 0 #ffffff;"
-        );
+    const locationLabel = document.getElementById("location-label");
+    if (locationLabel) {
+        locationLabel.textContent = task["where"];
     }
-
-    locationLabel.text(task["where"]);
   }
 
   _removeLocation() {
-    const svg = d3.select(this._canvas).select("svg");
-    const locationLabel = svg.select(".location-label");
-    if (locationLabel.empty()) {
-      return;
+    const locationLabel = document.getElementById("location-label");
+    if (locationLabel) {
+        locationLabel.textContent = "";
     }
-    locationLabel.text("");
+  }
+
+  setWidgetDimensions(width: number, height: number) {
+    this._widget.setDimensions(width, height);
+  }
+
+  setTimeRange(startTime: number, endTime: number) {
+    this._widget.setXAxis(startTime, endTime);  
+    this._updateTimeScale(); 
+  }
+
+  _fetchAndRenderAxisData(svg: SVGElement, isSecondary: boolean) {
+    const params = new URLSearchParams();
+    params.set("info_type", "ConcurrentTask");
+    params.set("where", this._componentName);
+    console.log('Fetching data with componentName:', this._componentName);
+    params.set("start_time", this._startTime.toString());
+    params.set("end_time", this._endTime.toString());
+    console.log('Fetching data time', this._startTime.toString(), this._endTime.toString());
+    params.set("num_dots", this._numDots.toString());
+    console.log(params.toString());
+    fetch(`/api/compinfo?${params.toString()}`)
+      .then((rsp) => rsp.json())
+      .then((rsp) => {
+        console.log('After Fetching data with componentName:', this._componentName);
+        if (isSecondary) {
+          this._secondaryAxisData = rsp;
+        } else {
+          this._primaryAxisData = rsp;
+        }
+        this._renderAxisData(svg, rsp, isSecondary);
+      })
+  }
+
+
+  _renderAxisData(svg: SVGElement, data: object, isSecondary: boolean) {
+    const yScale = this._calculateYScale(data);
+    if (isSecondary) {
+      this._secondaryYScale = yScale;
+    } else {
+      this._primaryYScale = yScale;
+    }
+
+    this._drawYAxis(svg, yScale);
+    this._renderDataCurve(svg, data, yScale, isSecondary);
+  }
+
+  _calculateYScale(data: Object) {
+    let max = 0;
+
+    data["data"].forEach((d: TimeValue) => {
+      if (d.value > max) {
+        max = d.value;
+      }
+    });
+
+    const yScale = d3
+      .scaleLinear()
+      .domain([0, max])
+      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + (this._canvasHeight - this._xAxisHeight - this._marginTop) / 2 - 15]);
+
+    return yScale;
+  }
+
+  _drawYAxis(
+    svg: SVGElement,
+    yScale: d3.ScaleLinear<number, number>,
+  ) {
+    const canvas = d3.select(svg);
+
+    const yAxisLeft = d3.axisLeft(yScale);
+    let yAxisLeftGroup = canvas.select(".y-axis-left");
+    if (yAxisLeftGroup.empty()) {
+        yAxisLeftGroup = canvas.append("g").attr("class", "y-axis-left");
+    }
+    yAxisLeftGroup
+        .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
+        .call(yAxisLeft.ticks(5, ".1e"));
+  }
+
+  _isPrimaryAxisSkipped() {
+    return this._primaryAxis === "-";
+  }
+
+  _isSecondaryAxisSkipped() {
+    return this._secondaryAxis === "-";
+  }
+
+  _renderDataCurve(
+    svg: SVGElement,
+    data: Object,
+    yScale: d3.ScaleLinear<number, number>,
+    isSecondary: boolean
+  ) {
+    const canvas = d3.select(svg);
+    const className = `curve-${data["info_type"]}`;
+    let reqInGroup = canvas.select(`.${className}`);
+    if (reqInGroup.empty()) {
+      reqInGroup = canvas.append("g").attr("class", className);
+    }
+
+    let color = "#d7191c";
+    if (isSecondary) {
+      color = "#2c7bb6";
+    }
+
+    const pathData = [];
+    data["data"].forEach((d: TimeValue) => {
+      pathData.push([d.time, d.value]);
+    });
+
+    const line = d3
+      .line()
+      .x((d) => this._yAxisWidth + this._xScale(d[0]))
+      .y((d) => this._graphPaddingTop + yScale(d[1]))
+      .curve(d3.curveCatmullRom.alpha(0.5));
+
+    let path = reqInGroup.select(".line");
+    if (path.empty()) {
+      path = reqInGroup.append("path").attr("class", "line");
+    }
+    path
+      .datum(pathData)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", color);
+
+    const circles = reqInGroup.selectAll("circle").data(data["data"]);
+
+    const circleEnter = circles
+      .enter()
+      .append("circle")
+      .attr("cx", (d: TimeValue) => {
+        const x = this._yAxisWidth + this._xScale(d.time);
+        return x;
+      })
+      .attr("cy", this._graphContentHeight + this._graphPaddingTop)
+      .attr("r", 2)
+      .attr("fill", color);
+
+    circleEnter
+      .merge(
+        <d3.Selection<SVGCircleElement, unknown, SVGCircleElement, unknown>>(
+          circles
+        )
+      )
+      .transition()
+      .attr("cx", (d: TimeValue, i: number) => {
+        const x = this._yAxisWidth + this._xScale(d.time);
+        return x;
+      })
+      .attr("cy", (d: TimeValue) => {
+        return this._graphPaddingTop + yScale(d.value);
+      });
+
+    circles.exit().remove();
   }
 }
 
