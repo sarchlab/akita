@@ -7,17 +7,17 @@ import (
 	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
-type PingMsg struct {
+type PingReq struct {
 	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingMsg) Meta() *sim.MsgMeta {
+func (p *PingReq) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
-func (p *PingMsg) Clone() sim.Msg {
+func (p *PingReq) Clone() sim.Msg {
 	cloneMsg := *p
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
@@ -27,6 +27,7 @@ func (p *PingMsg) Clone() sim.Msg {
 func (p *PingRsp) GenerateRsp() sim.Rsp {
 	rsp := &PingRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.RspTo = p.ID
 
 	return rsp
 }
@@ -34,6 +35,7 @@ func (p *PingRsp) GenerateRsp() sim.Rsp {
 type PingRsp struct {
 	sim.MsgMeta
 
+	RspTo string
 	SeqID int
 }
 
@@ -49,11 +51,11 @@ func (p *PingRsp) Clone() sim.Msg {
 }
 
 func (p *PingRsp) GetRspTo() string {
-	return p.ID
+	return p.RspTo
 }
 
 type pingTransaction struct {
-	req       *PingMsg
+	req       *PingReq
 	cycleLeft int
 }
 
@@ -87,7 +89,7 @@ func (c *Comp) processInput() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *PingMsg:
+	case *PingReq:
 		c.processingPingMsg(msg)
 	case *PingRsp:
 		c.processingPingRsp(msg)
@@ -99,7 +101,7 @@ func (c *Comp) processInput() bool {
 }
 
 func (c *Comp) processingPingMsg(
-	ping *PingMsg,
+	ping *PingReq,
 ) {
 	trans := &pingTransaction{
 		req:       ping,
@@ -163,7 +165,7 @@ func (c *Comp) sendPing() bool {
 		return false
 	}
 
-	pingMsg := &PingMsg{
+	pingMsg := &PingReq{
 		SeqID: c.nextSeqID,
 	}
 	pingMsg.Src = c.OutPort

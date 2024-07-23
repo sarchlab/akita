@@ -8,23 +8,24 @@ import (
 	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
-type PingMsg struct {
+type PingReq struct {
 	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingMsg) Meta() *sim.MsgMeta {
+func (p *PingReq) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
-func (p *PingMsg) Clone() sim.Msg {
+func (p *PingReq) Clone() sim.Msg {
 	return p
 }
 
-func (p *PingMsg) GenerateRsp() sim.Rsp {
+func (p *PingReq) GenerateRsp() sim.Rsp {
 	rsp := &PingRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.RspTo = p.ID
 
 	return rsp
 }
@@ -32,6 +33,7 @@ func (p *PingMsg) GenerateRsp() sim.Rsp {
 type PingRsp struct {
 	sim.MsgMeta
 
+	RspTo string
 	SeqID int
 }
 
@@ -44,7 +46,7 @@ func (p *PingRsp) Clone() sim.Msg {
 }
 
 func (p *PingRsp) GetRspTo() string {
-	return p.ID
+	return p.RspTo
 }
 
 type StartPingEvent struct {
@@ -54,7 +56,7 @@ type StartPingEvent struct {
 
 type RspPingEvent struct {
 	*sim.EventBase
-	pingMsg *PingMsg
+	pingMsg *PingReq
 }
 
 type Comp struct {
@@ -83,7 +85,7 @@ func (c *Comp) Handle(e sim.Event) error {
 }
 
 func (c *Comp) StartPing(evt StartPingEvent) {
-	pingMsg := &PingMsg{
+	pingMsg := &PingReq{
 		SeqID: c.nextSeqID,
 	}
 
@@ -114,7 +116,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 
 	msg := port.RetrieveIncoming()
 	switch msg := msg.(type) {
-	case *PingMsg:
+	case *PingReq:
 		c.processPingMsg(msg)
 	case *PingRsp:
 		c.processPingRsp(msg)
@@ -123,7 +125,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 	}
 }
 
-func (c *Comp) processPingMsg(msg *PingMsg) {
+func (c *Comp) processPingMsg(msg *PingReq) {
 	rspEvent := RspPingEvent{
 		EventBase: sim.NewEventBase(c.CurrentTime()+2, c),
 		pingMsg:   msg,
