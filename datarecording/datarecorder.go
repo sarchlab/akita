@@ -21,13 +21,13 @@ type DataRecorder interface {
 	Init()
 
 	//CreateTable creates a new table with given filename
-	CreateTable(table string, task any)
+	CreateTable(table string, sampleEntry any)
 
 	//DataInsert writes a same-type task into table that already exists
-	DataInsert(table string, task any)
+	DataInsert(table string, entry any)
 
 	//ListTable returns a slice containing names of all tables
-	ListTables()
+	ListTables() []string
 
 	//Flush flushes all the baffered task into database
 	Flush()
@@ -87,7 +87,7 @@ func (t *SQLiteWriter) CreateTable(table string, task any) {
 	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
 
 	t.mustExecute(createTableSQL)
-	fmt.Printf("Table %s created successfully", tableName)
+	fmt.Printf("Table %s created successfully\n", tableName)
 
 	storedTasks := []any{task}
 	t.tables[tableName] = storedTasks
