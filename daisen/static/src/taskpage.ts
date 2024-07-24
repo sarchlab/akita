@@ -77,7 +77,6 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setPrimaryAxis('ReqInCount');
     this._componentView.setSecondaryAxis('AvgLatency');
     this._componentView.setTimeAxis(this._startTime, this._endTime);
-    this.layout();
   }
 
   _handleMouseMove(e: MouseEvent) {
@@ -161,22 +160,24 @@ export class TaskPage implements ZoomHandler {
       this._rightColumn.classList.add("side-column");
       this._container.appendChild(this._rightColumn);
     }
+    const locationLabel = document.createElement("div");
+    locationLabel.setAttribute("id", "location-label");
+    locationLabel.style.fontSize = "20px";
+    locationLabel.style.color = "gray";  
+    this._rightColumn.appendChild(locationLabel);
     this._rightColumn.style.width =
       this._rightColumnWidth.toString() + "px";
     this._rightColumn.style.height =
       this._container.offsetHeight.toString() + "px";
     // const marginLeft = -5;
     // this._rightColumn.style.marginLeft = marginLeft.toString();
-    const locationLabel = document.createElement("div");
-    locationLabel.setAttribute("id", "location-label");
-    locationLabel.style.fontSize = "25px";
-    locationLabel.style.color = "gray";  
-    this._rightColumn.appendChild(locationLabel);
+
     if (this._tooltip === null) {
       this._tooltip = document.createElement("div");
       this._tooltip.classList.add("curr-task-info");
       this._rightColumn.appendChild(this._tooltip);
     }
+
     if (this._legendCanvas === null) {
       this._legendCanvas = document.createElement("div");
       this._legendCanvas.innerHTML = "<svg></svg>";
@@ -307,7 +308,6 @@ export class TaskPage implements ZoomHandler {
     this._taskView.render(task, subTasks, parentTask);
     this._componentView.render(sameLocationTasks);
     this._legend.render();
-    this._componentView._showLocation(task);
   }
 
   async showComponent(name: string) {
