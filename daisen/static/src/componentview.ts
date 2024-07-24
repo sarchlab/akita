@@ -147,30 +147,20 @@ class ComponentView {
 
   _updateTimeScale() {
     this._xScale = d3
-    .scaleLinear()
-    .domain([this._startTime, this._endTime])
-    .range([0, this._canvasWidth - this._marginLeft - this._marginRight]);
+      .scaleLinear()
+      .domain([this._startTime, this._endTime])
+      .range([this._marginLeft, this._canvasWidth - this._marginLeft]);
   
     this._taskRenderer.setXScale(this._xScale);
     this._drawXAxis();
-    if (this._primaryYScale) {
-      this._drawYAxis(this._svg, this._primaryYScale);
-    }
   }
 
   _drawXAxis() {
     this._xAxisDrawer
-      .setCanvasHeight(this._canvasHeight)
-      .setCanvasWidth(this._canvasWidth)
-      .setScale(this._xScale)
-      .renderTop(-15)
-      .renderBottom();
-
-    this._xAxisDrawer
     .setCanvasHeight(this._canvasHeight)
     .setCanvasWidth(this._canvasWidth)
     .setScale(this._xScale)
-    .renderCustom(this._canvasHeight / 2 - 50); 
+    .renderCustom(this._canvasHeight - 20); 
   }
 
   updateXAxis() {
@@ -468,6 +458,24 @@ class ComponentView {
     if (yAxisLeftGroup.empty()) {
         yAxisLeftGroup = canvas.append("g").attr("class", "y-axis-left");
     }
+    const tickValues = yScale.ticks(5);
+    const gridLines = yAxisLeftGroup.selectAll(".grid-line")
+      .data(tickValues);
+  
+    gridLines.enter()
+      .append("line")
+      .attr("class", "grid-line")
+      .merge(gridLines as any)
+      .attr("x1", 0)
+      .attr("x2", this._canvasWidth - this._marginLeft - 35)
+      .attr("y1", d => yScale(d))
+      .attr("y2", d => yScale(d))
+      .attr("stroke", "#ccc")
+      .attr("stroke-dasharray", "3,3")
+      .attr("opacity", 0.5);
+  
+    gridLines.exit().remove();
+  
     yAxisLeftGroup
         .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
         .call(yAxisLeft.ticks(5, ".1e"));
