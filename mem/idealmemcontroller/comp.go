@@ -80,13 +80,13 @@ func (c *Comp) Tick() bool {
 	madeProgress := false
 
 	for i := 0; i < c.width; i++ {
-		madeProgress = c.processControlSignals() || madeProgress
+		madeProgress = c.getCtrlSignals() || madeProgress
 
 		if c.enable {
-			if c.reset {
-				madeProgress = c.updateCtrls(i) || madeProgress
-			} else {
-				madeProgress = c.updateMemCtrl() || madeProgress
+			madeProgress = c.handleCtrlSignals(i) || madeProgress
+
+			if !c.checkStatus() {
+				madeProgress = c.handleMemReqs() || madeProgress
 			}
 		}
 	}
@@ -94,13 +94,18 @@ func (c *Comp) Tick() bool {
 	return madeProgress
 }
 
-func (c *Comp) updateCtrls(i int) bool {
+func (c *Comp) checkStatus() bool {
+	return c.drain || c.pause
+}
+
+func (c *Comp) handleCtrlSignals(i int) bool {
 	madeProgress := false
 
-	if c.reset {
-		madeProgress = c.handleReset() || madeProgress
-	} else if c.pause {
-		madeProgress = c.handlePauseProcess() || madeProgress
+	// if c.reset {
+	// 	madeProgress = c.handleReset() || madeProgress
+	// } else
+	if c.pause {
+		madeProgress = c.handlePause() || madeProgress
 	} else if c.drain {
 		madeProgress = c.handleDrain(i) || madeProgress
 	}
@@ -108,7 +113,7 @@ func (c *Comp) updateCtrls(i int) bool {
 	return madeProgress
 }
 
-func (c *Comp) processControlSignals() bool {
+func (c *Comp) getCtrlSignals() bool {
 	msg := c.CtrlPort.RetrieveIncoming()
 
 	if msg == nil {
@@ -145,9 +150,16 @@ func (c *Comp) handleControlMsg(msg *mem.ControlMsg) {
 		}
 	}
 
-	if c.reset != msg.Reset {
+	// if c.reset != msg.Reset {
+	// 	c.currentResetReq = msg
+	// 	c.reset = msg.Reset
+	// }
+
+	if msg.Reset {
 		c.currentResetReq = msg
-		c.reset = msg.Reset
+		c.reset = true
+
+		c.handleReset()
 	}
 }
 
@@ -174,7 +186,7 @@ func (c *Comp) handleReset() bool {
 	return true
 }
 
-func (c *Comp) handlePauseProcess() bool {
+func (c *Comp) handlePause() bool {
 	if !c.isPause {
 		responsePauseReq := sim.GeneralRspBuilder{}.
 			WithSrc(c.CtrlPort).
@@ -213,7 +225,7 @@ func (c *Comp) handleDrain(i int) bool {
 		return true
 	}
 
-	madeProgress = c.updateMemCtrl()
+	madeProgress = c.handleMemReqs()
 
 	return madeProgress
 }
@@ -227,7 +239,7 @@ func (c *Comp) fullyDrained(i int) bool {
 }
 
 // updateMemCtrl updates ideal memory controller state.
-func (c *Comp) updateMemCtrl() bool {
+func (c *Comp) handleMemReqs() bool {
 	msg := c.topPort.RetrieveIncoming()
 
 	if msg == nil {
