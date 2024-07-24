@@ -80,9 +80,10 @@ func (c *Comp) Tick() bool {
 	madeProgress := false
 
 	for i := 0; i < c.width; i++ {
-		madeProgress = c.getCtrlSignals() || madeProgress
+		madeProgress = c.handleEnableSignals() || madeProgress
 
 		if c.enable {
+			madeProgress = c.getCtrlSignals() || madeProgress
 			madeProgress = c.handleCtrlSignals(i) || madeProgress
 
 			if !c.checkStatus() {
@@ -98,12 +99,25 @@ func (c *Comp) checkStatus() bool {
 	return c.drain || c.pause
 }
 
+func (c *Comp) handleEnableSignals() bool {
+	enableSignal := c.CtrlPort.PeekIncoming()
+
+	if enableSignal == nil {
+		return false
+	}
+
+	if c.enable != enableSignal.(*mem.ControlMsg).Enable {
+		c.enable = enableSignal.(*mem.ControlMsg).Enable
+		c.currentEnableReq = enableSignal.(*mem.ControlMsg)
+		return true
+	}
+
+	return false
+}
+
 func (c *Comp) handleCtrlSignals(i int) bool {
 	madeProgress := false
 
-	// if c.reset {
-	// 	madeProgress = c.handleReset() || madeProgress
-	// } else
 	if c.pause {
 		madeProgress = c.handlePause() || madeProgress
 	} else if c.drain {
@@ -131,11 +145,6 @@ func (c *Comp) getCtrlSignals() bool {
 }
 
 func (c *Comp) handleControlMsg(msg *mem.ControlMsg) {
-	if c.enable != msg.Enable {
-		c.currentEnableReq = msg
-		c.enable = msg.Enable
-	}
-
 	if c.pause != msg.Pause {
 		c.currentPauseReq = msg
 		c.pause = msg.Pause
@@ -149,11 +158,6 @@ func (c *Comp) handleControlMsg(msg *mem.ControlMsg) {
 			c.isDraining = true
 		}
 	}
-
-	// if c.reset != msg.Reset {
-	// 	c.currentResetReq = msg
-	// 	c.reset = msg.Reset
-	// }
 
 	if msg.Reset {
 		c.currentResetReq = msg

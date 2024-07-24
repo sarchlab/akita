@@ -17,6 +17,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine        *MockEngine
 		memController *Comp
 		port          *MockPort
+		ctrlPort      *MockPort
 	)
 
 	BeforeEach(func() {
@@ -24,6 +25,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine = NewMockEngine(mockCtrl)
 		port = NewMockPort(mockCtrl)
+		ctrlPort = NewMockPort(mockCtrl)
 
 		memController = MakeBuilder().
 			WithEngine(engine).
@@ -32,6 +34,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Freq = 1000 * sim.MHz
 		memController.Latency = 10
 		memController.topPort = port
+		memController.CtrlPort = ctrlPort
 	})
 
 	AfterEach(func() {
@@ -45,6 +48,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithByteSize(4).
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(readReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -63,6 +68,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithDirtyMask([]bool{false, false, true, false}).
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -202,5 +209,19 @@ var _ = Describe("Ideal Memory Controller", func() {
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
 
 		memController.Handle(event)
+	})
+
+	It("should handle pause request", func() {
+		pauseReq := mem.ControlMsgBuilder{}.
+			WithDst(memController.CtrlPort).
+			WithPause(true).
+			Build()
+
+		ctrlPort.EXPECT().RetrieveIncoming().Return(pauseReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+		ctrlPort.EXPECT().Send(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+		madeProgress := memController.Tick()
+		Expect(madeProgress).To(BeTrue())
+
 	})
 })
