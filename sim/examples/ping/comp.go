@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
 type PingReq struct {
@@ -127,7 +126,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 
 func (c *Comp) processPingMsg(msg *PingReq) {
 	rspEvent := RspPingEvent{
-		EventBase: sim.NewEventBase(c.CurrentTime()+2, c),
+		EventBase: sim.NewEventBase(c.Engine.CurrentTime()+2, c),
 		pingMsg:   msg,
 	}
 	c.Engine.Schedule(rspEvent)
@@ -136,7 +135,7 @@ func (c *Comp) processPingMsg(msg *PingReq) {
 func (c *Comp) processPingRsp(msg *PingRsp) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
-	now := c.CurrentTime()
+	now := c.Engine.CurrentTime()
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
@@ -144,36 +143,4 @@ func (c *Comp) processPingRsp(msg *PingRsp) {
 
 func (c Comp) NotifyPortFree(_ sim.Port) {
 	// Do nothing
-}
-
-func Example_pingWithEvents() {
-	engine := sim.NewSerialEngine()
-	// agentA := NewPingAgent("AgentA", engine)
-	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
-	// agentB := NewPingAgent("AgentB", engine)
-	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
-
-	e1 := StartPingEvent{
-		EventBase: sim.NewEventBase(1, agentA),
-		Dst:       agentB.OutPort,
-	}
-	e2 := StartPingEvent{
-		EventBase: sim.NewEventBase(3, agentA),
-		Dst:       agentB.OutPort,
-	}
-	engine.Schedule(e1)
-	engine.Schedule(e2)
-
-	engine.Run()
-	// Output:
-	// Ping 0, 2.00
-	// Ping 1, 2.00
-}
-
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
 }
