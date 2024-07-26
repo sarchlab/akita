@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 
 	// Need to use SQLite connections.
@@ -50,6 +49,7 @@ func NewSQLiteWriter(path string) *SQLiteWriter {
 	w := &SQLiteWriter{
 		dbName:    path,
 		batchSize: 100000,
+		tables:    make(map[string][]any),
 	}
 
 	atexit.Register(func() { w.Flush() })
@@ -79,17 +79,18 @@ func (t *SQLiteWriter) Init() {
 	t.DB = db
 }
 
-func (t *SQLiteWriter) CreateTable(table string, task any) {
-	t.tableCount += 1
-	n := structs.Names(task)
+func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
+	t.tableCount++
+	n := structs.Names(sampleEntry)
 	fields := strings.Join(n, ", \n\t")
-	tableName := "trace_" + strconv.Itoa(t.tableCount)
+	tableName := table
 	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
+	fmt.Println(createTableSQL)
 
 	t.mustExecute(createTableSQL)
 	fmt.Printf("Table %s created successfully\n", tableName)
 
-	storedTasks := []any{task}
+	storedTasks := []any{sampleEntry}
 	t.tables[tableName] = storedTasks
 	t.taskCount += 1
 	if t.taskCount >= t.batchSize {
@@ -98,18 +99,18 @@ func (t *SQLiteWriter) CreateTable(table string, task any) {
 
 }
 
-func (t *SQLiteWriter) DataInsert(table string, task any) {
+func (t *SQLiteWriter) DataInsert(table string, entry any) {
 	storedTasks, exists := t.tables[table]
 	if !exists {
 		panic(fmt.Errorf("table %s does not exist", table))
 	}
 
 	stdTask := storedTasks[0]
-	if reflect.TypeOf(stdTask) != reflect.TypeOf(task) {
-		panic(fmt.Errorf("task %s can't be written into table %s", task, table))
+	if reflect.TypeOf(stdTask) != reflect.TypeOf(entry) {
+		panic(fmt.Errorf("task %s can't be written into table %s", entry, table))
 	}
 
-	storedTasks = append(storedTasks, task)
+	storedTasks = append(storedTasks, entry)
 	t.tables[table] = storedTasks
 	t.taskCount += 1
 	if t.taskCount >= t.batchSize {
