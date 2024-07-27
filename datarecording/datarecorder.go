@@ -85,14 +85,13 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	fields := strings.Join(n, ", \n\t")
 	tableName := table
 	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
-	fmt.Println(createTableSQL)
 
 	t.mustExecute(createTableSQL)
 	fmt.Printf("Table %s created successfully\n", tableName)
 
 	storedTasks := []any{sampleEntry}
 	t.tables[tableName] = storedTasks
-	t.taskCount += 1
+	t.taskCount++
 	if t.taskCount >= t.batchSize {
 		t.Flush()
 	}
@@ -126,10 +125,10 @@ func (t *SQLiteWriter) Flush() {
 	t.mustExecute("BEGIN TRANSACTION")
 	defer t.mustExecute("COMMIT TRANSACTION")
 
-	for tableName, storedTasks := range t.tables {
-		stdTask := storedTasks[0]
-		t.prepareStatement(tableName, stdTask)
-		for _, task := range storedTasks {
+	for tableName, storedEntries := range t.tables {
+		sampleEntry := storedEntries[0]
+		t.prepareStatement(tableName, sampleEntry)
+		for _, task := range storedEntries {
 			v := structs.Values(task)
 			_, err := t.statement.Exec(v...)
 			if err != nil {
@@ -155,8 +154,8 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 	for i := 0; i < len(n); i++ {
 		n[i] = "?"
 	}
-	toFill := "(" + strings.Join(n, ", ") + ")"
-	sqlStr := "INSERT INTO " + table + " VALUES " + toFill
+	entryToFill := "(" + strings.Join(n, ", ") + ")"
+	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
 	stmt, err := t.Prepare(sqlStr)
 	if err != nil {
@@ -167,23 +166,23 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 }
 
 // SQLiteTraceReader is a reader that reads trace data from a SQLite database.
-type SQLiteTraceReader struct {
+type SQLiteReader struct {
 	*sql.DB
 
 	filename string
 }
 
 // NewSQLiteTraceReader creates a new SQLiteTraceReader.
-func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
-	r := &SQLiteTraceReader{
-		filename: filename,
+func NewSQLiteReader(filename string) *SQLiteReader {
+	r := &SQLiteReader{
+		filename: filename + ".sqlite3",
 	}
 
 	return r
 }
 
 // Init establishes a connection to the database.
-func (r *SQLiteTraceReader) Init() {
+func (r *SQLiteReader) Init() {
 	db, err := sql.Open("sqlite3", r.filename)
 	if err != nil {
 		panic(err)
@@ -193,9 +192,9 @@ func (r *SQLiteTraceReader) Init() {
 }
 
 // ListTable returns a slice containing names of all tables
-func (r *SQLiteTraceReader) ListTables() []string {
-	var tableNames []string
-	query := `SELECT name FROM sqlite_master;`
+func (r *SQLiteReader) ListTables() []string {
+	tableNames := make([]string, 0)
+	query := `SELECT name FROM sqlite_master WHERE type='table';`
 
 	rows, err := r.Query(query)
 	if err != nil {
@@ -209,6 +208,7 @@ func (r *SQLiteTraceReader) ListTables() []string {
 		if err != nil {
 			panic(err)
 		}
+		fmt.Println(tableName)
 		tableNames = append(tableNames, tableName)
 	}
 

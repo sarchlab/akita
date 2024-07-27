@@ -11,12 +11,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*datarecording.SQLiteWriter, *datarecording.SQLiteTraceReader, func()) {
-	dbPath := "test.db"
+func setupTestDB(t *testing.T) (*datarecording.SQLiteWriter, *datarecording.SQLiteReader, func()) {
+	dbPath := "test"
 	writer := datarecording.NewSQLiteWriter(dbPath)
 	writer.Init()
 
-	reader := datarecording.NewSQLiteTraceReader(dbPath)
+	reader := datarecording.NewSQLiteReader(dbPath)
 	reader.Init()
 
 	cleanup := func() {
@@ -85,7 +85,7 @@ func TestSQLiteReader_Init(t *testing.T) {
 	assert.NotNil(t, reader.DB, "Database connection should be established")
 }
 
-func TestSQLiteTraceReader_ListTables(t *testing.T) {
+func TestSQLiteReader_ListTables(t *testing.T) {
 	writer, reader, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -113,13 +113,13 @@ func TestSQLiteWriter_Flush(t *testing.T) {
 		ID   int
 		Name string
 	}{1, "Task1"}
-	writer.DataInsert("trace_1", task1)
+	writer.DataInsert("test_table", task1)
 
 	writer.Flush()
 
 	var id int
 	var name string
-	err := writer.QueryRow("SELECT ID, Name FROM trace_1 WHERE ID=1;").Scan(&id, &name)
+	err := writer.QueryRow("SELECT ID, Name FROM test_table WHERE ID=1;").Scan(&id, &name)
 	require.NoError(t, err, "Data should be flushed")
 	assert.Equal(t, 1, id, "ID should match")
 	assert.Equal(t, "Task1", name, "Name should match")
