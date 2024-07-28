@@ -2,6 +2,7 @@ package datarecording
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -41,7 +42,7 @@ type SQLiteWriter struct {
 	tables     map[string][]any
 	batchSize  int
 	tableCount int
-	taskCount  int
+	entryCount int
 }
 
 // NewSQLiteWriter creates a new SQLiteWriter.
@@ -79,7 +80,38 @@ func (t *SQLiteWriter) Init() {
 	t.DB = db
 }
 
+func (t *SQLiteWriter) isAllowedType(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+		reflect.String, reflect.UnsafePointer:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *SQLiteWriter) checkStructFields(entry any) error {
+	types := reflect.TypeOf(entry)
+
+	for i := 0; i < types.NumField(); i++ {
+		field := types.Field(i)
+
+		fieldKind := field.Type.Kind()
+		if !t.isAllowedType(fieldKind) {
+			return errors.New("entry is invalid")
+		}
+	}
+	return nil
+}
+
 func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
+	err := t.checkStructFields(sampleEntry)
+	if err != nil {
+		panic(err)
+	}
+
 	t.tableCount++
 	n := structs.Names(sampleEntry)
 	fields := strings.Join(n, ", \n\t")
@@ -91,14 +123,19 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 
 	storedTasks := []any{sampleEntry}
 	t.tables[tableName] = storedTasks
-	t.taskCount++
-	if t.taskCount >= t.batchSize {
+	t.entryCount++
+	if t.entryCount >= t.batchSize {
 		t.Flush()
 	}
 
 }
 
 func (t *SQLiteWriter) DataInsert(table string, entry any) {
+	err := t.checkStructFields(entry)
+	if err != nil {
+		panic(err)
+	}
+
 	storedTasks, exists := t.tables[table]
 	if !exists {
 		panic(fmt.Errorf("table %s does not exist", table))
@@ -111,14 +148,14 @@ func (t *SQLiteWriter) DataInsert(table string, entry any) {
 
 	storedTasks = append(storedTasks, entry)
 	t.tables[table] = storedTasks
-	t.taskCount += 1
-	if t.taskCount >= t.batchSize {
+	t.entryCount += 1
+	if t.entryCount >= t.batchSize {
 		t.Flush()
 	}
 }
 
 func (t *SQLiteWriter) Flush() {
-	if t.taskCount == 0 {
+	if t.entryCount == 0 {
 		return
 	}
 
@@ -137,7 +174,8 @@ func (t *SQLiteWriter) Flush() {
 		}
 	}
 
-	t.taskCount = 0
+	t.tables = make(map[string][]any)
+	t.entryCount = 0
 }
 
 func (t *SQLiteWriter) mustExecute(query string) sql.Result {

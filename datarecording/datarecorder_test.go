@@ -124,3 +124,20 @@ func TestSQLiteWriter_Flush(t *testing.T) {
 	assert.Equal(t, 1, id, "ID should match")
 	assert.Equal(t, "Task1", name, "Name should match")
 }
+
+// This test should fail
+func TestSQLiteWriter_BlockComplexStructs(t *testing.T) {
+	writer, _, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	type Attribute struct {
+		ID   int
+		name string
+	}
+
+	task := struct {
+		attribute Attribute
+	}{}
+
+	writer.CreateTable("test_table", task)
+}
