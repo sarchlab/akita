@@ -274,6 +274,11 @@ export class TaskPage implements ZoomHandler {
     if (parentTask != null && parentTask.length > 0) {
       parentTask = parentTask[0];
     }
+    if (parentTask != null) {
+      this._componentView.setComponentName(parentTask.where);
+    } else {
+      this._componentView.setComponentName(task.where);
+    }
 
     const traceRsps = await Promise.all([
       fetch(

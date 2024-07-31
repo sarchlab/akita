@@ -87,6 +87,13 @@ class ComponentView {
 
   setComponentName(componentName: string) {
     this._componentName = componentName;
+    if (this._canvas) {
+      const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
+      this._fetchAndRenderAxisData(svg, false);
+      if (!this._isSecondaryAxisSkipped()) {
+        this._fetchAndRenderAxisData(svg, true);
+      }
+    }
     console.log('Component Name set to:', this._componentName);
   }
   
@@ -173,10 +180,10 @@ class ComponentView {
 
   render(tasks: Array<Task>) {
     this._tasks = tasks;
-
     this._renderData();
     if (tasks.length > 0) {
       this._showLocation(tasks[0]);
+      this.setComponentName(tasks[0].where);
     } else {
       this._removeLocation();
     }
@@ -187,6 +194,7 @@ class ComponentView {
         this._fetchAndRenderAxisData(svg, true);
       }
     }
+    this._ensureRenderingOrder();
   }
 
   _renderData() {
@@ -403,7 +411,7 @@ class ComponentView {
     params.set("end_time", this._endTime.toString());
     console.log('Fetching data time', this._startTime.toString(), this._endTime.toString());
     params.set("num_dots", this._numDots.toString());
-    console.log(params.toString());
+    console.log("Drawing data for:", params.toString());
     fetch(`/api/compinfo?${params.toString()}`)
       .then((rsp) => rsp.json())
       .then((rsp) => {
@@ -520,8 +528,8 @@ class ComponentView {
 
     const line = d3
       .line()
-      .x((d) => this._yAxisWidth + this._xScale(d[0]))
-      .y((d) => this._graphPaddingTop + yScale(d[1]))
+      .x((d) => this._xScale(d[0]))
+      .y((d) => yScale(d[1]))
       .curve(d3.curveCatmullRom.alpha(0.5));
 
     let path = reqInGroup.select(".line");
@@ -533,36 +541,6 @@ class ComponentView {
       .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", color);
-
-    const circles = reqInGroup.selectAll("circle").data(data["data"]);
-
-    const circleEnter = circles
-      .enter()
-      .append("circle")
-      .attr("cx", (d: TimeValue) => {
-        const x = this._yAxisWidth + this._xScale(d.time);
-        return x;
-      })
-      .attr("cy", this._graphContentHeight + this._graphPaddingTop)
-      .attr("r", 2)
-      .attr("fill", color);
-
-    circleEnter
-      .merge(
-        <d3.Selection<SVGCircleElement, unknown, SVGCircleElement, unknown>>(
-          circles
-        )
-      )
-      .transition()
-      .attr("cx", (d: TimeValue, i: number) => {
-        const x = this._yAxisWidth + this._xScale(d.time);
-        return x;
-      })
-      .attr("cy", (d: TimeValue) => {
-        return this._graphPaddingTop + yScale(d.value);
-      });
-
-    circles.exit().remove();
   }
 }
 
