@@ -122,7 +122,6 @@ class XAxisDrawer {
   
     const safeYOffset = Math.min(yOffset, this._canvasHeight - this._axisHeight);
 
-
     xAxisGroup
       .attr("transform", `translate(${this._marginLeft}, ${yOffset})`)
       .call(xAxis.ticks(12, "s"));

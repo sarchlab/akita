@@ -479,6 +479,12 @@ class ComponentView {
     yAxisLeftGroup
         .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
         .call(yAxisLeft.ticks(5, ".1e"));
+    
+    yAxisLeftGroup.selectAll(".domain")
+        .attr("opacity", 0);
+    
+    yAxisLeftGroup.selectAll(".tick line")
+        .attr("opacity", 0);
   }
 
   _isPrimaryAxisSkipped() {
