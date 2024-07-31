@@ -18,7 +18,10 @@ func (p *PingReq) Meta() *sim.MsgMeta {
 }
 
 func (p *PingReq) Clone() sim.Msg {
-	return p
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 func (p *PingReq) GenerateRsp() sim.Rsp {
@@ -41,7 +44,10 @@ func (p *PingRsp) Meta() *sim.MsgMeta {
 }
 
 func (p *PingRsp) Clone() sim.Msg {
-	return p
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 func (p *PingRsp) GetRspTo() string {
