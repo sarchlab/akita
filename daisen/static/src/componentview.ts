@@ -194,7 +194,6 @@ class ComponentView {
         this._fetchAndRenderAxisData(svg, true);
       }
     }
-    this._ensureRenderingOrder();
   }
 
   _renderData() {
@@ -208,7 +207,7 @@ class ComponentView {
     initDim.x = 0;
     initDim.y = 0;
     initDim.width = this._canvasWidth;
-    initDim.height = (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 2;
+    initDim.height = 2 * (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 3;
     initDim.startTime = this._startTime;
     initDim.endTime = this._endTime;
     this.assignDimension(tree, initDim);
@@ -450,7 +449,7 @@ class ComponentView {
     const yScale = d3
       .scaleLinear()
       .domain([0, max])
-      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + (this._canvasHeight - this._xAxisHeight - this._marginTop) / 2 - 15]);
+      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + 2 * (this._canvasHeight - this._xAxisHeight - this._marginTop) / 3 - 15]);
 
     return yScale;
   }
