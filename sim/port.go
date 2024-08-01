@@ -97,11 +97,11 @@ func (p *LimitNumMsgPort) CanSend() bool {
 // Send is used to send a message out from a component
 func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	p.msgMustBeValid(msg)
 
 	if !p.outgoingBuf.CanPush() {
+		p.lock.Unlock()
 		return NewSendError()
 	}
 
@@ -112,6 +112,7 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
+	p.lock.Unlock()
 
 	p.conn.NotifySend()
 
@@ -121,9 +122,9 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 // Deliver is used to deliver a message to a component
 func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	if !p.incomingBuf.CanPush() {
+		p.lock.Unlock()
 		return NewSendError()
 	}
 
@@ -135,6 +136,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	p.InvokeHook(hookCtx)
 
 	p.incomingBuf.Push(msg)
+	p.lock.Unlock()
 
 	if p.comp != nil {
 		p.comp.NotifyRecv(p)
