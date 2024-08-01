@@ -2,17 +2,6 @@ import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
 
-function throttle(func: (...args: any[]) => void, limit: number) {
-  let inThrottle: boolean;
-  return function(this: any, ...args: any[]) {
-    if (!inThrottle) {
-      func.apply(this, args);
-      inThrottle = true;
-      setTimeout(() => (inThrottle = false), limit);
-    }
-  };
-}
-
 class YAxisOption {
   optionValue: string;
   html: string;
@@ -92,21 +81,22 @@ class Dashboard {
       dropdownCanvas.style.display = isActive ? 'block' : 'none';
     });
   
-    window.addEventListener('resize', throttle(() => {
-      if (window.innerWidth > 1300) {
-        dropdownCanvas.classList.remove('active');
-        dropdownCanvas.style.display = 'none';
-        this._toolBar.style.display = 'flex';
-      } else {
-        this._toolBar.style.display = 'none';
-      }
+    window.addEventListener('resize', () => {
+      this._updateNavbarVisibility(); 
+      this._resize();
+      this._widgets.forEach((w: Widget) => {
+        w.createWidget(this._widgetWidth(), this._widgetHeight());
+        w.setXAxis(this._startTime, this._endTime);
+        w.setFirstAxis(this._primaryAxis);
+        w.setSecondAxis(this._secondaryAxis);
+      });
       const paginationContainer = this._canvas.querySelector('.pagination-container') as HTMLElement;
       if (paginationContainer) {
         paginationContainer.style.left = '50%';
         paginationContainer.style.transform = 'translateX(-50%)';
       }
-      this._resize();
-    }, 200)); 
+      this.render();
+    }); 
 
     this._addZoomResetButton(this._toolBar);
     this._addFilterUI(this._toolBar);
@@ -118,6 +108,23 @@ class Dashboard {
     this._addSecondarySelector(dropdownCanvas);
     this._resize();
 
+  }
+
+  _updateNavbarVisibility() {
+    if (window.innerWidth <= 1365) {
+      this._toolBar.style.display = 'none';
+      const burgerMenu = document.querySelector('.burger-menu') as HTMLElement;
+      if (burgerMenu) burgerMenu.style.display = 'block';
+    } else {
+      this._toolBar.style.display = 'flex';
+      const burgerMenu = document.querySelector('.burger-menu') as HTMLElement;
+      if (burgerMenu) burgerMenu.style.display = 'none';
+      const dropdownCanvas = document.querySelector('.dropdown-canvas') as HTMLElement;
+      if (dropdownCanvas) {
+        dropdownCanvas.classList.remove('active');
+        dropdownCanvas.style.display = 'none';
+      }
+    }
   }
 
   _resize() {
@@ -381,7 +388,7 @@ class Dashboard {
         this._filteredNames = compNames;
 
         this._getParamsFromURL(simulation);
-
+        this._updateNavbarVisibility();
         this._filter();
       });
   }
@@ -651,7 +658,6 @@ class Dashboard {
     });
     this._addPaginationControl();
   }
-
 }
 
 export default Dashboard;

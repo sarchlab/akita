@@ -38,15 +38,12 @@ class ComponentView {
   _yAxisWidth: number;
   _xAxisHeight: number;
   _primaryAxis: string;
-  _secondaryAxis: string;
   _numDots:number;
   _componentName: string;
   _svg: SVGElement;
   _yScale: d3.ScaleLinear<number, number>;
   _primaryYScale: d3.ScaleLinear<number, number>;
-  _secondaryYScale: d3.ScaleLinear<number, number>;
   _primaryAxisData: object;
-  _secondaryAxisData: object;
 
   constructor(
     yIndexAssigner: TaskYIndexAssigner,
@@ -81,7 +78,6 @@ class ComponentView {
     this._startTime = 0;
     this._endTime = 0;
     this._primaryAxis = "ConcurrentTask";
-    this._secondaryAxis = "ConcurrentTask";
     this._xScale = null;
   }
 
@@ -89,10 +85,7 @@ class ComponentView {
     this._componentName = componentName;
     if (this._canvas) {
       const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
-      this._fetchAndRenderAxisData(svg, false);
-      if (!this._isSecondaryAxisSkipped()) {
-        this._fetchAndRenderAxisData(svg, true);
-      }
+      this._fetchAndRenderAxisData(svg);
     }
     console.log('Component Name set to:', this._componentName);
   }
@@ -115,10 +108,7 @@ class ComponentView {
     this._updateTimeScale();
     this._renderData();
 
-    this._fetchAndRenderAxisData(svgElement, false);
-    if (!this._isSecondaryAxisSkipped()) {
-      this._fetchAndRenderAxisData(svgElement, true);
-    }
+    this._fetchAndRenderAxisData(svgElement);
   }
 
   updateLayout() {
@@ -135,21 +125,13 @@ class ComponentView {
     this._primaryAxis = axis;
     console.log('Primary Axis set to:', this._primaryAxis);
   }
-
-  setSecondaryAxis(axis: string) {
-    this._secondaryAxis = axis;
-    console.log('Secondary Axis set to:', this._secondaryAxis);
-  }
   
   setTimeAxis(startTime: number, endTime: number) {
     this._startTime = startTime;
     this._endTime = endTime;
     this._updateTimeScale();
     this._widget.setXAxis(startTime, endTime);
-    this._fetchAndRenderAxisData(this._svg, false);
-    if (!this._isSecondaryAxisSkipped()) {
-      this._fetchAndRenderAxisData(this._svg, true);
-    }
+    this._fetchAndRenderAxisData(this._svg);
   }
 
   _updateTimeScale() {
@@ -189,12 +171,8 @@ class ComponentView {
     }
     if (this._canvas) {
       const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
-      this._fetchAndRenderAxisData(svg, false);
-      if (!this._isSecondaryAxisSkipped()) {
-        this._fetchAndRenderAxisData(svg, true);
-      }
+      this._fetchAndRenderAxisData(svg);
     }
-    this._ensureRenderingOrder();
   }
 
   _renderData() {
@@ -208,7 +186,7 @@ class ComponentView {
     initDim.x = 0;
     initDim.y = 0;
     initDim.width = this._canvasWidth;
-    initDim.height = (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 2;
+    initDim.height = 2 * (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 3;
     initDim.startTime = this._startTime;
     initDim.endTime = this._endTime;
     this.assignDimension(tree, initDim);
@@ -402,7 +380,7 @@ class ComponentView {
     this._updateTimeScale(); 
   }
 
-  _fetchAndRenderAxisData(svg: SVGElement, isSecondary: boolean) {
+  _fetchAndRenderAxisData(svg: SVGElement) {
     const params = new URLSearchParams();
     params.set("info_type", "ConcurrentTask");
     params.set("where", this._componentName);
@@ -416,26 +394,18 @@ class ComponentView {
       .then((rsp) => rsp.json())
       .then((rsp) => {
         console.log('After Fetching data with componentName:', this._componentName);
-        if (isSecondary) {
-          this._secondaryAxisData = rsp;
-        } else {
-          this._primaryAxisData = rsp;
-        }
-        this._renderAxisData(svg, rsp, isSecondary);
+        this._primaryAxisData = rsp;
+        this._renderAxisData(svg, rsp);
       })
   }
 
 
-  _renderAxisData(svg: SVGElement, data: object, isSecondary: boolean) {
+  _renderAxisData(svg: SVGElement, data: object) {
     const yScale = this._calculateYScale(data);
-    if (isSecondary) {
-      this._secondaryYScale = yScale;
-    } else {
-      this._primaryYScale = yScale;
-    }
+    this._primaryYScale = yScale;
 
     this._drawYAxis(svg, yScale);
-    this._renderDataCurve(svg, data, yScale, isSecondary);
+    this._renderDataCurve(svg, data, yScale);
   }
 
   _calculateYScale(data: Object) {
@@ -450,7 +420,7 @@ class ComponentView {
     const yScale = d3
       .scaleLinear()
       .domain([0, max])
-      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + (this._canvasHeight - this._xAxisHeight - this._marginTop) / 2 - 15]);
+      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + 2 * (this._canvasHeight - this._xAxisHeight - this._marginTop) / 3 - 15]);
 
     return yScale;
   }
@@ -499,15 +469,10 @@ class ComponentView {
     return this._primaryAxis === "-";
   }
 
-  _isSecondaryAxisSkipped() {
-    return this._secondaryAxis === "-";
-  }
-
   _renderDataCurve(
     svg: SVGElement,
     data: Object,
-    yScale: d3.ScaleLinear<number, number>,
-    isSecondary: boolean
+    yScale: d3.ScaleLinear<number, number>
   ) {
     const canvas = d3.select(svg);
     const className = `curve-${data["info_type"]}`;
@@ -516,10 +481,7 @@ class ComponentView {
       reqInGroup = canvas.append("g").attr("class", className);
     }
 
-    let color = "#d7191c";
-    if (isSecondary) {
-      color = "#2c7bb6";
-    }
+    let color = "#2c7bb6";
 
     const pathData = [];
     data["data"].forEach((d: TimeValue) => {

@@ -230,7 +230,9 @@ export class Widget implements ZoomHandler {
       this._mouseEventHandler = new MouseEventHandler(this);
       this._mouseEventHandler.register(this);
     }
-
+    d3.select(this._svg)
+    .attr("width", this._widgetWidth)
+    .attr("height", this._widgetHeight);
     this._renderXAxis(svg);
     this._fetchAndRenderAxisData(svg, true);
     this._fetchAndRenderAxisData(svg, false);
@@ -309,6 +311,7 @@ export class Widget implements ZoomHandler {
   }
 
   _renderXAxis(svg: SVGElement) {
+    d3.select(svg).selectAll(".x-axis-bottom").remove()
     this._drawXAxis(svg, this._xScale);
   }
 
@@ -352,8 +355,10 @@ export class Widget implements ZoomHandler {
     const yScale = this._calculateYScale(data);
     if (isSecondary) {
       this._secondaryYScale = yScale;
+      d3.select(svg).selectAll(".y-axis-right").remove();
     } else {
       this._primaryYScale = yScale;
+      d3.select(svg).selectAll(".y-axis-left").remove(); 
     }
 
     this._drawYAxis(svg, yScale, isSecondary);
@@ -420,6 +425,7 @@ export class Widget implements ZoomHandler {
   ) {
     const canvas = d3.select(svg);
     const className = `curve-${data["info_type"]}`;
+    canvas.selectAll(`.${className}`).remove();
     let reqInGroup = canvas.select(`.${className}`);
     if (reqInGroup.empty()) {
       reqInGroup = canvas.append("g").attr("class", className);
@@ -481,6 +487,11 @@ export class Widget implements ZoomHandler {
 
     circles.exit().remove();
   }
+
+  clear() {
+    d3.select(this._svg).selectAll("*").remove();
+  }
+
 }
 
 export default Widget;

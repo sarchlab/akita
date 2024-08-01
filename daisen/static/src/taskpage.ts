@@ -75,7 +75,6 @@ export class TaskPage implements ZoomHandler {
     );
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
-    this._componentView.setSecondaryAxis('AvgLatency');
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 
