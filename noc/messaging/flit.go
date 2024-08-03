@@ -20,6 +20,16 @@ func (f *Flit) Meta() *sim.MsgMeta {
 	return &f.MsgMeta
 }
 
+// Clone returns cloned Flit with different ID
+func (f *Flit) Clone() sim.Msg {
+	cloneMsg := *f
+	cloneMsg.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
+		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
+		sim.GetIDGenerator().Generate())
+
+	return &cloneMsg
+}
+
 // FlitBuilder can build flits
 type FlitBuilder struct {
 	src, dst            sim.Port

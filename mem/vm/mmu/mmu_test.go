@@ -307,7 +307,7 @@ var _ = Describe("MMU", func() {
 				Build()
 			migrating = transaction{req: req, cycleLeft: 0}
 			mmu.currentOnDemandMigration = migrating
-			migrationDone = vm.NewPageMigrationRspFromDriver(nil, nil)
+			migrationDone = vm.NewPageMigrationRspFromDriver(nil, nil, req)
 		})
 
 		It("should do nothing if no respond", func() {

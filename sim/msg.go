@@ -3,6 +3,8 @@ package sim
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
 	Meta() *MsgMeta
+	Clone() Msg
+	// GenerateRsp() Rsp
 }
 
 // MsgMeta contains the meta data that is attached to every message.
@@ -20,6 +22,11 @@ type Rsp interface {
 	GetRspTo() string
 }
 
+type Request interface {
+	Msg
+	GenerateRsp() Rsp
+}
+
 // GeneralRsp is a general response message that is used to indicate the
 // completion of a request.
 type GeneralRsp struct {
@@ -31,6 +38,14 @@ type GeneralRsp struct {
 // Meta returns the meta data of the message.
 func (r *GeneralRsp) Meta() *MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned GeneralRsp with different ID
+func (r *GeneralRsp) Clone() Msg {
+	cloneMsg := *r
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetRspTo returns the ID of the original request.
@@ -106,6 +121,27 @@ type ControlMsg struct {
 // Meta returns the meta data of the control message.
 func (c *ControlMsg) Meta() *MsgMeta {
 	return &c.MsgMeta
+}
+
+// Clone returns cloned ControlMsg with different ID
+func (c *ControlMsg) Clone() Msg {
+	cloneMsg := *c
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// GenerateRsp generate response to the original request
+func (c *ControlMsg) GenerateRsp() Rsp {
+	rsp := GeneralRspBuilder{}.
+		WithSrc(c.Dst).
+		WithDst(c.Src).
+		WithTrafficClass(c.TrafficClass).
+		WithTrafficBytes(c.TrafficBytes).
+		WithOriginalReq(c).
+		Build()
+
+	return rsp
 }
 
 // ControlMsgBuilder can build control messages.
