@@ -60,6 +60,7 @@ export class Widget implements ZoomHandler {
   ) {
     this._dashboard = dashboard;
     this._componentName = componentName;
+    console.log('Widget created for component:', this._componentName);
     this._canvas = canvas;
 
     this._numDots = 40;

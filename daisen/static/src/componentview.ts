@@ -381,6 +381,10 @@ class ComponentView {
   }
 
   _fetchAndRenderAxisData(svg: SVGElement) {
+    if (!this._componentName || this._startTime >= this._endTime) {
+      console.error('Invalid parameters for fetching data');
+      return;
+    }
     const params = new URLSearchParams();
     params.set("info_type", "ConcurrentTask");
     params.set("where", this._componentName);
@@ -397,6 +401,10 @@ class ComponentView {
         this._primaryAxisData = rsp;
         this._renderAxisData(svg, rsp);
       })
+      .catch((error) => {
+        console.log('Error fetching component', error);
+      }
+      )
   }
 
 
