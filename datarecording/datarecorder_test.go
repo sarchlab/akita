@@ -131,8 +131,7 @@ func TestSQLiteWriter_BlockComplexStructs(t *testing.T) {
 	defer cleanup()
 
 	type Attribute struct {
-		ID   int
-		name string
+		ID int
 	}
 
 	task := struct {

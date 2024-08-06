@@ -127,7 +127,6 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	if t.entryCount >= t.batchSize {
 		t.Flush()
 	}
-
 }
 
 func (t *SQLiteWriter) DataInsert(table string, entry any) {
@@ -203,14 +202,14 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 	t.statement = stmt
 }
 
-// SQLiteTraceReader is a reader that reads trace data from a SQLite database.
+// SQLiteReader is a reader that reads trace data from a SQLite database.
 type SQLiteReader struct {
 	*sql.DB
 
 	filename string
 }
 
-// NewSQLiteTraceReader creates a new SQLiteTraceReader.
+// NewSQLiteReader creates a new SQLiteTraceReader.
 func NewSQLiteReader(filename string) *SQLiteReader {
 	r := &SQLiteReader{
 		filename: filename + ".sqlite3",
@@ -229,7 +228,7 @@ func (r *SQLiteReader) Init() {
 	r.DB = db
 }
 
-// ListTable returns a slice containing names of all tables
+// ListTables returns a slice containing names of all tables
 func (r *SQLiteReader) ListTables() []string {
 	tableNames := make([]string, 0)
 	query := `SELECT name FROM sqlite_master WHERE type='table';`
@@ -238,7 +237,14 @@ func (r *SQLiteReader) ListTables() []string {
 	if err != nil {
 		panic(err)
 	}
-	defer rows.Close()
+
+	close := func() {
+		err := rows.Close()
+		if err != nil {
+			panic(err)
+		}
+	}
+	defer close()
 
 	for rows.Next() {
 		var tableName string
@@ -246,10 +252,8 @@ func (r *SQLiteReader) ListTables() []string {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(tableName)
 		tableNames = append(tableNames, tableName)
 	}
 
 	return tableNames
-
 }
