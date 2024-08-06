@@ -144,6 +144,7 @@ func (t *SQLiteWriter) DataInsert(table string, entry any) {
 	if reflect.TypeOf(stdTask) != reflect.TypeOf(entry) {
 		panic(fmt.Errorf("task %s can't be written into table %s", entry, table))
 	}
+	fmt.Println("Data is successfully inserted")
 
 	storedTasks = append(storedTasks, entry)
 	t.tables[table] = storedTasks
