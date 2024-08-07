@@ -47,11 +47,7 @@ class ComponentView {
   _primaryYScale: d3.ScaleLinear<number, number>;
   _secondaryYScale: d3.ScaleLinear<number, number>;
   _primaryAxisData: object;
-<<<<<<< HEAD
-  _secondaryAxisData: object;
-=======
   _reqTreeCanvas: HTMLElement;
->>>>>>> fb62c77 (tree map added)
 
   constructor(
     yIndexAssigner: TaskYIndexAssigner,
