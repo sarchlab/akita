@@ -113,15 +113,16 @@ function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, und
     .attr("stroke", "#333")
     .attr("rx", 5)
     .attr("ry", 5)
-    .on("mouseover", function(this: SVGRectElement, event: MouseEvent, d: d3.HierarchyPointNode<TreeNode>) {
+    //@ts-ignore
+    .on("mouseover", function(event: MouseEvent, d: d3.HierarchyPointNode<TreeNode>) {
       tooltip.transition()
         .duration(200)
         .style("opacity", "0.9");
       tooltip.html(`ID: ${d.data.id}<br>What: ${d.data.what}`)
-        .style("left", `${event.pageX + 10}px`)
-        .style("top", `${event.pageY - 28}px`);
+        .style("left", `${event.x + 10}px`)
+        .style("top", `${event.y - 28}px`);
     })
-    .on("mouseout", function(this: SVGRectElement) {
+    .on("mouseout", function() {
       tooltip.transition()
         .duration(500)
         .style("opacity", "0");
