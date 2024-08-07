@@ -92,6 +92,7 @@ func startAPIServer() {
 	http.HandleFunc("/api/trace", httpTrace)
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
+	http.HandleFunc("/api/compreqtree", httpComponentReqTree)
 
 	fmt.Printf("Listening %s\n", *httpFlag)
 	err := http.ListenAndServe(*httpFlag, nil)

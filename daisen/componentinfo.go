@@ -427,3 +427,72 @@ func isTaskOverlapsWithBin(
 
 	return true
 }
+
+func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
+    compName := r.FormValue("where")
+    startTime, err := strconv.ParseFloat(r.FormValue("start_time"), 64)
+    if err != nil {
+        http.Error(w, "Invalid start_time", http.StatusBadRequest)
+        return
+    }
+    endTime, err := strconv.ParseFloat(r.FormValue("end_time"), 64)
+    if err != nil {
+        http.Error(w, "Invalid end_time", http.StatusBadRequest)
+        return
+    }
+
+    query := tracing.TaskQuery{
+        Where:            compName,
+        Kind:             "req_in",
+        EnableTimeRange:  true,
+        StartTime:        startTime,
+        EndTime:          endTime,
+        EnableParentTask: true,
+    }
+    reqIns := traceReader.ListTasks(query)
+
+    treeData := make([]map[string]interface{}, 0)
+
+    for _, reqIn := range reqIns {
+        reqOutQuery := tracing.TaskQuery{
+            ParentID:         reqIn.ID,
+            Kind:             "req_out",
+            EnableTimeRange:  true,
+            StartTime:        float64(reqIn.StartTime),
+            EndTime:          float64(reqIn.EndTime),
+            EnableParentTask: true,
+        }
+        reqOuts := traceReader.ListTasks(reqOutQuery)
+
+        reqInNode := map[string]interface{}{
+            "id":        reqIn.ID,
+            "type":      "req_in",
+            "what":      reqIn.What,
+            "startTime": reqIn.StartTime,
+            "endTime":   reqIn.EndTime,
+            "children":  make([]map[string]interface{}, 0),
+        }
+
+        for _, reqOut := range reqOuts {
+            reqOutNode := map[string]interface{}{
+                "id":        reqOut.ID,
+                "type":      "req_out",
+                "what":      reqOut.What,
+                "startTime": reqOut.StartTime,
+                "endTime":   reqOut.EndTime,
+            }
+            reqInNode["children"] = append(reqInNode["children"].([]map[string]interface{}), reqOutNode)
+        }
+
+        treeData = append(treeData, reqInNode)
+    }
+
+    rsp, err := json.Marshal(treeData)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+	log.Printf("Response data: %s", string(rsp))
+    w.Header().Set("Content-Type", "application/json")
+    w.Write(rsp)
+}

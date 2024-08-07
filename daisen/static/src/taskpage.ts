@@ -10,6 +10,7 @@ import { Task } from "./task";
 import { smartString } from "./smartvalue";
 import { Widget, TimeValue } from "./widget";
 import Dashboard from "./dashboard";
+import * as d3 from 'd3';
 
 export class TaskPage implements ZoomHandler {
   _container: HTMLElement;
@@ -32,6 +33,8 @@ export class TaskPage implements ZoomHandler {
   _taskView: TaskView;
   _componentView: ComponentView;
   _widget: Widget;
+  _reqTreeCanvas: HTMLElement;
+
   constructor() {
     this._container = null;
     this._taskViewCanvas = null;
@@ -67,11 +70,18 @@ export class TaskPage implements ZoomHandler {
       new TaskRenderer(this, this._taskColorCoder),
       new XAxisDrawer()
     );
+    this._reqTreeCanvas = document.createElement('div');
+    this._reqTreeCanvas.innerHTML = "<svg></svg>";
+    this._reqTreeCanvas.classList.add("req-tree");
+    this._reqTreeCanvas.style.width = "100%";
+    this._reqTreeCanvas.style.height = "100%";
+    console.log('TaskPage constructor: _reqTreeCanvas created', this._reqTreeCanvas);
     this._componentView = new ComponentView(
       this._yIndexAssigner,
       new TaskRenderer(this, this._taskColorCoder),
       new XAxisDrawer(),
-      this._widget
+      this._widget,
+      this._reqTreeCanvas
     );
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
@@ -182,6 +192,24 @@ export class TaskPage implements ZoomHandler {
       this._legendCanvas.innerHTML = "<svg></svg>";
       this._legendCanvas.classList.add("legend");
       this._rightColumn.appendChild(this._legendCanvas);
+    }
+
+    if (this._reqTreeCanvas === null) {
+      const reqTreeContainer = document.createElement("div");
+      reqTreeContainer.style.width = "100%";
+      reqTreeContainer.style.height = "100%"; 
+      reqTreeContainer.style.overflowY = "auto"; 
+      reqTreeContainer.style.border = "1px solid #ccc"; 
+      this._reqTreeCanvas = document.createElement("div");
+      this._reqTreeCanvas.innerHTML = "<svg></svg>";
+      this._reqTreeCanvas.classList.add("req-tree");
+      this._reqTreeCanvas.style.width = "100%";
+      this._reqTreeCanvas.style.height = "100%";
+      reqTreeContainer.appendChild(this._reqTreeCanvas);
+      this._rightColumn.appendChild(reqTreeContainer);
+    }
+    if (!this._rightColumn.contains(this._reqTreeCanvas)) {
+      this._rightColumn.appendChild(this._reqTreeCanvas);
     }
   }
 
@@ -363,6 +391,7 @@ export class TaskPage implements ZoomHandler {
     this._taskView.setTimeAxis(this._startTime, this._endTime);
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
+
 }
 
 export default TaskPage;

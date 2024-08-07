@@ -5,6 +5,7 @@ import XAxisDrawer from "./xaxisdrawer";
 import { ScaleLinear } from "d3";
 import { Task, Dim } from "./task";
 import { Widget, TimeValue } from "./widget";
+import renderReqTree from './reqTreeRenderer';
 
 type DataObject = {
   info_type: string;
@@ -46,18 +47,29 @@ class ComponentView {
   _primaryYScale: d3.ScaleLinear<number, number>;
   _secondaryYScale: d3.ScaleLinear<number, number>;
   _primaryAxisData: object;
+<<<<<<< HEAD
   _secondaryAxisData: object;
+=======
+  _reqTreeCanvas: HTMLElement;
+>>>>>>> fb62c77 (tree map added)
 
   constructor(
     yIndexAssigner: TaskYIndexAssigner,
     taskRenderer: TaskRenderer,
     xAxisDrawer: XAxisDrawer,
-    widget: Widget
+    widget: Widget,
+    reqTreeCanvas: HTMLElement
   ) {
     this._yIndexAssigner = yIndexAssigner;
     this._taskRenderer = taskRenderer;
     this._xAxisDrawer = xAxisDrawer;
     this._widget = widget; 
+    this._reqTreeCanvas = reqTreeCanvas;
+    console.log('ComponentView constructor: _reqTreeCanvas initialized', this._reqTreeCanvas);
+  
+    if (!this._reqTreeCanvas) {
+      console.warn('ComponentView constructor: _reqTreeCanvas is null or undefined');
+    }
 
     this._marginTop = 5;
     this._marginLeft = 5;
@@ -181,7 +193,7 @@ class ComponentView {
     this._taskRenderer.hightlight(task);
   }
 
-  render(tasks: Array<Task>) {
+  async render(tasks: Array<Task>) {
     this._tasks = tasks;
 
     this._renderData();
@@ -197,6 +209,34 @@ class ComponentView {
         this._fetchAndRenderAxisData(svg, true);
       }
     }
+    await this._renderReqTree();
+  }
+
+  async _renderReqTree() {
+    console.log('Rendering req tree');
+    if (!this._reqTreeCanvas) {
+      console.error('_reqTreeCanvas is not defined');
+      return;
+    }
+
+    const treeData = await this.getReqTreeData();
+    console.log('Req tree data:', treeData);
+    if (treeData.length === 0) {
+      console.log('No req tree data to render');
+      return;
+    }
+
+    const svg = d3.select(this._reqTreeCanvas)
+    .select<SVGSVGElement>("svg")
+    .node();
+  
+    if (svg) {
+      renderReqTree(d3.select(svg), treeData);
+    } else {
+      console.error('SVG element not found in _reqTreeCanvas');
+    }
+
+    console.log('Req tree rendering complete');
   }
 
   _renderData() {
@@ -427,6 +467,20 @@ class ComponentView {
       })
   }
 
+  async getReqTreeData(): Promise<any[]> {
+    const params = new URLSearchParams();
+    params.set("where", this._componentName);
+    params.set("start_time", this._startTime.toString());
+    params.set("end_time", this._endTime.toString());
+
+    try {
+      const response = await fetch(`/api/compreqtree?${params.toString()}`);
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching req tree data:", error);
+      return [];
+    }
+  }
 
   _renderAxisData(svg: SVGElement, data: object, isSecondary: boolean) {
     const yScale = this._calculateYScale(data);

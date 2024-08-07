@@ -290,3 +290,32 @@ body {
   font-size: 30px;
   font-weight: bold;
 }
+
+.req-tree .link {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 2px;
+}
+
+.req-tree .node circle {
+  fill: #fff;
+  stroke: steelblue;
+  stroke-width: 3px;
+}
+
+.req-tree .node text {
+  font: 12px sans-serif;
+}
+
+.req-tree .node.req_in circle {
+  fill: #ff7f0e;
+}
+
+.req-tree .node.req_out circle {
+  fill: #1f77b4;
+}
+
+.req-tree {
+  overflow-y: auto;
+  max-height: 1200px;
+}
