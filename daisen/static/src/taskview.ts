@@ -161,6 +161,7 @@ class TaskView {
   setTimeAxis(startTime: number, endTime: number) {
     this._startTime = startTime;
     this._endTime = endTime;
+    this._xAxisDrawer.setTimeRange(startTime, endTime);
     this._updateTimeScale();
   }
 
@@ -168,7 +169,7 @@ class TaskView {
     this._xScale = d3
       .scaleLinear()
       .domain([this._startTime, this._endTime])
-      .range([0, this._canvasWidth]);
+      .range([this._marginLeft, this._canvasWidth - this._marginLeft]);
 
     this._taskRenderer.setXScale(this._xScale);
     this._drawXAxis();
@@ -176,11 +177,10 @@ class TaskView {
 
   private _drawXAxis() {
     this._xAxisDrawer
-      .setCanvasHeight(this._canvasHeight)
-      .setCanvasWidth(this._canvasWidth)
-      .setScale(this._xScale)
-      .renderTop()
-      .renderBottom();
+    .setCanvasHeight(this._canvasHeight)
+    .setCanvasWidth(this._canvasWidth)
+    .setScale(this._xScale)
+    .renderCustom(5); 
   }
 
   updateXAxis() {

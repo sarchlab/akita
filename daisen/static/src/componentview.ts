@@ -39,13 +39,11 @@ class ComponentView {
   _yAxisWidth: number;
   _xAxisHeight: number;
   _primaryAxis: string;
-  _secondaryAxis: string;
   _numDots:number;
   _componentName: string;
   _svg: SVGElement;
   _yScale: d3.ScaleLinear<number, number>;
   _primaryYScale: d3.ScaleLinear<number, number>;
-  _secondaryYScale: d3.ScaleLinear<number, number>;
   _primaryAxisData: object;
   _reqTreeCanvas: HTMLElement;
 
@@ -89,12 +87,15 @@ class ComponentView {
     this._startTime = 0;
     this._endTime = 0;
     this._primaryAxis = "ConcurrentTask";
-    this._secondaryAxis = "ConcurrentTask";
     this._xScale = null;
   }
 
   setComponentName(componentName: string) {
     this._componentName = componentName;
+    if (this._canvas) {
+      const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
+      this._fetchAndRenderAxisData(svg);
+    }
     console.log('Component Name set to:', this._componentName);
   }
   
@@ -116,10 +117,7 @@ class ComponentView {
     this._updateTimeScale();
     this._renderData();
 
-    this._fetchAndRenderAxisData(svgElement, false);
-    if (!this._isSecondaryAxisSkipped()) {
-      this._fetchAndRenderAxisData(svgElement, true);
-    }
+    this._fetchAndRenderAxisData(svgElement);
   }
 
   updateLayout() {
@@ -136,49 +134,31 @@ class ComponentView {
     this._primaryAxis = axis;
     console.log('Primary Axis set to:', this._primaryAxis);
   }
-
-  setSecondaryAxis(axis: string) {
-    this._secondaryAxis = axis;
-    console.log('Secondary Axis set to:', this._secondaryAxis);
-  }
   
   setTimeAxis(startTime: number, endTime: number) {
     this._startTime = startTime;
     this._endTime = endTime;
     this._updateTimeScale();
     this._widget.setXAxis(startTime, endTime);
-    this._fetchAndRenderAxisData(this._svg, false);
-    if (!this._isSecondaryAxisSkipped()) {
-      this._fetchAndRenderAxisData(this._svg, true);
-    }
+    this._fetchAndRenderAxisData(this._svg);
   }
 
   _updateTimeScale() {
     this._xScale = d3
-    .scaleLinear()
-    .domain([this._startTime, this._endTime])
-    .range([0, this._canvasWidth - this._marginLeft - this._marginRight]);
+      .scaleLinear()
+      .domain([this._startTime, this._endTime])
+      .range([this._marginLeft, this._canvasWidth - this._marginLeft]);
   
     this._taskRenderer.setXScale(this._xScale);
     this._drawXAxis();
-    if (this._primaryYScale) {
-      this._drawYAxis(this._svg, this._primaryYScale);
-    }
   }
 
   _drawXAxis() {
     this._xAxisDrawer
-      .setCanvasHeight(this._canvasHeight)
-      .setCanvasWidth(this._canvasWidth)
-      .setScale(this._xScale)
-      .renderTop(-15)
-      .renderBottom();
-
-    this._xAxisDrawer
     .setCanvasHeight(this._canvasHeight)
     .setCanvasWidth(this._canvasWidth)
     .setScale(this._xScale)
-    .renderCustom(this._canvasHeight / 2 - 50); 
+    .renderCustom(this._canvasHeight - 20); 
   }
 
   updateXAxis() {
@@ -191,19 +171,16 @@ class ComponentView {
 
   async render(tasks: Array<Task>) {
     this._tasks = tasks;
-
     this._renderData();
     if (tasks.length > 0) {
       this._showLocation(tasks[0]);
+      this.setComponentName(tasks[0].where);
     } else {
       this._removeLocation();
     }
     if (this._canvas) {
       const svg = d3.select(this._canvas).select<SVGSVGElement>("svg").node() as SVGElement;
-      this._fetchAndRenderAxisData(svg, false);
-      if (!this._isSecondaryAxisSkipped()) {
-        this._fetchAndRenderAxisData(svg, true);
-      }
+      this._fetchAndRenderAxisData(svg);
     }
     await this._renderReqTree();
   }
@@ -246,7 +223,7 @@ class ComponentView {
     initDim.x = 0;
     initDim.y = 0;
     initDim.width = this._canvasWidth;
-    initDim.height = (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 2;
+    initDim.height = 2 * (this._canvasHeight - this._marginTop - this._marginBottom - 50) / 3;
     initDim.startTime = this._startTime;
     initDim.endTime = this._endTime;
     this.assignDimension(tree, initDim);
@@ -440,7 +417,11 @@ class ComponentView {
     this._updateTimeScale(); 
   }
 
-  _fetchAndRenderAxisData(svg: SVGElement, isSecondary: boolean) {
+  _fetchAndRenderAxisData(svg: SVGElement) {
+    if (!this._componentName || this._startTime >= this._endTime) {
+      console.error('Invalid parameters for fetching data');
+      return;
+    }
     const params = new URLSearchParams();
     params.set("info_type", "ConcurrentTask");
     params.set("where", this._componentName);
@@ -449,18 +430,18 @@ class ComponentView {
     params.set("end_time", this._endTime.toString());
     console.log('Fetching data time', this._startTime.toString(), this._endTime.toString());
     params.set("num_dots", this._numDots.toString());
-    console.log(params.toString());
+    console.log("Drawing data for:", params.toString());
     fetch(`/api/compinfo?${params.toString()}`)
       .then((rsp) => rsp.json())
       .then((rsp) => {
         console.log('After Fetching data with componentName:', this._componentName);
-        if (isSecondary) {
-          this._secondaryAxisData = rsp;
-        } else {
-          this._primaryAxisData = rsp;
-        }
-        this._renderAxisData(svg, rsp, isSecondary);
+        this._primaryAxisData = rsp;
+        this._renderAxisData(svg, rsp);
       })
+      .catch((error) => {
+        console.log('Error fetching component', error);
+      }
+      )
   }
 
   async getReqTreeData(): Promise<any[]> {
@@ -478,16 +459,12 @@ class ComponentView {
     }
   }
 
-  _renderAxisData(svg: SVGElement, data: object, isSecondary: boolean) {
+  _renderAxisData(svg: SVGElement, data: object) {
     const yScale = this._calculateYScale(data);
-    if (isSecondary) {
-      this._secondaryYScale = yScale;
-    } else {
-      this._primaryYScale = yScale;
-    }
+    this._primaryYScale = yScale;
 
     this._drawYAxis(svg, yScale);
-    this._renderDataCurve(svg, data, yScale, isSecondary);
+    this._renderDataCurve(svg, data, yScale);
   }
 
   _calculateYScale(data: Object) {
@@ -502,7 +479,7 @@ class ComponentView {
     const yScale = d3
       .scaleLinear()
       .domain([0, max])
-      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + (this._canvasHeight - this._xAxisHeight - this._marginTop) / 2 - 15]);
+      .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + 2 * (this._canvasHeight - this._xAxisHeight - this._marginTop) / 3 - 15]);
 
     return yScale;
   }
@@ -518,24 +495,43 @@ class ComponentView {
     if (yAxisLeftGroup.empty()) {
         yAxisLeftGroup = canvas.append("g").attr("class", "y-axis-left");
     }
+    const tickValues = yScale.ticks(5);
+    const gridLines = yAxisLeftGroup.selectAll(".grid-line")
+      .data(tickValues);
+  
+    gridLines.enter()
+      .append("line")
+      .attr("class", "grid-line")
+      .merge(gridLines as any)
+      .attr("x1", 0)
+      .attr("x2", this._canvasWidth - this._marginLeft - 35)
+      .attr("y1", d => yScale(d))
+      .attr("y2", d => yScale(d))
+      .attr("stroke", "#ccc")
+      .attr("stroke-dasharray", "3,3")
+      .attr("opacity", 0.5);
+  
+    gridLines.exit().remove();
+  
     yAxisLeftGroup
         .attr("transform", `translate(${this._marginLeft + 35}, ${this._graphPaddingTop})`)
         .call(yAxisLeft.ticks(5, ".1e"));
+    
+    yAxisLeftGroup.selectAll(".domain")
+        .attr("opacity", 0);
+    
+    yAxisLeftGroup.selectAll(".tick line")
+        .attr("opacity", 0);
   }
 
   _isPrimaryAxisSkipped() {
     return this._primaryAxis === "-";
   }
 
-  _isSecondaryAxisSkipped() {
-    return this._secondaryAxis === "-";
-  }
-
   _renderDataCurve(
     svg: SVGElement,
     data: Object,
-    yScale: d3.ScaleLinear<number, number>,
-    isSecondary: boolean
+    yScale: d3.ScaleLinear<number, number>
   ) {
     const canvas = d3.select(svg);
     const className = `curve-${data["info_type"]}`;
@@ -544,10 +540,7 @@ class ComponentView {
       reqInGroup = canvas.append("g").attr("class", className);
     }
 
-    let color = "#d7191c";
-    if (isSecondary) {
-      color = "#2c7bb6";
-    }
+    let color = "#2c7bb6";
 
     const pathData = [];
     data["data"].forEach((d: TimeValue) => {
@@ -556,8 +549,8 @@ class ComponentView {
 
     const line = d3
       .line()
-      .x((d) => this._yAxisWidth + this._xScale(d[0]))
-      .y((d) => this._graphPaddingTop + yScale(d[1]))
+      .x((d) => this._xScale(d[0]))
+      .y((d) => yScale(d[1]))
       .curve(d3.curveCatmullRom.alpha(0.5));
 
     let path = reqInGroup.select(".line");
@@ -569,36 +562,6 @@ class ComponentView {
       .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", color);
-
-    const circles = reqInGroup.selectAll("circle").data(data["data"]);
-
-    const circleEnter = circles
-      .enter()
-      .append("circle")
-      .attr("cx", (d: TimeValue) => {
-        const x = this._yAxisWidth + this._xScale(d.time);
-        return x;
-      })
-      .attr("cy", this._graphContentHeight + this._graphPaddingTop)
-      .attr("r", 2)
-      .attr("fill", color);
-
-    circleEnter
-      .merge(
-        <d3.Selection<SVGCircleElement, unknown, SVGCircleElement, unknown>>(
-          circles
-        )
-      )
-      .transition()
-      .attr("cx", (d: TimeValue, i: number) => {
-        const x = this._yAxisWidth + this._xScale(d.time);
-        return x;
-      })
-      .attr("cy", (d: TimeValue) => {
-        return this._graphPaddingTop + yScale(d.value);
-      });
-
-    circles.exit().remove();
   }
 }
 
