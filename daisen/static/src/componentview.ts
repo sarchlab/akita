@@ -6,6 +6,7 @@ import { ScaleLinear } from "d3";
 import { Task, Dim } from "./task";
 import { Widget, TimeValue } from "./widget";
 import renderReqTree from './reqTreeRenderer';
+import TaskPage from "./taskpage";
 
 type DataObject = {
   info_type: string;
@@ -46,19 +47,22 @@ class ComponentView {
   _primaryYScale: d3.ScaleLinear<number, number>;
   _primaryAxisData: object;
   _reqTreeCanvas: HTMLElement;
+  _taskPage: TaskPage;
 
   constructor(
     yIndexAssigner: TaskYIndexAssigner,
     taskRenderer: TaskRenderer,
     xAxisDrawer: XAxisDrawer,
     widget: Widget,
-    reqTreeCanvas: HTMLElement
+    reqTreeCanvas: HTMLElement,
+    taskPage: TaskPage
   ) {
     this._yIndexAssigner = yIndexAssigner;
     this._taskRenderer = taskRenderer;
     this._xAxisDrawer = xAxisDrawer;
     this._widget = widget; 
     this._reqTreeCanvas = reqTreeCanvas;
+    this._taskPage = taskPage;
     console.log('ComponentView constructor: _reqTreeCanvas initialized', this._reqTreeCanvas);
   
     if (!this._reqTreeCanvas) {
@@ -200,11 +204,10 @@ class ComponentView {
     }
 
     const svg = d3.select(this._reqTreeCanvas)
-    .select<SVGSVGElement>("svg")
-    .node();
+    .select<SVGSVGElement>("svg");
   
-    if (svg) {
-      renderReqTree(d3.select(svg), treeData);
+    if (svg.node()) {
+      renderReqTree(svg, treeData, this._taskPage);
     } else {
       console.error('SVG element not found in _reqTreeCanvas');
     }

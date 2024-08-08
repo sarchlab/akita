@@ -1,5 +1,5 @@
 import * as d3 from 'd3';
-
+import { TaskPage } from './taskpage';
 interface TreeNode {
   id: string;
   type: string;
@@ -9,7 +9,7 @@ interface TreeNode {
   children?: TreeNode[];
 }
 
-function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode[]) {
+function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode[], taskPage: TaskPage) {
   const margin = { top: 25, right: 90, bottom: 30, left: 50 };
   const containerWidth = container.node().getBoundingClientRect().width;
   const width = containerWidth - margin.left - margin.right;
@@ -87,6 +87,7 @@ function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, und
     .attr("d", customLinkGenerator)
     .attr("fill", "none")
     .attr("stroke", "#ccc");
+    
 
   const node = svg.selectAll(".node")
     .data(treeData.descendants())
@@ -109,10 +110,20 @@ function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, und
     .attr("height", 40)
     .attr("x", -50)
     .attr("y", -20)
-    .attr("fill", d => d.data.type === "req_in" ? "#4CAF50" : "#2196F3")
+    .attr("fill", d => d.data.type === "req_in" ? "#51be7e" : "#44a0d2")
     .attr("stroke", "#333")
     .attr("rx", 5)
     .attr("ry", 5)
+    .style("cursor", "pointer")
+    //@ts-ignore
+    .on("click", function(event: MouseEvent, d: d3.HierarchyPointNode<any>) {
+      event.preventDefault();
+      event.stopPropagation();
+      const taskId = d.data.id;
+      const newUrl = `/task?id=${taskId}`;
+      window.history.pushState({ taskId }, '', newUrl);
+      taskPage.showTask(d.data);
+    })
     //@ts-ignore
     .on("mouseover", function(event: MouseEvent, d: d3.HierarchyPointNode<TreeNode>) {
       tooltip.transition()

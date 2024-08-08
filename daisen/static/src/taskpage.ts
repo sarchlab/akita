@@ -81,7 +81,8 @@ export class TaskPage implements ZoomHandler {
       new TaskRenderer(this, this._taskColorCoder),
       new XAxisDrawer(),
       this._widget,
-      this._reqTreeCanvas
+      this._reqTreeCanvas,
+      this
     );
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
