@@ -23,3 +23,15 @@ export class Task {
   isParentTask: boolean;
   yIndex: number;
 }
+
+export class Progress {
+  progress_id: string;
+  time: number;
+  source: string;
+  task_id: string;
+  reason: string;
+  dim?: {
+    x: number;
+    y: number;
+  };
+}

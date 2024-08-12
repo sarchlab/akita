@@ -47,7 +47,7 @@ export class TaskPage implements ZoomHandler {
       task: null,
       subTask: null,
       parentTasks: [],
-      sameLocationTasks: []
+      sameLocationTasks: [],
     };
 
     this._startTime = 0;
@@ -149,8 +149,7 @@ export class TaskPage implements ZoomHandler {
       this._rightColumn.classList.add("side-column");
       this._container.appendChild(this._rightColumn);
     }
-    this._rightColumn.style.width =
-      this._rightColumnWidth.toString() + "px";
+    this._rightColumn.style.width = this._rightColumnWidth.toString() + "px";
     this._rightColumn.style.height =
       this._container.offsetHeight.toString() + "px";
     // const marginLeft = -5;
@@ -175,7 +174,7 @@ export class TaskPage implements ZoomHandler {
       this._leftColumn = document.createElement("div");
       this._leftColumn.classList.add("column");
       this._container.appendChild(this._leftColumn);
-      this._leftColumn.addEventListener("mousemove", e => {
+      this._leftColumn.addEventListener("mousemove", (e) => {
         this._handleMouseMove(e);
       });
     }
@@ -236,7 +235,7 @@ export class TaskPage implements ZoomHandler {
 
     let rsps = await Promise.all([
       fetch(`/api/trace?id=${task.id}`),
-      fetch(`/api/trace?parentid=${task.id}`)
+      fetch(`/api/trace?parentid=${task.id}`),
     ]);
 
     task = await rsps[0].json();
@@ -251,7 +250,7 @@ export class TaskPage implements ZoomHandler {
 
     let parentTask = null;
     if (task.parent_id != "") {
-      parentTask = await fetch(`/api/trace?id=${task.parent_id}`).then(rsp =>
+      parentTask = await fetch(`/api/trace?id=${task.parent_id}`).then((rsp) =>
         rsp.json()
       );
     }
@@ -262,17 +261,28 @@ export class TaskPage implements ZoomHandler {
     const traceRsps = await Promise.all([
       fetch(
         `/api/trace?` +
-        `where=${task.where}` +
-        `&starttime=${this._startTime}` +
-        `&endtime=${this._endTime}`
-      )
+          `where=${task.where}` +
+          `&starttime=${this._startTime}` +
+          `&endtime=${this._endTime}`
+      ),
     ]);
     const sameLocationTasks = await traceRsps[0].json();
+
+    const progressRsps = await Promise.all([
+      fetch(
+        `/api/progress?` +
+          `source=${task.where}` +
+          `&starttime=${this._startTime}` +
+          `&endtime=${this._endTime}`
+      ),
+    ]);
+    const sameLocationProgress = await progressRsps[0].json();
 
     this._currTasks["task"] = task;
     this._currTasks["parentTask"] = parentTask;
     this._currTasks["subTasks"] = subTasks;
     this._currTasks["sameLocationTasks"] = sameLocationTasks;
+    this._currTasks["sameLocationProgress"] = sameLocationProgress;
 
     let tasks = new Array(task);
     if (parentTask != null) {
@@ -282,7 +292,7 @@ export class TaskPage implements ZoomHandler {
     task.isMainTask = true;
     tasks.push(task);
     tasks = tasks.concat(subTasks);
-    tasks.forEach(t => {
+    tasks.forEach((t) => {
       if (t.start_time === undefined) {
         t.start_time = 0;
       }
@@ -291,6 +301,7 @@ export class TaskPage implements ZoomHandler {
     this._taskColorCoder.recode(tasks.concat(sameLocationTasks));
     this._taskView.render(task, subTasks, parentTask);
     this._componentView.render(sameLocationTasks);
+    this._componentView._renderProgress(sameLocationProgress);
     this._legend.render();
   }
 
@@ -301,17 +312,41 @@ export class TaskPage implements ZoomHandler {
     const rsps = await Promise.all([
       fetch(
         `/api/trace?` +
-        `where=${name}` +
-        `&starttime=${this._startTime}` +
-        `&endtime=${this._endTime}`
-      )
+          `where=${name}` +
+          `&starttime=${this._startTime}` +
+          `&endtime=${this._endTime}`
+      ),
     ]);
     const sameLocationTasks = await rsps[0].json();
+
+    // const delayRsps = await Promise.all([
+    //   fetch(
+    //     `/api/delay?` +
+    //       `event_id=Delay` + // Specify event_id="Delay"
+    //       `&source=${name}` +
+    //       `&starttime=${this._startTime}` +
+    //       `&endtime=${this._endTime}`
+    //   ),
+    // ]);
+    // const sameLocationDelays = await delayRsps[0].json();
+
+    const progressRsps = await Promise.all([
+      fetch(
+        `/api/progress?` +
+          `&source=${name}` +
+          `&starttime=${this._startTime}` +
+          `&endtime=${this._endTime}`
+      ),
+    ]);
+    const sameLocationProgress = await progressRsps[0].json();
 
     this._taskColorCoder.recode(sameLocationTasks);
     this._legend.render();
 
     this._componentView.render(sameLocationTasks);
+    this._componentView._renderProgress(sameLocationProgress);
+    // this._componentView._renderDelays(sameLocationDelays);
+    // this._componentView._renderDelayClusters(sameLocationDelays);
   }
 
   _switchToComponentOnlyMode() {

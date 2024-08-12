@@ -72,7 +72,7 @@ body {
   height: 20px;
 }
 
-.top-nav>h1 {
+.top-nav > h1 {
   font-size: 30px;
   font-family: "Lacquer", sans-serif;
   text-align: left;
@@ -86,7 +86,7 @@ body {
   user-select: none;
 }
 
-.top-name>button {
+.top-name > button {
   text-align: center;
   -webkit-user-select: none;
   -khtml-user-select: none;
@@ -185,4 +185,15 @@ body {
 
 .dashboard .widget .y-axis-right path {
   stroke: #2c7bb6;
+}
+
+.reasonTooltip {
+  position: absolute;
+  background: lightgrey;
+  padding: 5px;
+  border: 1px solid black;
+  border-radius: 5px;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 10;
 }

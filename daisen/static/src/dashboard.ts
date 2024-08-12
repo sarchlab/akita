@@ -318,6 +318,31 @@ class Dashboard {
 
         this._filter();
       });
+
+    Promise.all([
+      fetch("/api/delay"),
+      fetch("/api/progress"),
+      fetch("/api/dependency"),
+    ])
+      .then(([delayResponse, progressResponse, dependencyResponse]) => {
+        return Promise.all([
+          delayResponse.json(),
+          progressResponse.json(),
+          dependencyResponse.json(),
+        ]);
+      })
+      .then(([delayData, progressData, dependencyData]) => {
+        console.log("Delay data:", delayData);
+        console.log("Progress data:", progressData);
+        console.log("Dependency data:", dependencyData);
+
+        // handleDelayData(delayData);
+        // handleProgressData(progressData);
+        // handleDependencyData(dependencyData);
+      })
+      .catch((error) => {
+        console.error("Error fetching data:", error);
+      });
   }
 
   _getParamsFromURL(simulation: Object) {
