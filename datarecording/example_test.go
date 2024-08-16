@@ -31,7 +31,7 @@ func Example() {
 	writer.CreateTable("test_table", task1)
 
 	task2 := Task{2, "task2"}
-	writer.DataInsert("test_table", task2)
+	writer.InsertData("test_table", task2)
 
 	tables := reader.ListTables()
 	fmt.Printf("The stored table: %s", tables)

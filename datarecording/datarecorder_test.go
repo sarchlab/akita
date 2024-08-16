@@ -67,7 +67,7 @@ func TestSQLiteWriter_DataInsert(t *testing.T) {
 		Name string
 	}{1, "Task1"}
 
-	writer.DataInsert("test_table", task1)
+	writer.InsertData("test_table", task1)
 	writer.Flush()
 
 	var id int
@@ -113,7 +113,7 @@ func TestSQLiteWriter_Flush(t *testing.T) {
 		ID   int
 		Name string
 	}{1, "Task1"}
-	writer.DataInsert("test_table", task1)
+	writer.InsertData("test_table", task1)
 
 	writer.Flush()
 

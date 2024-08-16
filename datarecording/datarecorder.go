@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"strings"
 
-	// Need to use SQLite connections.
 	"github.com/fatih/structs"
+	// Need to use SQLite connections.
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/xid"
 	"github.com/tebeka/atexit"
@@ -17,19 +17,19 @@ import (
 
 // DataRecorder is a backend that can record and store data
 type DataRecorder interface {
-	//Init establishes a connection to the database
+	// Init establishes a connection to the database
 	Init()
 
-	//CreateTable creates a new table with given filename
+	// CreateTable creates a new table with given filename
 	CreateTable(table string, sampleEntry any)
 
-	//DataInsert writes a same-type task into table that already exists
-	DataInsert(table string, entry any)
+	// DataInsert writes a same-type task into table that already exists
+	InsertData(table string, entry any)
 
-	//ListTable returns a slice containing names of all tables
+	// ListTable returns a slice containing names of all tables
 	ListTables() []string
 
-	//Flush flushes all the baffered task into database
+	// Flush flushes all the baffered task into database
 	Flush()
 }
 
@@ -129,7 +129,7 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	}
 }
 
-func (t *SQLiteWriter) DataInsert(table string, entry any) {
+func (t *SQLiteWriter) InsertData(table string, entry any) {
 	err := t.checkStructFields(entry)
 	if err != nil {
 		panic(err)
