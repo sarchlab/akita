@@ -1,3 +1,4 @@
+/*taskrenderer.ts*/
 import * as d3 from "d3";
 import TaskColorCoder from "./taskcolorcoder";
 import TaskPage from "./taskpage";
@@ -193,7 +194,14 @@ class TaskRenderer {
    *
    * @param {Array[Task]} tasks
    */
-  render(tasks) {
+  render(tasks, progresses) {
+    this._renderTasks(tasks, progresses);
+    // this._renderProgress(progresses);
+
+    return this;
+  }
+
+  _renderTasks(tasks, progresses) {
     const svg = d3.select(this._canvas).select("svg");
 
     let taskBarGroup = svg.select(".task-bar");
@@ -216,9 +224,9 @@ class TaskRenderer {
       .on("mouseover", (_, d) => {
         this._showTooltip(d);
         this._detailPage.highlight(d);
-        console.log(d);
+        // console.log(d);
       })
-      .on("mouseout", (d) => {
+      .on("mouseout", () => {
         this._hideTooltip();
         this._detailPage.highlight(null);
       });
@@ -279,7 +287,69 @@ class TaskRenderer {
 
     taskBars.exit().remove();
 
+    // Ensure there is a separate group for progress indicators
+    let progressGroup = svg.select(".progress-group");
+    if (progressGroup.empty()) {
+      progressGroup = svg.append("g").attr("class", "progress-group").raise();
+    }
+
+    const progressIndicators = progressGroup
+      .selectAll("circle.progress-indicator")
+      .data(progresses, (d) => d.progress_id);
+    // progresses.forEach((d) => {
+    //   console.log(
+    //     `Progress ID: ${d.progress_id}, x: ${d.dim?.x}, y: ${d.dim?.y}`
+    //   );
+    // });
+
+    // Append new circles
+    progressIndicators
+      .enter()
+      .append("circle")
+      .attr("class", "progress-indicator")
+      .attr("r", 3)
+      .attr("cx", (d) => {
+        // console.log("Progress x (cx):", d.dim ? d.dim.x : -1);
+        return d.dim ? d.dim.x : -1; // Use pre-assigned x or off-screen
+      })
+      .attr("cy", (d) => {
+        // console.log("Progress y (cy):", d.dim ? d.dim.y : -1);
+        return d.dim ? d.dim.y : -1; // Use pre-assigned y or off-screen
+      })
+      .attr("fill", "blue")
+      .on("mouseover", (event, d) => {
+        // Log the relevant information to the console
+        console.log(
+          `Hovered over Progress ID: ${d.progress_id}, Time: ${d.time}, Reason: ${d.reason}`
+        );
+      });
+
+    // Update existing circles
+    progressIndicators
+      .attr("cx", (d) => (d.dim ? d.dim.x : -1))
+      .attr("cy", (d) => (d.dim ? d.dim.y : -1))
+      .on("mouseover", (event, d) => {
+        // Log the relevant information to the console
+        console.log(
+          `Hovered over Progress ID: ${d.progress_id}, Time: ${d.time}, Reason: ${d.reason}`
+        );
+      });
+    svg.selectAll(".progress-line").on("mouseover", (event, d) => {
+      // Log the relevant information to the console
+      console.log(`Hovered over Line with data:`, d); // Replace `d` with relevant data
+    });
+
+    // Remove old circles
+    progressIndicators.exit().remove();
     return this;
+  }
+
+  _findTaskYPosition(taskId) {
+    const task = this._tasks.find((t) => t.id === taskId);
+    if (!task || !task.dim) {
+      return -1; // Return an off-screen value if task is not found
+    }
+    return task.dim.y + task.dim.height / 2; // Center the dot vertically within the task bar
   }
 
   _showTooltip(task) {

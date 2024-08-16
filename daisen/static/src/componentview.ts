@@ -1,10 +1,11 @@
+/*componentview.ts*/
 import * as d3 from "d3";
 import { ValueFn } from "d3-selection";
 import TaskYIndexAssigner from "./taskyindexassigner";
 import TaskRenderer from "./taskrenderer";
 import XAxisDrawer from "./xaxisdrawer";
 import { ScaleLinear } from "d3";
-import { Task, Dim } from "./task";
+import { Task, Dim, Progress } from "./task";
 
 interface ProgressPoint {
   x: number;
@@ -28,6 +29,7 @@ class ComponentView {
   _endTime: number;
   _xScale: ScaleLinear<number, number>;
   _tasks: Array<Task>;
+  _progresses: Array<Progress>;
   _threshold: number;
   _lastProgressPoints: Map<string, ProgressPoint>;
 
@@ -110,8 +112,9 @@ class ComponentView {
     this._taskRenderer.hightlight(task);
   }
 
-  render(tasks: Array<Task>) {
+  render(tasks: Array<Task>, progress: Array<Progress>) {
     this._tasks = tasks;
+    this._progresses = progress;
 
     this._renderData();
 
@@ -143,131 +146,144 @@ class ComponentView {
     tasks.sort((a: Task, b: Task) => a.level - b.level);
     tasks = this._filterTasks(tasks);
 
+    this._progresses.forEach((progress) => {
+      const task = this._tasks.find((t) => t.id === progress.task_id);
+      if (task) {
+        progress.dim = {
+          x: this._xScale(progress.time),
+          y: task.dim.y + task.dim.height / 2, // Center vertically on the task
+          // No width or height needed unless visualizing as bars
+        };
+      } else {
+        progress.dim = { x: -1, y: -1 }; // put the dot off-screen if no task dimension is found
+      }
+    });
+
     this._taskRenderer
       .renderWithX((t: Task) => t.dim.x)
       .renderWithY((t: Task) => t.dim.y)
       .renderWithHeight((t: Task) => t.dim.height)
       .renderWithWidth((t: Task) => t.dim.width)
-      .render(tasks);
+      .render(tasks, this._progresses);
   }
 
-  _renderDelays(delays: Array<{ time: number; source: string }>) {
-    const svg = d3.select(this._canvas).select("svg");
-    const triangles = svg
-      .selectAll("polygon.delay-indicator")
-      .data(delays)
-      .enter()
-      .append("polygon")
-      .attr("class", "delay-indicator");
+  // _renderDelays(delays: Array<{ time: number; source: string }>) {
+  //   const svg = d3.select(this._canvas).select("svg");
+  //   const triangles = svg
+  //     .selectAll("polygon.delay-indicator")
+  //     .data(delays)
+  //     .enter()
+  //     .append("polygon")
+  //     .attr("class", "delay-indicator");
 
-    triangles
-      .attr("points", (d) => this._calculateTrianglePoints(d))
-      .attr("fill", "red") // Use a color that indicates a delay
-      .attr("stroke", "black")
-      .attr("stroke-width", 1);
-  }
+  //   triangles
+  //     .attr("points", (d) => this._calculateTrianglePoints(d))
+  //     .attr("fill", "red") // Use a color that indicates a delay
+  //     .attr("stroke", "black")
+  //     .attr("stroke-width", 1);
+  // }
 
-  _calculateTrianglePoints(delay) {
-    const x = this._xScale(delay.time); // Use the time to calculate the x position
+  // _calculateTrianglePoints(delay) {
+  //   const x = this._xScale(delay.time); // Use the time to calculate the x position
 
-    // Assuming delay.source matches a task 'where' property
-    // Find the y index of the task with the matching 'where' property
-    const task = this._tasks.find((task) => task.where === delay.source);
+  //   // Assuming delay.source matches a task 'where' property
+  //   // Find the y index of the task with the matching 'where' property
+  //   const task = this._tasks.find((task) => task.where === delay.source);
 
-    // If no task is found, don't draw the triangle
-    if (!task || !task.dim) {
-      return "";
-    }
+  //   // If no task is found, don't draw the triangle
+  //   if (!task || !task.dim) {
+  //     return "";
+  //   }
 
-    const y = task.dim.y + task.dim.height / 2; // Center the triangle in the task bar
+  //   const y = task.dim.y + task.dim.height / 2; // Center the triangle in the task bar
 
-    const size = 1; // Size of the triangle
-    // Create the points for an upward-pointing triangle
-    return `${x},${y - size} ${x - size},${y + size} ${x + size},${y + size}`;
-  }
+  //   const size = 1; // Size of the triangle
+  //   // Create the points for an upward-pointing triangle
+  //   return `${x},${y - size} ${x - size},${y + size} ${x + size},${y + size}`;
+  // }
 
-  _renderDelayClusters(delays: Array<{ time: number; source: string }>) {
-    // Cluster delays into groups based on the threshold
-    const clusters = this._clusterDelays(delays, this._threshold);
-    const svg = d3.select(this._canvas).select("svg");
+  // _renderDelayClusters(delays: Array<{ time: number; source: string }>) {
+  //   // Cluster delays into groups based on the threshold
+  //   const clusters = this._clusterDelays(delays, this._threshold);
+  //   const svg = d3.select(this._canvas).select("svg");
 
-    // Clear any existing triangles to avoid duplicates
-    svg.selectAll("polygon.delay-indicator").remove();
+  //   // Clear any existing triangles to avoid duplicates
+  //   svg.selectAll("polygon.delay-indicator").remove();
 
-    const triangles = svg
-      .selectAll("polygon.delay-indicator")
-      .data(clusters)
-      .enter()
-      .append("polygon")
-      .attr("class", "delay-indicator");
+  //   const triangles = svg
+  //     .selectAll("polygon.delay-indicator")
+  //     .data(clusters)
+  //     .enter()
+  //     .append("polygon")
+  //     .attr("class", "delay-indicator");
 
-    triangles
-      .attr("points", (d) => this._calculateTrianglePointsCluster(d))
-      .attr("fill", "red") // Or use a color scale based on 'count'
-      .attr("stroke", "black")
-      .attr("stroke-width", 1);
-  }
-  _calculateTrianglePointsCluster(cluster) {
-    const x = this._xScale(cluster.time); // Calculate the x position based on the cluster's time
+  //   triangles
+  //     .attr("points", (d) => this._calculateTrianglePointsCluster(d))
+  //     .attr("fill", "red") // Or use a color scale based on 'count'
+  //     .attr("stroke", "black")
+  //     .attr("stroke-width", 1);
+  // }
+  // _calculateTrianglePointsCluster(cluster) {
+  //   const x = this._xScale(cluster.time); // Calculate the x position based on the cluster's time
 
-    // Find the y index of the task with the matching 'source' property
-    const task = this._tasks.find((task) => task.where === cluster.source);
+  //   // Find the y index of the task with the matching 'source' property
+  //   const task = this._tasks.find((task) => task.where === cluster.source);
 
-    // If no task is found, don't draw the triangle
-    if (!task || !task.dim) {
-      return "";
-    }
+  //   // If no task is found, don't draw the triangle
+  //   if (!task || !task.dim) {
+  //     return "";
+  //   }
 
-    // Determine the y position by using the task's dimensions
-    const y = task.dim.y + task.dim.height / 2; // Center the triangle in the task bar's y position
+  //   // Determine the y position by using the task's dimensions
+  //   const y = task.dim.y + task.dim.height / 2; // Center the triangle in the task bar's y position
 
-    // Calculate the size of the triangle based on the number of delays in the cluster
-    const baseSize = 3; // Base size for a cluster with a single delay
-    const sizeIncrement = 1; // Increment size for each additional delay in the cluster
-    const size = baseSize + sizeIncrement * (Math.sqrt(cluster.count) - 1); // Slightly increase size based on count
+  //   // Calculate the size of the triangle based on the number of delays in the cluster
+  //   const baseSize = 3; // Base size for a cluster with a single delay
+  //   const sizeIncrement = 1; // Increment size for each additional delay in the cluster
+  //   const size = baseSize + sizeIncrement * (Math.sqrt(cluster.count) - 1); // Slightly increase size based on count
 
-    // Define the points for an upward-pointing triangle, centered at the calculated x, y
-    return `${x},${y - size} ${x - size},${y + size} ${x + size},${y + size}`;
-  }
+  //   // Define the points for an upward-pointing triangle, centered at the calculated x, y
+  //   return `${x},${y - size} ${x - size},${y + size} ${x + size},${y + size}`;
+  // }
 
-  _clusterDelays(
-    delays: Array<{ time: number; source: string }>,
-    threshold: number
-  ) {
-    // Sort delays by time
-    const sortedDelays = delays.sort((a, b) => a.time - b.time);
-    const clusters = [];
-    let currentCluster = [];
+  // _clusterDelays(
+  //   delays: Array<{ time: number; source: string }>,
+  //   threshold: number
+  // ) {
+  //   // Sort delays by time
+  //   const sortedDelays = delays.sort((a, b) => a.time - b.time);
+  //   const clusters = [];
+  //   let currentCluster = [];
 
-    sortedDelays.forEach((delay, index) => {
-      // Start a new cluster if needed
-      if (
-        currentCluster.length === 0 ||
-        delay.time - currentCluster[currentCluster.length - 1].time <= threshold
-      ) {
-        currentCluster.push(delay);
-      } else {
-        // Current delay is outside the threshold, save and start a new cluster
-        clusters.push(currentCluster);
-        currentCluster = [delay];
-      }
+  //   sortedDelays.forEach((delay, index) => {
+  //     // Start a new cluster if needed
+  //     if (
+  //       currentCluster.length === 0 ||
+  //       delay.time - currentCluster[currentCluster.length - 1].time <= threshold
+  //     ) {
+  //       currentCluster.push(delay);
+  //     } else {
+  //       // Current delay is outside the threshold, save and start a new cluster
+  //       clusters.push(currentCluster);
+  //       currentCluster = [delay];
+  //     }
 
-      // If it's the last delay, push the current cluster
-      if (index === sortedDelays.length - 1 && currentCluster.length > 0) {
-        clusters.push(currentCluster);
-      }
-    });
+  //     // If it's the last delay, push the current cluster
+  //     if (index === sortedDelays.length - 1 && currentCluster.length > 0) {
+  //       clusters.push(currentCluster);
+  //     }
+  //   });
 
-    // Convert clusters into a format suitable for rendering
-    return clusters.map((cluster) => {
-      // Here we take the first delay's time and source for the cluster
-      return {
-        time: cluster[0].time,
-        source: cluster[0].source,
-        count: cluster.length,
-      };
-    });
-  }
+  //   // Convert clusters into a format suitable for rendering
+  //   return clusters.map((cluster) => {
+  //     // Here we take the first delay's time and source for the cluster
+  //     return {
+  //       time: cluster[0].time,
+  //       source: cluster[0].source,
+  //       count: cluster.length,
+  //     };
+  //   });
+  // }
 
   _renderProgress(
     progresses: Array<{
@@ -290,12 +306,12 @@ class ComponentView {
       .enter()
       .append("circle")
       .attr("class", "progress-indicator")
-      .attr("r", 3); // Radius of the dots
+      .attr("r", 3);
 
     circles
       .attr("cx", (d) => this._xScale(d.time))
       .attr("cy", (d) => this._findTaskYPosition(d.task_id))
-      .attr("fill", "blue"); // Color of the progress dots
+      .attr("fill", "blue");
 
     // // Draw lines for progress
     svg

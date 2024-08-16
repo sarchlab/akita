@@ -1,8 +1,9 @@
+/*taskview.ts*/
 import * as d3 from "d3";
 import TaskYIndexAssigner from "./taskyindexassigner";
 import TaskRenderer from "./taskrenderer";
 import XAxisDrawer from "./xaxisdrawer";
-import { Task } from "./task";
+import { Task, Progress } from "./task";
 
 class TaskView {
   private _yIndexAssigner: TaskYIndexAssigner;
@@ -23,6 +24,7 @@ class TaskView {
   private _parentTask: Task;
   private _subTasks: Array<Task>;
   private _allTasks: Array<Task>;
+  private _allProgresses: Array<Progress>;
   private _maxY: number;
   private _largeTaskHeight: number;
   private _taskGroupGap: number;
@@ -191,7 +193,12 @@ class TaskView {
     this._taskRenderer.hightlight(task);
   }
 
-  render(task: Task, subTasks: Array<Task>, parentTask: Task) {
+  render(
+    task: Task,
+    subTasks: Array<Task>,
+    parentTask: Task,
+    progresses: Array<Progress>
+  ) {
     this._task = task;
     this._subTasks = subTasks;
     this._parentTask = parentTask;
@@ -204,6 +211,18 @@ class TaskView {
     task.isMainTask = true;
     tasks.push(task);
     tasks = tasks.concat(subTasks);
+    let taskIds = new Set(tasks.map((task) => task.id));
+
+    this._allProgresses = progresses;
+    // progresses.forEach((progress) => {
+    //   if (taskIds.has(progress.task_id)) {
+    //     if (!this._allProgresses[progress.task_id]) {
+    //       this._allProgresses[progress.task_id] = [];
+    //     }
+    //     this._allProgresses[progress.task_id].push(progress);
+    //   }
+    // });
+
     this._allTasks = tasks;
     this._maxY = this._yIndexAssigner.assign(subTasks);
 
@@ -248,7 +267,8 @@ class TaskView {
           return task.yIndex * barHeight + extraHeight + this._marginTop;
         }
       })
-      .render(tasks);
+      // .render(tasks, this._allProgresses);
+      .render(tasks, this._allProgresses);
   }
 }
 

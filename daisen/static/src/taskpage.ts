@@ -1,3 +1,4 @@
+/*taskpage.ts*/
 import TaskView from "./taskview";
 import { TaskColorCoder } from "./taskcolorcoder";
 import Legend from "./taskcolorlegend";
@@ -236,11 +237,13 @@ export class TaskPage implements ZoomHandler {
     let rsps = await Promise.all([
       fetch(`/api/trace?id=${task.id}`),
       fetch(`/api/trace?parentid=${task.id}`),
+      fetch(`/api/progress?source=${task.where}`),
     ]);
 
     task = await rsps[0].json();
     task = task[0];
     const subTasks = await rsps[1].json();
+    const subProgresses = await rsps[2].json();
 
     if (!keepView) {
       this._updateTimeAxisAccordingToTask(task);
@@ -258,17 +261,13 @@ export class TaskPage implements ZoomHandler {
       parentTask = parentTask[0];
     }
 
-    const traceRsps = await Promise.all([
+    const timedRsps = await Promise.all([
       fetch(
         `/api/trace?` +
           `where=${task.where}` +
           `&starttime=${this._startTime}` +
           `&endtime=${this._endTime}`
       ),
-    ]);
-    const sameLocationTasks = await traceRsps[0].json();
-
-    const progressRsps = await Promise.all([
       fetch(
         `/api/progress?` +
           `source=${task.where}` +
@@ -276,7 +275,8 @@ export class TaskPage implements ZoomHandler {
           `&endtime=${this._endTime}`
       ),
     ]);
-    const sameLocationProgress = await progressRsps[0].json();
+    const sameLocationTasks = await timedRsps[0].json();
+    const sameLocationProgress = await timedRsps[1].json();
 
     this._currTasks["task"] = task;
     this._currTasks["parentTask"] = parentTask;
@@ -299,9 +299,9 @@ export class TaskPage implements ZoomHandler {
     });
 
     this._taskColorCoder.recode(tasks.concat(sameLocationTasks));
-    this._taskView.render(task, subTasks, parentTask);
-    this._componentView.render(sameLocationTasks);
-    this._componentView._renderProgress(sameLocationProgress);
+    this._taskView.render(task, subTasks, parentTask, subProgresses);
+    this._componentView.render(sameLocationTasks, sameLocationProgress);
+    // this._componentView._renderProgress(sameLocationProgress);
     this._legend.render();
   }
 
@@ -309,28 +309,13 @@ export class TaskPage implements ZoomHandler {
     this._componentName = name;
     this._switchToComponentOnlyMode();
 
-    const rsps = await Promise.all([
+    const timedRsps = await Promise.all([
       fetch(
         `/api/trace?` +
           `where=${name}` +
           `&starttime=${this._startTime}` +
           `&endtime=${this._endTime}`
       ),
-    ]);
-    const sameLocationTasks = await rsps[0].json();
-
-    // const delayRsps = await Promise.all([
-    //   fetch(
-    //     `/api/delay?` +
-    //       `event_id=Delay` + // Specify event_id="Delay"
-    //       `&source=${name}` +
-    //       `&starttime=${this._startTime}` +
-    //       `&endtime=${this._endTime}`
-    //   ),
-    // ]);
-    // const sameLocationDelays = await delayRsps[0].json();
-
-    const progressRsps = await Promise.all([
       fetch(
         `/api/progress?` +
           `&source=${name}` +
@@ -338,15 +323,14 @@ export class TaskPage implements ZoomHandler {
           `&endtime=${this._endTime}`
       ),
     ]);
-    const sameLocationProgress = await progressRsps[0].json();
+    const sameLocationTasks = await timedRsps[0].json();
+    const sameLocationProgress = await timedRsps[1].json();
 
     this._taskColorCoder.recode(sameLocationTasks);
     this._legend.render();
 
-    this._componentView.render(sameLocationTasks);
-    this._componentView._renderProgress(sameLocationProgress);
-    // this._componentView._renderDelays(sameLocationDelays);
-    // this._componentView._renderDelayClusters(sameLocationDelays);
+    this._componentView.render(sameLocationTasks, sameLocationProgress);
+    // this._componentView._renderProgress(sameLocationProgress);
   }
 
   _switchToComponentOnlyMode() {

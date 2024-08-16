@@ -1,3 +1,4 @@
+/*task.ts*/
 export class Dim {
   x: number;
   y: number;
