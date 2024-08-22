@@ -341,6 +341,7 @@ export class TaskPage implements ZoomHandler {
     this._taskView.render(task, subTasks, parentTask);
     this._componentView.render(sameLocationTasks);
     this._legend.render();
+    await this._componentView._renderReqTree();
   }
 
   async showComponent(name: string) {
@@ -363,6 +364,7 @@ export class TaskPage implements ZoomHandler {
     this._legend.render();
     console.log('ComponentView Component Name before render:', this._componentView._componentName);
     await this._componentView.render(sameLocationTasks);
+    await this._componentView._renderReqTree();
   }
 
   _waitForComponentNameUpdate() {

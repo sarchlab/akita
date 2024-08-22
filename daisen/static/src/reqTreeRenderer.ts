@@ -1,149 +1,147 @@
 import * as d3 from 'd3';
 import { TaskPage } from './taskpage';
+
 interface TreeNode {
   id: string;
   type: string;
-  what: string;
-  startTime: number;
-  endTime: number;
-  children?: TreeNode[];
+  where: string;
+  startTime?: number;
+  endTime?: number;
+  left?: TreeNode[];
+  right?: TreeNode[];
 }
 
-function renderReqTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode[], taskPage: TaskPage) {
-  const margin = { top: 25, right: 90, bottom: 30, left: 50 };
-  const containerWidth = container.node().getBoundingClientRect().width;
-  const width = containerWidth - margin.left - margin.right;
-  const nodeHeight = 60;
-  const nodeSpacing = 10;
-  const fixedVerticalSpacing = 50;
-  function removeDuplicates(nodes: TreeNode[]): TreeNode[] {
-    const uniqueNodes: { [key: string]: TreeNode } = {};
-    nodes.forEach(node => {
-      const key = `${node.type}_${node.id}`;
-      if (!uniqueNodes[key] || node.children) {
-        uniqueNodes[key] = node;
-        if (node.children) {
-          node.children = removeDuplicates(node.children);
-        }
-      }
-    });
-    return Object.values(uniqueNodes);
-  }
-  const uniqueData = removeDuplicates(data);
-  const height = Math.max(
-    (uniqueData.length * (nodeHeight + nodeSpacing)) - margin.top - margin.bottom,
-    1000
-  );
-
+function renderReqTree(container: d3.Selection<HTMLElement, unknown, null, undefined>, data: TreeNode, taskPage: TaskPage) {
   container.selectAll("*").remove();
 
-  container.style('max-height', '1000px') 
-  .style('overflow-y', 'auto')
-  .style('overflow-x', 'hidden');
-  
-  const svg = container
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
+  const svg = container.append('svg')
+    .attr('width', '100%')
+    .attr('height', '300px');  
+
+  renderTree(svg, data);
+}
+
+function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode) {
+  const margin = { top: -50, right: 20, bottom: 20, left: 20 };
+  const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+  const height = 260; 
+  const svg = container.append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const root = d3.hierarchy({ children: uniqueData } as TreeNode);
+  const centerX = width / 2;
+  const yStep = height / 3;
 
-  const maxDepth = root.descendants().reduce((max, d) => Math.max(max, d.depth), 0);
-  const nodeSpacingY = height / (root.descendants().length / (maxDepth + 1));
-
-  const treeLayout = d3.tree<TreeNode>()
-    .size([height, width])
-    .separation((a, b) => {
-      if (a.parent === b.parent) {
-        return 1;
+  const calculateXPositions = (nodes: TreeNode[], totalWidth: number) => {
+    const nodeWidth = 150;
+    const totalNodesWidth = nodes.length * nodeWidth;
+    const remainingSpace = Math.max(totalWidth - totalNodesWidth, 0);
+    const gap = nodes.length > 1 ? remainingSpace / (nodes.length - 1) : 0;
+    const startX = (totalWidth - (totalNodesWidth + (nodes.length - 1) * gap)) / 2;
+    return nodes.map((_, index) => startX + (index * (nodeWidth + gap)) + (nodeWidth / 2));
+  };
+  const deduplicateNodes = (nodes: TreeNode[]): TreeNode[] => {
+    const uniqueNodes = new Map<string, TreeNode>();
+    nodes.forEach(node => {
+      if (!uniqueNodes.has(node.where)) {
+        uniqueNodes.set(node.where, node);
       }
-      return 2;
     });
-
-
-  const treeData = treeLayout(root);
-
-  const depthMap = new Map<number, number>();
-  treeData.each(node => {
-    if (!depthMap.has(node.depth)) {
-      depthMap.set(node.depth, 0);
-    }
-    node.x = depthMap.get(node.depth);
-    depthMap.set(node.depth, node.x + fixedVerticalSpacing);
-  });
-
-  const customLinkGenerator = (d: d3.HierarchyPointLink<TreeNode>) => {
-    return d3.linkHorizontal()({
-      source: [d.source.y, d.source.x],
-      target: [d.target.y, d.target.x]
-    });
+    return Array.from(uniqueNodes.values());
   };
 
-  svg.selectAll(".link")
-    .data(treeData.links())
-    .enter().append("path")
-    .attr("class", "link")
-    .attr("d", customLinkGenerator)
+  const leftNodes = data.left ? deduplicateNodes(data.left) : [];
+  const rightNodes = data.right ? deduplicateNodes(data.right) : [];
+
+  if (leftNodes.length > 0) {
+    const xPositions = calculateXPositions(leftNodes, width);
+    leftNodes.forEach((node, index) => {
+      renderNode(svg, node, xPositions[index], yStep, 'left');
+      drawConnector(svg, xPositions[index], yStep + 15, centerX, 2 * yStep - 15);
+    });
+  }
+
+  renderNode(svg, data, centerX, 2 * yStep, 'center');
+  
+  if (rightNodes.length > 0) {
+    const xPositions = calculateXPositions(rightNodes, width);
+    rightNodes.forEach((node, index) => {
+      renderNode(svg, node, xPositions[index], 3 * yStep, 'right');
+      drawConnector(svg, centerX, 2 * yStep + 15, xPositions[index], 3 * yStep - 15);
+    });
+  }
+}
+
+function drawConnector(svg: d3.Selection<SVGGElement, unknown, null, undefined>, x1: number, y1: number, x2: number, y2: number) {
+  const midY = (y1 + y2) / 2;
+  svg.append("path")
+    .attr("d", `M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}`)
     .attr("fill", "none")
     .attr("stroke", "#ccc");
-    
+}
 
-  const node = svg.selectAll(".node")
-    .data(treeData.descendants())
-    .enter().append("g")
-    .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
-    .attr("transform", d => `translate(${d.y},${d.x})`);
+function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, node: TreeNode, x: number, y: number, position: 'left' | 'right' | 'center') {
+  const g = svg.append("g")
+    .attr("transform", `translate(${x},${y})`);
+
+  g.append("rect")
+    .attr("width", 150)
+    .attr("height", 30)
+    .attr("x", -75)
+    .attr("y", -15)
+    .attr("fill", getNodeColor(node, position))
+    .attr("stroke", "#333")
+    .attr("rx", 4)
+    .attr("ry", 4);
+
+  g.append("text")
+    .attr("dy", ".35em")
+    .attr("text-anchor", "middle")
+    .style("font-size", "10px")
+    .style("font-weight", "bold")
+    .style("fill", "#132C33")
+    .text(node.where)
+    .each(function(this: SVGTextElement) {
+      const self = d3.select(this);
+      let textLength = this.getComputedTextLength();
+      let text = self.text();
+      while (textLength > 140 && text.length > 0) {
+        text = text.slice(0, -1);
+        self.text(text + '...');
+        textLength = this.getComputedTextLength();
+      }
+    });
 
   const tooltip = d3.select("body").append("div")
     .attr("class", "tooltip")
-    .style("position", "absolute")
     .style("background-color", "white")
-    .style("padding", "5px")
-    .style("border", "1px solid #ccc")
-    .style("border-radius", "4px")
-    .style("pointer-events", "none")
     .style("opacity", 0);
 
-  node.append("rect")
-    .attr("width", 60)
-    .attr("height", 40)
-    .attr("x", -50)
-    .attr("y", -20)
-    .attr("fill", d => d.data.type === "req_in" ? "#51be7e" : "#44a0d2")
-    .attr("stroke", "#333")
-    .attr("rx", 5)
-    .attr("ry", 5)
-    .style("cursor", "pointer")
-    //@ts-ignore
-    .on("click", function(event: MouseEvent, d: d3.HierarchyPointNode<any>) {
-      event.preventDefault();
-      event.stopPropagation();
-      const taskId = d.data.id;
-      const newUrl = `/task?id=${taskId}`;
-      window.history.pushState({ taskId }, '', newUrl);
-      taskPage.showTask(d.data);
-    })
-    //@ts-ignore
-    .on("mouseover", function(event: MouseEvent, d: d3.HierarchyPointNode<TreeNode>) {
-      tooltip.transition()
-        .duration(200)
-        .style("opacity", "0.9");
-      tooltip.html(`ID: ${d.data.id}<br>What: ${d.data.what}`)
-        .style("left", `${event.x + 10}px`)
-        .style("top", `${event.y - 28}px`);
-    })
-    .on("mouseout", function() {
-      tooltip.transition()
-        .duration(500)
-        .style("opacity", "0");
-    });
+  g.on("mouseover", (event: MouseEvent) => {
+    tooltip.transition()
+      .duration(200)
+      .style("opacity", 0.9);
+    tooltip.html(`ID: ${node.id}<br/>Type: ${node.type}<br/>Where: ${node.where}`)
+      .style("left", (event.pageX + 10) + "px")
+      .style("top", (event.pageY - 28) + "px");
+  })
+  .on("mouseout", () => {
+    tooltip.transition()
+      .duration(500)
+      .style("opacity", 0);
+  });
+}
 
-  node.append("text")
-    .attr("dy", ".35em")
-    .attr("x", -20)
-    .style("text-anchor", "middle")
-    .text(d => d.data.type)
+function getNodeColor(node: TreeNode, position: 'left' | 'right' | 'center'): string {
+  switch (position) {
+    case 'center':
+      return "#D1285B";  
+    case 'left':
+      return "#FCCF65"; 
+    case 'right':
+      return "#098761"; 
+    default:
+      return "#cccccc"; 
+  }
 }
 
 export default renderReqTree;

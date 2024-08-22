@@ -291,6 +291,12 @@ body {
   font-weight: bold;
 }
 
+.req-tree-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .req-tree .link {
   fill: none;
   stroke: #ccc;

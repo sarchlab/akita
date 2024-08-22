@@ -430,6 +430,8 @@ func isTaskOverlapsWithBin(
 
 func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
     compName := r.FormValue("where")
+    compID := r.FormValue("id")
+    compWhat := r.FormValue("what")
     startTime, err := strconv.ParseFloat(r.FormValue("start_time"), 64)
     if err != nil {
         http.Error(w, "Invalid start_time", http.StatusBadRequest)
@@ -442,49 +444,69 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
     }
 
     query := tracing.TaskQuery{
-        Where:            compName,
-        Kind:             "req_in",
-        EnableTimeRange:  true,
-        StartTime:        startTime,
-        EndTime:          endTime,
-        EnableParentTask: true,
+        EnableTimeRange: true,
+        StartTime:       startTime,
+        EndTime:         endTime,
     }
-    reqIns := traceReader.ListTasks(query)
+    allTasks := traceReader.ListTasks(query)
 
-    treeData := make([]map[string]interface{}, 0)
+    treeData := map[string]interface{}{
+        "id":        compID,
+        "type":      "component",
+        "what":      compWhat,
+        "where":     compName,
+        "startTime": startTime,
+        "endTime":   endTime,
+        "left":      make([]map[string]interface{}, 0),
+        "right":     make([]map[string]interface{}, 0),
+    }
 
-    for _, reqIn := range reqIns {
-        reqOutQuery := tracing.TaskQuery{
-            ParentID:         reqIn.ID,
-            Kind:             "req_out",
-            EnableTimeRange:  true,
-            StartTime:        float64(reqIn.StartTime),
-            EndTime:          float64(reqIn.EndTime),
-            EnableParentTask: true,
+    leftComponents := make(map[string]bool)
+    rightComponents := make(map[string]bool)
+    taskMap := make(map[string]tracing.Task)
+
+	relatedTasks := make([]tracing.Task, 0)
+    for _, task := range allTasks {
+        taskMap[task.ID] = task
+        if task.Where == compName || (task.ParentID != "" && taskMap[task.ParentID].Where == compName) {
+            relatedTasks = append(relatedTasks, task)
         }
-        reqOuts := traceReader.ListTasks(reqOutQuery)
+    }
+	for _, task := range relatedTasks {
+		if task.Where == compName && task.ParentID != "" {
+			parentTask, exists := taskMap[task.ParentID]
+			if exists && parentTask.Where != compName {
+				sourceComp := parentTask.Where
+				key := sourceComp
+				if !leftComponents[key] {
+					leftComponents[key] = true
+					treeData["left"] = append(treeData["left"].([]map[string]interface{}), map[string]interface{}{
+						"id":    parentTask.ID,
+						"type":  parentTask.Kind,
+						"what":  parentTask.What,
+						"where": sourceComp,
+					})
+				}
+			}
+		}
 
-        reqInNode := map[string]interface{}{
-            "id":        reqIn.ID,
-            "type":      "req_in",
-            "what":      reqIn.What,
-            "startTime": reqIn.StartTime,
-            "endTime":   reqIn.EndTime,
-            "children":  make([]map[string]interface{}, 0),
-        }
-
-        for _, reqOut := range reqOuts {
-            reqOutNode := map[string]interface{}{
-                "id":        reqOut.ID,
-                "type":      "req_out",
-                "what":      reqOut.What,
-                "startTime": reqOut.StartTime,
-                "endTime":   reqOut.EndTime,
+        if task.Where == compName {
+            for _, potentialSubTask := range allTasks {
+                if potentialSubTask.ParentID == task.ID && potentialSubTask.Where != compName {
+                    destComp := potentialSubTask.Where
+                    key := destComp + "|" + potentialSubTask.What
+                    if !rightComponents[key] {
+                        rightComponents[key] = true
+                        treeData["right"] = append(treeData["right"].([]map[string]interface{}), map[string]interface{}{
+                            "id":    potentialSubTask.ID,
+                            "type":  potentialSubTask.Kind,
+                            "what":  potentialSubTask.What,
+                            "where": destComp,
+                        })
+                    }
+                }
             }
-            reqInNode["children"] = append(reqInNode["children"].([]map[string]interface{}), reqOutNode)
         }
-
-        treeData = append(treeData, reqInNode)
     }
 
     rsp, err := json.Marshal(treeData)
@@ -492,7 +514,8 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
-	log.Printf("Response data: %s", string(rsp))
+
+    log.Printf("Response data: %s", string(rsp))
     w.Header().Set("Content-Type", "application/json")
     w.Write(rsp)
 }

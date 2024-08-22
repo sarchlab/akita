@@ -101,6 +101,7 @@ class ComponentView {
       this._fetchAndRenderAxisData(svg);
     }
     console.log('Component Name set to:', this._componentName);
+    this._renderReqTree();
   }
   
   setCanvas(canvas: HTMLElement, tooltip: HTMLElement) {
@@ -145,6 +146,7 @@ class ComponentView {
     this._updateTimeScale();
     this._widget.setXAxis(startTime, endTime);
     this._fetchAndRenderAxisData(this._svg);
+    this._renderReqTree();
   }
 
   _updateTimeScale() {
@@ -207,7 +209,8 @@ class ComponentView {
     .select<SVGSVGElement>("svg");
   
     if (svg.node()) {
-      renderReqTree(svg, treeData, this._taskPage);
+      //@ts-ignore
+      renderReqTree(d3.select(this._reqTreeCanvas), treeData);
     } else {
       console.error('SVG element not found in _reqTreeCanvas');
     }
