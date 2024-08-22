@@ -132,7 +132,7 @@ function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, no
     tooltip.transition()
       .duration(200)
       .style("opacity", 0.9);
-    tooltip.html(`ID: ${node.id}<br/>Type: ${node.type}<br/>Where: ${node.where}`)
+    tooltip.html(`Type: ${node.type}<br/>Where: ${node.where}`)
       .style("left", (event.pageX + 10) + "px")
       .style("top", (event.pageY - 28) + "px");
   })
