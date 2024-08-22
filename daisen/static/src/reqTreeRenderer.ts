@@ -26,7 +26,7 @@ function renderReqTree(container: d3.Selection<HTMLElement, unknown, null, undef
 }
 
 function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode) {
-  const margin = { top: -50, right: 20, bottom: 20, left: 10 };
+  const margin = { top: -50, right: 20, bottom: 20, left: 0 };
   // const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
   const height = 260; 
   const nodeWidth = 140;
