@@ -14,21 +14,33 @@ interface TreeNode {
 function renderReqTree(container: d3.Selection<HTMLElement, unknown, null, undefined>, data: TreeNode, taskPage: TaskPage) {
   container.selectAll("*").remove();
 
-  const svg = container.append('svg')
-    .attr('width', '100%')
+  const containerDiv = container.append('div')
+    .style('width', '100%')
+    .style('overflow-x', 'auto')
+    .style('overflow-y', 'hidden');
+
+  const svg = containerDiv.append('svg')
     .attr('height', '300px');  
 
   renderTree(svg, data);
 }
 
 function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode) {
-  const margin = { top: -50, right: 20, bottom: 20, left: 20 };
-  const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
+  const margin = { top: -50, right: 20, bottom: 20, left: 10 };
+  // const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
   const height = 260; 
+  const nodeWidth = 140;
+  const gapWidth = -100;
+  const totalNodes = (data.left?.length || 0) + 1 + (data.right?.length || 0);
+  const requiredWidth = totalNodes * nodeWidth + (totalNodes - 1) * gapWidth;
+  const containerWidth = container.node().parentElement.getBoundingClientRect().width;
+  const width = Math.max(containerWidth, requiredWidth);
+
+  container.attr('width', width);
   const svg = container.append("g")
     .attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const centerX = width / 2;
+  const centerX = containerWidth / 2;
   const yStep = height / 3;
 
   const calculateXPositions = (nodes: TreeNode[], totalWidth: number) => {
@@ -53,7 +65,7 @@ function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefi
   const rightNodes = data.right ? deduplicateNodes(data.right) : [];
 
   if (leftNodes.length > 0) {
-    const xPositions = calculateXPositions(leftNodes, width);
+    const xPositions = calculateXPositions(leftNodes, containerWidth);
     leftNodes.forEach((node, index) => {
       renderNode(svg, node, xPositions[index], yStep, 'left');
       drawConnector(svg, xPositions[index], yStep + 15, centerX, 2 * yStep - 15);
@@ -63,7 +75,7 @@ function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefi
   renderNode(svg, data, centerX, 2 * yStep, 'center');
   
   if (rightNodes.length > 0) {
-    const xPositions = calculateXPositions(rightNodes, width);
+    const xPositions = calculateXPositions(rightNodes, containerWidth);
     rightNodes.forEach((node, index) => {
       renderNode(svg, node, xPositions[index], 3 * yStep, 'right');
       drawConnector(svg, centerX, 2 * yStep + 15, xPositions[index], 3 * yStep - 15);
@@ -104,7 +116,7 @@ function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, no
       const self = d3.select(this);
       let textLength = this.getComputedTextLength();
       let text = self.text();
-      while (textLength > 140 && text.length > 0) {
+      while (textLength > 130 && text.length > 0) {
         text = text.slice(0, -1);
         self.text(text + '...');
         textLength = this.getComputedTextLength();
