@@ -517,5 +517,9 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Response data: %s", string(rsp))
     w.Header().Set("Content-Type", "application/json")
-    w.Write(rsp)
+	_, err = w.Write(rsp)
+	if err != nil {
+		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+		return
+	}
 }
