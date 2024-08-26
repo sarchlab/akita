@@ -15,6 +15,13 @@ func (m *trafficMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+func (m *trafficMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // Test is a test case.
 type Test struct {
 	agents            []*Agent

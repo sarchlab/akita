@@ -17,6 +17,14 @@ func (r *FlushReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned FlushReq with different ID
+func (r *FlushReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // FlushReqBuilder can build AT flush requests
 type FlushReqBuilder struct {
 	src, dst sim.Port
@@ -69,6 +77,14 @@ func (r *FlushRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned FlushRsp with different ID
+func (r *FlushRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // FlushRspBuilder can build AT flush rsp
 type FlushRspBuilder struct {
 	src, dst sim.Port
@@ -106,6 +122,14 @@ func (r *RestartReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned RestartReq with different ID
+func (r *RestartReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // RestartReqBuilder can build TLB restart requests.
 type RestartReqBuilder struct {
 	src, dst sim.Port
@@ -141,6 +165,14 @@ type RestartRsp struct {
 // Meta returns the meta data associated with the message.
 func (r *RestartRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned RestartRsp with different ID
+func (r *RestartRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // RestartRspBuilder can build AT flush rsp

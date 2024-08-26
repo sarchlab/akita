@@ -18,6 +18,26 @@ func (r *TranslationReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned TranslationReq with different ID
+func (r *TranslationReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// GenerateRsp generates response to originral translation request
+func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
+	rsp := TranslationRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithPage(page).
+		Build()
+
+	return rsp
+}
+
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
 	src, dst sim.Port
@@ -79,6 +99,14 @@ type TranslationRsp struct {
 // Meta returns the meta data associated with the message.
 func (r *TranslationRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned TranslationRsp with different ID
+func (r *TranslationRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetRspTo returns the request ID that the respond is responding to.
@@ -153,6 +181,17 @@ func (m *PageMigrationReqToDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned PageMigrationReqToDriver with different ID
+func (m *PageMigrationReqToDriver) Clone() sim.Msg {
+	return m
+}
+
+func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
+	rsp := NewPageMigrationRspFromDriver(m.Dst, m.Src, m)
+
+	return rsp
+}
+
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
 	src, dst sim.Port,
@@ -171,6 +210,8 @@ type PageMigrationRspFromDriver struct {
 	EndTime   sim.VTimeInSec
 	VAddr     []uint64
 	RspToTop  bool
+
+	OriginalReq sim.Msg
 }
 
 // Meta returns the meta data associated with the message.
@@ -178,12 +219,23 @@ func (m *PageMigrationRspFromDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned PageMigrationRspFromDriver with different ID
+func (m *PageMigrationRspFromDriver) Clone() sim.Msg {
+	return m
+}
+
+func (m *PageMigrationRspFromDriver) GetRspTo() string {
+	return m.OriginalReq.Meta().ID
+}
+
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
 	src, dst sim.Port,
+	originalReq sim.Msg,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)
 	cmd.Src = src
 	cmd.Dst = dst
+	cmd.OriginalReq = originalReq
 	return cmd
 }

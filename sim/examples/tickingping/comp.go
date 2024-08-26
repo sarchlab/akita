@@ -1,25 +1,40 @@
-package ticking_ping
+package tickingping
 
 import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
-type PingMsg struct {
+type PingReq struct {
 	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingMsg) Meta() *sim.MsgMeta {
+func (p *PingReq) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
+}
+
+func (p *PingReq) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (p *PingRsp) GenerateRsp() sim.Rsp {
+	rsp := &PingRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.RspTo = p.ID
+
+	return rsp
 }
 
 type PingRsp struct {
 	sim.MsgMeta
 
+	RspTo string
 	SeqID int
 }
 
@@ -27,8 +42,19 @@ func (p *PingRsp) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
 }
 
+func (p *PingRsp) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (p *PingRsp) GetRspTo() string {
+	return p.RspTo
+}
+
 type pingTransaction struct {
-	req       *PingMsg
+	req       *PingReq
 	cycleLeft int
 }
 
@@ -62,7 +88,7 @@ func (c *Comp) processInput() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *PingMsg:
+	case *PingReq:
 		c.processingPingMsg(msg)
 	case *PingRsp:
 		c.processingPingRsp(msg)
@@ -74,7 +100,7 @@ func (c *Comp) processInput() bool {
 }
 
 func (c *Comp) processingPingMsg(
-	ping *PingMsg,
+	ping *PingReq,
 ) {
 	trans := &pingTransaction{
 		req:       ping,
@@ -138,7 +164,7 @@ func (c *Comp) sendPing() bool {
 		return false
 	}
 
-	pingMsg := &PingMsg{
+	pingMsg := &PingReq{
 		SeqID: c.nextSeqID,
 	}
 	pingMsg.Src = c.OutPort
@@ -154,30 +180,4 @@ func (c *Comp) sendPing() bool {
 	c.nextSeqID++
 
 	return true
-}
-
-func Example_pingWithTicking() {
-	engine := sim.NewSerialEngine()
-	// agentA := NewTickingPingAgent("AgentA", engine, 1*sim.Hz)
-	agentA := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentA")
-	// agentB := NewTickingPingAgent("AgentB", engine, 1*sim.Hz)
-	agentB := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
-
-	agentA.pingDst = agentB.OutPort
-	agentA.numPingNeedToSend = 2
-
-	agentA.TickLater()
-
-	engine.Run()
-	// Output:
-	// Ping 0, 5.00
-	// Ping 1, 5.00
-}
-
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
 }

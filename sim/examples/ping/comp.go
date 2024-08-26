@@ -5,27 +5,53 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
-type PingMsg struct {
+type PingReq struct {
 	sim.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingMsg) Meta() *sim.MsgMeta {
+func (p *PingReq) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
+}
+
+func (p *PingReq) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (p *PingReq) GenerateRsp() sim.Rsp {
+	rsp := &PingRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.RspTo = p.ID
+
+	return rsp
 }
 
 type PingRsp struct {
 	sim.MsgMeta
 
+	RspTo string
 	SeqID int
 }
 
 func (p *PingRsp) Meta() *sim.MsgMeta {
 	return &p.MsgMeta
+}
+
+func (p *PingRsp) Clone() sim.Msg {
+	cloneMsg := *p
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (p *PingRsp) GetRspTo() string {
+	return p.RspTo
 }
 
 type StartPingEvent struct {
@@ -35,7 +61,7 @@ type StartPingEvent struct {
 
 type RspPingEvent struct {
 	*sim.EventBase
-	pingMsg *PingMsg
+	pingMsg *PingReq
 }
 
 type Comp struct {
@@ -47,13 +73,6 @@ type Comp struct {
 	startTime []sim.VTimeInSec
 	nextSeqID int
 }
-
-// func NewPingAgent(name string, engine sim.Engine) *PingAgent {
-// 	agent := &PingAgent{Engine: engine}
-// 	agent.ComponentBase = sim.NewComponentBase(name)
-// 	agent.OutPort = sim.NewLimitNumMsgPort(agent, 4, name+".OutPort")
-// 	return agent
-// }
 
 func (c *Comp) Handle(e sim.Event) error {
 	c.Lock()
@@ -71,7 +90,7 @@ func (c *Comp) Handle(e sim.Event) error {
 }
 
 func (c *Comp) StartPing(evt StartPingEvent) {
-	pingMsg := &PingMsg{
+	pingMsg := &PingReq{
 		SeqID: c.nextSeqID,
 	}
 
@@ -102,7 +121,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 
 	msg := port.RetrieveIncoming()
 	switch msg := msg.(type) {
-	case *PingMsg:
+	case *PingReq:
 		c.processPingMsg(msg)
 	case *PingRsp:
 		c.processPingRsp(msg)
@@ -111,9 +130,9 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 	}
 }
 
-func (c *Comp) processPingMsg(msg *PingMsg) {
+func (c *Comp) processPingMsg(msg *PingReq) {
 	rspEvent := RspPingEvent{
-		EventBase: sim.NewEventBase(c.CurrentTime()+2, c),
+		EventBase: sim.NewEventBase(c.Engine.CurrentTime()+2, c),
 		pingMsg:   msg,
 	}
 	c.Engine.Schedule(rspEvent)
@@ -122,7 +141,7 @@ func (c *Comp) processPingMsg(msg *PingMsg) {
 func (c *Comp) processPingRsp(msg *PingRsp) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
-	now := c.CurrentTime()
+	now := c.Engine.CurrentTime()
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
@@ -130,36 +149,4 @@ func (c *Comp) processPingRsp(msg *PingRsp) {
 
 func (c Comp) NotifyPortFree(_ sim.Port) {
 	// Do nothing
-}
-
-func Example_pingWithEvents() {
-	engine := sim.NewSerialEngine()
-	// agentA := NewPingAgent("AgentA", engine)
-	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
-	// agentB := NewPingAgent("AgentB", engine)
-	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
-
-	e1 := StartPingEvent{
-		EventBase: sim.NewEventBase(1, agentA),
-		Dst:       agentB.OutPort,
-	}
-	e2 := StartPingEvent{
-		EventBase: sim.NewEventBase(3, agentA),
-		Dst:       agentB.OutPort,
-	}
-	engine.Schedule(e1)
-	engine.Schedule(e2)
-
-	engine.Run()
-	// Output:
-	// Ping 0, 2.00
-	// Ping 1, 2.00
-}
-
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
 }
