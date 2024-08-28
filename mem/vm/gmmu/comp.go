@@ -1,3 +1,6 @@
+// Package gmmu provides the implementation of the Graphics Memory Management Unit (GMMU).
+// It includes structures and methods for handling memory translation, page migration,
+// and other related operations within the virtual memory system.
 package gmmu
 
 import (
