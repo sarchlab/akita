@@ -17,7 +17,7 @@ type transaction struct {
 	migration *vm.PageMigrationReqToDriver
 }
 
-// gmmu is the default gmmu implementation. It is also an akita Component.
+// GMMU is the default gmmu implementation. It is also an akita Component.
 type GMMU struct {
 	sim.TickingComponent
 
@@ -141,7 +141,7 @@ func (gmmu *GMMU) processRemoteMemReq(now sim.VTimeInSec, walkingIndex int) bool
 
 	walking := gmmu.walkingTranslations[walkingIndex].req
 
-	gmmu.remoteMemReqs[uint64(walking.VAddr)] = gmmu.walkingTranslations[walkingIndex]
+	gmmu.remoteMemReqs[walking.VAddr] = gmmu.walkingTranslations[walkingIndex]
 
 	req := vm.TranslationReqBuilder{}.
 		WithSendTime(now).
@@ -433,7 +433,7 @@ func (gmmu *GMMU) fetchFromBottom(now sim.VTimeInSec) bool {
 }
 
 func (gmmu *GMMU) handleTranslationRsp(now sim.VTimeInSec, rsponse *vm.TranslationRsp) bool {
-	reqTransaction := gmmu.remoteMemReqs[uint64(rsponse.Page.VAddr)]
+	reqTransaction := gmmu.remoteMemReqs[rsponse.Page.VAddr]
 
 	rsp := vm.TranslationRspBuilder{}.
 		WithSendTime(now).
@@ -448,7 +448,7 @@ func (gmmu *GMMU) handleTranslationRsp(now sim.VTimeInSec, rsponse *vm.Translati
 	// fmt.Printf("%0.9f,%s,GMMUHandleTranslationRsp,%s\n",
 	// 	float64(now), gmmu.topPort.Name(), rsp.TaskID)
 
-	delete(gmmu.remoteMemReqs, uint64(rsponse.Page.VAddr))
+	delete(gmmu.remoteMemReqs, rsponse.Page.VAddr)
 	return true
 }
 
