@@ -4,7 +4,6 @@
 package gmmu
 
 import (
-	"fmt"
 	"log"
 	"reflect"
 
@@ -118,10 +117,8 @@ func (gmmu *GMMU) walkPageTable(now sim.VTimeInSec) bool {
 
 		if page.DeviceID == gmmu.deviceID {
 			madeProgress = gmmu.finalizePageWalk(now, i) || madeProgress
-			fmt.Printf("GMMUlocalPageFault,%d,%d,%d,%d,%d\n", gmmu.deviceID, page.DeviceID, page.PID, page.PAddr, page.VAddr)
 		} else {
 			madeProgress = gmmu.processRemoteMemReq(now, i) || madeProgress
-			fmt.Printf("GMMURemotePageFault,%d,%d,%d,%d,%d\n", gmmu.deviceID, page.DeviceID, page.PID, page.PAddr, page.VAddr)
 		}
 	}
 
@@ -161,9 +158,6 @@ func (gmmu *GMMU) processRemoteMemReq(now sim.VTimeInSec, walkingIndex int) bool
 	if err != nil {
 		return false
 	}
-
-	// fmt.Printf("%0.9f,%s,GMMURemotePageFault,%s\n",
-	// 	float64(now), gmmu.bottomPort.Name(), req.TaskID)
 
 	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
 
@@ -241,9 +235,6 @@ func (gmmu *GMMU) doPageWalkHit(
 		Build()
 
 	gmmu.topSender.Send(rsp)
-
-	// fmt.Printf("%0.9f,%s,GMMULocalPageHit,%s\n",
-	// 	float64(now), gmmu.topPort.Name(), rsp.TaskID)
 
 	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
 
@@ -349,9 +340,6 @@ func (gmmu *GMMU) sendTranlationRsp(
 		Build()
 	gmmu.topSender.Send(rsp)
 
-	// fmt.Printf("%0.9f,%s,GMMUSendTranslationRsp,%s\n",
-	// 	float64(now), gmmu.topPort.Name(), rsp.TaskID)
-
 	return true
 }
 
@@ -448,18 +436,6 @@ func (gmmu *GMMU) handleTranslationRsp(now sim.VTimeInSec, rsponse *vm.Translati
 
 	gmmu.topSender.Send(rsp)
 
-	// fmt.Printf("%0.9f,%s,GMMUHandleTranslationRsp,%s\n",
-	// 	float64(now), gmmu.topPort.Name(), rsp.TaskID)
-
 	delete(gmmu.remoteMemReqs, rsponse.Page.VAddr)
 	return true
 }
-
-// func (gmmu *GMMU) getRemoteDeviceID(vAddr uint64) uint64 {
-// 	page, found := gmmu.pageTable.FindByVAddr(vAddr)
-// 	if !found {
-// 		panic("page not found")
-// 	}
-
-// 	return page.DeviceID
-// }
