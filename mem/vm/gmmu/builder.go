@@ -10,15 +10,14 @@ import (
 
 // A Builder can build GMMU component
 type Builder struct {
-	engine                   sim.Engine
-	freq                     sim.Freq
-	log2PageSize             uint64
-	pageTable                vm.PageTable
-	migrationServiceProvider sim.Port
-	maxNumReqInFlight        int
-	pageWalkingLatency       int
-	deviceID                 uint64
-	lowModule                sim.Port
+	engine             sim.Engine
+	freq               sim.Freq
+	log2PageSize       uint64
+	pageTable          vm.PageTable
+	maxNumReqInFlight  int
+	pageWalkingLatency int
+	deviceID           uint64
+	lowModule          sim.Port
 }
 
 // MakeBuilder creates a new builder
@@ -80,8 +79,6 @@ func (b Builder) WithLowModule(p sim.Port) Builder {
 }
 
 func (b Builder) configureInternalStates(gmmu *Comp) {
-	gmmu.MigrationServiceProvider = b.migrationServiceProvider
-	gmmu.migrationQueueSize = 4096
 	gmmu.maxRequestsInFlight = b.maxNumReqInFlight
 	gmmu.latency = b.pageWalkingLatency
 	gmmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
@@ -100,8 +97,6 @@ func (b Builder) createPageTable(gmmu *Comp) {
 func (b Builder) createPorts(name string, gmmu *Comp) {
 	gmmu.topPort = sim.NewLimitNumMsgPort(gmmu, 4096, name+".ToTop")
 	gmmu.AddPort("Top", gmmu.topPort)
-	gmmu.migrationPort = sim.NewLimitNumMsgPort(gmmu, 1, name+".MigrationPort")
-	gmmu.AddPort("Migration", gmmu.migrationPort)
 	gmmu.bottomPort = sim.NewLimitNumMsgPort(gmmu, 4096, name+".BottomPort")
 	gmmu.AddPort("Bottom", gmmu.bottomPort)
 

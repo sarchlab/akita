@@ -16,22 +16,17 @@ type transaction struct {
 	req       *vm.TranslationReq
 	page      vm.Page
 	cycleLeft int
-	migration *vm.PageMigrationReqToDriver
 }
 
-// GMMU is the default gmmu implementation. It is also an akita Component.
+// Comp is the default gmmu implementation. It is also an akita Component.
 type Comp struct {
 	sim.TickingComponent
 
 	deviceID uint64
 
-	topPort       sim.Port
-	migrationPort sim.Port
-	bottomPort    sim.Port
-
-	LowModule sim.Port
-
-	MigrationServiceProvider sim.Port
+	topPort    sim.Port
+	bottomPort sim.Port
+	LowModule  sim.Port
 
 	topSender    sim.BufferedSender
 	bottomSender sim.BufferedSender
@@ -41,17 +36,10 @@ type Comp struct {
 	maxRequestsInFlight int
 
 	walkingTranslations []transaction
-	migrationQueue      []transaction
 	remoteMemReqs       map[uint64]transaction
-
-	migrationQueueSize       int
-	currentOnDemandMigration transaction
-	isDoingMigration         bool
 
 	toRemoveFromPTW        []int
 	PageAccessedByDeviceID map[uint64][]uint64
-
-	isRecording bool
 }
 
 // Tick defines how the gmmu update state each cycle
@@ -167,50 +155,9 @@ func (gmmu *Comp) finalizePageWalk(
 ) bool {
 	req := gmmu.walkingTranslations[walkingIndex].req
 	page, _ := gmmu.pageTable.Find(req.PID, req.VAddr)
-
 	gmmu.walkingTranslations[walkingIndex].page = page
 
-	if page.IsMigrating {
-		return gmmu.addTransactionToMigrationQueue(walkingIndex)
-	}
-
-	if gmmu.pageNeedMigrate(gmmu.walkingTranslations[walkingIndex]) {
-		return gmmu.addTransactionToMigrationQueue(walkingIndex)
-	}
-
 	return gmmu.doPageWalkHit(now, walkingIndex)
-}
-
-func (gmmu *Comp) addTransactionToMigrationQueue(walkingIndex int) bool {
-	if len(gmmu.migrationQueue) >= gmmu.migrationQueueSize {
-		return false
-	}
-
-	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
-	gmmu.migrationQueue = append(gmmu.migrationQueue,
-		gmmu.walkingTranslations[walkingIndex])
-
-	page := gmmu.walkingTranslations[walkingIndex].page
-	page.IsMigrating = true
-	gmmu.pageTable.Update(page)
-
-	return true
-}
-
-func (gmmu *Comp) pageNeedMigrate(walking transaction) bool {
-	if walking.req.DeviceID == walking.page.DeviceID {
-		return false
-	}
-
-	if !walking.page.Unified {
-		return false
-	}
-
-	if walking.page.IsPinned {
-		return false
-	}
-
-	return true
 }
 
 func (gmmu *Comp) doPageWalkHit(
@@ -239,25 +186,6 @@ func (gmmu *Comp) doPageWalkHit(
 	return true
 }
 
-func (gmmu *Comp) sendTranlationRsp(
-	now sim.VTimeInSec,
-	trans transaction,
-) (madeProgress bool) {
-	req := trans.req
-	page := trans.page
-
-	rsp := vm.TranslationRspBuilder{}.
-		WithSendTime(now).
-		WithSrc(gmmu.topPort).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
-	gmmu.topSender.Send(rsp)
-
-	return true
-}
-
 func (gmmu *Comp) toRemove(index int) bool {
 	for i := 0; i < len(gmmu.toRemoveFromPTW); i++ {
 		remove := gmmu.toRemoveFromPTW[i]
@@ -266,18 +194,6 @@ func (gmmu *Comp) toRemove(index int) bool {
 		}
 	}
 	return false
-}
-
-func unique(intSlice []uint64) []uint64 {
-	keys := make(map[int]bool)
-	list := []uint64{}
-	for _, entry := range intSlice {
-		if _, value := keys[int(entry)]; !value {
-			keys[int(entry)] = true
-			list = append(list, entry)
-		}
-	}
-	return list
 }
 
 func (gmmu *Comp) fetchFromBottom(now sim.VTimeInSec) bool {
