@@ -19,7 +19,6 @@ type Builder struct {
 	pageWalkingLatency       int
 	deviceID                 uint64
 	lowModule                sim.Port
-	isRecording              bool
 }
 
 // MakeBuilder creates a new builder
@@ -28,7 +27,6 @@ func MakeBuilder() Builder {
 		freq:              1 * sim.GHz,
 		log2PageSize:      12,
 		maxNumReqInFlight: 16,
-		isRecording:       false,
 	}
 }
 
@@ -53,13 +51,6 @@ func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
 // WithPageTable sets the page table that the GMMU uses.
 func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 	b.pageTable = pageTable
-	return b
-}
-
-// WithMigrationServiceProvider sets the destination port that can perform
-// page migration.
-func (b Builder) WithMigrationServiceProvider(p sim.Port) Builder {
-	b.migrationServiceProvider = p
 	return b
 }
 
@@ -88,14 +79,7 @@ func (b Builder) WithLowModule(p sim.Port) Builder {
 	return b
 }
 
-// WithRecording sets whether the GMMU is recording
-func (b Builder) WithRecording(isRecording bool) Builder {
-	b.isRecording = isRecording
-
-	return b
-}
-
-func (b Builder) configureInternalStates(gmmu *GMMU) {
+func (b Builder) configureInternalStates(gmmu *Comp) {
 	gmmu.MigrationServiceProvider = b.migrationServiceProvider
 	gmmu.migrationQueueSize = 4096
 	gmmu.maxRequestsInFlight = b.maxNumReqInFlight
@@ -103,10 +87,9 @@ func (b Builder) configureInternalStates(gmmu *GMMU) {
 	gmmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
 	gmmu.deviceID = b.deviceID
 	gmmu.LowModule = b.lowModule
-	gmmu.isRecording = b.isRecording
 }
 
-func (b Builder) createPageTable(gmmu *GMMU) {
+func (b Builder) createPageTable(gmmu *Comp) {
 	if b.pageTable != nil {
 		gmmu.pageTable = b.pageTable
 	} else {
@@ -114,7 +97,7 @@ func (b Builder) createPageTable(gmmu *GMMU) {
 	}
 }
 
-func (b Builder) createPorts(name string, gmmu *GMMU) {
+func (b Builder) createPorts(name string, gmmu *Comp) {
 	gmmu.topPort = sim.NewLimitNumMsgPort(gmmu, 4096, name+".ToTop")
 	gmmu.AddPort("Top", gmmu.topPort)
 	gmmu.migrationPort = sim.NewLimitNumMsgPort(gmmu, 1, name+".MigrationPort")
@@ -130,8 +113,8 @@ func (b Builder) createPorts(name string, gmmu *GMMU) {
 	gmmu.remoteMemReqs = make(map[uint64]transaction)
 }
 
-func (b Builder) Build(name string) *GMMU {
-	gmmu := new(GMMU)
+func (b Builder) Build(name string) *Comp {
+	gmmu := new(Comp)
 	gmmu.TickingComponent = *sim.NewTickingComponent(
 		name, b.engine, b.freq, gmmu)
 

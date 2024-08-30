@@ -10,7 +10,6 @@ type TranslationReq struct {
 	sim.MsgMeta
 	VAddr    uint64
 	PID      PID
-	TaskID   string
 	DeviceID uint64
 }
 
@@ -25,7 +24,6 @@ type TranslationReqBuilder struct {
 	src, dst sim.Port
 	vAddr    uint64
 	pid      PID
-	taskID   string
 	deviceID uint64
 }
 
@@ -67,11 +65,6 @@ func (b TranslationReqBuilder) WithDeviceID(deviceID uint64) TranslationReqBuild
 	return b
 }
 
-func (b TranslationReqBuilder) WithTaskID(taskID string) TranslationReqBuilder {
-	b.taskID = taskID
-	return b
-}
-
 // Build creates a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
 	r := &TranslationReq{}
@@ -81,7 +74,6 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.SendTime = b.sendTime
 	r.VAddr = b.vAddr
 	r.PID = b.pid
-	r.TaskID = b.taskID
 	r.DeviceID = b.deviceID
 	return r
 }
@@ -92,7 +84,6 @@ type TranslationRsp struct {
 	sim.MsgMeta
 	RespondTo string // The ID of the request it replies
 	Page      Page
-	TaskID    string
 }
 
 // Meta returns the meta data associated with the message.
@@ -111,7 +102,6 @@ type TranslationRspBuilder struct {
 	src, dst sim.Port
 	rspTo    string
 	page     Page
-	taskID   string
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -146,11 +136,6 @@ func (b TranslationRspBuilder) WithPage(page Page) TranslationRspBuilder {
 	return b
 }
 
-func (b TranslationRspBuilder) WithTaskID(taskID string) TranslationRspBuilder {
-	b.taskID = taskID
-	return b
-}
-
 // Build creates a new TranslationRsp
 func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r := &TranslationRsp{}
@@ -160,12 +145,9 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	r.Page = b.page
-	r.TaskID = b.taskID
 	return r
 }
 
-// PageMigrationInfo records the information required for the driver to perform
-// a page migration.
 type PageMigrationInfo struct {
 	GPUReqToVAddrMap map[uint64][]uint64
 }
