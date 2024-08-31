@@ -27,6 +27,7 @@ type reqToBottom struct {
 // the address translated from virtual to physical.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort         sim.Port
 	bottomPort      sim.Port
@@ -59,58 +60,66 @@ func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
-// Tick updates state at each cycle.
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick updates state at each cycle.
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	if !c.isFlushing {
-		madeProgress = c.runPipeline()
+	if !m.isFlushing {
+		madeProgress = m.runPipeline()
 	}
 
-	madeProgress = c.handleCtrlRequest() || madeProgress
+	madeProgress = m.handleCtrlRequest() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runPipeline() bool {
+func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.respond() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respond() || madeProgress
 	}
 
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.parseTranslation() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseTranslation() || madeProgress
 	}
 
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.translate() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.translate() || madeProgress
 	}
 
-	madeProgress = c.doGL0Invalidate() || madeProgress
+	madeProgress = m.doGL0Invalidate() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) doGL0Invalidate() bool {
-	if c.currentGL0InvReq == nil {
+func (m *middleware) doGL0Invalidate() bool {
+	if m.currentGL0InvReq == nil {
 		return false
 	}
 
-	if c.isWaitingOnGL0InvalidateRsp {
+	if m.isWaitingOnGL0InvalidateRsp {
 		return false
 	}
 
-	if c.totalRequestsUponGL0InvArrival == 0 {
+	if m.totalRequestsUponGL0InvArrival == 0 {
 		req := mem.GL0InvalidateReqBuilder{}.
-			WithPID(c.currentGL0InvReq.PID).
-			WithSrc(c.bottomPort).
-			WithDst(c.lowModuleFinder.Find(0)).
+			WithPID(m.currentGL0InvReq.PID).
+			WithSrc(m.bottomPort).
+			WithDst(m.lowModuleFinder.Find(0)).
 			Build()
 
-		err := c.bottomPort.Send(req)
+		err := m.bottomPort.Send(req)
 		if err == nil {
-			c.isWaitingOnGL0InvalidateRsp = true
+			m.isWaitingOnGL0InvalidateRsp = true
 			return true
 		}
 	}
@@ -118,33 +127,33 @@ func (c *Comp) doGL0Invalidate() bool {
 	return true
 }
 
-func (c *Comp) translate() bool {
-	if c.currentGL0InvReq != nil {
+func (m *middleware) translate() bool {
+	if m.currentGL0InvReq != nil {
 		return false
 	}
 
-	item := c.topPort.PeekIncoming()
+	item := m.topPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
 	switch req := item.(type) {
 	case *mem.GL0InvalidateReq:
-		return c.handleGL0InvalidateReq(req)
+		return m.handleGL0InvalidateReq(req)
 	}
 
 	req := item.(mem.AccessReq)
 	vAddr := req.GetAddress()
-	vPageID := c.addrToPageID(vAddr)
+	vPageID := m.addrToPageID(vAddr)
 
 	transReq := vm.TranslationReqBuilder{}.
-		WithSrc(c.translationPort).
-		WithDst(c.translationProvider).
+		WithSrc(m.translationPort).
+		WithDst(m.translationProvider).
 		WithPID(req.GetPID()).
 		WithVAddr(vPageID).
-		WithDeviceID(c.deviceID).
+		WithDeviceID(m.deviceID).
 		Build()
-	err := c.translationPort.Send(transReq)
+	err := m.translationPort.Send(transReq)
 	if err != nil {
 		return false
 	}
@@ -153,77 +162,77 @@ func (c *Comp) translate() bool {
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
 	}
-	c.transactions = append(c.transactions, translation)
+	m.transactions = append(m.transactions, translation)
 
-	tracing.TraceReqReceive(req, c)
-	tracing.TraceReqInitiate(transReq, c, tracing.MsgIDAtReceiver(req, c))
+	tracing.TraceReqReceive(req, m.Comp)
+	tracing.TraceReqInitiate(transReq, m.Comp, tracing.MsgIDAtReceiver(req, m.Comp))
 
-	c.topPort.RetrieveIncoming()
+	m.topPort.RetrieveIncoming()
 
 	return true
 }
 
-func (c *Comp) handleGL0InvalidateReq(
+func (m *middleware) handleGL0InvalidateReq(
 	req *mem.GL0InvalidateReq,
 ) bool {
-	if c.currentGL0InvReq != nil {
+	if m.currentGL0InvReq != nil {
 		return false
 	}
 
-	c.currentGL0InvReq = req
-	c.totalRequestsUponGL0InvArrival =
-		len(c.transactions) + len(c.inflightReqToBottom)
-	c.topPort.RetrieveIncoming()
+	m.currentGL0InvReq = req
+	m.totalRequestsUponGL0InvArrival =
+		len(m.transactions) + len(m.inflightReqToBottom)
+	m.topPort.RetrieveIncoming()
 
 	return true
 }
 
-func (c *Comp) parseTranslation() bool {
-	rsp := c.translationPort.PeekIncoming()
+func (m *middleware) parseTranslation() bool {
+	rsp := m.translationPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
 
 	transRsp := rsp.(*vm.TranslationRsp)
-	transaction := c.findTranslationByReqID(transRsp.RespondTo)
+	transaction := m.findTranslationByReqID(transRsp.RespondTo)
 	if transaction == nil {
-		c.translationPort.RetrieveIncoming()
+		m.translationPort.RetrieveIncoming()
 		return true
 	}
 
 	transaction.translationRsp = transRsp
 	transaction.translationDone = true
 	reqFromTop := transaction.incomingReqs[0]
-	translatedReq := c.createTranslatedReq(
+	translatedReq := m.createTranslatedReq(
 		reqFromTop,
 		transaction.translationRsp.Page)
-	err := c.bottomPort.Send(translatedReq)
+	err := m.bottomPort.Send(translatedReq)
 	if err != nil {
 		return false
 	}
 
-	c.inflightReqToBottom = append(c.inflightReqToBottom,
+	m.inflightReqToBottom = append(m.inflightReqToBottom,
 		reqToBottom{
 			reqFromTop:  reqFromTop,
 			reqToBottom: translatedReq,
 		})
 	transaction.incomingReqs = transaction.incomingReqs[1:]
 	if len(transaction.incomingReqs) == 0 {
-		c.removeExistingTranslation(transaction)
+		m.removeExistingTranslation(transaction)
 	}
 
-	c.translationPort.RetrieveIncoming()
+	m.translationPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(transaction.translationReq, c)
-	tracing.TraceReqInitiate(translatedReq, c,
-		tracing.MsgIDAtReceiver(reqFromTop, c))
+	tracing.TraceReqFinalize(transaction.translationReq, m.Comp)
+	tracing.TraceReqInitiate(translatedReq, m.Comp,
+		tracing.MsgIDAtReceiver(reqFromTop, m.Comp))
 
 	return true
 }
 
 //nolint:funlen,gocyclo
-func (c *Comp) respond() bool {
-	rsp := c.bottomPort.PeekIncoming()
+func (m *middleware) respond() bool {
+	rsp := m.bottomPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
@@ -236,12 +245,12 @@ func (c *Comp) respond() bool {
 	var rspToTop mem.AccessRsp
 	switch rsp := rsp.(type) {
 	case *mem.DataReadyRsp:
-		reqInBottom = c.isReqInBottomByID(rsp.RespondTo)
+		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
 		if reqInBottom {
-			reqToBottomCombo = c.findReqToBottomByID(rsp.RespondTo)
+			reqToBottomCombo = m.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			drToTop := mem.DataReadyRspBuilder{}.
-				WithSrc(c.topPort).
+				WithSrc(m.topPort).
 				WithDst(reqFromTop.Meta().Src).
 				WithRspTo(reqFromTop.Meta().ID).
 				WithData(rsp.Data).
@@ -249,23 +258,23 @@ func (c *Comp) respond() bool {
 			rspToTop = drToTop
 		}
 	case *mem.WriteDoneRsp:
-		reqInBottom = c.isReqInBottomByID(rsp.RespondTo)
+		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
 		if reqInBottom {
-			reqToBottomCombo = c.findReqToBottomByID(rsp.RespondTo)
+			reqToBottomCombo = m.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			rspToTop = mem.WriteDoneRspBuilder{}.
-				WithSrc(c.topPort).
+				WithSrc(m.topPort).
 				WithDst(reqFromTop.Meta().Src).
 				WithRspTo(reqFromTop.Meta().ID).
 				Build()
 		}
 	case *mem.GL0InvalidateRsp:
-		gl0InvalidateReq := c.currentGL0InvReq
+		gl0InvalidateReq := m.currentGL0InvReq
 		if gl0InvalidateReq == nil {
 			log.Panicf("Cannot have rsp without req")
 		}
 		rspToTop = mem.GL0InvalidateRspBuilder{}.
-			WithSrc(c.topPort).
+			WithSrc(m.topPort).
 			WithDst(gl0InvalidateReq.Src).
 			WithRspTo(gl0InvalidateReq.Meta().ID).
 			Build()
@@ -275,65 +284,65 @@ func (c *Comp) respond() bool {
 	}
 
 	if reqInBottom {
-		err := c.topPort.Send(rspToTop)
+		err := m.topPort.Send(rspToTop)
 		if err != nil {
 			return false
 		}
 
-		c.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
+		m.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
 
-		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, c)
-		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, c)
+		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, m.Comp)
+		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, m.Comp)
 	}
 
 	if gl0InvalidateRsp {
-		err := c.topPort.Send(rspToTop)
+		err := m.topPort.Send(rspToTop)
 		if err != nil {
 			return false
 		}
-		c.currentGL0InvReq = nil
-		c.isWaitingOnGL0InvalidateRsp = false
-		if c.totalRequestsUponGL0InvArrival != 0 {
+		m.currentGL0InvReq = nil
+		m.isWaitingOnGL0InvalidateRsp = false
+		if m.totalRequestsUponGL0InvArrival != 0 {
 			log.Panicf("Something went wrong \n")
 		}
 	}
 
-	if c.currentGL0InvReq != nil {
-		c.totalRequestsUponGL0InvArrival--
+	if m.currentGL0InvReq != nil {
+		m.totalRequestsUponGL0InvArrival--
 
-		if c.totalRequestsUponGL0InvArrival < 0 {
+		if m.totalRequestsUponGL0InvArrival < 0 {
 			log.Panicf("Not possible")
 		}
 	}
 
-	c.bottomPort.RetrieveIncoming()
+	m.bottomPort.RetrieveIncoming()
 	return true
 }
 
-func (c *Comp) createTranslatedReq(
+func (m *middleware) createTranslatedReq(
 	req mem.AccessReq,
 	page vm.Page,
 ) mem.AccessReq {
 	switch req := req.(type) {
 	case *mem.ReadReq:
-		return c.createTranslatedReadReq(req, page)
+		return m.createTranslatedReadReq(req, page)
 	case *mem.WriteReq:
-		return c.createTranslatedWriteReq(req, page)
+		return m.createTranslatedWriteReq(req, page)
 	default:
 		log.Panicf("cannot translate request of type %s", reflect.TypeOf(req))
 		return nil
 	}
 }
 
-func (c *Comp) createTranslatedReadReq(
+func (m *middleware) createTranslatedReadReq(
 	req *mem.ReadReq,
 	page vm.Page,
 ) *mem.ReadReq {
-	offset := req.Address % (1 << c.log2PageSize)
+	offset := req.Address % (1 << m.log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.ReadReqBuilder{}.
-		WithSrc(c.bottomPort).
-		WithDst(c.lowModuleFinder.Find(addr)).
+		WithSrc(m.bottomPort).
+		WithDst(m.lowModuleFinder.Find(addr)).
 		WithAddress(addr).
 		WithByteSize(req.AccessByteSize).
 		WithPID(0).
@@ -343,15 +352,15 @@ func (c *Comp) createTranslatedReadReq(
 	return clone
 }
 
-func (c *Comp) createTranslatedWriteReq(
+func (m *middleware) createTranslatedWriteReq(
 	req *mem.WriteReq,
 	page vm.Page,
 ) *mem.WriteReq {
-	offset := req.Address % (1 << c.log2PageSize)
+	offset := req.Address % (1 << m.log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.WriteReqBuilder{}.
-		WithSrc(c.bottomPort).
-		WithDst(c.lowModuleFinder.Find(addr)).
+		WithSrc(m.bottomPort).
+		WithDst(m.lowModuleFinder.Find(addr)).
 		WithData(req.Data).
 		WithDirtyMask(req.DirtyMask).
 		WithAddress(addr).
@@ -362,12 +371,12 @@ func (c *Comp) createTranslatedWriteReq(
 	return clone
 }
 
-func (c *Comp) addrToPageID(addr uint64) uint64 {
-	return (addr >> c.log2PageSize) << c.log2PageSize
+func (m *middleware) addrToPageID(addr uint64) uint64 {
+	return (addr >> m.log2PageSize) << m.log2PageSize
 }
 
-func (c *Comp) findTranslationByReqID(id string) *transaction {
-	for _, t := range c.transactions {
+func (m *middleware) findTranslationByReqID(id string) *transaction {
+	for _, t := range m.transactions {
 		if t.translationReq.ID == id {
 			return t
 		}
@@ -375,18 +384,18 @@ func (c *Comp) findTranslationByReqID(id string) *transaction {
 	return nil
 }
 
-func (c *Comp) removeExistingTranslation(trans *transaction) {
-	for i, tr := range c.transactions {
+func (m *middleware) removeExistingTranslation(trans *transaction) {
+	for i, tr := range m.transactions {
 		if tr == trans {
-			c.transactions = append(c.transactions[:i], c.transactions[i+1:]...)
+			m.transactions = append(m.transactions[:i], m.transactions[i+1:]...)
 			return
 		}
 	}
 	panic("translation not found")
 }
 
-func (c *Comp) isReqInBottomByID(id string) bool {
-	for _, r := range c.inflightReqToBottom {
+func (m *middleware) isReqInBottomByID(id string) bool {
+	for _, r := range m.inflightReqToBottom {
 		if r.reqToBottom.Meta().ID == id {
 			return true
 		}
@@ -394,8 +403,8 @@ func (c *Comp) isReqInBottomByID(id string) bool {
 	return false
 }
 
-func (c *Comp) findReqToBottomByID(id string) reqToBottom {
-	for _, r := range c.inflightReqToBottom {
+func (m *middleware) findReqToBottomByID(id string) reqToBottom {
+	for _, r := range m.inflightReqToBottom {
 		if r.reqToBottom.Meta().ID == id {
 			return r
 		}
@@ -403,20 +412,20 @@ func (c *Comp) findReqToBottomByID(id string) reqToBottom {
 	panic("req to bottom not found")
 }
 
-func (c *Comp) removeReqToBottomByID(id string) {
-	for i, r := range c.inflightReqToBottom {
+func (m *middleware) removeReqToBottomByID(id string) {
+	for i, r := range m.inflightReqToBottom {
 		if r.reqToBottom.Meta().ID == id {
-			c.inflightReqToBottom = append(
-				c.inflightReqToBottom[:i],
-				c.inflightReqToBottom[i+1:]...)
+			m.inflightReqToBottom = append(
+				m.inflightReqToBottom[:i],
+				m.inflightReqToBottom[i+1:]...)
 			return
 		}
 	}
 	panic("req to bottom not found")
 }
 
-func (c *Comp) handleCtrlRequest() bool {
-	req := c.ctrlPort.PeekIncoming()
+func (m *middleware) handleCtrlRequest() bool {
+	req := m.ctrlPort.PeekIncoming()
 	if req == nil {
 		return false
 	}
@@ -424,64 +433,64 @@ func (c *Comp) handleCtrlRequest() bool {
 	msg := req.(*mem.ControlMsg)
 
 	if msg.DiscardTransations {
-		return c.handleFlushReq(msg)
+		return m.handleFlushReq(msg)
 	} else if msg.Restart {
-		return c.handleRestartReq(msg)
+		return m.handleRestartReq(msg)
 	}
 
 	panic("never")
 }
 
-func (c *Comp) handleFlushReq(
+func (m *middleware) handleFlushReq(
 	req *mem.ControlMsg,
 ) bool {
 	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(c.ctrlPort).
+		WithSrc(m.ctrlPort).
 		WithDst(req.Src).
 		ToNotifyDone().
 		Build()
 
-	err := c.ctrlPort.Send(rsp)
+	err := m.ctrlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	c.ctrlPort.RetrieveIncoming()
+	m.ctrlPort.RetrieveIncoming()
 
-	c.transactions = nil
-	c.inflightReqToBottom = nil
-	c.isFlushing = true
+	m.transactions = nil
+	m.inflightReqToBottom = nil
+	m.isFlushing = true
 
 	return true
 }
 
-func (c *Comp) handleRestartReq(
+func (m *middleware) handleRestartReq(
 	req *mem.ControlMsg,
 ) bool {
 	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(c.ctrlPort).
+		WithSrc(m.ctrlPort).
 		WithDst(req.Src).
 		ToNotifyDone().
 		Build()
 
-	err := c.ctrlPort.Send(rsp)
+	err := m.ctrlPort.Send(rsp)
 
 	if err != nil {
 		return false
 	}
 
-	for c.topPort.RetrieveIncoming() != nil {
+	for m.topPort.RetrieveIncoming() != nil {
 	}
 
-	for c.bottomPort.RetrieveIncoming() != nil {
+	for m.bottomPort.RetrieveIncoming() != nil {
 	}
 
-	for c.translationPort.RetrieveIncoming() != nil {
+	for m.translationPort.RetrieveIncoming() != nil {
 	}
 
-	c.isFlushing = false
+	m.isFlushing = false
 
-	c.ctrlPort.RetrieveIncoming()
+	m.ctrlPort.RetrieveIncoming()
 
 	return true
 }

@@ -40,6 +40,7 @@ func (p Protocol) isHBM() bool {
 // Comp is a MemController handles read and write requests.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort sim.Port
 
@@ -54,19 +55,27 @@ type Comp struct {
 	inflightTransactions []*signal.Transaction
 }
 
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
 // Tick updates memory controller's internal state.
-func (c *Comp) Tick() (madeProgress bool) {
-	madeProgress = c.respond() || madeProgress
-	madeProgress = c.respond() || madeProgress
-	madeProgress = c.channel.Tick() || madeProgress
-	madeProgress = c.issue() || madeProgress
-	madeProgress = c.subTransactionQueue.Tick() || madeProgress
-	madeProgress = c.parseTop() || madeProgress
+func (m *middleware) Tick() (madeProgress bool) {
+	madeProgress = m.respond() || madeProgress
+	madeProgress = m.respond() || madeProgress
+	madeProgress = m.channel.Tick() || madeProgress
+	madeProgress = m.issue() || madeProgress
+	madeProgress = m.subTransactionQueue.Tick() || madeProgress
+	madeProgress = m.parseTop() || madeProgress
 	return madeProgress
 }
 
-func (c *Comp) parseTop() (madeProgress bool) {
-	msg := c.topPort.PeekIncoming()
+func (m *middleware) parseTop() (madeProgress bool) {
+	msg := m.topPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -79,26 +88,26 @@ func (c *Comp) parseTop() (madeProgress bool) {
 		trans.Write = msg
 	}
 
-	c.assignTransInternalAddress(trans)
-	c.subTransSplitter.Split(trans)
+	m.assignTransInternalAddress(trans)
+	m.subTransSplitter.Split(trans)
 
-	if !c.subTransactionQueue.CanPush(len(trans.SubTransactions)) {
+	if !m.subTransactionQueue.CanPush(len(trans.SubTransactions)) {
 		return false
 	}
 
-	c.subTransactionQueue.Push(trans)
-	c.inflightTransactions = append(c.inflightTransactions, trans)
-	c.topPort.RetrieveIncoming()
+	m.subTransactionQueue.Push(trans)
+	m.inflightTransactions = append(m.inflightTransactions, trans)
+	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, c)
+	tracing.TraceReqReceive(msg, m.Comp)
 	for _, st := range trans.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
-			tracing.MsgIDAtReceiver(msg, c),
-			c,
+			tracing.MsgIDAtReceiver(msg, m.Comp),
+			m.Comp,
 			"sub-trans",
 			"sub-trans",
-			c.Name()+".SubTransQueue",
+			m.Comp.Name()+".SubTransQueue",
 			nil,
 		)
 	}
@@ -109,9 +118,9 @@ func (c *Comp) parseTop() (madeProgress bool) {
 	return true
 }
 
-func (c *Comp) assignTransInternalAddress(trans *signal.Transaction) {
-	if c.addrConverter != nil {
-		trans.InternalAddress = c.addrConverter.ConvertExternalToInternal(
+func (m *middleware) assignTransInternalAddress(trans *signal.Transaction) {
+	if m.addrConverter != nil {
+		trans.InternalAddress = m.addrConverter.ConvertExternalToInternal(
 			trans.GlobalAddress())
 		return
 	}
@@ -119,22 +128,22 @@ func (c *Comp) assignTransInternalAddress(trans *signal.Transaction) {
 	trans.InternalAddress = trans.GlobalAddress()
 }
 
-func (c *Comp) issue() (madeProgress bool) {
-	cmd := c.cmdQueue.GetCommandToIssue()
+func (m *middleware) issue() (madeProgress bool) {
+	cmd := m.cmdQueue.GetCommandToIssue()
 	if cmd == nil {
 		return false
 	}
 
-	c.channel.StartCommand(cmd)
-	c.channel.UpdateTiming(cmd)
+	m.channel.StartCommand(cmd)
+	m.channel.UpdateTiming(cmd)
 
 	return true
 }
 
-func (c *Comp) respond() (madeProgress bool) {
-	for i, t := range c.inflightTransactions {
+func (m *middleware) respond() (madeProgress bool) {
+	for i, t := range m.inflightTransactions {
 		if t.IsCompleted() {
-			done := c.finalizeTransaction(t, i)
+			done := m.finalizeTransaction(t, i)
 			if done {
 				return true
 			}
@@ -144,44 +153,44 @@ func (c *Comp) respond() (madeProgress bool) {
 	return false
 }
 
-func (c *Comp) finalizeTransaction(
+func (m *middleware) finalizeTransaction(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
 	if t.Write != nil {
-		done = c.finalizeWriteTrans(t, i)
+		done = m.finalizeWriteTrans(t, i)
 		if done {
-			tracing.TraceReqComplete(t.Write, c)
+			tracing.TraceReqComplete(t.Write, m.Comp)
 		}
 	} else {
-		done = c.finalizeReadTrans(t, i)
+		done = m.finalizeReadTrans(t, i)
 		if done {
-			tracing.TraceReqComplete(t.Read, c)
+			tracing.TraceReqComplete(t.Read, m.Comp)
 		}
 	}
 
 	return done
 }
 
-func (c *Comp) finalizeWriteTrans(
+func (m *middleware) finalizeWriteTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	err := c.storage.Write(t.InternalAddress, t.Write.Data)
+	err := m.storage.Write(t.InternalAddress, t.Write.Data)
 	if err != nil {
 		panic(err)
 	}
 
 	writeDone := mem.WriteDoneRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(t.Write.Src).
 		WithRspTo(t.Write.ID).
 		Build()
-	sendErr := c.topPort.Send(writeDone)
+	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
-		c.inflightTransactions = append(
-			c.inflightTransactions[:i],
-			c.inflightTransactions[i+1:]...)
+		m.inflightTransactions = append(
+			m.inflightTransactions[:i],
+			m.inflightTransactions[i+1:]...)
 
 		// fmt.Printf("%.10f, %s, finish transaction %s, %x\n",
 		// 	now, c.Name(), t.Write.ID, t.InternalAddress)
@@ -191,26 +200,26 @@ func (c *Comp) finalizeWriteTrans(
 	return false
 }
 
-func (c *Comp) finalizeReadTrans(
+func (m *middleware) finalizeReadTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	data, err := c.storage.Read(t.InternalAddress, t.Read.AccessByteSize)
+	data, err := m.storage.Read(t.InternalAddress, t.Read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
 
 	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(t.Read.Src).
 		WithData(data).
 		WithRspTo(t.Read.ID).
 		Build()
-	sendErr := c.topPort.Send(dataReady)
+	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
-		c.inflightTransactions = append(
-			c.inflightTransactions[:i],
-			c.inflightTransactions[i+1:]...)
+		m.inflightTransactions = append(
+			m.inflightTransactions[:i],
+			m.inflightTransactions[i+1:]...)
 
 		// fmt.Printf("%.10f, %s, finish transaction %s, %x\n",
 		// 	now, c.Name(), t.Read.ID, t.InternalAddress)

@@ -105,5 +105,8 @@ func (b Builder) Build(
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
+	middleware := &middleware{Comp: c}
+	c.AddMiddleware(middleware)
+
 	return c
 }

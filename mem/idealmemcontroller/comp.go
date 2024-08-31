@@ -38,6 +38,7 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort          sim.Port
 	Storage          *mem.Storage
@@ -45,6 +46,10 @@ type Comp struct {
 	addressConverter mem.AddressConverter
 
 	width int
+}
+
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
 }
 
 // Handle defines how the Comp handles event
@@ -63,21 +68,25 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
+type middleware struct {
+	*Comp
+}
+
 // Tick updates ideal memory controller state.
-func (c *Comp) Tick() bool {
-	msg := c.topPort.RetrieveIncoming()
+func (m *middleware) Tick() bool {
+	msg := m.topPort.RetrieveIncoming()
 	if msg == nil {
 		return false
 	}
 
-	tracing.TraceReqReceive(msg, c)
+	tracing.TraceReqReceive(msg, m.Comp)
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
-		c.handleReadReq(msg)
+		m.handleReadReq(msg)
 		return true
 	case *mem.WriteReq:
-		c.handleWriteReq(msg)
+		m.handleWriteReq(msg)
 		return true
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
@@ -86,18 +95,18 @@ func (c *Comp) Tick() bool {
 	return false
 }
 
-func (c *Comp) handleReadReq(req *mem.ReadReq) {
-	now := c.CurrentTime()
-	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
-	respondEvent := newReadRespondEvent(timeToSchedule, c, req)
-	c.Engine.Schedule(respondEvent)
+func (m *middleware) handleReadReq(req *mem.ReadReq) {
+	now := m.CurrentTime()
+	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
+	respondEvent := newReadRespondEvent(timeToSchedule, m.Comp, req)
+	m.Engine.Schedule(respondEvent)
 }
 
-func (c *Comp) handleWriteReq(req *mem.WriteReq) {
-	now := c.CurrentTime()
-	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
-	respondEvent := newWriteRespondEvent(timeToSchedule, c, req)
-	c.Engine.Schedule(respondEvent)
+func (m *middleware) handleWriteReq(req *mem.WriteReq) {
+	now := m.CurrentTime()
+	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
+	respondEvent := newWriteRespondEvent(timeToSchedule, m.Comp, req)
+	m.Engine.Schedule(respondEvent)
 }
 
 func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {

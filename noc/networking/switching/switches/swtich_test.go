@@ -47,6 +47,7 @@ var _ = Describe("Switch", func() {
 		routingTable               *MockTable
 		arbiter                    *MockArbiter
 		sw                         *Comp
+		swMiddleware               *middleware
 	)
 
 	BeforeEach(func() {
@@ -67,6 +68,7 @@ var _ = Describe("Switch", func() {
 			Build("Switch")
 		sw.addPort(portComplex1)
 		sw.addPort(portComplex2)
+		swMiddleware = sw.Middlewares()[0].(*middleware)
 	})
 
 	AfterEach(func() {
@@ -97,7 +99,7 @@ var _ = Describe("Switch", func() {
 				Expect(i.flit).To(Equal(flit))
 			})
 
-		madeProgress := sw.startProcessing()
+		madeProgress := swMiddleware.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -119,7 +121,7 @@ var _ = Describe("Switch", func() {
 		port2.EXPECT().PeekIncoming().Return(nil)
 		port1Pipeline.EXPECT().CanAccept().Return(false)
 
-		madeProgress := sw.startProcessing()
+		madeProgress := swMiddleware.startProcessing()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -131,7 +133,7 @@ var _ = Describe("Switch", func() {
 		port1Pipeline.EXPECT().Tick().Return(false)
 		port2Pipeline.EXPECT().Tick().Return(true)
 
-		madeProgress := sw.movePipeline()
+		madeProgress := swMiddleware.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -156,7 +158,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer1.EXPECT().Push(flit)
 		routingTable.EXPECT().FindPort(dstPort).Return(portComplex2.localPort)
 
-		madeProgress := sw.route()
+		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(flit.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
@@ -179,7 +181,7 @@ var _ = Describe("Switch", func() {
 		routeBuffer2.EXPECT().Peek().Return(nil)
 		forwardBuffer1.EXPECT().CanPush().Return(false)
 
-		madeProgress := sw.route()
+		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -207,7 +209,7 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().CanPush().Return(true)
 		sendOutBuffer2.EXPECT().Push(flit)
 
-		madeProgress := sw.forward()
+		madeProgress := swMiddleware.forward()
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -232,7 +234,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2.EXPECT().Peek().Return(nil)
 		sendOutBuffer2.EXPECT().CanPush().Return(false)
 
-		madeProgress := sw.forward()
+		madeProgress := swMiddleware.forward()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -255,7 +257,7 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().Pop()
 		localPort2.EXPECT().Send(flit).Return(nil)
 
-		madeProgress := sw.sendOut()
+		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
@@ -279,7 +281,7 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
 		localPort2.EXPECT().Send(flit).Return(&sim.SendError{})
 
-		madeProgress := sw.sendOut()
+		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeFalse())
 		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
