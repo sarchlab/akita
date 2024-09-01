@@ -38,6 +38,10 @@ func (m *sampleMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+func (m *sampleMsg) Clone() sim.Msg {
+	return m
+}
+
 var _ = Describe("Switch", func() {
 	var (
 		mockCtrl                   *gomock.Controller

@@ -29,7 +29,11 @@ func Example() {
 
 	agentA.TickLater()
 
-	engine.Run()
+	err := engine.Run()
+	if err != nil {
+		panic(err)
+	}
+
 	// Output:
 	// Ping 0, 5.00
 	// Ping 1, 5.00
