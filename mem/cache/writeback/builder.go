@@ -157,6 +157,9 @@ func (b Builder) Build(name string) *Comp {
 	b.createInternalStages(cache)
 	b.createInternalBuffers(cache)
 
+	middleware := &middleware{Comp: cache}
+	cache.AddMiddleware(middleware)
+
 	return cache
 }
 

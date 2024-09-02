@@ -54,6 +54,10 @@ func (b Builder) Build(name string) *Comp {
 	s.routingTable = b.routingTable
 	s.arbiter = b.arbiter
 	s.portToComplexMapping = make(map[sim.Port]portComplex)
+
+	middleware := &middleware{Comp: s}
+	s.AddMiddleware(middleware)
+
 	return s
 }
 

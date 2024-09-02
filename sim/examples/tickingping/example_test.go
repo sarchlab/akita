@@ -5,13 +5,21 @@ import (
 	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
-func Example_pingWithTicking() {
+func Example() {
 	engine := sim.NewSerialEngine()
-	// agentA := NewTickingPingAgent("AgentA", engine, 1*sim.Hz)
-	agentA := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentA")
-	// agentB := NewTickingPingAgent("AgentB", engine, 1*sim.Hz)
-	agentB := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.Hz).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+	agentA := MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.Hz).
+		Build("AgentA")
+	agentB := MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.Hz).
+		Build("AgentB")
+	conn := directconnection.
+		MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("Conn")
 
 	conn.PlugIn(agentA.OutPort, 1)
 	conn.PlugIn(agentB.OutPort, 1)

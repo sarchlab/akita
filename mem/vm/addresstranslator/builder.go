@@ -92,6 +92,9 @@ func (b Builder) Build(name string) *Comp {
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
 
+	middleware := &middleware{Comp: t}
+	t.AddMiddleware(middleware)
+
 	return t
 }
 
