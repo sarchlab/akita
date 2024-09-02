@@ -9,6 +9,7 @@ import (
 // Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -46,63 +47,71 @@ func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
-// Tick update the state of the cache
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick update the state of the cache
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	if !c.isPaused {
-		madeProgress = c.runPipeline() || madeProgress
+	if !m.isPaused {
+		madeProgress = m.runPipeline() || madeProgress
 	}
 
-	madeProgress = c.controlStage.Tick() || madeProgress
+	madeProgress = m.controlStage.Tick() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) runPipeline() bool {
+func (m *middleware) runPipeline() bool {
 	madeProgress := false
-	madeProgress = c.tickRespondStage() || madeProgress
-	madeProgress = c.tickParseBottomStage() || madeProgress
-	madeProgress = c.tickBankStage() || madeProgress
-	madeProgress = c.tickDirectoryStage() || madeProgress
-	madeProgress = c.tickCoalesceState() || madeProgress
+	madeProgress = m.tickRespondStage() || madeProgress
+	madeProgress = m.tickParseBottomStage() || madeProgress
+	madeProgress = m.tickBankStage() || madeProgress
+	madeProgress = m.tickDirectoryStage() || madeProgress
+	madeProgress = m.tickCoalesceState() || madeProgress
 	return madeProgress
 }
 
-func (c *Comp) tickRespondStage() bool {
+func (m *middleware) tickRespondStage() bool {
 	madeProgress := false
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.respondStage.Tick() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondStage.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Comp) tickParseBottomStage() bool {
+func (m *middleware) tickParseBottomStage() bool {
 	madeProgress := false
 
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.parseBottomStage.Tick() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottomStage.Tick() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) tickBankStage() bool {
+func (m *middleware) tickBankStage() bool {
 	madeProgress := false
-	for _, bs := range c.bankStages {
+	for _, bs := range m.bankStages {
 		madeProgress = bs.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Comp) tickDirectoryStage() bool {
-	return c.directoryStage.Tick()
+func (m *middleware) tickDirectoryStage() bool {
+	return m.directoryStage.Tick()
 }
 
-func (c *Comp) tickCoalesceState() bool {
+func (m *middleware) tickCoalesceState() bool {
 	madeProgress := false
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.coalesceStage.Tick() || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.coalesceStage.Tick() || madeProgress
 	}
 	return madeProgress
 }

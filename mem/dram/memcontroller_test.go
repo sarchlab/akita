@@ -20,7 +20,8 @@ var _ = Describe("MemController", func() {
 		channel             *MockChannel
 		storage             *mem.Storage
 
-		memCtrl *Comp
+		memCtrl           *Comp
+		memCtrlMiddleware *middleware
 	)
 
 	BeforeEach(func() {
@@ -42,6 +43,7 @@ var _ = Describe("MemController", func() {
 		memCtrl.cmdQueue = cmdQueue
 		memCtrl.channel = channel
 		memCtrl.storage = storage
+		memCtrlMiddleware = memCtrl.Middlewares()[0].(*middleware)
 	})
 
 	AfterEach(func() {
@@ -52,7 +54,7 @@ var _ = Describe("MemController", func() {
 		It("should do nothing if no message", func() {
 			topPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := memCtrl.parseTop()
+			madeProgress := memCtrlMiddleware.parseTop()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -72,7 +74,7 @@ var _ = Describe("MemController", func() {
 				})
 			subTransactionQueue.EXPECT().CanPush(3).Return(false)
 
-			madeProgress := memCtrl.parseTop()
+			madeProgress := memCtrlMiddleware.parseTop()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -97,7 +99,7 @@ var _ = Describe("MemController", func() {
 			subTransactionQueue.EXPECT().CanPush(3).Return(true)
 			subTransactionQueue.EXPECT().Push(gomock.Any())
 
-			madeProgress := memCtrl.parseTop()
+			madeProgress := memCtrlMiddleware.parseTop()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(memCtrl.inflightTransactions).To(HaveLen(1))
@@ -111,7 +113,7 @@ var _ = Describe("MemController", func() {
 				GetCommandToIssue().
 				Return(nil)
 
-			madeProgress := memCtrl.issue()
+			madeProgress := memCtrlMiddleware.issue()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -124,7 +126,7 @@ var _ = Describe("MemController", func() {
 			channel.EXPECT().StartCommand(cmd)
 			channel.EXPECT().UpdateTiming(cmd)
 
-			madeProgress := memCtrl.issue()
+			madeProgress := memCtrlMiddleware.issue()
 
 			Expect(madeProgress).To(BeTrue())
 		})
@@ -132,7 +134,7 @@ var _ = Describe("MemController", func() {
 
 	Context("respond", func() {
 		It("should do nothing if there is no transaction", func() {
-			madeProgress := memCtrl.respond()
+			madeProgress := memCtrlMiddleware.respond()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -149,7 +151,7 @@ var _ = Describe("MemController", func() {
 				memCtrl.inflightTransactions = append(
 					memCtrl.inflightTransactions, trans)
 
-				madeProgress := memCtrl.respond()
+				madeProgress := memCtrlMiddleware.respond()
 
 				Expect(madeProgress).To(BeFalse())
 			})
@@ -174,7 +176,7 @@ var _ = Describe("MemController", func() {
 
 			topPort.EXPECT().Send(gomock.Any()).Return(nil)
 
-			madeProgress := memCtrl.respond()
+			madeProgress := memCtrlMiddleware.respond()
 
 			Expect(madeProgress).To(BeTrue())
 			data, _ := storage.Read(0x40, 4)
@@ -205,7 +207,7 @@ var _ = Describe("MemController", func() {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			}).Return(nil)
 
-			madeProgress := memCtrl.respond()
+			madeProgress := memCtrlMiddleware.respond()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(memCtrl.inflightTransactions).NotTo(ContainElement(trans))

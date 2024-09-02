@@ -442,6 +442,9 @@ func (b Builder) Build(name string) *Comp {
 	m.topPort = sim.NewLimitNumMsgPort(m, 1024, name+".TopPort")
 	m.AddPort("Top", m.topPort)
 
+	middleware := &middleware{Comp: m}
+	m.AddMiddleware(middleware)
+
 	return m
 }
 

@@ -19,6 +19,7 @@ type transaction struct {
 // Comp is the default mmu implementation. It is also an akita Component.
 type Comp struct {
 	sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort       sim.Port
 	migrationPort sim.Port
@@ -41,83 +42,91 @@ type Comp struct {
 	PageAccessedByDeviceID map[uint64][]uint64
 }
 
-// Tick defines how the MMU update state each cycle
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick defines how the MMU update state each cycle
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.topSender.Tick() || madeProgress
-	madeProgress = c.sendMigrationToDriver() || madeProgress
-	madeProgress = c.walkPageTable() || madeProgress
-	madeProgress = c.processMigrationReturn() || madeProgress
-	madeProgress = c.parseFromTop() || madeProgress
+	madeProgress = m.topSender.Tick() || madeProgress
+	madeProgress = m.sendMigrationToDriver() || madeProgress
+	madeProgress = m.walkPageTable() || madeProgress
+	madeProgress = m.processMigrationReturn() || madeProgress
+	madeProgress = m.parseFromTop() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) walkPageTable() bool {
+func (m *middleware) walkPageTable() bool {
 	madeProgress := false
-	for i := 0; i < len(c.walkingTranslations); i++ {
-		if c.walkingTranslations[i].cycleLeft > 0 {
-			c.walkingTranslations[i].cycleLeft--
+	for i := 0; i < len(m.walkingTranslations); i++ {
+		if m.walkingTranslations[i].cycleLeft > 0 {
+			m.walkingTranslations[i].cycleLeft--
 			madeProgress = true
 			continue
 		}
 
-		madeProgress = c.finalizePageWalk(i) || madeProgress
+		madeProgress = m.finalizePageWalk(i) || madeProgress
 	}
 
-	tmp := c.walkingTranslations[:0]
-	for i := 0; i < len(c.walkingTranslations); i++ {
-		if !c.toRemove(i) {
-			tmp = append(tmp, c.walkingTranslations[i])
+	tmp := m.walkingTranslations[:0]
+	for i := 0; i < len(m.walkingTranslations); i++ {
+		if !m.toRemove(i) {
+			tmp = append(tmp, m.walkingTranslations[i])
 		}
 	}
-	c.walkingTranslations = tmp
-	c.toRemoveFromPTW = nil
+	m.walkingTranslations = tmp
+	m.toRemoveFromPTW = nil
 
 	return madeProgress
 }
 
-func (c *Comp) finalizePageWalk(
+func (m *middleware) finalizePageWalk(
 	walkingIndex int,
 ) bool {
-	req := c.walkingTranslations[walkingIndex].req
-	page, found := c.pageTable.Find(req.PID, req.VAddr)
+	req := m.walkingTranslations[walkingIndex].req
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 
 	if !found {
 		panic("page not found")
 	}
 
-	c.walkingTranslations[walkingIndex].page = page
+	m.walkingTranslations[walkingIndex].page = page
 
 	if page.IsMigrating {
-		return c.addTransactionToMigrationQueue(walkingIndex)
+		return m.addTransactionToMigrationQueue(walkingIndex)
 	}
 
-	if c.pageNeedMigrate(c.walkingTranslations[walkingIndex]) {
-		return c.addTransactionToMigrationQueue(walkingIndex)
+	if m.pageNeedMigrate(m.walkingTranslations[walkingIndex]) {
+		return m.addTransactionToMigrationQueue(walkingIndex)
 	}
 
-	return c.doPageWalkHit(walkingIndex)
+	return m.doPageWalkHit(walkingIndex)
 }
 
-func (c *Comp) addTransactionToMigrationQueue(walkingIndex int) bool {
-	if len(c.migrationQueue) >= c.migrationQueueSize {
+func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
+	if len(m.migrationQueue) >= m.migrationQueueSize {
 		return false
 	}
 
-	c.toRemoveFromPTW = append(c.toRemoveFromPTW, walkingIndex)
-	c.migrationQueue = append(c.migrationQueue,
-		c.walkingTranslations[walkingIndex])
+	m.toRemoveFromPTW = append(m.toRemoveFromPTW, walkingIndex)
+	m.migrationQueue = append(m.migrationQueue,
+		m.walkingTranslations[walkingIndex])
 
-	page := c.walkingTranslations[walkingIndex].page
+	page := m.walkingTranslations[walkingIndex].page
 	page.IsMigrating = true
-	c.pageTable.Update(page)
+	m.pageTable.Update(page)
 
 	return true
 }
 
-func (c *Comp) pageNeedMigrate(walking transaction) bool {
+func (m *middleware) pageNeedMigrate(walking transaction) bool {
 	if walking.req.DeviceID == walking.page.DeviceID {
 		return false
 	}
@@ -133,51 +142,51 @@ func (c *Comp) pageNeedMigrate(walking transaction) bool {
 	return true
 }
 
-func (c *Comp) doPageWalkHit(
+func (m *middleware) doPageWalkHit(
 	walkingIndex int,
 ) bool {
-	if !c.topSender.CanSend(1) {
+	if !m.topSender.CanSend(1) {
 		return false
 	}
-	walking := c.walkingTranslations[walkingIndex]
+	walking := m.walkingTranslations[walkingIndex]
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(walking.req.Src).
 		WithRspTo(walking.req.ID).
 		WithPage(walking.page).
 		Build()
 
-	c.topSender.Send(rsp)
-	c.toRemoveFromPTW = append(c.toRemoveFromPTW, walkingIndex)
+	m.topSender.Send(rsp)
+	m.toRemoveFromPTW = append(m.toRemoveFromPTW, walkingIndex)
 
-	tracing.TraceReqComplete(walking.req, c)
+	tracing.TraceReqComplete(walking.req, m.Comp)
 
 	return true
 }
 
-func (c *Comp) sendMigrationToDriver() (madeProgress bool) {
-	if len(c.migrationQueue) == 0 {
+func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
+	if len(m.migrationQueue) == 0 {
 		return false
 	}
 
-	trans := c.migrationQueue[0]
+	trans := m.migrationQueue[0]
 	req := trans.req
-	page, found := c.pageTable.Find(req.PID, req.VAddr)
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 	if !found {
 		panic("page not found")
 	}
 	trans.page = page
 
 	if req.DeviceID == page.DeviceID || page.IsPinned {
-		c.sendTranlationRsp(trans)
-		c.migrationQueue = c.migrationQueue[1:]
-		c.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
+		m.sendTranlationRsp(trans)
+		m.migrationQueue = m.migrationQueue[1:]
+		m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 
 		return true
 	}
 
-	if c.isDoingMigration {
+	if m.isDoingMigration {
 		return false
 	}
 
@@ -187,38 +196,38 @@ func (c *Comp) sendMigrationToDriver() (madeProgress bool) {
 		append(migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID],
 			trans.req.VAddr)
 
-	c.PageAccessedByDeviceID[page.VAddr] =
-		append(c.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
+	m.PageAccessedByDeviceID[page.VAddr] =
+		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
-		c.migrationPort, c.MigrationServiceProvider)
+		m.migrationPort, m.MigrationServiceProvider)
 	migrationReq.PID = page.PID
 	migrationReq.PageSize = page.PageSize
 	migrationReq.CurrPageHostGPU = page.DeviceID
 	migrationReq.MigrationInfo = migrationInfo
-	migrationReq.CurrAccessingGPUs = unique(c.PageAccessedByDeviceID[page.VAddr])
+	migrationReq.CurrAccessingGPUs = unique(m.PageAccessedByDeviceID[page.VAddr])
 	migrationReq.RespondToTop = true
 
-	err := c.migrationPort.Send(migrationReq)
+	err := m.migrationPort.Send(migrationReq)
 	if err != nil {
 		return false
 	}
 
 	trans.page.IsMigrating = true
-	c.pageTable.Update(trans.page)
+	m.pageTable.Update(trans.page)
 	trans.migration = migrationReq
-	c.isDoingMigration = true
-	c.currentOnDemandMigration = trans
-	c.migrationQueue = c.migrationQueue[1:]
+	m.isDoingMigration = true
+	m.currentOnDemandMigration = trans
+	m.migrationQueue = m.migrationQueue[1:]
 
 	return true
 }
 
-func (c *Comp) markPageAsNotMigratingIfNotInTheMigrationQueue(
+func (m *middleware) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	page vm.Page,
 ) vm.Page {
 	inQueue := false
-	for _, t := range c.migrationQueue {
+	for _, t := range m.migrationQueue {
 		if page.PAddr == t.page.PAddr {
 			inQueue = true
 			break
@@ -227,80 +236,80 @@ func (c *Comp) markPageAsNotMigratingIfNotInTheMigrationQueue(
 
 	if !inQueue {
 		page.IsMigrating = false
-		c.pageTable.Update(page)
+		m.pageTable.Update(page)
 		return page
 	}
 
 	return page
 }
 
-func (c *Comp) sendTranlationRsp(
+func (m *middleware) sendTranlationRsp(
 	trans transaction,
 ) (madeProgress bool) {
 	req := trans.req
 	page := trans.page
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
-	c.topSender.Send(rsp)
+	m.topSender.Send(rsp)
 
 	return true
 }
 
-func (c *Comp) processMigrationReturn() bool {
-	item := c.migrationPort.PeekIncoming()
+func (m *middleware) processMigrationReturn() bool {
+	item := m.migrationPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
-	if !c.topSender.CanSend(1) {
+	if !m.topSender.CanSend(1) {
 		return false
 	}
 
-	req := c.currentOnDemandMigration.req
-	page, found := c.pageTable.Find(req.PID, req.VAddr)
+	req := m.currentOnDemandMigration.req
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 	if !found {
 		panic("page not found")
 	}
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
-	c.topSender.Send(rsp)
+	m.topSender.Send(rsp)
 
-	c.isDoingMigration = false
+	m.isDoingMigration = false
 
-	page = c.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
+	page = m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 	page.IsPinned = true
-	c.pageTable.Update(page)
+	m.pageTable.Update(page)
 
-	c.migrationPort.RetrieveIncoming()
+	m.migrationPort.RetrieveIncoming()
 
 	return true
 }
 
-func (c *Comp) parseFromTop() bool {
-	if len(c.walkingTranslations) >= c.maxRequestsInFlight {
+func (m *middleware) parseFromTop() bool {
+	if len(m.walkingTranslations) >= m.maxRequestsInFlight {
 		return false
 	}
 
-	req := c.topPort.RetrieveIncoming()
+	req := m.topPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
-	tracing.TraceReqReceive(req, c)
+	tracing.TraceReqReceive(req, m.Comp)
 
 	switch req := req.(type) {
 	case *vm.TranslationReq:
-		c.startWalking(req)
+		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
 	}
@@ -308,18 +317,18 @@ func (c *Comp) parseFromTop() bool {
 	return true
 }
 
-func (c *Comp) startWalking(req *vm.TranslationReq) {
+func (m *middleware) startWalking(req *vm.TranslationReq) {
 	translationInPipeline := transaction{
 		req:       req,
-		cycleLeft: c.latency,
+		cycleLeft: m.latency,
 	}
 
-	c.walkingTranslations = append(c.walkingTranslations, translationInPipeline)
+	m.walkingTranslations = append(m.walkingTranslations, translationInPipeline)
 }
 
-func (c *Comp) toRemove(index int) bool {
-	for i := 0; i < len(c.toRemoveFromPTW); i++ {
-		remove := c.toRemoveFromPTW[i]
+func (m *middleware) toRemove(index int) bool {
+	for i := 0; i < len(m.toRemoveFromPTW); i++ {
+		remove := m.toRemoveFromPTW[i]
 		if remove == index {
 			return true
 		}

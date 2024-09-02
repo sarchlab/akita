@@ -112,6 +112,9 @@ func (b Builder) Build(name string) *Comp {
 		ep.PlugIn(dp, ep.numInputChannels)
 	}
 
+	middleware := &middleware{Comp: ep}
+	ep.AddMiddleware(middleware)
+
 	return ep
 }
 
