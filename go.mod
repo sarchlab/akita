@@ -11,7 +11,7 @@ require (
 	github.com/onsi/gomega v1.34.2
 	github.com/rs/xid v1.6.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.8.4
 	github.com/syifan/goseth v0.1.2
 	github.com/tebeka/atexit v0.3.0
 )
