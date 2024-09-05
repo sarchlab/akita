@@ -25,7 +25,11 @@ func (b Builder) WithFreq(f sim.Freq) Builder {
 func (b Builder) Build(name string) *Comp {
 	c := &Comp{}
 	c.TickingComponent = sim.NewSecondaryTickingComponent(name, b.engine, b.freq, c)
-	middleware := &middleware{Comp: c}
+
+	middleware := &middleware{
+		Comp: c,
+	}
 	c.AddMiddleware(middleware)
+
 	return c
 }

@@ -80,7 +80,9 @@ func (m *middleware) forwardMany(
 			break
 		}
 
-		err := head.Meta().Dst.Deliver(head)
+		dst := head.Meta().Dst
+
+		err := dst.Deliver(head)
 		if err != nil {
 			break
 		}
