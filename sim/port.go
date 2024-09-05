@@ -1,6 +1,7 @@
 package sim
 
 import (
+	"fmt"
 	"sync"
 )
 
@@ -51,6 +52,16 @@ var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
 
 // SetConnection sets which connection plugged in to this port.
 func (p *LimitNumMsgPort) SetConnection(conn Connection) {
+	if p.conn != nil {
+		connName := p.conn.Name()
+		newConnName := conn.Name()
+		panicMsg := fmt.Sprintf(
+			"connection already set to %s, now connecting to %s",
+			connName, newConnName,
+		)
+		panic(panicMsg)
+	}
+
 	p.conn = conn
 }
 

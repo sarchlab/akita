@@ -11,6 +11,7 @@ func NewSendError() *SendError {
 
 // A Connection is responsible for delivering messages to its destination.
 type Connection interface {
+	Named
 	Hookable
 
 	// PlugIn connects a port to the connection. The connection should reserve
