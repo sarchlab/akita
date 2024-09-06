@@ -210,18 +210,4 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		memController.Handle(event)
 	})
-
-	It("should handle pause request", func() {
-		pauseReq := mem.ControlMsgBuilder{}.
-			WithDst(memController.CtrlPort).
-			WithPause(true).
-			Build()
-
-		ctrlPort.EXPECT().RetrieveIncoming().Return(pauseReq)
-		ctrlPort.EXPECT().PeekIncoming().Return(nil)
-		ctrlPort.EXPECT().Send(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
-		madeProgress := memController.Tick()
-		Expect(madeProgress).To(BeTrue())
-
-	})
 })

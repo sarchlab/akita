@@ -343,8 +343,8 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	return r
 }
 
-type CtrlInfo struct {
-	Pause   bool
+type Pause struct {
+	Enable  bool
 	Drain   bool
 	Flush   bool
 	Invalid bool
@@ -363,11 +363,7 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
-	CtrlInfo           CtrlInfo
-	// Drain              DrainReq
-	// Enable bool
-	// Reset  bool
-	// Pause  bool
+	Pause              Pause
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -381,11 +377,7 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
-	ctrlInfo            CtrlInfo
-	// drain               DrainReq
-	// enable              bool
-	// reset               bool
-	// pause               bool
+	pause               Pause
 }
 
 // WithSrc sets the source of the request to build.
@@ -419,11 +411,11 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) WithCtrlInfo(pauseFlag bool, drainFlag bool, flushFlag bool, invalidFlag bool) ControlMsgBuilder {
-	b.ctrlInfo.Pause = pauseFlag
-	b.ctrlInfo.Drain = drainFlag
-	b.ctrlInfo.Flush = flushFlag
-	b.ctrlInfo.Invalid = invalidFlag
+func (b ControlMsgBuilder) WithCtrlInfo(enableFlag bool, drainFlag bool, flushFlag bool, invalidFlag bool) ControlMsgBuilder {
+	b.pause.Enable = enableFlag
+	b.pause.Drain = drainFlag
+	b.pause.Flush = flushFlag
+	b.pause.Invalid = invalidFlag
 	return b
 }
 
@@ -453,11 +445,7 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
-	m.CtrlInfo = b.ctrlInfo
-	// m.Pause = b.pause
-	// m.Drain = b.drain
-	// m.Enable = b.enable
-	// m.Reset = b.reset
+	m.Pause = b.pause
 
 	return m
 }

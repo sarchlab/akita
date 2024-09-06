@@ -45,14 +45,50 @@ type Comp struct {
 	Latency          int
 	addressConverter mem.AddressConverter
 
-	isDraining bool
 	respondReq *mem.ControlMsg
-
-	width int
+	width      int
 
 	state     string
-	ctrlState mem.CtrlInfo
-	isPause   bool
+	ctrlState mem.Pause
+
+	inflightbuffer []sim.Msg
+}
+
+func (c *Comp) Tick() bool {
+	madeProgress := false
+
+	// get ctrl msg from ctrl port
+	madeProgress = c.handleCtrlSignals() || madeProgress
+	madeProgress = c.updateInflightBuffer() || madeProgress
+	madeProgress = c.updateFSM() || madeProgress
+
+	return madeProgress
+}
+
+func (c *Comp) updateFSM() bool {
+	madeProgress := false
+
+	switch state := c.state; state {
+	case "enable":
+		madeProgress = c.handleInflightMemReqs()
+	case "pause":
+		madeProgress = true
+	case "drain":
+		madeProgress = c.handleDrainReq()
+	}
+
+	return madeProgress
+}
+
+func (c *Comp) handleDrainReq() bool {
+	madeProgress := false
+	for len(c.inflightbuffer) != 0 {
+		madeProgress = c.handleMemReqs()
+	}
+	if !c.setState("pause", c.respondReq) {
+		return true
+	}
+	return madeProgress
 }
 
 // Handle defines how the Comp handles event
@@ -73,30 +109,30 @@ func (c *Comp) Handle(e sim.Event) error {
 
 func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 	for {
-		msg := c.CtrlPort.PeekIncoming()
+		msg := c.CtrlPort.RetrieveIncoming()
 		if msg == nil {
 			return madeProgress
 		}
 
 		signalMsg := msg.(*mem.ControlMsg)
 
-		if signalMsg.CtrlInfo.Invalid || signalMsg.CtrlInfo.Flush {
+		if signalMsg.Pause.Invalid || signalMsg.Pause.Flush {
 			panic("Invalid or Flush signal should not be sent to ideal memory controller")
 		}
 
-		if !signalMsg.CtrlInfo.Pause && !signalMsg.CtrlInfo.Drain {
+		if signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
 			madeProgress = c.setState("enable", signalMsg)
 			return madeProgress
 		}
 
-		if signalMsg.CtrlInfo.Pause && signalMsg.CtrlInfo.Drain {
+		if !signalMsg.Pause.Enable && signalMsg.Pause.Drain {
 			c.state = "drain"
 			c.respondReq = signalMsg
 			madeProgress = true
 			return madeProgress
 		}
 
-		if signalMsg.CtrlInfo.Pause && !signalMsg.CtrlInfo.Drain {
+		if !signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
 			madeProgress = c.setState("pause", signalMsg)
 			return madeProgress
 		}
@@ -104,10 +140,31 @@ func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 	}
 }
 
-// updateMemCtrl updates ideal memory controller state.
-func (c *Comp) handleMemReqs() bool {
-	msg := c.topPort.RetrieveIncoming()
+func (c *Comp) updateInflightBuffer() bool {
+	for i := 0; i < c.width; i++ {
+		msg := c.topPort.RetrieveIncoming()
+		if msg == nil {
+			return false
+		}
 
+		c.inflightbuffer = append(c.inflightbuffer, msg)
+	}
+	return true
+}
+
+// updateMemCtrl updates ideal memory controller state.
+func (c *Comp) handleInflightMemReqs() bool {
+	madeProgress := false
+	for i := 0; i < c.width; i++ {
+		madeProgress = c.handleMemReqs()
+	}
+
+	return madeProgress
+}
+
+func (c *Comp) handleMemReqs() bool {
+	msg := c.inflightbuffer[0]
+	c.inflightbuffer = c.inflightbuffer[1:]
 	if msg == nil {
 		return false
 	}
@@ -124,7 +181,6 @@ func (c *Comp) handleMemReqs() bool {
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
 	}
-
 	return false
 }
 
@@ -252,7 +308,7 @@ func (c *Comp) setState(state string, rspMessage *mem.ControlMsg) bool {
 
 	c.CtrlPort.RetrieveIncoming()
 	c.state = state
-	c.ctrlState = rspMessage.CtrlInfo //need?
+	c.ctrlState = rspMessage.Pause
 
 	return true
 }

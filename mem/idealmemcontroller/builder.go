@@ -88,16 +88,14 @@ func (b Builder) Build(
 	name string,
 ) *Comp {
 	c := &Comp{
-		Latency:    b.latency,
-		width:      b.width,
-		isDraining: false,
-		ctrlState: mem.CtrlInfo{
-			Pause:   false,
+		Latency: b.latency,
+		width:   b.width,
+		ctrlState: mem.Pause{
+			Enable:  false,
 			Drain:   false,
 			Flush:   false,
 			Invalid: false,
 		},
-		isPause: false,
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
