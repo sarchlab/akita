@@ -60,12 +60,12 @@ func (c *Comp) Tick() bool {
 	// get ctrl msg from ctrl port
 	madeProgress = c.handleCtrlSignals() || madeProgress
 	madeProgress = c.updateInflightBuffer() || madeProgress
-	madeProgress = c.updateFSM() || madeProgress
+	madeProgress = c.handleBehavior() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) updateFSM() bool {
+func (c *Comp) handleBehavior() bool {
 	madeProgress := false
 
 	switch state := c.state; state {
@@ -141,6 +141,10 @@ func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 }
 
 func (c *Comp) updateInflightBuffer() bool {
+	if c.state == "pause" {
+		return false
+	}
+
 	for i := 0; i < c.width; i++ {
 		msg := c.topPort.RetrieveIncoming()
 		if msg == nil {
