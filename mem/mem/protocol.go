@@ -343,6 +343,13 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	return r
 }
 
+type CtrlInfo struct {
+	Pause   bool
+	Drain   bool
+	Flush   bool
+	Invalid bool
+}
+
 // ControlMsg is the commonly used message type for controlling the components
 // on the memory hierarchy. It is also used for resonpding the original
 // requester with the Done field.
@@ -356,10 +363,11 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
-	Drain              bool
-	Enable             bool
-	Reset              bool
-	Pause              bool
+	CtrlInfo           CtrlInfo
+	// Drain              DrainReq
+	// Enable bool
+	// Reset  bool
+	// Pause  bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -373,10 +381,11 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
-	drain               bool
-	enable              bool
-	reset               bool
-	pause               bool
+	ctrlInfo            CtrlInfo
+	// drain               DrainReq
+	// enable              bool
+	// reset               bool
+	// pause               bool
 }
 
 // WithSrc sets the source of the request to build.
@@ -410,25 +419,28 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) WithDrain(flag bool) ControlMsgBuilder {
-	b.drain = flag
+func (b ControlMsgBuilder) WithCtrlInfo(pauseFlag bool, drainFlag bool, flushFlag bool, invalidFlag bool) ControlMsgBuilder {
+	b.ctrlInfo.Pause = pauseFlag
+	b.ctrlInfo.Drain = drainFlag
+	b.ctrlInfo.Flush = flushFlag
+	b.ctrlInfo.Invalid = invalidFlag
 	return b
 }
 
-func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
-	b.enable = flag
-	return b
-}
+// func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
+// 	b.enable = flag
+// 	return b
+// }
 
-func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
-	b.reset = flag
-	return b
-}
+// func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
+// 	b.reset = flag
+// 	return b
+// }
 
-func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
-	b.pause = flag
-	return b
-}
+// func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
+// 	b.pause = flag
+// 	return b
+// }
 
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
@@ -441,10 +453,11 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
-	m.Pause = b.pause
-	m.Drain = b.drain
-	m.Enable = b.enable
-	m.Reset = b.reset
+	m.CtrlInfo = b.ctrlInfo
+	// m.Pause = b.pause
+	// m.Drain = b.drain
+	// m.Enable = b.enable
+	// m.Reset = b.reset
 
 	return m
 }

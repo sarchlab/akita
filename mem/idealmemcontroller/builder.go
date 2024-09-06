@@ -91,11 +91,13 @@ func (b Builder) Build(
 		Latency:    b.latency,
 		width:      b.width,
 		isDraining: false,
-		enable:     true,
-		pause:      false,
-		isPause:    false,
-		drain:      false,
-		reset:      false,
+		ctrlState: mem.CtrlInfo{
+			Pause:   false,
+			Drain:   false,
+			Flush:   false,
+			Invalid: false,
+		},
+		isPause: false,
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)

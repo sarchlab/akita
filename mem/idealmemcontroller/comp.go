@@ -45,19 +45,14 @@ type Comp struct {
 	Latency          int
 	addressConverter mem.AddressConverter
 
-	isDraining       bool
-	currentDrainReq  *mem.ControlMsg
-	currentPauseReq  *mem.ControlMsg
-	currentResetReq  *mem.ControlMsg
-	currentEnableReq *mem.ControlMsg
+	isDraining bool
+	respondReq *mem.ControlMsg
 
 	width int
 
-	enable  bool
-	pause   bool
-	isPause bool
-	drain   bool
-	reset   bool
+	state     string
+	ctrlState mem.CtrlInfo
+	isPause   bool
 }
 
 // Handle defines how the Comp handles event
@@ -76,170 +71,37 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
-func (c *Comp) Tick() bool {
-	madeProgress := false
-
-	for i := 0; i < c.width; i++ {
-		madeProgress = c.handleEnableSignals() || madeProgress
-
-		if c.enable {
-			madeProgress = c.getCtrlSignals() || madeProgress
-			madeProgress = c.handleCtrlSignals(i) || madeProgress
-
-			if !c.checkStatus() {
-				madeProgress = c.handleMemReqs() || madeProgress
-			}
-		}
-	}
-
-	return madeProgress
-}
-
-func (c *Comp) checkStatus() bool {
-	return c.drain || c.pause
-}
-
-func (c *Comp) handleEnableSignals() bool {
-	enableSignal := c.CtrlPort.PeekIncoming()
-
-	if enableSignal == nil {
-		return false
-	}
-
-	if c.enable != enableSignal.(*mem.ControlMsg).Enable {
-		c.enable = enableSignal.(*mem.ControlMsg).Enable
-		c.currentEnableReq = enableSignal.(*mem.ControlMsg)
-		return true
-	}
-
-	return false
-}
-
-func (c *Comp) handleCtrlSignals(i int) bool {
-	madeProgress := false
-
-	if c.pause {
-		madeProgress = c.handlePause() || madeProgress
-	} else if c.drain {
-		madeProgress = c.handleDrain(i) || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (c *Comp) getCtrlSignals() bool {
-	msg := c.CtrlPort.RetrieveIncoming()
-
-	if msg == nil {
-		return false
-	}
-
-	tracing.TraceReqReceive(msg, c)
-
-	switch msgType := msg.(type) {
-	case *mem.ControlMsg:
-		c.handleControlMsg(msgType)
-	}
-
-	return true
-}
-
-func (c *Comp) handleControlMsg(msg *mem.ControlMsg) {
-	if c.pause != msg.Pause {
-		c.currentPauseReq = msg
-		c.pause = msg.Pause
-	}
-
-	if c.drain != msg.Drain {
-		c.currentDrainReq = msg
-		c.drain = msg.Drain
-
-		if c.drain {
-			c.isDraining = true
-		}
-	}
-
-	if msg.Reset {
-		c.currentResetReq = msg
-		c.reset = true
-
-		c.handleReset()
-	}
-}
-
-func (c *Comp) handleReset() bool {
-	resetCompleteRsp := sim.GeneralRspBuilder{}.
-		WithSrc(c.CtrlPort).
-		WithDst(c.currentResetReq.Src).
-		WithOriginalReq(c.currentResetReq).
-		Build()
-	err := c.CtrlPort.Send(resetCompleteRsp)
-
-	if err != nil {
-		return false
-	}
-
-	c.drain = false
-	c.isDraining = false
-
-	c.pause = false
-	c.isPause = false
-
-	c.reset = false
-
-	return true
-}
-
-func (c *Comp) handlePause() bool {
-	if !c.isPause {
-		responsePauseReq := sim.GeneralRspBuilder{}.
-			WithSrc(c.CtrlPort).
-			WithDst(c.currentPauseReq.Src).
-			WithOriginalReq(c.currentPauseReq).
-			Build()
-
-		err := c.CtrlPort.Send(responsePauseReq)
-
-		if err != nil {
-			return false
+func (c *Comp) handleCtrlSignals() (madeProgress bool) {
+	for {
+		msg := c.CtrlPort.PeekIncoming()
+		if msg == nil {
+			return madeProgress
 		}
 
-		c.isPause = true
-	}
+		signalMsg := msg.(*mem.ControlMsg)
 
-	return true
-}
-
-func (c *Comp) handleDrain(i int) bool {
-	madeProgress := false
-
-	if c.fullyDrained(i) {
-		drainCompleteRsp := sim.GeneralRspBuilder{}.
-			WithSrc(c.CtrlPort).
-			WithDst(c.currentDrainReq.Src).
-			WithOriginalReq(c.currentDrainReq).
-			Build()
-
-		err := c.CtrlPort.Send(drainCompleteRsp)
-
-		if err != nil {
-			return false
+		if signalMsg.CtrlInfo.Invalid || signalMsg.CtrlInfo.Flush {
+			panic("Invalid or Flush signal should not be sent to ideal memory controller")
 		}
-		c.isDraining = false
-		return true
+
+		if !signalMsg.CtrlInfo.Pause && !signalMsg.CtrlInfo.Drain {
+			madeProgress = c.setState("enable", signalMsg)
+			return madeProgress
+		}
+
+		if signalMsg.CtrlInfo.Pause && signalMsg.CtrlInfo.Drain {
+			c.state = "drain"
+			c.respondReq = signalMsg
+			madeProgress = true
+			return madeProgress
+		}
+
+		if signalMsg.CtrlInfo.Pause && !signalMsg.CtrlInfo.Drain {
+			madeProgress = c.setState("pause", signalMsg)
+			return madeProgress
+		}
+
 	}
-
-	madeProgress = c.handleMemReqs()
-
-	return madeProgress
-}
-
-func (c *Comp) fullyDrained(i int) bool {
-	if (i == c.width-1) || c.topPort.PeekIncoming() == nil {
-		return true
-	}
-
-	return false
 }
 
 // updateMemCtrl updates ideal memory controller state.
@@ -373,4 +235,24 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 
 func (c *Comp) CurrentTime() sim.VTimeInSec {
 	return c.Engine.CurrentTime()
+}
+
+func (c *Comp) setState(state string, rspMessage *mem.ControlMsg) bool {
+	ctrlRsp := sim.GeneralRspBuilder{}.
+		WithSrc(c.CtrlPort).
+		WithDst(rspMessage.Src).
+		WithOriginalReq(rspMessage).
+		Build()
+
+	err := c.CtrlPort.Send(ctrlRsp)
+
+	if err != nil {
+		return false
+	}
+
+	c.CtrlPort.RetrieveIncoming()
+	c.state = state
+	c.ctrlState = rspMessage.CtrlInfo //need?
+
+	return true
 }
