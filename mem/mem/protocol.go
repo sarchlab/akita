@@ -423,21 +423,6 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	return b
 }
 
-// func (b ControlMsgBuilder) WithEnable(flag bool) ControlMsgBuilder {
-// 	b.enable = flag
-// 	return b
-// }
-
-// func (b ControlMsgBuilder) WithReset(flag bool) ControlMsgBuilder {
-// 	b.reset = flag
-// 	return b
-// }
-
-// func (b ControlMsgBuilder) WithPause(flag bool) ControlMsgBuilder {
-// 	b.pause = flag
-// 	return b
-// }
-
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
