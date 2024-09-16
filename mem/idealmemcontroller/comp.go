@@ -57,7 +57,6 @@ type Comp struct {
 func (c *Comp) Tick() bool {
 	madeProgress := false
 
-	// get ctrl msg from ctrl port
 	madeProgress = c.handleCtrlSignals() || madeProgress
 	madeProgress = c.updateInflightBuffer() || madeProgress
 	madeProgress = c.handleBehavior() || madeProgress
@@ -109,8 +108,12 @@ func (c *Comp) Handle(e sim.Event) error {
 
 func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 	for {
-		msg := c.CtrlPort.RetrieveIncoming()
+		msg := c.CtrlPort.PeekIncoming()
 		if msg == nil {
+			return madeProgress
+		}
+
+		if c.state == "drain" {
 			return madeProgress
 		}
 
@@ -131,6 +134,8 @@ func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 		if c.handlePauseSignal(signalMsg) {
 			return true
 		}
+
+		c.CtrlPort.RetrieveIncoming()
 	}
 }
 
@@ -193,11 +198,12 @@ func (c *Comp) handleInflightMemReqs() bool {
 }
 
 func (c *Comp) handleMemReqs() bool {
-	msg := c.inflightbuffer[0]
-	c.inflightbuffer = c.inflightbuffer[1:]
-	if msg == nil {
+	if len(c.inflightbuffer) == 0 {
 		return false
 	}
+
+	msg := c.inflightbuffer[0]
+	c.inflightbuffer = c.inflightbuffer[1:]
 
 	tracing.TraceReqReceive(msg, c)
 

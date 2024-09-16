@@ -49,7 +49,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(readReq)
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
-		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -69,7 +68,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
-		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
