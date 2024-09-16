@@ -8,24 +8,40 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+// A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
-	ToReadFromAddress uint64
-	ToWriteToAddress  uint64
-	DataTransferSize  uint64
+	srcAddress   uint64
+	dstAddress   uint64
+	srcDirection string
+	dstDirection string
+	byteSize     uint64
+}
+
+func NewDataMoveRequest(
+	sourcePort sim.Port,
+	destinationPort sim.Port,
+	sourceAddress uint64,
+	destinationAddress uint64,
+	sourceDirection string,
+	destinationDirection string,
+	size uint64,
+) *DataMoveRequest {
+	req := &DataMoveRequest{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Src = sourcePort
+	req.Dst = destinationPort
+	req.srcAddress = sourceAddress
+	req.dstAddress = destinationAddress
+	req.srcDirection = sourceDirection
+	req.dstDirection = destinationDirection
+	req.byteSize = size
+
+	return req
 }
 
 func (req *DataMoveRequest) Meta() *sim.MsgMeta {
 	return &req.MsgMeta
-}
-
-type NewDataMoveRequest struct {
-	sendTime          sim.VTimeInSec
-	src               sim.Port
-	dst               sim.Port
-	ToReadFromAddress uint64
-	ToWriteToAddress  uint64
-	DataTransferSize  uint64
 }
 
 type DataMover struct {
