@@ -95,6 +95,9 @@ func (b Builder) Build(name string) *Comp {
 
 	tlb.reset()
 
+	middleware := &middleware{Comp: tlb}
+	tlb.AddMiddleware(middleware)
+
 	return tlb
 }
 

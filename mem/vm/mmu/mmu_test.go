@@ -19,6 +19,7 @@ var _ = Describe("MMU", func() {
 		topSender     *MockBufferedSender
 		pageTable     *MockPageTable
 		mmu           *Comp
+		mmuMiddleware *middleware
 	)
 
 	BeforeEach(func() {
@@ -35,6 +36,8 @@ var _ = Describe("MMU", func() {
 		mmu.topSender = topSender
 		mmu.migrationPort = migrationPort
 		mmu.pageTable = pageTable
+
+		mmuMiddleware = mmu.Middlewares()[0].(*middleware)
 	})
 
 	AfterEach(func() {
@@ -53,7 +56,7 @@ var _ = Describe("MMU", func() {
 				RetrieveIncoming().
 				Return(translationReq)
 
-			mmu.parseFromTop()
+			mmuMiddleware.parseFromTop()
 
 			Expect(mmu.walkingTranslations).To(HaveLen(1))
 
@@ -62,7 +65,7 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top if MMU is servicing max requests", func() {
 			mmu.walkingTranslations = make([]transaction, 16)
 
-			madeProgress := mmu.parseFromTop()
+			madeProgress := mmuMiddleware.parseFromTop()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -79,7 +82,7 @@ var _ = Describe("MMU", func() {
 			walking := transaction{req: req, cycleLeft: 10}
 			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
 
-			madeProgress := mmu.walkPageTable()
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(mmu.walkingTranslations[0].cycleLeft).To(Equal(9))
 			Expect(madeProgress).To(BeTrue())
@@ -112,7 +115,7 @@ var _ = Describe("MMU", func() {
 					Expect(rsp.Page).To(Equal(page))
 				})
 
-			madeProgress := mmu.walkPageTable()
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -141,7 +144,7 @@ var _ = Describe("MMU", func() {
 				Return(page, true)
 			topSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := mmu.walkPageTable()
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -188,7 +191,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsMigrating = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.walkPageTable()
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -206,7 +209,7 @@ var _ = Describe("MMU", func() {
 
 			pageTable.EXPECT().Update(page)
 
-			madeProgress := mmu.walkPageTable()
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -214,7 +217,7 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should not send to driver if migration queue is empty", func() {
-			madeProgress := mmu.sendMigrationToDriver()
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -223,7 +226,7 @@ var _ = Describe("MMU", func() {
 			mmu.migrationQueue = append(mmu.migrationQueue, walking)
 			mmu.isDoingMigration = true
 
-			madeProgress := mmu.sendMigrationToDriver()
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.migrationQueue).To(ContainElement(walking))
@@ -236,7 +239,7 @@ var _ = Describe("MMU", func() {
 				Send(gomock.Any()).
 				Return(sim.NewSendError())
 
-			madeProgress := mmu.sendMigrationToDriver()
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.migrationQueue).To(ContainElement(walking))
@@ -252,7 +255,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsMigrating = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.sendMigrationToDriver()
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.migrationQueue).NotTo(ContainElement(walking))
@@ -268,7 +271,7 @@ var _ = Describe("MMU", func() {
 			pageTable.EXPECT().Update(updatedPage)
 			topSender.EXPECT().Send(gomock.Any())
 
-			madeProgress := mmu.sendMigrationToDriver()
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.migrationQueue).NotTo(ContainElement(walking))
@@ -307,13 +310,13 @@ var _ = Describe("MMU", func() {
 				Build()
 			migrating = transaction{req: req, cycleLeft: 0}
 			mmu.currentOnDemandMigration = migrating
-			migrationDone = vm.NewPageMigrationRspFromDriver(nil, nil)
+			migrationDone = vm.NewPageMigrationRspFromDriver(nil, nil, req)
 		})
 
 		It("should do nothing if no respond", func() {
 			migrationPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := mmu.processMigrationReturn()
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -322,7 +325,7 @@ var _ = Describe("MMU", func() {
 			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := mmu.processMigrationReturn()
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.isDoingMigration).To(BeFalse())
@@ -344,7 +347,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsPinned = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.processMigrationReturn()
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.isDoingMigration).To(BeFalse())

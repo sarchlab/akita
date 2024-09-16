@@ -80,6 +80,9 @@ func (b Builder) Build(name string) *Comp {
 	b.createPageTable(mmu)
 	b.configureInternalStates(mmu)
 
+	middleware := &middleware{Comp: mmu}
+	mmu.AddMiddleware(middleware)
+
 	return mmu
 }
 

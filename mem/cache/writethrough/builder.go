@@ -176,6 +176,9 @@ func (b *Builder) Build(name string) *Comp {
 		tracing.CollectTrace(c, b.visTracer)
 	}
 
+	middleware := &middleware{Comp: c}
+	c.AddMiddleware(middleware)
+
 	return c
 }
 

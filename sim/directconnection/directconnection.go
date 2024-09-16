@@ -8,6 +8,7 @@ import (
 // Comp is a DirectConnection connects two components without latency
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	nextPortID int
 	ports      []sim.Port
@@ -48,20 +49,28 @@ func (c *Comp) NotifySend() {
 	c.TickNow()
 }
 
-// Tick updates the states of the connection and delivers messages.
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick updates the states of the connection and delivers messages.
+func (m *middleware) Tick() bool {
 	madeProgress := false
-	for i := 0; i < len(c.ports); i++ {
-		portID := (i + c.nextPortID) % len(c.ports)
-		port := c.ports[portID]
-		madeProgress = c.forwardMany(port) || madeProgress
+	for i := 0; i < len(m.ports); i++ {
+		portID := (i + m.nextPortID) % len(m.ports)
+		port := m.ports[portID]
+		madeProgress = m.forwardMany(port) || madeProgress
 	}
 
-	c.nextPortID = (c.nextPortID + 1) % len(c.ports)
+	m.nextPortID = (m.nextPortID + 1) % len(m.ports)
 	return madeProgress
 }
 
-func (c *Comp) forwardMany(
+func (m *middleware) forwardMany(
 	port sim.Port,
 ) bool {
 	madeProgress := false
@@ -71,7 +80,9 @@ func (c *Comp) forwardMany(
 			break
 		}
 
-		err := head.Meta().Dst.Deliver(head)
+		dst := head.Meta().Dst
+
+		err := dst.Deliver(head)
 		if err != nil {
 			break
 		}

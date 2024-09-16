@@ -38,6 +38,7 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort          sim.Port
 	CtrlPort         sim.Port

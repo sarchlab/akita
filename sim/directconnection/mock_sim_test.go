@@ -464,6 +464,20 @@ func (mr *MockConnectionMockRecorder) Hooks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockConnection)(nil).Hooks))
 }
 
+// Name mocks base method.
+func (m *MockConnection) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockConnectionMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockConnection)(nil).Name))
+}
+
 // NotifyAvailable mocks base method.
 func (m *MockConnection) NotifyAvailable(arg0 sim.Port) {
 	m.ctrl.T.Helper()

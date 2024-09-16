@@ -13,6 +13,7 @@ import (
 // Comp is a cache(TLB) that maintains some page information.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -42,180 +43,188 @@ func (c *Comp) reset() {
 	}
 }
 
-// Tick defines how TLB update states at each cycle
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick defines how TLB update states at each cycle
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.performCtrlReq() || madeProgress
+	madeProgress = m.performCtrlReq() || madeProgress
 
-	if !c.isPaused {
-		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.respondMSHREntry() || madeProgress
+	if !m.isPaused {
+		for i := 0; i < m.numReqPerCycle; i++ {
+			madeProgress = m.respondMSHREntry() || madeProgress
 		}
 
-		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.lookup() || madeProgress
+		for i := 0; i < m.numReqPerCycle; i++ {
+			madeProgress = m.lookup() || madeProgress
 		}
 
-		for i := 0; i < c.numReqPerCycle; i++ {
-			madeProgress = c.parseBottom() || madeProgress
+		for i := 0; i < m.numReqPerCycle; i++ {
+			madeProgress = m.parseBottom() || madeProgress
 		}
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) respondMSHREntry() bool {
-	if c.respondingMSHREntry == nil {
+func (m *middleware) respondMSHREntry() bool {
+	if m.respondingMSHREntry == nil {
 		return false
 	}
 
-	mshrEntry := c.respondingMSHREntry
+	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
 	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
-	err := c.topPort.Send(rspToTop)
+	err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
 	}
 
 	mshrEntry.Requests = mshrEntry.Requests[1:]
 	if len(mshrEntry.Requests) == 0 {
-		c.respondingMSHREntry = nil
+		m.respondingMSHREntry = nil
 	}
 
-	tracing.TraceReqComplete(req, c)
+	tracing.TraceReqComplete(req, m.Comp)
 	return true
 }
 
-func (c *Comp) lookup() bool {
-	msg := c.topPort.PeekIncoming()
+func (m *middleware) lookup() bool {
+	msg := m.topPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
 	req := msg.(*vm.TranslationReq)
 
-	mshrEntry := c.mshr.Query(req.PID, req.VAddr)
+	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
-		return c.processTLBMSHRHit(mshrEntry, req)
+		return m.processTLBMSHRHit(mshrEntry, req)
 	}
 
-	setID := c.vAddrToSetID(req.VAddr)
-	set := c.Sets[setID]
+	setID := m.vAddrToSetID(req.VAddr)
+	set := m.Sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
 	if found && page.Valid {
-		return c.handleTranslationHit(req, setID, wayID, page)
+		return m.handleTranslationHit(req, setID, wayID, page)
 	}
 
-	return c.handleTranslationMiss(req)
+	return m.handleTranslationMiss(req)
 }
 
-func (c *Comp) handleTranslationHit(
+func (m *middleware) handleTranslationHit(
 	req *vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-	ok := c.sendRspToTop(req, page)
+	ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
 
-	c.visit(setID, wayID)
-	c.topPort.RetrieveIncoming()
+	m.visit(setID, wayID)
+	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, c)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "hit")
-	tracing.TraceReqComplete(req, c)
+	tracing.TraceReqReceive(req, m.Comp)
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
+	tracing.TraceReqComplete(req, m.Comp)
 
 	return true
 }
 
-func (c *Comp) handleTranslationMiss(
+func (m *middleware) handleTranslationMiss(
 	req *vm.TranslationReq,
 ) bool {
-	if c.mshr.IsFull() {
+	if m.mshr.IsFull() {
 		return false
 	}
 
-	fetched := c.fetchBottom(req)
+	fetched := m.fetchBottom(req)
 	if fetched {
-		c.topPort.RetrieveIncoming()
-		tracing.TraceReqReceive(req, c)
-		tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "miss")
+		m.topPort.RetrieveIncoming()
+		tracing.TraceReqReceive(req, m.Comp)
+		tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "miss")
 		return true
 	}
 
 	return false
 }
 
-func (c *Comp) vAddrToSetID(vAddr uint64) (setID int) {
-	return int(vAddr / c.pageSize % uint64(c.numSets))
+func (m *middleware) vAddrToSetID(vAddr uint64) (setID int) {
+	return int(vAddr / m.pageSize % uint64(m.numSets))
 }
 
-func (c *Comp) sendRspToTop(
+func (m *middleware) sendRspToTop(
 	req *vm.TranslationReq,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(m.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
 
-	err := c.topPort.Send(rsp)
+	err := m.topPort.Send(rsp)
 
 	return err == nil
 }
 
-func (c *Comp) processTLBMSHRHit(
+func (m *middleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
 	req *vm.TranslationReq,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
-	c.topPort.RetrieveIncoming()
-	tracing.TraceReqReceive(req, c)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, c), c, "mshr-hit")
+	m.topPort.RetrieveIncoming()
+	tracing.TraceReqReceive(req, m.Comp)
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
 
 	return true
 }
 
-func (c *Comp) fetchBottom(req *vm.TranslationReq) bool {
+func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSrc(c.bottomPort).
-		WithDst(c.LowModule).
+		WithSrc(m.bottomPort).
+		WithDst(m.LowModule).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		Build()
-	err := c.bottomPort.Send(fetchBottom)
+	err := m.bottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
 	}
 
-	mshrEntry := c.mshr.Add(req.PID, req.VAddr)
+	mshrEntry := m.mshr.Add(req.PID, req.VAddr)
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 	mshrEntry.reqToBottom = fetchBottom
 
-	tracing.TraceReqInitiate(fetchBottom, c,
-		tracing.MsgIDAtReceiver(req, c))
+	tracing.TraceReqInitiate(fetchBottom, m.Comp,
+		tracing.MsgIDAtReceiver(req, m.Comp))
 
 	return true
 }
 
-func (c *Comp) parseBottom() bool {
-	if c.respondingMSHREntry != nil {
+func (m *middleware) parseBottom() bool {
+	if m.respondingMSHREntry != nil {
 		return false
 	}
 
-	item := c.bottomPort.PeekIncoming()
+	item := m.bottomPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
@@ -223,45 +232,45 @@ func (c *Comp) parseBottom() bool {
 	rsp := item.(*vm.TranslationRsp)
 	page := rsp.Page
 
-	mshrEntryPresent := c.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
+	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		c.bottomPort.RetrieveIncoming()
+		m.bottomPort.RetrieveIncoming()
 		return true
 	}
 
-	setID := c.vAddrToSetID(page.VAddr)
-	set := c.Sets[setID]
-	wayID, ok := c.Sets[setID].Evict()
+	setID := m.vAddrToSetID(page.VAddr)
+	set := m.Sets[setID]
+	wayID, ok := m.Sets[setID].Evict()
 	if !ok {
 		panic("failed to evict")
 	}
 	set.Update(wayID, page)
 	set.Visit(wayID)
 
-	mshrEntry := c.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
-	c.respondingMSHREntry = mshrEntry
+	mshrEntry := m.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
+	m.respondingMSHREntry = mshrEntry
 	mshrEntry.page = page
 
-	c.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
-	c.bottomPort.RetrieveIncoming()
-	tracing.TraceReqFinalize(mshrEntry.reqToBottom, c)
+	m.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
+	m.bottomPort.RetrieveIncoming()
+	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
 
 	return true
 }
 
-func (c *Comp) performCtrlReq() bool {
-	item := c.controlPort.PeekIncoming()
+func (m *middleware) performCtrlReq() bool {
+	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
-	item = c.controlPort.RetrieveIncoming()
+	item = m.controlPort.RetrieveIncoming()
 
 	switch req := item.(type) {
 	case *FlushReq:
-		return c.handleTLBFlush(req)
+		return m.handleTLBFlush(req)
 	case *RestartReq:
-		return c.handleTLBRestart(req)
+		return m.handleTLBRestart(req)
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
@@ -269,25 +278,25 @@ func (c *Comp) performCtrlReq() bool {
 	return true
 }
 
-func (c *Comp) visit(setID, wayID int) {
-	set := c.Sets[setID]
+func (m *middleware) visit(setID, wayID int) {
+	set := m.Sets[setID]
 	set.Visit(wayID)
 }
 
-func (c *Comp) handleTLBFlush(req *FlushReq) bool {
+func (m *middleware) handleTLBFlush(req *FlushReq) bool {
 	rsp := FlushRspBuilder{}.
-		WithSrc(c.controlPort).
+		WithSrc(m.controlPort).
 		WithDst(req.Src).
 		Build()
 
-	err := c.controlPort.Send(rsp)
+	err := m.controlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
 	for _, vAddr := range req.VAddr {
-		setID := c.vAddrToSetID(vAddr)
-		set := c.Sets[setID]
+		setID := m.vAddrToSetID(vAddr)
+		set := m.Sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
 		if !found {
 			continue
@@ -297,30 +306,30 @@ func (c *Comp) handleTLBFlush(req *FlushReq) bool {
 		set.Update(wayID, page)
 	}
 
-	c.mshr.Reset()
-	c.isPaused = true
+	m.mshr.Reset()
+	m.isPaused = true
 	return true
 }
 
-func (c *Comp) handleTLBRestart(req *RestartReq) bool {
+func (m *middleware) handleTLBRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
-		WithSrc(c.controlPort).
+		WithSrc(m.controlPort).
 		WithDst(req.Src).
 		Build()
 
-	err := c.controlPort.Send(rsp)
+	err := m.controlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	c.isPaused = false
+	m.isPaused = false
 
-	for c.topPort.RetrieveIncoming() != nil {
-		c.topPort.RetrieveIncoming()
+	for m.topPort.RetrieveIncoming() != nil {
+		m.topPort.RetrieveIncoming()
 	}
 
-	for c.bottomPort.RetrieveIncoming() != nil {
-		c.bottomPort.RetrieveIncoming()
+	for m.bottomPort.RetrieveIncoming() != nil {
+		m.bottomPort.RetrieveIncoming()
 	}
 
 	return true

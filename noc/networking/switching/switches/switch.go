@@ -57,6 +57,7 @@ type portComplex struct {
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	ports                []sim.Port
 	portToComplexMapping map[sim.Port]portComplex
@@ -76,30 +77,38 @@ func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routingTable
 }
 
-// Tick update the Switch's state.
 func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
+// Tick update the Switch's state.
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.sendOut() || madeProgress
-	madeProgress = c.forward() || madeProgress
-	madeProgress = c.route() || madeProgress
-	madeProgress = c.movePipeline() || madeProgress
-	madeProgress = c.startProcessing() || madeProgress
+	madeProgress = m.sendOut() || madeProgress
+	madeProgress = m.forward() || madeProgress
+	madeProgress = m.route() || madeProgress
+	madeProgress = m.movePipeline() || madeProgress
+	madeProgress = m.startProcessing() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Comp) flitParentTaskID(flit *messaging.Flit) string {
+func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_e2e"
 }
 
-func (c *Comp) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + c.Name()
+func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.Comp.Name()
 }
 
-func (c *Comp) startProcessing() (madeProgress bool) {
-	for _, port := range c.ports {
-		pc := c.portToComplexMapping[port]
+func (m *middleware) startProcessing() (madeProgress bool) {
+	for _, port := range m.ports {
+		pc := m.portToComplexMapping[port]
 
 		for i := 0; i < pc.numInputChannel; i++ {
 			item := port.PeekIncoming()
@@ -113,7 +122,7 @@ func (c *Comp) startProcessing() (madeProgress bool) {
 
 			flit := item.(*messaging.Flit)
 			pipelineItem := flitPipelineItem{
-				taskID: c.flitTaskID(flit),
+				taskID: m.flitTaskID(flit),
 				flit:   flit,
 			}
 			pc.pipeline.Accept(pipelineItem)
@@ -121,9 +130,9 @@ func (c *Comp) startProcessing() (madeProgress bool) {
 			madeProgress = true
 
 			tracing.StartTask(
-				c.flitTaskID(flit),
-				c.flitParentTaskID(flit),
-				c, "flit", "flit_inside_sw",
+				m.flitTaskID(flit),
+				m.flitParentTaskID(flit),
+				m.Comp, "flit", "flit_inside_sw",
 				flit,
 			)
 
@@ -135,18 +144,18 @@ func (c *Comp) startProcessing() (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) movePipeline() (madeProgress bool) {
-	for _, port := range c.ports {
-		pc := c.portToComplexMapping[port]
+func (m *middleware) movePipeline() (madeProgress bool) {
+	for _, port := range m.ports {
+		pc := m.portToComplexMapping[port]
 		madeProgress = pc.pipeline.Tick() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (c *Comp) route() (madeProgress bool) {
-	for _, port := range c.ports {
-		pc := c.portToComplexMapping[port]
+func (m *middleware) route() (madeProgress bool) {
+	for _, port := range m.ports {
+		pc := m.portToComplexMapping[port]
 		routeBuf := pc.routeBuffer
 		forwardBuf := pc.forwardBuffer
 
@@ -162,7 +171,7 @@ func (c *Comp) route() (madeProgress bool) {
 
 			pipelineItem := item.(flitPipelineItem)
 			flit := pipelineItem.flit
-			c.assignFlitOutputBuf(flit)
+			m.assignFlitOutputBuf(flit)
 			routeBuf.Pop()
 			forwardBuf.Push(flit)
 			madeProgress = true
@@ -175,8 +184,8 @@ func (c *Comp) route() (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) forward() (madeProgress bool) {
-	inputBuffers := c.arbiter.Arbitrate()
+func (m *middleware) forward() (madeProgress bool) {
+	inputBuffers := m.arbiter.Arbitrate()
 
 	for _, buf := range inputBuffers {
 		for {
@@ -202,9 +211,9 @@ func (c *Comp) forward() (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) sendOut() (madeProgress bool) {
-	for _, port := range c.ports {
-		pc := c.portToComplexMapping[port]
+func (m *middleware) sendOut() (madeProgress bool) {
+	for _, port := range m.ports {
+		pc := m.portToComplexMapping[port]
 		sendOutBuf := pc.sendOutBuffer
 
 		for i := 0; i < pc.numOutputChannel; i++ {
@@ -225,7 +234,7 @@ func (c *Comp) sendOut() (madeProgress bool) {
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
 				// 	now, c.Name(), flit.ID)
 
-				tracing.EndTask(c.flitTaskID(flit), c)
+				tracing.EndTask(m.flitTaskID(flit), m.Comp)
 			}
 		}
 	}
@@ -233,19 +242,19 @@ func (c *Comp) sendOut() (madeProgress bool) {
 	return madeProgress
 }
 
-func (c *Comp) assignFlitOutputBuf(f *messaging.Flit) {
-	outPort := c.routingTable.FindPort(f.Msg.Meta().Dst)
+func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
+	outPort := m.routingTable.FindPort(f.Msg.Meta().Dst)
 	if outPort == nil {
 		panic(fmt.Sprintf("%s: no output port for %s",
-			c.Name(), f.Msg.Meta().Dst))
+			m.Comp.Name(), f.Msg.Meta().Dst))
 	}
 
-	pc := c.portToComplexMapping[outPort]
+	pc := m.portToComplexMapping[outPort]
 
 	f.OutputBuf = pc.sendOutBuffer
 	if f.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
-			c.Name(), f.Msg.Meta().Dst))
+			m.Comp.Name(), f.Msg.Meta().Dst))
 	}
 }
 
