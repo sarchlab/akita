@@ -411,7 +411,11 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-func (b ControlMsgBuilder) WithCtrlInfo(enableFlag bool, drainFlag bool, flushFlag bool, invalidFlag bool) ControlMsgBuilder {
+func (b ControlMsgBuilder) WithCtrlInfo(
+	enableFlag bool,
+	drainFlag bool,
+	flushFlag bool,
+	invalidFlag bool) ControlMsgBuilder {
 	b.pause.Enable = enableFlag
 	b.pause.Drain = drainFlag
 	b.pause.Flush = flushFlag
