@@ -116,28 +116,54 @@ func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 
 		signalMsg := msg.(*mem.ControlMsg)
 
-		if signalMsg.Pause.Invalid || signalMsg.Pause.Flush {
-			panic("Invalid or Flush signal should not be sent to ideal memory controller")
-		}
-
-		if signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
-			madeProgress = c.setState("enable", signalMsg)
+		if c.handleInvalidOrFlushSignal(signalMsg) {
 			return madeProgress
 		}
 
-		if !signalMsg.Pause.Enable && signalMsg.Pause.Drain {
-			c.state = "drain"
-			c.respondReq = signalMsg
-			madeProgress = true
-			return madeProgress
+		if c.handleEnableSignal(signalMsg) {
+			return true
 		}
 
-		if !signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
-			madeProgress = c.setState("pause", signalMsg)
-			return madeProgress
+		if c.handleDrainSignal(signalMsg) {
+			return true
 		}
 
+		if c.handlePauseSignal(signalMsg) {
+			return true
+		}
 	}
+}
+
+func (c *Comp) handleInvalidOrFlushSignal(signalMsg *mem.ControlMsg) bool {
+	if signalMsg.Pause.Invalid || signalMsg.Pause.Flush {
+		panic("Invalid or Flush signal should not be sent to ideal memory controller")
+	}
+	return false
+}
+
+func (c *Comp) handleEnableSignal(signalMsg *mem.ControlMsg) bool {
+	if signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
+		madeProgress := c.setState("enable", signalMsg)
+		return madeProgress
+	}
+	return false
+}
+
+func (c *Comp) handleDrainSignal(signalMsg *mem.ControlMsg) bool {
+	if !signalMsg.Pause.Enable && signalMsg.Pause.Drain {
+		c.state = "drain"
+		c.respondReq = signalMsg
+		return true
+	}
+	return false
+}
+
+func (c *Comp) handlePauseSignal(signalMsg *mem.ControlMsg) bool {
+	if !signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
+		madeProgress := c.setState("pause", signalMsg)
+		return madeProgress
+	}
+	return false
 }
 
 func (c *Comp) updateInflightBuffer() bool {
