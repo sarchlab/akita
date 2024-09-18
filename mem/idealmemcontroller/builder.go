@@ -90,13 +90,7 @@ func (b Builder) Build(
 	c := &Comp{
 		Latency: b.latency,
 		width:   b.width,
-		ctrlState: mem.Pause{
-			Enable:  true,
-			Drain:   false,
-			Flush:   false,
-			Invalid: false,
-		},
-		state: "enable",
+		state:   "enable",
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
@@ -111,8 +105,8 @@ func (b Builder) Build(
 
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
-	c.CtrlPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".CtrlPort")
-	c.AddPort("Control", c.CtrlPort)
+	c.ctrlPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".CtrlPort")
+	c.AddPort("Control", c.ctrlPort)
 
 	return c
 }

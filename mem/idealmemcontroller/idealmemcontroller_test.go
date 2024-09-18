@@ -34,7 +34,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Freq = 1000 * sim.MHz
 		memController.Latency = 10
 		memController.topPort = port
-		memController.CtrlPort = ctrlPort
+		memController.ctrlPort = ctrlPort
 	})
 
 	AfterEach(func() {

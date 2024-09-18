@@ -41,7 +41,7 @@ type Comp struct {
 	sim.MiddlewareHolder
 
 	topPort          sim.Port
-	CtrlPort         sim.Port
+	ctrlPort         sim.Port
 	Storage          *mem.Storage
 	Latency          int
 	addressConverter mem.AddressConverter
@@ -49,8 +49,7 @@ type Comp struct {
 	respondReq *mem.ControlMsg
 	width      int
 
-	state     string
-	ctrlState mem.Pause
+	state string
 
 	inflightbuffer []sim.Msg
 }
@@ -91,25 +90,9 @@ func (c *Comp) handleDrainReq() bool {
 	return madeProgress
 }
 
-// Handle defines how the Comp handles event
-func (c *Comp) Handle(e sim.Event) error {
-	switch e := e.(type) {
-	case *readRespondEvent:
-		return c.handleReadRespondEvent(e)
-	case *writeRespondEvent:
-		return c.handleWriteRespondEvent(e)
-	case sim.TickEvent:
-		return c.TickingComponent.Handle(e)
-	default:
-		log.Panicf("cannot handle event of %s", reflect.TypeOf(e))
-	}
-
-	return nil
-}
-
 func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 	for {
-		msg := c.CtrlPort.PeekIncoming()
+		msg := c.ctrlPort.PeekIncoming()
 		if msg == nil {
 			return madeProgress
 		}
@@ -136,19 +119,19 @@ func (c *Comp) handleCtrlSignals() (madeProgress bool) {
 			return true
 		}
 
-		c.CtrlPort.RetrieveIncoming()
+		c.ctrlPort.RetrieveIncoming()
 	}
 }
 
 func (c *Comp) handleInvalidOrFlushSignal(signalMsg *mem.ControlMsg) bool {
-	if signalMsg.Pause.Invalid || signalMsg.Pause.Flush {
+	if signalMsg.Invalid || signalMsg.Flush {
 		panic("Invalid or Flush signal should not be sent to ideal memory controller")
 	}
 	return false
 }
 
 func (c *Comp) handleEnableSignal(signalMsg *mem.ControlMsg) bool {
-	if signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
+	if signalMsg.Enable && !signalMsg.Drain {
 		madeProgress := c.setState("enable", signalMsg)
 		return madeProgress
 	}
@@ -156,7 +139,7 @@ func (c *Comp) handleEnableSignal(signalMsg *mem.ControlMsg) bool {
 }
 
 func (c *Comp) handleDrainSignal(signalMsg *mem.ControlMsg) bool {
-	if !signalMsg.Pause.Enable && signalMsg.Pause.Drain {
+	if !signalMsg.Enable && signalMsg.Drain {
 		c.state = "drain"
 		c.respondReq = signalMsg
 		return true
@@ -165,7 +148,7 @@ func (c *Comp) handleDrainSignal(signalMsg *mem.ControlMsg) bool {
 }
 
 func (c *Comp) handlePauseSignal(signalMsg *mem.ControlMsg) bool {
-	if !signalMsg.Pause.Enable && !signalMsg.Pause.Drain {
+	if !signalMsg.Enable && !signalMsg.Drain {
 		madeProgress := c.setState("pause", signalMsg)
 		return madeProgress
 	}
@@ -332,20 +315,19 @@ func (c *Comp) CurrentTime() sim.VTimeInSec {
 
 func (c *Comp) setState(state string, rspMessage *mem.ControlMsg) bool {
 	ctrlRsp := sim.GeneralRspBuilder{}.
-		WithSrc(c.CtrlPort).
+		WithSrc(c.ctrlPort).
 		WithDst(rspMessage.Src).
 		WithOriginalReq(rspMessage).
 		Build()
 
-	err := c.CtrlPort.Send(ctrlRsp)
+	err := c.ctrlPort.Send(ctrlRsp)
 
 	if err != nil {
 		return false
 	}
 
-	c.CtrlPort.RetrieveIncoming()
+	c.ctrlPort.RetrieveIncoming()
 	c.state = state
-	c.ctrlState = rspMessage.Pause
 
 	return true
 }
