@@ -17,6 +17,8 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 	m.ctrlMsgMustBeValid(ctrlMsg)
 
 	madeProgress = m.handleEnable(ctrlMsg) || madeProgress
+	madeProgress = m.handlePause(ctrlMsg) || madeProgress
+	madeProgress = m.handleDrain(ctrlMsg) || madeProgress
 
 	return madeProgress
 }
@@ -24,12 +26,32 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 	if ctrlMsg.Enable {
 		m.state = "enable"
+		rsp := ctrlMsg.GenerateRsp()
+		m.ctrlPort.Send(rsp)
+		return true
+	}
+	return false
+}
+
+func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
+	if !ctrlMsg.Enable && !ctrlMsg.Drain {
+		m.state = "pause"
+		rsp := ctrlMsg.GenerateRsp()
+		m.ctrlPort.Send(rsp)
+		return true
 	}
 
-	rsp := ctrlMsg.GenerateRsp()
-	m.ctrlPort.Send(rsp)
+	return false
+}
 
-	return true
+func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
+	if !ctrlMsg.Enable && ctrlMsg.Drain {
+		m.state = "drain"
+		m.respondReq = ctrlMsg
+		return true
+	}
+
+	return false
 }
 
 func (m *ctrlMiddleware) ctrlMsgMustBeValid(ctrlMsg *mem.ControlMsg) {
@@ -44,6 +66,18 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValid(ctrlMsg *mem.ControlMsg) {
 
 		if ctrlMsg.Flush {
 			panic("Enable and Flush should not be set at the same time")
+		}
+	}
+
+	if !ctrlMsg.Enable {
+		if ctrlMsg.Drain {
+			if ctrlMsg.Invalid {
+				panic("Drain and Invalid should not be set at the same time")
+			}
+
+			if ctrlMsg.Flush {
+				panic("Drain and Flush should not be set at the same time")
+			}
 		}
 	}
 }

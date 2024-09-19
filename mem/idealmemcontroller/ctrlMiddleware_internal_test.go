@@ -66,11 +66,53 @@ var _ = FDescribe("CtrlMiddleware", func() {
 				Expect(msg.Dst).To(Equal(remoteCtrlPort))
 				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
 			}).
-			Return(nil)
+			Return(nil).
+			AnyTimes()
 
 		madeProgress := ctrlMW.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(comp.state).To(Equal("enable"))
+	})
+
+	It("should handle pause message", func() {
+		comp.state = "enable"
+
+		ctrlMsg := mem.ControlMsgBuilder{}.
+			WithSrc(remoteCtrlPort).
+			WithDst(ctrlPort).
+			WithCtrlInfo(false, false, false, false).
+			Build()
+		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		ctrlPort.EXPECT().
+			Send(gomock.Any()).
+			Do(func(msg *sim.GeneralRsp) {
+				Expect(msg.Src).To(Equal(ctrlPort))
+				Expect(msg.Dst).To(Equal(remoteCtrlPort))
+				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
+			}).
+			Return(nil).
+			AnyTimes()
+
+		madeProgress := ctrlMW.Tick()
+
+		Expect(madeProgress).To(BeTrue())
+		Expect(comp.state).To(Equal("pause"))
+	})
+
+	FIt("should handle drain message", func() {
+		comp.state = "enable"
+
+		ctrlMsg := mem.ControlMsgBuilder{}.
+			WithSrc(remoteCtrlPort).
+			WithDst(ctrlPort).
+			WithCtrlInfo(false, true, false, false).
+			Build()
+		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		madeProgress := ctrlMW.Tick()
+
+		Expect(madeProgress).To(BeTrue())
+		Expect(comp.state).To(Equal("drain"))
+		Expect(comp.respondReq).To(Equal(ctrlMsg))
 	})
 })
