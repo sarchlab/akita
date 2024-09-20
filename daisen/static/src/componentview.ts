@@ -191,7 +191,7 @@ class ComponentView {
     await this._renderReqTree();
   }
 
-  async _renderReqTree() {
+  async _renderReqTree(targetElement: HTMLElement = this._reqTreeCanvas) {
     console.log('Rendering req tree');
     if (!this._reqTreeCanvas) {
       console.error('_reqTreeCanvas is not defined');

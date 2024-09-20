@@ -34,7 +34,9 @@ export class TaskPage implements ZoomHandler {
   _componentView: ComponentView;
   _widget: Widget;
   _reqTreeCanvas: HTMLElement;
-
+  private _reqTreeButton: HTMLButtonElement;
+  private _reqTreeHover: HTMLDivElement;
+  private _isTaskViewActive: boolean = false;
   constructor() {
     this._container = null;
     this._taskViewCanvas = null;
@@ -87,6 +89,8 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
     this._componentView.setTimeAxis(this._startTime, this._endTime);
+    this._isTaskViewActive = false;
+    this._createReqTreeButton();
   }
 
   _handleMouseMove(e: MouseEvent) {
@@ -195,23 +199,23 @@ export class TaskPage implements ZoomHandler {
       this._rightColumn.appendChild(this._legendCanvas);
     }
 
-    if (this._reqTreeCanvas === null) {
-      const reqTreeContainer = document.createElement("div");
-      reqTreeContainer.style.width = "100%";
-      reqTreeContainer.style.height = "100%"; 
-      reqTreeContainer.style.overflowY = "auto"; 
-      reqTreeContainer.style.border = "1px solid #ccc"; 
-      this._reqTreeCanvas = document.createElement("div");
-      this._reqTreeCanvas.innerHTML = "<svg></svg>";
-      this._reqTreeCanvas.classList.add("req-tree");
-      this._reqTreeCanvas.style.width = "100%";
-      this._reqTreeCanvas.style.height = "100%";
-      reqTreeContainer.appendChild(this._reqTreeCanvas);
-      this._rightColumn.appendChild(reqTreeContainer);
-    }
-    if (!this._rightColumn.contains(this._reqTreeCanvas)) {
-      this._rightColumn.appendChild(this._reqTreeCanvas);
-    }
+    // if (this._reqTreeCanvas === null) {
+    //   const reqTreeContainer = document.createElement("div");
+    //   reqTreeContainer.style.width = "100%";
+    //   reqTreeContainer.style.height = "100%"; 
+    //   reqTreeContainer.style.overflowY = "auto"; 
+    //   reqTreeContainer.style.border = "1px solid #ccc"; 
+    //   this._reqTreeCanvas = document.createElement("div");
+    //   this._reqTreeCanvas.innerHTML = "<svg></svg>";
+    //   this._reqTreeCanvas.classList.add("req-tree");
+    //   this._reqTreeCanvas.style.width = "100%";
+    //   this._reqTreeCanvas.style.height = "100%";
+    //   reqTreeContainer.appendChild(this._reqTreeCanvas);
+    //   this._rightColumn.appendChild(reqTreeContainer);
+    // }
+    // if (!this._rightColumn.contains(this._reqTreeCanvas)) {
+    //   this._rightColumn.appendChild(this._reqTreeCanvas);
+    // }
   }
 
   _layoutLeftColumn() {
@@ -399,6 +403,50 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 
+  private _createReqTreeButton() {
+    const existingButton = document.getElementById('reqtree-button');
+    if (existingButton) {
+        existingButton.remove();
+    }
+    this._reqTreeButton = document.createElement('button');
+    this._reqTreeButton.id = 'reqtree-button';
+    this._reqTreeButton.className = 'btn btn-outline-light';
+    this._reqTreeButton.textContent = 'ReqTree';
+
+    this._reqTreeHover = document.createElement('div');
+    this._reqTreeHover.id = 'reqtree-hover';
+    this._reqTreeHover.style.position = 'absolute';
+    this._reqTreeHover.style.background = 'rgba(255, 255, 255, 0.9)';
+    this._reqTreeHover.style.border = '1px solid #ccc';
+    this._reqTreeHover.style.display = 'none';
+
+    this._reqTreeButton.addEventListener('mouseenter', () => this._showReqTree());
+    this._reqTreeButton.addEventListener('mouseleave', () => this._hideReqTree());
+
+    const topNav = document.getElementById('top-nav');
+    if (topNav) {
+      topNav.appendChild(this._reqTreeButton);
+      topNav.appendChild(this._reqTreeHover);
+    }
+  }
+
+  private _showReqTree() {
+    if (this._reqTreeHover && this._componentView) {
+      const buttonRect = this._reqTreeButton!.getBoundingClientRect();
+      this._reqTreeHover.style.top = `${buttonRect.bottom}px`;
+      this._reqTreeHover.style.right = `${window.innerWidth - buttonRect.right}px`;
+      this._reqTreeHover.style.display = 'block';
+
+      if (!this._reqTreeHover.contains(this._reqTreeCanvas)) {
+        this._reqTreeHover.appendChild(this._reqTreeCanvas);
+      }
+      this._componentView._renderReqTree(this._reqTreeHover);
+    }
+  }
+
+  private _hideReqTree() {
+    this._reqTreeHover.style.display = 'none';
+  }
 }
 
 export default TaskPage;

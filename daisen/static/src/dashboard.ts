@@ -55,7 +55,10 @@ class Dashboard {
     this._canvas = canvas;
     this._pageBtnContainer = pageBtnContainer;
     this._toolBar = toolBar;
-  
+    const reqTreeButton = document.getElementById('reqtree-button');
+    if (reqTreeButton) {
+      reqTreeButton.style.display = 'none';
+    }
     this._canvas.classList.add('canvas-container');
     
     const burgerMenu = document.createElement('div');
