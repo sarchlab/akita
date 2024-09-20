@@ -116,6 +116,8 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 		return NewSendError()
 	}
 
+	wasEmpty := (p.outgoingBuf.Size() == 0)
+
 	p.outgoingBuf.Push(msg)
 	hookCtx := HookCtx{
 		Domain: p,
@@ -125,7 +127,9 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	p.InvokeHook(hookCtx)
 	p.lock.Unlock()
 
-	p.conn.NotifySend()
+    if wasEmpty {
+        p.conn.NotifySend()
+    }
 
 	return nil
 }
@@ -139,6 +143,8 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 		return NewSendError()
 	}
 
+	wasEmpty := (p.incomingBuf.Size() == 0)
+
 	hookCtx := HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRecvd,
@@ -149,7 +155,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
 
-	if p.comp != nil {
+	if p.comp != nil && wasEmpty {
 		p.comp.NotifyRecv(p)
 	}
 
