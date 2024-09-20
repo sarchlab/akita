@@ -49,7 +49,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 
 	p.csvWriter = csv.NewWriter(p.dbFile)
 
-	header := []string{"Start", "End", "Where", "What", "EntryType", "Value", "Unit"}
+	header := []string{"Start", "End", "Where", "What", "EntryType", "Value", "Unit", "Hops"}
 	err = p.csvWriter.Write(header)
 	if err != nil {
 		panic(err)
@@ -68,6 +68,7 @@ func (p *CSVBackend) AddDataEntry(entry PerfAnalyzerEntry) {
 		entry.EntryType,
 		fmt.Sprintf("%.10f", entry.Value),
 		entry.Unit,
+		fmt.Sprintf("%d", entry.Hops),
 	})
 	if err != nil {
 		panic(err)
@@ -144,6 +145,7 @@ func (p *SQLiteBackend) Flush() {
 			entry.EntryType,
 			entry.Value,
 			entry.Unit,
+			entry.Hops,
 		)
 		if err != nil {
 			panic(err)

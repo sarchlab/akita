@@ -85,6 +85,9 @@ func (mmu *MMU) finalizePageWalk(
 	req := mmu.walkingTranslations[walkingIndex].req
 	page, found := mmu.pageTable.Find(req.PID, req.VAddr)
 
+	// fmt.Printf("%0.9f,%s,GetReq,%s\n",
+	// 	float64(now), mmu.topPort.Name(), req.TaskID)
+
 	if !found {
 		panic("page not found")
 	}
@@ -149,9 +152,14 @@ func (mmu *MMU) doPageWalkHit(
 		WithDst(walking.req.Src).
 		WithRspTo(walking.req.ID).
 		WithPage(walking.page).
+		WithTaskID(walking.req.TaskID).
 		Build()
 
 	mmu.topSender.Send(rsp)
+
+	// fmt.Printf("%0.9f,%s,SendRsp,%s\n",
+	// 	float64(now), mmu.topPort.Name(), rsp.TaskID)
+
 	mmu.toRemoveFromPTW = append(mmu.toRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(walking.req, mmu)

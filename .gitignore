@@ -18,7 +18,7 @@ debug
 
 # Prof file
 *.prof
-
+*.sqlite3
 .DS_Store
 
 .vscode/*.log

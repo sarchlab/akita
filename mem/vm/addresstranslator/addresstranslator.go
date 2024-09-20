@@ -137,6 +137,7 @@ func (t *AddressTranslator) translate(now sim.VTimeInSec) bool {
 	req := item.(mem.AccessReq)
 	vAddr := req.GetAddress()
 	vPageID := t.addrToPageID(vAddr)
+	taskID := sim.GetIDGenerator().Generate()
 
 	transReq := vm.TranslationReqBuilder{}.
 		WithSendTime(now).
@@ -145,12 +146,15 @@ func (t *AddressTranslator) translate(now sim.VTimeInSec) bool {
 		WithPID(req.GetPID()).
 		WithVAddr(vPageID).
 		WithDeviceID(t.deviceID).
+		WithTaskID(taskID).
 		Build()
 	err := t.translationPort.Send(transReq)
 	if err != nil {
 		return false
 	}
-
+	// fmt.Printf("%0.9f,%s,generateReq,%s,%d,%d,%d\n",
+	// 	float64(now), transReq.Src.Name(), transReq.TaskID,
+	// 	transReq.DeviceID, transReq.VAddr, transReq.PID)
 	translation := &transaction{
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
@@ -205,6 +209,8 @@ func (t *AddressTranslator) parseTranslation(now sim.VTimeInSec) bool {
 	if err != nil {
 		return false
 	}
+	// fmt.Printf("%0.9f,%s,FeedbackReq,%s,\n",
+	// 	float64(now), transRsp.Dst.Name(), transRsp.TaskID)
 
 	t.inflightReqToBottom = append(t.inflightReqToBottom,
 		reqToBottom{

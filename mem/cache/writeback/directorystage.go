@@ -148,7 +148,7 @@ func (ds *directoryStage) handleReadHit(
 		"read-hit",
 	)
 
-	// log.Printf("%.10f, %s, dir read hit， %s, %04X, %04X, (%d, %d), %v\n",
+	// fmt.Printf("%.10f, %s, dir read hit, %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address,
@@ -176,15 +176,6 @@ func (ds *directoryStage) handleReadMiss(
 		return false
 	}
 
-	// log.Printf("%.10f, %s, dir read miss， %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, ds.cache.Name(),
-	// 	trans.read.ID,
-	// 	trans.read.Address,
-	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
-	// 	victim.SetID, victim.WayID,
-	// 	nil,
-	// )
-
 	if ds.needEviction(victim) {
 		ok := ds.evict(now, trans, victim)
 		if ok {
@@ -193,6 +184,15 @@ func (ds *directoryStage) handleReadMiss(
 				ds.cache,
 				"read-miss",
 			)
+
+			// fmt.Printf("%.10f, %s, dir read miss, %s, %04X, %04X, (%d, %d), %v\n",
+			// 	now, ds.cache.Name(),
+			// 	trans.read.ID,
+			// 	trans.read.Address,
+			// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
+			// 	victim.SetID, victim.WayID,
+			// 	nil,
+			// )
 		}
 
 		return ok
@@ -205,6 +205,15 @@ func (ds *directoryStage) handleReadMiss(
 			ds.cache,
 			"read-miss",
 		)
+
+		// fmt.Printf("%.10f, %s, dir read miss, %s, %04X, %04X, (%d, %d), %v\n",
+		// 	now, ds.cache.Name(),
+		// 	trans.read.ID,
+		// 	trans.read.Address,
+		// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
+		// 	victim.SetID, victim.WayID,
+		// 	nil,
+		// )
 	}
 
 	return ok
@@ -322,7 +331,7 @@ func (ds *directoryStage) writePartialLineMiss(
 		return false
 	}
 
-	// log.Printf("%.10f, %s, write partial line ， %s, %04X, %04X, (%d, %d), %v\n",
+	// fmt.Printf("%.10f, %s, write partial line , %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.write.ID,
 	// 	trans.write.Address, cachelineID,
@@ -331,7 +340,19 @@ func (ds *directoryStage) writePartialLineMiss(
 	// )
 
 	if ds.needEviction(victim) {
-		return ds.evict(now, trans, victim)
+
+		ok := ds.evict(now, trans, victim)
+		if ok {
+			// fmt.Printf("%.10f, %s, dir read miss, %s, %04X, %04X, (%d, %d), %v\n",
+			// 	now, ds.cache.Name(),
+			// 	trans.read.ID,
+			// 	trans.read.Address,
+			// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
+			// 	victim.SetID, victim.WayID,
+			// 	nil,
+			// )
+		}
+		return ok
 	}
 
 	return ds.fetch(now, trans, victim)
@@ -418,7 +439,7 @@ func (ds *directoryStage) evict(
 	bankBuf.Push(trans)
 	ds.cache.evictingList[trans.victim.Tag] = true
 
-	// log.Printf("%.10f, %s, directory evict ， %s, %04X, %04X, (%d, %d), %v\n",
+	// fmt.Printf("%.10f, %s, directory evict , %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.accessReq().Meta().ID,
 	// 	trans.accessReq().GetAddress(), trans.victim.Tag,

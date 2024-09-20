@@ -21,6 +21,7 @@ type PerfAnalyzerEntry struct {
 	What        string
 	Value       float64
 	Unit        string
+	Hops        int
 }
 
 // PerfLogger is the interface that provide the service that can record

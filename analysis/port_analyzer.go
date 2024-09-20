@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"math"
+	"regexp"
+	"strconv"
 
 	"github.com/sarchlab/akita/v3/sim"
 	"github.com/tebeka/atexit"
@@ -13,6 +15,7 @@ type portAnalyzerEntry struct {
 	OutTrafficMsg  int64
 	InTrafficByte  int64
 	InTrafficMsg   int64
+	Hops           int
 }
 
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
@@ -67,6 +70,8 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	} else {
 		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
 		entry.OutTrafficMsg++
+		hops := manhattanDistance(msg)
+		entry.Hops += hops
 	}
 
 	h.remoteToTrafficMap[remotePortName] = entry
@@ -107,10 +112,12 @@ func (h *PortAnalyzer) summarize() {
 
 			perfEntry.Value = float64(entry.InTrafficByte)
 			perfEntry.Unit = "Byte"
+			perfEntry.Hops = 0
 			h.PerfLogger.AddDataEntry(perfEntry)
 
 			perfEntry.Value = float64(entry.InTrafficMsg)
 			perfEntry.Unit = "Msg"
+			perfEntry.Hops = 0
 			h.PerfLogger.AddDataEntry(perfEntry)
 		}
 
@@ -119,10 +126,12 @@ func (h *PortAnalyzer) summarize() {
 
 			perfEntry.Value = float64(entry.OutTrafficByte)
 			perfEntry.Unit = "Byte"
+			perfEntry.Hops = 0
 			h.PerfLogger.AddDataEntry(perfEntry)
 
 			perfEntry.Value = float64(entry.OutTrafficMsg)
 			perfEntry.Unit = "Msg"
+			perfEntry.Hops = entry.Hops
 			h.PerfLogger.AddDataEntry(perfEntry)
 		}
 	}
@@ -204,4 +213,55 @@ func (b PortAnalyzerBuilder) Build() *PortAnalyzer {
 	atexit.Register(func() { a.summarize() })
 
 	return a
+}
+
+// Get Manhattan Distance
+func manhattanDistance(msg sim.Msg) int {
+	form := msg.Meta().Src.Name()
+	to := msg.Meta().Dst.Name()
+
+	formID := getGPUIDFromName(form)
+	toID := getGPUIDFromName(to)
+
+	formX, formY := convToCoord(formID)
+	toX, toY := convToCoord(toID)
+	distance := int(math.Abs(float64(formX-toX)) + math.Abs(float64(formY-toY)))
+	// fmt.Println("fromID: ", form, "toID", to, "formX: ", formX, " formY: ", formY, " toX: ", toX, " toY: ", toY, "distance: ", distance)
+	return distance
+}
+
+func getGPUIDFromName(name string) int {
+	re := regexp.MustCompile(`GPU\[(\d+)\]`)
+
+	// 查找所有匹配项
+	matches := re.FindAllStringSubmatch(name, -1)
+
+	// fmt.Println("name: ", name)
+	// 遍历所有匹配项，提取数字
+	for _, match := range matches {
+		if len(match) > 1 {
+			// fmt.Println(match[1]) // 输出匹配的数字
+			gpuid, err := strconv.Atoi(match[1])
+			if err == nil {
+				// fmt.Println("GPUID: %d \n", gpuid)
+				return gpuid
+			} else {
+				return 0
+			}
+		}
+	}
+	return 0
+}
+
+func convToCoord(id int) (int, int) {
+	if id >= 24 {
+		id += 1
+	}
+	// } else {
+	// 	id = id + 1
+	// }
+
+	x := id % 7
+	y := id / 7
+	return x, y
 }
