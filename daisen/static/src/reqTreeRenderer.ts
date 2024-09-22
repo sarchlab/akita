@@ -1,6 +1,6 @@
 import * as d3 from 'd3';
 import { TaskPage } from './taskpage';
-
+import { Task } from './task'; 
 interface TreeNode {
   id: string;
   type: string;
@@ -22,10 +22,10 @@ function renderReqTree(container: d3.Selection<HTMLElement, unknown, null, undef
   const svg = containerDiv.append('svg')
     .attr('height', '300px');  
 
-  renderTree(svg, data);
+  renderTree(svg, data, taskPage);
 }
 
-function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode) {
+function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefined>, data: TreeNode, taskPage: TaskPage) {
   const margin = { top: -50, right: 20, bottom: 20, left: 0 };
   // const width = container.node().getBoundingClientRect().width - margin.left - margin.right;
   const height = 260; 
@@ -67,17 +67,17 @@ function renderTree(container: d3.Selection<SVGSVGElement, unknown, null, undefi
   if (leftNodes.length > 0) {
     const xPositions = calculateXPositions(leftNodes, containerWidth);
     leftNodes.forEach((node, index) => {
-      renderNode(svg, node, xPositions[index], yStep, 'left');
+      renderNode(svg, node, xPositions[index], yStep, 'left', taskPage);
       drawConnector(svg, xPositions[index], yStep + 15, centerX, 2 * yStep - 15);
     });
   }
 
-  renderNode(svg, data, centerX, 2 * yStep, 'center');
+  renderNode(svg, data, centerX, 2 * yStep, 'center', taskPage);
   
   if (rightNodes.length > 0) {
     const xPositions = calculateXPositions(rightNodes, containerWidth);
     rightNodes.forEach((node, index) => {
-      renderNode(svg, node, xPositions[index], 3 * yStep, 'right');
+      renderNode(svg, node, xPositions[index], 3 * yStep, 'right', taskPage);
       drawConnector(svg, centerX, 2 * yStep + 15, xPositions[index], 3 * yStep - 15);
     });
   }
@@ -91,7 +91,7 @@ function drawConnector(svg: d3.Selection<SVGGElement, unknown, null, undefined>,
     .attr("stroke", "#ccc");
 }
 
-function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, node: TreeNode, x: number, y: number, position: 'left' | 'right' | 'center') {
+function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, node: TreeNode, x: number, y: number, position: 'left' | 'right' | 'center', taskPage: TaskPage) {
   const g = svg.append("g")
     .attr("transform", `translate(${x},${y})`);
 
@@ -135,11 +135,15 @@ function renderNode(svg: d3.Selection<SVGGElement, unknown, null, undefined>, no
     tooltip.html(`Type: ${node.type}<br/>Where: ${node.where}`)
       .style("left", (event.pageX + 10) + "px")
       .style("top", (event.pageY - 28) + "px");
+    const componentName = node.where;
+    const tasksToHighlight = taskPage.getTasksByComponent(componentName); 
+    taskPage.highlight((t: Task) => tasksToHighlight.some(ht => ht.id === t.id));
   })
   .on("mouseout", () => {
     tooltip.transition()
       .duration(500)
       .style("opacity", 0);
+    taskPage.highlight(null);
   });
 }
 

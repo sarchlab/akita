@@ -191,6 +191,17 @@ class TaskView {
     this._taskRenderer.hightlight(task);
   }
 
+  highlightReqTreeTasks(tasks: Task[]) {
+    const svg = d3.select(this._canvas).select("svg");
+    svg.selectAll(".task")
+      .classed("reqtree-highlighted", (d: Task) => tasks.some(t => t.id === d.id));
+  }
+  
+  clearReqTreeHighlight() {
+    const svg = d3.select(this._canvas).select("svg");
+    svg.selectAll(".task").classed("reqtree-highlighted", false);
+  }
+
   render(task: Task, subTasks: Array<Task>, parentTask: Task) {
     this._task = task;
     this._subTasks = subTasks;
@@ -249,6 +260,10 @@ class TaskView {
         }
       })
       .render(tasks);
+  }
+  
+  getAllTasks(): Task[] {
+    return this._allTasks;
   }
 }
 

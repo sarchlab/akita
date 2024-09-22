@@ -338,6 +338,7 @@ class TaskRenderer {
     _hideTooltip() {
         this._tooltip.classList.remove('showing');
     }
+      
 }
 
 export default TaskRenderer;

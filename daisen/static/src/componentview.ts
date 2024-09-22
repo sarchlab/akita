@@ -175,6 +175,17 @@ class ComponentView {
     this._taskRenderer.hightlight(task);
   }
 
+  highlightReqTreeTasks(tasks: Task[]) {
+    const svg = d3.select(this._canvas).select("svg");
+    svg.selectAll(".task")
+      .classed("reqtree-highlighted", (d: Task) => tasks.some(t => t.id === d.id));
+  }
+  
+  clearReqTreeHighlight() {
+    const svg = d3.select(this._canvas).select("svg");
+    svg.selectAll(".task").classed("reqtree-highlighted", false);
+  }
+  
   async render(tasks: Array<Task>) {
     this._tasks = tasks;
     this._renderData();
@@ -210,7 +221,7 @@ class ComponentView {
   
     if (svg.node()) {
       //@ts-ignore
-      renderReqTree(d3.select(this._reqTreeCanvas), treeData);
+      renderReqTree(d3.select(this._reqTreeCanvas), treeData, this._taskPage);
     } else {
       console.error('SVG element not found in _reqTreeCanvas');
     }

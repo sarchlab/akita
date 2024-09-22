@@ -37,6 +37,8 @@ export class TaskPage implements ZoomHandler {
   private _reqTreeButton: HTMLButtonElement;
   private _reqTreeHover: HTMLDivElement;
   private _isTaskViewActive: boolean = false;
+  private _isReqTreeVisible: boolean = false;
+
   constructor() {
     this._container = null;
     this._taskViewCanvas = null;
@@ -419,14 +421,25 @@ export class TaskPage implements ZoomHandler {
     this._reqTreeHover.style.background = 'rgba(255, 255, 255, 0.9)';
     this._reqTreeHover.style.border = '1px solid #ccc';
     this._reqTreeHover.style.display = 'none';
+    this._reqTreeButton.addEventListener('click', () => this._toggleReqTree());
 
-    this._reqTreeButton.addEventListener('mouseenter', () => this._showReqTree());
-    this._reqTreeButton.addEventListener('mouseleave', () => this._hideReqTree());
-
+    document.addEventListener('click', (event) => {
+      if (!this._reqTreeButton.contains(event.target as Node)) {
+        this._hideReqTree();
+      }
+    });
     const topNav = document.getElementById('top-nav');
     if (topNav) {
       topNav.appendChild(this._reqTreeButton);
       topNav.appendChild(this._reqTreeHover);
+    }
+  }
+
+  _toggleReqTree(): void {
+    if (this._isReqTreeVisible) {
+      this._hideReqTree();
+    } else {
+      this._showReqTree();
     }
   }
 
@@ -445,8 +458,22 @@ export class TaskPage implements ZoomHandler {
   }
 
   private _hideReqTree() {
-    this._reqTreeHover.style.display = 'none';
+    if (this._reqTreeHover) {
+      this._reqTreeHover.style.display = 'none';
+    }
+  }
+
+  getTasksByComponent(componentName: string): Task[] {
+    return this._taskView.getAllTasks().filter(
+      (task: Task) => task.where === componentName
+    );
+  }
+
+  clearHighlight() {
+    this._taskView.clearReqTreeHighlight();
+    this._componentView.clearReqTreeHighlight();
   }
 }
 
 export default TaskPage;
+
