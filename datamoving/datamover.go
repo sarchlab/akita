@@ -6,54 +6,25 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
-
-// A DataMoveRequest asks DataMover to transfer data
-type DataMoveRequest struct {
-	sim.MsgMeta
-	srcAddress   uint64
-	dstAddress   uint64
-	srcDirection string
-	dstDirection string
-	byteSize     uint64
-}
-
-func NewDataMoveRequest(
-	sourcePort sim.Port,
-	destinationPort sim.Port,
-	sourceAddress uint64,
-	destinationAddress uint64,
-	sourceDirection string,
-	destinationDirection string,
-	size uint64,
-) *DataMoveRequest {
-	req := &DataMoveRequest{}
-	req.ID = sim.GetIDGenerator().Generate()
-	req.Src = sourcePort
-	req.Dst = destinationPort
-	req.srcAddress = sourceAddress
-	req.dstAddress = destinationAddress
-	req.srcDirection = sourceDirection
-	req.dstDirection = destinationDirection
-	req.byteSize = size
-
-	return req
-}
-
-func (req *DataMoveRequest) Meta() *sim.MsgMeta {
-	return &req.MsgMeta
-}
 
 type DataMover struct {
 	*sim.TickingComponent
 
-	writeRequests   []sim.Msg
-	readRequests    []sim.Msg
-	pendingRequests []sim.Msg
+	Log2AccessSize uint64
 
-	toReadSrc   sim.Port
-	toWriteDst  sim.Port
-	controlPort sim.Port
+	toA                []*sim.Msg
+	toB                []*sim.Msg
+	processingRequests []*sim.Msg
+	pendingRequests    []*sim.Msg
+
+	moveRequest *DataMoveRequest
+	maxReqCount uint64
+
+	portA    sim.Port
+	portB    sim.Port
+	ctrlPort sim.Port
 
 	localDataSource mem.LowModuleFinder
 
@@ -89,28 +60,17 @@ func (d *DataMover) send(
 	return false
 }
 
-func (d *DataMover) parseFromOutside(
-	now sim.VTimeInSec,
-) bool {
-	req := d.controlPort.PeekIncoming()
-	if req == nil {
-		return false
-	}
-
-	return false
-}
-
-func (d *DataMover) parseFromReadSource(
-	now sim.VTimeInSec,
-) bool {
-	req := d.toReadSrc.RetrieveIncoming()
+func (d *DataMover) parseFromA(now sim.VTimeInSec) bool {
+	req := d.portA.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(now)
+		d.processDataReadyRsp(now, req)
+	case *mem.WriteDoneRsp:
+		d.processWriteDoneRsp(now, req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -118,17 +78,17 @@ func (d *DataMover) parseFromReadSource(
 	return true
 }
 
-func (d *DataMover) parseFromWriteDst(
-	now sim.VTimeInSec,
-) bool {
-	req := d.toWriteDst.RetrieveIncoming()
+func (d *DataMover) parseFromB(now sim.VTimeInSec) bool {
+	req := d.portB.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
+	case *mem.DataReadyRsp:
+		d.processDataReadyRsp(now, req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(now)
+		d.processWriteDoneRsp(now, req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -136,14 +96,53 @@ func (d *DataMover) parseFromWriteDst(
 	return true
 }
 
-func (d *DataMover) processDataMovingReq(now sim.VTimeInSec) {
+func (d *DataMover) processDataReadyRsp(
+	now sim.VTimeInSec,
+	rsp *mem.DataReadyRsp,
+) {
+}
+
+func (d *DataMover) processWriteDoneRsp(
+	now sim.VTimeInSec,
+	rsp *mem.WriteDoneRsp,
+) {
 
 }
 
-func (d *DataMover) processDataReadyRsp(now sim.VTimeInSec) {
+func (d *DataMover) parseFromCtrlPort(now sim.VTimeInSec) bool {
+	if len(d.processingRequests) >= int(d.maxReqCount) {
+		return false
+	}
 
+	req := d.ctrlPort.RetrieveIncoming()
+	if req == nil {
+		return false
+	}
+	tracing.TraceReqReceive(req, d)
+
+	switch req := req.(type) {
+	case *DataMoveRequest:
+		return d.handleMoveRequest(now, req)
+	default:
+		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
+	}
+	return false
 }
 
-func (d *DataMover) processWriteDoneRsp(now sim.VTimeInSec) {
-
+func (d *DataMover) handleMoveRequest(
+	now sim.VTimeInSec,
+	req *DataMoveRequest,
+) bool {
+	d.moveRequest = req
+	return true
 }
+
+func (d *DataMover) processMoveRequest(
+	now sim.VTimeInSec,
+) bool {
+	return false
+}
+
+func (d *DataMover) processOutside()
+
+func (d *DataMover) processInside()
