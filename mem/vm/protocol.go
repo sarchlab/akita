@@ -11,6 +11,7 @@ type TranslationReq struct {
 	VAddr    uint64
 	PID      PID
 	DeviceID uint64
+	TaskID   string
 }
 
 // Meta returns the meta data associated with the message.
@@ -25,6 +26,13 @@ type TranslationReqBuilder struct {
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
+	taskID   string
+}
+
+// WithTaskID sets the task ID of the request to build.
+func (b TranslationReqBuilder) WithTaskID(taskID string) TranslationReqBuilder {
+	b.taskID = taskID
+	return b
 }
 
 // WithSendTime sets the send time of the request to build.:w
@@ -75,6 +83,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.TaskID = b.taskID
 	return r
 }
 
@@ -84,6 +93,7 @@ type TranslationRsp struct {
 	sim.MsgMeta
 	RespondTo string // The ID of the request it replies
 	Page      Page
+	TaskID    string
 }
 
 // Meta returns the meta data associated with the message.
@@ -101,7 +111,13 @@ type TranslationRspBuilder struct {
 	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
+	taskID   string
 	page     Page
+}
+
+func (b TranslationRspBuilder) WithTaskID(taskID string) TranslationRspBuilder {
+	b.taskID = taskID
+	return b
 }
 
 // WithSendTime sets the send time of the message to build.
@@ -145,6 +161,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	r.Page = b.page
+	r.TaskID = b.taskID
 	return r
 }
 

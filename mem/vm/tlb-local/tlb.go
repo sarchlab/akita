@@ -30,8 +30,7 @@ type TLB struct {
 	mshr                mshr
 	respondingMSHREntry *mshrEntry
 
-	isPaused                  bool
-	onlyStoreLocalPageAddress bool
+	isPaused bool
 
 	deviceID uint64
 }
@@ -76,6 +75,7 @@ func (tlb *TLB) respondMSHREntry(now sim.VTimeInSec) bool {
 	mshrEntry := tlb.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
+
 	rspToTop := vm.TranslationRspBuilder{}.
 		WithSendTime(now).
 		WithSrc(tlb.topPort).
@@ -88,6 +88,9 @@ func (tlb *TLB) respondMSHREntry(now sim.VTimeInSec) bool {
 	if err != nil {
 		return false
 	}
+
+	// fmt.Printf("%0.9f,%s,MSHRRspToTop,%s\n",
+	// 	float64(now), tlb.topPort.Name(), rspToTop.TaskID)
 
 	mshrEntry.Requests = mshrEntry.Requests[1:]
 	if len(mshrEntry.Requests) == 0 {
@@ -106,22 +109,23 @@ func (tlb *TLB) lookup(now sim.VTimeInSec) bool {
 
 	req := msg.(*vm.TranslationReq)
 
+	// fmt.Printf("%0.9f,%s,FetchReqFromTop,%s\n",
+	// 	float64(now), tlb.topPort.Name(), req.TaskID)
+
 	mshrEntry := tlb.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return tlb.processTLBMSHRHit(now, mshrEntry, req)
 	}
 
-	if tlb.onlyStoreLocalPageAddress {
-		if tlb.deviceID != req.DeviceID {
-			fetched := tlb.fetchBottom(now, req)
-			if fetched {
-				tlb.topPort.Retrieve(now)
-				tracing.TraceReqReceive(req, tlb)
-				tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, tlb), tlb, "miss")
-				tracing.TraceReqComplete(req, tlb)
-			}
-			return fetched
+	if tlb.deviceID != req.DeviceID {
+		fetched := tlb.fetchBottom(now, req)
+		if fetched {
+			tlb.topPort.Retrieve(now)
+			tracing.TraceReqReceive(req, tlb)
+			tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, tlb), tlb, "miss")
+			tracing.TraceReqComplete(req, tlb)
 		}
+		return fetched
 	}
 
 	setID := tlb.vAddrToSetID(req.VAddr)
@@ -192,7 +196,14 @@ func (tlb *TLB) sendRspToTop(
 		Build()
 
 	err := tlb.topPort.Send(rsp)
-	return err == nil
+	if err != nil {
+		return false
+	}
+
+	// fmt.Printf("%0.9f,%s,RspToTop,%s\n",
+	// 	float64(now), tlb.topPort.Name(), rsp.TaskID)
+
+	return true
 }
 
 func (tlb *TLB) processTLBMSHRHit(
@@ -224,6 +235,9 @@ func (tlb *TLB) fetchBottom(now sim.VTimeInSec, req *vm.TranslationReq) bool {
 		return false
 	}
 
+	// fmt.Printf("%0.9f,%s,SendReq,%s\n",
+	// 	float64(now), tlb.bottomPort.Name(), fetchBottom.TaskID)
+
 	mshrEntry := tlb.mshr.Add(req.PID, req.VAddr)
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 	mshrEntry.reqToBottom = fetchBottom
@@ -253,7 +267,8 @@ func (tlb *TLB) parseBottom(now sim.VTimeInSec) bool {
 		return true
 	}
 
-	if !tlb.onlyStoreLocalPageAddress || tlb.deviceID == rsp.Page.DeviceID {
+	// Local address case
+	if page.DeviceID == tlb.deviceID {
 		setID := tlb.vAddrToSetID(page.VAddr)
 		set := tlb.Sets[setID]
 		wayID, ok := tlb.Sets[setID].Evict()
@@ -263,7 +278,6 @@ func (tlb *TLB) parseBottom(now sim.VTimeInSec) bool {
 		set.Update(wayID, page)
 		set.Visit(wayID)
 	}
-
 	mshrEntry := tlb.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
 	tlb.respondingMSHREntry = mshrEntry
 	mshrEntry.page = page

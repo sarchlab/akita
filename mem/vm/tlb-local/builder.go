@@ -12,6 +12,7 @@ type Builder struct {
 	pageSize                  uint64
 	lowModule                 sim.Port
 	numMSHREntry              int
+	deviceID                  uint64
 	onlyStoreLocalPageAddress bool
 }
 
@@ -80,6 +81,11 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 	return b
 }
 
+func (b Builder) WithDeviceID(deviceID uint64) Builder {
+	b.deviceID = deviceID
+	return b
+}
+
 func (b Builder) WithOnlyStoreLocalPageAddress(flag bool) Builder {
 	b.onlyStoreLocalPageAddress = flag
 	return b
@@ -97,6 +103,7 @@ func (b Builder) Build(name string) *TLB {
 	tlb.pageSize = b.pageSize
 	tlb.LowModule = b.lowModule
 	tlb.mshr = newMSHR(b.numMSHREntry)
+	tlb.deviceID = b.deviceID
 	tlb.onlyStoreLocalPageAddress = b.onlyStoreLocalPageAddress
 
 	b.createPorts(name, tlb)
