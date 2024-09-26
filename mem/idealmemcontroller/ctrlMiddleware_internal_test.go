@@ -100,7 +100,7 @@ var _ = FDescribe("CtrlMiddleware", func() {
 		Expect(comp.state).To(Equal("pause"))
 	})
 
-	FIt("should handle drain message", func() {
+	It("should handle drain message", func() {
 		comp.state = "enable"
 
 		ctrlMsg := mem.ControlMsgBuilder{}.
@@ -115,4 +115,5 @@ var _ = FDescribe("CtrlMiddleware", func() {
 		Expect(comp.state).To(Equal("drain"))
 		Expect(comp.respondReq).To(Equal(ctrlMsg))
 	})
+
 })
