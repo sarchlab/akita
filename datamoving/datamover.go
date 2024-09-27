@@ -14,17 +14,17 @@ type DataMover struct {
 
 	Log2AccessSize uint64
 
-	toA                []*sim.Msg
-	toB                []*sim.Msg
-	processingRequests []*sim.Msg
-	pendingRequests    []*sim.Msg
+	toOutside          []sim.Msg
+	toInside           []sim.Msg
+	processingRequests []sim.Msg
+	pendingRequests    []sim.Msg
 
 	moveRequest *DataMoveRequest
 	maxReqCount uint64
 
-	portA    sim.Port
-	portB    sim.Port
-	ctrlPort sim.Port
+	portOutside sim.Port
+	portInside  sim.Port
+	ctrlPort    sim.Port
 
 	localDataSource mem.LowModuleFinder
 
@@ -60,8 +60,8 @@ func (d *DataMover) send(
 	return false
 }
 
-func (d *DataMover) parseFromA(now sim.VTimeInSec) bool {
-	req := d.portA.RetrieveIncoming()
+func (d *DataMover) parseFromOutside(now sim.VTimeInSec) bool {
+	req := d.portOutside.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
@@ -79,7 +79,7 @@ func (d *DataMover) parseFromA(now sim.VTimeInSec) bool {
 }
 
 func (d *DataMover) parseFromB(now sim.VTimeInSec) bool {
-	req := d.portB.RetrieveIncoming()
+	req := d.portInside.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
@@ -125,24 +125,97 @@ func (d *DataMover) parseFromCtrlPort(now sim.VTimeInSec) bool {
 		return d.handleMoveRequest(now, req)
 	default:
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
+		return false
 	}
-	return false
 }
 
 func (d *DataMover) handleMoveRequest(
 	now sim.VTimeInSec,
 	req *DataMoveRequest,
 ) bool {
-	d.moveRequest = req
-	return true
+	return false
 }
 
 func (d *DataMover) processMoveRequest(
 	now sim.VTimeInSec,
 ) bool {
+	if d.moveRequest == nil {
+		return false
+	}
+
 	return false
 }
 
-func (d *DataMover) processOutside()
+func (d *DataMover) processOut(
+	req *DataMoveRequest,
+	execPort *sim.Port,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(req.dstBuffer))
+	addr := req.dstAddress
 
-func (d *DataMover) processInside()
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		module := d.localDataSource.Find(addr)
+		reqToExecPort := mem.WriteReqBuilder{}.
+			WithSrc(*execPort).
+			WithDst(module).
+			WithAddress(addr).
+			WithData(req.srcBuffer[offset : offset+length]).
+			Build()
+		d.toOutside = append(d.toOutside, reqToExecPort)
+		d.pendingRequests = append(d.pendingRequests, reqToExecPort)
+
+		tracing.TraceReqInitiate(reqToExecPort, d,
+			tracing.MsgIDAtReceiver(req, d))
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
+}
+
+func (d *DataMover) processIn(
+	req *DataMoveRequest,
+	execPort *sim.Port,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(req.dstBuffer))
+	addr := req.srcAddress
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		module := d.localDataSource.Find(addr)
+		reqToExecPort := mem.WriteReqBuilder{}.
+			WithSrc(*execPort).
+			WithDst(module).
+			WithAddress(addr).
+			WithData(req.srcBuffer[offset : offset+length]).
+			Build()
+		d.toOutside = append(d.toOutside, reqToExecPort)
+		d.pendingRequests = append(d.pendingRequests, reqToExecPort)
+
+		tracing.TraceReqInitiate(reqToExecPort, d,
+			tracing.MsgIDAtReceiver(req, d))
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
+}
