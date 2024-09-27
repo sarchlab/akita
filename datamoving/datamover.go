@@ -14,17 +14,17 @@ type DataMover struct {
 
 	Log2AccessSize uint64
 
-	toOutside          []sim.Msg
-	toInside           []sim.Msg
+	toSrc              []sim.Msg
+	toDst              []sim.Msg
 	processingRequests []sim.Msg
 	pendingRequests    []sim.Msg
 
 	moveRequest *DataMoveRequest
 	maxReqCount uint64
 
-	portOutside sim.Port
-	portInside  sim.Port
-	ctrlPort    sim.Port
+	srcPort  sim.Port
+	dstPort  sim.Port
+	ctrlPort sim.Port
 
 	localDataSource mem.LowModuleFinder
 
@@ -60,17 +60,17 @@ func (d *DataMover) send(
 	return false
 }
 
-func (d *DataMover) parseFromOutside(now sim.VTimeInSec) bool {
-	req := d.portOutside.RetrieveIncoming()
+func (d *DataMover) parseFromSrc(now sim.VTimeInSec) bool {
+	req := d.srcPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(now, req)
+		d.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(now, req)
+		d.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -78,38 +78,79 @@ func (d *DataMover) parseFromOutside(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (d *DataMover) parseFromB(now sim.VTimeInSec) bool {
-	req := d.portInside.RetrieveIncoming()
+func (d *DataMover) parseFromDst(now sim.VTimeInSec) bool {
+	req := d.dstPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(now, req)
+		d.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(now, req)
+		d.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
 
 	return true
+}
+
+func (d *DataMover) removeReqFromPendingReqs(
+	id string,
+) sim.Msg {
+	var targetReq sim.Msg
+	newList := make([]sim.Msg, 0, len(d.pendingRequests)-1)
+	for _, req := range d.pendingRequests {
+		if req.Meta().ID == id {
+			targetReq = req
+		} else {
+			newList = append(newList, req)
+		}
+	}
+	d.pendingRequests = newList
+
+	if targetReq == nil {
+		panic("request not found")
+	}
+
+	return targetReq
+}
+
+func (d *DataMover) removeReqFromProcessingReqs(
+	id string,
+) sim.Msg {
+	var targetReq sim.Msg
+	newList := make([]sim.Msg, 0, len(d.pendingRequests)-1)
+	for _, req := range d.processingRequests {
+		if req.Meta().ID == id {
+			targetReq = req
+		} else {
+			newList = append(newList, req)
+		}
+	}
+	d.processingRequests = newList
+
+	if targetReq == nil {
+		panic("request not found")
+	}
+
+	return targetReq
 }
 
 func (d *DataMover) processDataReadyRsp(
-	now sim.VTimeInSec,
 	rsp *mem.DataReadyRsp,
 ) {
+
 }
 
 func (d *DataMover) processWriteDoneRsp(
-	now sim.VTimeInSec,
 	rsp *mem.WriteDoneRsp,
 ) {
 
 }
 
-func (d *DataMover) parseFromCtrlPort(now sim.VTimeInSec) bool {
+func (d *DataMover) parseFromCtrlPort() bool {
 	if len(d.processingRequests) >= int(d.maxReqCount) {
 		return false
 	}
@@ -122,70 +163,48 @@ func (d *DataMover) parseFromCtrlPort(now sim.VTimeInSec) bool {
 
 	switch req := req.(type) {
 	case *DataMoveRequest:
-		return d.handleMoveRequest(now, req)
+		return d.processMoveRequest(req)
 	default:
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
 		return false
 	}
 }
 
-func (d *DataMover) handleMoveRequest(
-	now sim.VTimeInSec,
+func (d *DataMover) processMoveRequest(
 	req *DataMoveRequest,
 ) bool {
-	return false
-}
-
-func (d *DataMover) processMoveRequest(
-	now sim.VTimeInSec,
-) bool {
-	if d.moveRequest == nil {
+	if req == nil {
 		return false
 	}
 
-	return false
-}
+	srcAction := false
+	dstAction := true
 
-func (d *DataMover) processOut(
-	req *DataMoveRequest,
-	execPort *sim.Port,
-) {
-	offset := uint64(0)
-	lengthLeft := uint64(len(req.dstBuffer))
-	addr := req.dstAddress
-
-	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
-		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
-
-		length := lengthLeft
-		if lengthInUnit < length {
-			length = lengthInUnit
-		}
-
-		module := d.localDataSource.Find(addr)
-		reqToExecPort := mem.WriteReqBuilder{}.
-			WithSrc(*execPort).
-			WithDst(module).
-			WithAddress(addr).
-			WithData(req.srcBuffer[offset : offset+length]).
-			Build()
-		d.toOutside = append(d.toOutside, reqToExecPort)
-		d.pendingRequests = append(d.pendingRequests, reqToExecPort)
-
-		tracing.TraceReqInitiate(reqToExecPort, d,
-			tracing.MsgIDAtReceiver(req, d))
-
-		addr += length
-		lengthLeft -= length
-		offset += length
+	if req.srcDirection == "in" {
+		d.processSrcIn(req)
+		srcAction = true
+	} else if req.srcDirection == "out" {
+		d.processSrcOut(req)
+		srcAction = true
+	} else {
+		log.Panicf("can't process direction of type %s", req.srcDirection)
 	}
+
+	if req.dstDirection == "in" {
+		d.processDstIn(req)
+		dstAction = true
+	} else if req.dstDirection == "out" {
+		d.processDstOut(req)
+		dstAction = true
+	} else {
+		log.Panicf("can't process direction of type %s", req.dstDirection)
+	}
+
+	return srcAction || dstAction
 }
 
-func (d *DataMover) processIn(
+func (d *DataMover) processSrcIn(
 	req *DataMoveRequest,
-	execPort *sim.Port,
 ) {
 	offset := uint64(0)
 	lengthLeft := uint64(len(req.srcBuffer))
@@ -202,16 +221,124 @@ func (d *DataMover) processIn(
 		}
 
 		module := d.localDataSource.Find(addr)
-		reqToExecPort := mem.WriteReqBuilder{}.
-			WithSrc(*execPort).
+		reqToSrcPort := mem.ReadReqBuilder{}.
+			WithSrc(d.srcPort).
+			WithDst(module).
+			WithAddress(addr).
+			WithByteSize(length).
+			Build()
+		d.toSrc = append(d.toDst, reqToSrcPort)
+		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
+
+		tracing.TraceReqInitiate(reqToSrcPort, d,
+			tracing.MsgIDAtReceiver(req, d))
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
+}
+
+func (d *DataMover) processSrcOut(
+	req *DataMoveRequest,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(req.srcBuffer))
+	addr := req.srcAddress
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		module := d.localDataSource.Find(addr)
+		reqToSrcPort := mem.WriteReqBuilder{}.
+			WithSrc(d.srcPort).
 			WithDst(module).
 			WithAddress(addr).
 			WithData(req.srcBuffer[offset : offset+length]).
 			Build()
-		d.toInside = append(d.toInside, reqToExecPort)
-		d.pendingRequests = append(d.pendingRequests, reqToExecPort)
+		d.toSrc = append(d.toDst, reqToSrcPort)
+		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
 
-		tracing.TraceReqInitiate(reqToExecPort, d,
+		tracing.TraceReqInitiate(reqToSrcPort, d,
+			tracing.MsgIDAtReceiver(req, d))
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
+}
+
+func (d *DataMover) processDstIn(
+	req *DataMoveRequest,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(req.dstBuffer))
+	addr := req.dstAddress
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		module := d.localDataSource.Find(addr)
+		reqToDstPort := mem.ReadReqBuilder{}.
+			WithSrc(d.dstPort).
+			WithDst(module).
+			WithAddress(addr).
+			WithByteSize(length).
+			Build()
+		d.toDst = append(d.toSrc, reqToDstPort)
+		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+
+		tracing.TraceReqInitiate(reqToDstPort, d,
+			tracing.MsgIDAtReceiver(req, d))
+
+		addr += length
+		lengthLeft -= length
+		offset += length
+	}
+}
+
+func (d *DataMover) processDstOut(
+	req *DataMoveRequest,
+) {
+	offset := uint64(0)
+	lengthLeft := uint64(len(req.dstBuffer))
+	addr := req.dstAddress
+
+	for lengthLeft > 0 {
+		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		unitOffset := addr - addrUnitFirstByte
+		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+
+		length := lengthLeft
+		if lengthInUnit < length {
+			length = lengthInUnit
+		}
+
+		module := d.localDataSource.Find(addr)
+		reqToDstPort := mem.WriteReqBuilder{}.
+			WithSrc(d.dstPort).
+			WithDst(module).
+			WithAddress(addr).
+			WithData(req.dstBuffer[offset : offset+length]).
+			Build()
+		d.toDst = append(d.toSrc, reqToDstPort)
+		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+
+		tracing.TraceReqInitiate(reqToDstPort, d,
 			tracing.MsgIDAtReceiver(req, d))
 
 		addr += length
