@@ -188,7 +188,7 @@ func (d *DataMover) processIn(
 	execPort *sim.Port,
 ) {
 	offset := uint64(0)
-	lengthLeft := uint64(len(req.dstBuffer))
+	lengthLeft := uint64(len(req.srcBuffer))
 	addr := req.srcAddress
 
 	for lengthLeft > 0 {
@@ -208,7 +208,7 @@ func (d *DataMover) processIn(
 			WithAddress(addr).
 			WithData(req.srcBuffer[offset : offset+length]).
 			Build()
-		d.toOutside = append(d.toOutside, reqToExecPort)
+		d.toInside = append(d.toInside, reqToExecPort)
 		d.pendingRequests = append(d.pendingRequests, reqToExecPort)
 
 		tracing.TraceReqInitiate(reqToExecPort, d,
