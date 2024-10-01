@@ -127,9 +127,9 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	p.InvokeHook(hookCtx)
 	p.lock.Unlock()
 
-    if wasEmpty {
-        p.conn.NotifySend()
-    }
+	if wasEmpty {
+		p.conn.NotifySend()
+	}
 
 	return nil
 }
