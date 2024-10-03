@@ -413,7 +413,7 @@ export class TaskPage implements ZoomHandler {
     this._reqTreeButton = document.createElement('button');
     this._reqTreeButton.id = 'reqtree-button';
     this._reqTreeButton.className = 'btn btn-outline-light';
-    this._reqTreeButton.textContent = 'ReqTree';
+    this._reqTreeButton.textContent = 'Component Tree';
 
     this._reqTreeHover = document.createElement('div');
     this._reqTreeHover.id = 'reqtree-hover';
