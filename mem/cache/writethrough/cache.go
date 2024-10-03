@@ -46,11 +46,32 @@ func (c *Cache) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
+func (c *Cache) getTaskID() string {
+    if len(c.transactions) == 0 {
+        return ""
+    }
+
+    trans := c.transactions[0]
+
+    if trans.req != nil {
+        return trans.req.Meta().ID
+    }
+
+    return ""
+}
+
 // Tick update the state of the cache
 func (c *Cache) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
 	if !c.isPaused {
+		GlobalMilestoneManager.AddMilestone(
+            c.getTaskID(),
+            "Hardware Occupancy",
+            "Cache is paused",
+            "Tick",
+            now,
+        )
 		madeProgress = c.runPipeline(now) || madeProgress
 	}
 
