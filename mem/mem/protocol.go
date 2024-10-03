@@ -399,17 +399,21 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 }
 
 // ControlMsg is the commonly used message type for controlling the components
-// on the memory hierarchy. It is also used for resonpding the original
-// requester with the Done field.
+// on the memory hierarchy. It is also used for responding the original
+// requester with the Done field. Drain is used to process all the requests in
+// the queue when drain happens the component will not accept any new requests
+// Enable enables the component work. If the enable = false, it will not process
+// any requests.
 type ControlMsg struct {
 	sim.MsgMeta
 
-	DiscardTransations bool
-	Restart            bool
-	NotifyDone         bool
+	Enable  bool
+	Drain   bool
+	Flush   bool
+	Invalid bool
 }
 
-// Meta returns the meta data assocated with the ControlMsg.
+// Meta returns the meta data associated with the ControlMsg.
 func (m *ControlMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
@@ -422,12 +426,24 @@ func (m *ControlMsg) Clone() sim.Msg {
 	return &cloneMsg
 }
 
+// GenerateRsp generate GeneralRsp to ControlMsg
+func (m *ControlMsg) GenerateRsp() sim.Rsp {
+	rsp := sim.GeneralRspBuilder{}.
+		WithSrc(m.Dst).
+		WithDst(m.Src).
+		WithOriginalReq(m).
+		Build()
+
+	return rsp
+}
+
 // A ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
-	src, dst            sim.Port
-	discardTransactions bool
-	restart             bool
-	notifyDone          bool
+	src, dst sim.Port
+	Enable   bool
+	Drain    bool
+	Flush    bool
+	Invalid  bool
 }
 
 // WithSrc sets the source of the request to build.
@@ -442,22 +458,16 @@ func (b ControlMsgBuilder) WithDst(dst sim.Port) ControlMsgBuilder {
 	return b
 }
 
-// ToDiscardTransactions sets the discard transactions bit of the control
-// messages to 1.
-func (b ControlMsgBuilder) ToDiscardTransactions() ControlMsgBuilder {
-	b.discardTransactions = true
-	return b
-}
-
-// ToRestart sets the restart bit of the control messages to 1.
-func (b ControlMsgBuilder) ToRestart() ControlMsgBuilder {
-	b.restart = true
-	return b
-}
-
-// ToNotifyDone sets the "notify done" bit of the control messages to 1.
-func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
-	b.notifyDone = true
+func (b ControlMsgBuilder) WithCtrlInfo(
+	enableFlag bool,
+	drainFlag bool,
+	flushFlag bool,
+	invalidFlag bool,
+) ControlMsgBuilder {
+	b.Enable = enableFlag
+	b.Drain = drainFlag
+	b.Flush = flushFlag
+	b.Invalid = invalidFlag
 	return b
 }
 
@@ -469,9 +479,10 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
 
-	m.DiscardTransations = b.discardTransactions
-	m.Restart = b.restart
-	m.NotifyDone = b.notifyDone
+	m.Enable = b.Enable
+	m.Drain = b.Drain
+	m.Flush = b.Flush
+	m.Invalid = b.Invalid
 
 	return m
 }

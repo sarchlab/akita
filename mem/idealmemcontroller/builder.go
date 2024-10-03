@@ -90,6 +90,7 @@ func (b Builder) Build(
 	c := &Comp{
 		Latency: b.latency,
 		width:   b.width,
+		state:   "enable",
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
@@ -102,11 +103,15 @@ func (b Builder) Build(
 		c.Storage = b.storage
 	}
 
+	ctrlMiddleware := &ctrlMiddleware{Comp: c}
+	c.AddMiddleware(ctrlMiddleware)
+	funcMiddleware := &funcMiddleware{Comp: c}
+	c.AddMiddleware(funcMiddleware)
+
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
-
-	middleware := &middleware{Comp: c}
-	c.AddMiddleware(middleware)
+	c.ctrlPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".CtrlPort")
+	c.AddPort("Control", c.ctrlPort)
 
 	return c
 }
