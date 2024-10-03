@@ -551,19 +551,8 @@ func parseRequestParameters(
     compID = r.FormValue("id")
     compWhat = r.FormValue("what")
 
-    startTimeStr := r.FormValue("start_time")
-    startTime, err = strconv.ParseFloat(startTimeStr, 64)
-    if err != nil {
-        err = errors.New("Invalid start_time: " + err.Error())
-        return
-    }
-
-    endTimeStr := r.FormValue("end_time")
-    endTime, err = strconv.ParseFloat(endTimeStr, 64)
-    if err != nil {
-        err = errors.New("Invalid end_time: " + err.Error())
-        return
-    }
+    startTime, startErr = strconv.ParseFloat(r.FormValue("start_time"), 64)
+    endTime, endErr = strconv.ParseFloat(r.FormValue("end_time"), 64)
 
     return
 }
