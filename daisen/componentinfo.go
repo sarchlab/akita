@@ -544,14 +544,26 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
     sendJSONResponse(w, treeData)
 }
 
-func parseRequestParameters(r *http.Request) (compName, compID, compWhat string, startTime, endTime float64, err error) {
+func parseRequestParameters(
+    r *http.Request,
+) (compName, compID, compWhat string, startTime, endTime float64, err error) {
     compName = r.FormValue("where")
     compID = r.FormValue("id")
     compWhat = r.FormValue("what")
 
-    startTime = strconv.ParseFloat(r.FormValue("start_time"))
+    startTimeStr := r.FormValue("start_time")
+    startTime, err = strconv.ParseFloat(startTimeStr, 64)
+    if err != nil {
+        err = errors.New("Invalid start_time: " + err.Error())
+        return
+    }
 
-    endTime = strconv.ParseFloat(r.FormValue("end_time"))
+    endTimeStr := r.FormValue("end_time")
+    endTime, err = strconv.ParseFloat(endTimeStr, 64)
+    if err != nil {
+        err = errors.New("Invalid end_time: " + err.Error())
+        return
+    }
 
     return
 }
