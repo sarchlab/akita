@@ -428,28 +428,170 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
+// func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
+//     compName := r.FormValue("where")
+//     compID := r.FormValue("id")
+//     compWhat := r.FormValue("what")
+//     startTime, err := strconv.ParseFloat(r.FormValue("start_time"), 64)
+//     if err != nil {
+//         http.Error(w, "Invalid start_time", http.StatusBadRequest)
+//         return
+//     }
+//     endTime, err := strconv.ParseFloat(r.FormValue("end_time"), 64)
+//     if err != nil {
+//         http.Error(w, "Invalid end_time", http.StatusBadRequest)
+//         return
+//     }
+
+//     query := tracing.TaskQuery{
+//         EnableTimeRange: true,
+//         StartTime:       startTime,
+//         EndTime:         endTime,
+//     }
+//     allTasks := traceReader.ListTasks(query)
+
+//     treeData := map[string]interface{}{
+//         "id":        compID,
+//         "type":      "component",
+//         "what":      compWhat,
+//         "where":     compName,
+//         "startTime": startTime,
+//         "endTime":   endTime,
+//         "left":      make([]map[string]interface{}, 0),
+//         "right":     make([]map[string]interface{}, 0),
+//     }
+
+//     leftComponents := make(map[string]bool)
+//     rightComponents := make(map[string]bool)
+//     taskMap := make(map[string]tracing.Task)
+
+// 	relatedTasks := make([]tracing.Task, 0)
+//     for _, task := range allTasks {
+//         taskMap[task.ID] = task
+//         if task.Where == compName || (task.ParentID != "" && taskMap[task.ParentID].Where == compName) {
+//             relatedTasks = append(relatedTasks, task)
+//         }
+//     }
+// 	for _, task := range relatedTasks {
+// 		if task.Where == compName && task.ParentID != "" {
+// 			parentTask, exists := taskMap[task.ParentID]
+// 			if exists && parentTask.Where != compName {
+// 				sourceComp := parentTask.Where
+// 				key := sourceComp
+// 				if !leftComponents[key] {
+// 					leftComponents[key] = true
+// 					treeData["left"] = append(treeData["left"].([]map[string]interface{}), map[string]interface{}{
+// 						"id":    parentTask.ID,
+// 						"type":  parentTask.Kind,
+// 						"what":  parentTask.What,
+// 						"where": sourceComp,
+// 					})
+// 				}
+// 			}
+// 		}
+
+//         if task.Where == compName {
+//             for _, potentialSubTask := range allTasks {
+//                 if potentialSubTask.ParentID == task.ID && potentialSubTask.Where != compName {
+//                     destComp := potentialSubTask.Where
+//                     key := destComp + "|" + potentialSubTask.What
+//                     if !rightComponents[key] {
+//                         rightComponents[key] = true
+//                         treeData["right"] = append(treeData["right"].([]map[string]interface{}), map[string]interface{}{
+//                             "id":    potentialSubTask.ID,
+//                             "type":  potentialSubTask.Kind,
+//                             "what":  potentialSubTask.What,
+//                             "where": destComp,
+//                         })
+//                     }
+//                 }
+//             }
+//         }
+//     }
+
+//     rsp, err := json.Marshal(treeData)
+//     if err != nil {
+//         http.Error(w, err.Error(), http.StatusInternalServerError)
+//         return
+//     }
+
+//     log.Printf("Response data: %s", string(rsp))
+//     w.Header().Set("Content-Type", "application/json")
+// 	_, err = w.Write(rsp)
+// 	if err != nil {
+// 		http.Error(w, "Failed to write response", http.StatusInternalServerError)
+// 		return
+// 	}
+// }
 func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
-    compName := r.FormValue("where")
-    compID := r.FormValue("id")
-    compWhat := r.FormValue("what")
-    startTime, err := strconv.ParseFloat(r.FormValue("start_time"), 64)
+    compName, compID, compWhat, startTime, endTime, err := parseRequestParameters(r)
     if err != nil {
-        http.Error(w, "Invalid start_time", http.StatusBadRequest)
-        return
-    }
-    endTime, err := strconv.ParseFloat(r.FormValue("end_time"), 64)
-    if err != nil {
-        http.Error(w, "Invalid end_time", http.StatusBadRequest)
+        http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
 
+    allTasks := fetchAllTasks(startTime, endTime)
+
+    taskMap := buildTaskMap(allTasks)
+
+    relatedTasks := filterRelatedTasks(allTasks, taskMap, compName)
+
+    treeData, err := buildTreeData(compName, compID, compWhat, startTime, endTime, relatedTasks, taskMap)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    sendJSONResponse(w, treeData)
+}
+
+func parseRequestParameters(r *http.Request) (compName, compID, compWhat string, startTime, endTime float64, err error) {
+    compName = r.FormValue("where")
+    compID = r.FormValue("id")
+    compWhat = r.FormValue("what")
+
+    startTime, err = strconv.ParseFloat(r.FormValue("start_time"), 64)
+    if err != nil {
+        err = fmt.Errorf("Invalid start_time")
+        return
+    }
+
+    endTime, err = strconv.ParseFloat(r.FormValue("end_time"), 64)
+    if err != nil {
+        err = fmt.Errorf("Invalid end_time")
+        return
+    }
+
+    return
+}
+
+func fetchAllTasks(startTime, endTime float64) []tracing.Task {
     query := tracing.TaskQuery{
         EnableTimeRange: true,
         StartTime:       startTime,
         EndTime:         endTime,
     }
-    allTasks := traceReader.ListTasks(query)
+    return traceReader.ListTasks(query)
+}
 
+func buildTaskMap(tasks []tracing.Task) map[string]tracing.Task {
+    taskMap := make(map[string]tracing.Task)
+    for _, task := range tasks {
+        taskMap[task.ID] = task
+    }
+    return taskMap
+}
+
+func filterRelatedTasks(allTasks []tracing.Task, taskMap map[string]tracing.Task, compName string) []tracing.Task {
+    relatedTasks := make([]tracing.Task, 0)
+    for _, task := range allTasks {
+        if task.Where == compName || (task.ParentID != "" && taskMap[task.ParentID].Where == compName) {
+            relatedTasks = append(relatedTasks, task)
+        }
+    }
+    return relatedTasks
+}
+
+func buildTreeData(compName, compID, compWhat string, startTime, endTime float64, relatedTasks []tracing.Task, taskMap map[string]tracing.Task) (map[string]interface{}, error) {
     treeData := map[string]interface{}{
         "id":        compID,
         "type":      "component",
@@ -463,53 +605,56 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
 
     leftComponents := make(map[string]bool)
     rightComponents := make(map[string]bool)
-    taskMap := make(map[string]tracing.Task)
 
-	relatedTasks := make([]tracing.Task, 0)
-    for _, task := range allTasks {
-        taskMap[task.ID] = task
-        if task.Where == compName || (task.ParentID != "" && taskMap[task.ParentID].Where == compName) {
-            relatedTasks = append(relatedTasks, task)
+    for _, task := range relatedTasks {
+        if task.Where == compName && task.ParentID != "" {
+            addLeftComponent(treeData, task, taskMap, leftComponents, compName)
+        }
+        if task.Where == compName {
+            addRightComponents(treeData, task, taskMap, rightComponents, compName)
         }
     }
-	for _, task := range relatedTasks {
-		if task.Where == compName && task.ParentID != "" {
-			parentTask, exists := taskMap[task.ParentID]
-			if exists && parentTask.Where != compName {
-				sourceComp := parentTask.Where
-				key := sourceComp
-				if !leftComponents[key] {
-					leftComponents[key] = true
-					treeData["left"] = append(treeData["left"].([]map[string]interface{}), map[string]interface{}{
-						"id":    parentTask.ID,
-						"type":  parentTask.Kind,
-						"what":  parentTask.What,
-						"where": sourceComp,
-					})
-				}
-			}
-		}
 
-        if task.Where == compName {
-            for _, potentialSubTask := range allTasks {
-                if potentialSubTask.ParentID == task.ID && potentialSubTask.Where != compName {
-                    destComp := potentialSubTask.Where
-                    key := destComp + "|" + potentialSubTask.What
-                    if !rightComponents[key] {
-                        rightComponents[key] = true
-                        treeData["right"] = append(treeData["right"].([]map[string]interface{}), map[string]interface{}{
-                            "id":    potentialSubTask.ID,
-                            "type":  potentialSubTask.Kind,
-                            "what":  potentialSubTask.What,
-                            "where": destComp,
-                        })
-                    }
-                }
+    return treeData, nil
+}
+
+func addLeftComponent(treeData map[string]interface{}, task tracing.Task, taskMap map[string]tracing.Task, leftComponents map[string]bool, compName string) {
+    parentTask, exists := taskMap[task.ParentID]
+    if exists && parentTask.Where != compName {
+        sourceComp := parentTask.Where
+        key := sourceComp
+        if !leftComponents[key] {
+            leftComponents[key] = true
+            treeData["left"] = append(treeData["left"].([]map[string]interface{}), map[string]interface{}{
+                "id":    parentTask.ID,
+                "type":  parentTask.Kind,
+                "what":  parentTask.What,
+                "where": sourceComp,
+            })
+        }
+    }
+}
+
+func addRightComponents(treeData map[string]interface{}, task tracing.Task, taskMap map[string]tracing.Task, rightComponents map[string]bool, compName string) {
+    for _, potentialSubTask := range taskMap {
+        if potentialSubTask.ParentID == task.ID && potentialSubTask.Where != compName {
+            destComp := potentialSubTask.Where
+            key := destComp + "|" + potentialSubTask.What
+            if !rightComponents[key] {
+                rightComponents[key] = true
+                treeData["right"] = append(treeData["right"].([]map[string]interface{}), map[string]interface{}{
+                    "id":    potentialSubTask.ID,
+                    "type":  potentialSubTask.Kind,
+                    "what":  potentialSubTask.What,
+                    "where": destComp,
+                })
             }
         }
     }
+}
 
-    rsp, err := json.Marshal(treeData)
+func sendJSONResponse(w http.ResponseWriter, data interface{}) {
+    rsp, err := json.Marshal(data)
     if err != nil {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
@@ -517,9 +662,9 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
 
     log.Printf("Response data: %s", string(rsp))
     w.Header().Set("Content-Type", "application/json")
-	_, err = w.Write(rsp)
-	if err != nil {
-		http.Error(w, "Failed to write response", http.StatusInternalServerError)
-		return
-	}
+    _, err = w.Write(rsp)
+    if err != nil {
+        http.Error(w, "Failed to write response", http.StatusInternalServerError)
+        return
+    }
 }
