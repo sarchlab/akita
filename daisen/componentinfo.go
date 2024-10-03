@@ -525,11 +525,16 @@ func isTaskOverlapsWithBin(
 // }
 func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
     compName, compID, compWhat, startTime, endTime, err := parseRequestParameters(r)
+    startTime, err := strconv.ParseFloat(startTimeStr, 64)
     if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
+        http.Error(w, "Invalid start_time: "+err.Error(), http.StatusBadRequest)
         return
     }
-
+    endTime, err := strconv.ParseFloat(endTimeStr, 64)
+    if err != nil {
+        http.Error(w, "Invalid end_time: "+err.Error(), http.StatusBadRequest)
+        return
+    }
     allTasks := fetchAllTasks(startTime, endTime)
 
     taskMap := buildTaskMap(allTasks)
@@ -546,14 +551,12 @@ func httpComponentReqTree(w http.ResponseWriter, r *http.Request) {
 
 func parseRequestParameters(
     r *http.Request,
-) (compName, compID, compWhat string, startTime, endTime float64, err error) {
+) (compName, compID, compWhat, startTimeStr, endTimeStr string) {
     compName = r.FormValue("where")
     compID = r.FormValue("id")
     compWhat = r.FormValue("what")
-
-    startTime, startErr = strconv.ParseFloat(r.FormValue("start_time"), 64)
-    endTime, endErr = strconv.ParseFloat(r.FormValue("end_time"), 64)
-
+    startTimeStr = r.FormValue("start_time")
+    endTimeStr = r.FormValue("end_time")
     return
 }
 
