@@ -549,9 +549,9 @@ func parseRequestParameters(r *http.Request) (compName, compID, compWhat string,
     compID = r.FormValue("id")
     compWhat = r.FormValue("what")
 
-    startTime, err = strconv.ParseFloat(r.FormValue("start_time"), 64)
+    startTime = strconv.ParseFloat(r.FormValue("start_time"))
 
-    endTime, err = strconv.ParseFloat(r.FormValue("end_time"), 64)
+    endTime = strconv.ParseFloat(r.FormValue("end_time"))
 
     return
 }
