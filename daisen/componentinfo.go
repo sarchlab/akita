@@ -550,16 +550,8 @@ func parseRequestParameters(r *http.Request) (compName, compID, compWhat string,
     compWhat = r.FormValue("what")
 
     startTime, err = strconv.ParseFloat(r.FormValue("start_time"), 64)
-    if err != nil {
-        err = fmt.Errorf("Invalid start_time")
-        return
-    }
 
     endTime, err = strconv.ParseFloat(r.FormValue("end_time"), 64)
-    if err != nil {
-        err = fmt.Errorf("Invalid end_time")
-        return
-    }
 
     return
 }
