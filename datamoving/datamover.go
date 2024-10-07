@@ -9,6 +9,50 @@ import (
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
+// A RequestCollection contains a data moving request from a single
+// source/destination with Read/Write requests correspond to it.
+type RequestCollection struct {
+	topReq      sim.Msg
+	subReqIDs   []string
+	subReqCount int
+}
+
+func (rqC *RequestCollection) isFinished() bool {
+	return rqC.subReqCount == 0
+}
+
+func (rqC *RequestCollection) decreSubIfExists(inputID string) bool {
+	for _, id := range rqC.subReqIDs {
+		if inputID == id {
+			rqC.subReqCount -= 1
+			return true
+		}
+	}
+	return false
+}
+
+func (rqC *RequestCollection) appendSubReq(inputID string) {
+	rqC.subReqIDs = append(rqC.subReqIDs, inputID)
+	rqC.subReqCount += 1
+}
+
+func newRequestCollection(
+	inputReq sim.Msg,
+) *RequestCollection {
+	rqC := new(RequestCollection)
+	rqC.topReq = inputReq
+	rqC.subReqCount = 0
+	return rqC
+}
+
+func (rqC *RequestCollection) getTopReq() sim.Msg {
+	return rqC.topReq
+}
+
+func (rqC *RequestCollection) getTopID() string {
+	return rqC.topReq.Meta().ID
+}
+
 type DataMover struct {
 	*sim.TickingComponent
 
@@ -35,7 +79,7 @@ func (d *DataMover) SetLocalDataSource(s mem.LowModuleFinder) {
 	return
 }
 
-func (d *DataMover) Tick(now sim.VTimeInSec) bool {
+func (d *DataMover) Tick() bool {
 	madeProgess := false
 
 	return madeProgess
@@ -60,7 +104,7 @@ func (d *DataMover) send(
 	return false
 }
 
-func (d *DataMover) parseFromSrc(now sim.VTimeInSec) bool {
+func (d *DataMover) parseFromSrc() bool {
 	req := d.srcPort.RetrieveIncoming()
 	if req == nil {
 		return false
@@ -68,9 +112,9 @@ func (d *DataMover) parseFromSrc(now sim.VTimeInSec) bool {
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req)
+		d.processDataReadyRsp(req, d.srcPort)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req)
+		d.processWriteDoneRsp(req, d.srcPort)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -78,7 +122,7 @@ func (d *DataMover) parseFromSrc(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (d *DataMover) parseFromDst(now sim.VTimeInSec) bool {
+func (d *DataMover) parseFromDst() bool {
 	req := d.dstPort.RetrieveIncoming()
 	if req == nil {
 		return false
@@ -86,9 +130,9 @@ func (d *DataMover) parseFromDst(now sim.VTimeInSec) bool {
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req)
+		d.processDataReadyRsp(req, d.dstPort)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req)
+		d.processWriteDoneRsp(req, d.dstPort)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -140,12 +184,21 @@ func (d *DataMover) removeReqFromProcessingReqs(
 
 func (d *DataMover) processDataReadyRsp(
 	rsp *mem.DataReadyRsp,
+	receiver sim.Port,
 ) {
+	req := d.removeReqFromPendingReqs(rsp.RespondTo).(*mem.ReadReq)
+	tracing.TraceReqFinalize(req, d)
 
+	found := false
+
+	if !found {
+		panic("Request is not found ")
+	}
 }
 
 func (d *DataMover) processWriteDoneRsp(
 	rsp *mem.WriteDoneRsp,
+	receiver sim.Port,
 ) {
 
 }
