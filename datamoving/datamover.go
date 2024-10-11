@@ -17,10 +17,14 @@ type RequestCollection struct {
 	subReqCount int
 }
 
+// isFinished tells whether all subrequests in this collection have
+// been finished
 func (rqC *RequestCollection) isFinished() bool {
 	return rqC.subReqCount == 0
 }
 
+// decreSubIfExists compare the input ID with those of subrequests, and
+// decrease subrequest count by one if the ID matches
 func (rqC *RequestCollection) decreSubIfExists(inputID string) bool {
 	for _, id := range rqC.subReqIDs {
 		if inputID == id {
@@ -31,15 +35,19 @@ func (rqC *RequestCollection) decreSubIfExists(inputID string) bool {
 	return false
 }
 
+// appendSubReq add new IDs into the slice of subrequest IDs
 func (rqC *RequestCollection) appendSubReq(inputID string) {
 	rqC.subReqIDs = append(rqC.subReqIDs, inputID)
 	rqC.subReqCount += 1
 }
 
+// getTopReq returns DataMoveRequest that invokes all subrequests
+// in that collection
 func (rqC *RequestCollection) getTopReq() sim.Msg {
 	return rqC.topReq
 }
 
+// getTopID returns the ID of DataMoveRequest
 func (rqC *RequestCollection) getTopID() string {
 	return rqC.topReq.Meta().ID
 }
@@ -53,7 +61,9 @@ func newRequestCollection(
 	return rqC
 }
 
-type DataMover struct {
+// StreamingDataMover helps moving data from designated source and destination
+// following the given move direction
+type StreamingDataMover struct {
 	*sim.TickingComponent
 
 	Log2AccessSize uint64
@@ -64,7 +74,6 @@ type DataMover struct {
 	processingRequests []*RequestCollection
 	pendingRequests    []sim.Msg
 
-	moveRequest *DataMoveRequest
 	maxReqCount uint64
 
 	srcPort  sim.Port
@@ -72,22 +81,24 @@ type DataMover struct {
 	ctrlPort sim.Port
 
 	localDataSource mem.LowModuleFinder
-
-	writeDone bool
 }
 
-func (d *DataMover) SetLocalDataSource(s mem.LowModuleFinder) {
-	return
+// Tick ticks
+func (sdm *StreamingDataMover) Tick() bool {
+	madeProgress := false
+
+	madeProgress = sdm.send(sdm.srcPort, &sdm.toSrc) || madeProgress
+	madeProgress = sdm.send(sdm.dstPort, &sdm.toDst) || madeProgress
+	madeProgress = sdm.send(sdm.ctrlPort, &sdm.toCP) || madeProgress
+	madeProgress = sdm.parseFromCP() || madeProgress
+	madeProgress = sdm.parseFromSrc() || madeProgress
+	madeProgress = sdm.parseFromDst() || madeProgress
+
+	return madeProgress
 }
 
-func (d *DataMover) Tick() bool {
-	madeProgess := false
-
-	return madeProgess
-}
-
-func (d *DataMover) send(
-	// now sim.VTimeInSec,
+// send sends the Msg to the given port
+func (sdm *StreamingDataMover) send(
 	port sim.Port,
 	reqs *[]sim.Msg,
 ) bool {
@@ -104,17 +115,18 @@ func (d *DataMover) send(
 	return false
 }
 
-func (d *DataMover) parseFromSrc() bool {
-	req := d.srcPort.RetrieveIncoming()
+// parseFromSrc retrieves Msg from srcPort
+func (sdm *StreamingDataMover) parseFromSrc() bool {
+	req := sdm.srcPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req)
+		sdm.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req)
+		sdm.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -122,17 +134,18 @@ func (d *DataMover) parseFromSrc() bool {
 	return true
 }
 
-func (d *DataMover) parseFromDst() bool {
-	req := d.dstPort.RetrieveIncoming()
+// parseFromDst retrieves Msg from dstPort
+func (sdm *StreamingDataMover) parseFromDst() bool {
+	req := sdm.dstPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req)
+		sdm.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req)
+		sdm.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -140,19 +153,21 @@ func (d *DataMover) parseFromDst() bool {
 	return true
 }
 
-func (d *DataMover) removeReqFromPendingReqs(
+// removeReqFromPendingReqs remove request of certain ID from the
+// slice of pending requests
+func (sdm *StreamingDataMover) removeReqFromPendingReqs(
 	id string,
 ) sim.Msg {
 	var targetReq sim.Msg
-	newList := make([]sim.Msg, 0, len(d.pendingRequests)-1)
-	for _, req := range d.pendingRequests {
+	newList := make([]sim.Msg, 0, len(sdm.pendingRequests)-1)
+	for _, req := range sdm.pendingRequests {
 		if req.Meta().ID == id {
 			targetReq = req
 		} else {
 			newList = append(newList, req)
 		}
 	}
-	d.pendingRequests = newList
+	sdm.pendingRequests = newList
 
 	if targetReq == nil {
 		panic("request not found")
@@ -161,34 +176,38 @@ func (d *DataMover) removeReqFromPendingReqs(
 	return targetReq
 }
 
-func (d *DataMover) removeReqFromProcessingReqs(
+// removeReqFromProcessingReqs remove request of certain ID from the
+// collection of processing requests
+func (sdm *StreamingDataMover) removeReqFromProcessingReqs(
 	id string,
 ) {
 	found := false
-	newList := make([]*RequestCollection, 0, len(d.processingRequests)-1)
-	for _, req := range d.processingRequests {
+	newList := make([]*RequestCollection, 0, len(sdm.processingRequests)-1)
+	for _, req := range sdm.processingRequests {
 		if req.getTopID() == id {
 			found = true
 		} else {
 			newList = append(newList, req)
 		}
 	}
-	d.processingRequests = newList
+	sdm.processingRequests = newList
 
 	if !found {
 		panic("request not found")
 	}
 }
 
-func (d *DataMover) processDataReadyRsp(
+// processDataReadyRsp process every DataReadyRsp received after
+// requesting to read
+func (sdm *StreamingDataMover) processDataReadyRsp(
 	rsp *mem.DataReadyRsp,
 ) {
-	req := d.removeReqFromPendingReqs(rsp.RespondTo).(*mem.ReadReq)
-	tracing.TraceReqFinalize(req, d)
+	req := sdm.removeReqFromPendingReqs(rsp.RespondTo).(*mem.ReadReq)
+	tracing.TraceReqFinalize(req, sdm)
 
 	found := false
 	result := &RequestCollection{}
-	for _, rqC := range d.processingRequests {
+	for _, rqC := range sdm.processingRequests {
 		if rqC.decreSubIfExists(req.Meta().ID) {
 			result = rqC
 			found = true
@@ -200,30 +219,32 @@ func (d *DataMover) processDataReadyRsp(
 	}
 
 	processing := result.getTopReq().(*DataMoveRequest)
-	d.dataTransfer(req, processing, rsp)
+	sdm.dataTransfer(req, processing, rsp)
 
 	if result.isFinished() {
-		tracing.TraceReqComplete(processing, d)
-		d.removeReqFromProcessingReqs(processing.Meta().ID)
+		tracing.TraceReqComplete(processing, sdm)
+		sdm.removeReqFromProcessingReqs(processing.Meta().ID)
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
 			WithDst(processing.Src).
 			WithOriginalReq(processing).
 			Build()
-		d.toCP = append(d.toCP, rsp)
+		sdm.toCP = append(sdm.toCP, rsp)
 	}
 }
 
-func (d *DataMover) processWriteDoneRsp(
+// processWriteDoneRsp process every WriteDoneRsp received after
+// requesting to write
+func (sdm *StreamingDataMover) processWriteDoneRsp(
 	rsp *mem.WriteDoneRsp,
 ) {
-	req := d.removeReqFromPendingReqs(rsp.RespondTo)
-	tracing.TraceReqFinalize(req, d)
+	req := sdm.removeReqFromPendingReqs(rsp.RespondTo)
+	tracing.TraceReqFinalize(req, sdm)
 
 	found := false
 	result := &RequestCollection{}
-	for _, rqC := range d.processingRequests {
+	for _, rqC := range sdm.processingRequests {
 		if rqC.decreSubIfExists(req.Meta().ID) {
 			result = rqC
 			found = true
@@ -236,19 +257,22 @@ func (d *DataMover) processWriteDoneRsp(
 
 	processing := result.getTopReq().(*DataMoveRequest)
 	if result.isFinished() {
-		tracing.TraceReqComplete(processing, d)
-		d.removeReqFromProcessingReqs(processing.Meta().ID)
+		tracing.TraceReqComplete(processing, sdm)
+		sdm.removeReqFromProcessingReqs(processing.Meta().ID)
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
 			WithDst(processing.Src).
 			WithOriginalReq(processing).
 			Build()
-		d.toCP = append(d.toCP, rsp)
+		sdm.toCP = append(sdm.toCP, rsp)
 	}
 }
 
-func (d *DataMover) dataTransfer(
+// dataTransfer transfers data from buffer in source/destination to
+// buffer in source/destination following the given direction for every
+// read and write request
+func (sdm *StreamingDataMover) dataTransfer(
 	req *mem.ReadReq,
 	dmr *DataMoveRequest,
 	rsp *mem.DataReadyRsp,
@@ -268,30 +292,32 @@ func (d *DataMover) dataTransfer(
 	}
 }
 
-func (d *DataMover) parseFromCP() bool {
-	if len(d.processingRequests) >= int(d.maxReqCount) {
+// parseFromCP retrieves Msg from ctrlPort
+func (sdm *StreamingDataMover) parseFromCP() bool {
+	if len(sdm.processingRequests) >= int(sdm.maxReqCount) {
 		return false
 	}
 
-	req := d.ctrlPort.RetrieveIncoming()
+	req := sdm.ctrlPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
-	tracing.TraceReqReceive(req, d)
+	tracing.TraceReqReceive(req, sdm)
 
 	rqC := newRequestCollection(req)
-	d.processingRequests = append(d.processingRequests, rqC)
+	sdm.processingRequests = append(sdm.processingRequests, rqC)
 
 	switch req := req.(type) {
 	case *DataMoveRequest:
-		return d.processMoveRequest(req, rqC)
+		return sdm.processMoveRequest(req, rqC)
 	default:
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
 		return false
 	}
 }
 
-func (d *DataMover) processMoveRequest(
+// processMoveRequest process data move requests from ctrlPort
+func (sdm *StreamingDataMover) processMoveRequest(
 	req *DataMoveRequest,
 	rqC *RequestCollection,
 ) bool {
@@ -303,20 +329,20 @@ func (d *DataMover) processMoveRequest(
 	dstAction := true
 
 	if req.srcDirection == "in" {
-		d.processSrcIn(req, rqC)
+		sdm.processSrcIn(req, rqC)
 		srcAction = true
 	} else if req.srcDirection == "out" {
-		d.processSrcOut(req, rqC)
+		sdm.processSrcOut(req, rqC)
 		srcAction = true
 	} else {
 		log.Panicf("can't process direction of type %s", req.srcDirection)
 	}
 
 	if req.dstDirection == "in" {
-		d.processDstIn(req, rqC)
+		sdm.processDstIn(req, rqC)
 		dstAction = true
 	} else if req.dstDirection == "out" {
-		d.processDstOut(req, rqC)
+		sdm.processDstOut(req, rqC)
 		dstAction = true
 	} else {
 		log.Panicf("can't process direction of type %s", req.dstDirection)
@@ -325,7 +351,8 @@ func (d *DataMover) processMoveRequest(
 	return srcAction || dstAction
 }
 
-func (d *DataMover) processSrcIn(
+// processSrcIn processes reading request to source
+func (sdm *StreamingDataMover) processSrcIn(
 	req *DataMoveRequest,
 	rqC *RequestCollection,
 ) {
@@ -334,28 +361,28 @@ func (d *DataMover) processSrcIn(
 	addr := req.srcAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
 		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
 
 		length := lengthLeft
 		if lengthInUnit < length {
 			length = lengthInUnit
 		}
 
-		module := d.localDataSource.Find(addr)
+		module := sdm.localDataSource.Find(addr)
 		reqToSrcPort := mem.ReadReqBuilder{}.
-			WithSrc(d.srcPort).
+			WithSrc(sdm.srcPort).
 			WithDst(module).
 			WithAddress(addr).
 			WithByteSize(length).
 			Build()
-		d.toSrc = append(d.toDst, reqToSrcPort)
-		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
+		sdm.toSrc = append(sdm.toDst, reqToSrcPort)
+		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
 		rqC.appendSubReq(reqToSrcPort.Meta().ID)
 
-		tracing.TraceReqInitiate(reqToSrcPort, d,
-			tracing.MsgIDAtReceiver(req, d))
+		tracing.TraceReqInitiate(reqToSrcPort, sdm,
+			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
 		lengthLeft -= length
@@ -363,7 +390,8 @@ func (d *DataMover) processSrcIn(
 	}
 }
 
-func (d *DataMover) processSrcOut(
+// processSrcOut processes writing request to source
+func (sdm *StreamingDataMover) processSrcOut(
 	req *DataMoveRequest,
 	rqC *RequestCollection,
 ) {
@@ -372,28 +400,28 @@ func (d *DataMover) processSrcOut(
 	addr := req.srcAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
 		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
 
 		length := lengthLeft
 		if lengthInUnit < length {
 			length = lengthInUnit
 		}
 
-		module := d.localDataSource.Find(addr)
+		module := sdm.localDataSource.Find(addr)
 		reqToSrcPort := mem.WriteReqBuilder{}.
-			WithSrc(d.srcPort).
+			WithSrc(sdm.srcPort).
 			WithDst(module).
 			WithAddress(addr).
 			WithData(req.srcBuffer[offset : offset+length]).
 			Build()
-		d.toSrc = append(d.toDst, reqToSrcPort)
-		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
+		sdm.toSrc = append(sdm.toDst, reqToSrcPort)
+		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
 		rqC.appendSubReq(reqToSrcPort.Meta().ID)
 
-		tracing.TraceReqInitiate(reqToSrcPort, d,
-			tracing.MsgIDAtReceiver(req, d))
+		tracing.TraceReqInitiate(reqToSrcPort, sdm,
+			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
 		lengthLeft -= length
@@ -401,7 +429,8 @@ func (d *DataMover) processSrcOut(
 	}
 }
 
-func (d *DataMover) processDstIn(
+// processDstIn processes reading request to destination
+func (sdm *StreamingDataMover) processDstIn(
 	req *DataMoveRequest,
 	rqC *RequestCollection,
 ) {
@@ -410,28 +439,28 @@ func (d *DataMover) processDstIn(
 	addr := req.dstAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
 		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
 
 		length := lengthLeft
 		if lengthInUnit < length {
 			length = lengthInUnit
 		}
 
-		module := d.localDataSource.Find(addr)
+		module := sdm.localDataSource.Find(addr)
 		reqToDstPort := mem.ReadReqBuilder{}.
-			WithSrc(d.dstPort).
+			WithSrc(sdm.dstPort).
 			WithDst(module).
 			WithAddress(addr).
 			WithByteSize(length).
 			Build()
-		d.toDst = append(d.toSrc, reqToDstPort)
-		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+		sdm.toDst = append(sdm.toSrc, reqToDstPort)
+		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
 		rqC.appendSubReq(reqToDstPort.Meta().ID)
 
-		tracing.TraceReqInitiate(reqToDstPort, d,
-			tracing.MsgIDAtReceiver(req, d))
+		tracing.TraceReqInitiate(reqToDstPort, sdm,
+			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
 		lengthLeft -= length
@@ -439,7 +468,8 @@ func (d *DataMover) processDstIn(
 	}
 }
 
-func (d *DataMover) processDstOut(
+// processDstOut requests writing request to destination
+func (sdm *StreamingDataMover) processDstOut(
 	req *DataMoveRequest,
 	rqC *RequestCollection,
 ) {
@@ -448,28 +478,28 @@ func (d *DataMover) processDstOut(
 	addr := req.dstAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << d.Log2AccessSize)
+		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
 		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << d.Log2AccessSize) - unitOffset
+		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
 
 		length := lengthLeft
 		if lengthInUnit < length {
 			length = lengthInUnit
 		}
 
-		module := d.localDataSource.Find(addr)
+		module := sdm.localDataSource.Find(addr)
 		reqToDstPort := mem.WriteReqBuilder{}.
-			WithSrc(d.dstPort).
+			WithSrc(sdm.dstPort).
 			WithDst(module).
 			WithAddress(addr).
 			WithData(req.dstBuffer[offset : offset+length]).
 			Build()
-		d.toDst = append(d.toSrc, reqToDstPort)
-		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+		sdm.toDst = append(sdm.toSrc, reqToDstPort)
+		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
 		rqC.appendSubReq(reqToDstPort.Meta().ID)
 
-		tracing.TraceReqInitiate(reqToDstPort, d,
-			tracing.MsgIDAtReceiver(req, d))
+		tracing.TraceReqInitiate(reqToDstPort, sdm,
+			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
 		lengthLeft -= length
