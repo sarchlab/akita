@@ -36,6 +36,14 @@ func (rqC *RequestCollection) appendSubReq(inputID string) {
 	rqC.subReqCount += 1
 }
 
+func (rqC *RequestCollection) getTopReq() sim.Msg {
+	return rqC.topReq
+}
+
+func (rqC *RequestCollection) getTopID() string {
+	return rqC.topReq.Meta().ID
+}
+
 func newRequestCollection(
 	inputReq sim.Msg,
 ) *RequestCollection {
@@ -45,14 +53,6 @@ func newRequestCollection(
 	return rqC
 }
 
-func (rqC *RequestCollection) getTopReq() sim.Msg {
-	return rqC.topReq
-}
-
-func (rqC *RequestCollection) getTopID() string {
-	return rqC.topReq.Meta().ID
-}
-
 type DataMover struct {
 	*sim.TickingComponent
 
@@ -60,7 +60,8 @@ type DataMover struct {
 
 	toSrc              []sim.Msg
 	toDst              []sim.Msg
-	processingRequests []sim.Msg
+	toCP               []sim.Msg
+	processingRequests []*RequestCollection
 	pendingRequests    []sim.Msg
 
 	moveRequest *DataMoveRequest
@@ -95,7 +96,6 @@ func (d *DataMover) send(
 	}
 
 	req := (*reqs)[0]
-	// req.Meta().SendTime = now
 	err := port.Send(req)
 	if err == nil {
 		*reqs = (*reqs)[1:]
@@ -112,9 +112,9 @@ func (d *DataMover) parseFromSrc() bool {
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req, d.srcPort)
+		d.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req, d.srcPort)
+		d.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -130,9 +130,9 @@ func (d *DataMover) parseFromDst() bool {
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
-		d.processDataReadyRsp(req, d.dstPort)
+		d.processDataReadyRsp(req)
 	case *mem.WriteDoneRsp:
-		d.processWriteDoneRsp(req, d.dstPort)
+		d.processWriteDoneRsp(req)
 	default:
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
@@ -163,47 +163,112 @@ func (d *DataMover) removeReqFromPendingReqs(
 
 func (d *DataMover) removeReqFromProcessingReqs(
 	id string,
-) sim.Msg {
-	var targetReq sim.Msg
-	newList := make([]sim.Msg, 0, len(d.pendingRequests)-1)
+) {
+	found := false
+	newList := make([]*RequestCollection, 0, len(d.processingRequests)-1)
 	for _, req := range d.processingRequests {
-		if req.Meta().ID == id {
-			targetReq = req
+		if req.getTopID() == id {
+			found = true
 		} else {
 			newList = append(newList, req)
 		}
 	}
 	d.processingRequests = newList
 
-	if targetReq == nil {
+	if !found {
 		panic("request not found")
 	}
-
-	return targetReq
 }
 
 func (d *DataMover) processDataReadyRsp(
 	rsp *mem.DataReadyRsp,
-	receiver sim.Port,
 ) {
 	req := d.removeReqFromPendingReqs(rsp.RespondTo).(*mem.ReadReq)
 	tracing.TraceReqFinalize(req, d)
 
 	found := false
+	result := &RequestCollection{}
+	for _, rqC := range d.processingRequests {
+		if rqC.decreSubIfExists(req.Meta().ID) {
+			result = rqC
+			found = true
+		}
+	}
 
 	if !found {
 		panic("Request is not found ")
+	}
+
+	processing := result.getTopReq().(*DataMoveRequest)
+	d.dataTransfer(req, processing, rsp)
+
+	if result.isFinished() {
+		tracing.TraceReqComplete(processing, d)
+		d.removeReqFromProcessingReqs(processing.Meta().ID)
+
+		rsp := sim.GeneralRspBuilder{}.
+			WithSrc(processing.Dst).
+			WithDst(processing.Src).
+			WithOriginalReq(processing).
+			Build()
+		d.toCP = append(d.toCP, rsp)
 	}
 }
 
 func (d *DataMover) processWriteDoneRsp(
 	rsp *mem.WriteDoneRsp,
-	receiver sim.Port,
 ) {
+	req := d.removeReqFromPendingReqs(rsp.RespondTo)
+	tracing.TraceReqFinalize(req, d)
 
+	found := false
+	result := &RequestCollection{}
+	for _, rqC := range d.processingRequests {
+		if rqC.decreSubIfExists(req.Meta().ID) {
+			result = rqC
+			found = true
+		}
+	}
+
+	if !found {
+		panic("could not find requst collection")
+	}
+
+	processing := result.getTopReq().(*DataMoveRequest)
+	if result.isFinished() {
+		tracing.TraceReqComplete(processing, d)
+		d.removeReqFromProcessingReqs(processing.Meta().ID)
+
+		rsp := sim.GeneralRspBuilder{}.
+			WithSrc(processing.Dst).
+			WithDst(processing.Src).
+			WithOriginalReq(processing).
+			Build()
+		d.toCP = append(d.toCP, rsp)
+	}
 }
 
-func (d *DataMover) parseFromCtrlPort() bool {
+func (d *DataMover) dataTransfer(
+	req *mem.ReadReq,
+	dmr *DataMoveRequest,
+	rsp *mem.DataReadyRsp,
+) {
+	var offset uint64
+	srcDirection := dmr.srcDirection
+	dstDirection := dmr.dstDirection
+
+	if srcDirection == "out" && dstDirection == "in" {
+		offset = req.Address - dmr.srcAddress
+		copy(dmr.dstBuffer[offset:], rsp.Data)
+	} else if srcDirection == "in" && dstDirection == "out" {
+		offset = req.Address - dmr.dstAddress
+		copy(dmr.srcBuffer[offset:], rsp.Data)
+	} else {
+		panic("data move request invalid")
+	}
+}
+
+func (d *DataMover) parseFromCP() bool {
 	if len(d.processingRequests) >= int(d.maxReqCount) {
 		return false
 	}
@@ -214,9 +279,12 @@ func (d *DataMover) parseFromCtrlPort() bool {
 	}
 	tracing.TraceReqReceive(req, d)
 
+	rqC := newRequestCollection(req)
+	d.processingRequests = append(d.processingRequests, rqC)
+
 	switch req := req.(type) {
 	case *DataMoveRequest:
-		return d.processMoveRequest(req)
+		return d.processMoveRequest(req, rqC)
 	default:
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
 		return false
@@ -225,6 +293,7 @@ func (d *DataMover) parseFromCtrlPort() bool {
 
 func (d *DataMover) processMoveRequest(
 	req *DataMoveRequest,
+	rqC *RequestCollection,
 ) bool {
 	if req == nil {
 		return false
@@ -234,20 +303,20 @@ func (d *DataMover) processMoveRequest(
 	dstAction := true
 
 	if req.srcDirection == "in" {
-		d.processSrcIn(req)
+		d.processSrcIn(req, rqC)
 		srcAction = true
 	} else if req.srcDirection == "out" {
-		d.processSrcOut(req)
+		d.processSrcOut(req, rqC)
 		srcAction = true
 	} else {
 		log.Panicf("can't process direction of type %s", req.srcDirection)
 	}
 
 	if req.dstDirection == "in" {
-		d.processDstIn(req)
+		d.processDstIn(req, rqC)
 		dstAction = true
 	} else if req.dstDirection == "out" {
-		d.processDstOut(req)
+		d.processDstOut(req, rqC)
 		dstAction = true
 	} else {
 		log.Panicf("can't process direction of type %s", req.dstDirection)
@@ -258,6 +327,7 @@ func (d *DataMover) processMoveRequest(
 
 func (d *DataMover) processSrcIn(
 	req *DataMoveRequest,
+	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
 	lengthLeft := uint64(len(req.srcBuffer))
@@ -282,6 +352,7 @@ func (d *DataMover) processSrcIn(
 			Build()
 		d.toSrc = append(d.toDst, reqToSrcPort)
 		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
+		rqC.appendSubReq(reqToSrcPort.Meta().ID)
 
 		tracing.TraceReqInitiate(reqToSrcPort, d,
 			tracing.MsgIDAtReceiver(req, d))
@@ -294,6 +365,7 @@ func (d *DataMover) processSrcIn(
 
 func (d *DataMover) processSrcOut(
 	req *DataMoveRequest,
+	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
 	lengthLeft := uint64(len(req.srcBuffer))
@@ -318,6 +390,7 @@ func (d *DataMover) processSrcOut(
 			Build()
 		d.toSrc = append(d.toDst, reqToSrcPort)
 		d.pendingRequests = append(d.pendingRequests, reqToSrcPort)
+		rqC.appendSubReq(reqToSrcPort.Meta().ID)
 
 		tracing.TraceReqInitiate(reqToSrcPort, d,
 			tracing.MsgIDAtReceiver(req, d))
@@ -330,6 +403,7 @@ func (d *DataMover) processSrcOut(
 
 func (d *DataMover) processDstIn(
 	req *DataMoveRequest,
+	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
 	lengthLeft := uint64(len(req.dstBuffer))
@@ -354,6 +428,7 @@ func (d *DataMover) processDstIn(
 			Build()
 		d.toDst = append(d.toSrc, reqToDstPort)
 		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+		rqC.appendSubReq(reqToDstPort.Meta().ID)
 
 		tracing.TraceReqInitiate(reqToDstPort, d,
 			tracing.MsgIDAtReceiver(req, d))
@@ -366,6 +441,7 @@ func (d *DataMover) processDstIn(
 
 func (d *DataMover) processDstOut(
 	req *DataMoveRequest,
+	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
 	lengthLeft := uint64(len(req.dstBuffer))
@@ -390,6 +466,7 @@ func (d *DataMover) processDstOut(
 			Build()
 		d.toDst = append(d.toSrc, reqToDstPort)
 		d.pendingRequests = append(d.pendingRequests, reqToDstPort)
+		rqC.appendSubReq(reqToDstPort.Meta().ID)
 
 		tracing.TraceReqInitiate(reqToDstPort, d,
 			tracing.MsgIDAtReceiver(req, d))
