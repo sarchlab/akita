@@ -22,7 +22,6 @@ const (
 // The storage implementation manages the storage in units. The unit can is
 // similar to the concept of page in memory management. For the units that
 // it not touched by Read and Write function, no memory will be allocated.
-//
 type Storage struct {
 	sync.Mutex
 	Capacity uint64

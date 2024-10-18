@@ -1,14 +1,15 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
-// A Cache is a customized L1 cache the for R9nano GPUs.
-type Cache struct {
+// Comp is a customized L1 cache the for R9nano GPUs.
+type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -42,10 +43,11 @@ type Cache struct {
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
 // the data on a certain address.
-func (c *Cache) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
+<<<<<<< HEAD
 func (c *Cache) getTaskID() string {
     if len(c.transactions) == 0 {
         return ""
@@ -58,12 +60,21 @@ func (c *Cache) getTaskID() string {
     }
 
     return ""
+=======
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+>>>>>>> origin/v4
 }
 
 // Tick update the state of the cache
-func (c *Cache) Tick(now sim.VTimeInSec) bool {
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
+<<<<<<< HEAD
 	if !c.isPaused {
 		GlobalMilestoneManager.AddMilestone(
             c.getTaskID(),
@@ -73,57 +84,61 @@ func (c *Cache) Tick(now sim.VTimeInSec) bool {
             now,
         )
 		madeProgress = c.runPipeline(now) || madeProgress
+=======
+	if !m.isPaused {
+		madeProgress = m.runPipeline() || madeProgress
+>>>>>>> origin/v4
 	}
 
-	madeProgress = c.controlStage.Tick(now) || madeProgress
+	madeProgress = m.controlStage.Tick() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Cache) runPipeline(now sim.VTimeInSec) bool {
+func (m *middleware) runPipeline() bool {
 	madeProgress := false
-	madeProgress = c.tickRespondStage(now) || madeProgress
-	madeProgress = c.tickParseBottomStage(now) || madeProgress
-	madeProgress = c.tickBankStage(now) || madeProgress
-	madeProgress = c.tickDirectoryStage(now) || madeProgress
-	madeProgress = c.tickCoalesceState(now) || madeProgress
+	madeProgress = m.tickRespondStage() || madeProgress
+	madeProgress = m.tickParseBottomStage() || madeProgress
+	madeProgress = m.tickBankStage() || madeProgress
+	madeProgress = m.tickDirectoryStage() || madeProgress
+	madeProgress = m.tickCoalesceState() || madeProgress
 	return madeProgress
 }
 
-func (c *Cache) tickRespondStage(now sim.VTimeInSec) bool {
+func (m *middleware) tickRespondStage() bool {
 	madeProgress := false
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.respondStage.Tick(now) || madeProgress
-	}
-	return madeProgress
-}
-
-func (c *Cache) tickParseBottomStage(now sim.VTimeInSec) bool {
-	madeProgress := false
-
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.parseBottomStage.Tick(now) || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (c *Cache) tickBankStage(now sim.VTimeInSec) bool {
-	madeProgress := false
-	for _, bs := range c.bankStages {
-		madeProgress = bs.Tick(now) || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondStage.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Cache) tickDirectoryStage(now sim.VTimeInSec) bool {
-	return c.directoryStage.Tick(now)
+func (m *middleware) tickParseBottomStage() bool {
+	madeProgress := false
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottomStage.Tick() || madeProgress
+	}
+
+	return madeProgress
 }
 
-func (c *Cache) tickCoalesceState(now sim.VTimeInSec) bool {
+func (m *middleware) tickBankStage() bool {
 	madeProgress := false
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = c.coalesceStage.Tick(now) || madeProgress
+	for _, bs := range m.bankStages {
+		madeProgress = bs.Tick() || madeProgress
+	}
+	return madeProgress
+}
+
+func (m *middleware) tickDirectoryStage() bool {
+	return m.directoryStage.Tick()
+}
+
+func (m *middleware) tickCoalesceState() bool {
+	madeProgress := false
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.coalesceStage.Tick() || madeProgress
 	}
 	return madeProgress
 }

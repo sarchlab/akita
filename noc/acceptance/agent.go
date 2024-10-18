@@ -3,7 +3,7 @@ package acceptance
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Agent can send and receive request.
@@ -35,20 +35,19 @@ func NewAgent(
 }
 
 // Tick tries to receive requests and send requests out.
-func (a *Agent) Tick(now sim.VTimeInSec) bool {
+func (a *Agent) Tick() bool {
 	madeProgress := false
-	madeProgress = a.send(now) || madeProgress
-	madeProgress = a.recv(now) || madeProgress
+	madeProgress = a.send() || madeProgress
+	madeProgress = a.recv() || madeProgress
 	return madeProgress
 }
 
-func (a *Agent) send(now sim.VTimeInSec) bool {
+func (a *Agent) send() bool {
 	if len(a.MsgsToSend) == 0 {
 		return false
 	}
 
 	msg := a.MsgsToSend[0]
-	msg.Meta().SendTime = now
 	err := msg.Meta().Src.Send(msg)
 	if err == nil {
 		a.MsgsToSend = a.MsgsToSend[1:]
@@ -59,10 +58,10 @@ func (a *Agent) send(now sim.VTimeInSec) bool {
 	return false
 }
 
-func (a *Agent) recv(now sim.VTimeInSec) bool {
+func (a *Agent) recv() bool {
 	madeProgress := false
 	for _, port := range a.AgentPorts {
-		msg := port.Retrieve(now)
+		msg := port.RetrieveIncoming()
 		if msg != nil {
 			a.test.receiveMsg(msg, port)
 			a.recvBytes += uint64(msg.Meta().TrafficBytes)

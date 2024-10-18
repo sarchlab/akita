@@ -1,39 +1,38 @@
 package writethrough
 
 import (
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type bottomParser struct {
-	cache *Cache
+	cache *Comp
 }
 
-func (p *bottomParser) Tick(now sim.VTimeInSec) bool {
-	item := p.cache.bottomPort.Peek()
+func (p *bottomParser) Tick() bool {
+	item := p.cache.bottomPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
 	switch rsp := item.(type) {
 	case *mem.WriteDoneRsp:
-		return p.processDoneRsp(now, rsp)
+		return p.processDoneRsp(rsp)
 	case *mem.DataReadyRsp:
-		return p.processDataReady(now, rsp)
+		return p.processDataReady(rsp)
 	default:
 		panic("cannot process response")
 	}
 }
 
 func (p *bottomParser) processDoneRsp(
-	now sim.VTimeInSec,
 	done *mem.WriteDoneRsp,
 ) bool {
 	trans := p.findTransactionByWriteToBottomID(done.GetRspTo())
 	if trans == nil || trans.fetchAndWrite {
-		p.cache.bottomPort.Retrieve(now)
+		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 
@@ -42,7 +41,7 @@ func (p *bottomParser) processDoneRsp(
 	}
 
 	p.removeTransaction(trans)
-	p.cache.bottomPort.Retrieve(now)
+	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.writeToBottom, p.cache)
 	tracing.EndTask(trans.id, p.cache)
@@ -51,12 +50,11 @@ func (p *bottomParser) processDoneRsp(
 }
 
 func (p *bottomParser) processDataReady(
-	now sim.VTimeInSec,
 	dr *mem.DataReadyRsp,
 ) bool {
 	trans := p.findTransactionByReadToBottomID(dr.GetRspTo())
 	if trans == nil {
-		p.cache.bottomPort.Retrieve(now)
+		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 	pid := trans.readToBottom.PID
@@ -71,7 +69,7 @@ func (p *bottomParser) processDataReady(
 	dirtyMask := make([]bool, 1<<p.cache.log2BlockSize)
 	mshrEntry := p.cache.mshr.Query(pid, cachelineID)
 	p.mergeMSHRData(mshrEntry, data, dirtyMask)
-	p.finalizeMSHRTrans(mshrEntry, data, now)
+	p.finalizeMSHRTrans(mshrEntry, data)
 	p.cache.mshr.Remove(pid, cachelineID)
 
 	trans.bankAction = bankActionWriteFetched
@@ -80,7 +78,7 @@ func (p *bottomParser) processDataReady(
 	bankBuf.Push(trans)
 
 	p.removeTransaction(trans)
-	p.cache.bottomPort.Retrieve(now)
+	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.readToBottom, p.cache)
 
@@ -113,7 +111,6 @@ func (p *bottomParser) mergeMSHRData(
 func (p *bottomParser) finalizeMSHRTrans(
 	mshrEntry *cache.MSHREntry,
 	data []byte,
-	now sim.VTimeInSec,
 ) {
 	for _, t := range mshrEntry.Requests {
 		trans := t.(*transaction)

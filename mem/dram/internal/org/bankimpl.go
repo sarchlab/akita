@@ -1,9 +1,9 @@
 package org
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // BankState represents the current state of a bank.
@@ -47,8 +47,8 @@ func (b *BankImpl) Name() string {
 }
 
 // Tick updates the internal states of the bank.
-func (b *BankImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
-	madeProgress = b.countDownCurrentCmd(now) || madeProgress
+func (b *BankImpl) Tick() (madeProgress bool) {
+	madeProgress = b.countDownCurrentCmd() || madeProgress
 	madeProgress = b.countDownTiming() || madeProgress
 
 	return madeProgress
@@ -64,11 +64,11 @@ func (b *BankImpl) countDownTiming() (madeProgress bool) {
 	return madeProgress
 }
 
-func (b *BankImpl) countDownCurrentCmd(now sim.VTimeInSec) (madeProgress bool) {
+func (b *BankImpl) countDownCurrentCmd() (madeProgress bool) {
 	if b.currentCmd != nil {
 		b.currentCmd.CycleLeft--
 		if b.currentCmd.CycleLeft <= 0 {
-			b.completeCurrentCmd(now)
+			b.completeCurrentCmd()
 		}
 
 		madeProgress = true
@@ -77,7 +77,7 @@ func (b *BankImpl) countDownCurrentCmd(now sim.VTimeInSec) (madeProgress bool) {
 	return madeProgress
 }
 
-func (b *BankImpl) completeCurrentCmd(now sim.VTimeInSec) {
+func (b *BankImpl) completeCurrentCmd() {
 	b.currentCmd.CycleLeft = 0
 
 	tracing.EndTask(b.currentCmd.ID, b)
@@ -96,7 +96,6 @@ func (b *BankImpl) completeCurrentCmd(now sim.VTimeInSec) {
 
 // GetReadyCommand returns the next command is ready to be issued.
 func (b *BankImpl) GetReadyCommand(
-	now sim.VTimeInSec,
 	cmd *signal.Command,
 ) *signal.Command {
 	requiredKind := b.getRequiredCommandKind(cmd)
@@ -125,7 +124,7 @@ func (b *BankImpl) getRequiredCommandKind(cmd *signal.Command) signal.CommandKin
 }
 
 // StartCommand starts a new command in the Bank.
-func (b *BankImpl) StartCommand(now sim.VTimeInSec, cmd *signal.Command) {
+func (b *BankImpl) StartCommand(cmd *signal.Command) {
 	if b.currentCmd != nil {
 		panic("previous cmd is not completed")
 	}

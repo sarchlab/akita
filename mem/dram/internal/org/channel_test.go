@@ -4,9 +4,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 var _ = Describe("ChannelImpl", func() {
@@ -47,10 +46,10 @@ var _ = Describe("ChannelImpl", func() {
 		}
 
 		channel.Banks.GetBank(0, 0, 0).(*MockBank).EXPECT().
-			GetReadyCommand(sim.VTimeInSec(10), cmd).
+			GetReadyCommand(cmd).
 			Return(retCmd)
 
-		finalCmd := channel.GetReadyCommand(10, cmd)
+		finalCmd := channel.GetReadyCommand(cmd)
 
 		Expect(finalCmd).To(Equal(retCmd))
 	})
@@ -66,9 +65,9 @@ var _ = Describe("ChannelImpl", func() {
 		}
 
 		channel.Banks.GetBank(0, 0, 0).(*MockBank).EXPECT().
-			StartCommand(sim.VTimeInSec(10), cmd)
+			StartCommand(cmd)
 
-		channel.StartCommand(10, cmd)
+		channel.StartCommand(cmd)
 	})
 
 	It("should update timing", func() {
@@ -122,6 +121,6 @@ var _ = Describe("ChannelImpl", func() {
 		channel.Banks.GetBank(1, 1, 1).(*MockBank).EXPECT().
 			UpdateTiming(signal.CmdKindRead, 4)
 
-		channel.UpdateTiming(10, cmd)
+		channel.UpdateTiming(cmd)
 	})
 })

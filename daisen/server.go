@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/sarchlab/akita/v3/daisen/static"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/daisen/static"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 var (

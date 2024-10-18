@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE  -write_package_comment=false -self_package=github.com/sarchlab/akita/v3/mem/cache github.com/sarchlab/akita/v3/mem/cache VictimFinder,Directory
+//go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE  -write_package_comment=false -self_package=github.com/sarchlab/akita/v4/mem/cache github.com/sarchlab/akita/v4/mem/cache VictimFinder,Directory
 
 func TestCache(t *testing.T) {
 	log.SetOutput(GinkgoWriter)

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A TLBTracer write logs for what happened in a TLB

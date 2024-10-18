@@ -1,9 +1,8 @@
 package trans
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 // A FCFSSubTransactionQueue returns sub-transactions in a
@@ -38,7 +37,7 @@ func (q *FCFSSubTransactionQueue) Push(t *signal.Transaction) {
 
 // Tick breaks down transactions to commands and dispatches the command to the
 // command queues.
-func (q *FCFSSubTransactionQueue) Tick(now sim.VTimeInSec) bool {
+func (q *FCFSSubTransactionQueue) Tick() bool {
 	for i, subTrans := range q.Queue {
 		cmd := q.CmdCreator.Create(subTrans)
 

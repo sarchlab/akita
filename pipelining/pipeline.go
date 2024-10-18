@@ -4,8 +4,8 @@ package pipelining
 import (
 	"reflect"
 
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // PipelineItem is an item that can pass through a pipeline.
@@ -18,14 +18,14 @@ type Pipeline interface {
 	tracing.NamedHookable
 
 	// Tick moves elements in the pipeline forward.
-	Tick(now sim.VTimeInSec) (madeProgress bool)
+	Tick() (madeProgress bool)
 
 	// CanAccept checks if the pipeline can accept a new element.
 	CanAccept() bool
 
 	// Accept adds an element to the pipeline. If the first pipeline stage is
 	// currently occupied, this function panics.
-	Accept(now sim.VTimeInSec, elem PipelineItem)
+	Accept(elem PipelineItem)
 
 	// Clear discards all the items that are currently in the pipeline.
 	Clear()
@@ -81,7 +81,7 @@ func (p *pipelineImpl) Clear() {
 }
 
 // Tick moves elements in the pipeline forward.
-func (p *pipelineImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
+func (p *pipelineImpl) Tick() (madeProgress bool) {
 	for lane := 0; lane < p.width; lane++ {
 		for i := p.numStage - 1; i >= 0; i-- {
 			stage := &p.stages[lane][i]
@@ -98,7 +98,7 @@ func (p *pipelineImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
 
 			if i == p.numStage-1 {
 				madeProgress =
-					p.tryMoveToPostPipelineBuffer(now, stage) || madeProgress
+					p.tryMoveToPostPipelineBuffer(stage) || madeProgress
 			} else {
 				madeProgress = p.tryMoveToNextStage(lane, i) || madeProgress
 			}
@@ -109,7 +109,6 @@ func (p *pipelineImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
 }
 
 func (p *pipelineImpl) tryMoveToPostPipelineBuffer(
-	_ sim.VTimeInSec,
 	stage *pipelineStageInfo,
 ) (succeed bool) {
 	if !p.postPipelineBuf.CanPush() {
@@ -157,7 +156,7 @@ func (p *pipelineImpl) CanAccept() bool {
 
 // Accept adds an element to the pipeline. If the first pipeline stage is
 // currently occupied, this function panics.
-func (p *pipelineImpl) Accept(_ sim.VTimeInSec, elem PipelineItem) {
+func (p *pipelineImpl) Accept(elem PipelineItem) {
 	if p.numStage == 0 {
 		p.postPipelineBuf.Push(elem)
 		return

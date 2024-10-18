@@ -1,8 +1,7 @@
 package org
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 // Banks is indexed by rank, bank-group, bank.
@@ -41,21 +40,18 @@ func MakeBanks(numRank, numBankGroup, numBank uint64) Banks {
 // A Channel is a group of ranks.
 type Channel interface {
 	GetReadyCommand(
-		now sim.VTimeInSec,
 		cmd *signal.Command,
 	) *signal.Command
 
 	StartCommand(
-		now sim.VTimeInSec,
 		cmd *signal.Command,
 	)
 
 	UpdateTiming(
-		now sim.VTimeInSec,
 		cmd *signal.Command,
 	)
 
-	Tick(now sim.VTimeInSec) (madeProgress bool)
+	Tick() (madeProgress bool)
 }
 
 // ChannelImpl implements a Channel.
@@ -65,11 +61,11 @@ type ChannelImpl struct {
 }
 
 // Tick updates the internal states of the channel.
-func (cs *ChannelImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
+func (cs *ChannelImpl) Tick() (madeProgress bool) {
 	for i := 0; i < len(cs.Banks); i++ {
 		for j := 0; j < len(cs.Banks[0]); j++ {
 			for k := 0; k < len(cs.Banks[0][0]); k++ {
-				madeProgress = cs.Banks[i][j][k].Tick(now) || madeProgress
+				madeProgress = cs.Banks[i][j][k].Tick() || madeProgress
 			}
 		}
 	}
@@ -79,51 +75,48 @@ func (cs *ChannelImpl) Tick(now sim.VTimeInSec) (madeProgress bool) {
 
 // GetReadyCommand returns the command that is ready to start in the channel.
 func (cs *ChannelImpl) GetReadyCommand(
-	now sim.VTimeInSec,
 	cmd *signal.Command,
 ) *signal.Command {
 	readyCmd := cs.Banks.
 		GetBank(cmd.Rank, cmd.BankGroup, cmd.Bank).
-		GetReadyCommand(now, cmd)
+		GetReadyCommand(cmd)
 
 	return readyCmd
 }
 
 // StartCommand starts a command in a bank.
-func (cs *ChannelImpl) StartCommand(now sim.VTimeInSec, cmd *signal.Command) {
+func (cs *ChannelImpl) StartCommand(cmd *signal.Command) {
 	cs.Banks.
 		GetBank(cmd.Rank, cmd.BankGroup, cmd.Bank).
-		StartCommand(now, cmd)
+		StartCommand(cmd)
 }
 
 // UpdateTiming updates the timing-related states of the banks.
-func (cs *ChannelImpl) UpdateTiming(now sim.VTimeInSec, cmd *signal.Command) {
+func (cs *ChannelImpl) UpdateTiming(cmd *signal.Command) {
 	switch cmd.Kind {
 	case signal.CmdKindActivate:
 		fallthrough
 	case signal.CmdKindRead, signal.CmdKindReadPrecharge,
 		signal.CmdKindWrite, signal.CmdKindWritePrecharge,
 		signal.CmdKindPrecharge, signal.CmdKindRefreshBank:
-		cs.updateAllBankTiming(now, cmd)
+		cs.updateAllBankTiming(cmd)
 	}
 }
 
 func (cs *ChannelImpl) updateAllBankTiming(
-	now sim.VTimeInSec,
 	cmd *signal.Command,
 ) {
 	rank, bankGroup, bank := cs.Banks.GetSize()
 	for i := uint64(0); i < rank; i++ {
 		for j := uint64(0); j < bankGroup; j++ {
 			for k := uint64(0); k < bank; k++ {
-				cs.updateBankTiming(now, cmd, i, j, k)
+				cs.updateBankTiming(cmd, i, j, k)
 			}
 		}
 	}
 }
 
 func (cs *ChannelImpl) updateBankTiming(
-	now sim.VTimeInSec,
 	cmd *signal.Command,
 	rank, bankGroup, bank uint64,
 ) {

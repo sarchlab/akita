@@ -4,8 +4,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 type SampleMsg struct {
@@ -14,6 +14,10 @@ type SampleMsg struct {
 
 func (m *SampleMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
+}
+
+func (m *SampleMsg) Clone() sim.Msg {
+	return m
 }
 
 var _ = Describe("XBar", func() {
@@ -75,7 +79,7 @@ var _ = Describe("XBar", func() {
 		buf3.EXPECT().Peek().Return(flit3)
 		buf4.EXPECT().Peek().Return(flit4)
 
-		bufs := xbar.Arbitrate(10)
+		bufs := xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(3))
 		Expect(bufs[0]).To(BeIdenticalTo(buf1))
 		Expect(bufs[1]).To(BeIdenticalTo(buf3))
@@ -86,7 +90,7 @@ var _ = Describe("XBar", func() {
 		buf3.EXPECT().Peek().Return(nil)
 		buf4.EXPECT().Peek().Return(nil)
 
-		bufs = xbar.Arbitrate(10)
+		bufs = xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(1))
 		Expect(bufs[0]).To(BeIdenticalTo(buf2))
 	})

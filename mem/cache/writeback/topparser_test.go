@@ -4,14 +4,13 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
 )
 
 var _ = Describe("TopParser", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		parser   *topParser
 		port     *MockPort
 		buf      *MockBuffer
@@ -39,64 +38,61 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should return if no req to parse", func() {
-		port.EXPECT().Peek().Return(nil)
-		ret := parser.Tick(10)
+		port.EXPECT().PeekIncoming().Return(nil)
+		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should return if the cache is not in running stage", func() {
 		cache.state = cacheStateFlushing
-		ret := parser.Tick(10)
+		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should return if the dir buf is full", func() {
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(6).
 			WithAddress(0x100).
 			WithByteSize(64).
 			Build()
-		port.EXPECT().Peek().Return(read)
+		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(false)
 
-		ret := parser.Tick(10)
+		ret := parser.Tick()
 
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should parse read from top", func() {
 		read := mem.ReadReqBuilder{}.
-			WithSendTime(10).
 			WithAddress(0x100).
 			WithByteSize(64).
 			Build()
 
-		port.EXPECT().Peek().Return(read)
+		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(true)
 		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
 			Expect(t.read).To(BeIdenticalTo(read))
 		})
-		port.EXPECT().Retrieve(sim.VTimeInSec(10)).Return(read)
+		port.EXPECT().RetrieveIncoming().Return(read)
 
-		parser.Tick(10)
+		parser.Tick()
 
 		Expect(cache.inFlightTransactions).To(HaveLen(1))
 	})
 
 	It("should parse write from top", func() {
 		write := mem.WriteReqBuilder{}.
-			WithSendTime(10).
 			WithAddress(0x100).
 			Build()
 
-		port.EXPECT().Peek().Return(write)
+		port.EXPECT().PeekIncoming().Return(write)
 		buf.EXPECT().CanPush().Return(true)
 		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
 			Expect(t.write).To(BeIdenticalTo(write))
 		})
-		port.EXPECT().Retrieve(sim.VTimeInSec(10)).Return(write)
+		port.EXPECT().RetrieveIncoming().Return(write)
 
-		parser.Tick(10)
+		parser.Tick()
 
 		Expect(cache.inFlightTransactions).To(HaveLen(1))
 	})

@@ -1,16 +1,15 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type respondStage struct {
-	cache *Cache
+	cache *Comp
 }
 
-func (s *respondStage) Tick(now sim.VTimeInSec) bool {
+func (s *respondStage) Tick() bool {
 	if len(s.cache.transactions) == 0 {
 		return false
 	}
@@ -21,25 +20,21 @@ func (s *respondStage) Tick(now sim.VTimeInSec) bool {
 		}
 
 		if trans.read != nil {
-			return s.respondReadTrans(now, trans)
+			return s.respondReadTrans(trans)
 		}
-		return s.respondWriteTrans(now, trans)
+		return s.respondWriteTrans(trans)
 	}
 
 	return false
 }
 
-func (s *respondStage) respondReadTrans(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (s *respondStage) respondReadTrans(trans *transaction) bool {
 	if !trans.done {
 		return false
 	}
 
 	read := trans.read
 	dr := mem.DataReadyRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(s.cache.topPort).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
@@ -57,17 +52,13 @@ func (s *respondStage) respondReadTrans(
 	return true
 }
 
-func (s *respondStage) respondWriteTrans(
-	now sim.VTimeInSec,
-	trans *transaction,
-) bool {
+func (s *respondStage) respondWriteTrans(trans *transaction) bool {
 	if !trans.done {
 		return false
 	}
 
 	write := trans.write
 	done := mem.WriteDoneRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(s.cache.topPort).
 		WithDst(write.Src).
 		WithRspTo(write.ID).

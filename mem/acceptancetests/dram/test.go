@@ -5,17 +5,18 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/mem/dram"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
 
 	"os"
 	"time"
 
 	"log"
 
-	"github.com/sarchlab/akita/v3/mem/acceptancetests"
-	"github.com/sarchlab/akita/v3/mem/trace"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/acceptancetests"
+	"github.com/sarchlab/akita/v4/mem/trace"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -44,7 +45,7 @@ func main() {
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
-	conn := sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 	agent := acceptancetests.NewMemAccessAgent(engine)
 	agent.MaxAddress = *maxAddressFlag
@@ -68,7 +69,7 @@ func main() {
 	conn.PlugIn(agent.GetPortByName("Mem"), 16)
 	conn.PlugIn(memCtrl.GetPortByName("Top"), 1)
 
-	agent.TickLater(0)
+	agent.TickLater()
 
 	err := engine.Run()
 	if err != nil {

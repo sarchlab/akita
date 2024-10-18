@@ -4,10 +4,10 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Directory", func() {
@@ -22,7 +22,7 @@ var _ = Describe("Directory", func() {
 		pipeline        *MockPipeline
 		buf             *MockBuffer
 		d               *directory
-		c               *Cache
+		c               *Comp
 	)
 
 	BeforeEach(func() {
@@ -36,7 +36,7 @@ var _ = Describe("Directory", func() {
 		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
-		c = &Cache{
+		c = &Comp{
 			log2BlockSize:    6,
 			bottomPort:       bottomPort,
 			directory:        dir,
@@ -55,7 +55,7 @@ var _ = Describe("Directory", func() {
 			buf:      buf,
 		}
 
-		pipeline.EXPECT().Tick(gomock.Any()).AnyTimes()
+		pipeline.EXPECT().Tick().AnyTimes()
 	})
 
 	AfterEach(func() {
@@ -67,7 +67,7 @@ var _ = Describe("Directory", func() {
 		inBuf.EXPECT().Peek().Return(nil)
 		buf.EXPECT().Peek().Return(nil)
 
-		madeProgress := d.Tick(10)
+		madeProgress := d.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -80,7 +80,6 @@ var _ = Describe("Directory", func() {
 
 		BeforeEach(func() {
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(6).
 				WithAddress(0x104).
 				WithPID(1).
 				WithByteSize(4).
@@ -100,7 +99,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			buf.EXPECT().Pop()
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(ContainElement(trans))
@@ -119,7 +118,6 @@ var _ = Describe("Directory", func() {
 				IsValid: true,
 			}
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(6).
 				WithAddress(0x104).
 				WithPID(1).
 				WithByteSize(4).
@@ -145,7 +143,7 @@ var _ = Describe("Directory", func() {
 				})
 			buf.EXPECT().Pop()
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(block.ReadCount).To(Equal(1))
@@ -155,7 +153,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(false)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -163,7 +161,7 @@ var _ = Describe("Directory", func() {
 		It("should stall if block is locked", func() {
 			block.IsLocked = true
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 			Expect(madeProgress).To(BeFalse())
 		})
 	})
@@ -182,7 +180,6 @@ var _ = Describe("Directory", func() {
 			}
 			mshrEntry = &cache.MSHREntry{}
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(6).
 				WithAddress(0x104).
 				WithPID(1).
 				WithByteSize(4).
@@ -212,7 +209,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			buf.EXPECT().Pop()
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(ContainElement(trans))
@@ -230,7 +227,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -240,7 +237,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -250,7 +247,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			mshr.EXPECT().IsFull().Return(true)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -262,7 +259,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().IsFull().Return(false)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -277,7 +274,6 @@ var _ = Describe("Directory", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x104).
 				WithPID(1).
 				WithData([]byte{1, 2, 3, 4}).
@@ -305,7 +301,7 @@ var _ = Describe("Directory", func() {
 					Expect(write.PID).To(Equal(vm.PID(1)))
 				})
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(ContainElement(trans))
@@ -322,7 +318,6 @@ var _ = Describe("Directory", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x104).
 				WithPID(1).
 				WithData([]byte{1, 2, 3, 4}).
@@ -349,7 +344,7 @@ var _ = Describe("Directory", func() {
 					Expect(write.PID).To(Equal(vm.PID(1)))
 				})
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.writeToBottom).NotTo(BeNil())
@@ -364,7 +359,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -378,7 +373,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -391,7 +386,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(false)
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -406,7 +401,7 @@ var _ = Describe("Directory", func() {
 			lowModuleFinder.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -420,7 +415,6 @@ var _ = Describe("Directory", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x100).
 				WithPID(1).
 				WithData(make([]byte, 64)).
@@ -445,7 +439,7 @@ var _ = Describe("Directory", func() {
 					Expect(write.PID).To(Equal(vm.PID(1)))
 				})
 
-			madeProgress := d.Tick(10)
+			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.writeToBottom).NotTo(BeNil())

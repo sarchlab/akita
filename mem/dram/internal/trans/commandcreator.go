@@ -1,7 +1,7 @@
 package trans
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 )
 
 // A CommandCreator can convert a subtransaction to a command.

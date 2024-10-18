@@ -1,8 +1,8 @@
 package addresstranslator
 
 import (
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Builder can create address translators
@@ -79,8 +79,8 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 }
 
 // Build returns a new AddressTranslator
-func (b Builder) Build(name string) *AddressTranslator {
-	t := &AddressTranslator{}
+func (b Builder) Build(name string) *Comp {
+	t := &Comp{}
 	t.TickingComponent = sim.NewTickingComponent(
 		name, b.engine, b.freq, t)
 
@@ -92,10 +92,13 @@ func (b Builder) Build(name string) *AddressTranslator {
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
 
+	middleware := &middleware{Comp: t}
+	t.AddMiddleware(middleware)
+
 	return t
 }
 
-func (b Builder) createPorts(name string, t *AddressTranslator) {
+func (b Builder) createPorts(name string, t *Comp) {
 	t.topPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
 		name+".TopPort")
 	t.AddPort("Top", t.topPort)

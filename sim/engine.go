@@ -7,18 +7,14 @@ type TimeTeller interface {
 
 // EventScheduler can be used to schedule future events.
 type EventScheduler interface {
-	Schedule(e Event)
-}
+	TimeTeller
 
-// A SimulationEndHandler is a handler that is called after the simulation ends.
-type SimulationEndHandler interface {
-	Handle(now VTimeInSec)
+	Schedule(e Event)
 }
 
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable
-	TimeTeller
 	EventScheduler
 
 	// Run will process all the events until the simulation finishes
@@ -29,11 +25,4 @@ type Engine interface {
 
 	// Continue will continue the paused simulation
 	Continue()
-
-	// RegisterSimulationEndHandler registers a handler that perform some
-	// actions after the simulation is finished.
-	RegisterSimulationEndHandler(handler SimulationEndHandler)
-
-	// Finished invokes all the registered SimulationEndHandler
-	Finished()
 }

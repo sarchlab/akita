@@ -4,10 +4,11 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
 
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/sim"
+
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type readRespondEvent struct {
@@ -37,6 +38,7 @@ func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort          sim.Port
 	Storage          *mem.Storage
@@ -44,6 +46,13 @@ type Comp struct {
 	addressConverter mem.AddressConverter
 
 	width int
+<<<<<<< HEAD
+=======
+}
+
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+>>>>>>> origin/v4
 }
 
 // Handle defines how the Comp handles event
@@ -62,6 +71,7 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
+<<<<<<< HEAD
 func (c *Comp) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
@@ -75,18 +85,31 @@ func (c *Comp) Tick(now sim.VTimeInSec) bool {
 // updateMemCtrl updates ideal memory controller state.
 func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 	msg := c.topPort.Retrieve(now)
+=======
+type middleware struct {
+	*Comp
+}
+
+// Tick updates ideal memory controller state.
+func (m *middleware) Tick() bool {
+	msg := m.topPort.RetrieveIncoming()
+>>>>>>> origin/v4
 	if msg == nil {
 		return false
 	}
 
+<<<<<<< HEAD
 	tracing.TraceReqReceive(msg, c)
+=======
+	tracing.TraceReqReceive(msg, m.Comp)
+>>>>>>> origin/v4
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
-		c.handleReadReq(now, msg)
+		m.handleReadReq(msg)
 		return true
 	case *mem.WriteReq:
-		c.handleWriteReq(now, msg)
+		m.handleWriteReq(msg)
 		return true
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
@@ -94,16 +117,18 @@ func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
 	return false
 }
 
-func (c *Comp) handleReadReq(now sim.VTimeInSec, req *mem.ReadReq) {
-	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
-	respondEvent := newReadRespondEvent(timeToSchedule, c, req)
-	c.Engine.Schedule(respondEvent)
+func (m *middleware) handleReadReq(req *mem.ReadReq) {
+	now := m.CurrentTime()
+	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
+	respondEvent := newReadRespondEvent(timeToSchedule, m.Comp, req)
+	m.Engine.Schedule(respondEvent)
 }
 
-func (c *Comp) handleWriteReq(now sim.VTimeInSec, req *mem.WriteReq) {
-	timeToSchedule := c.Freq.NCyclesLater(c.Latency, now)
-	respondEvent := newWriteRespondEvent(timeToSchedule, c, req)
-	c.Engine.Schedule(respondEvent)
+func (m *middleware) handleWriteReq(req *mem.WriteReq) {
+	now := m.CurrentTime()
+	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
+	respondEvent := newWriteRespondEvent(timeToSchedule, m.Comp, req)
+	m.Engine.Schedule(respondEvent)
 }
 
 func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
@@ -121,7 +146,6 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	rsp := mem.DataReadyRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -137,7 +161,11 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+<<<<<<< HEAD
 	c.TickLater(now)
+=======
+	c.TickLater()
+>>>>>>> origin/v4
 
 	return nil
 }
@@ -147,7 +175,6 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	req := e.req
 
 	rsp := mem.WriteDoneRspBuilder{}.
-		WithSendTime(now).
 		WithSrc(c.topPort).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
@@ -188,7 +215,18 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+<<<<<<< HEAD
 	c.TickLater(now)
 
 	return nil
 }
+=======
+	c.TickLater()
+
+	return nil
+}
+
+func (c *Comp) CurrentTime() sim.VTimeInSec {
+	return c.Engine.CurrentTime()
+}
+>>>>>>> origin/v4

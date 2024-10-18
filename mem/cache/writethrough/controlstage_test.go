@@ -4,8 +4,8 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	cache2 "github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/sim"
+	cache2 "github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Control Stage", func() {
@@ -18,7 +18,7 @@ var _ = Describe("Control Stage", func() {
 		transactions []*transaction
 		directory    *MockDirectory
 		s            *controlStage
-		cache        *Cache
+		cache        *Comp
 		inBuf        *MockBuffer
 		mshr         *MockMSHR
 		c            *coalescer
@@ -36,7 +36,7 @@ var _ = Describe("Control Stage", func() {
 
 		transactions = nil
 
-		cache = &Cache{
+		cache = &Comp{
 			topPort:       topPort,
 			bottomPort:    bottomPort,
 			dirBuf:        inBuf,
@@ -59,9 +59,9 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		ctrlPort.EXPECT().Peek().Return(nil)
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -72,9 +72,9 @@ var _ = Describe("Control Stage", func() {
 		flushReq := cache2.FlushReqBuilder{}.Build()
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
-		ctrlPort.EXPECT().Peek().Return(flushReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -90,15 +90,15 @@ var _ = Describe("Control Stage", func() {
 			Expect(rsp.RspTo).To(Equal(flushReq.ID))
 		})
 
-		topPort.EXPECT().Peek().Return(nil)
-		bottomPort.EXPECT().Peek().Return(nil)
+		topPort.EXPECT().PeekIncoming().Return(nil)
+		bottomPort.EXPECT().PeekIncoming().Return(nil)
 		inBuf.EXPECT().Pop()
 		directory.EXPECT().Reset()
 		mshr.EXPECT().Reset()
 
-		ctrlPort.EXPECT().Peek().Return(flushReq)
+		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
-		madeProgress := s.Tick(10)
+		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(s.currFlushReq).To(BeNil())

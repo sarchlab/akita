@@ -23,9 +23,9 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
-	"github.com/sarchlab/akita/v3/analysis"
-	"github.com/sarchlab/akita/v3/monitoring/web"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/analysis"
+	"github.com/sarchlab/akita/v4/monitoring/web"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -216,7 +216,7 @@ func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
 }
 
 type tickingComponent interface {
-	TickLater(now sim.VTimeInSec)
+	TickLater()
 }
 
 func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
@@ -232,7 +232,7 @@ func (m *Monitor) tick(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 	}
 
-	tickingComp.TickLater(m.engine.CurrentTime())
+	tickingComp.TickLater()
 	w.WriteHeader(200)
 }
 
@@ -387,6 +387,14 @@ func (m *Monitor) sortAndSelectBuffers(
 		})
 	} else {
 		panic("Invalid sort method " + sortMethod)
+	}
+
+	if offset >= len(sortedBuffers) {
+		return []sim.Buffer{}
+	}
+
+	if offset+limit > len(sortedBuffers) {
+		limit = len(sortedBuffers) - offset
 	}
 
 	sortedBuffers = sortedBuffers[offset : offset+limit]

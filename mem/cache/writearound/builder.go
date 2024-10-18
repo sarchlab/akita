@@ -3,11 +3,11 @@ package writearound
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/pipelining"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/pipelining"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A Builder can build an writearound cache
@@ -129,10 +129,10 @@ func (b *Builder) WithLowModuleFinder(
 }
 
 // Build returns a new cache unit
-func (b *Builder) Build(name string) *Cache {
+func (b *Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
 
-	c := &Cache{
+	c := &Comp{
 		log2BlockSize:  b.log2BlockSize,
 		numReqPerCycle: b.numReqPerCycle,
 	}
@@ -175,10 +175,13 @@ func (b *Builder) Build(name string) *Cache {
 		tracing.CollectTrace(c, b.visTracer)
 	}
 
+	middleware := &middleware{Comp: c}
+	c.AddMiddleware(middleware)
+
 	return c
 }
 
-func (b *Builder) buildStages(c *Cache) {
+func (b *Builder) buildStages(c *Comp) {
 	c.coalesceStage = &coalescer{cache: c}
 	b.buildDirStage(c)
 	b.buildBankStages(c)
@@ -195,7 +198,7 @@ func (b *Builder) buildStages(c *Cache) {
 	}
 }
 
-func (b *Builder) buildDirStage(c *Cache) {
+func (b *Builder) buildDirStage(c *Comp) {
 	buf := sim.NewBuffer(
 		c.Name()+".DirectoryStage.PostPipelineBuffer",
 		b.numReqPerCycle,
@@ -214,7 +217,7 @@ func (b *Builder) buildDirStage(c *Cache) {
 	}
 }
 
-func (b *Builder) buildBankStages(c *Cache) {
+func (b *Builder) buildBankStages(c *Comp) {
 	for i := 0; i < b.numBank; i++ {
 		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", c.Name(), i)
 		postPipelineBuf := sim.NewBuffer(

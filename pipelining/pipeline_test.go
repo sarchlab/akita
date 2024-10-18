@@ -1,8 +1,6 @@
 package pipelining
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
-
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,47 +43,47 @@ var _ = Describe("Pipeline", func() {
 		canAccept1 := pipeline.CanAccept()
 		Expect(canAccept1).To(BeTrue())
 
-		pipeline.Accept(0, item1)
+		pipeline.Accept(item1)
 		canAccept2 := pipeline.CanAccept()
 		Expect(canAccept2).To(BeFalse())
 
-		madeProgress1 := pipeline.Tick(0)
+		madeProgress1 := pipeline.Tick()
 		Expect(madeProgress1).To(BeTrue())
 
 		canAccept3 := pipeline.CanAccept()
 		Expect(canAccept3).To(BeFalse())
 
-		madeProgress2 := pipeline.Tick(1)
+		madeProgress2 := pipeline.Tick()
 		Expect(madeProgress2).To(BeTrue())
 
 		canAccept4 := pipeline.CanAccept()
 		Expect(canAccept4).To(BeTrue())
-		pipeline.Accept(2, item2)
+		pipeline.Accept(item2)
 
 		for i := 2; i < 199; i++ {
-			madeProgress := pipeline.Tick(sim.VTimeInSec(i))
+			madeProgress := pipeline.Tick()
 			Expect(madeProgress).To(BeTrue())
 		}
 
 		postPipelineBuffer.EXPECT().CanPush().Return(true)
 		postPipelineBuffer.EXPECT().Push(item1)
 
-		madeProgress3 := pipeline.Tick(200)
+		madeProgress3 := pipeline.Tick()
 		Expect(madeProgress3).To(BeTrue())
 
-		madeProgress4 := pipeline.Tick(201)
+		madeProgress4 := pipeline.Tick()
 		Expect(madeProgress4).To(BeTrue())
 
 		postPipelineBuffer.EXPECT().CanPush().Return(false)
-		madeProgress5 := pipeline.Tick(202)
+		madeProgress5 := pipeline.Tick()
 		Expect(madeProgress5).To(BeFalse())
 
 		postPipelineBuffer.EXPECT().CanPush().Return(true)
 		postPipelineBuffer.EXPECT().Push(item2)
-		madeProgress6 := pipeline.Tick(203)
+		madeProgress6 := pipeline.Tick()
 		Expect(madeProgress6).To(BeTrue())
 
-		madeProgress7 := pipeline.Tick(204)
+		madeProgress7 := pipeline.Tick()
 		Expect(madeProgress7).To(BeFalse())
 	})
 })
@@ -127,7 +125,7 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 		postPipelineBuffer.EXPECT().Push(item1)
 
 		canAccept := pipeline.CanAccept()
-		pipeline.Accept(1, item1)
+		pipeline.Accept(item1)
 
 		Expect(canAccept).To(BeTrue())
 	})

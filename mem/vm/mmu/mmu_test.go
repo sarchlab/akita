@@ -4,8 +4,9 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
 )
 
 var _ = Describe("MMU", func() {
@@ -17,7 +18,8 @@ var _ = Describe("MMU", func() {
 		migrationPort *MockPort
 		topSender     *MockBufferedSender
 		pageTable     *MockPageTable
-		mmu           *MMU
+		mmu           *Comp
+		mmuMiddleware *middleware
 	)
 
 	BeforeEach(func() {
@@ -34,6 +36,8 @@ var _ = Describe("MMU", func() {
 		mmu.topSender = topSender
 		mmu.migrationPort = migrationPort
 		mmu.pageTable = pageTable
+
+		mmuMiddleware = mmu.Middlewares()[0].(*middleware)
 	})
 
 	AfterEach(func() {
@@ -43,17 +47,16 @@ var _ = Describe("MMU", func() {
 	Context("parse top", func() {
 		It("should process translation request", func() {
 			translationReq := vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(mmu.topPort).
 				WithPID(1).
 				WithVAddr(0x100000100).
 				WithDeviceID(0).
 				Build()
 			toTop.EXPECT().
-				Retrieve(sim.VTimeInSec(10)).
+				RetrieveIncoming().
 				Return(translationReq)
 
-			mmu.parseFromTop(10)
+			mmuMiddleware.parseFromTop()
 
 			Expect(mmu.walkingTranslations).To(HaveLen(1))
 
@@ -62,7 +65,7 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top if MMU is servicing max requests", func() {
 			mmu.walkingTranslations = make([]transaction, 16)
 
-			madeProgress := mmu.parseFromTop(10)
+			madeProgress := mmuMiddleware.parseFromTop()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -71,7 +74,6 @@ var _ = Describe("MMU", func() {
 	Context("walk page table", func() {
 		It("should reduce translation cycles", func() {
 			req := vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(toTop).
 				WithPID(1).
 				WithVAddr(0x1020).
@@ -80,7 +82,7 @@ var _ = Describe("MMU", func() {
 			walking := transaction{req: req, cycleLeft: 10}
 			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
 
-			madeProgress := mmu.walkPageTable(11)
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(mmu.walkingTranslations[0].cycleLeft).To(Equal(9))
 			Expect(madeProgress).To(BeTrue())
@@ -95,7 +97,6 @@ var _ = Describe("MMU", func() {
 				Valid:    true,
 			}
 			req := vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(mmu.topPort).
 				WithPID(1).
 				WithVAddr(0x1000).
@@ -114,7 +115,7 @@ var _ = Describe("MMU", func() {
 					Expect(rsp.Page).To(Equal(page))
 				})
 
-			madeProgress := mmu.walkPageTable(11)
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -129,7 +130,6 @@ var _ = Describe("MMU", func() {
 				Valid:    true,
 			}
 			req := vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(mmu.topPort).
 				WithPID(1).
 				WithVAddr(0x1000).
@@ -144,7 +144,7 @@ var _ = Describe("MMU", func() {
 				Return(page, true)
 			topSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := mmu.walkPageTable(11)
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -172,7 +172,6 @@ var _ = Describe("MMU", func() {
 				Return(page, true).
 				AnyTimes()
 			req = vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(mmu.topPort).
 				WithPID(1).
 				WithVAddr(0x1000).
@@ -192,7 +191,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsMigrating = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.walkPageTable(11)
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -210,7 +209,7 @@ var _ = Describe("MMU", func() {
 
 			pageTable.EXPECT().Update(page)
 
-			madeProgress := mmu.walkPageTable(11)
+			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.walkingTranslations).To(HaveLen(0))
@@ -218,7 +217,7 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should not send to driver if migration queue is empty", func() {
-			madeProgress := mmu.sendMigrationToDriver(11)
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -227,7 +226,7 @@ var _ = Describe("MMU", func() {
 			mmu.migrationQueue = append(mmu.migrationQueue, walking)
 			mmu.isDoingMigration = true
 
-			madeProgress := mmu.sendMigrationToDriver(11)
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.migrationQueue).To(ContainElement(walking))
@@ -240,7 +239,7 @@ var _ = Describe("MMU", func() {
 				Send(gomock.Any()).
 				Return(sim.NewSendError())
 
-			madeProgress := mmu.sendMigrationToDriver(11)
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.migrationQueue).To(ContainElement(walking))
@@ -256,7 +255,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsMigrating = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.sendMigrationToDriver(11)
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.migrationQueue).NotTo(ContainElement(walking))
@@ -272,7 +271,7 @@ var _ = Describe("MMU", func() {
 			pageTable.EXPECT().Update(updatedPage)
 			topSender.EXPECT().Send(gomock.Any())
 
-			madeProgress := mmu.sendMigrationToDriver(11)
+			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.migrationQueue).NotTo(ContainElement(walking))
@@ -304,7 +303,6 @@ var _ = Describe("MMU", func() {
 				Return(page, true).
 				AnyTimes()
 			req = vm.TranslationReqBuilder{}.
-				WithSendTime(10).
 				WithDst(mmu.topPort).
 				WithPID(1).
 				WithVAddr(0x1000).
@@ -312,35 +310,35 @@ var _ = Describe("MMU", func() {
 				Build()
 			migrating = transaction{req: req, cycleLeft: 0}
 			mmu.currentOnDemandMigration = migrating
-			migrationDone = vm.NewPageMigrationRspFromDriver(0, nil, nil)
+			migrationDone = vm.NewPageMigrationRspFromDriver(nil, nil, req)
 		})
 
 		It("should do nothing if no respond", func() {
-			migrationPort.EXPECT().Peek().Return(nil)
+			migrationPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := mmu.processMigrationReturn(10)
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should stall if send to top failed", func() {
-			migrationPort.EXPECT().Peek().Return(migrationDone)
+			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topSender.EXPECT().CanSend(1).Return(false)
 
-			madeProgress := mmu.processMigrationReturn(10)
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(mmu.isDoingMigration).To(BeFalse())
 		})
 
 		It("should send rsp to top", func() {
-			migrationPort.EXPECT().Peek().Return(migrationDone)
+			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topSender.EXPECT().CanSend(1).Return(true)
 			topSender.EXPECT().Send(gomock.Any()).
 				Do(func(rsp *vm.TranslationRsp) {
 					Expect(rsp.Page).To(Equal(page))
 				})
-			migrationPort.EXPECT().Retrieve(gomock.Any())
+			migrationPort.EXPECT().RetrieveIncoming()
 
 			updatedPage := page
 			updatedPage.IsMigrating = false
@@ -349,7 +347,7 @@ var _ = Describe("MMU", func() {
 			updatedPage.IsPinned = true
 			pageTable.EXPECT().Update(updatedPage)
 
-			madeProgress := mmu.processMigrationReturn(10)
+			madeProgress := mmuMiddleware.processMigrationReturn()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mmu.isDoingMigration).To(BeFalse())
@@ -362,7 +360,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		mmu        *MMU
+		mmu        *Comp
 		agent      *MockPort
 		connection sim.Connection
 	)
@@ -374,7 +372,9 @@ var _ = Describe("MMU Integration", func() {
 		builder := MakeBuilder().WithEngine(engine)
 		mmu = builder.Build("MMU")
 		agent = NewMockPort(mockCtrl)
-		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+
+		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)
 		connection.PlugIn(agent, 10)
@@ -397,17 +397,15 @@ var _ = Describe("MMU Integration", func() {
 		mmu.pageTable.Insert(page)
 
 		req := vm.TranslationReqBuilder{}.
-			WithSendTime(10).
 			WithSrc(agent).
 			WithDst(mmu.topPort).
 			WithPID(1).
 			WithVAddr(0x1000).
 			WithDeviceID(0).
 			Build()
-		req.RecvTime = 10
-		mmu.topPort.Recv(req)
+		mmu.topPort.Deliver(req)
 
-		agent.EXPECT().Recv(gomock.Any()).
+		agent.EXPECT().Deliver(gomock.Any()).
 			Do(func(rsp *vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
 				Expect(rsp.RespondTo).To(Equal(req.ID))

@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 
 	// . "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 type sampleMsg struct {
@@ -14,6 +14,10 @@ type sampleMsg struct {
 
 func (m *sampleMsg) Meta() *sim.MsgMeta {
 	return &m.meta
+}
+
+func (m *sampleMsg) Clone() sim.Msg {
+	return m
 }
 
 var _ = Describe("Port Analyzer", func() {
@@ -25,8 +29,12 @@ var _ = Describe("Port Analyzer", func() {
 		outgoingPort  *MockPort
 		timeTeller    *MockTimeTeller
 		portLogger    *MockPerfLogger
+<<<<<<< HEAD
 
 		portAnalyzer *PortAnalyzer
+=======
+		portAnalyzer  *PortAnalyzer
+>>>>>>> origin/v4
 	)
 
 	BeforeEach(func() {

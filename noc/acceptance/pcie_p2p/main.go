@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/noc/acceptance"
-	"github.com/sarchlab/akita/v3/noc/networking/pcie"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/noc/acceptance"
+	"github.com/sarchlab/akita/v4/noc/networking/pcie"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
 )
 
@@ -37,7 +37,7 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)
-		agent.TickLater(0)
+		agent.TickLater()
 		agents = append(agents, agent)
 	}
 

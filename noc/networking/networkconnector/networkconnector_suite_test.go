@@ -6,7 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 func TestNetworkconnector(t *testing.T) {

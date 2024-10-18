@@ -8,7 +8,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // PerfAnalyzerEntry is a single entry in the performance database.
@@ -229,7 +229,11 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	defer b.mu.Unlock()
 
 	for _, data := range b.portDataTable {
+<<<<<<< HEAD
 		if strings.Contains(data.Where, comp) || strings.Contains(data.WhereRemote, comp) {
+=======
+		if strings.Contains(data.Where, comp) {
+>>>>>>> origin/v4
 			entry := map[string]string{
 				"start":      fmt.Sprintf("%.9f", data.Start),
 				"end":        fmt.Sprintf("%.9f", data.End),

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v3/analysis"
-	"github.com/sarchlab/akita/v3/monitoring"
-	"github.com/sarchlab/akita/v3/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/analysis"
+	"github.com/sarchlab/akita/v4/monitoring"
+	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type tile struct {
@@ -364,7 +364,7 @@ func (c *Connector) createLink(
 				PortName:         DirectionB,
 			},
 			LinkParam: networkconnector.LinkParameter{
-				IsIdeal:       false, // Use channel model for NoC tracing
+				IsIdeal:       true,
 				Frequency:     c.freq * sim.Freq(c.linkTransferPerCycle),
 				NumStage:      1,
 				CyclePerStage: 1,

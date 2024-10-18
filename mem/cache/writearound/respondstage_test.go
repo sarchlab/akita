@@ -4,14 +4,14 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -19,7 +19,7 @@ var _ = Describe("Respond Stage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
-		cache = &Cache{
+		cache = &Comp{
 			topPort: topPort,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
@@ -40,7 +40,6 @@ var _ = Describe("Respond Stage", func() {
 
 		BeforeEach(func() {
 			read = mem.ReadReqBuilder{}.
-				WithSendTime(5).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(4).
@@ -54,7 +53,7 @@ var _ = Describe("Respond Stage", func() {
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -68,7 +67,7 @@ var _ = Describe("Respond Stage", func() {
 					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 				})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(cache.transactions).NotTo(ContainElement((trans)))
@@ -83,7 +82,6 @@ var _ = Describe("Respond Stage", func() {
 
 		BeforeEach(func() {
 			write = mem.WriteReqBuilder{}.
-				WithSendTime(5).
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
@@ -95,7 +93,7 @@ var _ = Describe("Respond Stage", func() {
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -108,7 +106,7 @@ var _ = Describe("Respond Stage", func() {
 					Expect(done.RespondTo).To(Equal(write.ID))
 				})
 
-			madeProgress := s.Tick(10)
+			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(cache.transactions).NotTo(ContainElement((trans)))

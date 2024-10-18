@@ -1,14 +1,13 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type writeBufferStage struct {
-	cache *Cache
+	cache *Comp
 
 	writeBufferCapacity int
 	maxInflightFetch    int
@@ -19,17 +18,17 @@ type writeBufferStage struct {
 	inflightEviction []*transaction
 }
 
-func (wb *writeBufferStage) Tick(now sim.VTimeInSec) bool {
+func (wb *writeBufferStage) Tick() bool {
 	madeProgress := false
 
-	madeProgress = wb.write(now) || madeProgress
-	madeProgress = wb.processReturnRsp(now) || madeProgress
-	madeProgress = wb.processNewTransaction(now) || madeProgress
+	madeProgress = wb.write() || madeProgress
+	madeProgress = wb.processReturnRsp() || madeProgress
+	madeProgress = wb.processNewTransaction() || madeProgress
 
 	return madeProgress
 }
 
-func (wb *writeBufferStage) processNewTransaction(now sim.VTimeInSec) bool {
+func (wb *writeBufferStage) processNewTransaction() bool {
 	item := wb.cache.writeBufferBuffer.Peek()
 	if item == nil {
 		return false
@@ -38,27 +37,26 @@ func (wb *writeBufferStage) processNewTransaction(now sim.VTimeInSec) bool {
 	trans := item.(*transaction)
 	switch trans.action {
 	case writeBufferFetch:
-		return wb.processWriteBufferFetch(now, trans)
+		return wb.processWriteBufferFetch(trans)
 	case writeBufferEvictAndWrite:
-		return wb.processWriteBufferEvictAndWrite(now, trans)
+		return wb.processWriteBufferEvictAndWrite(trans)
 	case writeBufferEvictAndFetch:
-		return wb.processWriteBufferFetchAndEvict(now, trans)
+		return wb.processWriteBufferFetchAndEvict(trans)
 	case writeBufferFlush:
-		return wb.processWriteBufferFlush(now, trans, true)
+		return wb.processWriteBufferFlush(trans, true)
 	default:
 		panic("unknown transaction action")
 	}
 }
 
 func (wb *writeBufferStage) processWriteBufferFetch(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if wb.findDataLocally(trans) {
-		return wb.sendFetchedDataToBank(now, trans)
+		return wb.sendFetchedDataToBank(trans)
 	}
 
-	return wb.fetchFromBottom(now, trans)
+	return wb.fetchFromBottom(trans)
 }
 
 func (wb *writeBufferStage) findDataLocally(trans *transaction) bool {
@@ -79,7 +77,6 @@ func (wb *writeBufferStage) findDataLocally(trans *transaction) bool {
 }
 
 func (wb *writeBufferStage) sendFetchedDataToBank(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	bankNum := bankID(trans.block,
@@ -114,7 +111,6 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 }
 
 func (wb *writeBufferStage) fetchFromBottom(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if wb.tooManyInflightFetches() {
@@ -146,7 +142,6 @@ func (wb *writeBufferStage) fetchFromBottom(
 }
 
 func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	if wb.writeBufferFull() {
@@ -182,10 +177,9 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 }
 
 func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
-	ok := wb.processWriteBufferFlush(now, trans, false)
+	ok := wb.processWriteBufferFlush(trans, false)
 	if ok {
 		trans.action = writeBufferFetch
 		return true
@@ -203,7 +197,6 @@ func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
 }
 
 func (wb *writeBufferStage) processWriteBufferFlush(
-	now sim.VTimeInSec,
 	trans *transaction,
 	popAfterDone bool,
 ) bool {
@@ -220,7 +213,7 @@ func (wb *writeBufferStage) processWriteBufferFlush(
 	return true
 }
 
-func (wb *writeBufferStage) write(now sim.VTimeInSec) bool {
+func (wb *writeBufferStage) write() bool {
 	if len(wb.pendingEvictions) == 0 {
 		return false
 	}
@@ -264,24 +257,23 @@ func (wb *writeBufferStage) write(now sim.VTimeInSec) bool {
 	return true
 }
 
-func (wb *writeBufferStage) processReturnRsp(now sim.VTimeInSec) bool {
-	msg := wb.cache.bottomPort.Peek()
+func (wb *writeBufferStage) processReturnRsp() bool {
+	msg := wb.cache.bottomPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
 	switch msg := msg.(type) {
 	case *mem.DataReadyRsp:
-		return wb.processDataReadyRsp(now, msg)
+		return wb.processDataReadyRsp(msg)
 	case *mem.WriteDoneRsp:
-		return wb.processWriteDoneRsp(now, msg)
+		return wb.processWriteDoneRsp(msg)
 	default:
 		panic("unknown msg type")
 	}
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	now sim.VTimeInSec,
 	dataReady *mem.DataReadyRsp,
 ) bool {
 	trans := wb.findInflightFetchByFetchReadReqID(dataReady.RespondTo)
@@ -306,7 +298,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	bankBuf.Push(trans)
 
 	wb.removeInflightFetch(trans)
-	wb.cache.bottomPort.Retrieve(now)
+	wb.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache)
 
@@ -369,7 +361,6 @@ func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	now sim.VTimeInSec,
 	writeDone *mem.WriteDoneRsp,
 ) bool {
 	for i := len(wb.inflightEviction) - 1; i >= 0; i-- {
@@ -387,7 +378,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				wb.inflightEviction[:i],
 				wb.inflightEviction[i+1:]...,
 			)
-			wb.cache.bottomPort.Retrieve(now)
+			wb.cache.bottomPort.RetrieveIncoming()
 			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache)
 
 			return true
@@ -410,6 +401,6 @@ func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 	return len(wb.inflightEviction) >= wb.maxInflightEviction
 }
 
-func (wb *writeBufferStage) Reset(now sim.VTimeInSec) {
+func (wb *writeBufferStage) Reset() {
 	wb.cache.writeBufferBuffer.Clear()
 }

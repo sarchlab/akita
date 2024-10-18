@@ -1,7 +1,7 @@
 package arbitration
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Arbiter can determine which buffer can send a message out
@@ -10,5 +10,5 @@ type Arbiter interface {
 	AddBuffer(buf sim.Buffer)
 
 	// Arbitrate returns a set of ports that can send request in the next cycle.
-	Arbitrate(now sim.VTimeInSec) []sim.Buffer
+	Arbitrate() []sim.Buffer
 }

@@ -3,7 +3,7 @@ package analysis
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
 )
 
@@ -104,7 +104,10 @@ func (h *PortAnalyzer) summarize() {
 
 		if entry.InTrafficMsg != 0 {
 			perfEntry.What = "Incoming"
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/v4
 			perfEntry.Value = float64(entry.InTrafficByte)
 			perfEntry.Unit = "Byte"
 			h.PerfLogger.AddDataEntry(perfEntry)
