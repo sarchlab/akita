@@ -2,50 +2,61 @@
 Copyright © 2024 NAME HERE <EMAIL ADDRESS>
 
 */
+
 package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
 	"github.com/spf13/cobra"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
-var create bool
-
-// createCompCmd represents the createComp command
+// componentCmd represents the main component command
 var componentCmd = &cobra.Command{
 	Use:   "component",
-	Short: "Create a new component",
-	Long: `Akita allows developers to create new component
-	and create and integrate new simulator components.
-	This command works to generate the needed files
-    to quickly create a new component.`,
-    Args:  cobra.ExactArgs(1),
-
+	Short: "Manage components",
 	Run: func(cmd *cobra.Command, args []string) {
-	    if create {
-        	componentName := args[0]
-        	newComponent := sim.NewComponentBase(componentName)
-        	fmt.Printf("Component '%s' created successfully.\n", newComponent.Name())
-        } else {
-        	fmt.Println("Use --create <component_name> to create a component.")
-        }
+		componentName, _ := cmd.Flags().GetString("create") // fetch the string value of the flag
+		if componentName != "" {
+			if !inGitRepo() {
+				log.Fatalf("Error: This command must be run inside a Git repository.")
+			}
+
+			err := createComponentFolder(componentName)
+			if err != nil {
+				log.Fatalf("Error creating folder: %v", err)
+			}
+
+			if err != nil {
+				log.Fatalf("Error saving component file: %v", err)
+			}
+			fmt.Printf("Component '%s' created successfully!\n", componentName)
+		} else {
+			fmt.Println("Action not valid.")
+		}
 	},
 }
 
 func init() {
-	componentCmd.Flags().BoolVarP(&create, "create", "", false, "Create a new component")
-    //componentCmd.Flags().StringVarP(&componentName, "create", "", "", "Name of the component to create")
-
 	rootCmd.AddCommand(componentCmd)
 
-	// Here you will define your flags and configuration settings.
+	componentCmd.Flags().String("create", "", "Create a new component")
+}
 
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// createCompCmd.PersistentFlags().String("foo", "", "A help for foo")
+// Check if current operation is in a Git repository
+func inGitRepo() bool {
+	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
+	cmd.Dir = filepath.Dir(".")
+	output, err := cmd.Output()
+	return strings.TrimSpace(string(output)) == "true" && err == nil
+}
 
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	//componentCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+// Create folder
+func createComponentFolder(name string) error {
+	return os.Mkdir(name, 0755) // create folder and gives read/write/execute permission to the owner
 }
