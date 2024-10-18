@@ -3,7 +3,7 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-
+	"sync/atomic"	
 	"github.com/sarchlab/akita/v3/sim"
 )
 
@@ -14,12 +14,58 @@ type NamedHookable interface {
 	InvokeHook(sim.HookCtx)
 }
 
+type Milestone struct {
+    ID                string
+    TaskID            string
+    BlockingCategory  string
+    BlockingReason    string
+    BlockingLocation  string
+    Timestamp         sim.VTimeInSec
+}
+
 // A list of hook poses for the hooks to apply to
 var (
 	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
 	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
+
+func AddMilestone(
+    taskID           string,
+    blockingCategory string,
+    blockingReason   string,
+    blockingLocation string,
+    timestamp        sim.VTimeInSec,
+    domain           NamedHookable,
+) {
+    if domain.NumHooks() == 0 {
+        return
+    }
+
+    milestone := Milestone{
+        ID:               fmt.Sprintf("milestone_%d", generateMilestoneID()),
+        TaskID:           taskID,
+        BlockingCategory: blockingCategory,
+        BlockingReason:   blockingReason,
+        BlockingLocation: blockingLocation,
+        Timestamp:        timestamp,
+    }
+
+    ctx := sim.HookCtx{
+        Domain: domain,
+        Item:   milestone,
+        Pos:    HookPosMilestone,
+    }
+    domain.InvokeHook(ctx)
+}
+
+var HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
+
+var milestoneIDCounter uint64
+
+func generateMilestoneID() uint64 {
+    return atomic.AddUint64(&milestoneIDCounter, 1)
+}
 
 // StartTask notifies the hooks that hook to the domain about the start of a
 // task.
