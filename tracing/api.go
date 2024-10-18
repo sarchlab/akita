@@ -3,8 +3,8 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/sarchlab/akita/v4/sim"
+	"sync/atomic"
+	"github.com/sarchlab/akita/v3/sim"
 )
 
 // NamedHookable represent something both have a name and can be hooked
@@ -30,6 +30,11 @@ var (
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
 
+var (
+	milestones       []Milestone
+	milestoneIDCounter uint64
+)
+
 func AddMilestone(
     taskID           string,
     blockingCategory string,
@@ -43,7 +48,7 @@ func AddMilestone(
     }
 
     milestone := Milestone{
-        ID:               fmt.Sprintf("milestone_%d", generateMilestoneID()),
+        ID:               ID: fmt.Sprintf("milestone_%d", strconv.FormatUint(generateMilestoneID(), 10)),
         TaskID:           taskID,
         BlockingCategory: blockingCategory,
         BlockingReason:   blockingReason,
@@ -61,12 +66,13 @@ func AddMilestone(
 
 var HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 
-var milestoneIDCounter uint64
-
 func generateMilestoneID() uint64 {
     return atomic.AddUint64(&milestoneIDCounter, 1)
 }
 
+func GetAllMilestones() []Milestone {
+    return milestones
+}
 // StartTask notifies the hooks that hook to the domain about the start of a
 // task.
 func StartTask(

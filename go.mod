@@ -1,4 +1,4 @@
-module github.com/sarchlab/akita/v4
+module github.com/sarchlab/akita/v3
 
 require (
 	github.com/fatih/structs v1.1.0
@@ -10,6 +10,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
 	github.com/rs/xid v1.6.0
+	github.com/sarchlab/akita/v4 v4.0.0-alpha.6
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/stretchr/testify v1.8.4
 	github.com/syifan/goseth v0.1.2
