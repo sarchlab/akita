@@ -15,7 +15,7 @@ var _ = Describe("FuncMiddleware", func() {
 		engine   *MockEngine
 		ctrlPort *MockPort
 		topPort  *MockPort
-		funcMW   *memMiddleware
+		memMW    *memMiddleware
 	)
 
 	BeforeEach(func() {
@@ -34,7 +34,7 @@ var _ = Describe("FuncMiddleware", func() {
 		comp.topPort = topPort
 		comp.ctrlPort = ctrlPort
 
-		funcMW = &memMiddleware{
+		memMW = &memMiddleware{
 			Comp: comp,
 		}
 	})
@@ -47,14 +47,14 @@ var _ = Describe("FuncMiddleware", func() {
 		func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := funcMW.Tick()
+			madeProgress := memMW.Tick()
 
-			Expect(madeProgress).To(BeFalse())
+			Expect(madeProgress).To(BeTrue())
 		})
 
 	It("should handle memory read request", func() {
 		readReq := mem.ReadReqBuilder{}.
-			WithDst(funcMW.topPort).
+			WithDst(memMW.topPort).
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
@@ -64,14 +64,14 @@ var _ = Describe("FuncMiddleware", func() {
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
 
-		madeProgress := funcMW.Tick()
+		madeProgress := memMW.Tick()
 
 		Expect(madeProgress).To(BeTrue())
 	})
 
 	It("should process write request", func() {
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(funcMW.topPort).
+			WithDst(memMW.topPort).
 			WithAddress(0).
 			WithData([]byte{0, 1, 2, 3}).
 			WithDirtyMask([]bool{false, false, true, false}).
@@ -82,7 +82,7 @@ var _ = Describe("FuncMiddleware", func() {
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
 
-		madeProgress := funcMW.Tick()
+		madeProgress := memMW.Tick()
 		Expect(madeProgress).To(BeTrue())
 	})
 })

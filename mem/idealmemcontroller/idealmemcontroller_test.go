@@ -49,8 +49,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 		port.EXPECT().RetrieveIncoming().Return(readReq)
-		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -68,8 +68,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithData([]byte{0, 1, 2, 3}).
 			WithDirtyMask([]bool{false, false, true, false}).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
-		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -85,6 +85,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithDst(ctrlPort).
 			WithCtrlInfo(false, false, false, false).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().
 			Send(gomock.Any()).
@@ -107,6 +108,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithDst(ctrlPort).
 			WithCtrlInfo(true, false, false, false).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
 		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 		ctrlPort.EXPECT().
@@ -129,6 +131,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithDst(ctrlPort).
 			WithCtrlInfo(false, true, false, false).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
 		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 

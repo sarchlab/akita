@@ -30,7 +30,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	for i := 0; i < m.width; i++ {
 		msg := m.topPort.RetrieveIncoming()
 		if msg == nil {
-			madeProgress = true
+			return true
 		}
 
 		m.inflightBuffer = append(m.inflightBuffer, msg)

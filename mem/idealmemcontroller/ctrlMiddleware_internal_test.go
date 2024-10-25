@@ -43,7 +43,8 @@ var _ = Describe("CtrlMiddleware", func() {
 	})
 
 	It("should do nothing if no ctrl message", func() {
-		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
 		madeProgress := ctrlMW.Tick()
 
@@ -58,6 +59,7 @@ var _ = Describe("CtrlMiddleware", func() {
 			WithDst(ctrlPort).
 			WithCtrlInfo(true, false, false, false).
 			Build()
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().
 			Send(gomock.Any()).
@@ -84,6 +86,7 @@ var _ = Describe("CtrlMiddleware", func() {
 			WithCtrlInfo(false, false, false, false).
 			Build()
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().
 			Send(gomock.Any()).
 			Do(func(msg *sim.GeneralRsp) {
@@ -109,10 +112,12 @@ var _ = Describe("CtrlMiddleware", func() {
 			WithCtrlInfo(false, true, false, false).
 			Build()
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
+		ctrlPort.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
 		madeProgress := ctrlMW.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(comp.state).To(Equal("drain"))
+		Expect(comp.state).To(Equal("pause"))
 		Expect(comp.currentCmd).To(Equal(ctrlMsg))
 	})
 })
