@@ -18,8 +18,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController *Comp
 		port          *MockPort
 		ctrlPort      *MockPort
-		// ctrlMW        *ctrlMiddleware
-		// FuncMW        *funcMiddleware
 	)
 
 	BeforeEach(func() {
