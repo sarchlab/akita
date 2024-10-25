@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-var _ = FDescribe("CtrlMiddleware", func() {
+var _ = Describe("CtrlMiddleware", func() {
 	var (
 		mockCtrl       *gomock.Controller
 		comp           *Comp
@@ -115,5 +115,4 @@ var _ = FDescribe("CtrlMiddleware", func() {
 		Expect(comp.state).To(Equal("drain"))
 		Expect(comp.respondReq).To(Equal(ctrlMsg))
 	})
-
 })

@@ -128,7 +128,6 @@ func (m *funcMiddleware) setState(state string, rspMessage *mem.ControlMsg) bool
 		return false
 	}
 
-	m.ctrlPort.RetrieveIncoming()
 	m.state = state
 
 	return true

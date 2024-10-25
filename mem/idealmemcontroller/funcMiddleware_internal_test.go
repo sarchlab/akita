@@ -43,7 +43,7 @@ var _ = Describe("FuncMiddleware", func() {
 		mockCtrl.Finish()
 	})
 
-	FIt("should do nothing if no memory read request or memory store request",
+	It("should do nothing if no memory read request or memory store request",
 		func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil)
 
@@ -52,7 +52,7 @@ var _ = Describe("FuncMiddleware", func() {
 			Expect(madeProgress).To(BeFalse())
 		})
 
-	FIt("should handle memory read request", func() {
+	It("should handle memory read request", func() {
 		readReq := mem.ReadReqBuilder{}.
 			WithDst(funcMW.topPort).
 			WithAddress(0).
@@ -69,7 +69,7 @@ var _ = Describe("FuncMiddleware", func() {
 		Expect(madeProgress).To(BeTrue())
 	})
 
-	FIt("should process write request", func() {
+	It("should process write request", func() {
 		writeReq := mem.WriteReqBuilder{}.
 			WithDst(funcMW.topPort).
 			WithAddress(0).

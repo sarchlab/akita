@@ -18,6 +18,8 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController *Comp
 		port          *MockPort
 		ctrlPort      *MockPort
+		// ctrlMW        *ctrlMiddleware
+		// FuncMW        *funcMiddleware
 	)
 
 	BeforeEach(func() {
@@ -48,7 +50,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithByteSize(4).
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(readReq)
-		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -67,7 +69,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithDirtyMask([]bool{false, false, true, false}).
 			Build()
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
-		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		engine.EXPECT().
@@ -77,135 +79,72 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(madeProgress).To(BeTrue())
 	})
 
-	It("should handle read respond event", func() {
-		data := []byte{1, 2, 3, 4}
-		memController.Storage.Write(0, data)
-
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithByteSize(4).
+	It("should process pause request", func() {
+		ctrlMsg := mem.ControlMsgBuilder{}.
+			WithSrc(ctrlPort).
+			WithDst(ctrlPort).
+			WithCtrlInfo(false, false, false, false).
 			Build()
-
-		event := newReadRespondEvent(11, memController, readReq)
-
-		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.DataReadyRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
-
-		memController.Handle(event)
-	})
-
-	It("should retry read if send DataReady failed", func() {
-		data := []byte{1, 2, 3, 4}
-		memController.Storage.Write(0, data)
-
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
-		event := newReadRespondEvent(11, memController, readReq)
-
-		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.DataReadyRsp{})).
-			Return(&sim.SendError{})
-
-		engine.EXPECT().
-			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
-
-		memController.Handle(event)
-	})
-
-	It("should handle write respond event without write mask", func() {
-		data := []byte{1, 2, 3, 4}
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithData(data).
-			Build()
-		event := newWriteRespondEvent(11, memController, writeReq)
-
-		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
-
-		memController.Handle(event)
-
-		retData, _ := memController.Storage.Read(0, 4)
-		Expect(retData).To(Equal([]byte{1, 2, 3, 4}))
-	})
-
-	It("should handle write respond event", func() {
-		memController.Storage.Write(0, []byte{9, 9, 9, 9})
-		data := []byte{1, 2, 3, 4}
-		dirtyMask := []bool{false, true, false, false}
-
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithData(data).
-			WithDirtyMask(dirtyMask).
-			Build()
-		event := newWriteRespondEvent(11, memController, writeReq)
-
-		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
-
-		memController.Handle(event)
-		retData, _ := memController.Storage.Read(0, 4)
-		Expect(retData).To(Equal([]byte{9, 2, 9, 9}))
-	})
-
-	Measure("write with write mask", func(b Benchmarker) {
-		data := make([]byte, 64)
-		dirtyMask := []bool{
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-			true, true, true, true, false, false, false, false,
-		}
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithData(data).
-			WithDirtyMask(dirtyMask).
-			Build()
-
-		event := newWriteRespondEvent(11, memController, writeReq)
-		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
-		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{})).
+		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		ctrlPort.EXPECT().
+			Send(gomock.Any()).
+			Do(func(msg *sim.GeneralRsp) {
+				Expect(msg.Src).To(Equal(ctrlPort))
+				Expect(msg.Dst).To(Equal(ctrlPort))
+				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
+			}).
+			Return(nil).
 			AnyTimes()
 
-		b.Time("write time", func() {
-			for i := 0; i < 100000; i++ {
-				memController.Handle(event)
-			}
-		})
-	}, 100)
+		madeProgress := memController.Tick()
+		Expect(madeProgress).To(BeTrue())
+	})
 
-	It("should retry write respond event, if network busy", func() {
-		data := []byte{1, 2, 3, 4}
-
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
-			WithAddress(0).
-			WithData(data).
+	It("should process enable request", func() {
+		memController.state = "pause"
+		ctrlMsg := mem.ControlMsgBuilder{}.
+			WithSrc(ctrlPort).
+			WithDst(ctrlPort).
+			WithCtrlInfo(true, false, false, false).
 			Build()
-		event := newWriteRespondEvent(11, memController, writeReq)
+		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+		ctrlPort.EXPECT().
+			Send(gomock.Any()).
+			Do(func(msg *sim.GeneralRsp) {
+				Expect(msg.Src).To(Equal(ctrlPort))
+				Expect(msg.Dst).To(Equal(ctrlPort))
+				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
+			}).
+			Return(nil).
+			AnyTimes()
 
-		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{})).
-			Return(&sim.SendError{})
-		engine.EXPECT().
-			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
+		madeProgress := memController.Tick()
+		Expect(madeProgress).To(BeTrue())
+	})
 
-		memController.Handle(event)
+	It("should process drain request", func() {
+		ctrlMsg := mem.ControlMsgBuilder{}.
+			WithSrc(ctrlPort).
+			WithDst(ctrlPort).
+			WithCtrlInfo(false, true, false, false).
+			Build()
+		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
+		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+
+		ctrlPort.EXPECT().
+			Send(gomock.Any()).
+			Do(func(msg *sim.GeneralRsp) {
+				Expect(msg.Src).To(Equal(ctrlPort))
+				Expect(msg.Dst).To(Equal(ctrlPort))
+				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
+			}).
+			Return(nil).
+			AnyTimes()
+
+		madeProgress := memController.Tick()
+
+		Expect(madeProgress).To(BeTrue())
+		Expect(memController.state).To(Equal("pause"))
 	})
 })
