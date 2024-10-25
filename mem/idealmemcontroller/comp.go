@@ -40,13 +40,11 @@ type Comp struct {
 	Storage          *mem.Storage
 	Latency          int
 	addressConverter mem.AddressConverter
+	currentCmd       *mem.ControlMsg
+	width            int
+	state            string
 
-	respondReq *mem.ControlMsg
-	width      int
-
-	state string
-
-	inflightbuffer []sim.Msg
+	inflightBuffer []sim.Msg
 }
 
 func (c *Comp) Tick() bool {

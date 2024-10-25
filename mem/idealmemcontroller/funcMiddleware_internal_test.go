@@ -15,7 +15,7 @@ var _ = Describe("FuncMiddleware", func() {
 		engine   *MockEngine
 		ctrlPort *MockPort
 		topPort  *MockPort
-		funcMW   *funcMiddleware
+		funcMW   *memMiddleware
 	)
 
 	BeforeEach(func() {
@@ -34,7 +34,7 @@ var _ = Describe("FuncMiddleware", func() {
 		comp.topPort = topPort
 		comp.ctrlPort = ctrlPort
 
-		funcMW = &funcMiddleware{
+		funcMW = &memMiddleware{
 			Comp: comp,
 		}
 	})

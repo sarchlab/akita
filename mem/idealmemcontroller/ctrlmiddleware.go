@@ -7,6 +7,35 @@ type ctrlMiddleware struct {
 }
 
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
+	madeProgress = m.handleIncomingCommands() || madeProgress
+	madeProgress = m.handleStateUpdate() || madeProgress
+	return madeProgress
+}
+
+func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
+	if m.state == "drain" {
+		madeProgress = m.handleDrainState() || madeProgress
+	}
+
+	return madeProgress
+}
+
+func (m *ctrlMiddleware) handleDrainState() bool {
+	if len(m.inflightBuffer) != 0 {
+		return false
+	}
+
+	rsp := m.currentCmd.GenerateRsp()
+	err := m.ctrlPort.Send(rsp)
+	if err != nil {
+		return false
+	}
+
+	m.state = "pause"
+	return true
+}
+
+func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 	msg := m.ctrlPort.RetrieveIncoming()
 	if msg == nil {
 		return false
@@ -30,6 +59,7 @@ func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 		m.ctrlPort.Send(rsp)
 		return true
 	}
+
 	return false
 }
 
@@ -47,7 +77,7 @@ func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && ctrlMsg.Drain {
 		m.state = "drain"
-		m.respondReq = ctrlMsg
+		m.currentCmd = ctrlMsg
 		return true
 	}
 

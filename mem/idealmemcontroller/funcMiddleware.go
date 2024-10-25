@@ -9,78 +9,66 @@ import (
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
-type funcMiddleware struct {
+type memMiddleware struct {
 	*Comp
 }
 
-func (m *funcMiddleware) Tick() bool {
+func (m *memMiddleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = m.tickInflightBuffer() || madeProgress
-	madeProgress = m.checkAndExecuteState() || madeProgress
+	madeProgress = m.takeNewReqs() || madeProgress
+	madeProgress = m.execute() || madeProgress
 
 	return madeProgress
 }
 
-func (m *funcMiddleware) checkAndExecuteState() bool {
-	madeProgress := false
-
-	switch state := m.state; state {
-	case "enable":
-		madeProgress = m.handleInflightMemReqs()
-	case "pause":
-		madeProgress = true
-	case "drain":
-		madeProgress = m.handleDrainReq()
-	}
-
-	return madeProgress
-}
-
-func (m *funcMiddleware) handleDrainReq() bool {
-	madeProgress := false
-	for len(m.inflightbuffer) != 0 {
-		madeProgress = m.handleMemReqs()
-	}
-	if !m.setState("pause", m.respondReq) {
-		return true
-	}
-	return madeProgress
-}
-
-func (m *funcMiddleware) tickInflightBuffer() bool {
-	if m.state == "pause" {
+func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
+	if m.state != "enable" {
 		return false
 	}
 
 	for i := 0; i < m.width; i++ {
 		msg := m.topPort.RetrieveIncoming()
 		if msg == nil {
-			return false
+			madeProgress = true
 		}
 
-		m.inflightbuffer = append(m.inflightbuffer, msg)
-	}
-	return true
-}
-
-// updateMemCtrl updates ideal memory controller state.
-func (m *funcMiddleware) handleInflightMemReqs() bool {
-	madeProgress := false
-	for i := 0; i < m.width; i++ {
-		madeProgress = m.handleMemReqs()
+		m.inflightBuffer = append(m.inflightBuffer, msg)
 	}
 
 	return madeProgress
 }
 
-func (m *funcMiddleware) handleMemReqs() bool {
-	if len(m.inflightbuffer) == 0 {
+func (m *memMiddleware) execute() bool {
+	madeProgress := false
+
+	switch state := m.state; state {
+	case "enable", "drain":
+		madeProgress = m.handleInflightMemReqs()
+	case "pause":
+		madeProgress = false
+	}
+
+	return madeProgress
+}
+
+// updateMemCtrl updates ideal memory controller state.
+func (m *memMiddleware) handleInflightMemReqs() bool {
+	madeProgress := false
+	for i := 0; i < m.width; i++ {
+		madeProgress = m.handleMemReqs() || madeProgress
+	}
+
+	return madeProgress
+}
+
+func (m *memMiddleware) handleMemReqs() bool {
+	if len(m.inflightBuffer) == 0 {
 		return false
 	}
 
-	msg := m.inflightbuffer[0]
-	m.inflightbuffer = m.inflightbuffer[1:]
+	msg := m.inflightBuffer[0]
+	m.inflightBuffer = m.inflightBuffer[1:]
 
 	tracing.TraceReqReceive(msg, m)
 
@@ -97,38 +85,20 @@ func (m *funcMiddleware) handleMemReqs() bool {
 	return false
 }
 
-func (m *funcMiddleware) handleReadReq(req *mem.ReadReq) {
+func (m *memMiddleware) handleReadReq(req *mem.ReadReq) {
 	now := m.CurrentTime()
 	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
 	respondEvent := newReadRespondEvent(timeToSchedule, m, req)
 	m.Engine.Schedule(respondEvent)
 }
 
-func (m *funcMiddleware) handleWriteReq(req *mem.WriteReq) {
+func (m *memMiddleware) handleWriteReq(req *mem.WriteReq) {
 	now := m.CurrentTime()
 	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
 	respondEvent := newWriteRespondEvent(timeToSchedule, m, req)
 	m.Engine.Schedule(respondEvent)
 }
 
-func (m *funcMiddleware) CurrentTime() sim.VTimeInSec {
+func (m *memMiddleware) CurrentTime() sim.VTimeInSec {
 	return m.Engine.CurrentTime()
-}
-
-func (m *funcMiddleware) setState(state string, rspMessage *mem.ControlMsg) bool {
-	ctrlRsp := sim.GeneralRspBuilder{}.
-		WithSrc(m.ctrlPort).
-		WithDst(rspMessage.Src).
-		WithOriginalReq(rspMessage).
-		Build()
-
-	err := m.ctrlPort.Send(ctrlRsp)
-
-	if err != nil {
-		return false
-	}
-
-	m.state = state
-
-	return true
 }

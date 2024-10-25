@@ -113,6 +113,6 @@ var _ = Describe("CtrlMiddleware", func() {
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(comp.state).To(Equal("drain"))
-		Expect(comp.respondReq).To(Equal(ctrlMsg))
+		Expect(comp.currentCmd).To(Equal(ctrlMsg))
 	})
 })

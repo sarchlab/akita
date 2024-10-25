@@ -105,7 +105,7 @@ func (b Builder) Build(
 
 	ctrlMiddleware := &ctrlMiddleware{Comp: c}
 	c.AddMiddleware(ctrlMiddleware)
-	funcMiddleware := &funcMiddleware{Comp: c}
+	funcMiddleware := &memMiddleware{Comp: c}
 	c.AddMiddleware(funcMiddleware)
 
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
