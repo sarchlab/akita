@@ -407,10 +407,13 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 type ControlMsg struct {
 	sim.MsgMeta
 
-	Enable  bool
-	Drain   bool
-	Flush   bool
-	Invalid bool
+	Enable             bool
+	Drain              bool
+	Flush              bool
+	Invalid            bool
+	DiscardTransations bool
+	Restart            bool
+	NotifyDone         bool
 }
 
 // Meta returns the meta data associated with the ControlMsg.
@@ -439,11 +442,14 @@ func (m *ControlMsg) GenerateRsp() sim.Rsp {
 
 // A ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
-	src, dst sim.Port
-	Enable   bool
-	Drain    bool
-	Flush    bool
-	Invalid  bool
+	src, dst            sim.Port
+	Enable              bool
+	Drain               bool
+	Flush               bool
+	Invalid             bool
+	discardTransactions bool
+	restart             bool
+	notifyDone          bool
 }
 
 // WithSrc sets the source of the request to build.
@@ -455,6 +461,25 @@ func (b ControlMsgBuilder) WithSrc(src sim.Port) ControlMsgBuilder {
 // WithDst sets the destination of the request to build.
 func (b ControlMsgBuilder) WithDst(dst sim.Port) ControlMsgBuilder {
 	b.dst = dst
+	return b
+}
+
+// ToDiscardTransactions sets the discard transactions bit of the control
+// messages to 1.
+func (b ControlMsgBuilder) ToDiscardTransactions() ControlMsgBuilder {
+	b.discardTransactions = true
+	return b
+}
+
+// ToRestart sets the restart bit of the control messages to 1.
+func (b ControlMsgBuilder) ToRestart() ControlMsgBuilder {
+	b.restart = true
+	return b
+}
+
+// ToNotifyDone sets the "notify done" bit of the control messages to 1.
+func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
+	b.notifyDone = true
 	return b
 }
 
@@ -483,6 +508,10 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Drain = b.Drain
 	m.Flush = b.Flush
 	m.Invalid = b.Invalid
+
+	m.DiscardTransations = b.discardTransactions
+	m.Restart = b.restart
+	m.NotifyDone = b.notifyDone
 
 	return m
 }
