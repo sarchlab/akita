@@ -15,14 +15,6 @@ type portAnalyzerEntry struct {
 	InTrafficMsg   int64
 }
 
-type portAnalyzerEntry struct {
-	remotePortName string
-	OutTrafficByte int64
-	OutTrafficMsg  int64
-	InTrafficByte  int64
-	InTrafficMsg   int64
-}
-
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
 	PerfLogger
@@ -32,8 +24,6 @@ type PortAnalyzer struct {
 	period    sim.VTimeInSec
 	port      sim.Port
 
-	lastTime           sim.VTimeInSec
-	remoteToTrafficMap map[string]portAnalyzerEntry
 	lastTime           sim.VTimeInSec
 	remoteToTrafficMap map[string]portAnalyzerEntry
 }
@@ -53,27 +43,6 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		}
 	}
 
-	if h.remoteToTrafficMap == nil {
-		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
-	}
-
-	remotePortName := msg.Meta().Dst.Name()
-	if h.isIncoming(msg) {
-		remotePortName = msg.Meta().Src.Name()
-	}
-
-	entry, ok := h.remoteToTrafficMap[remotePortName]
-	if !ok {
-		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
-			remotePortName: remotePortName,
-		}
-	}
-
-	entry = h.remoteToTrafficMap[remotePortName]
-
-	if h.isIncoming(msg) {
-		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
-		entry.InTrafficMsg++
 	if h.remoteToTrafficMap == nil {
 		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 	}

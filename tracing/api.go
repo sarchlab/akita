@@ -3,8 +3,10 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-
+	"sync/atomic"
+	"sync"
 	"github.com/sarchlab/akita/v4/sim"
+	"strconv"
 )
 
 // NamedHookable represent something both have a name and can be hooked
@@ -20,7 +22,6 @@ type Milestone struct {
     BlockingCategory  string
     BlockingReason    string
     BlockingLocation  string
-    Timestamp         sim.VTimeInSec
 }
 
 // A list of hook poses for the hooks to apply to
@@ -41,7 +42,6 @@ func AddMilestone(
     blockingCategory string,
     blockingReason   string,
     blockingLocation string,
-    timestamp        sim.VTimeInSec,
     domain           NamedHookable,
 ) {
     milestone := Milestone{
@@ -50,10 +50,10 @@ func AddMilestone(
         BlockingCategory: blockingCategory,
         BlockingReason:   blockingReason,
         BlockingLocation: blockingLocation,
-        Timestamp:        timestamp,
+
     }
-	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Timestamp=%v\n",
-	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Timestamp)
+	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s",
+	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation)
     milestonesMutex.Lock()
 	milestones = append(milestones, milestone)
 	milestonesMutex.Unlock()
