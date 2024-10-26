@@ -3,8 +3,10 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-
+	"sync/atomic"
 	"github.com/sarchlab/akita/v3/sim"
+	"strconv"
+	"sync"
 )
 
 // NamedHookable represent something both have a name and can be hooked
@@ -14,12 +16,65 @@ type NamedHookable interface {
 	InvokeHook(sim.HookCtx)
 }
 
+type Milestone struct {
+    ID                string
+    TaskID            string
+    BlockingCategory  string
+    BlockingReason    string
+    BlockingLocation  string
+    Timestamp         sim.VTimeInSec
+}
+
 // A list of hook poses for the hooks to apply to
 var (
 	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
 	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
+
+var (
+    milestones       []Milestone
+    milestonesMutex  sync.Mutex
+    milestoneIDCounter uint64
+)
+
+func AddMilestone(
+    taskID           string,
+    blockingCategory string,
+    blockingReason   string,
+    blockingLocation string,
+    timestamp        sim.VTimeInSec,
+    domain           NamedHookable,
+) {
+    milestone := Milestone{
+        ID:               strconv.FormatUint(generateMilestoneID(), 10),
+        TaskID:           taskID,
+        BlockingCategory: blockingCategory,
+        BlockingReason:   blockingReason,
+        BlockingLocation: blockingLocation,
+        Timestamp:        timestamp,
+    }
+	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Timestamp=%v\n",
+	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Timestamp)
+    milestonesMutex.Lock()
+	milestones = append(milestones, milestone)
+	milestonesMutex.Unlock()
+	ctx := sim.HookCtx{
+        Domain: domain,
+        Item:   milestone,
+        Pos:    HookPosMilestone,
+    }
+    domain.InvokeHook(ctx)
+}
+
+var HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
+func generateMilestoneID() uint64 {
+    return atomic.AddUint64(&milestoneIDCounter, 1)
+}
+
+func GetAllMilestones() []Milestone {
+    return milestones
+}
 
 // StartTask notifies the hooks that hook to the domain about the start of a
 // task.
