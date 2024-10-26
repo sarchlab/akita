@@ -1,9 +1,9 @@
 package writeevict
 
 import (
-	"github.com/sarchlab/akita/v3/pipelining"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/pipelining"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type bankTransaction struct {
@@ -15,7 +15,7 @@ func (t *bankTransaction) TaskID() string {
 }
 
 type bankStage struct {
-	cache          *Cache
+	cache          *Comp
 	bankID         int
 	numReqPerCycle int
 
@@ -28,23 +28,23 @@ func (s *bankStage) Reset() {
 	s.pipeline.Clear()
 }
 
-func (s *bankStage) Tick(now sim.VTimeInSec) bool {
+func (s *bankStage) Tick() bool {
 	madeProgress := false
 
 	for i := 0; i < s.numReqPerCycle; i++ {
-		madeProgress = s.finalizeTrans(now) || madeProgress
+		madeProgress = s.finalizeTrans() || madeProgress
 	}
 
-	madeProgress = s.pipeline.Tick(now) || madeProgress
+	madeProgress = s.pipeline.Tick() || madeProgress
 
 	for i := 0; i < s.numReqPerCycle; i++ {
-		madeProgress = s.extractFromBuf(now) || madeProgress
+		madeProgress = s.extractFromBuf() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (s *bankStage) extractFromBuf(now sim.VTimeInSec) bool {
+func (s *bankStage) extractFromBuf() bool {
 	item := s.cache.bankBufs[s.bankID].Peek()
 	if item == nil {
 		return false
@@ -54,14 +54,14 @@ func (s *bankStage) extractFromBuf(now sim.VTimeInSec) bool {
 		return false
 	}
 
-	s.pipeline.Accept(now, &bankTransaction{
+	s.pipeline.Accept(&bankTransaction{
 		transaction: item.(*transaction),
 	})
 	s.cache.bankBufs[s.bankID].Pop()
 	return true
 }
 
-func (s *bankStage) finalizeTrans(now sim.VTimeInSec) bool {
+func (s *bankStage) finalizeTrans() bool {
 	item := s.postPipelineBuf.Peek()
 	if item == nil {
 		return false
@@ -71,18 +71,17 @@ func (s *bankStage) finalizeTrans(now sim.VTimeInSec) bool {
 
 	switch trans.bankAction {
 	case bankActionReadHit:
-		return s.finalizeReadHitTrans(now, trans)
+		return s.finalizeReadHitTrans(trans)
 	case bankActionWrite:
-		return s.finalizeWriteTrans(now, trans)
+		return s.finalizeWriteTrans(trans)
 	case bankActionWriteFetched:
-		return s.finalizeWriteFetchedTrans(now, trans)
+		return s.finalizeWriteFetchedTrans(trans)
 	default:
 		panic("cannot handle trans bank action")
 	}
 }
 
 func (s *bankStage) finalizeReadHitTrans(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	block := trans.block
@@ -108,7 +107,6 @@ func (s *bankStage) finalizeReadHitTrans(
 }
 
 func (s *bankStage) finalizeWriteTrans(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	write := trans.write
@@ -141,7 +139,6 @@ func (s *bankStage) finalizeWriteTrans(
 }
 
 func (s *bankStage) finalizeWriteFetchedTrans(
-	now sim.VTimeInSec,
 	trans *transaction,
 ) bool {
 	block := trans.block

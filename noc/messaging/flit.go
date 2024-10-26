@@ -3,7 +3,7 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Flit is the smallest trasferring unit on a network.
@@ -20,18 +20,21 @@ func (f *Flit) Meta() *sim.MsgMeta {
 	return &f.MsgMeta
 }
 
+// Clone returns cloned Flit with different ID
+func (f *Flit) Clone() sim.Msg {
+	cloneMsg := *f
+	cloneMsg.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
+		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
+		sim.GetIDGenerator().Generate())
+
+	return &cloneMsg
+}
+
 // FlitBuilder can build flits
 type FlitBuilder struct {
-	sendTime            sim.VTimeInSec
 	src, dst            sim.Port
 	msg                 sim.Msg
 	seqID, numFlitInMsg int
-}
-
-// WithSendTime sets the send time of the request to build
-func (b FlitBuilder) WithSendTime(t sim.VTimeInSec) FlitBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the src of the request to send
@@ -70,7 +73,6 @@ func (b FlitBuilder) Build() *Flit {
 	f.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		b.seqID, b.msg.Meta().ID,
 		sim.GetIDGenerator().Generate())
-	f.SendTime = b.sendTime
 	f.Src = b.src
 	f.Dst = b.dst
 	f.Msg = b.msg

@@ -1,9 +1,10 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v3/mem/cache"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/mem/mem"
+
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 type cacheState int
@@ -16,9 +17,10 @@ const (
 	cacheStatePaused
 )
 
-// A Cache in the writeback package is a cache that performs the write-back policy.
-type Cache struct {
+// Comp in the writeback package is a cache that performs the write-back policy.
+type Comp struct {
 	*sim.TickingComponent
+	sim.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -54,52 +56,60 @@ type Cache struct {
 }
 
 // SetLowModuleFinder sets the LowModuleFinder used by the cache.
-func (c *Cache) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
 	c.lowModuleFinder = lmf
 }
 
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
+
+type middleware struct {
+	*Comp
+}
+
 // Tick updates the internal states of the Cache.
-func (c *Cache) Tick(now sim.VTimeInSec) bool {
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.controlPortSender.Tick(now) || madeProgress
+	madeProgress = m.controlPortSender.Tick() || madeProgress
 
-	if c.state != cacheStatePaused {
-		madeProgress = c.runPipeline(now) || madeProgress
+	if m.state != cacheStatePaused {
+		madeProgress = m.runPipeline() || madeProgress
 	}
 
-	madeProgress = c.flusher.Tick(now) || madeProgress
+	madeProgress = m.flusher.Tick() || madeProgress
 
 	return madeProgress
 }
 
-func (c *Cache) runPipeline(now sim.VTimeInSec) bool {
+func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	madeProgress = c.runStage(now, c.topSender) || madeProgress
-	madeProgress = c.runStage(now, c.bottomSender) || madeProgress
-	madeProgress = c.runStage(now, c.mshrStage) || madeProgress
+	madeProgress = m.runStage(m.topSender) || madeProgress
+	madeProgress = m.runStage(m.bottomSender) || madeProgress
+	madeProgress = m.runStage(m.mshrStage) || madeProgress
 
-	for _, bs := range c.bankStages {
-		madeProgress = bs.Tick(now) || madeProgress
+	for _, bs := range m.bankStages {
+		madeProgress = bs.Tick() || madeProgress
 	}
 
-	madeProgress = c.runStage(now, c.writeBuffer) || madeProgress
-	madeProgress = c.runStage(now, c.dirStage) || madeProgress
-	madeProgress = c.runStage(now, c.topParser) || madeProgress
+	madeProgress = m.runStage(m.writeBuffer) || madeProgress
+	madeProgress = m.runStage(m.dirStage) || madeProgress
+	madeProgress = m.runStage(m.topParser) || madeProgress
 
 	return madeProgress
 }
 
-func (c *Cache) runStage(now sim.VTimeInSec, stage sim.Ticker) bool {
+func (m *middleware) runStage(stage sim.Ticker) bool {
 	madeProgress := false
-	for i := 0; i < c.numReqPerCycle; i++ {
-		madeProgress = stage.Tick(now) || madeProgress
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = stage.Tick() || madeProgress
 	}
 	return madeProgress
 }
 
-func (c *Cache) discardInflightTransactions(now sim.VTimeInSec) {
+func (c *Comp) discardInflightTransactions() {
 	sets := c.directory.GetSets()
 	for _, set := range sets {
 		for _, block := range set.Blocks {
@@ -108,14 +118,14 @@ func (c *Cache) discardInflightTransactions(now sim.VTimeInSec) {
 		}
 	}
 
-	c.dirStage.Reset(now)
+	c.dirStage.Reset()
 	for _, bs := range c.bankStages {
-		bs.Reset(now)
+		bs.Reset()
 	}
-	c.mshrStage.Reset(now)
-	c.writeBuffer.Reset(now)
+	c.mshrStage.Reset()
+	c.writeBuffer.Reset()
 
-	clearPort(c.topPort, now)
+	clearPort(c.topPort)
 
 	c.topSender.Clear()
 

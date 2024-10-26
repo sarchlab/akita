@@ -4,7 +4,7 @@ import (
 	"log"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 type trafficMsg struct {
@@ -13,6 +13,13 @@ type trafficMsg struct {
 
 func (m *trafficMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
+}
+
+func (m *trafficMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // Test is a test case.

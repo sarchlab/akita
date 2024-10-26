@@ -1,6 +1,6 @@
 package tracing
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // A TaskStep represents a milestone in the processing of task
 type TaskStep struct {

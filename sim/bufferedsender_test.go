@@ -59,16 +59,14 @@ var _ = Describe("BufferedSender", func() {
 		port.EXPECT().Send(msg1)
 		buffer.EXPECT().Peek().Return(msg1)
 		buffer.EXPECT().Pop()
-		sent := sender.Tick(10)
-		Expect(msg1.Meta().SendTime).To(Equal(VTimeInSec(10)))
+		sent := sender.Tick()
 		Expect(sent).To(BeTrue())
 
 		port.EXPECT().Send(msg2)
 		buffer.EXPECT().Peek().Return(msg2)
 		buffer.EXPECT().Pop()
-		sent = sender.Tick(11)
+		sent = sender.Tick()
 		Expect(sent).To(BeTrue())
-		Expect(msg2.Meta().SendTime).To(Equal(VTimeInSec(11)))
 	})
 
 	It("should clear", func() {
@@ -78,7 +76,7 @@ var _ = Describe("BufferedSender", func() {
 
 	It("should do nothing if buffer is empty", func() {
 		buffer.EXPECT().Peek().Return(nil)
-		sent := sender.Tick(10)
+		sent := sender.Tick()
 		Expect(sent).To(BeFalse())
 	})
 
@@ -87,7 +85,7 @@ var _ = Describe("BufferedSender", func() {
 		buffer.EXPECT().Peek().Return(msg1)
 		port.EXPECT().Send(msg1).Return(NewSendError())
 
-		sent := sender.Tick(10)
+		sent := sender.Tick()
 
 		Expect(sent).To(BeFalse())
 	})

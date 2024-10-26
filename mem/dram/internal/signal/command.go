@@ -1,8 +1,8 @@
 package signal
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // CommandKind represents the kind of the command.

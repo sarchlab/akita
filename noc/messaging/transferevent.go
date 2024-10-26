@@ -1,6 +1,6 @@
 package messaging
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // A TransferEvent is an event that marks that a message completes transfer.
 type TransferEvent struct {

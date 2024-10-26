@@ -2,7 +2,7 @@ package cache
 
 import (
 	"github.com/rs/xid"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // FlushReq is the request send to a cache unit to request it to flush all
@@ -19,19 +19,30 @@ func (r *FlushReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned FlushReq with different ID
+func (r *FlushReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (r *FlushReq) GenerateRsp() sim.Rsp {
+	rsp := FlushRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
+}
+
 // FlushReqBuilder can build flush requests.
 type FlushReqBuilder struct {
-	sendTime                sim.VTimeInSec
 	src, dst                sim.Port
 	invalidateAllCacheLines bool
 	discardInflight         bool
 	pauseAfterFlushing      bool
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b FlushReqBuilder) WithSendTime(t sim.VTimeInSec) FlushReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the message to build
@@ -73,7 +84,6 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.InvalidateAllCachelines = b.invalidateAllCacheLines
 	r.DiscardInflight = b.discardInflight
 	r.PauseAfterFlushing = b.pauseAfterFlushing
@@ -92,19 +102,22 @@ func (r *FlushRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
-// FlushRspBuilder can build data ready responds.
-type FlushRspBuilder struct {
-	sendTime sim.VTimeInSec
-	src, dst sim.Port
-	rspTo    string
+// Clone returns cloned FlushRsp with different ID
+func (r *FlushRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
-// WithSendTime sets the send time of the message to build.
-func (b FlushRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) FlushRspBuilder {
-	b.sendTime = t
-	return b
+func (r *FlushRsp) GetRspTo() string {
+	return r.RspTo
+}
+
+// FlushRspBuilder can build data ready responds.
+type FlushRspBuilder struct {
+	src, dst sim.Port
+	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
@@ -131,7 +144,6 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RspTo = b.rspTo
 	return r
 }
@@ -147,18 +159,27 @@ func (r *RestartReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
-// RestartReqBuilder can build data ready responds.
-type RestartReqBuilder struct {
-	sendTime sim.VTimeInSec
-	src, dst sim.Port
+// Clone returns cloned RestartReq with different ID
+func (r *RestartReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
-// WithSendTime sets the send time of the message to build.
-func (b RestartReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) RestartReqBuilder {
-	b.sendTime = t
-	return b
+func (r *RestartReq) GenerateRsp() sim.Rsp {
+	rsp := RestartRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
+}
+
+// RestartReqBuilder can build data ready responds.
+type RestartReqBuilder struct {
+	src, dst sim.Port
 }
 
 // WithSrc sets the source of the request to build.
@@ -179,7 +200,6 @@ func (b RestartReqBuilder) Build() *RestartReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	return r
 }
 
@@ -195,19 +215,22 @@ func (r *RestartRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
-// RestartRspBuilder can build data ready responds.
-type RestartRspBuilder struct {
-	sendTime sim.VTimeInSec
-	src, dst sim.Port
-	rspTo    string
+// Clone returns cloned RestartRsp with different ID
+func (r *RestartRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = xid.New().String()
+
+	return &cloneMsg
 }
 
-// WithSendTime sets the send time of the message to build.
-func (b RestartRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) RestartRspBuilder {
-	b.sendTime = t
-	return b
+func (r *RestartRsp) GetRspTo() string {
+	return r.RspTo
+}
+
+// RestartRspBuilder can build data ready responds.
+type RestartRspBuilder struct {
+	src, dst sim.Port
+	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
@@ -234,7 +257,6 @@ func (b RestartRspBuilder) Build() *RestartRsp {
 	r.ID = xid.New().String()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RspTo = b.rspTo
 	return r
 }

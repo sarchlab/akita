@@ -1,9 +1,9 @@
 package trans
 
 import (
-	"github.com/sarchlab/akita/v3/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // ClosePageCommandCreator always creates precharge commands as precharge

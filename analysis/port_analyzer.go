@@ -3,9 +3,17 @@ package analysis
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
 )
+
+type portAnalyzerEntry struct {
+	remotePortName string
+	OutTrafficByte int64
+	OutTrafficMsg  int64
+	InTrafficByte  int64
+	InTrafficMsg   int64
+}
 
 type portAnalyzerEntry struct {
 	remotePortName string
@@ -26,6 +34,8 @@ type PortAnalyzer struct {
 
 	lastTime           sim.VTimeInSec
 	remoteToTrafficMap map[string]portAnalyzerEntry
+	lastTime           sim.VTimeInSec
+	remoteToTrafficMap map[string]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
@@ -43,6 +53,27 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		}
 	}
 
+	if h.remoteToTrafficMap == nil {
+		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
+	}
+
+	remotePortName := msg.Meta().Dst.Name()
+	if h.isIncoming(msg) {
+		remotePortName = msg.Meta().Src.Name()
+	}
+
+	entry, ok := h.remoteToTrafficMap[remotePortName]
+	if !ok {
+		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
+			remotePortName: remotePortName,
+		}
+	}
+
+	entry = h.remoteToTrafficMap[remotePortName]
+
+	if h.isIncoming(msg) {
+		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.InTrafficMsg++
 	if h.remoteToTrafficMap == nil {
 		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
 	}
@@ -104,7 +135,6 @@ func (h *PortAnalyzer) summarize() {
 
 		if entry.InTrafficMsg != 0 {
 			perfEntry.What = "Incoming"
-
 			perfEntry.Value = float64(entry.InTrafficByte)
 			perfEntry.Unit = "Byte"
 			h.PerfLogger.AddDataEntry(perfEntry)

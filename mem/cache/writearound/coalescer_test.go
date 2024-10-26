@@ -4,15 +4,15 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Cache
+		cache    *Comp
 		topPort  *MockPort
 		dirBuf   *MockBuffer
 		c        coalescer
@@ -22,7 +22,7 @@ var _ = Describe("Coalescer", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
 		dirBuf = NewMockBuffer(mockCtrl)
-		cache = &Cache{
+		cache = &Comp{
 			log2BlockSize:         6,
 			topPort:               topPort,
 			dirBuf:                dirBuf,
@@ -38,8 +38,8 @@ var _ = Describe("Coalescer", func() {
 	})
 
 	It("should do nothing if no req", func() {
-		topPort.EXPECT().Peek().Return(nil)
-		madeProgress := c.Tick(10)
+		topPort.EXPECT().PeekIncoming().Return(nil)
+		madeProgress := c.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
 
@@ -51,32 +51,29 @@ var _ = Describe("Coalescer", func() {
 
 		BeforeEach(func() {
 			read1 = mem.ReadReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x100).
 				WithPID(1).
 				WithByteSize(4).
 				CanWaitForCoalesce().
 				Build()
 			read2 = mem.ReadReqBuilder{}.
-				WithSendTime(1).
 				WithAddress(0x104).
 				WithPID(1).
 				WithByteSize(4).
 				CanWaitForCoalesce().
 				Build()
 
-			topPort.EXPECT().Peek().Return(read1)
-			topPort.EXPECT().Retrieve(gomock.Any())
-			topPort.EXPECT().Peek().Return(read2)
-			topPort.EXPECT().Retrieve(gomock.Any())
-			c.Tick(10)
-			c.Tick(11)
+			topPort.EXPECT().PeekIncoming().Return(read1)
+			topPort.EXPECT().RetrieveIncoming()
+			topPort.EXPECT().PeekIncoming().Return(read2)
+			topPort.EXPECT().RetrieveIncoming()
+			c.Tick()
+			c.Tick()
 		})
 
 		Context("not coalescable", func() {
 			It("should send to dir stage", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(1).
 					WithAddress(0x148).
 					WithPID(1).
 					WithByteSize(4).
@@ -89,10 +86,10 @@ var _ = Describe("Coalescer", func() {
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming()
 
-				madeProgress := c.Tick(13)
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeTrue())
 				Expect(cache.transactions).To(HaveLen(3))
@@ -102,7 +99,6 @@ var _ = Describe("Coalescer", func() {
 
 			It("should stall if cannot send to dir", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(10).
 					WithAddress(0x148).
 					WithPID(1).
 					WithByteSize(4).
@@ -110,9 +106,9 @@ var _ = Describe("Coalescer", func() {
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
-				topPort.EXPECT().Peek().Return(read3)
+				topPort.EXPECT().PeekIncoming().Return(read3)
 
-				madeProgress := c.Tick(13)
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeFalse())
 				Expect(cache.transactions).To(HaveLen(2))
@@ -123,7 +119,6 @@ var _ = Describe("Coalescer", func() {
 		Context("last in wave, coalescable", func() {
 			It("should send to dir stage", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(1).
 					WithAddress(0x108).
 					WithPID(1).
 					WithByteSize(4).
@@ -140,10 +135,10 @@ var _ = Describe("Coalescer", func() {
 						Expect(trans.read.PID).To(Equal(vm.PID(1)))
 						Expect(trans.read.AccessByteSize).To(Equal(uint64(64)))
 					})
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming()
 
-				madeProgress := c.Tick(13)
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeTrue())
 				Expect(cache.transactions).To(HaveLen(3))
@@ -153,7 +148,6 @@ var _ = Describe("Coalescer", func() {
 
 			It("should stall if cannot send", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(10).
 					WithAddress(0x108).
 					WithPID(1).
 					WithByteSize(4).
@@ -161,9 +155,9 @@ var _ = Describe("Coalescer", func() {
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
-				topPort.EXPECT().Peek().Return(read3)
+				topPort.EXPECT().PeekIncoming().Return(read3)
 
-				madeProgress := c.Tick(13)
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeFalse())
 				Expect(cache.transactions).To(HaveLen(2))
@@ -174,7 +168,6 @@ var _ = Describe("Coalescer", func() {
 		Context("last in wave, not coalescable", func() {
 			It("should send to dir stage", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(10).
 					WithAddress(0x148).
 					WithPID(1).
 					WithByteSize(4).
@@ -191,9 +184,9 @@ var _ = Describe("Coalescer", func() {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
 					})
 
-				topPort.EXPECT().Peek().Return(read3)
-				topPort.EXPECT().Retrieve(gomock.Any())
-				madeProgress := c.Tick(13)
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				topPort.EXPECT().RetrieveIncoming()
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeTrue())
 				Expect(cache.transactions).To(HaveLen(3))
@@ -203,7 +196,6 @@ var _ = Describe("Coalescer", func() {
 
 			It("should stall is cannot send to dir stage", func() {
 				read3 := mem.ReadReqBuilder{}.
-					WithSendTime(10).
 					WithAddress(0x148).
 					WithPID(1).
 					WithByteSize(4).
@@ -212,8 +204,8 @@ var _ = Describe("Coalescer", func() {
 				dirBuf.EXPECT().CanPush().
 					Return(false)
 
-				topPort.EXPECT().Peek().Return(read3)
-				madeProgress := c.Tick(13)
+				topPort.EXPECT().PeekIncoming().Return(read3)
+				madeProgress := c.Tick()
 
 				Expect(madeProgress).To(BeFalse())
 				Expect(cache.transactions).To(HaveLen(2))
@@ -223,7 +215,6 @@ var _ = Describe("Coalescer", func() {
 			It("should stall if cannot send to dir stage in the second time",
 				func() {
 					read3 := mem.ReadReqBuilder{}.
-						WithSendTime(10).
 						WithAddress(0x148).
 						WithPID(1).
 						WithByteSize(4).
@@ -236,9 +227,9 @@ var _ = Describe("Coalescer", func() {
 							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 						})
 					dirBuf.EXPECT().CanPush().Return(false)
-					topPort.EXPECT().Peek().Return(read3)
+					topPort.EXPECT().PeekIncoming().Return(read3)
 
-					madeProgress := c.Tick(13)
+					madeProgress := c.Tick()
 
 					Expect(madeProgress).To(BeTrue())
 					Expect(cache.transactions).To(HaveLen(2))
@@ -251,7 +242,6 @@ var _ = Describe("Coalescer", func() {
 	Context("write", func() {
 		It("should coalesce write", func() {
 			write1 := mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x104).
 				WithPID(1).
 				WithData([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}).
@@ -264,7 +254,6 @@ var _ = Describe("Coalescer", func() {
 				Build()
 
 			write2 := mem.WriteReqBuilder{}.
-				WithSendTime(10).
 				WithAddress(0x108).
 				WithPID(1).
 				WithData([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}).
@@ -275,9 +264,9 @@ var _ = Describe("Coalescer", func() {
 				}).
 				Build()
 
-			topPort.EXPECT().Peek().Return(write1)
-			topPort.EXPECT().Peek().Return(write2)
-			topPort.EXPECT().Retrieve(gomock.Any()).Times(2)
+			topPort.EXPECT().PeekIncoming().Return(write1)
+			topPort.EXPECT().PeekIncoming().Return(write2)
+			topPort.EXPECT().RetrieveIncoming().Times(2)
 			dirBuf.EXPECT().CanPush().Return(true)
 			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
 				Expect(trans.write.Address).To(Equal(uint64(0x100)))
@@ -306,10 +295,10 @@ var _ = Describe("Coalescer", func() {
 				}))
 			})
 
-			madeProgress := c.Tick(10)
+			madeProgress := c.Tick()
 			Expect(madeProgress).To(BeTrue())
 
-			madeProgress = c.Tick(11)
+			madeProgress = c.Tick()
 			Expect(madeProgress).To(BeTrue())
 
 			Expect(cache.postCoalesceTransactions).To(HaveLen(1))

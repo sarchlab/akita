@@ -3,14 +3,15 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/analysis"
-	"github.com/sarchlab/akita/v3/monitoring"
-	"github.com/sarchlab/akita/v3/noc/messaging"
-	"github.com/sarchlab/akita/v3/noc/networking/arbitration"
-	"github.com/sarchlab/akita/v3/noc/networking/routing"
-	"github.com/sarchlab/akita/v3/noc/networking/switching"
-	"github.com/sarchlab/akita/v3/sim"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/analysis"
+	"github.com/sarchlab/akita/v4/monitoring"
+	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
+	"github.com/sarchlab/akita/v4/noc/networking/routing"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
+	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameter that associated with an end of a
@@ -171,7 +172,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	arbiter := arbitration.NewXBarArbiter()
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
-	sw := switching.SwitchBuilder{}.
+	sw := switches.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
 		WithArbiter(arbiter).
@@ -253,7 +254,7 @@ func (c *Connector) createEndPointWithName(
 	name string,
 ) *deviceNode {
 	fullName := fmt.Sprintf("%s.%s", c.name, name)
-	endPoint := switching.MakeEndPointBuilder().
+	endPoint := endpoint.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
 		WithFlitByteSize(c.flitSize).
@@ -295,7 +296,7 @@ func (c *Connector) createEndPoint(
 }
 
 func (c *Connector) connectEndPointWithSwitch(
-	swNode *switchNode, endPoint *switching.EndPoint,
+	swNode *switchNode, endPoint *endpoint.Comp,
 	param DeviceToSwitchLinkParameter,
 ) (*sim.LimitNumMsgPort, namedHookableConnection) {
 	sw := swNode.sw
@@ -305,7 +306,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		param.SwitchEndParam.IncomingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
 	endPoint.DefaultSwitchDst = swPort
-	switching.MakeSwitchPortAdder(sw).
+	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).
 		WithNumInputChannel(param.SwitchEndParam.NumInputChannel).
@@ -351,16 +352,17 @@ func (c *Connector) connectPorts(
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = sim.NewDirectConnection(connName, c.engine, c.defaultFreq)
+		conn = directconnection.MakeBuilder().WithEngine(c.engine).WithFreq(c.defaultFreq).Build(connName)
 	} else {
-		conn = messaging.MakeChannelBuilder().
-			WithEngine(c.engine).
-			WithPipelineParameters(
-				linkParam.NumStage,
-				linkParam.CyclePerStage,
-				linkParam.PipelineWidth).
-			WithFreq(linkParam.Frequency).
-			Build(connName)
+		panic("non-ideal (with latency) connection is not implemented.")
+		// conn = messaging.MakeChannelBuilder().
+		// 	WithEngine(c.engine).
+		// 	WithPipelineParameters(
+		// 		linkParam.NumStage,
+		// 		linkParam.CyclePerStage,
+		// 		linkParam.PipelineWidth).
+		// 	WithFreq(linkParam.Frequency).
+		// 	Build(connName)
 	}
 	conn.PlugIn(left, leftBufSize)
 	conn.PlugIn(right, rightBufSize)
@@ -412,14 +414,14 @@ func (c *Connector) ConnectSwitches(
 	rightPort = sim.NewLimitNumMsgPort(rightSwitch,
 		param.RightEndParam.IncomingBufSize, rightPortName)
 
-	switching.MakeSwitchPortAdder(leftSwitch).
+	switches.MakeSwitchPortAdder(leftSwitch).
 		WithPorts(leftPort, rightPort).
 		WithLatency(param.LeftEndParam.Latency).
 		WithNumInputChannel(param.LeftEndParam.NumInputChannel).
 		WithNumOutputChannel(param.LeftEndParam.NumOutputChannel).
 		AddPort()
 
-	switching.MakeSwitchPortAdder(rightSwitch).
+	switches.MakeSwitchPortAdder(rightSwitch).
 		WithPorts(rightPort, leftPort).
 		WithLatency(param.RightEndParam.Latency).
 		WithNumInputChannel(param.RightEndParam.NumInputChannel).

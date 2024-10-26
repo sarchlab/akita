@@ -1,8 +1,8 @@
 package mmu
 
 import (
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Builder can build MMU component
@@ -71,8 +71,8 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 }
 
 // Build returns a newly created MMU component
-func (b Builder) Build(name string) *MMU {
-	mmu := new(MMU)
+func (b Builder) Build(name string) *Comp {
+	mmu := new(Comp)
 	mmu.TickingComponent = *sim.NewTickingComponent(
 		name, b.engine, b.freq, mmu)
 
@@ -80,10 +80,13 @@ func (b Builder) Build(name string) *MMU {
 	b.createPageTable(mmu)
 	b.configureInternalStates(mmu)
 
+	middleware := &middleware{Comp: mmu}
+	mmu.AddMiddleware(middleware)
+
 	return mmu
 }
 
-func (b Builder) configureInternalStates(mmu *MMU) {
+func (b Builder) configureInternalStates(mmu *Comp) {
 	mmu.MigrationServiceProvider = b.migrationServiceProvider
 	mmu.migrationQueueSize = 4096
 	mmu.maxRequestsInFlight = b.maxNumReqInFlight
@@ -91,7 +94,7 @@ func (b Builder) configureInternalStates(mmu *MMU) {
 	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
 }
 
-func (b Builder) createPageTable(mmu *MMU) {
+func (b Builder) createPageTable(mmu *Comp) {
 	if b.pageTable != nil {
 		mmu.pageTable = b.pageTable
 	} else {
@@ -99,7 +102,7 @@ func (b Builder) createPageTable(mmu *MMU) {
 	}
 }
 
-func (b Builder) createPorts(name string, mmu *MMU) {
+func (b Builder) createPorts(name string, mmu *Comp) {
 	mmu.topPort = sim.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
 	mmu.AddPort("Top", mmu.topPort)
 	mmu.migrationPort = sim.NewLimitNumMsgPort(mmu, 1, name+".MigrationPort")

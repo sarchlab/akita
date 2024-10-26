@@ -2,7 +2,7 @@
 package vm
 
 import (
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A TranslationReq asks the receiver component to translate the request.
@@ -18,21 +18,32 @@ func (r *TranslationReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned TranslationReq with different ID
+func (r *TranslationReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// GenerateRsp generates response to originral translation request
+func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
+	rsp := TranslationRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithPage(page).
+		Build()
+
+	return rsp
+}
+
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b TranslationReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) TranslationReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -71,7 +82,6 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
@@ -91,6 +101,14 @@ func (r *TranslationRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned TranslationRsp with different ID
+func (r *TranslationRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetRspTo returns the request ID that the respond is responding to.
 func (r *TranslationRsp) GetRspTo() string {
 	return r.RespondTo
@@ -98,18 +116,9 @@ func (r *TranslationRsp) GetRspTo() string {
 
 // TranslationRspBuilder can build translation requests
 type TranslationRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
 	page     Page
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b TranslationRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) TranslationRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the respond to build.
@@ -142,7 +151,6 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	r.Page = b.page
 	return r
@@ -171,13 +179,22 @@ func (m *PageMigrationReqToDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned PageMigrationReqToDriver with different ID
+func (m *PageMigrationReqToDriver) Clone() sim.Msg {
+	return m
+}
+
+func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
+	rsp := NewPageMigrationRspFromDriver(m.Dst, m.Src, m)
+
+	return rsp
+}
+
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	time sim.VTimeInSec,
 	src, dst sim.Port,
 ) *PageMigrationReqToDriver {
 	cmd := new(PageMigrationReqToDriver)
-	cmd.SendTime = time
 	cmd.Src = src
 	cmd.Dst = dst
 	return cmd
@@ -191,6 +208,8 @@ type PageMigrationRspFromDriver struct {
 	EndTime   sim.VTimeInSec
 	VAddr     []uint64
 	RspToTop  bool
+
+	OriginalReq sim.Msg
 }
 
 // Meta returns the meta data associated with the message.
@@ -198,14 +217,23 @@ func (m *PageMigrationRspFromDriver) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned PageMigrationRspFromDriver with different ID
+func (m *PageMigrationRspFromDriver) Clone() sim.Msg {
+	return m
+}
+
+func (m *PageMigrationRspFromDriver) GetRspTo() string {
+	return m.OriginalReq.Meta().ID
+}
+
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	time sim.VTimeInSec,
 	src, dst sim.Port,
+	originalReq sim.Msg,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)
-	cmd.SendTime = time
 	cmd.Src = src
 	cmd.Dst = dst
+	cmd.OriginalReq = originalReq
 	return cmd
 }

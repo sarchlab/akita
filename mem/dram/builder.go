@@ -3,16 +3,16 @@ package dram
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
 
-	"github.com/sarchlab/akita/v3/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v3/tracing"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
+	"github.com/sarchlab/akita/v4/tracing"
 
-	"github.com/sarchlab/akita/v3/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/org"
-	"github.com/sarchlab/akita/v3/mem/dram/internal/trans"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/org"
+	"github.com/sarchlab/akita/v4/mem/dram/internal/trans"
 )
 
 // Builder can build new memory controllers.
@@ -392,8 +392,8 @@ func (b Builder) WithRFCb(cycle int) Builder {
 }
 
 // Build builds a new MemController.
-func (b Builder) Build(name string) *MemController {
-	m := &MemController{
+func (b Builder) Build(name string) *Comp {
+	m := &Comp{
 		addrConverter: b.addrConverter,
 		storage:       b.storage,
 	}
@@ -442,6 +442,9 @@ func (b Builder) Build(name string) *MemController {
 	m.topPort = sim.NewLimitNumMsgPort(m, 1024, name+".TopPort")
 	m.AddPort("Top", m.topPort)
 
+	middleware := &middleware{Comp: m}
+	m.AddMiddleware(middleware)
+
 	return m
 }
 
@@ -451,7 +454,7 @@ func (b Builder) attachTracers(hookable tracing.NamedHookable) {
 	}
 }
 
-func (b Builder) buildChannel(name string, m *MemController) {
+func (b Builder) buildChannel(name string, m *Comp) {
 	timing := b.generateTiming()
 	channel := &org.ChannelImpl{
 		Timing: timing,

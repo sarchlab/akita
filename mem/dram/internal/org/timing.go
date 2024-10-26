@@ -1,6 +1,6 @@
 package org
 
-import "github.com/sarchlab/akita/v3/mem/dram/internal/signal"
+import "github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 
 // TimeTable is a table that records the minimum number of cycles between any
 // two types of DRAM commands.

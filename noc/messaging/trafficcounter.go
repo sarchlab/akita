@@ -1,6 +1,6 @@
 package messaging
 
-import "github.com/sarchlab/akita/v3/sim"
+import "github.com/sarchlab/akita/v4/sim"
 
 // A TrafficCounter counts number of bytes transferred over a connection
 type TrafficCounter struct {

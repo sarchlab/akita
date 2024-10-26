@@ -1,8 +1,8 @@
 package cache
 
 import (
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/mem/vm"
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem/vm"
 )
 
 // A Block of a cache is the information that is associated with a cache line

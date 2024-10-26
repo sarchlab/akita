@@ -3,10 +3,8 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-	"sync/atomic"
-	"github.com/sarchlab/akita/v3/sim"
-	"strconv"
-	"sync"
+
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 // NamedHookable represent something both have a name and can be hooked

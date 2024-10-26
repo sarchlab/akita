@@ -1,8 +1,8 @@
 package mem
 
 import (
-	"github.com/sarchlab/akita/v3/mem/vm"
-	"github.com/sarchlab/akita/v3/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var accessReqByteOverhead = 12
@@ -40,6 +40,26 @@ func (r *ReadReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned ReadReq with different ID
+func (r *ReadReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// GenerateRsp generate DataReadyRsp to ReadReq
+func (r *ReadReq) GenerateRsp(data []byte) sim.Rsp {
+	rsp := DataReadyRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithData(data).
+		Build()
+
+	return rsp
+}
+
 // GetByteSize returns the number of byte that the request is accessing.
 func (r *ReadReq) GetByteSize() uint64 {
 	return r.AccessByteSize
@@ -57,18 +77,11 @@ func (r *ReadReq) GetPID() vm.PID {
 
 // ReadReqBuilder can build read requests.
 type ReadReqBuilder struct {
-	sendTime           sim.VTimeInSec
 	src, dst           sim.Port
 	pid                vm.PID
 	address, byteSize  uint64
 	canWaitForCoalesce bool
 	info               interface{}
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b ReadReqBuilder) WithSendTime(t sim.VTimeInSec) ReadReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -119,7 +132,6 @@ func (b ReadReqBuilder) Build() *ReadReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.TrafficBytes = accessReqByteOverhead
 	r.Address = b.address
 	r.PID = b.pid
@@ -146,6 +158,25 @@ func (r *WriteReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned WriteReq with different ID
+func (r *WriteReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// GenerateRsp generate WriteDoneRsp to the original WriteReq
+func (r *WriteReq) GenerateRsp() sim.Rsp {
+	rsp := WriteDoneRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		Build()
+
+	return rsp
+}
+
 // GetByteSize returns the number of byte that the request is writing.
 func (r *WriteReq) GetByteSize() uint64 {
 	return uint64(len(r.Data))
@@ -163,7 +194,6 @@ func (r *WriteReq) GetPID() vm.PID {
 
 // WriteReqBuilder can build read requests.
 type WriteReqBuilder struct {
-	sendTime           sim.VTimeInSec
 	src, dst           sim.Port
 	pid                vm.PID
 	info               interface{}
@@ -171,12 +201,6 @@ type WriteReqBuilder struct {
 	data               []byte
 	dirtyMask          []bool
 	canWaitForCoalesce bool
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b WriteReqBuilder) WithSendTime(t sim.VTimeInSec) WriteReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -233,7 +257,6 @@ func (b WriteReqBuilder) Build() *WriteReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.PID = b.pid
 	r.Info = b.info
 	r.Address = b.address
@@ -258,6 +281,14 @@ func (r *DataReadyRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned DataReadyRsp with different ID
+func (r *DataReadyRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetRspTo returns the ID if the request that the respond is responding to.
 func (r *DataReadyRsp) GetRspTo() string {
 	return r.RespondTo
@@ -265,18 +296,9 @@ func (r *DataReadyRsp) GetRspTo() string {
 
 // DataReadyRspBuilder can build data ready responds.
 type DataReadyRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
 	data     []byte
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b DataReadyRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) DataReadyRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -309,7 +331,6 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.TrafficBytes = len(b.data) + accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Data = b.data
@@ -329,6 +350,14 @@ func (r *WriteDoneRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned WriteDoneRsp with different ID
+func (r *WriteDoneRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // GetRspTo returns the ID of the request that the respond is responding to.
 func (r *WriteDoneRsp) GetRspTo() string {
 	return r.RespondTo
@@ -336,17 +365,8 @@ func (r *WriteDoneRsp) GetRspTo() string {
 
 // WriteDoneRspBuilder can build data ready responds.
 type WriteDoneRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	rspTo    string
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b WriteDoneRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) WriteDoneRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -374,7 +394,6 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.TrafficBytes = accessRspByteOverhead
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	return r
 }
@@ -395,21 +414,20 @@ func (m *ControlMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
+// Clone returns cloned ControlMsg with different ID
+func (m *ControlMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 // A ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
-	sendTime            sim.VTimeInSec
 	src, dst            sim.Port
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
-}
-
-// WithSendTime sets the send time of the message to build.
-func (b ControlMsgBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) ControlMsgBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -450,7 +468,6 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Src = b.src
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
-	m.SendTime = b.sendTime
 
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
@@ -470,6 +487,25 @@ func (r *GL0InvalidateReq) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
 }
 
+// Clone returns cloned GL0InvalidateReq with different ID
+func (r *GL0InvalidateReq) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+func (r *GL0InvalidateReq) GenerateRsp(pid vm.PID) sim.Rsp {
+	rsp := GL0InvalidateRspBuilder{}.
+		WithSrc(r.Dst).
+		WithDst(r.Src).
+		WithRspTo(r.ID).
+		WithPID(pid).
+		Build()
+
+	return rsp
+}
+
 // GetByteSize returns the number of byte that the request is accessing.
 func (r *GL0InvalidateReq) GetByteSize() uint64 {
 	return 0
@@ -487,17 +523,8 @@ func (r *GL0InvalidateReq) GetPID() vm.PID {
 
 // GL0InvalidateReqBuilder can build new GL0InvalidReq.
 type GL0InvalidateReqBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	PID      vm.PID
-}
-
-// WithSendTime sets the send time of the request to build.
-func (b GL0InvalidateReqBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) GL0InvalidateReqBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -524,7 +551,6 @@ func (b GL0InvalidateReqBuilder) Build() *GL0InvalidateReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	return r
 }
 
@@ -538,6 +564,14 @@ type GL0InvalidateRsp struct {
 // Meta returns the meta data associated with the message.
 func (r *GL0InvalidateRsp) Meta() *sim.MsgMeta {
 	return &r.MsgMeta
+}
+
+// Clone returns cloned GL0InvalidateRsp with different ID
+func (r *GL0InvalidateRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
 }
 
 // GetByteSize returns the number of byte that the request is accessing.
@@ -562,18 +596,9 @@ func (r *GL0InvalidateRsp) GetRspTo() string {
 
 // GL0InvalidateRspBuilder can build new GL0 Invalid Rsp Builder
 type GL0InvalidateRspBuilder struct {
-	sendTime sim.VTimeInSec
 	src, dst sim.Port
 	PID      vm.PID
 	rspTo    string
-}
-
-// WithSendTime sets the send time of the request to build.:w
-func (b GL0InvalidateRspBuilder) WithSendTime(
-	t sim.VTimeInSec,
-) GL0InvalidateRspBuilder {
-	b.sendTime = t
-	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -611,7 +636,6 @@ func (b GL0InvalidateRspBuilder) Build() *GL0InvalidateRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
-	r.SendTime = b.sendTime
 	r.RespondTo = b.rspTo
 	return r
 }

@@ -3,7 +3,7 @@ package tlb
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v3/mem/vm"
+	"github.com/sarchlab/akita/v4/mem/vm"
 )
 
 type mshrEntry struct {
