@@ -92,8 +92,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 				Expect(msg.Dst).To(Equal(ctrlPort))
 				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
 			}).
-			Return(nil).
-			AnyTimes()
+			Return(nil)
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
@@ -108,7 +107,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			Build()
 		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
-		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+		port.EXPECT().RetrieveIncoming().Return(nil)
 		ctrlPort.EXPECT().
 			Send(gomock.Any()).
 			Do(func(msg *sim.GeneralRsp) {
@@ -116,8 +115,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 				Expect(msg.Dst).To(Equal(ctrlPort))
 				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
 			}).
-			Return(nil).
-			AnyTimes()
+			Return(nil)
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
@@ -131,7 +129,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			Build()
 		ctrlPort.EXPECT().PeekIncoming().Return(ctrlMsg)
 		ctrlPort.EXPECT().RetrieveIncoming().Return(ctrlMsg)
-		port.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
 		ctrlPort.EXPECT().
 			Send(gomock.Any()).
@@ -140,8 +137,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 				Expect(msg.Dst).To(Equal(ctrlPort))
 				Expect(msg.OriginalReq).To(Equal(ctrlMsg))
 			}).
-			Return(nil).
-			AnyTimes()
+			Return(nil)
 
 		madeProgress := memController.Tick()
 

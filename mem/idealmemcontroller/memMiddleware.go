@@ -13,6 +13,21 @@ type memMiddleware struct {
 	*Comp
 }
 
+func (m *memMiddleware) Handle(e sim.Event) error {
+	switch e := e.(type) {
+	case *readRespondEvent:
+		return m.handleReadRespondEvent(e)
+	case *writeRespondEvent:
+		return m.handleWriteRespondEvent(e)
+	case sim.TickEvent:
+		return m.TickingComponent.Handle(e)
+	default:
+		log.Panicf("cannot handle event of %s", reflect.TypeOf(e))
+	}
+
+	return nil
+}
+
 func (m *memMiddleware) Tick() bool {
 	madeProgress := false
 
@@ -30,10 +45,11 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	for i := 0; i < m.width; i++ {
 		msg := m.topPort.RetrieveIncoming()
 		if msg == nil {
-			return true
+			break
 		}
 
 		m.inflightBuffer = append(m.inflightBuffer, msg)
+		madeProgress = true
 	}
 
 	return madeProgress
@@ -101,4 +117,89 @@ func (m *memMiddleware) handleWriteReq(req *mem.WriteReq) {
 
 func (m *memMiddleware) CurrentTime() sim.VTimeInSec {
 	return m.Engine.CurrentTime()
+}
+
+func (m *memMiddleware) handleReadRespondEvent(e *readRespondEvent) error {
+	now := e.Time()
+	req := e.req
+
+	addr := req.Address
+	if m.addressConverter != nil {
+		addr = m.addressConverter.ConvertExternalToInternal(addr)
+	}
+
+	data, err := m.Storage.Read(addr, req.AccessByteSize)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	rsp := mem.DataReadyRspBuilder{}.
+		WithSrc(m.topPort).
+		WithDst(req.Src).
+		WithRspTo(req.ID).
+		WithData(data).
+		Build()
+
+	networkErr := m.topPort.Send(rsp)
+
+	if networkErr != nil {
+		retry := newReadRespondEvent(m.Freq.NextTick(now), m, req)
+		m.Engine.Schedule(retry)
+		return nil
+	}
+
+	tracing.TraceReqComplete(req, m)
+	m.TickLater()
+
+	return nil
+}
+
+func (m *memMiddleware) handleWriteRespondEvent(e *writeRespondEvent) error {
+	now := e.Time()
+	req := e.req
+
+	rsp := mem.WriteDoneRspBuilder{}.
+		WithSrc(m.topPort).
+		WithDst(req.Src).
+		WithRspTo(req.ID).
+		Build()
+
+	networkErr := m.topPort.Send(rsp)
+	if networkErr != nil {
+		retry := newWriteRespondEvent(m.Freq.NextTick(now), m, req)
+		m.Engine.Schedule(retry)
+		return nil
+	}
+
+	addr := req.Address
+
+	if m.addressConverter != nil {
+		addr = m.addressConverter.ConvertExternalToInternal(addr)
+	}
+
+	if req.DirtyMask == nil {
+		err := m.Storage.Write(addr, req.Data)
+		if err != nil {
+			log.Panic(err)
+		}
+	} else {
+		data, err := m.Storage.Read(addr, uint64(len(req.Data)))
+		if err != nil {
+			panic(err)
+		}
+		for i := 0; i < len(req.Data); i++ {
+			if req.DirtyMask[i] {
+				data[i] = req.Data[i]
+			}
+		}
+		err = m.Storage.Write(addr, data)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	tracing.TraceReqComplete(req, m)
+	m.TickLater()
+
+	return nil
 }

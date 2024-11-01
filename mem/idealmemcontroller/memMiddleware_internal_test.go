@@ -49,7 +49,7 @@ var _ = Describe("FuncMiddleware", func() {
 
 			madeProgress := memMW.Tick()
 
-			Expect(madeProgress).To(BeTrue())
+			Expect(madeProgress).To(BeFalse())
 		})
 
 	It("should handle memory read request", func() {
