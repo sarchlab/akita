@@ -148,6 +148,17 @@ func (t *SQLiteTraceWriter) createTable() {
 		create index trace_parent_id_index
 			on trace (parent_id);
 	`)
+
+	t.mustExecute(`
+        CREATE TABLE milestones (
+            id TEXT PRIMARY KEY,
+            task_id TEXT,
+            category TEXT,
+            reason TEXT,
+            location TEXT,
+            time REAL
+        )
+    `)
 }
 
 func (t *SQLiteTraceWriter) prepareStatement() {
@@ -359,4 +370,27 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	}
 
 	return sqlStr
+}
+
+func (t *SQLiteTraceWriter) WriteMilestone(milestone Milestone) {
+    stmt, err := t.Prepare(`
+        INSERT INTO milestones (id, task_id, category, reason, location, time)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `)
+    if err != nil {
+        panic(err)
+    }
+    defer stmt.Close()
+
+    _, err = stmt.Exec(
+        milestone.ID,
+        milestone.TaskID,
+        milestone.BlockingCategory,
+        milestone.BlockingReason,
+        milestone.BlockingLocation,
+        milestone.Time,
+    )
+    if err != nil {
+        panic(err)
+    }
 }

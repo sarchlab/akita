@@ -14,6 +14,7 @@ type TracerBackend interface {
 	// Flush flushes the tasks to the storage, in case if the backend buffers
 	// the tasks.
 	Flush()
+	WriteMilestone(milestone Milestone)
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -26,6 +27,7 @@ type DBTracer struct {
 	startTime, endTime sim.VTimeInSec
 
 	tracingTasks map[string]Task
+	milestones   []Milestone
 }
 
 // StartTask marks the start of a task.
@@ -104,6 +106,7 @@ func NewDBTracer(
 		timeTeller:   timeTeller,
 		backend:      backend,
 		tracingTasks: make(map[string]Task),
+		milestones:   make([]Milestone, 0),
 	}
 
 	atexit.Register(func() { t.Terminate() })
@@ -115,4 +118,8 @@ func NewDBTracer(
 func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 	t.startTime = startTime
 	t.endTime = endTime
+}
+
+func (t *DBTracer) RecordMilestone(milestone Milestone) {
+    t.backend.WriteMilestone(milestone)
 }

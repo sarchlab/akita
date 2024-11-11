@@ -14,6 +14,7 @@ type NamedHookable interface {
 	sim.Named
 	sim.Hookable
 	InvokeHook(sim.HookCtx)
+	CurrentTime() sim.VTimeInSec
 }
 
 type Milestone struct {
@@ -22,6 +23,7 @@ type Milestone struct {
     BlockingCategory  string
     BlockingReason    string
     BlockingLocation  string
+	Time              float64
 }
 
 // A list of hook poses for the hooks to apply to
@@ -37,6 +39,7 @@ var (
     milestoneIDCounter uint64
 )
 
+
 func AddMilestone(
     taskID           string,
     blockingCategory string,
@@ -44,19 +47,22 @@ func AddMilestone(
     blockingLocation string,
     domain           NamedHookable,
 ) {
+    currentTime := float64(domain.CurrentTime())
+    
     milestone := Milestone{
         ID:               strconv.FormatUint(generateMilestoneID(), 10),
         TaskID:           taskID,
         BlockingCategory: blockingCategory,
         BlockingReason:   blockingReason,
         BlockingLocation: blockingLocation,
-
+		Time:             currentTime,
     }
-	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s",
-	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation)
+	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Time=%f\n",
+	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Time)
     milestonesMutex.Lock()
 	milestones = append(milestones, milestone)
 	milestonesMutex.Unlock()
+
 	ctx := sim.HookCtx{
         Domain: domain,
         Item:   milestone,

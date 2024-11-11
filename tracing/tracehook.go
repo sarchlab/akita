@@ -3,7 +3,6 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -37,5 +36,7 @@ func (h *traceHook) Func(ctx sim.HookCtx) {
 		h.t.StepTask(ctx.Item.(Task))
 	case HookPosTaskEnd:
 		h.t.EndTask(ctx.Item.(Task))
+	case HookPosMilestone:
+		h.t.RecordMilestone(ctx.Item.(Milestone))
 	}
 }
