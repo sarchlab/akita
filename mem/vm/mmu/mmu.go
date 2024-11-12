@@ -295,25 +295,27 @@ func (mmu *MMU) processMigrationReturn(now sim.VTimeInSec) bool {
 }
 
 func (mmu *MMU) parseFromTop(now sim.VTimeInSec) bool {
-	if len(mmu.walkingTranslations) >= mmu.maxRequestsInFlight {
-		return false
+	madeProgress := false
+
+	for len(mmu.walkingTranslations) < mmu.maxRequestsInFlight {
+		req := mmu.topPort.Peek()
+		if req == nil {
+			break
+		}
+
+		tracing.TraceReqReceive(req, mmu)
+
+		switch req := req.(type) {
+		case *vm.TranslationReq:
+			mmu.startWalking(req)
+		default:
+			log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
+		}
+		mmu.topPort.Retrieve(now)
+		madeProgress = true
 	}
 
-	req := mmu.topPort.Retrieve(now)
-	if req == nil {
-		return false
-	}
-
-	tracing.TraceReqReceive(req, mmu)
-
-	switch req := req.(type) {
-	case *vm.TranslationReq:
-		mmu.startWalking(req)
-	default:
-		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
-	}
-
-	return true
+	return madeProgress
 }
 
 func (mmu *MMU) startWalking(req *vm.TranslationReq) {
