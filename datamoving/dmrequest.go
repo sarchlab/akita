@@ -7,13 +7,10 @@ import (
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
-	srcAddress   uint64
-	dstAddress   uint64
-	srcBuffer    []byte
-	dstBuffer    []byte
-	srcDirection string
-	dstDirection string
-	byteSize     uint64
+	srcAddress uint64
+	dstAddress uint64
+	direction  string
+	byteSize   uint64
 }
 
 func (req *DataMoveRequest) Meta() *sim.MsgMeta {
@@ -26,24 +23,18 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 	b.WithDst(req.Dst)
 	b.WithDstAddress(req.dstAddress)
 	b.WithSrcAddress(req.srcAddress)
-	b.WithSrcBuffer(req.srcBuffer)
-	b.WithDstBuffer(req.dstBuffer)
-	b.WithSrcDirection(req.srcDirection)
-	b.WithDstDirection(req.dstDirection)
+	b.WithDirection(req.direction)
 	b.WithByteSize(req.byteSize)
 	return b.Build()
 }
 
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
-	src, dst     sim.Port
-	srcAddress   uint64
-	dstAddress   uint64
-	srcBuffer    []byte
-	dstBuffer    []byte
-	srcDirection string
-	dstDirection string
-	byteSize     uint64
+	src, dst   sim.Port
+	srcAddress uint64
+	dstAddress uint64
+	direction  string
+	byteSize   uint64
 }
 
 func (b DataMoveRequestBuilder) WithSrc(
@@ -74,31 +65,10 @@ func (b DataMoveRequestBuilder) WithDstAddress(
 	return b
 }
 
-func (b DataMoveRequestBuilder) WithSrcBuffer(
-	inputSrcBuffer []byte,
+func (b DataMoveRequestBuilder) WithDirection(
+	inputDirection string,
 ) DataMoveRequestBuilder {
-	b.srcBuffer = inputSrcBuffer
-	return b
-}
-
-func (b DataMoveRequestBuilder) WithDstBuffer(
-	inputDstBuffer []byte,
-) DataMoveRequestBuilder {
-	b.dstBuffer = inputDstBuffer
-	return b
-}
-
-func (b DataMoveRequestBuilder) WithSrcDirection(
-	inputSrcDirection string,
-) DataMoveRequestBuilder {
-	b.srcDirection = inputSrcDirection
-	return b
-}
-
-func (b DataMoveRequestBuilder) WithDstDirection(
-	inputDstDirection string,
-) DataMoveRequestBuilder {
-	b.dstDirection = inputDstDirection
+	b.direction = inputDirection
 	return b
 }
 
@@ -116,10 +86,7 @@ func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.Dst = b.dst
 	r.srcAddress = b.srcAddress
 	r.dstAddress = b.dstAddress
-	r.srcBuffer = b.srcBuffer
-	r.dstBuffer = b.dstBuffer
-	r.srcDirection = b.srcDirection
-	r.dstDirection = b.dstDirection
+	r.direction = b.direction
 	r.byteSize = b.byteSize
 	return r
 }
