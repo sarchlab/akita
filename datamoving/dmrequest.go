@@ -7,10 +7,12 @@ import (
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
-	srcAddress uint64
-	dstAddress uint64
-	direction  string
-	byteSize   uint64
+	srcAddress      uint64
+	dstAddress      uint64
+	srcTransferSize uint64
+	dstTransferSize uint64
+	direction       string
+	byteSize        uint64
 }
 
 func (req *DataMoveRequest) Meta() *sim.MsgMeta {
@@ -23,6 +25,8 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 	b.WithDst(req.Dst)
 	b.WithDstAddress(req.dstAddress)
 	b.WithSrcAddress(req.srcAddress)
+	b.WithSrcTransferSize(req.srcTransferSize)
+	b.WithDstTransferSize(req.dstTransferSize)
 	b.WithDirection(req.direction)
 	b.WithByteSize(req.byteSize)
 	return b.Build()
@@ -30,11 +34,13 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
-	src, dst   sim.Port
-	srcAddress uint64
-	dstAddress uint64
-	direction  string
-	byteSize   uint64
+	src, dst        sim.Port
+	srcAddress      uint64
+	dstAddress      uint64
+	srcTransferSize uint64
+	dstTransferSize uint64
+	direction       string
+	byteSize        uint64
 }
 
 func (b DataMoveRequestBuilder) WithSrc(
@@ -62,6 +68,20 @@ func (b DataMoveRequestBuilder) WithDstAddress(
 	inputDstAddress uint64,
 ) DataMoveRequestBuilder {
 	b.dstAddress = inputDstAddress
+	return b
+}
+
+func (b DataMoveRequestBuilder) WithSrcTransferSize(
+	inputSrcTransferSize uint64,
+) DataMoveRequestBuilder {
+	b.srcTransferSize = inputSrcTransferSize
+	return b
+}
+
+func (b DataMoveRequestBuilder) WithDstTransferSize(
+	inputDstTransferSize uint64,
+) DataMoveRequestBuilder {
+	b.dstTransferSize = inputDstTransferSize
 	return b
 }
 

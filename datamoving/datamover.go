@@ -47,11 +47,6 @@ func (rqC *RequestCollection) getTopReq() sim.Msg {
 	return rqC.topReq
 }
 
-// getTopID returns the ID of DataMoveRequest
-func (rqC *RequestCollection) getTopID() string {
-	return rqC.topReq.Meta().ID
-}
-
 func NewRequestCollection(
 	inputReq sim.Msg,
 ) *RequestCollection {
@@ -67,13 +62,14 @@ type StreamingDataMover struct {
 	*sim.TickingComponent
 
 	Log2AccessSize uint64
+	isProcessing   bool
+	currentRequest *RequestCollection
 
-	toSrc              []sim.Msg
-	toDst              []sim.Msg
-	toCP               []sim.Msg
-	processingRequests []*RequestCollection
-	pendingRequests    []sim.Msg
-	buffer             []byte
+	toSrc           []sim.Msg
+	toDst           []sim.Msg
+	toCP            []sim.Msg
+	pendingRequests []sim.Msg
+	buffer          []byte
 
 	maxReqCount uint64
 
@@ -134,6 +130,9 @@ func (sdm *StreamingDataMover) parseFromSrc() bool {
 	if req == nil {
 		return false
 	}
+	if sdm.isProcessing {
+		return false
+	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
@@ -144,6 +143,7 @@ func (sdm *StreamingDataMover) parseFromSrc() bool {
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
 
+	sdm.isProcessing = true
 	return true
 }
 
@@ -189,27 +189,6 @@ func (sdm *StreamingDataMover) removeReqFromPendingReqs(
 	return targetReq
 }
 
-// removeReqFromProcessingReqs remove request of certain ID from the
-// collection of processing requests
-func (sdm *StreamingDataMover) removeReqFromProcessingReqs(
-	id string,
-) {
-	found := false
-	newList := make([]*RequestCollection, 0, len(sdm.processingRequests)-1)
-	for _, req := range sdm.processingRequests {
-		if req.getTopID() == id {
-			found = true
-		} else {
-			newList = append(newList, req)
-		}
-	}
-	sdm.processingRequests = newList
-
-	if !found {
-		panic("request not found")
-	}
-}
-
 // processDataReadyRsp process every DataReadyRsp received after
 // requesting to read
 func (sdm *StreamingDataMover) processDataReadyRsp(
@@ -219,12 +198,9 @@ func (sdm *StreamingDataMover) processDataReadyRsp(
 	tracing.TraceReqFinalize(req, sdm)
 
 	found := false
-	result := &RequestCollection{}
-	for _, rqC := range sdm.processingRequests {
-		if rqC.decreSubIfExists(req.Meta().ID) {
-			result = rqC
-			found = true
-		}
+	result := sdm.currentRequest
+	if result.decreSubIfExists(req.Meta().ID) {
+		found = true
 	}
 
 	if !found {
@@ -246,7 +222,7 @@ func (sdm *StreamingDataMover) processDataReadyRsp(
 
 	if result.isFinished() {
 		tracing.TraceReqComplete(processing, sdm)
-		sdm.removeReqFromProcessingReqs(processing.Meta().ID)
+		sdm.currentRequest = nil
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
@@ -266,22 +242,20 @@ func (sdm *StreamingDataMover) processWriteDoneRsp(
 	tracing.TraceReqFinalize(req, sdm)
 
 	found := false
-	result := &RequestCollection{}
-	for _, rqC := range sdm.processingRequests {
-		if rqC.decreSubIfExists(req.Meta().ID) {
-			result = rqC
-			found = true
-		}
+	result := sdm.currentRequest
+	if result.decreSubIfExists(req.Meta().ID) {
+		found = true
 	}
 
 	if !found {
-		panic("could not find requst collection")
+		panic("Request is not found")
 	}
 
 	processing := result.getTopReq().(*DataMoveRequest)
 	if result.isFinished() {
 		tracing.TraceReqComplete(processing, sdm)
-		sdm.removeReqFromProcessingReqs(processing.Meta().ID)
+		sdm.currentRequest = nil
+		sdm.isProcessing = false
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
@@ -294,10 +268,6 @@ func (sdm *StreamingDataMover) processWriteDoneRsp(
 
 // parseFromCP retrieves Msg from ctrlPort
 func (sdm *StreamingDataMover) parseFromCP() bool {
-	if len(sdm.processingRequests) >= int(sdm.maxReqCount) {
-		return false
-	}
-
 	req := sdm.CtrlPort.RetrieveIncoming()
 	if req == nil {
 		return false
@@ -305,7 +275,7 @@ func (sdm *StreamingDataMover) parseFromCP() bool {
 	tracing.TraceReqReceive(req, sdm)
 
 	rqC := NewRequestCollection(req)
-	sdm.processingRequests = append(sdm.processingRequests, rqC)
+	sdm.currentRequest = rqC
 
 	switch req := req.(type) {
 	case *DataMoveRequest:
@@ -354,7 +324,7 @@ func (sdm *StreamingDataMover) processSrcOut(
 	addr := req.srcAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := uint64(len(sdm.buffer))
+		lengthUnit := req.srcTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -387,17 +357,17 @@ func (sdm *StreamingDataMover) processSrcIn(
 	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
-	lengthLeft := uint64(len(sdm.buffer))
+	lengthLeft := req.byteSize
 	addr := req.srcAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
-		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
-
-		length := lengthLeft
-		if lengthInUnit < length {
-			length = lengthInUnit
+		lengthUnit := req.srcTransferSize
+		length := lengthUnit
+		if length > lengthLeft {
+			length = lengthLeft
+			lengthLeft = 0
+		} else {
+			lengthLeft -= lengthUnit
 		}
 
 		module := sdm.localDataSource.Find(addr)
@@ -415,7 +385,6 @@ func (sdm *StreamingDataMover) processSrcIn(
 			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
-		lengthLeft -= length
 		offset += length
 	}
 }
@@ -429,7 +398,7 @@ func (sdm *StreamingDataMover) processDstOut(
 	addr := req.dstAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := uint64(len(sdm.buffer))
+		lengthUnit := req.dstTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -462,17 +431,17 @@ func (sdm *StreamingDataMover) processDstIn(
 	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
-	lengthLeft := uint64(len(sdm.buffer))
+	lengthLeft := req.byteSize
 	addr := req.dstAddress
 
 	for lengthLeft > 0 {
-		addrUnitFirstByte := addr & (^uint64(0) << sdm.Log2AccessSize)
-		unitOffset := addr - addrUnitFirstByte
-		lengthInUnit := (1 << sdm.Log2AccessSize) - unitOffset
-
-		length := lengthLeft
-		if lengthInUnit < length {
-			length = lengthInUnit
+		lengthUnit := req.dstTransferSize
+		length := lengthUnit
+		if length > lengthLeft {
+			length = lengthLeft
+			lengthLeft = 0
+		} else {
+			lengthLeft -= lengthUnit
 		}
 
 		module := sdm.localDataSource.Find(addr)
@@ -490,7 +459,6 @@ func (sdm *StreamingDataMover) processDstIn(
 			tracing.MsgIDAtReceiver(req, sdm))
 
 		addr += length
-		lengthLeft -= length
 		offset += length
 	}
 }
