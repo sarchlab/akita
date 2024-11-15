@@ -71,8 +71,6 @@ type StreamingDataMover struct {
 	pendingRequests []sim.Msg
 	buffer          []byte
 
-	maxReqCount uint64
-
 	SrcPort  sim.Port
 	DstPort  sim.Port
 	CtrlPort sim.Port
@@ -98,12 +96,6 @@ func (sdm *StreamingDataMover) Tick() bool {
 // provide the data
 func (sdm *StreamingDataMover) SetLocalDataSource(s mem.LowModuleFinder) {
 	sdm.localDataSource = s
-}
-
-// GetMaxRequestCount returns the number of max requests streaming data mover
-// can process
-func (sdm *StreamingDataMover) GetMaxRequestCount() int {
-	return int(sdm.maxReqCount)
 }
 
 // send sends the Msg to the given port
@@ -476,8 +468,6 @@ func NewSDMEngine(
 
 	sdm.Log2AccessSize = 6
 	sdm.localDataSource = localDataSource
-
-	sdm.maxReqCount = 4
 
 	sdm.CtrlPort = sim.NewLimitNumMsgPort(sdm, 40960000, name+".CtrlPort")
 	sdm.SrcPort = sim.NewLimitNumMsgPort(sdm, 64, name+".SrcPort")

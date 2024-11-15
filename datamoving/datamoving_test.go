@@ -43,8 +43,6 @@ var _ = Describe("Datamoving", func() {
 			dstBuffer := make([]byte, 128)
 			reqBuilder := DataMoveRequestBuilder{}
 			// Builder method needs to complete
-			reqBuilder.WithSrcBuffer(srcBuffer)
-			reqBuilder.WithDstBuffer(dstBuffer)
 			req := reqBuilder.Build()
 			rqC := NewRequestCollection(req)
 
@@ -52,8 +50,8 @@ var _ = Describe("Datamoving", func() {
 		}
 		madeProgress := sdmEngine.parseFromCP()
 
-		Expect((sdmEngine.toSrc).To(HaveLen(0)))
-		Expect((madeProgress).To(BeFalse()))
+		Expect((sdmEngine.toSrc)).To(HaveLen(0))
+		Expect((madeProgress)).To(BeFalse())
 	})
 
 	It("should parse dmRequest from CP", func() {
