@@ -61,7 +61,6 @@ func NewRequestCollection(
 type StreamingDataMover struct {
 	*sim.TickingComponent
 
-	Log2AccessSize uint64
 	isProcessing   bool
 	currentRequest *RequestCollection
 
@@ -453,25 +452,4 @@ func (sdm *StreamingDataMover) processDstIn(
 		addr += length
 		offset += length
 	}
-}
-
-// NewSDMEngine creates a new streaming data mover, injecting an engine and a
-// "LowModuleFinder" that helps with locating the module that holds the data
-func NewSDMEngine(
-	name string,
-	engine sim.Engine,
-	localDataSource mem.LowModuleFinder,
-) *StreamingDataMover {
-	sdm := new(StreamingDataMover)
-	sdm.TickingComponent = sim.NewTickingComponent(
-		name, engine, 1*sim.GHz, sdm)
-
-	sdm.Log2AccessSize = 6
-	sdm.localDataSource = localDataSource
-
-	sdm.CtrlPort = sim.NewLimitNumMsgPort(sdm, 40960000, name+".CtrlPort")
-	sdm.SrcPort = sim.NewLimitNumMsgPort(sdm, 64, name+".SrcPort")
-	sdm.DstPort = sim.NewLimitNumMsgPort(sdm, 64, name+".DstPort")
-
-	return sdm
 }

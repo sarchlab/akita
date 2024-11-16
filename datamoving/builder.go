@@ -9,7 +9,6 @@ import (
 type Builder struct {
 	name            string
 	engine          sim.Engine
-	Log2AccessSize  uint64
 	localDataSource mem.LowModuleFinder
 }
 
@@ -27,13 +26,6 @@ func (sdmBuilder *Builder) WithEngine(
 	sdmBuilder.engine = inputEngine
 }
 
-// Sets
-func (sdmBuilder *Builder) WithByteSize(
-	inputByteSize uint64,
-) {
-	sdmBuilder.Log2AccessSize = inputByteSize
-}
-
 // Sets the local data source of StreamingDataMover
 func (sdmBuilder *Builder) WithLocalDataSource(
 	inputLocaDataSource mem.LowModuleFinder,
@@ -46,7 +38,6 @@ func (sdmBuilder *Builder) Build() *StreamingDataMover {
 	sdm := &StreamingDataMover{}
 	sdm.buffer = []byte{}
 	sdm.localDataSource = sdmBuilder.localDataSource
-	sdm.Log2AccessSize = sdmBuilder.Log2AccessSize
 	sdm.TickingComponent = sim.NewTickingComponent(
 		sdmBuilder.name, sdmBuilder.engine, 1*sim.GHz, sdm)
 
