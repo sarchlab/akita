@@ -121,9 +121,6 @@ func (sdm *StreamingDataMover) parseFromSrc() bool {
 	if req == nil {
 		return false
 	}
-	if sdm.isProcessing {
-		return false
-	}
 
 	switch req := req.(type) {
 	case *mem.DataReadyRsp:
@@ -134,7 +131,6 @@ func (sdm *StreamingDataMover) parseFromSrc() bool {
 		log.Panicf("can not handle request of type %s", reflect.TypeOf(req))
 	}
 
-	sdm.isProcessing = true
 	return true
 }
 
@@ -213,7 +209,6 @@ func (sdm *StreamingDataMover) processDataReadyRsp(
 
 	if result.isFinished() {
 		tracing.TraceReqComplete(processing, sdm)
-		sdm.currentRequest = nil
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
@@ -246,6 +241,7 @@ func (sdm *StreamingDataMover) processWriteDoneRsp(
 	if result.isFinished() {
 		tracing.TraceReqComplete(processing, sdm)
 		sdm.currentRequest = nil
+		sdm.buffer = nil
 		sdm.isProcessing = false
 
 		rsp := sim.GeneralRspBuilder{}.
@@ -263,6 +259,9 @@ func (sdm *StreamingDataMover) parseFromCP() bool {
 	if req == nil {
 		return false
 	}
+	if sdm.isProcessing {
+		return false
+	}
 	tracing.TraceReqReceive(req, sdm)
 
 	rqC := NewRequestCollection(req)
@@ -270,6 +269,7 @@ func (sdm *StreamingDataMover) parseFromCP() bool {
 
 	switch req := req.(type) {
 	case *DataMoveRequest:
+		sdm.isProcessing = true
 		return sdm.processMoveRequest(req, rqC)
 	default:
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
@@ -405,7 +405,7 @@ func (sdm *StreamingDataMover) processDstOut(
 			WithAddress(addr).
 			WithByteSize(length).
 			Build()
-		sdm.toSrc = append(sdm.toDst, reqToDstPort)
+		sdm.toDst = append(sdm.toDst, reqToDstPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
 		rqC.appendSubReq(reqToDstPort.Meta().ID)
 

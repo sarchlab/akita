@@ -43,63 +43,55 @@ type DataMoveRequestBuilder struct {
 	byteSize        uint64
 }
 
-func (b DataMoveRequestBuilder) WithSrc(
+func (b *DataMoveRequestBuilder) WithSrc(
 	inputSrc sim.Port,
-) DataMoveRequestBuilder {
+) {
 	b.src = inputSrc
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithDst(
+func (b *DataMoveRequestBuilder) WithDst(
 	inputDst sim.Port,
-) DataMoveRequestBuilder {
+) {
 	b.dst = inputDst
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithSrcAddress(
+func (b *DataMoveRequestBuilder) WithSrcAddress(
 	inputSrcAddress uint64,
-) DataMoveRequestBuilder {
+) {
 	b.srcAddress = inputSrcAddress
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithDstAddress(
+func (b *DataMoveRequestBuilder) WithDstAddress(
 	inputDstAddress uint64,
-) DataMoveRequestBuilder {
+) {
 	b.dstAddress = inputDstAddress
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithSrcTransferSize(
+func (b *DataMoveRequestBuilder) WithSrcTransferSize(
 	inputSrcTransferSize uint64,
-) DataMoveRequestBuilder {
+) {
 	b.srcTransferSize = inputSrcTransferSize
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithDstTransferSize(
+func (b *DataMoveRequestBuilder) WithDstTransferSize(
 	inputDstTransferSize uint64,
-) DataMoveRequestBuilder {
+) {
 	b.dstTransferSize = inputDstTransferSize
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithDirection(
+func (b *DataMoveRequestBuilder) WithDirection(
 	inputDirection string,
-) DataMoveRequestBuilder {
+) {
 	b.direction = inputDirection
-	return b
 }
 
-func (b DataMoveRequestBuilder) WithByteSize(
+func (b *DataMoveRequestBuilder) WithByteSize(
 	inputByteSize uint64,
-) DataMoveRequestBuilder {
+) {
 	b.byteSize = inputByteSize
-	return b
 }
 
-func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
+func (b *DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r := &DataMoveRequest{}
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
