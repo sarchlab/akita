@@ -138,10 +138,6 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.buffer[0:64]).To(Equal(dataReady.Data))
 	})
 
-	It("should respond to DataReady from srcPort", func() {
-		// TODO
-	})
-
 	It("should parse WriteDone from srcPort", func() {
 		dmBuilder := new(DataMoveRequestBuilder)
 		dmBuilder.WithByteSize(200)
@@ -188,10 +184,6 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
-	})
-
-	It("should respond to WriteDone from srcPort", func() {
-		// TODO
 	})
 
 	It("should parse DataReady from dstPort", func() {
@@ -255,10 +247,6 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.buffer[0:64]).To(Equal(dataReady.Data))
 	})
 
-	It("should respond to DataReady from dstPort", func() {
-		// TODO
-	})
-
 	It("should parse WriteDone from dstPort", func() {
 		dmBuilder := new(DataMoveRequestBuilder)
 		dmBuilder.WithByteSize(200)
@@ -306,9 +294,4 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
 	})
-
-	It("should respond to WriteDone from dstPort", func() {
-		// TODO
-	})
-
 })
