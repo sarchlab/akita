@@ -12,28 +12,28 @@ type Builder struct {
 	localDataSource mem.LowModuleFinder
 }
 
-// Sets the name of StreamingDataMover's ticking component
+// WithName sets the name of StreamingDataMover's ticking component
 func (sdmBuilder *Builder) WithName(
 	inputName string,
 ) {
 	sdmBuilder.name = inputName
 }
 
-// Sets StreamingDataMover's engine
+// WithEngine sets StreamingDataMover's engine
 func (sdmBuilder *Builder) WithEngine(
 	inputEngine sim.Engine,
 ) {
 	sdmBuilder.engine = inputEngine
 }
 
-// Sets the local data source of StreamingDataMover
+// WitLocalDataSource sets the local data source of StreamingDataMover
 func (sdmBuilder *Builder) WithLocalDataSource(
 	inputLocaDataSource mem.LowModuleFinder,
 ) {
 	sdmBuilder.localDataSource = inputLocaDataSource
 }
 
-// Creates a new StreamingDataMover
+// Build a new StreamingDataMover
 func (sdmBuilder *Builder) Build() *StreamingDataMover {
 	sdm := &StreamingDataMover{}
 	sdm.buffer = []byte{}
