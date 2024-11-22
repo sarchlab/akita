@@ -85,6 +85,34 @@ func (mr *MockBufferMockRecorder) Clear() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clear", reflect.TypeOf((*MockBuffer)(nil).Clear))
 }
 
+// GetAllElements mocks base method.
+func (m *MockBuffer) GetAllElements() []interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllElements")
+	ret0, _ := ret[0].([]interface{})
+	return ret0
+}
+
+// GetAllElements indicates an expected call of GetAllElements.
+func (mr *MockBufferMockRecorder) GetAllElements() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllElements", reflect.TypeOf((*MockBuffer)(nil).GetAllElements))
+}
+
+// GetElementByIndex mocks base method.
+func (m *MockBuffer) GetElementByIndex(arg0 int) interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetElementByIndex", arg0)
+	ret0, _ := ret[0].(interface{})
+	return ret0
+}
+
+// GetElementByIndex indicates an expected call of GetElementByIndex.
+func (mr *MockBufferMockRecorder) GetElementByIndex(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetElementByIndex", reflect.TypeOf((*MockBuffer)(nil).GetElementByIndex), arg0)
+}
+
 // Hooks mocks base method.
 func (m *MockBuffer) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
@@ -165,6 +193,20 @@ func (m *MockBuffer) Push(arg0 interface{}) {
 func (mr *MockBufferMockRecorder) Push(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Push", reflect.TypeOf((*MockBuffer)(nil).Push), arg0)
+}
+
+// RemoveElementByIndex mocks base method.
+func (m *MockBuffer) RemoveElementByIndex(arg0 int) interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveElementByIndex", arg0)
+	ret0, _ := ret[0].(interface{})
+	return ret0
+}
+
+// RemoveElementByIndex indicates an expected call of RemoveElementByIndex.
+func (mr *MockBufferMockRecorder) RemoveElementByIndex(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveElementByIndex", reflect.TypeOf((*MockBuffer)(nil).RemoveElementByIndex), arg0)
 }
 
 // Size mocks base method.

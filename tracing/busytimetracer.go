@@ -106,6 +106,21 @@ func (t *BusyTimeTracer) EndTask(task Task) {
 	t.collapse(task.EndTime)
 }
 
+// DelayTask does nothing
+func (t *BusyTimeTracer) DelayTask(_ DelayEvent) {
+	// Do nothing
+}
+
+// ProgressTask does nothing
+func (t *BusyTimeTracer) ProgressTask(_ ProgressEvent) {
+	// Do nothing
+}
+
+// DependencyTask does nothing
+func (t *BusyTimeTracer) DependencyTask(_ DependencyEvent) {
+	// Do nothing
+}
+
 func (t *BusyTimeTracer) collapse(now sim.VTimeInSec) {
 	time, found := t.startTimeOfFirstImcompleteTask()
 	if found && time < now {

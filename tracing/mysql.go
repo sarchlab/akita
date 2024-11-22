@@ -151,6 +151,34 @@ func (t *MySQLTraceWriter) Flush() {
 	t.tasksToWriteToDB = nil
 }
 
+
+// WriteDelay writes a DelayEvent into the database.
+func (t *MySQLTraceWriter) WriteDelay(delayEvent DelayEvent) {
+	
+}
+
+// FlushDelay flushes the queued DelayEvents into the database.
+func (t *MySQLTraceWriter) FlushDelay() {
+}
+
+// WriteProgress writes a progressEvent into the database.
+func (t *MySQLTraceWriter) WriteProgress(progressEvent ProgressEvent) {
+	
+}
+
+// FlushProgress flushes the queued progressEvent into the database.
+func (t *MySQLTraceWriter) FlushProgress() {
+}
+
+// WriteDependency writes a DependencyEvent into the database.
+func (t *MySQLTraceWriter) WriteDependency(event DependencyEvent) {
+	
+}
+
+// FlushDependency flushes the queued FlushDependency into the database.
+func (t *MySQLTraceWriter) FlushDependency() {
+}
+
 // MySQLTraceReader can read tasks from a MySQL database.
 type MySQLTraceReader struct {
 	dbConnection
@@ -240,6 +268,23 @@ func (r *MySQLTraceReader) ListTasks(query TaskQuery) []Task {
 	}
 
 	return tasks
+}
+
+// ListDelayEvents read Delay table from mysql file.
+func (r *MySQLTraceReader) ListDelayEvents(query DelayQuery) []DelayEvent{
+	delayEvents := []DelayEvent{}
+	return delayEvents
+}
+
+// ListProgressEvents read Progress table from mysql file.
+func (r *MySQLTraceReader) ListProgressEvents(query ProgressQuery) []ProgressEvent{
+	progressEvents := []ProgressEvent{}
+	return progressEvents
+}
+// ListDependencyEvents read Dependency table from mysql file.
+func (r *MySQLTraceReader) ListDependencyEvents() []DependencyEvent {
+	dependencyEvents := []DependencyEvent{}
+	return dependencyEvents
 }
 
 func (r *MySQLTraceReader) prepareTaskQueryStr(query TaskQuery) string {

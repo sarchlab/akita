@@ -49,6 +49,17 @@ type AddressTranslator struct {
 	totalRequestsUponGL0InvArrival int
 }
 
+func extractIDs(bufferElements []interface{}) []string {
+    ids := []string{}
+    for _, elem := range bufferElements {
+        if req, ok := elem.(*mem.ReadReq); ok {
+            ids = append(ids, req.MsgMeta.ID)
+        }
+    }
+    return ids
+}
+
+
 // SetTranslationProvider sets the remote port that can translate addresses.
 func (t *AddressTranslator) SetTranslationProvider(p sim.Port) {
 	t.translationProvider = p
@@ -87,7 +98,7 @@ func (t *AddressTranslator) runPipeline(now sim.VTimeInSec) bool {
 		madeProgress = t.translate(now) || madeProgress
 	}
 
-	madeProgress = t.doGL0Invalidate(now) || madeProgress
+	madeProgress = t.doGL0Invalidate(now) || madeProgress // skip
 
 	return madeProgress
 }
@@ -126,6 +137,7 @@ func (t *AddressTranslator) translate(now sim.VTimeInSec) bool {
 
 	item := t.topPort.Peek()
 	if item == nil {
+		tracing.TraceDelay(nil, t, t.topPort.Name(), now, "Delay", "idle", "addresstranslator")
 		return false
 	}
 
@@ -148,6 +160,7 @@ func (t *AddressTranslator) translate(now sim.VTimeInSec) bool {
 		Build()
 	err := t.translationPort.Send(transReq)
 	if err != nil {
+		tracing.TraceDelay(req, t, t.translationPort.Name(), now, "Delay", "Port network not available", "addresstranslator")
 		return false
 	}
 
@@ -156,9 +169,13 @@ func (t *AddressTranslator) translate(now sim.VTimeInSec) bool {
 		translationReq: transReq,
 	}
 	t.transactions = append(t.transactions, translation)
-
 	tracing.TraceReqReceive(req, t)
 	tracing.TraceReqInitiate(transReq, t, tracing.MsgIDAtReceiver(req, t))
+
+	transactionProgressID := sim.GetIDGenerator().Generate();
+	tracing.TraceProgress(transactionProgressID, req.Meta().ID, t, now, "addresstranslator", "Port network not available")
+	dependentIDs := extractIDs(t.translationPort.GetAllBufferElements())
+	tracing.TraceDependency(transactionProgressID, t, dependentIDs)
 
 	t.topPort.Retrieve(now)
 
@@ -184,6 +201,7 @@ func (t *AddressTranslator) handleGL0InvalidateReq(
 func (t *AddressTranslator) parseTranslation(now sim.VTimeInSec) bool {
 	rsp := t.translationPort.Peek()
 	if rsp == nil {
+		tracing.TraceDelay(nil, t, t.translationPort.Name(), now, "Delay", "idle", "addresstranslator")
 		return false
 	}
 
@@ -203,6 +221,7 @@ func (t *AddressTranslator) parseTranslation(now sim.VTimeInSec) bool {
 	translatedReq.Meta().SendTime = now
 	err := t.bottomPort.Send(translatedReq)
 	if err != nil {
+		tracing.TraceDelay(reqFromTop, t, t.bottomPort.Name(), now, "Delay", "Port network not available", "addresstranslator")
 		return false
 	}
 
@@ -222,6 +241,11 @@ func (t *AddressTranslator) parseTranslation(now sim.VTimeInSec) bool {
 	tracing.TraceReqInitiate(translatedReq, t,
 		tracing.MsgIDAtReceiver(reqFromTop, t))
 
+	transactionProgressID := sim.GetIDGenerator().Generate();
+	tracing.TraceProgress(transactionProgressID, translatedReq.Meta().ID, t, now, "addresstranslator", "Data not available")
+	dependentIDs := extractIDs(t.bottomPort.GetAllBufferElements())
+	tracing.TraceDependency(transactionProgressID, t, dependentIDs)
+
 	return true
 }
 
@@ -229,6 +253,7 @@ func (t *AddressTranslator) parseTranslation(now sim.VTimeInSec) bool {
 func (t *AddressTranslator) respond(now sim.VTimeInSec) bool {
 	rsp := t.bottomPort.Peek()
 	if rsp == nil {
+		tracing.TraceDelay(nil, t, t.bottomPort.Name(), now, "Delay", "data not available", "addresstranslator")
 		return false
 	}
 
@@ -284,6 +309,7 @@ func (t *AddressTranslator) respond(now sim.VTimeInSec) bool {
 	if reqInBottom {
 		err := t.topPort.Send(rspToTop)
 		if err != nil {
+			tracing.TraceDelay(rsp, t, t.topPort.Name(), now, "Delay", "Port network not available", "addresstranslator")
 			return false
 		}
 
@@ -291,11 +317,17 @@ func (t *AddressTranslator) respond(now sim.VTimeInSec) bool {
 
 		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, t)
 		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, t)
+
+		transactionProgressID := sim.GetIDGenerator().Generate();
+		tracing.TraceProgress(transactionProgressID, reqToBottomCombo.reqFromTop.Meta().ID, t, now, "addresstranslator","Port network not available")
+		dependentIDs := extractIDs(t.topPort.GetAllBufferElements())
+		tracing.TraceDependency(transactionProgressID, t, dependentIDs)
 	}
 
 	if gl0InvalidateRsp {
 		err := t.topPort.Send(rspToTop)
 		if err != nil {
+			tracing.TraceDelay(rsp, t, t.topPort.Name(), now, "Delay", "Port network not available", "addresstranslator")
 			return false
 		}
 		t.currentGL0InvReq = nil
@@ -314,6 +346,8 @@ func (t *AddressTranslator) respond(now sim.VTimeInSec) bool {
 	}
 
 	t.bottomPort.Retrieve(now)
+	// tracing.TraceDelay(rsp, t, t.topPort.Name(), now, "Step", "", "addresstranslator")
+	// Jijie Do we even need a step here?
 	return true
 }
 

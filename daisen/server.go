@@ -90,6 +90,9 @@ func startAPIServer() {
 	http.HandleFunc("/task", serveIndex)
 
 	http.HandleFunc("/api/trace", httpTrace)
+	http.HandleFunc("/api/delay", httpDelayEvents)
+	http.HandleFunc("/api/progress", httpProgressEvents)
+	http.HandleFunc("/api/dependency", httpDependencyEvents)
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 

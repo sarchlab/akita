@@ -1,6 +1,7 @@
 package writethrough
 
 import (
+	"fmt"
 	"github.com/sarchlab/akita/v3/mem/cache"
 	"github.com/sarchlab/akita/v3/mem/mem"
 	"github.com/sarchlab/akita/v3/sim"
@@ -45,6 +46,7 @@ func (p *bottomParser) processDoneRsp(
 	p.cache.bottomPort.Retrieve(now)
 
 	tracing.TraceReqFinalize(trans.writeToBottom, p.cache)
+	fmt.Printf("ProcessDoneRsp 11111\n")
 	tracing.EndTask(trans.id, p.cache)
 
 	return true

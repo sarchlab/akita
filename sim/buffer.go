@@ -14,11 +14,15 @@ type Buffer interface {
 	Hookable
 
 	CanPush() bool
-	Push(e interface{})
-	Pop() interface{}
-	Peek() interface{}
+	Push(e any)
+	Pop() any
+	Peek() any
 	Capacity() int
 	Size() int
+	GetElementByIndex(int) any // Jijie todo
+	RemoveElementByIndex(int) any // Jijie todo
+	GetAllElements() []any // Jijie todo
+
 
 	// Remove all elements in the buffer
 	Clear()
@@ -39,7 +43,7 @@ type bufferImpl struct {
 
 	name     string
 	capacity int
-	elements []interface{}
+	elements []any
 }
 
 // Name returns the name of the buffer.
@@ -51,7 +55,7 @@ func (b *bufferImpl) CanPush() bool {
 	return len(b.elements) < b.capacity
 }
 
-func (b *bufferImpl) Push(e interface{}) {
+func (b *bufferImpl) Push(e any) {
 	if len(b.elements) >= b.capacity {
 		log.Panic("buffer overflow")
 	}
@@ -68,7 +72,7 @@ func (b *bufferImpl) Push(e interface{}) {
 	}
 }
 
-func (b *bufferImpl) Pop() interface{} {
+func (b *bufferImpl) Pop() any {
 	if len(b.elements) == 0 {
 		return nil
 	}
@@ -88,7 +92,7 @@ func (b *bufferImpl) Pop() interface{} {
 	return e
 }
 
-func (b *bufferImpl) Peek() interface{} {
+func (b *bufferImpl) Peek() any {
 	if len(b.elements) == 0 {
 		return nil
 	}
@@ -106,4 +110,27 @@ func (b *bufferImpl) Size() int {
 
 func (b *bufferImpl) Clear() {
 	b.elements = nil
+}
+
+func (b *bufferImpl) GetElementByIndex(index int) any {
+	if index < 0 || index >= len(b.elements) {
+        return nil
+    }
+	return b.elements[index]
+}
+
+func (b *bufferImpl) RemoveElementByIndex(index int) any {
+    if index < 0 || index >= len(b.elements) {
+        return nil
+    }
+    elementToRemove := b.elements[index]
+    b.elements = append(b.elements[:index], b.elements[index+1:]...)
+    return elementToRemove
+}
+
+// Make a copy of the elements slice to prevent modification from outside
+func (b *bufferImpl) GetAllElements() []any {
+    elementsCopy := make([]any, len(b.elements))
+    copy(elementsCopy, b.elements)
+    return elementsCopy
 }

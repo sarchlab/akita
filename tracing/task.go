@@ -22,6 +22,34 @@ type Task struct {
 	ParentTask *Task          `json:"-"`
 }
 
+
+// DelayEvent represents a delay event related to a task.
+type DelayEvent struct {
+	EventID string         `json:"event_id"`
+	TaskID  string         `json:"task_id"`
+	Type    string         `json:"type"`
+	What    string         `json:"what"`
+	Source  string         `json:"source"`
+	Time    sim.VTimeInSec `json:"time"`
+}
+
+// ProgressEvent represents a progress event related to a task.
+type ProgressEvent struct {
+	ProgressID string         `json:"progress_id"`
+	TaskID     string         `json:"task_id"`
+	Source     string         `json:"source"`
+	Time       sim.VTimeInSec `json:"time"`
+	Reason     string         `json:"reason"`
+}
+
+
+
+// DependencyEvent represents a dependency event related to a step task.
+type DependencyEvent struct {
+	ProgressID  string         `json:"progress_id"`
+	DependentID []string   `json:"dependent_id"`
+	DependentIDJSON string
+}
 // TaskFilter is a function that can filter interesting tasks. If this function
 // returns true, the task is considered useful.
 type TaskFilter func(t Task) bool

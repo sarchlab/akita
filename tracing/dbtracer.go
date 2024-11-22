@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	// "fmt"
 	"github.com/sarchlab/akita/v3/sim"
 
 	"github.com/tebeka/atexit"
@@ -14,6 +15,17 @@ type TracerBackend interface {
 	// Flush flushes the tasks to the storage, in case if the backend buffers
 	// the tasks.
 	Flush()
+
+	// WriteDelay writes a delay event to the storage.
+    WriteDelay(delayEvent DelayEvent)
+	FlushDelay()
+
+	// WriteProgress writes progress evenet to the storage
+	WriteProgress(event ProgressEvent)
+	FlushProgress()
+
+	WriteDependency(event DependencyEvent)
+    FlushDependency()
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -79,8 +91,23 @@ func (t *DBTracer) EndTask(task Task) {
 
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
-
+	// fmt.Printf("originalTask task ID: %s, Task Type: %s, Task Description: %s\n",
+    //     task.ID, task.Kind, task.What)
 	t.backend.Write(originalTask)
+}
+
+// DelayTask marks the delay between tasks.
+func (t *DBTracer) DelayTask(delayEvent DelayEvent) {
+    t.backend.WriteDelay(delayEvent)
+}
+
+// DelayTask marks the delay between tasks.
+func (t *DBTracer) ProgressTask(progressEvent ProgressEvent) {
+    t.backend.WriteProgress(progressEvent)
+}
+// DependencyTask marks the dependency of tasks.
+func (t *DBTracer) DependencyTask(event DependencyEvent) {
+    t.backend.WriteDependency(event)
 }
 
 // Terminate terminates the tracer.
@@ -93,6 +120,9 @@ func (t *DBTracer) Terminate() {
 	t.tracingTasks = nil
 
 	t.backend.Flush()
+	t.backend.FlushDelay()
+	t.backend.FlushProgress()
+	t.backend.FlushDependency()
 }
 
 // NewDBTracer creates a new DBTracer.
@@ -106,7 +136,9 @@ func NewDBTracer(
 		tracingTasks: make(map[string]Task),
 	}
 
-	atexit.Register(func() { t.Terminate() })
+	atexit.Register(func() { 
+		t.Terminate()
+	 })
 
 	return t
 }

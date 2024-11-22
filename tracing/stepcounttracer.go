@@ -108,3 +108,18 @@ func (t *StepCountTracer) EndTask(task Task) {
 	delete(t.inflightTasks, task.ID)
 	t.lock.Unlock()
 }
+
+// DelayTask does nothing
+func (t *StepCountTracer) DelayTask(_ DelayEvent) {
+	// Do nothing
+}
+
+// ProgressTask does nothing
+func (t *StepCountTracer) ProgressTask(_ ProgressEvent) {
+	// Do nothing
+}
+
+// DependencyTask does nothing
+func (t *StepCountTracer) DependencyTask(_ DependencyEvent) {
+	// Do nothing
+}

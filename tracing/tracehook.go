@@ -37,5 +37,11 @@ func (h *traceHook) Func(ctx sim.HookCtx) {
 		h.t.StepTask(ctx.Item.(Task))
 	case HookPosTaskEnd:
 		h.t.EndTask(ctx.Item.(Task))
+	case HookPosTaskDelay:
+		h.t.DelayTask(ctx.Item.(DelayEvent))
+	case HookPosTaskProgress:
+		h.t.ProgressTask(ctx.Item.(ProgressEvent))
+	case HookPosTaskDependency:
+		h.t.DependencyTask(ctx.Item.(DependencyEvent))
 	}
 }

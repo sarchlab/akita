@@ -82,6 +82,28 @@ func (b *bufferImpl) Peek() interface{} {
 	return b.elements[0]
 }
 
+func (b *bufferImpl) GetElementByIndex(index int) any {
+	if index < 0 || index >= len(b.elements) {
+        return nil
+    }
+	return b.elements[index]
+}
+
+func (b *bufferImpl) RemoveElementByIndex(index int) any {
+    if index < 0 || index >= len(b.elements) {
+        return nil
+    }
+    elementToRemove := b.elements[index]
+    b.elements = append(b.elements[:index], b.elements[index+1:]...)
+    return elementToRemove
+}
+
+func (b *bufferImpl) GetAllElements() []any {
+    elementsCopy := make([]any, len(b.elements))
+    copy(elementsCopy, b.elements)
+    return elementsCopy
+}
+
 func (b *bufferImpl) Capacity() int {
 	return b.capacity
 }

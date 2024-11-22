@@ -5,4 +5,7 @@ type Tracer interface {
 	StartTask(task Task)
 	StepTask(task Task)
 	EndTask(task Task)
+	DelayTask(delayEvent DelayEvent)
+	ProgressTask(progressEvent ProgressEvent)
+	DependencyTask(event DependencyEvent)
 }

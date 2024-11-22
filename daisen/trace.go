@@ -48,3 +48,60 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 	_, err = w.Write(rsp)
 	dieOnErr(err)
 }
+
+
+func httpDelayEvents(w http.ResponseWriter, r *http.Request) {
+    source := r.FormValue("source")
+    query := tracing.DelayQuery{
+        Source: source,
+    }
+
+    delayEvents := traceReader.ListDelayEvents(query)
+    delayEventsJSON, err := json.Marshal(delayEvents)
+    if err != nil {
+        http.Error(w, "Failed to marshal delay events to JSON", http.StatusInternalServerError)
+        return
+    }
+
+    // Write the JSON response
+    w.Header().Set("Content-Type", "application/json")
+    _, err = w.Write(delayEventsJSON)
+    if err != nil {
+        http.Error(w, "Failed to write response", http.StatusInternalServerError)
+        return
+    }
+}
+
+
+func httpProgressEvents(w http.ResponseWriter, r *http.Request) {
+
+    source := r.FormValue("source")
+    query := tracing.ProgressQuery{
+        Source: source,
+    }
+    progressEvents := traceReader.ListProgressEvents(query);
+    rsp, err := json.Marshal(progressEvents)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    _, err = w.Write(rsp)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+}
+
+func httpDependencyEvents(w http.ResponseWriter, r *http.Request) {
+    dependencyEvents := traceReader.ListDependencyEvents()
+    rsp, err := json.Marshal(dependencyEvents)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    _, err = w.Write(rsp)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+}

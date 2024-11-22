@@ -105,6 +105,7 @@ var _ = Describe("BusyTimeTracer", func() {
 	})
 
 	It("should be able to terminate all the tasks", func() {
+		fmt.Printf("terminate all 22222\n")
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
 		t.StartTask(Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1))

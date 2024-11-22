@@ -71,3 +71,18 @@ func (t *TotalTimeTracer) EndTask(task Task) {
 	delete(t.inflightTasks, task.ID)
 	t.lock.Unlock()
 }
+
+// DelayTask does nothing
+func (t *TotalTimeTracer) DelayTask(_ DelayEvent) {
+	// Do nothing
+}
+
+// ProgressTask does nothing
+func (t *TotalTimeTracer) ProgressTask(_ ProgressEvent) {
+	// Do nothing
+}
+
+// DependencyTask does nothing
+func (t *TotalTimeTracer) DependencyTask(_ DependencyEvent) {
+	// Do nothing
+}

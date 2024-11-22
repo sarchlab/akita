@@ -73,6 +73,34 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Component", reflect.TypeOf((*MockPort)(nil).Component))
 }
 
+// GetAllBufferElements mocks base method.
+func (m *MockPort) GetAllBufferElements() []interface{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllBufferElements")
+	ret0, _ := ret[0].([]interface{})
+	return ret0
+}
+
+// GetAllBufferElements indicates an expected call of GetAllBufferElements.
+func (mr *MockPortMockRecorder) GetAllBufferElements() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllBufferElements", reflect.TypeOf((*MockPort)(nil).GetAllBufferElements))
+}
+
+// GetBuffer mocks base method.
+func (m *MockPort) GetBuffer() sim.Buffer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBuffer")
+	ret0, _ := ret[0].(sim.Buffer)
+	return ret0
+}
+
+// GetBuffer indicates an expected call of GetBuffer.
+func (mr *MockPortMockRecorder) GetBuffer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBuffer", reflect.TypeOf((*MockPort)(nil).GetBuffer))
+}
+
 // Hooks mocks base method.
 func (m *MockPort) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()

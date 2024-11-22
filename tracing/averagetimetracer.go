@@ -84,3 +84,18 @@ func (t *AverageTimeTracer) EndTask(task Task) {
 	t.taskCount++
 	t.lock.Unlock()
 }
+
+// DelayTask does nothing
+func (t *AverageTimeTracer) DelayTask(_ DelayEvent) {
+	// Do nothing
+}
+
+// ProgressTask does nothing
+func (t *AverageTimeTracer) ProgressTask(_ ProgressEvent) {
+	// Do nothing
+}
+
+// DependencyTask does nothing
+func (t *AverageTimeTracer) DependencyTask(_ DependencyEvent) {
+	// Do nothing
+}

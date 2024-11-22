@@ -22,6 +22,9 @@ type Port interface {
 	Send(msg Msg) *SendError
 	Retrieve(now VTimeInSec) Msg
 	Peek() Msg
+	GetBuffer() Buffer //Jijie todo
+	GetAllBufferElements() []any
+
 }
 
 // LimitNumMsgPort is a type of port that can hold at most a certain number
@@ -189,4 +192,20 @@ func NewLimitNumMsgPortWithExternalBuffer(
 	p.buf = buf
 	p.name = name
 	return p
+}
+
+
+// GetBuffer returns the buffer of current port
+func (p *LimitNumMsgPort) GetBuffer() Buffer {
+    p.bufLock.RLock()
+    defer p.bufLock.RUnlock()
+    return p.buf
+}
+
+
+// GetAllBufferElements returns all elements from the port's buffer.
+func (p *LimitNumMsgPort) GetAllBufferElements() []any {
+    p.bufLock.RLock()
+    defer p.bufLock.RUnlock()
+    return p.buf.GetAllElements()
 }

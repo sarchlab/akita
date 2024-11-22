@@ -1,49 +1,51 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Daisen Server",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/daisen",
-            "args": [
-                "-csv=sample_trace_small.csv"
-            ],
-            "env": {
-                "AKITA_DAISEN_DEV_SERVER": "http://localhost:5173"
-            }
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/monitoring",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/monitoring"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}"
-        },
-        {
-            "name": "Test github.com/sarchlab/analysis",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/analysis"
-        },
-        {
-            "name": "Test gitlab.com/akita/v3/sim/bottleneckanalysis",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/sim/bottleneckanalysis"
-        },
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Daisen Server",
+      "type": "go",
+      "request": "launch",
+      "mode": "debug",
+      "program": "${workspaceFolder}/daisen",
+      "args": [
+        "-sqlite",
+        "/Users/gigizhou/Desktop/research/sarchlab/mgpusim/samples/relu/akita_trace_cqvqajgqhqsgsb5j58p0.sqlite3",
+        "-http=:3001"
+      ],
+      "env": {
+        "AKITA_DAISEN_DEV_SERVER": "http://localhost:5173"
+      }
+    },
+    {
+      "name": "Test github.com/sarchlab/akita/monitoring",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/monitoring"
+    },
+    {
+      "name": "Test github.com/sarchlab/akita",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}"
+    },
+    {
+      "name": "Test github.com/sarchlab/analysis",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/analysis"
+    },
+    {
+      "name": "Test gitlab.com/akita/v3/sim/bottleneckanalysis",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/sim/bottleneckanalysis"
+    }
+  ]
 }

@@ -87,6 +87,35 @@ func (t *CSVTraceWriter) Flush() {
 	t.tasks = nil
 }
 
+// WriteDelay writes a DelayEvent to the CSV file.
+func (t *CSVTraceWriter) WriteDelay(delayEvent DelayEvent) {
+	
+}
+
+// FlushDelay flushes the queued DelayEvents to the CSV file.
+func (t *CSVTraceWriter) FlushDelay() {
+}
+
+// WriteProgress writes a progressEvent into the database.
+func (t *CSVTraceWriter) WriteProgress(progressEvent ProgressEvent) {
+	
+}
+
+// FlushProgress flushes the queued progressEvent into the database.
+func (t *CSVTraceWriter) FlushProgress() {
+}
+
+
+// WriteDependency writes a DependencyEvent to the CSV file.
+func (t *CSVTraceWriter) WriteDependency(event DependencyEvent) {
+	
+}
+
+// FlushDependency flushes the queued DependencyEvent to the CSV file.
+func (t *CSVTraceWriter) FlushDependency() {
+}
+
+
 // CSVTraceReader is a task tracer that can read tasks from a CSV file.
 type CSVTraceReader struct {
 	path string
@@ -192,6 +221,25 @@ func (r *CSVTraceReader) ListTasks(query TaskQuery) []Task {
 
 	return tasks
 }
+
+// ListDelayEvents read Delay table from mysql file.
+func (r *CSVTraceReader) ListDelayEvents(query DelayQuery) []DelayEvent{
+	delayEvents := []DelayEvent{}
+	return delayEvents
+}
+
+// ListProgressEvents read Progress table from mysql file.
+func (r *CSVTraceReader) ListProgressEvents(query ProgressQuery) []ProgressEvent{
+	progressEvents := []ProgressEvent{}
+	return progressEvents
+}
+// ListDependencyEvents read Dependency table from mysql file.
+func (r *CSVTraceReader) ListDependencyEvents() []DependencyEvent {
+	dependencyEvents := []DependencyEvent{}
+	return dependencyEvents
+}
+
+
 
 func (r *CSVTraceReader) keepTask(task Task, query TaskQuery) bool {
 	if !r.meetIDRequirement(task, query) {
