@@ -160,7 +160,7 @@ func (m *Monitor) StartServer() {
 
 	fmt.Fprintf(
 		os.Stderr,
-		"Jijie Monitoring simulation with http://localhost:%d\n",
+		"Monitoring simulation with http://localhost:%d\n",
 		listener.Addr().(*net.TCPAddr).Port)
 
 	go func() {

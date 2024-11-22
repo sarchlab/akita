@@ -19,9 +19,9 @@ type Buffer interface {
 	Peek() any
 	Capacity() int
 	Size() int
-	GetElementByIndex(int) any // Jijie todo
-	RemoveElementByIndex(int) any // Jijie todo
-	GetAllElements() []any // Jijie todo
+	GetElementByIndex(int) any
+	RemoveElementByIndex(int) any
+	GetAllElements() []any
 
 
 	// Remove all elements in the buffer

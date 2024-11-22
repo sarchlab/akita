@@ -347,7 +347,7 @@ func (t *AddressTranslator) respond(now sim.VTimeInSec) bool {
 
 	t.bottomPort.Retrieve(now)
 	// tracing.TraceDelay(rsp, t, t.topPort.Name(), now, "Step", "", "addresstranslator")
-	// Jijie Do we even need a step here?
+	// Do we even need a step here?
 	return true
 }
 

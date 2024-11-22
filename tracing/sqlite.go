@@ -196,7 +196,7 @@ func (t *SQLiteTraceWriter) createDatabase(fileName string) {
 		panic(fmt.Errorf("file %s already exists", filename))
 	}
 
-	fmt.Fprintf(os.Stderr, "Trace is Collected in Database Jijie: %s\n", filename)
+	fmt.Fprintf(os.Stderr, "Trace is Collected in Database: %s\n", filename)
 
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {

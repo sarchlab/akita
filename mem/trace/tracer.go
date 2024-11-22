@@ -50,19 +50,16 @@ func (t *tracer) EndTask(task tracing.Task) {
 // DelayTask marks the delay of a memory transaction
 func (t *tracer) DelayTask(delayEvent tracing.DelayEvent) {
 	delayEvent.Time = t.timeTeller.CurrentTime()
-	// Jijie DelayTask
 }
 
 // ProgressTask marks the progress of a memory transaction
 func (t *tracer) ProgressTask(progressEvent tracing.ProgressEvent) {
 	progressEvent.Time = t.timeTeller.CurrentTime()
-	// Jijie ProgressEvent
 }
 
 // DependencyTask marks the dependency of a memory transaction buffee
 func (t *tracer) DependencyTask(event tracing.DependencyEvent) {
 	// event.Time = t.timeTeller.CurrentTime()
-	// Jijie DependencyTask
 }
 // NewTracer creates a new Tracer.
 func NewTracer(logger *log.Logger, timeTeller sim.TimeTeller) tracing.Tracer {

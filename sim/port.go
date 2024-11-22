@@ -22,7 +22,7 @@ type Port interface {
 	Send(msg Msg) *SendError
 	Retrieve(now VTimeInSec) Msg
 	Peek() Msg
-	GetBuffer() Buffer //Jijie todo
+	GetBuffer() Buffer
 	GetAllBufferElements() []any
 
 }
