@@ -76,6 +76,11 @@ func (m *Monitor) RegisterPerfAnalyzer(pa *analysis.PerfAnalyzer) {
 func (m *Monitor) RegisterComponent(c sim.Component) {
 	m.components = append(m.components, c)
 
+	tickingComp, ok := c.(*sim.TickingComponent)
+	if ok {
+		tickingComp.TickNow(0)
+	}
+
 	m.registerBuffers(c)
 }
 

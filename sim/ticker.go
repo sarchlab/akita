@@ -137,10 +137,11 @@ func (c *TickingComponent) NotifyRecv(
 // Handle triggers the tick function of the TickingComponent
 func (c *TickingComponent) Handle(e Event) error {
 	now := e.Time()
-	madeProgress := c.ticker.Tick(now)
-	if madeProgress {
-		c.TickLater(now)
-	}
+	// madeProgress :=
+	c.ticker.Tick(now)
+	// if madeProgress {
+	c.TickLater(now)
+	// }
 	return nil
 }
 
