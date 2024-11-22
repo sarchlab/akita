@@ -9,6 +9,7 @@ import (
 type Builder struct {
 	name            string
 	engine          sim.Engine
+	bufferSize      int
 	localDataSource mem.LowModuleFinder
 }
 
@@ -26,17 +27,24 @@ func (sdmBuilder *Builder) WithEngine(
 	sdmBuilder.engine = inputEngine
 }
 
-// WitLocalDataSource sets the local data source of StreamingDataMover
+// WithLocalDataSource sets the local data source of StreamingDataMover
 func (sdmBuilder *Builder) WithLocalDataSource(
 	inputLocaDataSource mem.LowModuleFinder,
 ) {
 	sdmBuilder.localDataSource = inputLocaDataSource
 }
 
+// WithBufferSize sets the buffer size of StreamingDataMover
+func (sdmBuilder *Builder) WithBufferSize(
+	inputBufferSize int,
+) {
+	sdmBuilder.bufferSize = inputBufferSize
+}
+
 // Build a new StreamingDataMover
 func (sdmBuilder *Builder) Build() *StreamingDataMover {
 	sdm := &StreamingDataMover{}
-	sdm.buffer = []byte{}
+	sdm.buffer = make([]byte, sdmBuilder.bufferSize)
 	sdm.localDataSource = sdmBuilder.localDataSource
 	sdm.TickingComponent = sim.NewTickingComponent(
 		sdmBuilder.name, sdmBuilder.engine, 1*sim.GHz, sdm)

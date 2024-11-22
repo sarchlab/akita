@@ -321,7 +321,7 @@ func (sdm *StreamingDataMover) processSrcOut(
 			length = lengthLeft
 			lengthLeft = 0
 		} else {
-			lengthLeft -= lengthUnit
+			lengthLeft = lengthLeft - lengthUnit
 		}
 
 		module := sdm.localDataSource.Find(addr)
@@ -334,6 +334,7 @@ func (sdm *StreamingDataMover) processSrcOut(
 		sdm.toSrc = append(sdm.toSrc, reqToSrcPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
 		rqC.appendSubReq(reqToSrcPort.Meta().ID)
+		sdm.send(sdm.SrcPort, &sdm.toSrc)
 
 		tracing.TraceReqInitiate(reqToSrcPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -371,6 +372,7 @@ func (sdm *StreamingDataMover) processSrcIn(
 		sdm.toSrc = append(sdm.toSrc, reqToSrcPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
 		rqC.appendSubReq(reqToSrcPort.Meta().ID)
+		sdm.send(sdm.SrcPort, &sdm.toSrc)
 
 		tracing.TraceReqInitiate(reqToSrcPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -408,6 +410,7 @@ func (sdm *StreamingDataMover) processDstOut(
 		sdm.toDst = append(sdm.toDst, reqToDstPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
 		rqC.appendSubReq(reqToDstPort.Meta().ID)
+		sdm.send(sdm.DstPort, &sdm.toDst)
 
 		tracing.TraceReqInitiate(reqToDstPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -445,6 +448,7 @@ func (sdm *StreamingDataMover) processDstIn(
 		sdm.toDst = append(sdm.toDst, reqToDstPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
 		rqC.appendSubReq(reqToDstPort.Meta().ID)
+		sdm.send(sdm.DstPort, &sdm.toDst)
 
 		tracing.TraceReqInitiate(reqToDstPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))

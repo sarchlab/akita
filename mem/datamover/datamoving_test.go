@@ -31,6 +31,7 @@ var _ = Describe("Datamoving", func() {
 		sdmBuilder.WithName("SDMTest")
 		sdmBuilder.WithEngine(engine)
 		sdmBuilder.WithLocalDataSource(localModuleFinder)
+		sdmBuilder.WithBufferSize(2048)
 		sdmEngine = sdmBuilder.Build()
 		sdmEngine.SrcPort = SrcPort
 		sdmEngine.DstPort = DstPort
@@ -45,36 +46,6 @@ var _ = Describe("Datamoving", func() {
 		CtrlPort.EXPECT().RetrieveIncoming().Return(nil)
 		madeProgress := sdmEngine.parseFromCP()
 		Expect(madeProgress).To(BeFalse())
-	})
-
-	It("should parse dmRequest from CP", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("s2d")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(256)
-		dmBuilder.WithSrcAddress(20)
-		dmBuilder.WithDstAddress(40)
-		dmBuilder.WithDst(CtrlPort)
-		dmRequest := dmBuilder.Build()
-		CtrlPort.EXPECT().RetrieveIncoming().Return(dmRequest)
-
-		madeProgress := sdmEngine.parseFromCP()
-
-		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.toSrc).To(HaveLen(4))
-		Expect(sdmEngine.toSrc[0].(*mem.ReadReq).Address).
-			To(Equal(uint64(20)))
-		Expect(sdmEngine.toSrc[1].(*mem.ReadReq).Address).
-			To(Equal(uint64(84)))
-		Expect(sdmEngine.toSrc[2].(*mem.ReadReq).Address).
-			To(Equal(uint64(148)))
-		Expect(sdmEngine.toSrc[3].(*mem.ReadReq).Address).
-			To(Equal(uint64(212)))
-		Expect(sdmEngine.toDst).To(HaveLen(1))
-		Expect(sdmEngine.toDst[0].(*mem.WriteReq).Address).
-			To(Equal(uint64(40)))
 	})
 
 	It("should parse DataReady from srcPort", func() {
@@ -138,54 +109,6 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.buffer[0:64]).To(Equal(dataReady.Data))
 	})
 
-	It("should parse WriteDone from srcPort", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("d2s")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(64)
-		dmBuilder.WithSrcAddress(40)
-		dmBuilder.WithDstAddress(20)
-		dmBuilder.WithDst(CtrlPort)
-		dmRequest := dmBuilder.Build()
-		rqC := NewRequestCollection(dmRequest)
-		sdmEngine.currentRequest = rqC
-
-		writeReq1 := mem.WriteReqBuilder{}.
-			WithSrc(SrcPort).
-			WithAddress(40).
-			Build()
-		writeReq2 := mem.WriteReqBuilder{}.
-			WithSrc(SrcPort).
-			WithAddress(104).
-			Build()
-		writeReq3 := mem.WriteReqBuilder{}.
-			WithSrc(SrcPort).
-			WithAddress(168).
-			Build()
-		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq1)
-		rqC.appendSubReq(writeReq1.Meta().ID)
-		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq2)
-		rqC.appendSubReq(writeReq2.Meta().ID)
-		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq3)
-		rqC.appendSubReq(writeReq3.Meta().ID)
-
-		writeDone := mem.WriteDoneRspBuilder{}.
-			WithDst(SrcPort).
-			WithRspTo(writeReq1.Meta().ID).
-			Build()
-		SrcPort.EXPECT().RetrieveIncoming().Return(writeDone)
-
-		madeProgress := SrcPort.RetrieveIncoming()
-
-		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
-		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
-		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
-		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
-	})
-
 	It("should parse DataReady from dstPort", func() {
 		dmBuilder := new(DataMoveRequestBuilder)
 		dmBuilder.WithByteSize(200)
@@ -247,6 +170,54 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.buffer[0:64]).To(Equal(dataReady.Data))
 	})
 
+	It("should parse WriteDone from srcPort", func() {
+		dmBuilder := new(DataMoveRequestBuilder)
+		dmBuilder.WithByteSize(200)
+		dmBuilder.WithDirection("d2s")
+		dmBuilder.WithSrcTransferSize(64)
+		dmBuilder.WithDstTransferSize(64)
+		dmBuilder.WithSrcAddress(40)
+		dmBuilder.WithDstAddress(20)
+		dmBuilder.WithDst(CtrlPort)
+		dmRequest := dmBuilder.Build()
+		rqC := NewRequestCollection(dmRequest)
+		sdmEngine.currentRequest = rqC
+
+		writeReq1 := mem.WriteReqBuilder{}.
+			WithSrc(SrcPort).
+			WithAddress(40).
+			Build()
+		writeReq2 := mem.WriteReqBuilder{}.
+			WithSrc(SrcPort).
+			WithAddress(104).
+			Build()
+		writeReq3 := mem.WriteReqBuilder{}.
+			WithSrc(SrcPort).
+			WithAddress(168).
+			Build()
+		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq1)
+		rqC.appendSubReq(writeReq1.Meta().ID)
+		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq2)
+		rqC.appendSubReq(writeReq2.Meta().ID)
+		sdmEngine.pendingRequests = append(sdmEngine.pendingRequests, writeReq3)
+		rqC.appendSubReq(writeReq3.Meta().ID)
+
+		writeDone := mem.WriteDoneRspBuilder{}.
+			WithDst(SrcPort).
+			WithRspTo(writeReq1.Meta().ID).
+			Build()
+		SrcPort.EXPECT().RetrieveIncoming().Return(writeDone)
+
+		madeProgress := sdmEngine.parseFromSrc()
+
+		Expect(madeProgress).To(BeTrue())
+		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
+		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
+		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
+		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
+	})
+
 	It("should parse WriteDone from dstPort", func() {
 		dmBuilder := new(DataMoveRequestBuilder)
 		dmBuilder.WithByteSize(200)
@@ -285,7 +256,7 @@ var _ = Describe("Datamoving", func() {
 			Build()
 		DstPort.EXPECT().RetrieveIncoming().Return(writeDone)
 
-		madeProgress := DstPort.RetrieveIncoming()
+		madeProgress := sdmEngine.parseFromDst()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
@@ -293,5 +264,36 @@ var _ = Describe("Datamoving", func() {
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
+	})
+
+	It("should parse dmRequest from CP", func() {
+		dmBuilder := new(DataMoveRequestBuilder)
+		dmBuilder.WithByteSize(200)
+		dmBuilder.WithDirection("s2d")
+		dmBuilder.WithSrcTransferSize(64)
+		dmBuilder.WithDstTransferSize(256)
+		dmBuilder.WithSrcAddress(20)
+		dmBuilder.WithDstAddress(40)
+		dmBuilder.WithDst(CtrlPort)
+		dmRequest := dmBuilder.Build()
+		CtrlPort.EXPECT().RetrieveIncoming().Return(dmRequest)
+		SrcPort.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
+		DstPort.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()
+
+		madeProgress := sdmEngine.parseFromCP()
+
+		Expect(madeProgress).To(BeTrue())
+		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.pendingRequests).To(HaveLen(5))
+		Expect(sdmEngine.pendingRequests[0].(*mem.ReadReq).Address).
+			To(Equal(uint64(20)))
+		Expect(sdmEngine.pendingRequests[1].(*mem.ReadReq).Address).
+			To(Equal(uint64(84)))
+		Expect(sdmEngine.pendingRequests[2].(*mem.ReadReq).Address).
+			To(Equal(uint64(148)))
+		Expect(sdmEngine.pendingRequests[3].(*mem.ReadReq).Address).
+			To(Equal(uint64(212)))
+		Expect(sdmEngine.pendingRequests[4].(*mem.WriteReq).Address).
+			To(Equal(uint64(40)))
 	})
 })

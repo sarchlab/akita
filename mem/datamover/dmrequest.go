@@ -98,6 +98,8 @@ func (b *DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.Dst = b.dst
 	r.srcAddress = b.srcAddress
 	r.dstAddress = b.dstAddress
+	r.srcTransferSize = b.srcTransferSize
+	r.dstTransferSize = b.dstTransferSize
 	r.direction = b.direction
 	r.byteSize = b.byteSize
 	return r
