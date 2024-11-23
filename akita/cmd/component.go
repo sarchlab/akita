@@ -77,7 +77,6 @@ func createComponentFolder(name string) error {
     parentPath := "./akita"
 	folderPath := filepath.Join(parentPath, name)
 	return os.MkdirAll(folderPath, 0755)
-	return os.Mkdir(name, 0755)
 }
 
 // Create basic files for the new component
