@@ -23,11 +23,14 @@ type DataRecorder interface {
 	// CreateTable creates a new table with given filename
 	CreateTable(table string, sampleEntry any)
 
+	//CreateIndex accelerates data r/w performance on certain fieldname
+	CreateIndex(table string, fieldName string)
+
 	// DataInsert writes a same-type task into table that already exists
 	InsertData(table string, entry any)
 
-	// ListTable returns a slice containing names of all tables
-	ListTables() []string
+	// // ListTable returns a slice containing names of all tables
+	// ListTables() []string
 
 	// Flush flushes all the baffered task into database
 	Flush()
@@ -36,7 +39,7 @@ type DataRecorder interface {
 // SQLiteWriter is the writer that writes data into SQLite database
 type SQLiteWriter struct {
 	*sql.DB
-	statement *sql.Stmt
+	statement map[string]*sql.Stmt
 
 	dbName     string
 	tables     map[string][]any
@@ -51,6 +54,7 @@ func NewSQLiteWriter(path string) *SQLiteWriter {
 		dbName:    path,
 		batchSize: 100000,
 		tables:    make(map[string][]any),
+		statement: make(map[string]*sql.Stmt),
 	}
 
 	atexit.Register(func() { w.Flush() })
@@ -114,6 +118,9 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 
 	t.tableCount++
 	n := structs.Names(sampleEntry)
+	for i := range n {
+        n[i] = fmt.Sprintf(`"%s"`, n[i]) 
+    }
 	fields := strings.Join(n, ", \n\t")
 	tableName := table
 	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
@@ -124,12 +131,23 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	storedTasks := []any{sampleEntry}
 	t.tables[tableName] = storedTasks
 	t.entryCount++
-	if t.entryCount >= t.batchSize {
-		t.Flush()
-	}
+	t.Flush()
+}
+
+// CreateIndex creates an index on the specified field in the given table
+func (t *SQLiteWriter) CreateIndex(table string, fieldName string) {
+    indexName := fmt.Sprintf("idx_%s_%s", table, fieldName)
+    createIndexSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s(%s);", 
+        indexName, table, fieldName)
+    
+    t.mustExecute(createIndexSQL)
+    fmt.Printf("Index %s created successfully on table %s\n", indexName, table)
 }
 
 func (t *SQLiteWriter) InsertData(table string, entry any) {
+	if _, exists := t.tables[table]; !exists {
+        panic(fmt.Errorf("table %s does not exist, please create it first", table))
+    }
 	err := t.checkStructFields(entry)
 	if err != nil {
 		panic(err)
@@ -144,7 +162,7 @@ func (t *SQLiteWriter) InsertData(table string, entry any) {
 	if reflect.TypeOf(stdTask) != reflect.TypeOf(entry) {
 		panic(fmt.Errorf("task %s can't be written into table %s", entry, table))
 	}
-	fmt.Println("Data is successfully inserted")
+	// fmt.Println("Data is successfully inserted")
 
 	storedTasks = append(storedTasks, entry)
 	t.tables[table] = storedTasks
@@ -167,14 +185,14 @@ func (t *SQLiteWriter) Flush() {
 		t.prepareStatement(tableName, sampleEntry)
 		for _, task := range storedEntries {
 			v := structs.Values(task)
-			_, err := t.statement.Exec(v...)
+			_, err := t.statement[tableName].Exec(v...)
 			if err != nil {
 				panic(err)
 			}
 		}
 	}
 
-	t.tables = make(map[string][]any)
+	t.tables[tableName] = []any{storedEntries[0]}
 	t.entryCount = 0
 }
 
@@ -200,7 +218,7 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 		panic(err)
 	}
 
-	t.statement = stmt
+	t.statement[table] = stmt
 }
 
 // SQLiteReader is a reader that reads trace data from a SQLite database.
@@ -258,3 +276,4 @@ func (r *SQLiteReader) ListTables() []string {
 
 	return tableNames
 }
+

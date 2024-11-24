@@ -5,5 +5,4 @@ type Tracer interface {
 	StartTask(task Task)
 	StepTask(task Task)
 	EndTask(task Task)
-	RecordMilestone(milestone Milestone)
 }

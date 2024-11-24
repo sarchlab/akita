@@ -1,20 +1,20 @@
 package tracing
 
 import (
+	"fmt"
 	"github.com/sarchlab/akita/v4/sim"
-
+	"github.com/sarchlab/akita/v4/datarecording" 
 	"github.com/tebeka/atexit"
 )
 
-// TracerBackend is a backend that can store tasks.
-type TracerBackend interface {
-	// Write writes a task to the storage.
-	Write(task Task)
-
-	// Flush flushes the tasks to the storage, in case if the backend buffers
-	// the tasks.
-	Flush()
-	WriteMilestone(milestone Milestone)
+type TaskTable struct {
+    ID       string `json:"id"`
+    ParentID string `json:"parent_id"`
+    Kind     string `json:"kind"`
+    What     string `json:"what"`
+    Where    string `json:"where"`
+	StartTime  float64 `json:"start_time"`
+    EndTime    float64 `json:"end_time"`
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -22,12 +22,11 @@ type TracerBackend interface {
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
 type DBTracer struct {
 	timeTeller sim.TimeTeller
-	backend    TracerBackend
-
+	backend   datarecording.DataRecorder
+	
 	startTime, endTime sim.VTimeInSec
 
 	tracingTasks map[string]Task
-	milestones   []Milestone
 }
 
 // StartTask marks the start of a task.
@@ -82,14 +81,33 @@ func (t *DBTracer) EndTask(task Task) {
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
 
-	t.backend.Write(originalTask)
+    taskTable := TaskTable{
+        ID:        originalTask.ID,
+        ParentID:  originalTask.ParentID,
+        Kind:      originalTask.Kind,
+        What:      originalTask.What,
+        Where:     originalTask.Where,
+        StartTime: float64(originalTask.StartTime),
+        EndTime:   float64(originalTask.EndTime),
+    }
+
+	t.backend.InsertData("trace", taskTable)
 }
 
 // Terminate terminates the tracer.
 func (t *DBTracer) Terminate() {
 	for _, task := range t.tracingTasks {
 		task.EndTime = t.timeTeller.CurrentTime()
-		t.backend.Write(task)
+		taskTable := TaskTable{
+            ID:        task.ID,
+            ParentID:  task.ParentID,
+            Kind:      task.Kind,
+            What:      task.What,
+            Where:     task.Where,
+            StartTime: float64(task.StartTime),
+            EndTime:   float64(task.EndTime),
+        }
+		t.backend.InsertData("trace", taskTable)
 	}
 
 	t.tracingTasks = nil
@@ -100,17 +118,24 @@ func (t *DBTracer) Terminate() {
 // NewDBTracer creates a new DBTracer.
 func NewDBTracer(
 	timeTeller sim.TimeTeller,
-	backend TracerBackend,
+	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
+    fmt.Println("Creating 'trace' table")
+    dataRecorder.CreateTable("trace", TaskTable{})
+	dataRecorder.Flush()
+    fmt.Println("Creating 'trace_milestones' table")
+    dataRecorder.CreateTable("trace_milestones", Milestone{})
+	dataRecorder.Flush()
 	t := &DBTracer{
 		timeTeller:   timeTeller,
-		backend:      backend,
+		backend: dataRecorder,
 		tracingTasks: make(map[string]Task),
-		milestones:   make([]Milestone, 0),
 	}
 
-	atexit.Register(func() { t.Terminate() })
-
+    atexit.Register(func() { 
+        t.Terminate()
+        t.backend.Flush()  
+    })
 	return t
 }
 
@@ -121,5 +146,5 @@ func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 }
 
 func (t *DBTracer) RecordMilestone(milestone Milestone) {
-    t.backend.WriteMilestone(milestone)
+    t.backend.InsertData("trace_milestones", milestone)
 }

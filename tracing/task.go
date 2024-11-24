@@ -17,7 +17,7 @@ type Task struct {
 	Where      string         `json:"where"`
 	StartTime  sim.VTimeInSec `json:"start_time"`
 	EndTime    sim.VTimeInSec `json:"end_time"`
-	Steps      []TaskStep     `json:"steps"`
+	Steps      []TaskStep     `json:"steps"` 
 	Detail     interface{}    `json:"-"`
 	ParentTask *Task          `json:"-"`
 }

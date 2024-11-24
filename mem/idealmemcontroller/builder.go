@@ -1,13 +1,8 @@
 package idealmemcontroller
 
 import (
-<<<<<<< HEAD
-	"github.com/sarchlab/akita/v3/mem/mem"
-	"github.com/sarchlab/akita/v3/sim"
-=======
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
->>>>>>> origin/v4
 )
 
 type Builder struct {
@@ -110,11 +105,8 @@ func (b Builder) Build(
 	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
-<<<<<<< HEAD
-=======
 	middleware := &middleware{Comp: c}
 	c.AddMiddleware(middleware)
 
->>>>>>> origin/v4
 	return c
 }

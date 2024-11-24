@@ -9,21 +9,18 @@ import (
 	"strconv"
 )
 
+var globalTracer *DBTracer
+
+func SetTracer(t *DBTracer) {
+    fmt.Printf("Setting global tracer: %v\n", t)
+    globalTracer = t
+}
+
 // NamedHookable represent something both have a name and can be hooked
 type NamedHookable interface {
 	sim.Named
 	sim.Hookable
 	InvokeHook(sim.HookCtx)
-	CurrentTime() sim.VTimeInSec
-}
-
-type Milestone struct {
-    ID                string
-    TaskID            string
-    BlockingCategory  string
-    BlockingReason    string
-    BlockingLocation  string
-	Time              float64
 }
 
 // A list of hook poses for the hooks to apply to
@@ -39,6 +36,12 @@ var (
     milestoneIDCounter uint64
 )
 
+func CurrentTime(domain NamedHookable) float64 {
+    if timeTeller, ok := domain.(sim.TimeTeller); ok {
+        return float64(timeTeller.CurrentTime())
+    }
+    return 0
+}
 
 func AddMilestone(
     taskID           string,
@@ -47,28 +50,21 @@ func AddMilestone(
     blockingLocation string,
     domain           NamedHookable,
 ) {
-    currentTime := float64(domain.CurrentTime())
-    
     milestone := Milestone{
         ID:               strconv.FormatUint(generateMilestoneID(), 10),
         TaskID:           taskID,
         BlockingCategory: blockingCategory,
         BlockingReason:   blockingReason,
         BlockingLocation: blockingLocation,
-		Time:             currentTime,
+		Time:             CurrentTime(domain),
     }
 	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Time=%f\n",
 	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Time)
-    milestonesMutex.Lock()
-	milestones = append(milestones, milestone)
-	milestonesMutex.Unlock()
-
-	ctx := sim.HookCtx{
-        Domain: domain,
-        Item:   milestone,
-        Pos:    HookPosMilestone,
+    if globalTracer != nil {
+        globalTracer.RecordMilestone(milestone)
+    } else {
+        fmt.Printf("Warning: globalTracer is nil when recording milestone\n")
     }
-    domain.InvokeHook(ctx)
 }
 
 var HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}

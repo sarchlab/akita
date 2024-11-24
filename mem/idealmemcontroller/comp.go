@@ -46,13 +46,10 @@ type Comp struct {
 	addressConverter mem.AddressConverter
 
 	width int
-<<<<<<< HEAD
-=======
 }
 
 func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
->>>>>>> origin/v4
 }
 
 // Handle defines how the Comp handles event
@@ -71,21 +68,6 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
-<<<<<<< HEAD
-func (c *Comp) Tick(now sim.VTimeInSec) bool {
-	madeProgress := false
-
-	for i := 0; i < c.width; i++ {
-		madeProgress = c.updateMemCtrl(now) || madeProgress
-	}
-
-	return madeProgress
-}
-
-// updateMemCtrl updates ideal memory controller state.
-func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
-	msg := c.topPort.Retrieve(now)
-=======
 type middleware struct {
 	*Comp
 }
@@ -93,16 +75,11 @@ type middleware struct {
 // Tick updates ideal memory controller state.
 func (m *middleware) Tick() bool {
 	msg := m.topPort.RetrieveIncoming()
->>>>>>> origin/v4
 	if msg == nil {
 		return false
 	}
 
-<<<<<<< HEAD
-	tracing.TraceReqReceive(msg, c)
-=======
 	tracing.TraceReqReceive(msg, m.Comp)
->>>>>>> origin/v4
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
@@ -161,11 +138,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-<<<<<<< HEAD
-	c.TickLater(now)
-=======
 	c.TickLater()
->>>>>>> origin/v4
 
 	return nil
 }
@@ -215,18 +188,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
-<<<<<<< HEAD
-	c.TickLater(now)
-
-	return nil
-}
-=======
 	c.TickLater()
 
 	return nil
 }
-
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
-}
->>>>>>> origin/v4
