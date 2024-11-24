@@ -19,7 +19,7 @@ class Dashboard {
   _numCol: number;
   _currPage: number;
   _currFilter: string;
-  _filterTimer: NodeJS.Timeout;
+  _filterTimer: string;
   _primaryAxis: string;
   _secondaryAxis: string;
   _startTime: number;

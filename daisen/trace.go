@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-    "github.com/sarchlab/akita/v4/datarecording"
+    "github.com/sarchlab/akita/v4/tracing"
 )
 
 func httpTrace(w http.ResponseWriter, r *http.Request) {

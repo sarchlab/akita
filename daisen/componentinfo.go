@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-
-    "github.com/sarchlab/akita/v4/datarecording"
+	"github.com/sarchlab/akita/v4/tracing"
+    // "github.com/sarchlab/akita/v4/datarecording"
 )
 
 type TimeValue struct {
@@ -96,7 +96,7 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func taskIsReqIn(t datarecording.Task) bool {
+func taskIsReqIn(t tracing.Task) bool {
 	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
