@@ -119,8 +119,8 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	t.tableCount++
 	n := structs.Names(sampleEntry)
 	for i := range n {
-        n[i] = fmt.Sprintf(`"%s"`, n[i]) 
-    }
+		n[i] = fmt.Sprintf(`"%s"`, n[i])
+	}
 	fields := strings.Join(n, ", \n\t")
 	tableName := table
 	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
@@ -136,18 +136,18 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 
 // CreateIndex creates an index on the specified field in the given table
 func (t *SQLiteWriter) CreateIndex(table string, fieldName string) {
-    indexName := fmt.Sprintf("idx_%s_%s", table, fieldName)
-    createIndexSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s(%s);", 
-        indexName, table, fieldName)
-    
-    t.mustExecute(createIndexSQL)
-    fmt.Printf("Index %s created successfully on table %s\n", indexName, table)
+	indexName := fmt.Sprintf("idx_%s_%s", table, fieldName)
+	createIndexSQL := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s(%s);",
+		indexName, table, fieldName)
+
+	t.mustExecute(createIndexSQL)
+	fmt.Printf("Index %s created successfully on table %s\n", indexName, table)
 }
 
 func (t *SQLiteWriter) InsertData(table string, entry any) {
 	if _, exists := t.tables[table]; !exists {
-        panic(fmt.Errorf("table %s does not exist, please create it first", table))
-    }
+		panic(fmt.Errorf("table %s does not exist, please create it first", table))
+	}
 	err := t.checkStructFields(entry)
 	if err != nil {
 		panic(err)
@@ -190,9 +190,10 @@ func (t *SQLiteWriter) Flush() {
 				panic(err)
 			}
 		}
+
+		t.tables[tableName] = []any{storedEntries[0]}
 	}
 
-	t.tables[tableName] = []any{storedEntries[0]}
 	t.entryCount = 0
 }
 
@@ -276,4 +277,3 @@ func (r *SQLiteReader) ListTables() []string {
 
 	return tableNames
 }
-

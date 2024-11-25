@@ -65,6 +65,11 @@ func (t *AverageTimeTracer) StepTask(_ Task) {
 	// Do nothing
 }
 
+// AddMilestone does nothing
+func (t *AverageTimeTracer) AddMilestone(_ Milestone) {
+	// Do nothing
+}
+
 // EndTask records the end of the task
 func (t *AverageTimeTracer) EndTask(task Task) {
 	task.EndTime = t.timeTeller.CurrentTime()

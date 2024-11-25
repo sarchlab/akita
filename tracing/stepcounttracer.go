@@ -96,6 +96,11 @@ func taskContainsStep(task Task, step TaskStep) bool {
 	return false
 }
 
+// StepCountTracer does nothing
+func (t *StepCountTracer) AddMilestone(_ Milestone) {
+	// Do nothing
+}
+
 // EndTask records the end of the task
 func (t *StepCountTracer) EndTask(task Task) {
 	t.lock.Lock()

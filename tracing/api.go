@@ -3,18 +3,12 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-	"sync/atomic"
-	"sync"
-	"github.com/sarchlab/akita/v4/sim"
 	"strconv"
+	"sync"
+	"sync/atomic"
+
+	"github.com/sarchlab/akita/v4/sim"
 )
-
-var globalTracer *DBTracer
-
-func SetTracer(t *DBTracer) {
-    fmt.Printf("Setting global tracer: %v\n", t)
-    globalTracer = t
-}
 
 // NamedHookable represent something both have a name and can be hooked
 type NamedHookable interface {
@@ -27,53 +21,29 @@ type NamedHookable interface {
 var (
 	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
 	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
+	HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
 
 var (
-    milestones       []Milestone
-    milestonesMutex  sync.Mutex
-    milestoneIDCounter uint64
+	milestones         []Milestone
+	milestonesMutex    sync.Mutex
+	milestoneIDCounter uint64
 )
 
 func CurrentTime(domain NamedHookable) float64 {
-    if timeTeller, ok := domain.(sim.TimeTeller); ok {
-        return float64(timeTeller.CurrentTime())
-    }
-    return 0
+	if timeTeller, ok := domain.(sim.TimeTeller); ok {
+		return float64(timeTeller.CurrentTime())
+	}
+	return 0
 }
 
-func AddMilestone(
-    taskID           string,
-    blockingCategory string,
-    blockingReason   string,
-    blockingLocation string,
-    domain           NamedHookable,
-) {
-    milestone := Milestone{
-        ID:               strconv.FormatUint(generateMilestoneID(), 10),
-        TaskID:           taskID,
-        BlockingCategory: blockingCategory,
-        BlockingReason:   blockingReason,
-        BlockingLocation: blockingLocation,
-		Time:             CurrentTime(domain),
-    }
-	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Time=%f\n",
-	milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Time)
-    if globalTracer != nil {
-        globalTracer.RecordMilestone(milestone)
-    } else {
-        fmt.Printf("Warning: globalTracer is nil when recording milestone\n")
-    }
-}
-
-var HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 func generateMilestoneID() uint64 {
-    return atomic.AddUint64(&milestoneIDCounter, 1)
+	return atomic.AddUint64(&milestoneIDCounter, 1)
 }
 
 func GetAllMilestones() []Milestone {
-    return milestones
+	return milestones
 }
 
 // StartTask notifies the hooks that hook to the domain about the start of a
@@ -182,6 +152,34 @@ func AddTaskStep(
 		Domain: domain,
 		Item:   task,
 		Pos:    HookPosTaskStep,
+	}
+	domain.InvokeHook(ctx)
+}
+
+// AddMilestone records the time that that a blocking reason is resolved.
+func AddMilestone(
+	taskID string,
+	blockingCategory string,
+	blockingReason string,
+	blockingLocation string,
+	domain NamedHookable,
+) {
+	milestone := Milestone{
+		ID:               strconv.FormatUint(generateMilestoneID(), 10),
+		TaskID:           taskID,
+		BlockingCategory: blockingCategory,
+		BlockingReason:   blockingReason,
+		BlockingLocation: blockingLocation,
+		Time:             CurrentTime(domain),
+	}
+
+	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Time=%f\n",
+		milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Time)
+
+	ctx := sim.HookCtx{
+		Domain: domain,
+		Item:   milestone,
+		Pos:    HookPosMilestone,
 	}
 	domain.InvokeHook(ctx)
 }
