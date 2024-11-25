@@ -12,6 +12,7 @@ type Builder struct {
 	pageSize       uint64
 	lowModule      sim.Port
 	numMSHREntry   int
+	state          string
 }
 
 // MakeBuilder returns a Builder
@@ -23,6 +24,7 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
+		state:          "enable",
 	}
 }
 
@@ -95,7 +97,10 @@ func (b Builder) Build(name string) *Comp {
 
 	tlb.reset()
 
-	middleware := &middleware{Comp: tlb}
+	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
+	tlb.AddMiddleware(ctrlMiddleware)
+
+	middleware := &tlbMiddleware{Comp: tlb}
 	tlb.AddMiddleware(middleware)
 
 	return tlb

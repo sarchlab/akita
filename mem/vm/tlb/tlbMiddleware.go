@@ -25,6 +25,7 @@ type Comp struct {
 	numWays        int
 	pageSize       uint64
 	numReqPerCycle int
+	state          string
 
 	Sets []internal.Set
 
@@ -47,12 +48,12 @@ func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
 
-type middleware struct {
+type tlbMiddleware struct {
 	*Comp
 }
 
 // Tick defines how TLB update states at each cycle
-func (m *middleware) Tick() bool {
+func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.performCtrlReq() || madeProgress
@@ -74,7 +75,7 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) respondMSHREntry() bool {
+func (m *tlbMiddleware) respondMSHREntry() bool {
 	if m.respondingMSHREntry == nil {
 		return false
 	}
@@ -102,7 +103,7 @@ func (m *middleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *middleware) lookup() bool {
+func (m *tlbMiddleware) lookup() bool {
 	msg := m.topPort.PeekIncoming()
 	if msg == nil {
 		return false
@@ -125,7 +126,7 @@ func (m *middleware) lookup() bool {
 	return m.handleTranslationMiss(req)
 }
 
-func (m *middleware) handleTranslationHit(
+func (m *tlbMiddleware) handleTranslationHit(
 	req *vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
@@ -145,7 +146,7 @@ func (m *middleware) handleTranslationHit(
 	return true
 }
 
-func (m *middleware) handleTranslationMiss(
+func (m *tlbMiddleware) handleTranslationMiss(
 	req *vm.TranslationReq,
 ) bool {
 	if m.mshr.IsFull() {
@@ -163,11 +164,11 @@ func (m *middleware) handleTranslationMiss(
 	return false
 }
 
-func (m *middleware) vAddrToSetID(vAddr uint64) (setID int) {
+func (m *tlbMiddleware) vAddrToSetID(vAddr uint64) (setID int) {
 	return int(vAddr / m.pageSize % uint64(m.numSets))
 }
 
-func (m *middleware) sendRspToTop(
+func (m *tlbMiddleware) sendRspToTop(
 	req *vm.TranslationReq,
 	page vm.Page,
 ) bool {
@@ -183,7 +184,7 @@ func (m *middleware) sendRspToTop(
 	return err == nil
 }
 
-func (m *middleware) processTLBMSHRHit(
+func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
 	req *vm.TranslationReq,
 ) bool {
@@ -196,7 +197,7 @@ func (m *middleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort).
 		WithDst(m.LowModule).
@@ -219,7 +220,7 @@ func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
 	return true
 }
 
-func (m *middleware) parseBottom() bool {
+func (m *tlbMiddleware) parseBottom() bool {
 	if m.respondingMSHREntry != nil {
 		return false
 	}
@@ -258,7 +259,7 @@ func (m *middleware) parseBottom() bool {
 	return true
 }
 
-func (m *middleware) performCtrlReq() bool {
+func (m *tlbMiddleware) performCtrlReq() bool {
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
@@ -278,12 +279,12 @@ func (m *middleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *middleware) visit(setID, wayID int) {
+func (m *tlbMiddleware) visit(setID, wayID int) {
 	set := m.Sets[setID]
 	set.Visit(wayID)
 }
 
-func (m *middleware) handleTLBFlush(req *FlushReq) bool {
+func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 	rsp := FlushRspBuilder{}.
 		WithSrc(m.controlPort).
 		WithDst(req.Src).
@@ -311,7 +312,7 @@ func (m *middleware) handleTLBFlush(req *FlushReq) bool {
 	return true
 }
 
-func (m *middleware) handleTLBRestart(req *RestartReq) bool {
+func (m *tlbMiddleware) handleTLBRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort).
 		WithDst(req.Src).

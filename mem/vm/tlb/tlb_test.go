@@ -13,14 +13,14 @@ import (
 var _ = Describe("TLB", func() {
 
 	var (
-		mockCtrl      *gomock.Controller
-		engine        *MockEngine
-		tlb           *Comp
-		tlbMiddleware *middleware
-		set           *MockSet
-		topPort       *MockPort
-		bottomPort    *MockPort
-		controlPort   *MockPort
+		mockCtrl    *gomock.Controller
+		engine      *MockEngine
+		tlb         *Comp
+		tlbMW       *tlbMiddleware
+		set         *MockSet
+		topPort     *MockPort
+		bottomPort  *MockPort
+		controlPort *MockPort
 	)
 
 	BeforeEach(func() {
@@ -37,7 +37,7 @@ var _ = Describe("TLB", func() {
 		tlb.controlPort = controlPort
 		tlb.Sets = []internal.Set{set}
 
-		tlbMiddleware = tlb.Middlewares()[0].(*middleware)
+		tlbMW = tlb.Middlewares()[0].(*tlbMiddleware)
 	})
 
 	AfterEach(func() {
@@ -47,7 +47,7 @@ var _ = Describe("TLB", func() {
 	It("should do nothing if there is no req in TopPort", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := tlbMiddleware.lookup()
+		madeProgress := tlbMW.lookup()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -84,7 +84,7 @@ var _ = Describe("TLB", func() {
 
 			set.EXPECT().Visit(wayID)
 
-			madeProgress := tlbMiddleware.lookup()
+			madeProgress := tlbMW.lookup()
 
 			Expect(madeProgress).To(BeTrue())
 		})
@@ -94,7 +94,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().Send(gomock.Any()).
 				Return(&sim.SendError{})
 
-			madeProgress := tlbMiddleware.lookup()
+			madeProgress := tlbMW.lookup()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -138,7 +138,7 @@ var _ = Describe("TLB", func() {
 				}).
 				Return(nil)
 
-			madeProgress := tlbMiddleware.lookup()
+			madeProgress := tlbMW.lookup()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).To(Equal(true))
@@ -149,7 +149,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := tlbMiddleware.lookup()
+			madeProgress := tlbMW.lookup()
 			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).
 				To(Equal(true))
 			Expect(madeProgress).To(BeTrue())
@@ -160,7 +160,7 @@ var _ = Describe("TLB", func() {
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Return(&sim.SendError{})
 
-			madeProgress := tlbMiddleware.lookup()
+			madeProgress := tlbMW.lookup()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -202,7 +202,7 @@ var _ = Describe("TLB", func() {
 		It("should do nothing if no return", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := tlbMiddleware.parseBottom()
+			madeProgress := tlbMW.parseBottom()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -212,7 +212,7 @@ var _ = Describe("TLB", func() {
 			mshrEntry.Requests = append(mshrEntry.Requests, req)
 			tlb.respondingMSHREntry = mshrEntry
 
-			madeProgress := tlbMiddleware.parseBottom()
+			madeProgress := tlbMW.parseBottom()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -234,7 +234,7 @@ var _ = Describe("TLB", func() {
 			// 		Expect(rsp.RespondTo).To(Equal(req.ID))
 			// 	})
 
-			madeProgress := tlbMiddleware.parseBottom()
+			madeProgress := tlbMW.parseBottom()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.respondingMSHREntry).NotTo(BeNil())
@@ -249,7 +249,7 @@ var _ = Describe("TLB", func() {
 
 			topPort.EXPECT().Send(gomock.Any()).Return(nil)
 
-			madeProgress := tlbMiddleware.respondMSHREntry()
+			madeProgress := tlbMW.respondMSHREntry()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(HaveLen(0))
@@ -274,7 +274,7 @@ var _ = Describe("TLB", func() {
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tlbMiddleware.performCtrlReq()
+			madeProgress := tlbMW.performCtrlReq()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -303,7 +303,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
 
-			madeProgress := tlbMiddleware.performCtrlReq()
+			madeProgress := tlbMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeTrue())
@@ -322,7 +322,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := tlbMiddleware.performCtrlReq()
+			madeProgress := tlbMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeFalse())
