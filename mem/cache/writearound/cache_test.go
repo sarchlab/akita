@@ -30,11 +30,7 @@ var _ = Describe("Cache", func() {
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
 		engine = sim.NewSerialEngine()
-<<<<<<< HEAD
-		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
-=======
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
->>>>>>> origin/v4
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).

@@ -38,17 +38,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		mockCtrl.Finish()
 	})
 
-<<<<<<< HEAD
-	// It("should stall if too many transactions are running", func() {
-	// 	memController.currNumTransaction = 8
-
-	// 	madeProgress := memController.Tick(10)
-
-	// 	Expect(madeProgress).To(BeFalse())
-	// })
-
-=======
->>>>>>> origin/v4
 	It("should process read request", func() {
 		readReq := mem.ReadReqBuilder{}.
 			WithDst(memController.topPort).
@@ -61,15 +50,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
 
-<<<<<<< HEAD
-		madeProgress := memController.Tick(10)
-		// for i := 10; i < 20; i++ {
-		// 	madeProgress := memController.Tick(sim.VTimeInSec(i))
-		// 	Expect(madeProgress).To(BeTrue())
-		// }
-=======
 		madeProgress := memController.Tick()
->>>>>>> origin/v4
 
 		Expect(madeProgress).To(BeTrue())
 	})
@@ -108,11 +89,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
 
 		memController.Handle(event)
-<<<<<<< HEAD
-
-		// Expect(memController.currNumTransaction).To(Equal(0))
-=======
->>>>>>> origin/v4
 	})
 
 	It("should retry read if send DataReady failed", func() {
@@ -144,10 +120,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithData(data).
 			Build()
 		event := newWriteRespondEvent(11, memController, writeReq)
-<<<<<<< HEAD
-		// memController.currNumTransaction = 1
-=======
->>>>>>> origin/v4
 
 		engine.EXPECT().Schedule(gomock.Any())
 		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
@@ -157,10 +129,6 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		retData, _ := memController.Storage.Read(0, 4)
 		Expect(retData).To(Equal([]byte{1, 2, 3, 4}))
-<<<<<<< HEAD
-		// Expect(memController.currNumTransaction).To(Equal(0))
-=======
->>>>>>> origin/v4
 	})
 
 	It("should handle write respond event", func() {
