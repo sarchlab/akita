@@ -20,7 +20,7 @@ var compTemplate string
 var componentCmd = &cobra.Command{
 	Use:   "component",
 	Short: "Create and manage components.",
-	Long:  "`component --create [ComponentName]` creates a new component folder containing the builder and comp files",
+	Long:  "`component --create [ComponentName]` creates a new component.",
 	Run: func(cmd *cobra.Command, args []string) {
 		componentName, _ := cmd.Flags().GetString("create")
 		if componentName != "" {
@@ -31,21 +31,22 @@ var componentCmd = &cobra.Command{
 			err := createComponentFolder(componentName)
 			if err != nil {
 				log.Fatalf("Error creating component: %v", err)
+			} else {
+			    fmt.Printf("Component '%s' created successfully!\n", componentName)
 			}
-			fmt.Printf("Component '%s' created successfully!\n", componentName)
 
 			errFile := generateBuilderFile(componentName)
 			if errFile != nil {
-                log.Fatalf("Failed to generate builder file for component '%s': %v\n", componentName, errFile)
-            } else {
-				fmt.Println("Builder File generated successfully!")
+				log.Fatalf("Error generating builder file: %v\n", errFile)
+			} else {
+				fmt.Println("Builder file generated successfully!")
 			}
 
 			errComp := generateCompFile(componentName)
 			if errComp != nil {
-                log.Fatalf("Failed to generate comp file for component '%s': %v\n", componentName, errFile)
-            } else {
-				fmt.Println("Comp File generated successfully!")
+				log.Fatalf("Error generating comp file: %v\n", errComp)
+			} else {
+				fmt.Println("Comp file generated successfully!")
 			}
 
 		} else {
@@ -56,7 +57,7 @@ var componentCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(componentCmd)
-	componentCmd.Flags().String("create", "", "create a new component")
+	componentCmd.Flags().String("create", "", "Create a new component")
 }
 
 // Check if current operation is in a Git repository
@@ -65,7 +66,6 @@ func inGitRepo() bool {
 	cmd.Dir = filepath.Dir(".")
 	output, err := cmd.Output()
 	if err != nil {
-	    log.Fatalf("Error running git command: %v\n", err)
 		return false
 	}
 	return strings.TrimSpace(string(output)) == "true"
@@ -73,53 +73,56 @@ func inGitRepo() bool {
 
 // Create folder for the new component
 func createComponentFolder(name string) error {
-    parentPath := "./akita"
-	folderPath := filepath.Join(parentPath, name)
-	return os.MkdirAll(folderPath, 0755)
-}
-
-// Create basic files for the new component
-func generateBuilderFile(folder string) error {
-	// Ensure the folder exists before proceeding
-	folderPath := filepath.Join("./akita", folder)
-	_, errFind := os.Stat(folderPath)
-    if os.IsNotExist(errFind) {
-    	return fmt.Errorf("failed to find folder: %s", folderPath)
-    } else if errFind != nil {
-    	return fmt.Errorf("error checking folder: %v", errFind)
+	if _, err := os.Stat(name); err == nil {
+        return fmt.Errorf("folder '%s' already exists", name)
+    } else if !os.IsNotExist(err) {
+        return fmt.Errorf("%v", err)
     }
 
-	filePath := filepath.Join(folderPath, "builder.go")
+	return os.MkdirAll(name, 0755)
+}
+
+// Create builder file for the new component
+func generateBuilderFile(folder string) error {
+    // Ensure the folder exists before proceeding
+	_, errFind := os.Stat(folder)
+    if os.IsNotExist(errFind) {
+    	return fmt.Errorf("failed to find folder %s", folder)
+    } else if errFind != nil {
+    	return fmt.Errorf("%v", errFind)
+    }
+
+	filePath := filepath.Join(folder, "builder.go")
 	placeholder := "{{packageName}}"
 	packageName := folder
 	content := strings.Replace(builderTemplate, placeholder, packageName, -1)
 
 	err := os.WriteFile(filePath, []byte(content), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write builder file: %v", err)
+		return fmt.Errorf("%v", err)
 	}
 
 	return nil
 }
 
+// Create comp file for the new component
 func generateCompFile(folder string) error {
 	// Ensure the folder exists before proceeding
-	folderPath := filepath.Join("./akita", folder)
-	_, errFind := os.Stat(folderPath)
+	_, errFind := os.Stat(folder)
     if os.IsNotExist(errFind) {
-    	return fmt.Errorf("failed to find folder: %s", folderPath)
+    	return fmt.Errorf("failed to find folder: %s", folder)
     } else if errFind != nil {
-    	return fmt.Errorf("error checking folder: %v", errFind)
+    	return fmt.Errorf("%v", errFind)
     }
 
-	filePath := filepath.Join(folderPath, "comp.go")
+	filePath := filepath.Join(folder, "comp.go")
 	placeholder := "{{packageName}}"
 	packageName := folder
 	content := strings.Replace(compTemplate, placeholder, packageName, -1)
 
 	err := os.WriteFile(filePath, []byte(content), 0644)
 	if err != nil {
-		return fmt.Errorf("failed to write comp file: %v", err)
+		return fmt.Errorf("%v", err)
 	}
 
 	return nil
