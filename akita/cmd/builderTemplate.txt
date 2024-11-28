@@ -1,3 +1,4 @@
+// Builder can create the component {{packageName}} with different configurations.
 package {{packageName}}
 
 import "github.com/sarchlab/akita/v4/sim"

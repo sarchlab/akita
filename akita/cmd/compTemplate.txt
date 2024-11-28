@@ -1,3 +1,4 @@
+// Comp provides the component {{packageName}} with the ticking functionality.
 package {{packageName}}
 
 import "github.com/sarchlab/akita/v4/sim"
