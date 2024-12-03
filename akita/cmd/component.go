@@ -1,19 +1,20 @@
 package cmd
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	_ "embed"
 
 	"github.com/spf13/cobra"
 )
 
 //go:embed builderTemplate.txt
 var builderTemplate string
+
 //go:embed compTemplate.txt
 var compTemplate string
 
@@ -32,7 +33,7 @@ var componentCmd = &cobra.Command{
 			if err != nil {
 				log.Fatalf("Error creating component: %v", err)
 			} else {
-			    fmt.Printf("Component '%s' created successfully!\n", componentName)
+				fmt.Printf("Component '%s' created successfully!\n", componentName)
 			}
 
 			errFile := generateBuilderFile(componentName)
@@ -74,23 +75,23 @@ func inGitRepo() bool {
 // Create folder for the new component
 func createComponentFolder(name string) error {
 	if _, err := os.Stat(name); err == nil {
-        return fmt.Errorf("folder '%s' already exists", name)
-    } else if !os.IsNotExist(err) {
-        return fmt.Errorf("%v", err)
-    }
+		return fmt.Errorf("folder '%s' already exists", name)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("%v", err)
+	}
 
 	return os.MkdirAll(name, 0755)
 }
 
 // Create builder file for the new component
 func generateBuilderFile(folder string) error {
-    // Ensure the folder exists before proceeding
+	// Ensure the folder exists before proceeding
 	_, errFind := os.Stat(folder)
-    if os.IsNotExist(errFind) {
-    	return fmt.Errorf("failed to find folder %s", folder)
-    } else if errFind != nil {
-    	return fmt.Errorf("%v", errFind)
-    }
+	if os.IsNotExist(errFind) {
+		return fmt.Errorf("failed to find folder %s", folder)
+	} else if errFind != nil {
+		return fmt.Errorf("%v", errFind)
+	}
 
 	filePath := filepath.Join(folder, "builder.go")
 	placeholder := "{{packageName}}"
@@ -109,11 +110,11 @@ func generateBuilderFile(folder string) error {
 func generateCompFile(folder string) error {
 	// Ensure the folder exists before proceeding
 	_, errFind := os.Stat(folder)
-    if os.IsNotExist(errFind) {
-    	return fmt.Errorf("failed to find folder: %s", folder)
-    } else if errFind != nil {
-    	return fmt.Errorf("%v", errFind)
-    }
+	if os.IsNotExist(errFind) {
+		return fmt.Errorf("failed to find folder: %s", folder)
+	} else if errFind != nil {
+		return fmt.Errorf("%v", errFind)
+	}
 
 	filePath := filepath.Join(folder, "comp.go")
 	placeholder := "{{packageName}}"
