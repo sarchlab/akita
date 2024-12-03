@@ -10,10 +10,9 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "akita",
-	Short: "akita command",
-	Long: `akita command is the root command for Akita framework.
-	It contains child commands that help users to manage components and files
-	in Akita.`,
+	Short: "Akita CLI tool can perform common tasks related to developing simulators with Akita.",
+	Long: `Akita CLI tool can perform common tasks related to developing simulators with
+Akita. Currently, it supports creating components and builders.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
