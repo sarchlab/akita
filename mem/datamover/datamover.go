@@ -16,6 +16,64 @@ type dataMoverTransaction struct {
 	nextReadAddr  uint64
 	nextWriteAddr uint64
 	pendingRead   map[string]*mem.ReadReq
+	pendingWrite  map[string]*mem.WriteReq
+}
+
+type buffer struct {
+	initAddr    uint64
+	granularity uint64
+	data        [][]byte
+}
+
+func (b *buffer) addData(addr uint64, data []byte) {
+	addressMustBeAligned(addr, b.granularity)
+
+	offset := (addr - b.initAddr) / b.granularity
+	for i := uint64(len(b.data)); i <= offset; i++ {
+		b.data = append(b.data, nil)
+	}
+
+	b.data[offset] = data
+}
+
+func (b *buffer) extractData(addr, size uint64) (data []byte, ok bool) {
+	data = make([]byte, size)
+
+	sizeLeft := size
+	offset := (addr - b.initAddr) / b.granularity
+
+	for i := offset; i < uint64(len(b.data)); i++ {
+		if b.data[i] == nil {
+			return nil, false
+		}
+
+		copySize := min(sizeLeft, uint64(len(b.data[i])))
+		copy(data[size-sizeLeft:], b.data[i][:copySize])
+		sizeLeft -= copySize
+
+		if sizeLeft == 0 {
+			return data, true
+		}
+	}
+
+	return nil, false
+}
+
+func (b *buffer) moveInitAddrForwardTo(newStart uint64) {
+	alignedNewStart := (newStart / b.granularity) * b.granularity
+
+	if alignedNewStart <= b.initAddr {
+		return
+	}
+
+	discardChunks := (alignedNewStart - b.initAddr) / b.granularity
+	if discardChunks > uint64(len(b.data)) {
+		b.data = b.data[:0]
+	} else {
+		b.data = b.data[discardChunks:]
+	}
+
+	b.initAddr = alignedNewStart
 }
 
 func alignAddress(addr, granularity uint64) uint64 {
@@ -47,7 +105,7 @@ type Comp struct {
 	toCP            []sim.Msg
 	pendingRequests []sim.Msg
 	bufferSize      uint64
-	buffer          []byte
+	buffer          buffer
 
 	srcPort            sim.Port
 	dstPort            sim.Port
@@ -62,6 +120,7 @@ type Comp struct {
 func (c *Comp) Tick() bool {
 	madeProgress := false
 
+	madeProgress = c.finishTransaction() || madeProgress
 	madeProgress = c.processWriteDoneFromDst() || madeProgress
 	madeProgress = c.writeToDst() || madeProgress
 	madeProgress = c.processDataReadyFromSrc() || madeProgress
@@ -93,7 +152,10 @@ func (c *Comp) parseFromCP() bool {
 		nextWriteAddr: moveReq.DstAddress,
 	}
 	c.currentTransaction = rqC
-	c.buffer = make([]byte, moveReq.ByteSize)
+	c.buffer = buffer{
+		initAddr:    moveReq.DstAddress,
+		granularity: c.dstByteGranularity,
+	}
 
 	c.setSrcSide(moveReq)
 	c.setDstSide(moveReq)
@@ -166,9 +228,9 @@ func (c *Comp) processDataReadyFromSrc() bool {
 			readRsp.RespondTo)
 	}
 
-	offset := originalReq.Address - c.currentTransaction.nextWriteAddr
-	copy(c.buffer[offset:], readRsp.Data)
+	c.buffer.addData(originalReq.Address, readRsp.Data)
 
+	delete(c.currentTransaction.pendingRead, readRsp.RespondTo)
 	c.srcPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(originalReq, c)
 
@@ -181,6 +243,61 @@ func (c *Comp) writeToDst() bool {
 		return false
 	}
 
+	data, ok := c.buffer.extractData(
+		c.currentTransaction.nextWriteAddr, c.dstByteGranularity)
+
+	if !ok {
+		return false
+	}
+
+	req := mem.WriteReqBuilder{}.
+		WithAddress(c.currentTransaction.nextWriteAddr).
+		WithData(data).
+		WithSrc(c.dstPort).
+		WithDst(c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr)).
+		WithPID(0).
+		Build()
+
+	err := c.dstPort.Send(req)
+	if err != nil {
+		return false
+	}
+
+	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
+	c.currentTransaction.pendingWrite[req.ID] = req
+	c.buffer.moveInitAddrForwardTo(c.currentTransaction.nextWriteAddr)
+
+	tracing.TraceReqInitiate(req, c,
+		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
+
+	return true
+}
+
+// finishTransaction finishes the current transaction
+func (c *Comp) finishTransaction() bool {
+	if c.currentTransaction == nil {
+		return false
+	}
+
+	trans := c.currentTransaction
+
+	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
+		return false
+	}
+
+	rsp := trans.req.GenerateRsp()
+
+	err := c.ctrlPort.Send(rsp)
+	if err != nil {
+		return false
+	}
+
+	c.currentTransaction = nil
+	c.buffer = buffer{}
+
+	tracing.TraceReqComplete(rsp, c)
+
+	return true
 }
 
 // processWriteDoneFromDst processes write done from destination
@@ -189,7 +306,28 @@ func (c *Comp) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	panic("not implemented")
+	rsp := c.dstPort.PeekIncoming()
+	if rsp == nil {
+		return false
+	}
+
+	writeRsp, ok := rsp.(*mem.WriteDoneRsp)
+	if !ok {
+		return false
+	}
+
+	originalReq, ok := c.currentTransaction.pendingWrite[writeRsp.RespondTo]
+	if !ok {
+		log.Panicf("can't find original request for response %s",
+			writeRsp.RespondTo)
+	}
+
+	delete(c.currentTransaction.pendingWrite, writeRsp.RespondTo)
+	c.dstPort.RetrieveIncoming()
+
+	tracing.TraceReqFinalize(originalReq, c)
+
+	return false
 }
 
 func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {

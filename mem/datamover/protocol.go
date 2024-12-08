@@ -41,6 +41,17 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 	return b.Build()
 }
 
+// GenerateRsp creates a response message for the request.
+func (req *DataMoveRequest) GenerateRsp() sim.Msg {
+	rsp := sim.GeneralRspBuilder{}.
+		WithSrc(req.Dst).
+		WithDst(req.Src).
+		WithOriginalReq(req).
+		Build()
+
+	return rsp
+}
+
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
 	src, dst   sim.Port
