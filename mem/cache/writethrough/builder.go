@@ -23,7 +23,7 @@ type Builder struct {
 	bankLatency           int
 	maxNumConcurrentTrans int
 	numReqPerCycle        int
-	lowModuleFinder       mem.LowModuleFinder
+	lowModuleFinder       mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 }
 
@@ -121,7 +121,7 @@ func (b *Builder) WithVisTracer(tracer tracing.Tracer) *Builder {
 // WithLowModuleFinder specifies how the cache units to create should find low
 // level modules.
 func (b *Builder) WithLowModuleFinder(
-	lowModuleFinder mem.LowModuleFinder,
+	lowModuleFinder mem.AddressToPortMapper,
 ) *Builder {
 	b.lowModuleFinder = lowModuleFinder
 	return b

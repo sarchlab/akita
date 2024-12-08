@@ -1,4 +1,4 @@
-package datamoving
+package datamover
 
 import (
 	"github.com/golang/mock/gomock"
@@ -15,7 +15,7 @@ var _ = Describe("Datamoving", func() {
 		SrcPort           *MockPort
 		DstPort           *MockPort
 		CtrlPort          *MockPort
-		localModuleFinder *mem.SingleLowModuleFinder
+		localModuleFinder *mem.SinglePortMapper
 		sdmEngine         *StreamingDataMover
 	)
 
@@ -26,16 +26,16 @@ var _ = Describe("Datamoving", func() {
 		DstPort = NewMockPort(mockCtrl)
 		CtrlPort = NewMockPort(mockCtrl)
 
-		localModuleFinder = new(mem.SingleLowModuleFinder)
+		localModuleFinder = new(mem.SinglePortMapper)
 		sdmBuilder := new(Builder)
 		sdmBuilder.WithName("SDMTest")
 		sdmBuilder.WithEngine(engine)
 		sdmBuilder.WithLocalDataSource(localModuleFinder)
 		sdmBuilder.WithBufferSize(2048)
 		sdmEngine = sdmBuilder.Build()
-		sdmEngine.SrcPort = SrcPort
-		sdmEngine.DstPort = DstPort
-		sdmEngine.CtrlPort = CtrlPort
+		sdmEngine.insidePort = SrcPort
+		sdmEngine.outsidePort = DstPort
+		sdmEngine.ctrlPort = CtrlPort
 	})
 
 	AfterEach(func() {
@@ -49,14 +49,14 @@ var _ = Describe("Datamoving", func() {
 	})
 
 	It("should parse DataReady from srcPort", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("s2d")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(256)
-		dmBuilder.WithSrcAddress(20)
-		dmBuilder.WithDstAddress(40)
-		dmBuilder.WithDst(CtrlPort)
+		dmBuilder := MakeDataMoveRequestBuilder().
+			WithByteSize(200).
+			WithSrcPort(InsidePort).
+			WithSrcTransferSize(64).
+			WithDstTransferSize(256).
+			WithSrcAddress(20).
+			WithDstAddress(40).
+			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
 		sdmEngine.currentRequest = rqC
@@ -110,14 +110,15 @@ var _ = Describe("Datamoving", func() {
 	})
 
 	It("should parse DataReady from dstPort", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("d2s")
-		dmBuilder.WithSrcTransferSize(256)
-		dmBuilder.WithDstTransferSize(64)
-		dmBuilder.WithSrcAddress(40)
-		dmBuilder.WithDstAddress(20)
-		dmBuilder.WithDst(CtrlPort)
+		dmBuilder := new(DataMoveRequestBuilder).
+			WithByteSize(200).
+			WithSrcPort(OutsidePort).
+			WithDstPort(InsidePort).
+			WithSrcTransferSize(256).
+			WithDstTransferSize(64).
+			WithSrcAddress(40).
+			WithDstAddress(20).
+			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
 		sdmEngine.currentRequest = rqC
@@ -171,14 +172,15 @@ var _ = Describe("Datamoving", func() {
 	})
 
 	It("should parse WriteDone from srcPort", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("d2s")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(64)
-		dmBuilder.WithSrcAddress(40)
-		dmBuilder.WithDstAddress(20)
-		dmBuilder.WithDst(CtrlPort)
+		dmBuilder := new(DataMoveRequestBuilder).
+			WithByteSize(200).
+			WithSrcPort(OutsidePort).
+			WithDstPort(InsidePort).
+			WithSrcTransferSize(64).
+			WithDstTransferSize(64).
+			WithSrcAddress(40).
+			WithDstAddress(20).
+			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
 		sdmEngine.currentRequest = rqC
@@ -219,14 +221,15 @@ var _ = Describe("Datamoving", func() {
 	})
 
 	It("should parse WriteDone from dstPort", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("s2d")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(64)
-		dmBuilder.WithSrcAddress(20)
-		dmBuilder.WithDstAddress(40)
-		dmBuilder.WithDst(CtrlPort)
+		dmBuilder := MakeDataMoveRequestBuilder().
+			WithByteSize(200).
+			WithSrcPort(InsidePort).
+			WithDstPort(OutsidePort).
+			WithSrcTransferSize(64).
+			WithDstTransferSize(64).
+			WithSrcAddress(20).
+			WithDstAddress(40).
+			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
 		sdmEngine.currentRequest = rqC
@@ -267,14 +270,13 @@ var _ = Describe("Datamoving", func() {
 	})
 
 	It("should parse dmRequest from CP", func() {
-		dmBuilder := new(DataMoveRequestBuilder)
-		dmBuilder.WithByteSize(200)
-		dmBuilder.WithDirection("s2d")
-		dmBuilder.WithSrcTransferSize(64)
-		dmBuilder.WithDstTransferSize(256)
-		dmBuilder.WithSrcAddress(20)
-		dmBuilder.WithDstAddress(40)
-		dmBuilder.WithDst(CtrlPort)
+		dmBuilder := MakeDataMoveRequestBuilder().
+			WithByteSize(200).
+			WithSrcTransferSize(64).
+			WithDstTransferSize(256).
+			WithSrcAddress(20).
+			WithDstAddress(40).
+			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		CtrlPort.EXPECT().RetrieveIncoming().Return(dmRequest)
 		SrcPort.EXPECT().Send(gomock.Any()).Return(nil).AnyTimes()

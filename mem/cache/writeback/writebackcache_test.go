@@ -33,7 +33,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine           sim.Engine
 		victimFinder     *cache.LRUVictimFinder
 		directory        *cache.DirectoryImpl
-		lowModuleFinder  *mem.SingleLowModuleFinder
+		lowModuleFinder  *mem.SinglePortMapper
 		storage          *mem.Storage
 		cacheModule      *Comp
 		dram             *idealmemcontroller.Comp
@@ -54,7 +54,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		engine = sim.NewSerialEngine()
 		directory = cache.NewDirectory(1024, 4, 64, victimFinder)
-		lowModuleFinder = &mem.SingleLowModuleFinder{}
+		lowModuleFinder = &mem.SinglePortMapper{}
 		storage = mem.NewStorage(1024 * 4 * 64)
 
 		builder := MakeBuilder().

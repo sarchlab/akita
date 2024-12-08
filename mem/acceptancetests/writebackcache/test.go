@@ -69,7 +69,7 @@ func buildEnvironment() {
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
-	lowModuleFinder := new(mem.SingleLowModuleFinder)
+	lowModuleFinder := new(mem.SinglePortMapper)
 	builder := writeback.MakeBuilder().
 		WithEngine(engine).
 		WithLowModuleFinder(lowModuleFinder).

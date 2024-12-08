@@ -18,7 +18,7 @@ var _ = Describe("Cache", func() {
 		mockCtrl        *gomock.Controller
 		engine          sim.Engine
 		connection      sim.Connection
-		lowModuleFinder mem.LowModuleFinder
+		lowModuleFinder mem.AddressToPortMapper
 		dram            *idealmemcontroller.Comp
 		cuPort          *MockPort
 		c               *Comp
@@ -35,7 +35,7 @@ var _ = Describe("Cache", func() {
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
-		lowModuleFinder = &mem.SingleLowModuleFinder{
+		lowModuleFinder = &mem.SinglePortMapper{
 			LowModule: dram.GetPortByName("Top"),
 		}
 		c = NewBuilder().

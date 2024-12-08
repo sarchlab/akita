@@ -1,4 +1,4 @@
-package datamoving
+package datamover
 
 import (
 	"log"
@@ -32,6 +32,7 @@ func (rqC *RequestCollection) decreSubIfExists(inputID string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -47,6 +48,7 @@ func (rqC *RequestCollection) getTopReq() sim.Msg {
 	return rqC.topReq
 }
 
+// NewRequestCollection creates a new RequestCollection.
 func NewRequestCollection(
 	inputReq sim.Msg,
 ) *RequestCollection {
@@ -61,29 +63,29 @@ func NewRequestCollection(
 type StreamingDataMover struct {
 	*sim.TickingComponent
 
-	isProcessing   bool
-	currentRequest *RequestCollection
+	insidePort  sim.Port
+	outsidePort sim.Port
+	ctrlPort    sim.Port
 
 	toSrc           []sim.Msg
 	toDst           []sim.Msg
 	toCP            []sim.Msg
 	pendingRequests []sim.Msg
 	buffer          []byte
+	localDataSource mem.AddressToPortMapper
 
-	SrcPort  sim.Port
-	DstPort  sim.Port
-	CtrlPort sim.Port
-
-	localDataSource mem.LowModuleFinder
+	srcPort        sim.Port
+	dstPort        sim.Port
+	currentRequest *RequestCollection
 }
 
 // Tick ticks
 func (sdm *StreamingDataMover) Tick() bool {
 	madeProgress := false
 
-	madeProgress = sdm.send(sdm.SrcPort, &sdm.toSrc) || madeProgress
-	madeProgress = sdm.send(sdm.DstPort, &sdm.toDst) || madeProgress
-	madeProgress = sdm.send(sdm.CtrlPort, &sdm.toCP) || madeProgress
+	madeProgress = sdm.send(sdm.insidePort, &sdm.toSrc) || madeProgress
+	madeProgress = sdm.send(sdm.outsidePort, &sdm.toDst) || madeProgress
+	madeProgress = sdm.send(sdm.ctrlPort, &sdm.toCP) || madeProgress
 	madeProgress = sdm.parseFromCP() || madeProgress
 	madeProgress = sdm.parseFromSrc() || madeProgress
 	madeProgress = sdm.parseFromDst() || madeProgress
@@ -93,7 +95,7 @@ func (sdm *StreamingDataMover) Tick() bool {
 
 // SetLocalDataSource sets the table that maps from address to port that can
 // provide the data
-func (sdm *StreamingDataMover) SetLocalDataSource(s mem.LowModuleFinder) {
+func (sdm *StreamingDataMover) SetLocalDataSource(s mem.AddressToPortMapper) {
 	sdm.localDataSource = s
 }
 
@@ -112,12 +114,13 @@ func (sdm *StreamingDataMover) send(
 		*reqs = (*reqs)[1:]
 		return true
 	}
+
 	return false
 }
 
 // parseFromSrc retrieves Msg from srcPort
 func (sdm *StreamingDataMover) parseFromSrc() bool {
-	req := sdm.SrcPort.RetrieveIncoming()
+	req := sdm.insidePort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
@@ -136,7 +139,7 @@ func (sdm *StreamingDataMover) parseFromSrc() bool {
 
 // parseFromDst retrieves Msg from dstPort
 func (sdm *StreamingDataMover) parseFromDst() bool {
-	req := sdm.DstPort.RetrieveIncoming()
+	req := sdm.outsidePort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
@@ -199,9 +202,9 @@ func (sdm *StreamingDataMover) processDataReadyRsp(
 	offset := req.Address
 	switch transferFrom {
 	case "s2d":
-		offset -= processing.srcAddress
+		offset -= processing.SrcAddress
 	case "d2s":
-		offset -= processing.dstAddress
+		offset -= processing.DstAddress
 	default:
 		panic("Transfer direction is not supported")
 	}
@@ -242,7 +245,6 @@ func (sdm *StreamingDataMover) processWriteDoneRsp(
 		tracing.TraceReqComplete(processing, sdm)
 		sdm.currentRequest = nil
 		sdm.buffer = nil
-		sdm.isProcessing = false
 
 		rsp := sim.GeneralRspBuilder{}.
 			WithSrc(processing.Dst).
@@ -255,32 +257,30 @@ func (sdm *StreamingDataMover) processWriteDoneRsp(
 
 // parseFromCP retrieves Msg from ctrlPort
 func (sdm *StreamingDataMover) parseFromCP() bool {
-	req := sdm.CtrlPort.RetrieveIncoming()
+	req := sdm.ctrlPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
-	if sdm.isProcessing {
+
+	if sdm.currentRequest != nil {
 		return false
 	}
-	tracing.TraceReqReceive(req, sdm)
 
-	rqC := NewRequestCollection(req)
+	moveReq, ok := req.(*DataMoveRequest)
+	if !ok {
+		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
+	}
+
+	rqC := NewRequestCollection(moveReq)
 	sdm.currentRequest = rqC
 
-	switch req := req.(type) {
-	case *DataMoveRequest:
-		sdm.isProcessing = true
-		return sdm.processMoveRequest(req, rqC)
-	default:
-		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
-		return false
-	}
+	tracing.TraceReqReceive(req, sdm)
+
 }
 
 // processMoveRequest process data move requests from ctrlPort
 func (sdm *StreamingDataMover) processMoveRequest(
 	req *DataMoveRequest,
-	rqC *RequestCollection,
 ) bool {
 	if req == nil {
 		return false
@@ -290,14 +290,14 @@ func (sdm *StreamingDataMover) processMoveRequest(
 	dstAction := true
 
 	if req.direction == "s2d" {
-		sdm.processSrcOut(req, rqC)
+		sdm.processSrcOut(req)
 		srcAction = true
-		sdm.processDstIn(req, rqC)
+		sdm.processDstIn(req)
 		dstAction = true
 	} else if req.direction == "d2s" {
-		sdm.processDstOut(req, rqC)
+		sdm.processDstOut(req)
 		dstAction = true
-		sdm.processSrcIn(req, rqC)
+		sdm.processSrcIn(req)
 		srcAction = true
 	} else {
 		log.Panicf("can't process direction of type %s", req.direction)
@@ -309,13 +309,12 @@ func (sdm *StreamingDataMover) processMoveRequest(
 // processSrcIn sends read request from data mover to source
 func (sdm *StreamingDataMover) processSrcOut(
 	req *DataMoveRequest,
-	rqC *RequestCollection,
 ) {
-	lengthLeft := req.byteSize
-	addr := req.srcAddress
+	lengthLeft := req.ByteSize
+	addr := req.SrcAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := req.srcTransferSize
+		lengthUnit := req.SrcTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -326,15 +325,15 @@ func (sdm *StreamingDataMover) processSrcOut(
 
 		module := sdm.localDataSource.Find(addr)
 		reqToSrcPort := mem.ReadReqBuilder{}.
-			WithSrc(sdm.SrcPort).
+			WithSrc(sdm.insidePort).
 			WithDst(module).
 			WithAddress(addr).
 			WithByteSize(length).
 			Build()
 		sdm.toSrc = append(sdm.toSrc, reqToSrcPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
-		rqC.appendSubReq(reqToSrcPort.Meta().ID)
-		sdm.send(sdm.SrcPort, &sdm.toSrc)
+		sdm.currentRequest.appendSubReq(reqToSrcPort.Meta().ID)
+		sdm.send(sdm.insidePort, &sdm.toSrc)
 
 		tracing.TraceReqInitiate(reqToSrcPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -346,14 +345,13 @@ func (sdm *StreamingDataMover) processSrcOut(
 // processSrcOut processes writing request to source
 func (sdm *StreamingDataMover) processSrcIn(
 	req *DataMoveRequest,
-	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
-	lengthLeft := req.byteSize
-	addr := req.srcAddress
+	lengthLeft := req.ByteSize
+	addr := req.SrcAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := req.srcTransferSize
+		lengthUnit := req.SrcTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -364,15 +362,15 @@ func (sdm *StreamingDataMover) processSrcIn(
 
 		module := sdm.localDataSource.Find(addr)
 		reqToSrcPort := mem.WriteReqBuilder{}.
-			WithSrc(sdm.SrcPort).
+			WithSrc(sdm.insidePort).
 			WithDst(module).
 			WithAddress(addr).
 			WithData(sdm.buffer[offset : offset+length]).
 			Build()
 		sdm.toSrc = append(sdm.toSrc, reqToSrcPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToSrcPort)
-		rqC.appendSubReq(reqToSrcPort.Meta().ID)
-		sdm.send(sdm.SrcPort, &sdm.toSrc)
+		sdm.currentRequest.appendSubReq(reqToSrcPort.Meta().ID)
+		sdm.send(sdm.insidePort, &sdm.toSrc)
 
 		tracing.TraceReqInitiate(reqToSrcPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -385,13 +383,12 @@ func (sdm *StreamingDataMover) processSrcIn(
 // processDstIn sends read request from data mover to destination
 func (sdm *StreamingDataMover) processDstOut(
 	req *DataMoveRequest,
-	rqC *RequestCollection,
 ) {
-	lengthLeft := req.byteSize
-	addr := req.dstAddress
+	lengthLeft := req.ByteSize
+	addr := req.DstAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := req.dstTransferSize
+		lengthUnit := req.DstTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -402,15 +399,15 @@ func (sdm *StreamingDataMover) processDstOut(
 
 		module := sdm.localDataSource.Find(addr)
 		reqToDstPort := mem.ReadReqBuilder{}.
-			WithSrc(sdm.DstPort).
+			WithSrc(sdm.outsidePort).
 			WithDst(module).
 			WithAddress(addr).
 			WithByteSize(length).
 			Build()
 		sdm.toDst = append(sdm.toDst, reqToDstPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
-		rqC.appendSubReq(reqToDstPort.Meta().ID)
-		sdm.send(sdm.DstPort, &sdm.toDst)
+		sdm.currentRequest.appendSubReq(reqToDstPort.Meta().ID)
+		sdm.send(sdm.outsidePort, &sdm.toDst)
 
 		tracing.TraceReqInitiate(reqToDstPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))
@@ -422,14 +419,13 @@ func (sdm *StreamingDataMover) processDstOut(
 // processDstOut requests writing request to destination
 func (sdm *StreamingDataMover) processDstIn(
 	req *DataMoveRequest,
-	rqC *RequestCollection,
 ) {
 	offset := uint64(0)
-	lengthLeft := req.byteSize
-	addr := req.dstAddress
+	lengthLeft := req.ByteSize
+	addr := req.DstAddress
 
 	for lengthLeft > 0 {
-		lengthUnit := req.dstTransferSize
+		lengthUnit := req.DstTransferSize
 		length := lengthUnit
 		if length > lengthLeft {
 			length = lengthLeft
@@ -440,15 +436,15 @@ func (sdm *StreamingDataMover) processDstIn(
 
 		module := sdm.localDataSource.Find(addr)
 		reqToDstPort := mem.WriteReqBuilder{}.
-			WithSrc(sdm.DstPort).
+			WithSrc(sdm.outsidePort).
 			WithDst(module).
 			WithAddress(addr).
 			WithData(sdm.buffer[offset : offset+length]).
 			Build()
 		sdm.toDst = append(sdm.toDst, reqToDstPort)
 		sdm.pendingRequests = append(sdm.pendingRequests, reqToDstPort)
-		rqC.appendSubReq(reqToDstPort.Meta().ID)
-		sdm.send(sdm.DstPort, &sdm.toDst)
+		sdm.currentRequest.appendSubReq(reqToDstPort.Meta().ID)
+		sdm.send(sdm.outsidePort, &sdm.toDst)
 
 		tracing.TraceReqInitiate(reqToDstPort, sdm,
 			tracing.MsgIDAtReceiver(req, sdm))

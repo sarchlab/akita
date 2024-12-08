@@ -44,7 +44,7 @@ type Comp struct {
 	flusher     *flusher
 
 	storage         *mem.Storage
-	lowModuleFinder mem.LowModuleFinder
+	lowModuleFinder mem.AddressToPortMapper
 	directory       cache.Directory
 	mshr            cache.MSHR
 	log2BlockSize   uint64
@@ -56,7 +56,7 @@ type Comp struct {
 }
 
 // SetLowModuleFinder sets the LowModuleFinder used by the cache.
-func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.AddressToPortMapper) {
 	c.lowModuleFinder = lmf
 }
 

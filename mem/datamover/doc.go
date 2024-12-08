@@ -1,2 +1,2 @@
-// Package datamoving implements a streaming data mover
-package datamoving
+// Package datamover implements a streaming data mover
+package datamover

@@ -1,4 +1,4 @@
-package datamoving
+package datamover
 
 import (
 	"testing"
