@@ -10,13 +10,13 @@ import (
 
 var _ = Describe("Datamoving", func() {
 	var (
-		mockCtrl          *gomock.Controller
-		engine            *MockEngine
-		SrcPort           *MockPort
-		DstPort           *MockPort
-		CtrlPort          *MockPort
-		localModuleFinder *mem.SinglePortMapper
-		sdmEngine         *Comp
+		mockCtrl   *gomock.Controller
+		engine     *MockEngine
+		SrcPort    *MockPort
+		DstPort    *MockPort
+		CtrlPort   *MockPort
+		portMapper *mem.SinglePortMapper
+		sdmEngine  *Comp
 	)
 
 	BeforeEach(func() {
@@ -26,13 +26,15 @@ var _ = Describe("Datamoving", func() {
 		DstPort = NewMockPort(mockCtrl)
 		CtrlPort = NewMockPort(mockCtrl)
 
-		localModuleFinder = new(mem.SinglePortMapper)
-		sdmBuilder := new(Builder)
-		sdmBuilder.WithName("SDMTest")
-		sdmBuilder.WithEngine(engine)
-		sdmBuilder.WithLocalDataSource(localModuleFinder)
-		sdmBuilder.WithBufferSize(2048)
-		sdmEngine = sdmBuilder.Build()
+		portMapper = new(mem.SinglePortMapper)
+		sdmEngine = new(Builder).
+			WithName("SDMTest").
+			WithEngine(engine).
+			WithInsideByteGranularity(64).
+			WithOutsideByteGranularity(256).
+			WithInsidePortMapper(portMapper).
+			WithBufferSize(2048).
+			Build()
 		sdmEngine.insidePort = SrcPort
 		sdmEngine.outsidePort = DstPort
 		sdmEngine.ctrlPort = CtrlPort
@@ -52,8 +54,6 @@ var _ = Describe("Datamoving", func() {
 		dmBuilder := MakeDataMoveRequestBuilder().
 			WithByteSize(200).
 			WithSrcPort(InsidePort).
-			WithSrcTransferSize(64).
-			WithDstTransferSize(256).
 			WithSrcAddress(20).
 			WithDstAddress(40).
 			WithDst(CtrlPort)
