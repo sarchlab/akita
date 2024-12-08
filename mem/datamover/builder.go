@@ -7,7 +7,6 @@ import (
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	name                   string
 	engine                 sim.Engine
 	bufferSize             uint64
 	insidePortMapper       mem.AddressToPortMapper
@@ -19,14 +18,6 @@ type Builder struct {
 // MakeBuilder creates a new Builder
 func MakeBuilder() Builder {
 	return Builder{}
-}
-
-// WithName sets the name of StreamingDataMover's ticking component
-func (sdmBuilder Builder) WithName(
-	inputName string,
-) Builder {
-	sdmBuilder.name = inputName
-	return sdmBuilder
 }
 
 // WithEngine sets StreamingDataMover's engine
@@ -80,7 +71,7 @@ func (sdmBuilder Builder) WithOutsideByteGranularity(
 }
 
 // Build a new StreamingDataMover
-func (sdmBuilder Builder) Build() *Comp {
+func (sdmBuilder Builder) Build(name string) *Comp {
 	sdm := &Comp{}
 	sdm.bufferSize = sdmBuilder.bufferSize
 	sdm.insidePortMapper = sdmBuilder.insidePortMapper
@@ -89,11 +80,11 @@ func (sdmBuilder Builder) Build() *Comp {
 	sdm.outsideByteGranularity = sdmBuilder.outsideByteGranularity
 
 	sdm.TickingComponent = sim.NewTickingComponent(
-		sdmBuilder.name, sdmBuilder.engine, 1*sim.GHz, sdm)
+		name, sdmBuilder.engine, 1*sim.GHz, sdm)
 
-	sdm.ctrlPort = sim.NewLimitNumMsgPort(sdm, 40960000, sdmBuilder.name+".CtrlPort")
-	sdm.insidePort = sim.NewLimitNumMsgPort(sdm, 64, sdmBuilder.name+".SrcPort")
-	sdm.outsidePort = sim.NewLimitNumMsgPort(sdm, 64, sdmBuilder.name+".DstPort")
+	sdm.ctrlPort = sim.NewLimitNumMsgPort(sdm, 40960000, name+".CtrlPort")
+	sdm.insidePort = sim.NewLimitNumMsgPort(sdm, 64, name+".SrcPort")
+	sdm.outsidePort = sim.NewLimitNumMsgPort(sdm, 64, name+".DstPort")
 
 	return sdm
 }

@@ -19,61 +19,14 @@ type dataMoverTransaction struct {
 	pendingWrite  map[string]*mem.WriteReq
 }
 
-type buffer struct {
-	initAddr    uint64
-	granularity uint64
-	data        [][]byte
-}
-
-func (b *buffer) addData(addr uint64, data []byte) {
-	addressMustBeAligned(addr, b.granularity)
-
-	offset := (addr - b.initAddr) / b.granularity
-	for i := uint64(len(b.data)); i <= offset; i++ {
-		b.data = append(b.data, nil)
+func newDataMoverTransaction(req *DataMoveRequest) *dataMoverTransaction {
+	return &dataMoverTransaction{
+		req:           req,
+		nextReadAddr:  req.SrcAddress,
+		nextWriteAddr: req.DstAddress,
+		pendingRead:   make(map[string]*mem.ReadReq),
+		pendingWrite:  make(map[string]*mem.WriteReq),
 	}
-
-	b.data[offset] = data
-}
-
-func (b *buffer) extractData(addr, size uint64) (data []byte, ok bool) {
-	data = make([]byte, size)
-
-	sizeLeft := size
-	offset := (addr - b.initAddr) / b.granularity
-
-	for i := offset; i < uint64(len(b.data)); i++ {
-		if b.data[i] == nil {
-			return nil, false
-		}
-
-		copySize := min(sizeLeft, uint64(len(b.data[i])))
-		copy(data[size-sizeLeft:], b.data[i][:copySize])
-		sizeLeft -= copySize
-
-		if sizeLeft == 0 {
-			return data, true
-		}
-	}
-
-	return nil, false
-}
-
-func (b *buffer) moveInitAddrForwardTo(newStart uint64) {
-	alignedNewStart := (newStart / b.granularity) * b.granularity
-
-	if alignedNewStart <= b.initAddr {
-		return
-	}
-
-	discardChunks := (alignedNewStart - b.initAddr) / b.granularity
-	if discardChunks > uint64(len(b.data)) {
-		b.data = b.data[:0]
-	} else {
-		b.data = b.data[discardChunks:]
-	}
-
-	b.initAddr = alignedNewStart
 }
 
 func alignAddress(addr, granularity uint64) uint64 {
@@ -100,13 +53,6 @@ type Comp struct {
 	insideByteGranularity  uint64
 	outsideByteGranularity uint64
 
-	toSrc           []sim.Msg
-	toDst           []sim.Msg
-	toCP            []sim.Msg
-	pendingRequests []sim.Msg
-	bufferSize      uint64
-	buffer          buffer
-
 	srcPort            sim.Port
 	dstPort            sim.Port
 	srcPortMapper      mem.AddressToPortMapper
@@ -114,6 +60,8 @@ type Comp struct {
 	srcByteGranularity uint64
 	dstByteGranularity uint64
 	currentTransaction *dataMoverTransaction
+	bufferSize         uint64
+	buffer             *buffer
 }
 
 // Tick ticks
@@ -146,19 +94,16 @@ func (c *Comp) parseFromCP() bool {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
 	}
 
-	rqC := &dataMoverTransaction{
-		req:           moveReq,
-		nextReadAddr:  moveReq.SrcAddress,
-		nextWriteAddr: moveReq.DstAddress,
-	}
-	c.currentTransaction = rqC
-	c.buffer = buffer{
-		initAddr:    moveReq.DstAddress,
-		granularity: c.dstByteGranularity,
-	}
+	trans := newDataMoverTransaction(moveReq)
+	c.currentTransaction = trans
 
 	c.setSrcSide(moveReq)
 	c.setDstSide(moveReq)
+
+	c.buffer = &buffer{
+		initAddr:    moveReq.DstAddress,
+		granularity: c.dstByteGranularity,
+	}
 
 	tracing.TraceReqReceive(req, c)
 
@@ -293,7 +238,10 @@ func (c *Comp) finishTransaction() bool {
 	}
 
 	c.currentTransaction = nil
-	c.buffer = buffer{}
+	c.buffer = &buffer{
+		initAddr:    alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
+		granularity: c.srcByteGranularity,
+	}
 
 	tracing.TraceReqComplete(rsp, c)
 
