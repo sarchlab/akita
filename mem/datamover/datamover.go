@@ -1,6 +1,7 @@
 package datamover
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
@@ -102,7 +103,7 @@ func (c *Comp) parseFromCP() bool {
 
 	c.buffer = &buffer{
 		initAddr:    moveReq.DstAddress,
-		granularity: c.dstByteGranularity,
+		granularity: c.srcByteGranularity,
 	}
 
 	tracing.TraceReqReceive(req, c)
@@ -142,8 +143,9 @@ func (c *Comp) readFromSrc() bool {
 		return false
 	}
 
-	trans.nextReadAddr += addr + c.srcByteGranularity
+	trans.nextReadAddr += c.srcByteGranularity
 	trans.pendingRead[req.ID] = req
+	fmt.Printf("Read 0x%016x\n", req.Address)
 
 	tracing.TraceReqInitiate(req, c, tracing.MsgIDAtReceiver(trans.req, c))
 
@@ -179,6 +181,8 @@ func (c *Comp) processDataReadyFromSrc() bool {
 	c.srcPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(originalReq, c)
 
+	fmt.Printf("Data ready 0x%016x\n", originalReq.Address)
+
 	return true
 }
 
@@ -212,38 +216,10 @@ func (c *Comp) writeToDst() bool {
 	c.currentTransaction.pendingWrite[req.ID] = req
 	c.buffer.moveInitAddrForwardTo(c.currentTransaction.nextWriteAddr)
 
+	fmt.Printf("Writing to dst 0x%016x\n", req.Address)
+
 	tracing.TraceReqInitiate(req, c,
 		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
-
-	return true
-}
-
-// finishTransaction finishes the current transaction
-func (c *Comp) finishTransaction() bool {
-	if c.currentTransaction == nil {
-		return false
-	}
-
-	trans := c.currentTransaction
-
-	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
-		return false
-	}
-
-	rsp := trans.req.GenerateRsp()
-
-	err := c.ctrlPort.Send(rsp)
-	if err != nil {
-		return false
-	}
-
-	c.currentTransaction = nil
-	c.buffer = &buffer{
-		initAddr:    alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
-		granularity: c.srcByteGranularity,
-	}
-
-	tracing.TraceReqComplete(rsp, c)
 
 	return true
 }
@@ -276,6 +252,36 @@ func (c *Comp) processWriteDoneFromDst() bool {
 	tracing.TraceReqFinalize(originalReq, c)
 
 	return false
+}
+
+// finishTransaction finishes the current transaction
+func (c *Comp) finishTransaction() bool {
+	if c.currentTransaction == nil {
+		return false
+	}
+
+	trans := c.currentTransaction
+
+	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
+		return false
+	}
+
+	rsp := trans.req.GenerateRsp()
+
+	err := c.ctrlPort.Send(rsp)
+	if err != nil {
+		return false
+	}
+
+	c.currentTransaction = nil
+	c.buffer = &buffer{
+		initAddr:    alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
+		granularity: c.srcByteGranularity,
+	}
+
+	tracing.TraceReqComplete(rsp, c)
+
+	return true
 }
 
 func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {

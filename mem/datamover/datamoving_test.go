@@ -71,7 +71,12 @@ var _ = Describe("DataMover", func() {
 		}
 		outsideMem.Storage.Write(0, data)
 
+		srcPort.EXPECT().
+			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+
 		req := MakeDataMoveRequestBuilder().
+			WithSrc(srcPort).
+			WithDst(dataMover.ctrlPort).
 			WithSrcAddress(0).
 			WithSrcSide("outside").
 			WithDstAddress(0).
