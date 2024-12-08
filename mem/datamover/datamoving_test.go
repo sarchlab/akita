@@ -16,7 +16,7 @@ var _ = Describe("Datamoving", func() {
 		DstPort           *MockPort
 		CtrlPort          *MockPort
 		localModuleFinder *mem.SinglePortMapper
-		sdmEngine         *StreamingDataMover
+		sdmEngine         *Comp
 	)
 
 	BeforeEach(func() {
@@ -59,7 +59,7 @@ var _ = Describe("Datamoving", func() {
 			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
-		sdmEngine.currentRequest = rqC
+		sdmEngine.currentTransaction = rqC
 
 		readReq1 := mem.ReadReqBuilder{}.
 			WithSrc(SrcPort).
@@ -101,8 +101,8 @@ var _ = Describe("Datamoving", func() {
 		madeProgress := sdmEngine.parseFromSrc()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
+		Expect(sdmEngine.currentTransaction.req).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentTransaction).To(BeIdenticalTo(rqC))
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(readReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(readReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(readReq3))
@@ -121,7 +121,7 @@ var _ = Describe("Datamoving", func() {
 			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
-		sdmEngine.currentRequest = rqC
+		sdmEngine.currentTransaction = rqC
 
 		readReq1 := mem.ReadReqBuilder{}.
 			WithSrc(DstPort).
@@ -163,8 +163,8 @@ var _ = Describe("Datamoving", func() {
 		madeProgress := sdmEngine.parseFromDst()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
+		Expect(sdmEngine.currentTransaction.req).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentTransaction).To(BeIdenticalTo(rqC))
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(readReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(readReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(readReq3))
@@ -183,7 +183,7 @@ var _ = Describe("Datamoving", func() {
 			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
-		sdmEngine.currentRequest = rqC
+		sdmEngine.currentTransaction = rqC
 
 		writeReq1 := mem.WriteReqBuilder{}.
 			WithSrc(SrcPort).
@@ -213,8 +213,8 @@ var _ = Describe("Datamoving", func() {
 		madeProgress := sdmEngine.parseFromSrc()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
+		Expect(sdmEngine.currentTransaction.req).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentTransaction).To(BeIdenticalTo(rqC))
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
@@ -232,7 +232,7 @@ var _ = Describe("Datamoving", func() {
 			WithDst(CtrlPort)
 		dmRequest := dmBuilder.Build()
 		rqC := NewRequestCollection(dmRequest)
-		sdmEngine.currentRequest = rqC
+		sdmEngine.currentTransaction = rqC
 
 		writeReq1 := mem.WriteReqBuilder{}.
 			WithSrc(DstPort).
@@ -262,8 +262,8 @@ var _ = Describe("Datamoving", func() {
 		madeProgress := sdmEngine.parseFromDst()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
-		Expect(sdmEngine.currentRequest).To(BeIdenticalTo(rqC))
+		Expect(sdmEngine.currentTransaction.req).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentTransaction).To(BeIdenticalTo(rqC))
 		Expect(sdmEngine.pendingRequests).NotTo(ContainElement(writeReq1))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq2))
 		Expect(sdmEngine.pendingRequests).To(ContainElement(writeReq3))
@@ -285,7 +285,7 @@ var _ = Describe("Datamoving", func() {
 		madeProgress := sdmEngine.parseFromCP()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(sdmEngine.currentRequest.topReq).To(BeIdenticalTo(dmRequest))
+		Expect(sdmEngine.currentTransaction.req).To(BeIdenticalTo(dmRequest))
 		Expect(sdmEngine.pendingRequests).To(HaveLen(5))
 		Expect(sdmEngine.pendingRequests[0].(*mem.ReadReq).Address).
 			To(Equal(uint64(20)))

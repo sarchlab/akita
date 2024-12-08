@@ -16,43 +16,39 @@ const (
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
-	SrcAddress      uint64
-	DstAddress      uint64
-	SrcTransferSize uint64
-	DstTransferSize uint64
-	ByteSize        uint64
-	SrcPort         DateMovePort
-	DstPort         DateMovePort
+	SrcAddress uint64
+	DstAddress uint64
+	ByteSize   uint64
+	SrcSide    DateMovePort
+	DstSide    DateMovePort
 }
 
+// Meta returns the metadata of the message
 func (req *DataMoveRequest) Meta() *sim.MsgMeta {
 	return &req.MsgMeta
 }
 
+// Clone creates a deep copy of the DataMoveRequest with a new ID
 func (req *DataMoveRequest) Clone() sim.Msg {
-	b := &DataMoveRequestBuilder{}
-	b.WithSrc(req.Src)
-	b.WithDst(req.Dst)
-	b.WithDstAddress(req.DstAddress)
-	b.WithSrcAddress(req.SrcAddress)
-	b.WithSrcTransferSize(req.SrcTransferSize)
-	b.WithDstTransferSize(req.DstTransferSize)
-	b.WithSrcPort(req.SrcPort)
-	b.WithDstPort(req.DstPort)
-	b.WithByteSize(req.ByteSize)
+	b := MakeDataMoveRequestBuilder().
+		WithSrc(req.Src).
+		WithDst(req.Dst).
+		WithDstAddress(req.DstAddress).
+		WithSrcAddress(req.SrcAddress).
+		WithSrcSide(req.SrcSide).
+		WithDstSide(req.DstSide).
+		WithByteSize(req.ByteSize)
 	return b.Build()
 }
 
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
-	src, dst        sim.Port
-	srcAddress      uint64
-	dstAddress      uint64
-	srcTransferSize uint64
-	dstTransferSize uint64
-	byteSize        uint64
-	srcPort         DateMovePort
-	dstPort         DateMovePort
+	src, dst   sim.Port
+	srcAddress uint64
+	dstAddress uint64
+	byteSize   uint64
+	srcSide    DateMovePort
+	dstSide    DateMovePort
 }
 
 // MakeDataMoveRequestBuilder creates a new DataMoveRequestBuilder
@@ -60,6 +56,7 @@ func MakeDataMoveRequestBuilder() DataMoveRequestBuilder {
 	return DataMoveRequestBuilder{}
 }
 
+// WithSrc sets the source port of the message.
 func (b DataMoveRequestBuilder) WithSrc(
 	inputSrc sim.Port,
 ) DataMoveRequestBuilder {
@@ -67,6 +64,8 @@ func (b DataMoveRequestBuilder) WithSrc(
 	return b
 }
 
+// WithDst sets the destination port of the message. It should be the CtrlPort
+// of the DataMover.
 func (b DataMoveRequestBuilder) WithDst(
 	inputDst sim.Port,
 ) DataMoveRequestBuilder {
@@ -74,6 +73,7 @@ func (b DataMoveRequestBuilder) WithDst(
 	return b
 }
 
+// WithSrcAddress sets the source address of the data to be moved.
 func (b DataMoveRequestBuilder) WithSrcAddress(
 	inputSrcAddress uint64,
 ) DataMoveRequestBuilder {
@@ -81,6 +81,7 @@ func (b DataMoveRequestBuilder) WithSrcAddress(
 	return b
 }
 
+// WithDstAddress sets the destination address of the data to be moved.
 func (b DataMoveRequestBuilder) WithDstAddress(
 	inputDstAddress uint64,
 ) DataMoveRequestBuilder {
@@ -88,34 +89,23 @@ func (b DataMoveRequestBuilder) WithDstAddress(
 	return b
 }
 
-func (b DataMoveRequestBuilder) WithSrcTransferSize(
-	inputSrcTransferSize uint64,
+// WithDstSide sets the destination side of the data to be moved.
+func (b DataMoveRequestBuilder) WithDstSide(
+	side DateMovePort,
 ) DataMoveRequestBuilder {
-	b.srcTransferSize = inputSrcTransferSize
+	b.dstSide = side
 	return b
 }
 
-func (b DataMoveRequestBuilder) WithDstTransferSize(
-	inputDstTransferSize uint64,
+// WithSrcSide sets the source side of the data to be moved.
+func (b DataMoveRequestBuilder) WithSrcSide(
+	side DateMovePort,
 ) DataMoveRequestBuilder {
-	b.dstTransferSize = inputDstTransferSize
+	b.srcSide = side
 	return b
 }
 
-func (b DataMoveRequestBuilder) WithDstPort(
-	inputDstPort DateMovePort,
-) DataMoveRequestBuilder {
-	b.dstPort = inputDstPort
-	return b
-}
-
-func (b DataMoveRequestBuilder) WithSrcPort(
-	inputSrcPort DateMovePort,
-) DataMoveRequestBuilder {
-	b.srcPort = inputSrcPort
-	return b
-}
-
+// WithByteSize sets the byte size of the data to be moved.
 func (b DataMoveRequestBuilder) WithByteSize(
 	inputByteSize uint64,
 ) DataMoveRequestBuilder {
@@ -123,6 +113,7 @@ func (b DataMoveRequestBuilder) WithByteSize(
 	return b
 }
 
+// Build creates a new DataMoveRequest.
 func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r := &DataMoveRequest{}
 	r.ID = sim.GetIDGenerator().Generate()
@@ -130,10 +121,8 @@ func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.Dst = b.dst
 	r.SrcAddress = b.srcAddress
 	r.DstAddress = b.dstAddress
-	r.SrcTransferSize = b.srcTransferSize
-	r.DstTransferSize = b.dstTransferSize
 	r.ByteSize = b.byteSize
-	r.SrcPort = b.srcPort
-	r.DstPort = b.dstPort
+	r.SrcSide = b.srcSide
+	r.DstSide = b.dstSide
 	return r
 }
