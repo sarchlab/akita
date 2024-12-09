@@ -20,15 +20,15 @@ var _ = Describe("InterleavedAddressToPortMapper", func() {
 		addressToPortMapper.LowAddress = 0
 		addressToPortMapper.HighAddress = 4 * GB
 		addressToPortMapper.InterleavingSize = 4096
-		addressToPortMapper.LowModules = make([]sim.Port, 0)
+		addressToPortMapper.LowModules = make([]sim.RemotePort, 0)
 		for i := 0; i < 6; i++ {
 			addressToPortMapper.LowModules = append(
 				addressToPortMapper.LowModules,
-				sim.NewPort(nil, 4, 4,
-					fmt.Sprintf("LowModule[%d].Port", i)))
+				sim.RemotePort(fmt.Sprintf("LowModule[%d].Port", i)),
+			)
 		}
 		addressToPortMapper.ModuleForOtherAddresses =
-			sim.NewPort(nil, 4, 4, "LowModuleOther.Port")
+			sim.RemotePort("LowModuleOther.Port")
 	})
 
 	It("should find low module if address is in-space", func() {

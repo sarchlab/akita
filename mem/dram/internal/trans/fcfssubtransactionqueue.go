@@ -23,6 +23,7 @@ func (q *FCFSSubTransactionQueue) CanPush(n int) bool {
 	if len(q.Queue)+n > q.Capacity {
 		return false
 	}
+
 	return true
 }
 

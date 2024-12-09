@@ -43,7 +43,7 @@ var _ = Describe("DataMover", func() {
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-
+		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
@@ -60,10 +60,10 @@ var _ = Describe("DataMover", func() {
 			WithEngine(engine).
 			WithBufferSize(2048).
 			WithInsidePortMapper(&mem.SinglePortMapper{
-				Port: insideMem.GetPortByName("Top"),
+				Port: insideMem.GetPortByName("Top").AsRemote(),
 			}).
 			WithOutsidePortMapper(&mem.SinglePortMapper{
-				Port: outsideMem.GetPortByName("Top"),
+				Port: outsideMem.GetPortByName("Top").AsRemote(),
 			}).
 			WithInsideByteGranularity(64).
 			WithOutsideByteGranularity(256).
@@ -95,8 +95,8 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
 
 		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort).
-			WithDst(dataMover.ctrlPort).
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
 			WithSrcAddress(0).
 			WithSrcSide("outside").
 			WithDstAddress(0).
@@ -122,8 +122,8 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
 
 		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort).
-			WithDst(dataMover.ctrlPort).
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
 			WithSrcAddress(0).
 			WithSrcSide("inside").
 			WithDstAddress(0).
@@ -149,8 +149,8 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
 
 		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort).
-			WithDst(dataMover.ctrlPort).
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
 			WithSrcAddress(0).
 			WithSrcSide("inside").
 			WithDstAddress(4096).

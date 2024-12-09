@@ -68,6 +68,7 @@ func (c *Command) Clone() *Command {
 		CycleLeft: c.CycleLeft,
 		SubTrans:  c.SubTrans,
 	}
+
 	return newCmd
 }
 
