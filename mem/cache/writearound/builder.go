@@ -139,12 +139,13 @@ func (b *Builder) Build(name string) *Comp {
 	c.TickingComponent = sim.NewTickingComponent(
 		name, b.engine, b.freq, c)
 
-	c.topPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
+		name+".TopPort")
 	c.AddPort("Top", c.topPort)
-	c.bottomPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.bottomPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
-	c.controlPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.controlPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+".ControlPort")
 	c.AddPort("Control", c.controlPort)
 

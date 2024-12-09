@@ -40,7 +40,7 @@ func newSampleComponent() *sampleComponent {
 		buffer:        sim.NewBuffer("Comp.Buf", 10),
 	}
 
-	c.AddPort("Port1", sim.NewLimitNumMsgPort(c, 2, "Comp.Port1"))
+	c.AddPort("Port1", sim.NewPort(c, 2, 2, "Comp.Port1"))
 
 	return c
 }

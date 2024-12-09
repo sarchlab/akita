@@ -192,16 +192,19 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".ToTop")
+	cache.topPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".ToTop")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".BottomPort")
+	cache.bottomPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".ControlPort")
+	cache.controlPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
 }
 

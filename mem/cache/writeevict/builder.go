@@ -179,15 +179,15 @@ func (b *Builder) Build(name string) *Comp {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.topPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".TopPort")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.bottomPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.controlPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
 }

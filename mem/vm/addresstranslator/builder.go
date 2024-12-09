@@ -99,18 +99,18 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.topPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	t.AddPort("Top", t.topPort)
 
-	t.bottomPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.bottomPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	t.AddPort("Bottom", t.bottomPort)
 
-	t.translationPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.translationPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TranslationPort")
 	t.AddPort("Translation", t.translationPort)
 
-	t.ctrlPort = sim.NewLimitNumMsgPort(t, 1, name+".CtrlPort")
+	t.ctrlPort = sim.NewPort(t, 1, 1, name+".CtrlPort")
 	t.AddPort("Control", t.ctrlPort)
 }

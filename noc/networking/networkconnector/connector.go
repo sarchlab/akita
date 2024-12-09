@@ -271,8 +271,9 @@ func (c *Connector) createEndPointWithName(
 		tracing.CollectTrace(endPoint, c.visTracer)
 	}
 
-	epPort := sim.NewLimitNumMsgPort(endPoint,
+	epPort := sim.NewPort(endPoint,
 		param.DeviceEndParam.IncomingBufSize,
+		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
 	endPoint.NetworkPort = epPort
 
@@ -298,12 +299,13 @@ func (c *Connector) createEndPoint(
 func (c *Connector) connectEndPointWithSwitch(
 	swNode *switchNode, endPoint *endpoint.Comp,
 	param DeviceToSwitchLinkParameter,
-) (*sim.LimitNumMsgPort, namedHookableConnection) {
+) (sim.Port, namedHookableConnection) {
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort
 
-	swPort := sim.NewLimitNumMsgPort(sw,
+	swPort := sim.NewPort(sw,
 		param.SwitchEndParam.IncomingBufSize,
+		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
 	endPoint.DefaultSwitchDst = swPort
 	switches.MakeSwitchPortAdder(sw).
@@ -395,8 +397,9 @@ func (c *Connector) ConnectSwitches(
 		leftPortName = fmt.Sprintf("%s.Port%d",
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
-	leftPort = sim.NewLimitNumMsgPort(leftSwitch,
+	leftPort = sim.NewPort(leftSwitch,
 		param.LeftEndParam.IncomingBufSize,
+		param.LeftEndParam.OutgoingBufSize,
 		leftPortName)
 
 	rightNode := c.switches[rightSwitchID]
@@ -406,8 +409,10 @@ func (c *Connector) ConnectSwitches(
 		rightPortName = fmt.Sprintf("%s.Port%d",
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
-	rightPort = sim.NewLimitNumMsgPort(rightSwitch,
-		param.RightEndParam.IncomingBufSize, rightPortName)
+	rightPort = sim.NewPort(rightSwitch,
+		param.RightEndParam.IncomingBufSize,
+		param.RightEndParam.OutgoingBufSize,
+		rightPortName)
 
 	switches.MakeSwitchPortAdder(leftSwitch).
 		WithPorts(leftPort, rightPort).

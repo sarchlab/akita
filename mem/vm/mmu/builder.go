@@ -103,9 +103,9 @@ func (b Builder) createPageTable(mmu *Comp) {
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
-	mmu.topPort = sim.NewLimitNumMsgPort(mmu, 4096, name+".ToTop")
+	mmu.topPort = sim.NewPort(mmu, 4096, 4096, name+".ToTop")
 	mmu.AddPort("Top", mmu.topPort)
-	mmu.migrationPort = sim.NewLimitNumMsgPort(mmu, 1, name+".MigrationPort")
+	mmu.migrationPort = sim.NewPort(mmu, 1, 1, name+".MigrationPort")
 	mmu.AddPort("Migration", mmu.migrationPort)
 
 	mmu.topSender = sim.NewBufferedSender(

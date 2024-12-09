@@ -439,7 +439,7 @@ func (b Builder) Build(name string) *Comp {
 		m.storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	m.topPort = sim.NewLimitNumMsgPort(m, 1024, name+".TopPort")
+	m.topPort = sim.NewPort(m, 1024, 1024, name+".TopPort")
 	m.AddPort("Top", m.topPort)
 
 	middleware := &middleware{Comp: m}

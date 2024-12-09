@@ -85,7 +85,7 @@ type agent struct {
 func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = sim.NewLimitNumMsgPort(a, 4, name+".OutPort")
+	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
 	return a
 }
 

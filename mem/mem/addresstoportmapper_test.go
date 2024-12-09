@@ -24,11 +24,11 @@ var _ = Describe("InterleavedLowModuleFinder", func() {
 		for i := 0; i < 6; i++ {
 			lowModuleFinder.LowModules = append(
 				lowModuleFinder.LowModules,
-				sim.NewLimitNumMsgPort(nil, 4,
+				sim.NewPort(nil, 4, 4,
 					fmt.Sprintf("LowModule[%d].Port", i)))
 		}
 		lowModuleFinder.ModuleForOtherAddresses =
-			sim.NewLimitNumMsgPort(nil, 4, "LowModuleOther.Port")
+			sim.NewPort(nil, 4, 4, "LowModuleOther.Port")
 	})
 
 	It("should find low module if address is in-space", func() {
