@@ -22,12 +22,14 @@ func NewSet(numWays int) Set {
 	s.blocks = make([]*block, numWays)
 	s.visitList = make([]*block, 0, numWays)
 	s.vAddrWayIDMap = make(map[string]int)
+
 	for i := range s.blocks {
 		b := &block{}
 		s.blocks[i] = b
 		b.wayID = i
 		s.Visit(i)
 	}
+
 	return s
 }
 
@@ -59,6 +61,7 @@ func (s *setImpl) Lookup(pid vm.PID, vAddr uint64) (
 ) {
 	key := s.keyString(pid, vAddr)
 	wayID, ok := s.vAddrWayIDMap[key]
+
 	if !ok {
 		return 0, vm.Page{}, false
 	}
@@ -87,6 +90,7 @@ func (s *setImpl) Evict() (wayID int, ok bool) {
 	leastVisited := s.visitList[0]
 	wayID = leastVisited.wayID
 	s.visitList = s.visitList[1:]
+
 	return wayID, true
 }
 

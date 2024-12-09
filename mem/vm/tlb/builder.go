@@ -10,7 +10,7 @@ type Builder struct {
 	numSets        int
 	numWays        int
 	pageSize       uint64
-	lowModule      sim.Port
+	lowModule      sim.RemotePort
 	numMSHREntry   int
 }
 
@@ -67,7 +67,7 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of tlb miss.
-func (b Builder) WithLowModule(lowModule sim.Port) Builder {
+func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
 	b.lowModule = lowModule
 	return b
 }

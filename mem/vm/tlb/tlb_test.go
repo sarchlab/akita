@@ -28,8 +28,20 @@ var _ = Describe("TLB", func() {
 		engine = NewMockEngine(mockCtrl)
 		set = NewMockSet(mockCtrl)
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
+		controlPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("ControlPort")).
+			AnyTimes()
 
 		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
 		tlb.topPort = topPort
@@ -141,7 +153,8 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbMiddleware.lookup()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).To(Equal(true))
+			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).
+				To(Equal(true))
 		})
 
 		It("should find the entry in MSHR and not request from bottom", func() {
@@ -280,8 +293,8 @@ var _ = Describe("TLB", func() {
 
 		It("should handle flush request", func() {
 			flushReq := FlushReqBuilder{}.
-				WithSrc(nil).
-				WithDst(nil).
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
 				WithVAddrs([]uint64{0x1000}).
 				WithPID(1).
 				Build()
@@ -311,8 +324,8 @@ var _ = Describe("TLB", func() {
 
 		It("should handle restart request", func() {
 			restartReq := RestartReqBuilder{}.
-				WithSrc(nil).
-				WithDst(nil).
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
 				Build()
 			controlPort.EXPECT().PeekIncoming().
 				Return(restartReq)
@@ -345,6 +358,10 @@ var _ = Describe("TLB Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = sim.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
+		lowModule.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("LowModule")).
+			AnyTimes()
 		lowModuleCall := lowModule.EXPECT().
 			PeekOutgoing().
 			Return(nil).
@@ -352,9 +369,14 @@ var _ = Describe("TLB Integration", func() {
 		agent = NewMockPort(mockCtrl)
 		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 
-		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
-		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
-		tlb.LowModule = lowModule
+		connection = directconnection.MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			Build("Conn")
+		tlb = MakeBuilder().
+			WithEngine(engine).
+			Build("TLB")
+		tlb.LowModule = lowModule.AsRemote()
 
 		agent.EXPECT().SetConnection(connection)
 		lowModule.EXPECT().SetConnection(connection)
@@ -373,7 +395,7 @@ var _ = Describe("TLB Integration", func() {
 		lowModule.EXPECT().Deliver(gomock.Any()).
 			Do(func(req *vm.TranslationReq) {
 				rsp := vm.TranslationRspBuilder{}.
-					WithSrc(lowModule).
+					WithSrc(lowModule.AsRemote()).
 					WithDst(req.Src).
 					WithPage(page).
 					WithRspTo(req.ID).
@@ -392,8 +414,8 @@ var _ = Describe("TLB Integration", func() {
 
 	It("should do tlb miss", func() {
 		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent).
-			WithDst(tlb.topPort).
+			WithSrc(agent.AsRemote()).
+			WithDst(tlb.topPort.AsRemote()).
 			WithPID(1).
 			WithVAddr(0x1000).
 			WithDeviceID(1).
@@ -411,8 +433,8 @@ var _ = Describe("TLB Integration", func() {
 	It("should have faster hit than miss", func() {
 		time1 := engine.CurrentTime()
 		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent).
-			WithDst(tlb.topPort).
+			WithSrc(agent.AsRemote()).
+			WithDst(tlb.topPort.AsRemote()).
 			WithPID(1).
 			WithVAddr(0x1000).
 			WithDeviceID(1).
