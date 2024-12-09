@@ -14,7 +14,7 @@ import (
 type Builder struct {
 	engine           sim.Engine
 	freq             sim.Freq
-	lowModuleFinder  mem.LowModuleFinder
+	lowModuleFinder  mem.AddressToPortMapper
 	wayAssociativity int
 	log2BlockSize    uint64
 
@@ -81,7 +81,7 @@ func (b Builder) WithNumMSHREntry(n int) Builder {
 }
 
 // WithLowModuleFinder sets the LowModuleFinder to be used.
-func (b Builder) WithLowModuleFinder(f mem.LowModuleFinder) Builder {
+func (b Builder) WithLowModuleFinder(f mem.AddressToPortMapper) Builder {
 	b.lowModuleFinder = f
 	return b
 }

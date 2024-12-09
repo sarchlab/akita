@@ -11,11 +11,11 @@ import (
 
 var _ = Describe("InterleavedLowModuleFinder", func() {
 	var (
-		lowModuleFinder *InterleavedLowModuleFinder
+		lowModuleFinder *InterleavedAddressPortMapper
 	)
 
 	BeforeEach(func() {
-		lowModuleFinder = new(InterleavedLowModuleFinder)
+		lowModuleFinder = new(InterleavedAddressPortMapper)
 		lowModuleFinder.UseAddressSpaceLimitation = true
 		lowModuleFinder.LowAddress = 0
 		lowModuleFinder.HighAddress = 4 * GB

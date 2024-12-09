@@ -11,7 +11,7 @@ type Builder struct {
 	freq                sim.Freq
 	translationProvider sim.Port
 	ctrlPort            sim.Port
-	lowModuleFinder     mem.LowModuleFinder
+	lowModuleFinder     mem.AddressToPortMapper
 	numReqPerCycle      int
 	log2PageSize        uint64
 	deviceID            uint64
@@ -48,7 +48,7 @@ func (b Builder) WithTranslationProvider(p sim.Port) Builder {
 
 // WithLowModuleFinder sets the low modules finder that can tell the address
 // translators where to send the memory access request to.
-func (b Builder) WithLowModuleFinder(f mem.LowModuleFinder) Builder {
+func (b Builder) WithLowModuleFinder(f mem.AddressToPortMapper) Builder {
 	b.lowModuleFinder = f
 	return b
 }

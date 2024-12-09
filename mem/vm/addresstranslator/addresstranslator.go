@@ -34,7 +34,7 @@ type Comp struct {
 	translationPort sim.Port
 	ctrlPort        sim.Port
 
-	lowModuleFinder     mem.LowModuleFinder
+	lowModuleFinder     mem.AddressToPortMapper
 	translationProvider sim.Port
 	log2PageSize        uint64
 	deviceID            uint64
@@ -56,7 +56,7 @@ func (c *Comp) SetTranslationProvider(p sim.Port) {
 }
 
 // SetLowModuleFinder sets the table recording where to find an address.
-func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.AddressToPortMapper) {
 	c.lowModuleFinder = lmf
 }
 

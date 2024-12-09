@@ -23,7 +23,7 @@ type Comp struct {
 	mshr             cache.MSHR
 	bankLatency      int
 	wayAssociativity int
-	lowModuleFinder  mem.LowModuleFinder
+	lowModuleFinder  mem.AddressToPortMapper
 
 	dirBuf   sim.Buffer
 	bankBufs []sim.Buffer
@@ -48,7 +48,7 @@ func (c *Comp) Tick() bool {
 
 // SetLowModuleFinder sets the finder that tells which remote port can serve
 // the data on a certain address.
-func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
+func (c *Comp) SetLowModuleFinder(lmf mem.AddressToPortMapper) {
 	c.lowModuleFinder = lmf
 }
 
