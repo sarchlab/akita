@@ -38,11 +38,12 @@ func (s *controlStage) processCurrentFlush() bool {
 	}
 
 	rsp := cache.FlushRspBuilder{}.
-		WithSrc(s.ctrlPort).
+		WithSrc(s.ctrlPort.AsRemote()).
 		WithDst(s.currFlushReq.Src).
 		WithRspTo(s.currFlushReq.ID).
 		Build()
 	err := s.ctrlPort.Send(rsp)
+
 	if err != nil {
 		return false
 	}
@@ -57,6 +58,7 @@ func (s *controlStage) hardResetCache() {
 	s.flushPort(s.cache.topPort)
 	s.flushPort(s.cache.bottomPort)
 	s.flushBuffer(s.cache.dirBuf)
+
 	for _, bankBuf := range s.cache.bankBufs {
 		s.flushBuffer(bankBuf)
 	}
@@ -64,6 +66,7 @@ func (s *controlStage) hardResetCache() {
 	s.directory.Reset()
 	s.cache.mshr.Reset()
 	s.cache.coalesceStage.Reset()
+
 	for _, bankStage := range s.cache.bankStages {
 		bankStage.Reset()
 	}
@@ -102,6 +105,7 @@ func (s *controlStage) processNewRequest() bool {
 		log.Panicf("cannot handle request of type %s ",
 			reflect.TypeOf(req))
 	}
+
 	panic("never")
 }
 
@@ -132,7 +136,7 @@ func (s *controlStage) doCacheRestart(req *cache.RestartReq) bool {
 	}
 
 	rsp := cache.RestartRspBuilder{}.
-		WithSrc(s.ctrlPort).
+		WithSrc(s.ctrlPort.AsRemote()).
 		WithDst(req.Src).
 		Build()
 
