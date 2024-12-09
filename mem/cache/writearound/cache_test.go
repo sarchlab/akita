@@ -43,11 +43,11 @@ var _ = Describe("Cache", func() {
 			WithLowModuleFinder(lowModuleFinder).
 			Build("Cache")
 
-		connection.PlugIn(dram.GetPortByName("Top"), 64)
-		connection.PlugIn(c.GetPortByName("Top"), 4)
-		connection.PlugIn(c.GetPortByName("Bottom"), 16)
+		connection.PlugIn(dram.GetPortByName("Top"))
+		connection.PlugIn(c.GetPortByName("Top"))
+		connection.PlugIn(c.GetPortByName("Bottom"))
 		cuPort.EXPECT().SetConnection(connection)
-		connection.PlugIn(cuPort, 4)
+		connection.PlugIn(cuPort)
 	})
 
 	AfterEach(func() {

@@ -76,12 +76,12 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		lowModuleFinder.Port = dram.GetPortByName("Top")
 
 		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Connection")
-		conn.PlugIn(cacheModule.topPort, 10)
-		conn.PlugIn(cacheModule.bottomPort, 10)
-		conn.PlugIn(cacheModule.controlPort, 10)
-		conn.PlugIn(dram.GetPortByName("Top"), 10)
-		conn.PlugIn(agentPort, 10)
-		conn.PlugIn(controlAgentPort, 10)
+		conn.PlugIn(cacheModule.topPort)
+		conn.PlugIn(cacheModule.bottomPort)
+		conn.PlugIn(cacheModule.controlPort)
+		conn.PlugIn(dram.GetPortByName("Top"))
+		conn.PlugIn(agentPort)
+		conn.PlugIn(controlAgentPort)
 	})
 
 	AfterEach(func() {

@@ -64,8 +64,8 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithFreq(freq).
 		Build("Conn")
 
-	conn.PlugIn(ep1.NetworkPort, 1)
-	conn.PlugIn(ep2.NetworkPort, 1)
+	conn.PlugIn(ep1.NetworkPort)
+	conn.PlugIn(ep2.NetworkPort)
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])

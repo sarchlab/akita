@@ -76,12 +76,12 @@ var _ = Describe("DataMover", func() {
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
-		conn.PlugIn(srcPort, 64)
-		conn.PlugIn(dataMover.ctrlPort, 64)
-		conn.PlugIn(dataMover.insidePort, 64)
-		conn.PlugIn(dataMover.outsidePort, 64)
-		conn.PlugIn(insideMem.GetPortByName("Top"), 64)
-		conn.PlugIn(outsideMem.GetPortByName("Top"), 64)
+		conn.PlugIn(srcPort)
+		conn.PlugIn(dataMover.ctrlPort)
+		conn.PlugIn(dataMover.insidePort)
+		conn.PlugIn(dataMover.outsidePort)
+		conn.PlugIn(insideMem.GetPortByName("Top"))
+		conn.PlugIn(outsideMem.GetPortByName("Top"))
 	})
 
 	It("should move data outside to inside", func() {

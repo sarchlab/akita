@@ -313,11 +313,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		WithNumOutputChannel(param.SwitchEndParam.NumOutputChannel).
 		AddPort()
 
-	conn := c.connectPorts(epPort, swPort,
-		param.DeviceEndParam.OutgoingBufSize,
-		param.SwitchEndParam.OutgoingBufSize,
-		param.LinkParam,
-	)
+	conn := c.connectPorts(epPort, swPort, param.LinkParam)
 
 	return swPort, conn
 }
@@ -345,7 +341,6 @@ func (c *Connector) createRemoteInfoFoEP(
 
 func (c *Connector) connectPorts(
 	left, right sim.Port,
-	leftBufSize, rightBufSize int,
 	linkParam LinkParameter,
 ) (conn namedHookableConnection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
@@ -364,8 +359,8 @@ func (c *Connector) connectPorts(
 		// 	WithFreq(linkParam.Frequency).
 		// 	Build(connName)
 	}
-	conn.PlugIn(left, leftBufSize)
-	conn.PlugIn(right, rightBufSize)
+	conn.PlugIn(left)
+	conn.PlugIn(right)
 
 	if c.monitor != nil {
 		c.monitor.RegisterComponent(conn)
@@ -428,10 +423,7 @@ func (c *Connector) ConnectSwitches(
 		WithNumOutputChannel(param.RightEndParam.NumOutputChannel).
 		AddPort()
 
-	conn := c.connectPorts(leftPort, rightPort,
-		param.LeftEndParam.OutgoingBufSize,
-		param.RightEndParam.OutgoingBufSize,
-		param.LinkParam)
+	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 
 	c.createRemoteInfo(leftNode, rightNode, leftPort, rightPort, conn)
 

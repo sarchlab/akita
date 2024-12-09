@@ -45,8 +45,8 @@ var _ = Describe("DRAM Integration", func() {
 
 		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		srcPort.EXPECT().SetConnection(conn)
-		conn.PlugIn(memCtrl.topPort, 1)
-		conn.PlugIn(srcPort, 1)
+		conn.PlugIn(memCtrl.topPort)
+		conn.PlugIn(srcPort)
 	})
 
 	It("should read and write", func() {

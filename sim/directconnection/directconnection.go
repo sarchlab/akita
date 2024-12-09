@@ -15,7 +15,7 @@ type Comp struct {
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port sim.Port, sourceSideBufSize int) {
+func (c *Comp) PlugIn(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 

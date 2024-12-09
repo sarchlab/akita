@@ -99,10 +99,10 @@ func buildEnvironment() {
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 
-	conn.PlugIn(agent.GetPortByName("Mem"), 16)
-	conn.PlugIn(writeBackCache.GetPortByName("Bottom"), 16)
-	conn.PlugIn(writeBackCache.GetPortByName("Top"), 16)
-	conn.PlugIn(dram.GetPortByName("Top"), 16)
+	conn.PlugIn(agent.GetPortByName("Mem"))
+	conn.PlugIn(writeBackCache.GetPortByName("Bottom"))
+	conn.PlugIn(writeBackCache.GetPortByName("Top"))
+	conn.PlugIn(dram.GetPortByName("Top"))
 
 	agent.TickLater()
 }

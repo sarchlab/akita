@@ -109,7 +109,7 @@ func (b Builder) Build(name string) *Comp {
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
 
 	for _, dp := range b.devicePorts {
-		ep.PlugIn(dp, ep.numInputChannels)
+		ep.PlugIn(dp)
 	}
 
 	middleware := &middleware{Comp: ep}

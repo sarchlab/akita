@@ -21,8 +21,8 @@ func Example() {
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
+	conn.PlugIn(agentA.OutPort)
+	conn.PlugIn(agentB.OutPort)
 
 	agentA.pingDst = agentB.OutPort
 	agentA.numPingNeedToSend = 2

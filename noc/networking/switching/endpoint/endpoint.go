@@ -40,7 +40,7 @@ type Comp struct {
 }
 
 // PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port sim.Port, srcBufCap int) {
+func (c *Comp) PlugIn(port sim.Port) {
 	port.SetConnection(c)
 	c.DevicePorts = append(c.DevicePorts, port)
 }
