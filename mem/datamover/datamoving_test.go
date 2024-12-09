@@ -141,7 +141,7 @@ var _ = Describe("DataMover", func() {
 		Expect(insideMem.Storage.Read(0, 4096)).To(Equal(data))
 	})
 
-	FIt("should move on difference addresses", func() {
+	It("should move on difference addresses", func() {
 		data := make([]byte, 4096)
 		for i := 0; i < 4096; i++ {
 			data[i] = byte(i)
