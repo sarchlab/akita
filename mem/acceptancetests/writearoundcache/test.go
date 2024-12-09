@@ -68,10 +68,10 @@ func buildEnvironment() {
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
-	lowModuleFinder := new(mem.SinglePortMapper)
+	addressToPortMapper := new(mem.SinglePortMapper)
 	builder := writearound.NewBuilder().
 		WithEngine(engine).
-		WithLowModuleFinder(lowModuleFinder).
+		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).
 		WithNumMSHREntry(4).
 		WithWayAssociativity(8).
@@ -95,7 +95,7 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
-	lowModuleFinder.Port = dram.GetPortByName("Top")
+	addressToPortMapper.Port = dram.GetPortByName("Top")
 
 	agent.LowModule = writeevictCache.GetPortByName("Top")
 

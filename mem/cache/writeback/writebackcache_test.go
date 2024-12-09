@@ -16,7 +16,7 @@ import (
 )
 
 //go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE  -write_package_comment=false github.com/sarchlab/akita/v4/mem/cache Directory,MSHR
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE  -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem LowModuleFinder
+//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE  -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressToPortMapper
 //go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port,Engine,Buffer,BufferedSender
 //go:generate mockgen -destination "mock_pipelining_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/pipelining Pipeline
 
@@ -29,17 +29,17 @@ func TestCache(t *testing.T) {
 var _ = Describe("Write-Back Cache Integration", func() {
 
 	var (
-		mockCtrl         *gomock.Controller
-		engine           sim.Engine
-		victimFinder     *cache.LRUVictimFinder
-		directory        *cache.DirectoryImpl
-		lowModuleFinder  *mem.SinglePortMapper
-		storage          *mem.Storage
-		cacheModule      *Comp
-		dram             *idealmemcontroller.Comp
-		conn             *directconnection.Comp
-		agentPort        *MockPort
-		controlAgentPort *MockPort
+		mockCtrl            *gomock.Controller
+		engine              sim.Engine
+		victimFinder        *cache.LRUVictimFinder
+		directory           *cache.DirectoryImpl
+		addressToPortMapper *mem.SinglePortMapper
+		storage             *mem.Storage
+		cacheModule         *Comp
+		dram                *idealmemcontroller.Comp
+		conn                *directconnection.Comp
+		agentPort           *MockPort
+		controlAgentPort    *MockPort
 	)
 
 	BeforeEach(func() {
@@ -54,14 +54,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		engine = sim.NewSerialEngine()
 		directory = cache.NewDirectory(1024, 4, 64, victimFinder)
-		lowModuleFinder = &mem.SinglePortMapper{}
+		addressToPortMapper = &mem.SinglePortMapper{}
 		storage = mem.NewStorage(1024 * 4 * 64)
 
 		builder := MakeBuilder().
 			WithEngine(engine).
 			WithByteSize(1024 * 4 * 64).
 			WithNumReqPerCycle(4).
-			WithLowModuleFinder(lowModuleFinder)
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.directory = directory
 		cacheModule.storage = storage
@@ -73,7 +73,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithLatency(200).
 			Build("DRAM")
 
-		lowModuleFinder.Port = dram.GetPortByName("Top")
+		addressToPortMapper.Port = dram.GetPortByName("Top")
 
 		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Connection")
 		conn.PlugIn(cacheModule.topPort)

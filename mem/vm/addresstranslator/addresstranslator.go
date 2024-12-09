@@ -34,7 +34,7 @@ type Comp struct {
 	translationPort sim.Port
 	ctrlPort        sim.Port
 
-	lowModuleFinder     mem.AddressToPortMapper
+	addressToPortMapper mem.AddressToPortMapper
 	translationProvider sim.Port
 	log2PageSize        uint64
 	deviceID            uint64
@@ -55,9 +55,9 @@ func (c *Comp) SetTranslationProvider(p sim.Port) {
 	c.translationProvider = p
 }
 
-// SetLowModuleFinder sets the table recording where to find an address.
-func (c *Comp) SetLowModuleFinder(lmf mem.AddressToPortMapper) {
-	c.lowModuleFinder = lmf
+// SetAddressToPortMapper sets the table recording where to find an address.
+func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
+	c.addressToPortMapper = lmf
 }
 
 func (c *Comp) Tick() bool {
@@ -114,7 +114,7 @@ func (m *middleware) doGL0Invalidate() bool {
 		req := mem.GL0InvalidateReqBuilder{}.
 			WithPID(m.currentGL0InvReq.PID).
 			WithSrc(m.bottomPort).
-			WithDst(m.lowModuleFinder.Find(0)).
+			WithDst(m.addressToPortMapper.Find(0)).
 			Build()
 
 		err := m.bottomPort.Send(req)
@@ -342,7 +342,7 @@ func (m *middleware) createTranslatedReadReq(
 	addr := page.PAddr + offset
 	clone := mem.ReadReqBuilder{}.
 		WithSrc(m.bottomPort).
-		WithDst(m.lowModuleFinder.Find(addr)).
+		WithDst(m.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
 		WithByteSize(req.AccessByteSize).
 		WithPID(0).
@@ -360,7 +360,7 @@ func (m *middleware) createTranslatedWriteReq(
 	addr := page.PAddr + offset
 	clone := mem.WriteReqBuilder{}.
 		WithSrc(m.bottomPort).
-		WithDst(m.lowModuleFinder.Find(addr)).
+		WithDst(m.addressToPortMapper.Find(addr)).
 		WithData(req.Data).
 		WithDirtyMask(req.DirtyMask).
 		WithAddress(addr).

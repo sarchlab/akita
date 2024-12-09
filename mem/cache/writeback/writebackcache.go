@@ -43,21 +43,21 @@ type Comp struct {
 	mshrStage   *mshrStage
 	flusher     *flusher
 
-	storage         *mem.Storage
-	lowModuleFinder mem.AddressToPortMapper
-	directory       cache.Directory
-	mshr            cache.MSHR
-	log2BlockSize   uint64
-	numReqPerCycle  int
+	storage             *mem.Storage
+	addressToPortMapper mem.AddressToPortMapper
+	directory           cache.Directory
+	mshr                cache.MSHR
+	log2BlockSize       uint64
+	numReqPerCycle      int
 
 	state                cacheState
 	inFlightTransactions []*transaction
 	evictingList         map[uint64]bool
 }
 
-// SetLowModuleFinder sets the LowModuleFinder used by the cache.
-func (c *Comp) SetLowModuleFinder(lmf mem.AddressToPortMapper) {
-	c.lowModuleFinder = lmf
+// SetAddressToPortMapper sets the AddressToPortMapper used by the cache.
+func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
+	c.addressToPortMapper = lmf
 }
 
 func (c *Comp) Tick() bool {

@@ -189,7 +189,7 @@ func (d *directory) writeBottom(trans *transaction) bool {
 
 	writeToBottom := mem.WriteReqBuilder{}.
 		WithSrc(d.cache.bottomPort).
-		WithDst(d.cache.lowModuleFinder.Find(addr)).
+		WithDst(d.cache.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
 		WithPID(write.PID).
 		WithData(write.Data).
@@ -256,7 +256,7 @@ func (d *directory) fetchFromBottom(
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	bottomModule := d.cache.lowModuleFinder.Find(cacheLineID)
+	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
 	readToBottom := mem.ReadReqBuilder{}.
 		WithSrc(d.cache.bottomPort).
 		WithDst(bottomModule).

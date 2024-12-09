@@ -11,12 +11,12 @@ import (
 
 var _ = Describe("Address Translator", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		topPort         *MockPort
-		bottomPort      *MockPort
-		translationPort *MockPort
-		ctrlPort        *MockPort
-		lowModuleFinder *MockLowModuleFinder
+		mockCtrl            *gomock.Controller
+		topPort             *MockPort
+		bottomPort          *MockPort
+		translationPort     *MockPort
+		ctrlPort            *MockPort
+		addressToPortMapper *MockAddressToPortMapper
 
 		t           *Comp
 		tMiddleware *middleware
@@ -28,12 +28,12 @@ var _ = Describe("Address Translator", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		ctrlPort = NewMockPort(mockCtrl)
 		translationPort = NewMockPort(mockCtrl)
-		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		builder := MakeBuilder().
 			WithLog2PageSize(12).
 			WithFreq(1).
-			WithLowModuleFinder(lowModuleFinder)
+			WithAddressToPortMapper(addressToPortMapper)
 		t = builder.Build("AddressTranslator")
 		t.log2PageSize = 12
 		t.topPort = topPort
@@ -162,7 +162,7 @@ var _ = Describe("Address Translator", func() {
 			trans1.translationDone = true
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			lowModuleFinder.EXPECT().Find(uint64(0x20040))
+			addressToPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
 
 			madeProgress := tMiddleware.parseTranslation()
@@ -190,7 +190,7 @@ var _ = Describe("Address Translator", func() {
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
-			lowModuleFinder.EXPECT().Find(uint64(0x20040))
+			addressToPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(read *mem.ReadReq) {
 					Expect(read).NotTo(BeIdenticalTo(req))
@@ -230,7 +230,7 @@ var _ = Describe("Address Translator", func() {
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
-			lowModuleFinder.EXPECT().Find(uint64(0x20040))
+			addressToPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(req *mem.WriteReq) {
 					Expect(req).NotTo(BeIdenticalTo(write))

@@ -15,13 +15,13 @@ import (
 
 var _ = Describe("Cache", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		engine          sim.Engine
-		connection      sim.Connection
-		lowModuleFinder mem.AddressToPortMapper
-		dram            *idealmemcontroller.Comp
-		cuPort          *MockPort
-		c               *Comp
+		mockCtrl            *gomock.Controller
+		engine              sim.Engine
+		connection          sim.Connection
+		addressToPortMapper mem.AddressToPortMapper
+		dram                *idealmemcontroller.Comp
+		cuPort              *MockPort
+		c                   *Comp
 	)
 
 	BeforeEach(func() {
@@ -35,12 +35,12 @@ var _ = Describe("Cache", func() {
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
-		lowModuleFinder = &mem.SinglePortMapper{
+		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top"),
 		}
 		c = NewBuilder().
 			WithEngine(engine).
-			WithLowModuleFinder(lowModuleFinder).
+			WithAddressToPortMapper(addressToPortMapper).
 			Build("Cache")
 
 		connection.PlugIn(dram.GetPortByName("Top"))

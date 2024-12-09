@@ -11,15 +11,15 @@ import (
 
 var _ = Describe("Write Buffer Stage", func() {
 	var (
-		mockCtrl          *gomock.Controller
-		cacheModule       *Comp
-		writeBufferBuffer *MockBuffer
-		bankBuffer        *MockBuffer
-		directory         *MockDirectory
-		lowModuleFinder   *MockLowModuleFinder
-		bottomPort        *MockPort
-		bottomSender      *MockBufferedSender
-		mshr              *MockMSHR
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		writeBufferBuffer   *MockBuffer
+		bankBuffer          *MockBuffer
+		directory           *MockDirectory
+		addressToPortMapper *MockAddressToPortMapper
+		bottomPort          *MockPort
+		bottomSender        *MockBufferedSender
+		mshr                *MockMSHR
 
 		wbStage *writeBufferStage
 	)
@@ -32,7 +32,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		directory = NewMockDirectory(mockCtrl)
 		directory.EXPECT().WayAssociativity().Return(4).AnyTimes()
 		mshr = NewMockMSHR(mockCtrl)
-		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		bottomPort = NewMockPort(mockCtrl)
 		bottomSender = NewMockBufferedSender(mockCtrl)
 
@@ -42,7 +42,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		cacheModule.bottomSender = bottomSender
 		cacheModule.directory = directory
 		cacheModule.mshr = mshr
-		cacheModule.lowModuleFinder = lowModuleFinder
+		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.writeBufferBuffer = writeBufferBuffer
 		cacheModule.writeBufferToBankBuffers = []sim.Buffer{bankBuffer}
 
@@ -259,7 +259,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			dramPort := NewMockPort(mockCtrl)
 			var fetchReq *mem.ReadReq
 
-			lowModuleFinder.EXPECT().Find(uint64(0x1000)).Return(dramPort)
+			addressToPortMapper.EXPECT().Find(uint64(0x1000)).Return(dramPort)
 			bottomSender.EXPECT().CanSend(1).Return(true)
 			bottomSender.EXPECT().
 				Send(gomock.Any()).
@@ -516,7 +516,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		It("should send write requests to bottom", func() {
 			dramPort := NewMockPort(mockCtrl)
 			var writeReq *mem.WriteReq
-			lowModuleFinder.EXPECT().Find(uint64(0x1000)).Return(dramPort)
+			addressToPortMapper.EXPECT().Find(uint64(0x1000)).Return(dramPort)
 
 			bottomSender.EXPECT().CanSend(1).Return(true)
 			bottomSender.EXPECT().

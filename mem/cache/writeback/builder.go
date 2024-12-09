@@ -12,11 +12,11 @@ import (
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine           sim.Engine
-	freq             sim.Freq
-	lowModuleFinder  mem.AddressToPortMapper
-	wayAssociativity int
-	log2BlockSize    uint64
+	engine              sim.Engine
+	freq                sim.Freq
+	addressToPortMapper mem.AddressToPortMapper
+	wayAssociativity    int
+	log2BlockSize       uint64
 
 	interleaving          bool
 	numInterleavingBlock  int
@@ -80,9 +80,9 @@ func (b Builder) WithNumMSHREntry(n int) Builder {
 	return b
 }
 
-// WithLowModuleFinder sets the LowModuleFinder to be used.
-func (b Builder) WithLowModuleFinder(f mem.AddressToPortMapper) Builder {
-	b.lowModuleFinder = f
+// WithAddressToPortMapper sets the AddressToPortMapper to be used.
+func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
+	b.addressToPortMapper = f
 	return b
 }
 
@@ -186,7 +186,7 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 	cacheModule.directory = directory
 	cacheModule.mshr = mshr
 	cacheModule.storage = storage
-	cacheModule.lowModuleFinder = b.lowModuleFinder
+	cacheModule.addressToPortMapper = b.addressToPortMapper
 	cacheModule.state = cacheStateRunning
 	cacheModule.evictingList = make(map[uint64]bool)
 }

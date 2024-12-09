@@ -121,7 +121,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 		return false
 	}
 
-	lowModulePort := wb.cache.lowModuleFinder.Find(trans.fetchAddress)
+	lowModulePort := wb.cache.addressToPortMapper.Find(trans.fetchAddress)
 	read := mem.ReadReqBuilder{}.
 		WithSrc(wb.cache.bottomPort).
 		WithDst(lowModulePort).
@@ -228,7 +228,7 @@ func (wb *writeBufferStage) write() bool {
 		return false
 	}
 
-	lowModulePort := wb.cache.lowModuleFinder.Find(trans.evictingAddr)
+	lowModulePort := wb.cache.addressToPortMapper.Find(trans.evictingAddr)
 	write := mem.WriteReqBuilder{}.
 		WithSrc(wb.cache.bottomPort).
 		WithDst(lowModulePort).
