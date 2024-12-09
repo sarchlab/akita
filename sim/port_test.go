@@ -44,18 +44,17 @@ var _ = Describe("DefaultPort", func() {
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
-	It("should be panic if msg dst is nil", func() {
+	It("should be panic if msg dst is not set", func() {
 		msg := NewSampleMsg()
-		msg.Src = port
-		msg.Dst = nil
+		msg.Src = port.AsRemote()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
 		msg := NewSampleMsg()
-		msg.Src = port
-		msg.Dst = port
+		msg.Src = port.AsRemote()
+		msg.Dst = port.AsRemote()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
@@ -63,8 +62,8 @@ var _ = Describe("DefaultPort", func() {
 	It("should send successfully", func() {
 		dst := NewPort(comp, 4, 4, "Port")
 		msg := &sampleMsg{}
-		msg.Src = port
-		msg.Dst = dst
+		msg.Src = port.AsRemote()
+		msg.Dst = dst.AsRemote()
 		conn.EXPECT().NotifySend()
 
 		err := port.Send(msg)
@@ -76,8 +75,8 @@ var _ = Describe("DefaultPort", func() {
 	It("should propagate error when outgoing buff is full", func() {
 		dst := NewPort(comp, 4, 4, "Port")
 		msg := &sampleMsg{}
-		msg.Src = port
-		msg.Dst = dst
+		msg.Src = port.AsRemote()
+		msg.Dst = dst.AsRemote()
 
 		port.outgoingBuf.Push(msg)
 		port.outgoingBuf.Push(msg)

@@ -10,7 +10,7 @@ type Msg interface {
 // MsgMeta contains the meta data that is attached to every message.
 type MsgMeta struct {
 	ID           string
-	Src, Dst     Port
+	Src, Dst     RemotePort
 	TrafficClass int
 	TrafficBytes int
 }
@@ -55,20 +55,20 @@ func (r *GeneralRsp) GetRspTo() string {
 
 // GeneralRspBuilder can build general response messages.
 type GeneralRspBuilder struct {
-	Src, Dst     Port
+	Src, Dst     RemotePort
 	TrafficClass int
 	TrafficBytes int
 	OriginalReq  Msg
 }
 
 // WithSrc sets the source of the general response message.
-func (c GeneralRspBuilder) WithSrc(src Port) GeneralRspBuilder {
+func (c GeneralRspBuilder) WithSrc(src RemotePort) GeneralRspBuilder {
 	c.Src = src
 	return c
 }
 
 // WithDst sets the destination of the general response message.
-func (c GeneralRspBuilder) WithDst(dst Port) GeneralRspBuilder {
+func (c GeneralRspBuilder) WithDst(dst RemotePort) GeneralRspBuilder {
 	c.Dst = dst
 	return c
 }
@@ -105,116 +105,4 @@ func (c GeneralRspBuilder) Build() *GeneralRsp {
 	}
 
 	return rsp
-}
-
-// ControlMsg is a special message that is used to manipulate the states of
-// some components.
-type ControlMsg struct {
-	MsgMeta
-
-	Reset      bool
-	Disable    bool
-	Enable     bool
-	ClearPorts bool
-}
-
-// Meta returns the meta data of the control message.
-func (c *ControlMsg) Meta() *MsgMeta {
-	return &c.MsgMeta
-}
-
-// Clone returns cloned ControlMsg with different ID
-func (c *ControlMsg) Clone() Msg {
-	cloneMsg := *c
-	cloneMsg.ID = GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GenerateRsp generate response to the original request
-func (c *ControlMsg) GenerateRsp() Rsp {
-	rsp := GeneralRspBuilder{}.
-		WithSrc(c.Dst).
-		WithDst(c.Src).
-		WithTrafficClass(c.TrafficClass).
-		WithTrafficBytes(c.TrafficBytes).
-		WithOriginalReq(c).
-		Build()
-
-	return rsp
-}
-
-// ControlMsgBuilder can build control messages.
-type ControlMsgBuilder struct {
-	Src, Dst                           Port
-	TrafficClass                       int
-	TrafficBytes                       int
-	Reset, Disable, Enable, ClearPorts bool
-}
-
-// WithSrc sets the source of the control message.
-func (c ControlMsgBuilder) WithSrc(src Port) ControlMsgBuilder {
-	c.Src = src
-	return c
-}
-
-// WithDst sets the destination of the control message.
-func (c ControlMsgBuilder) WithDst(dst Port) ControlMsgBuilder {
-	c.Dst = dst
-	return c
-}
-
-// WithTrafficClass sets the traffic class of the control message.
-func (c ControlMsgBuilder) WithTrafficClass(trafficClass int) ControlMsgBuilder {
-	c.TrafficClass = trafficClass
-	return c
-}
-
-// WithTrafficBytes sets the traffic bytes of the control message.
-func (c ControlMsgBuilder) WithTrafficBytes(trafficBytes int) ControlMsgBuilder {
-	c.TrafficBytes = trafficBytes
-	return c
-}
-
-// WithReset sets the reset flag of the control message.
-func (c ControlMsgBuilder) WithReset() ControlMsgBuilder {
-	c.Reset = true
-	return c
-}
-
-// WithDisable sets the disable flag of the control message.
-func (c ControlMsgBuilder) WithDisable() ControlMsgBuilder {
-	c.Disable = true
-	return c
-}
-
-// WithEnable sets the enable flag of the control message.
-func (c ControlMsgBuilder) WithEnable() ControlMsgBuilder {
-	c.Enable = true
-	return c
-}
-
-// WithClearPorts sets the clear ports flag of the control message.
-func (c ControlMsgBuilder) WithClearPorts() ControlMsgBuilder {
-	c.ClearPorts = true
-	return c
-}
-
-// Build creates a new control message.
-func (c ControlMsgBuilder) Build() *ControlMsg {
-	msg := &ControlMsg{
-		MsgMeta: MsgMeta{
-			Src:          c.Src,
-			Dst:          c.Dst,
-			TrafficClass: c.TrafficClass,
-			TrafficBytes: c.TrafficBytes,
-			ID:           GetIDGenerator().Generate(),
-		},
-		Reset:      c.Reset,
-		Disable:    c.Disable,
-		Enable:     c.Enable,
-		ClearPorts: c.ClearPorts,
-	}
-
-	return msg
 }
