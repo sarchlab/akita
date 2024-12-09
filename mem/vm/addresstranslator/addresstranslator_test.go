@@ -25,9 +25,25 @@ var _ = Describe("Address Translator", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
 		ctrlPort = NewMockPort(mockCtrl)
+		ctrlPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("CtrlPort")).
+			AnyTimes()
 		translationPort = NewMockPort(mockCtrl)
+		translationPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TranslationPort")).
+			AnyTimes()
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		builder := MakeBuilder().
@@ -197,7 +213,7 @@ var _ = Describe("Address Translator", func() {
 					Expect(read.PID).To(Equal(vm.PID(0)))
 					Expect(read.Address).To(Equal(uint64(0x20040)))
 					Expect(read.AccessByteSize).To(Equal(uint64(4)))
-					Expect(read.Src).To(BeIdenticalTo(bottomPort))
+					Expect(read.Src).To(Equal(bottomPort.AsRemote()))
 				}).
 				Return(nil)
 
@@ -236,7 +252,7 @@ var _ = Describe("Address Translator", func() {
 					Expect(req).NotTo(BeIdenticalTo(write))
 					Expect(req.PID).To(Equal(vm.PID(0)))
 					Expect(req.Address).To(Equal(uint64(0x20040)))
-					Expect(req.Src).To(BeIdenticalTo(bottomPort))
+					Expect(req.Src).To(Equal(bottomPort.AsRemote()))
 					Expect(req.Data).To(Equal(data))
 					Expect(req.DirtyMask).To(Equal(dirty))
 				}).
@@ -369,11 +385,11 @@ var _ = Describe("Address Translator", func() {
 				WithAddress(0x10040).
 				Build()
 			flushReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort).
+				WithDst(t.ctrlPort.AsRemote()).
 				ToDiscardTransactions().
 				Build()
 			restartReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort).
+				WithDst(t.ctrlPort.AsRemote()).
 				ToRestart().
 				Build()
 
