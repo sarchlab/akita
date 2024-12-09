@@ -40,7 +40,8 @@ var _ = Describe("InterleavedAddressToPortMapper", func() {
 			BeIdenticalTo(addressToPortMapper.LowModules[1]))
 	})
 
-	It("should use a special module for all the addresses that does not fall in range", func() {
+	It("should use a special module for all the addresses that does not fall "+
+		"in range", func() {
 		Expect(addressToPortMapper.Find(4 * GB)).To(
 			BeIdenticalTo(addressToPortMapper.ModuleForOtherAddresses))
 	})

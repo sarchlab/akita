@@ -26,7 +26,7 @@ func (r *TranslationReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
-// GenerateRsp generates response to originral translation request
+// GenerateRsp generates response to original translation request
 func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
 	rsp := TranslationRspBuilder{}.
 		WithSrc(r.Dst).
@@ -40,20 +40,20 @@ func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
 
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
 }
 
 // WithSrc sets the source of the request to build.
-func (b TranslationReqBuilder) WithSrc(src sim.Port) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithSrc(src sim.RemotePort) TranslationReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b TranslationReqBuilder) WithDst(dst sim.Port) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithDst(dst sim.RemotePort) TranslationReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -116,19 +116,19 @@ func (r *TranslationRsp) GetRspTo() string {
 
 // TranslationRspBuilder can build translation requests
 type TranslationRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 	page     Page
 }
 
 // WithSrc sets the source of the respond to build.
-func (b TranslationRspBuilder) WithSrc(src sim.Port) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithSrc(src sim.RemotePort) TranslationRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the respond to build.
-func (b TranslationRspBuilder) WithDst(dst sim.Port) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithDst(dst sim.RemotePort) TranslationRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -194,7 +194,7 @@ func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
 
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	src, dst sim.Port,
+	src, dst sim.RemotePort,
 ) *PageMigrationReqToDriver {
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
@@ -230,7 +230,7 @@ func (m *PageMigrationRspFromDriver) GetRspTo() string {
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	src, dst sim.Port,
+	src, dst sim.RemotePort,
 	originalReq sim.Msg,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)

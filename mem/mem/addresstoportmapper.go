@@ -36,7 +36,9 @@ func (f *InterleavedAddressPortMapper) Find(address uint64) sim.Port {
 		(address >= f.HighAddress || address < f.LowAddress) {
 		return f.ModuleForOtherAddresses
 	}
+
 	number := address / f.InterleavingSize % uint64(len(f.LowModules))
+
 	return f.LowModules[number]
 }
 
@@ -46,8 +48,10 @@ func NewInterleavedAddressPortMapper(
 	interleavingSize uint64,
 ) *InterleavedAddressPortMapper {
 	finder := new(InterleavedAddressPortMapper)
+
 	finder.LowModules = make([]sim.Port, 0)
 	finder.InterleavingSize = interleavingSize
+
 	return finder
 }
 
@@ -68,5 +72,6 @@ func NewBankedAddressPortMapper(bankSize uint64) *BankedAddressPortMapper {
 	f := new(BankedAddressPortMapper)
 	f.BankSize = bankSize
 	f.LowModules = make([]sim.Port, 0)
+
 	return f
 }
