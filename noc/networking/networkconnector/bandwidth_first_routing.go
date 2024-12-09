@@ -88,7 +88,8 @@ func (r BandwidthFirstRouter) tableToRoute(table [][]bfRouteInfo, nodes []Node) 
 
 			remote := table[i][j].nextHop
 			for _, p := range epNode.ports {
-				swNode.Table().DefineRoute(p, remote.LocalPort)
+				swNode.Table().
+					DefineRoute(p.AsRemote(), remote.LocalPort.AsRemote())
 			}
 		}
 	}

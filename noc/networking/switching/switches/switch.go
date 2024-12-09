@@ -27,7 +27,7 @@ type portComplex struct {
 	localPort sim.Port
 
 	// remotePort is the port that is connected to the localPort.
-	remotePort sim.Port
+	remotePort sim.RemotePort
 
 	// Data arrived at the local port needs to be processed in a pipeline. There
 	// is a processing pipeline for each local port.
@@ -223,7 +223,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 			}
 
 			flit := item.(*messaging.Flit)
-			flit.Meta().Src = pc.localPort
+			flit.Meta().Src = pc.localPort.AsRemote()
 			flit.Meta().Dst = pc.remotePort
 
 			err := pc.localPort.Send(flit)

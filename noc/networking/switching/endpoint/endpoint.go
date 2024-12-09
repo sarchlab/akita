@@ -25,7 +25,7 @@ type Comp struct {
 
 	DevicePorts      []sim.Port
 	NetworkPort      sim.Port
-	DefaultSwitchDst sim.Port
+	DefaultSwitchDst sim.RemotePort
 
 	numInputChannels  int
 	numOutputChannels int

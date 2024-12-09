@@ -32,19 +32,19 @@ func (f *Flit) Clone() sim.Msg {
 
 // FlitBuilder can build flits
 type FlitBuilder struct {
-	src, dst            sim.Port
+	src, dst            sim.RemotePort
 	msg                 sim.Msg
 	seqID, numFlitInMsg int
 }
 
 // WithSrc sets the src of the request to send
-func (b FlitBuilder) WithSrc(src sim.Port) FlitBuilder {
+func (b FlitBuilder) WithSrc(src sim.RemotePort) FlitBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the dst of the request to send
-func (b FlitBuilder) WithDst(dst sim.Port) FlitBuilder {
+func (b FlitBuilder) WithDst(dst sim.RemotePort) FlitBuilder {
 	b.dst = dst
 	return b
 }
@@ -78,5 +78,6 @@ func (b FlitBuilder) Build() *Flit {
 	f.Msg = b.msg
 	f.SeqID = b.seqID
 	f.NumFlitInMsg = b.numFlitInMsg
+
 	return f
 }

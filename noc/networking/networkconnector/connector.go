@@ -307,7 +307,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		param.SwitchEndParam.IncomingBufSize,
 		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
-	endPoint.DefaultSwitchDst = swPort
+	endPoint.DefaultSwitchDst = swPort.AsRemote()
 	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).

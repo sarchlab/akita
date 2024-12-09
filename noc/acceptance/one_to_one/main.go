@@ -56,8 +56,8 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithDevicePorts(agents[1].AgentPorts).
 		Build("EP2")
 
-	ep1.DefaultSwitchDst = ep2.NetworkPort
-	ep2.DefaultSwitchDst = ep1.NetworkPort
+	ep1.DefaultSwitchDst = ep2.NetworkPort.AsRemote()
+	ep2.DefaultSwitchDst = ep1.NetworkPort.AsRemote()
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).

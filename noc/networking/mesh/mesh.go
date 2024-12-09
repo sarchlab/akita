@@ -30,7 +30,7 @@ type Connector struct {
 	gridSize [3]int
 	gridCap  [3]int
 	grid     [][][]tile
-	dstTable map[string]*tile
+	dstTable map[sim.RemotePort]*tile
 }
 
 // NewConnector creates a new mesh Connector.
@@ -39,7 +39,7 @@ func NewConnector() *Connector {
 		freq:                 1 * sim.GHz,
 		flitSize:             16,
 		linkTransferPerCycle: 1,
-		dstTable:             make(map[string]*tile),
+		dstTable:             make(map[sim.RemotePort]*tile),
 	}
 
 	c.connector = networkconnector.
@@ -137,7 +137,7 @@ func (c *Connector) AddTile(loc [3]int, ports []sim.Port) {
 	c.mergePorts(loc, ports)
 
 	for _, port := range ports {
-		c.dstTable[port.Name()] = &c.grid[loc[0]][loc[1]][loc[2]]
+		c.dstTable[port.AsRemote()] = &c.grid[loc[0]][loc[1]][loc[2]]
 	}
 }
 
@@ -289,7 +289,7 @@ func (c *Connector) createSwitches() {
 						},
 					})
 
-				rt.local = swPort
+				rt.local = swPort.AsRemote()
 			}
 		}
 	}
@@ -306,8 +306,8 @@ func (c *Connector) connectWithLeftSwitch(x, y, z int) {
 	left := c.grid[x1][y][z]
 
 	portA, portB := c.createLink(left.sw, curr.sw, "Right", "Left")
-	left.rt.right = portA
-	curr.rt.left = portB
+	left.rt.right = portA.AsRemote()
+	curr.rt.left = portB.AsRemote()
 }
 
 func (c *Connector) connectWithTopSwitch(x, y, z int) {
@@ -321,8 +321,8 @@ func (c *Connector) connectWithTopSwitch(x, y, z int) {
 	top := c.grid[x][y1][z]
 
 	portA, portB := c.createLink(top.sw, curr.sw, "Bottom", "Top")
-	top.rt.bottom = portA
-	curr.rt.top = portB
+	top.rt.bottom = portA.AsRemote()
+	curr.rt.top = portB.AsRemote()
 }
 
 func (c *Connector) connectWithFrontSwitch(x, y, z int) {
@@ -336,8 +336,8 @@ func (c *Connector) connectWithFrontSwitch(x, y, z int) {
 	front := c.grid[x][y][z1]
 
 	portA, portB := c.createLink(front.sw, curr.sw, "Back", "Front")
-	front.rt.back = portA
-	curr.rt.front = portB
+	front.rt.back = portA.AsRemote()
+	curr.rt.front = portB.AsRemote()
 }
 
 func (c *Connector) createLink(
