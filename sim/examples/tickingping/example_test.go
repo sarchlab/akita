@@ -24,7 +24,7 @@ func Example() {
 	conn.PlugIn(agentA.OutPort)
 	conn.PlugIn(agentB.OutPort)
 
-	agentA.pingDst = agentB.OutPort
+	agentA.pingDst = agentB.OutPort.AsRemote()
 	agentA.numPingNeedToSend = 2
 
 	agentA.TickLater()

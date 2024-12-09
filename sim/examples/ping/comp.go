@@ -56,7 +56,7 @@ func (p *PingRsp) GetRspTo() string {
 
 type StartPingEvent struct {
 	*sim.EventBase
-	Dst sim.Port
+	Dst sim.RemotePort
 }
 
 type RspPingEvent struct {
@@ -67,8 +67,8 @@ type RspPingEvent struct {
 type Comp struct {
 	*sim.ComponentBase
 
-	Engine  sim.Engine
 	OutPort sim.Port
+	Engine  sim.Engine
 
 	startTime []sim.VTimeInSec
 	nextSeqID int
@@ -94,7 +94,7 @@ func (c *Comp) StartPing(evt StartPingEvent) {
 		SeqID: c.nextSeqID,
 	}
 
-	pingMsg.Src = c.OutPort
+	pingMsg.Src = c.OutPort.AsRemote()
 	pingMsg.Dst = evt.Dst
 
 	c.OutPort.Send(pingMsg)
@@ -109,7 +109,7 @@ func (c *Comp) RspPing(evt RspPingEvent) {
 	rsp := &PingRsp{
 		SeqID: msg.SeqID,
 	}
-	rsp.Src = c.OutPort
+	rsp.Src = c.OutPort.AsRemote()
 	rsp.Dst = msg.Src
 
 	c.OutPort.Send(rsp)

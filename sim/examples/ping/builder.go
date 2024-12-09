@@ -3,7 +3,6 @@ package ping
 import "github.com/sarchlab/akita/v4/sim"
 
 type Builder struct {
-	name   string
 	Engine sim.Engine
 }
 
