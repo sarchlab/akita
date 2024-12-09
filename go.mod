@@ -6,11 +6,14 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/google/pprof v0.0.0-20240829160300-da1f7e9f2b25
 	github.com/gorilla/mux v1.8.1
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/onsi/ginkgo/v2 v2.20.2
 	github.com/onsi/gomega v1.34.2
 	github.com/rs/xid v1.6.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
+	github.com/spf13/cobra v1.8.1
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.8.4
 	github.com/syifan/goseth v0.1.2
 	github.com/tebeka/atexit v0.3.0

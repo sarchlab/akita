@@ -1,0 +1,13 @@
+// Comp provides the component {{packageName}} with the ticking functionality.
+package {{packageName}}
+
+import "github.com/sarchlab/akita/v4/sim"
+
+type Comp struct {
+	*sim.TickingComponent
+	sim.MiddlewareHolder
+}
+
+func (c *Comp) Tick() bool {
+	return c.MiddlewareHolder.Tick()
+}
