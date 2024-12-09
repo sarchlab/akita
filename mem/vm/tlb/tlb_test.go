@@ -358,11 +358,11 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.EXPECT().SetConnection(connection)
 		lowModule.EXPECT().SetConnection(connection)
-		connection.PlugIn(agent, 10)
-		connection.PlugIn(lowModule, 10)
-		connection.PlugIn(tlb.topPort, 10)
-		connection.PlugIn(tlb.bottomPort, 10)
-		connection.PlugIn(tlb.controlPort, 10)
+		connection.PlugIn(agent)
+		connection.PlugIn(lowModule)
+		connection.PlugIn(tlb.topPort)
+		connection.PlugIn(tlb.bottomPort)
+		connection.PlugIn(tlb.controlPort)
 
 		page = vm.Page{
 			PID:   1,

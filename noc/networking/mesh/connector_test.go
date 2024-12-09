@@ -20,7 +20,7 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should be able to connect ports outside current capacity", func() {
-		port := sim.NewLimitNumMsgPort(nil, 1, "Port")
+		port := sim.NewPort(nil, 1, 1, "Port")
 
 		// 8,8,2 is the default capacity
 		connector.AddTile([3]int{8, 8, 2}, []sim.Port{port})

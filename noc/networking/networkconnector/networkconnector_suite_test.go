@@ -25,7 +25,7 @@ var _ = Describe("Connector", func() {
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := sim.NewLimitNumMsgPort(nil, 1, fmt.Sprintf("Port%d", i))
+			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
 			connector.ConnectDevice(0, []sim.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -64,7 +64,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := sim.NewLimitNumMsgPort(nil, 1, fmt.Sprintf("Port%d", i))
+			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
 			connector.ConnectDevice(1+i, []sim.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -130,7 +130,7 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := sim.NewLimitNumMsgPort(nil, 1, fmt.Sprintf("Port%d", i))
+			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
 			connector.ConnectDevice(8+i, []sim.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{

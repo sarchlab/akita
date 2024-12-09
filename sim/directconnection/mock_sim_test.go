@@ -517,15 +517,15 @@ func (mr *MockConnectionMockRecorder) NumHooks() *gomock.Call {
 }
 
 // PlugIn mocks base method.
-func (m *MockConnection) PlugIn(arg0 sim.Port, arg1 int) {
+func (m *MockConnection) PlugIn(arg0 sim.Port) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "PlugIn", arg0, arg1)
+	m.ctrl.Call(m, "PlugIn", arg0)
 }
 
 // PlugIn indicates an expected call of PlugIn.
-func (mr *MockConnectionMockRecorder) PlugIn(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockConnectionMockRecorder) PlugIn(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlugIn", reflect.TypeOf((*MockConnection)(nil).PlugIn), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlugIn", reflect.TypeOf((*MockConnection)(nil).PlugIn), arg0)
 }
 
 // Unplug mocks base method.

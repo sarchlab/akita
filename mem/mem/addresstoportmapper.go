@@ -63,7 +63,7 @@ func (f *BankedAddressPortMapper) Find(address uint64) sim.Port {
 	return f.LowModules[i]
 }
 
-// NewBankedAddressPortMapper returns a new BankedLowModuleFinder.
+// NewBankedAddressPortMapper returns a new BankedAddressToPortMapper.
 func NewBankedAddressPortMapper(bankSize uint64) *BankedAddressPortMapper {
 	f := new(BankedAddressPortMapper)
 	f.BankSize = bankSize

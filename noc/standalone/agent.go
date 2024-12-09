@@ -115,7 +115,7 @@ func NewAgent(name string, engine sim.Engine) *Agent {
 	a := new(Agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, 1*sim.GHz, a)
 
-	a.ToOut = sim.NewLimitNumMsgPort(a, 4, name+".ToOut")
+	a.ToOut = sim.NewPort(a, 4, 4, name+".ToOut")
 
 	return a
 }

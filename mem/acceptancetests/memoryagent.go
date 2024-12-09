@@ -246,7 +246,7 @@ func NewMemAccessAgent(engine sim.Engine) *MemAccessAgent {
 	agent.TickingComponent = sim.NewTickingComponent(
 		"Agent", engine, 1*sim.GHz, agent)
 
-	agent.memPort = sim.NewLimitNumMsgPort(agent, 1, "Agent.MemPort")
+	agent.memPort = sim.NewPort(agent, 1, 1, "Agent.MemPort")
 	agent.AddPort("Mem", agent.memPort)
 
 	agent.ReadLeft = 10000

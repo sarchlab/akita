@@ -82,9 +82,9 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 	sdm.TickingComponent = sim.NewTickingComponent(
 		name, sdmBuilder.engine, 1*sim.GHz, sdm)
 
-	sdm.ctrlPort = sim.NewLimitNumMsgPort(sdm, 40960000, name+".CtrlPort")
-	sdm.insidePort = sim.NewLimitNumMsgPort(sdm, 64, name+".SrcPort")
-	sdm.outsidePort = sim.NewLimitNumMsgPort(sdm, 64, name+".DstPort")
+	sdm.ctrlPort = sim.NewPort(sdm, 40960000, 40960000, name+".CtrlPort")
+	sdm.insidePort = sim.NewPort(sdm, 64, 64, name+".SrcPort")
+	sdm.outsidePort = sim.NewPort(sdm, 64, 64, name+".DstPort")
 
 	return sdm
 }

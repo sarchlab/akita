@@ -102,7 +102,7 @@ func (b Builder) Build(
 		c.Storage = b.storage
 	}
 
-	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
 	middleware := &middleware{Comp: c}

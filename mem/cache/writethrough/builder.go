@@ -23,7 +23,7 @@ type Builder struct {
 	bankLatency           int
 	maxNumConcurrentTrans int
 	numReqPerCycle        int
-	lowModuleFinder       mem.AddressToPortMapper
+	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 }
 
@@ -118,12 +118,12 @@ func (b *Builder) WithVisTracer(tracer tracing.Tracer) *Builder {
 	return b
 }
 
-// WithLowModuleFinder specifies how the cache units to create should find low
+// WithAddressToPortMapper specifies how the cache units to create should find low
 // level modules.
-func (b *Builder) WithLowModuleFinder(
-	lowModuleFinder mem.AddressToPortMapper,
+func (b *Builder) WithAddressToPortMapper(
+	addressToPortMapper mem.AddressToPortMapper,
 ) *Builder {
-	b.lowModuleFinder = lowModuleFinder
+	b.addressToPortMapper = addressToPortMapper
 	return b
 }
 
@@ -138,12 +138,13 @@ func (b *Builder) Build(name string) *Comp {
 	c.TickingComponent = sim.NewTickingComponent(
 		name, b.engine, b.freq, c)
 
-	c.topPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
+		name+".TopPort")
 	c.AddPort("Top", c.topPort)
-	c.bottomPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.bottomPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
-	c.controlPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.controlPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+"ControlPort")
 	c.AddPort("Control", c.controlPort)
 
@@ -167,7 +168,7 @@ func (b *Builder) Build(name string) *Comp {
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
 	c.wayAssociativity = b.wayAssociativity
-	c.lowModuleFinder = b.lowModuleFinder
+	c.addressToPortMapper = b.addressToPortMapper
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.buildStages(c)

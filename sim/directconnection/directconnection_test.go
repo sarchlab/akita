@@ -29,10 +29,10 @@ var _ = Describe("DirectConnection", func() {
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Direct")
 
 		port1.EXPECT().SetConnection(connection)
-		connection.PlugIn(port1, 4)
+		connection.PlugIn(port1)
 
 		port2.EXPECT().SetConnection(connection)
-		connection.PlugIn(port2, 1)
+		connection.PlugIn(port2)
 	})
 
 	AfterEach(func() {
@@ -85,7 +85,7 @@ type agent struct {
 func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = sim.NewLimitNumMsgPort(a, 4, name+".OutPort")
+	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
 	return a
 }
 
@@ -127,7 +127,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
 			agents = append(agents, a)
-			connection.PlugIn(a.OutPort, 1)
+			connection.PlugIn(a.OutPort)
 		}
 	})
 
@@ -180,7 +180,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
 		agents = append(agents, a)
-		connection.PlugIn(a.OutPort, 1)
+		connection.PlugIn(a.OutPort)
 	}
 
 	for _, agent := range agents {

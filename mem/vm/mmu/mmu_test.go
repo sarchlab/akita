@@ -377,8 +377,8 @@ var _ = Describe("MMU Integration", func() {
 		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)
-		connection.PlugIn(agent, 10)
-		connection.PlugIn(mmu.topPort, 10)
+		connection.PlugIn(agent)
+		connection.PlugIn(mmu.topPort)
 	})
 
 	AfterEach(func() {

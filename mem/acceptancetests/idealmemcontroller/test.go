@@ -66,8 +66,8 @@ func main() {
 		tracing.CollectTrace(dram, tracer)
 	}
 
-	conn.PlugIn(agent.GetPortByName("Mem"), 16)
-	conn.PlugIn(dram.GetPortByName("Top"), 16)
+	conn.PlugIn(agent.GetPortByName("Mem"))
+	conn.PlugIn(dram.GetPortByName("Top"))
 
 	agent.TickLater()
 

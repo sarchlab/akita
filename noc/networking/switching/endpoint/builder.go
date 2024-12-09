@@ -104,12 +104,12 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.encodingOverhead = b.encodingOverhead
 
-	ep.NetworkPort = sim.NewLimitNumMsgPort(
-		ep, b.networkPortBufferSize,
+	ep.NetworkPort = sim.NewPort(
+		ep, b.networkPortBufferSize, b.networkPortBufferSize,
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
 
 	for _, dp := range b.devicePorts {
-		ep.PlugIn(dp, ep.numInputChannels)
+		ep.PlugIn(dp)
 	}
 
 	middleware := &middleware{Comp: ep}

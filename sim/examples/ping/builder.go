@@ -19,7 +19,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 func (b Builder) Build(name string) *Comp {
 	pingAgent := &Comp{}
 	pingAgent.ComponentBase = sim.NewComponentBase(name)
-	pingAgent.OutPort = sim.NewLimitNumMsgPort(pingAgent, 4, name+".OutPort")
+	pingAgent.OutPort = sim.NewPort(pingAgent, 4, 4, name+".OutPort")
 	pingAgent.Engine = b.Engine
 
 	return pingAgent

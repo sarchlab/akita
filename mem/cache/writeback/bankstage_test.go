@@ -12,18 +12,18 @@ import (
 
 var _ = Describe("Bank Stage", func() {
 	var (
-		mockCtrl          *gomock.Controller
-		cacheModule       *Comp
-		pipeline          *MockPipeline
-		postPipelineBuf   *bufferImpl
-		dirInBuf          *MockBuffer
-		writeBufferInBuf  *MockBuffer
-		bs                *bankStage
-		storage           *mem.Storage
-		topSender         *MockBufferedSender
-		writeBufferBuffer *MockBuffer
-		mshrStageBuffer   *MockBuffer
-		lowModuleFinder   *MockLowModuleFinder
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		pipeline            *MockPipeline
+		postPipelineBuf     *bufferImpl
+		dirInBuf            *MockBuffer
+		writeBufferInBuf    *MockBuffer
+		bs                  *bankStage
+		storage             *mem.Storage
+		topSender           *MockBufferedSender
+		writeBufferBuffer   *MockBuffer
+		mshrStageBuffer     *MockBuffer
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -35,7 +35,7 @@ var _ = Describe("Bank Stage", func() {
 		mshrStageBuffer = NewMockBuffer(mockCtrl)
 		topSender = NewMockBufferedSender(mockCtrl)
 		writeBufferBuffer = NewMockBuffer(mockCtrl)
-		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		storage = mem.NewStorage(4 * mem.KB)
 
 		builder := MakeBuilder()
@@ -46,7 +46,7 @@ var _ = Describe("Bank Stage", func() {
 		cacheModule.mshrStageBuffer = mshrStageBuffer
 		cacheModule.topSender = topSender
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.lowModuleFinder = lowModuleFinder
+		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.storage = storage
 		cacheModule.inFlightTransactions = nil
 

@@ -28,7 +28,7 @@ func NewAgent(
 	a.test = test
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
 	for i := 0; i < numPorts; i++ {
-		p := sim.NewLimitNumMsgPort(a, 1, fmt.Sprintf("%s.Port%d", name, i))
+		p := sim.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
 	return a

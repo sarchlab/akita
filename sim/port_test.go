@@ -6,19 +6,19 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("LimitNumMsgPort", func() {
+var _ = Describe("DefaultPort", func() {
 	var (
 		mockController *gomock.Controller
 		comp           *MockComponent
 		conn           *MockConnection
-		port           *LimitNumMsgPort
+		port           *defaultPort
 	)
 
 	BeforeEach(func() {
 		mockController = gomock.NewController(GinkgoT())
 		comp = NewMockComponent(mockController)
 		conn = NewMockConnection(mockController)
-		port = NewLimitNumMsgPort(comp, 4, "Port")
+		port = NewPort(comp, 4, 4, "Port").(*defaultPort)
 		port.SetConnection(conn)
 	})
 
@@ -61,7 +61,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 	})
 
 	It("should send successfully", func() {
-		dst := NewLimitNumMsgPort(comp, 4, "Port")
+		dst := NewPort(comp, 4, 4, "Port")
 		msg := &sampleMsg{}
 		msg.Src = port
 		msg.Dst = dst
@@ -74,7 +74,7 @@ var _ = Describe("LimitNumMsgPort", func() {
 	})
 
 	It("should propagate error when outgoing buff is full", func() {
-		dst := NewLimitNumMsgPort(comp, 4, "Port")
+		dst := NewPort(comp, 4, 4, "Port")
 		msg := &sampleMsg{}
 		msg.Src = port
 		msg.Dst = dst

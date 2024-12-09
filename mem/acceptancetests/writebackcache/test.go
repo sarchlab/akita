@@ -69,10 +69,10 @@ func buildEnvironment() {
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
-	lowModuleFinder := new(mem.SinglePortMapper)
+	addressToPortMapper := new(mem.SinglePortMapper)
 	builder := writeback.MakeBuilder().
 		WithEngine(engine).
-		WithLowModuleFinder(lowModuleFinder).
+		WithAddressToPortMapper(addressToPortMapper).
 		WithByteSize(16 * mem.KB).
 		WithLog2BlockSize(6).
 		WithWayAssociativity(4).
@@ -95,14 +95,14 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
-	lowModuleFinder.Port = dram.GetPortByName("Top")
+	addressToPortMapper.Port = dram.GetPortByName("Top")
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 
-	conn.PlugIn(agent.GetPortByName("Mem"), 16)
-	conn.PlugIn(writeBackCache.GetPortByName("Bottom"), 16)
-	conn.PlugIn(writeBackCache.GetPortByName("Top"), 16)
-	conn.PlugIn(dram.GetPortByName("Top"), 16)
+	conn.PlugIn(agent.GetPortByName("Mem"))
+	conn.PlugIn(writeBackCache.GetPortByName("Bottom"))
+	conn.PlugIn(writeBackCache.GetPortByName("Top"))
+	conn.PlugIn(dram.GetPortByName("Top"))
 
 	agent.TickLater()
 }
