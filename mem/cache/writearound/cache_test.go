@@ -36,7 +36,7 @@ var _ = Describe("Cache", func() {
 			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
 		lowModuleFinder = &mem.SinglePortMapper{
-			LowModule: dram.GetPortByName("Top"),
+			Port: dram.GetPortByName("Top"),
 		}
 		c = NewBuilder().
 			WithEngine(engine).

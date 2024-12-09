@@ -73,7 +73,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithLatency(200).
 			Build("DRAM")
 
-		lowModuleFinder.LowModule = dram.GetPortByName("Top")
+		lowModuleFinder.Port = dram.GetPortByName("Top")
 
 		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Connection")
 		conn.PlugIn(cacheModule.topPort, 10)

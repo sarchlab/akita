@@ -11,12 +11,12 @@ type AddressToPortMapper interface {
 // SinglePortMapper is used when a unit is connected with only one
 // low module
 type SinglePortMapper struct {
-	LowModule sim.Port
+	Port sim.Port
 }
 
 // Find simply returns the solo unit that it connects to
 func (f *SinglePortMapper) Find(address uint64) sim.Port {
-	return f.LowModule
+	return f.Port
 }
 
 // InterleavedAddressPortMapper helps find the low module when the low modules

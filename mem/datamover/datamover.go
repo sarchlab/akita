@@ -1,7 +1,6 @@
 package datamover
 
 import (
-	"fmt"
 	"log"
 	"reflect"
 
@@ -133,7 +132,7 @@ func (c *Comp) readFromSrc() bool {
 	req := mem.ReadReqBuilder{}.
 		WithAddress(addr).
 		WithSrc(c.srcPort).
-		WithDst(c.dstPortMapper.Find(addr)).
+		WithDst(c.srcPortMapper.Find(addr)).
 		WithByteSize(c.srcByteGranularity).
 		WithPID(0).
 		Build()
@@ -145,7 +144,6 @@ func (c *Comp) readFromSrc() bool {
 
 	trans.nextReadAddr += c.srcByteGranularity
 	trans.pendingRead[req.ID] = req
-	fmt.Printf("Read 0x%016x\n", req.Address)
 
 	tracing.TraceReqInitiate(req, c, tracing.MsgIDAtReceiver(trans.req, c))
 
@@ -181,8 +179,6 @@ func (c *Comp) processDataReadyFromSrc() bool {
 	c.srcPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(originalReq, c)
 
-	fmt.Printf("Data ready 0x%016x\n", originalReq.Address)
-
 	return true
 }
 
@@ -215,8 +211,6 @@ func (c *Comp) writeToDst() bool {
 	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
 	c.currentTransaction.pendingWrite[req.ID] = req
 	c.buffer.moveInitAddrForwardTo(c.currentTransaction.nextWriteAddr)
-
-	fmt.Printf("Writing to dst 0x%016x\n", req.Address)
 
 	tracing.TraceReqInitiate(req, c,
 		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))

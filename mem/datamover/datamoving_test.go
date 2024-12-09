@@ -33,20 +33,22 @@ var _ = Describe("DataMover", func() {
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			WithCacheLineSize(64).
+			WithNewStorage(1 * mem.MB).
 			Build("InsideMem")
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			WithCacheLineSize(64).
+			WithNewStorage(1 * mem.MB).
 			Build("OutsideMem")
 		dataMover = MakeBuilder().
 			WithEngine(engine).
 			WithBufferSize(2048).
 			WithInsidePortMapper(&mem.SinglePortMapper{
-				LowModule: insideMem.GetPortByName("Top"),
+				Port: insideMem.GetPortByName("Top"),
 			}).
 			WithOutsidePortMapper(&mem.SinglePortMapper{
-				LowModule: outsideMem.GetPortByName("Top"),
+				Port: outsideMem.GetPortByName("Top"),
 			}).
 			WithInsideByteGranularity(64).
 			WithOutsideByteGranularity(256).

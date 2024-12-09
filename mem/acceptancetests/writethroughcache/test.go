@@ -95,7 +95,7 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
-	lowModuleFinder.LowModule = dram.GetPortByName("Top")
+	lowModuleFinder.Port = dram.GetPortByName("Top")
 
 	agent.LowModule = writeevictCache.GetPortByName("Top")
 
