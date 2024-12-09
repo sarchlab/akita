@@ -10,7 +10,15 @@ import (
 
 func createMockPortComplex(ctrl *gomock.Controller) portComplex {
 	local := NewMockPort(ctrl)
+	local.EXPECT().AsRemote().
+		Return(sim.RemotePort("LocalPort")).
+		AnyTimes()
+
 	remote := NewMockPort(ctrl)
+	remote.EXPECT().AsRemote().
+		Return(sim.RemotePort("RemotePort")).
+		AnyTimes()
+
 	routeBuf := NewMockBuffer(ctrl)
 	forwardBuf := NewMockBuffer(ctrl)
 	sendOutBuf := NewMockBuffer(ctrl)
@@ -18,7 +26,7 @@ func createMockPortComplex(ctrl *gomock.Controller) portComplex {
 
 	pc := portComplex{
 		localPort:        local,
-		remotePort:       remote,
+		remotePort:       remote.AsRemote(),
 		pipeline:         pipeline,
 		routeBuffer:      routeBuf,
 		forwardBuffer:    forwardBuf,
@@ -85,10 +93,10 @@ var _ = Describe("Switch", func() {
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
-			WithDst(port1).
+			WithDst(port1.AsRemote()).
 			WithMsg(msg).
 			Build()
 
@@ -114,10 +122,10 @@ var _ = Describe("Switch", func() {
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
-			WithDst(port1).
+			WithDst(port1.AsRemote()).
 			WithMsg(msg).
 			Build()
 
@@ -148,8 +156,8 @@ var _ = Describe("Switch", func() {
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -160,7 +168,9 @@ var _ = Describe("Switch", func() {
 		routeBuffer2.EXPECT().Peek().Return(nil)
 		forwardBuffer1.EXPECT().CanPush().Return(true)
 		forwardBuffer1.EXPECT().Push(flit)
-		routingTable.EXPECT().FindPort(dstPort).Return(portComplex2.localPort)
+		routingTable.EXPECT().
+			FindPort(dstPort.AsRemote()).
+			Return(portComplex2.localPort)
 
 		madeProgress := swMiddleware.route()
 
@@ -174,8 +184,8 @@ var _ = Describe("Switch", func() {
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -196,8 +206,8 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -224,8 +234,8 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -247,11 +257,11 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer1 := portComplex1.sendOutBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 		localPort2 := portComplex2.localPort.(*MockPort)
-		remotePort2 := portComplex2.remotePort.(*MockPort)
+		remotePort2 := portComplex2.remotePort
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -272,11 +282,11 @@ var _ = Describe("Switch", func() {
 		sendOutBuffer1 := portComplex1.sendOutBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 		localPort2 := portComplex2.localPort.(*MockPort)
-		remotePort2 := portComplex2.remotePort.(*MockPort)
+		remotePort2 := portComplex2.remotePort
 
 		msg := &sampleMsg{}
-		msg.Src = dstPort
-		msg.Dst = dstPort
+		msg.Src = dstPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()

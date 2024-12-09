@@ -53,7 +53,7 @@ func (b Builder) Build(name string) *Comp {
 	s.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, s)
 	s.routingTable = b.routingTable
 	s.arbiter = b.arbiter
-	s.portToComplexMapping = make(map[sim.Port]portComplex)
+	s.portToComplexMapping = make(map[sim.RemotePort]portComplex)
 
 	middleware := &middleware{Comp: s}
 	s.AddMiddleware(middleware)

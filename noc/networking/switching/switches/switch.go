@@ -60,7 +60,7 @@ type Comp struct {
 	sim.MiddlewareHolder
 
 	ports                []sim.Port
-	portToComplexMapping map[sim.Port]portComplex
+	portToComplexMapping map[sim.RemotePort]portComplex
 	routingTable         routing.Table
 	arbiter              arbitration.Arbiter
 }
@@ -68,7 +68,7 @@ type Comp struct {
 // addPort adds a new port on the switch.
 func (c *Comp) addPort(complex portComplex) {
 	c.ports = append(c.ports, complex.localPort)
-	c.portToComplexMapping[complex.localPort] = complex
+	c.portToComplexMapping[complex.localPort.AsRemote()] = complex
 	c.arbiter.AddBuffer(complex.forwardBuffer)
 }
 
@@ -108,7 +108,7 @@ func (m *middleware) flitTaskID(flit *messaging.Flit) string {
 
 func (m *middleware) startProcessing() (madeProgress bool) {
 	for _, port := range m.ports {
-		pc := m.portToComplexMapping[port]
+		pc := m.portToComplexMapping[port.AsRemote()]
 
 		for i := 0; i < pc.numInputChannel; i++ {
 			item := port.PeekIncoming()
@@ -127,17 +127,17 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 			}
 			pc.pipeline.Accept(pipelineItem)
 			port.RetrieveIncoming()
+
 			madeProgress = true
 
+			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
+			// 	now, c.Name(), flit.ID)
 			tracing.StartTask(
 				m.flitTaskID(flit),
 				m.flitParentTaskID(flit),
 				m.Comp, "flit", "flit_inside_sw",
 				flit,
 			)
-
-			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
-			// 	now, c.Name(), flit.ID)
 		}
 	}
 
@@ -146,7 +146,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 
 func (m *middleware) movePipeline() (madeProgress bool) {
 	for _, port := range m.ports {
-		pc := m.portToComplexMapping[port]
+		pc := m.portToComplexMapping[port.AsRemote()]
 		madeProgress = pc.pipeline.Tick() || madeProgress
 	}
 
@@ -155,7 +155,7 @@ func (m *middleware) movePipeline() (madeProgress bool) {
 
 func (m *middleware) route() (madeProgress bool) {
 	for _, port := range m.ports {
-		pc := m.portToComplexMapping[port]
+		pc := m.portToComplexMapping[port.AsRemote()]
 		routeBuf := pc.routeBuffer
 		forwardBuf := pc.forwardBuffer
 
@@ -174,10 +174,11 @@ func (m *middleware) route() (madeProgress bool) {
 			m.assignFlitOutputBuf(flit)
 			routeBuf.Pop()
 			forwardBuf.Push(flit)
-			madeProgress = true
 
 			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
 			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
+
+			madeProgress = true
 		}
 	}
 
@@ -201,10 +202,11 @@ func (m *middleware) forward() (madeProgress bool) {
 
 			flit.OutputBuf.Push(flit)
 			buf.Pop()
-			madeProgress = true
 
 			// fmt.Printf("%.10f, %s, switch forward flit, %s\n",
 			// 	now, c.Name(), item.(*messaging.Flit).ID)
+
+			madeProgress = true
 		}
 	}
 
@@ -213,7 +215,7 @@ func (m *middleware) forward() (madeProgress bool) {
 
 func (m *middleware) sendOut() (madeProgress bool) {
 	for _, port := range m.ports {
-		pc := m.portToComplexMapping[port]
+		pc := m.portToComplexMapping[port.AsRemote()]
 		sendOutBuf := pc.sendOutBuffer
 
 		for i := 0; i < pc.numOutputChannel; i++ {
@@ -228,8 +230,9 @@ func (m *middleware) sendOut() (madeProgress bool) {
 
 			err := pc.localPort.Send(flit)
 			if err == nil {
-				sendOutBuf.Pop()
 				madeProgress = true
+
+				sendOutBuf.Pop()
 
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
 				// 	now, c.Name(), flit.ID)
@@ -244,7 +247,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 
 func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
 	outPort := m.routingTable.FindPort(f.Msg.Meta().Dst)
-	if outPort == nil {
+	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
 			m.Comp.Name(), f.Msg.Meta().Dst))
 	}
@@ -284,6 +287,7 @@ func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
 func (a SwitchPortAdder) WithPorts(local, remote sim.Port) SwitchPortAdder {
 	a.localPort = local
 	a.remotePort = remote
+
 	return a
 }
 
@@ -326,7 +330,7 @@ func (a SwitchPortAdder) AddPort() {
 
 	pc := portComplex{
 		localPort:        a.localPort,
-		remotePort:       a.remotePort,
+		remotePort:       a.remotePort.AsRemote(),
 		pipeline:         pipeline,
 		routeBuffer:      routeBuf,
 		forwardBuffer:    forwardBuf,
