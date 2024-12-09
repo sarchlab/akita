@@ -1,8 +1,6 @@
 package datamover
 
 import (
-	"fmt"
-
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -10,22 +8,21 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
-type dataMoverLogger struct{}
+// type dataMoverLogger struct{}
 
-func (l *dataMoverLogger) StartTask(task tracing.Task) {
-	fmt.Printf("Start task %+v\n", task)
-}
+// func (l *dataMoverLogger) StartTask(task tracing.Task) {
+// 	fmt.Printf("Start task %+v\n", task)
+// }
 
-func (l *dataMoverLogger) StepTask(task tracing.Task) {
-	// Do nothing.
-}
+// func (l *dataMoverLogger) StepTask(task tracing.Task) {
+// 	// Do nothing.
+// }
 
-func (l *dataMoverLogger) EndTask(task tracing.Task) {
-	fmt.Printf("End task %+v\n", task)
-}
+// func (l *dataMoverLogger) EndTask(task tracing.Task) {
+// 	fmt.Printf("End task %+v\n", task)
+// }
 
 var _ = Describe("DataMover", func() {
 	var (
