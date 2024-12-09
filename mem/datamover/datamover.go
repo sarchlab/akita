@@ -101,7 +101,6 @@ func (c *Comp) parseFromCP() bool {
 	c.setDstSide(moveReq)
 
 	c.buffer = &buffer{
-		initAddr:    moveReq.DstAddress,
 		granularity: c.srcByteGranularity,
 	}
 
@@ -119,7 +118,7 @@ func (c *Comp) readFromSrc() bool {
 	trans := c.currentTransaction
 	addr := alignAddress(trans.nextReadAddr, c.srcByteGranularity)
 
-	bufEndAddr := trans.nextWriteAddr + c.bufferSize
+	bufEndAddr := c.buffer.offset + c.bufferSize
 	if addr >= bufEndAddr {
 		return false
 	}
@@ -173,7 +172,8 @@ func (c *Comp) processDataReadyFromSrc() bool {
 			readRsp.RespondTo)
 	}
 
-	c.buffer.addData(originalReq.Address, readRsp.Data)
+	offset := originalReq.Address - c.currentTransaction.req.SrcAddress
+	c.buffer.addData(offset, readRsp.Data)
 
 	delete(c.currentTransaction.pendingRead, readRsp.RespondTo)
 	c.srcPort.RetrieveIncoming()
@@ -188,8 +188,9 @@ func (c *Comp) writeToDst() bool {
 		return false
 	}
 
-	data, ok := c.buffer.extractData(
-		c.currentTransaction.nextWriteAddr, c.dstByteGranularity)
+	trans := c.currentTransaction
+	offset := trans.nextWriteAddr - trans.req.DstAddress
+	data, ok := c.buffer.extractData(offset, c.dstByteGranularity)
 
 	if !ok {
 		return false
@@ -210,7 +211,7 @@ func (c *Comp) writeToDst() bool {
 
 	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
 	c.currentTransaction.pendingWrite[req.ID] = req
-	c.buffer.moveInitAddrForwardTo(c.currentTransaction.nextWriteAddr)
+	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.req.DstAddress)
 
 	tracing.TraceReqInitiate(req, c,
 		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
@@ -269,7 +270,7 @@ func (c *Comp) finishTransaction() bool {
 
 	c.currentTransaction = nil
 	c.buffer = &buffer{
-		initAddr:    alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
+		offset:      alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
 		granularity: c.srcByteGranularity,
 	}
 

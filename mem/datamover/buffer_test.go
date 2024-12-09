@@ -54,7 +54,7 @@ var _ = Describe("Buffer", func() {
 			Context(tt.name, func() {
 				It("should extract data correctly", func() {
 					b := &buffer{
-						initAddr:    tt.initAddr,
+						offset:      tt.initAddr,
 						granularity: tt.granularity,
 						data:        tt.data,
 					}

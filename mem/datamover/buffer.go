@@ -1,7 +1,7 @@
 package datamover
 
 type buffer struct {
-	initAddr    uint64
+	offset      uint64
 	granularity uint64
 	data        [][]byte
 }
@@ -9,20 +9,20 @@ type buffer struct {
 func (b *buffer) addData(addr uint64, data []byte) {
 	addressMustBeAligned(addr, b.granularity)
 
-	offset := (addr - b.initAddr) / b.granularity
-	for i := uint64(len(b.data)); i <= offset; i++ {
+	slot := (addr - b.offset) / b.granularity
+	for i := uint64(len(b.data)); i <= slot; i++ {
 		b.data = append(b.data, nil)
 	}
 
-	b.data[offset] = data
+	b.data[slot] = data
 }
 
 func (b *buffer) extractData(addr, size uint64) (data []byte, ok bool) {
 	data = make([]byte, size)
 
 	sizeLeft := size
-	slot := (addr - b.initAddr) / b.granularity
-	offset := addr - b.initAddr - slot*b.granularity
+	slot := (addr - b.offset) / b.granularity
+	offset := addr - b.offset - slot*b.granularity
 
 	for i := slot; i < uint64(len(b.data)); i++ {
 		if b.data[i] == nil {
@@ -46,19 +46,19 @@ func (b *buffer) extractData(addr, size uint64) (data []byte, ok bool) {
 	return nil, false
 }
 
-func (b *buffer) moveInitAddrForwardTo(newStart uint64) {
+func (b *buffer) moveOffsetForwardTo(newStart uint64) {
 	alignedNewStart := (newStart / b.granularity) * b.granularity
 
-	if alignedNewStart <= b.initAddr {
+	if alignedNewStart <= b.offset {
 		return
 	}
 
-	discardChunks := (alignedNewStart - b.initAddr) / b.granularity
+	discardChunks := (alignedNewStart - b.offset) / b.granularity
 	if discardChunks > uint64(len(b.data)) {
 		b.data = b.data[:0]
 	} else {
 		b.data = b.data[discardChunks:]
 	}
 
-	b.initAddr = alignedNewStart
+	b.offset = alignedNewStart
 }
