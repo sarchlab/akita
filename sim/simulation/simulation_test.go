@@ -4,7 +4,8 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim/hardware"
+
+	"github.com/sarchlab/akita/v4/sim/model"
 )
 
 var _ = Describe("Simulation", func() {
@@ -31,7 +32,7 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should register a component", func() {
-		comp.EXPECT().Ports().Return([]hardware.Port{port})
+		comp.EXPECT().Ports().Return([]model.Port{port})
 
 		sim.RegisterComponent(comp)
 

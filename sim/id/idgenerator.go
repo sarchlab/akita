@@ -11,11 +11,9 @@ import (
 
 var idGeneratorMutex sync.Mutex
 var idGeneratorInstantiated bool
-var idGenerator IDGenerator
+var gen idGenerator
 
-// IDGenerator can generate IDs
-type IDGenerator interface {
-	// Generate an ID
+type idGenerator interface {
 	Generate() string
 }
 
@@ -31,13 +29,13 @@ func UseSequentialIDGenerator() {
 		log.Panic("cannot change id generator type after using it")
 	}
 
-	idGenerator = &sequentialIDGenerator{}
+	gen = &sequentialIDGenerator{}
 	idGeneratorInstantiated = true
 
 	idGeneratorMutex.Unlock()
 }
 
-// UseParallelIDGenerator configurs the ID generator to generate ID in
+// UseParallelIDGenerator configures the ID generator to generate ID in
 // parallel. The IDs generated will not be deterministic anymore.
 func UseParallelIDGenerator() {
 	if idGeneratorInstantiated {
@@ -49,7 +47,7 @@ func UseParallelIDGenerator() {
 		log.Panic("cannot change id generator type after using it")
 	}
 
-	idGenerator = &parallelIDGenerator{}
+	gen = &parallelIDGenerator{}
 	idGeneratorInstantiated = true
 
 	idGeneratorMutex.Unlock()
@@ -61,22 +59,22 @@ func Generate() string {
 }
 
 // getIDGenerator returns the ID generator used in the current simulation.
-func getIDGenerator() IDGenerator {
+func getIDGenerator() idGenerator {
 	if idGeneratorInstantiated {
-		return idGenerator
+		return gen
 	}
 
 	idGeneratorMutex.Lock()
 	if idGeneratorInstantiated {
 		idGeneratorMutex.Unlock()
-		return idGenerator
+		return gen
 	}
 
-	idGenerator = &sequentialIDGenerator{}
+	gen = &sequentialIDGenerator{}
 	idGeneratorInstantiated = true
 	idGeneratorMutex.Unlock()
 
-	return idGenerator
+	return gen
 }
 
 type sequentialIDGenerator struct {
