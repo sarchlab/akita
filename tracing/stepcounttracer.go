@@ -22,6 +22,7 @@ func NewStepCountTracer(filter TaskFilter) *StepCountTracer {
 		stepCount:         make(map[string]uint64),
 		taskWithStepCount: make(map[string]uint64),
 	}
+
 	return t
 }
 
@@ -64,10 +65,12 @@ func (t *StepCountTracer) StepTask(task Task) {
 
 func (t *StepCountTracer) countStep(task Task) {
 	step := task.Steps[0]
+
 	_, ok := t.stepCount[step.What]
 	if !ok {
 		t.stepNames = append(t.stepNames, step.What)
 	}
+
 	t.stepCount[step.What]++
 }
 
@@ -99,6 +102,7 @@ func taskContainsStep(task Task, step TaskStep) bool {
 // EndTask records the end of the task
 func (t *StepCountTracer) EndTask(task Task) {
 	t.lock.Lock()
+
 	_, ok := t.inflightTasks[task.ID]
 	if !ok {
 		t.lock.Unlock()

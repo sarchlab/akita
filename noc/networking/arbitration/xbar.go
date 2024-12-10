@@ -28,6 +28,7 @@ func (a *xbarArbiter) Arbitrate() []sim.Buffer {
 		currPortID := (startingPortID + i) % len(a.buffers)
 		buf := a.buffers[currPortID]
 		item := buf.Peek()
+
 		if item == nil {
 			continue
 		}

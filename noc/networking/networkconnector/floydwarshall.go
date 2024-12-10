@@ -23,7 +23,10 @@ func (r FloydWarshallRouter) EstablishRoute(nodes []Node) {
 	r.tableToRoute(table, nodes)
 }
 
-func (r FloydWarshallRouter) floydWarshallInit(table [][]routeInfo, nodes []Node) {
+func (r FloydWarshallRouter) floydWarshallInit(
+	table [][]routeInfo,
+	nodes []Node,
+) {
 	for i := range table {
 		table[i] = make([]routeInfo, len(nodes))
 		for j := range table[i] {
@@ -36,6 +39,7 @@ func (r FloydWarshallRouter) floydWarshallInit(table [][]routeInfo, nodes []Node
 			if i == j {
 				table[i][j].distance = 0
 				table[i][j].nextHop = &remotes[0]
+
 				continue
 			}
 
@@ -44,11 +48,7 @@ func (r FloydWarshallRouter) floydWarshallInit(table [][]routeInfo, nodes []Node
 				table[i][j].distance = 1
 				table[i][j].nextHop = r
 			}
-
-			// fmt.Printf("FW Init Internal %d/%d\n", j, len(table))
 		}
-
-		// fmt.Printf("FW Init %d/%d\n", i, len(table))
 	}
 }
 
@@ -65,8 +65,6 @@ func (r FloydWarshallRouter) floydWarshall(table [][]routeInfo) {
 				}
 			}
 		}
-
-		// fmt.Printf("FW %d/%d\n", k, len(table))
 	}
 }
 

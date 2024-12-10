@@ -47,13 +47,17 @@ type TranslationReqBuilder struct {
 }
 
 // WithSrc sets the source of the request to build.
-func (b TranslationReqBuilder) WithSrc(src sim.RemotePort) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithSrc(
+	src sim.RemotePort,
+) TranslationReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b TranslationReqBuilder) WithDst(dst sim.RemotePort) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithDst(
+	dst sim.RemotePort,
+) TranslationReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -71,7 +75,9 @@ func (b TranslationReqBuilder) WithPID(pid PID) TranslationReqBuilder {
 }
 
 // WithDeviceID sets the GPU ID of the request to build.
-func (b TranslationReqBuilder) WithDeviceID(deviceID uint64) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithDeviceID(
+	deviceID uint64,
+) TranslationReqBuilder {
 	b.deviceID = deviceID
 	return b
 }
@@ -85,6 +91,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+
 	return r
 }
 
@@ -122,13 +129,17 @@ type TranslationRspBuilder struct {
 }
 
 // WithSrc sets the source of the respond to build.
-func (b TranslationRspBuilder) WithSrc(src sim.RemotePort) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithSrc(
+	src sim.RemotePort,
+) TranslationRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the respond to build.
-func (b TranslationRspBuilder) WithDst(dst sim.RemotePort) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithDst(
+	dst sim.RemotePort,
+) TranslationRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -153,6 +164,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Dst = b.dst
 	r.RespondTo = b.rspTo
 	r.Page = b.page
+
 	return r
 }
 
@@ -162,7 +174,8 @@ type PageMigrationInfo struct {
 	GPUReqToVAddrMap map[uint64][]uint64
 }
 
-// PageMigrationReqToDriver is a req to driver from MMU to start page migration process
+// PageMigrationReqToDriver is a req to driver from MMU to start page migration
+// process
 type PageMigrationReqToDriver struct {
 	sim.MsgMeta
 
@@ -199,10 +212,12 @@ func NewPageMigrationReqToDriver(
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
 	cmd.Dst = dst
+
 	return cmd
 }
 
-// PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of migration
+// PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of
+// migration
 type PageMigrationRspFromDriver struct {
 	sim.MsgMeta
 
@@ -237,5 +252,6 @@ func NewPageMigrationRspFromDriver(
 	cmd.Src = src
 	cmd.Dst = dst
 	cmd.OriginalReq = originalReq
+
 	return cmd
 }

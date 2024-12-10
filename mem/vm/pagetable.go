@@ -83,6 +83,7 @@ func (pt *pageTableImpl) Remove(pid PID, vAddr uint64) {
 func (pt *pageTableImpl) Find(pid PID, vAddr uint64) (Page, bool) {
 	table := pt.getTable(pid)
 	vAddr = pt.alignToPage(vAddr)
+
 	return table.find(vAddr)
 }
 

@@ -65,6 +65,7 @@ func (t *SQLiteWriter) Init() {
 	}
 
 	filename := t.dbName + ".sqlite3"
+
 	_, err := os.Stat(filename)
 	if err == nil {
 		panic(fmt.Errorf("file %s already exists", filename))
@@ -82,10 +83,25 @@ func (t *SQLiteWriter) Init() {
 
 func (t *SQLiteWriter) isAllowedType(kind reflect.Kind) bool {
 	switch kind {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
-		reflect.String, reflect.UnsafePointer:
+	case
+		reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Uintptr,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.String,
+		reflect.UnsafePointer:
 		return true
 	default:
 		return false
@@ -103,6 +119,7 @@ func (t *SQLiteWriter) checkStructFields(entry any) error {
 			return errors.New("entry is invalid")
 		}
 	}
+
 	return nil
 }
 
@@ -115,14 +132,17 @@ func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
 	t.tableCount++
 	n := structs.Names(sampleEntry)
 	fields := strings.Join(n, ", \n\t")
+
 	tableName := table
-	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
+	createTableSQL := `CREATE TABLE ` + tableName +
+		` (` + "\n\t" + fields + "\n" + `);`
 
 	t.mustExecute(createTableSQL)
 	fmt.Printf("Table %s created successfully\n", tableName)
 
 	storedTasks := []any{sampleEntry}
 	t.tables[tableName] = storedTasks
+
 	t.entryCount++
 	if t.entryCount >= t.batchSize {
 		t.Flush()
@@ -142,12 +162,15 @@ func (t *SQLiteWriter) InsertData(table string, entry any) {
 
 	stdTask := storedTasks[0]
 	if reflect.TypeOf(stdTask) != reflect.TypeOf(entry) {
-		panic(fmt.Errorf("task %s can't be written into table %s", entry, table))
+		panic(fmt.Errorf("task %s can't be written into table %s",
+			entry, table))
 	}
+
 	fmt.Println("Data is successfully inserted")
 
 	storedTasks = append(storedTasks, entry)
 	t.tables[table] = storedTasks
+
 	t.entryCount += 1
 	if t.entryCount >= t.batchSize {
 		t.Flush()
@@ -165,8 +188,10 @@ func (t *SQLiteWriter) Flush() {
 	for tableName, storedEntries := range t.tables {
 		sampleEntry := storedEntries[0]
 		t.prepareStatement(tableName, sampleEntry)
+
 		for _, task := range storedEntries {
 			v := structs.Values(task)
+
 			_, err := t.statement.Exec(v...)
 			if err != nil {
 				panic(err)
@@ -184,6 +209,7 @@ func (t *SQLiteWriter) mustExecute(query string) sql.Result {
 		fmt.Printf("Failed to execute: %s\n", query)
 		panic(err)
 	}
+
 	return res
 }
 
@@ -192,6 +218,7 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 	for i := 0; i < len(n); i++ {
 		n[i] = "?"
 	}
+
 	entryToFill := "(" + strings.Join(n, ", ") + ")"
 	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
@@ -249,10 +276,12 @@ func (r *SQLiteReader) ListTables() []string {
 
 	for rows.Next() {
 		var tableName string
+
 		err := rows.Scan(&tableName)
 		if err != nil {
 			panic(err)
 		}
+
 		tableNames = append(tableNames, tableName)
 	}
 
