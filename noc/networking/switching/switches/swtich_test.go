@@ -1,6 +1,8 @@
 package switches
 
 import (
+	"fmt"
+
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -8,15 +10,15 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-func createMockPortComplex(ctrl *gomock.Controller) portComplex {
+func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
 	local := NewMockPort(ctrl)
 	local.EXPECT().AsRemote().
-		Return(sim.RemotePort("LocalPort")).
+		Return(sim.RemotePort(fmt.Sprintf("LocalPort%d", index))).
 		AnyTimes()
 
 	remote := NewMockPort(ctrl)
 	remote.EXPECT().AsRemote().
-		Return(sim.RemotePort("RemotePort")).
+		Return(sim.RemotePort(fmt.Sprintf("RemotePort%d", index))).
 		AnyTimes()
 
 	routeBuf := NewMockBuffer(ctrl)
@@ -65,13 +67,20 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-		portComplex1 = createMockPortComplex(mockCtrl)
-		portComplex2 = createMockPortComplex(mockCtrl)
+
+		portComplex1 = createMockPortComplex(mockCtrl, 1)
+		portComplex2 = createMockPortComplex(mockCtrl, 2)
+
 		dstPort = NewMockPort(mockCtrl)
-		dstPort.EXPECT().Name().AnyTimes()
+		dstPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("DstPort")).
+			AnyTimes()
+
 		routingTable = NewMockTable(mockCtrl)
 		arbiter = NewMockArbiter(mockCtrl)
 		arbiter.EXPECT().AddBuffer(gomock.Any()).AnyTimes()
+
 		sw = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
@@ -170,7 +179,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer1.EXPECT().Push(flit)
 		routingTable.EXPECT().
 			FindPort(dstPort.AsRemote()).
-			Return(portComplex2.localPort)
+			Return(portComplex2.localPort.AsRemote())
 
 		madeProgress := swMiddleware.route()
 
@@ -266,7 +275,7 @@ var _ = Describe("Switch", func() {
 			WithMsg(msg).
 			Build()
 
-		sendOutBuffer1.EXPECT().Peek().Return(nil)
+		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
 		sendOutBuffer2.EXPECT().Pop()
 		localPort2.EXPECT().Send(flit).Return(nil)
@@ -274,11 +283,11 @@ var _ = Describe("Switch", func() {
 		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
-		Expect(flit.Src).To(BeIdenticalTo(portComplex2.localPort))
+		Expect(flit.Dst).To(Equal(remotePort2))
+		Expect(flit.Src).To(Equal(portComplex2.localPort.AsRemote()))
 	})
 
-	It("should wait ifport is busy flits out", func() {
+	It("should wait if port is busy flits out", func() {
 		sendOutBuffer1 := portComplex1.sendOutBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 		localPort2 := portComplex2.localPort.(*MockPort)
@@ -291,14 +300,14 @@ var _ = Describe("Switch", func() {
 			WithMsg(msg).
 			Build()
 
-		sendOutBuffer1.EXPECT().Peek().Return(nil)
+		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
 		localPort2.EXPECT().Send(flit).Return(&sim.SendError{})
 
 		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeFalse())
-		Expect(flit.Dst).To(BeIdenticalTo(remotePort2))
-		Expect(flit.Src).To(BeIdenticalTo(portComplex2.localPort))
+		Expect(flit.Dst).To(Equal(remotePort2))
+		Expect(flit.Src).To(Equal(portComplex2.localPort.AsRemote()))
 	})
 })
