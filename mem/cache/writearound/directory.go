@@ -162,6 +162,7 @@ func (d *directory) processWrite(trans *transaction) bool {
 		if ok {
 			return d.processMSHRHit(trans, mshrEntry)
 		}
+
 		return false
 	}
 
@@ -177,6 +178,7 @@ func (d *directory) writeMiss(trans *transaction) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
 		d.buf.Pop()
+
 		return true
 	}
 
@@ -188,7 +190,7 @@ func (d *directory) writeBottom(trans *transaction) bool {
 	addr := write.Address
 
 	writeToBottom := mem.WriteReqBuilder{}.
-		WithSrc(d.cache.bottomPort).
+		WithSrc(d.cache.bottomPort.AsRemote()).
 		WithDst(d.cache.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
 		WithPID(write.PID).
@@ -258,12 +260,13 @@ func (d *directory) fetchFromBottom(
 
 	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
 	readToBottom := mem.ReadReqBuilder{}.
-		WithSrc(d.cache.bottomPort).
+		WithSrc(d.cache.bottomPort.AsRemote()).
 		WithDst(bottomModule).
 		WithAddress(cacheLineID).
 		WithPID(pid).
 		WithByteSize(blockSize).
 		Build()
+
 	err := d.cache.bottomPort.Send(readToBottom)
 	if err != nil {
 		return false
@@ -291,5 +294,6 @@ func (d *directory) getBankBuf(block *cache.Block) sim.Buffer {
 	numWaysPerSet := d.cache.directory.WayAssociativity()
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)
+
 	return d.cache.bankBufs[bankID]
 }
