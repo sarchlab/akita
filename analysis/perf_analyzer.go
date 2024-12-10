@@ -8,16 +8,18 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // PerfAnalyzerEntry is a single entry in the performance database.
 type PerfAnalyzerEntry struct {
 	EntryType   string
-	Start       sim.VTimeInSec
-	End         sim.VTimeInSec
+	Start       timing.VTimeInSec
+	End         timing.VTimeInSec
 	Where       string
-	WhereRemote sim.RemotePort
+	WhereRemote model.RemotePort
 	What        string
 	Value       float64
 	Unit        string
@@ -32,8 +34,8 @@ type PerfLogger interface {
 // PerfAnalyzer can report performance metrics during simulation.
 type PerfAnalyzer struct {
 	usePeriod     bool
-	period        sim.VTimeInSec
-	engine        sim.Engine
+	period        timing.VTimeInSec
+	engine        timing.Engine
 	backend       PerfAnalyzerBackend
 	portDataTable map[string]PerfAnalyzerEntry
 
@@ -41,17 +43,17 @@ type PerfAnalyzer struct {
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
-func (b *PerfAnalyzer) RegisterEngine(e sim.Engine) {
+func (b *PerfAnalyzer) RegisterEngine(e timing.Engine) {
 	b.engine = e
 }
 
 // RegisterComponent register a component to be monitored.
-func (b *PerfAnalyzer) RegisterComponent(c sim.Component) {
+func (b *PerfAnalyzer) RegisterComponent(c model.Component) {
 	b.registerComponentBuffers(c)
 	b.registerComponentPorts(c)
 }
 
-func (b *PerfAnalyzer) registerComponentBuffers(c sim.Component) {
+func (b *PerfAnalyzer) registerComponentBuffers(c model.Component) {
 	b.registerComponentOrPortBuffers(c)
 
 	for _, port := range c.Ports() {
@@ -65,20 +67,20 @@ func (b *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Buffer)
+			).Elem().Interface().(queueing.Buffer)
 
 			b.RegisterBuffer(fieldRef)
 		}
 	}
 }
 
-func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
+func (b *PerfAnalyzer) RegisterBuffer(buf queueing.Buffer) {
 	bufferAnalyzerBuilder := MakeBufferAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).
@@ -92,7 +94,7 @@ func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
 	buf.AcceptHook(bufferAnalyzer)
 }
 
-func (b *PerfAnalyzer) registerComponentPorts(c sim.Component) {
+func (b *PerfAnalyzer) registerComponentPorts(c model.Component) {
 	b.registerComponentOrPorts(c)
 
 	for _, port := range c.Ports() {
@@ -101,7 +103,7 @@ func (b *PerfAnalyzer) registerComponentPorts(c sim.Component) {
 }
 
 // RegisterPort registers a port to be monitored.
-func (b *PerfAnalyzer) RegisterPort(port sim.Port) {
+func (b *PerfAnalyzer) RegisterPort(port model.Port) {
 	portAnalyzerBuilder := MakePortAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).
@@ -134,10 +136,10 @@ func (b *PerfAnalyzer) AddDataEntry(entry PerfAnalyzerEntry) {
 // PerfAnalyzerBuilder is a builder that can build a PerfAnalyzer.
 type PerfAnalyzerBuilder struct {
 	usePeriod   bool
-	period      sim.VTimeInSec
+	period      timing.VTimeInSec
 	backendType string
 	dbFilename  string
-	engine      sim.Engine
+	engine      timing.Engine
 }
 
 // MakePerfAnalyzerBuilder creates a new PerfAnalyzerBuilder.
@@ -152,7 +154,7 @@ func MakePerfAnalyzerBuilder() PerfAnalyzerBuilder {
 
 // WithPeriod sets the period of the PerfAnalyzer.
 func (b PerfAnalyzerBuilder) WithPeriod(
-	period sim.VTimeInSec,
+	period timing.VTimeInSec,
 ) PerfAnalyzerBuilder {
 	b.usePeriod = true
 	b.period = period
@@ -175,7 +177,7 @@ func (b PerfAnalyzerBuilder) WithDBFilename(
 }
 
 func (b PerfAnalyzerBuilder) WithEngine(
-	engine sim.Engine,
+	engine timing.Engine,
 ) PerfAnalyzerBuilder {
 	b.engine = engine
 	return b
@@ -210,13 +212,13 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		portType := reflect.TypeOf((*sim.Port)(nil)).Elem()
+		portType := reflect.TypeOf((*model.Port)(nil)).Elem()
 
 		if fieldType == portType && !field.IsNil() {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Port)
+			).Elem().Interface().(model.Port)
 
 			b.RegisterPort(fieldRef)
 		}
