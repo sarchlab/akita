@@ -27,10 +27,12 @@ func NewAgent(
 	a := &Agent{}
 	a.test = test
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
+
 	for i := 0; i < numPorts; i++ {
 		p := sim.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
+
 	return a
 }
 
@@ -39,6 +41,7 @@ func (a *Agent) Tick() bool {
 	madeProgress := false
 	madeProgress = a.send() || madeProgress
 	madeProgress = a.recv() || madeProgress
+
 	return madeProgress
 }
 
@@ -48,29 +51,55 @@ func (a *Agent) send() bool {
 	}
 
 	msg := a.MsgsToSend[0]
-	err := msg.Meta().Src.Send(msg)
+	src := msg.Meta().Src
+
+	srcPort := a.findPortByName(src)
+
+	err := srcPort.Send(msg)
 	if err == nil {
 		a.MsgsToSend = a.MsgsToSend[1:]
 		a.sendBytes += uint64(msg.Meta().TrafficBytes)
+
 		return true
 	}
 
 	return false
 }
 
+func (a *Agent) findPortByName(src sim.RemotePort) sim.Port {
+	var srcPort sim.Port
+
+	for _, port := range a.AgentPorts {
+		if port.AsRemote() == src {
+			srcPort = port
+			break
+		}
+	}
+
+	if srcPort == nil {
+		panic(fmt.Sprintf("src port not found for %s", src))
+	}
+
+	return srcPort
+}
+
 func (a *Agent) recv() bool {
 	madeProgress := false
+
 	for _, port := range a.AgentPorts {
 		msg := port.RetrieveIncoming()
+
 		if msg != nil {
 			a.test.receiveMsg(msg, port)
 			a.recvBytes += uint64(msg.Meta().TrafficBytes)
-			madeProgress = true
 
 			// fmt.Printf("%.10f, %s, agent received, msg-%s\n",
 			// now, a.Name(), msg.Meta().ID)
+
+			madeProgress = true
 		}
 	}
+
 	return madeProgress
 }
 

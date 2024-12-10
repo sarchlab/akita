@@ -94,6 +94,7 @@ func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
 	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
+
 	return a
 }
 
@@ -180,6 +181,7 @@ var _ = Describe("Direct Connection Integration", func() {
 
 func directConnectionTest(seed int64) sim.VTimeInSec {
 	rand.Seed(seed)
+
 	numAgents := 100
 	numMsgsPerAgent := 1000
 	engine := sim.NewSerialEngine()
@@ -197,13 +199,17 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 			msg := sim.NewSampleMsg()
 			msg.Src = agent.OutPort.AsRemote()
 			msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
+
 			for msg.Dst == msg.Src {
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 			}
+
 			msg.ID = fmt.Sprintf("%s(%d)->%s",
 				agent.Name(), i, msg.Dst)
+
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}
+
 		agent.TickLater()
 	}
 

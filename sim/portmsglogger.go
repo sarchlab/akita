@@ -19,6 +19,7 @@ func NewPortMsgLogger(
 	h := new(PortMsgLogger)
 	h.Logger = logger
 	h.TimeTeller = timeTeller
+
 	return h
 }
 

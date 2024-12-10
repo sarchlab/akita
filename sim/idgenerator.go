@@ -70,6 +70,7 @@ func GetIDGenerator() IDGenerator {
 	idGenerator = &sequentialIDGenerator{}
 	idGeneratorInstantiated = true
 	idGeneratorMutex.Unlock()
+
 	return idGenerator
 }
 
@@ -80,6 +81,7 @@ type sequentialIDGenerator struct {
 func (g *sequentialIDGenerator) Generate() string {
 	idNumber := atomic.AddUint64(&g.nextID, 1)
 	id := strconv.FormatUint(idNumber, 10)
+
 	return id
 }
 

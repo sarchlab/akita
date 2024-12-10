@@ -59,6 +59,7 @@ func (c *Connector) WithEngine(e sim.Engine) *Connector {
 func (c *Connector) WithFreq(freq sim.Freq) *Connector {
 	c.freq = freq
 	c.connector = c.connector.WithDefaultFreq(freq)
+
 	return c
 }
 
@@ -92,6 +93,7 @@ func (c *Connector) WithNoCTracer(t tracing.Tracer) *Connector {
 func (c *Connector) WithFlitSize(size int) *Connector {
 	c.flitSize = size
 	c.connector = c.connector.WithFlitSize(size)
+
 	return c
 }
 
@@ -175,6 +177,7 @@ func (c *Connector) resizeGridToHold(loc [3]int) {
 	}
 
 	newGrid := c.initializeGrid(newGridCap)
+
 	for x := 0; x < c.gridSize[0]; x++ {
 		for y := 0; y < c.gridSize[1]; y++ {
 			for z := 0; z < c.gridSize[2]; z++ {
@@ -227,10 +230,6 @@ func (c *Connector) initializeGrid(cap [3]int) [][][]tile {
 func (c *Connector) EstablishNetwork() {
 	c.createSwitches()
 	c.createLinks()
-
-	// router := &meshRouter{}
-	// c.connector = c.connector.WithRouter(router)
-	// c.connector.EstablishRoute()
 }
 
 func (c *Connector) createLinks() {
@@ -345,6 +344,7 @@ func (c *Connector) createLink(
 	DirectionA, DirectionB string,
 ) (portA, portB sim.Port) {
 	transferPerCycle := int(math.Ceil(c.linkTransferPerCycle))
+
 	return c.connector.ConnectSwitches(a, b,
 		networkconnector.SwitchToSwitchLinkParameter{
 			LeftEndParam: networkconnector.LinkEndSwitchParameter{

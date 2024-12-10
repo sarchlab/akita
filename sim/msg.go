@@ -74,13 +74,17 @@ func (c GeneralRspBuilder) WithDst(dst RemotePort) GeneralRspBuilder {
 }
 
 // WithTrafficClass sets the traffic class of the general response message.
-func (c GeneralRspBuilder) WithTrafficClass(trafficClass int) GeneralRspBuilder {
+func (c GeneralRspBuilder) WithTrafficClass(
+	trafficClass int,
+) GeneralRspBuilder {
 	c.TrafficClass = trafficClass
 	return c
 }
 
 // WithTrafficBytes sets the traffic bytes of the general response message.
-func (c GeneralRspBuilder) WithTrafficBytes(trafficBytes int) GeneralRspBuilder {
+func (c GeneralRspBuilder) WithTrafficBytes(
+	trafficBytes int,
+) GeneralRspBuilder {
 	c.TrafficBytes = trafficBytes
 	return c
 }

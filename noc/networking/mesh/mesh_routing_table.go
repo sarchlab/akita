@@ -16,12 +16,8 @@ type meshRoutingTable struct {
 // FindPort finds the next-hop port according to the coordinate of the final
 // destination.
 func (t *meshRoutingTable) FindPort(dst sim.RemotePort) sim.RemotePort {
-	// fmt.Printf("dst name: %s\n", dst.Name())
-
 	dstTile := t.dstTable[dst]
 	dstX, dstY, dstZ := dstTile.rt.x, dstTile.rt.y, dstTile.rt.z
-
-	// fmt.Printf("dst coord is: %d, %d, %d\n", dstX, dstY, dstZ)
 
 	switch {
 	case dstZ < t.z:

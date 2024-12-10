@@ -147,14 +147,15 @@ var _ = Describe("DefaultPort", func() {
 		Expect(msg).To(BeNil())
 	})
 
-	It("should allow component to retrieve message from incoming buffer", func() {
-		msg := &sampleMsg{}
-		port.incomingBuf.Push(msg)
+	It("should allow component to retrieve message from incoming buffer",
+		func() {
+			msg := &sampleMsg{}
+			port.incomingBuf.Push(msg)
 
-		msgRet := port.RetrieveIncoming()
+			msgRet := port.RetrieveIncoming()
 
-		Expect(msgRet).To(BeIdenticalTo(msg))
-	})
+			Expect(msgRet).To(BeIdenticalTo(msg))
+		})
 
 	It("should return nil when retrieving empty outgoing buffer", func() {
 		msg := port.RetrieveOutgoing()
@@ -162,12 +163,13 @@ var _ = Describe("DefaultPort", func() {
 		Expect(msg).To(BeNil())
 	})
 
-	It("should allow component to retrieve message from outgoing buffer", func() {
-		msg := &sampleMsg{}
-		port.outgoingBuf.Push(msg)
+	It("should allow component to retrieve message from outgoing buffer",
+		func() {
+			msg := &sampleMsg{}
+			port.outgoingBuf.Push(msg)
 
-		msgRet := port.RetrieveOutgoing()
+			msgRet := port.RetrieveOutgoing()
 
-		Expect(msgRet).To(BeIdenticalTo(msg))
-	})
+			Expect(msgRet).To(BeIdenticalTo(msg))
+		})
 })

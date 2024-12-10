@@ -11,7 +11,8 @@ var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
 var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
 
-// HookPosPortMsgRetrieve marks when an outbound message is sent over a connection
+// HookPosPortMsgRetrieve marks when an outbound message is sent over a
+// connection
 var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
 
 // A RemotePort is a string that refers to another port.
@@ -234,6 +235,7 @@ func (p *defaultPort) PeekIncoming() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 
@@ -249,6 +251,7 @@ func (p *defaultPort) PeekOutgoing() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 

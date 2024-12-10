@@ -118,6 +118,7 @@ func (m *middleware) forwardMany(
 		}
 
 		madeProgress = true
+
 		port.RetrieveOutgoing()
 	}
 

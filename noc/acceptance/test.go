@@ -34,6 +34,7 @@ type Test struct {
 func NewTest() *Test {
 	t := &Test{}
 	t.receivedMsgsTable = make(map[sim.Msg]bool)
+
 	return t
 }
 
@@ -62,8 +63,8 @@ func (t *Test) GenerateMsgs(n uint64) {
 
 		msg := &trafficMsg{}
 		msg.Meta().ID = sim.GetIDGenerator().Generate()
-		msg.Src = srcPort
-		msg.Dst = dstPort
+		msg.Src = srcPort.AsRemote()
+		msg.Dst = dstPort.AsRemote()
 		msg.TrafficBytes = rand.Intn(4096)
 		// msg.TrafficBytes = 512
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
@@ -79,16 +80,18 @@ func (t *Test) registerMsg(msg sim.Msg) {
 func (t *Test) receiveMsg(msg sim.Msg, recvPort sim.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
-	t.receivedMsgs = append(t.receivedMsgs, msg)
+
 	// log.Printf("Msg %s: sent at %.10f, recved at %.10f",
 	// 	msg.Meta().ID, msg.Meta().SendTime, msg.Meta().RecvTime)
+
+	t.receivedMsgs = append(t.receivedMsgs, msg)
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(
 	msg sim.Msg,
 	recvPort sim.Port,
 ) {
-	if msg.Meta().Dst != recvPort {
+	if msg.Meta().Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
 }
@@ -97,6 +100,7 @@ func (t *Test) msgMustNotBeReceivedBefore(msg sim.Msg) {
 	if _, found := t.receivedMsgsTable[msg]; found {
 		panic("msg is double delivered")
 	}
+
 	t.receivedMsgsTable[msg] = true
 }
 
