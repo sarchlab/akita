@@ -47,9 +47,11 @@ func (t transaction) accessReq() mem.AccessReq {
 	if t.read != nil {
 		return t.read
 	}
+
 	if t.write != nil {
 		return t.write
 	}
+
 	return nil
 }
 
@@ -57,8 +59,10 @@ func (t transaction) req() sim.Msg {
 	if t.accessReq() != nil {
 		return t.accessReq()
 	}
+
 	if t.flush != nil {
 		return t.flush
 	}
+
 	return nil
 }

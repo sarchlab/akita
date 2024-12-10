@@ -5,13 +5,39 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+type ports struct {
+	ports   []sim.Port
+	portMap map[sim.RemotePort]int
+}
+
+func (p *ports) addPort(port sim.Port) {
+	p.ports = append(p.ports, port)
+	p.portMap[port.AsRemote()] = len(p.ports) - 1
+}
+
+func (p *ports) getPortIndex(index int) sim.Port {
+	return p.ports[index]
+}
+
+func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
+	return p.ports[p.portMap[name]]
+}
+
+func (p *ports) list() []sim.Port {
+	return p.ports
+}
+
+func (p *ports) len() int {
+	return len(p.ports)
+}
+
 // Comp is a DirectConnection connects two components without latency
 type Comp struct {
 	*sim.TickingComponent
 	sim.MiddlewareHolder
 
+	ports      ports
 	nextPortID int
-	ports      []sim.Port
 }
 
 // PlugIn marks the port connects to this DirectConnection.
@@ -19,7 +45,7 @@ func (c *Comp) PlugIn(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.ports = append(c.ports, port)
+	c.ports.addPort(port)
 
 	port.SetConnection(c)
 }
@@ -32,7 +58,7 @@ func (c *Comp) Unplug(_ sim.Port) {
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
 func (c *Comp) NotifyAvailable(p sim.Port) {
-	for _, port := range c.ports {
+	for _, port := range c.ports.list() {
 		if port == p {
 			continue
 		}
@@ -60,13 +86,15 @@ type middleware struct {
 // Tick updates the states of the connection and delivers messages.
 func (m *middleware) Tick() bool {
 	madeProgress := false
-	for i := 0; i < len(m.ports); i++ {
-		portID := (i + m.nextPortID) % len(m.ports)
-		port := m.ports[portID]
+
+	for i := range m.ports.len() {
+		portID := (i + m.nextPortID) % m.ports.len()
+		port := m.ports.getPortIndex(portID)
 		madeProgress = m.forwardMany(port) || madeProgress
 	}
 
-	m.nextPortID = (m.nextPortID + 1) % len(m.ports)
+	m.nextPortID = (m.nextPortID + 1) % m.ports.len()
+
 	return madeProgress
 }
 
@@ -74,6 +102,7 @@ func (m *middleware) forwardMany(
 	port sim.Port,
 ) bool {
 	madeProgress := false
+
 	for {
 		head := port.PeekOutgoing()
 		if head == nil {
@@ -81,13 +110,15 @@ func (m *middleware) forwardMany(
 		}
 
 		dst := head.Meta().Dst
+		dstPort := m.ports.getPortByName(dst)
 
-		err := dst.Deliver(head)
+		err := dstPort.Deliver(head)
 		if err != nil {
 			break
 		}
 
 		madeProgress = true
+
 		port.RetrieveOutgoing()
 	}
 

@@ -39,20 +39,20 @@ func (r *FlushReq) GenerateRsp() sim.Rsp {
 
 // FlushReqBuilder can build flush requests.
 type FlushReqBuilder struct {
-	src, dst                sim.Port
+	src, dst                sim.RemotePort
 	invalidateAllCacheLines bool
 	discardInflight         bool
 	pauseAfterFlushing      bool
 }
 
 // WithSrc sets the source of the message to build
-func (b FlushReqBuilder) WithSrc(src sim.Port) FlushReqBuilder {
+func (b FlushReqBuilder) WithSrc(src sim.RemotePort) FlushReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the message to build.
-func (b FlushReqBuilder) WithDst(dst sim.Port) FlushReqBuilder {
+func (b FlushReqBuilder) WithDst(dst sim.RemotePort) FlushReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -87,6 +87,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.InvalidateAllCachelines = b.invalidateAllCacheLines
 	r.DiscardInflight = b.discardInflight
 	r.PauseAfterFlushing = b.pauseAfterFlushing
+
 	return r
 }
 
@@ -116,18 +117,18 @@ func (r *FlushRsp) GetRspTo() string {
 
 // FlushRspBuilder can build data ready responds.
 type FlushRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushRspBuilder) WithSrc(src sim.Port) FlushRspBuilder {
+func (b FlushRspBuilder) WithSrc(src sim.RemotePort) FlushRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushRspBuilder) WithDst(dst sim.Port) FlushRspBuilder {
+func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -145,6 +146,7 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.RspTo = b.rspTo
+
 	return r
 }
 
@@ -179,17 +181,17 @@ func (r *RestartReq) GenerateRsp() sim.Rsp {
 
 // RestartReqBuilder can build data ready responds.
 type RestartReqBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartReqBuilder) WithSrc(src sim.Port) RestartReqBuilder {
+func (b RestartReqBuilder) WithSrc(src sim.RemotePort) RestartReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartReqBuilder) WithDst(dst sim.Port) RestartReqBuilder {
+func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -200,6 +202,7 @@ func (b RestartReqBuilder) Build() *RestartReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
+
 	return r
 }
 
@@ -229,18 +232,18 @@ func (r *RestartRsp) GetRspTo() string {
 
 // RestartRspBuilder can build data ready responds.
 type RestartRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartRspBuilder) WithSrc(src sim.Port) RestartRspBuilder {
+func (b RestartRspBuilder) WithSrc(src sim.RemotePort) RestartRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartRspBuilder) WithDst(dst sim.Port) RestartRspBuilder {
+func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -258,5 +261,6 @@ func (b RestartRspBuilder) Build() *RestartRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.RspTo = b.rspTo
+
 	return r
 }

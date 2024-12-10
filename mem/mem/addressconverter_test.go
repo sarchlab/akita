@@ -28,7 +28,8 @@ var _ = Describe("Interleaving Address Converter", func() {
 			To(Equal(uint64(8292)))
 	})
 
-	It("should panic when converting address does not belongs to current element", func() {
+	It("should panic when converting address does not belongs to current "+
+		"element", func() {
 		Expect(func() {
 			converter.ConvertExternalToInternal(0)
 		}).

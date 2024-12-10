@@ -26,14 +26,19 @@ var componentCmd = &cobra.Command{
 		componentName, _ := cmd.Flags().GetString("create")
 		if componentName != "" {
 			if !inGitRepo() {
-				log.Fatalf("Error: This command must be run inside a Git repository.")
+				log.Fatalf(
+					"Error: This command must be run inside a Git repository.",
+				)
 			}
 
 			err := createComponentFolder(componentName)
 			if err != nil {
 				log.Fatalf("Error creating component: %v", err)
 			} else {
-				fmt.Printf("Component '%s' created successfully!\n", componentName)
+				fmt.Printf(
+					"Component '%s' created successfully!\n",
+					componentName,
+				)
 			}
 
 			errFile := generateBuilderFile(componentName)
@@ -49,7 +54,6 @@ var componentCmd = &cobra.Command{
 			} else {
 				fmt.Println("Comp file generated successfully!")
 			}
-
 		} else {
 			fmt.Println("Action not valid.")
 		}
@@ -65,10 +69,12 @@ func init() {
 func inGitRepo() bool {
 	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
 	cmd.Dir = filepath.Dir(".")
+
 	output, err := cmd.Output()
 	if err != nil {
 		return false
 	}
+
 	return strings.TrimSpace(string(output)) == "true"
 }
 

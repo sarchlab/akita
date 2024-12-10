@@ -31,6 +31,7 @@ func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
 	e.time = t
 	e.handler = handler
 	e.secondary = false
+
 	return e
 }
 

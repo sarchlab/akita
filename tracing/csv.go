@@ -40,6 +40,7 @@ func (t *CSVTraceWriter) Init() {
 	}
 
 	filename := t.path + ".csv"
+
 	_, err := os.Stat(filename)
 	if err == nil {
 		panic(fmt.Errorf("file %s already exists", filename))
@@ -49,12 +50,14 @@ func (t *CSVTraceWriter) Init() {
 	if err != nil {
 		panic(err)
 	}
+
 	t.file = file
 
 	fmt.Fprintf(file, "ID, ParentID, Kind, What, Where, Start, End\n")
 
 	atexit.Register(func() {
 		t.Flush()
+
 		err := t.file.Close()
 		if err != nil {
 			panic(err)
@@ -107,6 +110,7 @@ func (r *CSVTraceReader) ListComponents() []string {
 	if err != nil {
 		panic(err)
 	}
+
 	defer func() {
 		err := f.Close()
 		if err != nil {
@@ -118,6 +122,7 @@ func (r *CSVTraceReader) ListComponents() []string {
 	r.skipCSVHeader(reader)
 
 	components := make(map[string]bool)
+
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -161,6 +166,7 @@ func (r *CSVTraceReader) ListTasks(query TaskQuery) []Task {
 	r.skipCSVHeader(reader)
 
 	tasks := make([]Task, 0)
+
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
@@ -294,5 +300,6 @@ func (*CSVTraceReader) parseCSVRecord(record []string) Task {
 	}
 
 	task.EndTime = sim.VTimeInSec(endTime)
+
 	return task
 }

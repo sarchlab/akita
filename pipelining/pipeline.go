@@ -93,6 +93,7 @@ func (p *pipelineImpl) Tick() (madeProgress bool) {
 			if stage.cycleLeft > 0 {
 				stage.cycleLeft--
 				madeProgress = true
+
 				continue
 			}
 
@@ -129,6 +130,7 @@ func (p *pipelineImpl) tryMoveToNextStage(
 ) (succeed bool) {
 	stage := &p.stages[lane][stageNum]
 	nextStage := &p.stages[lane][stageNum+1]
+
 	if nextStage.elem != nil {
 		return false
 	}
@@ -136,6 +138,7 @@ func (p *pipelineImpl) tryMoveToNextStage(
 	nextStage.elem = stage.elem
 	nextStage.cycleLeft = p.cyclePerStage - 1
 	stage.elem = nil
+
 	return true
 }
 

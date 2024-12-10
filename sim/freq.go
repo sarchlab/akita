@@ -21,6 +21,7 @@ func (f Freq) Period() VTimeInSec {
 	if f == 0 {
 		log.Panic("frequency cannot be 0")
 	}
+
 	return VTimeInSec(1.0 / f)
 }
 
@@ -40,7 +41,9 @@ func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
+
 	count := math.Ceil(math.Round(float64(now)*10*float64(f)) / 10)
+
 	return VTimeInSec(count / float64(f))
 }
 
@@ -55,7 +58,9 @@ func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
+
 	count := math.Floor(math.Round(float64(now)*10*float64(f)) / 10)
+
 	return VTimeInSec((count + 1) / float64(f))
 }
 
@@ -66,6 +71,7 @@ func (f Freq) NCyclesLater(n int, now VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(now)) {
 		log.Panic("invalid time")
 	}
+
 	return f.ThisTick(now + VTimeInSec(Freq(n)/f))
 }
 
@@ -74,7 +80,9 @@ func (f Freq) NoEarlierThan(t VTimeInSec) VTimeInSec {
 	if math.IsNaN(float64(t)) {
 		log.Panic("invalid time")
 	}
+
 	count := t / f.Period()
+
 	return VTimeInSec(math.Ceil(float64(count))) * f.Period()
 }
 

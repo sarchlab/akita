@@ -11,7 +11,7 @@ type Builder struct {
 	freq                     sim.Freq
 	log2PageSize             uint64
 	pageTable                vm.PageTable
-	migrationServiceProvider sim.Port
+	migrationServiceProvider sim.RemotePort
 	maxNumReqInFlight        int
 	pageWalkingLatency       int
 }
@@ -51,7 +51,7 @@ func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 
 // WithMigrationServiceProvider sets the destination port that can perform
 // page migration.
-func (b Builder) WithMigrationServiceProvider(p sim.Port) Builder {
+func (b Builder) WithMigrationServiceProvider(p sim.RemotePort) Builder {
 	b.migrationServiceProvider = p
 	return b
 }
@@ -107,7 +107,4 @@ func (b Builder) createPorts(name string, mmu *Comp) {
 	mmu.AddPort("Top", mmu.topPort)
 	mmu.migrationPort = sim.NewPort(mmu, 1, 1, name+".MigrationPort")
 	mmu.AddPort("Migration", mmu.migrationPort)
-
-	mmu.topSender = sim.NewBufferedSender(
-		mmu.topPort, sim.NewBuffer(name+".TopSenderBuffer", 4096))
 }

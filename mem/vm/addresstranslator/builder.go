@@ -9,7 +9,7 @@ import (
 type Builder struct {
 	engine              sim.Engine
 	freq                sim.Freq
-	translationProvider sim.Port
+	translationProvider sim.RemotePort
 	ctrlPort            sim.Port
 	addressToPortMapper mem.AddressToPortMapper
 	numReqPerCycle      int
@@ -41,7 +41,7 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 
 // WithTranslationProvider sets the port that can provide the translation
 // service. The port must be a port on a TLB or an MMU.
-func (b Builder) WithTranslationProvider(p sim.Port) Builder {
+func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
 	b.translationProvider = p
 	return b
 }

@@ -38,6 +38,7 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 		WithSrcSide(req.SrcSide).
 		WithDstSide(req.DstSide).
 		WithByteSize(req.ByteSize)
+
 	return b.Build()
 }
 
@@ -54,7 +55,7 @@ func (req *DataMoveRequest) GenerateRsp() sim.Msg {
 
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
-	src, dst   sim.Port
+	src, dst   sim.RemotePort
 	srcAddress uint64
 	dstAddress uint64
 	byteSize   uint64
@@ -69,7 +70,7 @@ func MakeDataMoveRequestBuilder() DataMoveRequestBuilder {
 
 // WithSrc sets the source port of the message.
 func (b DataMoveRequestBuilder) WithSrc(
-	inputSrc sim.Port,
+	inputSrc sim.RemotePort,
 ) DataMoveRequestBuilder {
 	b.src = inputSrc
 	return b
@@ -78,7 +79,7 @@ func (b DataMoveRequestBuilder) WithSrc(
 // WithDst sets the destination port of the message. It should be the CtrlPort
 // of the DataMover.
 func (b DataMoveRequestBuilder) WithDst(
-	inputDst sim.Port,
+	inputDst sim.RemotePort,
 ) DataMoveRequestBuilder {
 	b.dst = inputDst
 	return b
@@ -135,5 +136,6 @@ func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.ByteSize = b.byteSize
 	r.SrcSide = b.srcSide
 	r.DstSide = b.dstSide
+
 	return r
 }

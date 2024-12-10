@@ -5,7 +5,8 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-// A FlushReq asks the TLB to invalidate certain entries. It will also not block all incoming and outgoing ports
+// A FlushReq asks the TLB to invalidate certain entries. It will also not block
+// all incoming and outgoing ports
 type FlushReq struct {
 	sim.MsgMeta
 	VAddr []uint64
@@ -27,19 +28,19 @@ func (r *FlushReq) Clone() sim.Msg {
 
 // FlushReqBuilder can build AT flush requests
 type FlushReqBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	vAddrs   []uint64
 	pid      vm.PID
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushReqBuilder) WithSrc(src sim.Port) FlushReqBuilder {
+func (b FlushReqBuilder) WithSrc(src sim.RemotePort) FlushReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushReqBuilder) WithDst(dst sim.Port) FlushReqBuilder {
+func (b FlushReqBuilder) WithDst(dst sim.RemotePort) FlushReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -64,6 +65,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.Dst = b.dst
 	r.VAddr = b.vAddrs
 	r.PID = b.pid
+
 	return r
 }
 
@@ -87,17 +89,17 @@ func (r *FlushRsp) Clone() sim.Msg {
 
 // FlushRspBuilder can build AT flush rsp
 type FlushRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushRspBuilder) WithSrc(src sim.Port) FlushRspBuilder {
+func (b FlushRspBuilder) WithSrc(src sim.RemotePort) FlushRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushRspBuilder) WithDst(dst sim.Port) FlushRspBuilder {
+func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -112,7 +114,8 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	return r
 }
 
-// A RestartReq is a request to TLB to start accepting requests and resume operations
+// A RestartReq is a request to TLB to start accepting requests and resume
+// operations
 type RestartReq struct {
 	sim.MsgMeta
 }
@@ -132,17 +135,17 @@ func (r *RestartReq) Clone() sim.Msg {
 
 // RestartReqBuilder can build TLB restart requests.
 type RestartReqBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartReqBuilder) WithSrc(src sim.Port) RestartReqBuilder {
+func (b RestartReqBuilder) WithSrc(src sim.RemotePort) RestartReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartReqBuilder) WithDst(dst sim.Port) RestartReqBuilder {
+func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -177,17 +180,17 @@ func (r *RestartRsp) Clone() sim.Msg {
 
 // RestartRspBuilder can build AT flush rsp
 type RestartRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartRspBuilder) WithSrc(src sim.Port) RestartRspBuilder {
+func (b RestartRspBuilder) WithSrc(src sim.RemotePort) RestartRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartRspBuilder) WithDst(dst sim.Port) RestartRspBuilder {
+func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 	b.dst = dst
 	return b
 }

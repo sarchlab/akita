@@ -11,13 +11,19 @@ var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
 var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
 
-// HookPosPortMsgRetrieve marks when an outbound message is sent over a connection
+// HookPosPortMsgRetrieve marks when an outbound message is sent over a
+// connection
 var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
+
+// A RemotePort is a string that refers to another port.
+type RemotePort string
 
 // A Port is owned by a component and is used to plugin connections
 type Port interface {
 	Named
 	Hookable
+
+	AsRemote() RemotePort
 
 	SetConnection(conn Connection)
 	Component() Component
@@ -46,6 +52,11 @@ type defaultPort struct {
 
 	incomingBuf Buffer
 	outgoingBuf Buffer
+}
+
+// AsRemote returns the remote port name.
+func (p *defaultPort) AsRemote() RemotePort {
+	return RemotePort(p.name)
 }
 
 // SetConnection sets which connection plugged in to this port.
@@ -224,6 +235,7 @@ func (p *defaultPort) PeekIncoming() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 
@@ -239,6 +251,7 @@ func (p *defaultPort) PeekOutgoing() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 
@@ -267,18 +280,18 @@ func NewPort(
 
 func (p *defaultPort) msgMustBeValid(msg Msg) {
 	portMustBeMsgSrc(p, msg)
-	dstMustNotBeNil(msg.Meta().Dst)
+	dstMustNotBeEmpty(msg.Meta().Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
 func portMustBeMsgSrc(port Port, msg Msg) {
-	if port != msg.Meta().Src {
+	if port.Name() != string(msg.Meta().Src) {
 		panic("sending port is not msg src")
 	}
 }
 
-func dstMustNotBeNil(port Port) {
-	if port == nil {
+func dstMustNotBeEmpty(port RemotePort) {
+	if port == "" {
 		panic("dst is not given")
 	}
 }

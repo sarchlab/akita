@@ -18,7 +18,13 @@ var _ = Describe("Respond Stage", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
+
 		cache = &Comp{
 			topPort: topPort,
 		}

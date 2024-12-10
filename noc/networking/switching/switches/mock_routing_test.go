@@ -34,7 +34,7 @@ func (m *MockTable) EXPECT() *MockTableMockRecorder {
 }
 
 // DefineDefaultRoute mocks base method.
-func (m *MockTable) DefineDefaultRoute(arg0 sim.Port) {
+func (m *MockTable) DefineDefaultRoute(arg0 sim.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineDefaultRoute", arg0)
 }
@@ -46,7 +46,7 @@ func (mr *MockTableMockRecorder) DefineDefaultRoute(arg0 interface{}) *gomock.Ca
 }
 
 // DefineRoute mocks base method.
-func (m *MockTable) DefineRoute(arg0, arg1 sim.Port) {
+func (m *MockTable) DefineRoute(arg0, arg1 sim.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineRoute", arg0, arg1)
 }
@@ -58,10 +58,10 @@ func (mr *MockTableMockRecorder) DefineRoute(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // FindPort mocks base method.
-func (m *MockTable) FindPort(arg0 sim.Port) sim.Port {
+func (m *MockTable) FindPort(arg0 sim.RemotePort) sim.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindPort", arg0)
-	ret0, _ := ret[0].(sim.Port)
+	ret0, _ := ret[0].(sim.RemotePort)
 	return ret0
 }
 

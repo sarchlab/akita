@@ -32,7 +32,13 @@ var _ = Describe("Directory", func() {
 		dir.EXPECT().WayAssociativity().Return(4).AnyTimes()
 		mshr = NewMockMSHR(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
+
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
@@ -199,7 +205,9 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			dir.EXPECT().Visit(block)
-			addressToPortMapper.EXPECT().Find(uint64(0x100)).Return(nil)
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(sim.RemotePort(""))
 			bottomPort.EXPECT().Send(gomock.Any()).Do(func(read *mem.ReadReq) {
 				readToBottom = read
 				Expect(read.Address).To(Equal(uint64(0x100)))
@@ -256,7 +264,9 @@ var _ = Describe("Directory", func() {
 		It("should stall if send to bottom failed", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
-			addressToPortMapper.EXPECT().Find(uint64(0x100)).Return(nil)
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(sim.RemotePort(""))
 			mshr.EXPECT().IsFull().Return(false)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 

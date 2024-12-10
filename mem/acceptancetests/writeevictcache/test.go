@@ -49,6 +49,7 @@ func initSeed() {
 	} else {
 		seed = *seedFlag
 	}
+
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 }
@@ -61,7 +62,10 @@ func buildEnvironment() {
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+	conn := directconnection.MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("Conn")
 
 	agent = acceptancetests.NewMemAccessAgent(engine)
 	agent.MaxAddress = *maxAddressFlag
@@ -95,7 +99,7 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
-	addressToPortMapper.Port = dram.GetPortByName("Top")
+	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
 	agent.LowModule = writeevictCache.GetPortByName("Top")
 

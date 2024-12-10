@@ -34,7 +34,9 @@ func main() {
 
 func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	freq := 1.0 * sim.GHz
+
 	var agents []*acceptance.Agent
+
 	for i := 0; i < 2; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)
@@ -56,8 +58,8 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithDevicePorts(agents[1].AgentPorts).
 		Build("EP2")
 
-	ep1.DefaultSwitchDst = ep2.NetworkPort
-	ep2.DefaultSwitchDst = ep1.NetworkPort
+	ep1.DefaultSwitchDst = ep2.NetworkPort.AsRemote()
+	ep2.DefaultSwitchDst = ep1.NetworkPort.AsRemote()
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).

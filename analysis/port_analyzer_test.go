@@ -37,12 +37,21 @@ var _ = Describe("Port Analyzer", func() {
 
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().Name().Return("PortName").AnyTimes()
+		port.EXPECT().AsRemote().
+			Return(sim.RemotePort("PortName")).
+			AnyTimes()
 
 		incommingPort = NewMockPort(mockCtrl)
 		incommingPort.EXPECT().Name().Return("IncomingPort").AnyTimes()
+		incommingPort.EXPECT().AsRemote().
+			Return(sim.RemotePort("IncomingPort")).
+			AnyTimes()
 
 		outgoingPort = NewMockPort(mockCtrl)
 		outgoingPort.EXPECT().Name().Return("OutgoingPort").AnyTimes()
+		outgoingPort.EXPECT().AsRemote().
+			Return(sim.RemotePort("OutgoingPort")).
+			AnyTimes()
 
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		portLogger = NewMockPerfLogger(mockCtrl)
@@ -63,8 +72,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
-				Src:          port,
-				Dst:          outgoingPort,
+				Src:          port.AsRemote(),
+				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 
@@ -107,8 +116,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
-				Dst:          port,
-				Src:          incommingPort,
+				Dst:          port.AsRemote(),
+				Src:          incommingPort.AsRemote(),
 			},
 		}
 
@@ -151,15 +160,15 @@ var _ = Describe("Port Analyzer", func() {
 		outMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
-				Src:          port,
-				Dst:          outgoingPort,
+				Src:          port.AsRemote(),
+				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 		inMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 10000,
-				Dst:          port,
-				Src:          incommingPort,
+				Dst:          port.AsRemote(),
+				Src:          incommingPort.AsRemote(),
 			},
 		}
 
@@ -228,8 +237,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
-				Src:          port,
-				Dst:          outgoingPort,
+				Src:          port.AsRemote(),
+				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 
@@ -272,8 +281,8 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
-				Src:          port,
-				Dst:          outgoingPort,
+				Src:          port.AsRemote(),
+				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 

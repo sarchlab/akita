@@ -26,11 +26,12 @@ func (m *TrafficMsg) Clone() sim.Msg {
 }
 
 // NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst sim.Port, byteSize int) *TrafficMsg {
+func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
 	msg := new(TrafficMsg)
 	msg.Src = src
 	msg.Dst = dst
 	msg.TrafficBytes = byteSize
+
 	return msg
 }
 
@@ -49,8 +50,9 @@ func NewStartSendEvent(
 ) *StartSendEvent {
 	e := new(StartSendEvent)
 	e.EventBase = sim.NewEventBase(time, src)
-	e.Msg = NewTrafficMsg(src.ToOut, dst.ToOut, byteSize)
+	e.Msg = NewTrafficMsg(src.ToOut.AsRemote(), dst.ToOut.AsRemote(), byteSize)
 	e.Msg.Meta().TrafficClass = trafficClass
+
 	return e
 }
 
@@ -83,6 +85,7 @@ func (a *Agent) Handle(e sim.Event) error {
 	default:
 		log.Panicf("cannot handle event of type %s", reflect.TypeOf(e))
 	}
+
 	return nil
 }
 
@@ -102,11 +105,13 @@ func (a *Agent) sendDataOut() bool {
 	}
 
 	msg := a.Buffer[0]
+
 	err := a.ToOut.Send(msg)
 	if err == nil {
 		a.Buffer = a.Buffer[1:]
 		return true
 	}
+
 	return false
 }
 

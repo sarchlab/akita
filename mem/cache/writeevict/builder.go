@@ -120,8 +120,8 @@ func (b *Builder) WithVisTracer(tracer tracing.Tracer) *Builder {
 	return b
 }
 
-// WithAddressToPortMapper specifies how the cache units to create should find low
-// level modules.
+// WithAddressToPortMapper specifies how the cache units to create should find
+// low level modules.
 func (b *Builder) WithAddressToPortMapper(
 	addressToPortMapper mem.AddressToPortMapper,
 ) *Builder {
@@ -147,6 +147,7 @@ func (b *Builder) Build(name string) *Comp {
 		b.numReqPerCycle,
 	)
 	c.bankBufs = make([]sim.Buffer, b.numBank)
+
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = sim.NewBuffer(
 			c.Name()+".BankBuf"+fmt.Sprint(i),

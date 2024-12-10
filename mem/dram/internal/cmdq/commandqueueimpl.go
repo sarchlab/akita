@@ -36,6 +36,7 @@ func (q *CommandQueueImpl) getNextQueue() (queueIndex int, queue Queue) {
 	queueIndex = q.nextQueueIndex
 	retQueue := q.Queues[q.nextQueueIndex]
 	q.nextQueueIndex = (q.nextQueueIndex + 1) % len(q.Queues)
+
 	return queueIndex, retQueue
 }
 
@@ -50,6 +51,7 @@ func (q *CommandQueueImpl) getFirstReadyInQueue(
 				q.Queues[queueIndex] = append(
 					q.Queues[queueIndex][:i], q.Queues[queueIndex][i+1:]...)
 			}
+
 			return readyCmd
 		}
 	}

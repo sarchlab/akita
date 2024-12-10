@@ -26,7 +26,7 @@ func (r *TranslationReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
-// GenerateRsp generates response to originral translation request
+// GenerateRsp generates response to original translation request
 func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
 	rsp := TranslationRspBuilder{}.
 		WithSrc(r.Dst).
@@ -40,20 +40,24 @@ func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
 
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
 }
 
 // WithSrc sets the source of the request to build.
-func (b TranslationReqBuilder) WithSrc(src sim.Port) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithSrc(
+	src sim.RemotePort,
+) TranslationReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b TranslationReqBuilder) WithDst(dst sim.Port) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithDst(
+	dst sim.RemotePort,
+) TranslationReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -71,7 +75,9 @@ func (b TranslationReqBuilder) WithPID(pid PID) TranslationReqBuilder {
 }
 
 // WithDeviceID sets the GPU ID of the request to build.
-func (b TranslationReqBuilder) WithDeviceID(deviceID uint64) TranslationReqBuilder {
+func (b TranslationReqBuilder) WithDeviceID(
+	deviceID uint64,
+) TranslationReqBuilder {
 	b.deviceID = deviceID
 	return b
 }
@@ -85,6 +91,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+
 	return r
 }
 
@@ -116,19 +123,23 @@ func (r *TranslationRsp) GetRspTo() string {
 
 // TranslationRspBuilder can build translation requests
 type TranslationRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 	page     Page
 }
 
 // WithSrc sets the source of the respond to build.
-func (b TranslationRspBuilder) WithSrc(src sim.Port) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithSrc(
+	src sim.RemotePort,
+) TranslationRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the respond to build.
-func (b TranslationRspBuilder) WithDst(dst sim.Port) TranslationRspBuilder {
+func (b TranslationRspBuilder) WithDst(
+	dst sim.RemotePort,
+) TranslationRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -153,6 +164,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Dst = b.dst
 	r.RespondTo = b.rspTo
 	r.Page = b.page
+
 	return r
 }
 
@@ -162,7 +174,8 @@ type PageMigrationInfo struct {
 	GPUReqToVAddrMap map[uint64][]uint64
 }
 
-// PageMigrationReqToDriver is a req to driver from MMU to start page migration process
+// PageMigrationReqToDriver is a req to driver from MMU to start page migration
+// process
 type PageMigrationReqToDriver struct {
 	sim.MsgMeta
 
@@ -194,15 +207,17 @@ func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
 
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	src, dst sim.Port,
+	src, dst sim.RemotePort,
 ) *PageMigrationReqToDriver {
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
 	cmd.Dst = dst
+
 	return cmd
 }
 
-// PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of migration
+// PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of
+// migration
 type PageMigrationRspFromDriver struct {
 	sim.MsgMeta
 
@@ -230,12 +245,13 @@ func (m *PageMigrationRspFromDriver) GetRspTo() string {
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	src, dst sim.Port,
+	src, dst sim.RemotePort,
 	originalReq sim.Msg,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)
 	cmd.Src = src
 	cmd.Dst = dst
 	cmd.OriginalReq = originalReq
+
 	return cmd
 }

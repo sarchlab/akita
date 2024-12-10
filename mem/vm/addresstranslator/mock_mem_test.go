@@ -34,10 +34,10 @@ func (m *MockAddressToPortMapper) EXPECT() *MockAddressToPortMapperMockRecorder 
 }
 
 // Find mocks base method.
-func (m *MockAddressToPortMapper) Find(arg0 uint64) sim.Port {
+func (m *MockAddressToPortMapper) Find(arg0 uint64) sim.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Find", arg0)
-	ret0, _ := ret[0].(sim.Port)
+	ret0, _ := ret[0].(sim.RemotePort)
 	return ret0
 }
 

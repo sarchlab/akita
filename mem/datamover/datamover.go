@@ -130,7 +130,7 @@ func (c *Comp) readFromSrc() bool {
 
 	req := mem.ReadReqBuilder{}.
 		WithAddress(addr).
-		WithSrc(c.srcPort).
+		WithSrc(c.srcPort.AsRemote()).
 		WithDst(c.srcPortMapper.Find(addr)).
 		WithByteSize(c.srcByteGranularity).
 		WithPID(0).
@@ -199,7 +199,7 @@ func (c *Comp) writeToDst() bool {
 	req := mem.WriteReqBuilder{}.
 		WithAddress(c.currentTransaction.nextWriteAddr).
 		WithData(data).
-		WithSrc(c.dstPort).
+		WithSrc(c.dstPort.AsRemote()).
 		WithDst(c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr)).
 		WithPID(0).
 		Build()

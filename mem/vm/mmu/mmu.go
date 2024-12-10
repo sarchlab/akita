@@ -24,9 +24,7 @@ type Comp struct {
 	topPort       sim.Port
 	migrationPort sim.Port
 
-	MigrationServiceProvider sim.Port
-
-	topSender sim.BufferedSender
+	MigrationServiceProvider sim.RemotePort
 
 	pageTable           vm.PageTable
 	latency             int
@@ -54,7 +52,6 @@ type middleware struct {
 func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = m.topSender.Tick() || madeProgress
 	madeProgress = m.sendMigrationToDriver() || madeProgress
 	madeProgress = m.walkPageTable() || madeProgress
 	madeProgress = m.processMigrationReturn() || madeProgress
@@ -65,10 +62,12 @@ func (m *middleware) Tick() bool {
 
 func (m *middleware) walkPageTable() bool {
 	madeProgress := false
+
 	for i := 0; i < len(m.walkingTranslations); i++ {
 		if m.walkingTranslations[i].cycleLeft > 0 {
 			m.walkingTranslations[i].cycleLeft--
 			madeProgress = true
+
 			continue
 		}
 
@@ -76,11 +75,13 @@ func (m *middleware) walkPageTable() bool {
 	}
 
 	tmp := m.walkingTranslations[:0]
+
 	for i := 0; i < len(m.walkingTranslations); i++ {
 		if !m.toRemove(i) {
 			tmp = append(tmp, m.walkingTranslations[i])
 		}
 	}
+
 	m.walkingTranslations = tmp
 	m.toRemoveFromPTW = nil
 
@@ -145,19 +146,19 @@ func (m *middleware) pageNeedMigrate(walking transaction) bool {
 func (m *middleware) doPageWalkHit(
 	walkingIndex int,
 ) bool {
-	if !m.topSender.CanSend(1) {
+	if !m.topPort.CanSend() {
 		return false
 	}
-	walking := m.walkingTranslations[walkingIndex]
 
+	walking := m.walkingTranslations[walkingIndex]
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(walking.req.Src).
 		WithRspTo(walking.req.ID).
 		WithPage(walking.page).
 		Build()
 
-	m.topSender.Send(rsp)
+	m.topPort.Send(rsp)
 	m.toRemoveFromPTW = append(m.toRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(walking.req, m.Comp)
@@ -173,13 +174,19 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 	trans := m.migrationQueue[0]
 	req := trans.req
 	page, found := m.pageTable.Find(req.PID, req.VAddr)
+
 	if !found {
 		panic("page not found")
 	}
+
 	trans.page = page
 
 	if req.DeviceID == page.DeviceID || page.IsPinned {
-		m.sendTranlationRsp(trans)
+		if !m.topPort.CanSend() {
+			return false
+		}
+
+		m.sendTranslationRsp(trans)
 		m.migrationQueue = m.migrationQueue[1:]
 		m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 
@@ -190,23 +197,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 		return false
 	}
 
-	migrationInfo := new(vm.PageMigrationInfo)
-	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
-	migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID] =
-		append(migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID],
-			trans.req.VAddr)
-
-	m.PageAccessedByDeviceID[page.VAddr] =
-		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
-
-	migrationReq := vm.NewPageMigrationReqToDriver(
-		m.migrationPort, m.MigrationServiceProvider)
-	migrationReq.PID = page.PID
-	migrationReq.PageSize = page.PageSize
-	migrationReq.CurrPageHostGPU = page.DeviceID
-	migrationReq.MigrationInfo = migrationInfo
-	migrationReq.CurrAccessingGPUs = unique(m.PageAccessedByDeviceID[page.VAddr])
-	migrationReq.RespondToTop = true
+	migrationReq := m.createMigrationRequest(trans, page)
 
 	err := m.migrationPort.Send(migrationReq)
 	if err != nil {
@@ -227,6 +218,7 @@ func (m *middleware) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	page vm.Page,
 ) vm.Page {
 	inQueue := false
+
 	for _, t := range m.migrationQueue {
 		if page.PAddr == t.page.PAddr {
 			inQueue = true
@@ -237,25 +229,26 @@ func (m *middleware) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	if !inQueue {
 		page.IsMigrating = false
 		m.pageTable.Update(page)
+
 		return page
 	}
 
 	return page
 }
 
-func (m *middleware) sendTranlationRsp(
+func (m *middleware) sendTranslationRsp(
 	trans transaction,
 ) (madeProgress bool) {
 	req := trans.req
 	page := trans.page
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
-	m.topSender.Send(rsp)
+	m.topPort.Send(rsp)
 
 	return true
 }
@@ -266,23 +259,24 @@ func (m *middleware) processMigrationReturn() bool {
 		return false
 	}
 
-	if !m.topSender.CanSend(1) {
+	if !m.topPort.CanSend() {
 		return false
 	}
 
 	req := m.currentOnDemandMigration.req
 	page, found := m.pageTable.Find(req.PID, req.VAddr)
+
 	if !found {
 		panic("page not found")
 	}
 
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
-	m.topSender.Send(rsp)
+	m.topPort.Send(rsp)
 
 	m.isDoingMigration = false
 
@@ -333,17 +327,47 @@ func (m *middleware) toRemove(index int) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func unique(intSlice []uint64) []uint64 {
 	keys := make(map[int]bool)
 	list := []uint64{}
+
 	for _, entry := range intSlice {
 		if _, value := keys[int(entry)]; !value {
 			keys[int(entry)] = true
+
 			list = append(list, entry)
 		}
 	}
+
 	return list
+}
+
+func (m *middleware) createMigrationRequest(
+	trans transaction,
+	page vm.Page,
+) *vm.PageMigrationReqToDriver {
+	migrationInfo := new(vm.PageMigrationInfo)
+	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
+	migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID] =
+		append(migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID],
+			trans.req.VAddr)
+
+	m.PageAccessedByDeviceID[page.VAddr] =
+		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
+
+	migrationReq := vm.NewPageMigrationReqToDriver(
+		m.migrationPort.AsRemote(), m.MigrationServiceProvider)
+	migrationReq.PID = page.PID
+	migrationReq.PageSize = page.PageSize
+	migrationReq.CurrPageHostGPU = page.DeviceID
+	migrationReq.MigrationInfo = migrationInfo
+	migrationReq.CurrAccessingGPUs = unique(
+		m.PageAccessedByDeviceID[page.VAddr])
+	migrationReq.RespondToTop = true
+
+	return migrationReq
 }

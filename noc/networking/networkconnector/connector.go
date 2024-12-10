@@ -132,7 +132,8 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 	return c
 }
 
-// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels in the network.
+// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels
+// in the network.
 func (c Connector) WithPerfAnalyzer(
 	a *analysis.PerfAnalyzer,
 ) Connector {
@@ -225,7 +226,9 @@ func (c *Connector) ConnectDevice(
 
 	epNode := c.createEndPoint(ports, param, swNode)
 	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
-	c.createRemoteInfoFoEP(epNode, swNode, epNode.endPoint.NetworkPort, swPort, conn)
+	c.createRemoteInfoFoEP(
+		epNode, swNode, epNode.endPoint.NetworkPort, swPort, conn,
+	)
 }
 
 // ConnectDeviceWithEPName connects a few ports that belongs to the device to a
@@ -307,7 +310,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		param.SwitchEndParam.IncomingBufSize,
 		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
-	endPoint.DefaultSwitchDst = swPort
+	endPoint.DefaultSwitchDst = swPort.AsRemote()
 	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).
@@ -349,18 +352,14 @@ func (c *Connector) connectPorts(
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = directconnection.MakeBuilder().WithEngine(c.engine).WithFreq(c.defaultFreq).Build(connName)
+		conn = directconnection.MakeBuilder().
+			WithEngine(c.engine).
+			WithFreq(c.defaultFreq).
+			Build(connName)
 	} else {
 		panic("non-ideal (with latency) connection is not implemented.")
-		// conn = messaging.MakeChannelBuilder().
-		// 	WithEngine(c.engine).
-		// 	WithPipelineParameters(
-		// 		linkParam.NumStage,
-		// 		linkParam.CyclePerStage,
-		// 		linkParam.PipelineWidth).
-		// 	WithFreq(linkParam.Frequency).
-		// 	Build(connName)
 	}
+
 	conn.PlugIn(left)
 	conn.PlugIn(right)
 
@@ -393,10 +392,12 @@ func (c *Connector) ConnectSwitches(
 	leftNode := c.switches[leftSwitchID]
 	leftSwitch := leftNode.sw
 	leftPortName := leftSwitch.Name() + "." + param.LeftEndParam.PortName
+
 	if param.LeftEndParam.PortName == "" {
 		leftPortName = fmt.Sprintf("%s.Port%d",
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
+
 	leftPort = sim.NewPort(leftSwitch,
 		param.LeftEndParam.IncomingBufSize,
 		param.LeftEndParam.OutgoingBufSize,
@@ -405,10 +406,12 @@ func (c *Connector) ConnectSwitches(
 	rightNode := c.switches[rightSwitchID]
 	rightSwitch := rightNode.sw
 	rightPortName := rightSwitch.Name() + "." + param.RightEndParam.PortName
+
 	if param.RightEndParam.PortName == "" {
 		rightPortName = fmt.Sprintf("%s.Port%d",
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
+
 	rightPort = sim.NewPort(rightSwitch,
 		param.RightEndParam.IncomingBufSize,
 		param.RightEndParam.OutgoingBufSize,
@@ -447,6 +450,7 @@ func (c *Connector) createRemoteInfo(
 		RemotePort: rightPort,
 		Link:       conn,
 	})
+
 	rightNode.remotes = append(rightNode.remotes, Remote{
 		LocalNode:  rightNode,
 		LocalPort:  rightPort,
@@ -464,7 +468,6 @@ func (c *Connector) EstablishRoute() {
 
 	nodes := c.createRoutingNodeList()
 	c.router.EstablishRoute(nodes)
-	// c.dumpRoute()
 }
 
 func (c *Connector) createRoutingNodeList() []Node {

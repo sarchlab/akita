@@ -68,7 +68,7 @@ type Comp struct {
 	startTime           []sim.VTimeInSec
 	numPingNeedToSend   int
 	nextSeqID           int
-	pingDst             sim.Port
+	pingDst             sim.RemotePort
 }
 
 func (c *Comp) Tick() bool {
@@ -155,7 +155,7 @@ func (m *middleware) sendRsp() bool {
 	rsp := &PingRsp{
 		SeqID: trans.req.SeqID,
 	}
-	rsp.Src = m.OutPort
+	rsp.Src = m.OutPort.AsRemote()
 	rsp.Dst = trans.req.Src
 
 	err := m.OutPort.Send(rsp)
@@ -176,7 +176,7 @@ func (m *middleware) sendPing() bool {
 	PingReq := &PingReq{
 		SeqID: m.nextSeqID,
 	}
-	PingReq.Src = m.OutPort
+	PingReq.Src = m.OutPort.AsRemote()
 	PingReq.Dst = m.pingDst
 
 	err := m.OutPort.Send(PingReq)

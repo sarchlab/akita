@@ -76,6 +76,7 @@ func (m *middleware) runPipeline() bool {
 	madeProgress = m.tickBankStage() || madeProgress
 	madeProgress = m.tickDirectoryStage() || madeProgress
 	madeProgress = m.tickCoalesceState() || madeProgress
+
 	return madeProgress
 }
 
@@ -84,6 +85,7 @@ func (m *middleware) tickRespondStage() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondStage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 
@@ -102,6 +104,7 @@ func (m *middleware) tickBankStage() bool {
 	for _, bs := range m.bankStages {
 		madeProgress = bs.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 
@@ -110,6 +113,7 @@ func (m *middleware) tickDirectoryStage() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.directoryStage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 

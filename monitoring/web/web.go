@@ -25,7 +25,10 @@ func GetAssets() http.FileSystem {
 
 		assetPath = path.Join(path.Dir(assetPath), "/dist")
 
-		fmt.Printf("In monitoring tool development mode, serving assets from %s\n", assetPath)
+		fmt.Printf(
+			"In monitoring tool development mode, serving assets from %s\n",
+			assetPath,
+		)
 
 		return http.Dir(assetPath)
 	}
