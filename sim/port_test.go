@@ -60,7 +60,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should send successfully", func() {
-		dst := NewPort(comp, 4, 4, "Port")
+		dst := NewPort(comp, 4, 4, "DstPort")
 		msg := &sampleMsg{}
 		msg.Src = port.AsRemote()
 		msg.Dst = dst.AsRemote()
@@ -73,7 +73,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should propagate error when outgoing buff is full", func() {
-		dst := NewPort(comp, 4, 4, "Port")
+		dst := NewPort(comp, 4, 4, "DstPort")
 		msg := &sampleMsg{}
 		msg.Src = port.AsRemote()
 		msg.Dst = dst.AsRemote()
