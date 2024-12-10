@@ -366,8 +366,13 @@ var _ = Describe("TLB Integration", func() {
 			PeekOutgoing().
 			Return(nil).
 			AnyTimes()
+
 		agent = NewMockPort(mockCtrl)
 		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		agent.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("Agent")).
+			AnyTimes()
 
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
