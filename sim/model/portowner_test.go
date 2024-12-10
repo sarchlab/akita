@@ -1,4 +1,4 @@
-package hardware
+package model
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -7,14 +7,14 @@ import (
 
 var _ = Describe("Port Owner", func() {
 	var (
-		po *PortOwnerBase
+		po PortOwnerBase
 	)
 
 	BeforeEach(func() {
-		po = NewPortOwnerBase()
+		po = MakePortOwnerBase()
 	})
 
-	It("shoud panic if the same name is added twice", func() {
+	It("should panic if the same name is added twice", func() {
 		port1 := NewPort(nil, 10, 10, "Port1")
 		port2 := NewPort(nil, 10, 10, "Port2")
 

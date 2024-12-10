@@ -1,4 +1,4 @@
-package hardware
+package model
 
 import (
 	. "github.com/onsi/ginkgo/v2"

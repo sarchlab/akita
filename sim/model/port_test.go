@@ -1,28 +1,23 @@
-package hardware
+package model
 
 import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 type sampleMsg struct {
 	MsgMeta
 }
 
-func newSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	return m
+func (m sampleMsg) Meta() MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *sampleMsg) Meta() *MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() Msg {
-	cloneMsg := *m
+func (m sampleMsg) Clone() Msg {
+	cloneMsg := m
 	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
@@ -61,31 +56,40 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should be panic if port is not msg src", func() {
-		msg := newSampleMsg()
+		msg := sampleMsg{}
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg dst is not set", func() {
-		msg := newSampleMsg()
-		msg.Src = port.AsRemote()
+		msg := sampleMsg{
+			MsgMeta: MsgMeta{
+				Src: port.AsRemote(),
+			},
+		}
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
-		msg := newSampleMsg()
-		msg.Src = port.AsRemote()
-		msg.Dst = port.AsRemote()
+		msg := sampleMsg{
+			MsgMeta: MsgMeta{
+				Src: port.AsRemote(),
+				Dst: port.AsRemote(),
+			},
+		}
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should send successfully", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := newSampleMsg()
-		msg.Src = port.AsRemote()
-		msg.Dst = dst.AsRemote()
+		msg := sampleMsg{
+			MsgMeta: MsgMeta{
+				Src: port.AsRemote(),
+				Dst: dst.AsRemote(),
+			},
+		}
 		conn.EXPECT().NotifySend()
 
 		err := port.Send(msg)
@@ -96,9 +100,12 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should propagate error when outgoing buff is full", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := newSampleMsg()
-		msg.Src = port.AsRemote()
-		msg.Dst = dst.AsRemote()
+		msg := sampleMsg{
+			MsgMeta: MsgMeta{
+				Src: port.AsRemote(),
+				Dst: dst.AsRemote(),
+			},
+		}
 
 		port.outgoingBuf.Push(msg)
 		port.outgoingBuf.Push(msg)
@@ -111,7 +118,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should deliver when successful", func() {
-		msg := newSampleMsg()
+		msg := sampleMsg{}
 
 		comp.EXPECT().NotifyRecv(port)
 
@@ -121,8 +128,8 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should fail to deliver when incoming buffer is full", func() {
-		msg := newSampleMsg()
-		port.incomingBuf = sim.NewBuffer("Buf", 4)
+		msg := sampleMsg{}
+		port.incomingBuf = queueing.NewBuffer("Buf", 4)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
@@ -140,7 +147,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from incoming buffer", func() {
-		msg := newSampleMsg()
+		msg := sampleMsg{}
 		port.incomingBuf.Push(msg)
 
 		msgRet := port.PeekIncoming()
@@ -155,7 +162,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from outgoing buffer", func() {
-		msg := newSampleMsg()
+		msg := sampleMsg{}
 		port.outgoingBuf.Push(msg)
 
 		msgRet := port.PeekOutgoing()
@@ -171,7 +178,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from incoming buffer",
 		func() {
-			msg := newSampleMsg()
+			msg := sampleMsg{}
 			port.incomingBuf.Push(msg)
 
 			msgRet := port.RetrieveIncoming()
@@ -187,7 +194,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from outgoing buffer",
 		func() {
-			msg := newSampleMsg()
+			msg := sampleMsg{}
 			port.outgoingBuf.Push(msg)
 
 			msgRet := port.RetrieveOutgoing()

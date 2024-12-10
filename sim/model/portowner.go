@@ -1,9 +1,8 @@
-package hardware
+package model
 
 import (
 	"fmt"
 	"os"
-	"sort"
 )
 
 // A PortOwner is an element that can communicate with others through ports.
@@ -15,36 +14,39 @@ type PortOwner interface {
 
 // PortOwnerBase provides an implementation of the PortOwner interface.
 type PortOwnerBase struct {
-	ports map[string]Port
+	ports       []Port
+	portsByName map[string]Port
 }
 
-// NewPortOwnerBase creates a new PortOwnerBase
-func NewPortOwnerBase() *PortOwnerBase {
-	return &PortOwnerBase{
-		ports: make(map[string]Port),
+// MakePortOwnerBase creates a new PortOwnerBase
+func MakePortOwnerBase() PortOwnerBase {
+	return PortOwnerBase{
+		ports:       make([]Port, 0),
+		portsByName: make(map[string]Port),
 	}
 }
 
 // AddPort adds a new port with a given name.
 func (po *PortOwnerBase) AddPort(name string, port Port) {
-	if _, found := po.ports[name]; found {
+	if _, found := po.portsByName[name]; found {
 		panic("port already exist")
 	}
 
-	po.ports[name] = port
+	po.ports = append(po.ports, port)
+	po.portsByName[name] = port
 }
 
 // GetPortByName returns the port according to the name of the port. This
 // function panics when the given name is not found.
 func (po PortOwnerBase) GetPortByName(name string) Port {
-	port, found := po.ports[name]
+	port, found := po.portsByName[name]
 	if !found {
 		errMsg := fmt.Sprintf(
 			"Port %s is not available.\n", name)
-		errMsg += "Available ports include:\n"
 
-		for n := range po.ports {
-			errMsg += fmt.Sprintf("\t%s\n", n)
+		errMsg += "Available ports include:\n"
+		for _, port := range po.ports {
+			errMsg += fmt.Sprintf("\t%s\n", port.Name())
 		}
 
 		fmt.Fprint(os.Stderr, errMsg)
@@ -57,19 +59,5 @@ func (po PortOwnerBase) GetPortByName(name string) Port {
 
 // Ports returns a slices of all the ports owned by the PortOwner.
 func (po PortOwnerBase) Ports() []Port {
-	portList := make([]string, 0, len(po.ports))
-
-	for k := range po.ports {
-		portList = append(portList, k)
-	}
-
-	sort.Strings(portList)
-
-	list := make([]Port, 0, len(po.ports))
-
-	for _, port := range portList {
-		list = append(list, po.ports[port])
-	}
-
-	return list
+	return po.ports
 }

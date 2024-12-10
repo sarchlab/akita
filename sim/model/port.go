@@ -1,11 +1,12 @@
-package hardware
+package model
 
 import (
 	"fmt"
 	"sync"
 
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -35,7 +36,7 @@ type RemotePort string
 
 // A Port is owned by a component and is used to plugin connections
 type Port interface {
-	named
+	naming.Named
 	hooking.Hookable
 
 	AsRemote() RemotePort
@@ -58,6 +59,7 @@ type Port interface {
 
 // DefaultPort implements the port interface.
 type defaultPort struct {
+	naming.NamedBase
 	hooking.HookableBase
 
 	lock sync.Mutex
@@ -65,8 +67,8 @@ type defaultPort struct {
 	comp Component
 	conn Connection
 
-	incomingBuf sim.Buffer
-	outgoingBuf sim.Buffer
+	incomingBuf queueing.Buffer
+	outgoingBuf queueing.Buffer
 }
 
 // AsRemote returns the remote port name.
@@ -266,8 +268,8 @@ func NewPort(
 ) Port {
 	p := new(defaultPort)
 	p.comp = comp
-	p.incomingBuf = sim.NewBuffer(name+".IncomingBuf", incomingBufCap)
-	p.outgoingBuf = sim.NewBuffer(name+".OutgoingBuf", outgoingBufCap)
+	p.incomingBuf = queueing.NewBuffer(name+".IncomingBuf", incomingBufCap)
+	p.outgoingBuf = queueing.NewBuffer(name+".OutgoingBuf", outgoingBufCap)
 	p.name = name
 
 	return p
