@@ -1,4 +1,4 @@
-package sim
+package queueing
 
 import (
 	"log"
@@ -6,11 +6,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
 )
-
-// A named object is an object that has a name.
-type named interface {
-	Name() string
-}
 
 // HookPosBufPush marks when an element is pushed into the buffer.
 var HookPosBufPush = &hooking.HookPos{Name: "Buffer Push"}
@@ -20,7 +15,7 @@ var HookPosBufPop = &hooking.HookPos{Name: "Buf Pop"}
 
 // A Buffer is a fifo queue for anything
 type Buffer interface {
-	named
+	naming.Named
 	hooking.Hookable
 
 	CanPush() bool
@@ -29,13 +24,11 @@ type Buffer interface {
 	Peek() interface{}
 	Capacity() int
 	Size() int
-
-	// Remove all elements in the buffer
 	Clear()
 }
 
 // NewBuffer creates a default buffer object.
-func NewBuffer(name string, capacity int) Buffer {
+func NewBuffer(name string, capacity int) *bufferImpl {
 	naming.NameMustBeValid(name)
 
 	return &bufferImpl{

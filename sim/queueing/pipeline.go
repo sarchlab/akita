@@ -1,11 +1,8 @@
-// Package pipelining provides a pipeline definition.
-package pipelining
+package queueing
 
 import (
-	"reflect"
-
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/naming"
 )
 
 // PipelineItem is an item that can pass through a pipeline.
@@ -15,7 +12,8 @@ type PipelineItem interface {
 
 // Pipeline allows simulation designers to define pipeline structures.
 type Pipeline interface {
-	tracing.NamedHookable
+	naming.Named
+	hooking.Hookable
 
 	// Tick moves elements in the pipeline forward.
 	Tick() (madeProgress bool)
@@ -31,40 +29,18 @@ type Pipeline interface {
 	Clear()
 }
 
-// NewPipeline creates a default pipeline
-//
-// Deprecated: use PipelineBuilder instead.
-func NewPipeline(
-	name string,
-	numStage, cyclePerStage int,
-	postPipelineBuf sim.Buffer,
-) Pipeline {
-	sim.NameMustBeValid(name)
-
-	p := &pipelineImpl{
-		width:           1,
-		numStage:        numStage,
-		cyclePerStage:   cyclePerStage,
-		postPipelineBuf: postPipelineBuf,
-	}
-
-	p.Clear()
-
-	return p
-}
-
 type pipelineStageInfo struct {
 	elem      PipelineItem
 	cycleLeft int
 }
 
 type pipelineImpl struct {
-	sim.HookableBase
+	hooking.HookableBase
 	name            string
 	width           int
 	numStage        int
 	cyclePerStage   int
-	postPipelineBuf sim.Buffer
+	postPipelineBuf Buffer
 	stages          [][]pipelineStageInfo
 }
 
@@ -116,7 +92,7 @@ func (p *pipelineImpl) tryMoveToPostPipelineBuffer(
 		return false
 	}
 
-	tracing.EndTask(stage.elem.TaskID()+"pipeline", p)
+	// tracing.EndTask(stage.elem.TaskID()+"pipeline", p)
 
 	p.postPipelineBuf.Push(stage.elem)
 	stage.elem = nil
@@ -173,17 +149,78 @@ func (p *pipelineImpl) Accept(elem PipelineItem) {
 		p.stages[lane][0].elem = elem
 		p.stages[lane][0].cycleLeft = p.cyclePerStage - 1
 
-		tracing.StartTask(
-			elem.TaskID()+"pipeline",
-			elem.TaskID(),
-			p,
-			"pipeline",
-			reflect.TypeOf(elem).String(),
-			nil,
-		)
+		// tracing.StartTask(
+		// 	elem.TaskID()+"pipeline",
+		// 	elem.TaskID(),
+		// 	p,
+		// 	"pipeline",
+		// 	reflect.TypeOf(elem).String(),
+		// 	nil,
+		// )
 
 		return
 	}
 
 	panic("pipeline is not free. Use can push before pushing.")
+}
+
+// A Builder can build pipelines.
+type Builder struct {
+	width           int
+	numStage        int
+	cyclePerStage   int
+	postPipelineBuf Buffer
+}
+
+// MakeBuilder creates a default builder
+func MakeBuilder() Builder {
+	return Builder{
+		width:         1,
+		numStage:      5,
+		cyclePerStage: 1,
+	}
+}
+
+// WithPipelineWidth sets the number of lanes in the pipeline. If width=4,
+// 4 elements can be in the same stage at the same time.
+func (b Builder) WithPipelineWidth(n int) Builder {
+	b.width = n
+	return b
+}
+
+// WithNumStage sets the number of pipeline stages
+func (b Builder) WithNumStage(n int) Builder {
+	b.numStage = n
+	return b
+}
+
+// WithCyclePerStage sets the the number of cycles that each element needs to
+// stage in each stage.
+func (b Builder) WithCyclePerStage(n int) Builder {
+	b.cyclePerStage = n
+	return b
+}
+
+// WithPostPipelineBuffer sets the buffer that the elements can be pushed to
+// after passing through the pipeline.
+func (b Builder) WithPostPipelineBuffer(buf Buffer) Builder {
+	b.postPipelineBuf = buf
+	return b
+}
+
+// Build builds a pipeline.
+func (b Builder) Build(name string) Pipeline {
+	naming.NameMustBeValid(name)
+
+	p := &pipelineImpl{
+		name:            name,
+		width:           b.width,
+		numStage:        b.numStage,
+		cyclePerStage:   b.cyclePerStage,
+		postPipelineBuf: b.postPipelineBuf,
+	}
+
+	p.Clear()
+
+	return p
 }
