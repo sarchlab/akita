@@ -20,7 +20,7 @@ func (m sampleMsg) Meta() model.MsgMeta {
 	return m.MsgMeta
 }
 
-func (m sampleMsg) Clone() sampleMsg {
+func (m sampleMsg) Clone() model.Msg {
 	newMsg := m
 	newMsg.ID = id.Generate()
 
@@ -76,7 +76,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic", func() {
-		msg := &sampleMsg{
+		msg := sampleMsg{
 			model.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
@@ -104,7 +104,6 @@ var _ = Describe("Port Analyzer", func() {
 			Value:       100.0,
 			Unit:        "Byte",
 		})
-
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start:       0.0,
 			End:         1.0,
@@ -310,8 +309,8 @@ var _ = Describe("Port Analyzer", func() {
 
 		timeTeller.EXPECT().
 			CurrentTime().
-			Return(timing.VTimeInSec(0.1)).
-			Times(2)
+			Return(timing.VTimeInSec(0.1))
+
 		portAnalyzer.Func(hooking.HookCtx{
 			Item:   msg,
 			Domain: port,
@@ -331,7 +330,6 @@ var _ = Describe("Port Analyzer", func() {
 			Value:       100.0,
 			Unit:        "Byte",
 		})
-
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start:       0.0,
 			End:         1.0,
