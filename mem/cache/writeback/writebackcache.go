@@ -32,10 +32,6 @@ type Comp struct {
 	mshrStageBuffer          sim.Buffer
 	writeBufferBuffer        sim.Buffer
 
-	topSender         sim.BufferedSender
-	bottomSender      sim.BufferedSender
-	controlPortSender sim.BufferedSender
-
 	topParser   *topParser
 	writeBuffer *writeBufferStage
 	dirStage    *directoryStage
@@ -72,8 +68,6 @@ type middleware struct {
 func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = m.controlPortSender.Tick() || madeProgress
-
 	if m.state != cacheStatePaused {
 		madeProgress = m.runPipeline() || madeProgress
 	}
@@ -86,8 +80,6 @@ func (m *middleware) Tick() bool {
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	madeProgress = m.runStage(m.topSender) || madeProgress
-	madeProgress = m.runStage(m.bottomSender) || madeProgress
 	madeProgress = m.runStage(m.mshrStage) || madeProgress
 
 	for _, bs := range m.bankStages {
@@ -119,15 +111,15 @@ func (c *Comp) discardInflightTransactions() {
 	}
 
 	c.dirStage.Reset()
+
 	for _, bs := range c.bankStages {
 		bs.Reset()
 	}
+
 	c.mshrStage.Reset()
 	c.writeBuffer.Reset()
 
 	clearPort(c.topPort)
-
-	c.topSender.Clear()
 
 	// for _, t := range c.inFlightTransactions {
 	// 	fmt.Printf("%.10f, %s, transaction %s discarded due to flushing\n",

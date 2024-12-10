@@ -118,7 +118,8 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 // ReportBandwidthAchieved dumps the bandwidth observed by each agents.
 func (t *Test) ReportBandwidthAchieved(now sim.VTimeInSec) {
 	for _, a := range t.agents {
-		log.Printf("agent %s, send bandwidth %.2f GB/s, recv bandwidth %.2f GB/s",
+		log.Printf(
+			"agent %s, send bandwidth %.2f GB/s, recv bandwidth %.2f GB/s",
 			a.Name(),
 			float64(a.sendBytes)/float64(now)/1e9,
 			float64(a.recvBytes)/float64(now)/1e9)

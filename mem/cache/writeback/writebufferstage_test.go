@@ -18,7 +18,6 @@ var _ = Describe("Write Buffer Stage", func() {
 		directory           *MockDirectory
 		addressToPortMapper *MockAddressToPortMapper
 		bottomPort          *MockPort
-		bottomSender        *MockBufferedSender
 		mshr                *MockMSHR
 
 		wbStage *writeBufferStage
@@ -33,13 +32,15 @@ var _ = Describe("Write Buffer Stage", func() {
 		directory.EXPECT().WayAssociativity().Return(4).AnyTimes()
 		mshr = NewMockMSHR(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
-		bottomPort = NewMockPort(mockCtrl)
-		bottomSender = NewMockBufferedSender(mockCtrl)
 
+		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
 		builder := MakeBuilder()
 		cacheModule = builder.Build("Cache")
 		cacheModule.bottomPort = bottomPort
-		cacheModule.bottomSender = bottomSender
 		cacheModule.directory = directory
 		cacheModule.mshr = mshr
 		cacheModule.addressToPortMapper = addressToPortMapper
@@ -248,7 +249,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should stall if cannot send", func() {
-			bottomSender.EXPECT().CanSend(1).Return(false)
+			bottomPort.EXPECT().CanSend().Return(false)
 
 			madeProgress := wbStage.processNewTransaction()
 
@@ -257,16 +258,23 @@ var _ = Describe("Write Buffer Stage", func() {
 
 		It("should send read request to bottom", func() {
 			dramPort := NewMockPort(mockCtrl)
+			dramPort.EXPECT().
+				AsRemote().
+				Return(sim.RemotePort("DramPort")).
+				AnyTimes()
+
 			var fetchReq *mem.ReadReq
 
-			addressToPortMapper.EXPECT().Find(uint64(0x1000)).Return(dramPort)
-			bottomSender.EXPECT().CanSend(1).Return(true)
-			bottomSender.EXPECT().
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x1000)).
+				Return(dramPort.AsRemote())
+			bottomPort.EXPECT().CanSend().Return(true)
+			bottomPort.EXPECT().
 				Send(gomock.Any()).
 				Do(func(req *mem.ReadReq) {
 					fetchReq = req
-					Expect(req.Src).To(BeIdenticalTo(cacheModule.bottomPort))
-					Expect(req.Dst).To(BeIdenticalTo(dramPort))
+					Expect(req.Src).To(Equal(cacheModule.bottomPort.AsRemote()))
+					Expect(req.Dst).To(Equal(dramPort.AsRemote()))
 					Expect(req.PID).To(Equal(trans.fetchPID))
 					Expect(req.Address).To(Equal(uint64(0x1000)))
 					Expect(req.AccessByteSize).To(Equal(uint64(64)))
@@ -505,8 +513,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should stall is buffered sender is full", func() {
-
-			bottomSender.EXPECT().CanSend(1).Return(false)
+			bottomPort.EXPECT().CanSend().Return(false)
 
 			madeProgress := wbStage.write()
 
@@ -515,17 +522,23 @@ var _ = Describe("Write Buffer Stage", func() {
 
 		It("should send write requests to bottom", func() {
 			dramPort := NewMockPort(mockCtrl)
-			var writeReq *mem.WriteReq
-			addressToPortMapper.EXPECT().Find(uint64(0x1000)).Return(dramPort)
+			dramPort.EXPECT().
+				AsRemote().
+				Return(sim.RemotePort("DramPort")).
+				AnyTimes()
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x1000)).
+				Return(dramPort.AsRemote())
 
-			bottomSender.EXPECT().CanSend(1).Return(true)
-			bottomSender.EXPECT().
+			var writeReq *mem.WriteReq
+			bottomPort.EXPECT().CanSend().Return(true)
+			bottomPort.EXPECT().
 				Send(gomock.Any()).
 				Do(func(write *mem.WriteReq) {
 					writeReq = write
 					Expect(write.Src).
-						To(BeIdenticalTo(wbStage.cache.bottomPort))
-					Expect(write.Dst).To(BeIdenticalTo(dramPort))
+						To(Equal(wbStage.cache.bottomPort.AsRemote()))
+					Expect(write.Dst).To(Equal(dramPort.AsRemote()))
 					Expect(write.PID).To(Equal(trans.evictingPID))
 					Expect(write.Address).To(Equal(uint64(0x1000)))
 					Expect(write.Data).To(Equal(trans.evictingData))

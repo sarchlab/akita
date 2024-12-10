@@ -20,10 +20,10 @@ var _ = Describe("Bank Stage", func() {
 		writeBufferInBuf    *MockBuffer
 		bs                  *bankStage
 		storage             *mem.Storage
-		topSender           *MockBufferedSender
 		writeBufferBuffer   *MockBuffer
 		mshrStageBuffer     *MockBuffer
 		addressToPortMapper *MockAddressToPortMapper
+		topPort             *MockPort
 	)
 
 	BeforeEach(func() {
@@ -33,10 +33,15 @@ var _ = Describe("Bank Stage", func() {
 		dirInBuf = NewMockBuffer(mockCtrl)
 		writeBufferInBuf = NewMockBuffer(mockCtrl)
 		mshrStageBuffer = NewMockBuffer(mockCtrl)
-		topSender = NewMockBufferedSender(mockCtrl)
 		writeBufferBuffer = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		storage = mem.NewStorage(4 * mem.KB)
+
+		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 
 		builder := MakeBuilder()
 		cacheModule = builder.Build("Cache")
@@ -44,11 +49,11 @@ var _ = Describe("Bank Stage", func() {
 		cacheModule.writeBufferToBankBuffers =
 			[]sim.Buffer{writeBufferInBuf}
 		cacheModule.mshrStageBuffer = mshrStageBuffer
-		cacheModule.topSender = topSender
 		cacheModule.writeBufferBuffer = writeBufferBuffer
 		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.storage = storage
 		cacheModule.inFlightTransactions = nil
+		cacheModule.topPort = topPort
 
 		bs = &bankStage{
 			cache:           cacheModule,
@@ -174,7 +179,7 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should stall if send buffer is full", func() {
-			topSender.EXPECT().CanSend(1).Return(false)
+			topPort.EXPECT().CanSend().Return(false)
 
 			ret := bs.Tick()
 
@@ -184,8 +189,8 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should read and send response", func() {
-			topSender.EXPECT().CanSend(1).Return(true)
-			topSender.EXPECT().Send(gomock.Any()).
+			topPort.EXPECT().CanSend().Return(true)
+			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(dr *mem.DataReadyRsp) {
 					Expect(dr.RespondTo).To(Equal(read.ID))
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
@@ -233,7 +238,7 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should stall if send buffer is full", func() {
-			topSender.EXPECT().CanSend(1).Return(false)
+			topPort.EXPECT().CanSend().Return(false)
 
 			ret := bs.Tick()
 
@@ -243,8 +248,8 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should write and send response", func() {
-			topSender.EXPECT().CanSend(1).Return(true)
-			topSender.EXPECT().Send(gomock.Any()).
+			topPort.EXPECT().CanSend().Return(true)
+			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(done *mem.WriteDoneRsp) {
 					Expect(done.RespondTo).To(Equal(write.ID))
 				})

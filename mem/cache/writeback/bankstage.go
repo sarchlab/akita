@@ -220,7 +220,7 @@ func (s *bankStage) finalizeTrans() bool {
 }
 
 func (s *bankStage) finalizeReadHit(trans *transaction) bool {
-	if !s.cache.topSender.CanSend(1) {
+	if !s.cache.topPort.CanSend() {
 		return false
 	}
 
@@ -241,12 +241,12 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	block.ReadCount--
 
 	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
 		WithData(data).
 		Build()
-	s.cache.topSender.Send(dataReady)
+	s.cache.topPort.Send(dataReady)
 
 	tracing.TraceReqComplete(read, s.cache)
 
@@ -262,7 +262,7 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 }
 
 func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
-	if !s.cache.topSender.CanSend(1) {
+	if !s.cache.topPort.CanSend() {
 		return false
 	}
 
@@ -283,11 +283,11 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	s.downwardInflightTransCount--
 
 	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(write.Src).
 		WithRspTo(write.ID).
 		Build()
-	s.cache.topSender.Send(done)
+	s.cache.topPort.Send(done)
 
 	tracing.TraceReqComplete(write, s.cache)
 

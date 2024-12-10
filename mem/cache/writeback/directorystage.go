@@ -116,6 +116,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 ) bool {
 	trans.mshrEntry = mshrEntry
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+
 	ds.buf.Pop()
 
 	tracing.AddTaskStep(
@@ -145,7 +146,8 @@ func (ds *directoryStage) handleReadHit(
 	// 	now, ds.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address,
-	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
+	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)
+	// 	<<ds.cache.log2BlockSize,
 	// 	block.SetID, block.WayID,
 	// 	nil,
 	// )
@@ -170,7 +172,8 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 	// 	now, ds.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address,
-	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<ds.cache.log2BlockSize,
+	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<
+	// 	ds.cache.log2BlockSize,
 	// 	victim.SetID, victim.WayID,
 	// 	nil,
 	// )
@@ -248,6 +251,7 @@ func (ds *directoryStage) doWriteMSHRHit(
 ) bool {
 	trans.mshrEntry = mshrEntry
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+
 	ds.buf.Pop()
 
 	return true
@@ -302,7 +306,8 @@ func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
 		return false
 	}
 
-	// log.Printf("%.10f, %s, write partial line ， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, write partial line ，"+
+	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.write.ID,
 	// 	trans.write.Address, cachelineID,
@@ -333,8 +338,10 @@ func (ds *directoryStage) readFromBank(
 	block.ReadCount++
 	trans.block = block
 	trans.action = bankReadHit
+
 	ds.buf.Pop()
 	bankBuf.Push(trans)
+
 	return true
 }
 
@@ -360,6 +367,7 @@ func (ds *directoryStage) writeToBank(
 	block.PID = trans.write.PID
 	trans.block = block
 	trans.action = bankWriteHit
+
 	ds.buf.Pop()
 	bankBuf.Push(trans)
 
@@ -378,8 +386,11 @@ func (ds *directoryStage) evict(
 		return false
 	}
 
-	var addr uint64
-	var pid vm.PID
+	var (
+		addr uint64
+		pid  vm.PID
+	)
+
 	if trans.read != nil {
 		addr = trans.read.Address
 		pid = trans.read.PID
@@ -408,7 +419,11 @@ func (ds *directoryStage) evict(
 	return true
 }
 
-func (ds *directoryStage) updateVictimBlockMetaData(victim *cache.Block, cacheLineID uint64, pid vm.PID) {
+func (ds *directoryStage) updateVictimBlockMetaData(
+	victim *cache.Block,
+	cacheLineID uint64,
+	pid vm.PID,
+) {
 	victim.Tag = cacheLineID
 	victim.PID = pid
 	victim.IsLocked = true
@@ -463,9 +478,12 @@ func (ds *directoryStage) fetch(
 	trans *transaction,
 	block *cache.Block,
 ) bool {
-	var addr uint64
-	var pid vm.PID
-	var req mem.AccessReq
+	var (
+		addr uint64
+		pid  vm.PID
+		req  mem.AccessReq
+	)
+
 	if trans.read != nil {
 		req = trans.read
 		addr = trans.read.Address

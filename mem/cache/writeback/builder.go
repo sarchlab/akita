@@ -153,7 +153,6 @@ func (b Builder) Build(name string) *Comp {
 
 	b.configureCache(cache)
 	b.createPorts(cache)
-	b.createPortSenders(cache)
 	b.createInternalStages(cache)
 	b.createInternalBuffers(cache)
 
@@ -206,28 +205,6 @@ func (b *Builder) createPorts(cache *Comp) {
 		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
 		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
-}
-
-func (b *Builder) createPortSenders(cache *Comp) {
-	cache.topSender = sim.NewBufferedSender(
-		cache.topPort,
-		sim.NewBuffer(cache.Name()+".TopSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
-	cache.bottomSender = sim.NewBufferedSender(
-		cache.bottomPort,
-		sim.NewBuffer(
-			cache.Name()+".BottomSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
-	cache.controlPortSender = sim.NewBufferedSender(
-		cache.controlPort, sim.NewBuffer(
-			cache.Name()+".ControlSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
 }
 
 func (b *Builder) createInternalStages(cache *Comp) {

@@ -127,7 +127,7 @@ func (f *flusher) startProcessingFlush(
 func (f *flusher) handleCacheRestart(
 	req *cache.RestartReq,
 ) bool {
-	if !f.cache.controlPortSender.CanSend(1) {
+	if !f.cache.controlPort.CanSend() {
 		return false
 	}
 
@@ -137,11 +137,11 @@ func (f *flusher) handleCacheRestart(
 	f.cache.state = cacheStateRunning
 
 	rsp := cache.RestartRspBuilder{}.
-		WithSrc(f.cache.controlPort).
+		WithSrc(f.cache.controlPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		Build()
-	f.cache.controlPortSender.Send(rsp)
+	f.cache.controlPort.Send(rsp)
 
 	f.cache.controlPort.RetrieveIncoming()
 
@@ -157,16 +157,16 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	if !f.cache.controlPortSender.CanSend(1) {
+	if !f.cache.controlPort.CanSend() {
 		return false
 	}
 
 	rsp := cache.FlushRspBuilder{}.
-		WithSrc(f.cache.controlPort).
+		WithSrc(f.cache.controlPort.AsRemote()).
 		WithDst(f.processingFlush.Src).
 		WithRspTo(f.processingFlush.ID).
 		Build()
-	f.cache.controlPortSender.Send(rsp)
+	f.cache.controlPort.Send(rsp)
 
 	f.cache.mshr.Reset()
 	f.cache.directory.Reset()
