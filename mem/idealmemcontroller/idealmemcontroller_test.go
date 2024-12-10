@@ -24,6 +24,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine = NewMockEngine(mockCtrl)
 		port = NewMockPort(mockCtrl)
+		port.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("Port")).
+			AnyTimes()
 
 		memController = MakeBuilder().
 			WithEngine(engine).
