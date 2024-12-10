@@ -18,14 +18,20 @@ var _ = Describe("Respond Stage", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
+
 		cache = &Comp{
 			topPort: topPort,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, cache)
-		s = &respondStage{cache: cache}
 
+		s = &respondStage{cache: cache}
 	})
 
 	AfterEach(func() {
