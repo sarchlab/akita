@@ -98,6 +98,7 @@ func (m *middleware) runStage(stage sim.Ticker) bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = stage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 

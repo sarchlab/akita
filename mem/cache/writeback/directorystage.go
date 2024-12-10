@@ -48,6 +48,7 @@ func (ds *directoryStage) processTransaction() bool {
 
 		addr := trans.accessReq().GetAddress()
 		cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
+
 		if _, evicting := ds.cache.evictingList[cacheLineID]; evicting {
 			break
 		}
@@ -274,6 +275,7 @@ func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
 	if ds.isWritingFullLine(write) {
 		return ds.writeFullLineMiss(trans)
 	}
+
 	return ds.writePartialLineMiss(trans)
 }
 
@@ -335,6 +337,7 @@ func (ds *directoryStage) readFromBank(
 	}
 
 	ds.cache.directory.Visit(block)
+
 	block.ReadCount++
 	trans.block = block
 	trans.action = bankReadHit
@@ -406,6 +409,7 @@ func (ds *directoryStage) evict(
 
 	ds.buf.Pop()
 	bankBuf.Push(trans)
+
 	ds.cache.evictingList[trans.victim.Tag] = true
 
 	// log.Printf("%.10f, %s, directory evict ， %s, %04X, %04X, (%d, %d), %v\n",
@@ -493,6 +497,7 @@ func (ds *directoryStage) fetch(
 		addr = trans.write.Address
 		pid = trans.write.PID
 	}
+
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
 	bankNum := bankID(block,

@@ -12,6 +12,7 @@ func getCacheLineID(
 	mask := uint64(0xffffffffffffffff << blockSizeAsPowerOf2)
 	cacheLineID = addr & mask
 	offset = addr & ^mask
+
 	return
 }
 

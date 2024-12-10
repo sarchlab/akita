@@ -15,11 +15,13 @@ type bankStage struct {
 	cache  *Comp
 	bankID int
 
-	pipeline                   pipelining.Pipeline
-	pipelineWidth              int
-	postPipelineBuf            *bufferImpl
-	inflightTransCount         int
-	downwardInflightTransCount int // Count the trans that needs to be sent to the write buffer.
+	pipeline           pipelining.Pipeline
+	pipelineWidth      int
+	postPipelineBuf    *bufferImpl
+	inflightTransCount int
+
+	// Count the trans that needs to be sent to the write buffer.
+	downwardInflightTransCount int
 }
 
 type bufferImpl struct {
@@ -42,6 +44,7 @@ func (b *bufferImpl) Push(e interface{}) {
 	if len(b.elements) >= b.capacity {
 		log.Panic("buffer overflow")
 	}
+
 	b.elements = append(b.elements, e)
 
 	if b.NumHooks() > 0 {
@@ -140,7 +143,6 @@ func (s *bankStage) Reset() {
 	s.pipeline.Clear()
 	s.postPipelineBuf.Clear()
 	s.inflightTransCount = 0
-	// s.currentTrans = nil
 }
 
 func (s *bankStage) pullFromBuf() bool {
@@ -149,10 +151,13 @@ func (s *bankStage) pullFromBuf() bool {
 	}
 
 	inBuf := s.cache.writeBufferToBankBuffers[s.bankID]
+
 	trans := inBuf.Pop()
 	if trans != nil {
 		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
+
 		s.inflightTransCount++
+
 		return true
 	}
 
@@ -168,6 +173,7 @@ func (s *bankStage) pullFromBuf() bool {
 
 	inBuf = s.cache.dirToBankBuffers[s.bankID]
 	trans = inBuf.Pop()
+
 	if trans != nil {
 		t := trans.(*transaction)
 
@@ -177,6 +183,7 @@ func (s *bankStage) pullFromBuf() bool {
 		}
 
 		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
+
 		s.inflightTransCount++
 
 		switch t.action {
@@ -236,6 +243,7 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	}
 
 	s.removeTransaction(trans)
+
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 	block.ReadCount--
@@ -250,7 +258,8 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(read, s.cache)
 
-	// log.Printf("%.10f, %s, bank read hit finalize， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, bank read hit finalize，"+
+	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, s.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address, block.Tag,
@@ -279,6 +288,7 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	block.DirtyMask = dirtyMask
 
 	s.removeTransaction(trans)
+
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 
@@ -291,7 +301,8 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(write, s.cache)
 
-	// log.Printf("%.10f, %s, bank write hit finalize， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, bank write hit finalize， "+
+	// "%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, s.cache.Name(),
 	// 	trans.write.ID,
 	// 	trans.write.Address, block.Tag,
@@ -356,7 +367,8 @@ func (s *bankStage) finalizeBankWriteFetched(
 	s.inflightTransCount--
 
 	// if trans.accessReq() != nil {
-	// 	log.Printf("%.10f, %s, write fetched, %s, %04X, %04X, (%d, %d), %v\n",
+	// 	log.Printf("%.10f, %s, write fetched, "+
+	// 		"%s, %04X, %04X, (%d, %d), %v\n",
 	// 		now, s.cache.Name(),
 	// 		trans.accessReq().Meta().ID,
 	// 		trans.accessReq().GetAddress(), block.Tag,
@@ -376,6 +388,7 @@ func (s *bankStage) removeTransaction(trans *transaction) {
 			s.cache.inFlightTransactions = append(
 				(s.cache.inFlightTransactions)[:i],
 				(s.cache.inFlightTransactions)[i+1:]...)
+
 			return
 		}
 	}
@@ -396,11 +409,13 @@ func (s *bankStage) finalizeBankEviction(
 	}
 
 	victim := trans.victim
+
 	data, err := s.cache.storage.Read(
 		victim.CacheAddress, 1<<s.cache.log2BlockSize)
 	if err != nil {
 		panic(err)
 	}
+
 	trans.evictingData = data
 
 	switch trans.action {
@@ -415,7 +430,8 @@ func (s *bankStage) finalizeBankEviction(
 	}
 
 	// if trans.accessReq() != nil {
-	// 	log.Printf("%.10f, %s, bank read for eviction， %s, %04X, %04X, (%d, %d), %v\n",
+	// 	log.Printf("%.10f, %s, bank read for eviction， "+
+	// 		"%s, %04X, %04X, (%d, %d), %v\n",
 	// 		now, s.cache.Name(),
 	// 		trans.accessReq().Meta().ID,
 	// 		trans.accessReq().GetAddress(), victim.Tag,
@@ -426,6 +442,7 @@ func (s *bankStage) finalizeBankEviction(
 
 	delete(s.cache.evictingList, trans.evictingAddr)
 	s.cache.writeBufferBuffer.Push(trans)
+
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 

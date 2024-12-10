@@ -23,6 +23,7 @@ func (s *mshrStage) Tick() bool {
 	}
 
 	s.processingMSHREntry = item.(*cache.MSHREntry)
+
 	return s.processOneReq()
 }
 
@@ -101,6 +102,7 @@ func (s *mshrStage) removeTransaction(trans *transaction) {
 			s.cache.inFlightTransactions = append(
 				(s.cache.inFlightTransactions)[:i],
 				(s.cache.inFlightTransactions)[i+1:]...)
+
 			return
 		}
 	}
@@ -114,5 +116,6 @@ func (s *mshrStage) findTransaction(trans *transaction) bool {
 			return true
 		}
 	}
+
 	return false
 }

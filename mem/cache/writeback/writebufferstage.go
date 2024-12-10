@@ -73,6 +73,7 @@ func (wb *writeBufferStage) findDataLocally(trans *transaction) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -359,6 +360,7 @@ func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
 				wb.inflightFetch[:i],
 				wb.inflightFetch[i+1:]...,
 			)
+
 			return
 		}
 	}

@@ -107,6 +107,7 @@ func (b Builder) WithInterleaving(
 	b.numInterleavingBlock = numBlock
 	b.interleavingUnitCount = unitCount
 	b.interleavingUnitIndex = unitIndex
+
 	return b
 }
 
@@ -171,7 +172,8 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 
 	if b.interleaving {
 		directory.AddrConverter = &mem.InterleavingConverter{
-			InterleavingSize:    uint64(b.numInterleavingBlock) * (1 << b.log2BlockSize),
+			InterleavingSize: uint64(b.numInterleavingBlock) *
+				(1 << b.log2BlockSize),
 			TotalNumOfElements:  b.interleavingUnitCount,
 			CurrentElementIndex: b.interleavingUnitIndex,
 		}

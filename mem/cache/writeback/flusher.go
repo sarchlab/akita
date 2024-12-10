@@ -24,6 +24,7 @@ func (f *flusher) Tick() bool {
 	if f.processingFlush != nil && f.cache.state == cacheStateFlushing {
 		madeProgress = f.finalizeFlushing() || madeProgress
 		madeProgress = f.processFlush() || madeProgress
+
 		return madeProgress
 	}
 
