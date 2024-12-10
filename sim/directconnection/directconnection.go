@@ -2,28 +2,28 @@
 package directconnection
 
 import (
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hardware"
 )
 
 type ports struct {
-	ports   []sim.Port
-	portMap map[sim.RemotePort]int
+	ports   []hardware.Port
+	portMap map[hardware.RemotePort]int
 }
 
-func (p *ports) addPort(port sim.Port) {
+func (p *ports) addPort(port hardware.Port) {
 	p.ports = append(p.ports, port)
 	p.portMap[port.AsRemote()] = len(p.ports) - 1
 }
 
-func (p *ports) getPortIndex(index int) sim.Port {
+func (p *ports) getPortIndex(index int) hardware.Port {
 	return p.ports[index]
 }
 
-func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
+func (p *ports) getPortByName(name hardware.RemotePort) hardware.Port {
 	return p.ports[p.portMap[name]]
 }
 
-func (p *ports) list() []sim.Port {
+func (p *ports) list() []hardware.Port {
 	return p.ports
 }
 
@@ -33,15 +33,15 @@ func (p *ports) len() int {
 
 // Comp is a DirectConnection connects two components without latency
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*hardware.TickingComponent
+	hardware.MiddlewareHolder
 
 	ports      ports
 	nextPortID int
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port sim.Port) {
+func (c *Comp) PlugIn(port hardware.Port) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -51,13 +51,13 @@ func (c *Comp) PlugIn(port sim.Port) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *Comp) Unplug(_ sim.Port) {
+func (c *Comp) Unplug(_ hardware.Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *Comp) NotifyAvailable(p sim.Port) {
+func (c *Comp) NotifyAvailable(p hardware.Port) {
 	for _, port := range c.ports.list() {
 		if port == p {
 			continue
@@ -99,7 +99,7 @@ func (m *middleware) Tick() bool {
 }
 
 func (m *middleware) forwardMany(
-	port sim.Port,
+	port hardware.Port,
 ) bool {
 	madeProgress := false
 

@@ -1,0 +1,69 @@
+package simulation
+
+import (
+	"github.com/sarchlab/akita/v4/sim/hardware"
+	"github.com/sarchlab/akita/v4/sim/timing"
+)
+
+// A Simulation provides the service requires to define a simulation.
+type Simulation struct {
+	engine        timing.Engine
+	components    []hardware.Component
+	compNameIndex map[string]int
+	ports         []hardware.Port
+	portNameIndex map[string]int
+}
+
+// NewSimulation creates a new simulation.
+func NewSimulation() *Simulation {
+	return &Simulation{
+		compNameIndex: make(map[string]int),
+		portNameIndex: make(map[string]int),
+	}
+}
+
+// RegisterEngine registers the engine used in the simulation.
+func (s *Simulation) RegisterEngine(e timing.Engine) {
+	s.engine = e
+}
+
+// GetEngine returns the engine used in the simulation.
+func (s *Simulation) GetEngine() timing.Engine {
+	return s.engine
+}
+
+// RegisterComponent registers a component with the simulation.
+func (s *Simulation) RegisterComponent(c hardware.Component) {
+	compName := c.Name()
+	if s.compNameIndex[compName] != 0 {
+		panic("component " + compName + " already registered")
+	}
+
+	s.components = append(s.components, c)
+	s.compNameIndex[compName] = len(s.components) - 1
+
+	for _, p := range c.Ports() {
+		s.registerPort(p)
+	}
+}
+
+// registerPort registers a port with the simulation.
+func (s *Simulation) registerPort(p hardware.Port) {
+	portName := p.Name()
+	if s.portNameIndex[portName] != 0 {
+		panic("port " + portName + " already registered")
+	}
+
+	s.ports = append(s.ports, p)
+	s.portNameIndex[portName] = len(s.ports) - 1
+}
+
+// GetComponentByName returns the component with the given name.
+func (s *Simulation) GetComponentByName(name string) hardware.Component {
+	return s.components[s.compNameIndex[name]]
+}
+
+// GetPortByName returns the port with the given name.
+func (s *Simulation) GetPortByName(name string) hardware.Port {
+	return s.ports[s.portNameIndex[name]]
+}

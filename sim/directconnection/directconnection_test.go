@@ -8,8 +8,30 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hardware"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
+
+type sampleMsg struct {
+	hardware.MsgMeta
+}
+
+func newSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *hardware.MsgMeta {
+	return &m.MsgMeta
+}
+
+func (m *sampleMsg) Clone() hardware.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = id.Generate()
+
+	return &cloneMsg
+}
 
 var _ = Describe("DirectConnection", func() {
 
@@ -25,10 +47,10 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		port1 = NewMockPort(mockCtrl)
-		port1.EXPECT().AsRemote().Return(sim.RemotePort("port1")).AnyTimes()
+		port1.EXPECT().AsRemote().Return(hardware.RemotePort("port1")).AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
-		port2.EXPECT().AsRemote().Return(sim.RemotePort("port2")).AnyTimes()
+		port2.EXPECT().AsRemote().Return(hardware.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
 		connection = MakeBuilder().
@@ -48,15 +70,15 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
 
-		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10))
+		tick := timing.MakeTickEvent(connection, timing.VTimeInSec(10))
 
-		msg1 := sim.NewSampleMsg()
+		msg1 := newSampleMsg()
 		msg1.Src = port1.AsRemote()
 		msg1.Dst = port2.AsRemote()
 
-		msg2 := sim.NewSampleMsg()
+		msg2 := newSampleMsg()
 		msg2.Src = port2.AsRemote()
 		msg2.Dst = port1.AsRemote()
 
@@ -72,8 +94,8 @@ var _ = Describe("DirectConnection", func() {
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
-			Do(func(evt sim.TickEvent) {
-				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
+			Do(func(evt timing.TickEvent) {
+				Expect(evt.Time()).To(Equal(timing.VTimeInSec(11)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
 
@@ -82,18 +104,18 @@ var _ = Describe("DirectConnection", func() {
 })
 
 type agent struct {
-	*sim.TickingComponent
+	*timing.TickingComponent
 
-	msgsOut []sim.Msg
-	msgsIn  []sim.Msg
+	msgsOut []hardware.Msg
+	msgsIn  []hardware.Msg
 
-	OutPort sim.Port
+	OutPort hardware.Port
 }
 
-func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
+func newAgent(engine timing.Engine, freq timing.Freq, name string) *agent {
 	a := new(agent)
-	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
+	a.TickingComponent = timing.NewTickingComponent(name, engine, freq, a)
+	a.OutPort = hardware.NewPort(a, 4, 4, name+".OutPort")
 
 	return a
 }
@@ -121,7 +143,7 @@ func (a *agent) Tick() bool {
 var _ = Describe("Direct Connection Integration", func() {
 	var (
 		mockCtrl        *gomock.Controller
-		engine          sim.Engine
+		engine          timing.Engine
 		connection      *Comp
 		agents          []*agent
 		numAgents       = 10
@@ -130,7 +152,7 @@ var _ = Describe("Direct Connection Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
@@ -147,7 +169,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := sim.NewSampleMsg()
+				msg := newSampleMsg()
 				msg.Src = agent.OutPort.AsRemote()
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				for msg.Dst == msg.Src {

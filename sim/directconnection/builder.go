@@ -1,23 +1,26 @@
 package directconnection
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+	"github.com/sarchlab/akita/v4/sim/hardware"
+	"github.com/sarchlab/akita/v4/sim/timing"
+)
 
 // Builder can help building directconnection.
 type Builder struct {
-	engine sim.Engine
-	freq   sim.Freq
+	engine timing.Engine
+	freq   timing.Freq
 }
 
 func MakeBuilder() Builder {
 	return Builder{}
 }
 
-func (b Builder) WithEngine(e sim.Engine) Builder {
+func (b Builder) WithEngine(e timing.Engine) Builder {
 	b.engine = e
 	return b
 }
 
-func (b Builder) WithFreq(f sim.Freq) Builder {
+func (b Builder) WithFreq(f timing.Freq) Builder {
 	b.freq = f
 	return b
 }
@@ -25,11 +28,11 @@ func (b Builder) WithFreq(f sim.Freq) Builder {
 func (b Builder) Build(name string) *Comp {
 	c := &Comp{
 		ports: ports{
-			ports:   make([]sim.Port, 0),
-			portMap: make(map[sim.RemotePort]int),
+			ports:   make([]hardware.Port, 0),
+			portMap: make(map[hardware.RemotePort]int),
 		},
 	}
-	c.TickingComponent = sim.NewSecondaryTickingComponent(
+	c.TickingComponent = hardware.NewSecondaryTickingComponent(
 		name, b.engine, b.freq, c)
 
 	middleware := &middleware{
