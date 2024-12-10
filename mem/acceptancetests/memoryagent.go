@@ -130,8 +130,8 @@ func (a *MemAccessAgent) doRead() bool {
 	}
 
 	readReq := mem.ReadReqBuilder{}.
-		WithSrc(a.memPort).
-		WithDst(a.LowModule).
+		WithSrc(a.memPort.AsRemote()).
+		WithDst(a.LowModule.AsRemote()).
 		WithAddress(address).
 		WithByteSize(4).
 		WithPID(1).
@@ -207,8 +207,8 @@ func (a *MemAccessAgent) doWrite() bool {
 	}
 
 	writeReq := mem.WriteReqBuilder{}.
-		WithSrc(a.memPort).
-		WithDst(a.LowModule).
+		WithSrc(a.memPort.AsRemote()).
+		WithDst(a.LowModule.AsRemote()).
 		WithAddress(address).
 		WithPID(1).
 		WithData(uint32ToBytes(data)).
