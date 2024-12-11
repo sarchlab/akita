@@ -87,18 +87,10 @@ func (t *BusyTimeTracer) StartTask(taskStart TaskStart) {
 	}
 
 	now := t.timeTeller.Now()
-	currTask := task{
-		ID:        taskStart.ID,
-		ParentID:  taskStart.ParentID,
-		Kind:      taskStart.Kind,
-		What:      taskStart.What,
-		StartTime: now,
-	}
-
 	taskTime := &taskTimeStartEnd{start: now}
 
 	elem := t.taskTimes.PushBack(taskTime)
-	t.inflightTasks[currTask.ID] = elem
+	t.inflightTasks[taskStart.ID] = elem
 }
 
 // EndTask records the end of the task

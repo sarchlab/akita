@@ -120,6 +120,7 @@ var _ = Describe("BusyTimeTracer", func() {
 		timeTeller.now = 2.1
 		t.EndTask(TaskEnd{ID: "3"})
 
+		timeTeller.now = 3.5
 		t.TerminateAllTasks()
 
 		Expect(t.BusyTime()).To(BeNumerically("~", 2.5, 0.01))

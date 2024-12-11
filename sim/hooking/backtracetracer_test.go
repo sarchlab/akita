@@ -112,8 +112,6 @@ var _ = Describe("BackTraceTracer", func() {
 
 		Expect(mockTaskPrinter.printed).To(Equal([]task{
 			{ID: "3", ParentID: "2"},
-			{ID: "2"},
-			{ID: "1"},
 		}))
 	})
 })

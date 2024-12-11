@@ -61,16 +61,16 @@ func (t *BackTraceTracer) EndTask(taskEnd TaskEnd) {
 }
 
 func (t *BackTraceTracer) DumpBackTrace(taskID string) {
-	task, ok := t.tracingTasks[taskID]
+	currTask, ok := t.tracingTasks[taskID]
 	if !ok {
-		panic(fmt.Sprintf("current task %s not found", taskID))
-	}
-
-	t.printer.Print(task)
-
-	if task.ParentID == "" {
 		return
 	}
 
-	t.DumpBackTrace(task.ParentID)
+	t.printer.Print(currTask)
+
+	if currTask.ParentID == "" {
+		return
+	}
+
+	t.DumpBackTrace(currTask.ParentID)
 }
