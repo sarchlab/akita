@@ -158,8 +158,8 @@ func (e *SerialEngine) Continue() {
 	e.isPaused = false
 }
 
-// CurrentTime returns the current time at which the engine is at.
+// Now returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
-func (e *SerialEngine) CurrentTime() VTimeInSec {
+func (e *SerialEngine) Now() VTimeInSec {
 	return e.readNow()
 }

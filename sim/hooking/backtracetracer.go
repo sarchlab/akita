@@ -1,0 +1,76 @@
+package hooking
+
+import (
+	"fmt"
+	"sync"
+)
+
+// taskPrinter can print tasks with a format.
+type taskPrinter interface {
+	Print(task task)
+}
+
+type defaultTaskPrinter struct {
+}
+
+func (p *defaultTaskPrinter) Print(task task) {
+	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Where)
+}
+
+// BackTraceTracer can record tasks incomplete tasks
+type BackTraceTracer struct {
+	printer      taskPrinter
+	tracingTasks map[string]task
+	lock         sync.Mutex
+}
+
+// NewBackTraceTracer creates a new BackTraceTracer
+func NewBackTraceTracer(printer taskPrinter) *BackTraceTracer {
+	t := &BackTraceTracer{
+		printer:      printer,
+		tracingTasks: make(map[string]task),
+	}
+
+	if t.printer == nil {
+		t.printer = &defaultTaskPrinter{}
+	}
+
+	return t
+}
+
+func (t *BackTraceTracer) StartTask(taskStart TaskStart) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	currTask := task{
+		ID:       taskStart.ID,
+		Kind:     taskStart.Kind,
+		What:     taskStart.What,
+		Where:    taskStart.Where,
+		ParentID: taskStart.ParentID,
+	}
+
+	t.tracingTasks[taskStart.ID] = currTask
+}
+
+func (t *BackTraceTracer) EndTask(taskEnd TaskEnd) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	delete(t.tracingTasks, taskEnd.ID)
+}
+
+func (t *BackTraceTracer) DumpBackTrace(taskID string) {
+	task, ok := t.tracingTasks[taskID]
+	if !ok {
+		panic(fmt.Sprintf("current task %s not found", taskID))
+	}
+
+	t.printer.Print(task)
+
+	if task.ParentID == "" {
+		return
+	}
+
+	t.DumpBackTrace(task.ParentID)
+}

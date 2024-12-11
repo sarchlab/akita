@@ -4,7 +4,7 @@ import "github.com/sarchlab/akita/v4/sim/hooking"
 
 // TimeTeller can be used to get the current time.
 type TimeTeller interface {
-	CurrentTime() VTimeInSec
+	Now() VTimeInSec
 }
 
 // EventScheduler can be used to schedule future events.

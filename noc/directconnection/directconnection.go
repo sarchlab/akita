@@ -1,29 +1,27 @@
 // Package directconnection provides directconnection
 package directconnection
 
-import (
-	"github.com/sarchlab/akita/v4/sim/hardware"
-)
+import "github.com/sarchlab/akita/v4/sim/model"
 
 type ports struct {
-	ports   []hardware.Port
-	portMap map[hardware.RemotePort]int
+	ports   []model.Port
+	portMap map[model.RemotePort]int
 }
 
-func (p *ports) addPort(port hardware.Port) {
+func (p *ports) addPort(port model.Port) {
 	p.ports = append(p.ports, port)
 	p.portMap[port.AsRemote()] = len(p.ports) - 1
 }
 
-func (p *ports) getPortIndex(index int) hardware.Port {
+func (p *ports) getPortIndex(index int) model.Port {
 	return p.ports[index]
 }
 
-func (p *ports) getPortByName(name hardware.RemotePort) hardware.Port {
+func (p *ports) getPortByName(name model.RemotePort) model.Port {
 	return p.ports[p.portMap[name]]
 }
 
-func (p *ports) list() []hardware.Port {
+func (p *ports) list() []model.Port {
 	return p.ports
 }
 
@@ -33,15 +31,15 @@ func (p *ports) len() int {
 
 // Comp is a DirectConnection connects two components without latency
 type Comp struct {
-	*hardware.TickingComponent
-	hardware.MiddlewareHolder
+	*model.TickingComponent
+	model.MiddlewareHolder
 
 	ports      ports
 	nextPortID int
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port hardware.Port) {
+func (c *Comp) PlugIn(port model.Port) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -51,13 +49,13 @@ func (c *Comp) PlugIn(port hardware.Port) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *Comp) Unplug(_ hardware.Port) {
+func (c *Comp) Unplug(_ model.Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *Comp) NotifyAvailable(p hardware.Port) {
+func (c *Comp) NotifyAvailable(p model.Port) {
 	for _, port := range c.ports.list() {
 		if port == p {
 			continue
@@ -99,7 +97,7 @@ func (m *middleware) Tick() bool {
 }
 
 func (m *middleware) forwardMany(
-	port hardware.Port,
+	port model.Port,
 ) bool {
 	madeProgress := false
 

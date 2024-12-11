@@ -296,8 +296,8 @@ func (e *ParallelEngine) Continue() {
 	e.pauseLock.Unlock()
 }
 
-// CurrentTime returns the current time at which the engine is at.
-// Specifically, the run time of the current event.
-func (e *ParallelEngine) CurrentTime() VTimeInSec {
+// Now returns the current time at which the engine is at. Specifically, the run
+// time of the current event.
+func (e *ParallelEngine) Now() VTimeInSec {
 	return e.readNow()
 }

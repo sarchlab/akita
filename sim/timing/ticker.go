@@ -76,7 +76,7 @@ func NewSecondaryTickScheduler(
 // TickNow schedule a Tick event at the current time.
 func (t *TickScheduler) TickNow() {
 	t.lock.Lock()
-	time := t.CurrentTime()
+	time := t.Now()
 
 	if t.nextTickTime >= time {
 		t.lock.Unlock()
@@ -97,7 +97,7 @@ func (t *TickScheduler) TickNow() {
 // TickLater will schedule a tick event at the cycle after the now time.
 func (t *TickScheduler) TickLater() {
 	t.lock.Lock()
-	time := t.Freq.NextTick(t.CurrentTime())
+	time := t.Freq.NextTick(t.Now())
 
 	if t.nextTickTime >= time {
 		t.lock.Unlock()
@@ -115,6 +115,6 @@ func (t *TickScheduler) TickLater() {
 	t.lock.Unlock()
 }
 
-func (t *TickScheduler) CurrentTime() VTimeInSec {
-	return t.Engine.CurrentTime()
+func (t *TickScheduler) Now() VTimeInSec {
+	return t.Engine.Now()
 }
