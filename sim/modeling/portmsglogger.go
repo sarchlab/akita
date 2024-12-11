@@ -1,4 +1,4 @@
-package model
+package modeling
 
 import (
 	"log"
@@ -34,7 +34,7 @@ func (h *PortMsgLogger) Func(ctx hooking.HookCtx) {
 	}
 
 	h.logger.Printf("%.10f,%s,%s,%s,%s,%s,%s\n",
-		h.CurrentTime(),
+		h.Now(),
 		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,
 		msg.Meta().Src,

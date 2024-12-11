@@ -1,4 +1,4 @@
-package model
+package modeling
 
 import (
 	. "github.com/onsi/ginkgo/v2"

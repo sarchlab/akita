@@ -1,4 +1,4 @@
-package model
+package modeling
 
 import (
 	gomock "github.com/golang/mock/gomock"

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
@@ -19,7 +19,7 @@ type PerfAnalyzerEntry struct {
 	Start       timing.VTimeInSec
 	End         timing.VTimeInSec
 	Where       string
-	WhereRemote model.RemotePort
+	WhereRemote modeling.RemotePort
 	What        string
 	Value       float64
 	Unit        string
@@ -48,12 +48,12 @@ func (b *PerfAnalyzer) RegisterEngine(e timing.Engine) {
 }
 
 // RegisterComponent register a component to be monitored.
-func (b *PerfAnalyzer) RegisterComponent(c model.Component) {
+func (b *PerfAnalyzer) RegisterComponent(c modeling.Component) {
 	b.registerComponentBuffers(c)
 	b.registerComponentPorts(c)
 }
 
-func (b *PerfAnalyzer) registerComponentBuffers(c model.Component) {
+func (b *PerfAnalyzer) registerComponentBuffers(c modeling.Component) {
 	b.registerComponentOrPortBuffers(c)
 
 	for _, port := range c.Ports() {
@@ -94,7 +94,7 @@ func (b *PerfAnalyzer) RegisterBuffer(buf queueing.Buffer) {
 	buf.AcceptHook(bufferAnalyzer)
 }
 
-func (b *PerfAnalyzer) registerComponentPorts(c model.Component) {
+func (b *PerfAnalyzer) registerComponentPorts(c modeling.Component) {
 	b.registerComponentOrPorts(c)
 
 	for _, port := range c.Ports() {
@@ -103,7 +103,7 @@ func (b *PerfAnalyzer) registerComponentPorts(c model.Component) {
 }
 
 // RegisterPort registers a port to be monitored.
-func (b *PerfAnalyzer) RegisterPort(port model.Port) {
+func (b *PerfAnalyzer) RegisterPort(port modeling.Port) {
 	portAnalyzerBuilder := MakePortAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).
@@ -212,13 +212,13 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		portType := reflect.TypeOf((*model.Port)(nil)).Elem()
+		portType := reflect.TypeOf((*modeling.Port)(nil)).Elem()
 
 		if fieldType == portType && !field.IsNil() {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(model.Port)
+			).Elem().Interface().(modeling.Port)
 
 			b.RegisterPort(fieldRef)
 		}
@@ -227,7 +227,7 @@ func (b *PerfAnalyzer) registerComponentOrPorts(c any) {
 
 func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	dataTable := []map[string]string{}
-	time := b.engine.CurrentTime()
+	time := b.engine.Now()
 
 	b.mu.Lock()
 	defer b.mu.Unlock()

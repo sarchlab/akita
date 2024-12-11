@@ -7,7 +7,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	timing "github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // MockTimeTeller is a mock of TimeTeller interface.
@@ -33,16 +32,16 @@ func (m *MockTimeTeller) EXPECT() *MockTimeTellerMockRecorder {
 	return m.recorder
 }
 
-// CurrentTime mocks base method.
-func (m *MockTimeTeller) CurrentTime() timing.VTimeInSec {
+// Now mocks base method.
+func (m *MockTimeTeller) Now() float64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CurrentTime")
-	ret0, _ := ret[0].(timing.VTimeInSec)
+	ret := m.ctrl.Call(m, "Now")
+	ret0, _ := ret[0].(float64)
 	return ret0
 }
 
-// CurrentTime indicates an expected call of CurrentTime.
-func (mr *MockTimeTellerMockRecorder) CurrentTime() *gomock.Call {
+// Now indicates an expected call of Now.
+func (mr *MockTimeTellerMockRecorder) Now() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTime", reflect.TypeOf((*MockTimeTeller)(nil).CurrentTime))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockTimeTeller)(nil).Now))
 }

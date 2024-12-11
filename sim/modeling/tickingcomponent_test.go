@@ -1,4 +1,4 @@
-package model
+package modeling
 
 import (
 	"github.com/golang/mock/gomock"
@@ -31,7 +31,7 @@ var _ = Describe("Ticking Component", func() {
 			Do(func(e timing.TickEvent) {
 				Expect(e.Time()).To(Equal(timing.VTimeInSec(11)))
 			})
-		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 		tc.NotifyRecv(nil)
 	})
 
@@ -41,7 +41,7 @@ var _ = Describe("Ticking Component", func() {
 				Do(func(e timing.TickEvent) {
 					Expect(e.Time()).To(Equal(timing.VTimeInSec(11)))
 				})
-			engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+			engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 			tc.NotifyPortFree(nil)
 		})
 
@@ -51,7 +51,7 @@ var _ = Describe("Ticking Component", func() {
 				Expect(e.Time()).To(Equal(timing.VTimeInSec(11)))
 			})
 		ticker.EXPECT().Tick().Return(true)
-		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 		tc.Handle(timing.MakeTickEvent(tc, timing.VTimeInSec(10)))
 	})
 
@@ -63,10 +63,10 @@ var _ = Describe("Ticking Component", func() {
 				})
 
 			ticker.EXPECT().Tick().Return(true)
-			engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+			engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 			tc.Handle(timing.MakeTickEvent(tc, timing.VTimeInSec(10)))
 
-			engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+			engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 			tc.TickNow()
 		})
 

@@ -1,4 +1,4 @@
-package model
+package modeling
 
 // Middleware defines the actions of a component.
 type Middleware interface {

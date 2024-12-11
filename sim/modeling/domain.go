@@ -1,4 +1,4 @@
-package model
+package modeling
 
 import "github.com/sarchlab/akita/v4/sim/naming"
 

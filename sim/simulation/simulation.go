@@ -1,16 +1,16 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
 	engine        timing.Engine
-	components    []model.Component
+	components    []modeling.Component
 	compNameIndex map[string]int
-	ports         []model.Port
+	ports         []modeling.Port
 	portNameIndex map[string]int
 }
 
@@ -33,7 +33,7 @@ func (s *Simulation) GetEngine() timing.Engine {
 }
 
 // RegisterComponent registers a component with the simulation.
-func (s *Simulation) RegisterComponent(c model.Component) {
+func (s *Simulation) RegisterComponent(c modeling.Component) {
 	compName := c.Name()
 	if s.compNameIndex[compName] != 0 {
 		panic("component " + compName + " already registered")
@@ -48,7 +48,7 @@ func (s *Simulation) RegisterComponent(c model.Component) {
 }
 
 // registerPort registers a port with the simulation.
-func (s *Simulation) registerPort(p model.Port) {
+func (s *Simulation) registerPort(p modeling.Port) {
 	portName := p.Name()
 	if s.portNameIndex[portName] != 0 {
 		panic("port " + portName + " already registered")
@@ -59,11 +59,11 @@ func (s *Simulation) registerPort(p model.Port) {
 }
 
 // GetComponentByName returns the component with the given name.
-func (s *Simulation) GetComponentByName(name string) model.Component {
+func (s *Simulation) GetComponentByName(name string) modeling.Component {
 	return s.components[s.compNameIndex[name]]
 }
 
 // GetPortByName returns the port with the given name.
-func (s *Simulation) GetPortByName(name string) model.Port {
+func (s *Simulation) GetPortByName(name string) modeling.Port {
 	return s.ports[s.portNameIndex[name]]
 }

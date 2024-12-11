@@ -25,7 +25,7 @@ type BufferAnalyzer struct {
 
 // Func is a function that records buffer level change.
 func (b *BufferAnalyzer) Func(ctx hooking.HookCtx) {
-	now := b.CurrentTime()
+	now := b.Now()
 	buf := ctx.Domain.(queueing.Buffer)
 	currLevel := buf.Size()
 
@@ -44,7 +44,7 @@ func (b *BufferAnalyzer) Func(ctx hooking.HookCtx) {
 }
 
 func (b *BufferAnalyzer) summarize() {
-	now := b.CurrentTime()
+	now := b.Now()
 
 	if !b.usePeriod {
 		b.summarizePeriod(now, 0, now)
@@ -100,7 +100,7 @@ func (b *BufferAnalyzer) summarizePeriod(
 }
 
 func (b *BufferAnalyzer) resetPeriod() {
-	now := b.CurrentTime()
+	now := b.Now()
 
 	b.bufLevelToDuration = make(map[int]timing.VTimeInSec)
 

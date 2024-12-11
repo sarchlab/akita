@@ -4,13 +4,13 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
-	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
 type portAnalyzerEntry struct {
-	remotePort     model.RemotePort
+	remotePort     modeling.RemotePort
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -24,17 +24,17 @@ type PortAnalyzer struct {
 
 	usePeriod bool
 	period    timing.VTimeInSec
-	port      model.Port
+	port      modeling.Port
 
 	lastTime           timing.VTimeInSec
-	remoteToTrafficMap map[model.RemotePort]portAnalyzerEntry
+	remoteToTrafficMap map[modeling.RemotePort]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
 func (h *PortAnalyzer) Func(ctx hooking.HookCtx) {
-	now := h.CurrentTime()
+	now := h.Now()
 
-	msg, ok := ctx.Item.(model.Msg)
+	msg, ok := ctx.Item.(modeling.Msg)
 	if !ok {
 		return
 	}
@@ -47,7 +47,7 @@ func (h *PortAnalyzer) Func(ctx hooking.HookCtx) {
 	}
 
 	if h.remoteToTrafficMap == nil {
-		h.remoteToTrafficMap = make(map[model.RemotePort]portAnalyzerEntry)
+		h.remoteToTrafficMap = make(map[modeling.RemotePort]portAnalyzerEntry)
 	}
 
 	remotePortName := msg.Meta().Dst
@@ -77,12 +77,12 @@ func (h *PortAnalyzer) Func(ctx hooking.HookCtx) {
 	h.lastTime = now
 }
 
-func (h *PortAnalyzer) isIncoming(msg model.Msg) bool {
+func (h *PortAnalyzer) isIncoming(msg modeling.Msg) bool {
 	return msg.Meta().Dst == h.port.AsRemote()
 }
 
 func (h *PortAnalyzer) summarize() {
-	now := h.CurrentTime()
+	now := h.Now()
 
 	startTime := timing.VTimeInSec(0)
 	endTime := now
@@ -129,7 +129,7 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	h.remoteToTrafficMap = make(map[model.RemotePort]portAnalyzerEntry)
+	h.remoteToTrafficMap = make(map[modeling.RemotePort]portAnalyzerEntry)
 }
 
 func (h *PortAnalyzer) periodStartTime(t timing.VTimeInSec) timing.VTimeInSec {
@@ -146,7 +146,7 @@ type PortAnalyzerBuilder struct {
 	timeTeller timing.TimeTeller
 	usePeriod  bool
 	period     timing.VTimeInSec
-	port       model.Port
+	port       modeling.Port
 }
 
 // MakePortAnalyzerBuilder creates a PortAnalyzerBuilder.
@@ -179,7 +179,7 @@ func (b PortAnalyzerBuilder) WithPeriod(
 }
 
 // WithPort sets the port to be used by the PortAnalyzer.
-func (b PortAnalyzerBuilder) WithPort(p model.Port) PortAnalyzerBuilder {
+func (b PortAnalyzerBuilder) WithPort(p modeling.Port) PortAnalyzerBuilder {
 	b.port = p
 	return b
 }
