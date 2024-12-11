@@ -1,27 +1,27 @@
 // Package directconnection provides directconnection
 package directconnection
 
-import "github.com/sarchlab/akita/v4/sim/model"
+import "github.com/sarchlab/akita/v4/sim/modeling"
 
 type ports struct {
-	ports   []model.Port
-	portMap map[model.RemotePort]int
+	ports   []modeling.Port
+	portMap map[modeling.RemotePort]int
 }
 
-func (p *ports) addPort(port model.Port) {
+func (p *ports) addPort(port modeling.Port) {
 	p.ports = append(p.ports, port)
 	p.portMap[port.AsRemote()] = len(p.ports) - 1
 }
 
-func (p *ports) getPortIndex(index int) model.Port {
+func (p *ports) getPortIndex(index int) modeling.Port {
 	return p.ports[index]
 }
 
-func (p *ports) getPortByName(name model.RemotePort) model.Port {
+func (p *ports) getPortByName(name modeling.RemotePort) modeling.Port {
 	return p.ports[p.portMap[name]]
 }
 
-func (p *ports) list() []model.Port {
+func (p *ports) list() []modeling.Port {
 	return p.ports
 }
 
@@ -31,15 +31,15 @@ func (p *ports) len() int {
 
 // Comp is a DirectConnection connects two components without latency
 type Comp struct {
-	*model.TickingComponent
-	model.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
 	ports      ports
 	nextPortID int
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port model.Port) {
+func (c *Comp) PlugIn(port modeling.Port) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -49,13 +49,13 @@ func (c *Comp) PlugIn(port model.Port) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *Comp) Unplug(_ model.Port) {
+func (c *Comp) Unplug(_ modeling.Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify that the connection can
 // deliver to the port again.
-func (c *Comp) NotifyAvailable(p model.Port) {
+func (c *Comp) NotifyAvailable(p modeling.Port) {
 	for _, port := range c.ports.list() {
 		if port == p {
 			continue
@@ -97,7 +97,7 @@ func (m *middleware) Tick() bool {
 }
 
 func (m *middleware) forwardMany(
-	port model.Port,
+	port modeling.Port,
 ) bool {
 	madeProgress := false
 

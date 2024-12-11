@@ -9,19 +9,19 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type sampleMsg struct {
-	model.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m sampleMsg) Meta() model.MsgMeta {
+func (m sampleMsg) Meta() modeling.MsgMeta {
 	return m.MsgMeta
 }
 
-func (m sampleMsg) Clone() model.Msg {
+func (m sampleMsg) Clone() modeling.Msg {
 	cloneMsg := m
 	cloneMsg.ID = id.Generate()
 
@@ -41,10 +41,16 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		port1 = NewMockPort(mockCtrl)
-		port1.EXPECT().AsRemote().Return(model.RemotePort("port1")).AnyTimes()
+		port1.EXPECT().
+			AsRemote().
+			Return(modeling.RemotePort("port1")).
+			AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
-		port2.EXPECT().AsRemote().Return(model.RemotePort("port2")).AnyTimes()
+		port2.EXPECT().
+			AsRemote().
+			Return(modeling.RemotePort("port2")).
+			AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
 		connection = MakeBuilder().
@@ -64,7 +70,7 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		tick := timing.MakeTickEvent(connection, timing.VTimeInSec(10))
 
@@ -98,18 +104,18 @@ var _ = Describe("DirectConnection", func() {
 })
 
 type agent struct {
-	*model.TickingComponent
+	*modeling.TickingComponent
 
-	msgsOut []model.Msg
-	msgsIn  []model.Msg
+	msgsOut []modeling.Msg
+	msgsIn  []modeling.Msg
 
-	OutPort model.Port
+	OutPort modeling.Port
 }
 
 func newAgent(engine timing.Engine, freq timing.Freq, name string) *agent {
 	a := new(agent)
-	a.TickingComponent = model.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = model.NewPort(a, 4, 4, name+".OutPort")
+	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
+	a.OutPort = modeling.NewPort(a, 4, 4, name+".OutPort")
 
 	return a
 }
@@ -231,5 +237,5 @@ func directConnectionTest(seed int64) timing.VTimeInSec {
 
 	engine.Run()
 
-	return engine.CurrentTime()
+	return engine.Now()
 }

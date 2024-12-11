@@ -1,7 +1,7 @@
 package directconnection
 
 import (
-	"github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -28,11 +28,11 @@ func (b Builder) WithFreq(f timing.Freq) Builder {
 func (b Builder) Build(name string) *Comp {
 	c := &Comp{
 		ports: ports{
-			ports:   make([]model.Port, 0),
-			portMap: make(map[model.RemotePort]int),
+			ports:   make([]modeling.Port, 0),
+			portMap: make(map[modeling.RemotePort]int),
 		},
 	}
-	c.TickingComponent = model.NewSecondaryTickingComponent(
+	c.TickingComponent = modeling.NewSecondaryTickingComponent(
 		name, b.engine, b.freq, c)
 
 	middleware := &middleware{

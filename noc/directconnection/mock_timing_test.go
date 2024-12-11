@@ -58,20 +58,6 @@ func (mr *MockEngineMockRecorder) Continue() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Continue", reflect.TypeOf((*MockEngine)(nil).Continue))
 }
 
-// CurrentTime mocks base method.
-func (m *MockEngine) CurrentTime() timing.VTimeInSec {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CurrentTime")
-	ret0, _ := ret[0].(timing.VTimeInSec)
-	return ret0
-}
-
-// CurrentTime indicates an expected call of CurrentTime.
-func (mr *MockEngineMockRecorder) CurrentTime() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentTime", reflect.TypeOf((*MockEngine)(nil).CurrentTime))
-}
-
 // Hooks mocks base method.
 func (m *MockEngine) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
@@ -84,6 +70,20 @@ func (m *MockEngine) Hooks() []hooking.Hook {
 func (mr *MockEngineMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockEngine)(nil).Hooks))
+}
+
+// Now mocks base method.
+func (m *MockEngine) Now() float64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Now")
+	ret0, _ := ret[0].(float64)
+	return ret0
+}
+
+// Now indicates an expected call of Now.
+func (mr *MockEngineMockRecorder) Now() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Now", reflect.TypeOf((*MockEngine)(nil).Now))
 }
 
 // NumHooks mocks base method.
@@ -190,10 +190,10 @@ func (mr *MockEventMockRecorder) IsSecondary() *gomock.Call {
 }
 
 // Time mocks base method.
-func (m *MockEvent) Time() timing.VTimeInSec {
+func (m *MockEvent) Time() float64 {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Time")
-	ret0, _ := ret[0].(timing.VTimeInSec)
+	ret0, _ := ret[0].(float64)
 	return ret0
 }
 

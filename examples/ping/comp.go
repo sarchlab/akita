@@ -4,77 +4,79 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type PingReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 
 	SeqID int
 }
 
-func (p *PingReq) Meta() *sim.MsgMeta {
-	return &p.MsgMeta
+func (p PingReq) Meta() modeling.MsgMeta {
+	return p.MsgMeta
 }
 
-func (p *PingReq) Clone() sim.Msg {
-	cloneMsg := *p
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+func (p PingReq) Clone() modeling.Msg {
+	cloneMsg := p
+	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
+	return cloneMsg
 }
 
-func (p *PingReq) GenerateRsp() sim.Rsp {
-	rsp := &PingRsp{}
-	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.RspTo = p.ID
+func (p PingReq) GenerateRsp() PingRsp {
+	rsp := PingRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: p.Dst,
+			Dst: p.Src,
+		},
+		SeqID: p.SeqID,
+	}
 
 	return rsp
 }
 
 type PingRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 
-	RspTo string
 	SeqID int
 }
 
-func (p *PingRsp) Meta() *sim.MsgMeta {
-	return &p.MsgMeta
+func (p PingRsp) Meta() modeling.MsgMeta {
+	return p.MsgMeta
 }
 
-func (p *PingRsp) Clone() sim.Msg {
-	cloneMsg := *p
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+func (p PingRsp) Clone() modeling.Msg {
+	cloneMsg := p
+	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
-}
-
-func (p *PingRsp) GetRspTo() string {
-	return p.RspTo
+	return cloneMsg
 }
 
 type StartPingEvent struct {
-	*sim.EventBase
-	Dst sim.RemotePort
+	*timing.EventBase
+	Dst modeling.RemotePort
 }
 
 type RspPingEvent struct {
-	*sim.EventBase
-	pingMsg *PingReq
+	*timing.EventBase
+	pingMsg PingReq
 }
 
 type Comp struct {
-	*sim.ComponentBase
+	*modeling.ComponentBase
 
-	OutPort sim.Port
-	Engine  sim.Engine
+	OutPort modeling.Port
+	Engine  timing.Engine
 
-	startTime []sim.VTimeInSec
+	startTime []timing.VTimeInSec
 	nextSeqID int
 }
 
-func (c *Comp) Handle(e sim.Event) error {
+func (c *Comp) Handle(e timing.Event) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -86,16 +88,19 @@ func (c *Comp) Handle(e sim.Event) error {
 	default:
 		panic("cannot handle event of type " + reflect.TypeOf(e).String())
 	}
+
 	return nil
 }
 
 func (c *Comp) StartPing(evt StartPingEvent) {
-	pingMsg := &PingReq{
+	pingMsg := PingReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: c.OutPort.AsRemote(),
+			Dst: evt.Dst,
+		},
 		SeqID: c.nextSeqID,
 	}
-
-	pingMsg.Src = c.OutPort.AsRemote()
-	pingMsg.Dst = evt.Dst
 
 	c.OutPort.Send(pingMsg)
 
@@ -106,47 +111,43 @@ func (c *Comp) StartPing(evt StartPingEvent) {
 
 func (c *Comp) RspPing(evt RspPingEvent) {
 	msg := evt.pingMsg
-	rsp := &PingRsp{
-		SeqID: msg.SeqID,
-	}
-	rsp.Src = c.OutPort.AsRemote()
-	rsp.Dst = msg.Src
+	rsp := msg.GenerateRsp()
 
 	c.OutPort.Send(rsp)
 }
 
-func (c *Comp) NotifyRecv(port sim.Port) {
+func (c *Comp) NotifyRecv(port modeling.Port) {
 	c.Lock()
 	defer c.Unlock()
 
 	msg := port.RetrieveIncoming()
 	switch msg := msg.(type) {
-	case *PingReq:
+	case PingReq:
 		c.processPingMsg(msg)
-	case *PingRsp:
+	case PingRsp:
 		c.processPingRsp(msg)
 	default:
 		panic("cannot process msg of type " + reflect.TypeOf(msg).String())
 	}
 }
 
-func (c *Comp) processPingMsg(msg *PingReq) {
+func (c *Comp) processPingMsg(msg PingReq) {
 	rspEvent := RspPingEvent{
-		EventBase: sim.NewEventBase(c.Engine.CurrentTime()+2, c),
+		EventBase: timing.NewEventBase(c.Engine.Now()+2, c),
 		pingMsg:   msg,
 	}
 	c.Engine.Schedule(rspEvent)
 }
 
-func (c *Comp) processPingRsp(msg *PingRsp) {
+func (c *Comp) processPingRsp(msg PingRsp) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
-	now := c.Engine.CurrentTime()
+	now := c.Engine.Now()
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 }
 
-func (c Comp) NotifyPortFree(_ sim.Port) {
+func (c Comp) NotifyPortFree(_ modeling.Port) {
 	// Do nothing
 }

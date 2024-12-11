@@ -1,32 +1,33 @@
 package ping
 
 import (
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func Example_pingWithEvents() {
-	engine := sim.NewSerialEngine()
-	// agentA := NewPingAgent("AgentA", engine)
+	engine := timing.NewSerialEngine()
+
 	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
-	// agentB := NewPingAgent("AgentB", engine)
 	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
+
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	conn.PlugIn(agentA.OutPort)
 	conn.PlugIn(agentB.OutPort)
 
 	e1 := StartPingEvent{
-		EventBase: sim.NewEventBase(1, agentA),
+		EventBase: timing.NewEventBase(1, agentA),
 		Dst:       agentB.OutPort.AsRemote(),
 	}
 	e2 := StartPingEvent{
-		EventBase: sim.NewEventBase(3, agentA),
+		EventBase: timing.NewEventBase(3, agentA),
 		Dst:       agentB.OutPort.AsRemote(),
 	}
+
 	engine.Schedule(e1)
 	engine.Schedule(e2)
 
