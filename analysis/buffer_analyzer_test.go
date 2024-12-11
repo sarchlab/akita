@@ -41,7 +41,7 @@ var _ = Describe("BufferAnalyzer", func() {
 
 	It("should calculate average buffer level", func() {
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(0.1))
 		buffer.EXPECT().Size().Return(1)
 
@@ -52,7 +52,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(1.1)).
 			AnyTimes()
 		buffer.EXPECT().Size().Return(2)
@@ -75,7 +75,7 @@ var _ = Describe("BufferAnalyzer", func() {
 
 	It("should report multiple periods together", func() {
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(0.1))
 		buffer.EXPECT().Size().Return(1)
 
@@ -86,7 +86,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(2.1)).
 			AnyTimes()
 		buffer.EXPECT().Size().Return(2)

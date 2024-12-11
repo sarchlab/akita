@@ -8,19 +8,19 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/id"
-	model "github.com/sarchlab/akita/v4/sim/model"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type sampleMsg struct {
-	model.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m sampleMsg) Meta() model.MsgMeta {
+func (m sampleMsg) Meta() modeling.MsgMeta {
 	return m.MsgMeta
 }
 
-func (m sampleMsg) Clone() model.Msg {
+func (m sampleMsg) Clone() modeling.Msg {
 	newMsg := m
 	newMsg.ID = id.Generate()
 
@@ -45,19 +45,19 @@ var _ = Describe("Port Analyzer", func() {
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().Name().Return("PortName").AnyTimes()
 		port.EXPECT().AsRemote().
-			Return(model.RemotePort("PortName")).
+			Return(modeling.RemotePort("PortName")).
 			AnyTimes()
 
 		incommingPort = NewMockPort(mockCtrl)
 		incommingPort.EXPECT().Name().Return("IncomingPort").AnyTimes()
 		incommingPort.EXPECT().AsRemote().
-			Return(model.RemotePort("IncomingPort")).
+			Return(modeling.RemotePort("IncomingPort")).
 			AnyTimes()
 
 		outgoingPort = NewMockPort(mockCtrl)
 		outgoingPort.EXPECT().Name().Return("OutgoingPort").AnyTimes()
 		outgoingPort.EXPECT().AsRemote().
-			Return(model.RemotePort("OutgoingPort")).
+			Return(modeling.RemotePort("OutgoingPort")).
 			AnyTimes()
 
 		timeTeller = NewMockTimeTeller(mockCtrl)
@@ -77,21 +77,21 @@ var _ = Describe("Port Analyzer", func() {
 
 	It("should log period traffic", func() {
 		msg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(0.1))
+		timeTeller.EXPECT().Now().Return(timing.VTimeInSec(0.1))
 		portAnalyzer.Func(hooking.HookCtx{
 			Item:   msg,
 			Domain: port,
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(1.1)).
 			AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
@@ -123,7 +123,7 @@ var _ = Describe("Port Analyzer", func() {
 
 	It("should log traffic if only a middle period has value", func() {
 		msg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 100,
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
@@ -131,7 +131,7 @@ var _ = Describe("Port Analyzer", func() {
 		}
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(20.5)).
 			Times(2)
 		portAnalyzer.Func(hooking.HookCtx{
@@ -162,7 +162,7 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(26.5)).
 			AnyTimes()
 		portAnalyzer.summarize()
@@ -170,14 +170,14 @@ var _ = Describe("Port Analyzer", func() {
 
 	It("should log incoming and outgoing traffic", func() {
 		outMsg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 		inMsg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
@@ -185,7 +185,7 @@ var _ = Describe("Port Analyzer", func() {
 		}
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(0.1)).
 			Times(2)
 		portAnalyzer.Func(hooking.HookCtx{
@@ -198,7 +198,7 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(1.1)).
 			AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
@@ -253,21 +253,21 @@ var _ = Describe("Port Analyzer", func() {
 
 	It("should log period traffic when there is a gap period", func() {
 		msg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
 
-		timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(0.1))
+		timeTeller.EXPECT().Now().Return(timing.VTimeInSec(0.1))
 		portAnalyzer.Func(hooking.HookCtx{
 			Item:   msg,
 			Domain: port,
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(3.1)).
 			AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
@@ -300,7 +300,7 @@ var _ = Describe("Port Analyzer", func() {
 
 	It("should log period traffic when simulation ends", func() {
 		msg := sampleMsg{
-			model.MsgMeta{
+			modeling.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
@@ -308,7 +308,7 @@ var _ = Describe("Port Analyzer", func() {
 		}
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(0.1))
 
 		portAnalyzer.Func(hooking.HookCtx{
@@ -317,7 +317,7 @@ var _ = Describe("Port Analyzer", func() {
 		})
 
 		timeTeller.EXPECT().
-			CurrentTime().
+			Now().
 			Return(timing.VTimeInSec(3.1)).
 			AnyTimes()
 		portLogger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
