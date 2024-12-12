@@ -6,8 +6,8 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )

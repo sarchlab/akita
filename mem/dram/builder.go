@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/tracing"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
@@ -23,6 +23,7 @@ type Builder struct {
 	useGlobalStorage bool
 	storage          *mem.Storage
 	addrConverter    mem.AddressConverter
+	hooks            []hooking.Hook
 
 	protocol             Protocol
 	transactionQueueSize int
@@ -66,8 +67,6 @@ type Builder struct {
 	tRFCb      int
 	tCKESR     int
 	tXS        int
-
-	tracers []tracing.Tracer
 }
 
 // MakeBuilder creates a builder with default configuration.
@@ -253,10 +252,10 @@ func (b Builder) WithNumCol(n int) Builder {
 	return b
 }
 
-// WithAdditionalTracer adds one tracer to the memory controller and all the
+// WithAdditionalHooks adds the given hook to the memory controller and all the
 // banks.
-func (b Builder) WithAdditionalTracer(t tracing.Tracer) Builder {
-	b.tracers = append(b.tracers, t)
+func (b Builder) WithAdditionalHooks(h hooking.Hook) Builder {
+	b.hooks = append(b.hooks, h)
 	return b
 }
 
@@ -402,7 +401,7 @@ func (b Builder) Build(name string) *Comp {
 	}
 	m.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, m)
 
-	b.attachTracers(m)
+	b.attachHooks(m)
 	b.buildChannel(name, m)
 
 	m.addrConverter = b.addrConverter
@@ -451,9 +450,9 @@ func (b Builder) Build(name string) *Comp {
 	return m
 }
 
-func (b Builder) attachTracers(hookable tracing.NamedHookable) {
-	for _, tracer := range b.tracers {
-		tracing.CollectTrace(hookable, tracer)
+func (b Builder) attachHooks(hookable hooking.Hookable) {
+	for _, hook := range b.hooks {
+		hookable.AcceptHook(hook)
 	}
 }
 
@@ -493,7 +492,7 @@ func (b Builder) buildChannel(name string, m *Comp) {
 
 				channel.Banks[i][j][k] = bank
 
-				b.attachTracers(bank)
+				b.attachHooks(bank)
 			}
 		}
 	}
@@ -575,191 +574,460 @@ func (b *Builder) generateTiming() org.Timing {
 	}
 
 	t.SameBank[signal.CmdKindRead] = []org.TimeTableEntry{
-		{signal.CmdKindRead, readToReadL},
-		{signal.CmdKindWrite, readToWrite},
-		{signal.CmdKindReadPrecharge, readToReadL},
-		{signal.CmdKindWritePrecharge, readToWrite},
-		{signal.CmdKindPrecharge, readToPrecharge},
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: readToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: readToWrite,
+		},
+		{
+			NextCmdKind:       signal.CmdKindReadPrecharge,
+			MinCycleInBetween: readToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWritePrecharge,
+			MinCycleInBetween: readToWrite,
+		},
+		{
+			NextCmdKind:       signal.CmdKindPrecharge,
+			MinCycleInBetween: readToPrecharge,
+		},
 	}
 
 	t.OtherBanksInBankGroup[signal.CmdKindRead] = []org.TimeTableEntry{
-		{signal.CmdKindRead, readToReadL},
-		{signal.CmdKindWrite, readToWrite},
-		{signal.CmdKindReadPrecharge, readToReadL},
-		{signal.CmdKindWritePrecharge, readToWrite},
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: readToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: readToWrite,
+		},
+		{
+			NextCmdKind:       signal.CmdKindReadPrecharge,
+			MinCycleInBetween: readToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWritePrecharge,
+			MinCycleInBetween: readToWrite,
+		},
 	}
 	t.SameRank[signal.CmdKindRead] = []org.TimeTableEntry{
-		{signal.CmdKindRead, readToReadS},
-		{signal.CmdKindWrite, readToWrite},
-		{signal.CmdKindReadPrecharge, readToReadS},
-		{signal.CmdKindWritePrecharge, readToWrite},
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: readToReadS,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: readToWrite,
+		},
+		{
+			NextCmdKind:       signal.CmdKindReadPrecharge,
+			MinCycleInBetween: readToReadS,
+		},
 	}
 	t.OtherRanks[signal.CmdKindRead] = []org.TimeTableEntry{
-		{signal.CmdKindRead, readToReadO},
-		{signal.CmdKindWrite, readToWriteO},
-		{signal.CmdKindReadPrecharge, readToReadO},
-		{signal.CmdKindWritePrecharge, readToWriteO},
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: readToReadO,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: readToWriteO,
+		},
 	}
 
 	t.SameBank[signal.CmdKindWrite] = []org.TimeTableEntry{
-		{signal.CmdKindRead, writeToReadL},
-		{signal.CmdKindWrite, writeToWriteL},
-		{signal.CmdKindReadPrecharge, writeToReadL},
-		{signal.CmdKindWritePrecharge, writeToWriteL},
-		{signal.CmdKindPrecharge, writeToPrecharge}}
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: writeToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: writeToWriteL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindReadPrecharge,
+			MinCycleInBetween: writeToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindPrecharge,
+			MinCycleInBetween: writeToPrecharge,
+		},
+	}
 	t.OtherBanksInBankGroup[signal.CmdKindWrite] = []org.TimeTableEntry{
-		{signal.CmdKindRead, writeToReadL},
-		{signal.CmdKindWrite, writeToWriteL},
-		{signal.CmdKindReadPrecharge, writeToReadL},
-		{signal.CmdKindWritePrecharge, writeToWriteL}}
+		{
+			NextCmdKind:       signal.CmdKindRead,
+			MinCycleInBetween: writeToReadL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindWrite,
+			MinCycleInBetween: writeToWriteL,
+		},
+		{
+			NextCmdKind:       signal.CmdKindReadPrecharge,
+			MinCycleInBetween: writeToReadL,
+		},
+	}
 	t.SameRank[signal.CmdKindWrite] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, writeToReadS},
-			{signal.CmdKindWrite, writeToWriteS},
-			{signal.CmdKindReadPrecharge, writeToReadS},
-			{signal.CmdKindWritePrecharge, writeToWriteS}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: writeToReadS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: writeToWriteS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: writeToReadS,
+			},
+		}
 	t.OtherRanks[signal.CmdKindWrite] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, writeToReadO},
-			{signal.CmdKindWrite, writeToWriteO},
-			{signal.CmdKindReadPrecharge, writeToReadO},
-			{signal.CmdKindWritePrecharge, writeToWriteO}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: writeToReadO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: writeToWriteO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: writeToReadO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWritePrecharge,
+				MinCycleInBetween: writeToWriteO,
+			},
+		}
 
 	// command READ_PRECHARGE
 	t.SameBank[signal.CmdKindReadPrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, readpToAct},
-			{signal.CmdKindRefresh, readToActivate},
-			{signal.CmdKindRefreshBank, readToActivate},
-			{signal.CmdKindSRefEnter, readToActivate}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: readpToAct,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: readToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: readToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindSRefEnter,
+				MinCycleInBetween: readToActivate,
+			},
+		}
 	t.OtherBanksInBankGroup[signal.CmdKindReadPrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, readToReadL},
-			{signal.CmdKindWrite, readToWrite},
-			{signal.CmdKindReadPrecharge, readToReadL},
-			{signal.CmdKindWritePrecharge, readToWrite}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: readToReadL,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: readToWrite,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: readToReadL,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWritePrecharge,
+				MinCycleInBetween: readToWrite,
+			},
+		}
 	t.SameRank[signal.CmdKindReadPrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, readToReadS},
-			{signal.CmdKindWrite, readToWrite},
-			{signal.CmdKindReadPrecharge, readToReadS},
-			{signal.CmdKindWritePrecharge, readToWrite}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: readToReadS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: readToWrite,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: readToReadS,
+			},
+		}
 	t.OtherRanks[signal.CmdKindReadPrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, readToReadO},
-			{signal.CmdKindWrite, readToWriteO},
-			{signal.CmdKindReadPrecharge, readToReadO},
-			{signal.CmdKindWritePrecharge, readToWriteO}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: readToReadO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: readToWriteO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: readToReadO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWritePrecharge,
+				MinCycleInBetween: readToWriteO,
+			},
+		}
 
 	// command WRITE_PRECHARGE
 	t.SameBank[signal.CmdKindWritePrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, writeToActivate},
-			{signal.CmdKindRefresh, writeToActivate},
-			{signal.CmdKindRefreshBank, writeToActivate},
-			{signal.CmdKindSRefEnter, writeToActivate}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: writeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: writeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: writeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindSRefEnter,
+				MinCycleInBetween: writeToActivate,
+			},
+		}
 	t.OtherBanksInBankGroup[signal.CmdKindWritePrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, writeToReadL},
-			{signal.CmdKindWrite, writeToWriteL},
-			{signal.CmdKindReadPrecharge, writeToReadL},
-			{signal.CmdKindWritePrecharge, writeToWriteL}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: writeToReadL,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: writeToWriteL,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: writeToReadL,
+			},
+		}
 	t.SameRank[signal.CmdKindWritePrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, writeToReadS},
-			{signal.CmdKindWrite, writeToWriteS},
-			{signal.CmdKindReadPrecharge, writeToReadS},
-			{signal.CmdKindWritePrecharge, writeToWriteS}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: writeToReadS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: writeToWriteS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: writeToReadS,
+			},
+		}
 	t.OtherRanks[signal.CmdKindWritePrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindRead, writeToReadO},
-			{signal.CmdKindWrite, writeToWriteO},
-			{signal.CmdKindReadPrecharge, writeToReadO},
-			{signal.CmdKindWritePrecharge, writeToWriteO}}
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: writeToReadO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: writeToWriteO,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: writeToReadO,
+			},
+		}
 
 	// command ACTIVATE
 	t.SameBank[signal.CmdKindActivate] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, activateToActivate},
-			{signal.CmdKindRead, activateToRead},
-			{signal.CmdKindWrite, activateToWrite},
-			{signal.CmdKindReadPrecharge, activateToRead},
-			{signal.CmdKindWritePrecharge, activateToWrite},
-			{signal.CmdKindPrecharge, activateToPrecharge},
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: activateToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRead,
+				MinCycleInBetween: activateToRead,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWrite,
+				MinCycleInBetween: activateToWrite,
+			},
+			{
+				NextCmdKind:       signal.CmdKindReadPrecharge,
+				MinCycleInBetween: activateToRead,
+			},
+			{
+				NextCmdKind:       signal.CmdKindWritePrecharge,
+				MinCycleInBetween: activateToWrite,
+			},
+			{
+				NextCmdKind:       signal.CmdKindPrecharge,
+				MinCycleInBetween: activateToPrecharge,
+			},
 		}
 
 	t.OtherBanksInBankGroup[signal.CmdKindActivate] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, activateToActivateL},
-			{signal.CmdKindRefreshBank, activateToRefresh}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: activateToActivateL,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: activateToRefresh,
+			},
+		}
 
 	t.SameRank[signal.CmdKindActivate] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, activateToActivateS},
-			{signal.CmdKindRefreshBank, activateToRefresh}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: activateToActivateS,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: activateToRefresh,
+			},
+		}
 
 	// command PRECHARGE
 	t.SameBank[signal.CmdKindPrecharge] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, prechargeToActivate},
-			{signal.CmdKindRefresh, prechargeToActivate},
-			{signal.CmdKindRefreshBank, prechargeToActivate},
-			{signal.CmdKindSRefEnter, prechargeToActivate}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: prechargeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: prechargeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: prechargeToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindSRefEnter,
+				MinCycleInBetween: prechargeToActivate,
+			},
+		}
 
 	// for those who need tPPD
 	if b.protocol.isGDDR() || b.protocol == LPDDR4 {
 		t.OtherBanksInBankGroup[signal.CmdKindPrecharge] =
 			[]org.TimeTableEntry{
-				{signal.CmdKindPrecharge, prechargeToPrecharge},
+				{
+					NextCmdKind:       signal.CmdKindPrecharge,
+					MinCycleInBetween: prechargeToPrecharge,
+				},
 			}
 
 		t.SameRank[signal.CmdKindPrecharge] =
 			[]org.TimeTableEntry{
-				{signal.CmdKindPrecharge, prechargeToPrecharge},
+				{
+					NextCmdKind:       signal.CmdKindPrecharge,
+					MinCycleInBetween: prechargeToPrecharge,
+				},
 			}
 	}
 
 	// command REFRESH_BANK
 	t.SameRank[signal.CmdKindRefreshBank] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, refreshToActivateBank},
-			{signal.CmdKindRefresh, refreshToActivateBank},
-			{signal.CmdKindRefreshBank, refreshToActivateBank},
-			{signal.CmdKindSRefEnter, refreshToActivateBank}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: refreshToActivateBank,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: refreshToActivateBank,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: refreshToActivateBank,
+			},
+			{
+				NextCmdKind:       signal.CmdKindSRefEnter,
+				MinCycleInBetween: refreshToActivateBank,
+			},
+		}
 
 	t.OtherBanksInBankGroup[signal.CmdKindRefreshBank] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, refreshToActivate},
-			{signal.CmdKindRefreshBank, refreshToRefresh},
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: refreshToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: refreshToRefresh,
+			},
 		}
 
 	t.SameRank[signal.CmdKindRefreshBank] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, refreshToActivate},
-			{signal.CmdKindRefreshBank, refreshToRefresh},
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: refreshToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: refreshToRefresh,
+			},
 		}
 
 	// REFRESH, SREF_ENTER and SREF_EXIT are isued to the entire
 	// rank  command REFRESH
 	t.SameRank[signal.CmdKindRefresh] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, refreshToActivate},
-			{signal.CmdKindRefresh, refreshToActivate},
-			{signal.CmdKindSRefEnter, refreshToActivate}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: refreshToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: refreshToActivate,
+			},
+			{
+				NextCmdKind:       signal.CmdKindSRefEnter,
+				MinCycleInBetween: refreshToActivate,
+			},
+		}
 
 	// command SREF_ENTER
 	// TODO: add power down commands
 	t.SameRank[signal.CmdKindSRefEnter] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindSRefExit, selfRefreshEntryToExit}}
+			{
+				NextCmdKind:       signal.CmdKindSRefExit,
+				MinCycleInBetween: selfRefreshEntryToExit,
+			},
+		}
 
 	// command SREF_EXIT
 	t.SameRank[signal.CmdKindSRefExit] =
 		[]org.TimeTableEntry{
-			{signal.CmdKindActivate, selfRefreshExit},
-			{signal.CmdKindRefresh, selfRefreshExit},
-			{signal.CmdKindRefreshBank, selfRefreshExit},
-			{signal.CmdKindSRefEnter, selfRefreshExit}}
+			{
+				NextCmdKind:       signal.CmdKindActivate,
+				MinCycleInBetween: selfRefreshExit,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefresh,
+				MinCycleInBetween: selfRefreshExit,
+			},
+			{
+				NextCmdKind:       signal.CmdKindRefreshBank,
+				MinCycleInBetween: selfRefreshExit,
+			},
+		}
 
 	return t
 }

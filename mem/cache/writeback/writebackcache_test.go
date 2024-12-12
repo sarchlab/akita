@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 

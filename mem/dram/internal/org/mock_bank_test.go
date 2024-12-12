@@ -9,7 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	signal "github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	sim "github.com/sarchlab/akita/v4/sim"
+	hooking "github.com/sarchlab/akita/v4/sim/hooking"
 )
 
 // MockBank is a mock of Bank interface.
@@ -36,7 +36,7 @@ func (m *MockBank) EXPECT() *MockBankMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockBank) AcceptHook(hook sim.Hook) {
+func (m *MockBank) AcceptHook(hook hooking.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -62,10 +62,10 @@ func (mr *MockBankMockRecorder) GetReadyCommand(cmd interface{}) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockBank) Hooks() []sim.Hook {
+func (m *MockBank) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]sim.Hook)
+	ret0, _ := ret[0].([]hooking.Hook)
 	return ret0
 }
 
@@ -73,18 +73,6 @@ func (m *MockBank) Hooks() []sim.Hook {
 func (mr *MockBankMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockBank)(nil).Hooks))
-}
-
-// InvokeHook mocks base method.
-func (m *MockBank) InvokeHook(arg0 hooking.HookCtx) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InvokeHook", arg0)
-}
-
-// InvokeHook indicates an expected call of InvokeHook.
-func (mr *MockBankMockRecorder) InvokeHook(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeHook", reflect.TypeOf((*MockBank)(nil).InvokeHook), arg0)
 }
 
 // Name mocks base method.

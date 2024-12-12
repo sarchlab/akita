@@ -1,14 +1,16 @@
 package dram
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/org"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // Protocol defines the category of the memory controller.
@@ -83,10 +85,12 @@ func (m *middleware) parseTop() (madeProgress bool) {
 
 	trans := &signal.Transaction{}
 	switch msg := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		trans.Read = msg
-	case *mem.WriteReq:
+		trans.Type = signal.TransactionTypeRead
+	case mem.WriteReq:
 		trans.Write = msg
+		trans.Type = signal.TransactionTypeWrite
 	}
 
 	m.assignTransInternalAddress(trans)
@@ -100,19 +104,7 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	m.inflightTransactions = append(m.inflightTransactions, trans)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, m.Comp)
-
-	for _, st := range trans.SubTransactions {
-		tracing.StartTaskWithSpecificLocation(
-			st.ID,
-			tracing.MsgIDAtReceiver(msg, m.Comp),
-			m.Comp,
-			"sub-trans",
-			"sub-trans",
-			m.Comp.Name()+".SubTransQueue",
-			nil,
-		)
-	}
+	m.traceTransactionStart(msg)
 
 	// fmt.Printf("%.10f, %s, start transaction, %s, %x\n",
 	// 	now, c.Name(), msg.Meta().ID, trans.InternalAddress)
@@ -159,15 +151,15 @@ func (m *middleware) finalizeTransaction(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	if t.Write != nil {
+	if t.Type == signal.TransactionTypeWrite {
 		done = m.finalizeWriteTrans(t, i)
 		if done {
-			tracing.TraceReqComplete(t.Write, m.Comp)
+			m.traceTransactionComplete(t)
 		}
 	} else {
 		done = m.finalizeReadTrans(t, i)
 		if done {
-			tracing.TraceReqComplete(t.Read, m.Comp)
+			m.traceTransactionComplete(t)
 		}
 	}
 
@@ -183,11 +175,13 @@ func (m *middleware) finalizeWriteTrans(
 		panic(err)
 	}
 
-	writeDone := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(t.Write.Src).
-		WithRspTo(t.Write.ID).
-		Build()
+	writeDone := mem.WriteDoneRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: m.topPort.AsRemote(),
+			Dst: t.Write.Src,
+		},
+		RespondTo: t.Write.ID,
+	}
 
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
@@ -212,12 +206,14 @@ func (m *middleware) finalizeReadTrans(
 		panic(err)
 	}
 
-	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(t.Read.Src).
-		WithData(data).
-		WithRspTo(t.Read.ID).
-		Build()
+	dataReady := mem.DataReadyRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: m.topPort.AsRemote(),
+			Dst: t.Read.Src,
+		},
+		RespondTo: t.Read.ID,
+		Data:      data,
+	}
 
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
@@ -231,4 +227,39 @@ func (m *middleware) finalizeReadTrans(
 	}
 
 	return false
+}
+
+func (m *middleware) traceTransactionStart(msg modeling.Msg) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Pos:    hooking.HookPosTaskStart,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(msg),
+			ParentID: modeling.ReqOutTaskID(msg),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(msg).Name(),
+		},
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTransactionComplete(t *signal.Transaction) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Pos:    hooking.HookPosTaskEnd,
+	}
+
+	switch t.Type {
+	case signal.TransactionTypeWrite:
+		ctx.Item = hooking.TaskEnd{
+			ID: modeling.ReqInTaskID(t.Write),
+		}
+	case signal.TransactionTypeRead:
+		ctx.Item = hooking.TaskEnd{
+			ID: modeling.ReqInTaskID(t.Read),
+		}
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

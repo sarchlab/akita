@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v4/mem/dram"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"os"

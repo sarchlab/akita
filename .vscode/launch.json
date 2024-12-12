@@ -33,6 +33,13 @@
             "program": "${workspaceFolder}/mem/datamover"
         },
         {
+            "name": "Test github.com/sarchlab/akita/v4/mem/dram",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/mem/dram"
+        },
+        {
             "name": "Test github.com/sarchlab/analysis",
             "type": "go",
             "request": "launch",

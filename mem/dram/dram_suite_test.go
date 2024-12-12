@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
@@ -43,7 +43,10 @@ var _ = Describe("DRAM Integration", func() {
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(modeling.RemotePort("SrcPort")).AnyTimes()
+		srcPort.EXPECT().
+			AsRemote().
+			Return(modeling.RemotePort("SrcPort")).
+			AnyTimes()
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
@@ -55,31 +58,35 @@ var _ = Describe("DRAM Integration", func() {
 	})
 
 	It("should read and write", func() {
-		write := mem.WriteReqBuilder{}.
-			WithAddress(0x40).
-			WithData([]byte{1, 2, 3, 4}).
-			WithSrc(srcPort.AsRemote()).
-			WithDst(memCtrl.topPort.AsRemote()).
-			Build()
+		write := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: srcPort.AsRemote(),
+				Dst: memCtrl.topPort.AsRemote(),
+			},
+			Address: 0x40,
+			Data:    []byte{1, 2, 3, 4},
+		}
 
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x40).
-			WithByteSize(4).
-			WithSrc(srcPort.AsRemote()).
-			WithDst(memCtrl.topPort.AsRemote()).
-			Build()
+		read := mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: srcPort.AsRemote(),
+				Dst: memCtrl.topPort.AsRemote(),
+			},
+			Address:        0x40,
+			AccessByteSize: 4,
+		}
 
 		memCtrl.topPort.Deliver(write)
 		memCtrl.topPort.Deliver(read)
 
 		ret1 := srcPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(wd *mem.WriteDoneRsp) {
+			Do(func(wd mem.WriteDoneRsp) {
 				Expect(wd.RespondTo).To(Equal(write.ID))
 			})
 		srcPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
+			Do(func(dr mem.DataReadyRsp) {
 				Expect(dr.RespondTo).To(Equal(read.ID))
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			}).After(ret1)
