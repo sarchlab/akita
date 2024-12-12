@@ -5,15 +5,16 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type transaction struct {
-	req       *vm.TranslationReq
+	req       vm.TranslationReq
 	page      vm.Page
 	cycleLeft int
-	migration *vm.PageMigrationReqToDriver
+	migration vm.PageMigrationReqToDriver
 }
 
 // Comp is the default mmu implementation. It is also an akita Component.
@@ -151,17 +152,20 @@ func (m *middleware) doPageWalkHit(
 	}
 
 	walking := m.walkingTranslations[walkingIndex]
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(walking.req.Src).
-		WithRspTo(walking.req.ID).
-		WithPage(walking.page).
-		Build()
+	rsp := vm.TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.topPort.AsRemote(),
+			Dst: walking.req.Src,
+		},
+		RespondTo: walking.req.ID,
+		Page:      walking.page,
+	}
 
 	m.topPort.Send(rsp)
 	m.toRemoveFromPTW = append(m.toRemoveFromPTW, walkingIndex)
 
-	tracing.TraceReqComplete(walking.req, m.Comp)
+	m.traceTranslationComplete(walking.req)
 
 	return true
 }
@@ -242,12 +246,16 @@ func (m *middleware) sendTranslationRsp(
 	req := trans.req
 	page := trans.page
 
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rsp := vm.TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.topPort.AsRemote(),
+			Dst: req.Src,
+		},
+		RespondTo: req.ID,
+		Page:      page,
+	}
+
 	m.topPort.Send(rsp)
 
 	return true
@@ -270,12 +278,16 @@ func (m *middleware) processMigrationReturn() bool {
 		panic("page not found")
 	}
 
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rsp := vm.TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.topPort.AsRemote(),
+			Dst: req.Src,
+		},
+		RespondTo: req.ID,
+		Page:      page,
+	}
+
 	m.topPort.Send(rsp)
 
 	m.isDoingMigration = false
@@ -299,10 +311,10 @@ func (m *middleware) parseFromTop() bool {
 		return false
 	}
 
-	tracing.TraceReqReceive(req, m.Comp)
+	m.traceTranslationStart(req.(vm.TranslationReq))
 
 	switch req := req.(type) {
-	case *vm.TranslationReq:
+	case vm.TranslationReq:
 		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
@@ -311,7 +323,7 @@ func (m *middleware) parseFromTop() bool {
 	return true
 }
 
-func (m *middleware) startWalking(req *vm.TranslationReq) {
+func (m *middleware) startWalking(req vm.TranslationReq) {
 	translationInPipeline := transaction{
 		req:       req,
 		cycleLeft: m.latency,
@@ -349,7 +361,7 @@ func unique(intSlice []uint64) []uint64 {
 func (m *middleware) createMigrationRequest(
 	trans transaction,
 	page vm.Page,
-) *vm.PageMigrationReqToDriver {
+) vm.PageMigrationReqToDriver {
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
 	migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID] =
@@ -359,15 +371,51 @@ func (m *middleware) createMigrationRequest(
 	m.PageAccessedByDeviceID[page.VAddr] =
 		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
-	migrationReq := vm.NewPageMigrationReqToDriver(
-		m.migrationPort.AsRemote(), m.MigrationServiceProvider)
-	migrationReq.PID = page.PID
-	migrationReq.PageSize = page.PageSize
-	migrationReq.CurrPageHostGPU = page.DeviceID
-	migrationReq.MigrationInfo = migrationInfo
-	migrationReq.CurrAccessingGPUs = unique(
-		m.PageAccessedByDeviceID[page.VAddr])
-	migrationReq.RespondToTop = true
+	migrationReq := vm.PageMigrationReqToDriver{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.migrationPort.AsRemote(),
+			Dst: m.MigrationServiceProvider,
+		},
+		PID:             page.PID,
+		PageSize:        page.PageSize,
+		CurrPageHostGPU: page.DeviceID,
+		MigrationInfo:   migrationInfo,
+		CurrAccessingGPUs: unique(
+			m.PageAccessedByDeviceID[page.VAddr]),
+		RespondToTop: true,
+	}
 
 	return migrationReq
+}
+
+func (m *middleware) traceTranslationStart(
+	req vm.TranslationReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(req),
+			ParentID: modeling.ReqOutTaskID(req),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(req).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTranslationComplete(
+	req vm.TranslationReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(req),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

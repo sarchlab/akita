@@ -7,7 +7,6 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
@@ -19,7 +18,7 @@ type Remote struct {
 	RemoteNode Node
 	RemotePort modeling.Port
 
-	Link sim.Connection
+	Link modeling.Connection
 }
 
 // Bandwidth returns the bandwidth of the link.

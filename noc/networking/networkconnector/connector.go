@@ -211,7 +211,7 @@ func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
 }
 
 type namedHookableConnection interface {
-	sim.Connection
+	modeling.Connection
 	sim.Named
 	sim.Hookable
 	modeling.Component

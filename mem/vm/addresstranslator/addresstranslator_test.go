@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
@@ -180,7 +179,7 @@ var _ = Describe("Address Translator", func() {
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			addressToPortMapper.EXPECT().Find(uint64(0x20040))
-			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
+			bottomPort.EXPECT().Send(gomock.Any()).Return(modeling.NewSendError())
 
 			madeProgress := tMiddleware.parseTranslation()
 

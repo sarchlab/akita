@@ -10,15 +10,13 @@ import (
 	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
-
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Cache", func() {
 	var (
 		mockCtrl            *gomock.Controller
 		engine              timing.Engine
-		connection          sim.Connection
+		connection          modeling.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
 		cuPort              *MockPort

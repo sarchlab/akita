@@ -106,17 +106,6 @@ func (m PageMigrationReqToDriver) GenerateRsp() modeling.Rsp {
 	return rsp
 }
 
-// NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
-func NewPageMigrationReqToDriver(
-	src, dst modeling.RemotePort,
-) *PageMigrationReqToDriver {
-	cmd := new(PageMigrationReqToDriver)
-	cmd.Src = src
-	cmd.Dst = dst
-
-	return cmd
-}
-
 // PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of
 // migration
 type PageMigrationRspFromDriver struct {

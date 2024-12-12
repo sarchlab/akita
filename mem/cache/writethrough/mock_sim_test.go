@@ -226,7 +226,7 @@ func (mr *MockPortMockRecorder) Send(arg0 interface{}) *gomock.Call {
 }
 
 // SetConnection mocks base method.
-func (m *MockPort) SetConnection(arg0 sim.Connection) {
+func (m *MockPort) SetConnection(arg0 modeling.Connection) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetConnection", arg0)
 }
