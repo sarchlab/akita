@@ -4,6 +4,7 @@ import (
 	"log"
 	"reflect"
 
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
@@ -15,31 +16,22 @@ type TrafficMsg struct {
 }
 
 // Meta returns the meta data of the message.
-func (m *TrafficMsg) Meta() *modeling.MsgMeta {
-	return &m.MsgMeta
+func (m TrafficMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
 // Clone returns cloned TrafficMsg
-func (m *TrafficMsg) Clone() modeling.Msg {
-	cloneMsg := NewTrafficMsg(m.Src, m.Dst, m.TrafficBytes)
+func (m TrafficMsg) Clone() modeling.Msg {
+	cloneMsg := m
+	cloneMsg.ID = id.Generate()
 
 	return cloneMsg
-}
-
-// NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst modeling.RemotePort, byteSize int) *TrafficMsg {
-	msg := new(TrafficMsg)
-	msg.Src = src
-	msg.Dst = dst
-	msg.TrafficBytes = byteSize
-
-	return msg
 }
 
 // StartSendEvent is an event that triggers an agent to send a message.
 type StartSendEvent struct {
 	*timing.EventBase
-	Msg *TrafficMsg
+	Msg TrafficMsg
 }
 
 // NewStartSendEvent creates a new StartSendEvent.
@@ -51,8 +43,14 @@ func NewStartSendEvent(
 ) *StartSendEvent {
 	e := new(StartSendEvent)
 	e.EventBase = timing.NewEventBase(time, src)
-	e.Msg = NewTrafficMsg(src.ToOut.AsRemote(), dst.ToOut.AsRemote(), byteSize)
-	e.Msg.Meta().TrafficClass = trafficClass
+	e.Msg = TrafficMsg{
+		MsgMeta: modeling.MsgMeta{
+			Src:          src.ToOut.AsRemote(),
+			Dst:          dst.ToOut.AsRemote(),
+			TrafficBytes: byteSize,
+			TrafficClass: trafficClass,
+		},
+	}
 
 	return e
 }
@@ -64,7 +62,7 @@ type Agent struct {
 
 	ToOut modeling.Port
 
-	Buffer []*TrafficMsg
+	Buffer []TrafficMsg
 }
 
 // NotifyRecv notifies that a port has received a message.
@@ -119,7 +117,8 @@ func (a *Agent) sendDataOut() bool {
 // NewAgent creates a new agent.
 func NewAgent(name string, engine timing.Engine) *Agent {
 	a := new(Agent)
-	a.TickingComponent = modeling.NewTickingComponent(name, engine, 1*timing.GHz, a)
+	a.TickingComponent = modeling.NewTickingComponent(
+		name, engine, 1*timing.GHz, a)
 
 	a.ToOut = modeling.NewPort(a, 4, 4, name+".ToOut")
 

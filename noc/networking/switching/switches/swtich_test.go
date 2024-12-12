@@ -7,8 +7,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
@@ -225,7 +225,7 @@ var _ = Describe("Switch", func() {
 
 		arbiter.EXPECT().
 			Arbitrate().
-			Return([]sim.Buffer{forwardBuffer1, forwardBuffer2})
+			Return([]queueing.Buffer{forwardBuffer1, forwardBuffer2})
 		forwardBuffer1.EXPECT().Peek().Return(flit)
 		forwardBuffer1.EXPECT().Peek().Return(nil)
 		forwardBuffer1.EXPECT().Pop()
@@ -253,7 +253,7 @@ var _ = Describe("Switch", func() {
 
 		arbiter.EXPECT().
 			Arbitrate().
-			Return([]sim.Buffer{forwardBuffer1, forwardBuffer2})
+			Return([]queueing.Buffer{forwardBuffer1, forwardBuffer2})
 		forwardBuffer1.EXPECT().Peek().Return(flit)
 		forwardBuffer2.EXPECT().Peek().Return(nil)
 		sendOutBuffer2.EXPECT().CanPush().Return(false)

@@ -7,8 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Bankstage", func() {
@@ -30,7 +29,7 @@ var _ = Describe("Bankstage", func() {
 		postPipelineBuf = NewMockBuffer(mockCtrl)
 		c = &Comp{
 			bankLatency:   10,
-			bankBufs:      []sim.Buffer{inBuf},
+			bankBufs:      []queueing.Buffer{inBuf},
 			storage:       storage,
 			log2BlockSize: 6,
 		}

@@ -2,7 +2,7 @@ package arbitration
 
 import (
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // NewXBarArbiter creates a new XBar arbiter.
@@ -11,18 +11,18 @@ func NewXBarArbiter() Arbiter {
 }
 
 type xbarArbiter struct {
-	buffers    []sim.Buffer
+	buffers    []queueing.Buffer
 	nextPortID int
 }
 
-func (a *xbarArbiter) AddBuffer(buf sim.Buffer) {
+func (a *xbarArbiter) AddBuffer(buf queueing.Buffer) {
 	a.buffers = append(a.buffers, buf)
 }
 
-func (a *xbarArbiter) Arbitrate() []sim.Buffer {
+func (a *xbarArbiter) Arbitrate() []queueing.Buffer {
 	startingPortID := a.nextPortID
-	selectedPort := make([]sim.Buffer, 0)
-	occupiedOutputPort := make(map[sim.Buffer]bool)
+	selectedPort := make([]queueing.Buffer, 0)
+	occupiedOutputPort := make(map[queueing.Buffer]bool)
 
 	for i := 0; i < len(a.buffers); i++ {
 		currPortID := (startingPortID + i) % len(a.buffers)

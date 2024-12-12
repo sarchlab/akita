@@ -1,7 +1,6 @@
 package messaging
 
 import (
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
@@ -13,7 +12,7 @@ type TrafficCounter struct {
 
 // Func adds the delivered traffic to the counter
 func (c *TrafficCounter) Func(ctx *hooking.HookCtx) {
-	if ctx.Pos != sim.HookPosConnDeliver {
+	if ctx.Pos != modeling.HookPosConnDeliver {
 		return
 	}
 

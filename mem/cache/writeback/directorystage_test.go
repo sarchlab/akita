@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("DirectoryStage", func() {
@@ -43,7 +43,7 @@ var _ = Describe("DirectoryStage", func() {
 		cacheModule.directory = directory
 		cacheModule.numReqPerCycle = 4
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.dirToBankBuffers = []sim.Buffer{bankBuf}
+		cacheModule.dirToBankBuffers = []queueing.Buffer{bankBuf}
 		cacheModule.addressToPortMapper = addressToPortMapper
 
 		pipeline = NewMockPipeline(mockCtrl)

@@ -72,6 +72,20 @@ func (mr *MockEngineMockRecorder) Hooks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockEngine)(nil).Hooks))
 }
 
+// Name mocks base method.
+func (m *MockEngine) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockEngineMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockEngine)(nil).Name))
+}
+
 // Now mocks base method.
 func (m *MockEngine) Now() float64 {
 	m.ctrl.T.Helper()

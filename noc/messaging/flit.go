@@ -3,9 +3,9 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // Flit is the smallest trasferring unit on a network.
@@ -14,22 +14,22 @@ type Flit struct {
 	SeqID        int
 	NumFlitInMsg int
 	Msg          modeling.Msg
-	OutputBuf    sim.Buffer // The buffer to route to within a switch
+	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
 // Meta returns the meta data associated with the Flit.
-func (f *Flit) Meta() *modeling.MsgMeta {
-	return &f.MsgMeta
+func (f Flit) Meta() modeling.MsgMeta {
+	return f.MsgMeta
 }
 
 // Clone returns cloned Flit with different ID
-func (f *Flit) Clone() modeling.Msg {
-	cloneMsg := *f
+func (f Flit) Clone() modeling.Msg {
+	cloneMsg := f
 	cloneMsg.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
 		id.Generate())
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // FlitBuilder can build flits

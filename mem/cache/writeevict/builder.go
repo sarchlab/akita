@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
@@ -148,7 +149,7 @@ func (b *Builder) Build(name string) *Comp {
 		c.Name()+".DirBuf",
 		b.numReqPerCycle,
 	)
-	c.bankBufs = make([]sim.Buffer, b.numBank)
+	c.bankBufs = make([]queueing.Buffer, b.numBank)
 
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = sim.NewBuffer(

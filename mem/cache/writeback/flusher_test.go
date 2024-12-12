@@ -5,8 +5,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Flusher", func() {
@@ -60,7 +60,7 @@ var _ = Describe("Flusher", func() {
 		cacheModule.directory = directory
 		cacheModule.mshr = mshr
 		cacheModule.dirStageBuffer = dirBuf
-		cacheModule.dirToBankBuffers = []sim.Buffer{bankBuf}
+		cacheModule.dirToBankBuffers = []queueing.Buffer{bankBuf}
 		cacheModule.mshrStageBuffer = mshrStageBuf
 		cacheModule.writeBufferBuffer = writeBufferBuf
 		cacheModule.dirStage = &directoryStage{

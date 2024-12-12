@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -20,7 +20,7 @@ type directory struct {
 	cache *Comp
 
 	pipeline pipelining.Pipeline
-	buf      sim.Buffer
+	buf      queueing.Buffer
 }
 
 func (d *directory) Tick() (madeProgress bool) {
@@ -290,7 +290,7 @@ func (d *directory) fetchFromBottom(
 	return true
 }
 
-func (d *directory) getBankBuf(block *cache.Block) sim.Buffer {
+func (d *directory) getBankBuf(block *cache.Block) queueing.Buffer {
 	numWaysPerSet := d.cache.directory.WayAssociativity()
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)

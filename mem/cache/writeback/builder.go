@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
@@ -277,12 +278,12 @@ func (b *Builder) createInternalBuffers(cache *Comp) {
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.dirToBankBuffers = make([]sim.Buffer, 1)
+	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
 	cache.dirToBankBuffers[0] = sim.NewBuffer(
 		cache.Name()+".DirToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferToBankBuffers = make([]sim.Buffer, 1)
+	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
 	cache.writeBufferToBankBuffers[0] = sim.NewBuffer(
 		cache.Name()+".WriteBufferToBankBuffer",
 		cache.numReqPerCycle,

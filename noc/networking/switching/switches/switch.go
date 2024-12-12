@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -36,13 +37,13 @@ type portComplex struct {
 
 	// The flits here are buffered after the pipeline and are waiting to be
 	// assigned with an output buffer.
-	routeBuffer sim.Buffer
+	routeBuffer queueing.Buffer
 
 	// The flits here are buffered to wait to be forwarded to the output buffer.
-	forwardBuffer sim.Buffer
+	forwardBuffer queueing.Buffer
 
 	// The flits here are waiting to be sent to the next hop.
-	sendOutBuffer sim.Buffer
+	sendOutBuffer queueing.Buffer
 
 	// NumInputChannel is the number of flits that can stream into the
 	// switch from the port. The RouteBuffer and the ForwardBuffer should

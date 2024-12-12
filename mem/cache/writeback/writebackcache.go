@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -27,11 +28,11 @@ type Comp struct {
 	bottomPort  modeling.Port
 	controlPort modeling.Port
 
-	dirStageBuffer           sim.Buffer
-	dirToBankBuffers         []sim.Buffer
-	writeBufferToBankBuffers []sim.Buffer
-	mshrStageBuffer          sim.Buffer
-	writeBufferBuffer        sim.Buffer
+	dirStageBuffer           queueing.Buffer
+	dirToBankBuffers         []queueing.Buffer
+	writeBufferToBankBuffers []queueing.Buffer
+	mshrStageBuffer          queueing.Buffer
+	writeBufferBuffer        queueing.Buffer
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage
