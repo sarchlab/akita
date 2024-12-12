@@ -431,7 +431,7 @@ var _ = Describe("TLB Integration", func() {
 			Valid: true,
 		}
 		lowModule.EXPECT().Deliver(gomock.Any()).
-			Do(func(req *vm.TranslationReq) {
+			Do(func(req vm.TranslationReq) {
 				rsp := vm.TranslationRsp{
 					MsgMeta: modeling.MsgMeta{
 						ID:  id.Generate(),

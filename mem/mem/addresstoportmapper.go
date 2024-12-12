@@ -31,7 +31,9 @@ type InterleavedAddressPortMapper struct {
 }
 
 // Find returns the low module that has the data at provided address
-func (f *InterleavedAddressPortMapper) Find(address uint64) modeling.RemotePort {
+func (f *InterleavedAddressPortMapper) Find(
+	address uint64,
+) modeling.RemotePort {
 	if f.UseAddressSpaceLimitation &&
 		(address >= f.HighAddress || address < f.LowAddress) {
 		return f.ModuleForOtherAddresses

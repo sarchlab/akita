@@ -6,14 +6,15 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type transaction struct {
 	incomingReqs    []mem.AccessReq
-	translationReq  *vm.TranslationReq
-	translationRsp  *vm.TranslationRsp
+	translationReq  vm.TranslationReq
+	translationRsp  vm.TranslationRsp
 	translationDone bool
 }
 
@@ -104,13 +105,16 @@ func (m *middleware) translate() bool {
 	vAddr := req.GetAddress()
 	vPageID := m.addrToPageID(vAddr)
 
-	transReq := vm.TranslationReqBuilder{}.
-		WithSrc(m.translationPort.AsRemote()).
-		WithDst(m.translationProvider).
-		WithPID(req.GetPID()).
-		WithVAddr(vPageID).
-		WithDeviceID(m.deviceID).
-		Build()
+	transReq := vm.TranslationReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.translationPort.AsRemote(),
+			Dst: m.translationProvider,
+		},
+		PID:      req.GetPID(),
+		VAddr:    vPageID,
+		DeviceID: m.deviceID,
+	}
 
 	err := m.translationPort.Send(transReq)
 	if err != nil {
@@ -123,12 +127,8 @@ func (m *middleware) translate() bool {
 	}
 	m.transactions = append(m.transactions, translation)
 
-	tracing.TraceReqReceive(req, m.Comp)
-	tracing.TraceReqInitiate(
-		transReq,
-		m.Comp,
-		tracing.MsgIDAtReceiver(req, m.Comp),
-	)
+	m.traceTransactionStart(req)
+	m.traceTranslationStart(req, transReq)
 
 	m.topPort.RetrieveIncoming()
 
@@ -141,7 +141,7 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
-	transRsp := rsp.(*vm.TranslationRsp)
+	transRsp := rsp.(vm.TranslationRsp)
 	transaction := m.findTranslationByReqID(transRsp.RespondTo)
 
 	if transaction == nil {
@@ -174,9 +174,8 @@ func (m *middleware) parseTranslation() bool {
 
 	m.translationPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(transaction.translationReq, m.Comp)
-	tracing.TraceReqInitiate(translatedReq, m.Comp,
-		tracing.MsgIDAtReceiver(reqFromTop, m.Comp))
+	m.traceTranslationEnd(transaction.translationReq)
+	m.traceMemAccessStart(reqFromTop, translatedReq)
 
 	return true
 }
@@ -197,29 +196,35 @@ func (m *middleware) respond() bool {
 	reqInBottom := false
 
 	switch rsp := rsp.(type) {
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
 		if reqInBottom {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
-			drToTop := mem.DataReadyRspBuilder{}.
-				WithSrc(m.topPort.AsRemote()).
-				WithDst(reqFromTop.Meta().Src).
-				WithRspTo(reqFromTop.Meta().ID).
-				WithData(rsp.Data).
-				Build()
+			drToTop := mem.DataReadyRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: m.topPort.AsRemote(),
+					Dst: reqFromTop.Meta().Src,
+				},
+				RespondTo: reqFromTop.Meta().ID,
+				Data:      rsp.Data,
+			}
 			rspToTop = drToTop
 		}
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
 		if reqInBottom {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RespondTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
-			rspToTop = mem.WriteDoneRspBuilder{}.
-				WithSrc(m.topPort.AsRemote()).
-				WithDst(reqFromTop.Meta().Src).
-				WithRspTo(reqFromTop.Meta().ID).
-				Build()
+			rspToTop = mem.WriteDoneRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: m.topPort.AsRemote(),
+					Dst: reqFromTop.Meta().Src,
+				},
+				RespondTo: reqFromTop.Meta().ID,
+			}
 		}
 	default:
 		log.Panicf("cannot handle respond of type %s", reflect.TypeOf(rsp))
@@ -233,8 +238,8 @@ func (m *middleware) respond() bool {
 
 		m.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
 
-		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, m.Comp)
-		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, m.Comp)
+		m.traceMemAccessEnd(reqToBottomCombo.reqToBottom)
+		m.traceTransactionEnd(reqFromTop)
 	}
 
 	m.bottomPort.RetrieveIncoming()
@@ -247,9 +252,9 @@ func (m *middleware) createTranslatedReq(
 	page vm.Page,
 ) mem.AccessReq {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		return m.createTranslatedReadReq(req, page)
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		return m.createTranslatedWriteReq(req, page)
 	default:
 		log.Panicf("cannot translate request of type %s", reflect.TypeOf(req))
@@ -258,39 +263,45 @@ func (m *middleware) createTranslatedReq(
 }
 
 func (m *middleware) createTranslatedReadReq(
-	req *mem.ReadReq,
+	req mem.ReadReq,
 	page vm.Page,
-) *mem.ReadReq {
+) mem.ReadReq {
 	offset := req.Address % (1 << m.log2PageSize)
 	addr := page.PAddr + offset
-	clone := mem.ReadReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressToPortMapper.Find(addr)).
-		WithAddress(addr).
-		WithByteSize(req.AccessByteSize).
-		WithPID(0).
-		WithInfo(req.Info).
-		Build()
+	clone := mem.ReadReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.bottomPort.AsRemote(),
+			Dst: m.addressToPortMapper.Find(addr),
+		},
+		Address:        addr,
+		AccessByteSize: req.AccessByteSize,
+		PID:            0,
+		Info:           req.Info,
+	}
 	clone.CanWaitForCoalesce = req.CanWaitForCoalesce
 
 	return clone
 }
 
 func (m *middleware) createTranslatedWriteReq(
-	req *mem.WriteReq,
+	req mem.WriteReq,
 	page vm.Page,
-) *mem.WriteReq {
+) mem.WriteReq {
 	offset := req.Address % (1 << m.log2PageSize)
 	addr := page.PAddr + offset
-	clone := mem.WriteReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressToPortMapper.Find(addr)).
-		WithData(req.Data).
-		WithDirtyMask(req.DirtyMask).
-		WithAddress(addr).
-		WithPID(0).
-		WithInfo(req.Info).
-		Build()
+	clone := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.bottomPort.AsRemote(),
+			Dst: m.addressToPortMapper.Find(addr),
+		},
+		Data:      req.Data,
+		DirtyMask: req.DirtyMask,
+		Address:   addr,
+		PID:       0,
+		Info:      req.Info,
+	}
 	clone.CanWaitForCoalesce = req.CanWaitForCoalesce
 
 	return clone
@@ -361,9 +372,9 @@ func (m *middleware) handleCtrlRequest() bool {
 		return false
 	}
 
-	msg := req.(*mem.ControlMsg)
+	msg := req.(mem.ControlMsg)
 
-	if msg.DiscardTransations {
+	if msg.DiscardTransactions {
 		return m.handleFlushReq(msg)
 	} else if msg.Restart {
 		return m.handleRestartReq(msg)
@@ -373,13 +384,16 @@ func (m *middleware) handleCtrlRequest() bool {
 }
 
 func (m *middleware) handleFlushReq(
-	req *mem.ControlMsg,
+	req mem.ControlMsg,
 ) bool {
-	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(m.ctrlPort.AsRemote()).
-		WithDst(req.Src).
-		ToNotifyDone().
-		Build()
+	rsp := mem.ControlMsg{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.ctrlPort.AsRemote(),
+			Dst: req.Src,
+		},
+		NotifyDone: true,
+	}
 
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
@@ -396,13 +410,16 @@ func (m *middleware) handleFlushReq(
 }
 
 func (m *middleware) handleRestartReq(
-	req *mem.ControlMsg,
+	req mem.ControlMsg,
 ) bool {
-	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(m.ctrlPort.AsRemote()).
-		WithDst(req.Src).
-		ToNotifyDone().
-		Build()
+	rsp := mem.ControlMsg{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.ctrlPort.AsRemote(),
+			Dst: req.Src,
+		},
+		NotifyDone: true,
+	}
 
 	err := m.ctrlPort.Send(rsp)
 
@@ -424,4 +441,92 @@ func (m *middleware) handleRestartReq(
 	m.ctrlPort.RetrieveIncoming()
 
 	return true
+}
+
+func (m *middleware) traceTransactionStart(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(req),
+			ParentID: modeling.ReqInTaskID(req),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(req).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTransactionEnd(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqInTaskID(req),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTranslationStart(
+	req mem.AccessReq,
+	transReq vm.TranslationReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqOutTaskID(transReq),
+			ParentID: modeling.ReqInTaskID(req),
+			Kind:     "req_out",
+			What:     reflect.TypeOf(transReq).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTranslationEnd(
+	transReq vm.TranslationReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(transReq),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceMemAccessStart(
+	reqFromTop, reqToBottom mem.AccessReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqOutTaskID(reqToBottom),
+			ParentID: modeling.ReqInTaskID(reqFromTop),
+			Kind:     "req_out",
+			What:     reflect.TypeOf(reqToBottom).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceMemAccessEnd(reqToBottom mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(reqToBottom),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

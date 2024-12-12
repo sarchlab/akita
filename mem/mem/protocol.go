@@ -6,10 +6,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
-var accessReqByteOverhead = 12
-var accessRspByteOverhead = 4
-var controlMsgByteOverhead = 4
-
 // AccessReq abstracts read and write requests that are sent to the
 // cache modules or memory controllers.
 type AccessReq interface {
@@ -192,9 +188,9 @@ func (r WriteDoneRsp) GetRspTo() string {
 type ControlMsg struct {
 	modeling.MsgMeta
 
-	DiscardTransations bool
-	Restart            bool
-	NotifyDone         bool
+	DiscardTransactions bool
+	Restart             bool
+	NotifyDone          bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
