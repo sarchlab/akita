@@ -26,7 +26,7 @@ type bankStage struct {
 }
 
 type bufferImpl struct {
-	sim.HookableBase
+	hooking.HookableBase
 
 	name     string
 	capacity int

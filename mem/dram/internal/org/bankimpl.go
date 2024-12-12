@@ -2,7 +2,7 @@ package org
 
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -20,7 +20,7 @@ const (
 
 // BankImpl provides a basic implementation of a bank.
 type BankImpl struct {
-	sim.HookableBase
+	hooking.HookableBase
 	BankName             string
 	state                BankState
 	currentCmd           *signal.Command

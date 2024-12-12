@@ -1,7 +1,6 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
@@ -26,118 +25,28 @@ type DataMoveRequest struct {
 }
 
 // Meta returns the metadata of the message
-func (req *DataMoveRequest) Meta() *modeling.MsgMeta {
-	return &req.MsgMeta
+func (req DataMoveRequest) Meta() modeling.MsgMeta {
+	return req.MsgMeta
 }
 
 // Clone creates a deep copy of the DataMoveRequest with a new ID
-func (req *DataMoveRequest) Clone() modeling.Msg {
-	b := MakeDataMoveRequestBuilder().
-		WithSrc(req.Src).
-		WithDst(req.Dst).
-		WithDstAddress(req.DstAddress).
-		WithSrcAddress(req.SrcAddress).
-		WithSrcSide(req.SrcSide).
-		WithDstSide(req.DstSide).
-		WithByteSize(req.ByteSize)
+func (req DataMoveRequest) Clone() modeling.Msg {
+	cloneMsg := req
+	cloneMsg.ID = id.Generate()
 
-	return b.Build()
+	return cloneMsg
 }
 
 // GenerateRsp creates a response message for the request.
-func (req *DataMoveRequest) GenerateRsp() modeling.Msg {
-	rsp := sim.GeneralRspBuilder{}.
-		WithSrc(req.Dst).
-		WithDst(req.Src).
-		WithOriginalReq(req).
-		Build()
+func (req DataMoveRequest) GenerateRsp() modeling.Msg {
+	rsp := modeling.GeneralRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: req.Dst,
+			Dst: req.Src,
+			ID:  id.Generate(),
+		},
+		OriginalReq: req,
+	}
 
 	return rsp
-}
-
-// DataMoveRequestBuilder can build new data move requests
-type DataMoveRequestBuilder struct {
-	src, dst   modeling.RemotePort
-	srcAddress uint64
-	dstAddress uint64
-	byteSize   uint64
-	srcSide    DateMovePort
-	dstSide    DateMovePort
-}
-
-// MakeDataMoveRequestBuilder creates a new DataMoveRequestBuilder
-func MakeDataMoveRequestBuilder() DataMoveRequestBuilder {
-	return DataMoveRequestBuilder{}
-}
-
-// WithSrc sets the source port of the message.
-func (b DataMoveRequestBuilder) WithSrc(
-	inputSrc modeling.RemotePort,
-) DataMoveRequestBuilder {
-	b.src = inputSrc
-	return b
-}
-
-// WithDst sets the destination port of the message. It should be the CtrlPort
-// of the DataMover.
-func (b DataMoveRequestBuilder) WithDst(
-	inputDst modeling.RemotePort,
-) DataMoveRequestBuilder {
-	b.dst = inputDst
-	return b
-}
-
-// WithSrcAddress sets the source address of the data to be moved.
-func (b DataMoveRequestBuilder) WithSrcAddress(
-	inputSrcAddress uint64,
-) DataMoveRequestBuilder {
-	b.srcAddress = inputSrcAddress
-	return b
-}
-
-// WithDstAddress sets the destination address of the data to be moved.
-func (b DataMoveRequestBuilder) WithDstAddress(
-	inputDstAddress uint64,
-) DataMoveRequestBuilder {
-	b.dstAddress = inputDstAddress
-	return b
-}
-
-// WithDstSide sets the destination side of the data to be moved.
-func (b DataMoveRequestBuilder) WithDstSide(
-	side DateMovePort,
-) DataMoveRequestBuilder {
-	b.dstSide = side
-	return b
-}
-
-// WithSrcSide sets the source side of the data to be moved.
-func (b DataMoveRequestBuilder) WithSrcSide(
-	side DateMovePort,
-) DataMoveRequestBuilder {
-	b.srcSide = side
-	return b
-}
-
-// WithByteSize sets the byte size of the data to be moved.
-func (b DataMoveRequestBuilder) WithByteSize(
-	inputByteSize uint64,
-) DataMoveRequestBuilder {
-	b.byteSize = inputByteSize
-	return b
-}
-
-// Build creates a new DataMoveRequest.
-func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
-	r := &DataMoveRequest{}
-	r.ID = id.Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.SrcAddress = b.srcAddress
-	r.DstAddress = b.dstAddress
-	r.ByteSize = b.byteSize
-	r.SrcSide = b.srcSide
-	r.DstSide = b.dstSide
-
-	return r
 }
