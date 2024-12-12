@@ -5,18 +5,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 type sampleMsg struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m *sampleMsg) Meta() *sim.MsgMeta {
+func (m *sampleMsg) Meta() *modeling.MsgMeta {
 	return &m.MsgMeta
 }
 
-func (m *sampleMsg) Clone() sim.Msg {
+func (m *sampleMsg) Clone() modeling.Msg {
 	return m
 }
 
@@ -36,17 +36,17 @@ var _ = Describe("End Point", func() {
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("DevicePort")).
+			Return(modeling.RemotePort("DevicePort")).
 			AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
 		networkPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("NetworkPort")).
+			Return(modeling.RemotePort("NetworkPort")).
 			AnyTimes()
 		defaultSwitchPort = NewMockPort(mockCtrl)
 		defaultSwitchPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("DefaultSwitchPort")).
+			Return(modeling.RemotePort("DefaultSwitchPort")).
 			AnyTimes()
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
@@ -55,7 +55,7 @@ var _ = Describe("End Point", func() {
 			WithEngine(engine).
 			WithFreq(1).
 			WithFlitByteSize(32).
-			WithDevicePorts([]sim.Port{devicePort}).
+			WithDevicePorts([]modeling.Port{devicePort}).
 			Build("EndPoint")
 		endPoint.NetworkPort = networkPort
 		endPoint.DefaultSwitchDst = defaultSwitchPort.AsRemote()

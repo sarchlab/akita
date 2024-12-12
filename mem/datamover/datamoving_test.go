@@ -8,6 +8,8 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // type dataMoverLogger struct{}
@@ -27,7 +29,7 @@ import (
 var _ = Describe("DataMover", func() {
 	var (
 		mockCtrl  *gomock.Controller
-		engine    sim.Engine
+		engine    timing.Engine
 		dataMover *Comp
 		// logger     *dataMoverLogger
 		insideMem  *idealmemcontroller.Comp
@@ -39,20 +41,20 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
+		srcPort.EXPECT().AsRemote().Return(modeling.RemotePort("SrcPort")).AnyTimes()
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
 			Build("InsideMem")
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
 			Build("OutsideMem")
@@ -74,7 +76,7 @@ var _ = Describe("DataMover", func() {
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.ctrlPort)

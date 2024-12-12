@@ -7,12 +7,12 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type msgToAssemble struct {
-	msg             sim.Msg
+	msg             modeling.Msg
 	numFlitRequired int
 	numFlitArrived  int
 }
@@ -20,33 +20,33 @@ type msgToAssemble struct {
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	NetworkPort      sim.Port
-	DevicePorts      []sim.Port
-	DefaultSwitchDst sim.RemotePort
+	NetworkPort      modeling.Port
+	DevicePorts      []modeling.Port
+	DefaultSwitchDst modeling.RemotePort
 
 	numInputChannels  int
 	numOutputChannels int
 	flitByteSize      int
 	encodingOverhead  float64
-	msgOutBuf         []sim.Msg
+	msgOutBuf         []modeling.Msg
 	flitsToSend       []*messaging.Flit
 
 	assemblingMsgTable map[string]*list.Element
 	assemblingMsgs     *list.List
-	assembledMsgs      []sim.Msg
+	assembledMsgs      []modeling.Msg
 }
 
 // PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port sim.Port) {
+func (c *Comp) PlugIn(port modeling.Port) {
 	port.SetConnection(c)
 	c.DevicePorts = append(c.DevicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (c *Comp) NotifyAvailable(_ sim.Port) {
+func (c *Comp) NotifyAvailable(_ modeling.Port) {
 	c.TickLater()
 }
 
@@ -57,7 +57,7 @@ func (c *Comp) NotifySend() {
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (c *Comp) Unplug(_ sim.Port) {
+func (c *Comp) Unplug(_ modeling.Port) {
 	panic("not implemented")
 }
 
@@ -90,7 +90,7 @@ func (m *middleware) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flit sim.Msg) string {
+func (m *middleware) flitTaskID(flit modeling.Msg) string {
 	return fmt.Sprintf("%s_e2e", flit.Meta().ID)
 }
 
@@ -109,7 +109,7 @@ func (m *middleware) sendFlitOut() bool {
 			m.flitsToSend = m.flitsToSend[1:]
 
 			// fmt.Printf("%.10f, %s, ep send flit, %s, %d\n",
-			// 	c.Engine.CurrentTime(), c.Name(),
+			// 	c.Engine.Now(), c.Name(),
 			// 	flit.Meta().ID, len(c.flitsToSend))
 
 			if len(m.flitsToSend) == 0 {
@@ -160,7 +160,7 @@ func (m *middleware) prepareFlits() bool {
 		m.flitsToSend = append(m.flitsToSend, flits...)
 
 		// fmt.Printf("%.10f, %s, ep create flit, msg-%s, %d, %d\n",
-		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID, len(flits),
+		// 	c.Engine.Now(), c.Name(), msg.Meta().ID, len(flits),
 		// 	len(c.flitsToSend))
 
 		for _, flit := range flits {
@@ -229,7 +229,7 @@ func (m *middleware) assemble() bool {
 		e = next
 
 		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
-		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)
+		// 	c.Engine.Now(), c.Name(), assemblingMsg.msg.Meta().ID)
 
 		madeProgress = true
 	}
@@ -244,7 +244,7 @@ func (m *middleware) tryDeliver() bool {
 		msg := m.assembledMsgs[0]
 		dst := msg.Meta().Dst
 
-		var dstPort sim.Port
+		var dstPort modeling.Port
 
 		for _, port := range m.DevicePorts {
 			if port.AsRemote() == dst {
@@ -292,12 +292,12 @@ func (m *middleware) logFlitE2ETask(flit *messaging.Flit, isEnd bool) {
 	)
 }
 
-func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
+func (m *middleware) logMsgE2ETask(msg modeling.Msg, isEnd bool) {
 	if m.Comp.NumHooks() == 0 {
 		return
 	}
 
-	rsp, isRsp := msg.(sim.Rsp)
+	rsp, isRsp := msg.(modeling.Rsp)
 	if isRsp {
 		m.logMsgRsp(isEnd, rsp)
 		return
@@ -306,7 +306,7 @@ func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 	m.logMsgReq(isEnd, msg)
 }
 
-func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
+func (m *middleware) logMsgReq(isEnd bool, msg modeling.Msg) {
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(msg.Meta().ID), m.Comp)
 	} else {
@@ -318,7 +318,7 @@ func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
 	}
 }
 
-func (m *middleware) logMsgRsp(isEnd bool, rsp sim.Rsp) {
+func (m *middleware) logMsgRsp(isEnd bool, rsp modeling.Rsp) {
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(rsp.Meta().ID), m.Comp)
 	} else {
@@ -330,7 +330,7 @@ func (m *middleware) logMsgRsp(isEnd bool, rsp sim.Rsp) {
 	}
 }
 
-func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
+func (m *middleware) msgToFlits(msg modeling.Msg) []*messaging.Flit {
 	numFlit := 1
 
 	if msg.Meta().TrafficBytes > 0 {

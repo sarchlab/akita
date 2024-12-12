@@ -60,6 +60,11 @@ func NewParallelEngine() *ParallelEngine {
 	return e
 }
 
+// Name returns the name of the engine.
+func (e *ParallelEngine) Name() string {
+	return "ParallelEngine"
+}
+
 // func (e *ParallelEngine) spawnWorkers() {
 // 	for i := 0; i < e.maxGoRoutine; i++ {
 // 		go e.worker()

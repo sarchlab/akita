@@ -8,15 +8,16 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // Remote records the link between two nodes.
 type Remote struct {
 	LocalNode Node
-	LocalPort sim.Port
+	LocalPort modeling.Port
 
 	RemoteNode Node
-	RemotePort sim.Port
+	RemotePort modeling.Port
 
 	Link sim.Connection
 }
@@ -58,7 +59,7 @@ func (sn *switchNode) Table() routing.Table {
 }
 
 type deviceNode struct {
-	ports    []sim.Port
+	ports    []modeling.Port
 	endPoint *endpoint.Comp
 	sw       *switchNode
 	remote   Remote

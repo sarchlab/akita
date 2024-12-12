@@ -4,20 +4,20 @@ package {{packageName}}
 import "github.com/sarchlab/akita/v4/sim"
 
 type Builder struct {
-	engine sim.Engine
-	freq   sim.Freq
+	engine timing.Engine
+	freq   timing.Freq
 }
 
 func MakeBuilder() Builder {
 	return Builder{}
 }
 
-func (b Builder) WithEngine(e sim.Engine) Builder {
+func (b Builder) WithEngine(e timing.Engine) Builder {
 	b.engine = e
 	return b
 }
 
-func (b Builder) WithFreq(f sim.Freq) Builder {
+func (b Builder) WithFreq(f timing.Freq) Builder {
 	b.freq = f
 	return b
 }

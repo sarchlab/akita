@@ -12,11 +12,11 @@
             "program": "${workspaceFolder}/monitoring"
         },
         {
-            "name": "Test github.com/sarchlab/akita/v4/sim",
+            "name": "Test github.com/sarchlab/akita/v4/sim/hooking",
             "type": "go",
             "request": "launch",
             "mode": "test",
-            "program": "${workspaceFolder}/sim"
+            "program": "${workspaceFolder}/sim/hooking"
         },
         {
             "name": "Test github.com/sarchlab/akita/v4/sim/directconnection",

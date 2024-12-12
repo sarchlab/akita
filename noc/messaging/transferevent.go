@@ -1,23 +1,26 @@
 package messaging
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
+)
 
 // A TransferEvent is an event that marks that a message completes transfer.
 type TransferEvent struct {
-	*sim.EventBase
-	msg sim.Msg
+	*timing.EventBase
+	msg modeling.Msg
 	vc  int
 }
 
 // NewTransferEvent creates a new TransferEvent.
 func NewTransferEvent(
-	time sim.VTimeInSec,
-	handler sim.Handler,
-	msg sim.Msg,
+	time timing.VTimeInSec,
+	handler timing.Handler,
+	msg modeling.Msg,
 	vc int,
 ) *TransferEvent {
 	evt := new(TransferEvent)
-	evt.EventBase = sim.NewEventBase(time, handler)
+	evt.EventBase = timing.NewEventBase(time, handler)
 	evt.msg = msg
 	evt.vc = vc
 

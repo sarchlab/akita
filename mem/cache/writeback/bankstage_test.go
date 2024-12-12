@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -40,7 +41,7 @@ var _ = Describe("Bank Stage", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 
 		builder := MakeBuilder()

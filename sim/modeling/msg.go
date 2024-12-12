@@ -54,3 +54,15 @@ func (r GeneralRsp) Clone() Msg {
 func (r GeneralRsp) GetRspTo() string {
 	return r.OriginalReq.Meta().ID
 }
+
+// ReqOutTaskID returns the ID of the task that is created when a request is
+// sent out.
+func ReqOutTaskID(req Msg) string {
+	return "req_out_" + req.Meta().ID
+}
+
+// ReqInTaskID returns the ID of the task that is created when a request is
+// received.
+func ReqInTaskID(req Msg) string {
+	return "req_in_" + req.Meta().ID
+}

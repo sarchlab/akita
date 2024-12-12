@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -24,10 +25,10 @@ func (f flitPipelineItem) TaskID() string {
 // A portComplex is the infrastructure related to a port.
 type portComplex struct {
 	// localPort is the port that is equipped on the switch.
-	localPort sim.Port
+	localPort modeling.Port
 
 	// remotePort is the port that is connected to the localPort.
-	remotePort sim.RemotePort
+	remotePort modeling.RemotePort
 
 	// Data arrived at the local port needs to be processed in a pipeline. There
 	// is a processing pipeline for each local port.
@@ -56,11 +57,11 @@ type portComplex struct {
 
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	ports                []sim.Port
-	portToComplexMapping map[sim.RemotePort]portComplex
+	ports                []modeling.Port
+	portToComplexMapping map[modeling.RemotePort]portComplex
 	routingTable         routing.Table
 	arbiter              arbitration.Arbiter
 }
@@ -176,7 +177,7 @@ func (m *middleware) route() (madeProgress bool) {
 			forwardBuf.Push(flit)
 
 			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
-			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
+			// 	c.Engine.Now(), c.Name(), flit.ID)
 
 			madeProgress = true
 		}
@@ -264,8 +265,8 @@ func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
 	sw               *Comp
-	localPort        sim.Port
-	remotePort       sim.Port
+	localPort        modeling.Port
+	remotePort       modeling.Port
 	latency          int
 	numInputChannel  int
 	numOutputChannel int
@@ -284,7 +285,7 @@ func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
 
 // WithPorts defines the ports to add. The local port is part of the switch.
 // The remote port is the port on an endpoint or on another switch.
-func (a SwitchPortAdder) WithPorts(local, remote sim.Port) SwitchPortAdder {
+func (a SwitchPortAdder) WithPorts(local, remote modeling.Port) SwitchPortAdder {
 	a.localPort = local
 	a.remotePort = remote
 

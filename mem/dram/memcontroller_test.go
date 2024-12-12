@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("MemController", func() {
@@ -29,7 +29,7 @@ var _ = Describe("MemController", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
+		topPort.EXPECT().AsRemote().Return(modeling.RemotePort("TopPort")).AnyTimes()
 
 		subTransactionQueue = NewMockSubTransactionQueue(mockCtrl)
 		subTransSplitter = NewMockSubTransSplitter(mockCtrl)

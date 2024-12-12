@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"os"
 	"time"
@@ -27,19 +28,19 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var traceFileFlag = flag.String("trace", "", "Trace file")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-func setupTest() (sim.Engine, *acceptancetests.MemAccessAgent) {
-	var engine sim.Engine
+func setupTest() (timing.Engine, *acceptancetests.MemAccessAgent) {
+	var engine timing.Engine
 	if *parallelFlag {
-		engine = sim.NewParallelEngine()
+		engine = timing.NewParallelEngine()
 	} else {
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 	}
 
 	engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent := acceptancetests.NewMemAccessAgent(engine)

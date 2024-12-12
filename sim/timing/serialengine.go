@@ -35,6 +35,11 @@ func NewSerialEngine() *SerialEngine {
 	return e
 }
 
+// Name returns the name of the engine.
+func (e *SerialEngine) Name() string {
+	return "SerialEngine"
+}
+
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
 	now := e.readNow()

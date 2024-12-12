@@ -6,7 +6,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func TestNetworkconnector(t *testing.T) {
@@ -16,17 +17,17 @@ func TestNetworkconnector(t *testing.T) {
 
 var _ = Describe("Connector", func() {
 	It("should establish route in a simple network", func() {
-		engine := sim.NewSerialEngine()
+		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
-			WithDefaultFreq(1 * sim.GHz)
+			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
-			connector.ConnectDevice(0, []sim.Port{port},
+			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			connector.ConnectDevice(0, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
 						IncomingBufSize: 1,
@@ -41,7 +42,7 @@ var _ = Describe("Connector", func() {
 					},
 					LinkParam: LinkParameter{
 						IsIdeal:       true,
-						Frequency:     1 * sim.GHz,
+						Frequency:     1 * timing.GHz,
 						NumStage:      0,
 						CyclePerStage: 0,
 						PipelineWidth: 0,
@@ -53,10 +54,10 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a small tree", func() {
-		engine := sim.NewSerialEngine()
+		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
-			WithDefaultFreq(1 * sim.GHz)
+			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
 		for i := 0; i < 3; i++ {
@@ -64,8 +65,8 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
-			connector.ConnectDevice(1+i, []sim.Port{port},
+			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			connector.ConnectDevice(1+i, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
 						IncomingBufSize: 1,
@@ -80,7 +81,7 @@ var _ = Describe("Connector", func() {
 					},
 					LinkParam: LinkParameter{
 						IsIdeal:       true,
-						Frequency:     1 * sim.GHz,
+						Frequency:     1 * timing.GHz,
 						NumStage:      0,
 						CyclePerStage: 0,
 						PipelineWidth: 0,
@@ -107,7 +108,7 @@ var _ = Describe("Connector", func() {
 					},
 					LinkParam: LinkParameter{
 						IsIdeal:       true,
-						Frequency:     1 * sim.GHz,
+						Frequency:     1 * timing.GHz,
 						NumStage:      0,
 						CyclePerStage: 0,
 						PipelineWidth: 0,
@@ -119,10 +120,10 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a large tree", func() {
-		engine := sim.NewSerialEngine()
+		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
-			WithDefaultFreq(1 * sim.GHz)
+			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
 		for i := 0; i < 16; i++ {
@@ -130,8 +131,8 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := sim.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
-			connector.ConnectDevice(8+i, []sim.Port{port},
+			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			connector.ConnectDevice(8+i, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
 						IncomingBufSize: 1,
@@ -146,7 +147,7 @@ var _ = Describe("Connector", func() {
 					},
 					LinkParam: LinkParameter{
 						IsIdeal:       true,
-						Frequency:     1 * sim.GHz,
+						Frequency:     1 * timing.GHz,
 						NumStage:      0,
 						CyclePerStage: 0,
 						PipelineWidth: 0,
@@ -173,7 +174,7 @@ var _ = Describe("Connector", func() {
 					},
 					LinkParam: LinkParameter{
 						IsIdeal:       true,
-						Frequency:     1 * sim.GHz,
+						Frequency:     1 * timing.GHz,
 						NumStage:      0,
 						CyclePerStage: 0,
 						PipelineWidth: 0,

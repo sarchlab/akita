@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Coalescer", func() {
@@ -28,7 +28,7 @@ var _ = Describe("Coalescer", func() {
 			dirBuf:                dirBuf,
 			maxNumConcurrentTrans: 32,
 		}
-		cache.TickingComponent = sim.NewTickingComponent(
+		cache.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, cache)
 		c = coalescer{cache: cache}
 	})

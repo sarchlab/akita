@@ -5,18 +5,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 type SampleMsg struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m *SampleMsg) Meta() *sim.MsgMeta {
+func (m *SampleMsg) Meta() *modeling.MsgMeta {
 	return &m.MsgMeta
 }
 
-func (m *SampleMsg) Clone() sim.Msg {
+func (m *SampleMsg) Clone() modeling.Msg {
 	return m
 }
 

@@ -7,6 +7,8 @@ import (
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 var _ = Describe("MMU", func() {
@@ -29,12 +31,12 @@ var _ = Describe("MMU", func() {
 
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 
 		migrationPort = NewMockPort(mockCtrl)
 		migrationPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("MigrationPort")).
+			Return(modeling.RemotePort("MigrationPort")).
 			AnyTimes()
 
 		builder := MakeBuilder().WithEngine(engine)
@@ -43,7 +45,7 @@ var _ = Describe("MMU", func() {
 		mmu.migrationPort = migrationPort
 		mmu.pageTable = pageTable
 		mmu.MigrationServiceProvider =
-			sim.RemotePort("MigrationServiceProvider")
+			modeling.RemotePort("MigrationServiceProvider")
 
 		mmuMiddleware = mmu.Middlewares()[0].(*middleware)
 	})
@@ -372,7 +374,7 @@ var _ = Describe("MMU", func() {
 var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
-		engine     sim.Engine
+		engine     timing.Engine
 		mmu        *Comp
 		agent      *MockPort
 		connection sim.Connection
@@ -380,18 +382,18 @@ var _ = Describe("MMU Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 
 		builder := MakeBuilder().WithEngine(engine)
 		mmu = builder.Build("MMU")
 
 		agent = NewMockPort(mockCtrl)
 		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		agent.EXPECT().AsRemote().Return(sim.RemotePort("Agent")).AnyTimes()
+		agent.EXPECT().AsRemote().Return(modeling.RemotePort("Agent")).AnyTimes()
 
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 
 		agent.EXPECT().SetConnection(connection)

@@ -4,16 +4,17 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort     modeling.Port
+	bottomPort  modeling.Port
+	controlPort modeling.Port
 
 	numReqPerCycle      int
 	log2BlockSize       uint64

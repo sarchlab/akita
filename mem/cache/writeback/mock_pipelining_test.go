@@ -99,7 +99,7 @@ func (mr *MockPipelineMockRecorder) Hooks() *gomock.Call {
 }
 
 // InvokeHook mocks base method.
-func (m *MockPipeline) InvokeHook(arg0 sim.HookCtx) {
+func (m *MockPipeline) InvokeHook(arg0 hooking.HookCtx) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "InvokeHook", arg0)
 }

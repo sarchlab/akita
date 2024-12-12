@@ -1,6 +1,8 @@
 package timing
 
-import "github.com/sarchlab/akita/v4/sim/hooking"
+import (
+	"github.com/sarchlab/akita/v4/sim/hooking"
+)
 
 // TimeTeller can be used to get the current time.
 type TimeTeller interface {

@@ -5,6 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
@@ -13,8 +15,8 @@ import (
 
 // A Builder can build an writearound cache
 type Builder struct {
-	engine                sim.Engine
-	freq                  sim.Freq
+	engine                timing.Engine
+	freq                  timing.Freq
 	log2BlockSize         uint64
 	totalByteSize         uint64
 	wayAssociativity      int
@@ -31,7 +33,7 @@ type Builder struct {
 // NewBuilder creates a builder with default parameter setting
 func NewBuilder() *Builder {
 	return &Builder{
-		freq:                  1 * sim.GHz,
+		freq:                  1 * timing.GHz,
 		log2BlockSize:         6,
 		totalByteSize:         4 * mem.KB,
 		wayAssociativity:      2,
@@ -45,13 +47,13 @@ func NewBuilder() *Builder {
 }
 
 // WithEngine sets the event driven simulation engine that the cache uses
-func (b *Builder) WithEngine(engine sim.Engine) *Builder {
+func (b *Builder) WithEngine(engine timing.Engine) *Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the cache works at
-func (b *Builder) WithFreq(freq sim.Freq) *Builder {
+func (b *Builder) WithFreq(freq timing.Freq) *Builder {
 	b.freq = freq
 	return b
 }
@@ -137,7 +139,7 @@ func (b *Builder) Build(name string) *Comp {
 		log2BlockSize:  b.log2BlockSize,
 		numReqPerCycle: b.numReqPerCycle,
 	}
-	c.TickingComponent = sim.NewTickingComponent(
+	c.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, c)
 
 	b.createPorts(c)
@@ -180,15 +182,15 @@ func (b *Builder) Build(name string) *Comp {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
+	cache.topPort = modeling.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".TopPort")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
+	cache.bottomPort = modeling.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
+	cache.controlPort = modeling.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
 }

@@ -8,6 +8,8 @@ import (
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -15,7 +17,7 @@ import (
 var _ = Describe("Cache", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		engine              sim.Engine
+		engine              timing.Engine
 		connection          sim.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
@@ -27,12 +29,12 @@ var _ = Describe("Cache", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		cuPort = NewMockPort(mockCtrl)
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("CuPort")).AnyTimes()
+		cuPort.EXPECT().AsRemote().Return(modeling.RemotePort("CuPort")).AnyTimes()
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
@@ -119,7 +121,7 @@ var _ = Describe("Cache", func() {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
 		engine.Run()
-		t1 := engine.CurrentTime()
+		t1 := engine.Now()
 
 		read2 := mem.ReadReqBuilder{}.
 			WithSrc(cuPort.AsRemote()).
@@ -133,7 +135,7 @@ var _ = Describe("Cache", func() {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 		engine.Run()
-		t2 := engine.CurrentTime()
+		t2 := engine.Now()
 
 		Expect(t2 - t1).To(BeNumerically("<", t1))
 	})

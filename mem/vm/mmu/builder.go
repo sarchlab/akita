@@ -2,16 +2,17 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder can build MMU component
 type Builder struct {
-	engine                   sim.Engine
-	freq                     sim.Freq
+	engine                   timing.Engine
+	freq                     timing.Freq
 	log2PageSize             uint64
 	pageTable                vm.PageTable
-	migrationServiceProvider sim.RemotePort
+	migrationServiceProvider modeling.RemotePort
 	maxNumReqInFlight        int
 	pageWalkingLatency       int
 }
@@ -19,20 +20,20 @@ type Builder struct {
 // MakeBuilder creates a new builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:              1 * sim.GHz,
+		freq:              1 * timing.GHz,
 		log2PageSize:      12,
 		maxNumReqInFlight: 16,
 	}
 }
 
 // WithEngine sets the engine to be used with the MMU
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the MMU to work at
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -51,7 +52,7 @@ func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 
 // WithMigrationServiceProvider sets the destination port that can perform
 // page migration.
-func (b Builder) WithMigrationServiceProvider(p sim.RemotePort) Builder {
+func (b Builder) WithMigrationServiceProvider(p modeling.RemotePort) Builder {
 	b.migrationServiceProvider = p
 	return b
 }
@@ -73,7 +74,7 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *Comp {
 	mmu := new(Comp)
-	mmu.TickingComponent = *sim.NewTickingComponent(
+	mmu.TickingComponent = *modeling.NewTickingComponent(
 		name, b.engine, b.freq, mmu)
 
 	b.createPorts(name, mmu)
@@ -103,8 +104,8 @@ func (b Builder) createPageTable(mmu *Comp) {
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
-	mmu.topPort = sim.NewPort(mmu, 4096, 4096, name+".ToTop")
+	mmu.topPort = modeling.NewPort(mmu, 4096, 4096, name+".ToTop")
 	mmu.AddPort("Top", mmu.topPort)
-	mmu.migrationPort = sim.NewPort(mmu, 1, 1, name+".MigrationPort")
+	mmu.migrationPort = modeling.NewPort(mmu, 1, 1, name+".MigrationPort")
 	mmu.AddPort("Migration", mmu.migrationPort)
 }

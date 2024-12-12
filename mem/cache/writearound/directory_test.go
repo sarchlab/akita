@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Directory", func() {
@@ -36,7 +37,7 @@ var _ = Describe("Directory", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 
 		pipeline = NewMockPipeline(mockCtrl)
@@ -53,7 +54,7 @@ var _ = Describe("Directory", func() {
 			wayAssociativity:    4,
 			bankBufs:            []sim.Buffer{bankBuf},
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		d = &directory{
 			cache:    c,
@@ -207,7 +208,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
-				Return(sim.RemotePort(""))
+				Return(modeling.RemotePort(""))
 			bottomPort.EXPECT().Send(gomock.Any()).Do(func(read *mem.ReadReq) {
 				readToBottom = read
 				Expect(read.Address).To(Equal(uint64(0x100)))
@@ -266,9 +267,9 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
-				Return(sim.RemotePort(""))
+				Return(modeling.RemotePort(""))
 			mshr.EXPECT().IsFull().Return(false)
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			bottomPort.EXPECT().Send(gomock.Any()).Return(&modeling.SendError{})
 
 			madeProgress := d.Tick()
 
@@ -417,7 +418,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(true)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			bottomPort.EXPECT().Send(gomock.Any()).Return(&modeling.SendError{})
 
 			madeProgress := d.Tick()
 

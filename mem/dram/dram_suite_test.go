@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/golang/mock/gomock"
 
@@ -28,7 +29,7 @@ func TestDram(t *testing.T) {
 var _ = Describe("DRAM Integration", func() {
 	var (
 		mockCtrl *gomock.Controller
-		engine   sim.Engine
+		engine   timing.Engine
 		srcPort  *MockPort
 		memCtrl  *Comp
 		conn     *directconnection.Comp
@@ -36,17 +37,17 @@ var _ = Describe("DRAM Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		memCtrl = MakeBuilder().
 			WithEngine(engine).
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
+		srcPort.EXPECT().AsRemote().Return(modeling.RemotePort("SrcPort")).AnyTimes()
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		srcPort.EXPECT().SetConnection(conn)
 		conn.PlugIn(memCtrl.topPort)

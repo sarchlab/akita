@@ -34,9 +34,9 @@ func NewAverageTimeTracer(
 func (t *TotalAvgTimeTracer) Func(ctx HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
-		t.StartTask(ctx.Item.(TaskStart))
+		t.StartTask(ctx)
 	case HookPosTaskEnd:
-		t.EndTask(ctx.Item.(TaskEnd))
+		t.EndTask(ctx)
 	}
 }
 
@@ -58,7 +58,8 @@ func (t *TotalAvgTimeTracer) TotalCount() uint64 {
 }
 
 // StartTask records the task start time
-func (t *TotalAvgTimeTracer) StartTask(taskStart TaskStart) {
+func (t *TotalAvgTimeTracer) StartTask(ctx HookCtx) {
+	taskStart := ctx.Item.(TaskStart)
 	if !t.filter(taskStart) {
 		return
 	}
@@ -74,7 +75,9 @@ func (t *TotalAvgTimeTracer) StartTask(taskStart TaskStart) {
 }
 
 // EndTask records the end of the task
-func (t *TotalAvgTimeTracer) EndTask(taskEnd TaskEnd) {
+func (t *TotalAvgTimeTracer) EndTask(ctx HookCtx) {
+	taskEnd := ctx.Item.(TaskEnd)
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

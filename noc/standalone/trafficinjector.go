@@ -3,7 +3,7 @@ package standalone
 import (
 	"math/rand"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A TrafficInjector can inject traffic to a network.
@@ -17,14 +17,14 @@ type TrafficInjector interface {
 type GreedyTrafficInjector struct {
 	agents []*Agent
 
-	engine sim.Engine
+	engine timing.Engine
 
 	PacketSize int
 	NumPackets int
 }
 
 // NewGreedyTrafficInjector creates a new GreedyTrafficInjector.
-func NewGreedyTrafficInjector(engine sim.Engine) *GreedyTrafficInjector {
+func NewGreedyTrafficInjector(engine timing.Engine) *GreedyTrafficInjector {
 	ti := new(GreedyTrafficInjector)
 	ti.PacketSize = 1024
 	ti.NumPackets = 1024

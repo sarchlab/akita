@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/mesh"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func main() {
@@ -28,12 +28,12 @@ func main() {
 	numMessages := 100
 
 	test := acceptance.NewTest()
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 
 	monitor := monitoring.NewMonitor()
 	monitor.RegisterEngine(engine)
 
-	freq := 1 * sim.GHz
+	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().
 		WithMonitor(monitor).
 		WithEngine(engine).
@@ -66,6 +66,6 @@ func main() {
 	}
 
 	test.MustHaveReceivedAllMsgs()
-	test.ReportBandwidthAchieved(engine.CurrentTime())
+	test.ReportBandwidthAchieved(engine.Now())
 	fmt.Println("passed!")
 }

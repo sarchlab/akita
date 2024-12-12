@@ -6,20 +6,20 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // Comp is a cache(TLB) that maintains some page information.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort     modeling.Port
+	bottomPort  modeling.Port
+	controlPort modeling.Port
 
-	LowModule sim.RemotePort
+	LowModule modeling.RemotePort
 
 	numSets        int
 	numWays        int

@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
-// Builder can help building directconnection.
+// Builder can build DirectConnection.
 type Builder struct {
 	engine timing.Engine
 	freq   timing.Freq

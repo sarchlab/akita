@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cache2 "github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Control Stage", func() {
@@ -30,17 +30,17 @@ var _ = Describe("Control Stage", func() {
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlPort")).
+			Return(modeling.RemotePort("ControlPort")).
 			AnyTimes()
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 
 		directory = NewMockDirectory(mockCtrl)
@@ -57,7 +57,7 @@ var _ = Describe("Control Stage", func() {
 			mshr:          mshr,
 			coalesceStage: c,
 		}
-		cache.TickingComponent = sim.NewTickingComponent(
+		cache.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, cache)
 
 		s = &controlStage{

@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -33,7 +34,7 @@ var _ = Describe("Bankstage", func() {
 			storage:       storage,
 			log2BlockSize: 6,
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		s = &bankStage{
 			cache:           c,

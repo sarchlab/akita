@@ -1,5 +1,7 @@
 package hooking
 
+import "github.com/sarchlab/akita/v4/sim/naming"
+
 // HookPos defines the enum of possible hooking positions.
 type HookPos struct {
 	Name string
@@ -16,6 +18,8 @@ type HookCtx struct {
 
 // Hookable defines an object that accept Hooks.
 type Hookable interface {
+	naming.Named
+
 	// AcceptHook registers a hook.
 	AcceptHook(hook Hook)
 

@@ -2,15 +2,16 @@ package addresstranslator
 
 import (
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder can create address translators
 type Builder struct {
-	engine              sim.Engine
-	freq                sim.Freq
-	translationProvider sim.RemotePort
-	ctrlPort            sim.Port
+	engine              timing.Engine
+	freq                timing.Freq
+	translationProvider modeling.RemotePort
+	ctrlPort            modeling.Port
 	addressToPortMapper mem.AddressToPortMapper
 	numReqPerCycle      int
 	log2PageSize        uint64
@@ -20,7 +21,7 @@ type Builder struct {
 // MakeBuilder creates a new builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:           1 * sim.GHz,
+		freq:           1 * timing.GHz,
 		numReqPerCycle: 4,
 		log2PageSize:   12,
 		deviceID:       1,
@@ -28,20 +29,20 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the address translators
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency of the address translators
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
 
 // WithTranslationProvider sets the port that can provide the translation
 // service. The port must be a port on a TLB or an MMU.
-func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
+func (b Builder) WithTranslationProvider(p modeling.RemotePort) Builder {
 	b.translationProvider = p
 	return b
 }
@@ -73,7 +74,7 @@ func (b Builder) WithDeviceID(n uint64) Builder {
 }
 
 // WithCtrlPort sets the port of the component that can send ctrl reqs to AT
-func (b Builder) WithCtrlPort(p sim.Port) Builder {
+func (b Builder) WithCtrlPort(p modeling.Port) Builder {
 	b.ctrlPort = p
 	return b
 }
@@ -81,7 +82,7 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 // Build returns a new AddressTranslator
 func (b Builder) Build(name string) *Comp {
 	t := &Comp{}
-	t.TickingComponent = sim.NewTickingComponent(
+	t.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, t)
 
 	b.createPorts(name, t)
@@ -99,18 +100,18 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
+	t.topPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	t.AddPort("Top", t.topPort)
 
-	t.bottomPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
+	t.bottomPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	t.AddPort("Bottom", t.bottomPort)
 
-	t.translationPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
+	t.translationPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TranslationPort")
 	t.AddPort("Translation", t.translationPort)
 
-	t.ctrlPort = sim.NewPort(t, 1, 1, name+".CtrlPort")
+	t.ctrlPort = modeling.NewPort(t, 1, 1, name+".CtrlPort")
 	t.AddPort("Control", t.ctrlPort)
 }

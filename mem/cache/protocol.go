@@ -2,32 +2,33 @@ package cache
 
 import (
 	"github.com/rs/xid"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // FlushReq is the request send to a cache unit to request it to flush all
 // the cache lines.
 type FlushReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool
 }
 
 // Meta returns the meta data associated with the message.
-func (r *FlushReq) Meta() *sim.MsgMeta {
+func (r *FlushReq) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned FlushReq with different ID
-func (r *FlushReq) Clone() sim.Msg {
+func (r *FlushReq) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
-func (r *FlushReq) GenerateRsp() sim.Rsp {
+func (r *FlushReq) GenerateRsp() modeling.Rsp {
 	rsp := FlushRspBuilder{}.
 		WithSrc(r.Dst).
 		WithDst(r.Src).
@@ -39,20 +40,20 @@ func (r *FlushReq) GenerateRsp() sim.Rsp {
 
 // FlushReqBuilder can build flush requests.
 type FlushReqBuilder struct {
-	src, dst                sim.RemotePort
+	src, dst                modeling.RemotePort
 	invalidateAllCacheLines bool
 	discardInflight         bool
 	pauseAfterFlushing      bool
 }
 
 // WithSrc sets the source of the message to build
-func (b FlushReqBuilder) WithSrc(src sim.RemotePort) FlushReqBuilder {
+func (b FlushReqBuilder) WithSrc(src modeling.RemotePort) FlushReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the message to build.
-func (b FlushReqBuilder) WithDst(dst sim.RemotePort) FlushReqBuilder {
+func (b FlushReqBuilder) WithDst(dst modeling.RemotePort) FlushReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -81,7 +82,7 @@ func (b FlushReqBuilder) PauseAfterFlushing() FlushReqBuilder {
 // Build creates a new FlushReq
 func (b FlushReqBuilder) Build() *FlushReq {
 	r := &FlushReq{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 	r.InvalidateAllCachelines = b.invalidateAllCacheLines
@@ -94,19 +95,19 @@ func (b FlushReqBuilder) Build() *FlushReq {
 // FlushRsp is the respond sent from the a cache unit for finishing a cache
 // flush
 type FlushRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	RspTo string
 }
 
 // Meta returns the meta data associated with the message.
-func (r *FlushRsp) Meta() *sim.MsgMeta {
+func (r *FlushRsp) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned FlushRsp with different ID
-func (r *FlushRsp) Clone() sim.Msg {
+func (r *FlushRsp) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
@@ -117,18 +118,18 @@ func (r *FlushRsp) GetRspTo() string {
 
 // FlushRspBuilder can build data ready responds.
 type FlushRspBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushRspBuilder) WithSrc(src sim.RemotePort) FlushRspBuilder {
+func (b FlushRspBuilder) WithSrc(src modeling.RemotePort) FlushRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
+func (b FlushRspBuilder) WithDst(dst modeling.RemotePort) FlushRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -142,7 +143,7 @@ func (b FlushRspBuilder) WithRspTo(id string) FlushRspBuilder {
 // Build creates a new FlushRsp
 func (b FlushRspBuilder) Build() *FlushRsp {
 	r := &FlushRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 	r.RspTo = b.rspTo
@@ -153,23 +154,23 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 // RestartReq is the request send to a cache unit to request it unpause the
 // cache
 type RestartReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
 // Meta returns the meta data associated with the message.
-func (r *RestartReq) Meta() *sim.MsgMeta {
+func (r *RestartReq) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned RestartReq with different ID
-func (r *RestartReq) Clone() sim.Msg {
+func (r *RestartReq) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
-func (r *RestartReq) GenerateRsp() sim.Rsp {
+func (r *RestartReq) GenerateRsp() modeling.Rsp {
 	rsp := RestartRspBuilder{}.
 		WithSrc(r.Dst).
 		WithDst(r.Src).
@@ -181,17 +182,17 @@ func (r *RestartReq) GenerateRsp() sim.Rsp {
 
 // RestartReqBuilder can build data ready responds.
 type RestartReqBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartReqBuilder) WithSrc(src sim.RemotePort) RestartReqBuilder {
+func (b RestartReqBuilder) WithSrc(src modeling.RemotePort) RestartReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
+func (b RestartReqBuilder) WithDst(dst modeling.RemotePort) RestartReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -199,7 +200,7 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 // Build creates a new RestartReq
 func (b RestartReqBuilder) Build() *RestartReq {
 	r := &RestartReq{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 
@@ -209,17 +210,17 @@ func (b RestartReqBuilder) Build() *RestartReq {
 // RestartRsp is the respond sent from the a cache unit for finishing a cache
 // flush
 type RestartRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	RspTo string
 }
 
 // Meta returns the meta data associated with the message.
-func (r *RestartRsp) Meta() *sim.MsgMeta {
+func (r *RestartRsp) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned RestartRsp with different ID
-func (r *RestartRsp) Clone() sim.Msg {
+func (r *RestartRsp) Clone() modeling.Msg {
 	cloneMsg := *r
 	cloneMsg.ID = xid.New().String()
 
@@ -232,18 +233,18 @@ func (r *RestartRsp) GetRspTo() string {
 
 // RestartRspBuilder can build data ready responds.
 type RestartRspBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartRspBuilder) WithSrc(src sim.RemotePort) RestartRspBuilder {
+func (b RestartRspBuilder) WithSrc(src modeling.RemotePort) RestartRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
+func (b RestartRspBuilder) WithDst(dst modeling.RemotePort) RestartRspBuilder {
 	b.dst = dst
 	return b
 }

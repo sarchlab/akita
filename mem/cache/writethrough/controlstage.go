@@ -6,10 +6,11 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 type controlStage struct {
-	ctrlPort     sim.Port
+	ctrlPort     modeling.Port
 	transactions *[]*transaction
 	directory    cache.Directory
 	cache        *Comp
@@ -79,7 +80,7 @@ func (s *controlStage) hardResetCache() {
 	}
 }
 
-func (s *controlStage) flushPort(port sim.Port) {
+func (s *controlStage) flushPort(port modeling.Port) {
 	for port.PeekIncoming() != nil {
 		port.RetrieveIncoming()
 	}

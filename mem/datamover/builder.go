@@ -2,12 +2,13 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	engine                 sim.Engine
+	engine                 timing.Engine
 	bufferSize             uint64
 	insidePortMapper       mem.AddressToPortMapper
 	outsidePortMapper      mem.AddressToPortMapper
@@ -22,7 +23,7 @@ func MakeBuilder() Builder {
 
 // WithEngine sets StreamingDataMover's engine
 func (sdmBuilder Builder) WithEngine(
-	inputEngine sim.Engine,
+	inputEngine timing.Engine,
 ) Builder {
 	sdmBuilder.engine = inputEngine
 	return sdmBuilder
@@ -79,12 +80,12 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 	sdm.insideByteGranularity = sdmBuilder.insideByteGranularity
 	sdm.outsideByteGranularity = sdmBuilder.outsideByteGranularity
 
-	sdm.TickingComponent = sim.NewTickingComponent(
-		name, sdmBuilder.engine, 1*sim.GHz, sdm)
+	sdm.TickingComponent = modeling.NewTickingComponent(
+		name, sdmBuilder.engine, 1*timing.GHz, sdm)
 
-	sdm.ctrlPort = sim.NewPort(sdm, 40960000, 40960000, name+".CtrlPort")
-	sdm.insidePort = sim.NewPort(sdm, 64, 64, name+".SrcPort")
-	sdm.outsidePort = sim.NewPort(sdm, 64, 64, name+".DstPort")
+	sdm.ctrlPort = modeling.NewPort(sdm, 40960000, 40960000, name+".CtrlPort")
+	sdm.insidePort = modeling.NewPort(sdm, 64, 64, name+".SrcPort")
+	sdm.outsidePort = modeling.NewPort(sdm, 64, 64, name+".DstPort")
 
 	return sdm
 }

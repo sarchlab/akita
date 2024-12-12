@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -48,7 +49,7 @@ func (b *bufferImpl) Push(e interface{}) {
 	b.elements = append(b.elements, e)
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
+		b.InvokeHook(hooking.HookCtx{
 			Domain: b,
 			Pos:    sim.HookPosBufPush,
 			Item:   e,
@@ -66,7 +67,7 @@ func (b *bufferImpl) Pop() interface{} {
 	b.elements = b.elements[1:]
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
+		b.InvokeHook(hooking.HookCtx{
 			Domain: b,
 			Pos:    sim.HookPosBufPush,
 			Item:   e,
@@ -107,7 +108,7 @@ func (b *bufferImpl) Remove(i int) {
 	b.elements = append(b.elements[:i], b.elements[i+1:]...)
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
+		b.InvokeHook(hooking.HookCtx{
 			Domain: b,
 			Pos:    sim.HookPosBufPush,
 			Item:   element,
@@ -393,7 +394,7 @@ func (s *bankStage) removeTransaction(trans *transaction) {
 		}
 	}
 
-	now := s.cache.Engine.CurrentTime()
+	now := s.cache.Engine.Now()
 
 	fmt.Printf("%.10f, %s, Transaction %s not found\n",
 		now, s.cache.Name(), trans.id)

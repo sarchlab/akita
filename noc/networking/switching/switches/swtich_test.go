@@ -8,17 +8,18 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
 	local := NewMockPort(ctrl)
 	local.EXPECT().AsRemote().
-		Return(sim.RemotePort(fmt.Sprintf("LocalPort%d", index))).
+		Return(modeling.RemotePort(fmt.Sprintf("LocalPort%d", index))).
 		AnyTimes()
 
 	remote := NewMockPort(ctrl)
 	remote.EXPECT().AsRemote().
-		Return(sim.RemotePort(fmt.Sprintf("RemotePort%d", index))).
+		Return(modeling.RemotePort(fmt.Sprintf("RemotePort%d", index))).
 		AnyTimes()
 
 	routeBuf := NewMockBuffer(ctrl)
@@ -41,14 +42,14 @@ func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
 }
 
 type sampleMsg struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m *sampleMsg) Meta() *sim.MsgMeta {
+func (m *sampleMsg) Meta() *modeling.MsgMeta {
 	return &m.MsgMeta
 }
 
-func (m *sampleMsg) Clone() sim.Msg {
+func (m *sampleMsg) Clone() modeling.Msg {
 	return m
 }
 
@@ -74,7 +75,7 @@ var _ = Describe("Switch", func() {
 		dstPort = NewMockPort(mockCtrl)
 		dstPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("DstPort")).
+			Return(modeling.RemotePort("DstPort")).
 			AnyTimes()
 
 		routingTable = NewMockTable(mockCtrl)
@@ -302,7 +303,7 @@ var _ = Describe("Switch", func() {
 
 		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
-		localPort2.EXPECT().Send(flit).Return(&sim.SendError{})
+		localPort2.EXPECT().Send(flit).Return(&modeling.SendError{})
 
 		madeProgress := swMiddleware.sendOut()
 

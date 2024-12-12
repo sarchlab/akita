@@ -11,6 +11,8 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -37,7 +39,7 @@ type LinkEndDeviceParameter struct {
 // LinkParameter defines the parameter of the link that connects to nodes.
 type LinkParameter struct {
 	IsIdeal       bool
-	Frequency     sim.Freq
+	Frequency     timing.Freq
 	NumStage      int
 	CyclePerStage int
 	PipelineWidth int
@@ -62,9 +64,9 @@ type SwitchToSwitchLinkParameter struct {
 // Connector can build complex network topologies.
 type Connector struct {
 	name         string
-	engine       sim.Engine
+	engine       timing.Engine
 	monitor      *monitoring.Monitor
-	defaultFreq  sim.Freq
+	defaultFreq  timing.Freq
 	flitSize     int
 	router       Router
 	visTracer    tracing.Tracer
@@ -79,7 +81,7 @@ type Connector struct {
 // MakeConnector creates a network connector
 func MakeConnector() Connector {
 	return Connector{
-		defaultFreq: 1 * sim.GHz,
+		defaultFreq: 1 * timing.GHz,
 		flitSize:    64,
 		router:      new(FloydWarshallRouter),
 	}
@@ -87,7 +89,7 @@ func MakeConnector() Connector {
 
 // WithEngine sets the engine to be used by all the components in the
 // connection.
-func (c Connector) WithEngine(e sim.Engine) Connector {
+func (c Connector) WithEngine(e timing.Engine) Connector {
 	c.engine = e
 	return c
 }
@@ -102,7 +104,7 @@ func (c Connector) WithMonitor(m *monitoring.Monitor) Connector {
 // WithDefaultFreq sets the default frequency used by the components in the
 // connection. Note that channels will not use the default frequency. Channels
 // use their own frequency to adjust bandwidth.
-func (c Connector) WithDefaultFreq(f sim.Freq) Connector {
+func (c Connector) WithDefaultFreq(f timing.Freq) Connector {
 	c.defaultFreq = f
 	return c
 }
@@ -212,14 +214,14 @@ type namedHookableConnection interface {
 	sim.Connection
 	sim.Named
 	sim.Hookable
-	sim.Component
+	modeling.Component
 }
 
 // ConnectDevice connects a few ports that belongs to the device to a switch
 // that is identified by switchID.
 func (c *Connector) ConnectDevice(
 	switchID int,
-	ports []sim.Port,
+	ports []modeling.Port,
 	param DeviceToSwitchLinkParameter,
 ) {
 	swNode := c.switches[switchID]
@@ -236,9 +238,9 @@ func (c *Connector) ConnectDevice(
 func (c *Connector) ConnectDeviceWithEPName(
 	epName string,
 	switchID int,
-	ports []sim.Port,
+	ports []modeling.Port,
 	param DeviceToSwitchLinkParameter,
-) (epPort, swPort sim.Port) {
+) (epPort, swPort modeling.Port) {
 	swNode := c.switches[switchID]
 
 	epNode := c.createEndPointWithName(ports, param, swNode, epName)
@@ -251,7 +253,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 }
 
 func (c *Connector) createEndPointWithName(
-	ports []sim.Port,
+	ports []modeling.Port,
 	param DeviceToSwitchLinkParameter,
 	swNode *switchNode,
 	name string,
@@ -274,7 +276,7 @@ func (c *Connector) createEndPointWithName(
 		tracing.CollectTrace(endPoint, c.visTracer)
 	}
 
-	epPort := sim.NewPort(endPoint,
+	epPort := modeling.NewPort(endPoint,
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
@@ -291,7 +293,7 @@ func (c *Connector) createEndPointWithName(
 }
 
 func (c *Connector) createEndPoint(
-	ports []sim.Port,
+	ports []modeling.Port,
 	param DeviceToSwitchLinkParameter,
 	swNode *switchNode,
 ) *deviceNode {
@@ -302,11 +304,11 @@ func (c *Connector) createEndPoint(
 func (c *Connector) connectEndPointWithSwitch(
 	swNode *switchNode, endPoint *endpoint.Comp,
 	param DeviceToSwitchLinkParameter,
-) (sim.Port, namedHookableConnection) {
+) (modeling.Port, namedHookableConnection) {
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort
 
-	swPort := sim.NewPort(sw,
+	swPort := modeling.NewPort(sw,
 		param.SwitchEndParam.IncomingBufSize,
 		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
@@ -325,7 +327,7 @@ func (c *Connector) connectEndPointWithSwitch(
 
 func (c *Connector) createRemoteInfoFoEP(
 	epNode *deviceNode, swNode *switchNode,
-	epPort, swPort sim.Port,
+	epPort, swPort modeling.Port,
 	conn namedHookableConnection,
 ) {
 	epNode.remote = Remote{
@@ -345,7 +347,7 @@ func (c *Connector) createRemoteInfoFoEP(
 }
 
 func (c *Connector) connectPorts(
-	left, right sim.Port,
+	left, right modeling.Port,
 	linkParam LinkParameter,
 ) (conn namedHookableConnection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
@@ -388,7 +390,7 @@ func (c *Connector) connectPorts(
 func (c *Connector) ConnectSwitches(
 	leftSwitchID, rightSwitchID int,
 	param SwitchToSwitchLinkParameter,
-) (leftPort, rightPort sim.Port) {
+) (leftPort, rightPort modeling.Port) {
 	leftNode := c.switches[leftSwitchID]
 	leftSwitch := leftNode.sw
 	leftPortName := leftSwitch.Name() + "." + param.LeftEndParam.PortName
@@ -398,7 +400,7 @@ func (c *Connector) ConnectSwitches(
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
 
-	leftPort = sim.NewPort(leftSwitch,
+	leftPort = modeling.NewPort(leftSwitch,
 		param.LeftEndParam.IncomingBufSize,
 		param.LeftEndParam.OutgoingBufSize,
 		leftPortName)
@@ -412,7 +414,7 @@ func (c *Connector) ConnectSwitches(
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
 
-	rightPort = sim.NewPort(rightSwitch,
+	rightPort = modeling.NewPort(rightSwitch,
 		param.RightEndParam.IncomingBufSize,
 		param.RightEndParam.OutgoingBufSize,
 		rightPortName)
@@ -440,7 +442,7 @@ func (c *Connector) ConnectSwitches(
 
 func (c *Connector) createRemoteInfo(
 	leftNode, rightNode *switchNode,
-	leftPort, rightPort sim.Port,
+	leftPort, rightPort modeling.Port,
 	conn namedHookableConnection,
 ) {
 	leftNode.remotes = append(leftNode.remotes, Remote{

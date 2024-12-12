@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -25,16 +25,16 @@ type reqToBottom struct {
 // Comp is an AddressTranslator that forwards the read/write requests with
 // the address translated from virtual to physical.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort         sim.Port
-	bottomPort      sim.Port
-	translationPort sim.Port
-	ctrlPort        sim.Port
+	topPort         modeling.Port
+	bottomPort      modeling.Port
+	translationPort modeling.Port
+	ctrlPort        modeling.Port
 
 	addressToPortMapper mem.AddressToPortMapper
-	translationProvider sim.RemotePort
+	translationProvider modeling.RemotePort
 	log2PageSize        uint64
 	deviceID            uint64
 	numReqPerCycle      int
@@ -46,7 +46,7 @@ type Comp struct {
 }
 
 // SetTranslationProvider sets the remote port that can translate addresses.
-func (c *Comp) SetTranslationProvider(p sim.RemotePort) {
+func (c *Comp) SetTranslationProvider(p modeling.RemotePort) {
 	c.translationProvider = p
 }
 

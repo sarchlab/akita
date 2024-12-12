@@ -9,7 +9,8 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 var dumpLog = false
@@ -17,9 +18,9 @@ var dumpLog = false
 // A MemAccessAgent is a Component that can help testing the cache and the the
 // memory controllers by generating a large number of read and write requests.
 type MemAccessAgent struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 
-	LowModule  sim.Port
+	LowModule  modeling.Port
 	MaxAddress uint64
 
 	WriteLeft       int
@@ -28,7 +29,7 @@ type MemAccessAgent struct {
 	PendingReadReq  map[string]*mem.ReadReq
 	PendingWriteReq map[string]*mem.WriteReq
 
-	memPort sim.Port
+	memPort modeling.Port
 }
 
 func (a *MemAccessAgent) checkReadResult(
@@ -88,7 +89,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 		if dumpLog {
 			write := a.PendingWriteReq[msg.RespondTo]
 			log.Printf("%.10f, agent, write complete, 0x%X\n",
-				a.CurrentTime(), write.Address)
+				a.Now(), write.Address)
 		}
 
 		delete(a.PendingWriteReq, msg.RespondTo)
@@ -100,7 +101,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 
 		if dumpLog {
 			log.Printf("%.10f, agent, read complete, 0x%X, %v\n",
-				a.CurrentTime(), req.Address, msg.Data)
+				a.Now(), req.Address, msg.Data)
 		}
 
 		a.checkReadResult(req, msg)
@@ -152,7 +153,7 @@ func (a *MemAccessAgent) doRead() bool {
 		a.ReadLeft--
 
 		if dumpLog {
-			log.Printf("%.10f, agent, read, 0x%X\n", a.CurrentTime(), address)
+			log.Printf("%.10f, agent, read, 0x%X\n", a.Now(), address)
 		}
 
 		return true
@@ -237,7 +238,7 @@ func (a *MemAccessAgent) doWrite() bool {
 
 		if dumpLog {
 			log.Printf("%.10f, agent, write, 0x%X, %v\n",
-				a.CurrentTime(), address, writeReq.Data)
+				a.Now(), address, writeReq.Data)
 		}
 
 		return true
@@ -258,12 +259,12 @@ func (a *MemAccessAgent) addKnownValue(address uint64, data uint32) {
 }
 
 // NewMemAccessAgent creates a new MemAccessAgent.
-func NewMemAccessAgent(engine sim.Engine) *MemAccessAgent {
+func NewMemAccessAgent(engine timing.Engine) *MemAccessAgent {
 	agent := new(MemAccessAgent)
-	agent.TickingComponent = sim.NewTickingComponent(
-		"Agent", engine, 1*sim.GHz, agent)
+	agent.TickingComponent = modeling.NewTickingComponent(
+		"Agent", engine, 1*timing.GHz, agent)
 
-	agent.memPort = sim.NewPort(agent, 1, 1, "Agent.MemPort")
+	agent.memPort = modeling.NewPort(agent, 1, 1, "Agent.MemPort")
 	agent.AddPort("Mem", agent.memPort)
 
 	agent.ReadLeft = 10000

@@ -74,10 +74,10 @@ func (mr *MockPortMockRecorder) CanSend() *gomock.Call {
 }
 
 // Component mocks base method.
-func (m *MockPort) Component() sim.Component {
+func (m *MockPort) Component() modeling.Component {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Component")
-	ret0, _ := ret[0].(sim.Component)
+	ret0, _ := ret[0].(modeling.Component)
 	return ret0
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Bottom Parser", func() {
@@ -32,7 +33,7 @@ var _ = Describe("Bottom Parser", func() {
 			wayAssociativity: 4,
 			bankBufs:         []sim.Buffer{bankBuf},
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		p = &bottomParser{cache: c}
 	})

@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -42,19 +42,19 @@ func addressMustBeAligned(addr, granularity uint64) {
 // Comp helps moving data from designated source and destination
 // following the given move direction
 type Comp struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 
-	ctrlPort    sim.Port
-	insidePort  sim.Port
-	outsidePort sim.Port
+	ctrlPort    modeling.Port
+	insidePort  modeling.Port
+	outsidePort modeling.Port
 
 	insidePortMapper       mem.AddressToPortMapper
 	outsidePortMapper      mem.AddressToPortMapper
 	insideByteGranularity  uint64
 	outsideByteGranularity uint64
 
-	srcPort            sim.Port
-	dstPort            sim.Port
+	srcPort            modeling.Port
+	dstPort            modeling.Port
 	srcPortMapper      mem.AddressToPortMapper
 	dstPortMapper      mem.AddressToPortMapper
 	srcByteGranularity uint64

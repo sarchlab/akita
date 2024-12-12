@@ -2,7 +2,7 @@ package trans
 
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 )
 
 // A SubTransSplitter can split transactions into sub-transactions.
@@ -30,7 +30,7 @@ func (s *defaultSubTransSplitter) Split(t *signal.Transaction) {
 
 	for addr < endAddr {
 		st := &signal.SubTransaction{
-			ID:          sim.GetIDGenerator().Generate(),
+			ID:          id.Generate(),
 			Transaction: t,
 			Address:     addr,
 		}

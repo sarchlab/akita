@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -29,7 +30,7 @@ func TestCache(t *testing.T) {
 var _ = Describe("Write-Back Cache Integration", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		engine              sim.Engine
+		engine              timing.Engine
 		victimFinder        *cache.LRUVictimFinder
 		directory           *cache.DirectoryImpl
 		addressToPortMapper *mem.SinglePortMapper
@@ -53,7 +54,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			AnyTimes()
 		agentPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("AgentPort")).
+			Return(modeling.RemotePort("AgentPort")).
 			AnyTimes()
 
 		controlAgentPort = NewMockPort(mockCtrl)
@@ -66,10 +67,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			AnyTimes()
 		controlAgentPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlAgentPort")).
+			Return(modeling.RemotePort("ControlAgentPort")).
 			AnyTimes()
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		directory = cache.NewDirectory(1024, 4, 64, victimFinder)
 		addressToPortMapper = &mem.SinglePortMapper{}
 		storage = mem.NewStorage(1024 * 4 * 64)
@@ -86,7 +87,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithLatency(200).
 			Build("DRAM")
 
@@ -94,7 +95,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Connection")
 		conn.PlugIn(cacheModule.topPort)
 		conn.PlugIn(cacheModule.bottomPort)

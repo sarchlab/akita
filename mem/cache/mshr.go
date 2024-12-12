@@ -5,7 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // MSHREntry is an entry in MSHR
@@ -46,7 +46,7 @@ func NewMSHR(capacity int) MSHR {
 }
 
 type mshrImpl struct {
-	*sim.ComponentBase
+	*modeling.ComponentBase
 
 	capacity int
 	entries  []*MSHREntry

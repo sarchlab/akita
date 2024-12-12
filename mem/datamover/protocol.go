@@ -2,6 +2,8 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // DateMovePort is the port name that either serves as a source or destination.
@@ -15,7 +17,7 @@ const (
 
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
@@ -24,12 +26,12 @@ type DataMoveRequest struct {
 }
 
 // Meta returns the metadata of the message
-func (req *DataMoveRequest) Meta() *sim.MsgMeta {
+func (req *DataMoveRequest) Meta() *modeling.MsgMeta {
 	return &req.MsgMeta
 }
 
 // Clone creates a deep copy of the DataMoveRequest with a new ID
-func (req *DataMoveRequest) Clone() sim.Msg {
+func (req *DataMoveRequest) Clone() modeling.Msg {
 	b := MakeDataMoveRequestBuilder().
 		WithSrc(req.Src).
 		WithDst(req.Dst).
@@ -43,7 +45,7 @@ func (req *DataMoveRequest) Clone() sim.Msg {
 }
 
 // GenerateRsp creates a response message for the request.
-func (req *DataMoveRequest) GenerateRsp() sim.Msg {
+func (req *DataMoveRequest) GenerateRsp() modeling.Msg {
 	rsp := sim.GeneralRspBuilder{}.
 		WithSrc(req.Dst).
 		WithDst(req.Src).
@@ -55,7 +57,7 @@ func (req *DataMoveRequest) GenerateRsp() sim.Msg {
 
 // DataMoveRequestBuilder can build new data move requests
 type DataMoveRequestBuilder struct {
-	src, dst   sim.RemotePort
+	src, dst   modeling.RemotePort
 	srcAddress uint64
 	dstAddress uint64
 	byteSize   uint64
@@ -70,7 +72,7 @@ func MakeDataMoveRequestBuilder() DataMoveRequestBuilder {
 
 // WithSrc sets the source port of the message.
 func (b DataMoveRequestBuilder) WithSrc(
-	inputSrc sim.RemotePort,
+	inputSrc modeling.RemotePort,
 ) DataMoveRequestBuilder {
 	b.src = inputSrc
 	return b
@@ -79,7 +81,7 @@ func (b DataMoveRequestBuilder) WithSrc(
 // WithDst sets the destination port of the message. It should be the CtrlPort
 // of the DataMover.
 func (b DataMoveRequestBuilder) WithDst(
-	inputDst sim.RemotePort,
+	inputDst modeling.RemotePort,
 ) DataMoveRequestBuilder {
 	b.dst = inputDst
 	return b
@@ -128,7 +130,7 @@ func (b DataMoveRequestBuilder) WithByteSize(
 // Build creates a new DataMoveRequest.
 func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r := &DataMoveRequest{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 	r.SrcAddress = b.srcAddress

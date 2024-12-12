@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/tracing"
@@ -17,8 +18,8 @@ import (
 
 // Builder can build new memory controllers.
 type Builder struct {
-	engine           sim.Engine
-	freq             sim.Freq
+	engine           timing.Engine
+	freq             timing.Freq
 	useGlobalStorage bool
 	storage          *mem.Storage
 	addrConverter    mem.AddressConverter
@@ -72,7 +73,7 @@ type Builder struct {
 // MakeBuilder creates a builder with default configuration.
 func MakeBuilder() Builder {
 	b := Builder{
-		freq:                 1600 * sim.MHz,
+		freq:                 1600 * timing.MHz,
 		protocol:             DDR3,
 		transactionQueueSize: 32,
 		commandQueueSize:     8,
@@ -115,13 +116,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the builder uses.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency of the builder.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -399,7 +400,7 @@ func (b Builder) Build(name string) *Comp {
 		addrConverter: b.addrConverter,
 		storage:       b.storage,
 	}
-	m.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, m)
+	m.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, m)
 
 	b.attachTracers(m)
 	b.buildChannel(name, m)
@@ -441,7 +442,7 @@ func (b Builder) Build(name string) *Comp {
 		m.storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	m.topPort = sim.NewPort(m, 1024, 1024, name+".TopPort")
+	m.topPort = modeling.NewPort(m, 1024, 1024, name+".TopPort")
 	m.AddPort("Top", m.topPort)
 
 	middleware := &middleware{Comp: m}

@@ -76,7 +76,7 @@ func (mr *MockBankMockRecorder) Hooks() *gomock.Call {
 }
 
 // InvokeHook mocks base method.
-func (m *MockBank) InvokeHook(arg0 sim.HookCtx) {
+func (m *MockBank) InvokeHook(arg0 hooking.HookCtx) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "InvokeHook", arg0)
 }

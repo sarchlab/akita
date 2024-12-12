@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Address Translator", func() {
@@ -27,22 +28,22 @@ var _ = Describe("Address Translator", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("CtrlPort")).
+			Return(modeling.RemotePort("CtrlPort")).
 			AnyTimes()
 		translationPort = NewMockPort(mockCtrl)
 		translationPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TranslationPort")).
+			Return(modeling.RemotePort("TranslationPort")).
 			AnyTimes()
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
@@ -100,7 +101,7 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			translationPort.EXPECT().Send(gomock.Any()).
-				DoAndReturn(func(req *vm.TranslationReq) *sim.SendError {
+				DoAndReturn(func(req *vm.TranslationReq) *modeling.SendError {
 					transReqReturn = req
 					return nil
 				})
@@ -118,7 +119,7 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			translationPort.EXPECT().
 				Send(gomock.Any()).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			needTick := tMiddleware.translate()
 
@@ -350,7 +351,7 @@ var _ = Describe("Address Translator", func() {
 					Expect(dr.RespondTo).To(Equal(readFromTop.ID))
 					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			madeProgress := tMiddleware.respond()
 

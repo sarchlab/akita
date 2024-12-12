@@ -2,45 +2,46 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // A FlushReq asks the TLB to invalidate certain entries. It will also not block
 // all incoming and outgoing ports
 type FlushReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	VAddr []uint64
 	PID   vm.PID
 }
 
 // Meta returns the meta data associated with the message.
-func (r *FlushReq) Meta() *sim.MsgMeta {
+func (r *FlushReq) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned FlushReq with different ID
-func (r *FlushReq) Clone() sim.Msg {
+func (r *FlushReq) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
 // FlushReqBuilder can build AT flush requests
 type FlushReqBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 	vAddrs   []uint64
 	pid      vm.PID
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushReqBuilder) WithSrc(src sim.RemotePort) FlushReqBuilder {
+func (b FlushReqBuilder) WithSrc(src modeling.RemotePort) FlushReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushReqBuilder) WithDst(dst sim.RemotePort) FlushReqBuilder {
+func (b FlushReqBuilder) WithDst(dst modeling.RemotePort) FlushReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -60,7 +61,7 @@ func (b FlushReqBuilder) WithPID(pid vm.PID) FlushReqBuilder {
 // Build creates a new TLBFlushReq
 func (b FlushReqBuilder) Build() *FlushReq {
 	r := &FlushReq{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 	r.VAddr = b.vAddrs
@@ -71,35 +72,35 @@ func (b FlushReqBuilder) Build() *FlushReq {
 
 // A FlushRsp is a response from AT indicating flush is complete
 type FlushRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
 // Meta returns the meta data associated with the message.
-func (r *FlushRsp) Meta() *sim.MsgMeta {
+func (r *FlushRsp) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned FlushRsp with different ID
-func (r *FlushRsp) Clone() sim.Msg {
+func (r *FlushRsp) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
 // FlushRspBuilder can build AT flush rsp
 type FlushRspBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b FlushRspBuilder) WithSrc(src sim.RemotePort) FlushRspBuilder {
+func (b FlushRspBuilder) WithSrc(src modeling.RemotePort) FlushRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
+func (b FlushRspBuilder) WithDst(dst modeling.RemotePort) FlushRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -107,7 +108,7 @@ func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 // Build creates a new TLBFlushRsps.
 func (b FlushRspBuilder) Build() *FlushRsp {
 	r := &FlushRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 
@@ -117,35 +118,35 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 // A RestartReq is a request to TLB to start accepting requests and resume
 // operations
 type RestartReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
 // Meta returns the meta data associated with the message.
-func (r *RestartReq) Meta() *sim.MsgMeta {
+func (r *RestartReq) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned RestartReq with different ID
-func (r *RestartReq) Clone() sim.Msg {
+func (r *RestartReq) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
 // RestartReqBuilder can build TLB restart requests.
 type RestartReqBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartReqBuilder) WithSrc(src sim.RemotePort) RestartReqBuilder {
+func (b RestartReqBuilder) WithSrc(src modeling.RemotePort) RestartReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
+func (b RestartReqBuilder) WithDst(dst modeling.RemotePort) RestartReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -153,7 +154,7 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 // Build creates a new TLBRestartReq.
 func (b RestartReqBuilder) Build() *RestartReq {
 	r := &RestartReq{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 
@@ -162,35 +163,35 @@ func (b RestartReqBuilder) Build() *RestartReq {
 
 // A RestartRsp is a response from AT indicating it has resumed working
 type RestartRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
 // Meta returns the meta data associated with the message.
-func (r *RestartRsp) Meta() *sim.MsgMeta {
+func (r *RestartRsp) Meta() *modeling.MsgMeta {
 	return &r.MsgMeta
 }
 
 // Clone returns cloned RestartRsp with different ID
-func (r *RestartRsp) Clone() sim.Msg {
+func (r *RestartRsp) Clone() modeling.Msg {
 	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.ID = id.Generate()
 
 	return &cloneMsg
 }
 
 // RestartRspBuilder can build AT flush rsp
 type RestartRspBuilder struct {
-	src, dst sim.RemotePort
+	src, dst modeling.RemotePort
 }
 
 // WithSrc sets the source of the request to build.
-func (b RestartRspBuilder) WithSrc(src sim.RemotePort) RestartRspBuilder {
+func (b RestartRspBuilder) WithSrc(src modeling.RemotePort) RestartRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
+func (b RestartRspBuilder) WithDst(dst modeling.RemotePort) RestartRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -198,7 +199,7 @@ func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 // Build creates a new TLBRestartRsp
 func (b RestartRspBuilder) Build() *RestartRsp {
 	r := &RestartRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = id.Generate()
 	r.Src = b.src
 	r.Dst = b.dst
 

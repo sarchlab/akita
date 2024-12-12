@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -18,13 +18,13 @@ type transaction struct {
 
 // Comp is the default mmu implementation. It is also an akita Component.
 type Comp struct {
-	sim.TickingComponent
-	sim.MiddlewareHolder
+	modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort       sim.Port
-	migrationPort sim.Port
+	topPort       modeling.Port
+	migrationPort modeling.Port
 
-	MigrationServiceProvider sim.RemotePort
+	MigrationServiceProvider modeling.RemotePort
 
 	pageTable           vm.PageTable
 	latency             int

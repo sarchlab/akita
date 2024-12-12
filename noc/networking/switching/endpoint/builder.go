@@ -4,20 +4,21 @@ import (
 	"container/list"
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Builder can help building End Points.
 type Builder struct {
-	engine                   sim.Engine
-	freq                     sim.Freq
+	engine                   timing.Engine
+	freq                     timing.Freq
 	numInputChannels         int
 	numOutputChannels        int
 	flitByteSize             int
 	encodingOverhead         float64
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
-	devicePorts              []sim.Port
+	devicePorts              []modeling.Port
 }
 
 // MakeBuilder creates a new EndPointBuilder with default
@@ -27,7 +28,7 @@ func MakeBuilder() Builder {
 		flitByteSize:             32,
 		flitAssemblingBufferSize: 64,
 		networkPortBufferSize:    4,
-		freq:                     1 * sim.GHz,
+		freq:                     1 * timing.GHz,
 		numInputChannels:         1,
 		numOutputChannels:        1,
 		encodingOverhead:         0.25,
@@ -35,13 +36,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine of the End Point to build.
-func (b Builder) WithEngine(e sim.Engine) Builder {
+func (b Builder) WithEngine(e timing.Engine) Builder {
 	b.engine = e
 	return b
 }
 
 // WithFreq sets the frequency of the End Point to built.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -80,7 +81,7 @@ func (b Builder) WithNetworkPortBufferSize(n int) Builder {
 
 // WithDevicePorts sets a list of ports that communicate directly through the
 // End Point.
-func (b Builder) WithDevicePorts(ports []sim.Port) Builder {
+func (b Builder) WithDevicePorts(ports []modeling.Port) Builder {
 	b.devicePorts = ports
 	return b
 }
@@ -92,7 +93,7 @@ func (b Builder) Build(name string) *Comp {
 	b.flitByteSizeMustBeGiven()
 
 	ep := &Comp{}
-	ep.TickingComponent = sim.NewTickingComponent(
+	ep.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, ep)
 	ep.flitByteSize = b.flitByteSize
 
@@ -104,7 +105,7 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.encodingOverhead = b.encodingOverhead
 
-	ep.NetworkPort = sim.NewPort(
+	ep.NetworkPort = modeling.NewPort(
 		ep, b.networkPortBufferSize, b.networkPortBufferSize,
 		fmt.Sprintf("%s.NetworkPort", ep.Name()))
 

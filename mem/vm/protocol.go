@@ -2,170 +2,71 @@
 package vm
 
 import (
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A TranslationReq asks the receiver component to translate the request.
 type TranslationReq struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	VAddr    uint64
 	PID      PID
 	DeviceID uint64
 }
 
 // Meta returns the meta data associated with the message.
-func (r *TranslationReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
+func (r TranslationReq) Meta() modeling.MsgMeta {
+	return r.MsgMeta
 }
 
 // Clone returns cloned TranslationReq with different ID
-func (r *TranslationReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+func (r TranslationReq) Clone() modeling.Msg {
+	cloneMsg := r
+	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // GenerateRsp generates response to original translation request
-func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
-	rsp := TranslationRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		WithPage(page).
-		Build()
+func (r TranslationReq) GenerateRsp(page Page) modeling.Rsp {
+	rsp := TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: r.Dst,
+			Dst: r.Src,
+		},
+		RespondTo: r.ID,
+		Page:      page,
+	}
 
 	return rsp
-}
-
-// TranslationReqBuilder can build translation requests
-type TranslationReqBuilder struct {
-	src, dst sim.RemotePort
-	vAddr    uint64
-	pid      PID
-	deviceID uint64
-}
-
-// WithSrc sets the source of the request to build.
-func (b TranslationReqBuilder) WithSrc(
-	src sim.RemotePort,
-) TranslationReqBuilder {
-	b.src = src
-	return b
-}
-
-// WithDst sets the destination of the request to build.
-func (b TranslationReqBuilder) WithDst(
-	dst sim.RemotePort,
-) TranslationReqBuilder {
-	b.dst = dst
-	return b
-}
-
-// WithVAddr sets the virtual address of the request to build.
-func (b TranslationReqBuilder) WithVAddr(vAddr uint64) TranslationReqBuilder {
-	b.vAddr = vAddr
-	return b
-}
-
-// WithPID sets the virtual address of the request to build.
-func (b TranslationReqBuilder) WithPID(pid PID) TranslationReqBuilder {
-	b.pid = pid
-	return b
-}
-
-// WithDeviceID sets the GPU ID of the request to build.
-func (b TranslationReqBuilder) WithDeviceID(
-	deviceID uint64,
-) TranslationReqBuilder {
-	b.deviceID = deviceID
-	return b
-}
-
-// Build creates a new TranslationReq
-func (b TranslationReqBuilder) Build() *TranslationReq {
-	r := &TranslationReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.VAddr = b.vAddr
-	r.PID = b.pid
-	r.DeviceID = b.deviceID
-
-	return r
 }
 
 // A TranslationRsp is the respond for a TranslationReq. It carries the physical
 // address.
 type TranslationRsp struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	RespondTo string // The ID of the request it replies
 	Page      Page
 }
 
 // Meta returns the meta data associated with the message.
-func (r *TranslationRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
+func (r TranslationRsp) Meta() modeling.MsgMeta {
+	return r.MsgMeta
 }
 
 // Clone returns cloned TranslationRsp with different ID
-func (r *TranslationRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+func (r TranslationRsp) Clone() modeling.Msg {
+	cloneMsg := r
+	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // GetRspTo returns the request ID that the respond is responding to.
-func (r *TranslationRsp) GetRspTo() string {
+func (r TranslationRsp) GetRspTo() string {
 	return r.RespondTo
-}
-
-// TranslationRspBuilder can build translation requests
-type TranslationRspBuilder struct {
-	src, dst sim.RemotePort
-	rspTo    string
-	page     Page
-}
-
-// WithSrc sets the source of the respond to build.
-func (b TranslationRspBuilder) WithSrc(
-	src sim.RemotePort,
-) TranslationRspBuilder {
-	b.src = src
-	return b
-}
-
-// WithDst sets the destination of the respond to build.
-func (b TranslationRspBuilder) WithDst(
-	dst sim.RemotePort,
-) TranslationRspBuilder {
-	b.dst = dst
-	return b
-}
-
-// WithRspTo sets the request ID of the respond to build.
-func (b TranslationRspBuilder) WithRspTo(rspTo string) TranslationRspBuilder {
-	b.rspTo = rspTo
-	return b
-}
-
-// WithPage sets the page of the respond to build.
-func (b TranslationRspBuilder) WithPage(page Page) TranslationRspBuilder {
-	b.page = page
-	return b
-}
-
-// Build creates a new TranslationRsp
-func (b TranslationRspBuilder) Build() *TranslationRsp {
-	r := &TranslationRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.RespondTo = b.rspTo
-	r.Page = b.page
-
-	return r
 }
 
 // PageMigrationInfo records the information required for the driver to perform
@@ -177,10 +78,10 @@ type PageMigrationInfo struct {
 // PageMigrationReqToDriver is a req to driver from MMU to start page migration
 // process
 type PageMigrationReqToDriver struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 
-	StartTime         sim.VTimeInSec
-	EndTime           sim.VTimeInSec
+	StartTime         timing.VTimeInSec
+	EndTime           timing.VTimeInSec
 	MigrationInfo     *PageMigrationInfo
 	CurrAccessingGPUs []uint64
 	PID               PID
@@ -190,16 +91,16 @@ type PageMigrationReqToDriver struct {
 }
 
 // Meta returns the meta data associated with the message.
-func (m *PageMigrationReqToDriver) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
+func (m PageMigrationReqToDriver) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
 // Clone returns cloned PageMigrationReqToDriver with different ID
-func (m *PageMigrationReqToDriver) Clone() sim.Msg {
+func (m PageMigrationReqToDriver) Clone() modeling.Msg {
 	return m
 }
 
-func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
+func (m PageMigrationReqToDriver) GenerateRsp() modeling.Rsp {
 	rsp := NewPageMigrationRspFromDriver(m.Dst, m.Src, m)
 
 	return rsp
@@ -207,7 +108,7 @@ func (m *PageMigrationReqToDriver) GenerateRsp() sim.Rsp {
 
 // NewPageMigrationReqToDriver creates a PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	src, dst sim.RemotePort,
+	src, dst modeling.RemotePort,
 ) *PageMigrationReqToDriver {
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
@@ -219,23 +120,23 @@ func NewPageMigrationReqToDriver(
 // PageMigrationRspFromDriver is a rsp from driver to MMU marking completion of
 // migration
 type PageMigrationRspFromDriver struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 
-	StartTime sim.VTimeInSec
-	EndTime   sim.VTimeInSec
+	StartTime timing.VTimeInSec
+	EndTime   timing.VTimeInSec
 	VAddr     []uint64
 	RspToTop  bool
 
-	OriginalReq sim.Msg
+	OriginalReq modeling.Msg
 }
 
 // Meta returns the meta data associated with the message.
-func (m *PageMigrationRspFromDriver) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
+func (m PageMigrationRspFromDriver) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
 // Clone returns cloned PageMigrationRspFromDriver with different ID
-func (m *PageMigrationRspFromDriver) Clone() sim.Msg {
+func (m PageMigrationRspFromDriver) Clone() modeling.Msg {
 	return m
 }
 
@@ -245,8 +146,8 @@ func (m *PageMigrationRspFromDriver) GetRspTo() string {
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	src, dst sim.RemotePort,
-	originalReq sim.Msg,
+	src, dst modeling.RemotePort,
+	originalReq modeling.Msg,
 ) *PageMigrationRspFromDriver {
 	cmd := new(PageMigrationRspFromDriver)
 	cmd.Src = src

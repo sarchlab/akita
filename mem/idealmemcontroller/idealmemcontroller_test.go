@@ -4,8 +4,9 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/sarchlab/akita/v4/mem/mem"
-
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	. "github.com/onsi/gomega"
 )
@@ -26,14 +27,14 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("Port")).
+			Return(modeling.RemotePort("Port")).
 			AnyTimes()
 
 		memController = MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(1 * mem.MB).
 			Build("MemCtrl")
-		memController.Freq = 1000 * sim.MHz
+		memController.Freq = 1000 * timing.MHz
 		memController.Latency = 10
 		memController.topPort = port
 	})
@@ -43,13 +44,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should process read request", func() {
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:            0,
+			AccessByteSize:     4,
+			CanWaitForCoalesce: false,
+		}
 		port.EXPECT().RetrieveIncoming().Return(readReq)
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
@@ -60,14 +66,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should process write request", func() {
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData([]byte{0, 1, 2, 3}).
-			WithDirtyMask([]bool{false, false, true, false}).
-			Build()
+		writeReq := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:   0,
+			Data:      []byte{0, 1, 2, 3},
+			DirtyMask: []bool{false, false, true, false},
+		}
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
@@ -80,17 +90,22 @@ var _ = Describe("Ideal Memory Controller", func() {
 		data := []byte{1, 2, 3, 4}
 		memController.Storage.Write(0, data)
 
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:            0,
+			AccessByteSize:     4,
+			CanWaitForCoalesce: false,
+		}
 
 		event := newReadRespondEvent(11, memController, readReq)
 
 		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.DataReadyRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		port.EXPECT().Send(gomock.AssignableToTypeOf(mem.DataReadyRsp{}))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		memController.Handle(event)
 	})
@@ -99,16 +114,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 		data := []byte{1, 2, 3, 4}
 		memController.Storage.Write(0, data)
 
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:            0,
+			AccessByteSize:     4,
+			CanWaitForCoalesce: false,
+		}
 		event := newReadRespondEvent(11, memController, readReq)
 
 		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.DataReadyRsp{})).
-			Return(&sim.SendError{})
+			Send(gomock.AssignableToTypeOf(mem.DataReadyRsp{})).
+			Return(&modeling.SendError{})
 
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&readRespondEvent{}))
@@ -118,16 +138,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should handle write respond event without write mask", func() {
 		data := []byte{1, 2, 3, 4}
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData(data).
-			Build()
+		writeReq := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:   0,
+			Data:      data,
+			DirtyMask: nil,
+		}
 		event := newWriteRespondEvent(11, memController, writeReq)
 
 		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		port.EXPECT().Send(gomock.AssignableToTypeOf(mem.WriteDoneRsp{}))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		memController.Handle(event)
 
@@ -140,17 +165,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 		data := []byte{1, 2, 3, 4}
 		dirtyMask := []bool{false, true, false, false}
 
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData(data).
-			WithDirtyMask(dirtyMask).
-			Build()
+		writeReq := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:   0,
+			Data:      data,
+			DirtyMask: dirtyMask,
+		}
 		event := newWriteRespondEvent(11, memController, writeReq)
 
 		engine.EXPECT().Schedule(gomock.Any())
-		port.EXPECT().Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{}))
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		port.EXPECT().Send(gomock.AssignableToTypeOf(mem.WriteDoneRsp{}))
+		engine.EXPECT().Now().Return(timing.VTimeInSec(10))
 
 		memController.Handle(event)
 		retData, _ := memController.Storage.Read(0, 4)
@@ -169,17 +198,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 			true, true, true, true, false, false, false, false,
 			true, true, true, true, false, false, false, false,
 		}
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData(data).
-			WithDirtyMask(dirtyMask).
-			Build()
+		writeReq := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:   0,
+			Data:      data,
+			DirtyMask: dirtyMask,
+		}
 
 		event := newWriteRespondEvent(11, memController, writeReq)
 		engine.EXPECT().Schedule(gomock.Any()).AnyTimes()
 		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{})).
+			Send(gomock.AssignableToTypeOf(mem.WriteDoneRsp{})).
 			AnyTimes()
 
 		b.Time("write time", func() {
@@ -192,16 +225,21 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should retry write respond event, if network busy", func() {
 		data := []byte{1, 2, 3, 4}
 
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData(data).
-			Build()
+		writeReq := mem.WriteReq{
+			MsgMeta: modeling.MsgMeta{
+				Src: port.AsRemote(),
+				Dst: memController.topPort.AsRemote(),
+				ID:  id.Generate(),
+			},
+			Address:   0,
+			Data:      data,
+			DirtyMask: nil,
+		}
 		event := newWriteRespondEvent(11, memController, writeReq)
 
 		port.EXPECT().
-			Send(gomock.AssignableToTypeOf(&mem.WriteDoneRsp{})).
-			Return(&sim.SendError{})
+			Send(gomock.AssignableToTypeOf(mem.WriteDoneRsp{})).
+			Return(&modeling.SendError{})
 		engine.EXPECT().
 			Schedule(gomock.AssignableToTypeOf(&writeRespondEvent{}))
 

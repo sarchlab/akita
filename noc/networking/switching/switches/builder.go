@@ -3,13 +3,14 @@ package switches
 import (
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Builder can help building switches
 type Builder struct {
-	engine       sim.Engine
-	freq         sim.Freq
+	engine       timing.Engine
+	freq         timing.Freq
 	routingTable routing.Table
 	arbiter      arbitration.Arbiter
 }
@@ -19,13 +20,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the switch to build uses.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the switch to build works at.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -50,10 +51,10 @@ func (b Builder) Build(name string) *Comp {
 	b.arbiterMustBeGiven()
 
 	s := &Comp{}
-	s.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, s)
+	s.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, s)
 	s.routingTable = b.routingTable
 	s.arbiter = b.arbiter
-	s.portToComplexMapping = make(map[sim.RemotePort]portComplex)
+	s.portToComplexMapping = make(map[modeling.RemotePort]portComplex)
 
 	middleware := &middleware{Comp: s}
 	s.AddMiddleware(middleware)

@@ -7,8 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
-
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"time"
 
@@ -31,7 +30,7 @@ var traceFileFlag = flag.String("trace", "", "Trace file")
 var traceWithStdoutFlag = flag.Bool("trace-stdout", false, "Trace with stdout")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-var engine sim.Engine
+var engine timing.Engine
 var agent *acceptancetests.MemAccessAgent
 
 func main() {
@@ -58,15 +57,15 @@ func initSeed() {
 
 func buildEnvironment() {
 	if *parallelFlag {
-		engine = sim.NewParallelEngine()
+		engine = timing.NewParallelEngine()
 	} else {
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent = acceptancetests.NewMemAccessAgent(engine)

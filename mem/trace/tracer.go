@@ -5,20 +5,20 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A tracer is a hook that can record the actions of a memory model into
 // traces.
 type tracer struct {
-	timeTeller sim.TimeTeller
+	timeTeller timing.TimeTeller
 	logger     *log.Logger
 }
 
 // StartTask marks the start of a memory transaction
 func (t *tracer) StartTask(task tracing.Task) {
-	task.StartTime = t.timeTeller.CurrentTime()
+	task.StartTime = t.timeTeller.Now()
 
 	req, ok := task.Detail.(mem.AccessReq)
 	if !ok {
@@ -38,7 +38,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 
 // StepTask marks the memory transaction has completed a milestone
 func (t *tracer) StepTask(task tracing.Task) {
-	task.Steps[0].Time = t.timeTeller.CurrentTime()
+	task.Steps[0].Time = t.timeTeller.Now()
 
 	t.logger.Printf("step, %.12f, %s, %s\n",
 		task.Steps[0].Time,
@@ -48,13 +48,13 @@ func (t *tracer) StepTask(task tracing.Task) {
 
 // EndTask marks the end of a memory transaction
 func (t *tracer) EndTask(task tracing.Task) {
-	task.EndTime = t.timeTeller.CurrentTime()
+	task.EndTime = t.timeTeller.Now()
 
 	t.logger.Printf("end, %.12f, %s\n", task.EndTime, task.ID)
 }
 
 // NewTracer creates a new Tracer.
-func NewTracer(logger *log.Logger, timeTeller sim.TimeTeller) tracing.Tracer {
+func NewTracer(logger *log.Logger, timeTeller timing.TimeTeller) tracing.Tracer {
 	t := new(tracer)
 	t.logger = logger
 	t.timeTeller = timeTeller

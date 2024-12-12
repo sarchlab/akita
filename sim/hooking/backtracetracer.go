@@ -38,7 +38,9 @@ func NewBackTraceTracer(printer taskPrinter) *BackTraceTracer {
 	return t
 }
 
-func (t *BackTraceTracer) StartTask(taskStart TaskStart) {
+func (t *BackTraceTracer) StartTask(ctx HookCtx) {
+	taskStart := ctx.Item.(TaskStart)
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -46,14 +48,16 @@ func (t *BackTraceTracer) StartTask(taskStart TaskStart) {
 		ID:       taskStart.ID,
 		Kind:     taskStart.Kind,
 		What:     taskStart.What,
-		Where:    taskStart.Where,
+		Where:    ctx.Domain.Name(),
 		ParentID: taskStart.ParentID,
 	}
 
 	t.tracingTasks[taskStart.ID] = currTask
 }
 
-func (t *BackTraceTracer) EndTask(taskEnd TaskEnd) {
+func (t *BackTraceTracer) EndTask(ctx HookCtx) {
+	taskEnd := ctx.Item.(TaskEnd)
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -61,16 +65,15 @@ func (t *BackTraceTracer) EndTask(taskEnd TaskEnd) {
 }
 
 func (t *BackTraceTracer) DumpBackTrace(taskID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	currTask, ok := t.tracingTasks[taskID]
-	if !ok {
-		return
+
+	for ok {
+		t.printer.Print(currTask)
+
+		taskID = currTask.ParentID
+		currTask, ok = t.tracingTasks[taskID]
 	}
-
-	t.printer.Print(currTask)
-
-	if currTask.ParentID == "" {
-		return
-	}
-
-	t.DumpBackTrace(currTask.ParentID)
 }

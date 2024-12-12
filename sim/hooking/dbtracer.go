@@ -26,18 +26,19 @@ type DBTracer struct {
 func (t *DBTracer) Func(ctx HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
-		t.StartTask(ctx.Item.(TaskStart))
+		t.StartTask(ctx)
 	case HookPosTaskStep:
-		t.StepTask(ctx.Item.(TaskStep))
+		t.StepTask(ctx)
 	case HookPosTaskTag:
-		t.TagTask(ctx.Item.(TaskTag))
+		t.TagTask(ctx)
 	case HookPosTaskEnd:
-		t.EndTask(ctx.Item.(TaskEnd))
+		t.EndTask(ctx)
 	}
 }
 
 // StartTask marks the start of a task.
-func (t *DBTracer) StartTask(taskStart TaskStart) {
+func (t *DBTracer) StartTask(ctx HookCtx) {
+	taskStart := ctx.Item.(TaskStart)
 	t.startingTaskMustBeValid(taskStart)
 
 	currTask := task{
@@ -45,6 +46,7 @@ func (t *DBTracer) StartTask(taskStart TaskStart) {
 		ParentID:  taskStart.ParentID,
 		Kind:      taskStart.Kind,
 		What:      taskStart.What,
+		Where:     ctx.Domain.Name(),
 		StartTime: t.timeTeller.Now(),
 	}
 
@@ -67,14 +69,12 @@ func (t *DBTracer) startingTaskMustBeValid(task TaskStart) {
 	if task.What == "" {
 		panic("task what must be set")
 	}
-
-	if task.Where == "" {
-		panic("task where must be set")
-	}
 }
 
 // StepTask marks a step of a task.
-func (t *DBTracer) StepTask(ts TaskStep) {
+func (t *DBTracer) StepTask(ctx HookCtx) {
+	ts := ctx.Item.(TaskStep)
+
 	originalTask, ok := t.tracingTasks[ts.TaskID]
 	if !ok {
 		return
@@ -92,7 +92,9 @@ func (t *DBTracer) StepTask(ts TaskStep) {
 }
 
 // TagTask marks a tag of a task.
-func (t *DBTracer) TagTask(tt TaskTag) {
+func (t *DBTracer) TagTask(ctx HookCtx) {
+	tt := ctx.Item.(TaskTag)
+
 	originalTask, ok := t.tracingTasks[tt.TaskID]
 	if !ok {
 		return
@@ -107,7 +109,9 @@ func (t *DBTracer) TagTask(tt TaskTag) {
 }
 
 // EndTask marks the end of a task.
-func (t *DBTracer) EndTask(taskEnd TaskEnd) {
+func (t *DBTracer) EndTask(ctx HookCtx) {
+	taskEnd := ctx.Item.(TaskEnd)
+
 	now := t.timeTeller.Now()
 
 	if t.startTime > 0 && now < t.startTime {

@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -39,10 +39,10 @@ func (p Protocol) isHBM() bool {
 
 // Comp is a MemController handles read and write requests.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort sim.Port
+	topPort modeling.Port
 
 	storage             *mem.Storage
 	addrConverter       mem.AddressConverter
