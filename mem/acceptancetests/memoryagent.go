@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
@@ -26,15 +27,15 @@ type MemAccessAgent struct {
 	WriteLeft       int
 	ReadLeft        int
 	KnownMemValue   map[uint64][]uint32
-	PendingReadReq  map[string]*mem.ReadReq
-	PendingWriteReq map[string]*mem.WriteReq
+	PendingReadReq  map[string]mem.ReadReq
+	PendingWriteReq map[string]mem.WriteReq
 
 	memPort modeling.Port
 }
 
 func (a *MemAccessAgent) checkReadResult(
-	read *mem.ReadReq,
-	dataReady *mem.DataReadyRsp,
+	read mem.ReadReq,
+	dataReady mem.DataReadyRsp,
 ) {
 	found := false
 
@@ -85,7 +86,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *mem.WriteDoneRsp:
+	case mem.WriteDoneRsp:
 		if dumpLog {
 			write := a.PendingWriteReq[msg.RespondTo]
 			log.Printf("%.10f, agent, write complete, 0x%X\n",
@@ -95,7 +96,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 		delete(a.PendingWriteReq, msg.RespondTo)
 
 		return true
-	case *mem.DataReadyRsp:
+	case mem.DataReadyRsp:
 		req := a.PendingReadReq[msg.RespondTo]
 		delete(a.PendingReadReq, msg.RespondTo)
 
@@ -139,13 +140,16 @@ func (a *MemAccessAgent) doRead() bool {
 		return false
 	}
 
-	readReq := mem.ReadReqBuilder{}.
-		WithSrc(a.memPort.AsRemote()).
-		WithDst(a.LowModule.AsRemote()).
-		WithAddress(address).
-		WithByteSize(4).
-		WithPID(1).
-		Build()
+	readReq := mem.ReadReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: a.memPort.AsRemote(),
+			Dst: a.LowModule.AsRemote(),
+		},
+		Address:        address,
+		AccessByteSize: 4,
+		PID:            1,
+	}
 
 	err := a.memPort.Send(readReq)
 	if err == nil {
@@ -222,13 +226,16 @@ func (a *MemAccessAgent) doWrite() bool {
 		return false
 	}
 
-	writeReq := mem.WriteReqBuilder{}.
-		WithSrc(a.memPort.AsRemote()).
-		WithDst(a.LowModule.AsRemote()).
-		WithAddress(address).
-		WithPID(1).
-		WithData(uint32ToBytes(data)).
-		Build()
+	writeReq := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: a.memPort.AsRemote(),
+			Dst: a.LowModule.AsRemote(),
+		},
+		Address: address,
+		PID:     1,
+		Data:    uint32ToBytes(data),
+	}
 
 	err := a.memPort.Send(writeReq)
 	if err == nil {
@@ -270,8 +277,8 @@ func NewMemAccessAgent(engine timing.Engine) *MemAccessAgent {
 	agent.ReadLeft = 10000
 	agent.WriteLeft = 10000
 	agent.KnownMemValue = make(map[uint64][]uint32)
-	agent.PendingWriteReq = make(map[string]*mem.WriteReq)
-	agent.PendingReadReq = make(map[string]*mem.ReadReq)
+	agent.PendingWriteReq = make(map[string]mem.WriteReq)
+	agent.PendingReadReq = make(map[string]mem.ReadReq)
 
 	return agent
 }
