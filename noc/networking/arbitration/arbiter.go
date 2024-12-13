@@ -1,14 +1,12 @@
 package arbitration
 
-import (
-	"github.com/sarchlab/akita/v4/sim"
-)
+import "github.com/sarchlab/akita/v4/sim/queueing"
 
 // Arbiter can determine which buffer can send a message out
 type Arbiter interface {
 	// Add a buffer for arbitration
-	AddBuffer(buf sim.Buffer)
+	AddBuffer(buf queueing.Buffer)
 
 	// Arbitrate returns a set of ports that can send request in the next cycle.
-	Arbitrate() []sim.Buffer
+	Arbitrate() []queueing.Buffer
 }

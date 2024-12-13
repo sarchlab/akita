@@ -5,15 +5,17 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine              sim.Engine
-	freq                sim.Freq
+	engine              timing.Engine
+	freq                timing.Freq
 	addressToPortMapper mem.AddressToPortMapper
 	wayAssociativity    int
 	log2BlockSize       uint64
@@ -37,7 +39,7 @@ type Builder struct {
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                1 * sim.GHz,
+		freq:                1 * timing.GHz,
 		wayAssociativity:    4,
 		log2BlockSize:       6,
 		byteSize:            512 * mem.KB,
@@ -51,13 +53,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the caches.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency to be used by the caches.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -149,7 +151,7 @@ func (b Builder) WithBankLatency(n int) Builder {
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *Comp {
 	cache := new(Comp)
-	cache.TickingComponent = sim.NewTickingComponent(
+	cache.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, cache)
 
 	b.configureCache(cache)
@@ -193,17 +195,17 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewPort(cache,
+	cache.topPort = modeling.NewPort(cache,
 		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
 		cache.Name()+".ToTop")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewPort(cache,
+	cache.bottomPort = modeling.NewPort(cache,
 		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
 		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewPort(cache,
+	cache.controlPort = modeling.NewPort(cache,
 		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
 		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
@@ -224,7 +226,7 @@ func (b *Builder) createInternalStages(cache *Comp) {
 }
 
 func (b *Builder) buildDirectoryStage(cache *Comp) {
-	buf := sim.NewBuffer(
+	buf := queueing.NewBuffer(
 		cache.Name()+".DirectoryStageBuffer",
 		b.numReqPerCycle,
 	)
@@ -271,25 +273,25 @@ func (b *Builder) buildBankStages(cache *Comp) {
 }
 
 func (b *Builder) createInternalBuffers(cache *Comp) {
-	cache.dirStageBuffer = sim.NewBuffer(
+	cache.dirStageBuffer = queueing.NewBuffer(
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.dirToBankBuffers = make([]sim.Buffer, 1)
-	cache.dirToBankBuffers[0] = sim.NewBuffer(
+	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
+	cache.dirToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".DirToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferToBankBuffers = make([]sim.Buffer, 1)
-	cache.writeBufferToBankBuffers[0] = sim.NewBuffer(
+	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
+	cache.writeBufferToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".WriteBufferToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.mshrStageBuffer = sim.NewBuffer(
+	cache.mshrStageBuffer = queueing.NewBuffer(
 		cache.Name()+".MSHRStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferBuffer = sim.NewBuffer(
+	cache.writeBufferBuffer = queueing.NewBuffer(
 		cache.Name()+".WriteBufferBuffer",
 		cache.numReqPerCycle,
 	)

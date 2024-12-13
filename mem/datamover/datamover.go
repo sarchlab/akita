@@ -5,27 +5,28 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
 type dataMoverTransaction struct {
-	req           *DataMoveRequest
+	req           DataMoveRequest
 	nextReadAddr  uint64
 	nextWriteAddr uint64
-	pendingRead   map[string]*mem.ReadReq
-	pendingWrite  map[string]*mem.WriteReq
+	pendingRead   map[string]mem.ReadReq
+	pendingWrite  map[string]mem.WriteReq
 }
 
-func newDataMoverTransaction(req *DataMoveRequest) *dataMoverTransaction {
+func newDataMoverTransaction(req DataMoveRequest) *dataMoverTransaction {
 	return &dataMoverTransaction{
 		req:           req,
 		nextReadAddr:  req.SrcAddress,
 		nextWriteAddr: req.DstAddress,
-		pendingRead:   make(map[string]*mem.ReadReq),
-		pendingWrite:  make(map[string]*mem.WriteReq),
+		pendingRead:   make(map[string]mem.ReadReq),
+		pendingWrite:  make(map[string]mem.WriteReq),
 	}
 }
 
@@ -42,19 +43,19 @@ func addressMustBeAligned(addr, granularity uint64) {
 // Comp helps moving data from designated source and destination
 // following the given move direction
 type Comp struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 
-	ctrlPort    sim.Port
-	insidePort  sim.Port
-	outsidePort sim.Port
+	ctrlPort    modeling.Port
+	insidePort  modeling.Port
+	outsidePort modeling.Port
 
 	insidePortMapper       mem.AddressToPortMapper
 	outsidePortMapper      mem.AddressToPortMapper
 	insideByteGranularity  uint64
 	outsideByteGranularity uint64
 
-	srcPort            sim.Port
-	dstPort            sim.Port
+	srcPort            modeling.Port
+	dstPort            modeling.Port
 	srcPortMapper      mem.AddressToPortMapper
 	dstPortMapper      mem.AddressToPortMapper
 	srcByteGranularity uint64
@@ -89,7 +90,7 @@ func (c *Comp) parseFromCP() bool {
 		return false
 	}
 
-	moveReq, ok := req.(*DataMoveRequest)
+	moveReq, ok := req.(DataMoveRequest)
 	if !ok {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
 	}
@@ -104,7 +105,7 @@ func (c *Comp) parseFromCP() bool {
 		granularity: c.srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(req, c)
+	c.traceDataMoveStart(moveReq)
 
 	return true
 }
@@ -128,13 +129,16 @@ func (c *Comp) readFromSrc() bool {
 		return false
 	}
 
-	req := mem.ReadReqBuilder{}.
-		WithAddress(addr).
-		WithSrc(c.srcPort.AsRemote()).
-		WithDst(c.srcPortMapper.Find(addr)).
-		WithByteSize(c.srcByteGranularity).
-		WithPID(0).
-		Build()
+	req := mem.ReadReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.srcPort.AsRemote(),
+			Dst: c.srcPortMapper.Find(addr),
+			ID:  id.Generate(),
+		},
+		Address:            addr,
+		AccessByteSize:     c.srcByteGranularity,
+		CanWaitForCoalesce: false,
+	}
 
 	err := c.srcPort.Send(req)
 	if err != nil {
@@ -144,7 +148,7 @@ func (c *Comp) readFromSrc() bool {
 	trans.nextReadAddr += c.srcByteGranularity
 	trans.pendingRead[req.ID] = req
 
-	tracing.TraceReqInitiate(req, c, tracing.MsgIDAtReceiver(trans.req, c))
+	c.traceReadWriteStart(req)
 
 	return true
 }
@@ -160,7 +164,7 @@ func (c *Comp) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	readRsp, ok := rsp.(*mem.DataReadyRsp)
+	readRsp, ok := rsp.(mem.DataReadyRsp)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
@@ -177,7 +181,8 @@ func (c *Comp) processDataReadyFromSrc() bool {
 
 	delete(c.currentTransaction.pendingRead, readRsp.RespondTo)
 	c.srcPort.RetrieveIncoming()
-	tracing.TraceReqFinalize(originalReq, c)
+
+	c.traceReadWriteEnd(originalReq)
 
 	return true
 }
@@ -196,13 +201,16 @@ func (c *Comp) writeToDst() bool {
 		return false
 	}
 
-	req := mem.WriteReqBuilder{}.
-		WithAddress(c.currentTransaction.nextWriteAddr).
-		WithData(data).
-		WithSrc(c.dstPort.AsRemote()).
-		WithDst(c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr)).
-		WithPID(0).
-		Build()
+	req := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.dstPort.AsRemote(),
+			Dst: c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr),
+			ID:  id.Generate(),
+		},
+		Address:            c.currentTransaction.nextWriteAddr,
+		Data:               data,
+		CanWaitForCoalesce: false,
+	}
 
 	err := c.dstPort.Send(req)
 	if err != nil {
@@ -213,8 +221,7 @@ func (c *Comp) writeToDst() bool {
 	c.currentTransaction.pendingWrite[req.ID] = req
 	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.req.DstAddress)
 
-	tracing.TraceReqInitiate(req, c,
-		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
+	c.traceReadWriteStart(req)
 
 	return true
 }
@@ -230,7 +237,7 @@ func (c *Comp) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	writeRsp, ok := rsp.(*mem.WriteDoneRsp)
+	writeRsp, ok := rsp.(mem.WriteDoneRsp)
 	if !ok {
 		return false
 	}
@@ -244,7 +251,7 @@ func (c *Comp) processWriteDoneFromDst() bool {
 	delete(c.currentTransaction.pendingWrite, writeRsp.RespondTo)
 	c.dstPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(originalReq, c)
+	c.traceReadWriteEnd(originalReq)
 
 	return false
 }
@@ -274,12 +281,12 @@ func (c *Comp) finishTransaction() bool {
 		granularity: c.srcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(rsp, c)
+	c.traceDataMoveEnd(trans.req)
 
 	return true
 }
 
-func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {
+func (c *Comp) setSrcSide(moveReq DataMoveRequest) {
 	switch moveReq.SrcSide {
 	case "inside":
 		c.srcPort = c.insidePort
@@ -296,7 +303,7 @@ func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {
 	addressMustBeAligned(moveReq.SrcAddress, c.srcByteGranularity)
 }
 
-func (c *Comp) setDstSide(moveReq *DataMoveRequest) {
+func (c *Comp) setDstSide(moveReq DataMoveRequest) {
 	switch moveReq.DstSide {
 	case "inside":
 		c.dstPort = c.insidePort
@@ -311,4 +318,72 @@ func (c *Comp) setDstSide(moveReq *DataMoveRequest) {
 	}
 
 	addressMustBeAligned(moveReq.DstAddress, c.dstByteGranularity)
+}
+
+func (c *Comp) traceDataMoveStart(req DataMoveRequest) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskStart,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqOutTaskID(req.Meta().ID),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(req).String(),
+		},
+	}
+
+	c.InvokeHook(ctx)
+}
+
+func (c *Comp) traceDataMoveEnd(req DataMoveRequest) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskEnd,
+		Item:   hooking.TaskEnd{ID: modeling.ReqInTaskID(req.Meta().ID)},
+	}
+
+	c.InvokeHook(ctx)
+}
+
+func (c *Comp) traceReadWriteStart(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskStart,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqOutTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(c.currentTransaction.req.Meta().ID),
+			Kind:     "req_out",
+			What:     reflect.TypeOf(req).String(),
+		},
+	}
+
+	// switch req := req.(type) {
+	// case mem.ReadReq:
+	// 	fmt.Printf("%.10f, %s, start read, 0x%016x\n",
+	// 		c.Now(), c.Name(), req.Address)
+	// case mem.WriteReq:
+	// 	fmt.Printf("%.10f, %s, start write, 0x%016x, %v\n",
+	// 		c.Now(), c.Name(), req.Address, req.Data)
+	// }
+
+	c.InvokeHook(ctx)
+}
+
+func (c *Comp) traceReadWriteEnd(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskEnd,
+		Item:   hooking.TaskEnd{ID: modeling.ReqOutTaskID(req.Meta().ID)},
+	}
+
+	// switch req := req.(type) {
+	// case mem.ReadReq:
+	// 	fmt.Printf("%.10f, %s, end read, 0x%016x\n",
+	// 		c.Now(), c.Name(), req.Address)
+	// case mem.WriteReq:
+	// 	fmt.Printf("%.10f, %s, end write, 0x%016x, %v\n",
+	// 		c.Now(), c.Name(), req.Address, req.Data)
+	// }
+
+	c.InvokeHook(ctx)
 }

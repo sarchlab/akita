@@ -1,9 +1,9 @@
 package messaging
 
-import "github.com/sarchlab/akita/v4/sim"
+import "github.com/sarchlab/akita/v4/sim/modeling"
 
 // MsgBuffer is a buffer that can hold requests
 type MsgBuffer struct {
 	Capacity int
-	Buf      []sim.Msg
+	Buf      []modeling.Msg
 }

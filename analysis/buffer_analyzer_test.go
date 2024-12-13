@@ -5,7 +5,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 
 	// . "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim"
+
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 var _ = Describe("BufferAnalyzer", func() {
@@ -38,17 +41,20 @@ var _ = Describe("BufferAnalyzer", func() {
 
 	It("should calculate average buffer level", func() {
 		timeTeller.EXPECT().
-			CurrentTime().
-			Return(sim.VTimeInSec(0.1))
+			Now().
+			Return(timing.VTimeInSec(0.1))
 		buffer.EXPECT().Size().Return(1)
 
-		bufferAnalyzer.Func(sim.HookCtx{
+		bufferAnalyzer.Func(hooking.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
+		timeTeller.EXPECT().
+			Now().
+			Return(timing.VTimeInSec(1.1)).
+			AnyTimes()
 		buffer.EXPECT().Size().Return(2)
 		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start:     0.0,
@@ -60,26 +66,29 @@ var _ = Describe("BufferAnalyzer", func() {
 			Unit:      "",
 		})
 
-		bufferAnalyzer.Func(sim.HookCtx{
+		bufferAnalyzer.Func(hooking.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 	})
 
 	It("should report multiple periods together", func() {
 		timeTeller.EXPECT().
-			CurrentTime().
-			Return(sim.VTimeInSec(0.1))
+			Now().
+			Return(timing.VTimeInSec(0.1))
 		buffer.EXPECT().Size().Return(1)
 
-		bufferAnalyzer.Func(sim.HookCtx{
+		bufferAnalyzer.Func(hooking.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 
-		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1)).AnyTimes()
+		timeTeller.EXPECT().
+			Now().
+			Return(timing.VTimeInSec(2.1)).
+			AnyTimes()
 		buffer.EXPECT().Size().Return(2)
 		logger.EXPECT().AddDataEntry(PerfAnalyzerEntry{
 			Start:     0.0,
@@ -101,10 +110,10 @@ var _ = Describe("BufferAnalyzer", func() {
 			Unit:      "",
 		})
 
-		bufferAnalyzer.Func(sim.HookCtx{
+		bufferAnalyzer.Func(hooking.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 	})
 })

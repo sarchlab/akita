@@ -75,8 +75,11 @@ var _ = Describe("FCFSSubTransactionQueue", func() {
 	})
 
 	It("should add read command to queue", func() {
-		read := mem.ReadReqBuilder{}.Build()
+		read := mem.ReadReq{
+			Address: 0x40,
+		}
 		trans := &signal.Transaction{
+			Type: signal.TransactionTypeRead,
 			Read: read,
 		}
 		subTrans := &signal.SubTransaction{

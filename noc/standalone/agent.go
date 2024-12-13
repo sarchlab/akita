@@ -4,54 +4,53 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // TrafficMsg is a type of msg that only used in standalone network test.
 // It has a byte size, but we do not care about the information it carries.
 type TrafficMsg struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
 // Meta returns the meta data of the message.
-func (m *TrafficMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
+func (m TrafficMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
 // Clone returns cloned TrafficMsg
-func (m *TrafficMsg) Clone() sim.Msg {
-	cloneMsg := NewTrafficMsg(m.Src, m.Dst, m.TrafficBytes)
+func (m TrafficMsg) Clone() modeling.Msg {
+	cloneMsg := m
+	cloneMsg.ID = id.Generate()
 
 	return cloneMsg
 }
 
-// NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
-	msg := new(TrafficMsg)
-	msg.Src = src
-	msg.Dst = dst
-	msg.TrafficBytes = byteSize
-
-	return msg
-}
-
 // StartSendEvent is an event that triggers an agent to send a message.
 type StartSendEvent struct {
-	*sim.EventBase
-	Msg *TrafficMsg
+	*timing.EventBase
+	Msg TrafficMsg
 }
 
 // NewStartSendEvent creates a new StartSendEvent.
 func NewStartSendEvent(
-	time sim.VTimeInSec,
+	time timing.VTimeInSec,
 	src, dst *Agent,
 	byteSize int,
 	trafficClass int,
 ) *StartSendEvent {
 	e := new(StartSendEvent)
-	e.EventBase = sim.NewEventBase(time, src)
-	e.Msg = NewTrafficMsg(src.ToOut.AsRemote(), dst.ToOut.AsRemote(), byteSize)
-	e.Msg.Meta().TrafficClass = trafficClass
+	e.EventBase = timing.NewEventBase(time, src)
+	e.Msg = TrafficMsg{
+		MsgMeta: modeling.MsgMeta{
+			Src:          src.ToOut.AsRemote(),
+			Dst:          dst.ToOut.AsRemote(),
+			TrafficBytes: byteSize,
+			TrafficClass: trafficClass,
+		},
+	}
 
 	return e
 }
@@ -59,25 +58,25 @@ func NewStartSendEvent(
 // Agent is a component that connects the network. It can send and receive
 // msg to/ from the network.
 type Agent struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 
-	ToOut sim.Port
+	ToOut modeling.Port
 
-	Buffer []*TrafficMsg
+	Buffer []TrafficMsg
 }
 
 // NotifyRecv notifies that a port has received a message.
-func (a *Agent) NotifyRecv(port sim.Port) {
+func (a *Agent) NotifyRecv(port modeling.Port) {
 	a.ToOut.RetrieveIncoming()
 	a.TickLater()
 }
 
 // Handle defines how an agent handles events.
-func (a *Agent) Handle(e sim.Event) error {
+func (a *Agent) Handle(e timing.Event) error {
 	switch e := e.(type) {
 	case *StartSendEvent:
 		a.handleStartSendEvent(e)
-	case sim.TickEvent:
+	case timing.TickEvent:
 		err := a.TickingComponent.Handle(e)
 		if err != nil {
 			return err
@@ -116,11 +115,12 @@ func (a *Agent) sendDataOut() bool {
 }
 
 // NewAgent creates a new agent.
-func NewAgent(name string, engine sim.Engine) *Agent {
+func NewAgent(name string, engine timing.Engine) *Agent {
 	a := new(Agent)
-	a.TickingComponent = sim.NewTickingComponent(name, engine, 1*sim.GHz, a)
+	a.TickingComponent = modeling.NewTickingComponent(
+		name, engine, 1*timing.GHz, a)
 
-	a.ToOut = sim.NewPort(a, 4, 4, name+".ToOut")
+	a.ToOut = modeling.NewPort(a, 4, 4, name+".ToOut")
 
 	return a
 }

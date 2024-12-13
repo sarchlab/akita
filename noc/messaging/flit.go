@@ -3,48 +3,50 @@ package messaging
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // Flit is the smallest trasferring unit on a network.
 type Flit struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 	SeqID        int
 	NumFlitInMsg int
-	Msg          sim.Msg
-	OutputBuf    sim.Buffer // The buffer to route to within a switch
+	Msg          modeling.Msg
+	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
 // Meta returns the meta data associated with the Flit.
-func (f *Flit) Meta() *sim.MsgMeta {
-	return &f.MsgMeta
+func (f Flit) Meta() modeling.MsgMeta {
+	return f.MsgMeta
 }
 
 // Clone returns cloned Flit with different ID
-func (f *Flit) Clone() sim.Msg {
-	cloneMsg := *f
+func (f Flit) Clone() modeling.Msg {
+	cloneMsg := f
 	cloneMsg.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
-		sim.GetIDGenerator().Generate())
+		id.Generate())
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // FlitBuilder can build flits
 type FlitBuilder struct {
-	src, dst            sim.RemotePort
-	msg                 sim.Msg
+	src, dst            modeling.RemotePort
+	msg                 modeling.Msg
 	seqID, numFlitInMsg int
 }
 
 // WithSrc sets the src of the request to send
-func (b FlitBuilder) WithSrc(src sim.RemotePort) FlitBuilder {
+func (b FlitBuilder) WithSrc(src modeling.RemotePort) FlitBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the dst of the request to send
-func (b FlitBuilder) WithDst(dst sim.RemotePort) FlitBuilder {
+func (b FlitBuilder) WithDst(dst modeling.RemotePort) FlitBuilder {
 	b.dst = dst
 	return b
 }
@@ -62,7 +64,7 @@ func (b FlitBuilder) WithNumFlitInMsg(n int) FlitBuilder {
 }
 
 // WithMsg sets the msg of the flit to build.
-func (b FlitBuilder) WithMsg(msg sim.Msg) FlitBuilder {
+func (b FlitBuilder) WithMsg(msg modeling.Msg) FlitBuilder {
 	b.msg = msg
 	return b
 }
@@ -72,7 +74,7 @@ func (b FlitBuilder) Build() *Flit {
 	f := &Flit{}
 	f.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		b.seqID, b.msg.Meta().ID,
-		sim.GetIDGenerator().Generate())
+		id.Generate())
 	f.Src = b.src
 	f.Dst = b.dst
 	f.Msg = b.msg

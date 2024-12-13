@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("MemController", func() {
@@ -29,7 +29,10 @@ var _ = Describe("MemController", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
+		topPort.EXPECT().
+			AsRemote().
+			Return(modeling.RemotePort("TopPort")).
+			AnyTimes()
 
 		subTransactionQueue = NewMockSubTransactionQueue(mockCtrl)
 		subTransSplitter = NewMockSubTransSplitter(mockCtrl)
@@ -63,9 +66,9 @@ var _ = Describe("MemController", func() {
 		})
 
 		It("should stall if substransaction queue is full", func() {
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x1000).
-				Build()
+			read := mem.ReadReq{
+				Address: 0x1000,
+			}
 
 			topPort.EXPECT().PeekIncoming().Return(read)
 			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
@@ -83,9 +86,9 @@ var _ = Describe("MemController", func() {
 		})
 
 		It("should push sub-transactions to subtrans queue", func() {
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x1000).
-				Build()
+			read := mem.ReadReq{
+				Address: 0x1000,
+			}
 
 			topPort.EXPECT().PeekIncoming().Return(read)
 			topPort.EXPECT().RetrieveIncoming().Return(read)
@@ -160,22 +163,27 @@ var _ = Describe("MemController", func() {
 			})
 
 		It("should send write done response", func() {
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x40).
-				WithData([]byte{1, 2, 3, 4}).
-				Build()
+			write := mem.WriteReq{
+				Address: 0x40,
+				Data:    []byte{1, 2, 3, 4},
+			}
 			trans := &signal.Transaction{
-				InternalAddress: 0x40,
+				Type:            signal.TransactionTypeWrite,
 				Write:           write,
+				InternalAddress: 0x40,
 			}
 			subTransaction := &signal.SubTransaction{
 				Transaction: trans,
 				Completed:   true,
 			}
-			trans.SubTransactions = append(trans.SubTransactions,
-				subTransaction)
-			memCtrl.inflightTransactions = append(memCtrl.inflightTransactions,
-				trans)
+			trans.SubTransactions = append(
+				trans.SubTransactions,
+				subTransaction,
+			)
+			memCtrl.inflightTransactions = append(
+				memCtrl.inflightTransactions,
+				trans,
+			)
 
 			topPort.EXPECT().Send(gomock.Any()).Return(nil)
 
@@ -189,10 +197,10 @@ var _ = Describe("MemController", func() {
 
 		It("should send data ready response", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4})
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x40).
-				WithByteSize(4).
-				Build()
+			read := mem.ReadReq{
+				Address:        0x40,
+				AccessByteSize: 4,
+			}
 			trans := &signal.Transaction{
 				InternalAddress: 0x40,
 				Read:            read,
@@ -206,7 +214,7 @@ var _ = Describe("MemController", func() {
 			memCtrl.inflightTransactions = append(memCtrl.inflightTransactions,
 				trans)
 
-			topPort.EXPECT().Send(gomock.Any()).Do(func(dr *mem.DataReadyRsp) {
+			topPort.EXPECT().Send(gomock.Any()).Do(func(dr mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			}).Return(nil)
 

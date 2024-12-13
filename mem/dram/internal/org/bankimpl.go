@@ -2,8 +2,8 @@ package org
 
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // BankState represents the current state of a bank.
@@ -20,7 +20,8 @@ const (
 
 // BankImpl provides a basic implementation of a bank.
 type BankImpl struct {
-	sim.HookableBase
+	hooking.HookableBase
+
 	BankName             string
 	state                BankState
 	currentCmd           *signal.Command
@@ -81,12 +82,10 @@ func (b *BankImpl) countDownCurrentCmd() (madeProgress bool) {
 func (b *BankImpl) completeCurrentCmd() {
 	b.currentCmd.CycleLeft = 0
 
-	tracing.EndTask(b.currentCmd.ID, b)
+	b.traceCmdEnd(b.currentCmd)
 
 	if b.currentCmd.IsReadOrWrite() {
 		b.currentCmd.SubTrans.Completed = true
-
-		tracing.EndTask(b.currentCmd.SubTrans.ID, b)
 	}
 
 	// fmt.Printf("%.10f, %s, cmd completed, %s\n",
@@ -148,14 +147,7 @@ func (b *BankImpl) StartCommand(cmd *signal.Command) {
 	// fmt.Printf("%.10f, %s, cmd started, %s\n",
 	// 	now, b.Name(), b.currentCmd.Kind.String())
 
-	tracing.StartTask(
-		cmd.ID,
-		cmd.SubTrans.ID,
-		b,
-		"cmd",
-		cmd.Kind.String(),
-		nil,
-	)
+	b.traceCmdStart(cmd)
 }
 
 // UpdateTiming updates timing related states of the bank.
@@ -215,6 +207,43 @@ func closeRow(b *BankImpl, cmd *signal.Command) {
 
 func doNothing(b *BankImpl, cmd *signal.Command) {
 	// Do nothing
+}
+
+func (b *BankImpl) traceCmdStart(cmd *signal.Command) {
+	taskStart := hooking.TaskStart{
+		ID:   cmd.ID,
+		Kind: "dram_cmd",
+		What: cmd.Kind.String(),
+	}
+
+	switch cmd.SubTrans.Transaction.Type {
+	case signal.TransactionTypeRead:
+		taskStart.ParentID = modeling.ReqInTaskID(
+			cmd.SubTrans.Transaction.Read.Meta().ID,
+		)
+	case signal.TransactionTypeWrite:
+		taskStart.ParentID = modeling.ReqInTaskID(
+			cmd.SubTrans.Transaction.Write.Meta().ID,
+		)
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: b,
+		Pos:    hooking.HookPosTaskStart,
+		Item:   taskStart,
+	}
+
+	b.InvokeHook(ctx)
+}
+
+func (b *BankImpl) traceCmdEnd(cmd *signal.Command) {
+	ctx := hooking.HookCtx{
+		Domain: b,
+		Pos:    hooking.HookPosTaskEnd,
+		Item:   hooking.TaskEnd{ID: cmd.ID},
+	}
+
+	b.InvokeHook(ctx)
 }
 
 // nolint: lll

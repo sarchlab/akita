@@ -7,7 +7,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github.com/sarchlab/akita/v4/sim"
+	modeling "github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // MockTable is a mock of Table interface.
@@ -34,7 +34,7 @@ func (m *MockTable) EXPECT() *MockTableMockRecorder {
 }
 
 // DefineDefaultRoute mocks base method.
-func (m *MockTable) DefineDefaultRoute(arg0 sim.RemotePort) {
+func (m *MockTable) DefineDefaultRoute(arg0 modeling.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineDefaultRoute", arg0)
 }
@@ -46,7 +46,7 @@ func (mr *MockTableMockRecorder) DefineDefaultRoute(arg0 interface{}) *gomock.Ca
 }
 
 // DefineRoute mocks base method.
-func (m *MockTable) DefineRoute(arg0, arg1 sim.RemotePort) {
+func (m *MockTable) DefineRoute(arg0, arg1 modeling.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineRoute", arg0, arg1)
 }
@@ -58,10 +58,10 @@ func (mr *MockTableMockRecorder) DefineRoute(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // FindPort mocks base method.
-func (m *MockTable) FindPort(arg0 sim.RemotePort) sim.RemotePort {
+func (m *MockTable) FindPort(arg0 modeling.RemotePort) modeling.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindPort", arg0)
-	ret0, _ := ret[0].(sim.RemotePort)
+	ret0, _ := ret[0].(modeling.RemotePort)
 	return ret0
 }
 

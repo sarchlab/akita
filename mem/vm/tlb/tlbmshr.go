@@ -9,8 +9,8 @@ import (
 type mshrEntry struct {
 	pid         vm.PID
 	vAddr       uint64
-	Requests    []*vm.TranslationReq
-	reqToBottom *vm.TranslationReq
+	Requests    []vm.TranslationReq
+	reqToBottom vm.TranslationReq
 	page        vm.Page
 }
 

@@ -4,8 +4,8 @@ package {{packageName}}
 import "github.com/sarchlab/akita/v4/sim"
 
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 }
 
 func (c *Comp) Tick() bool {

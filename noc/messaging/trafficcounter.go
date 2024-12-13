@@ -1,6 +1,9 @@
 package messaging
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+)
 
 // A TrafficCounter counts number of bytes transferred over a connection
 type TrafficCounter struct {
@@ -8,11 +11,11 @@ type TrafficCounter struct {
 }
 
 // Func adds the delivered traffic to the counter
-func (c *TrafficCounter) Func(ctx *sim.HookCtx) {
-	if ctx.Pos != sim.HookPosConnDeliver {
+func (c *TrafficCounter) Func(ctx *hooking.HookCtx) {
+	if ctx.Pos != modeling.HookPosConnDeliver {
 		return
 	}
 
-	req := ctx.Item.(sim.Msg)
+	req := ctx.Item.(modeling.Msg)
 	c.TotalData += uint64(req.Meta().TrafficBytes)
 }

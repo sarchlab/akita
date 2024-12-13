@@ -3,10 +3,9 @@ package mem
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/sim"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("InterleavedAddressToPortMapper", func() {
@@ -20,15 +19,15 @@ var _ = Describe("InterleavedAddressToPortMapper", func() {
 		addressToPortMapper.LowAddress = 0
 		addressToPortMapper.HighAddress = 4 * GB
 		addressToPortMapper.InterleavingSize = 4096
-		addressToPortMapper.LowModules = make([]sim.RemotePort, 0)
+		addressToPortMapper.LowModules = make([]modeling.RemotePort, 0)
 		for i := 0; i < 6; i++ {
 			addressToPortMapper.LowModules = append(
 				addressToPortMapper.LowModules,
-				sim.RemotePort(fmt.Sprintf("LowModule[%d].Port", i)),
+				modeling.RemotePort(fmt.Sprintf("LowModule[%d].Port", i)),
 			)
 		}
 		addressToPortMapper.ModuleForOtherAddresses =
-			sim.RemotePort("LowModuleOther.Port")
+			modeling.RemotePort("LowModuleOther.Port")
 	})
 
 	It("should find low module if address is in-space", func() {

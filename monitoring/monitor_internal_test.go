@@ -3,7 +3,9 @@ package monitoring
 import (
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -17,30 +19,30 @@ type sampleStruct struct {
 }
 
 type sampleComponent struct {
-	*sim.ComponentBase
+	*modeling.ComponentBase
 
-	buffer sim.Buffer
+	buffer queueing.Buffer
 }
 
-func (c *sampleComponent) Handle(_ sim.Event) error {
+func (c *sampleComponent) Handle(_ timing.Event) error {
 	return nil
 }
 
-func (c *sampleComponent) NotifyRecv(_ sim.Port) {
+func (c *sampleComponent) NotifyRecv(_ modeling.Port) {
 	// Do nothing
 }
 
-func (c *sampleComponent) NotifyPortFree(_ sim.Port) {
+func (c *sampleComponent) NotifyPortFree(_ modeling.Port) {
 	// Do nothing
 }
 
 func newSampleComponent() *sampleComponent {
 	c := &sampleComponent{
-		ComponentBase: sim.NewComponentBase("Comp"),
-		buffer:        sim.NewBuffer("Comp.Buf", 10),
+		ComponentBase: modeling.NewComponentBase("Comp"),
+		buffer:        queueing.NewBuffer("Comp.Buf", 10),
 	}
 
-	c.AddPort("Port1", sim.NewPort(c, 2, 2, "Comp.Port1"))
+	c.AddPort("Port1", modeling.NewPort(c, 2, 2, "Comp.Port1"))
 
 	return c
 }

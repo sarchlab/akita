@@ -6,8 +6,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 var _ = Describe("TLB", func() {
@@ -30,17 +32,17 @@ var _ = Describe("TLB", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlPort")).
+			Return(modeling.RemotePort("ControlPort")).
 			AnyTimes()
 
 		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
@@ -68,7 +70,7 @@ var _ = Describe("TLB", func() {
 		var (
 			wayID int
 			page  vm.Page
-			req   *vm.TranslationReq
+			req   vm.TranslationReq
 		)
 
 		BeforeEach(func() {
@@ -82,11 +84,16 @@ var _ = Describe("TLB", func() {
 			set.EXPECT().Lookup(vm.PID(1), uint64(0x100)).
 				Return(wayID, page, true)
 
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(uint64(0x100)).
-				WithDeviceID(1).
-				Build()
+			req = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: modeling.RemotePort("TLB"),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 		})
 
 		It("should respond to top", func() {
@@ -104,7 +111,7 @@ var _ = Describe("TLB", func() {
 		It("should stall if cannot send to top", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().Send(gomock.Any()).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			madeProgress := tlbMiddleware.lookup()
 
@@ -116,7 +123,7 @@ var _ = Describe("TLB", func() {
 		var (
 			wayID int
 			page  vm.Page
-			req   *vm.TranslationReq
+			req   vm.TranslationReq
 		)
 
 		BeforeEach(func() {
@@ -132,18 +139,23 @@ var _ = Describe("TLB", func() {
 				Return(wayID, page, true).
 				AnyTimes()
 
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			req = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: modeling.RemotePort("TLB"),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(req *vm.TranslationReq) {
+				Do(func(req vm.TranslationReq) {
 					Expect(req.VAddr).To(Equal(uint64(0x100)))
 					Expect(req.PID).To(Equal(vm.PID(1)))
 					Expect(req.DeviceID).To(Equal(uint64(1)))
@@ -171,7 +183,7 @@ var _ = Describe("TLB", func() {
 		It("should stall if bottom is busy", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			madeProgress := tlbMiddleware.lookup()
 
@@ -182,34 +194,49 @@ var _ = Describe("TLB", func() {
 	Context("parse bottom", func() {
 		var (
 			wayID       int
-			req         *vm.TranslationReq
-			fetchBottom *vm.TranslationReq
+			req         vm.TranslationReq
+			fetchBottom vm.TranslationReq
 			page        vm.Page
-			rsp         *vm.TranslationRsp
+			rsp         vm.TranslationRsp
 		)
 
 		BeforeEach(func() {
 			wayID = 1
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
-			fetchBottom = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			req = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: modeling.RemotePort("TLB"),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
+			fetchBottom = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: modeling.RemotePort("Bottom"),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 			page = vm.Page{
 				PID:   1,
 				VAddr: 0x100,
 				PAddr: 0x200,
 				Valid: true,
 			}
-			rsp = vm.TranslationRspBuilder{}.
-				WithRspTo(fetchBottom.ID).
-				WithPage(page).
-				Build()
+			rsp = vm.TranslationRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort("Bottom"),
+					Dst: modeling.RemotePort("TLB"),
+				},
+				RespondTo: fetchBottom.ID,
+				Page:      page,
+			}
 		})
 
 		It("should do nothing if no return", func() {
@@ -235,7 +262,7 @@ var _ = Describe("TLB", func() {
 			bottomPort.EXPECT().RetrieveIncoming()
 			mshrEntry := tlb.mshr.Add(1, 0x100)
 			mshrEntry.Requests = append(mshrEntry.Requests, req)
-			mshrEntry.reqToBottom = &vm.TranslationReq{}
+			mshrEntry.reqToBottom = vm.TranslationReq{}
 
 			set.EXPECT().Evict().Return(wayID, true)
 			set.EXPECT().Update(wayID, page)
@@ -292,12 +319,15 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle flush request", func() {
-			flushReq := FlushReqBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithVAddrs([]uint64{0x1000}).
-				WithPID(1).
-				Build()
+			flushReq := FlushReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: controlPort.AsRemote(),
+				},
+				VAddrs: []uint64{0x1000},
+				PID:    1,
+			}
 			page := vm.Page{
 				PID:   1,
 				VAddr: 0x1000,
@@ -323,10 +353,13 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle restart request", func() {
-			restartReq := RestartReqBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				Build()
+			restartReq := RestartReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: modeling.RemotePort(""),
+					Dst: controlPort.AsRemote(),
+				},
+			}
 			controlPort.EXPECT().PeekIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().RetrieveIncoming().
@@ -346,21 +379,21 @@ var _ = Describe("TLB", func() {
 var _ = Describe("TLB Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
-		engine     sim.Engine
+		engine     timing.Engine
 		tlb        *Comp
 		lowModule  *MockPort
 		agent      *MockPort
-		connection sim.Connection
+		connection modeling.Connection
 		page       vm.Page
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
 		lowModule.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("LowModule")).
+			Return(modeling.RemotePort("LowModule")).
 			AnyTimes()
 		lowModuleCall := lowModule.EXPECT().
 			PeekOutgoing().
@@ -371,12 +404,12 @@ var _ = Describe("TLB Integration", func() {
 		agent.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 		agent.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("Agent")).
+			Return(modeling.RemotePort("Agent")).
 			AnyTimes()
 
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		tlb = MakeBuilder().
 			WithEngine(engine).
@@ -398,13 +431,16 @@ var _ = Describe("TLB Integration", func() {
 			Valid: true,
 		}
 		lowModule.EXPECT().Deliver(gomock.Any()).
-			Do(func(req *vm.TranslationReq) {
-				rsp := vm.TranslationRspBuilder{}.
-					WithSrc(lowModule.AsRemote()).
-					WithDst(req.Src).
-					WithPage(page).
-					WithRspTo(req.ID).
-					Build()
+			Do(func(req vm.TranslationReq) {
+				rsp := vm.TranslationRsp{
+					MsgMeta: modeling.MsgMeta{
+						ID:  id.Generate(),
+						Src: lowModule.AsRemote(),
+						Dst: req.Src,
+					},
+					RespondTo: req.ID,
+					Page:      page,
+				}
 				lowModuleCall.Times(0)
 				lowModule.EXPECT().PeekOutgoing().Return(rsp)
 				lowModule.EXPECT().RetrieveOutgoing().Return(rsp)
@@ -418,17 +454,20 @@ var _ = Describe("TLB Integration", func() {
 	})
 
 	It("should do tlb miss", func() {
-		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent.AsRemote()).
-			WithDst(tlb.topPort.AsRemote()).
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(1).
-			Build()
+		req := vm.TranslationReq{
+			MsgMeta: modeling.MsgMeta{
+				ID:  id.Generate(),
+				Src: agent.AsRemote(),
+				Dst: tlb.topPort.AsRemote(),
+			},
+			PID:      1,
+			VAddr:    0x1000,
+			DeviceID: 1,
+		}
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *vm.TranslationRsp) {
+			Do(func(rsp vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
 			})
 
@@ -436,41 +475,44 @@ var _ = Describe("TLB Integration", func() {
 	})
 
 	It("should have faster hit than miss", func() {
-		time1 := engine.CurrentTime()
-		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent.AsRemote()).
-			WithDst(tlb.topPort.AsRemote()).
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(1).
-			Build()
+		time1 := engine.Now()
+		req := vm.TranslationReq{
+			MsgMeta: modeling.MsgMeta{
+				ID:  id.Generate(),
+				Src: agent.AsRemote(),
+				Dst: tlb.topPort.AsRemote(),
+			},
+			PID:      1,
+			VAddr:    0x1000,
+			DeviceID: 1,
+		}
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *vm.TranslationRsp) {
+			Do(func(rsp vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
 			})
 
 		engine.Run()
 
-		time2 := engine.CurrentTime()
+		time2 := engine.Now()
 
 		tlb.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *vm.TranslationRsp) {
+			Do(func(rsp vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
 			})
 
 		engine.Run()
 
-		time3 := engine.CurrentTime()
+		time3 := engine.Now()
 
 		Expect(time3 - time2).To(BeNumerically("<", time2-time1))
 	})
 
 	/*It("should have miss after shootdown ", func() {
-		time1 := sim.VTimeInSec(10)
+		time1 := timing.VTimeInSec(10)
 		req := vm.NewTranslationReq(time1, agent, tlb.TopPort, 1, 0x1000, 1)
 		req.SetRecvTime(time1)
 		tlb.TopPort.Recv(*req)
@@ -480,7 +522,7 @@ var _ = Describe("TLB Integration", func() {
 			})
 		engine.Run()
 
-		time2 := engine.CurrentTime()
+		time2 := engine.Now()
 		shootdownReq := vm.NewPTEInvalidationReq(
 			time2, agent, tlb.ControlPort, 1, []uint64{0x1000})
 		shootdownReq.SetRecvTime(time2)
@@ -491,7 +533,7 @@ var _ = Describe("TLB Integration", func() {
 			})
 		engine.Run()
 
-		time3 := engine.CurrentTime()
+		time3 := engine.Now()
 		req.SetRecvTime(time3)
 		tlb.TopPort.Recv(*req)
 		agent.EXPECT().Recv(gomock.Any()).
@@ -499,7 +541,7 @@ var _ = Describe("TLB Integration", func() {
 				Expect(rsp.Page).To(Equal(&page))
 			})
 		engine.Run()
-		time4 := engine.CurrentTime()
+		time4 := engine.Now()
 
 		Expect(time4 - time3).To(BeNumerically("~", time2-time1))
 	})*/

@@ -3,33 +3,34 @@ package acceptance
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Agent can send and receive request.
 type Agent struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 	test       *Test
-	AgentPorts []sim.Port
-	MsgsToSend []sim.Msg
+	AgentPorts []modeling.Port
+	MsgsToSend []modeling.Msg
 	sendBytes  uint64
 	recvBytes  uint64
 }
 
 // NewAgent creates a new agent.
 func NewAgent(
-	engine sim.Engine,
-	freq sim.Freq,
+	engine timing.Engine,
+	freq timing.Freq,
 	name string,
 	numPorts int,
 	test *Test,
 ) *Agent {
 	a := &Agent{}
 	a.test = test
-	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
 
 	for i := 0; i < numPorts; i++ {
-		p := sim.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
+		p := modeling.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
 
@@ -66,8 +67,8 @@ func (a *Agent) send() bool {
 	return false
 }
 
-func (a *Agent) findPortByName(src sim.RemotePort) sim.Port {
-	var srcPort sim.Port
+func (a *Agent) findPortByName(src modeling.RemotePort) modeling.Port {
+	var srcPort modeling.Port
 
 	for _, port := range a.AgentPorts {
 		if port.AsRemote() == src {
@@ -104,6 +105,6 @@ func (a *Agent) recv() bool {
 }
 
 // Ports returns the ports of the agent.
-func (a *Agent) Ports() []sim.Port {
+func (a *Agent) Ports() []modeling.Port {
 	return a.AgentPorts
 }

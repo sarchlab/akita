@@ -10,11 +10,12 @@ import (
 var _ = Describe("Default SubTransSplitter", func() {
 
 	It("should split", func() {
-		read := mem.ReadReqBuilder{}.
-			WithAddress(1020).
-			WithByteSize(128).
-			Build()
+		read := mem.ReadReq{
+			Address:        1020,
+			AccessByteSize: 128,
+		}
 		transaction := &signal.Transaction{
+			Type: signal.TransactionTypeRead,
 			Read: read,
 		}
 

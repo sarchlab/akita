@@ -25,7 +25,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -33,9 +36,9 @@ import (
 // Monitor can turn a simulation into a server and allows external monitoring
 // controlling of the simulation.
 type Monitor struct {
-	engine       sim.Engine
-	components   []sim.Component
-	buffers      []sim.Buffer
+	engine       timing.Engine
+	components   []modeling.Component
+	buffers      []queueing.Buffer
 	portNumber   int
 	perfAnalyzer *analysis.PerfAnalyzer
 
@@ -66,7 +69,7 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 }
 
 // RegisterEngine registers the engine that is used in the simulation.
-func (m *Monitor) RegisterEngine(e sim.Engine) {
+func (m *Monitor) RegisterEngine(e timing.Engine) {
 	m.engine = e
 }
 
@@ -76,13 +79,13 @@ func (m *Monitor) RegisterPerfAnalyzer(pa *analysis.PerfAnalyzer) {
 }
 
 // RegisterComponent register a component to be monitored.
-func (m *Monitor) RegisterComponent(c sim.Component) {
+func (m *Monitor) RegisterComponent(c modeling.Component) {
 	m.components = append(m.components, c)
 
 	m.registerBuffers(c)
 }
 
-func (m *Monitor) registerBuffers(c sim.Component) {
+func (m *Monitor) registerBuffers(c modeling.Component) {
 	m.registerComponentOrPortBuffers(c)
 
 	for _, p := range c.Ports() {
@@ -96,13 +99,13 @@ func (m *Monitor) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieledRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Buffer)
+			).Elem().Interface().(queueing.Buffer)
 			m.buffers = append(m.buffers, fieledRef)
 		}
 	}
@@ -111,7 +114,7 @@ func (m *Monitor) registerComponentOrPortBuffers(c any) {
 // CreateProgressBar creates a new progress bar.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *ProgressBar {
 	bar := &ProgressBar{
-		ID:    sim.GetIDGenerator().Generate(),
+		ID:    id.Generate(),
 		Name:  name,
 		Total: total,
 	}
@@ -197,7 +200,7 @@ func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
-	now := m.engine.CurrentTime()
+	now := m.engine.Now()
 	fmt.Fprintf(w, "{\"now\":%.10f}", now)
 }
 
@@ -360,15 +363,15 @@ func (*Monitor) buffersParseParams(
 	return sortMethod, limitNumber, offsetNumber, nil
 }
 
-func bufferPercent(b sim.Buffer) float64 {
+func bufferPercent(b queueing.Buffer) float64 {
 	return float64(b.Size()) / float64(b.Capacity())
 }
 
 func (m *Monitor) sortAndSelectBuffers(
 	sortMethod string,
 	limit, offset int,
-) []sim.Buffer {
-	sortedBuffers := make([]sim.Buffer, len(m.buffers))
+) []queueing.Buffer {
+	sortedBuffers := make([]queueing.Buffer, len(m.buffers))
 	copy(sortedBuffers, m.buffers)
 
 	if sortMethod == "level" {
@@ -406,7 +409,7 @@ func (m *Monitor) sortAndSelectBuffers(
 	}
 
 	if offset >= len(sortedBuffers) {
-		return []sim.Buffer{}
+		return []queueing.Buffer{}
 	}
 
 	if offset+limit > len(sortedBuffers) {
@@ -463,8 +466,8 @@ func (m *Monitor) walkFields(
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
 	name string,
-) sim.Component {
-	var component sim.Component
+) modeling.Component {
+	var component modeling.Component
 
 	for _, c := range m.components {
 		if c.Name() == name {

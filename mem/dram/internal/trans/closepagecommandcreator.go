@@ -3,7 +3,7 @@ package trans
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 )
 
 // ClosePageCommandCreator always creates precharge commands as precharge
@@ -17,7 +17,7 @@ func (c *ClosePageCommandCreator) Create(
 	subTrans *signal.SubTransaction,
 ) *signal.Command {
 	cmd := &signal.Command{
-		ID: sim.GetIDGenerator().Generate(),
+		ID: id.Generate(),
 	}
 
 	if subTrans.IsRead() {

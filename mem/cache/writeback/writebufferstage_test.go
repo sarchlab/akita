@@ -6,7 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Write Buffer Stage", func() {
@@ -36,7 +37,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 		builder := MakeBuilder()
 		cacheModule = builder.Build("Cache")
@@ -45,7 +46,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		cacheModule.mshr = mshr
 		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.writeBufferToBankBuffers = []sim.Buffer{bankBuffer}
+		cacheModule.writeBufferToBankBuffers = []queueing.Buffer{bankBuffer}
 
 		wbStage = &writeBufferStage{
 			cache:               cacheModule,
@@ -260,7 +261,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			dramPort := NewMockPort(mockCtrl)
 			dramPort.EXPECT().
 				AsRemote().
-				Return(sim.RemotePort("DramPort")).
+				Return(modeling.RemotePort("DramPort")).
 				AnyTimes()
 
 			var fetchReq *mem.ReadReq
@@ -524,7 +525,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			dramPort := NewMockPort(mockCtrl)
 			dramPort.EXPECT().
 				AsRemote().
-				Return(sim.RemotePort("DramPort")).
+				Return(modeling.RemotePort("DramPort")).
 				AnyTimes()
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x1000)).

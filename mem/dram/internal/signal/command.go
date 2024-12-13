@@ -2,7 +2,7 @@ package signal
 
 import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 )
 
 // CommandKind represents the kind of the command.
@@ -61,7 +61,7 @@ type Command struct {
 // Clone will create another command with the same content, but different ID.
 func (c *Command) Clone() *Command {
 	newCmd := &Command{
-		ID:        sim.GetIDGenerator().Generate(),
+		ID:        id.Generate(),
 		Location:  c.Location,
 		Kind:      c.Kind,
 		Address:   c.Address,

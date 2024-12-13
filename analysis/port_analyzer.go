@@ -3,12 +3,14 @@ package analysis
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
 type portAnalyzerEntry struct {
-	remotePort     sim.RemotePort
+	remotePort     modeling.RemotePort
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -18,21 +20,21 @@ type portAnalyzerEntry struct {
 // PortAnalyzer is a hook for the amount of traffic that passes through a Port.
 type PortAnalyzer struct {
 	PerfLogger
-	sim.TimeTeller
+	timing.TimeTeller
 
 	usePeriod bool
-	period    sim.VTimeInSec
-	port      sim.Port
+	period    timing.VTimeInSec
+	port      modeling.Port
 
-	lastTime           sim.VTimeInSec
-	remoteToTrafficMap map[sim.RemotePort]portAnalyzerEntry
+	lastTime           timing.VTimeInSec
+	remoteToTrafficMap map[modeling.RemotePort]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
-func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
-	now := h.CurrentTime()
+func (h *PortAnalyzer) Func(ctx hooking.HookCtx) {
+	now := h.Now()
 
-	msg, ok := ctx.Item.(sim.Msg)
+	msg, ok := ctx.Item.(modeling.Msg)
 	if !ok {
 		return
 	}
@@ -45,7 +47,7 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	}
 
 	if h.remoteToTrafficMap == nil {
-		h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
+		h.remoteToTrafficMap = make(map[modeling.RemotePort]portAnalyzerEntry)
 	}
 
 	remotePortName := msg.Meta().Dst
@@ -75,14 +77,14 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	h.lastTime = now
 }
 
-func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
+func (h *PortAnalyzer) isIncoming(msg modeling.Msg) bool {
 	return msg.Meta().Dst == h.port.AsRemote()
 }
 
 func (h *PortAnalyzer) summarize() {
-	now := h.CurrentTime()
+	now := h.Now()
 
-	startTime := sim.VTimeInSec(0)
+	startTime := timing.VTimeInSec(0)
 	endTime := now
 
 	if h.usePeriod {
@@ -127,24 +129,24 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
+	h.remoteToTrafficMap = make(map[modeling.RemotePort]portAnalyzerEntry)
 }
 
-func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
-	return sim.VTimeInSec(math.Floor(float64(t/h.period))) * h.period
+func (h *PortAnalyzer) periodStartTime(t timing.VTimeInSec) timing.VTimeInSec {
+	return timing.VTimeInSec(math.Floor(float64(t/h.period))) * h.period
 }
 
-func (h *PortAnalyzer) periodEndTime(t sim.VTimeInSec) sim.VTimeInSec {
+func (h *PortAnalyzer) periodEndTime(t timing.VTimeInSec) timing.VTimeInSec {
 	return h.periodStartTime(t) + h.period
 }
 
 // PortAnalyzerBuilder can build a PortAnalyzer.
 type PortAnalyzerBuilder struct {
 	perfLogger PerfLogger
-	timeTeller sim.TimeTeller
+	timeTeller timing.TimeTeller
 	usePeriod  bool
-	period     sim.VTimeInSec
-	port       sim.Port
+	period     timing.VTimeInSec
+	port       modeling.Port
 }
 
 // MakePortAnalyzerBuilder creates a PortAnalyzerBuilder.
@@ -160,14 +162,16 @@ func (b PortAnalyzerBuilder) WithPerfLogger(l PerfLogger) PortAnalyzerBuilder {
 
 // WithTimeTeller sets the TimeTeller to be used by the PortAnalyzer.
 func (b PortAnalyzerBuilder) WithTimeTeller(
-	t sim.TimeTeller,
+	t timing.TimeTeller,
 ) PortAnalyzerBuilder {
 	b.timeTeller = t
 	return b
 }
 
 // WithPeriod sets the period to be used by the PortAnalyzer.
-func (b PortAnalyzerBuilder) WithPeriod(p sim.VTimeInSec) PortAnalyzerBuilder {
+func (b PortAnalyzerBuilder) WithPeriod(
+	p timing.VTimeInSec,
+) PortAnalyzerBuilder {
 	b.usePeriod = true
 	b.period = p
 
@@ -175,7 +179,7 @@ func (b PortAnalyzerBuilder) WithPeriod(p sim.VTimeInSec) PortAnalyzerBuilder {
 }
 
 // WithPort sets the port to be used by the PortAnalyzer.
-func (b PortAnalyzerBuilder) WithPort(p sim.Port) PortAnalyzerBuilder {
+func (b PortAnalyzerBuilder) WithPort(p modeling.Port) PortAnalyzerBuilder {
 	b.port = p
 	return b
 }

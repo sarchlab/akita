@@ -6,7 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Bankstage", func() {
@@ -28,11 +29,11 @@ var _ = Describe("Bankstage", func() {
 		postPipelineBuf = NewMockBuffer(mockCtrl)
 		c = &Comp{
 			bankLatency:   10,
-			bankBufs:      []sim.Buffer{inBuf},
+			bankBufs:      []queueing.Buffer{inBuf},
 			storage:       storage,
 			log2BlockSize: 6,
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		s = &bankStage{
 			cache:           c,
@@ -78,7 +79,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("read hit", func() {
 		var (
-			preCRead1, preCRead2, postCRead    *mem.ReadReq
+			preCRead1, preCRead2, postCRead    mem.ReadReq
 			preCTrans1, preCTrans2, postCTrans *transaction
 			block                              *cache.Block
 		)
@@ -99,24 +100,34 @@ var _ = Describe("Bankstage", func() {
 				CacheAddress: 0x400,
 				ReadCount:    1,
 			}
-			preCRead1 = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithByteSize(4).
-				Build()
-			preCRead2 = mem.ReadReqBuilder{}.
-				WithAddress(0x108).
-				WithByteSize(8).
-				Build()
-			postCRead = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithByteSize(64).
-				Build()
-			preCTrans1 = &transaction{read: preCRead1}
-			preCTrans2 = &transaction{read: preCRead2}
+			preCRead1 = mem.ReadReq{
+				MsgMeta:        modeling.MsgMeta{},
+				Address:        0x104,
+				AccessByteSize: 4,
+			}
+			preCRead2 = mem.ReadReq{
+				MsgMeta:        modeling.MsgMeta{},
+				Address:        0x108,
+				AccessByteSize: 8,
+			}
+			postCRead = mem.ReadReq{
+				MsgMeta:        modeling.MsgMeta{},
+				Address:        0x100,
+				AccessByteSize: 64,
+			}
+			preCTrans1 = &transaction{
+				transactionType: transactionTypeRead,
+				read:            preCRead1,
+			}
+			preCTrans2 = &transaction{
+				transactionType: transactionTypeRead,
+				read:            preCRead2,
+			}
 			postCTrans = &transaction{
-				read:       postCRead,
-				block:      block,
-				bankAction: bankActionReadHit,
+				transactionType: transactionTypeRead,
+				read:            postCRead,
+				block:           block,
+				bankAction:      bankActionReadHit,
 				preCoalesceTransactions: []*transaction{
 					preCTrans1, preCTrans2,
 				},
@@ -148,7 +159,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
+			write mem.WriteReq
 			trans *transaction
 			block *cache.Block
 		)
@@ -160,9 +171,10 @@ var _ = Describe("Bankstage", func() {
 				IsLocked:     true,
 			}
 
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithData([]byte{
+			write = mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{},
+				Address: 0x100,
+				Data: []byte{
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
@@ -171,8 +183,8 @@ var _ = Describe("Bankstage", func() {
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
-				}).
-				WithDirtyMask([]bool{
+				},
+				DirtyMask: []bool{
 					false, false, false, false, false, false, false, false,
 					true, true, true, true, true, true, true, true,
 					false, false, false, false, false, false, false, false,
@@ -181,12 +193,13 @@ var _ = Describe("Bankstage", func() {
 					false, false, false, false, false, false, false, false,
 					false, false, false, false, false, false, false, false,
 					false, false, false, false, false, false, false, false,
-				}).
-				Build()
+				},
+			}
 			trans = &transaction{
-				write:      write,
-				block:      block,
-				bankAction: bankActionWrite,
+				transactionType: transactionTypeWrite,
+				write:           write,
+				block:           block,
+				bankAction:      bankActionWrite,
 			}
 
 			postPipelineBuf.EXPECT().

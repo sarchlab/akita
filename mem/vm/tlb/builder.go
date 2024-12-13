@@ -1,23 +1,26 @@
 package tlb
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
+)
 
 // A Builder can build TLBs
 type Builder struct {
-	engine         sim.Engine
-	freq           sim.Freq
+	engine         timing.Engine
+	freq           timing.Freq
 	numReqPerCycle int
 	numSets        int
 	numWays        int
 	pageSize       uint64
-	lowModule      sim.RemotePort
+	lowModule      modeling.RemotePort
 	numMSHREntry   int
 }
 
 // MakeBuilder returns a Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:           1 * sim.GHz,
+		freq:           1 * timing.GHz,
 		numReqPerCycle: 4,
 		numSets:        1,
 		numWays:        32,
@@ -27,13 +30,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the TLBs to use
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the freq the TLBs use
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -67,7 +70,7 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of tlb miss.
-func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
+func (b Builder) WithLowModule(lowModule modeling.RemotePort) Builder {
 	b.lowModule = lowModule
 	return b
 }
@@ -82,7 +85,7 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 func (b Builder) Build(name string) *Comp {
 	tlb := &Comp{}
 	tlb.TickingComponent =
-		sim.NewTickingComponent(name, b.engine, b.freq, tlb)
+		modeling.NewTickingComponent(name, b.engine, b.freq, tlb)
 
 	tlb.numSets = b.numSets
 	tlb.numWays = b.numWays
@@ -102,17 +105,17 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, c *Comp) {
-	c.topPort = sim.NewPort(c,
+	c.topPort = modeling.NewPort(c,
 		b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = sim.NewPort(c,
+	c.bottomPort = modeling.NewPort(c,
 		b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = sim.NewPort(c, 1, 1,
+	c.controlPort = modeling.NewPort(c, 1, 1,
 		name+".ControlPort")
 	c.AddPort("Control", c.controlPort)
 }

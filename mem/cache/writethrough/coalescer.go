@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -195,7 +195,7 @@ func (c *coalescer) coalesceRead() *transaction {
 		Build()
 
 	return &transaction{
-		id:                      sim.GetIDGenerator().Generate(),
+		id:                      id.Generate(),
 		read:                    coalescedRead,
 		preCoalesceTransactions: c.toCoalesce,
 	}
@@ -224,7 +224,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 	}
 
 	return &transaction{
-		id:                      sim.GetIDGenerator().Generate(),
+		id:                      id.Generate(),
 		write:                   write,
 		preCoalesceTransactions: c.toCoalesce,
 	}

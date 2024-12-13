@@ -6,7 +6,8 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Address Translator", func() {
@@ -27,22 +28,22 @@ var _ = Describe("Address Translator", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("CtrlPort")).
+			Return(modeling.RemotePort("CtrlPort")).
 			AnyTimes()
 		translationPort = NewMockPort(mockCtrl)
 		translationPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TranslationPort")).
+			Return(modeling.RemotePort("TranslationPort")).
 			AnyTimes()
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
@@ -66,15 +67,20 @@ var _ = Describe("Address Translator", func() {
 
 	Context("translate stage", func() {
 		var (
-			req *mem.ReadReq
+			req mem.ReadReq
 		)
 
 		BeforeEach(func() {
-			req = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithByteSize(4).
-				WithPID(1).
-				Build()
+			req = mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x100,
+				AccessByteSize: 4,
+				PID:            1,
+			}
 		})
 
 		It("should do nothing if there is no request", func() {
@@ -84,12 +90,17 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should send translation", func() {
-			var transReqReturn *vm.TranslationReq
-			transReq := vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			var transReqReturn vm.TranslationReq
+			transReq := vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 
 			translation := &transaction{
 				translationReq: transReq,
@@ -100,7 +111,7 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			translationPort.EXPECT().Send(gomock.Any()).
-				DoAndReturn(func(req *vm.TranslationReq) *sim.SendError {
+				DoAndReturn(func(req vm.TranslationReq) *modeling.SendError {
 					transReqReturn = req
 					return nil
 				})
@@ -118,7 +129,7 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			translationPort.EXPECT().
 				Send(gomock.Any()).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			needTick := tMiddleware.translate()
 
@@ -129,24 +140,34 @@ var _ = Describe("Address Translator", func() {
 
 	Context("parse translation", func() {
 		var (
-			transReq1, transReq2 *vm.TranslationReq
+			transReq1, transReq2 vm.TranslationReq
 			trans1, trans2       *transaction
 		)
 
 		BeforeEach(func() {
-			transReq1 = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq1 = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 			trans1 = &transaction{
 				translationReq: transReq1,
 			}
-			transReq2 = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq2 = vm.TranslationReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				PID:      1,
+				VAddr:    0x100,
+				DeviceID: 1,
+			}
 			trans2 = &transaction{
 				translationReq: transReq2,
 			}
@@ -160,18 +181,29 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if send failed", func() {
-			req := mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			req := mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x10040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			translationRsp := vm.TranslationRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: transReq1.ID,
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
 
 			trans1.incomingReqs = []mem.AccessReq{req}
 			trans1.translationRsp = translationRsp
@@ -179,7 +211,9 @@ var _ = Describe("Address Translator", func() {
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			addressToPortMapper.EXPECT().Find(uint64(0x20040))
-			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
+			bottomPort.EXPECT().
+				Send(gomock.Any()).
+				Return(modeling.NewSendError())
 
 			madeProgress := tMiddleware.parseTranslation()
 
@@ -187,18 +221,29 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should forward read request", func() {
-			req := mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			req := mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x10040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			translationRsp := vm.TranslationRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: transReq1.ID,
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
 
 			trans1.incomingReqs = []mem.AccessReq{req}
 			trans1.translationRsp = translationRsp
@@ -208,7 +253,7 @@ var _ = Describe("Address Translator", func() {
 			translationPort.EXPECT().RetrieveIncoming()
 			addressToPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(read *mem.ReadReq) {
+				Do(func(read mem.ReadReq) {
 					Expect(read).NotTo(BeIdenticalTo(req))
 					Expect(read.PID).To(Equal(vm.PID(0)))
 					Expect(read.Address).To(Equal(uint64(0x20040)))
@@ -227,19 +272,30 @@ var _ = Describe("Address Translator", func() {
 		It("should forward write request", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				WithData(data).
-				WithDirtyMask(dirty).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			write := mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:   0x10040,
+				PID:       1,
+				Data:      data,
+				DirtyMask: dirty,
+			}
+			translationRsp := vm.TranslationRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: transReq1.ID,
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
 			trans1.incomingReqs = []mem.AccessReq{write}
 			trans1.translationRsp = translationRsp
 			trans1.translationDone = true
@@ -248,7 +304,7 @@ var _ = Describe("Address Translator", func() {
 			translationPort.EXPECT().RetrieveIncoming()
 			addressToPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(req *mem.WriteReq) {
+				Do(func(req mem.WriteReq) {
 					Expect(req).NotTo(BeIdenticalTo(write))
 					Expect(req.PID).To(Equal(vm.PID(0)))
 					Expect(req.Address).To(Equal(uint64(0x20040)))
@@ -268,27 +324,51 @@ var _ = Describe("Address Translator", func() {
 
 	Context("respond", func() {
 		var (
-			readFromTop   *mem.ReadReq
-			writeFromTop  *mem.WriteReq
-			readToBottom  *mem.ReadReq
-			writeToBottom *mem.WriteReq
+			readFromTop   mem.ReadReq
+			writeFromTop  mem.WriteReq
+			readToBottom  mem.ReadReq
+			writeToBottom mem.WriteReq
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			readToBottom = mem.ReadReqBuilder{}.
-				WithAddress(0x20040).
-				WithByteSize(4).
-				Build()
-			writeFromTop = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			writeToBottom = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
+			readFromTop = mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x10040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			readToBottom = mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x20040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			writeFromTop = mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address: 0x10040,
+				PID:     1,
+			}
+			writeToBottom = mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address: 0x10040,
+				PID:     1,
+			}
 
 			t.inflightReqToBottom = []reqToBottom{
 				{reqFromTop: readFromTop, reqToBottom: readToBottom},
@@ -304,12 +384,18 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond data ready", func() {
-			dataReady := mem.DataReadyRspBuilder{}.
-				WithRspTo(readToBottom.ID).
-				Build()
+			dataReady := mem.DataReadyRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: readToBottom.ID,
+				Data:      []byte{1, 2, 3, 4},
+			}
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(dr *mem.DataReadyRsp) {
+				Do(func(dr mem.DataReadyRsp) {
 					Expect(dr.RespondTo).To(Equal(readFromTop.ID))
 					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
@@ -323,12 +409,17 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond write done", func() {
-			done := mem.WriteDoneRspBuilder{}.
-				WithRspTo(writeToBottom.ID).
-				Build()
+			done := mem.WriteDoneRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: writeToBottom.ID,
+			}
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(done *mem.WriteDoneRsp) {
+				Do(func(done mem.WriteDoneRsp) {
 					Expect(done.RespondTo).To(Equal(writeFromTop.ID))
 				}).
 				Return(nil)
@@ -341,16 +432,22 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if TopPort is busy", func() {
-			dataReady := mem.DataReadyRspBuilder{}.
-				WithRspTo(readToBottom.ID).
-				Build()
+			dataReady := mem.DataReadyRsp{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				RespondTo: readToBottom.ID,
+				Data:      []byte{1, 2, 3, 4},
+			}
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(dr *mem.DataReadyRsp) {
+				Do(func(dr mem.DataReadyRsp) {
 					Expect(dr.RespondTo).To(Equal(readFromTop.ID))
 					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
-				Return(&sim.SendError{})
+				Return(&modeling.SendError{})
 
 			madeProgress := tMiddleware.respond()
 
@@ -361,37 +458,69 @@ var _ = Describe("Address Translator", func() {
 
 	Context("when handling control messages", func() {
 		var (
-			readFromTop   *mem.ReadReq
-			writeFromTop  *mem.WriteReq
-			readToBottom  *mem.ReadReq
-			writeToBottom *mem.WriteReq
-			flushReq      *mem.ControlMsg
-			restartReq    *mem.ControlMsg
+			readFromTop   mem.ReadReq
+			writeFromTop  mem.WriteReq
+			readToBottom  mem.ReadReq
+			writeToBottom mem.WriteReq
+			flushReq      mem.ControlMsg
+			restartReq    mem.ControlMsg
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			readToBottom = mem.ReadReqBuilder{}.
-				WithAddress(0x20040).
-				WithByteSize(4).
-				Build()
-			writeFromTop = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			writeToBottom = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			flushReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort.AsRemote()).
-				ToDiscardTransactions().
-				Build()
-			restartReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort.AsRemote()).
-				ToRestart().
-				Build()
+			readFromTop = mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x10040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			readToBottom = mem.ReadReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address:        0x20040,
+				AccessByteSize: 4,
+				PID:            1,
+			}
+			writeFromTop = mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address: 0x10040,
+				PID:     1,
+			}
+			writeToBottom = mem.WriteReq{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Address: 0x10040,
+				PID:     1,
+			}
+			flushReq = mem.ControlMsg{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				DiscardTransactions: true,
+			}
+			restartReq = mem.ControlMsg{
+				MsgMeta: modeling.MsgMeta{
+					ID:  id.Generate(),
+					Src: bottomPort.AsRemote(),
+					Dst: topPort.AsRemote(),
+				},
+				Restart: true,
+			}
 
 			t.inflightReqToBottom = []reqToBottom{
 				{reqFromTop: readFromTop, reqToBottom: readToBottom},

@@ -1,21 +1,21 @@
 package mem
 
-import "github.com/sarchlab/akita/v4/sim"
+import "github.com/sarchlab/akita/v4/sim/modeling"
 
 // AddressToPortMapper helps a cache unit or a akita to find the low module that
 // should hold the data at a certain address
 type AddressToPortMapper interface {
-	Find(address uint64) sim.RemotePort
+	Find(address uint64) modeling.RemotePort
 }
 
 // SinglePortMapper is used when a unit is connected with only one
 // low module
 type SinglePortMapper struct {
-	Port sim.RemotePort
+	Port modeling.RemotePort
 }
 
 // Find simply returns the solo unit that it connects to
-func (f *SinglePortMapper) Find(address uint64) sim.RemotePort {
+func (f *SinglePortMapper) Find(address uint64) modeling.RemotePort {
 	return f.Port
 }
 
@@ -26,12 +26,14 @@ type InterleavedAddressPortMapper struct {
 	LowAddress                uint64
 	HighAddress               uint64
 	InterleavingSize          uint64
-	LowModules                []sim.RemotePort
-	ModuleForOtherAddresses   sim.RemotePort
+	LowModules                []modeling.RemotePort
+	ModuleForOtherAddresses   modeling.RemotePort
 }
 
 // Find returns the low module that has the data at provided address
-func (f *InterleavedAddressPortMapper) Find(address uint64) sim.RemotePort {
+func (f *InterleavedAddressPortMapper) Find(
+	address uint64,
+) modeling.RemotePort {
 	if f.UseAddressSpaceLimitation &&
 		(address >= f.HighAddress || address < f.LowAddress) {
 		return f.ModuleForOtherAddresses
@@ -49,7 +51,7 @@ func NewInterleavedAddressPortMapper(
 ) *InterleavedAddressPortMapper {
 	finder := new(InterleavedAddressPortMapper)
 
-	finder.LowModules = make([]sim.RemotePort, 0)
+	finder.LowModules = make([]modeling.RemotePort, 0)
 	finder.InterleavingSize = interleavingSize
 
 	return finder
@@ -58,11 +60,11 @@ func NewInterleavedAddressPortMapper(
 // BankedAddressPortMapper defines the lower level modules by address banks
 type BankedAddressPortMapper struct {
 	BankSize   uint64
-	LowModules []sim.RemotePort
+	LowModules []modeling.RemotePort
 }
 
 // Find returns the port that can provide the data.
-func (f *BankedAddressPortMapper) Find(address uint64) sim.RemotePort {
+func (f *BankedAddressPortMapper) Find(address uint64) modeling.RemotePort {
 	i := address / f.BankSize
 	return f.LowModules[i]
 }
@@ -71,7 +73,7 @@ func (f *BankedAddressPortMapper) Find(address uint64) sim.RemotePort {
 func NewBankedAddressPortMapper(bankSize uint64) *BankedAddressPortMapper {
 	f := new(BankedAddressPortMapper)
 	f.BankSize = bankSize
-	f.LowModules = make([]sim.RemotePort, 0)
+	f.LowModules = make([]modeling.RemotePort, 0)
 
 	return f
 }

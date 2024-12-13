@@ -6,30 +6,16 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
-
-// type dataMoverLogger struct{}
-
-// func (l *dataMoverLogger) StartTask(task tracing.Task) {
-// 	fmt.Printf("Start task %+v\n", task)
-// }
-
-// func (l *dataMoverLogger) StepTask(task tracing.Task) {
-// 	// Do nothing.
-// }
-
-// func (l *dataMoverLogger) EndTask(task tracing.Task) {
-// 	fmt.Printf("End task %+v\n", task)
-// }
 
 var _ = Describe("DataMover", func() {
 	var (
-		mockCtrl  *gomock.Controller
-		engine    sim.Engine
-		dataMover *Comp
-		// logger     *dataMoverLogger
+		mockCtrl   *gomock.Controller
+		engine     timing.Engine
+		dataMover  *Comp
 		insideMem  *idealmemcontroller.Comp
 		outsideMem *idealmemcontroller.Comp
 		conn       *directconnection.Comp
@@ -39,20 +25,24 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
+
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
+		srcPort.EXPECT().
+			AsRemote().
+			Return(modeling.RemotePort("SrcPort")).
+			AnyTimes()
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
 			Build("InsideMem")
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
 			Build("OutsideMem")
@@ -69,12 +59,9 @@ var _ = Describe("DataMover", func() {
 			WithOutsideByteGranularity(256).
 			Build("DataMover")
 
-		// logger = new(dataMoverLogger)
-		// tracing.CollectTrace(dataMover, logger)
-
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.ctrlPort)
@@ -92,18 +79,19 @@ var _ = Describe("DataMover", func() {
 		outsideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.AssignableToTypeOf(modeling.GeneralRsp{}))
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("outside").
-			WithDstAddress(0).
-			WithDstSide("inside").
-			WithByteSize(4096).
-			Build()
-
+		req := DataMoveRequest{
+			MsgMeta: modeling.MsgMeta{
+				Src: srcPort.AsRemote(),
+				Dst: dataMover.ctrlPort.AsRemote(),
+			},
+			SrcAddress: 0,
+			SrcSide:    "outside",
+			DstAddress: 0,
+			DstSide:    "inside",
+			ByteSize:   4096,
+		}
 		dataMover.ctrlPort.Deliver(req)
 
 		engine.Run()
@@ -119,17 +107,19 @@ var _ = Describe("DataMover", func() {
 		insideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.AssignableToTypeOf(modeling.GeneralRsp{}))
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(0).
-			WithDstSide("outside").
-			WithByteSize(4096).
-			Build()
+		req := DataMoveRequest{
+			MsgMeta: modeling.MsgMeta{
+				Src: srcPort.AsRemote(),
+				Dst: dataMover.ctrlPort.AsRemote(),
+			},
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 0,
+			DstSide:    "outside",
+			ByteSize:   4096,
+		}
 
 		dataMover.ctrlPort.Deliver(req)
 
@@ -146,17 +136,19 @@ var _ = Describe("DataMover", func() {
 		insideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.AssignableToTypeOf(modeling.GeneralRsp{}))
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(4096).
-			WithDstSide("outside").
-			WithByteSize(4096).
-			Build()
+		req := DataMoveRequest{
+			MsgMeta: modeling.MsgMeta{
+				Src: srcPort.AsRemote(),
+				Dst: dataMover.ctrlPort.AsRemote(),
+			},
+			SrcAddress: 0,
+			SrcSide:    "inside",
+			DstAddress: 4096,
+			DstSide:    "outside",
+			ByteSize:   4096,
+		}
 
 		dataMover.ctrlPort.Deliver(req)
 

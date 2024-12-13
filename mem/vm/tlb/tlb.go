@@ -6,20 +6,20 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // Comp is a cache(TLB) that maintains some page information.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort     modeling.Port
+	bottomPort  modeling.Port
+	controlPort modeling.Port
 
-	LowModule sim.RemotePort
+	LowModule modeling.RemotePort
 
 	numSets        int
 	numWays        int
@@ -82,12 +82,14 @@ func (m *middleware) respondMSHREntry() bool {
 	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
-	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rspToTop := vm.TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: m.topPort.AsRemote(),
+			Dst: req.Src,
+		},
+		RespondTo: req.ID,
+		Page:      page,
+	}
 
 	err := m.topPort.Send(rspToTop)
 	if err != nil {
@@ -99,7 +101,7 @@ func (m *middleware) respondMSHREntry() bool {
 		m.respondingMSHREntry = nil
 	}
 
-	tracing.TraceReqComplete(req, m.Comp)
+	m.traceTransactionComplete(req)
 
 	return true
 }
@@ -110,7 +112,7 @@ func (m *middleware) lookup() bool {
 		return false
 	}
 
-	req := msg.(*vm.TranslationReq)
+	req := msg.(vm.TranslationReq)
 
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
@@ -129,7 +131,7 @@ func (m *middleware) lookup() bool {
 }
 
 func (m *middleware) handleTranslationHit(
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -141,15 +143,15 @@ func (m *middleware) handleTranslationHit(
 	m.visit(setID, wayID)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
-	tracing.TraceReqComplete(req, m.Comp)
+	m.traceTransactionStart(req)
+	m.traceTransactionHitOrMiss(req, "hit")
+	m.traceTransactionComplete(req)
 
 	return true
 }
 
 func (m *middleware) handleTranslationMiss(
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 ) bool {
 	if m.mshr.IsFull() {
 		return false
@@ -158,12 +160,9 @@ func (m *middleware) handleTranslationMiss(
 	fetched := m.fetchBottom(req)
 	if fetched {
 		m.topPort.RetrieveIncoming()
-		tracing.TraceReqReceive(req, m.Comp)
-		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(req, m.Comp),
-			m.Comp,
-			"miss",
-		)
+
+		m.traceTransactionStart(req)
+		m.traceTransactionHitOrMiss(req, "miss")
 
 		return true
 	}
@@ -176,15 +175,17 @@ func (m *middleware) vAddrToSetID(vAddr uint64) (setID int) {
 }
 
 func (m *middleware) sendRspToTop(
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 	page vm.Page,
 ) bool {
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rsp := vm.TranslationRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: m.topPort.AsRemote(),
+			Dst: req.Src,
+		},
+		RespondTo: req.ID,
+		Page:      page,
+	}
 
 	err := m.topPort.Send(rsp)
 
@@ -193,26 +194,28 @@ func (m *middleware) sendRspToTop(
 
 func (m *middleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
-	req *vm.TranslationReq,
+	req vm.TranslationReq,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
 	m.topPort.RetrieveIncoming()
-	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
+
+	m.traceTransactionStart(req)
+	m.traceTransactionHitOrMiss(req, "mshr-hit")
 
 	return true
 }
 
-func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
-	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.LowModule).
-		WithPID(req.PID).
-		WithVAddr(req.VAddr).
-		WithDeviceID(req.DeviceID).
-		Build()
+func (m *middleware) fetchBottom(req vm.TranslationReq) bool {
+	fetchBottom := vm.TranslationReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: m.bottomPort.AsRemote(),
+			Dst: m.LowModule,
+		},
+		PID:      req.PID,
+		VAddr:    req.VAddr,
+		DeviceID: req.DeviceID,
+	}
 
 	err := m.bottomPort.Send(fetchBottom)
 	if err != nil {
@@ -223,8 +226,7 @@ func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 	mshrEntry.reqToBottom = fetchBottom
 
-	tracing.TraceReqInitiate(fetchBottom, m.Comp,
-		tracing.MsgIDAtReceiver(req, m.Comp))
+	m.traceFetchBottomStart(req, fetchBottom)
 
 	return true
 }
@@ -239,7 +241,7 @@ func (m *middleware) parseBottom() bool {
 		return false
 	}
 
-	rsp := item.(*vm.TranslationRsp)
+	rsp := item.(vm.TranslationRsp)
 	page := rsp.Page
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
@@ -265,7 +267,8 @@ func (m *middleware) parseBottom() bool {
 
 	m.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
 	m.bottomPort.RetrieveIncoming()
-	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
+
+	m.traceFetchBottomComplete(mshrEntry.reqToBottom)
 
 	return true
 }
@@ -279,9 +282,9 @@ func (m *middleware) performCtrlReq() bool {
 	item = m.controlPort.RetrieveIncoming()
 
 	switch req := item.(type) {
-	case *FlushReq:
+	case FlushReq:
 		return m.handleTLBFlush(req)
-	case *RestartReq:
+	case RestartReq:
 		return m.handleTLBRestart(req)
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
@@ -295,18 +298,15 @@ func (m *middleware) visit(setID, wayID int) {
 	set.Visit(wayID)
 }
 
-func (m *middleware) handleTLBFlush(req *FlushReq) bool {
-	rsp := FlushRspBuilder{}.
-		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
+func (m *middleware) handleTLBFlush(req FlushReq) bool {
+	rsp := req.GenerateRsp()
 
 	err := m.controlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	for _, vAddr := range req.VAddr {
+	for _, vAddr := range req.VAddrs {
 		setID := m.vAddrToSetID(vAddr)
 		set := m.Sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
@@ -325,11 +325,8 @@ func (m *middleware) handleTLBFlush(req *FlushReq) bool {
 	return true
 }
 
-func (m *middleware) handleTLBRestart(req *RestartReq) bool {
-	rsp := RestartRspBuilder{}.
-		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
+func (m *middleware) handleTLBRestart(req RestartReq) bool {
+	rsp := req.GenerateRsp()
 
 	err := m.controlPort.Send(rsp)
 	if err != nil {
@@ -347,4 +344,78 @@ func (m *middleware) handleTLBRestart(req *RestartReq) bool {
 	}
 
 	return true
+}
+
+func (m *middleware) traceTransactionStart(req vm.TranslationReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(req.Meta().ID),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(req).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTransactionComplete(req vm.TranslationReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(req.Meta().ID),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceTransactionHitOrMiss(
+	req vm.TranslationReq,
+	action string,
+) {
+	tag := hooking.TaskTag{
+		TaskID: modeling.ReqInTaskID(req.Meta().ID),
+		What:   action,
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   tag,
+		Pos:    hooking.HookPosTaskTag,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceFetchBottomStart(
+	reqFromTop, reqToBottom vm.TranslationReq,
+) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqOutTaskID(reqToBottom.Meta().ID),
+			ParentID: modeling.ReqInTaskID(reqFromTop.Meta().ID),
+			Kind:     "req_out",
+			What:     reflect.TypeOf(reqToBottom).String(),
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceFetchBottomComplete(req vm.TranslationReq) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(req.Meta().ID),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

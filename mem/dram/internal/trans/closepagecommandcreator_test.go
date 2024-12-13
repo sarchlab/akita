@@ -29,8 +29,13 @@ var _ = Describe("ClosePageCommandCreator", func() {
 	})
 
 	It("should create read precharge commands", func() {
-		read := mem.ReadReqBuilder{}.Build()
-		trans := &signal.Transaction{Read: read}
+		read := mem.ReadReq{
+			Address: 0x40,
+		}
+		trans := &signal.Transaction{
+			Type: signal.TransactionTypeRead,
+			Read: read,
+		}
 		subTrans := &signal.SubTransaction{
 			Transaction: trans,
 			Address:     0x40,

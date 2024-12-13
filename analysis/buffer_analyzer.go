@@ -3,28 +3,30 @@ package analysis
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
 // BufferAnalyzer can periodically record the buffer level of a buffer.
 type BufferAnalyzer struct {
 	PerfLogger
-	sim.TimeTeller
+	timing.TimeTeller
 
-	buf       sim.Buffer
+	buf       queueing.Buffer
 	usePeriod bool
-	period    sim.VTimeInSec
+	period    timing.VTimeInSec
 
-	lastTime           sim.VTimeInSec
+	lastTime           timing.VTimeInSec
 	lastBufLevel       int
-	bufLevelToDuration map[int]sim.VTimeInSec
+	bufLevelToDuration map[int]timing.VTimeInSec
 }
 
 // Func is a function that records buffer level change.
-func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
-	now := b.CurrentTime()
-	buf := ctx.Domain.(sim.Buffer)
+func (b *BufferAnalyzer) Func(ctx hooking.HookCtx) {
+	now := b.Now()
+	buf := ctx.Domain.(queueing.Buffer)
 	currLevel := buf.Size()
 
 	if b.usePeriod {
@@ -42,7 +44,7 @@ func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 }
 
 func (b *BufferAnalyzer) summarize() {
-	now := b.CurrentTime()
+	now := b.Now()
 
 	if !b.usePeriod {
 		b.summarizePeriod(now, 0, now)
@@ -55,7 +57,7 @@ func (b *BufferAnalyzer) summarize() {
 	for periodEndTime < now {
 		b.summarizePeriod(now, periodStartTime, periodEndTime)
 
-		b.bufLevelToDuration = make(map[int]sim.VTimeInSec)
+		b.bufLevelToDuration = make(map[int]timing.VTimeInSec)
 		b.lastTime = periodEndTime
 		periodStartTime = periodEndTime
 		periodEndTime = periodStartTime + b.period
@@ -63,7 +65,7 @@ func (b *BufferAnalyzer) summarize() {
 }
 
 func (b *BufferAnalyzer) summarizePeriod(
-	now, periodStartTime, periodEndTime sim.VTimeInSec,
+	now, periodStartTime, periodEndTime timing.VTimeInSec,
 ) {
 	sumLevel := 0.0
 	sumDuration := 0.0
@@ -98,22 +100,26 @@ func (b *BufferAnalyzer) summarizePeriod(
 }
 
 func (b *BufferAnalyzer) resetPeriod() {
-	now := b.CurrentTime()
+	now := b.Now()
 
-	b.bufLevelToDuration = make(map[int]sim.VTimeInSec)
+	b.bufLevelToDuration = make(map[int]timing.VTimeInSec)
 
 	b.lastTime = b.periodStartTime(now)
 }
 
-func (b *BufferAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
-	return sim.VTimeInSec(math.Floor(float64(t/b.period))) * b.period
+func (b *BufferAnalyzer) periodStartTime(
+	t timing.VTimeInSec,
+) timing.VTimeInSec {
+	return timing.VTimeInSec(math.Floor(float64(t/b.period))) * b.period
 }
 
-func (b *BufferAnalyzer) periodEndTime(t sim.VTimeInSec) sim.VTimeInSec {
+func (b *BufferAnalyzer) periodEndTime(
+	t timing.VTimeInSec,
+) timing.VTimeInSec {
 	return b.periodStartTime(t) + b.period
 }
 
-func minTime(a, b sim.VTimeInSec) sim.VTimeInSec {
+func minTime(a, b timing.VTimeInSec) timing.VTimeInSec {
 	if a < b {
 		return a
 	}
@@ -124,10 +130,10 @@ func minTime(a, b sim.VTimeInSec) sim.VTimeInSec {
 // BufferAnalyzerBuilder can build a BufferAnalyzer.
 type BufferAnalyzerBuilder struct {
 	perfLogger PerfLogger
-	timeTeller sim.TimeTeller
+	timeTeller timing.TimeTeller
 	usePeriod  bool
-	period     sim.VTimeInSec
-	buffer     sim.Buffer
+	period     timing.VTimeInSec
+	buffer     queueing.Buffer
 }
 
 // MakeBufferAnalyzerBuilder creates a BufferAnalyzerBuilder.
@@ -150,7 +156,7 @@ func (b BufferAnalyzerBuilder) WithPerfLogger(
 
 // WithTimeTeller sets the TimeTeller to use.
 func (b BufferAnalyzerBuilder) WithTimeTeller(
-	timeTeller sim.TimeTeller,
+	timeTeller timing.TimeTeller,
 ) BufferAnalyzerBuilder {
 	b.timeTeller = timeTeller
 	return b
@@ -158,7 +164,7 @@ func (b BufferAnalyzerBuilder) WithTimeTeller(
 
 // WithPeriod sets the period to use.
 func (b BufferAnalyzerBuilder) WithPeriod(
-	period sim.VTimeInSec,
+	period timing.VTimeInSec,
 ) BufferAnalyzerBuilder {
 	b.usePeriod = true
 	b.period = period
@@ -168,7 +174,7 @@ func (b BufferAnalyzerBuilder) WithPeriod(
 
 // WithBuffer sets the buffer to use.
 func (b BufferAnalyzerBuilder) WithBuffer(
-	buffer sim.Buffer,
+	buffer queueing.Buffer,
 ) BufferAnalyzerBuilder {
 	b.buffer = buffer
 	return b
@@ -196,7 +202,7 @@ func (b BufferAnalyzerBuilder) Build() *BufferAnalyzer {
 		period:             b.period,
 		lastTime:           0.0,
 		lastBufLevel:       0,
-		bufLevelToDuration: make(map[int]sim.VTimeInSec),
+		bufLevelToDuration: make(map[int]timing.VTimeInSec),
 	}
 
 	atexit.Register(func() {

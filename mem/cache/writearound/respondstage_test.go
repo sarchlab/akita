@@ -5,7 +5,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Respond Stage", func() {
@@ -22,13 +22,13 @@ var _ = Describe("Respond Stage", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
 
 		cache = &Comp{
 			topPort: topPort,
 		}
-		cache.TickingComponent = sim.NewTickingComponent(
+		cache.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, cache)
 
 		s = &respondStage{cache: cache}
@@ -57,7 +57,7 @@ var _ = Describe("Respond Stage", func() {
 		It("should stall if cannot send to top", func() {
 			trans.data = []byte{1, 2, 3, 4}
 			trans.done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			topPort.EXPECT().Send(gomock.Any()).Return(&modeling.SendError{})
 
 			madeProgress := s.Tick()
 
@@ -97,7 +97,7 @@ var _ = Describe("Respond Stage", func() {
 
 		It("should stall if cannot send to top", func() {
 			trans.done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			topPort.EXPECT().Send(gomock.Any()).Return(&modeling.SendError{})
 
 			madeProgress := s.Tick()
 

@@ -5,42 +5,42 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-
-	"github.com/sarchlab/akita/v4/sim"
-
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type readRespondEvent struct {
-	*sim.EventBase
-	req *mem.ReadReq
+	*timing.EventBase
+	req mem.ReadReq
 }
 
-func newReadRespondEvent(time sim.VTimeInSec, handler sim.Handler,
-	req *mem.ReadReq,
+func newReadRespondEvent(time timing.VTimeInSec, handler timing.Handler,
+	req mem.ReadReq,
 ) *readRespondEvent {
-	return &readRespondEvent{sim.NewEventBase(time, handler), req}
+	return &readRespondEvent{timing.NewEventBase(time, handler), req}
 }
 
 type writeRespondEvent struct {
-	*sim.EventBase
-	req *mem.WriteReq
+	*timing.EventBase
+	req mem.WriteReq
 }
 
-func newWriteRespondEvent(time sim.VTimeInSec, handler sim.Handler,
-	req *mem.WriteReq,
+func newWriteRespondEvent(time timing.VTimeInSec, handler timing.Handler,
+	req mem.WriteReq,
 ) *writeRespondEvent {
-	return &writeRespondEvent{sim.NewEventBase(time, handler), req}
+	return &writeRespondEvent{timing.NewEventBase(time, handler), req}
 }
 
 // An Comp is an ideal memory controller that can perform read and write
 // Ideal memory controller always respond to the request in a fixed number of
 // cycles. There is no limitation on the concurrency of this unit.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	topPort          sim.Port
+	topPort          modeling.Port
 	Storage          *mem.Storage
 	Latency          int
 	addressConverter mem.AddressConverter
@@ -53,13 +53,13 @@ func (c *Comp) Tick() bool {
 }
 
 // Handle defines how the Comp handles event
-func (c *Comp) Handle(e sim.Event) error {
+func (c *Comp) Handle(e timing.Event) error {
 	switch e := e.(type) {
 	case *readRespondEvent:
 		return c.handleReadRespondEvent(e)
 	case *writeRespondEvent:
 		return c.handleWriteRespondEvent(e)
-	case sim.TickEvent:
+	case timing.TickEvent:
 		return c.TickingComponent.Handle(e)
 	default:
 		log.Panicf("cannot handle event of %s", reflect.TypeOf(e))
@@ -79,13 +79,13 @@ func (m *middleware) Tick() bool {
 		return false
 	}
 
-	tracing.TraceReqReceive(msg, m.Comp)
+	m.traceReqStart(msg.(mem.AccessReq))
 
 	switch msg := msg.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		m.handleReadReq(msg)
 		return true
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		m.handleWriteReq(msg)
 		return true
 	default:
@@ -95,15 +95,15 @@ func (m *middleware) Tick() bool {
 	return false
 }
 
-func (m *middleware) handleReadReq(req *mem.ReadReq) {
-	now := m.CurrentTime()
+func (m *middleware) handleReadReq(req mem.ReadReq) {
+	now := m.Now()
 	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
 	respondEvent := newReadRespondEvent(timeToSchedule, m.Comp, req)
 	m.Engine.Schedule(respondEvent)
 }
 
-func (m *middleware) handleWriteReq(req *mem.WriteReq) {
-	now := m.CurrentTime()
+func (m *middleware) handleWriteReq(req mem.WriteReq) {
+	now := m.Now()
 	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
 	respondEvent := newWriteRespondEvent(timeToSchedule, m.Comp, req)
 	m.Engine.Schedule(respondEvent)
@@ -123,12 +123,15 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 		log.Panic(err)
 	}
 
-	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(c.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithData(data).
-		Build()
+	rsp := mem.DataReadyRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.topPort.AsRemote(),
+			Dst: req.Src,
+			ID:  id.Generate(),
+		},
+		RespondTo: req.ID,
+		Data:      data,
+	}
 
 	networkErr := c.topPort.Send(rsp)
 
@@ -139,7 +142,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 		return nil
 	}
 
-	tracing.TraceReqComplete(req, c)
+	c.traceReqComplete(req)
 	c.TickLater()
 
 	return nil
@@ -149,11 +152,14 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	now := e.Time()
 	req := e.req
 
-	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(c.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		Build()
+	rsp := mem.WriteDoneRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.topPort.AsRemote(),
+			Dst: req.Src,
+			ID:  id.Generate(),
+		},
+		RespondTo: req.ID,
+	}
 
 	networkErr := c.topPort.Send(rsp)
 	if networkErr != nil {
@@ -192,12 +198,39 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 		}
 	}
 
-	tracing.TraceReqComplete(req, c)
+	c.traceReqComplete(req)
 	c.TickLater()
 
 	return nil
 }
 
-func (c *Comp) CurrentTime() sim.VTimeInSec {
-	return c.Engine.CurrentTime()
+func (c *Comp) Now() timing.VTimeInSec {
+	return c.Engine.Now()
+}
+
+func (c *Comp) traceReqStart(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskStart,
+		Item: hooking.TaskStart{
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqOutTaskID(req.Meta().ID),
+			Kind:     "req_in",
+			What:     reflect.TypeOf(req).String(),
+		},
+	}
+
+	c.InvokeHook(ctx)
+}
+
+func (c *Comp) traceReqComplete(req mem.AccessReq) {
+	ctx := hooking.HookCtx{
+		Domain: c,
+		Pos:    hooking.HookPosTaskEnd,
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqInTaskID(req.Meta().ID),
+		},
+	}
+
+	c.InvokeHook(ctx)
 }

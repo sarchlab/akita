@@ -5,18 +5,18 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
-type SampleMsg struct {
-	sim.MsgMeta
+type sampleMsg struct {
+	modeling.MsgMeta
 }
 
-func (m *SampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
+func (m sampleMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *SampleMsg) Clone() sim.Msg {
+func (m sampleMsg) Clone() modeling.Msg {
 	return m
 }
 
@@ -52,7 +52,7 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := SampleMsg{}
+		msg := sampleMsg{}
 		flit1 := messaging.FlitBuilder{}.
 			WithMsg(&msg).
 			Build()

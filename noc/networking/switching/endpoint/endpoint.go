@@ -7,12 +7,12 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v4/noc/messaging"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 type msgToAssemble struct {
-	msg             sim.Msg
+	msg             modeling.Msg
 	numFlitRequired int
 	numFlitArrived  int
 }
@@ -20,33 +20,33 @@ type msgToAssemble struct {
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	NetworkPort      sim.Port
-	DevicePorts      []sim.Port
-	DefaultSwitchDst sim.RemotePort
+	NetworkPort      modeling.Port
+	DevicePorts      []modeling.Port
+	DefaultSwitchDst modeling.RemotePort
 
 	numInputChannels  int
 	numOutputChannels int
 	flitByteSize      int
 	encodingOverhead  float64
-	msgOutBuf         []sim.Msg
+	msgOutBuf         []modeling.Msg
 	flitsToSend       []*messaging.Flit
 
 	assemblingMsgTable map[string]*list.Element
 	assemblingMsgs     *list.List
-	assembledMsgs      []sim.Msg
+	assembledMsgs      []modeling.Msg
 }
 
 // PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port sim.Port) {
+func (c *Comp) PlugIn(port modeling.Port) {
 	port.SetConnection(c)
 	c.DevicePorts = append(c.DevicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (c *Comp) NotifyAvailable(_ sim.Port) {
+func (c *Comp) NotifyAvailable(_ modeling.Port) {
 	c.TickLater()
 }
 
@@ -57,7 +57,7 @@ func (c *Comp) NotifySend() {
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (c *Comp) Unplug(_ sim.Port) {
+func (c *Comp) Unplug(_ modeling.Port) {
 	panic("not implemented")
 }
 
@@ -90,7 +90,7 @@ func (m *middleware) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flit sim.Msg) string {
+func (m *middleware) flitTaskID(flit modeling.Msg) string {
 	return fmt.Sprintf("%s_e2e", flit.Meta().ID)
 }
 
@@ -109,7 +109,7 @@ func (m *middleware) sendFlitOut() bool {
 			m.flitsToSend = m.flitsToSend[1:]
 
 			// fmt.Printf("%.10f, %s, ep send flit, %s, %d\n",
-			// 	c.Engine.CurrentTime(), c.Name(),
+			// 	c.Engine.Now(), c.Name(),
 			// 	flit.Meta().ID, len(c.flitsToSend))
 
 			if len(m.flitsToSend) == 0 {
@@ -160,11 +160,13 @@ func (m *middleware) prepareFlits() bool {
 		m.flitsToSend = append(m.flitsToSend, flits...)
 
 		// fmt.Printf("%.10f, %s, ep create flit, msg-%s, %d, %d\n",
-		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID, len(flits),
+		// 	c.Engine.Now(), c.Name(), msg.Meta().ID, len(flits),
 		// 	len(c.flitsToSend))
 
+		m.logMsgE2ETaskStart(msg)
+
 		for _, flit := range flits {
-			m.logFlitE2ETask(flit, false)
+			m.logFlitE2ETaskStart(flit)
 		}
 
 		madeProgress = true
@@ -200,7 +202,8 @@ func (m *middleware) recv() bool {
 
 		// fmt.Printf("%.10f, %s, ep received flit %s\n",
 		// 	now, c.Name(), flit.ID)
-		m.logFlitE2ETask(flit, true)
+
+		m.logFlitE2ETaskEnd(flit)
 
 		madeProgress = true
 	}
@@ -229,7 +232,7 @@ func (m *middleware) assemble() bool {
 		e = next
 
 		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
-		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)
+		// 	c.Engine.Now(), c.Name(), assemblingMsg.msg.Meta().ID)
 
 		madeProgress = true
 	}
@@ -244,7 +247,7 @@ func (m *middleware) tryDeliver() bool {
 		msg := m.assembledMsgs[0]
 		dst := msg.Meta().Dst
 
-		var dstPort sim.Port
+		var dstPort modeling.Port
 
 		for _, port := range m.DevicePorts {
 			if port.AsRemote() == dst {
@@ -264,7 +267,8 @@ func (m *middleware) tryDeliver() bool {
 
 		// fmt.Printf("%.10f, %s, delivered, %s\n",
 		// 	now, c.Name(), msg.Meta().ID)
-		m.logMsgE2ETask(msg, true)
+
+		m.logMsgE2ETaskEnd(msg)
 
 		m.assembledMsgs = m.assembledMsgs[1:]
 
@@ -274,63 +278,7 @@ func (m *middleware) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *middleware) logFlitE2ETask(flit *messaging.Flit, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
-		return
-	}
-
-	msg := flit.Msg
-
-	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit), m.Comp)
-		return
-	}
-
-	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit), m.msgTaskID(msg.Meta().ID),
-		m.Comp, "flit_e2e", "flit_e2e", m.Comp.Name()+".FlitBuf", flit,
-	)
-}
-
-func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
-		return
-	}
-
-	rsp, isRsp := msg.(sim.Rsp)
-	if isRsp {
-		m.logMsgRsp(isEnd, rsp)
-		return
-	}
-
-	m.logMsgReq(isEnd, msg)
-}
-
-func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(msg.Meta().ID), m.Comp)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(msg.Meta().ID),
-			msg.Meta().ID+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", msg,
-		)
-	}
-}
-
-func (m *middleware) logMsgRsp(isEnd bool, rsp sim.Rsp) {
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(rsp.Meta().ID), m.Comp)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(rsp.Meta().ID),
-			rsp.GetRspTo()+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", rsp,
-		)
-	}
-}
-
-func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
+func (m *middleware) msgToFlits(msg modeling.Msg) []*messaging.Flit {
 	numFlit := 1
 
 	if msg.Meta().TrafficBytes > 0 {
@@ -352,4 +300,72 @@ func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
 	}
 
 	return flits
+}
+
+func (m *middleware) logMsgE2ETaskStart(msg modeling.Msg) {
+	taskStart := hooking.TaskStart{
+		ID:   m.msgTaskID(msg.Meta().ID),
+		Kind: "msg_e2e",
+		What: "msg_e2e",
+	}
+
+	taskStart.ParentID = modeling.ReqOutTaskID(msg.Meta().ID)
+
+	rsp, ok := msg.(modeling.Rsp)
+	if ok {
+		taskStart.ParentID = modeling.ReqOutTaskID(rsp.GetRspTo())
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskStart,
+		Pos:    hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logMsgE2ETaskEnd(msg modeling.Msg) {
+	taskEnd := hooking.TaskEnd{
+		ID: m.msgTaskID(msg.Meta().ID),
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskEnd,
+		Pos:    hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logFlitE2ETaskStart(flit *messaging.Flit) {
+	taskStart := hooking.TaskStart{
+		ID:       m.flitTaskID(flit),
+		ParentID: m.msgTaskID(flit.Msg.Meta().ID),
+		Kind:     "flit_e2e",
+		What:     "flit_e2e",
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskStart,
+		Pos:    hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logFlitE2ETaskEnd(flit *messaging.Flit) {
+	taskEnd := hooking.TaskEnd{
+		ID: m.flitTaskID(flit),
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskEnd,
+		Pos:    hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

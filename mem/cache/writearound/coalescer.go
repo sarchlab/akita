@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -115,13 +115,13 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(req mem.AccessReq) bool {
 
 func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		t := &transaction{
 			read: req,
 		}
 
 		return t
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		t := &transaction{
 			write: req,
 		}
@@ -135,9 +135,9 @@ func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 
 func (c *coalescer) isReqLastInWave(req mem.AccessReq) bool {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		return !req.CanWaitForCoalesce
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		return !req.CanWaitForCoalesce
 	default:
 		panic("unknown type")
@@ -185,7 +185,7 @@ func (c *coalescer) coalesceRead() *transaction {
 		Build()
 
 	return &transaction{
-		id:                      sim.GetIDGenerator().Generate(),
+		id:                      id.Generate(),
 		read:                    coalescedRead,
 		preCoalesceTransactions: c.toCoalesce,
 	}
@@ -214,7 +214,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 	}
 
 	return &transaction{
-		id:                      sim.GetIDGenerator().Generate(),
+		id:                      id.Generate(),
 		write:                   write,
 		preCoalesceTransactions: c.toCoalesce,
 	}

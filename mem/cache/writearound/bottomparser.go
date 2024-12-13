@@ -3,7 +3,7 @@ package writearound
 import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -90,7 +90,7 @@ func (p *bottomParser) mergeMSHRData(
 	for _, t := range mshrEntry.Requests {
 		trans := t.(*transaction)
 
-		if trans.write == nil {
+		if trans.transactionType != transactionTypeWrite {
 			continue
 		}
 
@@ -112,7 +112,7 @@ func (p *bottomParser) finalizeMSHRTrans(
 ) {
 	for _, t := range mshrEntry.Requests {
 		trans := t.(*transaction)
-		if trans.read != nil {
+		if trans.transactionType != transactionTypeRead {
 			for _, preCTrans := range trans.preCoalesceTransactions {
 				read := preCTrans.read
 				offset := read.Address - mshrEntry.Block.Tag
@@ -135,7 +135,8 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
 ) *transaction {
 	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans.writeToBottom != nil && trans.writeToBottom.ID == id {
+		if trans.transactionType == transactionTypeWrite &&
+			trans.writeToBottom.ID == id {
 			return trans
 		}
 	}
@@ -147,7 +148,7 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
 ) *transaction {
 	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans.readToBottom != nil && trans.readToBottom.ID == id {
+		if trans.readToBottom.ID == id {
 			return trans
 		}
 	}
@@ -167,7 +168,7 @@ func (p *bottomParser) removeTransaction(trans *transaction) {
 	}
 }
 
-func (p *bottomParser) getBankBuf(block *cache.Block) sim.Buffer {
+func (p *bottomParser) getBankBuf(block *cache.Block) queueing.Buffer {
 	numWaysPerSet := p.cache.wayAssociativity
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(p.cache.bankBufs)

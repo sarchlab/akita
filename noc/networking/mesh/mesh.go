@@ -8,12 +8,13 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type tile struct {
-	ports []sim.Port
+	ports []modeling.Port
 	sw    int
 	rt    *meshRoutingTable
 }
@@ -22,7 +23,7 @@ type tile struct {
 type Connector struct {
 	connector networkconnector.Connector
 
-	freq                 sim.Freq
+	freq                 timing.Freq
 	switchLatency        int
 	flitSize             int
 	linkTransferPerCycle float64
@@ -30,16 +31,16 @@ type Connector struct {
 	gridSize [3]int
 	gridCap  [3]int
 	grid     [][][]tile
-	dstTable map[sim.RemotePort]*tile
+	dstTable map[modeling.RemotePort]*tile
 }
 
 // NewConnector creates a new mesh Connector.
 func NewConnector() *Connector {
 	c := &Connector{
-		freq:                 1 * sim.GHz,
+		freq:                 1 * timing.GHz,
 		flitSize:             16,
 		linkTransferPerCycle: 1,
-		dstTable:             make(map[sim.RemotePort]*tile),
+		dstTable:             make(map[modeling.RemotePort]*tile),
 	}
 
 	c.connector = networkconnector.
@@ -50,13 +51,13 @@ func NewConnector() *Connector {
 }
 
 // WithEngine sets the engine to be used.
-func (c *Connector) WithEngine(e sim.Engine) *Connector {
+func (c *Connector) WithEngine(e timing.Engine) *Connector {
 	c.connector = c.connector.WithEngine(e)
 	return c
 }
 
 // WithFreq sets the frequency that the network works at.
-func (c *Connector) WithFreq(freq sim.Freq) *Connector {
+func (c *Connector) WithFreq(freq timing.Freq) *Connector {
 	c.freq = freq
 	c.connector = c.connector.WithDefaultFreq(freq)
 
@@ -77,14 +78,14 @@ func (c *Connector) WithBandwidth(transferPerCycle float64) *Connector {
 }
 
 // WithVisTracer sets the tracer used to trace tasks in the network.
-func (c *Connector) WithVisTracer(t tracing.Tracer) *Connector {
+func (c *Connector) WithVisTracer(t hooking.Hook) *Connector {
 	c.connector = c.connector.WithVisTracer(t)
 	return c
 }
 
 // WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
 // traffics and congestions in the channels.
-func (c *Connector) WithNoCTracer(t tracing.Tracer) *Connector {
+func (c *Connector) WithNoCTracer(t hooking.Hook) *Connector {
 	c.connector = c.connector.WithNoCTracer(t)
 	return c
 }
@@ -128,7 +129,7 @@ func (c *Connector) CreateNetwork(name string) {
 // connector supports 3 dimensional meshes. If a 2D mesh is designed, simply
 // set the third coordinate to 0. We assume first first tile always has a
 // coordinate of [0,0,0]. Negative coordinate is not supported.
-func (c *Connector) AddTile(loc [3]int, ports []sim.Port) {
+func (c *Connector) AddTile(loc [3]int, ports []modeling.Port) {
 	if loc[0] < 0 || loc[1] < 0 || loc[2] < 0 {
 		panic("coordinate is negative")
 	}
@@ -143,7 +144,7 @@ func (c *Connector) AddTile(loc [3]int, ports []sim.Port) {
 	}
 }
 
-func (c *Connector) mergePorts(loc [3]int, ports []sim.Port) {
+func (c *Connector) mergePorts(loc [3]int, ports []modeling.Port) {
 	if len(c.grid[loc[0]][loc[1]][loc[2]].ports) != 0 {
 		fmt.Printf("Tile [%d, %d, %d] already configured. Merging Ports.\n",
 			loc[0], loc[1], loc[2])
@@ -342,7 +343,7 @@ func (c *Connector) connectWithFrontSwitch(x, y, z int) {
 func (c *Connector) createLink(
 	a, b int,
 	DirectionA, DirectionB string,
-) (portA, portB sim.Port) {
+) (portA, portB modeling.Port) {
 	transferPerCycle := int(math.Ceil(c.linkTransferPerCycle))
 
 	return c.connector.ConnectSwitches(a, b,
@@ -365,7 +366,7 @@ func (c *Connector) createLink(
 			},
 			LinkParam: networkconnector.LinkParameter{
 				IsIdeal:       true,
-				Frequency:     c.freq * sim.Freq(c.linkTransferPerCycle),
+				Frequency:     c.freq * timing.Freq(c.linkTransferPerCycle),
 				NumStage:      1,
 				CyclePerStage: 1,
 				PipelineWidth: 1,

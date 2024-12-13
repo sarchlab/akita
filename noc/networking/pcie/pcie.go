@@ -6,13 +6,14 @@ import (
 
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Connector can connect devices into a PCIe network.
 type Connector struct {
-	freq          sim.Freq
+	freq          timing.Freq
 	bandwidth     uint64
 	flitByteSize  int
 	switchLatency int
@@ -25,7 +26,7 @@ func NewConnector() *Connector {
 
 	c.connector = networkconnector.MakeConnector()
 
-	c = c.WithFrequency(1*sim.GHz).
+	c = c.WithFrequency(1*timing.GHz).
 		WithVersion(4, 16).
 		WithSwitchLatency(140)
 
@@ -34,7 +35,7 @@ func NewConnector() *Connector {
 
 // WithEngine sets the event-driven simulation engine that the PCIe connection
 // uses.
-func (c *Connector) WithEngine(engine sim.Engine) *Connector {
+func (c *Connector) WithEngine(engine timing.Engine) *Connector {
 	c.connector = c.connector.WithEngine(engine)
 	return c
 }
@@ -42,7 +43,7 @@ func (c *Connector) WithEngine(engine sim.Engine) *Connector {
 // WithFrequency sets the frequency used by the components in the connection. It
 // does not have to be the exact frequency of the network. Instead, it is better
 // to set as same frequency that the network interfaces work at.
-func (c *Connector) WithFrequency(freq sim.Freq) *Connector {
+func (c *Connector) WithFrequency(freq timing.Freq) *Connector {
 	c.connector = c.connector.WithDefaultFreq(freq)
 	c.freq = freq
 
@@ -94,7 +95,7 @@ func (c *Connector) WithSwitchLatency(numCycles int) *Connector {
 }
 
 // WithVisTracer sets the vis tracer that can be used to visualize the network.
-func (c *Connector) WithVisTracer(tracer tracing.Tracer) *Connector {
+func (c *Connector) WithVisTracer(tracer hooking.Hook) *Connector {
 	c.connector = c.connector.WithVisTracer(tracer)
 	return c
 }
@@ -106,7 +107,7 @@ func (c *Connector) CreateNetwork(name string) {
 }
 
 // AddRootComplex adds a new switch connecting CPU ports.
-func (c *Connector) AddRootComplex(cpuPorts []sim.Port) (switchID int) {
+func (c *Connector) AddRootComplex(cpuPorts []modeling.Port) (switchID int) {
 	switchID = c.connector.AddSwitch()
 
 	c.PlugInDevice(switchID, cpuPorts)
@@ -144,7 +145,7 @@ func (c *Connector) AddSwitch(baseSwitchID int) (switchID int) {
 }
 
 // PlugInDevice connects a series of ports to a switch.
-func (c *Connector) PlugInDevice(baseSwitchID int, devicePorts []sim.Port) {
+func (c *Connector) PlugInDevice(baseSwitchID int, devicePorts []modeling.Port) {
 	c.connector.ConnectDevice(baseSwitchID, devicePorts,
 		networkconnector.DeviceToSwitchLinkParameter{
 			DeviceEndParam: networkconnector.LinkEndDeviceParameter{

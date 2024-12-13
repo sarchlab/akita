@@ -7,7 +7,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github.com/sarchlab/akita/v4/sim"
+	queueing "github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // MockArbiter is a mock of Arbiter interface.
@@ -34,7 +34,7 @@ func (m *MockArbiter) EXPECT() *MockArbiterMockRecorder {
 }
 
 // AddBuffer mocks base method.
-func (m *MockArbiter) AddBuffer(arg0 sim.Buffer) {
+func (m *MockArbiter) AddBuffer(arg0 queueing.Buffer) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddBuffer", arg0)
 }
@@ -46,10 +46,10 @@ func (mr *MockArbiterMockRecorder) AddBuffer(arg0 interface{}) *gomock.Call {
 }
 
 // Arbitrate mocks base method.
-func (m *MockArbiter) Arbitrate() []sim.Buffer {
+func (m *MockArbiter) Arbitrate() []queueing.Buffer {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Arbitrate")
-	ret0, _ := ret[0].([]sim.Buffer)
+	ret0, _ := ret[0].([]queueing.Buffer)
 	return ret0
 }
 

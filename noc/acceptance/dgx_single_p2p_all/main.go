@@ -12,7 +12,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/nvlink"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -38,7 +38,7 @@ func main() {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
 			rand.Seed(1)
 
-			engine := sim.NewSerialEngine()
+			engine := timing.NewSerialEngine()
 			t := acceptance.NewTest()
 
 			agents := createNetwork(engine, t)
@@ -52,7 +52,7 @@ func main() {
 			}
 
 			t.MustHaveReceivedAllMsgs()
-			t.ReportBandwidthAchieved(engine.CurrentTime())
+			t.ReportBandwidthAchieved(engine.Now())
 		}
 	}
 
@@ -60,7 +60,7 @@ func main() {
 }
 
 func createNetwork(
-	engine sim.Engine,
+	engine timing.Engine,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	// visTracer := tracing.NewMySQLTracer()
@@ -81,10 +81,10 @@ func createNetwork(
 }
 
 func createAgents(
-	engine sim.Engine,
+	engine timing.Engine,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
-	freq := 1.0 * sim.GHz
+	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 

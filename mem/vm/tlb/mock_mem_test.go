@@ -7,7 +7,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github.com/sarchlab/akita/v4/sim"
+	modeling "github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 // MockAddressToPortMapper is a mock of AddressToPortMapper interface.
@@ -34,10 +34,10 @@ func (m *MockAddressToPortMapper) EXPECT() *MockAddressToPortMapperMockRecorder 
 }
 
 // Find mocks base method.
-func (m *MockAddressToPortMapper) Find(arg0 uint64) sim.RemotePort {
+func (m *MockAddressToPortMapper) Find(arg0 uint64) modeling.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Find", arg0)
-	ret0, _ := ret[0].(sim.RemotePort)
+	ret0, _ := ret[0].(modeling.RemotePort)
 	return ret0
 }
 

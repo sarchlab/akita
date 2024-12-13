@@ -2,7 +2,7 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -25,7 +25,7 @@ func (p *topParser) Tick() bool {
 	}
 
 	trans := &transaction{
-		id: sim.GetIDGenerator().Generate(),
+		id: id.Generate(),
 	}
 	switch req := req.(type) {
 	case *mem.ReadReq:

@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/pcie"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	// engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	t := acceptance.NewTest()
@@ -33,16 +33,16 @@ func main() {
 	}
 
 	t.MustHaveReceivedAllMsgs()
-	t.ReportBandwidthAchieved(engine.CurrentTime())
+	t.ReportBandwidthAchieved(engine.Now())
 	atexit.Exit(0)
 }
 
-func createNetwork(engine sim.Engine, test *acceptance.Test) {
+func createNetwork(engine timing.Engine, test *acceptance.Test) {
 	monitor := monitoring.NewMonitor()
 	monitor.RegisterEngine(engine)
 	monitor.StartServer()
 
-	freq := 1.0 * sim.GHz
+	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 

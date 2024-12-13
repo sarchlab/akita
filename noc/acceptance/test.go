@@ -4,36 +4,38 @@ import (
 	"log"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type trafficMsg struct {
-	sim.MsgMeta
+	modeling.MsgMeta
 }
 
-func (m *trafficMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
+func (m trafficMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *trafficMsg) Clone() sim.Msg {
-	cloneMsg := *m
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
+func (m trafficMsg) Clone() modeling.Msg {
+	cloneMsg := m
+	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []sim.Msg
-	receivedMsgs      []sim.Msg
-	receivedMsgsTable map[sim.Msg]bool
+	msgs              []modeling.Msg
+	receivedMsgs      []modeling.Msg
+	receivedMsgsTable map[modeling.Msg]bool
 }
 
 // NewTest creates a new test.
 func NewTest() *Test {
 	t := &Test{}
-	t.receivedMsgsTable = make(map[sim.Msg]bool)
+	t.receivedMsgsTable = make(map[modeling.Msg]bool)
 
 	return t
 }
@@ -61,23 +63,25 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &trafficMsg{}
-		msg.Meta().ID = sim.GetIDGenerator().Generate()
-		msg.Src = srcPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
-		msg.TrafficBytes = rand.Intn(4096)
-		// msg.TrafficBytes = 512
+		msg := trafficMsg{
+			MsgMeta: modeling.MsgMeta{
+				ID:           id.Generate(),
+				Src:          srcPort.AsRemote(),
+				Dst:          dstPort.AsRemote(),
+				TrafficClass: rand.Intn(4096),
+			},
+		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
 }
 
-func (t *Test) registerMsg(msg sim.Msg) {
+func (t *Test) registerMsg(msg modeling.Msg) {
 	t.msgs = append(t.msgs, msg)
 }
 
 // receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg sim.Msg, recvPort sim.Port) {
+func (t *Test) receiveMsg(msg modeling.Msg, recvPort modeling.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
 
@@ -88,15 +92,15 @@ func (t *Test) receiveMsg(msg sim.Msg, recvPort sim.Port) {
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(
-	msg sim.Msg,
-	recvPort sim.Port,
+	msg modeling.Msg,
+	recvPort modeling.Port,
 ) {
 	if msg.Meta().Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
 }
 
-func (t *Test) msgMustNotBeReceivedBefore(msg sim.Msg) {
+func (t *Test) msgMustNotBeReceivedBefore(msg modeling.Msg) {
 	if _, found := t.receivedMsgsTable[msg]; found {
 		panic("msg is double delivered")
 	}
@@ -120,7 +124,7 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 }
 
 // ReportBandwidthAchieved dumps the bandwidth observed by each agents.
-func (t *Test) ReportBandwidthAchieved(now sim.VTimeInSec) {
+func (t *Test) ReportBandwidthAchieved(now timing.VTimeInSec) {
 	for _, a := range t.agents {
 		log.Printf(
 			"agent %s, send bandwidth %.2f GB/s, recv bandwidth %.2f GB/s",

@@ -7,9 +7,9 @@ import (
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
-	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 type flitPipelineItem struct {
@@ -24,24 +24,24 @@ func (f flitPipelineItem) TaskID() string {
 // A portComplex is the infrastructure related to a port.
 type portComplex struct {
 	// localPort is the port that is equipped on the switch.
-	localPort sim.Port
+	localPort modeling.Port
 
 	// remotePort is the port that is connected to the localPort.
-	remotePort sim.RemotePort
+	remotePort modeling.RemotePort
 
 	// Data arrived at the local port needs to be processed in a pipeline. There
 	// is a processing pipeline for each local port.
-	pipeline pipelining.Pipeline
+	pipeline queueing.Pipeline
 
 	// The flits here are buffered after the pipeline and are waiting to be
 	// assigned with an output buffer.
-	routeBuffer sim.Buffer
+	routeBuffer queueing.Buffer
 
 	// The flits here are buffered to wait to be forwarded to the output buffer.
-	forwardBuffer sim.Buffer
+	forwardBuffer queueing.Buffer
 
 	// The flits here are waiting to be sent to the next hop.
-	sendOutBuffer sim.Buffer
+	sendOutBuffer queueing.Buffer
 
 	// NumInputChannel is the number of flits that can stream into the
 	// switch from the port. The RouteBuffer and the ForwardBuffer should
@@ -56,11 +56,11 @@ type portComplex struct {
 
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
-	ports                []sim.Port
-	portToComplexMapping map[sim.RemotePort]portComplex
+	ports                []modeling.Port
+	portToComplexMapping map[modeling.RemotePort]portComplex
 	routingTable         routing.Table
 	arbiter              arbitration.Arbiter
 }
@@ -98,14 +98,6 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
-}
-
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.Comp.Name()
-}
-
 func (m *middleware) startProcessing() (madeProgress bool) {
 	for _, port := range m.ports {
 		pc := m.portToComplexMapping[port.AsRemote()]
@@ -132,12 +124,8 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 
 			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
 			// 	now, c.Name(), flit.ID)
-			tracing.StartTask(
-				m.flitTaskID(flit),
-				m.flitParentTaskID(flit),
-				m.Comp, "flit", "flit_inside_sw",
-				flit,
-			)
+
+			m.traceFlitStart(flit)
 		}
 	}
 
@@ -176,7 +164,7 @@ func (m *middleware) route() (madeProgress bool) {
 			forwardBuf.Push(flit)
 
 			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
-			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
+			// 	c.Engine.Now(), c.Name(), flit.ID)
 
 			madeProgress = true
 		}
@@ -225,8 +213,8 @@ func (m *middleware) sendOut() (madeProgress bool) {
 			}
 
 			flit := item.(*messaging.Flit)
-			flit.Meta().Src = pc.localPort.AsRemote()
-			flit.Meta().Dst = pc.remotePort
+			flit.Src = pc.localPort.AsRemote()
+			flit.Dst = pc.remotePort
 
 			err := pc.localPort.Send(flit)
 			if err == nil {
@@ -237,7 +225,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
 				// 	now, c.Name(), flit.ID)
 
-				tracing.EndTask(m.flitTaskID(flit), m.Comp)
+				m.traceFlitEnd(flit)
 			}
 		}
 	}
@@ -261,11 +249,46 @@ func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
 	}
 }
 
+func (m *middleware) traceFlitStart(flit *messaging.Flit) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       m.flitTaskID(flit),
+			ParentID: m.flitParentTaskID(flit),
+			Kind:     "flit",
+			What:     "flit_inside_sw",
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceFlitEnd(flit *messaging.Flit) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: m.flitTaskID(flit),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_e2e"
+}
+
+func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.Comp.Name()
+}
+
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
 	sw               *Comp
-	localPort        sim.Port
-	remotePort       sim.Port
+	localPort        modeling.Port
+	remotePort       modeling.Port
 	latency          int
 	numInputChannel  int
 	numOutputChannel int
@@ -284,7 +307,9 @@ func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
 
 // WithPorts defines the ports to add. The local port is part of the switch.
 // The remote port is the port on an endpoint or on another switch.
-func (a SwitchPortAdder) WithPorts(local, remote sim.Port) SwitchPortAdder {
+func (a SwitchPortAdder) WithPorts(
+	local, remote modeling.Port,
+) SwitchPortAdder {
 	a.localPort = local
 	a.remotePort = remote
 
@@ -318,10 +343,20 @@ func (a SwitchPortAdder) AddPort() {
 	complexID := len(a.sw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
-	sendOutBuf := sim.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
-	forwardBuf := sim.NewBuffer(complexName+"ForwardBuf", a.numInputChannel)
-	routeBuf := sim.NewBuffer(complexName+"RouteBuf", a.numInputChannel)
-	pipeline := pipelining.MakeBuilder().
+	sendOutBuf := queueing.NewBuffer(
+		complexName+"SendOutBuf",
+		a.numOutputChannel,
+	)
+	forwardBuf := queueing.NewBuffer(
+		complexName+"ForwardBuf",
+		a.numInputChannel,
+	)
+	routeBuf := queueing.NewBuffer(
+		complexName+"RouteBuf",
+		a.numInputChannel,
+	)
+
+	pipeline := queueing.MakePipelineBuilder().
 		WithNumStage(a.latency).
 		WithCyclePerStage(1).
 		WithPipelineWidth(a.numInputChannel).
