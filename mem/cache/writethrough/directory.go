@@ -3,6 +3,8 @@ package writethrough
 import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
@@ -262,14 +264,17 @@ func (d *directory) writeBottom(trans *transaction) bool {
 	write := trans.write
 	addr := write.Address
 
-	writeToBottom := mem.WriteReqBuilder{}.
-		WithSrc(d.cache.bottomPort.AsRemote()).
-		WithDst(d.cache.addressToPortMapper.Find(addr)).
-		WithAddress(addr).
-		WithPID(write.PID).
-		WithData(write.Data).
-		WithDirtyMask(write.DirtyMask).
-		Build()
+	writeToBottom := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: d.cache.bottomPort.AsRemote(),
+			Dst: d.cache.addressToPortMapper.Find(addr),
+			ID:  id.Generate(),
+		},
+		Address:   addr,
+		PID:       write.PID,
+		Data:      write.Data,
+		DirtyMask: write.DirtyMask,
+	}
 
 	err := d.cache.bottomPort.Send(writeToBottom)
 	if err != nil {

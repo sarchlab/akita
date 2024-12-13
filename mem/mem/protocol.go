@@ -46,7 +46,7 @@ func (r ReadReq) Clone() modeling.Msg {
 }
 
 // GenerateRsp generate DataReadyRsp to ReadReq
-func (r ReadReq) GenerateRsp(data []byte) modeling.Rsp {
+func (r ReadReq) GenerateRsp() modeling.Rsp {
 	rsp := DataReadyRsp{
 		MsgMeta: modeling.MsgMeta{
 			Src: r.Dst,
@@ -54,7 +54,6 @@ func (r ReadReq) GenerateRsp(data []byte) modeling.Rsp {
 			ID:  id.Generate(),
 		},
 		RespondTo: r.ID,
-		Data:      data,
 	}
 
 	return rsp

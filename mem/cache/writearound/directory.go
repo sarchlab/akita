@@ -3,6 +3,8 @@ package writearound
 import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
@@ -50,12 +52,14 @@ func (d *directory) Tick() (madeProgress bool) {
 
 		trans := item.(dirPipelineItem).trans
 
-		if trans.read != nil {
+		switch trans.transactionType {
+		case transactionTypeRead:
 			madeProgress = d.processRead(trans) || madeProgress
-			continue
+		case transactionTypeWrite:
+			madeProgress = d.processWrite(trans) || madeProgress
+		default:
+			panic("invalid transaction type")
 		}
-
-		madeProgress = d.processWrite(trans) || madeProgress
 	}
 
 	return madeProgress
@@ -87,10 +91,13 @@ func (d *directory) processMSHRHit(
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
-	if trans.read != nil {
+	switch trans.transactionType {
+	case transactionTypeRead:
 		tracing.AddTaskStep(trans.id, d.cache, "read-mshr-hit")
-	} else {
+	case transactionTypeWrite:
 		tracing.AddTaskStep(trans.id, d.cache, "write-mshr-hit")
+	default:
+		panic("invalid transaction type")
 	}
 
 	d.buf.Pop()
@@ -188,14 +195,17 @@ func (d *directory) writeBottom(trans *transaction) bool {
 	write := trans.write
 	addr := write.Address
 
-	writeToBottom := mem.WriteReqBuilder{}.
-		WithSrc(d.cache.bottomPort.AsRemote()).
-		WithDst(d.cache.addressToPortMapper.Find(addr)).
-		WithAddress(addr).
-		WithPID(write.PID).
-		WithData(write.Data).
-		WithDirtyMask(write.DirtyMask).
-		Build()
+	writeToBottom := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: d.cache.bottomPort.AsRemote(),
+			Dst: d.cache.addressToPortMapper.Find(addr),
+			ID:  id.Generate(),
+		},
+		Address:   addr,
+		PID:       write.PID,
+		Data:      write.Data,
+		DirtyMask: write.DirtyMask,
+	}
 
 	err := d.cache.bottomPort.Send(writeToBottom)
 	if err != nil {
@@ -258,13 +268,16 @@ func (d *directory) fetchFromBottom(
 	cacheLineID := addr / blockSize * blockSize
 
 	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
-	readToBottom := mem.ReadReqBuilder{}.
-		WithSrc(d.cache.bottomPort.AsRemote()).
-		WithDst(bottomModule).
-		WithAddress(cacheLineID).
-		WithPID(pid).
-		WithByteSize(blockSize).
-		Build()
+	readToBottom := mem.ReadReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: d.cache.bottomPort.AsRemote(),
+			Dst: bottomModule,
+			ID:  id.Generate(),
+		},
+		Address:        cacheLineID,
+		PID:            pid,
+		AccessByteSize: blockSize,
+	}
 
 	err := d.cache.bottomPort.Send(readToBottom)
 	if err != nil {

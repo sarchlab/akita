@@ -115,13 +115,13 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(req mem.AccessReq) bool {
 
 func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		t := &transaction{
 			read: req,
 		}
 
 		return t
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		t := &transaction{
 			write: req,
 		}
@@ -135,9 +135,9 @@ func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 
 func (c *coalescer) isReqLastInWave(req mem.AccessReq) bool {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		return !req.CanWaitForCoalesce
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		return !req.CanWaitForCoalesce
 	default:
 		panic("unknown type")

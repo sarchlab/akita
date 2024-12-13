@@ -15,14 +15,21 @@ const (
 	bankActionWriteFetched
 )
 
+type transactionType int
+
+const (
+	transactionTypeRead transactionType = iota
+	transactionTypeWrite
+)
+
 type transaction struct {
 	id string
 
-	read         *mem.ReadReq
-	readToBottom *mem.ReadReq
-
-	write         *mem.WriteReq
-	writeToBottom *mem.WriteReq
+	transactionType transactionType
+	read            mem.ReadReq
+	readToBottom    mem.ReadReq
+	write           mem.WriteReq
+	writeToBottom   mem.WriteReq
 
 	preCoalesceTransactions []*transaction
 
@@ -36,17 +43,23 @@ type transaction struct {
 }
 
 func (t *transaction) Address() uint64 {
-	if t.read != nil {
+	switch t.transactionType {
+	case transactionTypeRead:
 		return t.read.Address
+	case transactionTypeWrite:
+		return t.write.Address
 	}
 
-	return t.write.Address
+	panic("invalid transaction type")
 }
 
 func (t *transaction) PID() vm.PID {
-	if t.read != nil {
+	switch t.transactionType {
+	case transactionTypeRead:
 		return t.read.PID
+	case transactionTypeWrite:
+		return t.write.PID
 	}
 
-	return t.write.PID
+	panic("invalid transaction type")
 }

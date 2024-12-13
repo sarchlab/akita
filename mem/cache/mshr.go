@@ -14,8 +14,8 @@ type MSHREntry struct {
 	Address   uint64
 	Requests  []interface{}
 	Block     *Block
-	ReadReq   *mem.ReadReq
-	DataReady *mem.DataReadyRsp
+	ReadReq   mem.ReadReq
+	DataReady mem.DataReadyRsp
 	Data      []byte
 }
 

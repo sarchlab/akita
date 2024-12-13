@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/sim/timing"
@@ -209,7 +208,7 @@ func (b *Builder) buildDirStage(c *Comp) {
 		b.numReqPerCycle,
 	)
 	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", c.Name())
-	pipeline := pipelining.MakeBuilder().
+	pipeline := queueing.MakePipelineBuilder().
 		WithPipelineWidth(b.numReqPerCycle).
 		WithNumStage(b.dirLatency).
 		WithCyclePerStage(1).
@@ -229,7 +228,7 @@ func (b *Builder) buildBankStages(c *Comp) {
 			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", c.Name(), i),
 			b.numReqPerCycle,
 		)
-		pipeline := pipelining.MakeBuilder().
+		pipeline := queueing.MakePipelineBuilder().
 			WithPipelineWidth(b.numReqPerCycle).
 			WithNumStage(b.bankLatency).
 			WithCyclePerStage(1).

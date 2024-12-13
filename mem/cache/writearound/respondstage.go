@@ -19,11 +19,14 @@ func (s *respondStage) Tick() bool {
 			continue
 		}
 
-		if trans.read != nil {
+		switch trans.transactionType {
+		case transactionTypeRead:
 			return s.respondReadTrans(trans)
+		case transactionTypeWrite:
+			return s.respondWriteTrans(trans)
+		default:
+			panic("invalid transaction type")
 		}
-
-		return s.respondWriteTrans(trans)
 	}
 
 	return false
@@ -60,11 +63,7 @@ func (s *respondStage) respondWriteTrans(trans *transaction) bool {
 	}
 
 	write := trans.write
-	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(write.Src).
-		WithRspTo(write.ID).
-		Build()
+	done := write.GenerateRsp()
 
 	err := s.cache.topPort.Send(done)
 	if err != nil {
