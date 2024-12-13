@@ -447,8 +447,8 @@ func (m *middleware) traceTransactionStart(req mem.AccessReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(req),
-			ParentID: modeling.ReqInTaskID(req),
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(req.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -462,7 +462,7 @@ func (m *middleware) traceTransactionEnd(req mem.AccessReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqInTaskID(req),
+			ID: modeling.ReqInTaskID(req.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}
@@ -477,8 +477,8 @@ func (m *middleware) traceTranslationStart(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqOutTaskID(transReq),
-			ParentID: modeling.ReqInTaskID(req),
+			ID:       modeling.ReqOutTaskID(transReq.Meta().ID),
+			ParentID: modeling.ReqInTaskID(req.Meta().ID),
 			Kind:     "req_out",
 			What:     reflect.TypeOf(transReq).String(),
 		},
@@ -494,7 +494,7 @@ func (m *middleware) traceTranslationEnd(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqOutTaskID(transReq),
+			ID: modeling.ReqOutTaskID(transReq.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}
@@ -508,8 +508,8 @@ func (m *middleware) traceMemAccessStart(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqOutTaskID(reqToBottom),
-			ParentID: modeling.ReqInTaskID(reqFromTop),
+			ID:       modeling.ReqOutTaskID(reqToBottom.Meta().ID),
+			ParentID: modeling.ReqInTaskID(reqFromTop.Meta().ID),
 			Kind:     "req_out",
 			What:     reflect.TypeOf(reqToBottom).String(),
 		},
@@ -523,7 +523,7 @@ func (m *middleware) traceMemAccessEnd(reqToBottom mem.AccessReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqOutTaskID(reqToBottom),
+			ID: modeling.ReqOutTaskID(reqToBottom.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}

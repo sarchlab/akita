@@ -8,9 +8,9 @@ import (
 
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A deviceNode represents a switch associated with the device and
@@ -171,7 +171,7 @@ func (c *Connector) WithEthernetBandwidth(bytePerSecond uint64) *Connector {
 }
 
 // WithVisTracer sets the tracer used to trace tasks in the network.
-func (c Connector) WithVisTracer(t tracing.Tracer) Connector {
+func (c Connector) WithVisTracer(t hooking.Hook) Connector {
 	c.connector = c.connector.WithVisTracer(t)
 	return c
 }

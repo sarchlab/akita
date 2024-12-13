@@ -350,8 +350,8 @@ func (m *middleware) traceTransactionStart(req vm.TranslationReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(req),
-			ParentID: modeling.ReqOutTaskID(req),
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(req.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -365,7 +365,7 @@ func (m *middleware) traceTransactionComplete(req vm.TranslationReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqOutTaskID(req),
+			ID: modeling.ReqOutTaskID(req.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}
@@ -378,7 +378,7 @@ func (m *middleware) traceTransactionHitOrMiss(
 	action string,
 ) {
 	tag := hooking.TaskTag{
-		TaskID: modeling.ReqInTaskID(req),
+		TaskID: modeling.ReqInTaskID(req.Meta().ID),
 		What:   action,
 	}
 
@@ -397,8 +397,8 @@ func (m *middleware) traceFetchBottomStart(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqOutTaskID(reqToBottom),
-			ParentID: modeling.ReqInTaskID(reqFromTop),
+			ID:       modeling.ReqOutTaskID(reqToBottom.Meta().ID),
+			ParentID: modeling.ReqInTaskID(reqFromTop.Meta().ID),
 			Kind:     "req_out",
 			What:     reflect.TypeOf(reqToBottom).String(),
 		},
@@ -412,7 +412,7 @@ func (m *middleware) traceFetchBottomComplete(req vm.TranslationReq) {
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqOutTaskID(req),
+			ID: modeling.ReqOutTaskID(req.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}

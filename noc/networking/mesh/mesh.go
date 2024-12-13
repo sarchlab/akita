@@ -8,9 +8,9 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type tile struct {
@@ -78,14 +78,14 @@ func (c *Connector) WithBandwidth(transferPerCycle float64) *Connector {
 }
 
 // WithVisTracer sets the tracer used to trace tasks in the network.
-func (c *Connector) WithVisTracer(t tracing.Tracer) *Connector {
+func (c *Connector) WithVisTracer(t hooking.Hook) *Connector {
 	c.connector = c.connector.WithVisTracer(t)
 	return c
 }
 
 // WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
 // traffics and congestions in the channels.
-func (c *Connector) WithNoCTracer(t tracing.Tracer) *Connector {
+func (c *Connector) WithNoCTracer(t hooking.Hook) *Connector {
 	c.connector = c.connector.WithNoCTracer(t)
 	return c
 }

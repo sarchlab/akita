@@ -325,8 +325,8 @@ func (c *Comp) traceDataMoveStart(req DataMoveRequest) {
 		Domain: c,
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(req),
-			ParentID: modeling.ReqOutTaskID(req),
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqOutTaskID(req.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -339,7 +339,7 @@ func (c *Comp) traceDataMoveEnd(req DataMoveRequest) {
 	ctx := hooking.HookCtx{
 		Domain: c,
 		Pos:    hooking.HookPosTaskEnd,
-		Item:   hooking.TaskEnd{ID: modeling.ReqInTaskID(req)},
+		Item:   hooking.TaskEnd{ID: modeling.ReqInTaskID(req.Meta().ID)},
 	}
 
 	c.InvokeHook(ctx)
@@ -350,8 +350,8 @@ func (c *Comp) traceReadWriteStart(req mem.AccessReq) {
 		Domain: c,
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqOutTaskID(req),
-			ParentID: modeling.ReqInTaskID(c.currentTransaction.req),
+			ID:       modeling.ReqOutTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(c.currentTransaction.req.Meta().ID),
 			Kind:     "req_out",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -373,7 +373,7 @@ func (c *Comp) traceReadWriteEnd(req mem.AccessReq) {
 	ctx := hooking.HookCtx{
 		Domain: c,
 		Pos:    hooking.HookPosTaskEnd,
-		Item:   hooking.TaskEnd{ID: modeling.ReqOutTaskID(req)},
+		Item:   hooking.TaskEnd{ID: modeling.ReqOutTaskID(req.Meta().ID)},
 	}
 
 	// switch req := req.(type) {

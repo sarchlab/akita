@@ -8,15 +8,15 @@ import (
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
-type SampleMsg struct {
+type sampleMsg struct {
 	modeling.MsgMeta
 }
 
-func (m *SampleMsg) Meta() *modeling.MsgMeta {
-	return &m.MsgMeta
+func (m sampleMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *SampleMsg) Clone() modeling.Msg {
+func (m sampleMsg) Clone() modeling.Msg {
 	return m
 }
 
@@ -52,7 +52,7 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := SampleMsg{}
+		msg := sampleMsg{}
 		flit1 := messaging.FlitBuilder{}.
 			WithMsg(&msg).
 			Build()

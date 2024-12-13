@@ -234,8 +234,8 @@ func (m *middleware) traceTransactionStart(msg modeling.Msg) {
 		Domain: m.Comp,
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(msg),
-			ParentID: modeling.ReqOutTaskID(msg),
+			ID:       modeling.ReqInTaskID(msg.Meta().ID),
+			ParentID: modeling.ReqOutTaskID(msg.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(msg).Name(),
 		},
@@ -253,11 +253,11 @@ func (m *middleware) traceTransactionComplete(t *signal.Transaction) {
 	switch t.Type {
 	case signal.TransactionTypeWrite:
 		ctx.Item = hooking.TaskEnd{
-			ID: modeling.ReqInTaskID(t.Write),
+			ID: modeling.ReqInTaskID(t.Write.Meta().ID),
 		}
 	case signal.TransactionTypeRead:
 		ctx.Item = hooking.TaskEnd{
-			ID: modeling.ReqInTaskID(t.Read),
+			ID: modeling.ReqInTaskID(t.Read.Meta().ID),
 		}
 	}
 

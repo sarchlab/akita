@@ -219,11 +219,11 @@ func (b *BankImpl) traceCmdStart(cmd *signal.Command) {
 	switch cmd.SubTrans.Transaction.Type {
 	case signal.TransactionTypeRead:
 		taskStart.ParentID = modeling.ReqInTaskID(
-			cmd.SubTrans.Transaction.Read,
+			cmd.SubTrans.Transaction.Read.Meta().ID,
 		)
 	case signal.TransactionTypeWrite:
 		taskStart.ParentID = modeling.ReqInTaskID(
-			cmd.SubTrans.Transaction.Write,
+			cmd.SubTrans.Transaction.Write.Meta().ID,
 		)
 	}
 

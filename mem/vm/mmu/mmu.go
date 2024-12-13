@@ -395,8 +395,8 @@ func (m *middleware) traceTranslationStart(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(req),
-			ParentID: modeling.ReqOutTaskID(req),
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(req.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -412,7 +412,7 @@ func (m *middleware) traceTranslationComplete(
 	ctx := hooking.HookCtx{
 		Domain: m.Comp,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqOutTaskID(req),
+			ID: modeling.ReqOutTaskID(req.Meta().ID),
 		},
 		Pos: hooking.HookPosTaskEnd,
 	}

@@ -10,10 +10,10 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/timing"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameter that associated with an end of a
@@ -69,8 +69,8 @@ type Connector struct {
 	defaultFreq  timing.Freq
 	flitSize     int
 	router       Router
-	visTracer    tracing.Tracer
-	nocTracer    tracing.Tracer
+	visTracer    hooking.Hook
+	nocTracer    hooking.Hook
 	perfAnalyzer *analysis.PerfAnalyzer
 
 	switches        []*switchNode
@@ -122,14 +122,14 @@ func (c Connector) WithRouter(r Router) Connector {
 }
 
 // WithVisTracer sets the tracer used to trace tasks in the network.
-func (c Connector) WithVisTracer(t tracing.Tracer) Connector {
+func (c Connector) WithVisTracer(t hooking.Hook) Connector {
 	c.visTracer = t
 	return c
 }
 
 // WithNoCTracer sets the tracer used to trace NoC-specific metrics, such as the
 // traffics and congestions in the channels.
-func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
+func (c Connector) WithNoCTracer(t hooking.Hook) Connector {
 	c.nocTracer = t
 	return c
 }
@@ -187,7 +187,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	}
 
 	if c.visTracer != nil {
-		tracing.CollectTrace(sw, c.visTracer)
+		sw.AcceptHook(c.visTracer)
 	}
 
 	if c.perfAnalyzer != nil {
@@ -212,8 +212,8 @@ func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
 
 type namedHookableConnection interface {
 	modeling.Connection
-	sim.Named
-	sim.Hookable
+	naming.Named
+	hooking.Hookable
 	modeling.Component
 }
 
@@ -273,7 +273,7 @@ func (c *Connector) createEndPointWithName(
 	}
 
 	if c.visTracer != nil {
-		tracing.CollectTrace(endPoint, c.visTracer)
+		endPoint.AcceptHook(c.visTracer)
 	}
 
 	epPort := modeling.NewPort(endPoint,
@@ -370,11 +370,11 @@ func (c *Connector) connectPorts(
 	}
 
 	if c.visTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.visTracer)
+		conn.AcceptHook(c.visTracer)
 	}
 
 	if c.nocTracer != nil {
-		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
+		conn.AcceptHook(c.nocTracer)
 	}
 
 	if c.perfAnalyzer != nil {

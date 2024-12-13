@@ -6,9 +6,9 @@ import (
 
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // Connector can connect devices into a PCIe network.
@@ -95,7 +95,7 @@ func (c *Connector) WithSwitchLatency(numCycles int) *Connector {
 }
 
 // WithVisTracer sets the vis tracer that can be used to visualize the network.
-func (c *Connector) WithVisTracer(tracer tracing.Tracer) *Connector {
+func (c *Connector) WithVisTracer(tracer hooking.Hook) *Connector {
 	c.connector = c.connector.WithVisTracer(tracer)
 	return c
 }

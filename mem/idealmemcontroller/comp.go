@@ -213,8 +213,8 @@ func (c *Comp) traceReqStart(req mem.AccessReq) {
 		Domain: c,
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(req),
-			ParentID: modeling.ReqOutTaskID(req),
+			ID:       modeling.ReqInTaskID(req.Meta().ID),
+			ParentID: modeling.ReqOutTaskID(req.Meta().ID),
 			Kind:     "req_in",
 			What:     reflect.TypeOf(req).String(),
 		},
@@ -228,7 +228,7 @@ func (c *Comp) traceReqComplete(req mem.AccessReq) {
 		Domain: c,
 		Pos:    hooking.HookPosTaskEnd,
 		Item: hooking.TaskEnd{
-			ID: modeling.ReqInTaskID(req),
+			ID: modeling.ReqInTaskID(req.Meta().ID),
 		},
 	}
 

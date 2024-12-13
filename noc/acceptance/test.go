@@ -13,15 +13,15 @@ type trafficMsg struct {
 	modeling.MsgMeta
 }
 
-func (m *trafficMsg) Meta() *modeling.MsgMeta {
-	return &m.MsgMeta
+func (m trafficMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *trafficMsg) Clone() modeling.Msg {
-	cloneMsg := *m
+func (m trafficMsg) Clone() modeling.Msg {
+	cloneMsg := m
 	cloneMsg.ID = id.Generate()
 
-	return &cloneMsg
+	return cloneMsg
 }
 
 // Test is a test case.
@@ -63,12 +63,14 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &trafficMsg{}
-		msg.Meta().ID = id.Generate()
-		msg.Src = srcPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
-		msg.TrafficBytes = rand.Intn(4096)
-		// msg.TrafficBytes = 512
+		msg := trafficMsg{
+			MsgMeta: modeling.MsgMeta{
+				ID:           id.Generate(),
+				Src:          srcPort.AsRemote(),
+				Dst:          dstPort.AsRemote(),
+				TrafficClass: rand.Intn(4096),
+			},
+		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
