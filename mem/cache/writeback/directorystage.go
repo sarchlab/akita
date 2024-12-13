@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
@@ -21,7 +20,7 @@ func (i dirPipelineItem) TaskID() string {
 
 type directoryStage struct {
 	cache    *Comp
-	pipeline pipelining.Pipeline
+	pipeline queueing.Pipeline
 	buf      queueing.Buffer
 }
 

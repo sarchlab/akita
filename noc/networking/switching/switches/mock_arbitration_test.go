@@ -7,7 +7,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sim "github.com/sarchlab/akita/v4/sim"
+	queueing "github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 // MockArbiter is a mock of Arbiter interface.

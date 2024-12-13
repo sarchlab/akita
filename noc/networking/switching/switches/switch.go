@@ -7,11 +7,9 @@ import (
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
-	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type flitPipelineItem struct {
@@ -33,7 +31,7 @@ type portComplex struct {
 
 	// Data arrived at the local port needs to be processed in a pipeline. There
 	// is a processing pipeline for each local port.
-	pipeline pipelining.Pipeline
+	pipeline queueing.Pipeline
 
 	// The flits here are buffered after the pipeline and are waiting to be
 	// assigned with an output buffer.
@@ -100,14 +98,6 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
-}
-
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.Comp.Name()
-}
-
 func (m *middleware) startProcessing() (madeProgress bool) {
 	for _, port := range m.ports {
 		pc := m.portToComplexMapping[port.AsRemote()]
@@ -134,12 +124,8 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 
 			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
 			// 	now, c.Name(), flit.ID)
-			tracing.StartTask(
-				m.flitTaskID(flit),
-				m.flitParentTaskID(flit),
-				m.Comp, "flit", "flit_inside_sw",
-				flit,
-			)
+
+			m.traceFlitStart(flit)
 		}
 	}
 
@@ -227,8 +213,8 @@ func (m *middleware) sendOut() (madeProgress bool) {
 			}
 
 			flit := item.(*messaging.Flit)
-			flit.Meta().Src = pc.localPort.AsRemote()
-			flit.Meta().Dst = pc.remotePort
+			flit.Src = pc.localPort.AsRemote()
+			flit.Dst = pc.remotePort
 
 			err := pc.localPort.Send(flit)
 			if err == nil {
@@ -239,7 +225,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
 				// 	now, c.Name(), flit.ID)
 
-				tracing.EndTask(m.flitTaskID(flit), m.Comp)
+				m.traceFlitEnd(flit)
 			}
 		}
 	}
@@ -261,6 +247,41 @@ func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
 			m.Comp.Name(), f.Msg.Meta().Dst))
 	}
+}
+
+func (m *middleware) traceFlitStart(flit *messaging.Flit) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskStart{
+			ID:       m.flitTaskID(flit),
+			ParentID: m.flitParentTaskID(flit),
+			Kind:     "flit",
+			What:     "flit_inside_sw",
+		},
+		Pos: hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) traceFlitEnd(flit *messaging.Flit) {
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item: hooking.TaskEnd{
+			ID: m.flitTaskID(flit),
+		},
+		Pos: hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_e2e"
+}
+
+func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.Comp.Name()
 }
 
 // SwitchPortAdder can add a port to a switch.
@@ -286,7 +307,9 @@ func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
 
 // WithPorts defines the ports to add. The local port is part of the switch.
 // The remote port is the port on an endpoint or on another switch.
-func (a SwitchPortAdder) WithPorts(local, remote modeling.Port) SwitchPortAdder {
+func (a SwitchPortAdder) WithPorts(
+	local, remote modeling.Port,
+) SwitchPortAdder {
 	a.localPort = local
 	a.remotePort = remote
 
@@ -320,10 +343,20 @@ func (a SwitchPortAdder) AddPort() {
 	complexID := len(a.sw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
-	sendOutBuf := sim.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
-	forwardBuf := sim.NewBuffer(complexName+"ForwardBuf", a.numInputChannel)
-	routeBuf := sim.NewBuffer(complexName+"RouteBuf", a.numInputChannel)
-	pipeline := pipelining.MakeBuilder().
+	sendOutBuf := queueing.NewBuffer(
+		complexName+"SendOutBuf",
+		a.numOutputChannel,
+	)
+	forwardBuf := queueing.NewBuffer(
+		complexName+"ForwardBuf",
+		a.numInputChannel,
+	)
+	routeBuf := queueing.NewBuffer(
+		complexName+"RouteBuf",
+		a.numInputChannel,
+	)
+
+	pipeline := queueing.MakePipelineBuilder().
 		WithNumStage(a.latency).
 		WithCyclePerStage(1).
 		WithPipelineWidth(a.numInputChannel).

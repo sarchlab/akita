@@ -6,9 +6,9 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -16,7 +16,7 @@ type bankStage struct {
 	cache  *Comp
 	bankID int
 
-	pipeline           pipelining.Pipeline
+	pipeline           queueing.Pipeline
 	pipelineWidth      int
 	postPipelineBuf    *bufferImpl
 	inflightTransCount int

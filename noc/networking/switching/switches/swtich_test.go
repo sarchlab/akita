@@ -45,11 +45,11 @@ type sampleMsg struct {
 	modeling.MsgMeta
 }
 
-func (m *sampleMsg) Meta() *modeling.MsgMeta {
-	return &m.MsgMeta
+func (m sampleMsg) Meta() modeling.MsgMeta {
+	return m.MsgMeta
 }
 
-func (m *sampleMsg) Clone() modeling.Msg {
+func (m sampleMsg) Clone() modeling.Msg {
 	return m
 }
 

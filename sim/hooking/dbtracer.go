@@ -46,8 +46,12 @@ func (t *DBTracer) StartTask(ctx HookCtx) {
 		ParentID:  taskStart.ParentID,
 		Kind:      taskStart.Kind,
 		What:      taskStart.What,
-		Where:     ctx.Domain.Name(),
+		Where:     taskStart.Where,
 		StartTime: t.timeTeller.Now(),
+	}
+
+	if taskStart.Where != "" {
+		currTask.Where = ctx.Domain.Name()
 	}
 
 	if t.endTime > 0 && currTask.StartTime > t.endTime {

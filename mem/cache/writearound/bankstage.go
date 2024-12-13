@@ -1,7 +1,6 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
@@ -19,7 +18,7 @@ type bankStage struct {
 	bankID         int
 	numReqPerCycle int
 
-	pipeline        pipelining.Pipeline
+	pipeline        queueing.Pipeline
 	postPipelineBuf queueing.Buffer
 }
 

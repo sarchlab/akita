@@ -57,12 +57,12 @@ func (r GeneralRsp) GetRspTo() string {
 
 // ReqOutTaskID returns the ID of the task that is created when a request is
 // sent out.
-func ReqOutTaskID(req Msg) string {
-	return "req_out_" + req.Meta().ID
+func ReqOutTaskID(reqID string) string {
+	return "req_out_" + reqID
 }
 
 // ReqInTaskID returns the ID of the task that is created when a request is
 // received.
-func ReqInTaskID(req Msg) string {
-	return "req_in_" + req.Meta().ID
+func ReqInTaskID(reqID string) string {
+	return "req_in_" + reqID
 }

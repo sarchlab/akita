@@ -35,7 +35,7 @@ func (m *MockPipeline) EXPECT() *MockPipelineMockRecorder {
 }
 
 // Accept mocks base method.
-func (m *MockPipeline) Accept(arg0 pipelining.PipelineItem) {
+func (m *MockPipeline) Accept(arg0 queueing.PipelineItem) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Accept", arg0)
 }

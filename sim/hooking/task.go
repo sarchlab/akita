@@ -14,6 +14,7 @@ type TaskStart struct {
 	ParentID string
 	Kind     string
 	What     string
+	Where    string
 }
 
 // TaskTag is data attached to a task to provide more information about the

@@ -10,7 +10,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A Builder can build writeback caches
@@ -227,7 +226,7 @@ func (b *Builder) createInternalStages(cache *Comp) {
 }
 
 func (b *Builder) buildDirectoryStage(cache *Comp) {
-	buf := sim.NewBuffer(
+	buf := queueing.NewBuffer(
 		cache.Name()+".DirectoryStageBuffer",
 		b.numReqPerCycle,
 	)
@@ -274,25 +273,25 @@ func (b *Builder) buildBankStages(cache *Comp) {
 }
 
 func (b *Builder) createInternalBuffers(cache *Comp) {
-	cache.dirStageBuffer = sim.NewBuffer(
+	cache.dirStageBuffer = queueing.NewBuffer(
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,
 	)
 	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
-	cache.dirToBankBuffers[0] = sim.NewBuffer(
+	cache.dirToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".DirToBankBuffer",
 		cache.numReqPerCycle,
 	)
 	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
-	cache.writeBufferToBankBuffers[0] = sim.NewBuffer(
+	cache.writeBufferToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".WriteBufferToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.mshrStageBuffer = sim.NewBuffer(
+	cache.mshrStageBuffer = queueing.NewBuffer(
 		cache.Name()+".MSHRStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferBuffer = sim.NewBuffer(
+	cache.writeBufferBuffer = queueing.NewBuffer(
 		cache.Name()+".WriteBufferBuffer",
 		cache.numReqPerCycle,
 	)

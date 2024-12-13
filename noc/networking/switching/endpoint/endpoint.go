@@ -7,8 +7,8 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type msgToAssemble struct {
@@ -163,8 +163,10 @@ func (m *middleware) prepareFlits() bool {
 		// 	c.Engine.Now(), c.Name(), msg.Meta().ID, len(flits),
 		// 	len(c.flitsToSend))
 
+		m.logMsgE2ETaskStart(msg)
+
 		for _, flit := range flits {
-			m.logFlitE2ETask(flit, false)
+			m.logFlitE2ETaskStart(flit)
 		}
 
 		madeProgress = true
@@ -200,7 +202,8 @@ func (m *middleware) recv() bool {
 
 		// fmt.Printf("%.10f, %s, ep received flit %s\n",
 		// 	now, c.Name(), flit.ID)
-		m.logFlitE2ETask(flit, true)
+
+		m.logFlitE2ETaskEnd(flit)
 
 		madeProgress = true
 	}
@@ -264,7 +267,8 @@ func (m *middleware) tryDeliver() bool {
 
 		// fmt.Printf("%.10f, %s, delivered, %s\n",
 		// 	now, c.Name(), msg.Meta().ID)
-		m.logMsgE2ETask(msg, true)
+
+		m.logMsgE2ETaskEnd(msg)
 
 		m.assembledMsgs = m.assembledMsgs[1:]
 
@@ -272,62 +276,6 @@ func (m *middleware) tryDeliver() bool {
 	}
 
 	return madeProgress
-}
-
-func (m *middleware) logFlitE2ETask(flit *messaging.Flit, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
-		return
-	}
-
-	msg := flit.Msg
-
-	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit), m.Comp)
-		return
-	}
-
-	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit), m.msgTaskID(msg.Meta().ID),
-		m.Comp, "flit_e2e", "flit_e2e", m.Comp.Name()+".FlitBuf", flit,
-	)
-}
-
-func (m *middleware) logMsgE2ETask(msg modeling.Msg, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
-		return
-	}
-
-	rsp, isRsp := msg.(modeling.Rsp)
-	if isRsp {
-		m.logMsgRsp(isEnd, rsp)
-		return
-	}
-
-	m.logMsgReq(isEnd, msg)
-}
-
-func (m *middleware) logMsgReq(isEnd bool, msg modeling.Msg) {
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(msg.Meta().ID), m.Comp)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(msg.Meta().ID),
-			msg.Meta().ID+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", msg,
-		)
-	}
-}
-
-func (m *middleware) logMsgRsp(isEnd bool, rsp modeling.Rsp) {
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(rsp.Meta().ID), m.Comp)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(rsp.Meta().ID),
-			rsp.GetRspTo()+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", rsp,
-		)
-	}
 }
 
 func (m *middleware) msgToFlits(msg modeling.Msg) []*messaging.Flit {
@@ -352,4 +300,72 @@ func (m *middleware) msgToFlits(msg modeling.Msg) []*messaging.Flit {
 	}
 
 	return flits
+}
+
+func (m *middleware) logMsgE2ETaskStart(msg modeling.Msg) {
+	taskStart := hooking.TaskStart{
+		ID:   m.msgTaskID(msg.Meta().ID),
+		Kind: "msg_e2e",
+		What: "msg_e2e",
+	}
+
+	taskStart.ParentID = modeling.ReqOutTaskID(msg.Meta().ID)
+
+	rsp, ok := msg.(modeling.Rsp)
+	if ok {
+		taskStart.ParentID = modeling.ReqOutTaskID(rsp.GetRspTo())
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskStart,
+		Pos:    hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logMsgE2ETaskEnd(msg modeling.Msg) {
+	taskEnd := hooking.TaskEnd{
+		ID: m.msgTaskID(msg.Meta().ID),
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskEnd,
+		Pos:    hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logFlitE2ETaskStart(flit *messaging.Flit) {
+	taskStart := hooking.TaskStart{
+		ID:       m.flitTaskID(flit),
+		ParentID: m.msgTaskID(flit.Msg.Meta().ID),
+		Kind:     "flit_e2e",
+		What:     "flit_e2e",
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskStart,
+		Pos:    hooking.HookPosTaskStart,
+	}
+
+	m.Comp.InvokeHook(ctx)
+}
+
+func (m *middleware) logFlitE2ETaskEnd(flit *messaging.Flit) {
+	taskEnd := hooking.TaskEnd{
+		ID: m.flitTaskID(flit),
+	}
+
+	ctx := hooking.HookCtx{
+		Domain: m.Comp,
+		Item:   taskEnd,
+		Pos:    hooking.HookPosTaskEnd,
+	}
+
+	m.Comp.InvokeHook(ctx)
 }

@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
-	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/sim/timing"
@@ -151,13 +150,13 @@ func (b *Builder) Build(name string) *Comp {
 		name+"ControlPort")
 	c.AddPort("Control", c.controlPort)
 
-	c.dirBuf = sim.NewBuffer(
+	c.dirBuf = queueing.NewBuffer(
 		name+".DirBuf",
 		b.numReqPerCycle)
 	c.bankBufs = make([]queueing.Buffer, b.numBank)
 
 	for i := 0; i < b.numBank; i++ {
-		c.bankBufs[i] = sim.NewBuffer(
+		c.bankBufs[i] = queueing.NewBuffer(
 			name+".BankBuf"+fmt.Sprint(i),
 			b.numReqPerCycle,
 		)
@@ -205,7 +204,7 @@ func (b *Builder) buildStages(c *Comp) {
 }
 
 func (b *Builder) buildDirStage(c *Comp) {
-	buf := sim.NewBuffer(
+	buf := queueing.NewBuffer(
 		c.Name()+".Directory.PostPipelineBuffer",
 		b.numReqPerCycle,
 	)
@@ -226,7 +225,7 @@ func (b *Builder) buildDirStage(c *Comp) {
 func (b *Builder) buildBankStages(c *Comp) {
 	for i := 0; i < b.numBank; i++ {
 		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", c.Name(), i)
-		postPipelineBuf := sim.NewBuffer(
+		postPipelineBuf := queueing.NewBuffer(
 			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", c.Name(), i),
 			b.numReqPerCycle,
 		)

@@ -24,7 +24,7 @@ var _ = Describe("Pipeline", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		postPipelineBuffer = NewBuffer("PostPipelineBuffer", 1)
-		pipeline = MakeBuilder().
+		pipeline = MakePipelineBuilder().
 			WithPipelineWidth(1).
 			WithNumStage(100).
 			WithCyclePerStage(2).
@@ -104,7 +104,7 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		postPipelineBuffer = NewBuffer("PostPipelineBuffer", 1)
-		pipeline = MakeBuilder().
+		pipeline = MakePipelineBuilder().
 			WithPipelineWidth(1).
 			WithNumStage(0).
 			WithCyclePerStage(2).
