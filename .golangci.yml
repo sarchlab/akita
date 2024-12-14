@@ -200,6 +200,8 @@ linters-settings:
     # Allow multiline assignments to be cuddled. Default is true.
     allow-multiline-assign: true
 
+    allow-assign-and-anything: true
+
     # Allow declarations (var) to be cuddled.
     allow-cuddle-declarations: false
 

@@ -11,10 +11,10 @@ import (
 
 	"os"
 
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/acceptancetests"
 	"github.com/sarchlab/akita/v4/mem/cache/writeevict"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/timing"
 

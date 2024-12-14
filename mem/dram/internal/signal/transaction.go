@@ -1,6 +1,6 @@
 package signal
 
-import "github.com/sarchlab/akita/v4/mem/mem"
+import "github.com/sarchlab/akita/v4/mem"
 
 type TransactionType int
 

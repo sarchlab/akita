@@ -3,12 +3,12 @@ package dram
 import (
 	"reflect"
 
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/org"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/trans"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
