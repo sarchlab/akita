@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 type sampleMsg struct {
@@ -16,9 +17,35 @@ func (m sampleMsg) Meta() MsgMeta {
 	return m.MsgMeta
 }
 
+func (m sampleMsg) ID() string {
+	return m.MsgMeta.ID
+}
+
+func (m sampleMsg) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":            m.MsgMeta.ID,
+		"src":           m.MsgMeta.Src,
+		"dst":           m.MsgMeta.Dst,
+		"traffic_class": m.MsgMeta.TrafficClass,
+		"traffic_bytes": m.MsgMeta.TrafficBytes,
+	}, nil
+}
+
+func (m sampleMsg) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	m.MsgMeta.ID = data["id"].(string)
+	m.MsgMeta.Src = data["src"].(RemotePort)
+	m.MsgMeta.Dst = data["dst"].(RemotePort)
+	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
+	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
+
+	return m, nil
+}
+
 func (m sampleMsg) Clone() Msg {
 	cloneMsg := m
-	cloneMsg.ID = id.Generate()
+	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return &cloneMsg
 }

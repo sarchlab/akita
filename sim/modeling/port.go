@@ -73,14 +73,27 @@ type defaultPort struct {
 	outgoingBuf queueing.Buffer
 }
 
-// Serialize serializes the port.
-func (p *defaultPort) Serialize() ([]byte, error) {
+// ID returns the name of the port.
+func (p *defaultPort) ID() string {
+	return p.name
+}
 
+// Serialize serializes the port.
+func (p *defaultPort) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"incoming_buf": p.incomingBuf,
+		"outgoing_buf": p.outgoingBuf,
+	}, nil
 }
 
 // Deserialize deserializes the port.
-func (p *defaultPort) Deserialize([]byte) error {
-	return nil
+func (p *defaultPort) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	p.incomingBuf = data["incoming_buf"].(queueing.Buffer)
+	p.outgoingBuf = data["outgoing_buf"].(queueing.Buffer)
+
+	return p, nil
 }
 
 // AsRemote returns the remote port name.

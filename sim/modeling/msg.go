@@ -39,12 +39,17 @@ type Rsp interface {
 type GeneralRsp struct {
 	MsgMeta
 
-	OriginalReq Msg
+	RspTo string
 }
 
 // Meta returns the meta data of the message.
 func (r GeneralRsp) Meta() MsgMeta {
 	return r.MsgMeta
+}
+
+// ID returns the ID of the message.
+func (r GeneralRsp) ID() string {
+	return r.MsgMeta.ID
 }
 
 // Serialize serializes the message.
@@ -55,33 +60,40 @@ func (r GeneralRsp) Serialize() (map[string]interface{}, error) {
 		"dst":           r.Dst,
 		"traffic_class": r.TrafficClass,
 		"traffic_bytes": r.TrafficBytes,
-		"original_req":  r.OriginalReq.ID(),
+		"rsp_to":        r.RspTo,
 	}, nil
 }
 
 // Deserialize deserializes the message.
-func (r GeneralRsp) Deserialize(data map[string]interface{}) error {
-	r.ID = data["id"].(string)
-	r.Src = data["src"].(RemotePort)
-	r.Dst = data["dst"].(RemotePort)
-	r.TrafficClass = data["traffic_class"].(int)
-	r.TrafficBytes = data["traffic_bytes"].(int)
-	r.OriginalReq = data["original_req"].(Msg)
+func (r GeneralRsp) Deserialize(
+	data map[string]interface{},
+) (serialization.Serializable, error) {
+	newRsp := GeneralRsp{
+		MsgMeta: MsgMeta{
+			ID:           data["id"].(string),
+			Src:          data["src"].(RemotePort),
+			Dst:          data["dst"].(RemotePort),
+			TrafficClass: data["traffic_class"].(int),
+			TrafficBytes: data["traffic_bytes"].(int),
+		},
 
-	return nil
+		RspTo: data["rsp_to"].(string),
+	}
+
+	return newRsp, nil
 }
 
 // Clone returns cloned GeneralRsp with different ID
 func (r GeneralRsp) Clone() Msg {
 	cloneMsg := r
-	cloneMsg.ID = id.Generate()
+	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return cloneMsg
 }
 
 // GetRspTo returns the ID of the original request.
 func (r GeneralRsp) GetRspTo() string {
-	return r.OriginalReq.Meta().ID
+	return r.RspTo
 }
 
 // ReqOutTaskID returns the ID of the task that is created when a request is
