@@ -15,7 +15,14 @@ var _ = Describe("Tags", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		tags = NewTags(1024, 4, 64)
+		tags = &Tags{
+			NumSets:       1024,
+			NumWays:       4,
+			BlockSize:     64,
+			AddrConverter: nil,
+			Sets:          []Set{},
+		}
+		tags.Reset()
 	})
 
 	AfterEach(func() {

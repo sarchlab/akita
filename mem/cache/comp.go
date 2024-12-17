@@ -11,8 +11,7 @@ import (
 type transaction struct {
 	req mem.AccessReq
 
-	block     *tagging.Block
-	mshrEntry *mshr.MSHREntry
+	setID, wayID int
 }
 
 type state struct {
@@ -21,13 +20,13 @@ type state struct {
 
 	MSHR              mshr.MSHR
 	Tags              tagging.Tags
+	VictimFinder      tagging.VictimFinder
 	Storage           *mem.Storage
 	AddressToDstTable mem.AddressToPortMapper
 
-	Transactions []*transaction
+	Transactions []transaction
 
-	EvictQueue queueing.Buffer
-
+	EvictQueue               queueing.Buffer
 	TopDownPreStorageBuffer  queueing.Buffer
 	BottomUpPreStorageBuffer queueing.Buffer
 	PostStorageBuffer        queueing.Buffer

@@ -2,7 +2,6 @@ package mem
 
 import (
 	"errors"
-	"sync"
 )
 
 // For capacity
@@ -23,64 +22,61 @@ const (
 // similar to the concept of page in memory management. For the units that
 // it not touched by Read and Write function, no memory will be allocated.
 type Storage struct {
-	sync.Mutex
-	Capacity uint64
+	capacity uint64
 	unitSize uint64
-	data     map[uint64]*storageUnit
+	data     map[uint64]storageUnit
 }
 
 type storageUnit struct {
-	sync.RWMutex
 	data []byte
 }
 
-func newStorageUnit(uintSize uint64) *storageUnit {
-	u := new(storageUnit)
+func makeStorageUnit(uintSize uint64) storageUnit {
+	u := storageUnit{}
 	u.data = make([]byte, uintSize)
 
 	return u
 }
 
-// NewStorage creates a storage object with the specified capacity
-func NewStorage(capacity uint64) *Storage {
-	storage := new(Storage)
-
-	storage.Capacity = capacity
-	storage.unitSize = 4 * KB
-	storage.data = make(map[uint64]*storageUnit)
+// MakeStorage creates a storage object with the specified capacity
+func MakeStorage(capacity uint64) Storage {
+	storage := Storage{
+		capacity: capacity,
+		unitSize: 4 * KB,
+		data:     make(map[uint64]storageUnit),
+	}
 
 	return storage
 }
 
-// NewStorageWithUnitSize creates a storage object with the specified capacity.
+// MakeStorageWithUnitSize creates a storage object with the specified capacity.
 // The unit size is specified in bytes. Using unit size can reduces the memory
 // consumption of storage.
-func NewStorageWithUnitSize(capacity uint64, unitSize uint64) *Storage {
-	storage := new(Storage)
-
-	storage.Capacity = capacity
-	storage.unitSize = unitSize
-	storage.data = make(map[uint64]*storageUnit)
+func MakeStorageWithUnitSize(capacity uint64, unitSize uint64) Storage {
+	storage := Storage{
+		capacity: capacity,
+		unitSize: unitSize,
+		data:     make(map[uint64]storageUnit),
+	}
 
 	return storage
 }
 
 // createOrGetStorageUnit retrieves a storage unit if the unit has been created
-// before. Otherwise it initializes a storage unit in the storage object
-func (s *Storage) createOrGetStorageUnit(address uint64) (*storageUnit, error) {
-	if address > s.Capacity {
-		return nil, errors.New(
+// before. Otherwise it initializes a storage unit in the storage object. Note
+// that the storage unit is a copy of the actual data. So, the caller need to
+// write back the data to the storage unit if it is modified.
+func (s *Storage) createOrGetStorageUnit(address uint64) (storageUnit, error) {
+	if address > s.capacity {
+		return storageUnit{}, errors.New(
 			"accessing physical address beyond the storage capacity")
 	}
 
 	baseAddr, _ := s.parseAddress(address)
 
-	s.Lock()
-	defer s.Unlock()
-
 	unit, ok := s.data[baseAddr]
 	if !ok {
-		unit = newStorageUnit(s.unitSize)
+		unit = makeStorageUnit(s.unitSize)
 		s.data[baseAddr] = unit
 	}
 
@@ -150,6 +146,8 @@ func (s *Storage) Write(address uint64, data []byte) error {
 
 		copy(unit.data[inUnitAddr:inUnitAddr+lenToWrite],
 			data[dataOffset:dataOffset+lenToWrite])
+
+		s.data[currAddr] = unit
 
 		dataOffset += lenToWrite
 		currAddr += lenToWrite

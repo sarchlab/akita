@@ -18,6 +18,7 @@ type Builder struct {
 	log2CacheLineSize int
 	wayAssociativity  int
 	cacheByteSize     uint64
+	mshrCapacity      int
 	replaceStrategy   string
 	writeStrategy     string
 	addressToDstTable mem.AddressToPortMapper
@@ -31,6 +32,7 @@ func MakeBuilder() Builder {
 		log2CacheLineSize: 6,
 		wayAssociativity:  4,
 		cacheByteSize:     16 * mem.KB,
+		mshrCapacity:      4,
 		replaceStrategy:   "lru",
 		writeStrategy:     "writeThrough",
 	}
@@ -63,6 +65,12 @@ func (b Builder) WithLog2CacheLineSize(log2CacheLineSize int) Builder {
 // WithWayAssociativity sets the way associativity of the builder.
 func (b Builder) WithWayAssociativity(wayAssociativity int) Builder {
 	b.wayAssociativity = wayAssociativity
+	return b
+}
+
+// WithMSHRCapacity sets the capacity of the MSHR of the builder.
+func (b Builder) WithMSHRCapacity(mshrCapacity int) Builder {
+	b.mshrCapacity = mshrCapacity
 	return b
 }
 
@@ -105,13 +113,21 @@ func (b Builder) initState(comp *Comp) {
 	numSets := int(b.cacheByteSize / setSize)
 
 	victimFinder := b.createVictimFinder()
-	tags := tagging.NewTags(numSets, numWays, blockSize, victimFinder)
+	tags := tagging.Tags{
+		NumSets:       numSets,
+		NumWays:       numWays,
+		BlockSize:     blockSize,
+		AddrConverter: nil,
+		Sets:          []tagging.Set{},
+	}
+	tags.Reset()
 
 	comp.state = state{
 		NumReqPerCycle:    b.numReqPerCycle,
 		Log2BlockSize:     b.log2CacheLineSize,
-		MSHR:              mshr.NewMSHR(b.wayAssociativity),
+		MSHR:              mshr.MSHR{Capacity: b.mshrCapacity},
 		Tags:              tags,
+		VictimFinder:      victimFinder,
 		Storage:           mem.NewStorage(b.cacheByteSize),
 		AddressToDstTable: b.addressToDstTable,
 		EvictQueue: queueing.NewBuffer(

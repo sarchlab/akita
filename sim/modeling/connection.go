@@ -3,6 +3,7 @@ package modeling
 import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // SendError marks a failure send or receive
@@ -18,6 +19,7 @@ func NewSendError() *SendError {
 type Connection interface {
 	naming.Named
 	hooking.Hookable
+	serialization.Serializable
 
 	PlugIn(port Port)
 	Unplug(port Port)

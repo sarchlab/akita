@@ -35,22 +35,6 @@ type Tags struct {
 	Sets []Set
 }
 
-// NewTags returns a new tags object
-func NewTags(
-	set, way, blockSize int,
-) *Tags {
-	d := new(Tags)
-	d.Sets = make([]Set, set)
-
-	d.NumSets = set
-	d.NumWays = way
-	d.BlockSize = blockSize
-
-	d.Reset()
-
-	return d
-}
-
 // TotalSize returns the maximum number of bytes can be stored in the cache
 func (d *Tags) TotalSize() uint64 {
 	return uint64(d.NumSets) * uint64(d.NumWays) * uint64(d.BlockSize)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -13,6 +14,7 @@ type Component interface {
 	naming.Named
 	timing.Handler
 	hooking.Hookable
+	serialization.Serializable
 	PortOwner
 
 	NotifyRecv(port Port)

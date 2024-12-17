@@ -1,9 +1,14 @@
 package modeling
 
-import "github.com/sarchlab/akita/v4/sim/id"
+import (
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/serialization"
+)
 
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
+	serialization.Serializable
+
 	Meta() MsgMeta
 	Clone() Msg
 }
@@ -40,6 +45,30 @@ type GeneralRsp struct {
 // Meta returns the meta data of the message.
 func (r GeneralRsp) Meta() MsgMeta {
 	return r.MsgMeta
+}
+
+// Serialize serializes the message.
+func (r GeneralRsp) Serialize() (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"id":            r.ID,
+		"src":           r.Src,
+		"dst":           r.Dst,
+		"traffic_class": r.TrafficClass,
+		"traffic_bytes": r.TrafficBytes,
+		"original_req":  r.OriginalReq.ID(),
+	}, nil
+}
+
+// Deserialize deserializes the message.
+func (r GeneralRsp) Deserialize(data map[string]interface{}) error {
+	r.ID = data["id"].(string)
+	r.Src = data["src"].(RemotePort)
+	r.Dst = data["dst"].(RemotePort)
+	r.TrafficClass = data["traffic_class"].(int)
+	r.TrafficBytes = data["traffic_bytes"].(int)
+	r.OriginalReq = data["original_req"].(Msg)
+
+	return nil
 }
 
 // Clone returns cloned GeneralRsp with different ID

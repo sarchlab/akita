@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -38,6 +39,7 @@ type RemotePort string
 type Port interface {
 	naming.Named
 	hooking.Hookable
+	serialization.Serializable
 
 	AsRemote() RemotePort
 
@@ -69,6 +71,16 @@ type defaultPort struct {
 
 	incomingBuf queueing.Buffer
 	outgoingBuf queueing.Buffer
+}
+
+// Serialize serializes the port.
+func (p *defaultPort) Serialize() ([]byte, error) {
+
+}
+
+// Deserialize deserializes the port.
+func (p *defaultPort) Deserialize([]byte) error {
+	return nil
 }
 
 // AsRemote returns the remote port name.
