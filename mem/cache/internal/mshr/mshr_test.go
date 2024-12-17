@@ -1,81 +1,153 @@
-package mshr
+package mshr_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
+	"github.com/sarchlab/akita/v4/mem/cache/internal/mshr"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("MSHRImpl", func() {
-
 	var (
-		m *mshrImpl
+		m mshr.MSHR
 	)
 
 	BeforeEach(func() {
-		m = NewMSHR(4).(*mshrImpl)
+		m = mshr.MSHR{
+			Capacity: 4,
+		}
 	})
 
 	It("should add an entry", func() {
-		entry := m.Add(1, 0x00)
-		Expect(entry).NotTo(BeNil())
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})
+
+		found := m.Lookup(1, 0x00)
+		Expect(found).To(BeTrue())
+
+		m.RemoveEntry(1, 0x00)
+		found = m.Lookup(1, 0x00)
+		Expect(found).To(BeFalse())
 	})
 
-	It("should panic if adding an address that is already in MSHR", func() {
-		m.Add(1, 0x00)
-		Expect(func() { m.Add(1, 0x00) }).To(Panic())
+	It("should error if adding an address that is already in MSHR", func() {
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})
+
+		Expect(m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})).To(MatchError("trying to add an address that is already in MSHR"))
 	})
 
-	It("should panic if adding to a full MSHR", func() {
-		m.Add(1, 0x00)
-		m.Add(1, 0x40)
-		m.Add(1, 0x80)
-		m.Add(1, 0xc0)
-		Expect(func() { m.Add(1, 0x100) }).To(Panic())
-	})
+	It("should error if adding to a full MSHR", func() {
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x40,
+		})
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x80,
+		})
 
-	It("should say full if the MSHR is full", func() {
-		m.Add(1, 0x00)
-		m.Add(1, 0x40)
-		m.Add(1, 0x80)
-		m.Add(1, 0xc0)
-		Expect(m.IsFull()).To(BeTrue())
-	})
-
-	It("should say not full if the MSHR is not full", func() {
-		m.Add(1, 0x00)
-		m.Add(1, 0x40)
-		m.Add(1, 0xc0)
 		Expect(m.IsFull()).To(BeFalse())
+
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0xc0,
+		})
+
+		Expect(m.IsFull()).To(BeTrue())
+		Expect(m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x100,
+		})).To(MatchError("trying to add to a full MSHR"))
 	})
 
-	It("should send back the entry if querying a address in MSHR", func() {
-		entry := m.Add(1, 0x40)
-		entryQuery := m.Query(1, 0x40)
-		Expect(entry).To(BeIdenticalTo(entryQuery))
+	It("should add/remove a request to an entry", func() {
+		m.AddEntry(mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				ID: "2",
+			},
+			PID:     1,
+			Address: 0x00,
+		})
+
+		// Add a request to an entry
+		err := m.AddReqToEntry(mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				ID: "1",
+			},
+			PID:     1,
+			Address: 0x00,
+		})
+		Expect(err).To(BeNil())
+
+		// Get the next request in the entry
+		req, err := m.GetNextReqInEntry(1, 0x00)
+		Expect(err).To(BeNil())
+		Expect(req.Meta().ID).To(Equal("1"))
+
+		// Remove the request from the entry
+		err = m.RemoveReqFromEntry("1")
+		Expect(err).To(BeNil())
+
+		// Get the next request in the entry
+		req, err = m.GetNextReqInEntry(1, 0x00)
+		Expect(err).To(MatchError("no request found for pid 1 and addr 0x0"))
 	})
 
-	It("should send nil the entry if querying another address in MSHR", func() {
-		m.Add(1, 0x20)
-		entryQuery := m.Query(1, 0x40)
-		Expect(entryQuery).To(BeNil())
+	It("should reset the mshr", func() {
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})
+
+		m.Reset()
+		Expect(m.Lookup(1, 0x00)).To(BeFalse())
 	})
 
-	It("should send nil the entry if querying another pid in MSHR", func() {
-		m.Add(1, 0x20)
-		entryQuery := m.Query(2, 0x20)
-		Expect(entryQuery).To(BeNil())
+	It("should error if removing an non-exist entry", func() {
+		Expect(m.RemoveEntry(1, 0x00)).
+			To(MatchError("trying to remove an non-exist entry"))
 	})
 
-	It("should remove the mshr entry", func() {
-		entry := m.Add(1, 0x40)
-		entryRemove := m.Remove(1, 0x40)
-		Expect(len(m.entries)).To(Equal(0))
-		Expect(entry).To(BeIdenticalTo(entryRemove))
+	It("should error if adding a request to an non-exist entry", func() {
+		Expect(m.AddReqToEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})).To(MatchError("trying to add a request to an non-exist entry"))
 	})
 
-	It("should panic on removing an non-exist entry", func() {
-		m.Add(1, 0x80)
-		Expect(func() { m.Remove(1, 0x40) }).To(Panic())
+	It("should error if removing a request that is not in the entry", func() {
+		Expect(m.RemoveReqFromEntry("1")).To(MatchError("request 1 not found"))
 	})
+
+	It("should error if getting the next request in an empty entry", func() {
+		m.AddEntry(mem.ReadReq{
+			PID:     1,
+			Address: 0x00,
+		})
+
+		_, err := m.GetNextReqInEntry(1, 0x00)
+
+		Expect(err).To(MatchError("no request found for pid 1 and addr 0x0"))
+	})
+
+	It("should error if getting the next request in an non-exist entry",
+		func() {
+			_, err := m.GetNextReqInEntry(1, 0x00)
+
+			Expect(err).To(MatchError("no entry found for pid 1 and addr 0x0"))
+		})
 
 })

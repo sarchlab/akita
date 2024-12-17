@@ -1,105 +1,120 @@
 package mshr
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem"
-	"github.com/sarchlab/akita/v4/mem/cache/internal/tagging"
 	"github.com/sarchlab/akita/v4/mem/vm"
 )
 
-// MSHREntry is an entry in MSHR
-type MSHREntry struct {
-	PID       vm.PID
-	Address   uint64
-	Requests  []interface{}
-	Block     *tagging.Block
-	ReadReq   mem.ReadReq
-	DataReady mem.DataReadyRsp
-	Data      []byte
-}
-
-// NewMSHREntry returns a new MSHR entry object
-func NewMSHREntry() *MSHREntry {
-	e := new(MSHREntry)
-	e.Requests = make([]interface{}, 0)
-
-	return e
+// MSHREntry is an entry in MSHR.
+type mshrEntry struct {
+	PID      vm.PID
+	Address  uint64
+	Requests []mem.AccessReq
+	ReadReq  mem.ReadReq
 }
 
 // MSHR is an interface that controls MSHR entries
-type MSHR interface {
-	Query(pid vm.PID, addr uint64) *MSHREntry
-	Add(pid vm.PID, addr uint64) *MSHREntry
-	Remove(pid vm.PID, addr uint64) *MSHREntry
-	AllEntries() []*MSHREntry
-	IsFull() bool
-	Reset()
+type MSHR struct {
+	Capacity int
+	Entries  []mshrEntry
 }
 
-// NewMSHR returns a new MSHR object
-func NewMSHR(capacity int) MSHR {
-	m := new(mshrImpl)
-	m.capacity = capacity
-
-	return m
-}
-
-type mshrImpl struct {
-	capacity int
-	entries  []*MSHREntry
-}
-
-func (m *mshrImpl) Add(pid vm.PID, addr uint64) *MSHREntry {
-	for _, e := range m.entries {
+func (m *MSHR) Lookup(pid vm.PID, addr uint64) bool {
+	for _, e := range m.Entries {
 		if e.PID == pid && e.Address == addr {
-			panic("entry already in mshr")
+			return true
 		}
 	}
 
-	if len(m.entries) >= m.capacity {
-		log.Panic("MSHR is full")
-	}
-
-	entry := NewMSHREntry()
-	entry.PID = pid
-	entry.Address = addr
-	m.entries = append(m.entries, entry)
-
-	return entry
+	return false
 }
 
-func (m *mshrImpl) Query(pid vm.PID, addr uint64) *MSHREntry {
-	for _, e := range m.entries {
-		if e.PID == pid && e.Address == addr {
-			return e
-		}
+func (m *MSHR) AddEntry(readToBottom mem.ReadReq) error {
+	if m.Lookup(readToBottom.PID, readToBottom.Address) {
+		return fmt.Errorf("trying to add an address that is already in MSHR")
 	}
+
+	if m.IsFull() {
+		return fmt.Errorf("trying to add to a full MSHR")
+	}
+
+	entry := mshrEntry{
+		PID:     readToBottom.PID,
+		Address: readToBottom.Address,
+		ReadReq: readToBottom,
+	}
+
+	m.Entries = append(m.Entries, entry)
 
 	return nil
 }
 
-func (m *mshrImpl) Remove(pid vm.PID, addr uint64) *MSHREntry {
-	for i, e := range m.entries {
+func (m *MSHR) RemoveEntry(pid vm.PID, addr uint64) error {
+	for i, e := range m.Entries {
 		if e.PID == pid && e.Address == addr {
-			m.entries = append(m.entries[:i], m.entries[i+1:]...)
-			return e
+			m.Entries = append(m.Entries[:i], m.Entries[i+1:]...)
+			return nil
 		}
 	}
 
-	panic("trying to remove an non-exist entry")
+	return fmt.Errorf("trying to remove an non-exist entry")
 }
 
-// AllEntries returns all the MSHREntries that are currently in the MSHR
-func (m *mshrImpl) AllEntries() []*MSHREntry {
-	return m.entries
+func (m *MSHR) AddReqToEntry(req mem.AccessReq) error {
+	for i, e := range m.Entries {
+		if e.PID == req.GetPID() && e.Address == req.GetAddress() {
+			e.Requests = append(e.Requests, req)
+			m.Entries[i] = e
+
+			return nil
+		}
+	}
+
+	return fmt.Errorf("trying to add a request to an non-exist entry")
 }
 
-// IsFull returns true if no more MSHR entries can be added
-func (m *mshrImpl) IsFull() bool {
-	return len(m.entries) >= m.capacity
+func (m *MSHR) RemoveReqFromEntry(reqID string) error {
+	for i, e := range m.Entries {
+		for j, req := range e.Requests {
+			if req.Meta().ID == reqID {
+				e.Requests = append(e.Requests[:j], e.Requests[j+1:]...)
+				m.Entries[i] = e
+
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("request %s not found", reqID)
 }
 
-func (m *mshrImpl) Reset() {
-	m.entries = nil
+func (m *MSHR) GetNextReqInEntry(
+	pid vm.PID,
+	addr uint64,
+) (mem.AccessReq, error) {
+	for _, e := range m.Entries {
+		if e.PID == pid && e.Address == addr {
+			if len(e.Requests) == 0 {
+				return nil, fmt.Errorf(
+					"no request found for pid %d and addr 0x%x", pid, addr,
+				)
+			}
+
+			return e.Requests[0], nil
+		}
+	}
+
+	return nil, fmt.Errorf(
+		"no entry found for pid %d and addr 0x%x", pid, addr,
+	)
+}
+
+func (m *MSHR) IsFull() bool {
+	return len(m.Entries) >= m.Capacity
+}
+
+func (m *MSHR) Reset() {
+	m.Entries = nil
 }

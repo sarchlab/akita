@@ -26,6 +26,13 @@
             "program": "${workspaceFolder}/sim/directconnection"
         },
         {
+            "name": "Test github.com/sarchlab/akita/v4/mem/cache/internal/mshr",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/mem/cache/internal/mshr"
+        },
+        {
             "name": "Test github.com/sarchlab/akita/v4/mem/datamover",
             "type": "go",
             "request": "launch",

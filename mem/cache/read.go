@@ -37,9 +37,9 @@ func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
 			continue
 		}
 
-		b := s.Tags.Lookup(read.PID, read.Address)
-		if b != nil {
-			madeProgress = s.HandleReadHit(read, b) || madeProgress
+		block, ok := s.Tags.Lookup(read.PID, read.Address)
+		if ok {
+			madeProgress = s.HandleReadHit(read, &block) || madeProgress
 			continue
 		}
 
