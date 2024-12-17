@@ -19,6 +19,13 @@
             "program": "${workspaceFolder}/sim/hooking"
         },
         {
+            "name": "Test github.com/sarchlab/akita/v4/sim/serialization",
+            "type": "go",
+            "request": "launch",
+            "mode": "test",
+            "program": "${workspaceFolder}/sim/serialization"
+        },
+        {
             "name": "Test github.com/sarchlab/akita/v4/sim/directconnection",
             "type": "go",
             "request": "launch",

@@ -30,9 +30,9 @@ func NewManager(codec Codec) *Manager {
 func (m *Manager) serializeToMap(
 	obj any,
 ) (map[string]any, error) {
-	typeName := reflect.TypeOf(obj).String()
+	objType := reflect.TypeOf(obj)
 
-	switch reflect.TypeOf(obj).Kind() {
+	switch objType.Kind() {
 	case reflect.Bool,
 		reflect.Int,
 		reflect.Int8,
@@ -52,12 +52,12 @@ func (m *Manager) serializeToMap(
 		reflect.String:
 		// Do nothing
 		return map[string]any{
-			"type":  typeName,
-			"value": obj,
+			"type_kind": objType.Kind().String(),
+			"value":     obj,
 		}, nil
 
 	case reflect.Ptr:
-		return m.serializePtr(obj, typeName)
+		return m.serializePtr(obj)
 
 	case reflect.Slice:
 		return m.serializeSlice(obj)
@@ -69,15 +69,18 @@ func (m *Manager) serializeToMap(
 		return m.serializeStruct(obj)
 	}
 
-	return nil, fmt.Errorf("unsupported type: %s", reflect.TypeOf(obj).String())
+	return nil, fmt.Errorf("unsupported type: %s", objType.String())
 }
 
 func (*Manager) serializeStruct(obj any) (map[string]any, error) {
+	objType := reflect.TypeOf(obj)
+	typeName := objType.PkgPath() + "." + objType.Name()
+
 	serializable, ok := obj.(Serializable)
 	if !ok {
 		return nil, fmt.Errorf(
 			"%s is not a Serializable",
-			reflect.TypeOf(obj).String(),
+			typeName,
 		)
 	}
 
@@ -86,7 +89,8 @@ func (*Manager) serializeStruct(obj any) (map[string]any, error) {
 		return nil, err
 	}
 
-	mapped["type"] = reflect.TypeOf(obj).String()
+	mapped["type"] = typeName
+	mapped["type_kind"] = objType.Kind().String()
 
 	return mapped, nil
 }
@@ -100,8 +104,8 @@ func (*Manager) serializeMap(obj any) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"type":  "map",
-		"value": simpleMap,
+		"value":     simpleMap,
+		"type_kind": reflect.TypeOf(obj).Kind().String(),
 	}, nil
 }
 
@@ -121,19 +125,22 @@ func (m *Manager) serializeSlice(obj any) (map[string]any, error) {
 	}
 
 	return map[string]any{
-		"type":  "slice",
-		"value": simpleSlice,
+		"value":     simpleSlice,
+		"type_kind": reflect.TypeOf(obj).Kind().String(),
 	}, nil
 }
 
 func (m *Manager) serializePtr(
 	obj any,
-	typeName string,
 ) (map[string]any, error) {
+	objType := reflect.ValueOf(obj).Elem().Type()
+	typeName := objType.PkgPath() + "." + objType.Name()
+
 	if reflect.ValueOf(obj).IsNil() {
 		return map[string]any{
-			"type":  typeName,
-			"value": nil,
+			"type":      typeName,
+			"type_kind": reflect.TypeOf(obj).Kind().String(),
+			"value":     nil,
 		}, nil
 	}
 
@@ -144,7 +151,8 @@ func (m *Manager) serializePtr(
 		return nil, err
 	}
 
-	nested["is_ptr"] = true
+	nested["type"] = typeName
+	nested["type_kind"] = reflect.TypeOf(obj).Kind().String()
 
 	return nested, nil
 }
@@ -168,9 +176,40 @@ func (m *Manager) Serialize(obj any) error {
 	return nil
 }
 
-func (m *Manager) Deserialize(obj any) error {
+func (m *Manager) Deserialize() (any, error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	panic("not implemented")
+	mapped, err := m.codec.Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	typeKind := mapped["type_kind"].(string)
+	switch typeKind {
+	case "int":
+		f64, ok := mapped["value"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("value is not an int")
+		}
+
+		return int(f64), nil
+
+	case "struct":
+		typeName := mapped["type"].(string)
+
+		emptyV, err := CreateInstance(typeName)
+		if err != nil {
+			return nil, err
+		}
+
+		value, err := emptyV.Deserialize(mapped)
+		if err != nil {
+			return nil, err
+		}
+
+		return value, nil
+	default:
+		return nil, fmt.Errorf("unsupported type: %s", typeKind)
+	}
 }

@@ -3,6 +3,6 @@ package serialization
 // Serializable is an interface that can be serialized and deserialized.
 type Serializable interface {
 	ID() string
-	Serialize() (map[string]interface{}, error)
-	Deserialize(map[string]interface{}) error
+	Serialize() (map[string]any, error)
+	Deserialize(map[string]any) (Serializable, error)
 }

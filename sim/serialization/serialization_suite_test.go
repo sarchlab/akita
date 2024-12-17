@@ -11,28 +11,35 @@ import (
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
+func init() {
+	serialization.RegisterType(&TestType1{})
+}
+
 func TestSerialization(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Serialization Suite")
 }
 
-type TestType struct {
+type TestType1 struct {
 	Value int
 }
 
-func (t *TestType) ID() string {
+func (t TestType1) ID() string {
 	return "test_type"
 }
 
-func (t *TestType) Serialize() (map[string]any, error) {
+func (t TestType1) Serialize() (map[string]any, error) {
 	return map[string]any{
 		"value": t.Value,
 	}, nil
 }
 
-func (t *TestType) Deserialize(data map[string]any) error {
-	t.Value = data["value"].(int)
-	return nil
+func (t TestType1) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	t.Value = int(data["value"].(float64))
+
+	return t, nil
 }
 
 var _ = Describe("Serialization", func() {
@@ -48,20 +55,26 @@ var _ = Describe("Serialization", func() {
 		manager = serialization.NewManager(codec)
 	})
 
-	It("should register a type", func() {
-		err := serialization.RegisterType(&TestType{})
-		Expect(err).To(BeNil())
-	})
-
 	It("should serialize and deserialize a simple value", func() {
 		err := manager.Serialize(1)
 		Expect(err).To(BeNil())
 
 		fmt.Println(buffer.String())
 
-		var value int
-		err = manager.Deserialize(&value)
+		value, err := manager.Deserialize()
 		Expect(err).To(BeNil())
 		Expect(value).To(Equal(1))
+	})
+
+	It("should serialize and deserialize a struct", func() {
+		err := manager.Serialize(TestType1{Value: 1})
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(BeAssignableToTypeOf(TestType1{}))
+		Expect(value.(TestType1).Value).To(Equal(1))
 	})
 })
