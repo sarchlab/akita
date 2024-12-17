@@ -12,7 +12,8 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(&TestType1{})
+	serialization.RegisterType(TestType1{})
+	serialization.RegisterType(&TestType2{})
 }
 
 func TestSerialization(t *testing.T) {
@@ -37,7 +38,29 @@ func (t TestType1) Serialize() (map[string]any, error) {
 func (t TestType1) Deserialize(
 	data map[string]any,
 ) (serialization.Serializable, error) {
-	t.Value = int(data["value"].(float64))
+	t.Value = data["value"].(int)
+
+	return t, nil
+}
+
+type TestType2 struct {
+	Value int
+}
+
+func (t *TestType2) ID() string {
+	return "test_type_2"
+}
+
+func (t *TestType2) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"value": t.Value,
+	}, nil
+}
+
+func (t *TestType2) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	t.Value = data["value"].(int)
 
 	return t, nil
 }
@@ -76,5 +99,43 @@ var _ = Describe("Serialization", func() {
 		Expect(err).To(BeNil())
 		Expect(value).To(BeAssignableToTypeOf(TestType1{}))
 		Expect(value.(TestType1).Value).To(Equal(1))
+	})
+
+	It("should serialize and deserialize a pointer to a struct", func() {
+		err := manager.Serialize(&TestType1{Value: 1})
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(BeAssignableToTypeOf(&TestType1{}))
+		Expect(value.(*TestType1).Value).To(Equal(1))
+	})
+
+	It("should serialize ptr to primitive", func() {
+		val := int(1)
+		ptr := &val
+		err := manager.Serialize(ptr)
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(Equal(ptr))
+	})
+
+	It("should serialize and deserialize a pointer to a struct, "+
+		"with struct values not deserializable", func() {
+		err := manager.Serialize(&TestType2{Value: 1})
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(BeAssignableToTypeOf(&TestType2{}))
+		Expect(value.(*TestType2).Value).To(Equal(1))
 	})
 })

@@ -12,20 +12,20 @@ type typeRegistry struct {
 	types map[string]reflect.Type
 }
 
-func (r *typeRegistry) RegisterType(
+func (r *typeRegistry) registerType(
 	example Serializable,
 ) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	// Allow the example to be a pointer or a struct.
 	t := reflect.TypeOf(example)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+
+	tt := t
+	if tt.Kind() == reflect.Ptr {
+		tt = t.Elem()
 	}
 
-	typeName := t.PkgPath() + "." + t.Name()
-	fmt.Println(typeName)
+	typeName := tt.PkgPath() + "." + tt.Name()
 
 	if _, ok := r.types[typeName]; ok {
 		return fmt.Errorf("type %s already registered", typeName)
@@ -36,7 +36,7 @@ func (r *typeRegistry) RegisterType(
 	return nil
 }
 
-func (r *typeRegistry) CreateInstance(typeName string) (Serializable, error) {
+func (r *typeRegistry) createInstance(typeName string) (Serializable, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -45,7 +45,18 @@ func (r *typeRegistry) CreateInstance(typeName string) (Serializable, error) {
 		return nil, fmt.Errorf("type %s not found", typeName)
 	}
 
-	instance := reflect.New(exampleType).Interface()
+	valueType := exampleType
+	if exampleType.Kind() == reflect.Ptr {
+		valueType = exampleType.Elem()
+	}
+
+	instance := reflect.New(valueType).Interface()
+
+	if exampleType.Kind() == reflect.Ptr {
+		ptrValue := reflect.New(exampleType).Elem()
+		ptrValue.Set(reflect.ValueOf(instance))
+		instance = ptrValue.Interface()
+	}
 
 	serializable, ok := instance.(Serializable)
 	if !ok {
@@ -53,6 +64,18 @@ func (r *typeRegistry) CreateInstance(typeName string) (Serializable, error) {
 	}
 
 	return serializable, nil
+}
+
+func (r *typeRegistry) registeredType(typeName string) reflect.Type {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	t, ok := r.types[typeName]
+	if !ok {
+		return nil
+	}
+
+	return t
 }
 
 var registry = typeRegistry{
@@ -78,9 +101,9 @@ var registry = typeRegistry{
 }
 
 func RegisterType(example Serializable) error {
-	return registry.RegisterType(example)
+	return registry.registerType(example)
 }
 
 func CreateInstance(typeName string) (Serializable, error) {
-	return registry.CreateInstance(typeName)
+	return registry.createInstance(typeName)
 }
