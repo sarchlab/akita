@@ -9,6 +9,10 @@ import (
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
+func init() {
+	serialization.RegisterType(&SerialEngine{})
+}
+
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	hooking.HookableBase

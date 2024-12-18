@@ -1,25 +1,62 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v4/sim/modeling"
+	"os"
+
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
+func init() {
+	serialization.RegisterType(&Simulation{})
+}
+
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
+	id            string
 	engine        timing.Engine
-	components    []modeling.Component
-	compNameIndex map[string]int
-	ports         []modeling.Port
-	portNameIndex map[string]int
+	locations     []naming.Named
+	locationIndex map[string]int
 }
 
 // NewSimulation creates a new simulation.
 func NewSimulation() *Simulation {
 	return &Simulation{
-		compNameIndex: make(map[string]int),
-		portNameIndex: make(map[string]int),
+		id:            id.Generate(),
+		locationIndex: make(map[string]int),
 	}
+}
+
+// ID returns the ID of the simulation.
+func (s *Simulation) ID() string {
+	return s.id
+}
+
+// Serialize serializes the simulation into a map.
+func (s *Simulation) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":        s.id,
+		"engine":    s.engine,
+		"locations": s.locations,
+	}, nil
+}
+
+// Deserialize deserializes the simulation from a map.
+func (s *Simulation) Deserialize(
+	m map[string]any,
+) (serialization.Serializable, error) {
+	s.id = m["id"].(string)
+	s.engine = m["engine"].(timing.Engine)
+	s.locations = m["locations"].([]naming.Named)
+
+	s.locationIndex = make(map[string]int)
+	for i, loc := range s.locations {
+		s.locationIndex[loc.Name()] = i
+	}
+
+	return s, nil
 }
 
 // RegisterEngine registers the engine used in the simulation.
@@ -32,38 +69,51 @@ func (s *Simulation) GetEngine() timing.Engine {
 	return s.engine
 }
 
-// RegisterComponent registers a component with the simulation.
-func (s *Simulation) RegisterComponent(c modeling.Component) {
-	compName := c.Name()
-	if s.compNameIndex[compName] != 0 {
-		panic("component " + compName + " already registered")
+// RegisterLocation registers a location with the simulation.
+func (s *Simulation) RegisterLocation(l naming.Named) {
+	locName := l.Name()
+	if s.locationIndex[locName] != 0 {
+		panic("location " + locName + " already registered")
 	}
 
-	s.components = append(s.components, c)
-	s.compNameIndex[compName] = len(s.components) - 1
+	s.locations = append(s.locations, l)
+	s.locationIndex[locName] = len(s.locations) - 1
+}
 
-	for _, p := range c.Ports() {
-		s.registerPort(p)
+func (s *Simulation) GetLocation(name string) naming.Named {
+	return s.locations[s.locationIndex[name]]
+}
+
+func (s *Simulation) Save(filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	codec := serialization.NewJSONCodec(file, file)
+	serializer := serialization.NewManager(codec)
+
+	err = serializer.Serialize(s)
+	if err != nil {
+		panic(err)
 	}
 }
 
-// registerPort registers a port with the simulation.
-func (s *Simulation) registerPort(p modeling.Port) {
-	portName := p.Name()
-	if s.portNameIndex[portName] != 0 {
-		panic("port " + portName + " already registered")
+func (s *Simulation) Load(filename string) {
+	file, err := os.Open(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	codec := serialization.NewJSONCodec(file, file)
+	serializer := serialization.NewManager(codec)
+
+	newSim, err := serializer.Deserialize()
+	if err != nil {
+		panic(err)
 	}
 
-	s.ports = append(s.ports, p)
-	s.portNameIndex[portName] = len(s.ports) - 1
-}
-
-// GetComponentByName returns the component with the given name.
-func (s *Simulation) GetComponentByName(name string) modeling.Component {
-	return s.components[s.compNameIndex[name]]
-}
-
-// GetPortByName returns the port with the given name.
-func (s *Simulation) GetPortByName(name string) modeling.Port {
-	return s.ports[s.portNameIndex[name]]
+	s = newSim.(*Simulation)
 }

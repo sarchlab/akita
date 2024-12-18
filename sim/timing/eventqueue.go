@@ -4,10 +4,18 @@ import (
 	"container/heap"
 	"container/list"
 	"sync"
+
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
+
+func init() {
+	serialization.RegisterType(&EventQueueImpl{})
+}
 
 // EventQueue are a queue of event ordered by the time of events
 type EventQueue interface {
+	serialization.Serializable
+
 	Push(evt Event)
 	Pop() Event
 	Len() int
@@ -17,6 +25,8 @@ type EventQueue interface {
 // EventQueueImpl provides a thread safe event queue
 type EventQueueImpl struct {
 	sync.Mutex
+
+	id     string
 	events eventHeap
 }
 
@@ -27,6 +37,29 @@ func NewEventQueue() *EventQueueImpl {
 	heap.Init(&q.events)
 
 	return q
+}
+
+// ID returns the ID of the event queue
+func (q *EventQueueImpl) ID() string {
+	return q.id
+}
+
+// Serialize serializes the event queue into a map
+func (q *EventQueueImpl) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":     q.id,
+		"events": q.events,
+	}, nil
+}
+
+// Deserialize deserializes the event queue from a map
+func (q *EventQueueImpl) Deserialize(
+	m map[string]any,
+) (serialization.Serializable, error) {
+	q.id = m["id"].(string)
+	q.events = m["events"].([]Event)
+
+	return q, nil
 }
 
 // Push adds an event to the event queue
