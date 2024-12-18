@@ -174,8 +174,20 @@ func (m *Manager) serializeSlice(obj any) (map[string]any, error) {
 		simpleSlice[i] = simple
 	}
 
+	elemType := reflect.TypeOf(obj).Elem()
+	if elemType.Kind() == reflect.Ptr {
+		elemType = elemType.Elem()
+	}
+
+	typeName := elemType.Name()
+	if elemType.Kind() == reflect.Interface ||
+		elemType.Kind() == reflect.Struct {
+		typeName = elemType.PkgPath() + "." + typeName
+	}
+
 	return map[string]any{
 		"value":     simpleSlice,
+		"type":      typeName,
 		"type_kind": reflect.TypeOf(obj).Kind().String(),
 	}, nil
 }
@@ -235,8 +247,14 @@ func (m *Manager) deserializeFromMap(mapped map[string]any) (any, error) {
 	switch typeKind {
 	case "int":
 		return m.deserializeInt(mapped)
+	case "float64":
+		return m.deserializeFloat64(mapped)
+	case "string":
+		return m.deserializeString(mapped)
 	case "ptr":
 		return m.deserializePtr(mapped)
+	case "slice":
+		return m.deserializeSlice(mapped)
 	case "struct":
 		return m.deserializeStruct(mapped)
 	default:
@@ -249,17 +267,6 @@ func (m *Manager) deserializePtr(mapped map[string]any) (any, error) {
 
 	if registeredAsPtr(typeName) {
 		return m.deserializeStruct(mapped)
-		// val, err := CreateInstance(typeName)
-		// if err != nil {
-		// 	return nil, err
-		// }
-
-		// value, err := val.Deserialize(mapped)
-		// if err != nil {
-		// 	return nil, err
-		// }
-
-		// return value, nil
 	}
 
 	rawValue, ok := mapped["value"]
@@ -290,6 +297,32 @@ func (m *Manager) deserializePtr(mapped map[string]any) (any, error) {
 	}
 
 	return value, nil
+}
+
+func (m *Manager) deserializeSlice(mapped map[string]any) (any, error) {
+	elemType := registry.registeredType(mapped["type"].(string))
+	if elemType == nil {
+		return nil, fmt.Errorf(
+			"type not registered: %s", mapped["type"].(string),
+		)
+	}
+
+	slice := reflect.MakeSlice(
+		reflect.SliceOf(elemType),
+		len(mapped["value"].([]any)),
+		len(mapped["value"].([]any)),
+	)
+
+	for i, v := range mapped["value"].([]any) {
+		elem, err := m.deserializeFromMap(v.(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+
+		slice.Index(i).Set(reflect.ValueOf(elem))
+	}
+
+	return slice.Interface(), nil
 }
 
 func (m *Manager) deserializeStruct(mapped map[string]any) (any, error) {
@@ -327,6 +360,24 @@ func (*Manager) deserializeInt(mapped map[string]any) (any, error) {
 	}
 
 	return int(f64), nil
+}
+
+func (*Manager) deserializeFloat64(mapped map[string]any) (any, error) {
+	f64, ok := mapped["value"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("value is not a float64")
+	}
+
+	return f64, nil
+}
+
+func (*Manager) deserializeString(mapped map[string]any) (any, error) {
+	str, ok := mapped["value"].(string)
+	if !ok {
+		return nil, fmt.Errorf("value is not a string")
+	}
+
+	return str, nil
 }
 
 func registeredAsPtr(typeName string) bool {

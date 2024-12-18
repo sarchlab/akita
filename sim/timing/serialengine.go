@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(&SerialEngine{})
+	serialization.RegisterType(reflect.TypeOf(&SerialEngine{}))
 }
 
 // A SerialEngine is an Engine that always run events one after another.

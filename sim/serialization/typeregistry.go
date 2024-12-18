@@ -13,12 +13,10 @@ type typeRegistry struct {
 }
 
 func (r *typeRegistry) registerType(
-	example Serializable,
+	t reflect.Type,
 ) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-
-	t := reflect.TypeOf(example)
 
 	tt := t
 	if tt.Kind() == reflect.Ptr {
@@ -100,8 +98,8 @@ var registry = typeRegistry{
 	},
 }
 
-func RegisterType(example Serializable) error {
-	return registry.registerType(example)
+func RegisterType(t reflect.Type) error {
+	return registry.registerType(t)
 }
 
 func CreateInstance(typeName string) (Serializable, error) {

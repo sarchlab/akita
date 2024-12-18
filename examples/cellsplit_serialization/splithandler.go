@@ -2,6 +2,7 @@ package cellsplit
 
 import (
 	"math/rand"
+	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/serialization"
@@ -9,7 +10,7 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(&SplitHandler{})
+	serialization.RegisterType(reflect.TypeOf(&SplitHandler{}))
 }
 
 type SplitHandler struct {

@@ -1,12 +1,14 @@
 package cellsplit
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func init() {
-	serialization.RegisterType(splitEvent{})
+	serialization.RegisterType(reflect.TypeOf(splitEvent{}))
 }
 
 type splitEvent struct {

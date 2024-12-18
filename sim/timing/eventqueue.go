@@ -3,13 +3,14 @@ package timing
 import (
 	"container/heap"
 	"container/list"
+	"reflect"
 	"sync"
 
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 func init() {
-	serialization.RegisterType(&EventQueueImpl{})
+	serialization.RegisterType(reflect.TypeOf(&EventQueueImpl{}))
 }
 
 // EventQueue are a queue of event ordered by the time of events

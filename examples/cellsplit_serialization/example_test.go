@@ -55,7 +55,10 @@ func secondStage() {
 
 	engine.Run()
 
-	fmt.Printf("Total number at time 10: %d\n", handler.total)
+	fmt.Printf("Total number at time %.10f: %d\n",
+		engine.Now(),
+		handler.total,
+	)
 }
 
 func Example() {

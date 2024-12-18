@@ -2,6 +2,7 @@ package simulation
 
 import (
 	"os"
+	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/naming"
@@ -10,7 +11,7 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(&Simulation{})
+	serialization.RegisterType(reflect.TypeOf(&Simulation{}))
 }
 
 // A Simulation provides the service requires to define a simulation.

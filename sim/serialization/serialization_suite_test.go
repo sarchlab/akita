@@ -3,6 +3,7 @@ package serialization_test
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,8 +13,9 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(TestType1{})
-	serialization.RegisterType(&TestType2{})
+	serialization.RegisterType(reflect.TypeOf(TestType1{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType2{}))
+	serialization.RegisterType(reflect.TypeOf((*TestType3)(nil)).Elem())
 }
 
 func TestSerialization(t *testing.T) {
@@ -65,6 +67,11 @@ func (t *TestType2) Deserialize(
 	return t, nil
 }
 
+type TestType3 interface {
+	serialization.Serializable
+	ID() string
+}
+
 var _ = Describe("Serialization", func() {
 	var (
 		buffer  *bytes.Buffer
@@ -87,6 +94,56 @@ var _ = Describe("Serialization", func() {
 		value, err := manager.Deserialize()
 		Expect(err).To(BeNil())
 		Expect(value).To(Equal(1))
+	})
+
+	It("should serialize float64", func() {
+		err := manager.Serialize(2.3)
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(Equal(2.3))
+	})
+
+	It("should serialize string", func() {
+		err := manager.Serialize("hello")
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(Equal("hello"))
+	})
+
+	It("should serialize slice", func() {
+		err := manager.Serialize([]int{1, 2, 3})
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(Equal([]int{1, 2, 3}))
+	})
+
+	It("should serialize slice of interface", func() {
+		err := manager.Serialize([]TestType3{
+			&TestType2{Value: 1},
+			&TestType2{Value: 2},
+		})
+		Expect(err).To(BeNil())
+
+		fmt.Println(buffer.String())
+
+		value, err := manager.Deserialize()
+		Expect(err).To(BeNil())
+		Expect(value).To(Equal([]TestType3{
+			&TestType2{Value: 1},
+			&TestType2{Value: 2},
+		}))
 	})
 
 	It("should serialize and deserialize a struct", func() {
