@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -21,9 +22,35 @@ func (m sampleMsg) Meta() modeling.MsgMeta {
 	return m.MsgMeta
 }
 
+func (m sampleMsg) ID() string {
+	return m.MsgMeta.ID
+}
+
+func (m sampleMsg) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":            m.ID(),
+		"src":           m.Src,
+		"dst":           m.Dst,
+		"traffic_class": m.TrafficClass,
+		"traffic_bytes": m.TrafficBytes,
+	}, nil
+}
+
+func (m sampleMsg) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	m.MsgMeta.ID = data["id"].(string)
+	m.MsgMeta.Src = data["src"].(modeling.RemotePort)
+	m.MsgMeta.Dst = data["dst"].(modeling.RemotePort)
+	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
+	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
+
+	return m, nil
+}
+
 func (m sampleMsg) Clone() modeling.Msg {
 	cloneMsg := m
-	cloneMsg.ID = id.Generate()
+	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return cloneMsg
 }
@@ -120,6 +147,26 @@ func newAgent(engine timing.Engine, freq timing.Freq, name string) *agent {
 	return a
 }
 
+func (a *agent) ID() string {
+	return a.Name()
+}
+
+func (a *agent) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"msgs_out": a.msgsOut,
+		"msgs_in":  a.msgsIn,
+	}, nil
+}
+
+func (a *agent) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	a.msgsOut = data["msgs_out"].([]modeling.Msg)
+	a.msgsIn = data["msgs_in"].([]modeling.Msg)
+
+	return a, nil
+}
+
 func (a *agent) Tick() bool {
 	madeProgress := false
 
@@ -172,10 +219,12 @@ var _ = Describe("Direct Connection Integration", func() {
 				msg := sampleMsg{}
 				msg.Src = agent.OutPort.AsRemote()
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
+
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
-				msg.ID = fmt.Sprintf("%s(%d)->%s",
+
+				msg.MsgMeta.ID = fmt.Sprintf("%s(%d)->%s",
 					agent.Name(), i, msg.Dst)
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
@@ -192,7 +241,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		Expect(totalRecvedMsgCount).To(Equal(numAgents * numMsgsPerAgent))
 	})
 
-	It("should run deterministicly", func() {
+	It("should run deterministically", func() {
 		seed := time.Now().UTC().UnixNano()
 		time1 := directConnectionTest(seed)
 		time2 := directConnectionTest(seed)
@@ -226,7 +275,7 @@ func directConnectionTest(seed int64) timing.VTimeInSec {
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 			}
 
-			msg.ID = fmt.Sprintf("%s(%d)->%s",
+			msg.MsgMeta.ID = fmt.Sprintf("%s(%d)->%s",
 				agent.Name(), i, msg.Dst)
 
 			agent.msgsOut = append(agent.msgsOut, msg)

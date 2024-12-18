@@ -2,6 +2,7 @@ package timing
 
 import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // TimeTeller can be used to get the current time.
@@ -19,6 +20,7 @@ type EventScheduler interface {
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	hooking.Hookable
+	serialization.Serializable
 	EventScheduler
 
 	// Run will process all the events until the simulation finishes

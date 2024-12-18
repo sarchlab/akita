@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // TickEvent is a generic event that almost all the component can use to
@@ -14,13 +15,43 @@ type TickEvent struct {
 
 // MakeTickEvent creates a new TickEvent
 func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
-	evt := TickEvent{}
-	evt.ID = id.Generate()
-	evt.handler = handler
-	evt.time = time
-	evt.secondary = false
+	evt := TickEvent{
+		EventBase: EventBase{
+			ID:        id.Generate(),
+			time:      time,
+			handler:   handler,
+			secondary: false,
+		},
+	}
 
 	return evt
+}
+
+// ID returns the ID of the TickEvent.
+func (e TickEvent) ID() string {
+	return e.EventBase.ID
+}
+
+// Serialize serializes the TickEvent.
+func (e TickEvent) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":        e.ID(),
+		"time":      e.Time(),
+		"handler":   e.Handler(),
+		"secondary": e.secondary,
+	}, nil
+}
+
+// Deserialize deserializes the TickEvent.
+func (e TickEvent) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	e.EventBase.ID = data["id"].(string)
+	e.EventBase.time = data["time"].(VTimeInSec)
+	e.EventBase.handler = data["handler"].(Handler)
+	e.EventBase.secondary = data["secondary"].(bool)
+
+	return e, nil
 }
 
 // A Ticker is an object that updates states with ticks.

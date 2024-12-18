@@ -1,7 +1,10 @@
 // Package directconnection provides directconnection
 package directconnection
 
-import "github.com/sarchlab/akita/v4/sim/modeling"
+import (
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/serialization"
+)
 
 type ports struct {
 	ports   []modeling.Port
@@ -36,6 +39,27 @@ type Comp struct {
 
 	ports      ports
 	nextPortID int
+}
+
+// ID returns the name of the component.
+func (c *Comp) ID() string {
+	return c.Name()
+}
+
+// Serialize serializes the component.
+func (c *Comp) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"next_port_id": c.nextPortID,
+	}, nil
+}
+
+// Deserialize deserializes the component.
+func (c *Comp) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	c.nextPortID = data["next_port_id"].(int)
+
+	return c, nil
 }
 
 // PlugIn marks the port connects to this DirectConnection.

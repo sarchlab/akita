@@ -4,12 +4,34 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 type SplitEvent struct {
+	id      string
 	time    timing.VTimeInSec
 	handler timing.Handler
+}
+
+func (e SplitEvent) ID() string {
+	return e.id
+}
+
+func (e SplitEvent) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":   e.id,
+		"time": e.time,
+	}, nil
+}
+
+func (e SplitEvent) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	e.id = data["id"].(string)
+	e.time = data["time"].(timing.VTimeInSec)
+
+	return e, nil
 }
 
 func (e SplitEvent) Time() timing.VTimeInSec {

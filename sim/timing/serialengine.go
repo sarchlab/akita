@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // A SerialEngine is an Engine that always run events one after another.
@@ -38,6 +39,31 @@ func NewSerialEngine() *SerialEngine {
 // Name returns the name of the engine.
 func (e *SerialEngine) Name() string {
 	return "SerialEngine"
+}
+
+// ID returns the ID of the engine.
+func (e *SerialEngine) ID() string {
+	return e.Name()
+}
+
+// Serialize serializes the SerialEngine.
+func (e *SerialEngine) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"time":           e.time,
+		"queue":          e.queue,
+		"secondaryQueue": e.secondaryQueue,
+	}, nil
+}
+
+// Deserialize deserializes the SerialEngine.
+func (e *SerialEngine) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	e.time = data["time"].(VTimeInSec)
+	e.queue = data["queue"].(EventQueue)
+	e.secondaryQueue = data["secondaryQueue"].(EventQueue)
+
+	return e, nil
 }
 
 // Schedule register an event to be happen in the future

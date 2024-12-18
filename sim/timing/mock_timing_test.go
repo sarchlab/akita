@@ -8,6 +8,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	hooking "github.com/sarchlab/akita/v4/sim/hooking"
+	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -57,6 +58,21 @@ func (mr *MockEngineMockRecorder) Continue() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Continue", reflect.TypeOf((*MockEngine)(nil).Continue))
 }
 
+// Deserialize mocks base method.
+func (m *MockEngine) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Deserialize", arg0)
+	ret0, _ := ret[0].(serialization.Serializable)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Deserialize indicates an expected call of Deserialize.
+func (mr *MockEngineMockRecorder) Deserialize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deserialize", reflect.TypeOf((*MockEngine)(nil).Deserialize), arg0)
+}
+
 // Hooks mocks base method.
 func (m *MockEngine) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
@@ -69,6 +85,20 @@ func (m *MockEngine) Hooks() []hooking.Hook {
 func (mr *MockEngineMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockEngine)(nil).Hooks))
+}
+
+// ID mocks base method.
+func (m *MockEngine) ID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ID indicates an expected call of ID.
+func (mr *MockEngineMockRecorder) ID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockEngine)(nil).ID))
 }
 
 // Name mocks base method.
@@ -151,6 +181,21 @@ func (mr *MockEngineMockRecorder) Schedule(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Schedule", reflect.TypeOf((*MockEngine)(nil).Schedule), arg0)
 }
 
+// Serialize mocks base method.
+func (m *MockEngine) Serialize() (map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Serialize")
+	ret0, _ := ret[0].(map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Serialize indicates an expected call of Serialize.
+func (mr *MockEngineMockRecorder) Serialize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serialize", reflect.TypeOf((*MockEngine)(nil).Serialize))
+}
+
 // MockEvent is a mock of Event interface.
 type MockEvent struct {
 	ctrl     *gomock.Controller
@@ -174,6 +219,21 @@ func (m *MockEvent) EXPECT() *MockEventMockRecorder {
 	return m.recorder
 }
 
+// Deserialize mocks base method.
+func (m *MockEvent) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Deserialize", arg0)
+	ret0, _ := ret[0].(serialization.Serializable)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Deserialize indicates an expected call of Deserialize.
+func (mr *MockEventMockRecorder) Deserialize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deserialize", reflect.TypeOf((*MockEvent)(nil).Deserialize), arg0)
+}
+
 // Handler mocks base method.
 func (m *MockEvent) Handler() Handler {
 	m.ctrl.T.Helper()
@@ -188,6 +248,20 @@ func (mr *MockEventMockRecorder) Handler() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handler", reflect.TypeOf((*MockEvent)(nil).Handler))
 }
 
+// ID mocks base method.
+func (m *MockEvent) ID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ID indicates an expected call of ID.
+func (mr *MockEventMockRecorder) ID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockEvent)(nil).ID))
+}
+
 // IsSecondary mocks base method.
 func (m *MockEvent) IsSecondary() bool {
 	m.ctrl.T.Helper()
@@ -200,6 +274,21 @@ func (m *MockEvent) IsSecondary() bool {
 func (mr *MockEventMockRecorder) IsSecondary() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSecondary", reflect.TypeOf((*MockEvent)(nil).IsSecondary))
+}
+
+// Serialize mocks base method.
+func (m *MockEvent) Serialize() (map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Serialize")
+	ret0, _ := ret[0].(map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Serialize indicates an expected call of Serialize.
+func (mr *MockEventMockRecorder) Serialize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serialize", reflect.TypeOf((*MockEvent)(nil).Serialize))
 }
 
 // Time mocks base method.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -20,10 +21,39 @@ func (m TrafficMsg) Meta() modeling.MsgMeta {
 	return m.MsgMeta
 }
 
+// ID returns the ID of the TrafficMsg.
+func (m TrafficMsg) ID() string {
+	return m.MsgMeta.ID
+}
+
+// Serialize serializes the TrafficMsg.
+func (m TrafficMsg) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":            m.ID(),
+		"src":           m.Src,
+		"dst":           m.Dst,
+		"traffic_class": m.TrafficClass,
+		"traffic_bytes": m.TrafficBytes,
+	}, nil
+}
+
+// Deserialize deserializes the TrafficMsg.
+func (m TrafficMsg) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	m.MsgMeta.ID = data["id"].(string)
+	m.MsgMeta.Src = data["src"].(modeling.RemotePort)
+	m.MsgMeta.Dst = data["dst"].(modeling.RemotePort)
+	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
+	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
+
+	return m, nil
+}
+
 // Clone returns cloned TrafficMsg
 func (m TrafficMsg) Clone() modeling.Msg {
 	cloneMsg := m
-	cloneMsg.ID = id.Generate()
+	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return cloneMsg
 }
@@ -63,6 +93,26 @@ type Agent struct {
 	ToOut modeling.Port
 
 	Buffer []TrafficMsg
+}
+
+// ID returns the ID of the Agent.
+func (a *Agent) ID() string {
+	return a.Name()
+}
+
+// Serialize serializes the Agent.
+func (a *Agent) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"buffer": a.Buffer,
+	}, nil
+}
+
+// Deserialize deserializes the Agent.
+func (a *Agent) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	a.Buffer = data["buffer"].([]TrafficMsg)
+	return a, nil
 }
 
 // NotifyRecv notifies that a port has received a message.

@@ -9,6 +9,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	hooking "github.com/sarchlab/akita/v4/sim/hooking"
 	modeling "github.com/sarchlab/akita/v4/sim/modeling"
+	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // MockPort is a mock of Port interface.
@@ -102,6 +103,21 @@ func (mr *MockPortMockRecorder) Deliver(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deliver", reflect.TypeOf((*MockPort)(nil).Deliver), arg0)
 }
 
+// Deserialize mocks base method.
+func (m *MockPort) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Deserialize", arg0)
+	ret0, _ := ret[0].(serialization.Serializable)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Deserialize indicates an expected call of Deserialize.
+func (mr *MockPortMockRecorder) Deserialize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deserialize", reflect.TypeOf((*MockPort)(nil).Deserialize), arg0)
+}
+
 // Hooks mocks base method.
 func (m *MockPort) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
@@ -114,6 +130,20 @@ func (m *MockPort) Hooks() []hooking.Hook {
 func (mr *MockPortMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockPort)(nil).Hooks))
+}
+
+// ID mocks base method.
+func (m *MockPort) ID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ID indicates an expected call of ID.
+func (mr *MockPortMockRecorder) ID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockPort)(nil).ID))
 }
 
 // Name mocks base method.
@@ -226,6 +256,21 @@ func (mr *MockPortMockRecorder) Send(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockPort)(nil).Send), arg0)
 }
 
+// Serialize mocks base method.
+func (m *MockPort) Serialize() (map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Serialize")
+	ret0, _ := ret[0].(map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Serialize indicates an expected call of Serialize.
+func (mr *MockPortMockRecorder) Serialize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serialize", reflect.TypeOf((*MockPort)(nil).Serialize))
+}
+
 // SetConnection mocks base method.
 func (m *MockPort) SetConnection(arg0 modeling.Connection) {
 	m.ctrl.T.Helper()
@@ -273,6 +318,21 @@ func (mr *MockConnectionMockRecorder) AcceptHook(arg0 interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptHook", reflect.TypeOf((*MockConnection)(nil).AcceptHook), arg0)
 }
 
+// Deserialize mocks base method.
+func (m *MockConnection) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Deserialize", arg0)
+	ret0, _ := ret[0].(serialization.Serializable)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Deserialize indicates an expected call of Deserialize.
+func (mr *MockConnectionMockRecorder) Deserialize(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Deserialize", reflect.TypeOf((*MockConnection)(nil).Deserialize), arg0)
+}
+
 // Hooks mocks base method.
 func (m *MockConnection) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
@@ -285,6 +345,20 @@ func (m *MockConnection) Hooks() []hooking.Hook {
 func (mr *MockConnectionMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockConnection)(nil).Hooks))
+}
+
+// ID mocks base method.
+func (m *MockConnection) ID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// ID indicates an expected call of ID.
+func (mr *MockConnectionMockRecorder) ID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockConnection)(nil).ID))
 }
 
 // Name mocks base method.
@@ -349,6 +423,21 @@ func (m *MockConnection) PlugIn(arg0 modeling.Port) {
 func (mr *MockConnectionMockRecorder) PlugIn(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PlugIn", reflect.TypeOf((*MockConnection)(nil).PlugIn), arg0)
+}
+
+// Serialize mocks base method.
+func (m *MockConnection) Serialize() (map[string]interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Serialize")
+	ret0, _ := ret[0].(map[string]interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Serialize indicates an expected call of Serialize.
+func (mr *MockConnectionMockRecorder) Serialize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Serialize", reflect.TypeOf((*MockConnection)(nil).Serialize))
 }
 
 // Unplug mocks base method.

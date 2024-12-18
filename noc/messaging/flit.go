@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // Flit is the smallest trasferring unit on a network.
@@ -17,6 +18,41 @@ type Flit struct {
 	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
+// ID returns the ID of the Flit.
+func (f Flit) ID() string {
+	return f.MsgMeta.ID
+}
+
+// Serialize serializes the Flit.
+func (f Flit) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"id":              f.ID(),
+		"src":             f.Src,
+		"dst":             f.Dst,
+		"traffic_class":   f.TrafficClass,
+		"traffic_bytes":   f.TrafficBytes,
+		"seq_id":          f.SeqID,
+		"num_flit_in_msg": f.NumFlitInMsg,
+		"msg":             f.Msg,
+	}, nil
+}
+
+// Deserialize deserializes the Flit.
+func (f Flit) Deserialize(
+	data map[string]any,
+) (serialization.Serializable, error) {
+	f.MsgMeta.ID = data["id"].(string)
+	f.Src = data["src"].(modeling.RemotePort)
+	f.Dst = data["dst"].(modeling.RemotePort)
+	f.TrafficClass = data["traffic_class"].(int)
+	f.TrafficBytes = data["traffic_bytes"].(int)
+	f.SeqID = data["seq_id"].(int)
+	f.NumFlitInMsg = data["num_flit_in_msg"].(int)
+	f.Msg = data["msg"].(modeling.Msg)
+
+	return f, nil
+}
+
 // Meta returns the meta data associated with the Flit.
 func (f Flit) Meta() modeling.MsgMeta {
 	return f.MsgMeta
@@ -25,7 +61,7 @@ func (f Flit) Meta() modeling.MsgMeta {
 // Clone returns cloned Flit with different ID
 func (f Flit) Clone() modeling.Msg {
 	cloneMsg := f
-	cloneMsg.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
+	cloneMsg.MsgMeta.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
 		id.Generate())
 
@@ -72,7 +108,7 @@ func (b FlitBuilder) WithMsg(msg modeling.Msg) FlitBuilder {
 // Build creates a new flit.
 func (b FlitBuilder) Build() *Flit {
 	f := &Flit{}
-	f.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
+	f.MsgMeta.ID = fmt.Sprintf("flit-%d-msg-%s-%s",
 		b.seqID, b.msg.Meta().ID,
 		id.Generate())
 	f.Src = b.src
