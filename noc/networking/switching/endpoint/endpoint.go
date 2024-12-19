@@ -31,9 +31,9 @@ type Comp struct {
 	numOutputChannels int
 	flitByteSize      int
 	encodingOverhead  float64
-	msgOutBuf         []modeling.Msg
-	flitsToSend       []*messaging.Flit
 
+	msgOutBuf          []modeling.Msg
+	flitsToSend        []*messaging.Flit
 	assemblingMsgTable map[string]*list.Element
 	assemblingMsgs     *list.List
 	assembledMsgs      []modeling.Msg

@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // Flit is the smallest trasferring unit on a network.
@@ -26,7 +25,6 @@ func (f Flit) ID() string {
 // Serialize serializes the Flit.
 func (f Flit) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"id":              f.ID(),
 		"src":             f.Src,
 		"dst":             f.Dst,
 		"traffic_class":   f.TrafficClass,
@@ -38,10 +36,9 @@ func (f Flit) Serialize() (map[string]any, error) {
 }
 
 // Deserialize deserializes the Flit.
-func (f Flit) Deserialize(
+func (f *Flit) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
-	f.MsgMeta.ID = data["id"].(string)
+) error {
 	f.Src = data["src"].(modeling.RemotePort)
 	f.Dst = data["dst"].(modeling.RemotePort)
 	f.TrafficClass = data["traffic_class"].(int)
@@ -50,7 +47,7 @@ func (f Flit) Deserialize(
 	f.NumFlitInMsg = data["num_flit_in_msg"].(int)
 	f.Msg = data["msg"].(modeling.Msg)
 
-	return f, nil
+	return nil
 }
 
 // Meta returns the meta data associated with the Flit.
@@ -65,7 +62,7 @@ func (f Flit) Clone() modeling.Msg {
 		cloneMsg.SeqID, cloneMsg.Msg.Meta().ID,
 		id.Generate())
 
-	return cloneMsg
+	return &cloneMsg
 }
 
 // FlitBuilder can build flits

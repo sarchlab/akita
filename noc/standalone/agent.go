@@ -6,7 +6,6 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -29,7 +28,6 @@ func (m TrafficMsg) ID() string {
 // Serialize serializes the TrafficMsg.
 func (m TrafficMsg) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"id":            m.ID(),
 		"src":           m.Src,
 		"dst":           m.Dst,
 		"traffic_class": m.TrafficClass,
@@ -40,14 +38,13 @@ func (m TrafficMsg) Serialize() (map[string]any, error) {
 // Deserialize deserializes the TrafficMsg.
 func (m TrafficMsg) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
-	m.MsgMeta.ID = data["id"].(string)
+) error {
 	m.MsgMeta.Src = data["src"].(modeling.RemotePort)
 	m.MsgMeta.Dst = data["dst"].(modeling.RemotePort)
 	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
 	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
 
-	return m, nil
+	return nil
 }
 
 // Clone returns cloned TrafficMsg
@@ -55,7 +52,7 @@ func (m TrafficMsg) Clone() modeling.Msg {
 	cloneMsg := m
 	cloneMsg.MsgMeta.ID = id.Generate()
 
-	return cloneMsg
+	return &cloneMsg
 }
 
 // StartSendEvent is an event that triggers an agent to send a message.
@@ -85,6 +82,24 @@ func NewStartSendEvent(
 	return e
 }
 
+func (e *StartSendEvent) ID() string {
+	return e.Msg.ID()
+}
+
+func (e *StartSendEvent) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"msg": e.Msg,
+	}, nil
+}
+
+func (e *StartSendEvent) Deserialize(
+	data map[string]any,
+) error {
+	e.Msg = data["msg"].(TrafficMsg)
+
+	return nil
+}
+
 // Agent is a component that connects the network. It can send and receive
 // msg to/ from the network.
 type Agent struct {
@@ -110,9 +125,9 @@ func (a *Agent) Serialize() (map[string]any, error) {
 // Deserialize deserializes the Agent.
 func (a *Agent) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	a.Buffer = data["buffer"].([]TrafficMsg)
-	return a, nil
+	return nil
 }
 
 // NotifyRecv notifies that a port has received a message.
