@@ -11,7 +11,7 @@ import (
 //go:generate mockgen -destination "mock_timing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/timing Engine,Ticker
 //go:generate mockgen -destination "mock_queueing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/queueing Buffer
 
-func TestHardware(t *testing.T) {
+func TestModeling(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Hardware Suite")
+	RunSpecs(t, "Modeling Suite")
 }

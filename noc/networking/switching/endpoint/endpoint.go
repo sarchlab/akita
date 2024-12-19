@@ -17,6 +17,14 @@ type msgToAssemble struct {
 	numFlitArrived  int
 }
 
+type state struct {
+	msgOutBuf          []modeling.Msg
+	flitsToSend        []*messaging.Flit
+	assemblingMsgTable map[string]*list.Element
+	assemblingMsgs     *list.List
+	assembledMsgs      []modeling.Msg
+}
+
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
@@ -32,11 +40,39 @@ type Comp struct {
 	flitByteSize      int
 	encodingOverhead  float64
 
-	msgOutBuf          []modeling.Msg
-	flitsToSend        []*messaging.Flit
-	assemblingMsgTable map[string]*list.Element
-	assemblingMsgs     *list.List
-	assembledMsgs      []modeling.Msg
+	state
+}
+
+// ID returns the ID of the endpoint.
+func (c *Comp) ID() string {
+	return c.Name()
+}
+
+// Serialize returns the serialization of the endpoint.
+func (c *Comp) Serialize() (map[string]any, error) {
+	assemblingMsgs := make([]*msgToAssemble, 0, c.assemblingMsgs.Len())
+	for e := c.assemblingMsgs.Front(); e != nil; e = e.Next() {
+		assemblingMsgs = append(
+			assemblingMsgs,
+			e.Value.(*msgToAssemble),
+		)
+	}
+
+	return map[string]any{
+		"msgOutBuf":      c.msgOutBuf,
+		"flitsToSend":    c.flitsToSend,
+		"assemblingMsgs": assemblingMsgs,
+		"assembledMsgs":  c.assembledMsgs,
+	}, nil
+}
+
+// Deserialize deserializes the endpoint.
+func (c *Comp) Deserialize(data map[string]any) error {
+	for _, msg := range data["msgOutBuf"].([]map[string]any) {
+		c.msgOutBuf = append(c.msgOutBuf, msg.(modeling.Msg))
+	}
+
+	return nil
 }
 
 // PlugIn connects a port to the endpoint.

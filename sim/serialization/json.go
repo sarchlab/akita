@@ -6,29 +6,24 @@ import (
 )
 
 type JSONCodec struct {
-	writer io.Writer
-	reader io.Reader
 }
 
-func NewJSONCodec(writer io.Writer, reader io.Reader) *JSONCodec {
-	return &JSONCodec{
-		writer: writer,
-		reader: reader,
-	}
+func NewJSONCodec() *JSONCodec {
+	return &JSONCodec{}
 }
 
-func (c JSONCodec) Encode(v map[string]any) error {
-	encoder := json.NewEncoder(c.writer)
+func (c JSONCodec) Encode(v map[string]*Value, writer io.Writer) error {
+	encoder := json.NewEncoder(writer)
 	encoder.SetEscapeHTML(false)
 
 	return encoder.Encode(v)
 }
 
-func (c JSONCodec) Decode() (map[string]any, error) {
-	decoder := json.NewDecoder(c.reader)
+func (c JSONCodec) Decode(reader io.Reader) (map[string]*Value, error) {
+	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
 
-	v := map[string]any{}
+	v := map[string]*Value{}
 
 	err := decoder.Decode(&v)
 	if err != nil {
