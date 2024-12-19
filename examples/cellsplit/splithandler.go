@@ -19,7 +19,7 @@ func (h *SplitHandler) Handle(evt timing.Event) error {
 	nextTime := now + timing.VTimeInSec(h.rand.Float64()*2+0.5)
 
 	if nextTime < 100.0 {
-		nextEvt := splitEvent{
+		nextEvt := &SplitEvent{
 			id:      id.Generate(),
 			time:    nextTime,
 			handler: h,

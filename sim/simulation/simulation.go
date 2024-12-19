@@ -14,11 +14,18 @@ func init() {
 	serialization.RegisterType(reflect.TypeOf(&Simulation{}))
 }
 
+// NamedSerializable is a location that can be stored and indexed in a
+// simulation.
+type NamedSerializable interface {
+	naming.Named
+	serialization.Serializable
+}
+
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
 	id            string
 	engine        timing.Engine
-	locations     []naming.Named
+	locations     []NamedSerializable
 	locationIndex map[string]int
 }
 
@@ -38,8 +45,6 @@ func (s *Simulation) ID() string {
 // Serialize serializes the simulation into a map.
 func (s *Simulation) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"id":        s.id,
-		"engine":    s.engine,
 		"locations": s.locations,
 	}, nil
 }
@@ -47,17 +52,14 @@ func (s *Simulation) Serialize() (map[string]any, error) {
 // Deserialize deserializes the simulation from a map.
 func (s *Simulation) Deserialize(
 	m map[string]any,
-) (serialization.Serializable, error) {
-	s.id = m["id"].(string)
-	s.engine = m["engine"].(timing.Engine)
-	s.locations = m["locations"].([]naming.Named)
+) error {
+	locInData := m["locations"].([]any)
 
-	s.locationIndex = make(map[string]int)
 	for i, loc := range s.locations {
-		s.locationIndex[loc.Name()] = i
+		loc.Deserialize(locInData[i].(map[string]any))
 	}
 
-	return s, nil
+	return nil
 }
 
 // RegisterEngine registers the engine used in the simulation.
@@ -71,7 +73,7 @@ func (s *Simulation) GetEngine() timing.Engine {
 }
 
 // RegisterLocation registers a location with the simulation.
-func (s *Simulation) RegisterLocation(l naming.Named) {
+func (s *Simulation) RegisterLocation(l NamedSerializable) {
 	locName := l.Name()
 	if s.locationIndex[locName] != 0 {
 		panic("location " + locName + " already registered")
@@ -111,10 +113,8 @@ func (s *Simulation) Load(filename string) {
 	codec := serialization.NewJSONCodec(file, file)
 	serializer := serialization.NewManager(codec)
 
-	newSim, err := serializer.Deserialize()
+	err = serializer.Deserialize(s)
 	if err != nil {
 		panic(err)
 	}
-
-	s = newSim.(*Simulation)
 }

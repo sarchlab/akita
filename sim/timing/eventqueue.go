@@ -48,7 +48,6 @@ func (q *EventQueueImpl) ID() string {
 // Serialize serializes the event queue into a map
 func (q *EventQueueImpl) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"id":     q.id,
 		"events": q.events,
 	}, nil
 }
@@ -56,11 +55,10 @@ func (q *EventQueueImpl) Serialize() (map[string]any, error) {
 // Deserialize deserializes the event queue from a map
 func (q *EventQueueImpl) Deserialize(
 	m map[string]any,
-) (serialization.Serializable, error) {
-	q.id = m["id"].(string)
+) error {
 	q.events = m["events"].([]Event)
 
-	return q, nil
+	return nil
 }
 
 // Push adds an event to the event queue

@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/queueing"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 type sampleMsg struct {
@@ -31,20 +30,20 @@ func (m sampleMsg) Serialize() (map[string]any, error) {
 	}, nil
 }
 
-func (m sampleMsg) Deserialize(
+func (m *sampleMsg) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	m.MsgMeta.ID = data["id"].(string)
 	m.MsgMeta.Src = data["src"].(RemotePort)
 	m.MsgMeta.Dst = data["dst"].(RemotePort)
 	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
 	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
 
-	return m, nil
+	return nil
 }
 
-func (m sampleMsg) Clone() Msg {
-	cloneMsg := m
+func (m *sampleMsg) Clone() Msg {
+	cloneMsg := *m
 	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return &cloneMsg
@@ -83,13 +82,13 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should be panic if port is not msg src", func() {
-		msg := sampleMsg{}
+		msg := &sampleMsg{}
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg dst is not set", func() {
-		msg := sampleMsg{
+		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
 			},
@@ -99,7 +98,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
-		msg := sampleMsg{
+		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
 				Dst: port.AsRemote(),
@@ -111,7 +110,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should send successfully", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := sampleMsg{
+		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
 				Dst: dst.AsRemote(),
@@ -127,7 +126,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should propagate error when outgoing buff is full", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := sampleMsg{
+		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
 				Dst: dst.AsRemote(),
@@ -145,7 +144,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should deliver when successful", func() {
-		msg := sampleMsg{}
+		msg := &sampleMsg{}
 
 		comp.EXPECT().NotifyRecv(port)
 
@@ -155,7 +154,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should fail to deliver when incoming buffer is full", func() {
-		msg := sampleMsg{}
+		msg := &sampleMsg{}
 		port.incomingBuf = queueing.NewBuffer("Buf", 4)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
@@ -174,7 +173,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from incoming buffer", func() {
-		msg := sampleMsg{}
+		msg := &sampleMsg{}
 		port.incomingBuf.Push(msg)
 
 		msgRet := port.PeekIncoming()
@@ -189,7 +188,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from outgoing buffer", func() {
-		msg := sampleMsg{}
+		msg := &sampleMsg{}
 		port.outgoingBuf.Push(msg)
 
 		msgRet := port.PeekOutgoing()
@@ -205,7 +204,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from incoming buffer",
 		func() {
-			msg := sampleMsg{}
+			msg := &sampleMsg{}
 			port.incomingBuf.Push(msg)
 
 			msgRet := port.RetrieveIncoming()
@@ -221,7 +220,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from outgoing buffer",
 		func() {
-			msg := sampleMsg{}
+			msg := &sampleMsg{}
 			port.outgoingBuf.Push(msg)
 
 			msgRet := port.RetrieveOutgoing()

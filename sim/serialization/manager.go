@@ -46,16 +46,26 @@ func (m *Manager) Serialize(obj any) error {
 	return nil
 }
 
-func (m *Manager) Deserialize() (any, error) {
+func (m *Manager) Deserialize(s Serializable) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	mapped, err := m.codec.Decode()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return m.deserializeFromMap(mapped)
+	deserializedMap, err := m.deserializeInternal(mapped)
+	if err != nil {
+		return err
+	}
+
+	err = s.Deserialize(deserializedMap.(map[string]any))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *Manager) serializeToMap(
@@ -94,55 +104,9 @@ func (m *Manager) serializeToMap(
 
 	case reflect.Map:
 		return m.serializeMap(obj)
-
-	case reflect.Struct:
-		return m.serializeStruct(obj)
 	}
 
 	return nil, fmt.Errorf("unsupported type: %s", objType.String())
-}
-
-func (m *Manager) serializeStruct(obj any) (map[string]any, error) {
-	objType := reflect.TypeOf(obj)
-	typeName := objType.PkgPath() + "." + objType.Name()
-
-	serializable, ok := obj.(Serializable)
-	if !ok {
-		return nil, fmt.Errorf(
-			"%s is not a Serializable",
-			typeName,
-		)
-	}
-
-	mapped, err := serializable.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	mapped, err = m.serializeStructInternal(mapped)
-	if err != nil {
-		return nil, err
-	}
-
-	mapped["type"] = typeName
-	mapped["type_kind"] = objType.Kind().String()
-
-	return mapped, nil
-}
-
-func (m *Manager) serializeStructInternal(
-	mapped map[string]any,
-) (map[string]any, error) {
-	for k, v := range mapped {
-		simple, err := m.serializeToMap(v)
-		if err != nil {
-			return nil, err
-		}
-
-		mapped[k] = simple
-	}
-
-	return mapped, nil
 }
 
 func (*Manager) serializeMap(obj any) (map[string]any, error) {
@@ -195,18 +159,17 @@ func (m *Manager) serializeSlice(obj any) (map[string]any, error) {
 func (m *Manager) serializePtr(
 	obj any,
 ) (map[string]any, error) {
-	objType := reflect.ValueOf(obj).Elem().Type()
-	typeName := objType.PkgPath() + "." + objType.Name()
+	typeKind, typeName := typeKindName(obj)
 
-	if reflect.ValueOf(obj).IsNil() {
+	if typeKind == "nil" {
 		return map[string]any{
 			"type":      typeName,
-			"type_kind": reflect.TypeOf(obj).Kind().String(),
+			"type_kind": typeKind,
 			"value":     nil,
 		}, nil
 	}
 
-	if registeredAsPtr(typeName) {
+	if typeKind == "serializable" {
 		simpleMap, err := obj.(Serializable).Serialize()
 		if err != nil {
 			return nil, err
@@ -218,14 +181,14 @@ func (m *Manager) serializePtr(
 		}
 
 		simpleMap["type"] = typeName
-		simpleMap["type_kind"] = reflect.TypeOf(obj).Kind().String()
+		simpleMap["type_kind"] = "serializable"
 
 		return simpleMap, nil
 	}
 
 	nested := map[string]any{
 		"type":      typeName,
-		"type_kind": reflect.TypeOf(obj).Kind().String(),
+		"type_kind": typeKind,
 		"value":     nil,
 	}
 
@@ -241,151 +204,133 @@ func (m *Manager) serializePtr(
 	return nested, nil
 }
 
-func (m *Manager) deserializeFromMap(mapped map[string]any) (any, error) {
-	typeKind := mapped["type_kind"].(string)
-
-	switch typeKind {
-	case "int":
-		return m.deserializeInt(mapped)
-	case "float64":
-		return m.deserializeFloat64(mapped)
-	case "string":
-		return m.deserializeString(mapped)
-	case "ptr":
-		return m.deserializePtr(mapped)
-	case "slice":
-		return m.deserializeSlice(mapped)
-	case "struct":
-		return m.deserializeStruct(mapped)
-	default:
-		return nil, fmt.Errorf("unsupported type: %s", typeKind)
-	}
-}
-
-func (m *Manager) deserializePtr(mapped map[string]any) (any, error) {
-	typeName := mapped["type"].(string)
-
-	if registeredAsPtr(typeName) {
-		return m.deserializeStruct(mapped)
-	}
-
-	rawValue, ok := mapped["value"]
-	if !ok {
-		return nil, fmt.Errorf("missing value field for ptr")
-	}
-
-	if rawValue == nil {
-		return nil, nil
-	}
-
-	valueMap, ok := rawValue.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("value for ptr is not a map")
-	}
-
-	value, err := m.deserializeFromMap(valueMap)
-	if err != nil {
-		return nil, err
-	}
-
-	v := reflect.ValueOf(value)
-	if v.Kind() != reflect.Ptr {
-		ptr := reflect.New(v.Type())
-		ptr.Elem().Set(v)
-
-		return ptr.Interface(), nil
-	}
-
-	return value, nil
-}
-
-func (m *Manager) deserializeSlice(mapped map[string]any) (any, error) {
-	elemType := registry.registeredType(mapped["type"].(string))
-	if elemType == nil {
-		return nil, fmt.Errorf(
-			"type not registered: %s", mapped["type"].(string),
-		)
-	}
-
-	slice := reflect.MakeSlice(
-		reflect.SliceOf(elemType),
-		len(mapped["value"].([]any)),
-		len(mapped["value"].([]any)),
-	)
-
-	for i, v := range mapped["value"].([]any) {
-		elem, err := m.deserializeFromMap(v.(map[string]any))
+func (m *Manager) serializeStructInternal(
+	mapped map[string]any,
+) (map[string]any, error) {
+	for k, v := range mapped {
+		simple, err := m.serializeToMap(v)
 		if err != nil {
 			return nil, err
 		}
 
-		slice.Index(i).Set(reflect.ValueOf(elem))
+		mapped[k] = simple
 	}
 
-	return slice.Interface(), nil
+	return mapped, nil
 }
 
-func (m *Manager) deserializeStruct(mapped map[string]any) (any, error) {
-	typeName := mapped["type"].(string)
+func (m *Manager) deserializeInternal(
+	mapped map[string]any,
+) (any, error) {
+	typeKind := mapped["type_kind"].(string)
 
+	switch typeKind {
+	case "slice":
+		return m.deserializeSlice(mapped)
+	case "serializable":
+		return m.deserializeSerializableInternal(mapped)
+	default:
+		return m.deserializePrimitive(mapped)
+	}
+}
+
+func (m *Manager) deserializeSlice(mapped map[string]any) (any, error) {
+	delete(mapped, "type")
+	delete(mapped, "type_kind")
+
+	slice := []any{}
+
+	for _, v := range mapped["value"].([]any) {
+		simple, err := m.deserializeInternal(v.(map[string]any))
+		if err != nil {
+			return nil, err
+		}
+
+		slice = append(slice, simple)
+	}
+
+	return slice, nil
+}
+
+func (m *Manager) deserializeSerializableInternal(
+	mapped map[string]any,
+) (any, error) {
 	delete(mapped, "type")
 	delete(mapped, "type_kind")
 
 	for k, v := range mapped {
-		nested, err := m.deserializeFromMap(v.(map[string]any))
+		simple, err := m.deserializeInternal(v.(map[string]any))
 		if err != nil {
 			return nil, err
 		}
 
-		mapped[k] = nested
+		mapped[k] = simple
 	}
 
-	emptyV, err := CreateInstance(typeName)
-	if err != nil {
-		return nil, err
-	}
-
-	value, err := emptyV.Deserialize(mapped)
-	if err != nil {
-		return nil, err
-	}
-
-	return value, nil
+	return mapped, nil
 }
 
-func (*Manager) deserializeInt(mapped map[string]any) (any, error) {
-	f64, ok := mapped["value"].(float64)
-	if !ok {
-		return nil, fmt.Errorf("value is not an int")
-	}
+// Type converter function type
+type typeConverter func(any) any
 
-	return int(f64), nil
+// Map of type converters
+var typeConverters = map[string]typeConverter{
+	"bool":       func(v any) any { return v.(bool) },
+	"int":        func(v any) any { return int(v.(float64)) },
+	"int8":       func(v any) any { return int8(v.(float64)) },
+	"int16":      func(v any) any { return int16(v.(float64)) },
+	"int32":      func(v any) any { return int32(v.(float64)) },
+	"int64":      func(v any) any { return int64(v.(float64)) },
+	"uint":       func(v any) any { return uint(v.(float64)) },
+	"uint8":      func(v any) any { return uint8(v.(float64)) },
+	"uint16":     func(v any) any { return uint16(v.(float64)) },
+	"uint32":     func(v any) any { return uint32(v.(float64)) },
+	"uint64":     func(v any) any { return uint64(v.(float64)) },
+	"float32":    func(v any) any { return float32(v.(float64)) },
+	"float64":    func(v any) any { return v.(float64) },
+	"ptr":        func(v any) any { return v },
+	"string":     func(v any) any { return v },
+	"complex64":  func(v any) any { return complex64(v.(complex128)) },
+	"complex128": func(v any) any { return v.(complex128) },
+	"nil":        func(v any) any { return nil },
 }
 
-func (*Manager) deserializeFloat64(mapped map[string]any) (any, error) {
-	f64, ok := mapped["value"].(float64)
-	if !ok {
-		return nil, fmt.Errorf("value is not a float64")
+func (m *Manager) deserializePrimitive(mapValue map[string]any) (any, error) {
+	typeKind := mapValue["type_kind"].(string)
+	converter, exists := typeConverters[typeKind]
+
+	if !exists {
+		return nil, fmt.Errorf(
+			"type %s is not supported or not primitive",
+			typeKind,
+		)
 	}
 
-	return f64, nil
+	return converter(mapValue["value"]), nil
 }
 
-func (*Manager) deserializeString(mapped map[string]any) (any, error) {
-	str, ok := mapped["value"].(string)
-	if !ok {
-		return nil, fmt.Errorf("value is not a string")
+func typeKindName(val any) (kind, name string) {
+	if reflect.ValueOf(val).IsNil() {
+		return "nil", "nil"
 	}
 
-	return str, nil
+	typeOf := reflect.TypeOf(val)
+	if typeOf.Kind() == reflect.Ptr {
+		typeOf = typeOf.Elem()
+	}
+
+	kind = typeOf.Kind().String()
+	name = typeOf.PkgPath() + "." + typeOf.Name()
+
+	if registered(name) {
+		kind = "serializable"
+	}
+
+	return kind, name
 }
 
-func registeredAsPtr(typeName string) bool {
+func registered(typeName string) bool {
 	registeredType := registry.registeredType(typeName)
 
-	if registeredType == nil {
-		return false
-	}
-
-	return registeredType.Kind() == reflect.Ptr
+	return registeredType != nil
 }

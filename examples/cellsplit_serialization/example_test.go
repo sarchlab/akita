@@ -26,7 +26,7 @@ func firstStage() {
 	sim := simulation.NewSimulation()
 	config(sim)
 
-	sim.GetEngine().Schedule(splitEvent{
+	sim.GetEngine().Schedule(&splitEvent{
 		id:      id.Generate(),
 		time:    0,
 		handler: sim.GetLocation("handler").(timing.Handler),
@@ -47,15 +47,15 @@ func secondStage() {
 	handler.endTime = timing.VTimeInSec(200)
 
 	engine := sim.GetEngine()
-	engine.Schedule(splitEvent{
+	engine.Schedule(&splitEvent{
 		id:      id.Generate(),
-		time:    engine.Now(),
+		time:    100,
 		handler: sim.GetLocation("handler").(timing.Handler),
 	})
 
 	engine.Run()
 
-	fmt.Printf("Total number at time %.10f: %d\n",
+	fmt.Printf("Total number at time %.1f: %d\n",
 		engine.Now(),
 		handler.total,
 	)
@@ -65,5 +65,5 @@ func Example() {
 	firstStage()
 	secondStage()
 
-	// Output: Total number at time 10: 69
+	// Output: Total number at time 197.9: 138
 }

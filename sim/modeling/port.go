@@ -89,11 +89,11 @@ func (p *defaultPort) Serialize() (map[string]any, error) {
 // Deserialize deserializes the port.
 func (p *defaultPort) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	p.incomingBuf = data["incoming_buf"].(queueing.Buffer)
 	p.outgoingBuf = data["outgoing_buf"].(queueing.Buffer)
 
-	return p, nil
+	return nil
 }
 
 // AsRemote returns the remote port name.

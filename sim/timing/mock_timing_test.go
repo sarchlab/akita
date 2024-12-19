@@ -8,7 +8,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	hooking "github.com/sarchlab/akita/v4/sim/hooking"
-	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // MockEngine is a mock of Engine interface.
@@ -59,12 +58,11 @@ func (mr *MockEngineMockRecorder) Continue() *gomock.Call {
 }
 
 // Deserialize mocks base method.
-func (m *MockEngine) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+func (m *MockEngine) Deserialize(arg0 map[string]interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deserialize", arg0)
-	ret0, _ := ret[0].(serialization.Serializable)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Deserialize indicates an expected call of Deserialize.
@@ -220,12 +218,11 @@ func (m *MockEvent) EXPECT() *MockEventMockRecorder {
 }
 
 // Deserialize mocks base method.
-func (m *MockEvent) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+func (m *MockEvent) Deserialize(arg0 map[string]interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deserialize", arg0)
-	ret0, _ := ret[0].(serialization.Serializable)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Deserialize indicates an expected call of Deserialize.

@@ -41,12 +41,12 @@ func (e splitEvent) Serialize() (map[string]any, error) {
 	}, nil
 }
 
-func (e splitEvent) Deserialize(
+func (e *splitEvent) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	e.id = data["id"].(string)
 	e.time = data["time"].(timing.VTimeInSec)
 	e.handler = data["handler"].(timing.Handler)
 
-	return e, nil
+	return nil
 }

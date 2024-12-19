@@ -34,7 +34,7 @@ func (r *typeRegistry) registerType(
 	return nil
 }
 
-func (r *typeRegistry) createInstance(typeName string) (Serializable, error) {
+func (r *typeRegistry) createInstance(typeName string) (any, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -48,20 +48,12 @@ func (r *typeRegistry) createInstance(typeName string) (Serializable, error) {
 		valueType = exampleType.Elem()
 	}
 
-	instance := reflect.New(valueType).Interface()
-
-	if exampleType.Kind() == reflect.Ptr {
-		ptrValue := reflect.New(exampleType).Elem()
-		ptrValue.Set(reflect.ValueOf(instance))
-		instance = ptrValue.Interface()
+	newValue := reflect.New(valueType)
+	if exampleType.Kind() != reflect.Ptr {
+		newValue = newValue.Elem()
 	}
 
-	serializable, ok := instance.(Serializable)
-	if !ok {
-		return nil, fmt.Errorf("type %s is not a Serializable", typeName)
-	}
-
-	return serializable, nil
+	return newValue.Interface(), nil
 }
 
 func (r *typeRegistry) registeredType(typeName string) reflect.Type {
@@ -100,8 +92,4 @@ var registry = typeRegistry{
 
 func RegisterType(t reflect.Type) error {
 	return registry.registerType(t)
-}
-
-func CreateInstance(typeName string) (Serializable, error) {
-	return registry.createInstance(typeName)
 }

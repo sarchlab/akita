@@ -14,7 +14,7 @@ func Example() {
 		engine: engine,
 	}
 
-	engine.Schedule(splitEvent{
+	engine.Schedule(&SplitEvent{
 		time:    0,
 		handler: handler,
 	})
