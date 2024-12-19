@@ -3,7 +3,6 @@ package directconnection
 
 import (
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 type ports struct {
@@ -56,10 +55,10 @@ func (c *Comp) Serialize() (map[string]any, error) {
 // Deserialize deserializes the component.
 func (c *Comp) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	c.nextPortID = data["next_port_id"].(int)
 
-	return c, nil
+	return nil
 }
 
 // PlugIn marks the port connects to this DirectConnection.
