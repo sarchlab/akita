@@ -33,13 +33,13 @@ type Buffer interface {
 
 // BufferBuilder is a builder for Buffer.
 type BufferBuilder struct {
-	simulation *simulation.Simulation
+	simulation simulation.Simulation
 	capacity   int
 }
 
 // WithSimulation defines simulation environment of the buffer.
 func (b BufferBuilder) WithSimulation(
-	sim *simulation.Simulation,
+	sim simulation.Simulation,
 ) BufferBuilder {
 	b.simulation = sim
 	return b

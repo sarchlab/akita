@@ -64,12 +64,6 @@ jobs:
           version: "latest"
           args: --timeout=10m
 
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
-
-      - name: Unit Test
-        run: ginkgo -r
-
   akita_unit_test:
     name: Akita Unit Test
     needs: akita_compile
@@ -83,6 +77,12 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: "stable"
+
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@latest
+
+      - name: Generate Mocks
+        run: go generate ./...
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
