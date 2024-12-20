@@ -101,7 +101,7 @@ func (m *Manager) RegisterDeserializationStartingPoint(s Serializable) {
 }
 
 func (m *Manager) registerDeserializationElement(s Serializable) {
-	m.serialized[s.ID()] = s
+	m.serialized[s.Name()] = s
 
 	value := reflect.ValueOf(s)
 	if value.Kind() == reflect.Ptr {
@@ -178,7 +178,7 @@ func (m *Manager) serializeSerializable(s Serializable) (*Value, error) {
 		return nilValue(), nil
 	}
 
-	id := s.ID()
+	id := s.Name()
 	if _, ok := m.serialized[id]; ok {
 		return IDToDeserialize(id), nil
 	}
@@ -208,7 +208,7 @@ func (m *Manager) serializeSerializable(s Serializable) (*Value, error) {
 	m.data[id] = v
 	m.serialized[id] = v
 
-	return IDToDeserialize(s.ID()), nil
+	return IDToDeserialize(s.Name()), nil
 }
 
 // // Serialize adds an object to the serialization session.
@@ -507,7 +507,7 @@ func (m *Manager) deserializeSerializable(vID *Value) (any, error) {
 		return nil, err
 	}
 
-	m.serialized[deserialized.(Serializable).ID()] = deserialized
+	m.serialized[deserialized.(Serializable).Name()] = deserialized
 
 	return deserialized, nil
 }

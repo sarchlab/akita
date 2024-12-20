@@ -24,13 +24,13 @@ func TestSerialization(t *testing.T) {
 }
 
 type TestType1 struct {
-	id             string
+	name           string
 	v1             int
 	NonSerializing int
 }
 
-func (t *TestType1) ID() string {
-	return t.id
+func (t *TestType1) Name() string {
+	return t.name
 }
 
 func (t *TestType1) Serialize() (map[string]any, error) {
@@ -48,13 +48,13 @@ func (t *TestType1) Deserialize(
 }
 
 type TestType2 struct {
-	id  string
-	v2  int
-	Ptr *TestType1
+	name string
+	v2   int
+	Ptr  *TestType1
 }
 
-func (t *TestType2) ID() string {
-	return t.id
+func (t *TestType2) Name() string {
+	return t.name
 }
 
 func (t *TestType2) Serialize() (map[string]any, error) {
@@ -79,13 +79,14 @@ func (t *TestType2) Deserialize(
 }
 
 type TestType3 struct {
+	name  string
 	Value int
 	Data  []byte
 	deps  []*TestType1
 }
 
-func (t *TestType3) ID() string {
-	return "test_type_3"
+func (t *TestType3) Name() string {
+	return t.name
 }
 
 func (t *TestType3) Serialize() (map[string]any, error) {
@@ -137,7 +138,7 @@ var _ = Describe("Serialization", func() {
 	})
 
 	It("should serialize a simple serializable", func() {
-		s := &TestType1{id: "1", v1: 1}
+		s := &TestType1{name: "1", v1: 1}
 		manager.StartSerialization()
 		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
@@ -155,9 +156,9 @@ var _ = Describe("Serialization", func() {
 
 	It("should serialize nested serializable", func() {
 		s := &TestType2{
-			id:  "2",
-			v2:  1,
-			Ptr: &TestType1{id: "1", v1: 2},
+			name: "2",
+			v2:   1,
+			Ptr:  &TestType1{name: "1", v1: 2},
 		}
 
 		manager.StartSerialization()
@@ -178,8 +179,8 @@ var _ = Describe("Serialization", func() {
 
 	It("should serialized if field is nil", func() {
 		s := &TestType2{
-			id: "2",
-			v2: 1,
+			name: "2",
+			v2:   1,
 		}
 
 		manager.StartSerialization()
