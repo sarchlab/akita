@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
-func config(sim *simulation.Simulation) {
+func config(sim simulation.Simulation) {
 	engine := timing.NewSerialEngine()
 	sim.RegisterEngine(engine)
 

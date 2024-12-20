@@ -25,13 +25,14 @@ var _ = Describe("Pipeline", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		sim = NewMockSimulation(mockCtrl)
-		sim.EXPECT().RegisterStateHolder(gomock.Any())
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
 		postPipelineBuffer = BufferBuilder{}.
 			WithSimulation(sim).
 			WithCapacity(1).
 			Build("PostPipelineBuffer").(*bufferImpl)
 		pipeline = MakePipelineBuilder().
+			WithSimulation(sim).
 			WithPipelineWidth(1).
 			WithNumStage(100).
 			WithCyclePerStage(2).
@@ -113,13 +114,14 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		sim = NewMockSimulation(mockCtrl)
 
-		sim.EXPECT().RegisterStateHolder(gomock.Any())
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
 		postPipelineBuffer = BufferBuilder{}.
 			WithSimulation(sim).
 			WithCapacity(1).
 			Build("PostPipelineBuffer").(*bufferImpl)
 		pipeline = MakePipelineBuilder().
+			WithSimulation(sim).
 			WithPipelineWidth(1).
 			WithNumStage(0).
 			WithCyclePerStage(2).
