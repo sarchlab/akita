@@ -7,16 +7,27 @@ import (
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
+// Simulation defines everything required to run a simulation.
+type Simulation interface {
+	RegisterEngine(e timing.Engine)
+	GetEngine() timing.Engine
+	RegisterStateHolder(obj StateHolder)
+	GetStateHolder(name string) StateHolder
+	GetState(name string) State
+	Save(filename string)
+	Load(filename string)
+}
+
 // NewSimulation creates a new simulation.
-func NewSimulation() *Simulation {
-	return &Simulation{
+func NewSimulation() Simulation {
+	return &sim{
 		stateHolder: make(map[string]StateHolder),
 		states:      make(map[string]State),
 	}
 }
 
 // A Simulation provides the service requires to define a simulation.
-type Simulation struct {
+type sim struct {
 	engine timing.Engine
 
 	stateHolder map[string]StateHolder
@@ -24,33 +35,33 @@ type Simulation struct {
 }
 
 // RegisterEngine registers the engine used in the simulation.
-func (s *Simulation) RegisterEngine(e timing.Engine) {
+func (s *sim) RegisterEngine(e timing.Engine) {
 	s.engine = e
 }
 
 // GetEngine returns the engine used in the simulation.
-func (s *Simulation) GetEngine() timing.Engine {
+func (s *sim) GetEngine() timing.Engine {
 	return s.engine
 }
 
 // RegisterStateful registers a stateful object with the simulation.
-func (s *Simulation) RegisterStateHolder(obj StateHolder) {
+func (s *sim) RegisterStateHolder(obj StateHolder) {
 	s.stateHolder[obj.Name()] = obj
 	s.states[obj.Name()] = obj.State()
 }
 
 // GetStateHolder returns a stateful object by its name.
-func (s *Simulation) GetStateHolder(name string) StateHolder {
+func (s *sim) GetStateHolder(name string) StateHolder {
 	return s.stateHolder[name]
 }
 
 // GetState returns a state by its name.
-func (s *Simulation) GetState(name string) State {
+func (s *sim) GetState(name string) State {
 	return s.states[name]
 }
 
 // Save saves the state of the simulation to a file.
-func (s *Simulation) Save(filename string) {
+func (s *sim) Save(filename string) {
 	codec := serialization.NewJSONCodec()
 	serializer := serialization.NewManager(codec)
 
@@ -72,7 +83,7 @@ func (s *Simulation) Save(filename string) {
 	serializer.FinalizeSerialization(file)
 }
 
-func (s *Simulation) Load(filename string) {
+func (s *sim) Load(filename string) {
 	codec := serialization.NewJSONCodec()
 	serializer := serialization.NewManager(codec)
 
