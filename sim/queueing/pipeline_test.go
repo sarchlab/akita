@@ -4,6 +4,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 type pipelineItem struct {
@@ -17,13 +18,19 @@ func (p pipelineItem) TaskID() string {
 var _ = Describe("Pipeline", func() {
 	var (
 		mockCtrl           *gomock.Controller
+		sim                *simulation.Simulation
 		postPipelineBuffer *bufferImpl
 		pipeline           Pipeline
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		postPipelineBuffer = NewBuffer("PostPipelineBuffer", 1)
+
+		sim = simulation.NewSimulation()
+		postPipelineBuffer = BufferBuilder{}.
+			WithSimulation(sim).
+			WithCapacity(1).
+			Build("PostPipelineBuffer").(*bufferImpl)
 		pipeline = MakePipelineBuilder().
 			WithPipelineWidth(1).
 			WithNumStage(100).
@@ -97,13 +104,18 @@ var _ = Describe("Pipeline", func() {
 var _ = Describe("Zero-Stage Pipeline", func() {
 	var (
 		mockCtrl           *gomock.Controller
+		sim                *simulation.Simulation
 		postPipelineBuffer *bufferImpl
 		pipeline           Pipeline
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		postPipelineBuffer = NewBuffer("PostPipelineBuffer", 1)
+		sim = simulation.NewSimulation()
+		postPipelineBuffer = BufferBuilder{}.
+			WithSimulation(sim).
+			WithCapacity(1).
+			Build("PostPipelineBuffer").(*bufferImpl)
 		pipeline = MakePipelineBuilder().
 			WithPipelineWidth(1).
 			WithNumStage(0).

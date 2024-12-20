@@ -3,16 +3,21 @@ package queueing
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 var _ = Describe("BufferImpl", func() {
-
 	var (
+		sim *simulation.Simulation
 		buf Buffer
 	)
 
 	BeforeEach(func() {
-		buf = NewBuffer("Buf", 2)
+		sim = simulation.NewSimulation()
+		buf = BufferBuilder{}.
+			WithSimulation(sim).
+			WithCapacity(2).
+			Build("Buf")
 	})
 
 	It("should allow push and pop", func() {
