@@ -89,35 +89,6 @@ func (m *Manager) StartDeserialization(reader io.Reader) {
 	}
 }
 
-// RegisterDeserializationStartingPoint registers a starting point for
-// deserialization. This function allows merging deserialization with
-// existing data.
-func (m *Manager) RegisterDeserializationStartingPoint(s Serializable) {
-	if m.mode != modeDeserialization {
-		panic("deserialization session is not active")
-	}
-
-	m.registerDeserializationElement(s)
-}
-
-func (m *Manager) registerDeserializationElement(s Serializable) {
-	m.serialized[s.Name()] = s
-
-	value := reflect.ValueOf(s)
-	if value.Kind() == reflect.Ptr {
-		value = value.Elem()
-	}
-
-	for i := 0; i < value.NumField(); i++ {
-		field := value.Field(i)
-
-		_, typeName := typeKindName(field.Interface())
-		if registered(typeName) {
-			m.registerDeserializationElement(field.Interface().(Serializable))
-		}
-	}
-}
-
 // FinalizeSerialization finalizes a serialization session by writing the data
 // to the writer.
 func (m *Manager) FinalizeSerialization(writer io.Writer) {
@@ -138,17 +109,19 @@ func (m *Manager) FinalizeDeserialization() {
 
 // Serialize converts an object to a map[string]any.
 func (m *Manager) Serialize(obj any) (*Value, error) {
-	s, isSerializable := obj.(Serializable)
-	if !isSerializable {
-		v, err := m.serializePrimitive(obj)
-		if err != nil {
-			return nil, err
-		}
-
-		return v, nil
+	if m.mode != modeSerialization {
+		panic("serialization session is not active")
 	}
 
-	return m.serializeSerializable(s)
+	k, _ := typeKindName(obj)
+	switch k {
+	case "slice":
+		return m.serializeSlice(obj)
+	case "serializable":
+		return m.serializeSerializable(obj.(Serializable))
+	default:
+		return m.serializePrimitive(obj)
+	}
 }
 
 // Deserialize converts a Value to an object.
@@ -156,6 +129,8 @@ func (m *Manager) Deserialize(v *Value) (any, error) {
 	switch v.K {
 	case "id":
 		return m.deserializeSerializable(v)
+	case "slice":
+		return m.deserializeSlice(v)
 	default:
 		return m.deserializePrimitive(v)
 	}
@@ -171,6 +146,67 @@ func (m *Manager) serializePrimitive(obj any) (*Value, error) {
 	}
 
 	return v, nil
+}
+
+func (m *Manager) serializeSlice(obj any) (*Value, error) {
+	slice := reflect.ValueOf(obj)
+	values := make([]*Value, 0, slice.Len())
+
+	for i := 0; i < slice.Len(); i++ {
+		elem := slice.Index(i)
+
+		v, err := m.Serialize(elem.Interface())
+		if err != nil {
+			return nil, err
+		}
+
+		values = append(values, v)
+	}
+
+	k, t := typeKindName(obj)
+	v := &Value{
+		T: t,
+		K: k,
+		V: values,
+	}
+
+	return v, nil
+}
+
+func (m *Manager) deserializeSlice(v *Value) (any, error) {
+	// Ensure v is actually representing a slice.
+	if v.K != "slice" {
+		return nil, fmt.Errorf("value kind is %s, not 'slice'", v.K)
+	}
+
+	// Convert v.V to []any.
+	rawSlice, ok := v.V.([]any)
+	if !ok {
+		return nil, fmt.Errorf("value V is not a slice")
+	}
+
+	// Prepare a result slice
+	result := make([]any, 0, len(rawSlice))
+
+	// Each element of rawSlice is a serialized Value (in map form).
+	// Convert it back to a *Value and deserialize it.
+	for _, elem := range rawSlice {
+		elemMap, ok := elem.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("slice element is not a map")
+		}
+
+		elemVal := v.mapToValue(elemMap)
+
+		deserializedElem, err := m.Deserialize(elemVal)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, deserializedElem)
+	}
+
+	return result, nil
 }
 
 func (m *Manager) serializeSerializable(s Serializable) (*Value, error) {
@@ -210,265 +246,6 @@ func (m *Manager) serializeSerializable(s Serializable) (*Value, error) {
 
 	return IDToDeserialize(s.Name()), nil
 }
-
-// // Serialize adds an object to the serialization session.
-// func (m *Manager) Serialize(obj any) error {
-// 	if m.mode != modeSerialization {
-// 		return fmt.Errorf("serialization session is not active")
-// 	}
-
-// 	var err error
-
-// 	m.lock.Lock()
-// 	defer m.lock.Unlock()
-
-// 	mapped, err := m.serializeToMap(obj)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
-
-// func (m *Manager) Deserialize(s Serializable) error {
-// 	m.lock.Lock()
-// 	defer m.lock.Unlock()
-
-// 	mapped, err := m.codec.Decode()
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	deserializedMap, err := m.deserializeInternal(mapped)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	err = s.Deserialize(deserializedMap.(map[string]any))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
-
-// // DeserializeItem deserializes an item from a map.
-// func (m *Manager) DeserializeItem(
-// 	mapped map[string]any,
-// ) (any, error) {
-// 	typeKind := mapped["type_kind"].(string)
-
-// 	switch typeKind {
-// 	case "slice":
-// 		return m.deserializeSlice(mapped)
-// 	case "serializable":
-// 		return m.deserializeSerializableInternal(mapped)
-// 	default:
-// 		return m.deserializePrimitive(mapped)
-// 	}
-// }
-
-// func (m *Manager) serializeToMap(
-// 	obj any,
-// ) (map[string]any, error) {
-// 	objType := reflect.TypeOf(obj)
-
-// 	switch objType.Kind() {
-// 	case reflect.Bool,
-// 		reflect.Int,
-// 		reflect.Int8,
-// 		reflect.Int16,
-// 		reflect.Int32,
-// 		reflect.Int64,
-// 		reflect.Uint,
-// 		reflect.Uint8,
-// 		reflect.Uint16,
-// 		reflect.Uint32,
-// 		reflect.Uint64,
-// 		reflect.Uintptr,
-// 		reflect.Float32,
-// 		reflect.Float64,
-// 		reflect.Complex64,
-// 		reflect.Complex128,
-// 		reflect.String:
-// 		return map[string]any{
-// 			"type_kind": objType.Kind().String(),
-// 			"value":     obj,
-// 		}, nil
-
-// 	case reflect.Ptr:
-// 		return m.serializePtr(obj)
-
-// 	case reflect.Slice:
-// 		return m.serializeSlice(obj)
-
-// 	case reflect.Map:
-// 		return m.serializeMap(obj)
-// 	}
-
-// 	return nil, fmt.Errorf("unsupported type: %s", objType.String())
-// }
-
-// func (*Manager) serializeMap(obj any) (map[string]any, error) {
-// 	mapValue := reflect.ValueOf(obj)
-// 	simpleMap := make(map[string]any, mapValue.Len())
-
-// 	for _, key := range mapValue.MapKeys() {
-// 		simpleMap[key.String()] = mapValue.MapIndex(key).Interface()
-// 	}
-
-// 	return map[string]any{
-// 		"value":     simpleMap,
-// 		"type_kind": reflect.TypeOf(obj).Kind().String(),
-// 	}, nil
-// }
-
-// func (m *Manager) serializeSlice(obj any) (map[string]any, error) {
-// 	slice := reflect.ValueOf(obj)
-// 	simpleSlice := make([]interface{}, slice.Len())
-
-// 	for i := 0; i < slice.Len(); i++ {
-// 		element := slice.Index(i)
-
-// 		simple, err := m.serializeToMap(element.Interface())
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		simpleSlice[i] = simple
-// 	}
-
-// 	elemType := reflect.TypeOf(obj).Elem()
-// 	if elemType.Kind() == reflect.Ptr {
-// 		elemType = elemType.Elem()
-// 	}
-
-// 	typeName := elemType.Name()
-// 	if elemType.Kind() == reflect.Interface ||
-// 		elemType.Kind() == reflect.Struct {
-// 		typeName = elemType.PkgPath() + "." + typeName
-// 	}
-
-// 	return map[string]any{
-// 		"value":     simpleSlice,
-// 		"type":      typeName,
-// 		"type_kind": reflect.TypeOf(obj).Kind().String(),
-// 	}, nil
-// }
-
-// func (m *Manager) serializePtr(
-// 	obj any,
-// ) (map[string]any, error) {
-// 	typeKind, typeName := typeKindName(obj)
-
-// 	if typeKind == "nil" {
-// 		return map[string]any{
-// 			"type":      typeName,
-// 			"type_kind": typeKind,
-// 			"value":     nil,
-// 		}, nil
-// 	}
-
-// 	if typeKind == "serializable" {
-// 		simpleMap, err := obj.(Serializable).Serialize()
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		simpleMap, err = m.serializeStructInternal(simpleMap)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		simpleMap["type"] = typeName
-// 		simpleMap["type_kind"] = "serializable"
-
-// 		return simpleMap, nil
-// 	}
-
-// 	nested := map[string]any{
-// 		"type":      typeName,
-// 		"type_kind": typeKind,
-// 		"value":     nil,
-// 	}
-
-// 	value, err := m.serializeToMap(
-// 		reflect.ValueOf(obj).Elem().Interface(),
-// 	)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	nested["value"] = value
-
-// 	return nested, nil
-// }
-
-// func (m *Manager) serializeStructInternal(
-// 	mapped map[string]any,
-// ) (map[string]any, error) {
-// 	for k, v := range mapped {
-// 		simple, err := m.serializeToMap(v)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		mapped[k] = simple
-// 	}
-
-// 	return mapped, nil
-// }
-
-// func (m *Manager) deserializeInternal(
-// 	mapped map[string]any,
-// ) (any, error) {
-// 	typeKind := mapped["type_kind"].(string)
-
-// 	switch typeKind {
-// 	case "slice":
-// 		return m.deserializeSlice(mapped)
-// 	case "serializable":
-// 		return m.deserializeSerializableInternal(mapped)
-// 	default:
-// 		return m.deserializePrimitive(mapped)
-// 	}
-// }
-
-// func (m *Manager) deserializeSlice(mapped map[string]any) (any, error) {
-// 	delete(mapped, "type")
-// 	delete(mapped, "type_kind")
-
-// 	slice := []any{}
-
-// 	for _, v := range mapped["value"].([]any) {
-// 		simple, err := m.deserializeInternal(v.(map[string]any))
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		slice = append(slice, simple)
-// 	}
-
-// 	return slice, nil
-// }
-
-// func (m *Manager) deserializeSerializableInternal(
-// 	mapped map[string]any,
-// ) (any, error) {
-// 	delete(mapped, "type")
-// 	delete(mapped, "type_kind")
-
-// 	for k, v := range mapped {
-// 		simple, err := m.deserializeInternal(v.(map[string]any))
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		mapped[k] = simple
-// 	}
-
-// 	return mapped, nil
-// }
 
 func (m *Manager) deserializeSerializable(vID *Value) (any, error) {
 	res, found := m.serialized[vID.V.(string)]
@@ -553,11 +330,19 @@ func (m *Manager) deserializePrimitive(v *Value) (any, error) {
 
 func typeKindName(val any) (kind, name string) {
 	typeOf := reflect.TypeOf(val)
-	if typeOf.Kind() == reflect.Ptr {
-		typeOf = typeOf.Elem()
-	}
-
 	kind = typeOf.Kind().String()
+
+	switch kind {
+	case "ptr":
+		typeOf = typeOf.Elem()
+	case "slice":
+		kind = "slice"
+		typeOf = typeOf.Elem()
+
+		if typeOf.Kind() == reflect.Ptr {
+			typeOf = typeOf.Elem()
+		}
+	}
 
 	name = typeOf.Name()
 	if typeOf.PkgPath() != "" {

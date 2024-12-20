@@ -106,19 +106,9 @@ func (t *TestType3) Deserialize(
 		t.Data = append(t.Data, v.(byte))
 	}
 
+	t.deps = make([]*TestType1, len(data["deps"].([]any)))
 	for i, depMap := range data["deps"].([]any) {
-		var dep *TestType1
-		if i < len(t.deps) {
-			dep = t.deps[i]
-		} else {
-			dep = &TestType1{}
-			t.deps = append(t.deps, dep)
-		}
-
-		err := dep.Deserialize(depMap.(map[string]any))
-		if err != nil {
-			return err
-		}
+		t.deps[i] = depMap.(*TestType1)
 	}
 
 	return nil
@@ -199,10 +189,15 @@ var _ = Describe("Serialization", func() {
 		manager.FinalizeDeserialization()
 	})
 
-	It("should merge non-serializing fields", func() {
-		s := &TestType2{
-			v2:  1,
-			Ptr: &TestType1{v1: 2, NonSerializing: 3},
+	It("should serialize slices", func() {
+		s := &TestType3{
+			name:  "3",
+			Value: 1,
+			Data:  []byte{1, 2, 3},
+			deps: []*TestType1{
+				{name: "T1_1", v1: 2},
+				{name: "T1_2", v1: 3},
+			},
 		}
 
 		manager.StartSerialization()
@@ -212,50 +207,13 @@ var _ = Describe("Serialization", func() {
 
 		fmt.Println(buffer.String())
 
-		value := &TestType2{
-			Ptr: &TestType1{
-				NonSerializing: 3,
-			},
-		}
-
 		manager.StartDeserialization(buffer)
-		manager.RegisterDeserializationStartingPoint(value)
-		result, err := manager.Deserialize(serialization.IDToDeserialize("2"))
+		result, err := manager.Deserialize(serialization.IDToDeserialize("3"))
 		Expect(err).To(BeNil())
-		Expect(result).To(BeAssignableToTypeOf(&TestType2{}))
-		Expect(result.(*TestType2).v2).To(Equal(1))
-		Expect(result.(*TestType2).Ptr.v1).To(Equal(2))
-		Expect(result.(*TestType2).Ptr.NonSerializing).To(Equal(3))
-		manager.FinalizeDeserialization()
+		Expect(result).To(BeAssignableToTypeOf(&TestType3{}))
+		Expect(result.(*TestType3).Value).To(Equal(1))
+		Expect(result.(*TestType3).Data).To(Equal([]byte{1, 2, 3}))
+		Expect(result.(*TestType3).deps).To(HaveLen(2))
+		Expect(result.(*TestType3).deps[0].v1).To(Equal(2))
 	})
-
-	// It("should serialize slices", func() {
-	// 	s := &TestType3{
-	// 		Value: 1,
-	// 		Data:  []byte{1, 2, 3},
-	// 		deps: []*TestType1{
-	// 			{v1: 2, NonSerializing: 3},
-	// 			{v1: 3, NonSerializing: 4},
-	// 		},
-	// 	}
-	// 	err := manager.Serialize(s)
-	// 	Expect(err).To(BeNil())
-
-	// 	fmt.Println(buffer.String())
-
-	// 	value := &TestType3{
-	// 		deps: []*TestType1{
-	// 			{NonSerializing: 3},
-	// 		},
-	// 	}
-	// 	err = manager.Deserialize(value)
-	// 	Expect(err).To(BeNil())
-	// 	Expect(value.Value).To(Equal(1))
-	// 	Expect(value.Data).To(Equal([]byte{1, 2, 3}))
-	// 	Expect(value.deps).To(HaveLen(2))
-	// 	Expect(value.deps[0].v1).To(Equal(2))
-	// 	Expect(value.deps[0].NonSerializing).To(Equal(3))
-	// 	Expect(value.deps[1].v1).To(Equal(3))
-	// 	Expect(value.deps[1].NonSerializing).To(Equal(0))
-	// })
 })
