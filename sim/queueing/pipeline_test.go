@@ -4,7 +4,6 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 type pipelineItem struct {
@@ -18,15 +17,16 @@ func (p pipelineItem) TaskID() string {
 var _ = Describe("Pipeline", func() {
 	var (
 		mockCtrl           *gomock.Controller
-		sim                *simulation.Simulation
+		sim                *MockSimulation
 		postPipelineBuffer *bufferImpl
 		pipeline           Pipeline
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().RegisterStateHolder(gomock.Any())
 
-		sim = simulation.NewSimulation()
 		postPipelineBuffer = BufferBuilder{}.
 			WithSimulation(sim).
 			WithCapacity(1).
@@ -104,14 +104,17 @@ var _ = Describe("Pipeline", func() {
 var _ = Describe("Zero-Stage Pipeline", func() {
 	var (
 		mockCtrl           *gomock.Controller
-		sim                *simulation.Simulation
+		sim                *MockSimulation
 		postPipelineBuffer *bufferImpl
 		pipeline           Pipeline
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		sim = simulation.NewSimulation()
+		sim = NewMockSimulation(mockCtrl)
+
+		sim.EXPECT().RegisterStateHolder(gomock.Any())
+
 		postPipelineBuffer = BufferBuilder{}.
 			WithSimulation(sim).
 			WithCapacity(1).
@@ -122,6 +125,7 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 			WithCyclePerStage(2).
 			WithPostPipelineBuffer(postPipelineBuffer).
 			Build("Pipeline")
+
 	})
 
 	AfterEach(func() {

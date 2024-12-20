@@ -1,19 +1,23 @@
 package queueing
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 var _ = Describe("BufferImpl", func() {
 	var (
-		sim *simulation.Simulation
-		buf Buffer
+		mockCtrl *gomock.Controller
+		sim      *MockSimulation
+		buf      Buffer
 	)
 
 	BeforeEach(func() {
-		sim = simulation.NewSimulation()
+		mockCtrl = gomock.NewController(GinkgoT())
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().RegisterStateHolder(gomock.Any())
+
 		buf = BufferBuilder{}.
 			WithSimulation(sim).
 			WithCapacity(2).
