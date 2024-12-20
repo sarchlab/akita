@@ -42,8 +42,19 @@ func (s *Simulation) GetEngine() timing.Engine {
 }
 
 // RegisterStateful registers a stateful object with the simulation.
-func (s *Simulation) RegisterStateful(obj StateHolder) {
+func (s *Simulation) RegisterStateHolder(obj StateHolder) {
 	s.stateHolder[obj.Name()] = obj
+	s.states[obj.Name()] = obj.State()
+}
+
+// GetStateHolder returns a stateful object by its name.
+func (s *Simulation) GetStateHolder(name string) StateHolder {
+	return s.stateHolder[name]
+}
+
+// GetState returns a state by its name.
+func (s *Simulation) GetState(name string) State {
+	return s.states[name]
 }
 
 // Save saves the state of the simulation to a file.

@@ -6,44 +6,55 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func init() {
-	serialization.RegisterType(reflect.TypeOf(&SplitHandler{}))
+	serialization.RegisterType(reflect.TypeOf(&state{}))
 }
 
-type SplitHandler struct {
-	name   string
-	engine timing.Engine
-	rand   *rand.Rand
-
+type state struct {
+	name    string
 	endTime timing.VTimeInSec
 	total   int
 }
 
-func (h *SplitHandler) ID() string {
-	return h.name
+func (s *state) Name() string {
+	return s.name
 }
 
-func (h *SplitHandler) Serialize() (map[string]any, error) {
+func (s *state) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"endTime": h.endTime,
-		"total":   h.total,
+		"endTime": s.endTime,
+		"total":   s.total,
 	}, nil
 }
 
-func (h *SplitHandler) Deserialize(
-	m map[string]any,
-) error {
-	h.endTime = m["endTime"].(timing.VTimeInSec)
-	h.total = m["total"].(int)
+func (s *state) Deserialize(m map[string]any) error {
+	s.endTime = m["endTime"].(timing.VTimeInSec)
+	s.total = m["total"].(int)
 
 	return nil
 }
 
+type SplitHandler struct {
+	*state
+
+	engine timing.Engine
+	rand   *rand.Rand
+}
+
 func (h *SplitHandler) Name() string {
 	return h.name
+}
+
+func (h *SplitHandler) State() simulation.State {
+	return h.state
+}
+
+func (h *SplitHandler) SetState(s simulation.State) {
+	h.state = s.(*state)
 }
 
 func (h *SplitHandler) Handle(evt timing.Event) error {
