@@ -174,22 +174,17 @@ func (m *Manager) serializeSlice(obj any) (*Value, error) {
 }
 
 func (m *Manager) deserializeSlice(v *Value) (any, error) {
-	// Ensure v is actually representing a slice.
 	if v.K != "slice" {
 		return nil, fmt.Errorf("value kind is %s, not 'slice'", v.K)
 	}
 
-	// Convert v.V to []any.
 	rawSlice, ok := v.V.([]any)
 	if !ok {
 		return nil, fmt.Errorf("value V is not a slice")
 	}
 
-	// Prepare a result slice
 	result := make([]any, 0, len(rawSlice))
 
-	// Each element of rawSlice is a serialized Value (in map form).
-	// Convert it back to a *Value and deserialize it.
 	for _, elem := range rawSlice {
 		elemMap, ok := elem.(map[string]any)
 		if !ok {

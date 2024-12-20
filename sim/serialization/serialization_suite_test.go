@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
@@ -16,6 +17,7 @@ func init() {
 	serialization.RegisterType(reflect.TypeOf(&TestType1{}))
 	serialization.RegisterType(reflect.TypeOf(&TestType2{}))
 	serialization.RegisterType(reflect.TypeOf(&TestType3{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType4{}))
 }
 
 func TestSerialization(t *testing.T) {
@@ -102,13 +104,40 @@ func (t *TestType3) Deserialize(
 ) error {
 	t.Value = data["Value"].(int)
 
-	for _, v := range data["Data"].([]any) {
-		t.Data = append(t.Data, v.(byte))
+	t.Data = make([]byte, len(data["Data"].([]any)))
+	for i, v := range data["Data"].([]any) {
+		t.Data[i] = v.(byte)
 	}
 
 	t.deps = make([]*TestType1, len(data["deps"].([]any)))
 	for i, depMap := range data["deps"].([]any) {
 		t.deps[i] = depMap.(*TestType1)
+	}
+
+	return nil
+}
+
+type TestType4 struct {
+	name string
+	deps []naming.Named
+}
+
+func (t *TestType4) Name() string {
+	return t.name
+}
+
+func (t *TestType4) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"deps": t.deps,
+	}, nil
+}
+
+func (t *TestType4) Deserialize(
+	data map[string]any,
+) error {
+	t.deps = make([]naming.Named, len(data["deps"].([]any)))
+	for i, depMap := range data["deps"].([]any) {
+		t.deps[i] = depMap.(naming.Named)
 	}
 
 	return nil
@@ -215,5 +244,36 @@ var _ = Describe("Serialization", func() {
 		Expect(result.(*TestType3).Data).To(Equal([]byte{1, 2, 3}))
 		Expect(result.(*TestType3).deps).To(HaveLen(2))
 		Expect(result.(*TestType3).deps[0].v1).To(Equal(2))
+	})
+
+	It("should serialize abstract slices", func() {
+		s := &TestType4{
+			name: "4",
+			deps: []naming.Named{
+				&TestType1{name: "T1_1", v1: 2},
+				&TestType2{
+					name: "T2_1",
+					v2:   3,
+					Ptr:  &TestType1{name: "T1_2", v1: 4},
+				},
+			},
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
+		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
+
+		fmt.Println(buffer.String())
+
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("4"))
+		Expect(err).To(BeNil())
+		Expect(result).To(BeAssignableToTypeOf(&TestType4{}))
+		Expect(result.(*TestType4).deps).To(HaveLen(2))
+		Expect(result.(*TestType4).deps[0].(*TestType1).v1).To(Equal(2))
+		Expect(result.(*TestType4).deps[1].(*TestType2).v2).To(Equal(3))
+		Expect(result.(*TestType4).deps[1].(*TestType2).Ptr.v1).To(Equal(4))
+		manager.FinalizeDeserialization()
 	})
 })
