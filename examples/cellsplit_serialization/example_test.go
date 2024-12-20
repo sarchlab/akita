@@ -13,23 +13,27 @@ func config(sim *simulation.Simulation) {
 	engine := timing.NewSerialEngine()
 	sim.RegisterEngine(engine)
 
-	handler := &SplitHandler{
-		name:    "handler",
-		rand:    rand.New(rand.NewSource(1)),
-		engine:  sim.GetEngine(),
-		endTime: timing.VTimeInSec(100),
+	var handler = &SplitHandler{
+		state: &state{
+			name:    "handler",
+			endTime: timing.VTimeInSec(100),
+		},
+		rand:   rand.New(rand.NewSource(1)),
+		engine: engine,
 	}
-	sim.RegisterLocation(handler)
+
+	sim.RegisterStateHolder(handler)
 }
 
 func firstStage() {
 	sim := simulation.NewSimulation()
 	config(sim)
 
-	sim.GetEngine().Schedule(splitEvent{
+	handler := sim.GetStateHolder("handler").(*SplitHandler)
+	sim.GetEngine().Schedule(&splitEvent{
 		id:      id.Generate(),
 		time:    0,
-		handler: sim.GetLocation("handler").(timing.Handler),
+		handler: handler,
 	})
 
 	sim.GetEngine().Run()
@@ -43,24 +47,27 @@ func secondStage() {
 
 	sim.Load("sim.json")
 
-	handler := sim.GetLocation("handler").(*SplitHandler)
-	handler.endTime = timing.VTimeInSec(200)
+	handler := sim.GetStateHolder("handler").(*SplitHandler)
+	handler.state.endTime = timing.VTimeInSec(200)
 
 	engine := sim.GetEngine()
-	engine.Schedule(splitEvent{
+	engine.Schedule(&splitEvent{
 		id:      id.Generate(),
-		time:    engine.Now(),
-		handler: sim.GetLocation("handler").(timing.Handler),
+		time:    100,
+		handler: handler,
 	})
 
 	engine.Run()
 
-	fmt.Printf("Total number at time 10: %d\n", handler.total)
+	fmt.Printf("Total number at time %.1f: %d\n",
+		engine.Now(),
+		handler.total,
+	)
 }
 
 func Example() {
 	firstStage()
 	secondStage()
 
-	// Output: Total number at time 10: 69
+	// Output: Total number at time 197.9: 138
 }

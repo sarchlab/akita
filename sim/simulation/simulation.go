@@ -3,60 +3,32 @@ package simulation
 import (
 	"os"
 
-	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
-func init() {
-	serialization.RegisterType(&Simulation{})
+// NamedSerializable is a location that can be stored and indexed in a
+// simulation.
+type NamedSerializable interface {
+	naming.Named
+	serialization.Serializable
 }
 
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
-	id            string
-	engine        timing.Engine
-	locations     []naming.Named
-	locationIndex map[string]int
+	engine timing.Engine
+
+	stateHolder map[string]StateHolder
+	states      map[string]State
 }
 
 // NewSimulation creates a new simulation.
 func NewSimulation() *Simulation {
 	return &Simulation{
-		id:            id.Generate(),
-		locationIndex: make(map[string]int),
+		stateHolder: make(map[string]StateHolder),
+		states:      make(map[string]State),
 	}
-}
-
-// ID returns the ID of the simulation.
-func (s *Simulation) ID() string {
-	return s.id
-}
-
-// Serialize serializes the simulation into a map.
-func (s *Simulation) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"id":        s.id,
-		"engine":    s.engine,
-		"locations": s.locations,
-	}, nil
-}
-
-// Deserialize deserializes the simulation from a map.
-func (s *Simulation) Deserialize(
-	m map[string]any,
-) (serialization.Serializable, error) {
-	s.id = m["id"].(string)
-	s.engine = m["engine"].(timing.Engine)
-	s.locations = m["locations"].([]naming.Named)
-
-	s.locationIndex = make(map[string]int)
-	for i, loc := range s.locations {
-		s.locationIndex[loc.Name()] = i
-	}
-
-	return s, nil
 }
 
 // RegisterEngine registers the engine used in the simulation.
@@ -69,51 +41,68 @@ func (s *Simulation) GetEngine() timing.Engine {
 	return s.engine
 }
 
-// RegisterLocation registers a location with the simulation.
-func (s *Simulation) RegisterLocation(l naming.Named) {
-	locName := l.Name()
-	if s.locationIndex[locName] != 0 {
-		panic("location " + locName + " already registered")
+// RegisterStateful registers a stateful object with the simulation.
+func (s *Simulation) RegisterStateHolder(obj StateHolder) {
+	s.stateHolder[obj.Name()] = obj
+	s.states[obj.Name()] = obj.State()
+}
+
+// GetStateHolder returns a stateful object by its name.
+func (s *Simulation) GetStateHolder(name string) StateHolder {
+	return s.stateHolder[name]
+}
+
+// GetState returns a state by its name.
+func (s *Simulation) GetState(name string) State {
+	return s.states[name]
+}
+
+// Save saves the state of the simulation to a file.
+func (s *Simulation) Save(filename string) {
+	codec := serialization.NewJSONCodec()
+	serializer := serialization.NewManager(codec)
+
+	serializer.StartSerialization()
+
+	for _, obj := range s.states {
+		_, err := serializer.Serialize(obj)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	s.locations = append(s.locations, l)
-	s.locationIndex[locName] = len(s.locations) - 1
-}
-
-func (s *Simulation) GetLocation(name string) naming.Named {
-	return s.locations[s.locationIndex[name]]
-}
-
-func (s *Simulation) Save(filename string) {
 	file, err := os.Create(filename)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	codec := serialization.NewJSONCodec(file, file)
-	serializer := serialization.NewManager(codec)
-
-	err = serializer.Serialize(s)
-	if err != nil {
-		panic(err)
-	}
+	serializer.FinalizeSerialization(file)
 }
 
 func (s *Simulation) Load(filename string) {
+	codec := serialization.NewJSONCodec()
+	serializer := serialization.NewManager(codec)
+
 	file, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 
-	codec := serialization.NewJSONCodec(file, file)
-	serializer := serialization.NewManager(codec)
+	serializer.StartDeserialization(file)
 
-	newSim, err := serializer.Deserialize()
-	if err != nil {
-		panic(err)
+	for name, obj := range s.states {
+		v := serialization.IDToDeserialize(obj.Name())
+
+		newState, err := serializer.Deserialize(v)
+		if err != nil {
+			panic(err)
+		}
+
+		s.states[name] = newState.(State)
+		s.stateHolder[name].SetState(newState.(State))
 	}
 
-	s = newSim.(*Simulation)
+	serializer.FinalizeDeserialization()
 }

@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
+	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
 )
@@ -50,7 +51,24 @@ func (m sampleMsg) Meta() modeling.MsgMeta {
 }
 
 func (m sampleMsg) Clone() modeling.Msg {
-	return m
+	cloneMsg := m
+	cloneMsg.MsgMeta.ID = id.Generate()
+
+	return &cloneMsg
+}
+
+func (m sampleMsg) ID() string {
+	return m.MsgMeta.ID
+}
+
+func (m *sampleMsg) Serialize() (map[string]any, error) {
+	panic("not implemented")
+}
+
+func (m *sampleMsg) Deserialize(
+	data map[string]any,
+) error {
+	panic("not implemented")
 }
 
 var _ = Describe("Switch", func() {

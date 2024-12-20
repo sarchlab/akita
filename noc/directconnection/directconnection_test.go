@@ -10,7 +10,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
-	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -38,14 +37,14 @@ func (m sampleMsg) Serialize() (map[string]any, error) {
 
 func (m sampleMsg) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	m.MsgMeta.ID = data["id"].(string)
 	m.MsgMeta.Src = data["src"].(modeling.RemotePort)
 	m.MsgMeta.Dst = data["dst"].(modeling.RemotePort)
 	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
 	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
 
-	return m, nil
+	return nil
 }
 
 func (m sampleMsg) Clone() modeling.Msg {
@@ -139,32 +138,24 @@ type agent struct {
 	OutPort modeling.Port
 }
 
+func (a *agent) ID() string {
+	return a.Name()
+}
+
+func (a *agent) Serialize() (map[string]any, error) {
+	panic("not implemented")
+}
+
+func (a *agent) Deserialize(data map[string]any) error {
+	panic("not implemented")
+}
+
 func newAgent(engine timing.Engine, freq timing.Freq, name string) *agent {
 	a := new(agent)
 	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
 	a.OutPort = modeling.NewPort(a, 4, 4, name+".OutPort")
 
 	return a
-}
-
-func (a *agent) ID() string {
-	return a.Name()
-}
-
-func (a *agent) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"msgs_out": a.msgsOut,
-		"msgs_in":  a.msgsIn,
-	}, nil
-}
-
-func (a *agent) Deserialize(
-	data map[string]any,
-) (serialization.Serializable, error) {
-	a.msgsOut = data["msgs_out"].([]modeling.Msg)
-	a.msgsIn = data["msgs_in"].([]modeling.Msg)
-
-	return a, nil
 }
 
 func (a *agent) Tick() bool {

@@ -45,7 +45,7 @@ func (req DataMoveRequest) GenerateRsp() modeling.Msg {
 			Dst: req.Src,
 			ID:  id.Generate(),
 		},
-		OriginalReq: req,
+		RspTo: req.ID,
 	}
 
 	return rsp

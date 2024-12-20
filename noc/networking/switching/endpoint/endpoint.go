@@ -17,6 +17,14 @@ type msgToAssemble struct {
 	numFlitArrived  int
 }
 
+type state struct {
+	msgOutBuf          []modeling.Msg
+	flitsToSend        []*messaging.Flit
+	assemblingMsgTable map[string]*list.Element
+	assemblingMsgs     *list.List
+	assembledMsgs      []modeling.Msg
+}
+
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
@@ -31,12 +39,8 @@ type Comp struct {
 	numOutputChannels int
 	flitByteSize      int
 	encodingOverhead  float64
-	msgOutBuf         []modeling.Msg
-	flitsToSend       []*messaging.Flit
 
-	assemblingMsgTable map[string]*list.Element
-	assemblingMsgs     *list.List
-	assembledMsgs      []modeling.Msg
+	state
 }
 
 // PlugIn connects a port to the endpoint.

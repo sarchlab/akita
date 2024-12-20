@@ -277,11 +277,11 @@ func (m *middleware) traceFlitEnd(flit *messaging.Flit) {
 }
 
 func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
+	return flit.ID() + "_e2e"
 }
 
 func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.Comp.Name()
+	return flit.ID() + "_" + m.Comp.Name()
 }
 
 // SwitchPortAdder can add a port to a switch.

@@ -9,7 +9,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	hooking "github.com/sarchlab/akita/v4/sim/hooking"
 	modeling "github.com/sarchlab/akita/v4/sim/modeling"
-	serialization "github.com/sarchlab/akita/v4/sim/serialization"
 	timing "github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -105,12 +104,11 @@ func (mr *MockPortMockRecorder) Deliver(arg0 interface{}) *gomock.Call {
 }
 
 // Deserialize mocks base method.
-func (m *MockPort) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+func (m *MockPort) Deserialize(arg0 map[string]interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deserialize", arg0)
-	ret0, _ := ret[0].(serialization.Serializable)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Deserialize indicates an expected call of Deserialize.
@@ -320,12 +318,11 @@ func (mr *MockConnectionMockRecorder) AcceptHook(arg0 interface{}) *gomock.Call 
 }
 
 // Deserialize mocks base method.
-func (m *MockConnection) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+func (m *MockConnection) Deserialize(arg0 map[string]interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deserialize", arg0)
-	ret0, _ := ret[0].(serialization.Serializable)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Deserialize indicates an expected call of Deserialize.
@@ -501,12 +498,11 @@ func (mr *MockComponentMockRecorder) AddPort(arg0, arg1 interface{}) *gomock.Cal
 }
 
 // Deserialize mocks base method.
-func (m *MockComponent) Deserialize(arg0 map[string]interface{}) (serialization.Serializable, error) {
+func (m *MockComponent) Deserialize(arg0 map[string]interface{}) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deserialize", arg0)
-	ret0, _ := ret[0].(serialization.Serializable)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // Deserialize indicates an expected call of Deserialize.

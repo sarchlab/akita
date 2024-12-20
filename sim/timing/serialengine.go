@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	serialization.RegisterType(&SerialEngine{})
+	serialization.RegisterType(reflect.TypeOf(&SerialEngine{}))
 }
 
 // A SerialEngine is an Engine that always run events one after another.
@@ -62,12 +62,12 @@ func (e *SerialEngine) Serialize() (map[string]any, error) {
 // Deserialize deserializes the SerialEngine.
 func (e *SerialEngine) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	e.time = data["time"].(VTimeInSec)
 	e.queue = data["queue"].(EventQueue)
 	e.secondaryQueue = data["secondaryQueue"].(EventQueue)
 
-	return e, nil
+	return nil
 }
 
 // Schedule register an event to be happen in the future

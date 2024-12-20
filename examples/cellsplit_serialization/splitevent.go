@@ -1,12 +1,14 @@
 package cellsplit
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func init() {
-	serialization.RegisterType(splitEvent{})
+	serialization.RegisterType(reflect.TypeOf(splitEvent{}))
 }
 
 type splitEvent struct {
@@ -39,12 +41,12 @@ func (e splitEvent) Serialize() (map[string]any, error) {
 	}, nil
 }
 
-func (e splitEvent) Deserialize(
+func (e *splitEvent) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
+) error {
 	e.id = data["id"].(string)
 	e.time = data["time"].(timing.VTimeInSec)
 	e.handler = data["handler"].(timing.Handler)
 
-	return e, nil
+	return nil
 }

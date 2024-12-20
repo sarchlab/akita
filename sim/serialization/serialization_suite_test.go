@@ -3,17 +3,21 @@ package serialization_test
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 func init() {
-	serialization.RegisterType(TestType1{})
-	serialization.RegisterType(&TestType2{})
+	serialization.RegisterType(reflect.TypeOf(&TestType1{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType2{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType3{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType4{}))
 }
 
 func TestSerialization(t *testing.T) {
@@ -22,47 +26,121 @@ func TestSerialization(t *testing.T) {
 }
 
 type TestType1 struct {
-	Value int
+	name           string
+	v1             int
+	NonSerializing int
 }
 
-func (t TestType1) ID() string {
-	return "test_type"
+func (t *TestType1) Name() string {
+	return t.name
 }
 
-func (t TestType1) Serialize() (map[string]any, error) {
+func (t *TestType1) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"value": t.Value,
+		"v1": t.v1,
 	}, nil
 }
 
-func (t TestType1) Deserialize(
+func (t *TestType1) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
-	t.Value = data["value"].(int)
+) error {
+	t.v1 = data["v1"].(int)
 
-	return t, nil
+	return nil
 }
 
 type TestType2 struct {
-	Value int
+	name string
+	v2   int
+	Ptr  *TestType1
 }
 
-func (t *TestType2) ID() string {
-	return "test_type_2"
+func (t *TestType2) Name() string {
+	return t.name
 }
 
 func (t *TestType2) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"value": t.Value,
+		"v2":  t.v2,
+		"Ptr": t.Ptr,
 	}, nil
 }
 
 func (t *TestType2) Deserialize(
 	data map[string]any,
-) (serialization.Serializable, error) {
-	t.Value = data["value"].(int)
+) error {
+	t.v2 = data["v2"].(int)
 
-	return t, nil
+	if data["Ptr"] == nil {
+		t.Ptr = nil
+	} else {
+		t.Ptr = data["Ptr"].(*TestType1)
+	}
+
+	return nil
+}
+
+type TestType3 struct {
+	name  string
+	Value int
+	Data  []byte
+	deps  []*TestType1
+}
+
+func (t *TestType3) Name() string {
+	return t.name
+}
+
+func (t *TestType3) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"Value": t.Value,
+		"Data":  t.Data,
+		"deps":  t.deps,
+	}, nil
+}
+
+func (t *TestType3) Deserialize(
+	data map[string]any,
+) error {
+	t.Value = data["Value"].(int)
+
+	t.Data = make([]byte, len(data["Data"].([]any)))
+	for i, v := range data["Data"].([]any) {
+		t.Data[i] = v.(byte)
+	}
+
+	t.deps = make([]*TestType1, len(data["deps"].([]any)))
+	for i, depMap := range data["deps"].([]any) {
+		t.deps[i] = depMap.(*TestType1)
+	}
+
+	return nil
+}
+
+type TestType4 struct {
+	name string
+	deps []naming.Named
+}
+
+func (t *TestType4) Name() string {
+	return t.name
+}
+
+func (t *TestType4) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"deps": t.deps,
+	}, nil
+}
+
+func (t *TestType4) Deserialize(
+	data map[string]any,
+) error {
+	t.deps = make([]naming.Named, len(data["deps"].([]any)))
+	for i, depMap := range data["deps"].([]any) {
+		t.deps[i] = depMap.(naming.Named)
+	}
+
+	return nil
 }
 
 var _ = Describe("Serialization", func() {
@@ -74,68 +152,128 @@ var _ = Describe("Serialization", func() {
 
 	BeforeEach(func() {
 		buffer = &bytes.Buffer{}
-		codec = serialization.NewJSONCodec(buffer, buffer)
+		codec = serialization.NewJSONCodec()
 		manager = serialization.NewManager(codec)
 	})
 
-	It("should serialize and deserialize a simple value", func() {
-		err := manager.Serialize(1)
+	It("should serialize a simple serializable", func() {
+		s := &TestType1{name: "1", v1: 1}
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
 
 		fmt.Println(buffer.String())
 
-		value, err := manager.Deserialize()
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("1"))
 		Expect(err).To(BeNil())
-		Expect(value).To(Equal(1))
+		Expect(result).To(BeAssignableToTypeOf(&TestType1{}))
+		Expect(result.(*TestType1).v1).To(Equal(1))
+		manager.FinalizeDeserialization()
 	})
 
-	It("should serialize and deserialize a struct", func() {
-		err := manager.Serialize(TestType1{Value: 1})
+	It("should serialize nested serializable", func() {
+		s := &TestType2{
+			name: "2",
+			v2:   1,
+			Ptr:  &TestType1{name: "1", v1: 2},
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
 
 		fmt.Println(buffer.String())
 
-		value, err := manager.Deserialize()
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("2"))
 		Expect(err).To(BeNil())
-		Expect(value).To(BeAssignableToTypeOf(TestType1{}))
-		Expect(value.(TestType1).Value).To(Equal(1))
+		Expect(result).To(BeAssignableToTypeOf(&TestType2{}))
+		Expect(result.(*TestType2).v2).To(Equal(1))
+		Expect(result.(*TestType2).Ptr.v1).To(Equal(2))
+		manager.FinalizeDeserialization()
 	})
 
-	It("should serialize and deserialize a pointer to a struct", func() {
-		err := manager.Serialize(&TestType1{Value: 1})
+	It("should serialized if field is nil", func() {
+		s := &TestType2{
+			name: "2",
+			v2:   1,
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
 
 		fmt.Println(buffer.String())
 
-		value, err := manager.Deserialize()
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("2"))
 		Expect(err).To(BeNil())
-		Expect(value).To(BeAssignableToTypeOf(&TestType1{}))
-		Expect(value.(*TestType1).Value).To(Equal(1))
+		Expect(result).To(BeAssignableToTypeOf(&TestType2{}))
+		Expect(result.(*TestType2).v2).To(Equal(1))
+		Expect(result.(*TestType2).Ptr).To(BeNil())
+		manager.FinalizeDeserialization()
 	})
 
-	It("should serialize ptr to primitive", func() {
-		val := int(1)
-		ptr := &val
-		err := manager.Serialize(ptr)
+	It("should serialize slices", func() {
+		s := &TestType3{
+			name:  "3",
+			Value: 1,
+			Data:  []byte{1, 2, 3},
+			deps: []*TestType1{
+				{name: "T1_1", v1: 2},
+				{name: "T1_2", v1: 3},
+			},
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
 
 		fmt.Println(buffer.String())
 
-		value, err := manager.Deserialize()
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("3"))
 		Expect(err).To(BeNil())
-		Expect(value).To(Equal(ptr))
+		Expect(result).To(BeAssignableToTypeOf(&TestType3{}))
+		Expect(result.(*TestType3).Value).To(Equal(1))
+		Expect(result.(*TestType3).Data).To(Equal([]byte{1, 2, 3}))
+		Expect(result.(*TestType3).deps).To(HaveLen(2))
+		Expect(result.(*TestType3).deps[0].v1).To(Equal(2))
 	})
 
-	It("should serialize and deserialize a pointer to a struct, "+
-		"with struct values not deserializable", func() {
-		err := manager.Serialize(&TestType2{Value: 1})
+	It("should serialize abstract slices", func() {
+		s := &TestType4{
+			name: "4",
+			deps: []naming.Named{
+				&TestType1{name: "T1_1", v1: 2},
+				&TestType2{
+					name: "T2_1",
+					v2:   3,
+					Ptr:  &TestType1{name: "T1_2", v1: 4},
+				},
+			},
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
 		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
 
 		fmt.Println(buffer.String())
 
-		value, err := manager.Deserialize()
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("4"))
 		Expect(err).To(BeNil())
-		Expect(value).To(BeAssignableToTypeOf(&TestType2{}))
-		Expect(value.(*TestType2).Value).To(Equal(1))
+		Expect(result).To(BeAssignableToTypeOf(&TestType4{}))
+		Expect(result.(*TestType4).deps).To(HaveLen(2))
+		Expect(result.(*TestType4).deps[0].(*TestType1).v1).To(Equal(2))
+		Expect(result.(*TestType4).deps[1].(*TestType2).v2).To(Equal(3))
+		Expect(result.(*TestType4).deps[1].(*TestType2).Ptr.v1).To(Equal(4))
+		manager.FinalizeDeserialization()
 	})
 })
