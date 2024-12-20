@@ -3,16 +3,16 @@ package simulation
 import (
 	"os"
 
-	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
-// NamedSerializable is a location that can be stored and indexed in a
-// simulation.
-type NamedSerializable interface {
-	naming.Named
-	serialization.Serializable
+// NewSimulation creates a new simulation.
+func NewSimulation() *Simulation {
+	return &Simulation{
+		stateHolder: make(map[string]StateHolder),
+		states:      make(map[string]State),
+	}
 }
 
 // A Simulation provides the service requires to define a simulation.
@@ -21,14 +21,6 @@ type Simulation struct {
 
 	stateHolder map[string]StateHolder
 	states      map[string]State
-}
-
-// NewSimulation creates a new simulation.
-func NewSimulation() *Simulation {
-	return &Simulation{
-		stateHolder: make(map[string]StateHolder),
-		states:      make(map[string]State),
-	}
 }
 
 // RegisterEngine registers the engine used in the simulation.

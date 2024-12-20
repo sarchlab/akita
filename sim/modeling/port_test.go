@@ -16,34 +16,8 @@ func (m sampleMsg) Meta() MsgMeta {
 	return m.MsgMeta
 }
 
-func (m sampleMsg) ID() string {
-	return m.MsgMeta.ID
-}
-
-func (m sampleMsg) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"id":            m.MsgMeta.ID,
-		"src":           m.MsgMeta.Src,
-		"dst":           m.MsgMeta.Dst,
-		"traffic_class": m.MsgMeta.TrafficClass,
-		"traffic_bytes": m.MsgMeta.TrafficBytes,
-	}, nil
-}
-
-func (m *sampleMsg) Deserialize(
-	data map[string]any,
-) error {
-	m.MsgMeta.ID = data["id"].(string)
-	m.MsgMeta.Src = data["src"].(RemotePort)
-	m.MsgMeta.Dst = data["dst"].(RemotePort)
-	m.MsgMeta.TrafficClass = data["traffic_class"].(int)
-	m.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
-
-	return nil
-}
-
-func (m *sampleMsg) Clone() Msg {
-	cloneMsg := *m
+func (m sampleMsg) Clone() Msg {
+	cloneMsg := m
 	cloneMsg.MsgMeta.ID = id.Generate()
 
 	return &cloneMsg

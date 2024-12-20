@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -259,21 +260,6 @@ func (p *defaultPort) NotifyAvailable() {
 	}
 }
 
-// NewPort creates a new port with default behavior.
-func NewPort(
-	comp Component,
-	incomingBufCap, outgoingBufCap int,
-	name string,
-) Port {
-	p := new(defaultPort)
-	p.comp = comp
-	p.incomingBuf = queueing.NewBuffer(name+".IncomingBuf", incomingBufCap)
-	p.outgoingBuf = queueing.NewBuffer(name+".OutgoingBuf", outgoingBufCap)
-	p.name = name
-
-	return p
-}
-
 func (p *defaultPort) msgMustBeValid(msg Msg) {
 	portMustBeMsgSrc(p, msg)
 	dstMustNotBeEmpty(msg.Meta().Dst)
@@ -296,4 +282,50 @@ func srcDstMustNotBeTheSame(msg Msg) {
 	if msg.Meta().Src == msg.Meta().Dst {
 		panic("sending back to src")
 	}
+}
+
+type PortBuilder struct {
+	simulation     *simulation.Simulation
+	comp           Component
+	incomingBufCap int
+	outgoingBufCap int
+}
+
+func (b *PortBuilder) WithSimulation(sim *simulation.Simulation) *PortBuilder {
+	b.simulation = sim
+	return b
+}
+
+func (b *PortBuilder) WithComponent(comp Component) *PortBuilder {
+	b.comp = comp
+	return b
+}
+
+func (b *PortBuilder) WithIncomingBufCap(cap int) *PortBuilder {
+	b.incomingBufCap = cap
+	return b
+}
+
+func (b *PortBuilder) WithOutgoingBufCap(cap int) *PortBuilder {
+	b.outgoingBufCap = cap
+	return b
+}
+
+func (b *PortBuilder) Build(name string) Port {
+	p := &defaultPort{
+		name: name,
+		comp: b.comp,
+	}
+
+	p.incomingBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.simulation).
+		WithCapacity(b.incomingBufCap).
+		Build(name + ".IncomingBuf")
+
+	p.outgoingBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.simulation).
+		WithCapacity(b.outgoingBufCap).
+		Build(name + ".OutgoingBuf")
+
+	return p
 }
