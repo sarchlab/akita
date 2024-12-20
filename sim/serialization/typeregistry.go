@@ -56,17 +56,17 @@ func (r *typeRegistry) createInstance(typeName string) (any, error) {
 	return newValue.Interface(), nil
 }
 
-func (r *typeRegistry) registeredType(typeName string) reflect.Type {
-	r.lock.RLock()
-	defer r.lock.RUnlock()
+// func (r *typeRegistry) registeredType(typeName string) reflect.Type {
+// 	r.lock.RLock()
+// 	defer r.lock.RUnlock()
 
-	t, ok := r.types[typeName]
-	if !ok {
-		return nil
-	}
+// 	t, ok := r.types[typeName]
+// 	if !ok {
+// 		return nil
+// 	}
 
-	return t
-}
+// 	return t
+// }
 
 var registry = typeRegistry{
 	types: map[string]reflect.Type{

@@ -2,13 +2,10 @@ package modeling
 
 import (
 	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
-	serialization.Serializable
-
 	Meta() MsgMeta
 	Clone() Msg
 }

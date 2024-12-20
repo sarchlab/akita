@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -14,7 +13,6 @@ type Component interface {
 	naming.Named
 	timing.Handler
 	hooking.Hookable
-	serialization.Serializable
 	PortOwner
 
 	NotifyRecv(port Port)
@@ -23,8 +21,8 @@ type Component interface {
 
 // ComponentBase provides some functions that other component can use.
 type ComponentBase struct {
+	name string
 	sync.Mutex
-	naming.NamedBase
 	hooking.HookableBase
 	PortOwnerBase
 }
@@ -34,8 +32,12 @@ func NewComponentBase(name string) *ComponentBase {
 	naming.NameMustBeValid(name)
 
 	c := new(ComponentBase)
-	c.NamedBase = naming.MakeNamedBase(name)
+	c.name = name
 	c.PortOwnerBase = MakePortOwnerBase()
 
 	return c
+}
+
+func (c *ComponentBase) Name() string {
+	return c.name
 }

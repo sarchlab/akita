@@ -1,24 +1,15 @@
 package timing
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
-
-func init() {
-	serialization.RegisterType(reflect.TypeOf((*Event)(nil)).Elem())
-}
 
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec = float64
 
 // An Event is something going to happen in the future.
 type Event interface {
-	serialization.Serializable
-
 	// Return the time that the event should happen
 	Time() VTimeInSec
 

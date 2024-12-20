@@ -205,6 +205,11 @@ linters-settings:
     # Allow declarations (var) to be cuddled.
     allow-cuddle-declarations: false
 
+    allow-trailing-comment: true
+
+    force-err-cuddling: true
+
+
 linters:
   disable-all: true
   enable:

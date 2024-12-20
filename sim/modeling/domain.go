@@ -4,7 +4,7 @@ import "github.com/sarchlab/akita/v4/sim/naming"
 
 // Domain is a group of components that are closely connected.
 type Domain struct {
-	naming.NamedBase
+	name string
 	PortOwnerBase
 }
 
@@ -13,8 +13,12 @@ func NewDomain(name string) *Domain {
 	naming.NameMustBeValid(name)
 
 	d := new(Domain)
-	d.NamedBase = naming.MakeNamedBase(name)
+	d.name = name
 	d.PortOwnerBase = MakePortOwnerBase()
 
 	return d
+}
+
+func (d *Domain) Name() string {
+	return d.name
 }

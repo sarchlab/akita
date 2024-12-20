@@ -351,8 +351,8 @@ func typeKindName(val any) (kind, name string) {
 	return kind, name
 }
 
-func registered(typeName string) bool {
-	registeredType := registry.registeredType(typeName)
+// func registered(typeName string) bool {
+// 	registeredType := registry.registeredType(typeName)
 
-	return registeredType != nil
-}
+// 	return registeredType != nil
+// }
