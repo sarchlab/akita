@@ -2,9 +2,12 @@ package queueing
 
 import (
 	"log"
+	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 // HookPosBufPush marks when an element is pushed into the buffer.
@@ -17,6 +20,7 @@ var HookPosBufPop = &hooking.HookPos{Name: "Buf Pop"}
 type Buffer interface {
 	naming.Named
 	hooking.Hookable
+	simulation.StateHolder
 
 	CanPush() bool
 	Push(e interface{})
@@ -27,27 +31,86 @@ type Buffer interface {
 	Clear()
 }
 
-// NewBuffer creates a default buffer object.
-func NewBuffer(name string, capacity int) *bufferImpl {
-	naming.NameMustBeValid(name)
+// BufferBuilder is a builder for Buffer.
+type BufferBuilder struct {
+	simulation *simulation.Simulation
+	capacity   int
+}
 
-	return &bufferImpl{
-		name:     name,
-		capacity: capacity,
+// WithSimulation defines simulation environment of the buffer.
+func (b BufferBuilder) WithSimulation(
+	sim *simulation.Simulation,
+) BufferBuilder {
+	b.simulation = sim
+	return b
+}
+
+// WithCapacity defines the capacity of the buffer.
+func (b BufferBuilder) WithCapacity(capacity int) BufferBuilder {
+	b.capacity = capacity
+	return b
+}
+
+// Build builds a new Buffer.
+func (b BufferBuilder) Build(name string) Buffer {
+	buffer := &bufferImpl{
+		bufferState: &bufferState{
+			name:     name,
+			elements: nil,
+		},
+		capacity: b.capacity,
 	}
+
+	b.simulation.RegisterStateHolder(buffer)
+
+	return buffer
+}
+
+func init() {
+	serialization.RegisterType(reflect.TypeOf(&bufferState{}))
+}
+
+type bufferState struct {
+	name     string
+	elements []interface{}
+}
+
+func (s *bufferState) Name() string {
+	return s.name
+}
+
+func (s *bufferState) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"elements": s.elements,
+	}, nil
+}
+
+func (s *bufferState) Deserialize(state map[string]any) error {
+	s.elements = state["elements"].([]interface{})
+
+	return nil
 }
 
 type bufferImpl struct {
 	hooking.HookableBase
+	*bufferState
 
-	name     string
 	capacity int
-	elements []interface{}
 }
 
 // Name returns the name of the buffer.
 func (b *bufferImpl) Name() string {
 	return b.name
+}
+
+// State returns the state of the buffer.
+func (b *bufferImpl) State() simulation.State {
+	return b.bufferState
+}
+
+// SetState sets the state of the buffer.
+func (b *bufferImpl) SetState(state simulation.State) {
+	b.bufferState = state.(*bufferState)
 }
 
 func (b *bufferImpl) CanPush() bool {
