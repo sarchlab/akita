@@ -13,43 +13,21 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
+func MakeTickEvent(
+	handlerName string,
+	time VTimeInSec,
+	idGenerator id.IDGenerator,
+) TickEvent {
 	evt := TickEvent{
 		EventBase: EventBase{
-			ID:        id.Generate(),
-			time:      time,
-			handler:   handler,
-			secondary: false,
+			ID:          idGenerator.Generate(),
+			time:        time,
+			handlerName: handlerName,
+			secondary:   false,
 		},
 	}
 
 	return evt
-}
-
-// ID returns the ID of the TickEvent.
-func (e TickEvent) ID() string {
-	return e.EventBase.ID
-}
-
-// Serialize serializes the TickEvent.
-func (e TickEvent) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"time":      e.Time(),
-		"handler":   e.Handler(),
-		"secondary": e.secondary,
-	}, nil
-}
-
-// Deserialize deserializes the TickEvent.
-func (e TickEvent) Deserialize(
-	data map[string]any,
-) error {
-	e.EventBase.ID = data["id"].(string)
-	e.EventBase.time = data["time"].(VTimeInSec)
-	e.EventBase.handler = data["handler"].(Handler)
-	e.EventBase.secondary = data["secondary"].(bool)
-
-	return nil
 }
 
 // A Ticker is an object that updates states with ticks.
@@ -59,24 +37,24 @@ type Ticker interface {
 
 // TickScheduler can help schedule tick events.
 type TickScheduler struct {
-	lock      sync.Mutex
-	handler   Handler
-	Freq      Freq
-	Engine    Engine
-	secondary bool
+	lock        sync.Mutex
+	handlerName string
+	Freq        Freq
+	Engine      Engine
+	secondary   bool
 
 	nextTickTime VTimeInSec
 }
 
 // NewTickScheduler creates a scheduler for tick events.
 func NewTickScheduler(
-	handler Handler,
+	handlerName string,
 	engine Engine,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
-	ticker.handler = handler
+	ticker.handlerName = handlerName
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.nextTickTime = -1 // This will make sure the first tick is scheduled
@@ -87,13 +65,13 @@ func NewTickScheduler(
 // NewSecondaryTickScheduler creates a scheduler that always schedule secondary
 // tick events.
 func NewSecondaryTickScheduler(
-	handler Handler,
+	handlerName string,
 	engine Engine,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
-	ticker.handler = handler
+	ticker.handlerName = handlerName
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.secondary = true
@@ -113,7 +91,7 @@ func (t *TickScheduler) TickNow() {
 	}
 
 	t.nextTickTime = t.Freq.ThisTick(time)
-	tick := MakeTickEvent(t.handler, t.nextTickTime)
+	tick := MakeTickEvent(t.handlerName, t.nextTickTime)
 
 	if t.secondary {
 		tick.secondary = true

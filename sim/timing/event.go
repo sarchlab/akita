@@ -1,29 +1,21 @@
 package timing
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/naming"
 )
-
-func init() {
-	serialization.RegisterType(reflect.TypeOf((*Event)(nil)).Elem())
-}
 
 // VTimeInSec defines the time in the simulated space in the unit of second
 type VTimeInSec = float64
 
 // An Event is something going to happen in the future.
 type Event interface {
-	serialization.Serializable
-
 	// Return the time that the event should happen
 	Time() VTimeInSec
 
 	// Returns the handler that can should handle the event
-	Handler() Handler
+	HandlerName() string
 
 	// IsSecondary tells if the event is a secondary event. Secondary event are
 	// handled after all same-time primary events are handled.
@@ -38,18 +30,22 @@ var HookPosAfterEvent = &hooking.HookPos{Name: "AfterEvent"}
 
 // EventBase provides the basic fields and getters for other events
 type EventBase struct {
-	ID        string
-	time      VTimeInSec
-	handler   Handler
-	secondary bool
+	ID          string
+	time        VTimeInSec
+	handlerName string
+	secondary   bool
 }
 
 // NewEventBase creates a new EventBase
-func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
+func NewEventBase(
+	t VTimeInSec,
+	handlerName string,
+	idGenerator id.IDGenerator,
+) *EventBase {
 	e := new(EventBase)
-	e.ID = id.Generate()
+	e.ID = idGenerator.Generate()
 	e.time = t
-	e.handler = handler
+	e.handlerName = handlerName
 	e.secondary = false
 
 	return e
@@ -60,9 +56,9 @@ func (e EventBase) Time() VTimeInSec {
 	return e.time
 }
 
-// Handler returns the handler to handle the event.
-func (e EventBase) Handler() Handler {
-	return e.handler
+// HandlerName returns the handler name to handle the event.
+func (e EventBase) HandlerName() string {
+	return e.handlerName
 }
 
 // IsSecondary returns true if the event is a secondary event.
@@ -75,5 +71,7 @@ func (e EventBase) IsSecondary() bool {
 // One event is always constraint to one Handler, which means the event can
 // only be scheduled by one handler and can only directly modify that handler.
 type Handler interface {
+	naming.Named
+
 	Handle(e Event) error
 }

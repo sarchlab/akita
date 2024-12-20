@@ -16,6 +16,8 @@ import (
 type ParallelEngine struct {
 	hooking.HookableBase
 
+	handlers map[string]Handler
+
 	pauseLock              sync.Mutex
 	nowLock                sync.RWMutex
 	now                    VTimeInSec
@@ -63,6 +65,15 @@ func NewParallelEngine() *ParallelEngine {
 // Name returns the name of the engine.
 func (e *ParallelEngine) Name() string {
 	return "ParallelEngine"
+}
+
+// RegisterHandler registers a handler to the engine.
+func (e *ParallelEngine) RegisterHandler(handler Handler) {
+	if _, ok := e.handlers[handler.Name()]; ok {
+		log.Panicf("handler %s already registered", handler.Name())
+	}
+
+	e.handlers[handler.Name()] = handler
 }
 
 // func (e *ParallelEngine) spawnWorkers() {

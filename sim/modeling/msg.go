@@ -1,16 +1,8 @@
 package modeling
 
-import (
-	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/serialization"
-)
-
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
-	serialization.Serializable
-
 	Meta() MsgMeta
-	Clone() Msg
 }
 
 // MsgMeta contains the meta data that is attached to every message.
@@ -50,40 +42,6 @@ func (r GeneralRsp) Meta() MsgMeta {
 // ID returns the ID of the message.
 func (r *GeneralRsp) ID() string {
 	return r.MsgMeta.ID
-}
-
-// Serialize serializes the message.
-func (r *GeneralRsp) Serialize() (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"id":            r.ID,
-		"src":           r.Src,
-		"dst":           r.Dst,
-		"traffic_class": r.TrafficClass,
-		"traffic_bytes": r.TrafficBytes,
-		"rsp_to":        r.RspTo,
-	}, nil
-}
-
-// Deserialize deserializes the message.
-func (r *GeneralRsp) Deserialize(
-	data map[string]interface{},
-) error {
-	r.MsgMeta.ID = data["id"].(string)
-	r.MsgMeta.Src = data["src"].(RemotePort)
-	r.MsgMeta.Dst = data["dst"].(RemotePort)
-	r.MsgMeta.TrafficClass = data["traffic_class"].(int)
-	r.MsgMeta.TrafficBytes = data["traffic_bytes"].(int)
-	r.RspTo = data["rsp_to"].(string)
-
-	return nil
-}
-
-// Clone returns cloned GeneralRsp with different ID
-func (r *GeneralRsp) Clone() Msg {
-	cloneMsg := *r
-	cloneMsg.MsgMeta.ID = id.Generate()
-
-	return &cloneMsg
 }
 
 // GetRspTo returns the ID of the original request.

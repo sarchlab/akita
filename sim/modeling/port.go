@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
 	"github.com/sarchlab/akita/v4/sim/queueing"
-	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/stateful"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
@@ -39,7 +39,7 @@ type RemotePort string
 type Port interface {
 	naming.Named
 	hooking.Hookable
-	serialization.Serializable
+	stateful.StateHolder
 
 	AsRemote() RemotePort
 
@@ -64,36 +64,22 @@ type defaultPort struct {
 	naming.NamedBase
 	hooking.HookableBase
 
-	lock sync.Mutex
-	name string
-	comp Component
-	conn Connection
-
+	lock        sync.Mutex
+	name        string
+	comp        Component
+	conn        Connection
 	incomingBuf queueing.Buffer
 	outgoingBuf queueing.Buffer
 }
 
-// ID returns the name of the port.
-func (p *defaultPort) ID() string {
-	return p.name
-}
-
-// Serialize serializes the port.
-func (p *defaultPort) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"incoming_buf": p.incomingBuf,
-		"outgoing_buf": p.outgoingBuf,
-	}, nil
-}
-
-// Deserialize deserializes the port.
-func (p *defaultPort) Deserialize(
-	data map[string]any,
-) error {
-	p.incomingBuf = data["incoming_buf"].(queueing.Buffer)
-	p.outgoingBuf = data["outgoing_buf"].(queueing.Buffer)
-
+// State returns the state of the port.
+func (p *defaultPort) State() stateful.State {
 	return nil
+}
+
+// SetState sets the state of the port.
+func (p *defaultPort) SetState(state stateful.State) {
+	// No internal state
 }
 
 // AsRemote returns the remote port name.

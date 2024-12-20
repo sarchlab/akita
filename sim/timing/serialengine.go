@@ -6,27 +6,20 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v4/sim/hooking"
-	"github.com/sarchlab/akita/v4/sim/serialization"
 )
-
-func init() {
-	serialization.RegisterType(reflect.TypeOf(&SerialEngine{}))
-}
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
 	hooking.HookableBase
-
+	handlers       map[string]Handler
 	timeLock       sync.RWMutex
 	time           VTimeInSec
 	queue          EventQueue
 	secondaryQueue EventQueue
-
-	isPaused     bool
-	isPausedLock sync.Mutex
-	pauseLock    sync.Mutex
-
-	singleRunLock sync.Mutex
+	isPaused       bool
+	isPausedLock   sync.Mutex
+	pauseLock      sync.Mutex
+	singleRunLock  sync.Mutex
 }
 
 // NewSerialEngine creates a SerialEngine
@@ -45,29 +38,13 @@ func (e *SerialEngine) Name() string {
 	return "SerialEngine"
 }
 
-// ID returns the ID of the engine.
-func (e *SerialEngine) ID() string {
-	return e.Name()
-}
+// RegisterHandler registers a handler to the engine.
+func (e *SerialEngine) RegisterHandler(handler Handler) {
+	if _, ok := e.handlers[handler.Name()]; ok {
+		log.Panicf("handler %s already registered", handler.Name())
+	}
 
-// Serialize serializes the SerialEngine.
-func (e *SerialEngine) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"time":           e.time,
-		"queue":          e.queue,
-		"secondaryQueue": e.secondaryQueue,
-	}, nil
-}
-
-// Deserialize deserializes the SerialEngine.
-func (e *SerialEngine) Deserialize(
-	data map[string]any,
-) error {
-	e.time = data["time"].(VTimeInSec)
-	e.queue = data["queue"].(EventQueue)
-	e.secondaryQueue = data["secondaryQueue"].(EventQueue)
-
-	return nil
+	e.handlers[handler.Name()] = handler
 }
 
 // Schedule register an event to be happen in the future
@@ -131,7 +108,7 @@ func (e *SerialEngine) Run() error {
 		}
 		e.InvokeHook(hookCtx)
 
-		handler := evt.Handler()
+		handler := e.handlers[evt.HandlerName()]
 		_ = handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent

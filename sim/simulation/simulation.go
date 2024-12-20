@@ -2,64 +2,32 @@ package simulation
 
 import (
 	"os"
-	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim/id"
-	"github.com/sarchlab/akita/v4/sim/naming"
-	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/stateful"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
-func init() {
-	serialization.RegisterType(reflect.TypeOf(&Simulation{}))
-}
-
-// NamedSerializable is a location that can be stored and indexed in a
-// simulation.
-type NamedSerializable interface {
-	naming.Named
-	serialization.Serializable
-}
-
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
-	id            string
-	engine        timing.Engine
-	locations     []NamedSerializable
-	locationIndex map[string]int
+	idGenerator id.IDGenerator
+	engine      timing.Engine
+	stateHolder map[string]stateful.StateHolder
+	states      map[string]stateful.State
 }
 
 // NewSimulation creates a new simulation.
 func NewSimulation() *Simulation {
 	return &Simulation{
-		id:            id.Generate(),
-		locationIndex: make(map[string]int),
+		idGenerator: id.NewIDGenerator(),
+		stateHolder: make(map[string]stateful.StateHolder),
+		states:      make(map[string]stateful.State),
 	}
 }
 
 // ID returns the ID of the simulation.
 func (s *Simulation) ID() string {
-	return s.id
-}
-
-// Serialize serializes the simulation into a map.
-func (s *Simulation) Serialize() (map[string]any, error) {
-	return map[string]any{
-		"locations": s.locations,
-	}, nil
-}
-
-// Deserialize deserializes the simulation from a map.
-func (s *Simulation) Deserialize(
-	m map[string]any,
-) error {
-	locInData := m["locations"].([]any)
-
-	for i, loc := range s.locations {
-		loc.Deserialize(locInData[i].(map[string]any))
-	}
-
-	return nil
+	return "simulation"
 }
 
 // RegisterEngine registers the engine used in the simulation.
@@ -72,19 +40,27 @@ func (s *Simulation) GetEngine() timing.Engine {
 	return s.engine
 }
 
-// RegisterLocation registers a location with the simulation.
-func (s *Simulation) RegisterLocation(l NamedSerializable) {
+// RegisterStateHolder registers a state holder and its state with the
+// simulation.
+func (s *Simulation) RegisterStateHolder(l stateful.StateHolder) {
 	locName := l.Name()
-	if s.locationIndex[locName] != 0 {
-		panic("location " + locName + " already registered")
+
+	if _, ok := s.stateHolder[locName]; ok {
+		panic("state holder " + locName + " already registered")
 	}
 
-	s.locations = append(s.locations, l)
-	s.locationIndex[locName] = len(s.locations) - 1
+	s.stateHolder[locName] = l
+	s.states[locName] = l.State()
 }
 
-func (s *Simulation) GetLocation(name string) naming.Named {
-	return s.locations[s.locationIndex[name]]
+// GetStateHolderByName returns the state holder with the given name.
+func (s *Simulation) GetStateHolderByName(name string) stateful.StateHolder {
+	return s.stateHolder[name]
+}
+
+// GetStateByName returns the state with the given name.
+func (s *Simulation) GetStateByName(name string) stateful.State {
+	return s.states[name]
 }
 
 func (s *Simulation) Save(filename string) {
@@ -94,10 +70,18 @@ func (s *Simulation) Save(filename string) {
 	}
 	defer file.Close()
 
-	codec := serialization.NewJSONCodec(file, file)
-	serializer := serialization.NewManager(codec)
+	codec := stateful.JSONCodec{}
 
-	err = serializer.Serialize(s)
+	data := make(map[string]any)
+	for name, state := range s.states {
+		if state == nil {
+			continue
+		}
+
+		data[name] = state
+	}
+
+	err = codec.Encode(file, data)
 	if err != nil {
 		panic(err)
 	}
@@ -110,11 +94,15 @@ func (s *Simulation) Load(filename string) {
 	}
 	defer file.Close()
 
-	codec := serialization.NewJSONCodec(file, file)
-	serializer := serialization.NewManager(codec)
+	codec := stateful.JSONCodec{}
 
-	err = serializer.Deserialize(s)
+	data, err := codec.Decode(file)
 	if err != nil {
 		panic(err)
+	}
+
+	for name, state := range data {
+		s.states[name] = state.(stateful.State)
+		s.stateHolder[name].SetState(state.(stateful.State))
 	}
 }
