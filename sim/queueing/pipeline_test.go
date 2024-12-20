@@ -1,9 +1,12 @@
 package queueing
 
 import (
+	"bytes"
+
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
 type pipelineItem struct {
@@ -99,6 +102,65 @@ var _ = Describe("Pipeline", func() {
 		Expect(madeProgress6).To(BeTrue())
 		Expect(postPipelineBuffer.Size()).To(Equal(1))
 		Expect(postPipelineBuffer.Peek()).To(Equal(item2))
+	})
+
+	It("should be serializable", func() {
+		var err error
+
+		strBuf := bytes.NewBuffer(nil)
+		jsonCodec := serialization.NewJSONCodec()
+		sManager := serialization.NewManager(jsonCodec)
+
+		// Insert some items into the pipeline and run a few ticks.
+		item1 := pipelineItem{taskID: "1"}
+		item2 := pipelineItem{taskID: "2"}
+		pipeline.Accept(item1)
+		pipeline.Tick()
+		pipeline.Tick()
+		pipeline.Accept(item2)
+		// Advance the pipeline enough so that it has items in-flight.
+		for i := 0; i < 10; i++ {
+			pipeline.Tick()
+		}
+
+		// Serialize the pipeline state.
+		sManager.StartSerialization()
+		_, err = sManager.Serialize(pipeline.State())
+		Expect(err).To(BeNil())
+		sManager.FinalizeSerialization(strBuf)
+
+		// Build a second pipeline instance to deserialize into.
+		postPipelineBuffer2 := BufferBuilder{}.
+			WithSimulation(sim).
+			WithCapacity(1).
+			Build("PostPipelineBuffer2").(*bufferImpl)
+		pipeline2 := MakePipelineBuilder().
+			WithSimulation(sim).
+			WithPipelineWidth(1).
+			WithNumStage(100).
+			WithCyclePerStage(2).
+			WithPostPipelineBuffer(postPipelineBuffer2).
+			Build("Pipeline2")
+
+		// Deserialize the saved state into pipeline2.
+		sManager.StartDeserialization(strBuf)
+		state, err := sManager.Deserialize(
+			serialization.IDToDeserialize("Pipeline"))
+		Expect(err).To(BeNil())
+		pipeline2.SetState(state.(*pipelineState))
+		sManager.FinalizeDeserialization()
+
+		// After deserialization, pipeline2 should resume as if it had run the
+		// same sequence. Run enough ticks so items should appear in the post
+		// pipeline buffer.
+		for i := 0; i < 200; i++ {
+			pipeline2.Tick()
+		}
+
+		// Check that the items eventually emerge in the correct order.
+		Expect(postPipelineBuffer2.Size()).To(BeNumerically(">=", 2))
+		Expect(postPipelineBuffer2.Pop()).To(Equal(item1))
+		Expect(postPipelineBuffer2.Pop()).To(Equal(item2))
 	})
 })
 

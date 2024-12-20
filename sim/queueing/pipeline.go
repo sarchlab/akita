@@ -48,13 +48,36 @@ func (s *pipelineState) Name() string {
 }
 
 func (s *pipelineState) Serialize() (map[string]any, error) {
+	stages := make([][]map[string]any, len(s.stages))
+
+	for i := range s.stages {
+		stages[i] = make([]map[string]any, len(s.stages[i]))
+		for j := range s.stages[i] {
+			stages[i][j] = map[string]any{
+				"elem":      s.stages[i][j].elem,
+				"cycleLeft": s.stages[i][j].cycleLeft,
+			}
+		}
+	}
+
 	return map[string]any{
-		"stages": s.stages,
+		"stages": stages,
 	}, nil
 }
 
 func (s *pipelineState) Deserialize(state map[string]any) error {
-	s.stages = state["stages"].([][]pipelineStageInfo)
+	stages := state["stages"].([][]map[string]any)
+
+	s.stages = make([][]pipelineStageInfo, len(stages))
+	for i := range stages {
+		s.stages[i] = make([]pipelineStageInfo, len(stages[i]))
+		for j := range stages[i] {
+			s.stages[i][j] = pipelineStageInfo{
+				elem:      stages[i][j]["elem"].(PipelineItem),
+				cycleLeft: int(stages[i][j]["cycleLeft"].(int64)),
+			}
+		}
+	}
 
 	return nil
 }
