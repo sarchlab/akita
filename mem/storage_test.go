@@ -7,7 +7,7 @@ import (
 
 var _ = Describe("Storage", func() {
 	It("should read and write in single unit", func() {
-		storage := MakeStorage(4096)
+		storage := NewStorage(4096)
 		storage.Write(0, []byte{1, 2, 3, 4})
 
 		res, _ := storage.Read(0, 2)
@@ -18,7 +18,7 @@ var _ = Describe("Storage", func() {
 	})
 
 	It("should read and write across units", func() {
-		storage := MakeStorage(8192)
+		storage := NewStorage(8192)
 		storage.Write(4094, []byte{1, 2, 3, 4})
 
 		res, _ := storage.Read(4094, 4)
@@ -26,7 +26,7 @@ var _ = Describe("Storage", func() {
 	})
 
 	It("should return error if accessing over the capacity", func() {
-		storage := MakeStorage(4096)
+		storage := NewStorage(4096)
 		err := storage.Write(4097, []byte{1})
 		Expect(err).To(MatchError(
 			"accessing physical address beyond the storage capacity"))

@@ -43,38 +43,6 @@ type Comp struct {
 	state
 }
 
-// ID returns the ID of the endpoint.
-func (c *Comp) ID() string {
-	return c.Name()
-}
-
-// Serialize returns the serialization of the endpoint.
-func (c *Comp) Serialize() (map[string]any, error) {
-	assemblingMsgs := make([]*msgToAssemble, 0, c.assemblingMsgs.Len())
-	for e := c.assemblingMsgs.Front(); e != nil; e = e.Next() {
-		assemblingMsgs = append(
-			assemblingMsgs,
-			e.Value.(*msgToAssemble),
-		)
-	}
-
-	return map[string]any{
-		"msgOutBuf":      c.msgOutBuf,
-		"flitsToSend":    c.flitsToSend,
-		"assemblingMsgs": assemblingMsgs,
-		"assembledMsgs":  c.assembledMsgs,
-	}, nil
-}
-
-// Deserialize deserializes the endpoint.
-func (c *Comp) Deserialize(data map[string]any) error {
-	for _, msg := range data["msgOutBuf"].([]map[string]any) {
-		c.msgOutBuf = append(c.msgOutBuf, msg.(modeling.Msg))
-	}
-
-	return nil
-}
-
 // PlugIn connects a port to the endpoint.
 func (c *Comp) PlugIn(port modeling.Port) {
 	port.SetConnection(c)

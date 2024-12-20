@@ -38,15 +38,13 @@ func makeStorageUnit(uintSize uint64) storageUnit {
 	return u
 }
 
-// MakeStorage creates a storage object with the specified capacity
-func MakeStorage(capacity uint64) Storage {
-	storage := Storage{
+// NewStorage creates a new storage object with the specified capacity.
+func NewStorage(capacity uint64) *Storage {
+	return &Storage{
 		capacity: capacity,
 		unitSize: 4 * KB,
 		data:     make(map[uint64]storageUnit),
 	}
-
-	return storage
 }
 
 // MakeStorageWithUnitSize creates a storage object with the specified capacity.

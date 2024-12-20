@@ -36,7 +36,7 @@ func (r FlushReq) GenerateRsp() modeling.Rsp {
 			Dst: r.Src,
 		},
 
-		OriginalReq: r,
+		RspTo: r.ID,
 	}
 
 	return rsp
