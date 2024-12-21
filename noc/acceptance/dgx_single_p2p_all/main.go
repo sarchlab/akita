@@ -12,6 +12,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/nvlink"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
@@ -39,9 +40,12 @@ func main() {
 			rand.Seed(1)
 
 			engine := timing.NewSerialEngine()
+			sim := simulation.NewSimulation()
+			sim.RegisterEngine(engine)
+
 			t := acceptance.NewTest()
 
-			agents := createNetwork(engine, t)
+			agents := createNetwork(sim, t)
 			t.RegisterAgent(agents[i])
 			t.RegisterAgent(agents[j])
 			t.GenerateMsgs(2000)
@@ -60,15 +64,15 @@ func main() {
 }
 
 func createNetwork(
-	engine timing.Engine,
+	sim simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	// visTracer := tracing.NewMySQLTracer()
 	// visTracer.Init()
-	agents := createAgents(engine, test)
+	agents := createAgents(sim, test)
 
 	connector := nvlink.NewConnector().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithPCIeVersion(3, 16)
 	connector.CreateNetwork("Network")
 
@@ -81,7 +85,7 @@ func createNetwork(
 }
 
 func createAgents(
-	engine timing.Engine,
+	sim simulation.Simulation,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * timing.GHz
@@ -90,7 +94,7 @@ func createAgents(
 
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), 1, test)
+			sim, freq, fmt.Sprintf("Agent%d", i), 1, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
