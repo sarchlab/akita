@@ -26,7 +26,7 @@ var _ = Describe("Connector", func() {
 		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
 		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
-		connector = mesh.NewConnector().WithEngine(engine)
+		connector = mesh.NewConnector().WithSimulation(sim)
 		connector.CreateNetwork("Network")
 	})
 
