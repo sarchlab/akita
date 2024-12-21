@@ -13,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -64,7 +65,7 @@ type SwitchToSwitchLinkParameter struct {
 // Connector can build complex network topologies.
 type Connector struct {
 	name         string
-	engine       timing.Engine
+	sim          simulation.Simulation
 	monitor      *monitoring.Monitor
 	defaultFreq  timing.Freq
 	flitSize     int
@@ -87,10 +88,10 @@ func MakeConnector() Connector {
 	}
 }
 
-// WithEngine sets the engine to be used by all the components in the
+// WithSimulation sets the simulation to be used by all the components in the
 // connection.
-func (c Connector) WithEngine(e timing.Engine) Connector {
-	c.engine = e
+func (c Connector) WithSimulation(s simulation.Simulation) Connector {
+	c.sim = s
 	return c
 }
 
@@ -176,7 +177,7 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
 	sw := switches.MakeBuilder().
-		WithEngine(c.engine).
+		WithSimulation(c.sim).
 		WithFreq(c.defaultFreq).
 		WithArbiter(arbiter).
 		WithRoutingTable(rt).
@@ -260,7 +261,7 @@ func (c *Connector) createEndPointWithName(
 ) *deviceNode {
 	fullName := fmt.Sprintf("%s.%s", c.name, name)
 	endPoint := endpoint.MakeBuilder().
-		WithEngine(c.engine).
+		WithSimulation(c.sim).
 		WithFreq(c.defaultFreq).
 		WithFlitByteSize(c.flitSize).
 		WithDevicePorts(ports).
@@ -276,10 +277,12 @@ func (c *Connector) createEndPointWithName(
 		endPoint.AcceptHook(c.visTracer)
 	}
 
-	epPort := modeling.NewPort(endPoint,
-		param.DeviceEndParam.IncomingBufSize,
-		param.DeviceEndParam.OutgoingBufSize,
-		endPoint.Name()+".NetworkPort")
+	epPort := modeling.PortBuilder{}.
+		WithSimulation(c.sim).
+		WithComponent(endPoint).
+		WithIncomingBufCap(param.DeviceEndParam.IncomingBufSize).
+		WithOutgoingBufCap(param.DeviceEndParam.OutgoingBufSize).
+		Build(endPoint.Name() + ".NetworkPort")
 	endPoint.NetworkPort = epPort
 
 	epNode := &deviceNode{
@@ -308,10 +311,12 @@ func (c *Connector) connectEndPointWithSwitch(
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort
 
-	swPort := modeling.NewPort(sw,
-		param.SwitchEndParam.IncomingBufSize,
-		param.SwitchEndParam.OutgoingBufSize,
-		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
+	swPort := modeling.PortBuilder{}.
+		WithSimulation(c.sim).
+		WithComponent(sw).
+		WithIncomingBufCap(param.SwitchEndParam.IncomingBufSize).
+		WithOutgoingBufCap(param.SwitchEndParam.OutgoingBufSize).
+		Build(fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
 	endPoint.DefaultSwitchDst = swPort.AsRemote()
 	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
@@ -355,7 +360,7 @@ func (c *Connector) connectPorts(
 
 	if linkParam.IsIdeal {
 		conn = directconnection.MakeBuilder().
-			WithEngine(c.engine).
+			WithEngine(c.sim.GetEngine()).
 			WithFreq(c.defaultFreq).
 			Build(connName)
 	} else {
@@ -400,10 +405,12 @@ func (c *Connector) ConnectSwitches(
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
 
-	leftPort = modeling.NewPort(leftSwitch,
-		param.LeftEndParam.IncomingBufSize,
-		param.LeftEndParam.OutgoingBufSize,
-		leftPortName)
+	leftPort = modeling.PortBuilder{}.
+		WithSimulation(c.sim).
+		WithComponent(leftSwitch).
+		WithIncomingBufCap(param.LeftEndParam.IncomingBufSize).
+		WithOutgoingBufCap(param.LeftEndParam.OutgoingBufSize).
+		Build(leftPortName)
 
 	rightNode := c.switches[rightSwitchID]
 	rightSwitch := rightNode.sw
@@ -414,10 +421,12 @@ func (c *Connector) ConnectSwitches(
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
 
-	rightPort = modeling.NewPort(rightSwitch,
-		param.RightEndParam.IncomingBufSize,
-		param.RightEndParam.OutgoingBufSize,
-		rightPortName)
+	rightPort = modeling.PortBuilder{}.
+		WithSimulation(c.sim).
+		WithComponent(rightSwitch).
+		WithIncomingBufCap(param.RightEndParam.IncomingBufSize).
+		WithOutgoingBufCap(param.RightEndParam.OutgoingBufSize).
+		Build(rightPortName)
 
 	switches.MakeSwitchPortAdder(leftSwitch).
 		WithPorts(leftPort, rightPort).

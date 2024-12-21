@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -150,10 +151,14 @@ func (a *agent) Deserialize(data map[string]any) error {
 	panic("not implemented")
 }
 
-func newAgent(engine timing.Engine, freq timing.Freq, name string) *agent {
+func newAgent(sim simulation.Simulation, freq timing.Freq, name string) *agent {
 	a := new(agent)
-	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = modeling.NewPort(a, 4, 4, name+".OutPort")
+	a.TickingComponent = modeling.NewTickingComponent(name, sim.GetEngine(), freq, a)
+	a.OutPort = modeling.PortBuilder{}.
+		WithSimulation(sim).
+		WithIncomingBufCap(4).
+		WithOutgoingBufCap(4).
+		Build(name + ".OutPort")
 
 	return a
 }
@@ -182,6 +187,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	var (
 		mockCtrl        *gomock.Controller
 		engine          timing.Engine
+		sim             *MockSimulation
 		connection      *Comp
 		agents          []*agent
 		numAgents       = 10
@@ -191,10 +197,15 @@ var _ = Describe("Direct Connection Integration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
+
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
-			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
+			a := newAgent(sim, 1, fmt.Sprintf("Agent[%d]", i))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
 		}
@@ -246,12 +257,19 @@ func directConnectionTest(seed int64) timing.VTimeInSec {
 
 	numAgents := 100
 	numMsgsPerAgent := 1000
+
 	engine := timing.NewSerialEngine()
-	connection := MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
+
+	connection := MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1).
+		Build("Conn")
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {
-		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
+		a := newAgent(sim, 1, fmt.Sprintf("Agent%d", i))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)
 	}

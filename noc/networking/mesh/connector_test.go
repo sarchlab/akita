@@ -1,7 +1,9 @@
 package mesh_test
 
 import (
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
+
 	// . "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/networking/mesh"
 	"github.com/sarchlab/akita/v4/sim/modeling"
@@ -10,18 +12,30 @@ import (
 
 var _ = Describe("Connector", func() {
 	var (
+		mockCtrl  *gomock.Controller
 		engine    timing.Engine
+		sim       *MockSimulation
 		connector *mesh.Connector
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
+
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+
 		connector = mesh.NewConnector().WithEngine(engine)
 		connector.CreateNetwork("Network")
 	})
 
 	It("should be able to connect ports outside current capacity", func() {
-		port := modeling.NewPort(nil, 1, 1, "Port")
+		port := modeling.PortBuilder{}.
+			WithSimulation(sim).
+			WithIncomingBufCap(1).
+			WithOutgoingBufCap(1).
+			Build("Port")
 
 		// 8,8,2 is the default capacity
 		connector.AddTile([3]int{8, 8, 2}, []modeling.Port{port})

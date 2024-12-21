@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -180,12 +181,17 @@ func (a *Agent) sendDataOut() bool {
 }
 
 // NewAgent creates a new agent.
-func NewAgent(name string, engine timing.Engine) *Agent {
+func NewAgent(name string, sim simulation.Simulation) *Agent {
 	a := new(Agent)
 	a.TickingComponent = modeling.NewTickingComponent(
-		name, engine, 1*timing.GHz, a)
+		name, sim.GetEngine(), 1*timing.GHz, a)
 
-	a.ToOut = modeling.NewPort(a, 4, 4, name+".ToOut")
+	a.ToOut = modeling.PortBuilder{}.
+		WithSimulation(sim).
+		WithComponent(a).
+		WithIncomingBufCap(4).
+		WithOutgoingBufCap(4).
+		Build(name + ".ToOut")
 
 	return a
 }

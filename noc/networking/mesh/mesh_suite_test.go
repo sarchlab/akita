@@ -7,6 +7,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+//go:generate mockgen -destination "mock_simulation_test.go" -self_package=github.com/sarchlab/akita/v4/noc/networking/mesh -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/simulation Simulation
+
 func TestMesh(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Mesh Suite")
