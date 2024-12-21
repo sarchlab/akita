@@ -2,6 +2,7 @@ package queueing
 
 import (
 	"bytes"
+	"reflect"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
@@ -9,12 +10,31 @@ import (
 	"github.com/sarchlab/akita/v4/sim/serialization"
 )
 
+func init() {
+	serialization.RegisterType(reflect.TypeOf(&pipelineItem{}))
+}
+
 type pipelineItem struct {
 	taskID string
 }
 
 func (p pipelineItem) TaskID() string {
 	return p.taskID
+}
+
+func (p *pipelineItem) Name() string {
+	return p.taskID
+}
+
+func (p *pipelineItem) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"taskID": p.taskID,
+	}, nil
+}
+
+func (p *pipelineItem) Deserialize(data map[string]any) error {
+	p.taskID = data["taskID"].(string)
+	return nil
 }
 
 var _ = Describe("Pipeline", func() {
@@ -48,8 +68,8 @@ var _ = Describe("Pipeline", func() {
 	})
 
 	It("should process items in pipeline", func() {
-		item1 := pipelineItem{taskID: "1"}
-		item2 := pipelineItem{taskID: "2"}
+		item1 := &pipelineItem{taskID: "1"}
+		item2 := &pipelineItem{taskID: "2"}
 
 		// Cycle 0, inject item1
 		canAccept1 := pipeline.CanAccept()
@@ -112,12 +132,13 @@ var _ = Describe("Pipeline", func() {
 		sManager := serialization.NewManager(jsonCodec)
 
 		// Insert some items into the pipeline and run a few ticks.
-		item1 := pipelineItem{taskID: "1"}
-		item2 := pipelineItem{taskID: "2"}
+		item1 := &pipelineItem{taskID: "1"}
+		item2 := &pipelineItem{taskID: "2"}
 		pipeline.Accept(item1)
 		pipeline.Tick()
 		pipeline.Tick()
 		pipeline.Accept(item2)
+
 		// Advance the pipeline enough so that it has items in-flight.
 		for i := 0; i < 10; i++ {
 			pipeline.Tick()
@@ -158,8 +179,10 @@ var _ = Describe("Pipeline", func() {
 		}
 
 		// Check that the items eventually emerge in the correct order.
-		Expect(postPipelineBuffer2.Size()).To(BeNumerically(">=", 2))
+		Expect(postPipelineBuffer2.Size()).To(Equal(1))
 		Expect(postPipelineBuffer2.Pop()).To(Equal(item1))
+
+		pipeline2.Tick()
 		Expect(postPipelineBuffer2.Pop()).To(Equal(item2))
 	})
 })
@@ -206,7 +229,7 @@ var _ = Describe("Zero-Stage Pipeline", func() {
 	})
 
 	It("should forward to post buffer directory", func() {
-		item1 := pipelineItem{taskID: "1"}
+		item1 := &pipelineItem{taskID: "1"}
 
 		canAccept := pipeline.CanAccept()
 		pipeline.Accept(item1)

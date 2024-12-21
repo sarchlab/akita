@@ -11,6 +11,7 @@ import (
 
 // PipelineItem is an item that can pass through a pipeline.
 type PipelineItem interface {
+	serialization.Serializable
 	TaskID() string
 }
 
@@ -66,15 +67,22 @@ func (s *pipelineState) Serialize() (map[string]any, error) {
 }
 
 func (s *pipelineState) Deserialize(state map[string]any) error {
-	stages := state["stages"].([][]map[string]any)
+	pipesMap := state["stages"].([]any)
+	s.stages = make([][]pipelineStageInfo, len(pipesMap))
 
-	s.stages = make([][]pipelineStageInfo, len(stages))
-	for i := range stages {
-		s.stages[i] = make([]pipelineStageInfo, len(stages[i]))
-		for j := range stages[i] {
+	for i := range pipesMap {
+		pipeMap := pipesMap[i].([]any)
+
+		s.stages[i] = make([]pipelineStageInfo, len(pipeMap))
+
+		for j := range pipeMap {
+			stageMap := pipeMap[j].(map[string]any)
 			s.stages[i][j] = pipelineStageInfo{
-				elem:      stages[i][j]["elem"].(PipelineItem),
-				cycleLeft: int(stages[i][j]["cycleLeft"].(int64)),
+				cycleLeft: stageMap["cycleLeft"].(int),
+			}
+
+			if stageMap["elem"] != nil {
+				s.stages[i][j].elem = stageMap["elem"].(PipelineItem)
 			}
 		}
 	}

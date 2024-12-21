@@ -117,6 +117,8 @@ func (m *Manager) Serialize(obj any) (*Value, error) {
 	switch k {
 	case "slice":
 		return m.serializeSlice(obj)
+	case "map":
+		return m.serializeMap(obj)
 	case "serializable":
 		return m.serializeSerializable(obj.(Serializable))
 	default:
@@ -131,6 +133,8 @@ func (m *Manager) Deserialize(v *Value) (any, error) {
 		return m.deserializeSerializable(v)
 	case "slice":
 		return m.deserializeSlice(v)
+	case "map":
+		return m.deserializeMap(v)
 	default:
 		return m.deserializePrimitive(v)
 	}
@@ -171,6 +175,77 @@ func (m *Manager) serializeSlice(obj any) (*Value, error) {
 	}
 
 	return v, nil
+}
+
+func (m *Manager) serializeMap(obj any) (*Value, error) {
+	rv := reflect.ValueOf(obj)
+	if rv.Kind() != reflect.Map {
+		return nil, fmt.Errorf("object passed to serializeMap is not a map")
+	}
+
+	// Currently we assume that map keys are strings.
+	// If they're not, return an error or implement conversion logic.
+	keys := rv.MapKeys()
+	result := make(map[string]*Value, len(keys))
+
+	for _, k := range keys {
+		if k.Kind() != reflect.String {
+			return nil, fmt.Errorf("map key %v is not a string", k.Interface())
+		}
+
+		val := rv.MapIndex(k).Interface()
+
+		serializedVal, err := m.Serialize(val)
+		if err != nil {
+			return nil, err
+		}
+
+		result[k.String()] = serializedVal
+	}
+
+	kind, name := typeKindName(obj)
+	v := &Value{
+		T: name,
+		K: kind,
+		V: result,
+	}
+
+	return v, nil
+}
+
+func (m *Manager) deserializeMap(v *Value) (any, error) {
+	if v.K != "map" {
+		return nil, fmt.Errorf("value kind is %s, not 'map'", v.K)
+	}
+
+	rawMap, ok := v.V.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("value V is not a map")
+	}
+
+	result := make(map[string]any, len(rawMap))
+
+	for key, elem := range rawMap {
+		elemMap, ok := elem.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("map element for key %q is not a map", key)
+		}
+
+		elemVal := v.mapToValue(elemMap)
+
+		deserializedElem, err := m.Deserialize(elemVal)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed to deserialize map element for key %q: %w",
+				key,
+				err,
+			)
+		}
+
+		result[key] = deserializedElem
+	}
+
+	return result, nil
 }
 
 func (m *Manager) deserializeSlice(v *Value) (any, error) {
@@ -324,7 +399,15 @@ func (m *Manager) deserializePrimitive(v *Value) (any, error) {
 }
 
 func typeKindName(val any) (kind, name string) {
+	if val == nil {
+		return "nil", ""
+	}
+
 	typeOf := reflect.TypeOf(val)
+	if typeOf == nil {
+		return "nil", ""
+	}
+
 	kind = typeOf.Kind().String()
 
 	switch kind {
