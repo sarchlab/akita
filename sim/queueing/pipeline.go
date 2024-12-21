@@ -1,12 +1,17 @@
 package queueing
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/naming"
+	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 // PipelineItem is an item that can pass through a pipeline.
 type PipelineItem interface {
+	serialization.Serializable
 	TaskID() string
 }
 
@@ -14,6 +19,7 @@ type PipelineItem interface {
 type Pipeline interface {
 	naming.Named
 	hooking.Hookable
+	simulation.StateHolder
 
 	// Tick moves elements in the pipeline forward.
 	Tick() (madeProgress bool)
@@ -29,6 +35,61 @@ type Pipeline interface {
 	Clear()
 }
 
+func init() {
+	serialization.RegisterType(reflect.TypeOf(&pipelineState{}))
+}
+
+type pipelineState struct {
+	name   string
+	stages [][]pipelineStageInfo
+}
+
+func (s *pipelineState) Name() string {
+	return s.name
+}
+
+func (s *pipelineState) Serialize() (map[string]any, error) {
+	stages := make([][]map[string]any, len(s.stages))
+
+	for i := range s.stages {
+		stages[i] = make([]map[string]any, len(s.stages[i]))
+		for j := range s.stages[i] {
+			stages[i][j] = map[string]any{
+				"elem":      s.stages[i][j].elem,
+				"cycleLeft": s.stages[i][j].cycleLeft,
+			}
+		}
+	}
+
+	return map[string]any{
+		"stages": stages,
+	}, nil
+}
+
+func (s *pipelineState) Deserialize(state map[string]any) error {
+	pipesMap := state["stages"].([]any)
+	s.stages = make([][]pipelineStageInfo, len(pipesMap))
+
+	for i := range pipesMap {
+		pipeMap := pipesMap[i].([]any)
+
+		s.stages[i] = make([]pipelineStageInfo, len(pipeMap))
+
+		for j := range pipeMap {
+			stageMap := pipeMap[j].(map[string]any)
+			s.stages[i][j] = pipelineStageInfo{
+				cycleLeft: stageMap["cycleLeft"].(int),
+			}
+
+			if stageMap["elem"] != nil {
+				s.stages[i][j].elem = stageMap["elem"].(PipelineItem)
+			}
+		}
+	}
+
+	return nil
+}
+
 type pipelineStageInfo struct {
 	elem      PipelineItem
 	cycleLeft int
@@ -36,16 +97,24 @@ type pipelineStageInfo struct {
 
 type pipelineImpl struct {
 	hooking.HookableBase
-	name            string
+	*pipelineState
+
 	width           int
 	numStage        int
 	cyclePerStage   int
 	postPipelineBuf Buffer
-	stages          [][]pipelineStageInfo
 }
 
 func (p *pipelineImpl) Name() string {
 	return p.name
+}
+
+func (p *pipelineImpl) State() simulation.State {
+	return p.pipelineState
+}
+
+func (p *pipelineImpl) SetState(state simulation.State) {
+	p.pipelineState = state.(*pipelineState)
 }
 
 // Clear discards all the items in the pipeline.
@@ -166,6 +235,7 @@ func (p *pipelineImpl) Accept(elem PipelineItem) {
 
 // A PipelineBuilder can build pipelines.
 type PipelineBuilder struct {
+	sim             simulation.Simulation
 	width           int
 	numStage        int
 	cyclePerStage   int
@@ -179,6 +249,14 @@ func MakePipelineBuilder() PipelineBuilder {
 		numStage:      5,
 		cyclePerStage: 1,
 	}
+}
+
+// WithSimulation sets the simulation that the pipeline belongs to.
+func (b PipelineBuilder) WithSimulation(
+	sim simulation.Simulation,
+) PipelineBuilder {
+	b.sim = sim
+	return b
 }
 
 // WithPipelineWidth sets the number of lanes in the pipeline. If width=4,
@@ -213,7 +291,9 @@ func (b PipelineBuilder) Build(name string) Pipeline {
 	naming.NameMustBeValid(name)
 
 	p := &pipelineImpl{
-		name:            name,
+		pipelineState: &pipelineState{
+			name: name,
+		},
 		width:           b.width,
 		numStage:        b.numStage,
 		cyclePerStage:   b.cyclePerStage,
@@ -221,6 +301,8 @@ func (b PipelineBuilder) Build(name string) Pipeline {
 	}
 
 	p.Clear()
+
+	b.sim.RegisterStateHolder(p)
 
 	return p
 }

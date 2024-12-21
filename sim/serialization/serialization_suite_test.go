@@ -18,6 +18,7 @@ func init() {
 	serialization.RegisterType(reflect.TypeOf(&TestType2{}))
 	serialization.RegisterType(reflect.TypeOf(&TestType3{}))
 	serialization.RegisterType(reflect.TypeOf(&TestType4{}))
+	serialization.RegisterType(reflect.TypeOf(&TestType5{}))
 }
 
 func TestSerialization(t *testing.T) {
@@ -140,6 +141,28 @@ func (t *TestType4) Deserialize(
 		t.deps[i] = depMap.(naming.Named)
 	}
 
+	return nil
+}
+
+type TestType5 struct {
+	name string
+	deps map[string]any
+}
+
+func (t *TestType5) Name() string {
+	return t.name
+}
+
+func (t *TestType5) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"deps": t.deps,
+	}, nil
+}
+
+func (t *TestType5) Deserialize(
+	data map[string]any,
+) error {
+	t.deps = data["deps"].(map[string]any)
 	return nil
 }
 
@@ -274,6 +297,32 @@ var _ = Describe("Serialization", func() {
 		Expect(result.(*TestType4).deps[0].(*TestType1).v1).To(Equal(2))
 		Expect(result.(*TestType4).deps[1].(*TestType2).v2).To(Equal(3))
 		Expect(result.(*TestType4).deps[1].(*TestType2).Ptr.v1).To(Equal(4))
+		manager.FinalizeDeserialization()
+	})
+
+	It("should serialize map", func() {
+		s := &TestType5{
+			name: "5",
+			deps: map[string]any{
+				"a": 1,
+				"b": &TestType1{name: "T1_1", v1: 2},
+			},
+		}
+
+		manager.StartSerialization()
+		_, err := manager.Serialize(s)
+		Expect(err).To(BeNil())
+		manager.FinalizeSerialization(buffer)
+
+		fmt.Println(buffer.String())
+
+		manager.StartDeserialization(buffer)
+		result, err := manager.Deserialize(serialization.IDToDeserialize("5"))
+		Expect(err).To(BeNil())
+		Expect(result).To(BeAssignableToTypeOf(&TestType5{}))
+		Expect(result.(*TestType5).deps).To(HaveLen(2))
+		Expect(result.(*TestType5).deps["a"]).To(Equal(1))
+		Expect(result.(*TestType5).deps["b"].(*TestType1).v1).To(Equal(2))
 		manager.FinalizeDeserialization()
 	})
 })

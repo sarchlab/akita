@@ -285,33 +285,33 @@ func srcDstMustNotBeTheSame(msg Msg) {
 }
 
 type PortBuilder struct {
-	simulation     *simulation.Simulation
+	simulation     simulation.Simulation
 	comp           Component
 	incomingBufCap int
 	outgoingBufCap int
 }
 
-func (b *PortBuilder) WithSimulation(sim *simulation.Simulation) *PortBuilder {
+func (b PortBuilder) WithSimulation(sim simulation.Simulation) PortBuilder {
 	b.simulation = sim
 	return b
 }
 
-func (b *PortBuilder) WithComponent(comp Component) *PortBuilder {
+func (b PortBuilder) WithComponent(comp Component) PortBuilder {
 	b.comp = comp
 	return b
 }
 
-func (b *PortBuilder) WithIncomingBufCap(cap int) *PortBuilder {
+func (b PortBuilder) WithIncomingBufCap(cap int) PortBuilder {
 	b.incomingBufCap = cap
 	return b
 }
 
-func (b *PortBuilder) WithOutgoingBufCap(cap int) *PortBuilder {
+func (b PortBuilder) WithOutgoingBufCap(cap int) PortBuilder {
 	b.outgoingBufCap = cap
 	return b
 }
 
-func (b *PortBuilder) Build(name string) Port {
+func (b PortBuilder) Build(name string) Port {
 	p := &defaultPort{
 		name: name,
 		comp: b.comp,

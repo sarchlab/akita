@@ -26,6 +26,7 @@ func (m sampleMsg) Clone() Msg {
 var _ = Describe("DefaultPort", func() {
 	var (
 		mockController *gomock.Controller
+		sim            *MockSimulation
 		comp           *MockComponent
 		conn           *MockConnection
 		port           *defaultPort
@@ -33,9 +34,16 @@ var _ = Describe("DefaultPort", func() {
 
 	BeforeEach(func() {
 		mockController = gomock.NewController(GinkgoT())
+		sim = NewMockSimulation(mockController)
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 		comp = NewMockComponent(mockController)
 		conn = NewMockConnection(mockController)
-		port = NewPort(comp, 4, 4, "Port").(*defaultPort)
+		port = PortBuilder{}.
+			WithSimulation(sim).
+			WithComponent(comp).
+			WithIncomingBufCap(4).
+			WithOutgoingBufCap(4).
+			Build("Port").(*defaultPort)
 		port.SetConnection(conn)
 	})
 
@@ -83,7 +91,12 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should send successfully", func() {
-		dst := NewPort(comp, 4, 4, "DstPort")
+		dst := PortBuilder{}.
+			WithSimulation(sim).
+			WithComponent(comp).
+			WithIncomingBufCap(4).
+			WithOutgoingBufCap(4).
+			Build("DstPort").(*defaultPort)
 		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
@@ -99,7 +112,12 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should propagate error when outgoing buff is full", func() {
-		dst := NewPort(comp, 4, 4, "DstPort")
+		dst := PortBuilder{}.
+			WithSimulation(sim).
+			WithComponent(comp).
+			WithIncomingBufCap(4).
+			WithOutgoingBufCap(4).
+			Build("DstPort").(*defaultPort)
 		msg := &sampleMsg{
 			MsgMeta: MsgMeta{
 				Src: port.AsRemote(),
@@ -129,7 +147,10 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should fail to deliver when incoming buffer is full", func() {
 		msg := &sampleMsg{}
-		port.incomingBuf = queueing.NewBuffer("Buf", 4)
+		port.incomingBuf = queueing.BufferBuilder{}.
+			WithSimulation(sim).
+			WithCapacity(4).
+			Build("Buf")
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
