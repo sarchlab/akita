@@ -24,6 +24,7 @@ var _ = Describe("End Point", func() {
 	var (
 		mockCtrl          *gomock.Controller
 		engine            *MockEngine
+		sim               *MockSimulation
 		devicePort        *MockPort
 		networkPort       *MockPort
 		defaultSwitchPort *MockPort
@@ -33,6 +34,11 @@ var _ = Describe("End Point", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
 			AsRemote().
@@ -52,7 +58,7 @@ var _ = Describe("End Point", func() {
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
 		endPoint = MakeBuilder().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithFreq(1).
 			WithFlitByteSize(32).
 			WithDevicePorts([]modeling.Port{devicePort}).

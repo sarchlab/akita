@@ -5,12 +5,13 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Builder can help building End Points.
 type Builder struct {
-	engine                   timing.Engine
+	sim                      simulation.Simulation
 	freq                     timing.Freq
 	numInputChannels         int
 	numOutputChannels        int
@@ -35,9 +36,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithEngine sets the engine of the End Point to build.
-func (b Builder) WithEngine(e timing.Engine) Builder {
-	b.engine = e
+// WithSimulation sets the simulation of the End Point to build.
+func (b Builder) WithSimulation(sim simulation.Simulation) Builder {
+	b.sim = sim
 	return b
 }
 
@@ -88,13 +89,12 @@ func (b Builder) WithDevicePorts(ports []modeling.Port) Builder {
 
 // Build creates a new End Point.
 func (b Builder) Build(name string) *Comp {
-	b.engineMustBeGiven()
 	b.freqMustBeGiven()
 	b.flitByteSizeMustBeGiven()
 
 	ep := &Comp{}
 	ep.TickingComponent = modeling.NewTickingComponent(
-		name, b.engine, b.freq, ep)
+		name, b.sim.GetEngine(), b.freq, ep)
 	ep.flitByteSize = b.flitByteSize
 
 	ep.numInputChannels = b.numInputChannels
@@ -105,9 +105,12 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.encodingOverhead = b.encodingOverhead
 
-	ep.NetworkPort = modeling.NewPort(
-		ep, b.networkPortBufferSize, b.networkPortBufferSize,
-		fmt.Sprintf("%s.NetworkPort", ep.Name()))
+	ep.NetworkPort = modeling.PortBuilder{}.
+		WithSimulation(b.sim).
+		WithComponent(ep).
+		WithIncomingBufCap(b.networkPortBufferSize).
+		WithOutgoingBufCap(b.networkPortBufferSize).
+		Build(fmt.Sprintf("%s.NetworkPort", ep.Name()))
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp)
@@ -117,12 +120,6 @@ func (b Builder) Build(name string) *Comp {
 	ep.AddMiddleware(middleware)
 
 	return ep
-}
-
-func (b Builder) engineMustBeGiven() {
-	if b.engine == nil {
-		panic("engine is not given")
-	}
 }
 
 func (b Builder) freqMustBeGiven() {
