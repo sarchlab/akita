@@ -2,14 +2,17 @@ package ping
 
 import (
 	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func Example_pingWithEvents() {
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
 
-	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
-	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
+	agentA := Builder{}.WithSimulation(sim).Build("AgentA")
+	agentB := Builder{}.WithSimulation(sim).Build("AgentB")
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).

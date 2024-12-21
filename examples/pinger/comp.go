@@ -69,8 +69,8 @@ type RspPingEvent struct {
 type Comp struct {
 	*modeling.ComponentBase
 
+	engine  timing.Engine
 	OutPort modeling.Port
-	Engine  timing.Engine
 
 	startTime []timing.VTimeInSec
 	nextSeqID int
@@ -133,16 +133,16 @@ func (c *Comp) NotifyRecv(port modeling.Port) {
 
 func (c *Comp) processPingMsg(msg PingReq) {
 	rspEvent := RspPingEvent{
-		EventBase: timing.NewEventBase(c.Engine.Now()+2, c),
+		EventBase: timing.NewEventBase(c.engine.Now()+2, c),
 		pingMsg:   msg,
 	}
-	c.Engine.Schedule(rspEvent)
+	c.engine.Schedule(rspEvent)
 }
 
 func (c *Comp) processPingRsp(msg PingRsp) {
 	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
-	now := c.Engine.Now()
+	now := c.engine.Now()
 	duration := now - startTime
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
