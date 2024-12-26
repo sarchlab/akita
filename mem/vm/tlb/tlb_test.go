@@ -13,10 +13,10 @@ import (
 )
 
 var _ = Describe("TLB", func() {
-
 	var (
 		mockCtrl      *gomock.Controller
 		engine        *MockEngine
+		simulation    *MockSimulation
 		tlb           *Comp
 		tlbMiddleware *middleware
 		set           *MockSet
@@ -28,24 +28,34 @@ var _ = Describe("TLB", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(engine).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
 		set = NewMockSet(mockCtrl)
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
 			Return(modeling.RemotePort("TopPort")).
 			AnyTimes()
+
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
 			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
+
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
 			Return(modeling.RemotePort("ControlPort")).
 			AnyTimes()
 
-		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
+		tlb = MakeBuilder().WithSimulation(simulation).Build("TLB")
 		tlb.topPort = topPort
 		tlb.bottomPort = bottomPort
 		tlb.controlPort = controlPort
@@ -380,6 +390,7 @@ var _ = Describe("TLB Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     timing.Engine
+		simulation *MockSimulation
 		tlb        *Comp
 		lowModule  *MockPort
 		agent      *MockPort
@@ -390,6 +401,14 @@ var _ = Describe("TLB Integration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
+
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(engine).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
 		lowModule = NewMockPort(mockCtrl)
 		lowModule.EXPECT().
 			AsRemote().
@@ -412,7 +431,7 @@ var _ = Describe("TLB Integration", func() {
 			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		tlb = MakeBuilder().
-			WithEngine(engine).
+			WithSimulation(simulation).
 			Build("TLB")
 		tlb.LowModule = lowModule.AsRemote()
 
