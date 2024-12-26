@@ -13,6 +13,7 @@ import (
 var _ = Describe("Address Translator", func() {
 	var (
 		mockCtrl            *gomock.Controller
+		simulation          *MockSimulation
 		topPort             *MockPort
 		bottomPort          *MockPort
 		translationPort     *MockPort
@@ -25,6 +26,14 @@ var _ = Describe("Address Translator", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(nil).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
@@ -48,6 +57,7 @@ var _ = Describe("Address Translator", func() {
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		builder := MakeBuilder().
+			WithSimulation(simulation).
 			WithLog2PageSize(12).
 			WithFreq(1).
 			WithAddressToPortMapper(addressToPortMapper)
