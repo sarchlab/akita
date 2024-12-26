@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -51,8 +52,8 @@ func NewConnector() *Connector {
 }
 
 // WithEngine sets the engine to be used.
-func (c *Connector) WithEngine(e timing.Engine) *Connector {
-	c.connector = c.connector.WithEngine(e)
+func (c *Connector) WithSimulation(s simulation.Simulation) *Connector {
+	c.connector = c.connector.WithSimulation(s)
 	return c
 }
 

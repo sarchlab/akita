@@ -16,6 +16,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache/writearound"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/mem/trace"
@@ -62,19 +63,22 @@ func buildEnvironment() {
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
+
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
-	agent = acceptancetests.NewMemAccessAgent(engine)
+	agent = acceptancetests.NewMemAccessAgent(sim)
 	agent.MaxAddress = *maxAddressFlag
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	builder := writearound.NewBuilder().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).
 		WithNumMSHREntry(4).

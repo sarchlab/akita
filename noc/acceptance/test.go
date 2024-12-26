@@ -68,7 +68,8 @@ func (t *Test) GenerateMsgs(n uint64) {
 				ID:           id.Generate(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
-				TrafficClass: rand.Intn(4096),
+				TrafficClass: 1,
+				TrafficBytes: rand.Intn(4096),
 			},
 		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)

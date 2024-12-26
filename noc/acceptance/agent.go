@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -19,7 +20,7 @@ type Agent struct {
 
 // NewAgent creates a new agent.
 func NewAgent(
-	engine timing.Engine,
+	sim simulation.Simulation,
 	freq timing.Freq,
 	name string,
 	numPorts int,
@@ -27,10 +28,20 @@ func NewAgent(
 ) *Agent {
 	a := &Agent{}
 	a.test = test
-	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(
+		name,
+		sim.GetEngine(),
+		freq,
+		a,
+	)
 
 	for i := 0; i < numPorts; i++ {
-		p := modeling.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
+		p := modeling.PortBuilder{}.
+			WithSimulation(sim).
+			WithComponent(a).
+			WithIncomingBufCap(1).
+			WithOutgoingBufCap(1).
+			Build(fmt.Sprintf("%s.Port%d", name, i))
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
 

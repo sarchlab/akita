@@ -2,12 +2,13 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder can build TLBs
 type Builder struct {
-	engine         timing.Engine
+	simulation     simulation.Simulation
 	freq           timing.Freq
 	numReqPerCycle int
 	numSets        int
@@ -29,9 +30,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithEngine sets the engine that the TLBs to use
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation that the TLBs to use
+func (b Builder) WithSimulation(simulation simulation.Simulation) Builder {
+	b.simulation = simulation
 	return b
 }
 
@@ -84,8 +85,8 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
 	tlb := &Comp{}
-	tlb.TickingComponent =
-		modeling.NewTickingComponent(name, b.engine, b.freq, tlb)
+	tlb.TickingComponent = modeling.NewTickingComponent(
+		name, b.simulation.GetEngine(), b.freq, tlb)
 
 	tlb.numSets = b.numSets
 	tlb.numWays = b.numWays
@@ -105,17 +106,27 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, c *Comp) {
-	c.topPort = modeling.NewPort(c,
-		b.numReqPerCycle, b.numReqPerCycle,
-		name+".TopPort")
+	c.topPort = modeling.PortBuilder{}.
+		WithSimulation(b.simulation).
+		WithComponent(c).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build(name + ".TopPort")
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = modeling.NewPort(c,
-		b.numReqPerCycle, b.numReqPerCycle,
-		name+".BottomPort")
+	c.bottomPort = modeling.PortBuilder{}.
+		WithComponent(c).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build(name + ".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = modeling.NewPort(c, 1, 1,
-		name+".ControlPort")
+	c.controlPort = modeling.PortBuilder{}.
+		WithComponent(c).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(1).
+		WithOutgoingBufCap(1).
+		Build(name + ".ControlPort")
 	c.AddPort("Control", c.controlPort)
 }

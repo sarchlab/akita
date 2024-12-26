@@ -4,11 +4,15 @@ import (
 	"fmt"
 	"testing"
 
+	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
+
+//go:generate mockgen -destination "mock_simulation_test.go" -self_package=github.com/sarchlab/akita/v4/noc/networking/networkconnector -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/simulation Simulation
+//go:generate mockgen -destination "mock_timing_test.go" -self_package=github.com/sarchlab/akita/v4/noc/networking/networkconnector -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/timing Engine
 
 func TestNetworkconnector(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -16,17 +20,39 @@ func TestNetworkconnector(t *testing.T) {
 }
 
 var _ = Describe("Connector", func() {
+	var (
+		mockCtrl *gomock.Controller
+		engine   timing.Engine
+		sim      *MockSimulation
+	)
+
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		engine = timing.NewSerialEngine()
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
+
 	It("should establish route in a simple network", func() {
-		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
 		connector.AddSwitch()
 
 		for i := 0; i < 2; i++ {
-			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := modeling.PortBuilder{}.
+				WithSimulation(sim).
+				WithIncomingBufCap(1).
+				WithOutgoingBufCap(1).
+				Build(fmt.Sprintf("Port%d", i))
+
 			connector.ConnectDevice(0, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -54,9 +80,8 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a small tree", func() {
-		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
@@ -65,7 +90,12 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 2; i++ {
-			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := modeling.PortBuilder{}.
+				WithSimulation(sim).
+				WithIncomingBufCap(1).
+				WithOutgoingBufCap(1).
+				Build(fmt.Sprintf("Port%d", i))
+
 			connector.ConnectDevice(1+i, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{
@@ -120,9 +150,8 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a large tree", func() {
-		engine := timing.NewSerialEngine()
 		connector := MakeConnector().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithDefaultFreq(1 * timing.GHz)
 		connector.NewNetwork("Network")
 
@@ -131,7 +160,12 @@ var _ = Describe("Connector", func() {
 		}
 
 		for i := 0; i < 8; i++ {
-			port := modeling.NewPort(nil, 1, 1, fmt.Sprintf("Port%d", i))
+			port := modeling.PortBuilder{}.
+				WithSimulation(sim).
+				WithIncomingBufCap(1).
+				WithOutgoingBufCap(1).
+				Build(fmt.Sprintf("Port%d", i))
+
 			connector.ConnectDevice(8+i, []modeling.Port{port},
 				DeviceToSwitchLinkParameter{
 					DeviceEndParam: LinkEndDeviceParameter{

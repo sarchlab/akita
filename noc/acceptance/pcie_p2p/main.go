@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/pcie"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
@@ -16,10 +17,13 @@ func main() {
 	rand.Seed(1)
 
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
+
 	t := acceptance.NewTest()
 
-	createNetwork(engine, t)
-	t.GenerateMsgs(1000)
+	createNetwork(sim, t)
+	t.GenerateMsgs(10000)
 
 	err := engine.Run()
 	if err != nil {
@@ -31,21 +35,21 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine timing.Engine, test *acceptance.Test) {
+func createNetwork(sim simulation.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)
+			sim, freq, fmt.Sprintf("Agent%d", i), 5, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
 
 	pcieConnector := pcie.NewConnector()
 	pcieConnector = pcieConnector.
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFrequency(1*timing.GHz).
 		WithVersion(4, 16)
 

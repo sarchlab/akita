@@ -74,6 +74,7 @@ func (m *sampleMsg) Deserialize(
 var _ = Describe("Switch", func() {
 	var (
 		mockCtrl                   *gomock.Controller
+		sim                        *MockSimulation
 		engine                     *MockEngine
 		portComplex1, portComplex2 portComplex
 		dstPort                    *MockPort
@@ -86,6 +87,10 @@ var _ = Describe("Switch", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
+
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(engine).AnyTimes()
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
 		portComplex1 = createMockPortComplex(mockCtrl, 1)
 		portComplex2 = createMockPortComplex(mockCtrl, 2)
@@ -101,7 +106,7 @@ var _ = Describe("Switch", func() {
 		arbiter.EXPECT().AddBuffer(gomock.Any()).AnyTimes()
 
 		sw = MakeBuilder().
-			WithEngine(engine).
+			WithSimulation(sim).
 			WithFreq(1).
 			WithRoutingTable(routingTable).
 			WithArbiter(arbiter).
@@ -135,7 +140,7 @@ var _ = Describe("Switch", func() {
 		port1Pipeline.
 			EXPECT().
 			Accept(gomock.Any()).
-			Do(func(i flitPipelineItem) {
+			Do(func(i *flitPipelineItem) {
 				Expect(i.flit).To(Equal(flit))
 			})
 
@@ -190,7 +195,7 @@ var _ = Describe("Switch", func() {
 			WithMsg(msg).
 			Build()
 
-		pipelineItem := flitPipelineItem{taskID: "flit", flit: flit}
+		pipelineItem := &flitPipelineItem{taskID: "flit", flit: flit}
 		routeBuffer1.EXPECT().Peek().Return(pipelineItem)
 		routeBuffer1.EXPECT().Pop()
 		routeBuffer2.EXPECT().Peek().Return(nil)

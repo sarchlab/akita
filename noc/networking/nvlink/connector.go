@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -72,10 +73,9 @@ func (c *Connector) WithMonitor(m *monitoring.Monitor) *Connector {
 	return c
 }
 
-// WithEngine sets the event-driven simulation engine that the PCIe connection
-// uses.
-func (c *Connector) WithEngine(engine timing.Engine) *Connector {
-	c.connector = c.connector.WithEngine(engine)
+// WithSimulation sets the simulation that the PCIe connection uses.
+func (c *Connector) WithSimulation(s simulation.Simulation) *Connector {
+	c.connector = c.connector.WithSimulation(s)
 	return c
 }
 

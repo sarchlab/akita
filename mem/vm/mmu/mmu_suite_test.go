@@ -9,8 +9,9 @@ import (
 
 //go:generate mockgen -destination "mock_modeling_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/modeling Port
 //go:generate mockgen -destination "mock_timing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/timing Engine
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressToPortMapper
+//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false "github.com/sarchlab/akita/v4/mem" AddressToPortMapper
 //go:generate mockgen -destination "mock_vm_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/vm PageTable
+//go:generate mockgen -destination "mock_simulation_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/simulation Simulation
 func TestMMU(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "MMU Suite")

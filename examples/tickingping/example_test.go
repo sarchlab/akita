@@ -2,18 +2,21 @@ package tickingping
 
 import (
 	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 func Example() {
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
 
-	agentA := MakeBuilder().
-		WithEngine(engine).
+	agentA := Builder{}.
+		WithSimulation(sim).
 		WithFreq(1 * timing.Hz).
 		Build("AgentA")
-	agentB := MakeBuilder().
-		WithEngine(engine).
+	agentB := Builder{}.
+		WithSimulation(sim).
 		WithFreq(1 * timing.Hz).
 		Build("AgentB")
 	conn := directconnection.

@@ -10,6 +10,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
 
 type flitPipelineItem struct {
@@ -17,8 +18,26 @@ type flitPipelineItem struct {
 	flit   *messaging.Flit
 }
 
-func (f flitPipelineItem) TaskID() string {
+func (f *flitPipelineItem) TaskID() string {
 	return f.taskID
+}
+
+func (f *flitPipelineItem) Name() string {
+	return f.flit.ID()
+}
+
+func (f *flitPipelineItem) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"taskID": f.taskID,
+		"flit":   f.flit,
+	}, nil
+}
+
+func (f *flitPipelineItem) Deserialize(data map[string]any) error {
+	f.taskID = data["taskID"].(string)
+	f.flit = data["flit"].(*messaging.Flit)
+
+	return nil
 }
 
 // A portComplex is the infrastructure related to a port.
@@ -59,6 +78,7 @@ type Comp struct {
 	*modeling.TickingComponent
 	modeling.MiddlewareHolder
 
+	sim                  simulation.Simulation
 	ports                []modeling.Port
 	portToComplexMapping map[modeling.RemotePort]portComplex
 	routingTable         routing.Table
@@ -113,7 +133,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 			}
 
 			flit := item.(*messaging.Flit)
-			pipelineItem := flitPipelineItem{
+			pipelineItem := &flitPipelineItem{
 				taskID: m.flitTaskID(flit),
 				flit:   flit,
 			}
@@ -157,7 +177,7 @@ func (m *middleware) route() (madeProgress bool) {
 				break
 			}
 
-			pipelineItem := item.(flitPipelineItem)
+			pipelineItem := item.(*flitPipelineItem)
 			flit := pipelineItem.flit
 			m.assignFlitOutputBuf(flit)
 			routeBuf.Pop()
@@ -343,20 +363,21 @@ func (a SwitchPortAdder) AddPort() {
 	complexID := len(a.sw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
-	sendOutBuf := queueing.NewBuffer(
-		complexName+"SendOutBuf",
-		a.numOutputChannel,
-	)
-	forwardBuf := queueing.NewBuffer(
-		complexName+"ForwardBuf",
-		a.numInputChannel,
-	)
-	routeBuf := queueing.NewBuffer(
-		complexName+"RouteBuf",
-		a.numInputChannel,
-	)
+	sendOutBuf := queueing.BufferBuilder{}.
+		WithSimulation(a.sw.sim).
+		WithCapacity(a.numOutputChannel).
+		Build(complexName + "SendOutBuf")
+	forwardBuf := queueing.BufferBuilder{}.
+		WithSimulation(a.sw.sim).
+		WithCapacity(a.numInputChannel).
+		Build(complexName + "ForwardBuf")
+	routeBuf := queueing.BufferBuilder{}.
+		WithSimulation(a.sw.sim).
+		WithCapacity(a.numInputChannel).
+		Build(complexName + "RouteBuf")
 
 	pipeline := queueing.MakePipelineBuilder().
+		WithSimulation(a.sw.sim).
 		WithNumStage(a.latency).
 		WithCyclePerStage(1).
 		WithPipelineWidth(a.numInputChannel).

@@ -13,6 +13,7 @@ var _ = Describe("MemController", func() {
 	var (
 		mockCtrl *gomock.Controller
 
+		sim                 *MockSimulation
 		topPort             *MockPort
 		addrConverter       *MockAddressConverter
 		subTransSplitter    *MockSubTransSplitter
@@ -28,6 +29,10 @@ var _ = Describe("MemController", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().GetEngine().Return(nil)
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
@@ -41,7 +46,9 @@ var _ = Describe("MemController", func() {
 		channel = NewMockChannel(mockCtrl)
 		storage = mem.NewStorage(4 * mem.GB)
 
-		memCtrl = MakeBuilder().Build("MemCtrl")
+		memCtrl = MakeBuilder().
+			WithSimulation(sim).
+			Build("MemCtrl")
 		memCtrl.topPort = topPort
 		memCtrl.subTransactionQueue = subTransactionQueue
 		memCtrl.subTransSplitter = subTransSplitter

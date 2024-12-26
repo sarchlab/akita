@@ -7,6 +7,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/nvlink"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
@@ -16,9 +17,12 @@ func main() {
 	rand.Seed(1)
 
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
+
 	t := acceptance.NewTest()
 
-	createNetwork(engine, t)
+	createNetwork(sim, t)
 	t.GenerateMsgs(1000)
 
 	err := engine.Run()
@@ -31,20 +35,20 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine timing.Engine, test *acceptance.Test) {
+func createNetwork(sim simulation.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)
+			sim, freq, fmt.Sprintf("Agent%d", i), 5, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
 
 	connector := nvlink.NewConnector().
-		WithEngine(engine)
+		WithSimulation(sim)
 
 	connector.CreateNetwork("Network")
 

@@ -16,6 +16,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	var (
 		mockCtrl      *gomock.Controller
 		engine        *MockEngine
+		simulation    *MockSimulation
 		memController *Comp
 		port          *MockPort
 	)
@@ -24,6 +25,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		engine = NewMockEngine(mockCtrl)
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(engine).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().
 			AsRemote().
@@ -31,7 +39,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			AnyTimes()
 
 		memController = MakeBuilder().
-			WithEngine(engine).
+			WithSimulation(simulation).
 			WithNewStorage(1 * mem.MB).
 			Build("MemCtrl")
 		memController.Freq = 1000 * timing.MHz

@@ -12,7 +12,7 @@ import (
 //go:generate mockgen -destination "mock_queueing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/queueing Buffer,Pipeline
 //go:generate mockgen -destination "mock_routing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/noc/networking/routing Table
 //go:generate mockgen -destination "mock_arbitration_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/noc/networking/arbitration Arbiter
-
+//go:generate mockgen -destination "mock_simulation_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/simulation Simulation
 func TestSwitches(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Switches Suite")

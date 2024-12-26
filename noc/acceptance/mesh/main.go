@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/networking/mesh"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -29,6 +30,8 @@ func main() {
 
 	test := acceptance.NewTest()
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
 
 	monitor := monitoring.NewMonitor()
 	monitor.RegisterEngine(engine)
@@ -36,7 +39,7 @@ func main() {
 	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().
 		WithMonitor(monitor).
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(freq)
 
 	connector.CreateNetwork("Mesh")
@@ -44,7 +47,7 @@ func main() {
 	for x := 0; x < meshWidth; x++ {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
-			agent := acceptance.NewAgent(engine, freq, name, 1, test)
+			agent := acceptance.NewAgent(sim, freq, name, 1, test)
 			agent.TickLater()
 
 			monitor.RegisterComponent(agent)

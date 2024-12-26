@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -266,12 +267,17 @@ func (a *MemAccessAgent) addKnownValue(address uint64, data uint32) {
 }
 
 // NewMemAccessAgent creates a new MemAccessAgent.
-func NewMemAccessAgent(engine timing.Engine) *MemAccessAgent {
+func NewMemAccessAgent(sim simulation.Simulation) *MemAccessAgent {
 	agent := new(MemAccessAgent)
 	agent.TickingComponent = modeling.NewTickingComponent(
-		"Agent", engine, 1*timing.GHz, agent)
+		"Agent", sim.GetEngine(), 1*timing.GHz, agent)
 
-	agent.memPort = modeling.NewPort(agent, 1, 1, "Agent.MemPort")
+	agent.memPort = modeling.PortBuilder{}.
+		WithComponent(agent).
+		WithSimulation(sim).
+		WithIncomingBufCap(1).
+		WithOutgoingBufCap(1).
+		Build("Agent.MemPort")
 	agent.AddPort("Mem", agent.memPort)
 
 	agent.ReadLeft = 10000

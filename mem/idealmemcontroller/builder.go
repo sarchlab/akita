@@ -3,6 +3,7 @@ package idealmemcontroller
 import (
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
@@ -11,7 +12,7 @@ type Builder struct {
 	latency          int
 	freq             timing.Freq
 	capacity         uint64
-	engine           timing.Engine
+	simulation       simulation.Simulation
 	cacheLineSize    int
 	topBufSize       int
 	storage          *mem.Storage
@@ -60,9 +61,9 @@ func (b Builder) WithCacheLineSize(cacheLineSize int) Builder {
 	return b
 }
 
-// WithEngine sets the engine of the memory controller
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation of the memory controller
+func (b Builder) WithSimulation(simulation simulation.Simulation) Builder {
+	b.simulation = simulation
 	return b
 }
 
@@ -95,7 +96,8 @@ func (b Builder) Build(
 		width:   b.width,
 	}
 
-	c.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, c)
+	c.TickingComponent = modeling.NewTickingComponent(
+		name, b.simulation.GetEngine(), b.freq, c)
 	c.Latency = b.latency
 	c.addressConverter = b.addressConverter
 
@@ -105,7 +107,12 @@ func (b Builder) Build(
 		c.Storage = b.storage
 	}
 
-	c.topPort = modeling.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
+	c.topPort = modeling.PortBuilder{}.
+		WithSimulation(b.simulation).
+		WithComponent(c).
+		WithIncomingBufCap(b.topBufSize).
+		WithOutgoingBufCap(b.topBufSize).
+		Build(name + ".TopPort")
 	c.AddPort("Top", c.topPort)
 
 	middleware := &middleware{Comp: c}

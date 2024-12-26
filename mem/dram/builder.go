@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
@@ -18,7 +19,7 @@ import (
 
 // Builder can build new memory controllers.
 type Builder struct {
-	engine           timing.Engine
+	simulation       simulation.Simulation
 	freq             timing.Freq
 	useGlobalStorage bool
 	storage          *mem.Storage
@@ -114,9 +115,9 @@ func MakeBuilder() Builder {
 	return b
 }
 
-// WithEngine sets the engine that the builder uses.
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation that the builder uses.
+func (b Builder) WithSimulation(simulation simulation.Simulation) Builder {
+	b.simulation = simulation
 	return b
 }
 
@@ -399,7 +400,8 @@ func (b Builder) Build(name string) *Comp {
 		addrConverter: b.addrConverter,
 		storage:       b.storage,
 	}
-	m.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, m)
+	m.TickingComponent = modeling.NewTickingComponent(
+		name, b.simulation.GetEngine(), b.freq, m)
 
 	b.attachHooks(m)
 	b.buildChannel(name, m)
@@ -441,7 +443,12 @@ func (b Builder) Build(name string) *Comp {
 		m.storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	m.topPort = modeling.NewPort(m, 1024, 1024, name+".TopPort")
+	m.topPort = modeling.PortBuilder{}.
+		WithComponent(m).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(1024).
+		WithOutgoingBufCap(1024).
+		Build(name + ".TopPort")
 	m.AddPort("Top", m.topPort)
 
 	middleware := &middleware{Comp: m}

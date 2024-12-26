@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/golang/mock/gomock"
@@ -19,7 +20,8 @@ import (
 //go:generate mockgen -destination "mock_addressmapping_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping Mapper
 //go:generate mockgen -destination "mock_cmdq_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/cmdq CommandQueue
 //go:generate mockgen -destination "mock_org_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/org Channel
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressConverter
+//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false "github.com/sarchlab/akita/v4/mem" AddressConverter
+//go:generate mockgen -destination "mock_simulation_test.go" -package $GOPACKAGE -write_package_comment=false "github.com/sarchlab/akita/v4/sim/simulation" Simulation
 
 func TestDram(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -30,6 +32,7 @@ var _ = Describe("DRAM Integration", func() {
 	var (
 		mockCtrl *gomock.Controller
 		engine   timing.Engine
+		sim      simulation.Simulation
 		srcPort  *MockPort
 		memCtrl  *Comp
 		conn     *directconnection.Comp
@@ -37,9 +40,13 @@ var _ = Describe("DRAM Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		engine = timing.NewSerialEngine()
+		sim = simulation.NewSimulation()
+		sim.RegisterEngine(engine)
+
 		memCtrl = MakeBuilder().
-			WithEngine(engine).
+			WithSimulation(sim).
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()

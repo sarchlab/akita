@@ -4,12 +4,13 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Builder can help building switches
 type Builder struct {
-	engine       timing.Engine
+	sim          simulation.Simulation
 	freq         timing.Freq
 	routingTable routing.Table
 	arbiter      arbitration.Arbiter
@@ -20,8 +21,8 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the switch to build uses.
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+func (b Builder) WithSimulation(sim simulation.Simulation) Builder {
+	b.sim = sim
 	return b
 }
 
@@ -45,13 +46,14 @@ func (b Builder) WithRoutingTable(rt routing.Table) Builder {
 
 // Build creates a new switch
 func (b Builder) Build(name string) *Comp {
-	b.engineMustBeGiven()
 	b.freqMustNotBeZero()
 	b.routingTableMustBeGiven()
 	b.arbiterMustBeGiven()
 
 	s := &Comp{}
-	s.TickingComponent = modeling.NewTickingComponent(name, b.engine, b.freq, s)
+	s.TickingComponent = modeling.NewTickingComponent(
+		name, b.sim.GetEngine(), b.freq, s)
+	s.sim = b.sim
 	s.routingTable = b.routingTable
 	s.arbiter = b.arbiter
 	s.portToComplexMapping = make(map[modeling.RemotePort]portComplex)
@@ -60,12 +62,6 @@ func (b Builder) Build(name string) *Comp {
 	s.AddMiddleware(middleware)
 
 	return s
-}
-
-func (b Builder) engineMustBeGiven() {
-	if b.engine == nil {
-		panic("engine of switch is not given")
-	}
 }
 
 func (b Builder) freqMustNotBeZero() {

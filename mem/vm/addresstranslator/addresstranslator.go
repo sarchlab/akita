@@ -422,7 +422,6 @@ func (m *middleware) handleRestartReq(
 	}
 
 	err := m.ctrlPort.Send(rsp)
-
 	if err != nil {
 		return false
 	}

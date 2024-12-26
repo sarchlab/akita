@@ -3,12 +3,13 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder can create address translators
 type Builder struct {
-	engine              timing.Engine
+	simulation          simulation.Simulation
 	freq                timing.Freq
 	translationProvider modeling.RemotePort
 	ctrlPort            modeling.Port
@@ -28,9 +29,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithEngine sets the engine to be used by the address translators
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation to be used by the address translators
+func (b Builder) WithSimulation(simulation simulation.Simulation) Builder {
+	b.simulation = simulation
 	return b
 }
 
@@ -83,7 +84,7 @@ func (b Builder) WithCtrlPort(p modeling.Port) Builder {
 func (b Builder) Build(name string) *Comp {
 	t := &Comp{}
 	t.TickingComponent = modeling.NewTickingComponent(
-		name, b.engine, b.freq, t)
+		name, b.simulation.GetEngine(), b.freq, t)
 
 	b.createPorts(name, t)
 
@@ -100,18 +101,35 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".TopPort")
+	t.topPort = modeling.PortBuilder{}.
+		WithComponent(t).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build(name + ".TopPort")
 	t.AddPort("Top", t.topPort)
 
-	t.bottomPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".BottomPort")
+	t.bottomPort = modeling.PortBuilder{}.
+		WithComponent(t).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build(name + ".BottomPort")
 	t.AddPort("Bottom", t.bottomPort)
 
-	t.translationPort = modeling.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".TranslationPort")
+	t.translationPort = modeling.PortBuilder{}.
+		WithComponent(t).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build(name + ".TranslationPort")
 	t.AddPort("Translation", t.translationPort)
 
-	t.ctrlPort = modeling.NewPort(t, 1, 1, name+".CtrlPort")
+	t.ctrlPort = modeling.PortBuilder{}.
+		WithComponent(t).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(1).
+		WithOutgoingBufCap(1).
+		Build(name + ".CtrlPort")
 	t.AddPort("Control", t.ctrlPort)
 }

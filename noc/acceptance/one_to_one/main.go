@@ -8,6 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/acceptance"
 	"github.com/sarchlab/akita/v4/noc/directconnection"
 	"github.com/sarchlab/akita/v4/noc/networking/switching/endpoint"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/tebeka/atexit"
 )
@@ -17,9 +18,12 @@ func main() {
 	rand.Seed(1)
 
 	engine := timing.NewSerialEngine()
+	sim := simulation.NewSimulation()
+	sim.RegisterEngine(engine)
+
 	t := acceptance.NewTest()
 
-	createNetwork(engine, t)
+	createNetwork(sim, t)
 	t.GenerateMsgs(20000)
 
 	err := engine.Run()
@@ -32,27 +36,27 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine timing.Engine, test *acceptance.Test) {
+func createNetwork(sim simulation.Simulation, test *acceptance.Test) {
 	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 2; i++ {
 		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)
+			sim, freq, fmt.Sprintf("Agent%d", i), 5, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
 
 	ep1 := endpoint.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[0].AgentPorts).
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[1].AgentPorts).
@@ -62,7 +66,7 @@ func createNetwork(engine timing.Engine, test *acceptance.Test) {
 	ep2.DefaultSwitchDst = ep1.NetworkPort.AsRemote()
 
 	conn := directconnection.MakeBuilder().
-		WithEngine(engine).
+		WithEngine(sim.GetEngine()).
 		WithFreq(freq).
 		Build("Conn")
 

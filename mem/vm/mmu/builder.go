@@ -3,12 +3,13 @@ package mmu
 import (
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // A Builder can build MMU component
 type Builder struct {
-	engine                   timing.Engine
+	simulation               simulation.Simulation
 	freq                     timing.Freq
 	log2PageSize             uint64
 	pageTable                vm.PageTable
@@ -26,9 +27,9 @@ func MakeBuilder() Builder {
 	}
 }
 
-// WithEngine sets the engine to be used with the MMU
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation to be used with the MMU
+func (b Builder) WithSimulation(simulation simulation.Simulation) Builder {
+	b.simulation = simulation
 	return b
 }
 
@@ -75,7 +76,7 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 func (b Builder) Build(name string) *Comp {
 	mmu := new(Comp)
 	mmu.TickingComponent = *modeling.NewTickingComponent(
-		name, b.engine, b.freq, mmu)
+		name, b.simulation.GetEngine(), b.freq, mmu)
 
 	b.createPorts(name, mmu)
 	b.createPageTable(mmu)
@@ -104,8 +105,19 @@ func (b Builder) createPageTable(mmu *Comp) {
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
-	mmu.topPort = modeling.NewPort(mmu, 4096, 4096, name+".ToTop")
+	mmu.topPort = modeling.PortBuilder{}.
+		WithComponent(mmu).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(4096).
+		WithOutgoingBufCap(4096).
+		Build(name + ".ToTop")
 	mmu.AddPort("Top", mmu.topPort)
-	mmu.migrationPort = modeling.NewPort(mmu, 1, 1, name+".MigrationPort")
+
+	mmu.migrationPort = modeling.PortBuilder{}.
+		WithComponent(mmu).
+		WithSimulation(b.simulation).
+		WithIncomingBufCap(1).
+		WithOutgoingBufCap(1).
+		Build(name + ".MigrationPort")
 	mmu.AddPort("Migration", mmu.migrationPort)
 }

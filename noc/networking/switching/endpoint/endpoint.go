@@ -107,8 +107,8 @@ func (m *middleware) sendFlitOut() bool {
 		}
 
 		flit := m.flitsToSend[0]
-		err := m.NetworkPort.Send(flit)
 
+		err := m.NetworkPort.Send(flit)
 		if err == nil {
 			m.flitsToSend = m.flitsToSend[1:]
 
