@@ -65,6 +65,24 @@ func (e *ParallelEngine) Name() string {
 	return "ParallelEngine"
 }
 
+// Serialize serializes the ParallelEngine.
+func (e *ParallelEngine) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"time":            e.now,
+		"queues":          e.queues,
+		"secondaryQueues": e.secondaryQueues,
+	}, nil
+}
+
+// Deserialize deserializes the ParallelEngine.
+func (e *ParallelEngine) Deserialize(data map[string]any) error {
+	e.now = data["time"].(VTimeInSec)
+	e.queues = data["queues"].([]EventQueue)
+	e.secondaryQueues = data["secondaryQueues"].([]EventQueue)
+
+	return nil
+}
+
 // func (e *ParallelEngine) spawnWorkers() {
 // 	for i := 0; i < e.maxGoRoutine; i++ {
 // 		go e.worker()
