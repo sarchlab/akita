@@ -8,26 +8,57 @@ import (
 	"github.com/sarchlab/akita/v4/sim/hooking"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/serialization"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 )
+
+func init() {
+	serialization.RegisterType(reflect.TypeOf(&dataMoverTransaction{}))
+	serialization.RegisterType(reflect.TypeOf(&state{}))
+}
 
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
 type dataMoverTransaction struct {
-	req           DataMoveRequest
-	nextReadAddr  uint64
-	nextWriteAddr uint64
-	pendingRead   map[string]mem.ReadReq
-	pendingWrite  map[string]mem.WriteReq
+	Req           DataMoveRequest
+	NextReadAddr  uint64
+	NextWriteAddr uint64
+	PendingRead   map[string]mem.ReadReq
+	PendingWrite  map[string]mem.WriteReq
 }
 
 func newDataMoverTransaction(req DataMoveRequest) *dataMoverTransaction {
 	return &dataMoverTransaction{
-		req:           req,
-		nextReadAddr:  req.SrcAddress,
-		nextWriteAddr: req.DstAddress,
-		pendingRead:   make(map[string]mem.ReadReq),
-		pendingWrite:  make(map[string]mem.WriteReq),
+		Req:           req,
+		NextReadAddr:  req.SrcAddress,
+		NextWriteAddr: req.DstAddress,
+		PendingRead:   make(map[string]mem.ReadReq),
+		PendingWrite:  make(map[string]mem.WriteReq),
 	}
+}
+
+func (t *dataMoverTransaction) Name() string {
+	return "data-mover-transaction-" + t.Req.Meta().ID
+}
+
+func (t *dataMoverTransaction) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"req":             t.Req,
+		"next-read-addr":  t.NextReadAddr,
+		"next-write-addr": t.NextWriteAddr,
+		"pending-read":    t.PendingRead,
+		"pending-write":   t.PendingWrite,
+	}, nil
+}
+
+func (t *dataMoverTransaction) Deserialize(state map[string]any) error {
+	t.Req = state["req"].(DataMoveRequest)
+	t.NextReadAddr = state["next-read-addr"].(uint64)
+	t.NextWriteAddr = state["next-write-addr"].(uint64)
+	t.PendingRead = state["pending-read"].(map[string]mem.ReadReq)
+	t.PendingWrite = state["pending-write"].(map[string]mem.WriteReq)
+
+	return nil
 }
 
 func alignAddress(addr, granularity uint64) uint64 {
@@ -40,10 +71,34 @@ func addressMustBeAligned(addr, granularity uint64) {
 	}
 }
 
+type state struct {
+	name               string
+	CurrentTransaction *dataMoverTransaction
+}
+
+// Name returns the name of the state.
+func (s *state) Name() string {
+	return s.name
+}
+
+// Serialize serializes the state.
+func (s *state) Serialize() (map[string]any, error) {
+	return map[string]any{
+		"current-transaction": s.CurrentTransaction,
+	}, nil
+}
+
+// Deserialize deserializes the state.
+func (s *state) Deserialize(state map[string]any) error {
+	s.CurrentTransaction = state["current-transaction"].(*dataMoverTransaction)
+	return nil
+}
+
 // Comp helps moving data from designated source and destination
 // following the given move direction
 type Comp struct {
 	*modeling.TickingComponent
+	*state
 
 	ctrlPort    modeling.Port
 	insidePort  modeling.Port
@@ -60,9 +115,18 @@ type Comp struct {
 	dstPortMapper      mem.AddressToPortMapper
 	srcByteGranularity uint64
 	dstByteGranularity uint64
-	currentTransaction *dataMoverTransaction
 	bufferSize         uint64
 	buffer             *buffer
+}
+
+// State returns the state of the component
+func (c *Comp) State() simulation.State {
+	return c.state
+}
+
+// SetState sets the state of the component
+func (c *Comp) SetState(s simulation.State) {
+	c.state = s.(*state)
 }
 
 // Tick ticks
@@ -86,7 +150,7 @@ func (c *Comp) parseFromCP() bool {
 		return false
 	}
 
-	if c.currentTransaction != nil {
+	if c.CurrentTransaction != nil {
 		return false
 	}
 
@@ -96,7 +160,7 @@ func (c *Comp) parseFromCP() bool {
 	}
 
 	trans := newDataMoverTransaction(moveReq)
-	c.currentTransaction = trans
+	c.CurrentTransaction = trans
 
 	c.setSrcSide(moveReq)
 	c.setDstSide(moveReq)
@@ -112,19 +176,19 @@ func (c *Comp) parseFromCP() bool {
 
 // readFromSrc reads data from source
 func (c *Comp) readFromSrc() bool {
-	if c.currentTransaction == nil {
+	if c.CurrentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
-	addr := alignAddress(trans.nextReadAddr, c.srcByteGranularity)
+	trans := c.CurrentTransaction
+	addr := alignAddress(trans.NextReadAddr, c.srcByteGranularity)
 
 	bufEndAddr := c.buffer.offset + c.bufferSize
 	if addr >= bufEndAddr {
 		return false
 	}
 
-	transEndAddr := trans.req.SrcAddress + trans.req.ByteSize
+	transEndAddr := trans.Req.SrcAddress + trans.Req.ByteSize
 	if addr > transEndAddr {
 		return false
 	}
@@ -145,8 +209,8 @@ func (c *Comp) readFromSrc() bool {
 		return false
 	}
 
-	trans.nextReadAddr += c.srcByteGranularity
-	trans.pendingRead[req.ID] = req
+	trans.NextReadAddr += c.srcByteGranularity
+	trans.PendingRead[req.ID] = req
 
 	c.traceReadWriteStart(req)
 
@@ -155,7 +219,7 @@ func (c *Comp) readFromSrc() bool {
 
 // processDataReadyFromSrc processes data ready from source
 func (c *Comp) processDataReadyFromSrc() bool {
-	if c.currentTransaction == nil {
+	if c.CurrentTransaction == nil {
 		return false
 	}
 
@@ -170,16 +234,16 @@ func (c *Comp) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingRead[readRsp.RespondTo]
+	originalReq, ok := c.CurrentTransaction.PendingRead[readRsp.RespondTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
 			readRsp.RespondTo)
 	}
 
-	offset := originalReq.Address - c.currentTransaction.req.SrcAddress
+	offset := originalReq.Address - c.CurrentTransaction.Req.SrcAddress
 	c.buffer.addData(offset, readRsp.Data)
 
-	delete(c.currentTransaction.pendingRead, readRsp.RespondTo)
+	delete(c.CurrentTransaction.PendingRead, readRsp.RespondTo)
 	c.srcPort.RetrieveIncoming()
 
 	c.traceReadWriteEnd(originalReq)
@@ -189,12 +253,12 @@ func (c *Comp) processDataReadyFromSrc() bool {
 
 // writeToDst sends data to destination
 func (c *Comp) writeToDst() bool {
-	if c.currentTransaction == nil {
+	if c.CurrentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
-	offset := trans.nextWriteAddr - trans.req.DstAddress
+	trans := c.CurrentTransaction
+	offset := trans.NextWriteAddr - trans.Req.DstAddress
 	data, ok := c.buffer.extractData(offset, c.dstByteGranularity)
 
 	if !ok {
@@ -204,10 +268,10 @@ func (c *Comp) writeToDst() bool {
 	req := mem.WriteReq{
 		MsgMeta: modeling.MsgMeta{
 			Src: c.dstPort.AsRemote(),
-			Dst: c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr),
+			Dst: c.dstPortMapper.Find(c.CurrentTransaction.NextWriteAddr),
 			ID:  id.Generate(),
 		},
-		Address:            c.currentTransaction.nextWriteAddr,
+		Address:            c.CurrentTransaction.NextWriteAddr,
 		Data:               data,
 		CanWaitForCoalesce: false,
 	}
@@ -217,9 +281,9 @@ func (c *Comp) writeToDst() bool {
 		return false
 	}
 
-	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
-	c.currentTransaction.pendingWrite[req.ID] = req
-	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.req.DstAddress)
+	c.CurrentTransaction.NextWriteAddr += c.dstByteGranularity
+	c.CurrentTransaction.PendingWrite[req.ID] = req
+	c.buffer.moveOffsetForwardTo(trans.NextWriteAddr - trans.Req.DstAddress)
 
 	c.traceReadWriteStart(req)
 
@@ -228,7 +292,7 @@ func (c *Comp) writeToDst() bool {
 
 // processWriteDoneFromDst processes write done from destination
 func (c *Comp) processWriteDoneFromDst() bool {
-	if c.currentTransaction == nil {
+	if c.CurrentTransaction == nil {
 		return false
 	}
 
@@ -242,13 +306,13 @@ func (c *Comp) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingWrite[writeRsp.RespondTo]
+	originalReq, ok := c.CurrentTransaction.PendingWrite[writeRsp.RespondTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
 			writeRsp.RespondTo)
 	}
 
-	delete(c.currentTransaction.pendingWrite, writeRsp.RespondTo)
+	delete(c.CurrentTransaction.PendingWrite, writeRsp.RespondTo)
 	c.dstPort.RetrieveIncoming()
 
 	c.traceReadWriteEnd(originalReq)
@@ -258,30 +322,30 @@ func (c *Comp) processWriteDoneFromDst() bool {
 
 // finishTransaction finishes the current transaction
 func (c *Comp) finishTransaction() bool {
-	if c.currentTransaction == nil {
+	if c.CurrentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
+	trans := c.CurrentTransaction
 
-	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
+	if trans.NextWriteAddr < trans.Req.DstAddress+trans.Req.ByteSize {
 		return false
 	}
 
-	rsp := trans.req.GenerateRsp()
+	rsp := trans.Req.GenerateRsp()
 
 	err := c.ctrlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	c.currentTransaction = nil
+	c.CurrentTransaction = nil
 	c.buffer = &buffer{
-		offset:      alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
+		offset:      alignAddress(trans.Req.SrcAddress, c.srcByteGranularity),
 		granularity: c.srcByteGranularity,
 	}
 
-	c.traceDataMoveEnd(trans.req)
+	c.traceDataMoveEnd(trans.Req)
 
 	return true
 }
@@ -351,7 +415,7 @@ func (c *Comp) traceReadWriteStart(req mem.AccessReq) {
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
 			ID:       modeling.ReqOutTaskID(req.Meta().ID),
-			ParentID: modeling.ReqInTaskID(c.currentTransaction.req.Meta().ID),
+			ParentID: modeling.ReqInTaskID(c.CurrentTransaction.Req.Meta().ID),
 			Kind:     "req_out",
 			What:     reflect.TypeOf(req).String(),
 		},
