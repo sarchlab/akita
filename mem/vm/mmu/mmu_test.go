@@ -16,6 +16,7 @@ var _ = Describe("MMU", func() {
 	var (
 		mockCtrl      *gomock.Controller
 		engine        *MockEngine
+		simulation    *MockSimulation
 		topPort       *MockPort
 		migrationPort *MockPort
 		pageTable     *MockPageTable
@@ -27,6 +28,13 @@ var _ = Describe("MMU", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		engine = NewMockEngine(mockCtrl)
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(engine).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
 		pageTable = NewMockPageTable(mockCtrl)
 
 		topPort = NewMockPort(mockCtrl)
@@ -39,7 +47,7 @@ var _ = Describe("MMU", func() {
 			Return(modeling.RemotePort("MigrationPort")).
 			AnyTimes()
 
-		builder := MakeBuilder().WithEngine(engine)
+		builder := MakeBuilder().WithSimulation(simulation)
 		mmu = builder.Build("MMU")
 		mmu.topPort = topPort
 		mmu.migrationPort = migrationPort
@@ -406,6 +414,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     timing.Engine
+		simulation *MockSimulation
 		mmu        *Comp
 		agent      *MockPort
 		connection modeling.Connection
@@ -415,7 +424,14 @@ var _ = Describe("MMU Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = timing.NewSerialEngine()
 
-		builder := MakeBuilder().WithEngine(engine)
+		simulation = NewMockSimulation(mockCtrl)
+		simulation.EXPECT().GetEngine().Return(engine).AnyTimes()
+		simulation.EXPECT().
+			RegisterStateHolder(gomock.Any()).
+			Return().
+			AnyTimes()
+
+		builder := MakeBuilder().WithSimulation(simulation)
 		mmu = builder.Build("MMU")
 
 		agent = NewMockPort(mockCtrl)
