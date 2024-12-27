@@ -126,8 +126,6 @@ var _ = Describe("Read", func() {
 		Expect(trans).To(Equal(&transaction{
 			req:       req,
 			transType: transactionTypeReadHit,
-			setID:     0,
-			wayID:     0,
 		}))
 	})
 })

@@ -182,7 +182,7 @@ func (r WriteDoneRsp) GetRspTo() string {
 }
 
 // ControlMsg is the commonly used message type for controlling the components
-// on the memory hierarchy. It is also used for resonpding the original
+// on the memory hierarchy. It is also used for responding the original
 // requester with the Done field.
 type ControlMsg struct {
 	modeling.MsgMeta

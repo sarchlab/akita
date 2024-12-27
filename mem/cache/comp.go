@@ -20,7 +20,8 @@ func init() {
 type transactionType int
 
 const (
-	transactionTypeReadHit transactionType = iota
+	transactionTypeInvalid transactionType = iota
+	transactionTypeReadHit
 	transactionTypeReadMiss
 	transactionTypeReadMSHRHit
 	transactionTypeWriteHit
@@ -29,10 +30,10 @@ const (
 )
 
 type transaction struct {
-	transType    transactionType
-	req          mem.AccessReq
-	reqToBottom  mem.AccessReq
-	setID, wayID int
+	transType   transactionType
+	req         mem.AccessReq
+	reqToBottom mem.AccessReq
+	block       tagging.Block
 }
 
 func (t *transaction) TaskID() string {
@@ -45,16 +46,18 @@ func (t *transaction) Name() string {
 
 func (t *transaction) Serialize() (map[string]any, error) {
 	return map[string]any{
-		"req":   t.req,
-		"setID": t.setID,
-		"wayID": t.wayID,
+		"transType":   t.transType,
+		"req":         t.req,
+		"reqToBottom": t.reqToBottom,
+		"block":       t.block,
 	}, nil
 }
 
 func (t *transaction) Deserialize(data map[string]any) error {
+	t.transType = transactionType(data["transType"].(int))
 	t.req = data["req"].(mem.AccessReq)
-	t.setID = int(data["setID"].(uint64))
-	t.wayID = int(data["wayID"].(uint64))
+	t.reqToBottom = data["reqToBottom"].(mem.AccessReq)
+	t.block = data["block"].(tagging.Block)
 
 	return nil
 }
@@ -113,4 +116,21 @@ func (c *Comp) Tick() bool {
 	c.MiddlewareHolder.Tick()
 
 	return true
+}
+
+func (c *Comp) removeTransaction(trans *transaction) {
+	for i, t := range c.state.Transactions {
+		if t == trans {
+			c.state.Transactions = append(
+				c.state.Transactions[:i], c.state.Transactions[i+1:]...)
+			break
+		}
+	}
+}
+
+func getCacheLineAddr(addr uint64, log2BlockSize int) uint64 {
+	mask := ^((uint64(1) << log2BlockSize) - 1)
+	cacheLineAddr := addr & mask
+
+	return cacheLineAddr
 }

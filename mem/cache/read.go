@@ -72,9 +72,9 @@ func (s *defaultReadStrategy) HandleReadHit(
 	}
 
 	transaction := &transaction{
-		req:   req,
-		setID: b.SetID,
-		wayID: b.WayID,
+		transType: transactionTypeReadHit,
+		req:       req,
+		block:     b,
 	}
 	s.Transactions = append(s.Transactions, transaction)
 
@@ -112,9 +112,9 @@ func (s *defaultReadStrategy) HandleReadMiss(
 	}
 
 	transaction := &transaction{
-		req:   req,
-		setID: victim.SetID,
-		wayID: victim.WayID,
+		transType: transactionTypeReadMiss,
+		req:       req,
+		block:     victim,
 	}
 	s.Transactions = append(s.Transactions, transaction)
 

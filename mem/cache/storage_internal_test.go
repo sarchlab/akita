@@ -16,9 +16,13 @@ var _ = Describe("Storage", func() {
 		sim        *MockSimulation
 		cache      *Comp
 		mshr       *MockMSHR
+		tags       *MockTagArray
 		topPort    *MockPort
 		bottomPort *MockPort
 		storage    *storageMiddleware
+
+		readReq mem.ReadReq
+		trans   *transaction
 	)
 
 	BeforeEach(func() {
@@ -29,6 +33,8 @@ var _ = Describe("Storage", func() {
 		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
 		mshr = NewMockMSHR(mockCtrl)
+		tags = NewMockTagArray(mockCtrl)
+
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
@@ -44,20 +50,15 @@ var _ = Describe("Storage", func() {
 			WithSimulation(sim).
 			Build("Cache")
 		cache.mshr = mshr
+		cache.tags = tags
 		cache.topPort = topPort
 		cache.bottomPort = bottomPort
 
 		storage = &storageMiddleware{
 			Comp: cache,
 		}
-	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
-
-	It("should handle read hit", func() {
-		req := mem.ReadReq{
+		readReq = mem.ReadReq{
 			MsgMeta: modeling.MsgMeta{
 				ID: "123",
 			},
@@ -65,40 +66,75 @@ var _ = Describe("Storage", func() {
 			AccessByteSize: 4,
 		}
 
-		transaction := &transaction{
-			req:   req,
-			setID: 0,
-			wayID: 0,
+		trans = &transaction{
+			block: tagging.Block{
+				PID:          vm.PID(0),
+				Tag:          0x1000,
+				WayID:        0,
+				SetID:        0,
+				CacheAddress: 0x40,
+				IsValid:      true,
+				IsDirty:      false,
+			},
 		}
 
-		block := tagging.Block{
-			PID:          vm.PID(0),
-			Tag:          0x1000,
-			WayID:        0,
-			SetID:        0,
-			CacheAddress: 0x40,
-			IsValid:      true,
-			IsDirty:      false,
-			ReadCount:    0,
-			IsLocked:     true,
-			DirtyMask:    []bool{},
-		}
-		cache.tags.Update(block)
+		cache.Transactions = append(cache.Transactions, trans)
+	})
 
-		cache.storagePostPipelineBuf.Push(transaction)
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
 
-		topPort.EXPECT().
-			Send(gomock.Any()).
-			Return(nil).
-			AnyTimes()
+	It("should handle read hit", func() {
+		trans.req = readReq
+		trans.transType = transactionTypeReadHit
+
+		prefillStorage(cache.storage)
+		cache.storagePostPipelineBuf.Push(trans)
+
+		expectDataReady(topPort, []byte{0, 1, 2, 3})
+		tags.EXPECT().Unlock(0, 0)
 
 		storage.processPostPipelineBuffer()
 
-		Expect(storage.state.Transactions).To(HaveLen(1))
-		Expect(storage.state.Transactions[0].req).To(Equal(req))
+		Expect(storage.state.Transactions).To(HaveLen(0))
+		Expect(cache.storagePostPipelineBuf.Size()).To(Equal(0))
+	})
 
-		finalBlock, ok := cache.tags.Lookup(vm.PID(0), 0x1000)
-		Expect(ok).To(BeTrue())
-		Expect(finalBlock.IsLocked).To(BeFalse())
+	It("should handle read hit, with offset", func() {
+		readReq.Address = 0x1004
+		trans.req = readReq
+		trans.transType = transactionTypeReadHit
+
+		prefillStorage(cache.storage)
+		cache.storagePostPipelineBuf.Push(trans)
+
+		expectDataReady(topPort, []byte{4, 5, 6, 7})
+		tags.EXPECT().Unlock(0, 0)
+
+		storage.processPostPipelineBuffer()
+
+		Expect(storage.state.Transactions).To(HaveLen(0))
+		Expect(cache.storagePostPipelineBuf.Size()).To(Equal(0))
 	})
 })
+
+func prefillStorage(storage *mem.Storage) {
+	data := make([]byte, 64)
+	for i := range data {
+		data[i] = byte(i)
+	}
+
+	storage.Write(0x40, data)
+}
+
+func expectDataReady(port *MockPort, data []byte) {
+	port.EXPECT().
+		Send(gomock.Any()).
+		DoAndReturn(func(msg modeling.Msg) error {
+			Expect(msg).To(BeAssignableToTypeOf(mem.DataReadyRsp{}))
+			Expect(msg.(mem.DataReadyRsp).Data).To(Equal(data))
+			return nil
+		}).
+		AnyTimes()
+}

@@ -9,6 +9,8 @@ type TagArray interface {
 	Update(block Block)
 	Visit(block Block)
 	GetSet(reqAddr uint64) (set *Set, setID int)
+	Lock(setID, wayID int)
+	Unlock(setID, wayID int)
 	Reset()
 }
 
@@ -118,4 +120,12 @@ func (d *tagArrayImpl) Reset() {
 			d.Sets[i].LRUQueue = append(d.Sets[i].LRUQueue, j)
 		}
 	}
+}
+
+func (d *tagArrayImpl) Lock(setID, wayID int) {
+	d.Sets[setID].Blocks[wayID].IsLocked = true
+}
+
+func (d *tagArrayImpl) Unlock(setID, wayID int) {
+	d.Sets[setID].Blocks[wayID].IsLocked = false
 }
