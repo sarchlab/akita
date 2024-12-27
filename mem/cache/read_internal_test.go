@@ -6,19 +6,22 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache/internal/tagging"
+	vm "github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Read", func() {
 	var (
-		mockCtrl   *gomock.Controller
-		sim        *MockSimulation
-		cache      *Comp
-		mshr       *MockMSHR
-		topPort    *MockPort
-		bottomPort *MockPort
-		read       *defaultReadStrategy
-		req        mem.ReadReq
+		mockCtrl     *gomock.Controller
+		sim          *MockSimulation
+		cache        *Comp
+		victimFinder *MockVictimFinder
+		tagArray     *MockTagArray
+		mshr         *MockMSHR
+		topPort      *MockPort
+		bottomPort   *MockPort
+		read         *defaultReadStrategy
+		req          mem.ReadReq
 	)
 
 	BeforeEach(func() {
@@ -28,7 +31,10 @@ var _ = Describe("Read", func() {
 		sim.EXPECT().GetEngine().Return(nil).AnyTimes()
 		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
+		tagArray = NewMockTagArray(mockCtrl)
+		victimFinder = NewMockVictimFinder(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
+
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
@@ -43,10 +49,11 @@ var _ = Describe("Read", func() {
 		cache = MakeBuilder().
 			WithSimulation(sim).
 			Build("Cache")
-		cache.MSHR = mshr
+		cache.mshr = mshr
 		cache.topPort = topPort
 		cache.bottomPort = bottomPort
-
+		cache.tags = tagArray
+		cache.victimFinder = victimFinder
 		read = &defaultReadStrategy{
 			Comp: cache,
 		}
@@ -72,11 +79,13 @@ var _ = Describe("Read", func() {
 
 		Expect(read.state.Transactions).To(HaveLen(1))
 		Expect(read.state.Transactions[0].req).To(Equal(req))
-		Expect(cache.EvictQueue.Size()).To(Equal(0))
+		Expect(cache.storageTopDownBuf.Size()).To(Equal(0))
 	})
 
 	It("should handle read miss, w/o eviction", func() {
 		expectTopPortPeekAndRetrieve(topPort, req)
+		expectVictimFinderFindCleanVictim(victimFinder)
+		expectTagArrayMiss(tagArray)
 		expectMSHRMissAndNotFull(mshr, req)
 		expectMSHRAddEntryAndReq(mshr, req)
 		expectBottomPortCanSendAndSend(bottomPort)
@@ -88,8 +97,8 @@ var _ = Describe("Read", func() {
 	})
 
 	It("should handle read miss, w/ eviction", func() {
-		fillSetWithDirtyBlocks(cache, 0)
-
+		expectTagArrayMiss(tagArray)
+		expectVictimFinderFindDirtyVictim(victimFinder)
 		expectTopPortPeekAndRetrieve(topPort, req)
 		expectMSHRMissAndNotFull(mshr, req)
 		expectMSHRAddEntryAndReq(mshr, req)
@@ -99,12 +108,11 @@ var _ = Describe("Read", func() {
 
 		Expect(read.state.Transactions).To(HaveLen(1))
 		Expect(read.state.Transactions[0].req).To(Equal(req))
-		Expect(cache.EvictQueue.Size()).To(Equal(1))
-	},
-	)
+		Expect(cache.storageTopDownBuf.Size()).To(Equal(1))
+	})
 
 	It("should handle read hit", func() {
-		fillWithHitBlock(cache, req)
+		expectTagArrayHit(tagArray, 0, 0)
 		expectTopPortPeekAndRetrieve(topPort, req)
 		expectMSHRMissAndNotFull(mshr, req)
 
@@ -112,9 +120,9 @@ var _ = Describe("Read", func() {
 
 		Expect(read.state.Transactions).To(HaveLen(1))
 		Expect(read.state.Transactions[0].req).To(Equal(req))
-		Expect(cache.TopDownPreStorageBuffer.Size()).To(Equal(1))
+		Expect(cache.storageBottomUpBuf.Size()).To(Equal(1))
 
-		trans := cache.TopDownPreStorageBuffer.Peek().(*transaction)
+		trans := cache.storageBottomUpBuf.Peek().(*transaction)
 		Expect(trans).To(Equal(&transaction{
 			req:       req,
 			transType: transactionTypeReadHit,
@@ -124,28 +132,49 @@ var _ = Describe("Read", func() {
 	})
 })
 
-func fillSetWithDirtyBlocks(cache *Comp, setID int) {
-	for wayID := 0; wayID < cache.Tags.NumWays; wayID++ {
-		cache.Tags.Update(tagging.Block{
-			SetID:    setID,
-			WayID:    wayID,
-			IsValid:  true,
-			IsDirty:  true,
-			IsLocked: false,
-		})
-	}
+func expectTagArrayMiss(tagArray *MockTagArray) {
+	tagArray.EXPECT().
+		Lookup(vm.PID(0), uint64(0x1000)).
+		Return(tagging.Block{}, false)
+	tagArray.EXPECT().
+		Visit(gomock.Any()).
+		Return()
 }
 
-func fillWithHitBlock(cache *Comp, req mem.ReadReq) {
-	cache.Tags.Update(tagging.Block{
-		SetID:    0,
-		WayID:    0,
+func expectTagArrayHit(tagArray *MockTagArray, setID int, wayID int) {
+	block := tagging.Block{
+		SetID: setID,
+		WayID: wayID,
+	}
+
+	tagArray.EXPECT().Lookup(vm.PID(0), uint64(0x1000)).Return(block, true)
+	tagArray.EXPECT().Visit(gomock.Any())
+}
+
+func expectVictimFinderFindCleanVictim(victimFinder *MockVictimFinder) {
+	block := tagging.Block{
 		IsValid:  true,
 		IsDirty:  false,
 		IsLocked: false,
-		Tag:      req.Address,
-		PID:      req.PID,
-	})
+	}
+
+	victimFinder.EXPECT().
+		FindVictim(gomock.Any(), gomock.Any()).
+		Return(block, true).
+		AnyTimes()
+}
+
+func expectVictimFinderFindDirtyVictim(victimFinder *MockVictimFinder) {
+	block := tagging.Block{
+		IsValid:  true,
+		IsDirty:  true,
+		IsLocked: false,
+	}
+
+	victimFinder.EXPECT().
+		FindVictim(gomock.Any(), gomock.Any()).
+		Return(block, true).
+		AnyTimes()
 }
 
 func expectMSHRMissAndNotFull(mshr *MockMSHR, req mem.ReadReq) {

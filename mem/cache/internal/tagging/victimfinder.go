@@ -2,7 +2,7 @@ package tagging
 
 // A VictimFinder decides with block should be evicted
 type VictimFinder interface {
-	FindVictim(tags Tags, address uint64) (Block, bool)
+	FindVictim(tags TagArray, address uint64) (Block, bool)
 }
 
 // LRUVictimFinder evicts the least recently used block to evict
@@ -16,7 +16,10 @@ func NewLRUVictimFinder() *LRUVictimFinder {
 }
 
 // FindVictim returns the least recently used block in a set
-func (e *LRUVictimFinder) FindVictim(tags Tags, address uint64) (Block, bool) {
+func (e *LRUVictimFinder) FindVictim(
+	tags TagArray,
+	address uint64,
+) (Block, bool) {
 	set, _ := tags.GetSet(address)
 
 	// First try evicting an empty block

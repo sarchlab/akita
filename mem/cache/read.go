@@ -19,7 +19,7 @@ func (s *defaultReadStrategy) Tick() bool {
 }
 
 func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
-	for i := 0; i < s.NumReqPerCycle; i++ {
+	for i := 0; i < s.numReqPerCycle; i++ {
 		req := s.topPort.PeekIncoming()
 		if req == nil {
 			break
@@ -30,13 +30,13 @@ func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
 			break
 		}
 
-		inMSHR := s.MSHR.Lookup(read.PID, read.Address)
+		inMSHR := s.mshr.Lookup(read.PID, read.Address)
 		if inMSHR {
 			madeProgress = s.handleMSHRHit(read) || madeProgress
 			continue
 		}
 
-		block, ok := s.Tags.Lookup(read.PID, read.Address)
+		block, ok := s.tags.Lookup(read.PID, read.Address)
 		if ok {
 			madeProgress = s.HandleReadHit(read, block) || madeProgress
 			continue
@@ -57,7 +57,7 @@ func (s *defaultReadStrategy) handleMSHRHit(
 	s.Transactions = append(s.Transactions, transaction)
 
 	s.tagMSHRHit(transaction)
-	s.MSHR.AddReqToEntry(read)
+	s.mshr.AddReqToEntry(read)
 	s.topPort.RetrieveIncoming()
 
 	return true
@@ -67,7 +67,7 @@ func (s *defaultReadStrategy) HandleReadHit(
 	req mem.ReadReq,
 	b tagging.Block,
 ) (madeProgress bool) {
-	if !s.TopDownPreStorageBuffer.CanPush() {
+	if !s.storageBottomUpBuf.CanPush() {
 		return false
 	}
 
@@ -79,8 +79,8 @@ func (s *defaultReadStrategy) HandleReadHit(
 	s.Transactions = append(s.Transactions, transaction)
 
 	b.IsLocked = true
-	s.Tags.Visit(b)
-	s.TopDownPreStorageBuffer.Push(transaction)
+	s.tags.Visit(b)
+	s.storageBottomUpBuf.Push(transaction)
 	s.tagCacheHit(transaction)
 	s.topPort.RetrieveIncoming()
 
@@ -90,7 +90,7 @@ func (s *defaultReadStrategy) HandleReadHit(
 func (s *defaultReadStrategy) HandleReadMiss(
 	req mem.ReadReq,
 ) (madeProgress bool) {
-	if s.MSHR.IsFull() {
+	if s.mshr.IsFull() {
 		return false
 	}
 
@@ -98,12 +98,12 @@ func (s *defaultReadStrategy) HandleReadMiss(
 		return false
 	}
 
-	victim, ok := s.VictimFinder.FindVictim(s.Tags, req.Address)
+	victim, ok := s.victimFinder.FindVictim(s.tags, req.Address)
 	if !ok || victim.IsLocked {
 		return false
 	}
 
-	if victim.IsDirty && !s.EvictQueue.CanPush() {
+	if victim.IsDirty && !s.storageTopDownBuf.CanPush() {
 		return false
 	}
 
@@ -119,11 +119,11 @@ func (s *defaultReadStrategy) HandleReadMiss(
 	s.Transactions = append(s.Transactions, transaction)
 
 	if victim.IsDirty {
-		s.EvictQueue.Push(transaction)
+		s.storageTopDownBuf.Push(transaction)
 	}
 
 	alignedAddr := s.alignAddrToBlock(req.Address)
-	blockSize := 1 << s.Log2BlockSize
+	blockSize := 1 << s.log2BlockSize
 	downReq := mem.ReadReq{
 		MsgMeta: modeling.MsgMeta{
 			ID:  id.Generate(),
@@ -134,17 +134,20 @@ func (s *defaultReadStrategy) HandleReadMiss(
 		AccessByteSize: uint64(blockSize),
 	}
 
+	transaction.reqToBottom = downReq
 	victim.IsLocked = true
-	s.Tags.Visit(victim)
-	s.MSHR.AddEntry(downReq)
-	s.MSHR.AddReqToEntry(req)
+
+	s.tags.Visit(victim)
+	s.mshr.AddEntry(downReq)
+	s.mshr.AddReqToEntry(req)
 	s.topPort.RetrieveIncoming()
 	s.bottomPort.Send(downReq)
 	s.tagCacheMiss(transaction)
+	s.traceReqToBottomStart(transaction)
 
 	return true
 }
 
 func (s *defaultReadStrategy) alignAddrToBlock(addr uint64) uint64 {
-	return addr & ^((uint64(1) << s.Log2BlockSize) - 1)
+	return addr & ^((uint64(1) << s.log2BlockSize) - 1)
 }

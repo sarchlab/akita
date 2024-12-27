@@ -89,19 +89,19 @@ type Comp struct {
 	topPort    modeling.Port
 	bottomPort modeling.Port
 
-	NumReqPerCycle int
-	Log2BlockSize  int
+	numReqPerCycle int
+	log2BlockSize  int
 
-	MSHR                     mshr.MSHR
-	Tags                     tagging.Tags
-	VictimFinder             tagging.VictimFinder
-	Storage                  *mem.Storage
-	AddressToDstTable        mem.AddressToPortMapper
-	EvictQueue               queueing.Buffer
-	TopDownPreStorageBuffer  queueing.Buffer
-	BottomUpPreStorageBuffer queueing.Buffer
-	PostStorageBuffer        queueing.Buffer
-	StoragePipeline          queueing.Pipeline
+	mshr                   mshr.MSHR
+	tags                   tagging.TagArray
+	victimFinder           tagging.VictimFinder
+	storage                *mem.Storage
+	addressToDstTable      mem.AddressToPortMapper
+	storageTopDownBuf      queueing.Buffer
+	storageBottomUpBuf     queueing.Buffer
+	bottomInteractionBuf   queueing.Buffer
+	storagePostPipelineBuf queueing.Buffer
+	storagePipeline        queueing.Pipeline
 }
 
 func (c *Comp) State() simulation.State {

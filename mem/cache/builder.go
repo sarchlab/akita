@@ -112,42 +112,39 @@ func (b Builder) initState(comp *Comp) {
 	setSize := uint64(blockSize * numWays)
 	numSets := int(b.cacheByteSize / setSize)
 
-	comp.NumReqPerCycle = b.numReqPerCycle
-	comp.Log2BlockSize = b.log2CacheLineSize
-	comp.VictimFinder = b.createVictimFinder()
+	comp.numReqPerCycle = b.numReqPerCycle
+	comp.log2BlockSize = b.log2CacheLineSize
+	comp.victimFinder = b.createVictimFinder()
 	b.createInternalBuffers(comp)
-	comp.MSHR = mshr.NewMSHR(b.mshrCapacity)
-	comp.Storage = mem.NewStorage(b.cacheByteSize)
-	comp.AddressToDstTable = b.addressToDstTable
-	comp.Tags = tagging.Tags{
-		NumSets:       numSets,
-		NumWays:       numWays,
-		BlockSize:     blockSize,
-		AddrConverter: nil,
-		Sets:          []tagging.Set{},
-	}
-	comp.Tags.Reset()
+	comp.mshr = mshr.NewMSHR(b.mshrCapacity)
+	comp.storage = mem.NewStorage(b.cacheByteSize)
+	comp.addressToDstTable = b.addressToDstTable
+	comp.tags = tagging.NewTagArray(
+		numSets,
+		numWays,
+		blockSize,
+	)
 
 	comp.state = &state{}
 }
 
 func (b Builder) createInternalBuffers(comp *Comp) {
-	comp.TopDownPreStorageBuffer = queueing.BufferBuilder{}.
+	comp.storageTopDownBuf = queueing.BufferBuilder{}.
 		WithSimulation(b.sim).
 		WithCapacity(b.numReqPerCycle).
-		Build("TopDownPreStorageBuffer")
-	comp.EvictQueue = queueing.BufferBuilder{}.
+		Build("StorageTopDownBuf")
+	comp.storageBottomUpBuf = queueing.BufferBuilder{}.
 		WithSimulation(b.sim).
 		WithCapacity(b.numReqPerCycle).
-		Build("EvictQueue")
-	comp.BottomUpPreStorageBuffer = queueing.BufferBuilder{}.
+		Build("StorageBottomUpBuf")
+	comp.bottomInteractionBuf = queueing.BufferBuilder{}.
 		WithSimulation(b.sim).
 		WithCapacity(b.numReqPerCycle).
-		Build("BottomUpPreStorageBuffer")
-	comp.PostStorageBuffer = queueing.BufferBuilder{}.
+		Build("BottomInteractionBuf")
+	comp.storagePostPipelineBuf = queueing.BufferBuilder{}.
 		WithSimulation(b.sim).
 		WithCapacity(b.numReqPerCycle).
-		Build("PostStorageBuffer")
+		Build("StoragePostPipelineBuf")
 }
 
 func (b Builder) createVictimFinder() tagging.VictimFinder {

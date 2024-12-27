@@ -11,53 +11,37 @@ type storageMiddleware struct {
 }
 
 func (m *storageMiddleware) Tick() (madeProgress bool) {
-	for range m.NumReqPerCycle {
-		madeProgress = m.processPostStorageBuffer() || madeProgress
+	for range m.numReqPerCycle {
+		madeProgress = m.processPostPipelineBuffer() || madeProgress
 	}
 
-	for range m.NumReqPerCycle {
-		madeProgress = m.StoragePipeline.Tick() || madeProgress
-	}
+	madeProgress = m.storagePipeline.Tick() || madeProgress
 
-	for range m.NumReqPerCycle {
-		madeProgress = m.processPreStorageBuffer() || madeProgress
+	for range m.numReqPerCycle {
+		madeProgress = m.processPrePipelineBuffer() || madeProgress
 	}
 
 	return
 }
 
-func (m *storageMiddleware) processPostStorageBuffer() bool {
-	item := m.PostStorageBuffer.Peek()
-	if item == nil {
-		return false
-	}
-
-	transaction := item.(*transaction)
-
-	switch transaction.transType {
-	case transactionTypeReadHit:
-		m.StoragePipeline.Accept(transaction)
-	default:
-		panic("unsupported transaction type")
-	}
-
-	return true
+func (m *storageMiddleware) processPostPipelineBuffer() bool {
+	panic("not implemented")
 }
 
-func (m *storageMiddleware) processPreStorageBuffer() bool {
-	if !m.StoragePipeline.CanAccept() {
+func (m *storageMiddleware) processPrePipelineBuffer() bool {
+	if !m.storagePipeline.CanAccept() {
 		return false
 	}
 
-	item := m.BottomUpPreStorageBuffer.Pop()
+	item := m.storageBottomUpBuf.Pop()
 	if item != nil {
-		m.StoragePipeline.Accept(item.(queueing.PipelineItem))
+		m.storagePipeline.Accept(item.(queueing.PipelineItem))
 		return true
 	}
 
-	item = m.TopDownPreStorageBuffer.Pop()
+	item = m.storageTopDownBuf.Pop()
 	if item != nil {
-		m.StoragePipeline.Accept(item.(queueing.PipelineItem))
+		m.storagePipeline.Accept(item.(queueing.PipelineItem))
 		return true
 	}
 
