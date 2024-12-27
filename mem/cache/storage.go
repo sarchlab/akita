@@ -32,13 +32,13 @@ func (m *storageMiddleware) processPostStorageBuffer() bool {
 		return false
 	}
 
-	transaction := item.(queueing.PipelineItem).(*storageTransaction)
+	transaction := item.(*transaction)
 
-	switch transaction.Type {
-	case storageTransactionTypeReadHit:
-		panic("not implemented")
-	case storageTransactionTypeEvict:
-		panic("not implemented")
+	switch transaction.transType {
+	case transactionTypeReadHit:
+		m.StoragePipeline.Accept(transaction)
+	default:
+		panic("unsupported transaction type")
 	}
 
 	return true

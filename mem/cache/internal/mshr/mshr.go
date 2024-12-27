@@ -7,6 +7,26 @@ import (
 	"github.com/sarchlab/akita/v4/mem/vm"
 )
 
+// MSHR records cache's request to bottom memory.
+type MSHR interface {
+	Lookup(pid vm.PID, addr uint64) bool
+	AddEntry(readToBottom mem.ReadReq) error
+	RemoveEntry(pid vm.PID, addr uint64) error
+	AddReqToEntry(req mem.AccessReq) error
+	RemoveReqFromEntry(reqID string) error
+	GetNextReqInEntry(pid vm.PID, addr uint64) (mem.AccessReq, error)
+	IsFull() bool
+	Reset()
+}
+
+// NewMSHR creates a new MSHR.
+func NewMSHR(capacity int) MSHR {
+	return &mshrImpl{
+		Capacity: capacity,
+		Entries:  make([]mshrEntry, 0),
+	}
+}
+
 // MSHREntry is an entry in MSHR.
 type mshrEntry struct {
 	PID      vm.PID
@@ -15,13 +35,12 @@ type mshrEntry struct {
 	ReadReq  mem.ReadReq
 }
 
-// MSHR is an interface that controls MSHR entries
-type MSHR struct {
+type mshrImpl struct {
 	Capacity int
 	Entries  []mshrEntry
 }
 
-func (m *MSHR) Lookup(pid vm.PID, addr uint64) bool {
+func (m *mshrImpl) Lookup(pid vm.PID, addr uint64) bool {
 	for _, e := range m.Entries {
 		if e.PID == pid && e.Address == addr {
 			return true
@@ -31,7 +50,7 @@ func (m *MSHR) Lookup(pid vm.PID, addr uint64) bool {
 	return false
 }
 
-func (m *MSHR) AddEntry(readToBottom mem.ReadReq) error {
+func (m *mshrImpl) AddEntry(readToBottom mem.ReadReq) error {
 	if m.Lookup(readToBottom.PID, readToBottom.Address) {
 		return fmt.Errorf("trying to add an address that is already in MSHR")
 	}
@@ -51,7 +70,7 @@ func (m *MSHR) AddEntry(readToBottom mem.ReadReq) error {
 	return nil
 }
 
-func (m *MSHR) RemoveEntry(pid vm.PID, addr uint64) error {
+func (m *mshrImpl) RemoveEntry(pid vm.PID, addr uint64) error {
 	for i, e := range m.Entries {
 		if e.PID == pid && e.Address == addr {
 			m.Entries = append(m.Entries[:i], m.Entries[i+1:]...)
@@ -62,7 +81,7 @@ func (m *MSHR) RemoveEntry(pid vm.PID, addr uint64) error {
 	return fmt.Errorf("trying to remove an non-exist entry")
 }
 
-func (m *MSHR) AddReqToEntry(req mem.AccessReq) error {
+func (m *mshrImpl) AddReqToEntry(req mem.AccessReq) error {
 	for i, e := range m.Entries {
 		if e.PID == req.GetPID() && e.Address == req.GetAddress() {
 			e.Requests = append(e.Requests, req)
@@ -75,7 +94,7 @@ func (m *MSHR) AddReqToEntry(req mem.AccessReq) error {
 	return fmt.Errorf("trying to add a request to an non-exist entry")
 }
 
-func (m *MSHR) RemoveReqFromEntry(reqID string) error {
+func (m *mshrImpl) RemoveReqFromEntry(reqID string) error {
 	for i, e := range m.Entries {
 		for j, req := range e.Requests {
 			if req.Meta().ID == reqID {
@@ -90,7 +109,7 @@ func (m *MSHR) RemoveReqFromEntry(reqID string) error {
 	return fmt.Errorf("request %s not found", reqID)
 }
 
-func (m *MSHR) GetNextReqInEntry(
+func (m *mshrImpl) GetNextReqInEntry(
 	pid vm.PID,
 	addr uint64,
 ) (mem.AccessReq, error) {
@@ -111,10 +130,10 @@ func (m *MSHR) GetNextReqInEntry(
 	)
 }
 
-func (m *MSHR) IsFull() bool {
+func (m *mshrImpl) IsFull() bool {
 	return len(m.Entries) >= m.Capacity
 }
 
-func (m *MSHR) Reset() {
+func (m *mshrImpl) Reset() {
 	m.Entries = nil
 }

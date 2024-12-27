@@ -1,4 +1,4 @@
-package mshr
+package mshr_test
 
 import (
 	"testing"
