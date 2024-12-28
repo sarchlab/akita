@@ -113,9 +113,7 @@ func (c *Comp) State() simulation.State {
 
 // Tick updates the state of the cache.
 func (c *Comp) Tick() bool {
-	c.MiddlewareHolder.Tick()
-
-	return true
+	return c.MiddlewareHolder.Tick()
 }
 
 func (c *Comp) removeTransaction(trans *transaction) {

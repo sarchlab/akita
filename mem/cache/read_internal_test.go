@@ -46,8 +46,10 @@ var _ = Describe("Read", func() {
 			Return(modeling.RemotePort("BottomPort")).
 			AnyTimes()
 
+		addrToDstTable := mem.SinglePortMapper{Port: "Remote"}
 		cache = MakeBuilder().
 			WithSimulation(sim).
+			WithAddressToDstTable(addrToDstTable).
 			Build("Cache")
 		cache.mshr = mshr
 		cache.topPort = topPort

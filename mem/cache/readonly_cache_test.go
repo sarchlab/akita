@@ -68,7 +68,7 @@ var _ = Describe("ReadOnlyCache", func() {
 		conn.PlugIn(m.GetPortByName("Top"))
 	})
 
-	FIt("should be able to read from the memory", func() {
+	It("should be able to read from the memory", func() {
 		readReq := mem.ReadReq{
 			MsgMeta: modeling.MsgMeta{
 				ID:  id.Generate(),
@@ -88,7 +88,6 @@ var _ = Describe("ReadOnlyCache", func() {
 		})
 
 		engine.Run()
-
 	})
 
 })
