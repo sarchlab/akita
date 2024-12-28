@@ -15,6 +15,10 @@ type storageMiddleware struct {
 
 func (m *storageMiddleware) Tick() (madeProgress bool) {
 	for range m.numReqPerCycle {
+		madeProgress = m.generateRspFromMSHR() || madeProgress
+	}
+
+	for range m.numReqPerCycle {
 		madeProgress = m.processPostPipelineBuffer() || madeProgress
 	}
 
@@ -25,6 +29,10 @@ func (m *storageMiddleware) Tick() (madeProgress bool) {
 	}
 
 	return
+}
+
+func (m *storageMiddleware) generateRspFromMSHR() bool {
+	panic("not implemented")
 }
 
 func (m *storageMiddleware) processPostPipelineBuffer() bool {
