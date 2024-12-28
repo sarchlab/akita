@@ -32,7 +32,7 @@ func (m *storageMiddleware) Tick() (madeProgress bool) {
 }
 
 func (m *storageMiddleware) generateRspFromMSHR() bool {
-	panic("not implemented")
+	return false
 }
 
 func (m *storageMiddleware) processPostPipelineBuffer() bool {

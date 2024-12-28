@@ -129,8 +129,5 @@ func (c *Comp) removeTransaction(trans *transaction) {
 }
 
 func getCacheLineAddr(addr uint64, log2BlockSize int) uint64 {
-	mask := ^((uint64(1) << log2BlockSize) - 1)
-	cacheLineAddr := addr & mask
-
-	return cacheLineAddr
+	return addr & ^((uint64(1) << log2BlockSize) - 1)
 }

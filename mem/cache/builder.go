@@ -19,6 +19,7 @@ type Builder struct {
 	wayAssociativity  int
 	cacheByteSize     uint64
 	mshrCapacity      int
+	cycleLatency      int
 	replaceStrategy   string
 	writeStrategy     string
 	addressToDstTable mem.AddressToPortMapper
@@ -33,6 +34,7 @@ func MakeBuilder() Builder {
 		wayAssociativity:  4,
 		cacheByteSize:     16 * mem.KB,
 		mshrCapacity:      4,
+		cycleLatency:      1,
 		replaceStrategy:   "lru",
 		writeStrategy:     "writeThrough",
 	}
@@ -71,6 +73,12 @@ func (b Builder) WithWayAssociativity(wayAssociativity int) Builder {
 // WithMSHRCapacity sets the capacity of the MSHR of the builder.
 func (b Builder) WithMSHRCapacity(mshrCapacity int) Builder {
 	b.mshrCapacity = mshrCapacity
+	return b
+}
+
+// WithCycleLatency sets the cycle latency of the builder.
+func (b Builder) WithCycleLatency(cycleLatency int) Builder {
+	b.cycleLatency = cycleLatency
 	return b
 }
 
@@ -145,6 +153,14 @@ func (b Builder) createInternalBuffers(comp *Comp) {
 		WithSimulation(b.sim).
 		WithCapacity(b.numReqPerCycle).
 		Build("StoragePostPipelineBuf")
+
+	comp.storagePipeline = queueing.PipelineBuilder{}.
+		WithSimulation(b.sim).
+		WithPipelineWidth(1).
+		WithNumStage(b.cycleLatency).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(comp.storagePostPipelineBuf).
+		Build("StoragePipeline")
 }
 
 func (b Builder) createVictimFinder() tagging.VictimFinder {

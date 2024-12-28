@@ -153,9 +153,16 @@ func (a *agent) Deserialize(data map[string]any) error {
 
 func newAgent(sim simulation.Simulation, freq timing.Freq, name string) *agent {
 	a := new(agent)
-	a.TickingComponent = modeling.NewTickingComponent(name, sim.GetEngine(), freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(
+		name,
+		sim.GetEngine(),
+		freq,
+		a,
+	)
+
 	a.OutPort = modeling.PortBuilder{}.
 		WithSimulation(sim).
+		WithComponent(a).
 		WithIncomingBufCap(4).
 		WithOutgoingBufCap(4).
 		Build(name + ".OutPort")
@@ -203,6 +210,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
 
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
+
 		agents = nil
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(sim, 1, fmt.Sprintf("Agent[%d]", i))

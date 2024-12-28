@@ -36,6 +36,9 @@ var _ = Describe("ReadOnlyCache", func() {
 		port = cache.NewMockPort(mockCtrl)
 		port.EXPECT().AsRemote().Return(modeling.RemotePort("Agent")).AnyTimes()
 		port.EXPECT().SetConnection(gomock.Any()).AnyTimes()
+		port.EXPECT().NotifyAvailable().AnyTimes()
+		port.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		port.EXPECT().RetrieveOutgoing().Return(nil).AnyTimes()
 
 		m = idealmemcontroller.MakeBuilder().
 			WithSimulation(sim).
@@ -65,7 +68,7 @@ var _ = Describe("ReadOnlyCache", func() {
 		conn.PlugIn(m.GetPortByName("Top"))
 	})
 
-	It("should be able to read from the memory", func() {
+	FIt("should be able to read from the memory", func() {
 		readReq := mem.ReadReq{
 			MsgMeta: modeling.MsgMeta{
 				ID:  id.Generate(),

@@ -122,12 +122,13 @@ func (s *defaultReadStrategy) HandleReadMiss(
 		s.storageTopDownBuf.Push(transaction)
 	}
 
-	alignedAddr := s.alignAddrToBlock(req.Address)
+	alignedAddr := getCacheLineAddr(req.Address, s.log2BlockSize)
 	blockSize := 1 << s.log2BlockSize
 	downReq := mem.ReadReq{
 		MsgMeta: modeling.MsgMeta{
 			ID:  id.Generate(),
 			Src: s.bottomPort.AsRemote(),
+			Dst: s.addressToDstTable.Find(alignedAddr),
 		},
 		PID:            req.PID,
 		Address:        alignedAddr,
@@ -146,8 +147,4 @@ func (s *defaultReadStrategy) HandleReadMiss(
 	s.traceReqToBottomStart(transaction)
 
 	return true
-}
-
-func (s *defaultReadStrategy) alignAddrToBlock(addr uint64) uint64 {
-	return addr & ^((uint64(1) << s.log2BlockSize) - 1)
 }
