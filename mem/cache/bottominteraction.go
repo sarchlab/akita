@@ -6,6 +6,6 @@ type bottomInteraction struct {
 	*Comp
 }
 
-func (b *bottomInteraction) Tick() {
-
+func (b *bottomInteraction) Tick() bool {
+	return false
 }

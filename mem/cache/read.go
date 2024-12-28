@@ -94,10 +94,6 @@ func (s *defaultReadStrategy) HandleReadMiss(
 		return false
 	}
 
-	if !s.bottomPort.CanSend() {
-		return false
-	}
-
 	victim, ok := s.victimFinder.FindVictim(s.tags, req.Address)
 	if !ok || victim.IsLocked {
 		return false
@@ -107,7 +103,7 @@ func (s *defaultReadStrategy) HandleReadMiss(
 		return false
 	}
 
-	if !s.bottomPort.CanSend() {
+	if !s.bottomInteractionBuf.CanPush() {
 		return false
 	}
 
@@ -142,7 +138,7 @@ func (s *defaultReadStrategy) HandleReadMiss(
 	s.mshr.AddEntry(downReq)
 	s.mshr.AddReqToEntry(req)
 	s.topPort.RetrieveIncoming()
-	s.bottomPort.Send(downReq)
+	s.bottomInteractionBuf.Push(transaction)
 	s.tagCacheMiss(transaction)
 	s.traceReqToBottomStart(transaction)
 

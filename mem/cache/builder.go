@@ -197,6 +197,7 @@ func (b Builder) addPorts(comp *Comp) {
 func (b Builder) addMiddleware(comp *Comp) {
 	comp.AddMiddleware(&storageMiddleware{Comp: comp})
 	comp.AddMiddleware(&defaultReadStrategy{Comp: comp})
+	comp.AddMiddleware(&bottomInteraction{Comp: comp})
 
 	switch b.writeStrategy {
 	case "writeThrough":

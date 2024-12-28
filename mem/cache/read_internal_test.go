@@ -90,12 +90,12 @@ var _ = Describe("Read", func() {
 		expectTagArrayMiss(tagArray)
 		expectMSHRMissAndNotFull(mshr, req)
 		expectMSHRAddEntryAndReq(mshr, req)
-		expectBottomPortCanSendAndSend(bottomPort)
 
 		read.Tick()
 
 		Expect(read.state.Transactions).To(HaveLen(1))
 		Expect(read.state.Transactions[0].req).To(Equal(req))
+		Expect(cache.bottomInteractionBuf.Size()).To(Equal(1))
 	})
 
 	It("should handle read miss, w/ eviction", func() {
@@ -111,6 +111,7 @@ var _ = Describe("Read", func() {
 		Expect(read.state.Transactions).To(HaveLen(1))
 		Expect(read.state.Transactions[0].req).To(Equal(req))
 		Expect(cache.storageTopDownBuf.Size()).To(Equal(1))
+		Expect(cache.bottomInteractionBuf.Size()).To(Equal(1))
 	})
 
 	It("should handle read hit", func() {
