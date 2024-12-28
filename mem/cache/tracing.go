@@ -41,8 +41,8 @@ func (c *Comp) traceReqToBottomStart(trans *transaction) {
 		Domain: c,
 		Pos:    hooking.HookPosTaskStart,
 		Item: hooking.TaskStart{
-			ID:       modeling.ReqInTaskID(trans.req.Meta().ID),
-			ParentID: modeling.ReqOutTaskID(trans.reqToBottom.Meta().ID),
+			ID:       modeling.ReqOutTaskID(trans.reqToBottom.Meta().ID),
+			ParentID: modeling.ReqInTaskID(trans.req.Meta().ID),
 			Kind:     "req_to_bottom",
 			What:     reflect.TypeOf(trans.reqToBottom).String(),
 			Where:    c.Name(),
@@ -56,7 +56,9 @@ func (c *Comp) traceReqToBottomEnd(trans *transaction) {
 	ctx := hooking.HookCtx{
 		Domain: c,
 		Pos:    hooking.HookPosTaskEnd,
-		Item:   hooking.TaskEnd{ID: modeling.ReqInTaskID(trans.req.Meta().ID)},
+		Item: hooking.TaskEnd{
+			ID: modeling.ReqOutTaskID(trans.reqToBottom.Meta().ID),
+		},
 	}
 
 	c.InvokeHook(ctx)

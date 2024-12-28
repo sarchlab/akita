@@ -30,10 +30,11 @@ const (
 )
 
 type transaction struct {
-	transType   transactionType
-	req         mem.AccessReq
-	reqToBottom mem.AccessReq
-	block       tagging.Block
+	transType     transactionType
+	req           mem.AccessReq
+	reqToBottom   mem.AccessReq
+	rspFromBottom mem.AccessRsp
+	block         tagging.Block
 }
 
 func (t *transaction) TaskID() string {
@@ -114,6 +115,16 @@ func (c *Comp) State() simulation.State {
 // Tick updates the state of the cache.
 func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
+}
+
+func (c *Comp) findTransByReqToBottomID(reqID string) (*transaction, bool) {
+	for _, trans := range c.state.Transactions {
+		if trans.reqToBottom.Meta().ID == reqID {
+			return trans, true
+		}
+	}
+
+	return nil, false
 }
 
 func (c *Comp) removeTransaction(trans *transaction) {
