@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
@@ -32,7 +34,46 @@ func (m *storageMiddleware) Tick() (madeProgress bool) {
 }
 
 func (m *storageMiddleware) generateRspFromMSHR() bool {
-	return false
+	trans := m.state.RespondingTrans
+	if trans == nil {
+		return false
+	}
+
+	pid := trans.req.GetPID()
+	addr := trans.req.GetAddress()
+
+	if !m.mshr.Lookup(pid, addr) {
+		panic(fmt.Sprintf("MSHR does not have entry for 0x%016x",
+			trans.req.GetAddress()))
+	}
+
+	nextReq, err := m.mshr.GetNextReqInEntry(pid, addr)
+	if err != nil {
+		m.state.RespondingTrans = nil
+		m.mshr.RemoveEntry(pid, addr)
+
+		return true
+	}
+
+	data := make([]byte, nextReq.GetByteSize())
+
+	rsp := mem.DataReadyRsp{
+		MsgMeta: modeling.MsgMeta{
+			ID:  id.Generate(),
+			Src: m.topPort.AsRemote(),
+			Dst: nextReq.Meta().Src,
+		},
+		Data:      data,
+		RespondTo: nextReq.Meta().ID,
+	}
+
+	if err := m.topPort.Send(rsp); err != nil {
+		return false
+	}
+
+	_ = m.mshr.RemoveReqFromEntry(nextReq.Meta().ID)
+
+	return true
 }
 
 func (m *storageMiddleware) processPostPipelineBuffer() bool {
@@ -45,8 +86,11 @@ func (m *storageMiddleware) processPostPipelineBuffer() bool {
 	switch trans.transType {
 	case transactionTypeReadHit:
 		return m.processReadHit(trans)
+	case transactionTypeReadMiss:
+		return m.processReadMiss(trans)
 	default:
-		panic("unknown transaction type")
+		panic(fmt.Sprintf("unknown transaction type: %s",
+			trans.transType.String()))
 	}
 }
 
@@ -80,6 +124,18 @@ func (m *storageMiddleware) processReadHit(trans *transaction) bool {
 	m.tags.Unlock(trans.block.SetID, trans.block.WayID)
 
 	m.traceReqEnd(trans.req)
+
+	return true
+}
+
+func (m *storageMiddleware) processReadMiss(trans *transaction) bool {
+	m.storage.Write(
+		trans.block.CacheAddress,
+		trans.rspFromBottom.(mem.DataReadyRsp).Data,
+	)
+
+	m.state.RespondingTrans = trans
+	m.storagePostPipelineBuf.Pop()
 
 	return true
 }

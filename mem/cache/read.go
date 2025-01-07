@@ -60,6 +60,8 @@ func (s *defaultReadStrategy) handleMSHRHit(
 	s.mshr.AddReqToEntry(read)
 	s.topPort.RetrieveIncoming()
 
+	s.traceReqStart(read)
+
 	return true
 }
 
@@ -83,6 +85,8 @@ func (s *defaultReadStrategy) HandleReadHit(
 	s.storageBottomUpBuf.Push(transaction)
 	s.tagCacheHit(transaction)
 	s.topPort.RetrieveIncoming()
+
+	s.traceReqStart(req)
 
 	return true
 }
@@ -141,6 +145,7 @@ func (s *defaultReadStrategy) HandleReadMiss(
 	s.bottomInteractionBuf.Push(transaction)
 	s.tagCacheMiss(transaction)
 	s.traceReqToBottomStart(transaction)
+	s.traceReqStart(req)
 
 	return true
 }

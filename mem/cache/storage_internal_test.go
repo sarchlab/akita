@@ -117,6 +117,83 @@ var _ = Describe("Storage", func() {
 		Expect(storage.state.Transactions).To(HaveLen(0))
 		Expect(cache.storagePostPipelineBuf.Size()).To(Equal(0))
 	})
+
+	It("should handle read miss", func() {
+		data := make([]byte, 64)
+		for i := range data {
+			data[i] = byte(i)
+		}
+
+		dr := mem.DataReadyRsp{
+			MsgMeta: modeling.MsgMeta{
+				ID: "124",
+			},
+			Data:      data,
+			RespondTo: "123",
+		}
+
+		block := tagging.Block{
+			PID:          vm.PID(0),
+			Tag:          0x1000,
+			WayID:        0,
+			SetID:        0,
+			CacheAddress: 0x40,
+			IsValid:      true,
+			IsDirty:      false,
+		}
+
+		trans.req = readReq
+		trans.rspFromBottom = dr
+		trans.block = block
+		trans.transType = transactionTypeReadMiss
+
+		cache.storagePostPipelineBuf.Push(trans)
+
+		storage.processPostPipelineBuffer()
+
+		Expect(storage.state.RespondingTrans).To(BeIdenticalTo(trans))
+
+		dataInStorage, _ := cache.storage.Read(0x40, 64)
+		Expect(dataInStorage).To(Equal(data))
+	})
+
+	It("should generate responses from MSHR", func() {
+		req := mem.ReadReq{
+			MsgMeta: modeling.MsgMeta{
+				ID: "125",
+			},
+			PID:            vm.PID(0),
+			Address:        0x1000,
+			AccessByteSize: 4,
+		}
+
+		trans := &transaction{
+			req: req,
+		}
+
+		cache.RespondingTrans = trans
+
+		mshr.EXPECT().
+			Lookup(vm.PID(0), uint64(0x1000)).
+			Return(true).
+			Times(1)
+		mshr.EXPECT().
+			GetNextReqInEntry(vm.PID(0), uint64(0x1000)).
+			Return(req, nil).
+			Times(1)
+		mshr.EXPECT().
+			RemoveReqFromEntry(req.Meta().ID).
+			Return(nil).
+			Times(1)
+		topPort.EXPECT().
+			Send(gomock.Any()).
+			DoAndReturn(func(msg modeling.Msg) error {
+				Expect(msg).To(BeAssignableToTypeOf(mem.DataReadyRsp{}))
+				return nil
+			})
+
+		storage.generateRspFromMSHR()
+	})
 })
 
 func prefillStorage(storage *mem.Storage) {

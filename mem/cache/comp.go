@@ -29,6 +29,18 @@ const (
 	transactionTypeWriteMSHRHit
 )
 
+func (t transactionType) String() string {
+	return []string{
+		"invalid",
+		"readHit",
+		"readMiss",
+		"readMSHRHit",
+		"writeHit",
+		"writeMiss",
+		"writeMSHRHit",
+	}[t]
+}
+
 type transaction struct {
 	transType     transactionType
 	req           mem.AccessReq
@@ -64,8 +76,9 @@ func (t *transaction) Deserialize(data map[string]any) error {
 }
 
 type state struct {
-	name         string
-	Transactions []*transaction
+	name            string
+	Transactions    []*transaction
+	RespondingTrans *transaction
 }
 
 func (s *state) Name() string {
