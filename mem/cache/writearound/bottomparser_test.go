@@ -4,10 +4,11 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	modeling "github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Bottom Parser", func() {
@@ -30,9 +31,9 @@ var _ = Describe("Bottom Parser", func() {
 			bottomPort:       bottomPort,
 			mshr:             mshr,
 			wayAssociativity: 4,
-			bankBufs:         []sim.Buffer{bankBuf},
+			bankBufs:         []queueing.Buffer{bankBuf},
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		p = &bottomParser{cache: c}
 	})

@@ -3,17 +3,19 @@ package writethrough
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A Builder can build an writethrough cache
 type Builder struct {
-	engine                sim.Engine
-	freq                  sim.Freq
+	engine                timing.Engine
+	freq                  timing.Freq
 	log2BlockSize         uint64
 	totalByteSize         uint64
 	wayAssociativity      int
@@ -30,7 +32,7 @@ type Builder struct {
 // NewBuilder creates a builder with default parameter setting
 func NewBuilder() *Builder {
 	return &Builder{
-		freq:                  1 * sim.GHz,
+		freq:                  1 * timing.GHz,
 		log2BlockSize:         6,
 		totalByteSize:         4 * mem.KB,
 		wayAssociativity:      4,
@@ -43,13 +45,13 @@ func NewBuilder() *Builder {
 }
 
 // WithEngine sets the event driven simulation engine that the cache uses
-func (b *Builder) WithEngine(engine sim.Engine) *Builder {
+func (b *Builder) WithEngine(engine timing.Engine) *Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the cache works at
-func (b *Builder) WithFreq(freq sim.Freq) *Builder {
+func (b *Builder) WithFreq(freq timing.Freq) *Builder {
 	b.freq = freq
 	return b
 }
@@ -135,7 +137,7 @@ func (b *Builder) Build(name string) *Comp {
 		log2BlockSize:  b.log2BlockSize,
 		numReqPerCycle: b.numReqPerCycle,
 	}
-	c.TickingComponent = sim.NewTickingComponent(
+	c.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, c)
 
 	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
@@ -151,7 +153,7 @@ func (b *Builder) Build(name string) *Comp {
 	c.dirBuf = sim.NewBuffer(
 		name+".DirBuf",
 		b.numReqPerCycle)
-	c.bankBufs = make([]sim.Buffer, b.numBank)
+	c.bankBufs = make([]queueing.Buffer, b.numBank)
 
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = sim.NewBuffer(
@@ -207,7 +209,7 @@ func (b *Builder) buildDirStage(c *Comp) {
 		b.numReqPerCycle,
 	)
 	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", c.Name())
-	pipeline := pipelining.MakeBuilder().
+	pipeline := queueing.MakePipelineBuilder().
 		WithPipelineWidth(b.numReqPerCycle).
 		WithNumStage(b.dirLatency).
 		WithCyclePerStage(1).
@@ -227,7 +229,7 @@ func (b *Builder) buildBankStages(c *Comp) {
 			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", c.Name(), i),
 			b.numReqPerCycle,
 		)
-		pipeline := pipelining.MakeBuilder().
+		pipeline := queueing.MakePipelineBuilder().
 			WithPipelineWidth(b.numReqPerCycle).
 			WithNumStage(b.bankLatency).
 			WithCyclePerStage(1).

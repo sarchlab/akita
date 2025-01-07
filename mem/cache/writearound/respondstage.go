@@ -1,7 +1,8 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -19,7 +20,7 @@ func (s *respondStage) Tick() bool {
 			continue
 		}
 
-		if trans.read != nil {
+		if trans.transactionType == transactionTypeRead {
 			return s.respondReadTrans(trans)
 		}
 
@@ -35,12 +36,14 @@ func (s *respondStage) respondReadTrans(trans *transaction) bool {
 	}
 
 	read := trans.read
-	dr := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(read.Src).
-		WithRspTo(read.ID).
-		WithData(trans.data).
-		Build()
+	dr := mem.DataReadyRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: s.cache.topPort.AsRemote(),
+			Dst: read.Src,
+		},
+		Data:      trans.data,
+		RespondTo: read.ID,
+	}
 
 	err := s.cache.topPort.Send(dr)
 	if err != nil {
@@ -60,11 +63,13 @@ func (s *respondStage) respondWriteTrans(trans *transaction) bool {
 	}
 
 	write := trans.write
-	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(write.Src).
-		WithRspTo(write.ID).
-		Build()
+	done := mem.WriteDoneRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: s.cache.topPort.AsRemote(),
+			Dst: write.Src,
+		},
+		RespondTo: write.ID,
+	}
 
 	err := s.cache.topPort.Send(done)
 	if err != nil {

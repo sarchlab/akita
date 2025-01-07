@@ -4,10 +4,11 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
 	. "github.com/sarchlab/akita/v4/mem/cache/writeevict"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -15,7 +16,7 @@ import (
 var _ = Describe("Cache", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		engine              sim.Engine
+		engine              timing.Engine
 		connection          sim.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
@@ -32,7 +33,7 @@ var _ = Describe("Cache", func() {
 		engine = sim.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).

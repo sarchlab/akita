@@ -4,8 +4,9 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -45,9 +46,9 @@ var _ = Describe("Bank Stage", func() {
 
 		builder := MakeBuilder()
 		cacheModule = builder.Build("Cache")
-		cacheModule.dirToBankBuffers = []sim.Buffer{dirInBuf}
+		cacheModule.dirToBankBuffers = []queueing.Buffer{dirInBuf}
 		cacheModule.writeBufferToBankBuffers =
-			[]sim.Buffer{writeBufferInBuf}
+			[]queueing.Buffer{writeBufferInBuf}
 		cacheModule.mshrStageBuffer = mshrStageBuffer
 		cacheModule.writeBufferBuffer = writeBufferBuffer
 		cacheModule.addressToPortMapper = addressToPortMapper

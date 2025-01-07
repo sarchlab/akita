@@ -4,10 +4,10 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
-
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Bankstage", func() {
@@ -29,11 +29,11 @@ var _ = Describe("Bankstage", func() {
 		postPipelineBuf = NewMockBuffer(mockCtrl)
 		c = &Comp{
 			bankLatency:   10,
-			bankBufs:      []sim.Buffer{inBuf},
+			bankBufs:      []queueing.Buffer{inBuf},
 			storage:       storage,
 			log2BlockSize: 6,
 		}
-		c.TickingComponent = sim.NewTickingComponent(
+		c.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, c)
 		s = &bankStage{
 			cache:           c,

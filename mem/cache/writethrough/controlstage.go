@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 type controlStage struct {
@@ -85,7 +86,7 @@ func (s *controlStage) flushPort(port sim.Port) {
 	}
 }
 
-func (s *controlStage) flushBuffer(buffer sim.Buffer) {
+func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 	for buffer.Pop() != nil {
 	}
 }

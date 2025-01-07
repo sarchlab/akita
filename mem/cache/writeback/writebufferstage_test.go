@@ -4,9 +4,10 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 var _ = Describe("Write Buffer Stage", func() {
@@ -45,7 +46,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		cacheModule.mshr = mshr
 		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.writeBufferToBankBuffers = []sim.Buffer{bankBuffer}
+		cacheModule.writeBufferToBankBuffers = []queueing.Buffer{bankBuffer}
 
 		wbStage = &writeBufferStage{
 			cache:               cacheModule,

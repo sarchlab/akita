@@ -1,8 +1,8 @@
 package writearound
 
 import (
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 )
 
@@ -15,14 +15,23 @@ const (
 	bankActionWriteFetched
 )
 
+type transactionType int
+
+const (
+	transactionTypeRead transactionType = iota
+	transactionTypeWrite
+)
+
 type transaction struct {
 	id string
 
-	read         *mem.ReadReq
-	readToBottom *mem.ReadReq
+	transactionType transactionType
 
-	write         *mem.WriteReq
-	writeToBottom *mem.WriteReq
+	read         mem.ReadReq
+	readToBottom mem.ReadReq
+
+	write         mem.WriteReq
+	writeToBottom mem.WriteReq
 
 	preCoalesceTransactions []*transaction
 
@@ -36,7 +45,7 @@ type transaction struct {
 }
 
 func (t *transaction) Address() uint64 {
-	if t.read != nil {
+	if t.transactionType == transactionTypeRead {
 		return t.read.Address
 	}
 
@@ -44,7 +53,7 @@ func (t *transaction) Address() uint64 {
 }
 
 func (t *transaction) PID() vm.PID {
-	if t.read != nil {
+	if t.transactionType == transactionTypeRead {
 		return t.read.PID
 	}
 

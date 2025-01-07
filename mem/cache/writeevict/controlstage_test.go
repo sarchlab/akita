@@ -6,6 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Control Stage", func() {
@@ -58,7 +59,7 @@ var _ = Describe("Control Stage", func() {
 			coalesceStage:         c,
 			maxNumConcurrentTrans: 32,
 		}
-		cacheComp.TickingComponent = sim.NewTickingComponent(
+		cacheComp.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, cacheComp)
 
 		s = &controlStage{

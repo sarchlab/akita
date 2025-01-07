@@ -6,6 +6,8 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 )
 
 type controlStage struct {
@@ -37,11 +39,13 @@ func (s *controlStage) processCurrentFlush() bool {
 		return false
 	}
 
-	rsp := cache.FlushRspBuilder{}.
-		WithSrc(s.ctrlPort.AsRemote()).
-		WithDst(s.currFlushReq.Src).
-		WithRspTo(s.currFlushReq.ID).
-		Build()
+	rsp := cache.FlushRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: s.ctrlPort.AsRemote(),
+			Dst: s.currFlushReq.Src,
+		},
+		RspTo: s.currFlushReq.ID,
+	}
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {
@@ -85,7 +89,7 @@ func (s *controlStage) flushPort(port sim.Port) {
 	}
 }
 
-func (s *controlStage) flushBuffer(buffer sim.Buffer) {
+func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 	for buffer.Pop() != nil {
 	}
 }
@@ -133,10 +137,13 @@ func (s *controlStage) doCacheRestart(req *cache.RestartReq) bool {
 		s.cache.bottomPort.RetrieveIncoming()
 	}
 
-	rsp := cache.RestartRspBuilder{}.
-		WithSrc(s.ctrlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
+	rsp := cache.RestartRsp{
+		MsgMeta: modeling.MsgMeta{
+			Src: s.ctrlPort.AsRemote(),
+			Dst: req.Src,
+		},
+		RspTo: req.ID,
+	}
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {

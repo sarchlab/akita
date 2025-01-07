@@ -3,9 +3,8 @@ package cache
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
 )
 
 // MSHREntry is an entry in MSHR
@@ -46,8 +45,6 @@ func NewMSHR(capacity int) MSHR {
 }
 
 type mshrImpl struct {
-	*sim.ComponentBase
-
 	capacity int
 	entries  []*MSHREntry
 }

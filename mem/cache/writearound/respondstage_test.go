@@ -4,8 +4,9 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	modeling "github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 var _ = Describe("Respond Stage", func() {
@@ -28,7 +29,7 @@ var _ = Describe("Respond Stage", func() {
 		cache = &Comp{
 			topPort: topPort,
 		}
-		cache.TickingComponent = sim.NewTickingComponent(
+		cache.TickingComponent = modeling.NewTickingComponent(
 			"Cache", nil, 1, cache)
 
 		s = &respondStage{cache: cache}

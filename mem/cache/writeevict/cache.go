@@ -1,16 +1,18 @@
 package writeevict
 
 import (
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
 
 // Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -25,8 +27,8 @@ type Comp struct {
 	wayAssociativity    int
 	addressToPortMapper mem.AddressToPortMapper
 
-	dirBuf   sim.Buffer
-	bankBufs []sim.Buffer
+	dirBuf   queueing.Buffer
+	bankBufs []queueing.Buffer
 
 	coalesceStage    *coalescer
 	directoryStage   *directory

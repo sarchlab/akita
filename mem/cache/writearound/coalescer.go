@@ -4,8 +4,10 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/id"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -115,13 +117,13 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(req mem.AccessReq) bool {
 
 func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 	switch req := req.(type) {
-	case *mem.ReadReq:
+	case mem.ReadReq:
 		t := &transaction{
 			read: req,
 		}
 
 		return t
-	case *mem.WriteReq:
+	case mem.WriteReq:
 		t := &transaction{
 			write: req,
 		}
@@ -151,7 +153,7 @@ func (c *coalescer) canReqCoalesce(req mem.AccessReq) bool {
 
 func (c *coalescer) coalesceAndSend() bool {
 	var trans *transaction
-	if c.toCoalesce[0].read != nil {
+	if c.toCoalesce[0].transactionType == transactionTypeRead {
 		trans = c.coalesceRead()
 		tracing.StartTaskWithSpecificLocation(trans.id,
 			tracing.MsgIDAtReceiver(c.toCoalesce[0].read, c.cache),
@@ -178,14 +180,18 @@ func (c *coalescer) coalesceAndSend() bool {
 func (c *coalescer) coalesceRead() *transaction {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	coalescedRead := mem.ReadReqBuilder{}.
-		WithAddress(cachelineID).
-		WithByteSize(blockSize).
-		WithPID(c.toCoalesce[0].PID()).
-		Build()
+	coalescedRead := mem.ReadReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.cache.topPort.AsRemote(),
+			Dst: c.cache.addressToPortMapper.Find(cachelineID),
+		},
+		Address:        cachelineID,
+		AccessByteSize: blockSize,
+		PID:            c.toCoalesce[0].PID(),
+	}
 
 	return &transaction{
-		id:                      sim.GetIDGenerator().Generate(),
+		id:                      id.Generate(),
 		read:                    coalescedRead,
 		preCoalesceTransactions: c.toCoalesce,
 	}
@@ -194,12 +200,16 @@ func (c *coalescer) coalesceRead() *transaction {
 func (c *coalescer) coalesceWrite() *transaction {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	write := mem.WriteReqBuilder{}.
-		WithAddress(cachelineID).
-		WithPID(c.toCoalesce[0].PID()).
-		WithData(make([]byte, blockSize)).
-		WithDirtyMask(make([]bool, blockSize)).
-		Build()
+	write := mem.WriteReq{
+		MsgMeta: modeling.MsgMeta{
+			Src: c.cache.topPort.AsRemote(),
+			Dst: c.cache.addressToPortMapper.Find(cachelineID),
+		},
+		Address:   cachelineID,
+		PID:       c.toCoalesce[0].PID(),
+		Data:      make([]byte, blockSize),
+		DirtyMask: make([]bool, blockSize),
+	}
 
 	for _, t := range c.toCoalesce {
 		w := t.write

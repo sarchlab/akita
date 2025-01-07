@@ -1,8 +1,10 @@
 package writeback
 
 import (
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -19,18 +21,18 @@ const (
 
 // Comp in the writeback package is a cache that performs the write-back policy.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.TickingComponent
+	modeling.MiddlewareHolder
 
 	topPort     sim.Port
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	dirStageBuffer           sim.Buffer
-	dirToBankBuffers         []sim.Buffer
-	writeBufferToBankBuffers []sim.Buffer
-	mshrStageBuffer          sim.Buffer
-	writeBufferBuffer        sim.Buffer
+	dirStageBuffer           queueing.Buffer
+	dirToBankBuffers         []queueing.Buffer
+	writeBufferToBankBuffers []queueing.Buffer
+	mshrStageBuffer          queueing.Buffer
+	writeBufferBuffer        queueing.Buffer
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage

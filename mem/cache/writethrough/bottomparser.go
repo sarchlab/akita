@@ -1,9 +1,9 @@
 package writethrough
 
 import (
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/queueing"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -172,7 +172,7 @@ func (p *bottomParser) removeTransaction(trans *transaction) {
 	}
 }
 
-func (p *bottomParser) getBankBuf(block *cache.Block) sim.Buffer {
+func (p *bottomParser) getBankBuf(block *cache.Block) queueing.Buffer {
 	numWaysPerSet := p.cache.wayAssociativity
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(p.cache.bankBufs)

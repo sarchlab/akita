@@ -1,10 +1,10 @@
 package writeback
 
 import (
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/sim/modeling"
 )
 
 type action int
@@ -55,7 +55,7 @@ func (t transaction) accessReq() mem.AccessReq {
 	return nil
 }
 
-func (t transaction) req() sim.Msg {
+func (t transaction) req() modeling.Msg {
 	if t.accessReq() != nil {
 		return t.accessReq()
 	}

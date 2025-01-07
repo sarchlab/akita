@@ -3,8 +3,11 @@ package writeback
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/cache"
-	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim/modeling"
+	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/timing"
 
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
@@ -12,8 +15,8 @@ import (
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine              sim.Engine
-	freq                sim.Freq
+	engine              timing.Engine
+	freq                timing.Freq
 	addressToPortMapper mem.AddressToPortMapper
 	wayAssociativity    int
 	log2BlockSize       uint64
@@ -37,7 +40,7 @@ type Builder struct {
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                1 * sim.GHz,
+		freq:                1 * timing.GHz,
 		wayAssociativity:    4,
 		log2BlockSize:       6,
 		byteSize:            512 * mem.KB,
@@ -51,13 +54,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the caches.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine timing.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency to be used by the caches.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.freq = freq
 	return b
 }
@@ -149,7 +152,7 @@ func (b Builder) WithBankLatency(n int) Builder {
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *Comp {
 	cache := new(Comp)
-	cache.TickingComponent = sim.NewTickingComponent(
+	cache.TickingComponent = modeling.NewTickingComponent(
 		name, b.engine, b.freq, cache)
 
 	b.configureCache(cache)
@@ -275,12 +278,12 @@ func (b *Builder) createInternalBuffers(cache *Comp) {
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.dirToBankBuffers = make([]sim.Buffer, 1)
+	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
 	cache.dirToBankBuffers[0] = sim.NewBuffer(
 		cache.Name()+".DirToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferToBankBuffers = make([]sim.Buffer, 1)
+	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
 	cache.writeBufferToBankBuffers[0] = sim.NewBuffer(
 		cache.Name()+".WriteBufferToBankBuffer",
 		cache.numReqPerCycle,
