@@ -1,35 +1,32 @@
 package main
 
 import (
+	"flag"
 	"fmt"
-	"log"
 	"math/rand"
-
-	"github.com/sarchlab/akita/v4/mem"
-	"github.com/sarchlab/akita/v4/noc/directconnection"
-	"github.com/sarchlab/akita/v4/sim/timing"
-
+	"os"
 	"time"
 
-	"flag"
-
-	"os"
-
+	"github.com/sarchlab/akita/v4/mem"
 	"github.com/sarchlab/akita/v4/mem/acceptancetests"
-	"github.com/sarchlab/akita/v4/mem/cache/writeback"
+	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v4/mem/trace"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/noc/directconnection"
+	"github.com/sarchlab/akita/v4/sim/simulation"
+	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
 var numAccessFlag = flag.Int("num-access", 100000,
 	"Number of accesses to generate")
 var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
-var traceFileFlag = flag.String("trace", "", "Trace file")
-var traceWithStdoutFlag = flag.Bool("trace-stdout", false, "Trace with stdout")
+
+// var traceFileFlag = flag.String("trace", "", "Trace file")
+// var traceWithStdoutFlag = flag.Bool(
+// "trace-stdout", false, "Trace with stdout")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
+var sim simulation.Simulation
 var engine timing.Engine
 var agent *acceptancetests.MemAccessAgent
 
@@ -56,11 +53,15 @@ func initSeed() {
 }
 
 func buildEnvironment() {
+	sim = simulation.NewSimulation()
+
 	if *parallelFlag {
 		engine = timing.NewParallelEngine()
 	} else {
 		engine = timing.NewSerialEngine()
 	}
+
+	sim.RegisterEngine(engine)
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	conn := directconnection.MakeBuilder().
@@ -68,35 +69,27 @@ func buildEnvironment() {
 		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
-	agent = acceptancetests.NewMemAccessAgent(engine)
+	agent = acceptancetests.NewMemAccessAgent(sim)
 	agent.MaxAddress = *maxAddressFlag
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
 	addressToPortMapper := new(mem.SinglePortMapper)
-	builder := writeback.MakeBuilder().
-		WithEngine(engine).
-		WithAddressToPortMapper(addressToPortMapper).
-		WithByteSize(16 * mem.KB).
-		WithLog2BlockSize(6).
+	builder := cache.MakeBuilder().
+		WithSimulation(sim).
+		WithFreq(1 * timing.GHz).
+		WithCycleLatency(4).
+		WithAddressToDstTable(addressToPortMapper).
+		WithLog2CacheLineSize(6).
 		WithWayAssociativity(4).
-		WithNumMSHREntry(4).
-		WithNumReqPerCycle(16)
+		WithMSHRCapacity(4).
+		WithNumReqPerCycle(16).
+		WithWriteStrategy("writeback")
+
 	writeBackCache := builder.Build("Cache")
 
-	if *traceWithStdoutFlag {
-		logger := log.New(os.Stdout, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(writeBackCache, tracer)
-	} else if *traceFileFlag != "" {
-		traceFile, _ := os.Create(*traceFileFlag)
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(writeBackCache, tracer)
-	}
-
 	dram := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
+		WithSimulation(sim).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()

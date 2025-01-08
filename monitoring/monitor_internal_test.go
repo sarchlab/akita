@@ -39,10 +39,16 @@ func (c *sampleComponent) NotifyPortFree(_ modeling.Port) {
 func newSampleComponent() *sampleComponent {
 	c := &sampleComponent{
 		ComponentBase: modeling.NewComponentBase("Comp"),
-		buffer:        queueing.NewBuffer("Comp.Buf", 10),
+		buffer:        queueing.BufferBuilder{}.Build("Comp.Buf"),
 	}
 
-	c.AddPort("Port1", modeling.NewPort(c, 2, 2, "Comp.Port1"))
+	c.AddPort("Port1",
+		modeling.PortBuilder{}.
+			WithComponent(c).
+			WithIncomingBufCap(2).
+			WithOutgoingBufCap(2).
+			Build("Comp.Port1"),
+	)
 
 	return c
 }

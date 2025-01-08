@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type TimeValue struct {
@@ -50,26 +48,26 @@ func getComponentInfo(
 	case "ConcurrentTask":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
-			func(t tracing.Task) bool { return true },
-			func(t tracing.Task) float64 { return float64(t.StartTime) },
-			func(t tracing.Task) float64 { return float64(t.EndTime) })
+			func(t hooking.Task) bool { return true },
+			func(t hooking.Task) float64 { return float64(t.StartTime) },
+			func(t hooking.Task) float64 { return float64(t.EndTime) })
 	case "BufferPressure":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
 			taskIsReqIn,
-			func(t tracing.Task) float64 {
+			func(t hooking.Task) float64 {
 				return float64(t.ParentTask.StartTime)
 			},
-			func(t tracing.Task) float64 {
+			func(t hooking.Task) float64 {
 				return float64(t.StartTime)
 			},
 		)
 	case "PendingReqOut":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
-			func(t tracing.Task) bool { return t.Kind == "req_out" },
-			func(t tracing.Task) float64 { return float64(t.StartTime) },
-			func(t tracing.Task) float64 { return float64(t.EndTime) })
+			func(t hooking.Task) bool { return t.Kind == "req_out" },
+			func(t hooking.Task) float64 { return float64(t.StartTime) },
+			func(t hooking.Task) float64 { return float64(t.EndTime) })
 	default:
 		log.Panicf("unknown info_type %s\n", infoType)
 		return nil
@@ -100,7 +98,7 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func taskIsReqIn(t tracing.Task) bool {
+func taskIsReqIn(t hooking.Task) bool {
 	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
@@ -116,7 +114,7 @@ func calculateReqIn(
 		EndTime:   endTime,
 	}
 
-	query := tracing.TaskQuery{
+	query := hooking.TaskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -165,7 +163,7 @@ func calculateReqComplete(
 		EndTime:   endTime,
 	}
 
-	query := tracing.TaskQuery{
+	query := hooking.TaskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -214,7 +212,7 @@ func calculateAvgLatency(
 		EndTime:   endTime,
 	}
 
-	query := tracing.TaskQuery{
+	query := hooking.TaskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -277,8 +275,8 @@ func (ts timestamps) Swap(i, j int) {
 	ts[i], ts[j] = ts[j], ts[i]
 }
 
-type taskFilter func(t tracing.Task) bool
-type taskTime func(t tracing.Task) float64
+type taskFilter func(t hooking.Task) bool
+type taskTime func(t hooking.Task) float64
 
 func calculateTimeWeightedTaskCount(
 	compName, infoType string,
@@ -294,7 +292,7 @@ func calculateTimeWeightedTaskCount(
 		EndTime:   endTime,
 	}
 
-	query := tracing.TaskQuery{
+	query := hooking.TaskQuery{
 		Where:            compName,
 		EnableTimeRange:  true,
 		StartTime:        startTime,
@@ -331,8 +329,8 @@ func calculateTimeWeightedTaskCount(
 	return info
 }
 
-func filterTask(tasks []tracing.Task, filter taskFilter) []tracing.Task {
-	filteredTasks := []tracing.Task{}
+func filterTask(tasks []hooking.Task, filter taskFilter) []hooking.Task {
+	filteredTasks := []hooking.Task{}
 
 	for _, t := range tasks {
 		if filter(t) {
@@ -390,7 +388,7 @@ func calculateAvgTaskCount(
 }
 
 func taskToTimeStamps(
-	tasks []tracing.Task,
+	tasks []hooking.Task,
 	taskStart, taskEnd taskTime,
 ) []timestamp {
 	timestampList := make(timestamps, 0, len(tasks)*2)
@@ -414,10 +412,10 @@ func taskToTimeStamps(
 }
 
 func getTasksInBin(
-	tasks []tracing.Task,
+	tasks []hooking.Task,
 	binStart, binEnd float64,
 	taskStart, taskEnd taskTime,
-) (tasksInBin []tracing.Task) {
+) (tasksInBin []hooking.Task) {
 	for _, t := range tasks {
 		if isTaskOverlapsWithBin(t, binStart, binEnd, taskStart, taskEnd) {
 			tasksInBin = append(tasksInBin, t)
@@ -428,7 +426,7 @@ func getTasksInBin(
 }
 
 func isTaskOverlapsWithBin(
-	t tracing.Task,
+	t hooking.Task,
 	binStart, binEnd float64,
 	taskStart, taskEnd taskTime,
 ) bool {
