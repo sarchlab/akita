@@ -26,8 +26,8 @@ var (
 		"",
 		"Name of the SQLite file to read from.")
 
-	traceReader tracing.TraceReader
-	fs          http.FileSystem
+	reader traceReader
+	fs     http.FileSystem
 )
 
 func main() {
@@ -74,14 +74,14 @@ func connectToDB() {
 	case *mySQLDBName != "":
 		db := tracing.NewMySQLTraceReader(*mySQLDBName)
 		db.Init()
-		traceReader = db
+		reader = db
 	case *csvFileName != "":
 		db := tracing.NewCSVTraceReader(*csvFileName)
-		traceReader = db
+		reader = db
 	case *sqliteFileName != "":
 		db := tracing.NewSQLiteTraceReader(*sqliteFileName)
 		db.Init()
-		traceReader = db
+		reader = db
 	}
 }
 
