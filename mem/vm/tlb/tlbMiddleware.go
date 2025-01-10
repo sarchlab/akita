@@ -35,7 +35,7 @@ type Comp struct {
 	isPaused bool
 }
 
-// Reset sets all the entries int he TLB to be invalid
+// Reset sets all the entries in the TLB to be invalid
 func (c *Comp) reset() {
 	c.Sets = make([]internal.Set, c.numSets)
 	for i := 0; i < c.numSets; i++ {
