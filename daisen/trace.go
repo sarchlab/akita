@@ -81,6 +81,7 @@ func (r *traceReader) ListComponents() []string {
 	if err != nil {
 		panic(err)
 	}
+
 	defer func() {
 		err := rows.Close()
 		if err != nil {
@@ -90,10 +91,12 @@ func (r *traceReader) ListComponents() []string {
 
 	for rows.Next() {
 		var component string
+
 		err := rows.Scan(&component)
 		if err != nil {
 			panic(err)
 		}
+
 		components = append(components, component)
 	}
 
@@ -110,6 +113,7 @@ func (r *traceReader) ListTasks(query taskQuery) []task {
 	}
 
 	tasks := []task{}
+
 	for rows.Next() {
 		t := task{}
 		pt := task{}
@@ -132,6 +136,7 @@ func (r *traceReader) ListTasks(query taskQuery) []task {
 				&pt.StartTime,
 				&pt.EndTime,
 			)
+
 			if err != nil {
 				panic(err)
 			}

@@ -22,7 +22,7 @@ type ComponentInfo struct {
 }
 
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
-	componentNames := traceReader.ListComponents()
+	componentNames := reader.ListComponents()
 
 	rsp, err := json.Marshal(componentNames)
 	dieOnErr(err)
@@ -48,26 +48,26 @@ func getComponentInfo(
 	case "ConcurrentTask":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
-			func(t hooking.Task) bool { return true },
-			func(t hooking.Task) float64 { return float64(t.StartTime) },
-			func(t hooking.Task) float64 { return float64(t.EndTime) })
+			func(t task) bool { return true },
+			func(t task) float64 { return float64(t.StartTime) },
+			func(t task) float64 { return float64(t.EndTime) })
 	case "BufferPressure":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
 			taskIsReqIn,
-			func(t hooking.Task) float64 {
+			func(t task) float64 {
 				return float64(t.ParentTask.StartTime)
 			},
-			func(t hooking.Task) float64 {
+			func(t task) float64 {
 				return float64(t.StartTime)
 			},
 		)
 	case "PendingReqOut":
 		return calculateTimeWeightedTaskCount(
 			compName, infoType, startTime, endTime, numDots,
-			func(t hooking.Task) bool { return t.Kind == "req_out" },
-			func(t hooking.Task) float64 { return float64(t.StartTime) },
-			func(t hooking.Task) float64 { return float64(t.EndTime) })
+			func(t task) bool { return t.Kind == "req_out" },
+			func(t task) float64 { return float64(t.StartTime) },
+			func(t task) float64 { return float64(t.EndTime) })
 	default:
 		log.Panicf("unknown info_type %s\n", infoType)
 		return nil
@@ -98,7 +98,7 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func taskIsReqIn(t hooking.Task) bool {
+func taskIsReqIn(t task) bool {
 	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
@@ -114,7 +114,7 @@ func calculateReqIn(
 		EndTime:   endTime,
 	}
 
-	query := hooking.TaskQuery{
+	query := taskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -122,7 +122,7 @@ func calculateReqIn(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := reader.ListTasks(query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -163,7 +163,7 @@ func calculateReqComplete(
 		EndTime:   endTime,
 	}
 
-	query := hooking.TaskQuery{
+	query := taskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -171,7 +171,7 @@ func calculateReqComplete(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := reader.ListTasks(query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -212,7 +212,7 @@ func calculateAvgLatency(
 		EndTime:   endTime,
 	}
 
-	query := hooking.TaskQuery{
+	query := taskQuery{
 		Where:            compName,
 		Kind:             "req_in",
 		EnableTimeRange:  true,
@@ -220,7 +220,7 @@ func calculateAvgLatency(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := reader.ListTasks(query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -275,8 +275,8 @@ func (ts timestamps) Swap(i, j int) {
 	ts[i], ts[j] = ts[j], ts[i]
 }
 
-type taskFilter func(t hooking.Task) bool
-type taskTime func(t hooking.Task) float64
+type taskFilter func(t task) bool
+type taskTime func(t task) float64
 
 func calculateTimeWeightedTaskCount(
 	compName, infoType string,
@@ -292,14 +292,14 @@ func calculateTimeWeightedTaskCount(
 		EndTime:   endTime,
 	}
 
-	query := hooking.TaskQuery{
+	query := taskQuery{
 		Where:            compName,
 		EnableTimeRange:  true,
 		StartTime:        startTime,
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	tasks := traceReader.ListTasks(query)
+	tasks := reader.ListTasks(query)
 	tasks = filterTask(tasks, filter)
 
 	totalDuration := endTime - startTime
@@ -329,8 +329,8 @@ func calculateTimeWeightedTaskCount(
 	return info
 }
 
-func filterTask(tasks []hooking.Task, filter taskFilter) []hooking.Task {
-	filteredTasks := []hooking.Task{}
+func filterTask(tasks []task, filter taskFilter) []task {
+	filteredTasks := []task{}
 
 	for _, t := range tasks {
 		if filter(t) {
@@ -388,7 +388,7 @@ func calculateAvgTaskCount(
 }
 
 func taskToTimeStamps(
-	tasks []hooking.Task,
+	tasks []task,
 	taskStart, taskEnd taskTime,
 ) []timestamp {
 	timestampList := make(timestamps, 0, len(tasks)*2)
@@ -412,10 +412,10 @@ func taskToTimeStamps(
 }
 
 func getTasksInBin(
-	tasks []hooking.Task,
+	tasks []task,
 	binStart, binEnd float64,
 	taskStart, taskEnd taskTime,
-) (tasksInBin []hooking.Task) {
+) (tasksInBin []task) {
 	for _, t := range tasks {
 		if isTaskOverlapsWithBin(t, binStart, binEnd, taskStart, taskEnd) {
 			tasksInBin = append(tasksInBin, t)
@@ -426,7 +426,7 @@ func getTasksInBin(
 }
 
 func isTaskOverlapsWithBin(
-	t hooking.Task,
+	t task,
 	binStart, binEnd float64,
 	taskStart, taskEnd taskTime,
 ) bool {
