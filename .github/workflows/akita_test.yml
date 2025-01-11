@@ -55,14 +55,14 @@ jobs:
         with:
           go-version: "stable"
 
-      - name: Build
-        run: go build ./...
-
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@latest
 
       - name: Generate Mocks
         run: go generate ./...
+
+      - name: Build
+        run: go build ./...
 
       - name: Lint
         uses: golangci/golangci-lint-action@v3
