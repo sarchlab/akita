@@ -17,19 +17,19 @@ import (
 
 // DataRecorder is a backend that can record and store data
 type DataRecorder interface {
-	// Init establishes a connection to the database
+	// Init establishes a connection to the database.
 	Init()
 
-	// CreateTable creates a new table with given filename
+	// CreateTable creates a new table with given filename.
 	CreateTable(table string, sampleEntry any)
 
-	// DataInsert writes a same-type task into table that already exists
+	// DataInsert writes a same-type task into table that already exists.
 	InsertData(table string, entry any)
 
-	// ListTable returns a slice containing names of all tables
+	// ListTables returns a slice containing names of all tables.
 	ListTables() []string
 
-	// Flush flushes all the baffered task into database
+	// Flush flushes all the buffered task into database.
 	Flush()
 }
 
@@ -58,7 +58,7 @@ func NewSQLiteWriter(path string) *SQLiteWriter {
 	return w
 }
 
-// Init establishes a connection to the databse
+// Init establishes a connection to the database.
 func (t *SQLiteWriter) Init() {
 	if t.dbName == "" {
 		t.dbName = "akita_data_recording_" + xid.New().String()
@@ -100,8 +100,7 @@ func (t *SQLiteWriter) isAllowedType(kind reflect.Kind) bool {
 		reflect.Float64,
 		reflect.Complex64,
 		reflect.Complex128,
-		reflect.String,
-		reflect.UnsafePointer:
+		reflect.String:
 		return true
 	default:
 		return false

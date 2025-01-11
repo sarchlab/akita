@@ -2,6 +2,7 @@ package timing
 
 import (
 	"log"
+	"math"
 	"reflect"
 	"sync"
 
@@ -72,6 +73,10 @@ func (e *SerialEngine) Deserialize(
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
+	if math.IsNaN(float64(evt.Time())) {
+		log.Panicf("scheduling an event with NaN time: %v", evt)
+	}
+
 	now := e.readNow()
 	if evt.Time() < now {
 		log.Panic("scheduling an event earlier than current time")

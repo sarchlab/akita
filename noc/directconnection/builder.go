@@ -12,7 +12,9 @@ type Builder struct {
 }
 
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{
+		freq: 1 * timing.GHz,
+	}
 }
 
 func (b Builder) WithEngine(e timing.Engine) Builder {

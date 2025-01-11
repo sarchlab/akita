@@ -4,23 +4,21 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v4/mem"
 )
 
 var _ = Describe("Tags", func() {
 	var (
 		mockCtrl *gomock.Controller
-		tags     *Tags
+		tags     *tagArrayImpl
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		tags = &Tags{
-			NumSets:       1024,
-			NumWays:       4,
-			BlockSize:     64,
-			AddrConverter: nil,
-			Sets:          []Set{},
+		tags = &tagArrayImpl{
+			NumSets:   1024,
+			NumWays:   4,
+			BlockSize: 64,
+			Sets:      []Set{},
 		}
 		tags.Reset()
 	})
@@ -87,21 +85,5 @@ var _ = Describe("Tags", func() {
 		tags.Visit(set.Blocks[1])
 
 		Expect(set.LRUQueue).To(Equal([]int{0, 2, 3, 1}))
-	})
-
-	It("should get set considering interleaving", func() {
-		tags.AddrConverter = &mem.InterleavingConverter{
-			InterleavingSize:    128,
-			TotalNumOfElements:  4,
-			CurrentElementIndex: 1,
-		}
-
-		Expect(func() { tags.GetSet(64) }).To(Panic())
-
-		_, setID := tags.GetSet(192)
-		Expect(setID).To(Equal(1))
-
-		_, setID = tags.GetSet(640)
-		Expect(setID).To(Equal(2))
 	})
 })

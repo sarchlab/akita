@@ -15,7 +15,7 @@ type SinglePortMapper struct {
 }
 
 // Find simply returns the solo unit that it connects to
-func (f *SinglePortMapper) Find(address uint64) modeling.RemotePort {
+func (f SinglePortMapper) Find(address uint64) modeling.RemotePort {
 	return f.Port
 }
 

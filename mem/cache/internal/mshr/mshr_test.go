@@ -14,9 +14,7 @@ var _ = Describe("MSHRImpl", func() {
 	)
 
 	BeforeEach(func() {
-		m = mshr.MSHR{
-			Capacity: 4,
-		}
+		m = mshr.NewMSHR(4)
 	})
 
 	It("should add an entry", func() {

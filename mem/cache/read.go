@@ -2,7 +2,6 @@ package cache
 
 import (
 	"github.com/sarchlab/akita/v4/mem"
-	"github.com/sarchlab/akita/v4/mem/cache/internal/mshr"
 	"github.com/sarchlab/akita/v4/mem/cache/internal/tagging"
 	"github.com/sarchlab/akita/v4/sim/id"
 	"github.com/sarchlab/akita/v4/sim/modeling"
@@ -20,7 +19,7 @@ func (s *defaultReadStrategy) Tick() bool {
 }
 
 func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
-	for i := 0; i < s.NumReqPerCycle; i++ {
+	for i := 0; i < s.numReqPerCycle; i++ {
 		req := s.topPort.PeekIncoming()
 		if req == nil {
 			break
@@ -31,15 +30,15 @@ func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
 			break
 		}
 
-		entry := s.MSHR.Query(read.PID, read.Address)
-		if entry != nil {
-			madeProgress = s.handleMSHRHit(read, entry) || madeProgress
+		inMSHR := s.mshr.Lookup(read.PID, read.Address)
+		if inMSHR {
+			madeProgress = s.handleMSHRHit(read) || madeProgress
 			continue
 		}
 
-		block, ok := s.Tags.Lookup(read.PID, read.Address)
+		block, ok := s.tags.Lookup(read.PID, read.Address)
 		if ok {
-			madeProgress = s.HandleReadHit(read, &block) || madeProgress
+			madeProgress = s.HandleReadHit(read, block) || madeProgress
 			continue
 		}
 
@@ -51,80 +50,102 @@ func (s *defaultReadStrategy) ParseTop() (madeProgress bool) {
 
 func (s *defaultReadStrategy) handleMSHRHit(
 	read mem.ReadReq,
-	entry *mshr.MSHREntry,
 ) (madeProgress bool) {
-	entry.Requests = append(entry.Requests, read)
-	s.Transactions = append(s.Transactions, &transaction{
-		req:       read,
-		mshrEntry: entry,
-	})
+	transaction := &transaction{
+		req: read,
+	}
+	s.Transactions = append(s.Transactions, transaction)
 
+	s.tagMSHRHit(transaction)
+	s.mshr.AddReqToEntry(read)
 	s.topPort.RetrieveIncoming()
+
+	s.traceReqStart(read)
 
 	return true
 }
 
 func (s *defaultReadStrategy) HandleReadHit(
 	req mem.ReadReq,
-	b *tagging.Block,
+	b tagging.Block,
 ) (madeProgress bool) {
-	panic("read hit not implemented")
+	if !s.storageBottomUpBuf.CanPush() {
+		return false
+	}
+
+	transaction := &transaction{
+		transType: transactionTypeReadHit,
+		req:       req,
+		block:     b,
+	}
+	s.Transactions = append(s.Transactions, transaction)
+
+	b.IsLocked = true
+	s.tags.Visit(b)
+	s.storageBottomUpBuf.Push(transaction)
+	s.tagCacheHit(transaction)
+	s.topPort.RetrieveIncoming()
+
+	s.traceReqStart(req)
+
+	return true
 }
 
 func (s *defaultReadStrategy) HandleReadMiss(
 	req mem.ReadReq,
 ) (madeProgress bool) {
-	if s.MSHR.IsFull() {
+	if s.mshr.IsFull() {
 		return false
 	}
 
-	if !s.bottomPort.CanSend() {
+	victim, ok := s.victimFinder.FindVictim(s.tags, req.Address)
+	if !ok || victim.IsLocked {
 		return false
 	}
 
-	victim := s.Tags.FindVictim(req.Address)
-	if victim == nil || victim.IsLocked {
+	if victim.IsDirty && !s.storageTopDownBuf.CanPush() {
 		return false
 	}
 
-	if victim.IsDirty && !s.EvictQueue.CanPush() {
+	if !s.bottomInteractionBuf.CanPush() {
 		return false
 	}
 
 	transaction := &transaction{
-		req:   req,
-		block: victim,
+		transType: transactionTypeReadMiss,
+		req:       req,
+		block:     victim,
 	}
 	s.Transactions = append(s.Transactions, transaction)
 
 	if victim.IsDirty {
-		s.EvictQueue.Push(transaction)
+		s.storageTopDownBuf.Push(transaction)
 	}
 
-	mshrEntry := s.MSHR.Add(req.PID, req.Address)
-	mshrEntry.Requests = append(mshrEntry.Requests, req)
-	transaction.mshrEntry = mshrEntry
-
-	clAddr := s.alignAddrToBlock(req.Address)
-	blockSize := 1 << s.Log2BlockSize
-	readReq := mem.ReadReq{
+	alignedAddr := getCacheLineAddr(req.Address, s.log2BlockSize)
+	blockSize := 1 << s.log2BlockSize
+	downReq := mem.ReadReq{
 		MsgMeta: modeling.MsgMeta{
 			ID:  id.Generate(),
 			Src: s.bottomPort.AsRemote(),
+			Dst: s.addressToDstTable.Find(alignedAddr),
 		},
 		PID:            req.PID,
-		Address:        clAddr,
+		Address:        alignedAddr,
 		AccessByteSize: uint64(blockSize),
 	}
-	s.bottomPort.Send(readReq)
 
+	transaction.reqToBottom = downReq
 	victim.IsLocked = true
-	s.Tags.Visit(victim)
+
+	s.tags.Visit(victim)
+	s.mshr.AddEntry(downReq)
+	s.mshr.AddReqToEntry(req)
 	s.topPort.RetrieveIncoming()
+	s.bottomInteractionBuf.Push(transaction)
+	s.tagCacheMiss(transaction)
+	s.traceReqToBottomStart(transaction)
+	s.traceReqStart(req)
 
 	return true
-}
-
-func (s *defaultReadStrategy) alignAddrToBlock(addr uint64) uint64 {
-	return addr & ^((uint64(1) << s.Log2BlockSize) - 1)
 }

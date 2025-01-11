@@ -6,19 +6,20 @@ import (
 	"github.com/sarchlab/akita/v4/mem/cache/internal/tagging"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
 )
 
 // Builder can build caches.
 type Builder struct {
-	engine timing.Engine
-	freq   timing.Freq
-
+	sim               simulation.Simulation
+	freq              timing.Freq
 	numReqPerCycle    int
 	log2CacheLineSize int
 	wayAssociativity  int
 	cacheByteSize     uint64
 	mshrCapacity      int
+	cycleLatency      int
 	replaceStrategy   string
 	writeStrategy     string
 	addressToDstTable mem.AddressToPortMapper
@@ -33,14 +34,15 @@ func MakeBuilder() Builder {
 		wayAssociativity:  4,
 		cacheByteSize:     16 * mem.KB,
 		mshrCapacity:      4,
+		cycleLatency:      1,
 		replaceStrategy:   "lru",
 		writeStrategy:     "writeThrough",
 	}
 }
 
-// WithEngine sets the engine of the builder.
-func (b Builder) WithEngine(engine timing.Engine) Builder {
-	b.engine = engine
+// WithSimulation sets the simulation of the builder.
+func (b Builder) WithSimulation(sim simulation.Simulation) Builder {
+	b.sim = sim
 	return b
 }
 
@@ -74,6 +76,12 @@ func (b Builder) WithMSHRCapacity(mshrCapacity int) Builder {
 	return b
 }
 
+// WithCycleLatency sets the cycle latency of the builder.
+func (b Builder) WithCycleLatency(cycleLatency int) Builder {
+	b.cycleLatency = cycleLatency
+	return b
+}
+
 // WithWriteStrategy sets the write strategy of the builder.
 func (b Builder) WithWriteStrategy(writeStrategy string) Builder {
 	b.writeStrategy = writeStrategy
@@ -93,13 +101,13 @@ func (b Builder) Build(name string) *Comp {
 	comp := new(Comp)
 	comp.TickingComponent = modeling.NewTickingComponent(
 		name,
-		b.engine,
+		b.sim.GetEngine(),
 		b.freq,
 		comp,
 	)
 
 	b.initState(comp)
-	b.addPorts(comp, name)
+	b.addPorts(comp)
 	b.addMiddleware(comp)
 
 	return comp
@@ -112,29 +120,47 @@ func (b Builder) initState(comp *Comp) {
 	setSize := uint64(blockSize * numWays)
 	numSets := int(b.cacheByteSize / setSize)
 
-	victimFinder := b.createVictimFinder()
-	tags := tagging.Tags{
-		NumSets:       numSets,
-		NumWays:       numWays,
-		BlockSize:     blockSize,
-		AddrConverter: nil,
-		Sets:          []tagging.Set{},
-	}
-	tags.Reset()
+	comp.numReqPerCycle = b.numReqPerCycle
+	comp.log2BlockSize = b.log2CacheLineSize
+	comp.victimFinder = b.createVictimFinder()
+	b.createInternalBuffers(comp)
+	comp.mshr = mshr.NewMSHR(b.mshrCapacity)
+	comp.storage = mem.NewStorage(b.cacheByteSize)
+	comp.addressToDstTable = b.addressToDstTable
+	comp.tags = tagging.NewTagArray(
+		numSets,
+		numWays,
+		blockSize,
+	)
 
-	comp.state = state{
-		NumReqPerCycle:    b.numReqPerCycle,
-		Log2BlockSize:     b.log2CacheLineSize,
-		MSHR:              mshr.MSHR{Capacity: b.mshrCapacity},
-		Tags:              tags,
-		VictimFinder:      victimFinder,
-		Storage:           mem.NewStorage(b.cacheByteSize),
-		AddressToDstTable: b.addressToDstTable,
-		EvictQueue: queueing.NewBuffer(
-			comp.Name()+".EvictQueue",
-			b.numReqPerCycle,
-		),
-	}
+	comp.state = &state{}
+}
+
+func (b Builder) createInternalBuffers(comp *Comp) {
+	comp.storageTopDownBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.sim).
+		WithCapacity(b.numReqPerCycle).
+		Build("StorageTopDownBuf")
+	comp.storageBottomUpBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.sim).
+		WithCapacity(b.numReqPerCycle).
+		Build("StorageBottomUpBuf")
+	comp.bottomInteractionBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.sim).
+		WithCapacity(b.numReqPerCycle).
+		Build("BottomInteractionBuf")
+	comp.storagePostPipelineBuf = queueing.BufferBuilder{}.
+		WithSimulation(b.sim).
+		WithCapacity(b.numReqPerCycle).
+		Build("StoragePostPipelineBuf")
+
+	comp.storagePipeline = queueing.PipelineBuilder{}.
+		WithSimulation(b.sim).
+		WithPipelineWidth(1).
+		WithNumStage(b.cycleLatency).
+		WithCyclePerStage(1).
+		WithPostPipelineBuffer(comp.storagePostPipelineBuf).
+		Build("StoragePipeline")
 }
 
 func (b Builder) createVictimFinder() tagging.VictimFinder {
@@ -150,27 +176,28 @@ func (b Builder) createVictimFinder() tagging.VictimFinder {
 	return victimFinder
 }
 
-func (b Builder) addPorts(comp *Comp, name string) {
-	comp.topPort = modeling.NewPort(
-		comp,
-		b.numReqPerCycle,
-		b.log2CacheLineSize,
-		name+".Top",
-	)
-	comp.bottomPort = modeling.NewPort(
-		comp,
-		b.numReqPerCycle,
-		b.log2CacheLineSize,
-		name+".Bottom",
-	)
-
+func (b Builder) addPorts(comp *Comp) {
+	comp.topPort = modeling.PortBuilder{}.
+		WithSimulation(b.sim).
+		WithComponent(comp).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build("Top")
 	comp.AddPort("Top", comp.topPort)
+
+	comp.bottomPort = modeling.PortBuilder{}.
+		WithSimulation(b.sim).
+		WithComponent(comp).
+		WithIncomingBufCap(b.numReqPerCycle).
+		WithOutgoingBufCap(b.numReqPerCycle).
+		Build("Bottom")
 	comp.AddPort("Bottom", comp.bottomPort)
 }
 
 func (b Builder) addMiddleware(comp *Comp) {
 	comp.AddMiddleware(&storageMiddleware{Comp: comp})
 	comp.AddMiddleware(&defaultReadStrategy{Comp: comp})
+	comp.AddMiddleware(&bottomInteraction{Comp: comp})
 
 	switch b.writeStrategy {
 	case "writeThrough":
