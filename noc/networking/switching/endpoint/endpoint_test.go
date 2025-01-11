@@ -1,11 +1,11 @@
 package endpoint
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/sim/modeling"
+	"go.uber.org/mock/gomock"
 )
 
 type sampleMsg struct {

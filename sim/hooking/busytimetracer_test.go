@@ -3,10 +3,10 @@ package hooking
 import (
 	"fmt"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
+	"go.uber.org/mock/gomock"
 )
 
 type stubTimeTeller struct {

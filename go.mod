@@ -3,7 +3,6 @@ module github.com/sarchlab/akita/v4
 require (
 	github.com/fatih/structs v1.1.0
 	github.com/go-sql-driver/mysql v1.8.1
-	github.com/golang/mock v1.6.0
 	github.com/google/pprof v0.0.0-20240829160300-da1f7e9f2b25
 	github.com/gorilla/mux v1.8.1
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -14,10 +13,12 @@ require (
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.8.4
+	github.com/stretchr/testify v1.9.0
 	github.com/syifan/goseth v0.1.2
 	github.com/tebeka/atexit v0.3.0
 )
+
+require go.uber.org/mock v0.5.0
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect

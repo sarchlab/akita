@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/timing"
+	"go.uber.org/mock/gomock"
 )
 
 //go:generate mockgen -destination "mock_simulation_test.go" -self_package=github.com/sarchlab/akita/v4/noc/networking/networkconnector -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim/simulation Simulation

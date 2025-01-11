@@ -1,8 +1,8 @@
 package analysis
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
+	"go.uber.org/mock/gomock"
 
 	// . "github.com/onsi/gomega"
 

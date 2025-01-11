@@ -3,9 +3,9 @@ package timing
 import (
 	"math/rand"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("EventQueueImpl", func() {

@@ -1,7 +1,6 @@
 package datamover
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem"
@@ -10,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("DataMover", func() {

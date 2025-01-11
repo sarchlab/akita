@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"reflect"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim/serialization"
+	"go.uber.org/mock/gomock"
 )
 
 func init() {
