@@ -79,8 +79,12 @@ var _ = Describe("Bank", func() {
 		Context("activate", func() {
 			It("should open row", func() {
 				cmd := &signal.Command{
-					Kind:     signal.CmdKindActivate,
-					SubTrans: &signal.SubTransaction{},
+					Kind: signal.CmdKindActivate,
+					SubTrans: &signal.SubTransaction{
+						Transaction: &signal.Transaction{
+							Type: signal.TransactionTypeRead,
+						},
+					},
 				}
 				cmd.Row = 1
 
@@ -98,6 +102,7 @@ var _ = Describe("Bank", func() {
 		var (
 			readCmd *signal.Command
 		)
+
 		BeforeEach(func() {
 			b.state = BankStateOpen
 			readCmd = &signal.Command{
@@ -130,8 +135,12 @@ var _ = Describe("Bank", func() {
 		Context("precharge", func() {
 			It("should close", func() {
 				cmd := &signal.Command{
-					Kind:     signal.CmdKindPrecharge,
-					SubTrans: &signal.SubTransaction{},
+					Kind: signal.CmdKindPrecharge,
+					SubTrans: &signal.SubTransaction{
+						Transaction: &signal.Transaction{
+							Type: signal.TransactionTypeRead,
+						},
+					},
 				}
 				cmd.Row = 1
 

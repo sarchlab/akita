@@ -5,7 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim/modeling"
 	"github.com/sarchlab/akita/v4/sim/queueing"
+	simulation "github.com/sarchlab/akita/v4/sim/simulation"
 	"github.com/sarchlab/akita/v4/sim/timing"
+	gomock "go.uber.org/mock/gomock"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -36,14 +38,17 @@ func (c *sampleComponent) NotifyPortFree(_ modeling.Port) {
 	// Do nothing
 }
 
-func newSampleComponent() *sampleComponent {
+func newSampleComponent(sim simulation.Simulation) *sampleComponent {
 	c := &sampleComponent{
 		ComponentBase: modeling.NewComponentBase("Comp"),
-		buffer:        queueing.BufferBuilder{}.Build("Comp.Buf"),
+		buffer: queueing.BufferBuilder{}.
+			WithSimulation(sim).
+			Build("Comp.Buf"),
 	}
 
 	c.AddPort("Port1",
 		modeling.PortBuilder{}.
+			WithSimulation(sim).
 			WithComponent(c).
 			WithIncomingBufCap(2).
 			WithOutgoingBufCap(2).
@@ -55,15 +60,21 @@ func newSampleComponent() *sampleComponent {
 
 var _ = Describe("Monitor", func() {
 	var (
-		m *Monitor
+		mockCtrl *gomock.Controller
+		sim      *MockSimulation
+		m        *Monitor
 	)
 
 	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		sim = NewMockSimulation(mockCtrl)
+		sim.EXPECT().RegisterStateHolder(gomock.Any()).AnyTimes()
+
 		m = &Monitor{}
 	})
 
 	It("should register components and internal buffers", func() {
-		c := newSampleComponent()
+		c := newSampleComponent(sim)
 		m.RegisterComponent(c)
 
 		Expect(m.components).To(HaveLen(1))
