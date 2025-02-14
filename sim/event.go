@@ -8,7 +8,7 @@ type Event interface {
 	// Return the time that the event should happen
 	Time() VTimeInSec
 
-	// Returns the handler that can should handle the event
+	// Returns the handler that can handle the event
 	Handler() Handler
 
 	// IsSecondary tells if the event is a secondary event. Secondary event are
