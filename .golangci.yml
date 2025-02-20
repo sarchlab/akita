@@ -215,7 +215,6 @@ linters:
     - misspell
     - nakedret
     - prealloc
-    - exportloopref
     - unconvert
     - whitespace
     - gosimple
