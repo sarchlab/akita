@@ -2,11 +2,8 @@ package datarecording
 
 // Struct ExeInfo is feed to SQLiteWriter
 type ExeInfo struct {
-	ID         string
-	command    string
-	cwd        string
-	start_time string
-	end_time   string
+	property string
+	value    string
 }
 
 /*
@@ -20,24 +17,20 @@ type ExeRecorder struct {
 	// ExeRecorder use SQLiteWriter to log execution
 	writer *SQLiteWriter
 
-	// Store property of each command execution in string format
-	prop []string
-
-	// Store value of each command execution in string format
-	value []string
+	// Stores all the tasks as command
+	tasks []ExeInfo
 }
 
-func (e *ExeRecorder) Trigger() {
+// Write keeps track of current execution and writes it into SQLiteWriter
+func (e *ExeRecorder) Write() {
 }
 
-func (e *ExeRecorder) RecordStartTime() {}
-
-func (e *ExeRecorder) RecordEndTime() {}
-
-func (e *ExeRecorder) RecordCommand() {}
-
-func (e *ExeRecorder) RecordCurrentDirectory() {}
+// Flush wash all the data into SQLite
+func (e *ExeRecorder) Flush() {
+}
 
 func NewExeRecoerder(path string) *ExeRecorder {
 	return nil
 }
+
+func init() {}
