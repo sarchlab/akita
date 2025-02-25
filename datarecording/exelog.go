@@ -7,7 +7,7 @@ type ExeInfo struct {
 }
 
 /*
-1. Whenever a program executes certain command, we get notified.
+1. Log command through init() function
 2. Convert the execution into ExeInfo object
 3. Through SQLiteWriter API we create a table, and insert all following objects
 4. Use atexit command to "automatically" flush all ExeInfom objects in a table eventually
@@ -18,18 +18,25 @@ type ExeRecorder struct {
 	writer *SQLiteWriter
 
 	// Stores all the tasks as command
-	tasks []ExeInfo
+	tasks ExeInfo
 }
 
 // Write keeps track of current execution and writes it into SQLiteWriter
 func (e *ExeRecorder) Write() {
 }
 
-// Flush wash all the data into SQLite
+// Flush writes data into SQLite along with program exit time
 func (e *ExeRecorder) Flush() {
 }
 
-func NewExeRecoerder(path string) *ExeRecorder {
+// Sets SQLiteWriter
+func (e *ExeRecorder) SetWriter(inputWriter *SQLiteWriter) {
+	e.writer = inputWriter
+}
+
+func NewExeRecoerder(
+	path string,
+) *ExeRecorder {
 	return nil
 }
 
