@@ -11,6 +11,26 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+type sampleMsg struct {
+	sim.MsgMeta
+}
+
+func NewSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
+}
+
+func (m *sampleMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 var _ = Describe("DirectConnection", func() {
 
 	var (
@@ -52,11 +72,11 @@ var _ = Describe("DirectConnection", func() {
 
 		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10))
 
-		msg1 := sim.NewSampleMsg()
+		msg1 := NewSampleMsg()
 		msg1.Src = port1.AsRemote()
 		msg1.Dst = port2.AsRemote()
 
-		msg2 := sim.NewSampleMsg()
+		msg2 := NewSampleMsg()
 		msg2.Src = port2.AsRemote()
 		msg2.Dst = port1.AsRemote()
 
@@ -147,7 +167,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := sim.NewSampleMsg()
+				msg := NewSampleMsg()
 				msg.Src = agent.OutPort.AsRemote()
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				for msg.Dst == msg.Src {
@@ -196,7 +216,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 
 	for _, agent := range agents {
 		for i := 0; i < numMsgsPerAgent; i++ {
-			msg := sim.NewSampleMsg()
+			msg := NewSampleMsg()
 			msg.Src = agent.OutPort.AsRemote()
 			msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 

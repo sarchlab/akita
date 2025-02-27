@@ -6,6 +6,26 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+type sampleMsg struct {
+	MsgMeta
+}
+
+func NewSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *MsgMeta {
+	return &m.MsgMeta
+}
+
+func (m *sampleMsg) Clone() Msg {
+	cloneMsg := *m
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 var _ = Describe("DefaultPort", func() {
 	var (
 		mockController *gomock.Controller
