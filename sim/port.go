@@ -79,26 +79,6 @@ func (p *defaultPort) Component() Component {
 	return p.comp
 }
 
-type sampleMsg struct {
-	MsgMeta
-}
-
-func NewSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	return m
-}
-
-func (m *sampleMsg) Meta() *MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() Msg {
-	cloneMsg := *m
-	cloneMsg.ID = GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
 // Name returns the name of the port.
 func (p *defaultPort) Name() string {
 	return p.name
