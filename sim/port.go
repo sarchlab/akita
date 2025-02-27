@@ -106,8 +106,8 @@ func (p *defaultPort) Send(msg Msg) *SendError {
 	}
 
 	wasEmpty := (p.outgoingBuf.Size() == 0)
-
 	p.outgoingBuf.Push(msg)
+
 	hookCtx := HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgSend,
