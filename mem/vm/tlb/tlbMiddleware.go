@@ -285,12 +285,12 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
-	case *EnableReq:
+	/*case *EnableReq:
     	m.state = "enable"
     case *DrainReq:
     	m.state = "drain"
     case *PauseReq:
-    	m.state = "paused"
+    	m.state = "paused"*/
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}

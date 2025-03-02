@@ -30,6 +30,7 @@ type mshr interface {
 	Reset()
 	GetEntry(pid vm.PID, vAddr uint64) *mshrEntry
 	IsEntryPresent(pid vm.PID, vAddr uint64) bool
+	IsEmpty() bool
 }
 
 type mshrImpl struct {
@@ -109,4 +110,8 @@ func (m *mshrImpl) IsEntryPresent(pid vm.PID, vAddr uint64) bool {
 		}
 	}
 	return false
+}
+
+func (m *mshrImpl) IsEmpty() bool {
+	return len(m.entries) == 0
 }
