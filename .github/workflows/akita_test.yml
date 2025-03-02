@@ -58,6 +58,9 @@ jobs:
       - name: Clean Go module cache
         run: go clean -modcache
 
+      - name: Install dependencies
+        run: go mod tidy
+
       - name: Build
         run: go build ./...
 
