@@ -35,7 +35,7 @@ type Comp struct {
 	isPaused bool
 }
 
-// Reset sets all the entries in the TLB to be invalid
+//Reset sets all the entries in the TLB to be invalid
 func (c *Comp) reset() {
 	c.Sets = make([]internal.Set, c.numSets)
 	for i := 0; i < c.numSets; i++ {
@@ -45,83 +45,7 @@ func (c *Comp) reset() {
 }
 
 func (c *Comp) Tick() bool {
-	makeProgress := false
-
-	makeProgress = m.takeNewReqs() || madeProgress
-	makeProgress = m.execute() || madeProgress
-
-	return madeProgress
-}
-
-func (m *middleware) takeNewReqs() (madeProgress bool){
-
-    if m.state != "enable" {
-    	return false
-    }
-
-    // isEnabled: pour message into inflightBuffer
-    for i := 0; i < m.width; i++ {
-    	msg := m.topPort.RetrieveIncoming()
-    	if msg == nil {
-    		break
-    	}
-
-    	m.inflightBuffer = append(m.inflightBuffer, msg)
-    	madeProgress = true
-    }
-
-    return madeProgress
-}
-
-// executes request in the inflight buffer
-func (m *middleware) execute() (madeProgress bool){
-
-    madeProgress := false
-
-    switch state := m.state; state {
-    case "enable", "drain":
-    	madeProgress = m.handleInflightTlbReqs()
-    case "pause":
-    	madeProgress = false
-    case "flush":
-        madeProgress = m.handleTLBFlush()
-    }
-
-    return madeProgress
-}
-
-// iterate all requests
-func (m *tlbMiddleware) handleInflightTlbReqs() bool {
-	madeProgress := false
-	for i := 0; i < m.width; i++ {
-		madeProgress = m.handleTlbReqs() || madeProgress
-	}
-
-	return madeProgress
-}
-
-// handle each request
-func (m *tlbMiddleware) handleTlbReqs() bool {
-	if len(m.inflightBuffer) == 0 {
-		return false
-	}
-
-	msg := m.inflightBuffer[0]
-	m.inflightBuffer = m.inflightBuffer[1:]
-
-	tracing.TraceReqReceive(msg, m)
-
-	switch msg := msg.(type) {
-	case *mem.ReadReq:
-		m.handleReadReq(msg)
-		return true
-	case *mem.WriteReq:
-		m.handleWriteReq(msg)
-		return true
-	default:
-		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
-	}
-	return false
+	return c.MiddlewareHolder.Tick()
 }
 
 type tlbMiddleware struct {
@@ -131,21 +55,34 @@ type tlbMiddleware struct {
 // Tick defines how TLB update states at each cycle
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
-
 	madeProgress = m.performCtrlReq() || madeProgress
 
-	if !m.isPaused {
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.respondMSHREntry() || madeProgress
-		}
+	switch m.state {
+		case "enable":
+			for i := 0; i < m.numReqPerCycle; i++ {
+				madeProgress = m.respondMSHREntry() || madeProgress
+			}
+			for i := 0; i < m.numReqPerCycle; i++ {
+				madeProgress = m.lookup() || madeProgress
+			}
+			for i := 0; i < m.numReqPerCycle; i++ {
+				madeProgress = m.parseBottom() || madeProgress
+			}
 
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.lookup() || madeProgress
-		}
+		case "drain":
+			for i := 0; i < m.numReqPerCycle; i++ {
+		        madeProgress = m.respondMSHREntry() || madeProgress
+			}
+			for i := 0; i < m.numReqPerCycle; i++ {
+				madeProgress = m.parseBottom() || madeProgress
+			}
 
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.parseBottom() || madeProgress
-		}
+            if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+            	m.state = "pause"
+            }
+
+		case "pause":
+			// No action
 	}
 
 	return madeProgress
@@ -207,7 +144,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-	ok := m.sendRspToTop(req, page)
+    ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
@@ -348,6 +285,12 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
+	case *EnableReq:
+    	m.state = "enable"
+    case *DrainReq:
+    	m.state = "drain"
+    case *PauseReq:
+    	m.state = "paused"
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
