@@ -87,9 +87,6 @@ jobs:
         with:
           go-version: "stable"
 
-      - name: Clean Go module cache
-        run: go clean -modcache
-
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
 
