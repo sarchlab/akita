@@ -61,8 +61,8 @@ jobs:
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
 
-      - name: Run Ginkgo Tests with Coverage
-        run: ginkgo --cover --focus=".*"
+      - name: Unit Test
+        run: ginkgo -r
 
   lint:
     name: Lint

@@ -13,6 +13,7 @@ type Builder struct {
 	lowModule      sim.Port
 	numMSHREntry   int
 	state          string
+	latency        int
 }
 
 // MakeBuilder returns a Builder
@@ -25,6 +26,7 @@ func MakeBuilder() Builder {
 		pageSize:       4096,
 		numMSHREntry:   4,
 		state:          "enable",
+		latency:        4,
 	}
 }
 
@@ -78,6 +80,11 @@ func (b Builder) WithLowModule(lowModule sim.Port) Builder {
 func (b Builder) WithNumMSHREntry(num int) Builder {
 	b.numMSHREntry = num
 	return b
+}
+
+func (b Builder) WithLatency(cycles int) Builder{
+    b.latency = cycles
+    return b
 }
 
 // Build creates a new TLB
