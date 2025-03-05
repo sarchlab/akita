@@ -8,6 +8,8 @@ import XAxisDrawer from "./xaxisdrawer";
 import { ZoomHandler } from "./mouseeventhandler";
 import { Task } from "./task";
 import { smartString } from "./smartvalue";
+import { Widget, TimeValue } from "./widget";
+import Dashboard from "./dashboard";
 
 export class TaskPage implements ZoomHandler {
   _container: HTMLElement;
@@ -29,7 +31,7 @@ export class TaskPage implements ZoomHandler {
   _yIndexAssigner: TaskYIndexAssigner;
   _taskView: TaskView;
   _componentView: ComponentView;
-
+  _widget: Widget;
   constructor() {
     this._container = null;
     this._taskViewCanvas = null;
@@ -42,6 +44,7 @@ export class TaskPage implements ZoomHandler {
     this._legendCanvas = null;
     this._componentOnlyMode = false;
     this._componentName = "";
+    this._widget = null;
 
     this._currTasks = {
       task: null,
@@ -56,6 +59,9 @@ export class TaskPage implements ZoomHandler {
     this._taskColorCoder = new TaskColorCoder();
     this._legend = new Legend(this._taskColorCoder, this);
     this._yIndexAssigner = new TaskYIndexAssigner();
+    const widgetCanvas = document.createElement('div');
+    document.body.appendChild(widgetCanvas);      
+    this._widget = new Widget(this._componentName, widgetCanvas, new Dashboard());
     this._taskView = new TaskView(
       this._yIndexAssigner,
       new TaskRenderer(this, this._taskColorCoder),
@@ -64,8 +70,12 @@ export class TaskPage implements ZoomHandler {
     this._componentView = new ComponentView(
       this._yIndexAssigner,
       new TaskRenderer(this, this._taskColorCoder),
-      new XAxisDrawer()
+      new XAxisDrawer(),
+      this._widget
     );
+    this._componentView.setComponentName(this._componentName);
+    this._componentView.setPrimaryAxis('ReqInCount');
+    this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 
   _handleMouseMove(e: MouseEvent) {
@@ -149,6 +159,11 @@ export class TaskPage implements ZoomHandler {
       this._rightColumn.classList.add("side-column");
       this._container.appendChild(this._rightColumn);
     }
+    const locationLabel = document.createElement("div");
+    locationLabel.setAttribute("id", "location-label");
+    locationLabel.style.fontSize = "20px";
+    locationLabel.style.color = "gray";  
+    this._rightColumn.appendChild(locationLabel);
     this._rightColumn.style.width =
       this._rightColumnWidth.toString() + "px";
     this._rightColumn.style.height =
@@ -258,6 +273,11 @@ export class TaskPage implements ZoomHandler {
     if (parentTask != null && parentTask.length > 0) {
       parentTask = parentTask[0];
     }
+    if (parentTask != null) {
+      this._componentView.setComponentName(parentTask.where);
+    } else {
+      this._componentView.setComponentName(task.where);
+    }
 
     const traceRsps = await Promise.all([
       fetch(
@@ -296,8 +316,10 @@ export class TaskPage implements ZoomHandler {
 
   async showComponent(name: string) {
     this._componentName = name;
+    this._componentView.setComponentName(name);
+    console.log('TaskPage', this._componentName);
     this._switchToComponentOnlyMode();
-
+    await this._waitForComponentNameUpdate();
     const rsps = await Promise.all([
       fetch(
         `/api/trace?` +
@@ -310,8 +332,16 @@ export class TaskPage implements ZoomHandler {
 
     this._taskColorCoder.recode(sameLocationTasks);
     this._legend.render();
+    console.log('ComponentView Component Name before render:', this._componentView._componentName);
+    await this._componentView.render(sameLocationTasks);
+  }
 
-    this._componentView.render(sameLocationTasks);
+  _waitForComponentNameUpdate() {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve(true);
+        }, 1000);
+    });
   }
 
   _switchToComponentOnlyMode() {

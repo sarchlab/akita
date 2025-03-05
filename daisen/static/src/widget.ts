@@ -1,8 +1,9 @@
 import * as d3 from "d3";
 import Dashboard from "./dashboard";
+import TaskPage from "./taskpage";
 import { ZoomHandler, MouseEventHandler } from "./mouseeventhandler";
 
-class TimeValue {
+export class TimeValue {
   time: number;
   value: number;
 
@@ -12,13 +13,20 @@ class TimeValue {
   }
 }
 
-class Widget implements ZoomHandler {
+type DataObject = {
+  info_type: string;
+  data: TimeValue[];
+};
+
+export class Widget implements ZoomHandler {
   _dashboard: Dashboard;
   _componentName: string;
   _div: HTMLDivElement;
   _canvas: HTMLDivElement;
   _svg: SVGElement;
   _mouseEventHandler: MouseEventHandler;
+  _thumbnail: HTMLDivElement;
+  _taskPage: TaskPage;
 
   _numDots: number;
   _startTime: number;
@@ -41,6 +49,7 @@ class Widget implements ZoomHandler {
   _graphPaddingTop: number;
 
   _xScale: d3.ScaleLinear<number, number>;
+  _yScale: d3.ScaleLinear<number, number>;
   _primaryYScale: d3.ScaleLinear<number, number>;
   _secondaryYScale: d3.ScaleLinear<number, number>;
 
@@ -51,6 +60,7 @@ class Widget implements ZoomHandler {
   ) {
     this._dashboard = dashboard;
     this._componentName = componentName;
+    console.log('Widget created for component:', this._componentName);
     this._canvas = canvas;
 
     this._numDots = 40;
@@ -64,7 +74,7 @@ class Widget implements ZoomHandler {
     this._graphPaddingTop = 5;
     this._xAxisHeight = 30;
     this._graphContentHeight =
-      this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
+    this._graphHeight - this._xAxisHeight - this._graphPaddingTop;
 
     this._startTime = 0;
     this._endTime = 0;
@@ -73,9 +83,36 @@ class Widget implements ZoomHandler {
     this._xScale = null;
   }
 
+  setSVG(svg: SVGElement) {
+    this._svg = svg;
+  }
+  
+  public async initialize(): Promise<void> {
+    this._svg = await this.loadSvgElement();
+  }
+
+  private async loadSvgElement(): Promise<SVGElement> {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svgElement.setAttribute("width", "100");
+            svgElement.setAttribute("height", "50");
+            resolve(svgElement);
+        }, 1000);
+    });
+  }
+  setDimensions(width: number, height: number) {
+    this._widgetWidth = width;
+    this._widgetHeight = height;
+    this._graphWidth = this._widgetWidth;
+    this._graphContentWidth = this._widgetWidth - 2 * this._yAxisWidth;
+    this._graphHeight = this._widgetHeight - this._titleHeight;
+    this._graphContentHeight = this._graphHeight - 
+    this._xAxisHeight - this._graphPaddingTop;
+  }
+  
   resize(width: number, height: number) {
-    this._setWidgetWidth(width);
-    this._setWidgetHeight(height);
+    this.setDimensions(width, height);
     this._renderXAxis(this._svg);
     if (!this._isPrimaryAxisSkipped()) {
       this._renderDataCurve(
@@ -86,7 +123,7 @@ class Widget implements ZoomHandler {
       );
       this._drawYAxis(this._svg, this._primaryYScale, false);
     }
-
+  
     if (!this._isSecondaryAxisSkipped()) {
       this._renderDataCurve(
         this._svg,
@@ -116,6 +153,10 @@ class Widget implements ZoomHandler {
       .range([0, this._graphContentWidth]);
   }
 
+  setYScale(yScale: d3.ScaleLinear<number, number>) {
+    this._yScale = yScale;
+  }
+  
   temporaryTimeShift(startTime: number, endTime: number) {
     this.setXAxis(startTime, endTime);
     this._renderXAxis(this._svg);
@@ -190,12 +231,18 @@ class Widget implements ZoomHandler {
       this._mouseEventHandler = new MouseEventHandler(this);
       this._mouseEventHandler.register(this);
     }
-
+    d3.select(this._svg)
+    .attr("width", this._widgetWidth)
+    .attr("height", this._widgetHeight);
     this._renderXAxis(svg);
     this._fetchAndRenderAxisData(svg, true);
     this._fetchAndRenderAxisData(svg, false);
   }
 
+  setXScale(xScale: d3.ScaleLinear<number, number>) {
+    this._xScale = xScale;
+  }
+  
   createWidget(width: number, height: number) {
     const div = document.createElement("div");
 
@@ -224,7 +271,7 @@ class Widget implements ZoomHandler {
 
     this._createSaveButton(titleBar);
   }
-
+  
   _createSaveButton(titleBar: HTMLDivElement) {
     const btn = document.createElement("div");
     btn.classList.add("btn");
@@ -250,7 +297,7 @@ class Widget implements ZoomHandler {
   }
 
   _createSVG(div: HTMLDivElement) {
-    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg") as SVGSVGElement;;
     svg.setAttribute("width", "100%");
     svg.setAttribute("height", this._widgetHeight.toString());
     div.appendChild(svg);
@@ -265,6 +312,7 @@ class Widget implements ZoomHandler {
   }
 
   _renderXAxis(svg: SVGElement) {
+    d3.select(svg).selectAll(".x-axis-bottom").remove()
     this._drawXAxis(svg, this._xScale);
   }
 
@@ -292,7 +340,6 @@ class Widget implements ZoomHandler {
     params.set("start_time", this._startTime.toString());
     params.set("end_time", this._endTime.toString());
     params.set("num_dots", this._numDots.toString());
-
     fetch(`/api/compinfo?${params.toString()}`)
       .then((rsp) => rsp.json())
       .then((rsp) => {
@@ -309,8 +356,10 @@ class Widget implements ZoomHandler {
     const yScale = this._calculateYScale(data);
     if (isSecondary) {
       this._secondaryYScale = yScale;
+      d3.select(svg).selectAll(".y-axis-right").remove();
     } else {
       this._primaryYScale = yScale;
+      d3.select(svg).selectAll(".y-axis-left").remove(); 
     }
 
     this._drawYAxis(svg, yScale, isSecondary);
@@ -377,6 +426,7 @@ class Widget implements ZoomHandler {
   ) {
     const canvas = d3.select(svg);
     const className = `curve-${data["info_type"]}`;
+    canvas.selectAll(`.${className}`).remove();
     let reqInGroup = canvas.select(`.${className}`);
     if (reqInGroup.empty()) {
       reqInGroup = canvas.append("g").attr("class", className);
@@ -438,6 +488,11 @@ class Widget implements ZoomHandler {
 
     circles.exit().remove();
   }
+
+  clear() {
+    d3.select(this._svg).selectAll("*").remove();
+  }
+
 }
 
 export default Widget;
