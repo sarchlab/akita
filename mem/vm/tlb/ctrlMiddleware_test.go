@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 )
 
-var _ = FDescribe("TLB", func() {
+var _ = Describe("TLB", func() {
 
 	var (
 		mockCtrl    *gomock.Controller
