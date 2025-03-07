@@ -32,8 +32,13 @@ func Example() {
 	tables := recorder.ListTables()
 	fmt.Printf("The stored table: %s\n", tables[0])
 
+	recorder.Close()
+
 	reader := datarecording.NewReader(dbPath + ".sqlite3")
 	reader.MapTable("test_table", Task{})
+
+	tables = reader.ListTables()
+	fmt.Printf("The stored table: %s\n", tables[0])
 
 	results, _, err := reader.Query("test_table", datarecording.QueryParams{})
 	if err != nil {
@@ -45,7 +50,10 @@ func Example() {
 		fmt.Printf("ID: %d, Name: %s\n", task.ID, task.Name)
 	}
 
+	reader.Close()
+
 	// Output:
+	// The stored table: test_table
 	// The stored table: test_table
 	// ID: 2, Name: task2
 }

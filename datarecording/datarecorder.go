@@ -27,6 +27,9 @@ type DataRecorder interface {
 
 	// Flush flushes all the buffered task into database
 	Flush()
+
+	// Close closes the recorder
+	Close() error
 }
 
 // NewDataRecorder creates a new DataRecorder.
@@ -337,4 +340,8 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 	}
 
 	t.statement = stmt
+}
+
+func (t *sqliteWriter) Close() error {
+	return t.DB.Close()
 }

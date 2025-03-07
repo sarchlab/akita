@@ -42,6 +42,9 @@ type DataReader interface {
 		totalCount int,
 		err error,
 	)
+
+	// Close closes the reader
+	Close() error
 }
 
 // SQLiteReader reads data from SQLite database
@@ -180,12 +183,19 @@ func (r *sqliteReader) scanRowsToSlice(
 
 		err := rows.Scan(scanTargets...)
 		if err != nil {
-			continue // Skip rows with scan errors
+			panic(err)
 		}
 
-		// Add the populated struct to results
 		results = append(results, structPtr.Interface())
 	}
 
+	if err := rows.Err(); err != nil {
+		panic(err)
+	}
+
 	return results
+}
+
+func (r *sqliteReader) Close() error {
+	return r.DB.Close()
 }
