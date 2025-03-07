@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 
@@ -8,36 +9,54 @@ import (
 )
 
 type Task struct {
-	id   int
-	name string
+	ID   int
+	Name string
 }
 
 func Example() {
 	dbPath := "test"
-	writer := datarecording.NewSQLiteWriter(dbPath)
-	writer.Init()
-
-	reader := datarecording.NewSQLiteReader(dbPath)
-	reader.Init()
+	recorder := datarecording.New(dbPath)
 
 	cleanup := func() {
-		writer.DB.Close()
-		reader.DB.Close()
 		os.Remove(dbPath + ".sqlite3")
 	}
 	defer cleanup()
 
 	task1 := Task{1, "task1"}
-	writer.CreateTable("test_table", task1)
+	recorder.CreateTable("test_table", task1)
 
 	task2 := Task{2, "task2"}
-	writer.InsertData("test_table", task2)
+	recorder.InsertData("test_table", task2)
+	recorder.Flush()
 
-	tables := reader.ListTables()
-	fmt.Printf("The stored table: %s", tables)
+	tables := recorder.ListTables()
+	fmt.Printf("The stored table: %s\n", tables[0])
+
+	db, err := sql.Open("sqlite3", dbPath+".sqlite3")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	rows, err := db.Query("SELECT * FROM test_table")
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int
+		var name string
+
+		err = rows.Scan(&id, &name)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Printf("ID: %d, Name: %s\n", id, name)
+	}
 
 	// Output:
-	// Table test_table created successfully
-	// Data is successfully inserted
-	// The stored table: [test_table]
+	// The stored table: test_table
+	// ID: 2, Name: task2
 }
