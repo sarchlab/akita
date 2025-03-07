@@ -9,8 +9,9 @@ import (
 )
 
 type Task struct {
-	ID   int
-	Name string
+	ID   int    `json:"id" akita_data:"unique"`
+	Name string `json:"name" akita_data:"index"`
+	Age  int    `json:"age" akita_data:"ignore"`
 }
 
 func Example() {
@@ -22,10 +23,10 @@ func Example() {
 	}
 	defer cleanup()
 
-	task1 := Task{1, "task1"}
+	task1 := Task{1, "task1", 30}
 	recorder.CreateTable("test_table", task1)
 
-	task2 := Task{2, "task2"}
+	task2 := Task{2, "task2", 15}
 	recorder.InsertData("test_table", task2)
 	recorder.Flush()
 

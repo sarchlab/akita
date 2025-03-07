@@ -8,8 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fatih/structs"
-
 	// Need to use SQLite connections.
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/xid"
@@ -72,7 +70,6 @@ type sqliteWriter struct {
 	dbName     string
 	tables     map[string]*table
 	batchSize  int
-	tableCount int
 	entryCount int
 }
 
@@ -113,13 +110,11 @@ func (t *sqliteWriter) isAllowedType(kind reflect.Kind) bool {
 		reflect.Uint16,
 		reflect.Uint32,
 		reflect.Uint64,
-		reflect.Uintptr,
 		reflect.Float32,
 		reflect.Float64,
 		reflect.Complex64,
 		reflect.Complex128,
-		reflect.String,
-		reflect.UnsafePointer:
+		reflect.String:
 		return true
 	default:
 		return false
@@ -132,6 +127,12 @@ func (t *sqliteWriter) checkStructFields(entry any) error {
 	for i := 0; i < types.NumField(); i++ {
 		field := types.Field(i)
 
+		t.mustHaveAtMostOneTag(field)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
+
 		fieldKind := field.Type.Kind()
 		if !t.isAllowedType(fieldKind) {
 			return errors.New("entry is invalid")
@@ -141,25 +142,97 @@ func (t *sqliteWriter) checkStructFields(entry any) error {
 	return nil
 }
 
+func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
+	tags, ok := field.Tag.Lookup("akita_data")
+	if !ok {
+		return // No tag is fine
+	}
+
+	if tags == "ignore" {
+		return
+	}
+
+	if tags == "unique" {
+		return
+	}
+
+	if tags == "index" {
+		return
+	}
+
+	panic("akita_data tag can only be either ignore, unique, or index")
+}
+
 func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
 	}
 
-	t.tableCount++
-	n := structs.Names(sampleEntry)
-	fields := strings.Join(n, ", \n\t")
+	fieldNames := t.getFieldNames(sampleEntry)
+	fields := strings.Join(fieldNames, ", \n\t")
 
 	createTableSQL := `CREATE TABLE ` + tableName +
 		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
+
+	t.createIndexesForTable(tableName, sampleEntry)
 
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleEntry),
 		entries:    []any{},
 	}
 	t.tables[tableName] = tableInfo
+}
+
+func (t *sqliteWriter) getFieldNames(entry any) []string {
+	sType := reflect.TypeOf(entry)
+	var fieldNames []string
+
+	for i := 0; i < sType.NumField(); i++ {
+		field := sType.Field(i)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
+
+		fieldNames = append(fieldNames, field.Name)
+	}
+
+	return fieldNames
+}
+
+func (t *sqliteWriter) createIndexesForTable(
+	tableName string,
+	sampleEntry any,
+) {
+	sType := reflect.TypeOf(sampleEntry)
+
+	for i := 0; i < sType.NumField(); i++ {
+		field := sType.Field(i)
+
+		if dbTag, ok := field.Tag.Lookup("akita_data"); ok {
+			switch dbTag {
+			case "unique":
+				t.createIndex(tableName, field.Name, true)
+			case "index":
+				t.createIndex(tableName, field.Name, false)
+			}
+		}
+	}
+}
+
+func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
+	indexType := "INDEX"
+	if unique {
+		indexType = "UNIQUE INDEX"
+	}
+
+	indexSQL := fmt.Sprintf(
+		"CREATE %s idx_%s_%s ON %s(%s);",
+		indexType, tableName, fieldName, tableName, fieldName,
+	)
+	t.mustExecute(indexSQL)
 }
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
@@ -200,9 +273,21 @@ func (t *sqliteWriter) Flush() {
 		for _, task := range table.entries {
 			v := []any{}
 
-			types := reflect.ValueOf(task)
-			for i := 0; i < types.NumField(); i++ {
-				v = append(v, types.Field(i).Interface())
+			value := reflect.ValueOf(task)
+			vType := value.Type()
+
+			if vType != table.structType {
+				panic("entry type mismatch")
+			}
+
+			for i := 0; i < value.NumField(); i++ {
+				field := vType.Field(i)
+
+				if t.fieldIgnored(field) {
+					continue
+				}
+
+				v = append(v, value.Field(i).Interface())
 			}
 
 			_, err := t.statement.Exec(v...)
@@ -220,6 +305,11 @@ func (t *sqliteWriter) Flush() {
 	t.entryCount = 0
 }
 
+func (t *sqliteWriter) fieldIgnored(field reflect.StructField) bool {
+	tag, ok := field.Tag.Lookup("akita_data")
+	return ok && strings.Contains(tag, "ignore")
+}
+
 func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	res, err := t.Exec(query)
 	if err != nil {
@@ -231,12 +321,14 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 }
 
 func (t *sqliteWriter) prepareStatement(table string, task any) {
-	n := structs.Names(task)
-	for i := 0; i < len(n); i++ {
-		n[i] = "?"
+	fieldNames := t.getFieldNames(task)
+	placeholders := make([]string, len(fieldNames))
+
+	for i := range placeholders {
+		placeholders[i] = "?"
 	}
 
-	entryToFill := "(" + strings.Join(n, ", ") + ")"
+	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
 	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
 	stmt, err := t.Prepare(sqlStr)
