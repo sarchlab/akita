@@ -151,6 +151,7 @@ func (r *sqliteReader) scanRowsToSlice(
 	}
 
 	fieldMap := make(map[string]int)
+
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
 		fieldMap[field.Name] = i
