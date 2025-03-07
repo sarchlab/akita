@@ -1,7 +1,6 @@
 package datarecording_test
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 
@@ -33,28 +32,17 @@ func Example() {
 	tables := recorder.ListTables()
 	fmt.Printf("The stored table: %s\n", tables[0])
 
-	db, err := sql.Open("sqlite3", dbPath+".sqlite3")
+	reader := datarecording.NewReader(dbPath + ".sqlite3")
+	reader.MapTable("test_table", Task{})
+
+	results, _, err := reader.Query("test_table", datarecording.QueryParams{})
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
 
-	rows, err := db.Query("SELECT * FROM test_table")
-	if err != nil {
-		panic(err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id int
-		var name string
-
-		err = rows.Scan(&id, &name)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("ID: %d, Name: %s\n", id, name)
+	for _, result := range results {
+		task := result.(*Task)
+		fmt.Printf("ID: %d, Name: %s\n", task.ID, task.Name)
 	}
 
 	// Output:
