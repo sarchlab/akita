@@ -29,8 +29,8 @@ type DataRecorder interface {
 	Flush()
 }
 
-// New creates a new DataRecorder.
-func New(path string) DataRecorder {
+// NewDataRecorder creates a new DataRecorder.
+func NewDataRecorder(path string) DataRecorder {
 	w := &sqliteWriter{
 		dbName:    path,
 		batchSize: 100000,
@@ -44,8 +44,8 @@ func New(path string) DataRecorder {
 	return w
 }
 
-// NewWithDB creates a new DataRecorder with a given database.
-func NewWithDB(db *sql.DB) DataRecorder {
+// NewDataRecorderWithDB creates a new DataRecorder with a given database.
+func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 	w := &sqliteWriter{
 		DB:        db,
 		batchSize: 100000,

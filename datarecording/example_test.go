@@ -15,7 +15,7 @@ type Task struct {
 
 func Example() {
 	dbPath := "test"
-	recorder := datarecording.New(dbPath)
+	recorder := datarecording.NewDataRecorder(dbPath)
 
 	cleanup := func() {
 		os.Remove(dbPath + ".sqlite3")
