@@ -29,8 +29,14 @@ type QueryParams struct {
 
 // DataReader can read and store data
 type DataReader interface {
+	// MapTable establishes a mapping between a database table and a Go struct
+	// type. This mapping is required before querying a table.
 	MapTable(tableName string, sampleEntry any)
+
+	// ListTables returns a list of all tables that have been mapped.
 	ListTables() []string
+
+	// Query executes a query on a table and returns the results.
 	Query(tableName string, params QueryParams) (
 		results []any,
 		totalCount int,
