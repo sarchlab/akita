@@ -14,9 +14,9 @@ type Buffer interface {
 	Hookable
 
 	CanPush() bool
-	Push(e interface{})
-	Pop() interface{}
-	Peek() interface{}
+	Push(e any)
+	Pop() any
+	Peek() any
 	Capacity() int
 	Size() int
 
@@ -28,10 +28,16 @@ type Buffer interface {
 func NewBuffer(name string, capacity int) Buffer {
 	NameMustBeValid(name)
 
-	return &bufferImpl{
+	b := &bufferImpl{
 		name:     name,
 		capacity: capacity,
+		elements: make([]any, capacity),
+		head:     0,
+		tail:     0,
+		size:     0,
 	}
+
+	return b
 }
 
 type bufferImpl struct {
@@ -39,7 +45,14 @@ type bufferImpl struct {
 
 	name     string
 	capacity int
-	elements []interface{}
+	// Use a fixed-size slice for the circular buffer
+	elements []any
+	// head points to the index of the next element to pop
+	head int
+	// tail points to the next insertion index
+	tail int
+	// size is the current number of elements in the buffer
+	size int
 }
 
 // Name returns the name of the buffer.
@@ -48,15 +61,17 @@ func (b *bufferImpl) Name() string {
 }
 
 func (b *bufferImpl) CanPush() bool {
-	return len(b.elements) < b.capacity
+	return b.size < b.capacity
 }
 
-func (b *bufferImpl) Push(e interface{}) {
-	if len(b.elements) >= b.capacity {
+func (b *bufferImpl) Push(e any) {
+	if b.size == b.capacity {
 		log.Panic("buffer overflow")
 	}
 
-	b.elements = append(b.elements, e)
+	b.elements[b.tail] = e
+	b.tail = (b.tail + 1) % b.capacity
+	b.size++
 
 	if b.NumHooks() > 0 {
 		b.InvokeHook(HookCtx{
@@ -68,18 +83,22 @@ func (b *bufferImpl) Push(e interface{}) {
 	}
 }
 
-func (b *bufferImpl) Pop() interface{} {
-	if len(b.elements) == 0 {
+func (b *bufferImpl) Pop() any {
+	if b.size == 0 {
 		return nil
 	}
 
-	e := b.elements[0]
-	b.elements = b.elements[1:]
+	e := b.elements[b.head]
+
+	// Avoid memory leak by nil-ing the slot
+	b.elements[b.head] = nil
+	b.head = (b.head + 1) % b.capacity
+	b.size--
 
 	if b.NumHooks() > 0 {
 		b.InvokeHook(HookCtx{
 			Domain: b,
-			Pos:    HookPosBufPush,
+			Pos:    HookPosBufPop, // Use the pop hook
 			Item:   e,
 			Detail: nil,
 		})
@@ -88,12 +107,12 @@ func (b *bufferImpl) Pop() interface{} {
 	return e
 }
 
-func (b *bufferImpl) Peek() interface{} {
-	if len(b.elements) == 0 {
+func (b *bufferImpl) Peek() any {
+	if b.size == 0 {
 		return nil
 	}
 
-	return b.elements[0]
+	return b.elements[b.head]
 }
 
 func (b *bufferImpl) Capacity() int {
@@ -101,9 +120,15 @@ func (b *bufferImpl) Capacity() int {
 }
 
 func (b *bufferImpl) Size() int {
-	return len(b.elements)
+	return b.size
 }
 
 func (b *bufferImpl) Clear() {
-	b.elements = nil
+	b.head = 0
+	b.tail = 0
+	b.size = 0
+
+	for i := range b.elements {
+		b.elements[i] = make([]any, b.capacity)
+	}
 }

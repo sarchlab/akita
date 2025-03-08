@@ -10,10 +10,16 @@ type TickEvent struct {
 	EventBase
 }
 
-// MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
-	evt := TickEvent{}
-	evt.ID = GetIDGenerator().Generate()
+var tickEventPool = sync.Pool{
+	New: func() any {
+		return &TickEvent{}
+	},
+}
+
+// NewTickEvent creates a new TickEvent
+func NewTickEvent(handler Handler, time VTimeInSec) *TickEvent {
+	evt := tickEventPool.Get().(*TickEvent)
+	evt.EventBase = EventBase{}
 	evt.handler = handler
 	evt.time = time
 	evt.secondary = false
@@ -82,7 +88,7 @@ func (t *TickScheduler) TickNow() {
 	}
 
 	t.nextTickTime = t.Freq.ThisTick(time)
-	tick := MakeTickEvent(t.handler, t.nextTickTime)
+	tick := NewTickEvent(t.handler, t.nextTickTime)
 
 	if t.secondary {
 		tick.secondary = true
@@ -103,7 +109,7 @@ func (t *TickScheduler) TickLater() {
 	}
 
 	t.nextTickTime = time
-	tick := MakeTickEvent(t.handler, t.nextTickTime)
+	tick := NewTickEvent(t.handler, t.nextTickTime)
 
 	if t.secondary {
 		tick.secondary = true
@@ -148,6 +154,7 @@ func (c *TickingComponent) Handle(e Event) error {
 		c.TickLater()
 	}
 
+	tickEventPool.Put(e)
 	return nil
 }
 

@@ -51,7 +51,7 @@ var _ = Describe("Ticking Component", func() {
 			})
 		ticker.EXPECT().Tick().Return(true)
 		engine.EXPECT().CurrentTime().Return(VTimeInSec(10))
-		tc.Handle(MakeTickEvent(tc, VTimeInSec(10)))
+		tc.Handle(NewTickEvent(tc, VTimeInSec(10)))
 	})
 
 	It("should not tick if there is another tick scheduled in the future",
@@ -63,7 +63,7 @@ var _ = Describe("Ticking Component", func() {
 
 			ticker.EXPECT().Tick().Return(true)
 			engine.EXPECT().CurrentTime().Return(VTimeInSec(10))
-			tc.Handle(MakeTickEvent(tc, VTimeInSec(10)))
+			tc.Handle(NewTickEvent(tc, VTimeInSec(10)))
 
 			engine.EXPECT().CurrentTime().Return(VTimeInSec(10))
 			tc.TickNow()
@@ -71,7 +71,7 @@ var _ = Describe("Ticking Component", func() {
 
 	It("should stop ticking if no progress is made", func() {
 		ticker.EXPECT().Tick().Return(false)
-		tc.Handle(MakeTickEvent(tc, VTimeInSec(10)))
+		tc.Handle(NewTickEvent(tc, VTimeInSec(10)))
 		engine.EXPECT().Schedule(gomock.Any()).Times(0)
 	})
 
