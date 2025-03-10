@@ -1,0 +1,3 @@
+[submodule "daisen"]
+	path = daisen
+	url = git@github.com:duoduoyeah/Daisen.git
