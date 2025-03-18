@@ -210,15 +210,43 @@ func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 	}()
 }
 
-func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
+func (m *Monitor) listComponents(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	pageStr := r.URL.Query().Get("page")
+
+	limit := 100
+	page := 1
+
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	if pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+
+	start := (page - 1) * limit
+	end := start + limit
+
+	if start >= len(m.components) {
+		start = len(m.components)
+	}
+	if end > len(m.components) {
+		end = len(m.components)
+	}
+
 	fmt.Fprint(w, "[")
 
-	for i, c := range m.components {
-		if i > 0 {
+	for i := start; i < end; i++ {
+		if i > start {
 			fmt.Fprint(w, ",")
 		}
 
-		fmt.Fprintf(w, "\"%s\"", c.Name())
+		fmt.Fprintf(w, "\"%s\"", m.components[i].Name())
 	}
 
 	fmt.Fprint(w, "]")
