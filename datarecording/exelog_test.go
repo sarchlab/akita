@@ -15,21 +15,25 @@ import (
 
 func setupExeLog(
 	t *testing.T,
-) (*datarecording.ExeRecorder, *datarecording.SQLiteWriter,
-	*datarecording.SQLiteReader, func()) {
+) (*datarecording.ExeRecorder, *datarecording.DataRecorder,
+	*datarecording.DataReader, func()) {
 	t.Helper()
 
 	path := "test"
-	writer, reader, cleanup := setupTestDB(t)
+	writer := datarecording.NewDataRecorder(path)
 
 	logger := datarecording.NewExeRecoerder(path)
 	logger.SetWriter(writer)
+
+	cleanup := func() {
+		os.Remove(path + ".sqlite3")
+	}
 
 	return logger, writer, reader, cleanup
 }
 
 func TestWrite(t *testing.T) {
-	logger, writer, _, cleanup := setupExeLog(t)
+	logger, writer, reader, cleanup := setupExeLog(t)
 	defer cleanup()
 
 	originalCL := os.Args
@@ -44,7 +48,7 @@ func TestWrite(t *testing.T) {
 		fmt.Sprintf("WHERE type='table' AND name='%s';", expectedName)
 
 	var tableName string
-	err := writer.QueryRow(query).Scan(&tableName)
+	err := reader.QueryRow(query).Scan(&tableName)
 	require.NoError(t, err, "Table should be created")
 	assert.Equal(t, expectedName, tableName, "Table name should match")
 }
