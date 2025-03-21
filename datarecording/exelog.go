@@ -1,38 +1,39 @@
 package datarecording
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-// Struct ExeInfo is feed to SQLiteWriter
-type ExeInfo struct {
+// Struct ExecInfo is feed to DataRecorder
+type ExecInfo struct {
 	property string
 	value    string
 }
 
-type ExeRecorder struct {
-	// ExeRecorder use SQLiteWriter to log execution
-	writer *SQLiteWriter
-
-	// tableName string
+// Records program execution
+type ExecRecorder struct {
+	db        *sql.DB
+	recorder  DataRecorder
 	tableName string
+	entries   []ExecInfo
+}
 
-	// Stores all the entries as into a slice
-	entries []ExeInfo
+func (e *ExecRecorder) Init() {
 }
 
 // Write keeps track of current execution and writes it into SQLiteWriter
-func (e *ExeRecorder) Write() {
+func (e *ExecRecorder) Write() {
 	currentTime := time.Now()
 	startTime := currentTime.Format("2006-01-02 15:04:05")
-	timeEntry := ExeInfo{"Start Time", startTime}
+	timeEntry := ExecInfo{"Start Time", startTime}
 	e.entries = append(e.entries, timeEntry)
 
 	cmd := strings.Join(os.Args, " ")
-	cmdEntry := ExeInfo{"Command", cmd}
+	cmdEntry := ExecInfo{"Command", cmd}
 	e.entries = append(e.entries, cmdEntry)
 
 	ex, err := os.Executable()
@@ -40,37 +41,30 @@ func (e *ExeRecorder) Write() {
 		panic(err)
 	}
 	path := filepath.Dir(ex)
-	pathEntry := ExeInfo{"Path", path}
+	pathEntry := ExecInfo{"Path", path}
 	e.entries = append(e.entries, pathEntry)
 
-	sampleEntry := ExeInfo{}
+	sampleEntry := ExecInfo{}
 	e.tableName = "log_" + startTime
-	e.writer.CreateTable(e.tableName, sampleEntry)
+	e.recorder.CreateTable(e.tableName, sampleEntry)
 }
 
 // Flush writes data into SQLite along with program exit time
-func (e *ExeRecorder) Flush() {
+func (e *ExecRecorder) Flush() {
 	for _, entry := range e.entries {
-		e.writer.InsertData(e.tableName, entry)
+		e.recorder.InsertData(e.tableName, entry)
 	}
 
 	endTime := time.Now()
 	endValue := endTime.Format("2006-01-02 15:04:05")
-	timeEntry := ExeInfo{"End Time", endValue}
-	e.writer.InsertData(e.tableName, timeEntry)
+	timeEntry := ExecInfo{"End Time", endValue}
+	e.recorder.InsertData(e.tableName, timeEntry)
 
-	e.writer.Flush()
-}
-
-// Sets SQLiteWriter
-func (e *ExeRecorder) SetWriter(inputWriter *SQLiteWriter) {
-	e.writer = inputWriter
+	e.recorder.Flush()
 }
 
 func NewExeRecoerder(
 	path string,
-) *ExeRecorder {
+) *ExecRecorder {
 	return nil
 }
-
-func init() {}
