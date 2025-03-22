@@ -16,13 +16,10 @@ type ExecInfo struct {
 
 // Records program execution
 type ExecRecorder struct {
-	db        *sql.DB
+	// db        *sql.DB
+	tablename string
 	recorder  DataRecorder
-	tableName string
 	entries   []ExecInfo
-}
-
-func (e *ExecRecorder) Init() {
 }
 
 // Write keeps track of current execution and writes it into SQLiteWriter
@@ -63,8 +60,38 @@ func (e *ExecRecorder) Flush() {
 	e.recorder.Flush()
 }
 
-func NewExeRecoerder(
-	path string,
-) *ExecRecorder {
-	return nil
+// NewExecRecorder creates a new ExecRecorder
+func NewExeRecoerder(path string) *ExecRecorder {
+	newRecorder := NewDataRecorder(path)
+
+	e := &ExecRecorder{
+		recorder: newRecorder,
+	}
+
+	setupTable(e)
+
+	return e
+}
+
+// NewExecRecorderWithDB creates a new ExecRecorder with a given database
+func NewExecRecorderWithDB(db *sql.DB) *ExecRecorder {
+	newRecorder := NewDataRecorderWithDB(db)
+
+	e := &ExecRecorder{
+		recorder: newRecorder,
+	}
+
+	setupTable(e)
+
+	return e
+}
+
+func setupTable(e *ExecRecorder) {
+	currentTime := time.Now()
+	time := currentTime.Format("2006-01-02 15:04:05")
+	name := "akita_exec_log" + time
+	e.tablename = name
+
+	sampleEntry := ExecInfo{}
+	e.recorder.CreateTable(name, sampleEntry)
 }
