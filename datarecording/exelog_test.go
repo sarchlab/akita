@@ -1,7 +1,6 @@
 package datarecording_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,107 +9,138 @@ import (
 
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func setupExeLog(
+// setupExeLog creates a new ExecRecorder and cleanup function for testing
+func setupExecLog(
 	t *testing.T,
-) (*datarecording.ExeRecorder, *datarecording.DataRecorder,
-	*datarecording.DataReader, func()) {
+) (*datarecording.ExecRecorder, datarecording.DataReader, string, func()) {
 	t.Helper()
 
 	path := "test"
-	writer := datarecording.NewDataRecorder(path)
+	initializeTime := time.Now()
+	time := initializeTime.Format("2006-01-02 15:04:05")
+	logger := datarecording.NewExecRecoerder(path)
 
-	logger := datarecording.NewExeRecoerder(path)
-	logger.SetWriter(writer)
+	reader := datarecording.NewReader(path + ".sqlite3")
 
 	cleanup := func() {
 		os.Remove(path + ".sqlite3")
 	}
 
-	return logger, writer, reader, cleanup
+	return logger, reader, time, cleanup
 }
 
-func TestWrite(t *testing.T) {
-	logger, writer, reader, cleanup := setupExeLog(t)
-	defer cleanup()
-
-	originalCL := os.Args
-	defer func() { os.Args = originalCL }()
-
-	os.Args = []string{"test_program", "arg1", "arg2"}
-	logger.Write()
-
-	timeNow := time.Now()
-	expectedName := "log_" + timeNow.Format("2006-01-02 15:04:05")
-	query := "SELECT name FROM sqlite_master " +
-		fmt.Sprintf("WHERE type='table' AND name='%s';", expectedName)
-
-	var tableName string
-	err := reader.QueryRow(query).Scan(&tableName)
-	require.NoError(t, err, "Table should be created")
-	assert.Equal(t, expectedName, tableName, "Table name should match")
-}
-
+// TestSingleExecution tests the logging of a single execution
 func TestSingleExecution(t *testing.T) {
-	logger, writer, _, cleanup := setupExeLog(t)
+	logger, reader, initializeTime, cleanup := setupExecLog(t)
 	defer cleanup()
 
 	originalCL := os.Args
 	defer func() { os.Args = originalCL }()
 
+	timeStart := time.Now()
+	logger.Write()
+	expectedStart := timeStart.Format("2006-01-02 15:04:05")
+	tableName := "akita_exec_log_" + initializeTime
+
+	timeEnd := time.Now()
+	logger.Flush()
+	expectedEnd := timeEnd.Format("2006-01-02 15:04:05")
+
+	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
+	assert.True(t, testPathLog(tableName, reader), "Path should be logged")
+	assert.True(t, testStartTimeLog(tableName, expectedStart, reader), "Start time should be logged")
+	assert.True(t, testEndTimeLog(tableName, expectedEnd, reader), "End time should be logged")
+}
+
+func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 	os.Args = []string{"test_program", "arg1", "arg2"}
 	expectedCMD := strings.Join(os.Args, " ")
 
+	queryCMD := datarecording.QueryParams{
+		Where: "ID=?",
+		Args:  []interface{}{1},
+	}
+
+	results, _, _ := reader.Query(tableName, queryCMD)
+
+	flag := true
+	flag = flag && (len(results) == 1)
+
+	if cmd, ok := results[0].(datarecording.ExecInfo); ok {
+		flag = flag && (cmd.Property == "Command")
+		flag = flag && (cmd.Value == expectedCMD)
+	}
+
+	return flag
+}
+
+func testPathLog(tableName string, reader datarecording.DataReader) bool {
 	ex, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
 	expectedPath := filepath.Dir(ex)
 
-	timeStart := time.Now()
-	logger.Write()
-	expectedStart := timeStart.Format("2006-01-02 15:04:05")
-	expectedName := "log_" + expectedStart
-	query := "SELECT name FROM sqlite_master " +
-		fmt.Sprintf("WHERE type='table' AND name='%s';", expectedStart)
+	queryPath := datarecording.QueryParams{
+		Where: "ID=?",
+		Args:  []interface{}{2},
+	}
 
-	timeEnd := time.Now()
-	logger.Flush()
-	expectedEnd := timeEnd.Format("2006-01-02 15:04:05")
+	results, _, _ := reader.Query(tableName, queryPath)
 
-	var tableName string
-	openErr := writer.QueryRow(query).Scan(&tableName)
-	require.NoError(t, openErr, "Table should be created")
-	assert.Equal(t, expectedName, tableName, "Table name should match")
+	flag := true
+	flag = flag && (len(results) == 1)
 
-	var (
-		property [4]string
-		value    [4]string
-	)
+	if cmd, ok := results[1].(datarecording.ExecInfo); ok {
+		flag = flag && (cmd.Property == "CWD")
+		flag = flag && (cmd.Value == expectedPath)
+	}
 
-	queryCMD := fmt.Sprintf("SELECT Property, Value FROM %s WHERE ID=1;", expectedName)
-	errCMD := writer.QueryRow(queryCMD).Scan(&property[0], &value[0])
-	require.NoError(t, errCMD, "Data should be inserted")
-	assert.Equal(t, "Command", property[0], "Property should match")
-	assert.Equal(t, expectedCMD, value[0], "Value should match")
+	return flag
+}
 
-	queryCWD := fmt.Sprintf("SELECT Property, Value FROM %s WHERE ID=2;", expectedName)
-	errCWD := writer.QueryRow(queryCWD).Scan(&property[1], &value[1])
-	require.NoError(t, errCWD, "Data should be inserted")
-	assert.Equal(t, "CWD", property[1], "Property should match")
-	assert.Equal(t, expectedPath, value[1], "Value should match")
+func testStartTimeLog(tableName string, expectedStart string,
+	reader datarecording.DataReader) bool {
+	queryStart := datarecording.QueryParams{
+		Where: "ID=?",
+		Args:  []interface{}{3},
+	}
 
-	queryStart := fmt.Sprintf("SELECT Property, Value FROM %s WHERE ID=3;", expectedName)
-	errStart := writer.QueryRow(queryStart).Scan(&property[2], &value[2])
-	require.NoError(t, errStart, "Data should be inserted")
-	assert.Equal(t, "Start Time", property[2], "Property should match")
-	assert.Equal(t, expectedStart, value[2], "Value should match")
+	results, _, _ := reader.Query(tableName, queryStart)
 
-	queryEnd := fmt.Sprintf("SELECT Property, Value FROM %s WHERE ID=4;", expectedName)
-	errEnd := writer.QueryRow(queryEnd).Scan(&property[3], &value[3])
-	require.NoError(t, errEnd, "Data should be inserted")
-	assert.Equal(t, "End Time", property[3], "Property should match")
-	assert.Equal(t, expectedEnd, value[3], "Value should match")
+	flag := true
+	flag = flag && (len(results) == 1)
+
+	if cmd, ok := results[2].(datarecording.ExecInfo); ok {
+		flag = flag && (cmd.Property == "Start Time")
+		flag = flag && (cmd.Value == expectedStart)
+	}
+
+	return flag
+}
+
+func testEndTimeLog(tableName string, expectedEnd string,
+	reader datarecording.DataReader) bool {
+	queryEnd := datarecording.QueryParams{
+		Where: "ID=?",
+		Args:  []interface{}{4},
+	}
+
+	results, _, _ := reader.Query(tableName, queryEnd)
+
+	flag := true
+	flag = flag && (len(results) == 1)
+
+	if cmd, ok := results[3].(datarecording.ExecInfo); ok {
+		flag = flag && (cmd.Property == "End Time")
+		flag = flag && (cmd.Value == expectedEnd)
+	}
+
+	return flag
+}
+
+func TestCleanUp(t *testing.T) {
+	os.Remove("test.sqlite3")
 }

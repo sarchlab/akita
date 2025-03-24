@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/tebeka/atexit"
 )
 
 // Struct ExecInfo is feed to DataRecorder
 type ExecInfo struct {
-	property string
-	value    string
+	Property string
+	Value    string
 }
 
 // Records program execution
@@ -22,7 +24,7 @@ type ExecRecorder struct {
 	entries   []ExecInfo
 }
 
-// Write keeps track of current execution and writes it into SQLiteWriter
+// Write log current execution
 func (e *ExecRecorder) Write() {
 	currentTime := time.Now()
 	startTime := currentTime.Format("2006-01-02 15:04:05")
@@ -40,35 +42,32 @@ func (e *ExecRecorder) Write() {
 	path := filepath.Dir(ex)
 	pathEntry := ExecInfo{"Path", path}
 	e.entries = append(e.entries, pathEntry)
-
-	sampleEntry := ExecInfo{}
-	e.tableName = "log_" + startTime
-	e.recorder.CreateTable(e.tableName, sampleEntry)
 }
 
 // Flush writes data into SQLite along with program exit time
 func (e *ExecRecorder) Flush() {
 	for _, entry := range e.entries {
-		e.recorder.InsertData(e.tableName, entry)
+		e.recorder.InsertData(e.tablename, entry)
 	}
 
 	endTime := time.Now()
 	endValue := endTime.Format("2006-01-02 15:04:05")
 	timeEntry := ExecInfo{"End Time", endValue}
-	e.recorder.InsertData(e.tableName, timeEntry)
+	e.recorder.InsertData(e.tablename, timeEntry)
 
 	e.recorder.Flush()
 }
 
 // NewExecRecorder creates a new ExecRecorder
-func NewExeRecoerder(path string) *ExecRecorder {
+func NewExecRecoerder(path string) *ExecRecorder {
 	newRecorder := NewDataRecorder(path)
 
 	e := &ExecRecorder{
 		recorder: newRecorder,
 	}
-
 	setupTable(e)
+
+	atexit.Register(e.Flush)
 
 	return e
 }
@@ -80,16 +79,17 @@ func NewExecRecorderWithDB(db *sql.DB) *ExecRecorder {
 	e := &ExecRecorder{
 		recorder: newRecorder,
 	}
-
 	setupTable(e)
+
+	atexit.Register(e.Flush)
 
 	return e
 }
 
 func setupTable(e *ExecRecorder) {
 	currentTime := time.Now()
-	time := currentTime.Format("2006-01-02 15:04:05")
-	name := "akita_exec_log" + time
+	time := currentTime.Format("2006:01:02 15:04:05")
+	name := "akita_exec_log_" + time
 	e.tablename = name
 
 	sampleEntry := ExecInfo{}
