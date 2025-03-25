@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func setupExecLog(
 
 	path := "test"
 	initializeTime := time.Now()
-	time := initializeTime.Format("2006-01-02 15:04:05")
+	time := initializeTime.Format("2006_01_02_15_04_05")
 	logger := datarecording.NewExecRecoerder(path)
 
 	reader := datarecording.NewReader(path + ".sqlite3")
@@ -31,8 +32,30 @@ func setupExecLog(
 	return logger, reader, time, cleanup
 }
 
+func TestDataLog(t *testing.T) {
+	os.Remove("test.sqlite3")
+
+	logger, reader, time, _ := setupExecLog(t)
+
+	logger.Write()
+	logger.Flush()
+
+	tableName := "akita_exec_log_" + time
+	fmt.Println(tableName)
+	reader.MapTable(tableName, datarecording.ExecInfo{})
+
+	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	for _, result := range results {
+		fmt.Println(result)
+	}
+
+	os.Remove("test.sqlite3")
+}
+
 // TestSingleExecution tests the logging of a single execution
-func TestSingleExecution(t *testing.T) {
+func TestExecutionLog(t *testing.T) {
+	os.Remove("test.sqlite3")
+
 	logger, reader, initializeTime, cleanup := setupExecLog(t)
 	defer cleanup()
 
@@ -60,9 +83,10 @@ func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 
 	queryCMD := datarecording.QueryParams{
 		Where: "ID=?",
-		Args:  []interface{}{1},
+		Args:  []any{1},
 	}
 
+	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, queryCMD)
 
 	flag := true
@@ -88,6 +112,7 @@ func testPathLog(tableName string, reader datarecording.DataReader) bool {
 		Args:  []interface{}{2},
 	}
 
+	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, queryPath)
 
 	flag := true
@@ -108,6 +133,7 @@ func testStartTimeLog(tableName string, expectedStart string,
 		Args:  []interface{}{3},
 	}
 
+	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, queryStart)
 
 	flag := true
@@ -128,6 +154,7 @@ func testEndTimeLog(tableName string, expectedEnd string,
 		Args:  []interface{}{4},
 	}
 
+	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, queryEnd)
 
 	flag := true
@@ -139,8 +166,4 @@ func testEndTimeLog(tableName string, expectedEnd string,
 	}
 
 	return flag
-}
-
-func TestCleanUp(t *testing.T) {
-	os.Remove("test.sqlite3")
 }

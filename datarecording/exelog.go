@@ -55,6 +55,8 @@ func (e *ExecRecorder) Flush() {
 	timeEntry := ExecInfo{"End Time", endValue}
 	e.recorder.InsertData(e.tablename, timeEntry)
 
+	e.entries = nil
+
 	e.recorder.Flush()
 }
 
@@ -88,7 +90,7 @@ func NewExecRecorderWithDB(db *sql.DB) *ExecRecorder {
 
 func setupTable(e *ExecRecorder) {
 	currentTime := time.Now()
-	time := currentTime.Format("2006:01:02 15:04:05")
+	time := currentTime.Format("2006_01_02_15_04_05")
 	name := "akita_exec_log_" + time
 	e.tablename = name
 
