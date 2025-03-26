@@ -199,6 +199,7 @@ class TaskRenderer {
      * @param {Array[Task]} tasks 
      */
     render(tasks) {
+        console.log("Tasks with milestones:", tasks);
         const svg = d3.select(this._canvas)
             .select('svg');
 
@@ -288,7 +289,45 @@ class TaskRenderer {
             .attr('stroke', '#000000')
             .attr('stroke-opacity', 0.2);
 
+        
         taskBars.exit().remove();
+
+        tasks.forEach(task => {
+            console.log("milestones", task.steps)
+            if (task.steps && task.steps.length > 0) {
+                const milestones = taskBarGroup
+                    .selectAll(`.milestone-${this._taskIdTag(task)}`)
+                    .data(task.steps, d => `${d.task_id}-${d.time}`);
+
+                const milestonesEnter = milestones
+                    .enter()
+                    .append('circle')
+                    .attr('class', `milestone-${this._taskIdTag(task)}`)
+                    .attr('r', 2)
+                    .attr('fill', 'red')
+                    .attr('cy', (d) => this._getYValue(task) + this._getHeightValue(task) / 2);
+
+                milestonesEnter
+                    .on("mouseover", (event, d) => {
+                        this._showMilestoneTooltip(d, event);
+                    })
+                    .on("mouseout", () => {
+                        this._hideTooltip();
+                    });
+
+                milestonesEnter.merge(milestones)
+                    .transition(t)
+                    .attr('cx', d => {
+                    console.log("Milestone position calculation:", {
+                        time: d.time,
+                        xPos: this._xScale(d.time)
+                    });
+                    return this._xScale(d.time);
+                });
+
+                milestones.exit().remove();
+            }
+        });
 
         return this
     }
@@ -337,6 +376,35 @@ class TaskRenderer {
 
     _hideTooltip() {
         this._tooltip.classList.remove('showing');
+    }
+
+    _showMilestoneTooltip(step, event) {
+        const tableLeftCol = 3;
+        const tableRightCol = 12 - tableLeftCol;
+
+        this._tooltip.innerHTML = `
+        <div class="container">
+            <div class="row">
+                <h4>Milestone</h4>
+            </div>
+            <dl class="row">
+                <dt class="col-sm-${tableLeftCol}">Time</dt>
+                <dd class="col-sm-${tableRightCol}">${smartString(step.time)}</dd>
+
+                <dt class="col-sm-${tableLeftCol}">What</dt>
+                <dd class="col-sm-${tableRightCol}">${step.what || 'N/A'}</dd>
+            </dl>
+        </div>`;
+
+        this._tooltip.classList.add('showing');
+        
+        const tooltipWidth = this._tooltip.offsetWidth;
+        const tooltipHeight = this._tooltip.offsetHeight;
+        const x = event.pageX - tooltipWidth / 2;
+        const y = event.pageY - tooltipHeight - 10;
+        
+        this._tooltip.style.left = `${x}px`;
+        this._tooltip.style.top = `${y}px`;
     }
 }
 

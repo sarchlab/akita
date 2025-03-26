@@ -6,6 +6,7 @@ import (
 
 	// SQLite driver
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 type DataRecorderTraceReader struct {
@@ -24,14 +25,17 @@ func NewDataRecorderTraceReader(filename string) *DataRecorderTraceReader {
 }
 
 func (r *DataRecorderTraceReader) ListComponents() []string {
-	var components []string
-
-	rows, err := r.Query("SELECT DISTINCT location FROM trace")
+	rows, err := r.DB.Query(`
+        SELECT DISTINCT "Where" 
+        FROM trace 
+        WHERE "Where" IS NOT NULL
+    `)
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
 
+	var components []string
 	for rows.Next() {
 		var component string
 		err := rows.Scan(&component)
@@ -45,99 +49,124 @@ func (r *DataRecorderTraceReader) ListComponents() []string {
 }
 
 func (r *DataRecorderTraceReader) ListTasks(query TaskQuery) []Task {
-	sqlStr := r.prepareTaskQueryStr(query)
+	args := make([]interface{}, 0)
+	conditions := make([]string, 0)
 
-	rows, err := r.Query(sqlStr)
+	sqlStr := `SELECT ID, ParentID, Kind, What, "Where", StartTime, EndTime FROM trace WHERE 1=1`
+
+	if query.ID != "" {
+		conditions = append(conditions, "ID = ?")
+		args = append(args, query.ID)
+	}
+
+	if query.ParentID != "" {
+		conditions = append(conditions, "ParentID = ?")
+		args = append(args, query.ParentID)
+	}
+
+	if query.Kind != "" {
+		conditions = append(conditions, "Kind = ?")
+		args = append(args, query.Kind)
+	}
+
+	if query.Where != "" {
+		conditions = append(conditions, `"Where" = ?`)
+		args = append(args, query.Where)
+	}
+
+	if query.EnableTimeRange {
+		conditions = append(conditions, "EndTime > ? AND StartTime < ?")
+		args = append(args, query.StartTime, query.EndTime)
+	}
+
+	for _, condition := range conditions {
+		sqlStr += " AND " + condition
+	}
+
+	sqlStr += " ORDER BY StartTime"
+
+	rows, err := r.DB.Query(sqlStr, args...)
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
 
-	tasks := []Task{}
+	var tasks []Task
 	for rows.Next() {
-		t := Task{}
-		pt := Task{}
+		var task Task
+		err := rows.Scan(
+			&task.ID,
+			&task.ParentID,
+			&task.Kind,
+			&task.What,
+			&task.Where,
+			&task.StartTime,
+			&task.EndTime,
+		)
+		if err != nil {
+			panic(err)
+		}
 
-		if query.EnableParentTask {
-			t.ParentTask = &pt
-			err := rows.Scan(
-				&t.ID,
-				&t.ParentID,
-				&t.Kind,
-				&t.What,
-				&t.Where,
-				&t.StartTime,
-				&t.EndTime,
-				&pt.ID,
-				&pt.ParentID,
-				&pt.Kind,
-				&pt.What,
-				&pt.Where,
-				&pt.StartTime,
-				&pt.EndTime,
+		milestoneRows, err := r.DB.Query(`
+            SELECT ID, BlockingCategory, BlockingReason, BlockingLocation, Time
+            FROM trace_milestones
+            WHERE TaskID = ? AND Time >= ? AND Time <= ?
+            ORDER BY Time`,
+			task.ID, task.StartTime, task.EndTime)
+		if err != nil {
+			panic(err)
+		}
+		defer milestoneRows.Close()
+
+		for milestoneRows.Next() {
+			var (
+				id, category, reason, location string
+				timestamp                      float64
 			)
+			err := milestoneRows.Scan(&id, &category, &reason, &location, &timestamp)
 			if err != nil {
 				panic(err)
 			}
-		} else {
-			err := rows.Scan(
-				&t.ID,
-				&t.ParentID,
-				&t.Kind,
-				&t.What,
-				&t.Where,
-				&t.StartTime,
-				&t.EndTime,
-			)
-			if err != nil {
-				panic(err)
+
+			task.Steps = append(task.Steps, TaskStep{
+				Time: sim.VTimeInSec(timestamp),
+				What: fmt.Sprintf("%s: %s at %s", category, reason, location),
+			})
+		}
+
+		milestoneRows.Close()
+
+		if query.EnableParentTask && task.ParentID != "" {
+			parentTask, err := r.getParentTask(task.ParentID)
+			if err == nil {
+				task.ParentTask = parentTask
 			}
 		}
 
-		tasks = append(tasks, t)
+		tasks = append(tasks, task)
 	}
-
 	return tasks
 }
 
-func (r *DataRecorderTraceReader) prepareTaskQueryStr(query TaskQuery) string {
-	sqlStr := `
-		SELECT 
-			t.task_id as id, 
-			t.parent_id,
-			t.kind,
-			t.what,
-			t.location as "where",
-			t.start_time,
-			t.end_time
-	`
-
-	if query.EnableParentTask {
-		sqlStr += `,
-			pt.task_id as parent_id,
-			pt.parent_id as parent_parent_id,
-			pt.kind as parent_kind,
-			pt.what as parent_what,
-			pt.location as parent_where,
-			pt.start_time as parent_start_time,
-			pt.end_time as parent_end_time
-		`
+func (r *DataRecorderTraceReader) getParentTask(parentID string) (*Task, error) {
+	var task Task
+	err := r.DB.QueryRow(`
+        SELECT ID, ParentID, Kind, What, "Where", StartTime, EndTime
+        FROM trace
+        WHERE ID = ?`,
+		parentID).Scan(
+		&task.ID,
+		&task.ParentID,
+		&task.Kind,
+		&task.What,
+		&task.Where,
+		&task.StartTime,
+		&task.EndTime,
+	)
+	if err != nil {
+		return nil, err
 	}
-
-	sqlStr += `
-		FROM trace t
-	`
-
-	if query.EnableParentTask {
-		sqlStr += `
-			LEFT JOIN trace pt
-			ON t.parent_id = pt.task_id
-		`
-	}
-
-	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
-
-	return sqlStr
+	return &task, nil
 }
 
 func (r *DataRecorderTraceReader) addQueryConditionsToQueryStr(
@@ -150,31 +179,31 @@ func (r *DataRecorderTraceReader) addQueryConditionsToQueryStr(
 
 	if query.ID != "" {
 		sqlStr += `
-			AND t.task_id = '` + query.ID + `'
+			AND ID = '` + query.ID + `'
 		`
 	}
 
 	if query.ParentID != "" {
 		sqlStr += `
-			AND t.parent_id = '` + query.ParentID + `'
+			AND ParentID = '` + query.ParentID + `'
 		`
 	}
 
 	if query.Kind != "" {
 		sqlStr += `
-			AND t.kind = '` + query.Kind + `'
+			AND Kind = '` + query.Kind + `'
 		`
 	}
 
 	if query.Where != "" {
 		sqlStr += `
-			AND t.location = '` + query.Where + `'
+			AND Where = '` + query.Where + `'
 		`
 	}
 
 	if query.EnableTimeRange {
 		sqlStr += fmt.Sprintf(
-			"AND t.end_time > %.15f AND t.start_time < %.15f",
+			"AND EndTime > %.15f AND StartTime < %.15f",
 			query.StartTime,
 			query.EndTime)
 	}

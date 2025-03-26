@@ -38,7 +38,7 @@ func CurrentTime(domain NamedHookable) float64 {
 	return 0
 }
 
-func generateMilestoneID() uint64 {
+func GenerateMilestoneID() uint64 {
 	return atomic.AddUint64(&milestoneIDCounter, 1)
 }
 
@@ -165,7 +165,7 @@ func AddMilestone(
 	domain NamedHookable,
 ) {
 	milestone := Milestone{
-		ID:               strconv.FormatUint(generateMilestoneID(), 10),
+		ID:               strconv.FormatUint(GenerateMilestoneID(), 10),
 		TaskID:           taskID,
 		BlockingCategory: blockingCategory,
 		BlockingReason:   blockingReason,

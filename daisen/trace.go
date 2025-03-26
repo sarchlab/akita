@@ -5,8 +5,22 @@ import (
 	"net/http"
 	"strconv"
 
-    "github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 )
+
+type Milestone struct {
+	ID               string  `json:"id"`
+	TaskID           string  `json:"task_id"`
+	BlockingCategory string  `json:"blocking_category"`
+	BlockingReason   string  `json:"blocking_reason"`
+	BlockingLocation string  `json:"blocking_location"`
+	Time             float64 `json:"time"`
+}
+
+type TaskWithMilestones struct {
+	tracing.Task
+	Milestones []Milestone `json:"milestones,omitempty"`
+}
 
 func httpTrace(w http.ResponseWriter, r *http.Request) {
 	useTimeRange := true
@@ -42,7 +56,44 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 
 	tasks := traceReader.ListTasks(query)
 
-	rsp, err := json.Marshal(tasks)
+	tasksWithMilestones := make([]TaskWithMilestones, len(tasks))
+
+	sqliteReader, ok := traceReader.(*tracing.DataRecorderTraceReader)
+	if !ok {
+		panic("Unsupported trace reader type")
+	}
+
+	for i, task := range tasks {
+		tasksWithMilestones[i].Task = task
+
+		rows, err := sqliteReader.DB.Query(`
+            SELECT ID, BlockingCategory, BlockingReason, BlockingLocation, Time
+			FROM trace_milestones
+			WHERE ID = ?
+			AND Time >= ?
+			AND Time <= ?
+			ORDER BY Time`,
+			task.ID, task.StartTime, task.EndTime)
+
+		if err != nil {
+			panic(err)
+		}
+		defer rows.Close()
+
+		var milestones []Milestone
+		for rows.Next() {
+			var m Milestone
+			err := rows.Scan(&m.ID, &m.BlockingCategory, &m.BlockingReason, &m.BlockingLocation, &m.Time)
+			if err != nil {
+				panic(err)
+			}
+			m.TaskID = task.ID
+			milestones = append(milestones, m)
+		}
+		tasksWithMilestones[i].Milestones = milestones
+	}
+
+	rsp, err := json.Marshal(tasksWithMilestones)
 	dieOnErr(err)
 
 	_, err = w.Write(rsp)
