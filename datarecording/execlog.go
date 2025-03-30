@@ -1,7 +1,6 @@
 package datarecording
 
 import (
-	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -61,7 +60,7 @@ func (e *ExecRecorder) Flush() {
 }
 
 // NewExecRecorder creates a new ExecRecorder
-func NewExecRecoerder(path string) *ExecRecorder {
+func NewExecRecorder(path string) *ExecRecorder {
 	newRecorder := NewDataRecorder(path)
 
 	e := &ExecRecorder{
@@ -74,12 +73,10 @@ func NewExecRecoerder(path string) *ExecRecorder {
 	return e
 }
 
-// NewExecRecorderWithDB creates a new ExecRecorder with a given database
-func NewExecRecorderWithDB(db *sql.DB) *ExecRecorder {
-	newRecorder := NewDataRecorderWithDB(db)
-
+// NewExecRecorderWithWriter creates a new ExecRecorder with given writer
+func NewExecRecorderWithWriter(writer *sqliteWriter) *ExecRecorder {
 	e := &ExecRecorder{
-		recorder: newRecorder,
+		recorder: writer,
 	}
 	setupTable(e)
 

@@ -20,7 +20,7 @@ func setupExecLog(
 	path := "test"
 	initializeTime := time.Now()
 	time := initializeTime.Format("2006_01_02_15_04_05")
-	logger := datarecording.NewExecRecoerder(path)
+	logger := datarecording.NewExecRecorder(path)
 
 	reader := datarecording.NewReader(path + ".sqlite3")
 

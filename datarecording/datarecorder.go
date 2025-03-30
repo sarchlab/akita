@@ -42,6 +42,9 @@ func NewDataRecorder(path string) DataRecorder {
 
 	w.Init()
 
+	execRecorder := NewExecRecorderWithWriter(w)
+	atexit.Register(func() { execRecorder.Write() })
+
 	atexit.Register(func() { w.Flush() })
 
 	return w
@@ -54,6 +57,9 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 		batchSize: 100000,
 		tables:    make(map[string]*table),
 	}
+
+	execRecorder := NewExecRecorderWithWriter(w)
+	atexit.Register(func() { execRecorder.Write() })
 
 	atexit.Register(func() { w.Flush() })
 
