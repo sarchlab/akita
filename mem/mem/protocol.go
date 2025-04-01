@@ -471,7 +471,7 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
-// WithEnable sets the enable bit of the control messages to 1.
+// WithCtrlInfo sets the enable bit of the control messages to 1.
 func (b ControlMsgBuilder) WithCtrlInfo(
 	enable bool, drain bool, flush bool, pause bool, invalid bool,
 ) ControlMsgBuilder {
