@@ -62,9 +62,12 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 	}
 
 	execRecorder := NewExecRecorderWithWriter(w)
-	atexit.Register(func() { execRecorder.Write() })
 
-	atexit.Register(func() { w.Flush() })
+	atexit.Register(func() {
+		execRecorder.Write()
+		execRecorder.Flush()
+		w.Flush()
+	})
 
 	return w
 }

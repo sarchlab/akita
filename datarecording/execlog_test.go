@@ -62,7 +62,6 @@ func TestExecutionRecord(t *testing.T) {
 	reader := datarecording.NewReader(path + ".sqlite3")
 
 	tableName := "akita_exec_log_" + ExpectedInfo[2]
-	fmt.Println()
 
 	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
@@ -70,8 +69,10 @@ func TestExecutionRecord(t *testing.T) {
 
 	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
 	assert.True(t, testPathLog(tableName, reader), "Path should be logged")
-	assert.True(t, testStartTimeLog(tableName, ExpectedInfo[2], reader), "Start time should be logged")
-	assert.True(t, testEndTimeLog(tableName, ExpectedInfo[3], reader), "End time should be logged")
+	assert.True(t, testStartTimeLog(tableName, ExpectedInfo[2], reader),
+		"Start time should be logged")
+	assert.True(t, testEndTimeLog(tableName, ExpectedInfo[3], reader),
+		"End time should be logged")
 }
 
 func testArgsLog(tableName string, reader datarecording.DataReader) bool {
