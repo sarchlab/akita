@@ -3,8 +3,10 @@ package tlb
 import (
 	"log"
 	"reflect"
+	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
@@ -57,8 +59,12 @@ func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
 	madeProgress = m.performCtrlReq() || madeProgress
 
+    fmt.Println("my state is ")
+
 	switch m.state {
-		case "enable":
+	    case "enable":
+		default:
+		    fmt.Println("my state is enable")
 			for i := 0; i < m.numReqPerCycle; i++ {
 				madeProgress = m.respondMSHREntry() || madeProgress
 			}
@@ -70,6 +76,7 @@ func (m *tlbMiddleware) Tick() bool {
 			}
 
 		case "drain":
+			fmt.Println("my state is drain")
 			for i := 0; i < m.numReqPerCycle; i++ {
 		        madeProgress = m.respondMSHREntry() || madeProgress
 			}
@@ -234,20 +241,25 @@ func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) parseBottom() bool {
+    fmt.Println("parseBottom() called")
 	if m.respondingMSHREntry != nil {
+	    fmt.Println("Already responding to an entry")
 		return false
 	}
 
 	item := m.bottomPort.PeekIncoming()
 	if item == nil {
+	    fmt.Println("No incoming message at bottomPort")
 		return false
 	}
 
 	rsp := item.(*vm.TranslationRsp)
 	page := rsp.Page
+	fmt.Println("parseBottom() received TranslationRsp with Page:", page)
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
+	    fmt.Println("MSHR entry not found for", rsp.Page.PID, rsp.Page.VAddr)
 		m.bottomPort.RetrieveIncoming()
 		return true
 	}
@@ -269,28 +281,39 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
 
+    fmt.Println("Final TLB state:", m.Sets)
 	return true
 }
 
 func (m *tlbMiddleware) performCtrlReq() bool {
+    fmt.Println("performCtrlReq() called")  // Debugging output
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
+	    fmt.Println("false1")  // Debugging output
 		return false
 	}
-
+	fmt.Printf("Type of item: %T, value: %+v\n", item, item)
+    fmt.Println("performCtrlReq() called")
 	item = m.controlPort.RetrieveIncoming()
+	fmt.Println(item)
 
 	switch req := item.(type) {
 	case *FlushReq:
+	    fmt.Println("req is",req)
 		return m.handleTLBFlush(req)
 	case *RestartReq:
+	    fmt.Println("req is",req)
 		return m.handleTLBRestart(req)
-	/*case *EnableReq:
-    	m.state = "enable"
-    case *DrainReq:
-    	m.state = "drain"
-    case *PauseReq:
-    	m.state = "paused"*/
+    case *mem.ControlMsg:
+        fmt.Println("yes")
+    	if req.Enable {
+    	    fmt.Println("yes")
+    		m.state = "enable"
+    	} else if req.Drain {
+    		m.state = "drain"
+    	} else if req.Pause {
+    		m.state = "pause"
+    	}
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}

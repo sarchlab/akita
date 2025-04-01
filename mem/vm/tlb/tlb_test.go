@@ -1,6 +1,7 @@
 package tlb
 
 import (
+    "fmt"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -37,7 +38,7 @@ var _ = Describe("TLB", func() {
 		tlb.controlPort = controlPort
 		tlb.Sets = []internal.Set{set}
 
-		tlbMW = tlb.Middlewares()[0].(*tlbMiddleware)
+		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
 	})
 
 	AfterEach(func() {
@@ -402,6 +403,7 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.EXPECT().Deliver(gomock.Any()).
 			Do(func(rsp *vm.TranslationRsp) {
+			    fmt.Println("Deliver() called with Page:", rsp.Page)
 				Expect(rsp.Page).To(Equal(page))
 			})
 
