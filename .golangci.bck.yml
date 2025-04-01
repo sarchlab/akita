@@ -1,6 +1,6 @@
 run:
   concurrency: 4
-  timeout: 1m
+  timeout: 10m
   issues-exit-code: 1
   tests: true
   build-tags: []
@@ -13,28 +13,12 @@ issues:
   exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0
-  new: false
-  new-from-rev: ""
 
 output:
   formats:
     - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-    exclude-functions:
-      - fmt.*
-      - io/ioutil.Read.*
-
-  govet:
-    enable:
-      - atomicalign
-    disable:
-      - shadow
 
 linters:
   disable-all: true
@@ -56,4 +40,29 @@ linters:
     - errcheck
     - ineffassign
     - unused
+    - shadow
   fast: false
+
+linters-settings:
+  errcheck:
+    exclude-functions:  # 改为数组格式
+      - "fmt:.*"
+      - "io/ioutil:^Read.*"
+    check-type-assertions: false
+    check-blank: false
+
+  govet:
+    enable:
+      - atomicalign
+    disable:
+      - shadow
+
+  funlen:
+    lines: 60
+    statements: 40
+
+  gocyclo:
+    min-complexity: 10
+
+  revive:
+    confidence: 0.8

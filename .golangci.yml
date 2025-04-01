@@ -25,6 +25,7 @@ linters:
     - nakedret
     - prealloc
     - revive
+    - shadow
     - staticcheck
     - unconvert
     - unused
@@ -34,13 +35,20 @@ linters:
       check-type-assertions: false
       check-blank: false
       exclude-functions:
-        - fmt.*
-        - io/ioutil.Read.*
+        - fmt:.*
+        - io/ioutil:^Read.*
+    funlen:
+      lines: 60
+      statements: 40
+    gocyclo:
+      min-complexity: 10
     govet:
       enable:
         - atomicalign
       disable:
         - shadow
+    revive:
+      confidence: 0.8
   exclusions:
     generated: lax
     paths:
@@ -51,8 +59,6 @@ linters:
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  new-from-rev: ""
-  new: false
 formatters:
   exclusions:
     generated: lax
