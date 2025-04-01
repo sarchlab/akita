@@ -1,0 +1,59 @@
+run:
+  concurrency: 4
+  timeout: 1m
+  issues-exit-code: 1
+  tests: true
+  build-tags: []
+  go: "1.20"
+
+issues:
+  exclude-files:
+    - ".*\\.my\\.go$"
+  exclude-dirs-use-default: true
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+  new-from-rev: ""
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+    exclude-functions:
+      - fmt.*
+      - io/ioutil.Read.*
+
+  govet:
+    enable:
+      - atomicalign
+    disable:
+      - shadow
+
+linters:
+  disable-all: true
+  enable:
+    - revive
+    - bodyclose
+    - govet
+    - stylecheck
+    - funlen
+    - gocyclo
+    - lll
+    - misspell
+    - nakedret
+    - prealloc
+    - copyloopvar
+    - unconvert
+    - whitespace
+    - gosimple
+    - errcheck
+    - ineffassign
+    - unused
+  fast: false
