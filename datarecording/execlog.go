@@ -14,7 +14,7 @@ type ExecInfo struct {
 }
 
 // Records program execution
-type ExecRecorder struct {
+type execRecorder struct {
 	// db        *sql.DB
 	tablename string
 	recorder  DataRecorder
@@ -22,7 +22,7 @@ type ExecRecorder struct {
 }
 
 // Write log current execution
-func (e *ExecRecorder) Write() {
+func (e *execRecorder) Write() {
 	currentTime := time.Now()
 	startTime := currentTime.Format("2006-01-02 15:04:05")
 	timeEntry := ExecInfo{"Start Time", startTime}
@@ -42,7 +42,7 @@ func (e *ExecRecorder) Write() {
 }
 
 // Flush writes data into SQLite along with program exit time
-func (e *ExecRecorder) Flush() {
+func (e *execRecorder) Flush() {
 	for _, entry := range e.entries {
 		e.recorder.InsertData(e.tablename, entry)
 	}
@@ -58,8 +58,8 @@ func (e *ExecRecorder) Flush() {
 }
 
 // NewExecRecorderWithWriter creates a new ExecRecorder with given writer
-func NewExecRecorderWithWriter(writer *sqliteWriter) *ExecRecorder {
-	e := &ExecRecorder{
+func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
+	e := &execRecorder{
 		recorder: writer,
 	}
 	setupTable(e)
@@ -67,7 +67,7 @@ func NewExecRecorderWithWriter(writer *sqliteWriter) *ExecRecorder {
 	return e
 }
 
-func setupTable(e *ExecRecorder) {
+func setupTable(e *execRecorder) {
 	currentTime := time.Now()
 	time := currentTime.Format("2006_01_02_15_04_05")
 	name := "akita_exec_log_" + time
