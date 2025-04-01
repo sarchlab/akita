@@ -54,46 +54,58 @@ type tlbMiddleware struct {
 	*Comp
 }
 
-// Tick defines how TLB update states at each cycle
 func (m *tlbMiddleware) Tick() bool {
-	madeProgress := false
+    madeProgress := false
 	madeProgress = m.performCtrlReq() || madeProgress
 
-    fmt.Println("my state is ")
-
 	switch m.state {
-	    case "enable":
-		default:
-		    fmt.Println("my state is enable")
-			for i := 0; i < m.numReqPerCycle; i++ {
-				madeProgress = m.respondMSHREntry() || madeProgress
-			}
-			for i := 0; i < m.numReqPerCycle; i++ {
-				madeProgress = m.lookup() || madeProgress
-			}
-			for i := 0; i < m.numReqPerCycle; i++ {
-				madeProgress = m.parseBottom() || madeProgress
-			}
+	default: // Handles enable and unknown states
+		madeProgress = m.handleEnable() || madeProgress
 
-		case "drain":
-			fmt.Println("my state is drain")
-			for i := 0; i < m.numReqPerCycle; i++ {
-		        madeProgress = m.respondMSHREntry() || madeProgress
-			}
-			for i := 0; i < m.numReqPerCycle; i++ {
-				madeProgress = m.parseBottom() || madeProgress
-			}
+	case "drain":
+		madeProgress = m.handleDrain() || madeProgress
 
-            if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
-            	m.state = "pause"
-            }
-
-		case "pause":
-			// No action
+	case "pause":
+		// No action
 	}
 
 	return madeProgress
 }
+
+// Handle enable state
+func (m *tlbMiddleware) handleEnable() bool {
+	fmt.Println("my state is enable")
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondMSHREntry() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.lookup() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottom() || madeProgress
+	}
+	return madeProgress
+}
+
+// Handle drain state
+func (m *tlbMiddleware) handleDrain() bool {
+	fmt.Println("my state is drain")
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondMSHREntry() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottom() || madeProgress
+	}
+
+	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+		m.state = "pause"
+	}
+
+	return madeProgress
+}
+
 
 func (m *tlbMiddleware) respondMSHREntry() bool {
 	if m.respondingMSHREntry == nil {
