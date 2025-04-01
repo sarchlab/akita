@@ -55,18 +55,17 @@ type tlbMiddleware struct {
 }
 
 func (m *tlbMiddleware) Tick() bool {
-    madeProgress := false
-	madeProgress = m.performCtrlReq() || madeProgress
+	madeProgress := m.performCtrlReq()
 
 	switch m.state {
-	default: // Handles enable and unknown states
-		madeProgress = m.handleEnable() || madeProgress
-
 	case "drain":
 		madeProgress = m.handleDrain() || madeProgress
 
 	case "pause":
 		// No action
+
+	default: // When state is enable or in initial state
+		madeProgress = m.handleEnable() || madeProgress
 	}
 
 	return madeProgress
@@ -74,8 +73,7 @@ func (m *tlbMiddleware) Tick() bool {
 
 // Handle enable state
 func (m *tlbMiddleware) handleEnable() bool {
-	fmt.Println("my state is enable")
-
+	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -90,8 +88,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 // Handle drain state
 func (m *tlbMiddleware) handleDrain() bool {
-	fmt.Println("my state is drain")
-
+	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -105,7 +102,6 @@ func (m *tlbMiddleware) handleDrain() bool {
 
 	return madeProgress
 }
-
 
 func (m *tlbMiddleware) respondMSHREntry() bool {
 	if m.respondingMSHREntry == nil {
@@ -253,15 +249,12 @@ func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) parseBottom() bool {
-    fmt.Println("parseBottom() called")
 	if m.respondingMSHREntry != nil {
-	    fmt.Println("Already responding to an entry")
 		return false
 	}
 
 	item := m.bottomPort.PeekIncoming()
 	if item == nil {
-	    fmt.Println("No incoming message at bottomPort")
 		return false
 	}
 
@@ -301,25 +294,19 @@ func (m *tlbMiddleware) performCtrlReq() bool {
     fmt.Println("performCtrlReq() called")  // Debugging output
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
-	    fmt.Println("false1")  // Debugging output
 		return false
 	}
 	fmt.Printf("Type of item: %T, value: %+v\n", item, item)
-    fmt.Println("performCtrlReq() called")
 	item = m.controlPort.RetrieveIncoming()
 	fmt.Println(item)
 
 	switch req := item.(type) {
 	case *FlushReq:
-	    fmt.Println("req is",req)
 		return m.handleTLBFlush(req)
 	case *RestartReq:
-	    fmt.Println("req is",req)
 		return m.handleTLBRestart(req)
     case *mem.ControlMsg:
-        fmt.Println("yes")
     	if req.Enable {
-    	    fmt.Println("yes")
     		m.state = "enable"
     	} else if req.Drain {
     		m.state = "drain"
