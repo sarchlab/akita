@@ -55,6 +55,14 @@ jobs:
         with:
           go-version: "stable"
 
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Build
         run: go build ./...
 
@@ -77,8 +85,11 @@ jobs:
         with:
           go-version: "stable"
 
-      - name: Tidy Go modules
-        run: go mod tidy
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
       - name: Lint
         uses: golangci/golangci-lint-action@v3
