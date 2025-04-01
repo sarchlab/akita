@@ -82,30 +82,74 @@ body {
 
 #dashboard-btn,
 #dashboard-filter-group,
+#primary-selector-group {
+  display: flex;
+  flex-direction: row;
+  margin-left: 20px;
+}
+
+#dashboard-filter-group,
 #primary-selector-group,
 #secondary-selector-group {
-  margin-top: 8px;
-  margin-bottom: 3px;
+  display: flex;
+  flex-direction: row;
+  flex: 2;
+  width: 400px;;
+}
+
+#secondary-selector-group {
+  margin-right: 10px;
+}
+
+#dashboard-filter-input {
+  width: 40%;
+  margin-left: -3px;
+  height: 38px !important;
+}
+
+#dashboard-btn { 
+  height: 38px !important; 
+  flex: 0.6;
+  width: 180px;
+  text-align: center;
+}
+
+.input-group-text,
+.custom-select,
+.form-control {
+  height: 38px;
+}
+
+.custom-select {
+  width: 50%;
+  margin-left: -3px;
 }
 
 .dropdown-canvas #dashboard-btn {
-  text-align: left;
+  text-align: center;
   margin-bottom: 10px;
   margin-left: 16px; 
+  width: 30%;
 }
 
 .dropdown-canvas #dashboard-filter-group {
   text-align: left;
   margin-bottom: 10px;
   margin-left: 16px; 
+  width: 80%;
 }
 
 .dropdown-canvas .custom-select,
 .dropdown-canvas .input-group {
-  width: calc(100% - 20px);
+  width: 100%;
   text-align: left;
+  margin-left: 16px; 
+}
+
+.dropdown-canvas #primary-selector-group {
+  width: 100%;
+  margin-left: 16px;
   margin-bottom: 10px;
-  margin-left: 0; 
 }
 
 .dropdown-canvas .input-group-text {
@@ -114,7 +158,11 @@ body {
   justify-content: flex-start;
 }
 
-@media (max-width: 1300px) {
+.dropdown-canvas .custom-select {
+  width: 40%;
+}
+
+@media (max-width: 1365px) {
   .burger-menu {
     display: block;
   }
@@ -289,4 +337,56 @@ body {
   margin-top: 10px;
   font-size: 30px;
   font-weight: bold;
+}
+
+.req-tree-container {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.req-tree .link {
+  fill: none;
+  stroke: #ccc;
+  stroke-width: 2px;
+}
+
+.req-tree .node circle {
+  fill: #fff;
+  stroke: steelblue;
+  stroke-width: 3px;
+}
+
+.req-tree .node text {
+  font: 12px sans-serif;
+}
+
+.req-tree .node.req_in circle {
+  fill: #ff7f0e;
+}
+
+.req-tree .node.req_out circle {
+  fill: #1f77b4;
+}
+
+.req-tree {
+  overflow-y: auto;
+  max-height: 1200px;
+}
+
+#reqtree-button {
+  position: relative;
+}
+
+#reqtree-hover {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 600px;
+  height: 500px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px solid #ccc;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  z-index: 1000;
 }
