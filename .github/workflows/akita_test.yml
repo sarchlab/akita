@@ -77,9 +77,6 @@ jobs:
         with:
           go-version: "stable"
 
-      - name: Remove old Go modules cache
-        run: rm -rf ~/go/pkg/mod
-
       - name: Tidy Go modules
         run: go mod tidy
 
