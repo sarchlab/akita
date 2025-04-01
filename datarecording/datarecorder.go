@@ -43,9 +43,12 @@ func NewDataRecorder(path string) DataRecorder {
 	w.Init()
 
 	execRecorder := NewExecRecorderWithWriter(w)
-	atexit.Register(func() { execRecorder.Write() })
 
-	atexit.Register(func() { w.Flush() })
+	atexit.Register(func() {
+		execRecorder.Write()
+		execRecorder.Flush()
+		w.Flush()
+	})
 
 	return w
 }

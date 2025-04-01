@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/tebeka/atexit"
 )
 
 // Struct ExecInfo is feed to DataRecorder
@@ -59,28 +57,12 @@ func (e *ExecRecorder) Flush() {
 	e.recorder.Flush()
 }
 
-// NewExecRecorder creates a new ExecRecorder
-func NewExecRecorder(path string) *ExecRecorder {
-	newRecorder := NewDataRecorder(path)
-
-	e := &ExecRecorder{
-		recorder: newRecorder,
-	}
-	setupTable(e)
-
-	atexit.Register(e.Flush)
-
-	return e
-}
-
 // NewExecRecorderWithWriter creates a new ExecRecorder with given writer
 func NewExecRecorderWithWriter(writer *sqliteWriter) *ExecRecorder {
 	e := &ExecRecorder{
 		recorder: writer,
 	}
 	setupTable(e)
-
-	atexit.Register(e.Flush)
 
 	return e
 }

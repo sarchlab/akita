@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,56 +10,72 @@ import (
 
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/stretchr/testify/assert"
+	"github.com/tebeka/atexit"
 )
 
-// setupExeLog creates a new ExecRecorder and cleanup function for testing
-func setupExecLog(
-	t *testing.T,
-) (*datarecording.ExecRecorder, datarecording.DataReader, string, func()) {
-	t.Helper()
+var ExpectedInfo [4]string
+
+// TestRecorderSetUp creates a new ExecRecorder and cleanup function for testing
+func TestRecorderSetUp(t *testing.T) {
+	defer handlePanic()
 
 	path := "test"
-	initializeTime := time.Now()
-	time := initializeTime.Format("2006_01_02_15_04_05")
-	logger := datarecording.NewExecRecorder(path)
-
-	reader := datarecording.NewReader(path + ".sqlite3")
-
-	cleanup := func() {
-		os.Remove(path + ".sqlite3")
-	}
-
-	return logger, reader, time, cleanup
-}
-
-// TestSingleExecution tests the logging of a single execution
-func TestExecutionLog(t *testing.T) {
-	os.Remove("test.sqlite3")
-
-	logger, reader, initializeTime, cleanup := setupExecLog(t)
-	defer cleanup()
 
 	originalCL := os.Args
 	defer func() { os.Args = originalCL }()
+	os.Args = []string{"test_program", "arg1", "arg2"}
+	ExpectedInfo[0] = strings.Join(os.Args, " ")
 
-	timeStart := time.Now()
-	logger.Write()
-	expectedStart := timeStart.Format("2006-01-02 15:04:05")
-	tableName := "akita_exec_log_" + initializeTime
+	ex, err := os.Executable()
+	if err != nil {
+		panic(err)
+	}
+	expectedPath := filepath.Dir(ex)
+	ExpectedInfo[1] = expectedPath
 
-	timeEnd := time.Now()
-	logger.Flush()
-	expectedEnd := timeEnd.Format("2006-01-02 15:04:05")
+	initializeTime := time.Now()
+	startTime := initializeTime.Format("2006_01_02_15_04_05")
+	ExpectedInfo[2] = startTime
+
+	writer := datarecording.NewDataRecorder(path)
+
+	assert.True(t, writer != nil)
+
+	exitTime := time.Now()
+	endTime := exitTime.Format("2006_01_02_15_04_05")
+	ExpectedInfo[3] = endTime
+
+	fmt.Println(ExpectedInfo)
+
+	atexit.Exit(0)
+}
+
+func handlePanic() {
+	if r := recover(); r != nil {
+		fmt.Println("Recovered from panic:", r)
+	}
+}
+
+// TestExecutionRecord tests the record of a single execution
+func TestExecutionRecord(t *testing.T) {
+	path := "test"
+	reader := datarecording.NewReader(path + ".sqlite3")
+
+	tableName := "akita_exec_log_" + ExpectedInfo[2]
+	fmt.Println()
+
+	reader.MapTable(tableName, datarecording.ExecInfo{})
+	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	fmt.Println(results)
 
 	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
 	assert.True(t, testPathLog(tableName, reader), "Path should be logged")
-	assert.True(t, testStartTimeLog(tableName, expectedStart, reader), "Start time should be logged")
-	assert.True(t, testEndTimeLog(tableName, expectedEnd, reader), "End time should be logged")
+	assert.True(t, testStartTimeLog(tableName, ExpectedInfo[2], reader), "Start time should be logged")
+	assert.True(t, testEndTimeLog(tableName, ExpectedInfo[3], reader), "End time should be logged")
 }
 
 func testArgsLog(tableName string, reader datarecording.DataReader) bool {
-	os.Args = []string{"test_program", "arg1", "arg2"}
-	expectedCMD := strings.Join(os.Args, " ")
+	expectedCMD := ExpectedInfo[0]
 
 	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
@@ -75,11 +92,7 @@ func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 }
 
 func testPathLog(tableName string, reader datarecording.DataReader) bool {
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	expectedPath := filepath.Dir(ex)
+	expectedPath := ExpectedInfo[1]
 
 	reader.MapTable(tableName, datarecording.ExecInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
