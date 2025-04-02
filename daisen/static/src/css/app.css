@@ -109,8 +109,8 @@ body {
 
 #dashboard-btn { 
   height: 38px !important; 
-  flex: 0.6;
-  width: 180px;
+  flex: 0.5;
+  width: 150px;
   text-align: center;
 }
 
@@ -246,6 +246,10 @@ body {
   left: 0;
   position: fixed;
   pointer-events: none;
+}
+
+.navbar-brand {
+  margin-left: 10px;
 }
 
 .dashboard {
