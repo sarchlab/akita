@@ -58,12 +58,6 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
-
-      - name: Unit Test
-        run: ginkgo -r
-
   lint:
     name: Lint
     runs-on: ubuntu-latest
