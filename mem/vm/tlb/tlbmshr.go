@@ -42,6 +42,7 @@ type mshrImpl struct {
 func newMSHR(capacity int) mshr {
 	m := new(mshrImpl)
 	m.capacity = capacity
+
 	return m
 }
 
@@ -60,6 +61,7 @@ func (m *mshrImpl) Add(pid vm.PID, vAddr uint64) *mshrEntry {
 	entry.pid = pid
 	entry.vAddr = vAddr
 	m.entries = append(m.entries, entry)
+
 	return entry
 }
 
@@ -69,6 +71,7 @@ func (m *mshrImpl) Query(pid vm.PID, vAddr uint64) *mshrEntry {
 			return e
 		}
 	}
+
 	return nil
 }
 
@@ -79,6 +82,7 @@ func (m *mshrImpl) Remove(pid vm.PID, vAddr uint64) *mshrEntry {
 			return e
 		}
 	}
+
 	panic("trying to remove an non-exist entry")
 }
 
@@ -100,6 +104,7 @@ func (m *mshrImpl) GetEntry(pid vm.PID, vAddr uint64) *mshrEntry {
 			return e
 		}
 	}
+
 	return nil
 }
 
@@ -109,6 +114,7 @@ func (m *mshrImpl) IsEntryPresent(pid vm.PID, vAddr uint64) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

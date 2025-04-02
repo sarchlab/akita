@@ -19,6 +19,7 @@ func NewPortMsgLogger(
 	h := new(PortMsgLogger)
 	h.Logger = logger
 	h.TimeTeller = timeTeller
+
 	return h
 }
 
@@ -33,7 +34,7 @@ func (h *PortMsgLogger) Func(ctx HookCtx) {
 		h.CurrentTime(),
 		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,
-		msg.Meta().Src.Name(),
-		msg.Meta().Dst.Name(),
+		msg.Meta().Src,
+		msg.Meta().Dst,
 		reflect.TypeOf(msg), msg.Meta().ID)
 }

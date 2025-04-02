@@ -78,7 +78,9 @@ func (b Builder) WithStorage(storage *mem.Storage) Builder {
 }
 
 // WithAddressConverter sets the address converter of the memory controller
-func (b Builder) WithAddressConverter(addressConverter mem.AddressConverter) Builder {
+func (b Builder) WithAddressConverter(
+	addressConverter mem.AddressConverter,
+) Builder {
 	b.addressConverter = addressConverter
 	return b
 }
@@ -102,7 +104,7 @@ func (b Builder) Build(
 		c.Storage = b.storage
 	}
 
-	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
 	middleware := &middleware{Comp: c}

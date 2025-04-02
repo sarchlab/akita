@@ -23,6 +23,7 @@ func (s *mshrStage) Tick() bool {
 	}
 
 	s.processingMSHREntry = item.(*cache.MSHREntry)
+
 	return s.processOneReq()
 }
 
@@ -32,7 +33,7 @@ func (s *mshrStage) Reset() {
 }
 
 func (s *mshrStage) processOneReq() bool {
-	if !s.cache.topSender.CanSend(1) {
+	if !s.cache.topPort.CanSend() {
 		return false
 	}
 
@@ -72,23 +73,23 @@ func (s *mshrStage) respondRead(
 ) {
 	_, offset := getCacheLineID(read.Address, s.cache.log2BlockSize)
 	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
 		WithData(data[offset : offset+read.AccessByteSize]).
 		Build()
-	s.cache.topSender.Send(dataReady)
+	s.cache.topPort.Send(dataReady)
 
 	tracing.TraceReqComplete(read, s.cache)
 }
 
 func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 	writeDoneRsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(write.Src).
 		WithRspTo(write.ID).
 		Build()
-	s.cache.topSender.Send(writeDoneRsp)
+	s.cache.topPort.Send(writeDoneRsp)
 
 	tracing.TraceReqComplete(write, s.cache)
 }
@@ -101,9 +102,11 @@ func (s *mshrStage) removeTransaction(trans *transaction) {
 			s.cache.inFlightTransactions = append(
 				(s.cache.inFlightTransactions)[:i],
 				(s.cache.inFlightTransactions)[i+1:]...)
+
 			return
 		}
 	}
+
 	panic("transaction not found")
 }
 
@@ -113,5 +116,6 @@ func (s *mshrStage) findTransaction(trans *transaction) bool {
 			return true
 		}
 	}
+
 	return false
 }

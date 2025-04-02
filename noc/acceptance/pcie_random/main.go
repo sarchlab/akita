@@ -43,7 +43,9 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	monitor.StartServer()
 
 	freq := 1.0 * sim.GHz
+
 	var agents []*acceptance.Agent
+
 	for i := 0; i < numDevicePerSwitch*2+1; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), numPortPerDevice, test)
@@ -63,6 +65,7 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	pcieConnector.CreateNetwork("PCIe")
 	rootComplexID := pcieConnector.AddRootComplex(agents[0].AgentPorts)
 	switch1ID := pcieConnector.AddSwitch(rootComplexID)
+
 	for i := 0; i < numDevicePerSwitch; i++ {
 		pcieConnector.PlugInDevice(switch1ID, agents[i+1].AgentPorts)
 	}

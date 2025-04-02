@@ -21,7 +21,7 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	LowModule sim.Port
+	LowModule sim.RemotePort
 
 	numSets        int
 	numWays        int
@@ -112,11 +112,12 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
 	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
+
 	err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
@@ -128,6 +129,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	}
 
 	tracing.TraceReqComplete(req, m.Comp)
+
 	return true
 }
 
@@ -147,6 +149,7 @@ func (m *tlbMiddleware) lookup() bool {
 	setID := m.vAddrToSetID(req.VAddr)
 	set := m.Sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
+
 	if found && page.Valid {
 		return m.handleTranslationHit(req, setID, wayID, page)
 	}
@@ -185,7 +188,12 @@ func (m *tlbMiddleware) handleTranslationMiss(
 	if fetched {
 		m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
-		tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "miss")
+		tracing.AddTaskStep(
+			tracing.MsgIDAtReceiver(req, m.Comp),
+			m.Comp,
+			"miss",
+		)
+
 		return true
 	}
 
@@ -201,7 +209,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
@@ -220,19 +228,21 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 
 	m.topPort.RetrieveIncoming()
 	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
+	tracing.AddTaskStep(
+		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
 
 	return true
 }
 
 func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSrc(m.bottomPort).
+		WithSrc(m.bottomPort.AsRemote()).
 		WithDst(m.LowModule).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		Build()
+
 	err := m.bottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
@@ -272,9 +282,11 @@ func (m *tlbMiddleware) parseBottom() bool {
 	setID := m.vAddrToSetID(page.VAddr)
 	set := m.Sets[setID]
 	wayID, ok := m.Sets[setID].Evict()
+
 	if !ok {
 		panic("failed to evict")
 	}
+
 	set.Update(wayID, page)
 	set.Visit(wayID)
 
@@ -327,7 +339,7 @@ func (m *tlbMiddleware) visit(setID, wayID int) {
 
 func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 	rsp := FlushRspBuilder{}.
-		WithSrc(m.controlPort).
+		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).
 		Build()
 
@@ -340,6 +352,7 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 		setID := m.vAddrToSetID(vAddr)
 		set := m.Sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
+
 		if !found {
 			continue
 		}
@@ -350,12 +363,13 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 
 	m.mshr.Reset()
 	m.isPaused = true
+
 	return true
 }
 
 func (m *tlbMiddleware) handleTLBRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
-		WithSrc(m.controlPort).
+		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).
 		Build()
 

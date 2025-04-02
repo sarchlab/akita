@@ -53,7 +53,10 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 	if portNumber < 1000 {
 		fmt.Fprintf(os.Stderr,
 			"Port number %d is assigned to the monitoring server, "+
-				"which is not allowed. Using a random port instead.\n", portNumber)
+				"which is not allowed. Using a random port instead.\n",
+			portNumber,
+		)
+
 		portNumber = 0
 	}
 
@@ -127,6 +130,7 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	defer m.progressBarsLock.Unlock()
 
 	newBars := make([]*ProgressBar, 0, len(m.progressBars)-1)
+
 	for _, b := range m.progressBars {
 		if b != pb {
 			newBars = append(newBars, b)
@@ -142,6 +146,7 @@ func (m *Monitor) StartServer() {
 
 	fs := web.GetAssets()
 	fServer := http.FileServer(fs)
+
 	r.HandleFunc("/api/pause", m.pauseEngine)
 	r.HandleFunc("/api/continue", m.continueEngine)
 	r.HandleFunc("/api/now", m.now)
@@ -179,12 +184,14 @@ func (m *Monitor) StartServer() {
 
 func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engine.Pause()
+
 	_, err := w.Write(nil)
 	dieOnErr(err)
 }
 
 func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
 	m.engine.Continue()
+
 	_, err := w.Write(nil)
 	dieOnErr(err)
 }
@@ -205,6 +212,7 @@ func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 
 func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprint(w, "[")
+
 	for i, c := range m.components {
 		if i > 0 {
 			fmt.Fprint(w, ",")
@@ -212,6 +220,7 @@ func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
 
 		fmt.Fprintf(w, "\"%s\"", c.Name())
 	}
+
 	fmt.Fprint(w, "]")
 }
 
@@ -290,12 +299,14 @@ func (m *Monitor) hangDetectorBuffers(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(400)
 		fmt.Fprintf(w, "Error: %s", err)
+
 		return
 	}
 
 	sortedBuffers := m.sortAndSelectBuffers(sortMethod, limit, offset)
 
 	fmt.Fprintf(w, "[")
+
 	for i, b := range sortedBuffers {
 		if i > 0 {
 			fmt.Fprint(w, ",")
@@ -316,10 +327,13 @@ func (*Monitor) buffersParseParams(
 	if sortMethod == "" {
 		sortMethod = "percent"
 	}
+
 	if sortMethod != "level" && sortMethod != "percent" {
 		errStr := fmt.Sprintf(
 			"Invalid sort method: %s. Allowed values are `level` and `percent`",
-			sortMethod)
+			sortMethod,
+		)
+
 		return "", 0, 0, errors.New(errStr)
 	}
 
@@ -327,6 +341,7 @@ func (*Monitor) buffersParseParams(
 	if limitStr == "" {
 		limitStr = "0"
 	}
+
 	limitNumber, err := strconv.Atoi(limitStr)
 	if err != nil {
 		return sortMethod, 0, 0, err
@@ -336,6 +351,7 @@ func (*Monitor) buffersParseParams(
 	if offsetStr == "" {
 		offsetStr = "0"
 	}
+
 	offsetNumber, err := strconv.Atoi(offsetStr)
 	if err != nil {
 		return sortMethod, limitNumber, 0, err
@@ -449,6 +465,7 @@ func (m *Monitor) findComponentOr404(
 	name string,
 ) sim.Component {
 	var component sim.Component
+
 	for _, c := range m.components {
 		if c.Name() == name {
 			component = c

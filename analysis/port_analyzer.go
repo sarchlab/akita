@@ -8,7 +8,7 @@ import (
 )
 
 type portAnalyzerEntry struct {
-	remotePortName string
+	remotePort     sim.RemotePort
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -25,12 +25,13 @@ type PortAnalyzer struct {
 	port      sim.Port
 
 	lastTime           sim.VTimeInSec
-	remoteToTrafficMap map[string]portAnalyzerEntry
+	remoteToTrafficMap map[sim.RemotePort]portAnalyzerEntry
 }
 
 // Func writes the message information into the logger
 func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	now := h.CurrentTime()
+
 	msg, ok := ctx.Item.(sim.Msg)
 	if !ok {
 		return
@@ -44,18 +45,18 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	}
 
 	if h.remoteToTrafficMap == nil {
-		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
+		h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
 	}
 
-	remotePortName := msg.Meta().Dst.Name()
+	remotePortName := msg.Meta().Dst
 	if h.isIncoming(msg) {
-		remotePortName = msg.Meta().Src.Name()
+		remotePortName = msg.Meta().Src
 	}
 
 	entry, ok := h.remoteToTrafficMap[remotePortName]
 	if !ok {
 		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
-			remotePortName: remotePortName,
+			remotePort: remotePortName,
 		}
 	}
 
@@ -75,7 +76,7 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 }
 
 func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
-	return msg.Meta().Dst == h.port
+	return msg.Meta().Dst == h.port.AsRemote()
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -98,7 +99,7 @@ func (h *PortAnalyzer) summarize() {
 			Start:       startTime,
 			End:         endTime,
 			Where:       h.port.Name(),
-			WhereRemote: entry.remotePortName,
+			WhereRemote: entry.remotePort,
 			EntryType:   "Traffic",
 		}
 
@@ -126,7 +127,7 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
-	h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
+	h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {
@@ -169,6 +170,7 @@ func (b PortAnalyzerBuilder) WithTimeTeller(
 func (b PortAnalyzerBuilder) WithPeriod(p sim.VTimeInSec) PortAnalyzerBuilder {
 	b.usePeriod = true
 	b.period = p
+
 	return b
 }
 

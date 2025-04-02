@@ -30,8 +30,8 @@ func (b Builder) Build(name string) *Comp {
 	middleware := &middleware{Comp: tickingPingAgent}
 	tickingPingAgent.AddMiddleware(middleware)
 
-	tickingPingAgent.OutPort = sim.NewLimitNumMsgPort(
-		tickingPingAgent, 4, tickingPingAgent.Name()+".OutPort")
+	tickingPingAgent.OutPort = sim.NewPort(
+		tickingPingAgent, 4, 4, tickingPingAgent.Name()+".OutPort")
 
 	return tickingPingAgent
 }

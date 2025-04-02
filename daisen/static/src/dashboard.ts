@@ -26,6 +26,10 @@ class Dashboard {
   _endTime: number;
   _widgets: Array<Widget>;
   _yAxisOptions: Array<YAxisOption>;
+  _initialWidth: number;
+  _initialHeight: number;
+  _burgerMenu: HTMLDivElement;
+  _dropdownCanvas: HTMLDivElement;
 
   constructor() {
     this._numWidget = 16;
@@ -41,6 +45,8 @@ class Dashboard {
       { optionValue: "PendingReqOut", html: "Pending Request Out" },
       { optionValue: "-", html: " - " },
     ];
+    this._initialWidth = window.innerWidth;
+    this._initialHeight = window.innerHeight;
   }
 
   setCanvas(
@@ -51,15 +57,82 @@ class Dashboard {
     this._canvas = canvas;
     this._pageBtnContainer = pageBtnContainer;
     this._toolBar = toolBar;
+  
+    this._canvas.classList.add('canvas-container');
+    
+    if (this._burgerMenu) {
+      this._burgerMenu.remove();
+    }
+    if (this._dropdownCanvas) {
+      this._dropdownCanvas.remove();
+    }
+    
+    this._burgerMenu = document.createElement('div');
+    this._burgerMenu.classList.add('burger-menu');
+    this._burgerMenu.innerHTML = `
+      <div class="burger-bar"></div>
+      <div class="burger-bar"></div>
+      <div class="burger-bar"></div>
+    `;
+    this._burgerMenu.style.position = 'absolute';
+    this._burgerMenu.style.top = '10px';
+    this._burgerMenu.style.right = '10px';
 
-    this._addZoomResetButton();
-    this._addFilterUI();
-    this._addPrimarySelector();
-    this._addSecondarySelector();
+    this._dropdownCanvas = document.createElement('div');
+    this._dropdownCanvas.classList.add('dropdown-canvas');
+    this._dropdownCanvas.style.display = 'none';
+
+    document.body.appendChild(this._burgerMenu);
+    document.body.appendChild(this._dropdownCanvas);
+  
+    this._burgerMenu.addEventListener('click', () => {
+      const isActive = this._dropdownCanvas.classList.toggle('active');
+      this._dropdownCanvas.style.display = isActive ? 'block' : 'none';
+    });
+  
+    window.addEventListener('resize', () => {
+      this._updateNavbarVisibility();
+      this._resize();
+      this._widgets.forEach((w: Widget) => {
+        w.createWidget(this._widgetWidth(), this._widgetHeight());
+        w.setXAxis(this._startTime, this._endTime);
+        w.setFirstAxis(this._primaryAxis);
+        w.setSecondAxis(this._secondaryAxis);
+      });
+      const paginationContainer = this._canvas.querySelector('.pagination-container') as HTMLElement;
+      if (paginationContainer) {
+        paginationContainer.style.left = '50%';
+        paginationContainer.style.transform = 'translateX(-50%)';
+      }
+      this.render();
+    }); 
+
+    this._addZoomResetButton(this._toolBar);
+    this._addFilterUI(this._toolBar);
+    this._addPrimarySelector(this._toolBar);
+    this._addSecondarySelector(this._toolBar);
+    this._addZoomResetButton(this._dropdownCanvas);
+    this._addFilterUI(this._dropdownCanvas);
+    this._addPrimarySelector(this._dropdownCanvas);
+    this._addSecondarySelector(this._dropdownCanvas);
     this._resize();
+
+  }
+
+  _updateNavbarVisibility() {
+    if (window.innerWidth <= 1365) {
+      this._toolBar.style.display = 'none';
+      this._burgerMenu.style.display = 'block';
+    } else {
+      this._toolBar.style.display = 'flex';
+      this._burgerMenu.style.display = 'none';
+      this._dropdownCanvas.style.display = 'none';
+      this._dropdownCanvas.classList.remove('active');
+    }
   }
 
   _resize() {
+    this._resetNumRowCol();
     const width = this._widgetWidth();
     const height = this._widgetHeight();
     this._widgets.forEach((w: Widget) => {
@@ -87,9 +160,20 @@ class Dashboard {
       [4, 4],
       [4, 4],
     ];
-
-    this._numRow = rowColTable[this._numWidget][0];
-    this._numCol = rowColTable[this._numWidget][1];
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    this._numCol = rowColTable[this._numWidget][0];
+    this._numRow = rowColTable[this._numWidget][1];
+    if (width >= 1200) {
+      this._numCol = 4;
+    }
+    if (width < 1200 && width >= 800) {
+      this._numCol = 3;
+    }
+    if (width < 800) {
+      this._numCol = 2;
+    }
+    console.log(width, height);
   }
 
   _widgetWidth(): number {
@@ -104,7 +188,7 @@ class Dashboard {
 
   _widgetHeight(): number {
     this._resetNumRowCol();
-    const numGap = this._numCol + 1;
+    const numGap = this._numRow + 1;
     const marginTop = 5;
     const gapSpace = numGap * marginTop;
     const widgetSpace = this._canvas.offsetHeight - gapSpace;
@@ -144,119 +228,112 @@ class Dashboard {
     });
   }
 
-  _addZoomResetButton() {
-    const btn = document.createElement("button");
-    btn.setAttribute("type", "button");
-    btn.classList.add("mr-3");
-    btn.classList.add("btn");
-    btn.classList.add("btn-primary");
-    btn.innerHTML = "Reset Zoom";
-    this._toolBar.appendChild(btn);
-
+  _addZoomResetButton(container: HTMLElement) {
+    const btn = document.createElement('button');
+    btn.setAttribute('type', 'button');
+    btn.classList.add('btn', 'btn-primary', 'mr-3');
+    btn.id = "dashboard-btn";
+    btn.innerHTML = 'Reset Zoom';
     btn.onclick = () => {
       this._resetZoom();
     };
+    container.appendChild(btn);
   }
-
-  _addFilterUI() {
-    const filterGroup = document.createElement("div");
-    filterGroup.classList.add("input-group");
+  
+  _addFilterUI(container: HTMLElement) {
+    const filterGroup = document.createElement('div');
+    filterGroup.classList.add('input-group', 'mr-3');
+    filterGroup.id = 'dashboard-filter-group';
     filterGroup.innerHTML = `
-            <div class="input-group-prepend">
-                <span class="input-group-text" id="basic-addon1">Filter</span>
-            </div>
-            <input id="dashboard-filter-input" type="text" class="form-control" 
-                placeholder="Component Name" 
-                aria-label="Filter" aria-describedby="basic-addon1"
-            >
-        `;
-    this._toolBar.appendChild(filterGroup);
-
-    const input = filterGroup.getElementsByTagName("input")[0];
+      <div class="input-group-prepend">
+        <span class="input-group-text" id="basic-addon1">Filter</span>
+      </div>
+      <input id="dashboard-filter-input" type="text" class="form-control" 
+        placeholder="Component Name" aria-label="Filter" aria-describedby="basic-addon1">
+    `;
+    container.appendChild(filterGroup);
+  
+    const input = filterGroup.getElementsByTagName('input')[0];
     input.oninput = () => {
       this._filterInputChage();
     };
   }
-
-  _addPrimarySelector() {
-    const selectorGroup = document.createElement("div");
-    selectorGroup.classList.add("input-group");
-    selectorGroup.classList.add("ml-3");
-    this._toolBar.appendChild(selectorGroup);
-
-    const button = document.createElement("div");
-    button.classList.add("input-group-prepend");
+  
+  _addPrimarySelector(container: HTMLElement) {
+    const selectorGroup = document.createElement('div');
+    selectorGroup.classList.add('input-group', 'ml-3');
+    const button = document.createElement('div');
+    button.classList.add('input-group-prepend');
+    selectorGroup.id = 'primary-selector-group'; 
     button.innerHTML = `
-            <label 
-                class="input-group-text" 
-                for="primary-axis-select"
-            >
-                <div class="circle-primary"></div>
-                <div class="circle-primary"></div>
-                <div class="circle-primary"></div>
-                Primary Y-Axis
-            </label>`;
+      <label class="input-group-text" for="primary-axis-select">
+        <div class="circle-primary"></div>
+        <div class="circle-primary"></div>
+        <div class="circle-primary"></div>
+        Primary Y-Axis
+      </label>`;
     selectorGroup.appendChild(button);
-
-    const select = document.createElement("select");
-    select.classList.add("custom-select");
-    select.id = "primary-axis-select";
+  
+    const select = document.createElement('select');
+    select.classList.add('custom-select');
+    select.id = 'primary-axis-select';
     selectorGroup.appendChild(select);
-
+  
     this._yAxisOptions.forEach((o, index) => {
-      let option = document.createElement("option");
-      if (index == 0) {
+      let option = document.createElement('option');
+      if (index === 0) {
         option.selected = true;
       }
       option.value = o.optionValue;
       option.innerHTML = o.html;
       select.add(option);
     });
-
+  
     select.onchange = () => {
       this._switchPrimaryAxis(select.value);
     };
+  
+    container.appendChild(selectorGroup);
+    this._canvas.classList.add('canvas-container');
   }
-
-  _addSecondarySelector() {
-    const selectorGroup = document.createElement("div");
-    selectorGroup.classList.add("input-group");
-    selectorGroup.classList.add("ml-3");
-    this._toolBar.appendChild(selectorGroup);
-
-    const button = document.createElement("div");
-    button.classList.add("input-group-prepend");
+  
+  _addSecondarySelector(container: HTMLElement) {
+    const selectorGroup = document.createElement('div');
+    selectorGroup.classList.add('input-group', 'ml-3');
+    const button = document.createElement('div');
+    button.classList.add('input-group-prepend');
+    selectorGroup.id = 'secondary-selector-group';
     button.innerHTML = `
-            <label 
-                class="input-group-text" 
-                for="secondary-axis-select"
-            >
-                <div class="circle-secondary"></div>
-                <div class="circle-secondary"></div>
-                <div class="circle-secondary"></div>
-                Secondary Y-Axis
-            </label>`;
+      <label class="input-group-text" for="secondary-axis-select">
+        <div class="circle-secondary"></div>
+        <div class="circle-secondary"></div>
+        <div class="circle-secondary"></div>
+        Secondary Y-Axis
+      </label>`;
     selectorGroup.appendChild(button);
-
-    const select = document.createElement("select");
-    select.classList.add("custom-select");
-    select.id = "secondary-axis-select";
+  
+    const select = document.createElement('select');
+    select.classList.add('custom-select');
+    select.id = 'secondary-axis-select';
     selectorGroup.appendChild(select);
-
+  
     this._yAxisOptions.forEach((o, index) => {
-      let option = document.createElement("option");
-      if (index == 0) {
+      let option = document.createElement('option');
+      if (index === 0) {
         option.selected = true;
       }
       option.value = o.optionValue;
       option.innerHTML = o.html;
       select.add(option);
     });
-
+  
     select.onchange = () => {
       this._switchSecondaryAxis(select.value);
     };
+  
+    container.appendChild(selectorGroup);
   }
+  
 
   _switchPrimaryAxis(name: string) {
     this._primaryAxis = name;
@@ -315,7 +392,7 @@ class Dashboard {
         this._filteredNames = compNames;
 
         this._getParamsFromURL(simulation);
-
+        this._updateNavbarVisibility();
         this._filter();
       });
   }
@@ -400,9 +477,17 @@ class Dashboard {
     ul.classList.add("pagination");
     nav.appendChild(ul);
 
-    this._pageBtnContainer.innerHTML = "";
-    this._pageBtnContainer.appendChild(nav);
-
+    const pageInfo = document.createElement("div");
+    pageInfo.classList.add("page-info");
+  
+    const paginationContainer = document.createElement("div");
+    paginationContainer.classList.add("pagination-container");
+    paginationContainer.appendChild(nav);
+    paginationContainer.appendChild(pageInfo);
+    if (this._canvas.querySelector('.pagination-container')) {
+      this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
+    }
+    this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
   }
 
@@ -418,27 +503,53 @@ class Dashboard {
 
     this._addPrevPageButton(ul, this._currPage);
 
-    let offset = -2;
-    if (this._currPage <= 1) {
-      offset = -this._currPage;
-    }
-    if (this._currPage == numPages - 2) {
-      offset = -3;
-    }
-    if (this._currPage == numPages - 1) {
-      offset = -4;
+    this._addNumPageButton(ul, 0);
+
+    if (this._currPage > 2) {
+      this._addEllipsis(ul);
     }
 
-    for (let i = 0; i < 5; i++) {
-      const pageNum = this._currPage + i + offset;
-      if (pageNum < 0 || pageNum >= numPages) {
-        continue;
-      }
+    for (let i = Math.max(1, this._currPage - 1); i <= Math.min(numPages - 2, this._currPage + 1); i++) {
+      this._addNumPageButton(ul, i);
+    }
 
-      this._addNumPageButton(ul, pageNum);
+    if (this._currPage < numPages - 3) {
+      this._addEllipsis(ul);
+    }
+
+    if (numPages > 1) {
+      this._addNumPageButton(ul, numPages - 1);
     }
 
     this._addNextPageButton(ul, this._currPage, numPages);
+    // let offset = -2;
+    // if (this._currPage <= 1) {
+    //   offset = -this._currPage;
+    // }
+    // if (this._currPage == numPages - 2) {
+    //   offset = -3;
+    // }
+    // if (this._currPage == numPages - 1) {
+    //   offset = -4;
+    // }
+
+    // for (let i = 0; i < 5; i++) {
+    //   const pageNum = this._currPage + i + offset;
+    //   if (pageNum < 0 || pageNum >= numPages) {
+    //     continue;
+    //   }
+
+    //   this._addNumPageButton(ul, pageNum);
+    // }
+
+    // this._addNextPageButton(ul, this._currPage, numPages);
+  }
+
+  _addEllipsis(ul: HTMLUListElement) {
+    const li = document.createElement("li");
+    li.classList.add("page-item", "disabled");
+    li.innerHTML = `<a class="page-link">...</a>`;
+    ul.appendChild(li);
   }
 
   _showNoComponentInfo() {
@@ -507,7 +618,7 @@ class Dashboard {
     }
     li.innerHTML = `
             <a class="page-link">
-                ${pageNum}
+                ${pageNum + 1}
             </a>
         `;
 
@@ -527,6 +638,7 @@ class Dashboard {
 
     this._addPaginationControl();
     this._renderPage();
+    const pageInfo = this._pageBtnContainer.querySelector('.page-info') as HTMLDivElement;
   }
 
   _renderPage() {
@@ -548,6 +660,7 @@ class Dashboard {
 
       widget.render(true);
     });
+    this._addPaginationControl();
   }
 }
 

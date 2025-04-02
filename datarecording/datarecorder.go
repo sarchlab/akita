@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fatih/structs"
 	// Need to use SQLite connections.
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/xid"
@@ -17,40 +16,43 @@ import (
 
 // DataRecorder is a backend that can record and store data
 type DataRecorder interface {
-	// Init establishes a connection to the database
-	Init()
-
 	// CreateTable creates a new table with given filename
-	CreateTable(table string, sampleEntry any)
+	CreateTable(tableName string, sampleEntry any)
 
 	// DataInsert writes a same-type task into table that already exists
-	InsertData(table string, entry any)
+	InsertData(tableName string, entry any)
 
 	// ListTable returns a slice containing names of all tables
 	ListTables() []string
 
-	// Flush flushes all the baffered task into database
+	// Flush flushes all the buffered task into database
 	Flush()
+
+	// Close closes the recorder
+	Close() error
 }
 
-// SQLiteWriter is the writer that writes data into SQLite database
-type SQLiteWriter struct {
-	*sql.DB
-	statement *sql.Stmt
-
-	dbName     string
-	tables     map[string][]any
-	batchSize  int
-	tableCount int
-	entryCount int
-}
-
-// NewSQLiteWriter creates a new SQLiteWriter.
-func NewSQLiteWriter(path string) *SQLiteWriter {
-	w := &SQLiteWriter{
+// NewDataRecorder creates a new DataRecorder.
+func NewDataRecorder(path string) DataRecorder {
+	w := &sqliteWriter{
 		dbName:    path,
 		batchSize: 100000,
-		tables:    make(map[string][]any),
+		tables:    make(map[string]*table),
+	}
+
+	w.Init()
+
+	atexit.Register(func() { w.Flush() })
+
+	return w
+}
+
+// NewDataRecorderWithDB creates a new DataRecorder with a given database.
+func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
+	w := &sqliteWriter{
+		DB:        db,
+		batchSize: 100000,
+		tables:    make(map[string]*table),
 	}
 
 	atexit.Register(func() { w.Flush() })
@@ -58,13 +60,30 @@ func NewSQLiteWriter(path string) *SQLiteWriter {
 	return w
 }
 
-// Init establishes a connection to the databse
-func (t *SQLiteWriter) Init() {
+type table struct {
+	structType reflect.Type
+	entries    []any
+}
+
+// sqliteWriter is the writer that writes data into SQLite database
+type sqliteWriter struct {
+	*sql.DB
+	statement *sql.Stmt
+
+	dbName     string
+	tables     map[string]*table
+	batchSize  int
+	entryCount int
+}
+
+// Init establishes a connection to the database.
+func (t *sqliteWriter) Init() {
 	if t.dbName == "" {
 		t.dbName = "akita_data_recording_" + xid.New().String()
 	}
 
 	filename := t.dbName + ".sqlite3"
+
 	_, err := os.Stat(filename)
 	if err == nil {
 		panic(fmt.Errorf("file %s already exists", filename))
@@ -80,81 +99,169 @@ func (t *SQLiteWriter) Init() {
 	t.DB = db
 }
 
-func (t *SQLiteWriter) isAllowedType(kind reflect.Kind) bool {
+func (t *sqliteWriter) isAllowedType(kind reflect.Kind) bool {
 	switch kind {
-	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
-		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
-		reflect.String, reflect.UnsafePointer:
+	case
+		reflect.Bool,
+		reflect.Int,
+		reflect.Int8,
+		reflect.Int16,
+		reflect.Int32,
+		reflect.Int64,
+		reflect.Uint,
+		reflect.Uint8,
+		reflect.Uint16,
+		reflect.Uint32,
+		reflect.Uint64,
+		reflect.Float32,
+		reflect.Float64,
+		reflect.Complex64,
+		reflect.Complex128,
+		reflect.String:
 		return true
 	default:
 		return false
 	}
 }
 
-func (t *SQLiteWriter) checkStructFields(entry any) error {
+func (t *sqliteWriter) checkStructFields(entry any) error {
 	types := reflect.TypeOf(entry)
 
 	for i := 0; i < types.NumField(); i++ {
 		field := types.Field(i)
+
+		t.mustHaveAtMostOneTag(field)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
 
 		fieldKind := field.Type.Kind()
 		if !t.isAllowedType(fieldKind) {
 			return errors.New("entry is invalid")
 		}
 	}
+
 	return nil
 }
 
-func (t *SQLiteWriter) CreateTable(table string, sampleEntry any) {
+func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
+	tags, ok := field.Tag.Lookup("akita_data")
+	if !ok {
+		return // No tag is fine
+	}
+
+	if tags == "ignore" {
+		return
+	}
+
+	if tags == "unique" {
+		return
+	}
+
+	if tags == "index" {
+		return
+	}
+
+	panic("akita_data tag can only be either ignore, unique, or index")
+}
+
+func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
 	}
 
-	t.tableCount++
-	n := structs.Names(sampleEntry)
-	fields := strings.Join(n, ", \n\t")
-	tableName := table
-	createTableSQL := `CREATE TABLE ` + tableName + ` (` + "\n\t" + fields + "\n" + `);`
+	fieldNames := t.getFieldNames(sampleEntry)
+	fields := strings.Join(fieldNames, ", \n\t")
 
+	createTableSQL := `CREATE TABLE ` + tableName +
+		` (` + "\n\t" + fields + "\n" + `);`
 	t.mustExecute(createTableSQL)
-	fmt.Printf("Table %s created successfully\n", tableName)
 
-	storedTasks := []any{sampleEntry}
-	t.tables[tableName] = storedTasks
-	t.entryCount++
-	if t.entryCount >= t.batchSize {
-		t.Flush()
+	t.createIndexesForTable(tableName, sampleEntry)
+
+	tableInfo := &table{
+		structType: reflect.TypeOf(sampleEntry),
+		entries:    []any{},
+	}
+	t.tables[tableName] = tableInfo
+}
+
+func (t *sqliteWriter) getFieldNames(entry any) []string {
+	sType := reflect.TypeOf(entry)
+	var fieldNames []string
+
+	for i := 0; i < sType.NumField(); i++ {
+		field := sType.Field(i)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
+
+		fieldNames = append(fieldNames, field.Name)
+	}
+
+	return fieldNames
+}
+
+func (t *sqliteWriter) createIndexesForTable(
+	tableName string,
+	sampleEntry any,
+) {
+	sType := reflect.TypeOf(sampleEntry)
+
+	for i := 0; i < sType.NumField(); i++ {
+		field := sType.Field(i)
+
+		if dbTag, ok := field.Tag.Lookup("akita_data"); ok {
+			switch dbTag {
+			case "unique":
+				t.createIndex(tableName, field.Name, true)
+			case "index":
+				t.createIndex(tableName, field.Name, false)
+			}
+		}
 	}
 }
 
-func (t *SQLiteWriter) InsertData(table string, entry any) {
-	err := t.checkStructFields(entry)
-	if err != nil {
-		panic(err)
+func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
+	indexType := "INDEX"
+	if unique {
+		indexType = "UNIQUE INDEX"
 	}
 
-	storedTasks, exists := t.tables[table]
+	indexSQL := fmt.Sprintf(
+		"CREATE %s idx_%s_%s ON %s(%s);",
+		indexType, tableName, fieldName, tableName, fieldName,
+	)
+	t.mustExecute(indexSQL)
+}
+
+func (t *sqliteWriter) InsertData(tableName string, entry any) {
+	table, exists := t.tables[tableName]
 	if !exists {
-		panic(fmt.Errorf("table %s does not exist", table))
+		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
-	stdTask := storedTasks[0]
-	if reflect.TypeOf(stdTask) != reflect.TypeOf(entry) {
-		panic(fmt.Errorf("task %s can't be written into table %s", entry, table))
-	}
-	fmt.Println("Data is successfully inserted")
+	table.entries = append(table.entries, entry)
 
-	storedTasks = append(storedTasks, entry)
-	t.tables[table] = storedTasks
 	t.entryCount += 1
 	if t.entryCount >= t.batchSize {
 		t.Flush()
 	}
 }
 
-func (t *SQLiteWriter) Flush() {
+func (t *sqliteWriter) ListTables() []string {
+	tables := make([]string, 0, len(t.tables))
+	for table := range t.tables {
+		tables = append(tables, table)
+	}
+
+	return tables
+}
+
+func (t *sqliteWriter) Flush() {
 	if t.entryCount == 0 {
 		return
 	}
@@ -162,37 +269,69 @@ func (t *SQLiteWriter) Flush() {
 	t.mustExecute("BEGIN TRANSACTION")
 	defer t.mustExecute("COMMIT TRANSACTION")
 
-	for tableName, storedEntries := range t.tables {
-		sampleEntry := storedEntries[0]
+	for tableName, table := range t.tables {
+		sampleEntry := table.entries[0]
 		t.prepareStatement(tableName, sampleEntry)
-		for _, task := range storedEntries {
-			v := structs.Values(task)
+
+		for _, task := range table.entries {
+			v := []any{}
+
+			value := reflect.ValueOf(task)
+			vType := value.Type()
+
+			if vType != table.structType {
+				panic("entry type mismatch")
+			}
+
+			for i := 0; i < value.NumField(); i++ {
+				field := vType.Field(i)
+
+				if t.fieldIgnored(field) {
+					continue
+				}
+
+				v = append(v, value.Field(i).Interface())
+			}
+
 			_, err := t.statement.Exec(v...)
 			if err != nil {
 				panic(err)
 			}
 		}
+
+		table.entries = nil
+
+		t.statement.Close()
+		t.statement = nil
 	}
 
-	t.tables = make(map[string][]any)
 	t.entryCount = 0
 }
 
-func (t *SQLiteWriter) mustExecute(query string) sql.Result {
+func (t *sqliteWriter) fieldIgnored(field reflect.StructField) bool {
+	tag, ok := field.Tag.Lookup("akita_data")
+	return ok && strings.Contains(tag, "ignore")
+}
+
+func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	res, err := t.Exec(query)
 	if err != nil {
 		fmt.Printf("Failed to execute: %s\n", query)
 		panic(err)
 	}
+
 	return res
 }
 
-func (t *SQLiteWriter) prepareStatement(table string, task any) {
-	n := structs.Names(task)
-	for i := 0; i < len(n); i++ {
-		n[i] = "?"
+func (t *sqliteWriter) prepareStatement(table string, task any) {
+	fieldNames := t.getFieldNames(task)
+	placeholders := make([]string, len(fieldNames))
+
+	for i := range placeholders {
+		placeholders[i] = "?"
 	}
-	entryToFill := "(" + strings.Join(n, ", ") + ")"
+
+	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
 	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
 	stmt, err := t.Prepare(sqlStr)
@@ -203,58 +342,6 @@ func (t *SQLiteWriter) prepareStatement(table string, task any) {
 	t.statement = stmt
 }
 
-// SQLiteReader is a reader that reads trace data from a SQLite database.
-type SQLiteReader struct {
-	*sql.DB
-
-	filename string
-}
-
-// NewSQLiteReader creates a new SQLiteTraceReader.
-func NewSQLiteReader(filename string) *SQLiteReader {
-	r := &SQLiteReader{
-		filename: filename + ".sqlite3",
-	}
-
-	return r
-}
-
-// Init establishes a connection to the database.
-func (r *SQLiteReader) Init() {
-	db, err := sql.Open("sqlite3", r.filename)
-	if err != nil {
-		panic(err)
-	}
-
-	r.DB = db
-}
-
-// ListTables returns a slice containing names of all tables
-func (r *SQLiteReader) ListTables() []string {
-	tableNames := make([]string, 0)
-	query := `SELECT name FROM sqlite_master WHERE type='table';`
-
-	rows, err := r.Query(query)
-	if err != nil {
-		panic(err)
-	}
-
-	close := func() {
-		err := rows.Close()
-		if err != nil {
-			panic(err)
-		}
-	}
-	defer close()
-
-	for rows.Next() {
-		var tableName string
-		err := rows.Scan(&tableName)
-		if err != nil {
-			panic(err)
-		}
-		tableNames = append(tableNames, tableName)
-	}
-
-	return tableNames
+func (t *sqliteWriter) Close() error {
+	return t.DB.Close()
 }

@@ -109,10 +109,12 @@ func (b Builder) Build() Mapper {
 	m.colMask = (1 << b.colHiBit) - 1
 
 	pos := b.accessUnitBit
+
 	for len(b.bitOrderHighToLow) > 0 {
 		curr := b.bitOrderHighToLow[len(b.bitOrderHighToLow)-1]
 		b.bitOrderHighToLow =
 			b.bitOrderHighToLow[0 : len(b.bitOrderHighToLow)-1]
+
 		switch curr {
 		case LocationItemChannel:
 			m.channelPos = int(pos)
@@ -156,6 +158,7 @@ func (b *Builder) calculateBits() {
 func log2(n uint64) (uint64, bool) {
 	oneCount := 0
 	onePos := uint64(0)
+
 	for i := uint64(0); i < 64; i++ {
 		if n&(1<<i) > 0 {
 			onePos = i

@@ -42,9 +42,11 @@ func (po PortOwnerBase) GetPortByName(name string) Port {
 		errMsg := fmt.Sprintf(
 			"Port %s is not available.\n", name)
 		errMsg += "Available ports include:\n"
+
 		for n := range po.ports {
 			errMsg += fmt.Sprintf("\t%s\n", n)
 		}
+
 		fmt.Fprint(os.Stderr, errMsg)
 
 		panic("port not found")

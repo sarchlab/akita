@@ -77,7 +77,7 @@ func (r *ReadReq) GetPID() vm.PID {
 
 // ReadReqBuilder can build read requests.
 type ReadReqBuilder struct {
-	src, dst           sim.Port
+	src, dst           sim.RemotePort
 	pid                vm.PID
 	address, byteSize  uint64
 	canWaitForCoalesce bool
@@ -85,13 +85,13 @@ type ReadReqBuilder struct {
 }
 
 // WithSrc sets the source of the request to build.
-func (b ReadReqBuilder) WithSrc(src sim.Port) ReadReqBuilder {
+func (b ReadReqBuilder) WithSrc(src sim.RemotePort) ReadReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b ReadReqBuilder) WithDst(dst sim.Port) ReadReqBuilder {
+func (b ReadReqBuilder) WithDst(dst sim.RemotePort) ReadReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -138,6 +138,7 @@ func (b ReadReqBuilder) Build() *ReadReq {
 	r.Info = b.info
 	r.AccessByteSize = b.byteSize
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+
 	return r
 }
 
@@ -194,7 +195,7 @@ func (r *WriteReq) GetPID() vm.PID {
 
 // WriteReqBuilder can build read requests.
 type WriteReqBuilder struct {
-	src, dst           sim.Port
+	src, dst           sim.RemotePort
 	pid                vm.PID
 	info               interface{}
 	address            uint64
@@ -204,13 +205,13 @@ type WriteReqBuilder struct {
 }
 
 // WithSrc sets the source of the request to build.
-func (b WriteReqBuilder) WithSrc(src sim.Port) WriteReqBuilder {
+func (b WriteReqBuilder) WithSrc(src sim.RemotePort) WriteReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b WriteReqBuilder) WithDst(dst sim.Port) WriteReqBuilder {
+func (b WriteReqBuilder) WithDst(dst sim.RemotePort) WriteReqBuilder {
 	b.dst = dst
 	return b
 }
@@ -264,6 +265,7 @@ func (b WriteReqBuilder) Build() *WriteReq {
 	r.TrafficBytes = len(r.Data) + accessReqByteOverhead
 	r.DirtyMask = b.dirtyMask
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+
 	return r
 }
 
@@ -296,19 +298,19 @@ func (r *DataReadyRsp) GetRspTo() string {
 
 // DataReadyRspBuilder can build data ready responds.
 type DataReadyRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 	data     []byte
 }
 
 // WithSrc sets the source of the request to build.
-func (b DataReadyRspBuilder) WithSrc(src sim.Port) DataReadyRspBuilder {
+func (b DataReadyRspBuilder) WithSrc(src sim.RemotePort) DataReadyRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b DataReadyRspBuilder) WithDst(dst sim.Port) DataReadyRspBuilder {
+func (b DataReadyRspBuilder) WithDst(dst sim.RemotePort) DataReadyRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -334,6 +336,7 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.TrafficBytes = len(b.data) + accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Data = b.data
+
 	return r
 }
 
@@ -365,18 +368,18 @@ func (r *WriteDoneRsp) GetRspTo() string {
 
 // WriteDoneRspBuilder can build data ready responds.
 type WriteDoneRspBuilder struct {
-	src, dst sim.Port
+	src, dst sim.RemotePort
 	rspTo    string
 }
 
 // WithSrc sets the source of the request to build.
-func (b WriteDoneRspBuilder) WithSrc(src sim.Port) WriteDoneRspBuilder {
+func (b WriteDoneRspBuilder) WithSrc(src sim.RemotePort) WriteDoneRspBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b WriteDoneRspBuilder) WithDst(dst sim.Port) WriteDoneRspBuilder {
+func (b WriteDoneRspBuilder) WithDst(dst sim.RemotePort) WriteDoneRspBuilder {
 	b.dst = dst
 	return b
 }
@@ -395,6 +398,7 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	r.Dst = b.dst
 	r.TrafficBytes = accessRspByteOverhead
 	r.RespondTo = b.rspTo
+
 	return r
 }
 
@@ -429,7 +433,7 @@ func (m *ControlMsg) Clone() sim.Msg {
 
 // A ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
-	src, dst            sim.Port
+	src, dst            sim.RemotePort
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
@@ -441,13 +445,13 @@ type ControlMsgBuilder struct {
 }
 
 // WithSrc sets the source of the request to build.
-func (b ControlMsgBuilder) WithSrc(src sim.Port) ControlMsgBuilder {
+func (b ControlMsgBuilder) WithSrc(src sim.RemotePort) ControlMsgBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b ControlMsgBuilder) WithDst(dst sim.Port) ControlMsgBuilder {
+func (b ControlMsgBuilder) WithDst(dst sim.RemotePort) ControlMsgBuilder {
 	b.dst = dst
 	return b
 }
@@ -501,168 +505,4 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Invalid = b.Invalid
 
 	return m
-}
-
-// GL0InvalidateReq is a request that invalidates the L0 cache.
-type GL0InvalidateReq struct {
-	sim.MsgMeta
-	PID vm.PID
-}
-
-// Meta returns the meta data associated with the message.
-func (r *GL0InvalidateReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned GL0InvalidateReq with different ID
-func (r *GL0InvalidateReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-func (r *GL0InvalidateReq) GenerateRsp(pid vm.PID) sim.Rsp {
-	rsp := GL0InvalidateRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		WithPID(pid).
-		Build()
-
-	return rsp
-}
-
-// GetByteSize returns the number of byte that the request is accessing.
-func (r *GL0InvalidateReq) GetByteSize() uint64 {
-	return 0
-}
-
-// GetAddress returns the address that the request is accessing
-func (r *GL0InvalidateReq) GetAddress() uint64 {
-	return 0
-}
-
-// GetPID returns the process ID that the request is working on.
-func (r *GL0InvalidateReq) GetPID() vm.PID {
-	return r.PID
-}
-
-// GL0InvalidateReqBuilder can build new GL0InvalidReq.
-type GL0InvalidateReqBuilder struct {
-	src, dst sim.Port
-	PID      vm.PID
-}
-
-// WithSrc sets the source of the request to build.
-func (b GL0InvalidateReqBuilder) WithSrc(src sim.Port) GL0InvalidateReqBuilder {
-	b.src = src
-	return b
-}
-
-// WithDst sets the destination of the request to build.
-func (b GL0InvalidateReqBuilder) WithDst(dst sim.Port) GL0InvalidateReqBuilder {
-	b.dst = dst
-	return b
-}
-
-// WithPID sets the PID of the request to build.
-func (b GL0InvalidateReqBuilder) WithPID(pid vm.PID) GL0InvalidateReqBuilder {
-	b.PID = pid
-	return b
-}
-
-// Build creates a new GL0InvalidateReq
-func (b GL0InvalidateReqBuilder) Build() *GL0InvalidateReq {
-	r := &GL0InvalidateReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	return r
-}
-
-// GL0InvalidateRsp is a response to a GL0InvalidateReq.
-type GL0InvalidateRsp struct {
-	sim.MsgMeta
-	PID       vm.PID
-	RespondTo string
-}
-
-// Meta returns the meta data associated with the message.
-func (r *GL0InvalidateRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned GL0InvalidateRsp with different ID
-func (r *GL0InvalidateRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GetByteSize returns the number of byte that the request is accessing.
-func (r *GL0InvalidateRsp) GetByteSize() uint64 {
-	return 0
-}
-
-// GetAddress returns the address that the request is accessing
-func (r *GL0InvalidateRsp) GetAddress() uint64 {
-	return 0
-}
-
-// GetPID returns the process ID that the request is working on.
-func (r *GL0InvalidateRsp) GetPID() vm.PID {
-	return r.PID
-}
-
-// GetRspTo returns the ID of the request that this response is responding to.
-func (r *GL0InvalidateRsp) GetRspTo() string {
-	return r.RespondTo
-}
-
-// GL0InvalidateRspBuilder can build new GL0 Invalid Rsp Builder
-type GL0InvalidateRspBuilder struct {
-	src, dst sim.Port
-	PID      vm.PID
-	rspTo    string
-}
-
-// WithSrc sets the source of the request to build.
-func (b GL0InvalidateRspBuilder) WithSrc(src sim.Port) GL0InvalidateRspBuilder {
-	b.src = src
-	return b
-}
-
-// WithDst sets the destination of the request to build.
-func (b GL0InvalidateRspBuilder) WithDst(dst sim.Port) GL0InvalidateRspBuilder {
-	b.dst = dst
-	return b
-}
-
-// WithPID sets the PID of the request to build.
-func (b GL0InvalidateRspBuilder) WithPID(pid vm.PID) GL0InvalidateRspBuilder {
-	b.PID = pid
-	return b
-}
-
-// WithRspTo sets ID of the request that the respond to build is replying to.
-func (b GL0InvalidateRspBuilder) WithRspTo(id string) GL0InvalidateRspBuilder {
-	b.rspTo = id
-	return b
-}
-
-// GetRespondTo returns the ID if the request that the respond is responding to.
-func (r *GL0InvalidateRsp) GetRespondTo() string {
-	return r.RespondTo
-}
-
-// Build creates a new CUPipelineRestartReq
-func (b GL0InvalidateRspBuilder) Build() *GL0InvalidateRsp {
-	r := &GL0InvalidateRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.RespondTo = b.rspTo
-	return r
 }
