@@ -82,30 +82,74 @@ body {
 
 #dashboard-btn,
 #dashboard-filter-group,
+#primary-selector-group {
+  display: flex;
+  flex-direction: row;
+  margin-left: 20px;
+}
+
+#dashboard-filter-group,
 #primary-selector-group,
 #secondary-selector-group {
-  margin-top: 8px;
-  margin-bottom: 3px;
+  display: flex;
+  flex-direction: row;
+  flex: 2;
+  width: 400px;;
+}
+
+#secondary-selector-group {
+  margin-right: 10px;
+}
+
+#dashboard-filter-input {
+  width: 40%;
+  margin-left: -3px;
+  height: 38px !important;
+}
+
+#dashboard-btn { 
+  height: 38px !important; 
+  flex: 0.5;
+  width: 150px;
+  text-align: center;
+}
+
+.input-group-text,
+.custom-select,
+.form-control {
+  height: 38px;
+}
+
+.custom-select {
+  width: 50%;
+  margin-left: -3px;
 }
 
 .dropdown-canvas #dashboard-btn {
-  text-align: left;
+  text-align: center;
   margin-bottom: 10px;
   margin-left: 16px; 
+  width: 30%;
 }
 
 .dropdown-canvas #dashboard-filter-group {
   text-align: left;
   margin-bottom: 10px;
   margin-left: 16px; 
+  width: 80%;
 }
 
 .dropdown-canvas .custom-select,
 .dropdown-canvas .input-group {
-  width: calc(100% - 20px);
+  width: 100%;
   text-align: left;
+  margin-left: 16px; 
+}
+
+.dropdown-canvas #primary-selector-group {
+  width: 100%;
+  margin-left: 16px;
   margin-bottom: 10px;
-  margin-left: 0; 
 }
 
 .dropdown-canvas .input-group-text {
@@ -114,7 +158,11 @@ body {
   justify-content: flex-start;
 }
 
-@media (max-width: 1300px) {
+.dropdown-canvas .custom-select {
+  width: 40%;
+}
+
+@media (max-width: 1365px) {
   .burger-menu {
     display: block;
   }
@@ -198,6 +246,10 @@ body {
   left: 0;
   position: fixed;
   pointer-events: none;
+}
+
+.navbar-brand {
+  margin-left: 10px;
 }
 
 .dashboard {

@@ -22,7 +22,7 @@
     "webpack-cli": "^5.1.1"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-free": "^5.12.1",
+    "@fortawesome/fontawesome-free": "^5.15.4",
     "@types/chroma-js": "^2.0.0",
     "@types/d3": "^5.7.2",
     "bootstrap": "^5.0.0",
