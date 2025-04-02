@@ -12,6 +12,8 @@ type Builder struct {
 	pageSize       uint64
 	lowModule      sim.RemotePort
 	numMSHREntry   int
+	state          string
+	latency        int
 }
 
 // MakeBuilder returns a Builder
@@ -23,6 +25,8 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
+		state:          "enable",
+		latency:        4,
 	}
 }
 
@@ -78,6 +82,11 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 	return b
 }
 
+func (b Builder) WithLatency(cycles int) Builder{
+    b.latency = cycles
+    return b
+}
+
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
 	tlb := &Comp{}
@@ -95,7 +104,10 @@ func (b Builder) Build(name string) *Comp {
 
 	tlb.reset()
 
-	middleware := &middleware{Comp: tlb}
+	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
+	tlb.AddMiddleware(ctrlMiddleware)
+
+	middleware := &tlbMiddleware{Comp: tlb}
 	tlb.AddMiddleware(middleware)
 
 	return tlb

@@ -58,17 +58,29 @@ jobs:
       - name: Build
         run: go build ./...
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: akita_compile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "stable"
+
+      - name: Clean Go cache
+        run: |
+          go clean -modcache
+          rm -rf $(go env GOMODCACHE)/*
+
       - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: "latest"
           args: --timeout=10m
-
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
-
-      - name: Unit Test
-        run: ginkgo -r
 
   akita_unit_test:
     name: Akita Unit Test
