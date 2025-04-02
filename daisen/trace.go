@@ -15,8 +15,10 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var err error
+
 	startTime := 0.0
 	endTime := 0.0
+
 	if useTimeRange {
 		startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
 		if err != nil {

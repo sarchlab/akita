@@ -24,6 +24,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		engine = NewMockEngine(mockCtrl)
 		port = NewMockPort(mockCtrl)
+		port.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("Port")).
+			AnyTimes()
 
 		memController = MakeBuilder().
 			WithEngine(engine).
@@ -40,7 +44,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should process read request", func() {
 		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
@@ -57,7 +61,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should process write request", func() {
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithData([]byte{0, 1, 2, 3}).
 			WithDirtyMask([]bool{false, false, true, false}).
@@ -77,7 +81,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Storage.Write(0, data)
 
 		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
@@ -96,7 +100,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Storage.Write(0, data)
 
 		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithByteSize(4).
 			Build()
@@ -115,7 +119,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should handle write respond event without write mask", func() {
 		data := []byte{1, 2, 3, 4}
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithData(data).
 			Build()
@@ -137,7 +141,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		dirtyMask := []bool{false, true, false, false}
 
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithData(data).
 			WithDirtyMask(dirtyMask).
@@ -166,7 +170,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			true, true, true, true, false, false, false, false,
 		}
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithData(data).
 			WithDirtyMask(dirtyMask).
@@ -189,7 +193,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		data := []byte{1, 2, 3, 4}
 
 		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort).
+			WithDst(memController.topPort.AsRemote()).
 			WithAddress(0).
 			WithData(data).
 			Build()

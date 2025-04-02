@@ -17,15 +17,15 @@ type msgToAssemble struct {
 	numFlitArrived  int
 }
 
-// Comp is an akita component(Endpoint) that delegates sending and receiving actions
-// of a few ports.
+// Comp is an akita component(Endpoint) that delegates sending and receiving
+// actions of a few ports.
 type Comp struct {
 	*sim.TickingComponent
 	sim.MiddlewareHolder
 
-	DevicePorts      []sim.Port
 	NetworkPort      sim.Port
-	DefaultSwitchDst sim.Port
+	DevicePorts      []sim.Port
+	DefaultSwitchDst sim.RemotePort
 
 	numInputChannels  int
 	numOutputChannels int
@@ -40,7 +40,7 @@ type Comp struct {
 }
 
 // PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port sim.Port, srcBufCap int) {
+func (c *Comp) PlugIn(port sim.Port) {
 	port.SetConnection(c)
 	c.DevicePorts = append(c.DevicePorts, port)
 }
@@ -127,6 +127,7 @@ func (m *middleware) sendFlitOut() bool {
 
 func (m *middleware) prepareMsg() bool {
 	madeProgress := false
+
 	for i := 0; i < len(m.DevicePorts); i++ {
 		port := m.DevicePorts[i]
 		if port.PeekOutgoing() == nil {
@@ -197,12 +198,11 @@ func (m *middleware) recv() bool {
 
 		m.NetworkPort.RetrieveIncoming()
 
+		// fmt.Printf("%.10f, %s, ep received flit %s\n",
+		// 	now, c.Name(), flit.ID)
 		m.logFlitE2ETask(flit, true)
 
 		madeProgress = true
-
-		// fmt.Printf("%.10f, %s, ep received flit %s\n",
-		// 	now, c.Name(), flit.ID)
 	}
 
 	return madeProgress
@@ -242,8 +242,22 @@ func (m *middleware) tryDeliver() bool {
 
 	for len(m.assembledMsgs) > 0 {
 		msg := m.assembledMsgs[0]
+		dst := msg.Meta().Dst
 
-		err := msg.Meta().Dst.Deliver(msg)
+		var dstPort sim.Port
+
+		for _, port := range m.DevicePorts {
+			if port.AsRemote() == dst {
+				dstPort = port
+				break
+			}
+		}
+
+		if dstPort == nil {
+			panic(fmt.Sprintf("no dst port found for %s", dst))
+		}
+
+		err := dstPort.Deliver(msg)
 		if err != nil {
 			return madeProgress
 		}
@@ -318,6 +332,7 @@ func (m *middleware) logMsgRsp(isEnd bool, rsp sim.Rsp) {
 
 func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
 	numFlit := 1
+
 	if msg.Meta().TrafficBytes > 0 {
 		trafficByte := msg.Meta().TrafficBytes
 		trafficByte += int(math.Ceil(
@@ -328,7 +343,7 @@ func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
 	flits := make([]*messaging.Flit, numFlit)
 	for i := 0; i < numFlit; i++ {
 		flits[i] = messaging.FlitBuilder{}.
-			WithSrc(m.NetworkPort).
+			WithSrc(m.NetworkPort.AsRemote()).
 			WithDst(m.DefaultSwitchDst).
 			WithSeqID(i).
 			WithNumFlitInMsg(numFlit).

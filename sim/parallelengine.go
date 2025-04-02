@@ -43,6 +43,7 @@ func NewParallelEngine() *ParallelEngine {
 	e.queueChan = make(chan EventQueue, numQueues)
 	e.secondaryQueues = make([]EventQueue, 0, numQueues)
 	e.secondaryQueueChan = make(chan EventQueue, numQueues)
+
 	for i := 0; i < numQueues; i++ {
 		queue := NewEventQueue()
 		//queue := NewInsertionQueue()
@@ -87,9 +88,11 @@ func NewParallelEngine() *ParallelEngine {
 
 func (e *ParallelEngine) readNow() VTimeInSec {
 	var now VTimeInSec
+
 	e.nowLock.RLock()
 	now = e.now
 	e.nowLock.RUnlock()
+
 	return now
 }
 
@@ -112,6 +115,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 		queue := <-e.secondaryQueueChan
 		queue.Push(evt)
 		e.secondaryQueueChan <- queue
+
 		return
 	}
 
@@ -142,6 +146,7 @@ func (e *ParallelEngine) determineWhatToRun() {
 	if primaryTime <= secondaryTime {
 		e.runningSecondaryEvents = false
 		e.writeNow(primaryTime)
+
 		return
 	}
 
@@ -153,6 +158,7 @@ func (e *ParallelEngine) earliestTimeInQueueGroup(
 	queues []EventQueue,
 ) VTimeInSec {
 	earliestTime := VTimeInSec(math.MaxFloat64)
+
 	for _, q := range queues {
 		if q.Len() == 0 {
 			continue
@@ -163,6 +169,7 @@ func (e *ParallelEngine) earliestTimeInQueueGroup(
 			earliestTime = t
 		}
 	}
+
 	return earliestTime
 }
 
@@ -203,6 +210,7 @@ func (e *ParallelEngine) hasMorePrimaryEvents() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -212,6 +220,7 @@ func (e *ParallelEngine) hasMoreSecondaryEvents() bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -220,6 +229,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 	queueChan chan EventQueue,
 ) {
 	now := e.readNow()
+
 	for _, queue := range queues {
 		for queue.Len() > 0 {
 			evt := queue.Peek()

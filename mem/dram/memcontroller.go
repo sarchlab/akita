@@ -71,6 +71,7 @@ func (m *middleware) Tick() (madeProgress bool) {
 	madeProgress = m.issue() || madeProgress
 	madeProgress = m.subTransactionQueue.Tick() || madeProgress
 	madeProgress = m.parseTop() || madeProgress
+
 	return madeProgress
 }
 
@@ -100,6 +101,7 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, m.Comp)
+
 	for _, st := range trans.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
@@ -182,10 +184,11 @@ func (m *middleware) finalizeWriteTrans(
 	}
 
 	writeDone := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(t.Write.Src).
 		WithRspTo(t.Write.ID).
 		Build()
+
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
 		m.inflightTransactions = append(
@@ -210,11 +213,12 @@ func (m *middleware) finalizeReadTrans(
 	}
 
 	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(t.Read.Src).
 		WithData(data).
 		WithRspTo(t.Read.ID).
 		Build()
+
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
 		m.inflightTransactions = append(

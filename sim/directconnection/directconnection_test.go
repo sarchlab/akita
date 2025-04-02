@@ -11,6 +11,26 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+type sampleMsg struct {
+	sim.MsgMeta
+}
+
+func NewSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
+}
+
+func (m *sampleMsg) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
 var _ = Describe("DirectConnection", func() {
 
 	var (
@@ -23,16 +43,24 @@ var _ = Describe("DirectConnection", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		port1 = NewMockPort(mockCtrl)
+		port1.EXPECT().AsRemote().Return(sim.RemotePort("port1")).AnyTimes()
+
 		port2 = NewMockPort(mockCtrl)
+		port2.EXPECT().AsRemote().Return(sim.RemotePort("port2")).AnyTimes()
+
 		engine = NewMockEngine(mockCtrl)
-		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Direct")
+		connection = MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1).
+			Build("Direct")
 
 		port1.EXPECT().SetConnection(connection)
-		connection.PlugIn(port1, 4)
+		connection.PlugIn(port1)
 
 		port2.EXPECT().SetConnection(connection)
-		connection.PlugIn(port2, 1)
+		connection.PlugIn(port2)
 	})
 
 	AfterEach(func() {
@@ -44,13 +72,13 @@ var _ = Describe("DirectConnection", func() {
 
 		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10))
 
-		msg1 := sim.NewSampleMsg()
-		msg1.Src = port1
-		msg1.Dst = port2
+		msg1 := NewSampleMsg()
+		msg1.Src = port1.AsRemote()
+		msg1.Dst = port2.AsRemote()
 
-		msg2 := sim.NewSampleMsg()
-		msg2.Src = port2
-		msg2.Dst = port1
+		msg2 := NewSampleMsg()
+		msg2.Src = port2.AsRemote()
+		msg2.Dst = port1.AsRemote()
 
 		port1.EXPECT().PeekOutgoing().Return(msg1)
 		port1.EXPECT().PeekOutgoing().Return(nil)
@@ -85,7 +113,8 @@ type agent struct {
 func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = sim.NewLimitNumMsgPort(a, 4, name+".OutPort")
+	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
+
 	return a
 }
 
@@ -127,7 +156,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		for i := 0; i < numAgents; i++ {
 			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
 			agents = append(agents, a)
-			connection.PlugIn(a.OutPort, 1)
+			connection.PlugIn(a.OutPort)
 		}
 	})
 
@@ -138,14 +167,14 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := sim.NewSampleMsg()
-				msg.Src = agent.OutPort
-				msg.Dst = agents[rand.Intn(len(agents))].OutPort
+				msg := NewSampleMsg()
+				msg.Src = agent.OutPort.AsRemote()
+				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				for msg.Dst == msg.Src {
-					msg.Dst = agents[rand.Intn(len(agents))].OutPort
+					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
 				msg.ID = fmt.Sprintf("%s(%d)->%s",
-					agent.Name(), i, msg.Dst.Component().Name())
+					agent.Name(), i, msg.Dst)
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater()
@@ -157,6 +186,7 @@ var _ = Describe("Direct Connection Integration", func() {
 		for _, agent := range agents {
 			totalRecvedMsgCount += len(agent.msgsIn)
 		}
+
 		Expect(totalRecvedMsgCount).To(Equal(numAgents * numMsgsPerAgent))
 	})
 
@@ -171,6 +201,7 @@ var _ = Describe("Direct Connection Integration", func() {
 
 func directConnectionTest(seed int64) sim.VTimeInSec {
 	rand.Seed(seed)
+
 	numAgents := 100
 	numMsgsPerAgent := 1000
 	engine := sim.NewSerialEngine()
@@ -180,21 +211,25 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 	for i := 0; i < numAgents; i++ {
 		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
 		agents = append(agents, a)
-		connection.PlugIn(a.OutPort, 1)
+		connection.PlugIn(a.OutPort)
 	}
 
 	for _, agent := range agents {
 		for i := 0; i < numMsgsPerAgent; i++ {
-			msg := sim.NewSampleMsg()
-			msg.Src = agent.OutPort
-			msg.Dst = agents[rand.Intn(len(agents))].OutPort
+			msg := NewSampleMsg()
+			msg.Src = agent.OutPort.AsRemote()
+			msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
+
 			for msg.Dst == msg.Src {
-				msg.Dst = agents[rand.Intn(len(agents))].OutPort
+				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 			}
+
 			msg.ID = fmt.Sprintf("%s(%d)->%s",
-				agent.Name(), i, msg.Dst.Component().Name())
+				agent.Name(), i, msg.Dst)
+
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}
+
 		agent.TickLater()
 	}
 

@@ -85,14 +85,16 @@ func createAgents(
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * sim.GHz
+
 	var agents []*acceptance.Agent
+
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 1, test)
 		agent.TickLater()
 		agents = append(agents, agent)
-		//test.RegisterAgent(agent)
 	}
+
 	return agents
 }
 
@@ -118,6 +120,7 @@ func createPCIeNetwork(
 		deviceID := connector.PlugInDevice(switch2ID, agents[i].AgentPorts)
 		deviceIDs = append(deviceIDs, deviceID)
 	}
+
 	return deviceIDs
 }
 

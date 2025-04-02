@@ -18,6 +18,7 @@ func NewTLBTracer(w io.Writer, timeTeller sim.TimeTeller) *TLBTracer {
 	t := new(TLBTracer)
 	t.writer = w
 	t.timeTeller = timeTeller
+
 	return t
 }
 

@@ -13,17 +13,17 @@ import (
 var _ = Describe("DirectoryStage", func() {
 
 	var (
-		mockCtrl          *gomock.Controller
-		ds                *directoryStage
-		cacheModule       *Comp
-		mshr              *MockMSHR
-		dirBuf            *MockBuffer
-		pipeline          *MockPipeline
-		buf               *MockBuffer
-		directory         *MockDirectory
-		bankBuf           *MockBuffer
-		writeBufferBuffer *MockBuffer
-		lowModuleFinder   *MockLowModuleFinder
+		mockCtrl            *gomock.Controller
+		ds                  *directoryStage
+		cacheModule         *Comp
+		mshr                *MockMSHR
+		dirBuf              *MockBuffer
+		pipeline            *MockPipeline
+		buf                 *MockBuffer
+		directory           *MockDirectory
+		bankBuf             *MockBuffer
+		writeBufferBuffer   *MockBuffer
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -34,7 +34,7 @@ var _ = Describe("DirectoryStage", func() {
 		directory.EXPECT().WayAssociativity().Return(4).AnyTimes()
 		writeBufferBuffer = NewMockBuffer(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
-		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		builder := MakeBuilder()
 		cacheModule = builder.Build("Cache")
@@ -44,7 +44,7 @@ var _ = Describe("DirectoryStage", func() {
 		cacheModule.numReqPerCycle = 4
 		cacheModule.writeBufferBuffer = writeBufferBuffer
 		cacheModule.dirToBankBuffers = []sim.Buffer{bankBuf}
-		cacheModule.lowModuleFinder = lowModuleFinder
+		cacheModule.addressToPortMapper = addressToPortMapper
 
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)

@@ -33,7 +33,9 @@ func main() {
 
 func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	freq := 1.0 * sim.GHz
+
 	var agents []*acceptance.Agent
+
 	for i := 0; i < 9; i++ {
 		agent := acceptance.NewAgent(
 			engine, freq, fmt.Sprintf("Agent%d", i), 5, test)

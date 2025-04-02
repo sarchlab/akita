@@ -15,8 +15,8 @@ var _ = Describe("Port Owner", func() {
 	})
 
 	It("shoud panic if the same name is added twice", func() {
-		port1 := NewLimitNumMsgPort(nil, 10, "Port1")
-		port2 := NewLimitNumMsgPort(nil, 10, "Port2")
+		port1 := NewPort(nil, 10, 10, "Port1")
+		port2 := NewPort(nil, 10, 10, "Port2")
 
 		po.AddPort("LocalPort", port1)
 		Expect(func() { po.AddPort("LocalPort", port2) }).To(Panic())
@@ -24,7 +24,7 @@ var _ = Describe("Port Owner", func() {
 	})
 
 	It("should add and get port", func() {
-		port := NewLimitNumMsgPort(nil, 10, "PortA")
+		port := NewPort(nil, 10, 10, "PortA")
 
 		po.AddPort("LocalPort", port)
 

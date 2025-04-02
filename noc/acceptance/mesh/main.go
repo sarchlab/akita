@@ -12,6 +12,9 @@ import (
 )
 
 func main() {
+	flag.Parse()
+	rand.Seed(1)
+
 	// In case of a panic, do not exit the program, but sleep.
 	// defer func() {
 	// 	if r := recover(); r != nil {
@@ -19,9 +22,6 @@ func main() {
 	// 		select {}
 	// 	}
 	// }()
-
-	flag.Parse()
-	rand.Seed(1)
 
 	meshWidth := 2
 	meshHeight := 2

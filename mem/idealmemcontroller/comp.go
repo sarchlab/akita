@@ -123,7 +123,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(c.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithData(data).
@@ -134,6 +134,7 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	if networkErr != nil {
 		retry := newReadRespondEvent(c.Freq.NextTick(now), c, req)
 		c.Engine.Schedule(retry)
+
 		return nil
 	}
 
@@ -148,7 +149,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	req := e.req
 
 	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(c.topPort).
+		WithSrc(c.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		Build()
@@ -157,6 +158,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	if networkErr != nil {
 		retry := newWriteRespondEvent(c.Freq.NextTick(now), c, req)
 		c.Engine.Schedule(retry)
+
 		return nil
 	}
 
@@ -176,11 +178,13 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 		if err != nil {
 			panic(err)
 		}
+
 		for i := 0; i < len(req.Data); i++ {
 			if req.DirtyMask[i] {
 				data[i] = req.Data[i]
 			}
 		}
+
 		err = c.Storage.Write(addr, data)
 		if err != nil {
 			panic(err)
