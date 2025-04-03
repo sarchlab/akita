@@ -43,9 +43,9 @@ func NewDataRecorder(path string) DataRecorder {
 	w.Init()
 
 	execRecorder := NewExecRecorderWithWriter(w)
+	execRecorder.Write()
 
 	atexit.Register(func() {
-		execRecorder.Write()
 		execRecorder.Flush()
 		w.Flush()
 	})
@@ -62,9 +62,9 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 	}
 
 	execRecorder := NewExecRecorderWithWriter(w)
+	execRecorder.Write()
 
 	atexit.Register(func() {
-		execRecorder.Write()
 		execRecorder.Flush()
 		w.Flush()
 	})

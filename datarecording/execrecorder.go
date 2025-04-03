@@ -8,7 +8,7 @@ import (
 )
 
 // Struct ExecInfo is feed to DataRecorder
-type ExecInfo struct {
+type execInfo struct {
 	Property string
 	Value    string
 }
@@ -18,27 +18,27 @@ type execRecorder struct {
 	// db        *sql.DB
 	tablename string
 	recorder  DataRecorder
-	entries   []ExecInfo
+	entries   []execInfo
 }
 
 // Write log current execution
 func (e *execRecorder) Write() {
 	currentTime := time.Now()
-	startTime := currentTime.Format("2006-01-02 15:04:05")
-	timeEntry := ExecInfo{"Start Time", startTime}
+	startTime := currentTime.Format("2006-01-02 15:04:05.000000000")
+	timeEntry := execInfo{"Start Time", startTime}
 	e.entries = append(e.entries, timeEntry)
 
 	cmd := strings.Join(os.Args, " ")
-	cmdEntry := ExecInfo{"Command", cmd}
+	cmdEntry := execInfo{"Command", cmd}
 	e.entries = append(e.entries, cmdEntry)
 
 	ex, err := os.Executable()
 	if err != nil {
 		panic(err)
 	}
-	path := filepath.Dir(ex)
-	pathEntry := ExecInfo{"Path", path}
-	e.entries = append(e.entries, pathEntry)
+	cwd := filepath.Dir(ex)
+	cwdEntry := execInfo{"Working Directory", cwd}
+	e.entries = append(e.entries, cwdEntry)
 }
 
 // Flush writes data into SQLite along with program exit time
@@ -48,8 +48,8 @@ func (e *execRecorder) Flush() {
 	}
 
 	endTime := time.Now()
-	endValue := endTime.Format("2006-01-02 15:04:05")
-	timeEntry := ExecInfo{"End Time", endValue}
+	endValue := endTime.Format("2006-01-02 15:04:05.000000000")
+	timeEntry := execInfo{"End Time", endValue}
 	e.recorder.InsertData(e.tablename, timeEntry)
 
 	e.entries = nil
@@ -68,11 +68,9 @@ func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
 }
 
 func setupTable(e *execRecorder) {
-	currentTime := time.Now()
-	time := currentTime.Format("2006_01_02_15_04_05")
-	name := "akita_exec_log_" + time
+	name := "exec_info"
 	e.tablename = name
 
-	sampleEntry := ExecInfo{}
+	sampleEntry := execInfo{}
 	e.recorder.CreateTable(name, sampleEntry)
 }

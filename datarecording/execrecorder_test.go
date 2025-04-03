@@ -13,6 +13,12 @@ import (
 	"github.com/tebeka/atexit"
 )
 
+// Struct ExecInfo is feed to DataRecorder
+type execInfo struct {
+	Property string
+	Value    string
+}
+
 var ExpectedInfo [4]string
 
 // TestRecorderSetUp creates a new ExecRecorder and cleanup function for testing
@@ -34,7 +40,7 @@ func TestRecorderSetUp(t *testing.T) {
 	ExpectedInfo[1] = expectedPath
 
 	initializeTime := time.Now()
-	startTime := initializeTime.Format("2006_01_02_15_04_05")
+	startTime := initializeTime.Format("2006-01-02 15:04:05.000000000")
 	ExpectedInfo[2] = startTime
 
 	writer := datarecording.NewDataRecorder(path)
@@ -42,7 +48,7 @@ func TestRecorderSetUp(t *testing.T) {
 	assert.True(t, writer != nil)
 
 	exitTime := time.Now()
-	endTime := exitTime.Format("2006_01_02_15_04_05")
+	endTime := exitTime.Format("2006-01-02 15:04:05.000000000")
 	ExpectedInfo[3] = endTime
 
 	fmt.Println(ExpectedInfo)
@@ -61,9 +67,9 @@ func TestExecutionRecord(t *testing.T) {
 	path := "test"
 	reader := datarecording.NewReader(path + ".sqlite3")
 
-	tableName := "akita_exec_log_" + ExpectedInfo[2]
+	tableName := "exec_info"
 
-	reader.MapTable(tableName, datarecording.ExecInfo{})
+	reader.MapTable(tableName, execInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
 	fmt.Println(results)
 
@@ -78,13 +84,13 @@ func TestExecutionRecord(t *testing.T) {
 func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 	expectedCMD := ExpectedInfo[0]
 
-	reader.MapTable(tableName, datarecording.ExecInfo{})
+	reader.MapTable(tableName, execInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
 
-	if cmd, ok := results[1].(datarecording.ExecInfo); ok {
+	if cmd, ok := results[1].(execInfo); ok {
 		flag = flag && (cmd.Property == "Command")
 		flag = flag && (cmd.Value == expectedCMD)
 	}
@@ -95,13 +101,13 @@ func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 func testPathLog(tableName string, reader datarecording.DataReader) bool {
 	expectedPath := ExpectedInfo[1]
 
-	reader.MapTable(tableName, datarecording.ExecInfo{})
+	reader.MapTable(tableName, execInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
 
-	if cmd, ok := results[2].(datarecording.ExecInfo); ok {
+	if cmd, ok := results[2].(execInfo); ok {
 		flag = flag && (cmd.Property == "CWD")
 		flag = flag && (cmd.Value == expectedPath)
 	}
@@ -109,15 +115,18 @@ func testPathLog(tableName string, reader datarecording.DataReader) bool {
 	return flag
 }
 
-func testStartTimeLog(tableName string, expectedStart string,
-	reader datarecording.DataReader) bool {
-	reader.MapTable(tableName, datarecording.ExecInfo{})
+func testStartTimeLog(
+	tableName string,
+	expectedStart string,
+	reader datarecording.DataReader,
+) bool {
+	reader.MapTable(tableName, execInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
 
-	if cmd, ok := results[0].(datarecording.ExecInfo); ok {
+	if cmd, ok := results[0].(execInfo); ok {
 		flag = flag && (cmd.Property == "Start Time")
 		flag = flag && (cmd.Value == expectedStart)
 	}
@@ -125,15 +134,18 @@ func testStartTimeLog(tableName string, expectedStart string,
 	return flag
 }
 
-func testEndTimeLog(tableName string, expectedEnd string,
-	reader datarecording.DataReader) bool {
-	reader.MapTable(tableName, datarecording.ExecInfo{})
+func testEndTimeLog(
+	tableName string,
+	expectedEnd string,
+	reader datarecording.DataReader,
+) bool {
+	reader.MapTable(tableName, execInfo{})
 	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
 
-	if cmd, ok := results[3].(datarecording.ExecInfo); ok {
+	if cmd, ok := results[3].(execInfo); ok {
 		flag = flag && (cmd.Property == "End Time")
 		flag = flag && (cmd.Value == expectedEnd)
 	}
