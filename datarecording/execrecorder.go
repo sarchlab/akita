@@ -15,14 +15,13 @@ type execInfo struct {
 
 // Records program execution
 type execRecorder struct {
-	// db        *sql.DB
 	tablename string
 	recorder  DataRecorder
 	entries   []execInfo
 }
 
-// Write log current execution
-func (e *execRecorder) Write() {
+// Start log current execution.
+func (e *execRecorder) Start() {
 	currentTime := time.Now()
 	startTime := currentTime.Format("2006-01-02 15:04:05.000000000")
 	timeEntry := execInfo{"Start Time", startTime}
@@ -41,8 +40,8 @@ func (e *execRecorder) Write() {
 	e.entries = append(e.entries, cwdEntry)
 }
 
-// Flush writes data into SQLite along with program exit time
-func (e *execRecorder) Flush() {
+// End writes data into SQLite along with program exit time.
+func (e *execRecorder) End() {
 	for _, entry := range e.entries {
 		e.recorder.InsertData(e.tablename, entry)
 	}
@@ -62,6 +61,7 @@ func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
 	e := &execRecorder{
 		recorder: writer,
 	}
+
 	setupTable(e)
 
 	return e
