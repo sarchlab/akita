@@ -3,7 +3,6 @@ package tlb
 import (
 	"log"
 	"reflect"
-	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/mem"
@@ -270,11 +269,9 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	rsp := item.(*vm.TranslationRsp)
 	page := rsp.Page
-	fmt.Println("parseBottom() received TranslationRsp with Page:", page)
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-	    fmt.Println("MSHR entry not found for", rsp.Page.PID, rsp.Page.VAddr)
 		m.bottomPort.RetrieveIncoming()
 		return true
 	}
@@ -298,19 +295,15 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
 
-    fmt.Println("Final TLB state:", m.Sets)
 	return true
 }
 
 func (m *tlbMiddleware) performCtrlReq() bool {
-    fmt.Println("performCtrlReq() called")  // Debugging output
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
-	fmt.Printf("Type of item: %T, value: %+v\n", item, item)
 	item = m.controlPort.RetrieveIncoming()
-	fmt.Println(item)
 
 	switch req := item.(type) {
 	case *FlushReq:
