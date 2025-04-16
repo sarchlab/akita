@@ -78,7 +78,9 @@ func (b Builder) WithStorage(storage *mem.Storage) Builder {
 }
 
 // WithAddressConverter sets the address converter of the memory controller
-func (b Builder) WithAddressConverter(addressConverter mem.AddressConverter) Builder {
+func (b Builder) WithAddressConverter(
+	addressConverter mem.AddressConverter,
+) Builder {
 	b.addressConverter = addressConverter
 	return b
 }

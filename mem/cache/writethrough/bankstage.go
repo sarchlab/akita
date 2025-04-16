@@ -58,6 +58,7 @@ func (s *bankStage) extractFromBuf() bool {
 		transaction: item.(*transaction),
 	})
 	s.cache.bankBufs[s.bankID].Pop()
+
 	return true
 }
 
@@ -91,6 +92,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	if err != nil {
 		panic(err)
 	}
+
 	block.ReadCount--
 
 	for _, t := range trans.preCoalesceTransactions {
@@ -103,6 +105,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	s.postPipelineBuf.Pop()
 
 	tracing.EndTask(trans.id, s.cache)
+
 	return true
 }
 
@@ -119,6 +122,7 @@ func (s *bankStage) finalizeWriteTrans(
 	}
 
 	offset := write.Address - block.Tag
+
 	for i := 0; i < len(write.Data); i++ {
 		if write.DirtyMask[i] {
 			data[offset+uint64(i)] = write.Data[i]
@@ -129,12 +133,14 @@ func (s *bankStage) finalizeWriteTrans(
 	if err != nil {
 		panic(err)
 	}
+
 	block.DirtyMask = write.DirtyMask
 	block.IsLocked = false
 
 	s.postPipelineBuf.Pop()
 
 	tracing.EndTask(trans.id, s.cache)
+
 	return true
 }
 
@@ -162,6 +168,7 @@ func (s *bankStage) removeTransaction(trans *transaction) {
 			s.cache.postCoalesceTransactions = append(
 				s.cache.postCoalesceTransactions[:i],
 				s.cache.postCoalesceTransactions[i+1:]...)
+
 			return
 		}
 	}

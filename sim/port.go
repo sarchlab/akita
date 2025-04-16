@@ -5,11 +5,25 @@ import (
 	"sync"
 )
 
+// HookPosPortMsgSend marks when a message is sent out from the port.
+var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
+
+// HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
+var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
+
+// HookPosPortMsgRetrieve marks when an outbound message is sent over a
+// connection
+var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
+
+// A RemotePort is a string that refers to another port.
+type RemotePort string
+
 // A Port is owned by a component and is used to plugin connections
 type Port interface {
-	// Embed interface
 	Named
 	Hookable
+
+	AsRemote() RemotePort
 
 	SetConnection(conn Connection)
 	Component() Component
@@ -27,9 +41,8 @@ type Port interface {
 	PeekIncoming() Msg
 }
 
-// LimitNumMsgPort is a type of port that can hold at most a certain number
-// of messages.
-type LimitNumMsgPort struct {
+// DefaultPort implements the port interface.
+type defaultPort struct {
 	HookableBase
 
 	lock sync.Mutex
@@ -41,17 +54,13 @@ type LimitNumMsgPort struct {
 	outgoingBuf Buffer
 }
 
-// HookPosPortMsgSend marks when a message is sent out from the port.
-var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
-
-// HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
-var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
-
-// HookPosPortMsgRetrieve marks when an outbound message is sent over a connection
-var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
+// AsRemote returns the remote port name.
+func (p *defaultPort) AsRemote() RemotePort {
+	return RemotePort(p.name)
+}
 
 // SetConnection sets which connection plugged in to this port.
-func (p *LimitNumMsgPort) SetConnection(conn Connection) {
+func (p *defaultPort) SetConnection(conn Connection) {
 	if p.conn != nil {
 		connName := p.conn.Name()
 		newConnName := conn.Name()
@@ -66,37 +75,17 @@ func (p *LimitNumMsgPort) SetConnection(conn Connection) {
 }
 
 // Component returns the owner component of the port.
-func (p *LimitNumMsgPort) Component() Component {
+func (p *defaultPort) Component() Component {
 	return p.comp
 }
 
-type sampleMsg struct {
-	MsgMeta
-}
-
-func NewSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	return m
-}
-
-func (m *sampleMsg) Meta() *MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() Msg {
-	cloneMsg := *m
-	cloneMsg.ID = GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
 // Name returns the name of the port.
-func (p *LimitNumMsgPort) Name() string {
+func (p *defaultPort) Name() string {
 	return p.name
 }
 
 // CanSend checks if the port can send a message without error.
-func (p *LimitNumMsgPort) CanSend() bool {
+func (p *defaultPort) CanSend() bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -106,7 +95,7 @@ func (p *LimitNumMsgPort) CanSend() bool {
 }
 
 // Send is used to send a message out from a component
-func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
+func (p *defaultPort) Send(msg Msg) *SendError {
 	p.lock.Lock()
 
 	p.msgMustBeValid(msg)
@@ -116,7 +105,9 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 		return NewSendError()
 	}
 
+	wasEmpty := (p.outgoingBuf.Size() == 0)
 	p.outgoingBuf.Push(msg)
+
 	hookCtx := HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgSend,
@@ -125,19 +116,23 @@ func (p *LimitNumMsgPort) Send(msg Msg) *SendError {
 	p.InvokeHook(hookCtx)
 	p.lock.Unlock()
 
-	p.conn.NotifySend()
+	if wasEmpty {
+		p.conn.NotifySend()
+	}
 
 	return nil
 }
 
 // Deliver is used to deliver a message to a component
-func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
+func (p *defaultPort) Deliver(msg Msg) *SendError {
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
 		p.lock.Unlock()
 		return NewSendError()
 	}
+
+	wasEmpty := (p.incomingBuf.Size() == 0)
 
 	hookCtx := HookCtx{
 		Domain: p,
@@ -149,7 +144,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 	p.incomingBuf.Push(msg)
 	p.lock.Unlock()
 
-	if p.comp != nil {
+	if p.comp != nil && wasEmpty {
 		p.comp.NotifyRecv(p)
 	}
 
@@ -158,7 +153,7 @@ func (p *LimitNumMsgPort) Deliver(msg Msg) *SendError {
 
 // RetrieveIncoming is used by the component to take a message from the incoming
 // buffer
-func (p *LimitNumMsgPort) RetrieveIncoming() Msg {
+func (p *defaultPort) RetrieveIncoming() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -184,7 +179,7 @@ func (p *LimitNumMsgPort) RetrieveIncoming() Msg {
 
 // RetrieveOutgoing is used by the component to take a message from the outgoing
 // buffer
-func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
+func (p *defaultPort) RetrieveOutgoing() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -210,7 +205,7 @@ func (p *LimitNumMsgPort) RetrieveOutgoing() Msg {
 
 // PeekIncoming returns the first message in the incoming buffer without
 // removing it.
-func (p *LimitNumMsgPort) PeekIncoming() Msg {
+func (p *defaultPort) PeekIncoming() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -220,12 +215,13 @@ func (p *LimitNumMsgPort) PeekIncoming() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
 // removing it.
-func (p *LimitNumMsgPort) PeekOutgoing() Msg {
+func (p *defaultPort) PeekOutgoing() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -235,61 +231,47 @@ func (p *LimitNumMsgPort) PeekOutgoing() Msg {
 	}
 
 	msg := item.(Msg)
+
 	return msg
 }
 
 // NotifyAvailable is called by the connection to notify the port that the
 // connection is available again
-func (p *LimitNumMsgPort) NotifyAvailable() {
+func (p *defaultPort) NotifyAvailable() {
 	if p.comp != nil {
 		p.comp.NotifyPortFree(p)
 	}
 }
 
-// NewLimitNumMsgPort creates a new port that works for the provided component
-func NewLimitNumMsgPort(
+// NewPort creates a new port with default behavior.
+func NewPort(
 	comp Component,
-	capacity int,
+	incomingBufCap, outgoingBufCap int,
 	name string,
-) *LimitNumMsgPort {
-	p := new(LimitNumMsgPort)
+) Port {
+	p := new(defaultPort)
 	p.comp = comp
-	p.incomingBuf = NewBuffer(name+".IncomingBuf", capacity)
-	p.outgoingBuf = NewBuffer(name+".OutgoingBuf", capacity)
+	p.incomingBuf = NewBuffer(name+".IncomingBuf", incomingBufCap)
+	p.outgoingBuf = NewBuffer(name+".OutgoingBuf", outgoingBufCap)
 	p.name = name
+
 	return p
 }
 
-// NewLimitNumMsgPortWithExternalBuffer creates a new port that works for the
-// provided component and uses the provided buffer.
-func NewLimitNumMsgPortWithExternalBuffer(
-	comp Component,
-	buf Buffer,
-	name string,
-) *LimitNumMsgPort {
-	NameMustBeValid(name)
-
-	p := new(LimitNumMsgPort)
-	p.comp = comp
-	p.incomingBuf = buf
-	p.name = name
-	return p
-}
-
-func (p *LimitNumMsgPort) msgMustBeValid(msg Msg) {
+func (p *defaultPort) msgMustBeValid(msg Msg) {
 	portMustBeMsgSrc(p, msg)
-	dstMustNotBeNil(msg.Meta().Dst)
+	dstMustNotBeEmpty(msg.Meta().Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
 func portMustBeMsgSrc(port Port, msg Msg) {
-	if port != msg.Meta().Src {
+	if port.Name() != string(msg.Meta().Src) {
 		panic("sending port is not msg src")
 	}
 }
 
-func dstMustNotBeNil(port Port) {
-	if port == nil {
+func dstMustNotBeEmpty(port RemotePort) {
+	if port == "" {
 		panic("dst is not given")
 	}
 }

@@ -11,18 +11,21 @@ func Example_pingWithEvents() {
 	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
 	// agentB := NewPingAgent("AgentB", engine)
 	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+	conn := directconnection.MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("Conn")
 
-	conn.PlugIn(agentA.OutPort, 1)
-	conn.PlugIn(agentB.OutPort, 1)
+	conn.PlugIn(agentA.OutPort)
+	conn.PlugIn(agentB.OutPort)
 
 	e1 := StartPingEvent{
 		EventBase: sim.NewEventBase(1, agentA),
-		Dst:       agentB.OutPort,
+		Dst:       agentB.OutPort.AsRemote(),
 	}
 	e2 := StartPingEvent{
 		EventBase: sim.NewEventBase(3, agentA),
-		Dst:       agentB.OutPort,
+		Dst:       agentB.OutPort.AsRemote(),
 	}
 	engine.Schedule(e1)
 	engine.Schedule(e2)

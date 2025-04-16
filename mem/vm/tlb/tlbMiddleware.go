@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
@@ -19,12 +20,13 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	LowModule sim.Port
+	LowModule sim.RemotePort
 
 	numSets        int
 	numWays        int
 	pageSize       uint64
 	numReqPerCycle int
+	state          string
 
 	Sets []internal.Set
 
@@ -34,7 +36,7 @@ type Comp struct {
 	isPaused bool
 }
 
-// Reset sets all the entries int he TLB to be invalid
+//Reset sets all the entries in the TLB to be invalid
 func (c *Comp) reset() {
 	c.Sets = make([]internal.Set, c.numSets)
 	for i := 0; i < c.numSets; i++ {
@@ -47,34 +49,60 @@ func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
 
-type middleware struct {
+type tlbMiddleware struct {
 	*Comp
 }
 
-// Tick defines how TLB update states at each cycle
-func (m *middleware) Tick() bool {
-	madeProgress := false
+func (m *tlbMiddleware) Tick() bool {
+	madeProgress := m.performCtrlReq()
 
-	madeProgress = m.performCtrlReq() || madeProgress
+	switch m.state {
+	case "drain":
+		madeProgress = m.handleDrain() || madeProgress
 
-	if !m.isPaused {
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.respondMSHREntry() || madeProgress
-		}
+	case "pause":
+		// No action
 
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.lookup() || madeProgress
-		}
-
-		for i := 0; i < m.numReqPerCycle; i++ {
-			madeProgress = m.parseBottom() || madeProgress
-		}
+	default: // When state is enable or in initial state
+		madeProgress = m.handleEnable() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (m *middleware) respondMSHREntry() bool {
+// Handle enable state
+func (m *tlbMiddleware) handleEnable() bool {
+	madeProgress := false
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondMSHREntry() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.lookup() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottom() || madeProgress
+	}
+	return madeProgress
+}
+
+// Handle drain state
+func (m *tlbMiddleware) handleDrain() bool {
+	madeProgress := false
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondMSHREntry() || madeProgress
+	}
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottom() || madeProgress
+	}
+
+	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+		m.state = "pause"
+	}
+
+	return madeProgress
+}
+
+func (m *tlbMiddleware) respondMSHREntry() bool {
 	if m.respondingMSHREntry == nil {
 		return false
 	}
@@ -83,11 +111,12 @@ func (m *middleware) respondMSHREntry() bool {
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
 	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
 		Build()
+
 	err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
@@ -99,10 +128,11 @@ func (m *middleware) respondMSHREntry() bool {
 	}
 
 	tracing.TraceReqComplete(req, m.Comp)
+
 	return true
 }
 
-func (m *middleware) lookup() bool {
+func (m *tlbMiddleware) lookup() bool {
 	msg := m.topPort.PeekIncoming()
 	if msg == nil {
 		return false
@@ -118,6 +148,7 @@ func (m *middleware) lookup() bool {
 	setID := m.vAddrToSetID(req.VAddr)
 	set := m.Sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
+
 	if found && page.Valid {
 		return m.handleTranslationHit(req, setID, wayID, page)
 	}
@@ -125,12 +156,12 @@ func (m *middleware) lookup() bool {
 	return m.handleTranslationMiss(req)
 }
 
-func (m *middleware) handleTranslationHit(
+func (m *tlbMiddleware) handleTranslationHit(
 	req *vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-	ok := m.sendRspToTop(req, page)
+    ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
@@ -145,7 +176,7 @@ func (m *middleware) handleTranslationHit(
 	return true
 }
 
-func (m *middleware) handleTranslationMiss(
+func (m *tlbMiddleware) handleTranslationMiss(
 	req *vm.TranslationReq,
 ) bool {
 	if m.mshr.IsFull() {
@@ -156,23 +187,28 @@ func (m *middleware) handleTranslationMiss(
 	if fetched {
 		m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
-		tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "miss")
+		tracing.AddTaskStep(
+			tracing.MsgIDAtReceiver(req, m.Comp),
+			m.Comp,
+			"miss",
+		)
+
 		return true
 	}
 
 	return false
 }
 
-func (m *middleware) vAddrToSetID(vAddr uint64) (setID int) {
+func (m *tlbMiddleware) vAddrToSetID(vAddr uint64) (setID int) {
 	return int(vAddr / m.pageSize % uint64(m.numSets))
 }
 
-func (m *middleware) sendRspToTop(
+func (m *tlbMiddleware) sendRspToTop(
 	req *vm.TranslationReq,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithPage(page).
@@ -183,7 +219,7 @@ func (m *middleware) sendRspToTop(
 	return err == nil
 }
 
-func (m *middleware) processTLBMSHRHit(
+func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
 	req *vm.TranslationReq,
 ) bool {
@@ -191,19 +227,21 @@ func (m *middleware) processTLBMSHRHit(
 
 	m.topPort.RetrieveIncoming()
 	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
+	tracing.AddTaskStep(
+		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
 
 	return true
 }
 
-func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSrc(m.bottomPort).
+		WithSrc(m.bottomPort.AsRemote()).
 		WithDst(m.LowModule).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
 		Build()
+
 	err := m.bottomPort.Send(fetchBottom)
 	if err != nil {
 		return false
@@ -219,7 +257,7 @@ func (m *middleware) fetchBottom(req *vm.TranslationReq) bool {
 	return true
 }
 
-func (m *middleware) parseBottom() bool {
+func (m *tlbMiddleware) parseBottom() bool {
 	if m.respondingMSHREntry != nil {
 		return false
 	}
@@ -241,9 +279,11 @@ func (m *middleware) parseBottom() bool {
 	setID := m.vAddrToSetID(page.VAddr)
 	set := m.Sets[setID]
 	wayID, ok := m.Sets[setID].Evict()
+
 	if !ok {
 		panic("failed to evict")
 	}
+
 	set.Update(wayID, page)
 	set.Visit(wayID)
 
@@ -258,12 +298,11 @@ func (m *middleware) parseBottom() bool {
 	return true
 }
 
-func (m *middleware) performCtrlReq() bool {
+func (m *tlbMiddleware) performCtrlReq() bool {
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
-
 	item = m.controlPort.RetrieveIncoming()
 
 	switch req := item.(type) {
@@ -271,6 +310,14 @@ func (m *middleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
+    case *mem.ControlMsg:
+    	if req.Enable {
+    		m.state = "enable"
+    	} else if req.Drain {
+    		m.state = "drain"
+    	} else if req.Pause {
+    		m.state = "pause"
+    	}
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
@@ -278,14 +325,14 @@ func (m *middleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *middleware) visit(setID, wayID int) {
+func (m *tlbMiddleware) visit(setID, wayID int) {
 	set := m.Sets[setID]
 	set.Visit(wayID)
 }
 
-func (m *middleware) handleTLBFlush(req *FlushReq) bool {
+func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 	rsp := FlushRspBuilder{}.
-		WithSrc(m.controlPort).
+		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).
 		Build()
 
@@ -298,6 +345,7 @@ func (m *middleware) handleTLBFlush(req *FlushReq) bool {
 		setID := m.vAddrToSetID(vAddr)
 		set := m.Sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
+
 		if !found {
 			continue
 		}
@@ -308,12 +356,13 @@ func (m *middleware) handleTLBFlush(req *FlushReq) bool {
 
 	m.mshr.Reset()
 	m.isPaused = true
+
 	return true
 }
 
-func (m *middleware) handleTLBRestart(req *RestartReq) bool {
+func (m *tlbMiddleware) handleTLBRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
-		WithSrc(m.controlPort).
+		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).
 		Build()
 

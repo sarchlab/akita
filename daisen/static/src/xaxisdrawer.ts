@@ -7,12 +7,16 @@ class XAxisDrawer {
   _canvasWidth: number;
   _canvasHeight: number;
   _xScale: d3.ScaleLinear<number, number>;
+  _startTime: number;
+   _endTime: number;
 
   constructor() {
     this._axisHeight = 20;
     this._marginLeft = 0;
     this._canvas = null;
     this._xScale = null;
+    this._startTime = 0;
+    this._endTime = 0;
   }
 
   setCanvas(canvas: HTMLElement) {
@@ -38,6 +42,19 @@ class XAxisDrawer {
   setScale(scale: d3.ScaleLinear<number, number>) {
     this._xScale = scale;
     return this;
+  }
+
+  setTimeRange(startTime: number, endTime: number) {
+    this._startTime = startTime;
+    this._endTime = endTime;
+    this._updateScale();
+    return this;
+  }
+
+  _updateScale() {
+    this._xScale = d3.scaleLinear()
+      .domain([this._startTime, this._endTime])
+      .range([this._marginLeft, this._canvasWidth - this._marginLeft]);
   }
 
   renderTop(yOffset = 0) {
@@ -90,6 +107,55 @@ class XAxisDrawer {
 
     return this;
   }
+
+  renderCustom(yOffset: number) {
+    const xAxis = d3.axisBottom(this._xScale);
+    const svg = d3.select(this._canvas).select("svg");
+    let xAxisGroup = svg.select(".x-axis-custom");
+    let rect = null;
+    if (xAxisGroup.empty()) {
+      xAxisGroup = svg.append("g").attr("class", "x-axis-custom");
+      rect = xAxisGroup.append("rect");
+    } else {
+      rect = xAxisGroup.select("rect");
+    }
+  
+    const safeYOffset = Math.min(yOffset, this._canvasHeight - this._axisHeight);
+
+    xAxisGroup
+      .attr("transform", `translate(${this._marginLeft}, ${yOffset})`)
+      .call(xAxis.ticks(12, "s"));
+
+    const tickValues = this._xScale.ticks(12);
+    const dashedLines = xAxisGroup.selectAll(".tick-line")
+      .data(tickValues);
+
+    dashedLines.enter()
+    .append("line")
+    .attr("class", "tick-line")
+    .merge(dashedLines as any)
+    .attr("x1", d => this._xScale(d))
+    .attr("x2", d => this._xScale(d))
+    .attr("y1", -safeYOffset)
+    .attr("y2", this._canvasHeight - safeYOffset)
+    .attr("stroke", "#000")
+    .attr("stroke-dasharray", "3,3")
+    .attr("opacity", 0.5);
+
+    dashedLines.exit().remove();
+    xAxisGroup.selectAll("path").attr("stroke", "black");
+    xAxisGroup.selectAll("line").attr("stroke", "black");
+    xAxisGroup.selectAll("text")
+      .attr("fill", "black")
+      .attr("font-size", "12px");
+    rect
+      .attr("fill", "none") 
+      .attr("height", this._axisHeight)
+      .attr("width", this._canvasWidth)
+      .attr("x", 0)
+      .attr("y", -this._axisHeight); 
+  }
+  
 }
 
 export default XAxisDrawer;

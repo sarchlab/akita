@@ -132,7 +132,8 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 	return c
 }
 
-// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels in the network.
+// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels
+// in the network.
 func (c Connector) WithPerfAnalyzer(
 	a *analysis.PerfAnalyzer,
 ) Connector {
@@ -225,7 +226,9 @@ func (c *Connector) ConnectDevice(
 
 	epNode := c.createEndPoint(ports, param, swNode)
 	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
-	c.createRemoteInfoFoEP(epNode, swNode, epNode.endPoint.NetworkPort, swPort, conn)
+	c.createRemoteInfoFoEP(
+		epNode, swNode, epNode.endPoint.NetworkPort, swPort, conn,
+	)
 }
 
 // ConnectDeviceWithEPName connects a few ports that belongs to the device to a
@@ -271,8 +274,9 @@ func (c *Connector) createEndPointWithName(
 		tracing.CollectTrace(endPoint, c.visTracer)
 	}
 
-	epPort := sim.NewLimitNumMsgPort(endPoint,
+	epPort := sim.NewPort(endPoint,
 		param.DeviceEndParam.IncomingBufSize,
+		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
 	endPoint.NetworkPort = epPort
 
@@ -298,14 +302,15 @@ func (c *Connector) createEndPoint(
 func (c *Connector) connectEndPointWithSwitch(
 	swNode *switchNode, endPoint *endpoint.Comp,
 	param DeviceToSwitchLinkParameter,
-) (*sim.LimitNumMsgPort, namedHookableConnection) {
+) (sim.Port, namedHookableConnection) {
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort
 
-	swPort := sim.NewLimitNumMsgPort(sw,
+	swPort := sim.NewPort(sw,
 		param.SwitchEndParam.IncomingBufSize,
+		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
-	endPoint.DefaultSwitchDst = swPort
+	endPoint.DefaultSwitchDst = swPort.AsRemote()
 	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).
@@ -313,11 +318,7 @@ func (c *Connector) connectEndPointWithSwitch(
 		WithNumOutputChannel(param.SwitchEndParam.NumOutputChannel).
 		AddPort()
 
-	conn := c.connectPorts(epPort, swPort,
-		param.DeviceEndParam.OutgoingBufSize,
-		param.SwitchEndParam.OutgoingBufSize,
-		param.LinkParam,
-	)
+	conn := c.connectPorts(epPort, swPort, param.LinkParam)
 
 	return swPort, conn
 }
@@ -345,27 +346,22 @@ func (c *Connector) createRemoteInfoFoEP(
 
 func (c *Connector) connectPorts(
 	left, right sim.Port,
-	leftBufSize, rightBufSize int,
 	linkParam LinkParameter,
 ) (conn namedHookableConnection) {
 	connName := fmt.Sprintf("%s.Conn[%d]", c.name, c.connectionCount)
 	c.connectionCount++
 
 	if linkParam.IsIdeal {
-		conn = directconnection.MakeBuilder().WithEngine(c.engine).WithFreq(c.defaultFreq).Build(connName)
+		conn = directconnection.MakeBuilder().
+			WithEngine(c.engine).
+			WithFreq(c.defaultFreq).
+			Build(connName)
 	} else {
 		panic("non-ideal (with latency) connection is not implemented.")
-		// conn = messaging.MakeChannelBuilder().
-		// 	WithEngine(c.engine).
-		// 	WithPipelineParameters(
-		// 		linkParam.NumStage,
-		// 		linkParam.CyclePerStage,
-		// 		linkParam.PipelineWidth).
-		// 	WithFreq(linkParam.Frequency).
-		// 	Build(connName)
 	}
-	conn.PlugIn(left, leftBufSize)
-	conn.PlugIn(right, rightBufSize)
+
+	conn.PlugIn(left)
+	conn.PlugIn(right)
 
 	if c.monitor != nil {
 		c.monitor.RegisterComponent(conn)
@@ -396,23 +392,30 @@ func (c *Connector) ConnectSwitches(
 	leftNode := c.switches[leftSwitchID]
 	leftSwitch := leftNode.sw
 	leftPortName := leftSwitch.Name() + "." + param.LeftEndParam.PortName
+
 	if param.LeftEndParam.PortName == "" {
 		leftPortName = fmt.Sprintf("%s.Port%d",
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
-	leftPort = sim.NewLimitNumMsgPort(leftSwitch,
+
+	leftPort = sim.NewPort(leftSwitch,
 		param.LeftEndParam.IncomingBufSize,
+		param.LeftEndParam.OutgoingBufSize,
 		leftPortName)
 
 	rightNode := c.switches[rightSwitchID]
 	rightSwitch := rightNode.sw
 	rightPortName := rightSwitch.Name() + "." + param.RightEndParam.PortName
+
 	if param.RightEndParam.PortName == "" {
 		rightPortName = fmt.Sprintf("%s.Port%d",
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
-	rightPort = sim.NewLimitNumMsgPort(rightSwitch,
-		param.RightEndParam.IncomingBufSize, rightPortName)
+
+	rightPort = sim.NewPort(rightSwitch,
+		param.RightEndParam.IncomingBufSize,
+		param.RightEndParam.OutgoingBufSize,
+		rightPortName)
 
 	switches.MakeSwitchPortAdder(leftSwitch).
 		WithPorts(leftPort, rightPort).
@@ -428,10 +431,7 @@ func (c *Connector) ConnectSwitches(
 		WithNumOutputChannel(param.RightEndParam.NumOutputChannel).
 		AddPort()
 
-	conn := c.connectPorts(leftPort, rightPort,
-		param.LeftEndParam.OutgoingBufSize,
-		param.RightEndParam.OutgoingBufSize,
-		param.LinkParam)
+	conn := c.connectPorts(leftPort, rightPort, param.LinkParam)
 
 	c.createRemoteInfo(leftNode, rightNode, leftPort, rightPort, conn)
 
@@ -450,6 +450,7 @@ func (c *Connector) createRemoteInfo(
 		RemotePort: rightPort,
 		Link:       conn,
 	})
+
 	rightNode.remotes = append(rightNode.remotes, Remote{
 		LocalNode:  rightNode,
 		LocalPort:  rightPort,
@@ -467,7 +468,6 @@ func (c *Connector) EstablishRoute() {
 
 	nodes := c.createRoutingNodeList()
 	c.router.EstablishRoute(nodes)
-	// c.dumpRoute()
 }
 
 func (c *Connector) createRoutingNodeList() []Node {

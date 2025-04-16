@@ -17,6 +17,7 @@ func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
 	evt.handler = handler
 	evt.time = time
 	evt.secondary = false
+
 	return evt
 }
 
@@ -82,9 +83,11 @@ func (t *TickScheduler) TickNow() {
 
 	t.nextTickTime = t.Freq.ThisTick(time)
 	tick := MakeTickEvent(t.handler, t.nextTickTime)
+
 	if t.secondary {
 		tick.secondary = true
 	}
+
 	t.Engine.Schedule(tick)
 	t.lock.Unlock()
 }
@@ -101,9 +104,11 @@ func (t *TickScheduler) TickLater() {
 
 	t.nextTickTime = time
 	tick := MakeTickEvent(t.handler, t.nextTickTime)
+
 	if t.secondary {
 		tick.secondary = true
 	}
+
 	t.Engine.Schedule(tick)
 	t.lock.Unlock()
 }
@@ -142,6 +147,7 @@ func (c *TickingComponent) Handle(e Event) error {
 	if madeProgress {
 		c.TickLater()
 	}
+
 	return nil
 }
 
@@ -156,6 +162,7 @@ func NewTickingComponent(
 	tc.TickScheduler = NewTickScheduler(tc, engine, freq)
 	tc.ComponentBase = NewComponentBase(name)
 	tc.ticker = ticker
+
 	return tc
 }
 
@@ -170,5 +177,6 @@ func NewSecondaryTickingComponent(
 	tc.TickScheduler = NewSecondaryTickScheduler(tc, engine, freq)
 	tc.ComponentBase = NewComponentBase(name)
 	tc.ticker = ticker
+
 	return tc
 }

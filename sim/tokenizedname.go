@@ -21,9 +21,11 @@ type NameToken struct {
 func ParseName(sname string) Name {
 	tokens := strings.Split(sname, ".")
 	name := Name{Tokens: make([]NameToken, len(tokens))}
+
 	for i, token := range tokens {
 		name.Tokens[i] = parseNameToken(token)
 	}
+
 	return name
 }
 
@@ -34,6 +36,7 @@ func parseNameToken(token string) NameToken {
 	elemName := ts[0]
 
 	indices := make([]int, len(ts)-1)
+
 	for i := 1; i < len(ts); i++ {
 		index, err := strconv.Atoi(ts[i][0 : len(ts[i])-1])
 		if err != nil {
@@ -48,6 +51,7 @@ func parseNameToken(token string) NameToken {
 
 func bracketMustMatch(name string) {
 	openBracketCount := 0
+
 	for _, c := range name {
 		if c == '[' {
 			openBracketCount++
@@ -66,12 +70,12 @@ func bracketMustMatch(name string) {
 
 // NameMustBeValid panics if the name does not follow the naming convention.
 // There are several rules that a name must follow.
-// 1. It must be organized in a hierarchical structure. For example, a name
-//    "A.B.C" is valid, but "A.B.C." is not.
-// 2. Individual names must not be empty. For example, "A..B" is not valid.
-// 3. Individual names must be named as capitalized CamelCase style.
-//    For example, "A.b" is not valid.
-// 4. Elements in a series must be named using square-bracket notation.
+//  1. It must be organized in a hierarchical structure. For example, a name
+//     "A.B.C" is valid, but "A.B.C." is not.
+//  2. Individual names must not be empty. For example, "A..B" is not valid.
+//  3. Individual names must be named as capitalized CamelCase style.
+//     For example, "A.b" is not valid.
+//  4. Elements in a series must be named using square-bracket notation.
 func NameMustBeValid(name string) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -114,12 +118,14 @@ func BuildName(parentName, elementName string) string {
 	return parentName + "." + elementName
 }
 
-// BuildNameWithIndex builds a name from a parent name, an element name and an index.
+// BuildNameWithIndex builds a name from a parent name, an element name and an
+// index.
 func BuildNameWithIndex(parentName, elementName string, index int) string {
 	return BuildName(parentName, elementName+"["+strconv.Itoa(index)+"]")
 }
 
-// BuildNameWithMultiDimensionalIndex builds a name from a parent name, an element name and a multi-dimensional index.
+// BuildNameWithMultiDimensionalIndex builds a name from a parent name, an
+// element name and a multi-dimensional index.
 func BuildNameWithMultiDimensionalIndex(
 	parentName, elementName string,
 	index []int,

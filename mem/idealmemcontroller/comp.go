@@ -50,3 +50,4 @@ type Comp struct {
 func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
+

@@ -25,6 +25,7 @@ func NewEventQueue() *EventQueueImpl {
 	q := new(EventQueueImpl)
 	q.events = make([]Event, 0)
 	heap.Init(&q.events)
+
 	return q
 }
 
@@ -40,6 +41,7 @@ func (q *EventQueueImpl) Pop() Event {
 	q.Lock()
 	e := heap.Pop(&q.events).(Event)
 	q.Unlock()
+
 	return e
 }
 
@@ -48,6 +50,7 @@ func (q *EventQueueImpl) Len() int {
 	q.Lock()
 	l := q.events.Len()
 	q.Unlock()
+
 	return l
 }
 
@@ -57,6 +60,7 @@ func (q *EventQueueImpl) Peek() Event {
 	q.Lock()
 	evt := q.events[0]
 	q.Unlock()
+
 	return evt
 }
 
@@ -90,6 +94,7 @@ func (h *eventHeap) Pop() interface{} {
 	n := len(old)
 	event := old[n-1]
 	*h = old[0 : n-1]
+
 	return event
 }
 
@@ -103,6 +108,7 @@ type InsertionQueue struct {
 func NewInsertionQueue() *InsertionQueue {
 	q := new(InsertionQueue)
 	q.l = list.New()
+
 	return q
 }
 
@@ -125,6 +131,7 @@ func (q *InsertionQueue) Push(evt Event) {
 	} else {
 		q.l.PushBack(evt)
 	}
+
 	q.lock.Unlock()
 }
 
@@ -133,6 +140,7 @@ func (q *InsertionQueue) Pop() Event {
 	q.lock.Lock()
 	evt := q.l.Remove(q.l.Front())
 	q.lock.Unlock()
+
 	return evt.(Event)
 }
 
@@ -141,6 +149,7 @@ func (q *InsertionQueue) Len() int {
 	q.lock.RLock()
 	l := q.l.Len()
 	q.lock.RUnlock()
+
 	return l
 }
 
@@ -149,6 +158,8 @@ func (q *InsertionQueue) Len() int {
 func (q *InsertionQueue) Peek() Event {
 	q.lock.RLock()
 	evt := q.l.Front().Value.(Event)
+
 	q.lock.RUnlock()
+
 	return evt
 }

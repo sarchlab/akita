@@ -26,8 +26,8 @@ type defaultSubTransSplitter struct {
 func (s *defaultSubTransSplitter) Split(t *signal.Transaction) {
 	addr, size := s.align(t)
 	endAddr := addr + size
-
 	unitSize := uint64(1 << s.log2AccessUnitSize)
+
 	for addr < endAddr {
 		st := &signal.SubTransaction{
 			ID:          sim.GetIDGenerator().Generate(),

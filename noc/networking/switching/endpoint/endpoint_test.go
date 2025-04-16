@@ -34,8 +34,20 @@ var _ = Describe("End Point", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
 		devicePort = NewMockPort(mockCtrl)
+		devicePort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("DevicePort")).
+			AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
+		networkPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("NetworkPort")).
+			AnyTimes()
 		defaultSwitchPort = NewMockPort(mockCtrl)
+		defaultSwitchPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("DefaultSwitchPort")).
+			AnyTimes()
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
 
@@ -46,7 +58,7 @@ var _ = Describe("End Point", func() {
 			WithDevicePorts([]sim.Port{devicePort}).
 			Build("EndPoint")
 		endPoint.NetworkPort = networkPort
-		endPoint.DefaultSwitchDst = defaultSwitchPort
+		endPoint.DefaultSwitchDst = defaultSwitchPort.AsRemote()
 	})
 
 	AfterEach(func() {
@@ -55,7 +67,7 @@ var _ = Describe("End Point", func() {
 
 	It("should send flits", func() {
 		msg := &sampleMsg{}
-		msg.Src = devicePort
+		msg.Src = devicePort.AsRemote()
 		msg.TrafficBytes = 33
 
 		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
@@ -68,8 +80,8 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.Src).To(Equal(networkPort))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort))
+			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(0))
 			Expect(flit.NumFlitInMsg).To(Equal(2))
 			Expect(flit.Msg).To(BeIdenticalTo(msg))
@@ -80,8 +92,8 @@ var _ = Describe("End Point", func() {
 		Expect(madeProgress).To(BeTrue())
 
 		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.Src).To(Equal(networkPort))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort))
+			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(1))
 			Expect(flit.NumFlitInMsg).To(Equal(2))
 			Expect(flit.Msg).To(BeIdenticalTo(msg))
@@ -98,7 +110,7 @@ var _ = Describe("End Point", func() {
 
 	It("should receive message", func() {
 		msg := &sampleMsg{}
-		msg.Dst = devicePort
+		msg.Dst = devicePort.AsRemote()
 
 		flit0 := messaging.FlitBuilder{}.
 			WithSeqID(0).

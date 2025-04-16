@@ -10,8 +10,10 @@ type Builder struct {
 	numSets        int
 	numWays        int
 	pageSize       uint64
-	lowModule      sim.Port
+	lowModule      sim.RemotePort
 	numMSHREntry   int
+	state          string
+	latency        int
 }
 
 // MakeBuilder returns a Builder
@@ -23,6 +25,8 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
+		state:          "enable",
+		latency:        4,
 	}
 }
 
@@ -67,7 +71,7 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of tlb miss.
-func (b Builder) WithLowModule(lowModule sim.Port) Builder {
+func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
 	b.lowModule = lowModule
 	return b
 }
@@ -76,6 +80,11 @@ func (b Builder) WithLowModule(lowModule sim.Port) Builder {
 func (b Builder) WithNumMSHREntry(num int) Builder {
 	b.numMSHREntry = num
 	return b
+}
+
+func (b Builder) WithLatency(cycles int) Builder{
+    b.latency = cycles
+    return b
 }
 
 // Build creates a new TLB
@@ -95,22 +104,27 @@ func (b Builder) Build(name string) *Comp {
 
 	tlb.reset()
 
-	middleware := &middleware{Comp: tlb}
+	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
+	tlb.AddMiddleware(ctrlMiddleware)
+
+	middleware := &tlbMiddleware{Comp: tlb}
 	tlb.AddMiddleware(middleware)
 
 	return tlb
 }
 
 func (b Builder) createPorts(name string, c *Comp) {
-	c.topPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.topPort = sim.NewPort(c,
+		b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = sim.NewLimitNumMsgPort(c, b.numReqPerCycle,
+	c.bottomPort = sim.NewPort(c,
+		b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = sim.NewLimitNumMsgPort(c, 1,
+	c.controlPort = sim.NewPort(c, 1, 1,
 		name+".ControlPort")
 	c.AddPort("Control", c.controlPort)
 }

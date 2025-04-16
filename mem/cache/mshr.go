@@ -23,6 +23,7 @@ type MSHREntry struct {
 func NewMSHREntry() *MSHREntry {
 	e := new(MSHREntry)
 	e.Requests = make([]interface{}, 0)
+
 	return e
 }
 
@@ -40,6 +41,7 @@ type MSHR interface {
 func NewMSHR(capacity int) MSHR {
 	m := new(mshrImpl)
 	m.capacity = capacity
+
 	return m
 }
 
@@ -65,6 +67,7 @@ func (m *mshrImpl) Add(pid vm.PID, addr uint64) *MSHREntry {
 	entry.PID = pid
 	entry.Address = addr
 	m.entries = append(m.entries, entry)
+
 	return entry
 }
 
@@ -74,6 +77,7 @@ func (m *mshrImpl) Query(pid vm.PID, addr uint64) *MSHREntry {
 			return e
 		}
 	}
+
 	return nil
 }
 
@@ -84,6 +88,7 @@ func (m *mshrImpl) Remove(pid vm.PID, addr uint64) *MSHREntry {
 			return e
 		}
 	}
+
 	panic("trying to remove an non-exist entry")
 }
 

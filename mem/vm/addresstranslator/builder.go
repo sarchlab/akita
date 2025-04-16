@@ -9,9 +9,9 @@ import (
 type Builder struct {
 	engine              sim.Engine
 	freq                sim.Freq
-	translationProvider sim.Port
+	translationProvider sim.RemotePort
 	ctrlPort            sim.Port
-	lowModuleFinder     mem.LowModuleFinder
+	addressToPortMapper mem.AddressToPortMapper
 	numReqPerCycle      int
 	log2PageSize        uint64
 	deviceID            uint64
@@ -41,15 +41,15 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 
 // WithTranslationProvider sets the port that can provide the translation
 // service. The port must be a port on a TLB or an MMU.
-func (b Builder) WithTranslationProvider(p sim.Port) Builder {
+func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
 	b.translationProvider = p
 	return b
 }
 
-// WithLowModuleFinder sets the low modules finder that can tell the address
+// WithAddressToPortMapper sets the low modules finder that can tell the address
 // translators where to send the memory access request to.
-func (b Builder) WithLowModuleFinder(f mem.LowModuleFinder) Builder {
-	b.lowModuleFinder = f
+func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
+	b.addressToPortMapper = f
 	return b
 }
 
@@ -87,7 +87,7 @@ func (b Builder) Build(name string) *Comp {
 	b.createPorts(name, t)
 
 	t.translationProvider = b.translationProvider
-	t.lowModuleFinder = b.lowModuleFinder
+	t.addressToPortMapper = b.addressToPortMapper
 	t.numReqPerCycle = b.numReqPerCycle
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
@@ -99,18 +99,18 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.topPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	t.AddPort("Top", t.topPort)
 
-	t.bottomPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.bottomPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	t.AddPort("Bottom", t.bottomPort)
 
-	t.translationPort = sim.NewLimitNumMsgPort(t, b.numReqPerCycle,
+	t.translationPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TranslationPort")
 	t.AddPort("Translation", t.translationPort)
 
-	t.ctrlPort = sim.NewLimitNumMsgPort(t, 1, name+".CtrlPort")
+	t.ctrlPort = sim.NewPort(t, 1, 1, name+".CtrlPort")
 	t.AddPort("Control", t.ctrlPort)
 }

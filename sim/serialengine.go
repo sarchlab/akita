@@ -42,6 +42,7 @@ func (e *SerialEngine) Schedule(evt Event) {
 
 	if evt.IsSecondary() {
 		e.secondaryQueue.Push(evt)
+
 		return
 	}
 
@@ -52,6 +53,7 @@ func (e *SerialEngine) readNow() VTimeInSec {
 	e.timeLock.RLock()
 	t := e.time
 	e.timeLock.RUnlock()
+
 	return t
 }
 
@@ -75,12 +77,14 @@ func (e *SerialEngine) Run() error {
 
 		evt := e.nextEvent()
 		now := e.readNow()
+
 		if evt.Time() < now {
 			log.Panicf(
 				"cannot run event in the past, evt %s @ %.10f, now %.10f",
 				reflect.TypeOf(evt), evt.Time(), now,
 			)
 		}
+
 		e.writeNow(evt.Time())
 
 		hookCtx := HookCtx{
@@ -122,6 +126,7 @@ func (e *SerialEngine) nextEvent() Event {
 	}
 
 	e.secondaryQueue.Pop()
+
 	return secondaryEvt
 }
 

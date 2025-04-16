@@ -20,5 +20,6 @@ func NewTransferEvent(
 	evt.EventBase = sim.NewEventBase(time, handler)
 	evt.msg = msg
 	evt.vc = vc
+
 	return evt
 }

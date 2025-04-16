@@ -26,9 +26,23 @@ var _ = Describe("Control Stage", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		ctrlPort = NewMockPort(mockCtrl)
+		ctrlPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("CtrlPort")).
+			AnyTimes()
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+
 		directory = NewMockDirectory(mockCtrl)
 		inBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)

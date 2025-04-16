@@ -23,8 +23,14 @@ func (b Builder) WithFreq(f sim.Freq) Builder {
 }
 
 func (b Builder) Build(name string) *Comp {
-	c := &Comp{}
-	c.TickingComponent = sim.NewSecondaryTickingComponent(name, b.engine, b.freq, c)
+	c := &Comp{
+		ports: ports{
+			ports:   make([]sim.Port, 0),
+			portMap: make(map[sim.RemotePort]int),
+		},
+	}
+	c.TickingComponent = sim.NewSecondaryTickingComponent(
+		name, b.engine, b.freq, c)
 
 	middleware := &middleware{
 		Comp: c,

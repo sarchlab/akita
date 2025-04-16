@@ -32,7 +32,9 @@ var (
 
 func main() {
 	parseArgs()
+
 	fs = static.GetAssets()
+
 	startServer()
 }
 

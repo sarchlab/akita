@@ -16,14 +16,14 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	numReqPerCycle   int
-	log2BlockSize    uint64
-	storage          *mem.Storage
-	directory        cache.Directory
-	mshr             cache.MSHR
-	bankLatency      int
-	wayAssociativity int
-	lowModuleFinder  mem.LowModuleFinder
+	numReqPerCycle      int
+	log2BlockSize       uint64
+	storage             *mem.Storage
+	directory           cache.Directory
+	mshr                cache.MSHR
+	bankLatency         int
+	wayAssociativity    int
+	addressToPortMapper mem.AddressToPortMapper
 
 	dirBuf   sim.Buffer
 	bankBufs []sim.Buffer
@@ -46,10 +46,10 @@ func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
 
-// SetLowModuleFinder sets the finder that tells which remote port can serve
+// SetAddressToPortMapper sets the finder that tells which remote port can serve
 // the data on a certain address.
-func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
-	c.lowModuleFinder = lmf
+func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
+	c.addressToPortMapper = lmf
 }
 
 type middleware struct {
@@ -76,6 +76,7 @@ func (m *middleware) runPipeline() bool {
 	madeProgress = m.tickBankStage() || madeProgress
 	madeProgress = m.tickDirectoryStage() || madeProgress
 	madeProgress = m.tickCoalesceState() || madeProgress
+
 	return madeProgress
 }
 
@@ -84,6 +85,7 @@ func (m *middleware) tickRespondStage() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondStage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 
@@ -102,6 +104,7 @@ func (m *middleware) tickBankStage() bool {
 	for _, bs := range m.bankStages {
 		madeProgress = bs.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 
@@ -110,6 +113,7 @@ func (m *middleware) tickDirectoryStage() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.directoryStage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 

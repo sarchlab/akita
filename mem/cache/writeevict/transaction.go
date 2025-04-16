@@ -39,6 +39,7 @@ func (t *transaction) Address() uint64 {
 	if t.read != nil {
 		return t.read.Address
 	}
+
 	return t.write.Address
 }
 
@@ -46,5 +47,6 @@ func (t *transaction) PID() vm.PID {
 	if t.read != nil {
 		return t.read.PID
 	}
+
 	return t.write.PID
 }

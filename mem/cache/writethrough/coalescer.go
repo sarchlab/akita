@@ -34,41 +34,19 @@ func (c *coalescer) processReq(
 		return false
 	}
 
-	switch item := req.(type) {
-	case *mem.GL0InvalidateReq:
-		return c.processGL0InvalidateReq(item)
-	}
-
 	if c.isReqLastInWave(req) {
 		if len(c.toCoalesce) == 0 || c.canReqCoalesce(req) {
 			return c.processReqLastInWaveCoalescable(req)
 		}
+
 		return c.processReqLastInWaveNoncoalescable(req)
 	}
 
 	if len(c.toCoalesce) == 0 || c.canReqCoalesce(req) {
 		return c.processReqCoalescable(req)
 	}
+
 	return c.processReqNoncoalescable(req)
-}
-
-func (c *coalescer) processGL0InvalidateReq(
-	req *mem.GL0InvalidateReq,
-) bool {
-	c.cache.directory.Reset()
-
-	rsp := mem.GL0InvalidateRspBuilder{}.
-		WithPID(req.GetPID()).
-		WithSrc(c.cache.topPort).
-		WithDst(req.Meta().Src).
-		Build()
-
-	err := c.cache.topPort.Send(rsp)
-	if err == nil {
-		c.cache.topPort.RetrieveIncoming()
-		return true
-	}
-	return false
 }
 
 func (c *coalescer) processReqCoalescable(
@@ -80,6 +58,7 @@ func (c *coalescer) processReqCoalescable(
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, c.cache)
+
 	return true
 }
 
@@ -98,6 +77,7 @@ func (c *coalescer) processReqNoncoalescable(
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, c.cache)
+
 	return true
 }
 
@@ -115,6 +95,7 @@ func (c *coalescer) processReqLastInWaveCoalescable(
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, c.cache)
+
 	return true
 }
 
@@ -124,6 +105,7 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
+
 	c.coalesceAndSend()
 
 	if !c.cache.dirBuf.CanPush() {
@@ -137,6 +119,7 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, c.cache)
+
 	return true
 }
 
@@ -146,11 +129,13 @@ func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
 		t := &transaction{
 			read: req,
 		}
+
 		return t
 	case *mem.WriteReq:
 		t := &transaction{
 			write: req,
 		}
+
 		return t
 	default:
 		log.Panicf("cannot process request of type %s\n", reflect.TypeOf(req))
@@ -191,6 +176,7 @@ func (c *coalescer) coalesceAndSend() bool {
 			c.cache.Name()+".Local",
 			nil)
 	}
+
 	c.cache.dirBuf.Push(trans)
 	c.cache.postCoalesceTransactions =
 		append(c.cache.postCoalesceTransactions, trans)
@@ -207,6 +193,7 @@ func (c *coalescer) coalesceRead() *transaction {
 		WithByteSize(blockSize).
 		WithPID(c.toCoalesce[0].PID()).
 		Build()
+
 	return &transaction{
 		id:                      sim.GetIDGenerator().Generate(),
 		read:                    coalescedRead,
@@ -227,6 +214,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 	for _, t := range c.toCoalesce {
 		w := t.write
 		offset := int(w.Address - cachelineID)
+
 		for i := 0; i < len(w.Data); i++ {
 			if w.DirtyMask == nil || w.DirtyMask[i] {
 				write.Data[i+offset] = w.Data[i]
@@ -234,6 +222,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 			}
 		}
 	}
+
 	return &transaction{
 		id:                      sim.GetIDGenerator().Generate(),
 		write:                   write,
