@@ -110,9 +110,9 @@ func (b Builder) Build(
 	funcMiddleware := &memMiddleware{Comp: c}
 	c.AddMiddleware(funcMiddleware)
 
-	c.topPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
 	c.AddPort("Top", c.topPort)
-	c.ctrlPort = sim.NewLimitNumMsgPort(c, b.topBufSize, name+".CtrlPort")
+	c.ctrlPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".CtrlPort")
 	c.AddPort("Control", c.ctrlPort)
 
 	return c

@@ -134,7 +134,7 @@ func (m *memMiddleware) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		WithData(data).
@@ -159,7 +159,7 @@ func (m *memMiddleware) handleWriteRespondEvent(e *writeRespondEvent) error {
 	req := e.req
 
 	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort).
+		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
 		WithRspTo(req.ID).
 		Build()
