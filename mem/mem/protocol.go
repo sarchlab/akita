@@ -411,10 +411,6 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 type ControlMsg struct {
 	sim.MsgMeta
 
-	Enable             bool
-	Drain              bool
-	Flush              bool
-	Invalid            bool
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
@@ -492,7 +488,6 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	b.notifyDone = true
 	return b
 }
-
 
 // WithCtrlInfo sets the enable bit of the control messages to 1.
 func (b ControlMsgBuilder) WithCtrlInfo(
