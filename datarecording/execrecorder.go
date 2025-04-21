@@ -42,6 +42,8 @@ func (e *execRecorder) Start() {
 
 // End writes data into SQLite along with program exit time.
 func (e *execRecorder) End() {
+	setupTable(e)
+
 	for _, entry := range e.entries {
 		e.recorder.InsertData(e.tablename, entry)
 	}
@@ -58,11 +60,12 @@ func (e *execRecorder) End() {
 
 // NewExecRecorderWithWriter creates a new ExecRecorder with given writer
 func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
+	entrySlice := []execInfo{}
+
 	e := &execRecorder{
 		recorder: writer,
+		entries:  entrySlice,
 	}
-
-	setupTable(e)
 
 	return e
 }

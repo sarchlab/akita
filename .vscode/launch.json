@@ -1,105 +1,18 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
+    "name": "Debug Example() in example_test.go",
+    "type": "go",
+    "request": "launch",
+    "mode": "test",
+    "program": "${workspaceFolder}",  
+    "args": [
+      "-test.run", "^Example$"
+    ],
+    // optional: set cwd if your code is in a subfolder
+    // "cwd": "${workspaceFolder}/path/to/your/package",
+    "env": {},
+    "buildFlags": "",
     "configurations": [
-        {
-            "name": "Test github.com/sarchlab/akita/monitoring",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/monitoring"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/sim",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/sim"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/sim/directconnection",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/sim/directconnection"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/mem/datamover",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/mem/datamover"
-        },
-        {
-            "name": "Test github.com/sarchlab/analysis",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/analysis"
-        },
-        {
-            "name": "Test gitlab.com/akita/v3/sim/bottleneckanalysis",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/sim/bottleneckanalysis"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/mem/vm/tlb",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/mem/vm/tlb"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/noc/networking/switching/endpoint",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/noc/networking/switching/endpoint"
-        },
-        {
-            "name": "Test github.com/sarchlab/akita/v4/noc/networking/switching/switches",
-            "type": "go",
-            "request": "launch",
-            "mode": "test",
-            "program": "${workspaceFolder}/noc/networking/switching/switches"
-        },
-        {
-            "name": "noc/acceptance/one_on_one",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/noc/acceptance/one_to_one"
-        },
-        {
-            "name": "noc/acceptance/dgx_single_random",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/noc/acceptance/dgx_single_random"
-        },
-        {
-            "name": "noc/acceptance/mesh",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/noc/acceptance/mesh"
-        },
-        {
-            "name": "Daisen Server",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/daisen",
-            "args": [
-                "-csv=sample_trace_small.csv"
-            ],
-            "env": {
-                "AKITA_DAISEN_DEV_SERVER": "http://localhost:5173"
-            }
-        },
+    
     ]
-}
+  }
+  
