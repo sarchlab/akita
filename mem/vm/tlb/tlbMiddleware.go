@@ -3,13 +3,13 @@ package tlb
 import (
 	"log"
 	"reflect"
-	"fmt"
 
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/pipelining"
 )
 
 // Comp is a cache(TLB) that maintains some page information.
@@ -35,6 +35,9 @@ type Comp struct {
 	respondingMSHREntry *mshrEntry
 
 	isPaused bool
+
+	pipeline pipelining.Pipeline
+	//pipelineBuf sim.Buffer
 }
 
 //Reset sets all the entries in the TLB to be invalid
@@ -80,6 +83,10 @@ func (m *tlbMiddleware) handleEnable() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
 	}
+
+	madeProgress = m.pipeline.Tick() || madeProgress
+	madeProgress = m.sendFromPipeline() || madeProgress
+
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
@@ -95,6 +102,9 @@ func (m *tlbMiddleware) handleDrain() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+    madeProgress = m.pipeline.Tick() || madeProgress
+    madeProgress = m.sendFromPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
@@ -162,17 +172,29 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-    ok := m.sendRspToTop(req, page)
+    /*ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
-	}
+	}*/
+	if !m.pipeline.CanAccept() {
+        return false
+    }
+
+    rsp := vm.TranslationRspBuilder{}.
+    		WithSrc(m.topPort.AsRemote()).
+    		WithDst(req.Src).
+    		WithRspTo(req.ID).
+    		WithPage(page).
+    		Build()
+
+    m.pipeline.Accept(rsp)
 
 	m.visit(setID, wayID)
 	m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
-	tracing.TraceReqComplete(req, m.Comp)
+	//tracing.TraceReqComplete(req, m.Comp)
 
 	return true
 }
@@ -219,6 +241,19 @@ func (m *tlbMiddleware) sendRspToTop(
 
 	return err == nil
 }
+
+func (m *tlbMiddleware) sendFromPipeline() bool {
+	buffer := m.pipeline.(*pipelineImpl).postPipelineBuf
+    item := buffer.Peek()
+    if item != nil {
+    	err := m.topPort.Send(item) //if postPipelineBuf not empty, ends latency and send rsp to topPort
+    	if err == nil {
+    		buffer.Pop() //if send to topPort successfully, pop rsp from postPipelineBuf
+    		tracing.TraceReqComplete(item, m.Comp)
+    	}
+    }
+}
+
 
 func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
@@ -270,11 +305,9 @@ func (m *tlbMiddleware) parseBottom() bool {
 
 	rsp := item.(*vm.TranslationRsp)
 	page := rsp.Page
-	fmt.Println("parseBottom() received TranslationRsp with Page:", page)
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-	    fmt.Println("MSHR entry not found for", rsp.Page.PID, rsp.Page.VAddr)
 		m.bottomPort.RetrieveIncoming()
 		return true
 	}
@@ -298,19 +331,15 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
 
-    fmt.Println("Final TLB state:", m.Sets)
 	return true
 }
 
 func (m *tlbMiddleware) performCtrlReq() bool {
-    fmt.Println("performCtrlReq() called")  // Debugging output
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
-	fmt.Printf("Type of item: %T, value: %+v\n", item, item)
 	item = m.controlPort.RetrieveIncoming()
-	fmt.Println(item)
 
 	switch req := item.(type) {
 	case *FlushReq:
