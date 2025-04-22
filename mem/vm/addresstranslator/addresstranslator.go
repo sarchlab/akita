@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
@@ -48,6 +49,17 @@ type Comp struct {
 	isWaitingOnGL0InvalidateRsp    bool
 	currentGL0InvReq               *mem.GL0InvalidateReq
 	totalRequestsUponGL0InvArrival int
+
+	visTracer *AddressTranslatorVisTracer
+}
+
+func (c *Comp) InitVisTracer(
+	engine sim.Engine,
+	backend tracing.Tracer,
+) {
+	fmt.Println("Initializing AddressTranslator Visual Tracer...")
+	c.visTracer = NewAddressTranslatorVisTracer(c, backend, c)
+	tracing.CollectTrace(c, c.visTracer)
 }
 
 // SetTranslationProvider sets the remote port that can translate addresses.
@@ -137,6 +149,10 @@ func (m *middleware) translate() bool {
 		return false
 	}
 
+	if m.visTracer != nil {
+		m.visTracer.OnPortUpdate(m.topPort, item)
+	}
+
 	switch req := item.(type) {
 	case *mem.GL0InvalidateReq:
 		return m.handleGL0InvalidateReq(req)
@@ -193,6 +209,10 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
+	if m.visTracer != nil {
+		m.visTracer.OnPortUpdate(m.translationPort, rsp)
+	}
+
 	transRsp := rsp.(*vm.TranslationRsp)
 	transaction := m.findTranslationByReqID(transRsp.RespondTo)
 	if transaction == nil {
@@ -203,6 +223,7 @@ func (m *middleware) parseTranslation() bool {
 	transaction.translationRsp = transRsp
 	transaction.translationDone = true
 	reqFromTop := transaction.incomingReqs[0]
+
 	translatedReq := m.createTranslatedReq(
 		reqFromTop,
 		transaction.translationRsp.Page)
@@ -235,6 +256,10 @@ func (m *middleware) respond() bool {
 	rsp := m.bottomPort.PeekIncoming()
 	if rsp == nil {
 		return false
+	}
+
+	if m.visTracer != nil {
+		m.visTracer.OnPortUpdate(m.bottomPort, rsp)
 	}
 
 	reqInBottom := false
@@ -428,6 +453,10 @@ func (m *middleware) handleCtrlRequest() bool {
 	req := m.ctrlPort.PeekIncoming()
 	if req == nil {
 		return false
+	}
+
+	if m.visTracer != nil {
+		m.visTracer.OnPortUpdate(m.ctrlPort, req)
 	}
 
 	msg := req.(*mem.ControlMsg)
