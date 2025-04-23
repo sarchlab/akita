@@ -9,7 +9,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/sarchlab/akita/v4/daisen/static"
-	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
@@ -80,11 +79,9 @@ func connectToDB() {
 		db := tracing.NewCSVTraceReader(*csvFileName)
 		traceReader = db
 	case *sqliteFileName != "":
-		db := datarecording.NewSQLiteReader(*sqliteFileName)
+		db := tracing.NewSQLiteTraceReader(*sqliteFileName)
 		db.Init()
-		traceReader = &tracing.DataRecorderTraceReader{
-			DB: db.DB,
-		}
+		traceReader = db
 	}
 }
 

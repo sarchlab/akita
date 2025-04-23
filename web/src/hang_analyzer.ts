@@ -16,11 +16,6 @@ export class HangAnalyzer {
 	}
 
 	prepareDom() {
-		let sankeyAnalyzerBtn = document.querySelector<HTMLElement>('.auto-sankey-refresh-btn')
-        if (sankeyAnalyzerBtn !== null && sankeyAnalyzerBtn.classList.contains('btn-primary')) {
-            sankeyAnalyzerBtn.click()
-        }
-
 		const container = document.getElementById('right-pane')!
 		container.innerHTML = ""
 
@@ -72,7 +67,7 @@ export class HangAnalyzer {
 		})
 
 		const autoRefreshBtn = document.createElement("button")
-		autoRefreshBtn.classList.add("btn", "btn-primary", "ms-3", "auto-refresh-btn")
+		autoRefreshBtn.classList.add("btn", "btn-primary", "ms-3")
 		autoRefreshBtn.innerHTML = "Stop Refresh"
 		toolbar.appendChild(autoRefreshBtn)
 

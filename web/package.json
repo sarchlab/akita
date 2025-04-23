@@ -9,8 +9,6 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@types/d3-sankey": "^0.12.4",
-    "d3-sankey": "^0.12.3",
     "sass": "^1.62.1",
     "typescript": "^5.0.2",
     "vite": "^6.2.6"
