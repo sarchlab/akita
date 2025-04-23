@@ -3,9 +3,7 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
-	"sync/atomic"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -30,21 +28,6 @@ var (
 	milestonesMutex    sync.Mutex
 	milestoneIDCounter uint64
 )
-
-func CurrentTime(domain NamedHookable) float64 {
-	if timeTeller, ok := domain.(sim.TimeTeller); ok {
-		return float64(timeTeller.CurrentTime())
-	}
-	return 0
-}
-
-func generateMilestoneID() uint64 {
-	return atomic.AddUint64(&milestoneIDCounter, 1)
-}
-
-func GetAllMilestones() []Milestone {
-	return milestones
-}
 
 // StartTask notifies the hooks that hook to the domain about the start of a
 // task.
@@ -165,16 +148,12 @@ func AddMilestone(
 	domain NamedHookable,
 ) {
 	milestone := Milestone{
-		ID:               strconv.FormatUint(generateMilestoneID(), 10),
+		ID:               sim.GetIDGenerator().Generate(),
 		TaskID:           taskID,
 		BlockingCategory: blockingCategory,
 		BlockingReason:   blockingReason,
 		BlockingLocation: blockingLocation,
-		Time:             CurrentTime(domain),
 	}
-
-	fmt.Printf("Milestone added: ID=%s, TaskID=%s, Category=%s, Reason=%s, Location=%s, Time=%f\n",
-		milestone.ID, milestone.TaskID, milestone.BlockingCategory, milestone.BlockingReason, milestone.BlockingLocation, milestone.Time)
 
 	ctx := sim.HookCtx{
 		Domain: domain,
