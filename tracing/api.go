@@ -3,7 +3,6 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -21,12 +20,6 @@ var (
 	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
 	HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
-)
-
-var (
-	milestones         []Milestone
-	milestonesMutex    sync.Mutex
-	milestoneIDCounter uint64
 )
 
 // StartTask notifies the hooks that hook to the domain about the start of a
