@@ -222,5 +222,5 @@ linters:
     - gosimple
     - ineffassign
     - unused
-    - wsl
+    # - wsl
   fast: false

@@ -42,7 +42,11 @@ func NewDataRecorder(path string) DataRecorder {
 
 	w.Init()
 
-	atexit.Register(func() { w.Flush() })
+	createExecRecorder(w)
+
+	atexit.Register(func() {
+		w.Flush()
+	})
 
 	return w
 }
@@ -55,9 +59,22 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 		tables:    make(map[string]*table),
 	}
 
-	atexit.Register(func() { w.Flush() })
+	createExecRecorder(w)
+
+	atexit.Register(func() {
+		w.Flush()
+	})
 
 	return w
+}
+
+func createExecRecorder(w *sqliteWriter) {
+	execRecorder := NewExecRecorderWithWriter(w)
+	execRecorder.Start()
+
+	atexit.Register(func() {
+		execRecorder.End()
+	})
 }
 
 type table struct {
