@@ -411,6 +411,11 @@ type ControlMsg struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
+	Enable             bool
+	Drain              bool
+	Flush              bool
+	Pause              bool
+	Invalid            bool
 }
 
 // Meta returns the meta data assocated with the ControlMsg.
@@ -432,6 +437,11 @@ type ControlMsgBuilder struct {
 	discardTransactions bool
 	restart             bool
 	notifyDone          bool
+	Enable              bool
+	Drain               bool
+	Flush               bool
+	Pause               bool
+	Invalid             bool
 }
 
 // WithSrc sets the source of the request to build.
@@ -465,6 +475,18 @@ func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
 	return b
 }
 
+// WithCtrlInfo sets the enable bit of the control messages to 1.
+func (b ControlMsgBuilder) WithCtrlInfo(
+	enable bool, drain bool, flush bool, pause bool, invalid bool,
+) ControlMsgBuilder {
+	b.Enable = enable
+	b.Drain = drain
+	b.Flush = flush
+	b.Pause = pause
+	b.Invalid = invalid
+	return b
+}
+
 // Build creates a new ControlMsg.
 func (b ControlMsgBuilder) Build() *ControlMsg {
 	m := &ControlMsg{}
@@ -476,6 +498,11 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
+	m.Enable = b.Enable
+	m.Drain = b.Drain
+	m.Flush = b.Flush
+	m.Pause = b.Pause
+	m.Invalid = b.Invalid
 
 	return m
 }

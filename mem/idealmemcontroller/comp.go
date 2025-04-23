@@ -91,6 +91,7 @@ func (m *middleware) Tick() bool {
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
 	}
+
 	return false
 }
 
@@ -195,4 +196,8 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	c.TickLater()
 
 	return nil
+}
+
+func (c *Comp) CurrentTime() sim.VTimeInSec {
+	return c.Engine.CurrentTime()
 }

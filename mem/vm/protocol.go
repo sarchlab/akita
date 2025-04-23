@@ -168,6 +168,8 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	return r
 }
 
+// PageMigrationInfo records the information required for the driver to perform
+// a page migration.
 type PageMigrationInfo struct {
 	GPUReqToVAddrMap map[uint64][]uint64
 }

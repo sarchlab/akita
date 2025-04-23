@@ -164,4 +164,74 @@ var _ = Describe("DataMover", func() {
 
 		Expect(outsideMem.Storage.Read(4096, 4096)).To(Equal(data))
 	})
+
+	It("should move partial data", func() {
+		data := make([]byte, 1024)
+		for i := 0; i < 1024; i++ {
+			data[i] = byte(i)
+		}
+		outsideMem.Storage.Write(0, data)
+
+		srcPort.EXPECT().
+			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+
+		req := MakeDataMoveRequestBuilder().
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
+			WithSrcAddress(0).
+			WithSrcSide("outside").
+			WithDstAddress(512).
+			WithDstSide("inside").
+			WithByteSize(512).
+			Build()
+
+		dataMover.ctrlPort.Deliver(req)
+
+		engine.Run()
+
+		expected := data[:512]
+		Expect(insideMem.Storage.Read(512, 512)).To(Equal(expected))
+	})
+
+	It("should handle zero-size transfers", func() {
+		req := MakeDataMoveRequestBuilder().
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
+			WithSrcAddress(0).
+			WithSrcSide("inside").
+			WithDstAddress(0).
+			WithDstSide("outside").
+			WithByteSize(0).
+			Build()
+
+		Expect(func() { dataMover.ctrlPort.Deliver(req) }).NotTo(Panic())
+	})
+
+	It("should handle overlapping ranges", func() {
+		data := make([]byte, 1024)
+		for i := 0; i < 1024; i++ {
+			data[i] = byte(i)
+		}
+		insideMem.Storage.Write(0, data)
+
+		srcPort.EXPECT().
+			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+
+		req := MakeDataMoveRequestBuilder().
+			WithSrc(srcPort.AsRemote()).
+			WithDst(dataMover.ctrlPort.AsRemote()).
+			WithSrcAddress(0).
+			WithSrcSide("inside").
+			WithDstAddress(512).
+			WithDstSide("inside").
+			WithByteSize(512).
+			Build()
+
+		dataMover.ctrlPort.Deliver(req)
+
+		engine.Run()
+
+		expected := append(data[:512], data[:512]...)
+		Expect(insideMem.Storage.Read(0, 1024)).To(Equal(expected))
+	})
 })
