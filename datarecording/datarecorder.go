@@ -287,6 +287,10 @@ func (t *sqliteWriter) Flush() {
 	defer t.mustExecute("COMMIT TRANSACTION")
 
 	for tableName, table := range t.tables {
+		if len(table.entries) == 0 {
+			continue
+		}
+
 		sampleEntry := table.entries[0]
 		t.prepareStatement(tableName, sampleEntry)
 

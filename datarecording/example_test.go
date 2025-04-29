@@ -30,7 +30,7 @@ func Example() {
 	recorder.Flush()
 
 	tables := recorder.ListTables()
-	fmt.Printf("The stored table: %s\n", tables[0])
+	fmt.Printf("The stored table: %s\n", tables[1])
 
 	recorder.Close()
 
