@@ -45,7 +45,7 @@ var _ = Describe("Cache", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		c = NewBuilder().
+		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
 			Build("Cache")

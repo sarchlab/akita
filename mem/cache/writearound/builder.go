@@ -27,8 +27,8 @@ type Builder struct {
 	visTracer             tracing.Tracer
 }
 
-// NewBuilder creates a builder with default parameter setting
-func NewBuilder() *Builder {
+// MakeBuilder creates a builder with default parameter setting
+func MakeBuilder() *Builder {
 	return &Builder{
 		freq:                  1 * sim.GHz,
 		log2BlockSize:         6,

@@ -6,6 +6,7 @@ import (
 )
 
 type Builder struct {
+	name             string
 	width            int
 	latency          int
 	freq             sim.Freq
@@ -85,16 +86,21 @@ func (b Builder) WithAddressConverter(
 	return b
 }
 
+// WithName sets the name of the memory controller
+func (b Builder) WithName(name string) Builder {
+	b.name = name
+	return b
+}
+
+
 // Build builds a new Comp
-func (b Builder) Build(
-	name string,
-) *Comp {
+func (b Builder) Build() *Comp {
 	c := &Comp{
 		Latency: b.latency,
 		width:   b.width,
 	}
 
-	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
+	c.TickingComponent = sim.NewTickingComponent(b.name, b.engine, b.freq, c)
 	c.Latency = b.latency
 	c.addressConverter = b.addressConverter
 
@@ -104,7 +110,7 @@ func (b Builder) Build(
 		c.Storage = b.storage
 	}
 
-	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, b.name+".TopPort")
 	c.AddPort("Top", c.topPort)
 
 	middleware := &middleware{Comp: c}
