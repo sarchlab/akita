@@ -162,7 +162,8 @@ export class TaskPage implements ZoomHandler {
     const locationLabel = document.createElement("div");
     locationLabel.setAttribute("id", "location-label");
     locationLabel.style.fontSize = "20px";
-    locationLabel.style.color = "gray";  
+    locationLabel.style.color = "black"; 
+    locationLabel.style.fontWeight = "bold"; 
     this._rightColumn.appendChild(locationLabel);
     this._rightColumn.style.width =
       this._rightColumnWidth.toString() + "px";
