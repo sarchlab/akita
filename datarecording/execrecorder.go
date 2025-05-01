@@ -35,6 +35,7 @@ func (e *execRecorder) Start() {
 	if err != nil {
 		panic(err)
 	}
+
 	cwd := filepath.Dir(ex)
 	cwdEntry := execInfo{"Working Directory", cwd}
 	e.entries = append(e.entries, cwdEntry)
@@ -58,8 +59,11 @@ func (e *execRecorder) End() {
 
 // NewExecRecorderWithWriter creates a new ExecRecorder with given writer
 func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
+	entrySlice := []execInfo{}
+
 	e := &execRecorder{
 		recorder: writer,
+		entries:  entrySlice,
 	}
 
 	setupTable(e)
