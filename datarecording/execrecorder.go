@@ -35,6 +35,7 @@ func (e *execRecorder) Start() {
 	if err != nil {
 		panic(err)
 	}
+
 	cwd := filepath.Dir(ex)
 	cwdEntry := execInfo{"Working Directory", cwd}
 	e.entries = append(e.entries, cwdEntry)
