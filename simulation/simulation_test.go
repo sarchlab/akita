@@ -1,22 +1,23 @@
-package sim
+package simulation
 
 import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Simulation", func() {
 	var (
-		mockCtrl *gomock.Controller
-		sim      *Simulation
-		comp     *MockComponent
-		port     *MockPort
+		mockCtrl   *gomock.Controller
+		simulation *Simulation
+		comp       *MockComponent
+		port       *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		sim = NewSimulation()
+		simulation = NewSimulation()
 
 		comp = NewMockComponent(mockCtrl)
 		comp.EXPECT().Name().Return("comp").AnyTimes()
@@ -30,11 +31,11 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should register a component", func() {
-		comp.EXPECT().Ports().Return([]Port{port})
+		comp.EXPECT().Ports().Return([]sim.Port{port})
 
-		sim.RegisterComponent(comp)
+		simulation.RegisterComponent(comp)
 
-		Expect(sim.GetComponentByName("comp")).To(Equal(comp))
-		Expect(sim.GetPortByName("port")).To(Equal(port))
+		Expect(simulation.GetComponentByName("comp")).To(Equal(comp))
+		Expect(simulation.GetPortByName("port")).To(Equal(port))
 	})
 })

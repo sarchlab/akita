@@ -2,7 +2,7 @@ module github.com/sarchlab/akita/v4
 
 require (
 	github.com/go-sql-driver/mysql v1.8.1
-	github.com/golang/mock v1.6.0
+	github.com/uber-go/mock v0.5.2
 	github.com/google/pprof v0.0.0-20240829160300-da1f7e9f2b25
 	github.com/gorilla/mux v1.8.1
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
