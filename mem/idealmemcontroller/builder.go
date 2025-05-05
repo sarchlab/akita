@@ -6,7 +6,6 @@ import (
 )
 
 type Builder struct {
-	name             string
 	width            int
 	latency          int
 	freq             sim.Freq
@@ -85,13 +84,6 @@ func (b Builder) WithAddressConverter(
 	b.addressConverter = addressConverter
 	return b
 }
-
-// WithName sets the name of the memory controller
-func (b Builder) WithName(name string) Builder {
-	b.name = name
-	return b
-}
-
 
 // Build builds a new Comp
 func (b Builder) Build(
