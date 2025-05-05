@@ -49,6 +49,11 @@ func (t *BackTraceTracer) StepTask(task Task) {
 	// Do Nothing
 }
 
+// AddMilestone does nothing
+func (t *BackTraceTracer) AddMilestone(_ Milestone) {
+	// Do nothing
+}
+
 func (t *BackTraceTracer) EndTask(task Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()

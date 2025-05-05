@@ -15,6 +15,8 @@ type Task struct {
 
 func Example() {
 	dbPath := "test"
+	os.Remove(dbPath + ".sqlite3")
+
 	recorder := datarecording.NewDataRecorder(dbPath)
 
 	cleanup := func() {
@@ -30,7 +32,7 @@ func Example() {
 	recorder.Flush()
 
 	tables := recorder.ListTables()
-	fmt.Printf("The stored table: %s\n", tables[0])
+	fmt.Printf("The stored table: %s\n", tables[1])
 
 	recorder.Close()
 

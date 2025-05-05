@@ -17,7 +17,7 @@
     "style-loader": "^3.3.2",
     "ts-loader": "^9.4.2",
     "typescript": "^5.0.4",
-    "vite": "^6.2.4",
+    "vite": "^6.2.7",
     "webpack": "^5.82.1",
     "webpack-cli": "^5.1.1"
   },
