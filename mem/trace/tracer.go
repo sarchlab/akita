@@ -46,6 +46,11 @@ func (t *tracer) StepTask(task tracing.Task) {
 		task.Steps[0].What)
 }
 
+// AddMilestone adds a milestone to the task
+func (t *tracer) AddMilestone(milestone tracing.Milestone) {
+	// Do nothing
+}
+
 // EndTask marks the end of a memory transaction
 func (t *tracer) EndTask(task tracing.Task) {
 	task.EndTime = t.timeTeller.CurrentTime()

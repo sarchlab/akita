@@ -80,12 +80,12 @@ func createExecRecorder(w *sqliteWriter) {
 type table struct {
 	structType reflect.Type
 	entries    []any
+	statement  *sql.Stmt
 }
 
 // sqliteWriter is the writer that writes data into SQLite database
 type sqliteWriter struct {
 	*sql.DB
-	statement *sql.Stmt
 
 	dbName     string
 	tables     map[string]*table
@@ -204,6 +204,27 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 		entries:    []any{},
 	}
 	t.tables[tableName] = tableInfo
+
+	t.prepareStatement(tableName, sampleEntry)
+}
+
+func (t *sqliteWriter) prepareStatement(table string, task any) {
+	fieldNames := t.getFieldNames(task)
+	placeholders := make([]string, len(fieldNames))
+
+	for i := range placeholders {
+		placeholders[i] = "?"
+	}
+
+	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
+	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
+
+	stmt, err := t.Prepare(sqlStr)
+	if err != nil {
+		panic(err)
+	}
+
+	t.tables[table].statement = stmt
 }
 
 func (t *sqliteWriter) getFieldNames(entry any) []string {
@@ -287,9 +308,10 @@ func (t *sqliteWriter) Flush() {
 	t.mustExecute("BEGIN TRANSACTION")
 	defer t.mustExecute("COMMIT TRANSACTION")
 
-	for tableName, table := range t.tables {
-		sampleEntry := table.entries[0]
-		t.prepareStatement(tableName, sampleEntry)
+	for _, table := range t.tables {
+		if len(table.entries) == 0 {
+			continue
+		}
 
 		for _, task := range table.entries {
 			v := []any{}
@@ -311,16 +333,13 @@ func (t *sqliteWriter) Flush() {
 				v = append(v, value.Field(i).Interface())
 			}
 
-			_, err := t.statement.Exec(v...)
+			_, err := table.statement.Exec(v...)
 			if err != nil {
 				panic(err)
 			}
 		}
 
 		table.entries = nil
-
-		t.statement.Close()
-		t.statement = nil
 	}
 
 	t.entryCount = 0
@@ -339,25 +358,6 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 	}
 
 	return res
-}
-
-func (t *sqliteWriter) prepareStatement(table string, task any) {
-	fieldNames := t.getFieldNames(task)
-	placeholders := make([]string, len(fieldNames))
-
-	for i := range placeholders {
-		placeholders[i] = "?"
-	}
-
-	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
-	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
-
-	stmt, err := t.Prepare(sqlStr)
-	if err != nil {
-		panic(err)
-	}
-
-	t.statement = stmt
 }
 
 func (t *sqliteWriter) Close() error {

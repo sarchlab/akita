@@ -4,5 +4,6 @@ package tracing
 type Tracer interface {
 	StartTask(task Task)
 	StepTask(task Task)
+	AddMilestone(milestone Milestone)
 	EndTask(task Task)
 }
