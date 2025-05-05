@@ -3,11 +3,11 @@ package switches
 import (
 	"fmt"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {

@@ -106,7 +106,7 @@ Other than the flexibility of configuration, we simplify how we write unit tests
 package test
 
 import (
-    "github.com/golang/mock/gomock"
+    "go.uber.org/mock/gomock"
     . "github.com/onsi/ginkgo/v2"
     . "github.com/onsi/gomega"
     "github.com/sarchlab/akita"

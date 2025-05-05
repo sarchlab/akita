@@ -100,6 +100,7 @@ func (t *sqliteWriter) Init() {
 	}
 
 	filename := t.dbName + ".sqlite3"
+	os.Remove(filename)
 
 	_, err := os.Stat(filename)
 	if err == nil {

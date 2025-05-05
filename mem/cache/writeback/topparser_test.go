@@ -1,10 +1,10 @@
 package writeback
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TopParser", func() {
