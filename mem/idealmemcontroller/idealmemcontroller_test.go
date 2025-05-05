@@ -1,9 +1,9 @@
 package idealmemcontroller
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v4/sim"
 

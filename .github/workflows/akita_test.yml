@@ -76,6 +76,12 @@ jobs:
           go clean -modcache
           rm -rf $(go env GOMODCACHE)/*
 
+      - name: Install Mockgen
+        run: go install go.uber.org/mock/mockgen@latest
+
+      - name: Run Mockgen
+        run: go generate ./...
+
       - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
@@ -98,6 +104,12 @@ jobs:
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
+
+      - name: Install Mockgen
+        run: go install go.uber.org/mock/mockgen@latest
+
+      - name: Run Mockgen
+        run: go generate ./...
 
       - name: Unit Test
         run: ginkgo -r
