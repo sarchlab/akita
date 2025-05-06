@@ -356,10 +356,16 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 }
 
 func (t *sqliteWriter) Close() error {
-	t.execRecorder.End()
+	if t.execRecorder != nil {
+		t.execRecorder.End()
+	}
 
 	t.Flush()
-	t.DB.Close()
+
+	err := t.DB.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close database connection: %w", err)
+	}
 
 	return nil
 }
