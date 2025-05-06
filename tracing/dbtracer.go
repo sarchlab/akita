@@ -13,7 +13,7 @@ type taskTableEntry struct {
 	ParentID  string  `json:"parent_id"`
 	Kind      string  `json:"kind"`
 	What      string  `json:"what"`
-	Location  string  `json:"where"`
+	Location  string  `json:"location"`
 	StartTime float64 `json:"start_time"`
 	EndTime   float64 `json:"end_time"`
 }
@@ -56,7 +56,7 @@ func (t *DBTracer) startingTaskMustBeValid(task Task) {
 	}
 
 	if task.Location == "" {
-		panic("task where must be set")
+		panic("task location must be set")
 	}
 }
 
