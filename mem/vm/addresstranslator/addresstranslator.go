@@ -58,7 +58,7 @@ func (c *Comp) InitVisTracer(
 	backend tracing.Tracer,
 ) {
 	fmt.Println("Initializing AddressTranslator Visual Tracer...")
-	c.visTracer = NewAddressTranslatorVisTracer(c, backend, c)
+	c.visTracer = NewAddressTranslatorVisTracer(engine, backend, c)
 	tracing.CollectTrace(c, c.visTracer)
 }
 
@@ -132,6 +132,20 @@ func (m *middleware) doGL0Invalidate() bool {
 		err := m.bottomPort.Send(req)
 		if err == nil {
 			m.isWaitingOnGL0InvalidateRsp = true
+			if m.visTracer != nil {
+				ms := tracing.Milestone{
+					ID:               req.Meta().ID,
+					TaskID:           req.Meta().ID,
+					BlockingCategory: "Hardware",
+					BlockingReason:   "GL0 invalidate request sent",
+					BlockingLocation: m.Comp.Name(),
+				}
+				m.visTracer.AddMilestone(ms)
+				fmt.Printf("[Milestone] Cat=%s | Reason=%s | ID=%s | Task=%s | Loc=%s\n",
+					ms.BlockingCategory, ms.BlockingReason, ms.ID, ms.TaskID, ms.BlockingLocation)
+			} else {
+				fmt.Print("No vistracer")
+			}
 			return true
 		}
 	}
@@ -182,6 +196,21 @@ func (m *middleware) translate() bool {
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.TraceReqInitiate(transReq, m.Comp, tracing.MsgIDAtReceiver(req, m.Comp))
+	fmt.Print("translate!")
+	if m.visTracer != nil {
+		ms := tracing.Milestone{
+			ID:               transReq.ID,
+			TaskID:           transReq.ID,
+			BlockingCategory: "Network",
+			BlockingReason:   "Translation request sent",
+			BlockingLocation: m.Comp.Name(),
+		}
+		m.visTracer.AddMilestone(ms)
+		fmt.Printf("[Milestone] Cat=%s | Reason=%s | ID=%s | Task=%s | Loc=%s\n",
+			ms.BlockingCategory, ms.BlockingReason, ms.ID, ms.TaskID, ms.BlockingLocation)
+	} else {
+		fmt.Print("No vistracer")
+	}
 
 	m.topPort.RetrieveIncoming()
 
@@ -199,6 +228,16 @@ func (m *middleware) handleGL0InvalidateReq(
 	m.totalRequestsUponGL0InvArrival =
 		len(m.transactions) + len(m.inflightReqToBottom)
 	m.topPort.RetrieveIncoming()
+
+	if m.visTracer != nil {
+		m.visTracer.AddMilestone(tracing.Milestone{
+			ID:               req.Meta().ID,
+			TaskID:           req.Meta().ID,
+			BlockingCategory: "Dependency",
+			BlockingReason:   "GL0 invalidate request received",
+			BlockingLocation: m.Comp.Name(),
+		})
+	}
 
 	return true
 }
@@ -224,12 +263,32 @@ func (m *middleware) parseTranslation() bool {
 	transaction.translationDone = true
 	reqFromTop := transaction.incomingReqs[0]
 
+	if m.visTracer != nil {
+		m.visTracer.AddMilestone(tracing.Milestone{
+			ID:               transRsp.RespondTo,
+			TaskID:           transRsp.RespondTo,
+			BlockingCategory: "Network",
+			BlockingReason:   "Translation request sent",
+			BlockingLocation: m.Comp.Name(),
+		})
+	}
+
 	translatedReq := m.createTranslatedReq(
 		reqFromTop,
 		transaction.translationRsp.Page)
 	err := m.bottomPort.Send(translatedReq)
 	if err != nil {
 		return false
+	}
+
+	if m.visTracer != nil {
+		m.visTracer.AddMilestone(tracing.Milestone{
+			ID:               translatedReq.Meta().ID,
+			TaskID:           translatedReq.Meta().ID,
+			BlockingCategory: "Port Status",
+			BlockingReason:   "Forwarded translated request",
+			BlockingLocation: m.Comp.Name(),
+		})
 	}
 
 	m.inflightReqToBottom = append(m.inflightReqToBottom,
@@ -316,6 +375,16 @@ func (m *middleware) respond() bool {
 
 		m.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
 
+		if m.visTracer != nil {
+			m.visTracer.AddMilestone(tracing.Milestone{
+				ID:               reqToBottomCombo.reqToBottom.Meta().ID,
+				TaskID:           reqToBottomCombo.reqToBottom.Meta().ID,
+				BlockingCategory: "Port Status",
+				BlockingReason:   "Response forwarded to source",
+				BlockingLocation: m.Comp.Name(),
+			})
+		}
+
 		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, m.Comp)
 		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, m.Comp)
 	}
@@ -327,6 +396,15 @@ func (m *middleware) respond() bool {
 		}
 		m.currentGL0InvReq = nil
 		m.isWaitingOnGL0InvalidateRsp = false
+		if m.visTracer != nil {
+			m.visTracer.AddMilestone(tracing.Milestone{
+				ID:               rspToTop.Meta().ID,
+				TaskID:           rspToTop.Meta().ID,
+				BlockingCategory: "Hardware",
+				BlockingReason:   "GL0 invalidate response received",
+				BlockingLocation: m.Comp.Name(),
+			})
+		}
 		if m.totalRequestsUponGL0InvArrival != 0 {
 			log.Panicf("Something went wrong \n")
 		}
@@ -486,6 +564,16 @@ func (m *middleware) handleFlushReq(
 
 	m.ctrlPort.RetrieveIncoming()
 
+	if m.visTracer != nil {
+		m.visTracer.AddMilestone(tracing.Milestone{
+			ID:               rsp.Meta().ID,
+			TaskID:           rsp.Meta().ID,
+			BlockingCategory: "Data",
+			BlockingReason:   "Flush transactions",
+			BlockingLocation: m.Comp.Name(),
+		})
+	}
+
 	m.transactions = nil
 	m.inflightReqToBottom = nil
 	m.isFlushing = true
@@ -518,6 +606,15 @@ func (m *middleware) handleRestartReq(
 	}
 
 	m.isFlushing = false
+	if m.visTracer != nil {
+		m.visTracer.AddMilestone(tracing.Milestone{
+			ID:               rsp.Meta().ID,
+			TaskID:           rsp.Meta().ID,
+			BlockingCategory: "Data",
+			BlockingReason:   "Restart complete",
+			BlockingLocation: m.Comp.Name(),
+		})
+	}
 
 	m.ctrlPort.RetrieveIncoming()
 

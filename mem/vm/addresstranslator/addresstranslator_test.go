@@ -34,6 +34,7 @@ var _ = Describe("Address Translator", func() {
 			WithLog2PageSize(12).
 			WithFreq(1).
 			WithLowModuleFinder(lowModuleFinder)
+
 		t = builder.Build("AddressTranslator")
 		t.log2PageSize = 12
 		t.topPort = topPort
@@ -410,4 +411,5 @@ var _ = Describe("Address Translator", func() {
 		})
 
 	})
+
 })

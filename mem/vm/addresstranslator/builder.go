@@ -3,6 +3,7 @@ package addresstranslator
 import (
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A Builder can create address translators
@@ -15,6 +16,7 @@ type Builder struct {
 	numReqPerCycle      int
 	log2PageSize        uint64
 	deviceID            uint64
+	visTracerBackend    tracing.Tracer
 }
 
 // MakeBuilder creates a new builder
@@ -25,6 +27,11 @@ func MakeBuilder() Builder {
 		log2PageSize:   12,
 		deviceID:       1,
 	}
+}
+
+func (b Builder) WithVisTracer(backend tracing.Tracer) Builder {
+	b.visTracerBackend = backend
+	return b
 }
 
 // WithEngine sets the engine to be used by the address translators
@@ -91,6 +98,10 @@ func (b Builder) Build(name string) *Comp {
 	t.numReqPerCycle = b.numReqPerCycle
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
+
+	if b.visTracerBackend != nil {
+		t.InitVisTracer(b.engine, b.visTracerBackend)
+	}
 
 	middleware := &middleware{Comp: t}
 	t.AddMiddleware(middleware)

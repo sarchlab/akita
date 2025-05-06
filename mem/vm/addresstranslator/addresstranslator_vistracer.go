@@ -49,18 +49,32 @@ func (t *AddressTranslatorVisTracer) OnPortUpdate(port sim.Port, item interface{
 		return
 	}
 
-	if req, ok := item.(mem.AccessReq); ok {
-		taskID := tracing.MsgIDAtReceiver(req, t.translator)
-		fmt.Printf("AddressTranslatorVisTracer: Port Update - Port: %s, TaskID: %s\n",
-			port.Name(), taskID)
+	var taskID string
+	var msgType string
 
-		t.AddMilestone(tracing.Milestone{
-			ID:               strconv.FormatUint(tracing.GenerateMilestoneID(), 10),
-			TaskID:           taskID,
-			BlockingCategory: "Port Status",
-			BlockingReason:   "Task Front of Port",
-			BlockingLocation: port.Name(),
-			Time:             float64(t.timeTeller.CurrentTime()),
-		})
+	switch msg := item.(type) {
+	case mem.AccessReq:
+		taskID = tracing.MsgIDAtReceiver(msg, t.translator)
+		msgType = "Access Request"
+	case mem.AccessRsp:
+		taskID = tracing.MsgIDAtReceiver(msg, t.translator)
+		msgType = "Access Response"
+	case *mem.ControlMsg:
+		taskID = msg.Meta().ID
+		msgType = "Control Message"
+	default:
+		return
 	}
+
+	fmt.Printf("AddressTranslatorVisTracer: Port Update - Port: %s, TaskID: %s, Type: %s\n",
+		port.Name(), taskID, msgType)
+
+	t.AddMilestone(tracing.Milestone{
+		ID:               strconv.FormatUint(tracing.GenerateMilestoneID(), 10),
+		TaskID:           taskID,
+		BlockingCategory: "Port Status",
+		BlockingReason:   fmt.Sprintf("%s at %s", msgType, port.Name()),
+		BlockingLocation: port.Name(),
+		Time:             float64(t.timeTeller.CurrentTime()),
+	})
 }
