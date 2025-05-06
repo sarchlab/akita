@@ -1,6 +1,7 @@
 package datarecording
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,8 @@ func (e *execRecorder) End() {
 	e.entries = nil
 
 	e.recorder.Flush()
+
+	fmt.Printf("Ended\n")
 }
 
 // NewExecRecorderWithWriter creates a new ExecRecorder with given writer

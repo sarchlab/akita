@@ -96,7 +96,7 @@ func StartTaskWithSpecificLocation(
 		ParentID: parentID,
 		Kind:     kind,
 		What:     what,
-		Where:    location,
+		Location: location,
 		Detail:   detail,
 	}
 	ctx := sim.HookCtx{

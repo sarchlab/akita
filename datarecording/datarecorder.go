@@ -61,10 +61,6 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 
 	createExecRecorder(w)
 
-	atexit.Register(func() {
-		w.Flush()
-	})
-
 	return w
 }
 
@@ -72,9 +68,7 @@ func createExecRecorder(w *sqliteWriter) {
 	execRecorder := NewExecRecorderWithWriter(w)
 	execRecorder.Start()
 
-	atexit.Register(func() {
-		execRecorder.End()
-	})
+	w.execRecorder = execRecorder
 }
 
 type table struct {
@@ -87,10 +81,11 @@ type table struct {
 type sqliteWriter struct {
 	*sql.DB
 
-	dbName     string
-	tables     map[string]*table
-	batchSize  int
-	entryCount int
+	dbName       string
+	tables       map[string]*table
+	batchSize    int
+	entryCount   int
+	execRecorder *execRecorder
 }
 
 // Init establishes a connection to the database.
@@ -361,5 +356,10 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 }
 
 func (t *sqliteWriter) Close() error {
-	return t.DB.Close()
+	t.execRecorder.End()
+
+	t.Flush()
+	t.DB.Close()
+
+	return nil
 }

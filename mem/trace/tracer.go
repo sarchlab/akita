@@ -28,7 +28,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 	t.logger.Printf(
 		"start, %.12f, %s, %s, %s, 0x%x, %d\n",
 		task.StartTime,
-		task.Where,
+		task.Location,
 		task.ID,
 		task.What,
 		req.GetAddress(),
