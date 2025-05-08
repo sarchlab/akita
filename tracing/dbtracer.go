@@ -8,12 +8,12 @@ import (
 	"github.com/tebeka/atexit"
 )
 
-type TaskTable struct {
+type taskTableEntry struct {
 	ID        string  `json:"id"`
 	ParentID  string  `json:"parent_id"`
 	Kind      string  `json:"kind"`
 	What      string  `json:"what"`
-	Where     string  `json:"where"`
+	Location  string  `json:"location"`
 	StartTime float64 `json:"start_time"`
 	EndTime   float64 `json:"end_time"`
 }
@@ -55,8 +55,8 @@ func (t *DBTracer) startingTaskMustBeValid(task Task) {
 		panic("task what must be set")
 	}
 
-	if task.Where == "" {
-		panic("task where must be set")
+	if task.Location == "" {
+		panic("task location must be set")
 	}
 }
 
@@ -87,12 +87,12 @@ func (t *DBTracer) EndTask(task Task) {
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
 
-	taskTable := TaskTable{
+	taskTable := taskTableEntry{
 		ID:        originalTask.ID,
 		ParentID:  originalTask.ParentID,
 		Kind:      originalTask.Kind,
 		What:      originalTask.What,
-		Where:     originalTask.Where,
+		Location:  originalTask.Location,
 		StartTime: float64(originalTask.StartTime),
 		EndTime:   float64(originalTask.EndTime),
 	}
@@ -104,12 +104,12 @@ func (t *DBTracer) EndTask(task Task) {
 func (t *DBTracer) Terminate() {
 	for _, task := range t.tracingTasks {
 		task.EndTime = t.timeTeller.CurrentTime()
-		taskTable := TaskTable{
+		taskTable := taskTableEntry{
 			ID:        task.ID,
 			ParentID:  task.ParentID,
 			Kind:      task.Kind,
 			What:      task.What,
-			Where:     task.Where,
+			Location:  task.Location,
 			StartTime: float64(task.StartTime),
 			EndTime:   float64(task.EndTime),
 		}
@@ -127,8 +127,9 @@ func NewDBTracer(
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
 	fmt.Println("Creating 'trace' table")
-	dataRecorder.CreateTable("trace", TaskTable{})
+	dataRecorder.CreateTable("trace", taskTableEntry{})
 	dataRecorder.Flush()
+
 	fmt.Println("Creating 'trace_milestones' table")
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
 	dataRecorder.Flush()

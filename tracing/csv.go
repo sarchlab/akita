@@ -81,7 +81,7 @@ func (t *CSVTraceWriter) Flush() {
 			task.ParentID,
 			task.Kind,
 			task.What,
-			task.Where,
+			task.Location,
 			task.StartTime,
 			task.EndTime,
 		)
@@ -135,7 +135,7 @@ func (r *CSVTraceReader) ListComponents() []string {
 
 		task := r.parseCSVRecord(record)
 
-		components[task.Where] = true
+		components[task.Location] = true
 	}
 
 	componentSlice := make([]string, 0, len(components))
@@ -251,7 +251,7 @@ func (*CSVTraceReader) meetKindRequirement(task Task, query TaskQuery) bool {
 }
 
 func (*CSVTraceReader) meetWhereRequirement(task Task, query TaskQuery) bool {
-	if query.Where != "" && task.Where != query.Where {
+	if query.Where != "" && task.Location != query.Where {
 		return false
 	}
 
@@ -285,7 +285,7 @@ func (*CSVTraceReader) parseCSVRecord(record []string) Task {
 	task.ParentID = strings.Trim(record[1], " ")
 	task.Kind = strings.Trim(record[2], " ")
 	task.What = strings.Trim(record[3], " ")
-	task.Where = strings.Trim(record[4], " ")
+	task.Location = strings.Trim(record[4], " ")
 
 	startTime, err := strconv.ParseFloat(strings.Trim(record[5], " "), 64)
 	if err != nil {
