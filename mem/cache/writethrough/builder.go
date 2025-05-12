@@ -25,6 +25,8 @@ type Builder struct {
 	numReqPerCycle        int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
+	addressMapperType     string
+	remotePorts           []sim.RemotePort
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -127,6 +129,16 @@ func (b Builder) WithAddressToPortMapper(
 	return b
 }
 
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
 // Build returns a new cache unit
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
@@ -141,11 +153,13 @@ func (b Builder) Build(name string) *Comp {
 	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+".TopPort")
 	c.AddPort("Top", c.topPort)
+
 	c.bottomPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
 		name+".BottomPort")
 	c.AddPort("Bottom", c.bottomPort)
+
 	c.controlPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
-		name+"ControlPort")
+		name+".ControlPort")
 	c.AddPort("Control", c.controlPort)
 
 	c.dirBuf = sim.NewBuffer(
@@ -164,12 +178,26 @@ func (b Builder) Build(name string) *Comp {
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
 	c.directory = cache.NewDirectory(
-		numSets, b.wayAssociativity, 1<<b.log2BlockSize,
+		numSets, b.wayAssociativity, blockSize,
 		cache.NewLRUVictimFinder())
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
 	c.wayAssociativity = b.wayAssociativity
-	c.addressToPortMapper = b.addressToPortMapper
+
+	if b.addressToPortMapper != nil {
+		c.addressToPortMapper = b.addressToPortMapper
+	} else {
+		if b.addressMapperType == "single" && len(b.remotePorts) == 1 {
+			c.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
+		} else if b.addressMapperType == "interleaved" && len(b.remotePorts) > 1 {
+			mapper := mem.NewInterleavedAddressPortMapper(4096) // example interleave size
+			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+			c.addressToPortMapper = mapper
+		} else {
+			panic("AddressToPortMapper is nil and cannot be inferred. Did you forget to set WithRemotePorts and WithAddressMapperType?")
+		}
+	}
+
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.buildStages(c)
