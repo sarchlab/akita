@@ -7,9 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/sarchlab/akita/v4/daisen/static"
-	"github.com/sarchlab/akita/v4/datarecording"
 )
 
 var (
@@ -20,8 +18,8 @@ var (
 		"",
 		"Name of the SQLite file to read from.")
 
-	db datarecording.DataReader
-	fs http.FileSystem
+	traceReader *SQLiteTraceReader
+	fs          http.FileSystem
 )
 
 func main() {
@@ -34,7 +32,6 @@ func main() {
 
 func parseArgs() {
 	flag.Parse()
-
 }
 
 func startServer() {
@@ -47,7 +44,8 @@ func connectToDB() {
 		panic("Must specify a SQLite file")
 	}
 
-	db = datarecording.NewReader(*sqliteFileName)
+	traceReader = NewSQLiteTraceReader(*sqliteFileName)
+	traceReader.Init()
 }
 
 func startAPIServer() {

@@ -165,7 +165,7 @@ class ComponentView {
     this._renderData();
     if (tasks.length > 0) {
       this._showLocation(tasks[0]);
-      this.setComponentName(tasks[0].where);
+      this.setComponentName(tasks[0].location);
     } else {
       this._removeLocation();
     }
@@ -360,7 +360,7 @@ class ComponentView {
   _showLocation(task: Task) {
     const locationLabel = document.getElementById("location-label");
     if (locationLabel) {
-        locationLabel.textContent = task["where"];
+        locationLabel.textContent = task["location"];
     }
   }
 
