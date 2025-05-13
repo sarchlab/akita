@@ -1,8 +1,6 @@
 package tracing
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
@@ -126,11 +124,9 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	fmt.Println("Creating 'trace' table")
 	dataRecorder.CreateTable("trace", taskTableEntry{})
 	dataRecorder.Flush()
 
-	fmt.Println("Creating 'trace_milestones' table")
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
 	dataRecorder.Flush()
 	t := &DBTracer{
