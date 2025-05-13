@@ -1,6 +1,8 @@
 package simulation
 
 import (
+	"os"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/sim"
@@ -17,7 +19,7 @@ var _ = Describe("Simulation", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		simulation = NewSimulation()
+		simulation = MakeBuilder().Build()
 
 		comp = NewMockComponent(mockCtrl)
 		comp.EXPECT().Name().Return("comp").AnyTimes()
@@ -30,10 +32,12 @@ var _ = Describe("Simulation", func() {
 		mockCtrl.Finish()
 
 		simulation.Terminate()
+
+		os.Remove("akita_sim_" + simulation.ID() + ".sqlite3")
 	})
 
 	It("should register a component", func() {
-		comp.EXPECT().Ports().Return([]sim.Port{port})
+		comp.EXPECT().Ports().Return([]sim.Port{port}).AnyTimes()
 
 		simulation.RegisterComponent(comp)
 

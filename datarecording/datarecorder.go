@@ -102,8 +102,6 @@ func (t *sqliteWriter) Init() {
 		panic(fmt.Errorf("file %s already exists", filename))
 	}
 
-	fmt.Fprintf(os.Stderr, "Database created for recording: %s\n", filename)
-
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
 		panic(err)

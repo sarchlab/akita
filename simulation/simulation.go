@@ -1,7 +1,6 @@
 package simulation
 
 import (
-	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/sim"
@@ -10,8 +9,8 @@ import (
 
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
-	engine sim.Engine
-
+	id           string
+	engine       sim.Engine
 	dataRecorder datarecording.DataRecorder
 	monitor      *monitoring.Monitor
 	visTracer    *tracing.DBTracer
@@ -22,26 +21,10 @@ type Simulation struct {
 	portNameIndex map[string]int
 }
 
-// NewSimulation creates a new simulation.
-func NewSimulation() *Simulation {
-	s := &Simulation{
-		compNameIndex: make(map[string]int),
-		portNameIndex: make(map[string]int),
-	}
-
-	name := xid.New().String()
-	s.dataRecorder = datarecording.NewDataRecorder(
-		"akita_sim_" + name + ".sqlite3")
-
-	s.monitor = monitoring.NewMonitor()
-	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
-
-	return s
-}
-
-// RegisterEngine registers the engine used in the simulation.
-func (s *Simulation) RegisterEngine(e sim.Engine) {
-	s.engine = e
+// ID returns the ID of the simulation. An ID is a UUID that is generated when
+// the simulation is created.
+func (s *Simulation) ID() string {
+	return s.id
 }
 
 // GetEngine returns the engine used in the simulation.
@@ -73,6 +56,8 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
+
+	s.monitor.RegisterComponent(c)
 
 	for _, p := range c.Ports() {
 		s.registerPort(p)
