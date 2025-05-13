@@ -7,13 +7,13 @@ import (
 )
 
 type taskTableEntry struct {
-	ID        string  `json:"id"`
-	ParentID  string  `json:"parent_id"`
-	Kind      string  `json:"kind"`
-	What      string  `json:"what"`
-	Location  string  `json:"location"`
-	StartTime float64 `json:"start_time"`
-	EndTime   float64 `json:"end_time"`
+	ID        string  `json:"id" akita_data:"unique"`
+	ParentID  string  `json:"parent_id" akita_data:"index"`
+	Kind      string  `json:"kind" akita_data:"index"`
+	What      string  `json:"what" akita_data:"index"`
+	Location  string  `json:"location" akita_data:"index"`
+	StartTime float64 `json:"start_time" akita_data:"index"`
+	EndTime   float64 `json:"end_time" akita_data:"index"`
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -125,10 +125,8 @@ func NewDBTracer(
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
 	dataRecorder.CreateTable("trace", taskTableEntry{})
-	dataRecorder.Flush()
-
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
-	dataRecorder.Flush()
+
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
@@ -137,8 +135,8 @@ func NewDBTracer(
 
 	atexit.Register(func() {
 		t.Terminate()
-		t.backend.Flush()
 	})
+
 	return t
 }
 
