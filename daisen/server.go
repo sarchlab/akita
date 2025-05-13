@@ -9,25 +9,19 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/sarchlab/akita/v4/daisen/static"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/datarecording"
 )
 
 var (
 	httpFlag = flag.String("http",
 		"0.0.0.0:3001",
 		"HTTP service address (e.g., ':6060')")
-	mySQLDBName = flag.String("mysql",
-		"",
-		"Name of the MySQL database to connect to.")
-	csvFileName = flag.String("csv",
-		"",
-		"Name of the CSV file to read from.")
 	sqliteFileName = flag.String("sqlite",
 		"",
 		"Name of the SQLite file to read from.")
 
-	traceReader tracing.TraceReader
-	fs          http.FileSystem
+	db datarecording.DataReader
+	fs http.FileSystem
 )
 
 func main() {
@@ -41,27 +35,6 @@ func main() {
 func parseArgs() {
 	flag.Parse()
 
-	mustBeOneAndOnlyOneSource()
-}
-
-func mustBeOneAndOnlyOneSource() {
-	numSources := 0
-	if *mySQLDBName != "" {
-		numSources++
-	}
-
-	if *csvFileName != "" {
-		numSources++
-	}
-
-	if *sqliteFileName != "" {
-		numSources++
-	}
-
-	if numSources != 1 {
-		flag.PrintDefaults()
-		panic("Must specify one and only one of -mysql, -csv, or -sqlite")
-	}
 }
 
 func startServer() {
@@ -70,19 +43,11 @@ func startServer() {
 }
 
 func connectToDB() {
-	switch {
-	case *mySQLDBName != "":
-		db := tracing.NewMySQLTraceReader(*mySQLDBName)
-		db.Init()
-		traceReader = db
-	case *csvFileName != "":
-		db := tracing.NewCSVTraceReader(*csvFileName)
-		traceReader = db
-	case *sqliteFileName != "":
-		db := tracing.NewSQLiteTraceReader(*sqliteFileName)
-		db.Init()
-		traceReader = db
+	if *sqliteFileName == "" {
+		panic("Must specify a SQLite file")
 	}
+
+	db = datarecording.NewReader(*sqliteFileName)
 }
 
 func startAPIServer() {
@@ -96,6 +61,7 @@ func startAPIServer() {
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 
 	fmt.Printf("Listening %s\n", *httpFlag)
+
 	err := http.ListenAndServe(*httpFlag, nil)
 	dieOnErr(err)
 }
