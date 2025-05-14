@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/pkg/browser"
 	"github.com/sarchlab/akita/v4/daisen/static"
 )
 
@@ -59,6 +60,16 @@ func startAPIServer() {
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 
 	fmt.Printf("Listening %s\n", *httpFlag)
+
+	go func() {
+		url := fmt.Sprintf("http://localhost%s", *httpFlag)
+		if (*httpFlag)[0] != ':' {
+			url = fmt.Sprintf("http://%s", *httpFlag)
+		}
+		if err := browser.OpenURL(url); err != nil {
+			log.Printf("Error opening browser: %v\n", err)
+		}
+	}()
 
 	err := http.ListenAndServe(*httpFlag, nil)
 	dieOnErr(err)
