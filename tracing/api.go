@@ -3,7 +3,6 @@ package tracing
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -158,6 +157,7 @@ func AddTaskStep(
 
 // AddMilestone records the time that that a blocking reason is resolved.
 func AddMilestone(
+	ID string,
 	taskID string,
 	blockingCategory string,
 	blockingReason string,
@@ -165,7 +165,7 @@ func AddMilestone(
 	domain NamedHookable,
 ) {
 	milestone := Milestone{
-		ID:               strconv.FormatUint(GenerateMilestoneID(), 10),
+		ID:               ID,
 		TaskID:           taskID,
 		BlockingCategory: blockingCategory,
 		BlockingReason:   blockingReason,
