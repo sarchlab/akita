@@ -34,7 +34,6 @@ type Builder struct {
 	bankLatency int
 
 	addressMapperType string
-	remotePorts       []sim.RemotePort
 }
 
 // MakeBuilder creates a new builder with default configurations.
@@ -214,7 +213,10 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 	cacheModule.storage = storage
 
 	if b.addressToPortMapper == nil {
-		panic("addressToPortMapper is nil. Did you forget to set WithRemotePorts or WithAddressMapperType?")
+		panic(
+			"addressToPortMapper is nil. " +
+			"WithRemotePorts or WithAddressMapperType not set",
+		)
 	}
 
 	cacheModule.addressToPortMapper = b.addressToPortMapper
