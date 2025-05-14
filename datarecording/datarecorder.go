@@ -65,7 +65,7 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 }
 
 func createExecRecorder(w *sqliteWriter) {
-	execRecorder := NewExecRecorderWithWriter(w)
+	execRecorder := newExecRecorderWithWriter(w)
 	execRecorder.Start()
 
 	w.execRecorder = execRecorder
