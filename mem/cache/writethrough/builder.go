@@ -172,13 +172,18 @@ func (b Builder) setTickingComponent(c *Comp, name string) {
 }
 
 func (b Builder) createPorts(c *Comp, name string) {
-	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle, name+".TopPort")
+	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle, name+".TopPort",
+)
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle, name+".BottomPort")
+	c.bottomPort = sim.NewPort(
+		c, b.numReqPerCycle, b.numReqPerCycle, name+".BottomPort",
+	)
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle, name+".ControlPort")
+	c.controlPort = sim.NewPort(
+		c, b.numReqPerCycle, b.numReqPerCycle, name+".ControlPort",
+	)
 	c.AddPort("Control", c.controlPort)
 }
 
@@ -186,7 +191,9 @@ func (b Builder) createBuffers(c *Comp, name string) {
 	c.dirBuf = sim.NewBuffer(name+".DirBuf", b.numReqPerCycle)
 	c.bankBufs = make([]sim.Buffer, b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		c.bankBufs[i] = sim.NewBuffer(fmt.Sprintf("%s.BankBuf%d", name, i), b.numReqPerCycle)
+		c.bankBufs[i] = sim.NewBuffer(
+			fmt.Sprintf("%s.BankBuf%d", name, i), b.numReqPerCycle,
+		)
 	}
 }
 
@@ -222,10 +229,7 @@ func (b Builder) configurAddressMapper(c *Comp) {
 		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
 		c.addressToPortMapper = mapper
 	default:
-		panic(
-			"addressToPortMapper is nil. " +
-			"Did you forget to set WithRemotePorts or WithAddressMapperType?",
-		)
+		panic("addressToPortMapper is nil.")
 	}
 }
 
