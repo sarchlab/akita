@@ -1,6 +1,8 @@
 package addresstranslator
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
@@ -29,8 +31,8 @@ func MakeBuilder() Builder {
 	}
 }
 
-func (b Builder) WithVisTracer(backend tracing.Tracer) Builder {
-	b.visTracerBackend = backend
+func (b Builder) WithVisTracer(tracer tracing.Tracer) Builder {
+	b.visTracerBackend = tracer
 	return b
 }
 
@@ -100,7 +102,10 @@ func (b Builder) Build(name string) *Comp {
 	t.deviceID = b.deviceID
 
 	if b.visTracerBackend != nil {
+		fmt.Printf("Initializing tracer for AddressTranslator: %s\n", name)
 		t.InitVisTracer(b.engine, b.visTracerBackend)
+	} else {
+		fmt.Printf("No tracer provided for AddressTranslator: %s\n", name)
 	}
 
 	middleware := &middleware{Comp: t}
