@@ -12,6 +12,25 @@ import (
 	"github.com/sarchlab/akita/v4/pipelining"
 )
 
+/*type tlbPipelineItem struct {
+	taskID string
+    //req    *vm.TranslationReq
+    //page   vm.Page
+	rsp    *vm.TranslationRsp
+}
+
+func (i *tlbPipelineItem) TaskID() string {
+	return i.taskID
+}*/
+
+type pipelineTLBReq struct {
+	req *vm.TranslationReq
+}
+
+func (r *pipelineTLBReq) TaskID() string {
+	return r.req.ID
+}
+
 // Comp is a cache(TLB) that maintains some page information.
 type Comp struct {
 	*sim.TickingComponent
@@ -36,8 +55,8 @@ type Comp struct {
 
 	isPaused bool
 
-	pipeline pipelining.Pipeline
-	//pipelineBuf sim.Buffer
+	responsePipeline pipelining.Pipeline
+	responseBuffer   sim.Buffer
 }
 
 //Reset sets all the entries in the TLB to be invalid
@@ -60,6 +79,9 @@ type tlbMiddleware struct {
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := m.performCtrlReq()
 
+	// tick pipeline
+    madeProgress = m.responsePipeline.Tick() || madeProgress
+
 	switch m.state {
 	case "drain":
 		madeProgress = m.handleDrain() || madeProgress
@@ -74,18 +96,52 @@ func (m *tlbMiddleware) Tick() bool {
 	return madeProgress
 }
 
+func (m *tlbMiddleware) processPipeline() bool{
+    madeProgress := false
+
+    // get req from port buffer and insert into pipeline
+    for i := 0; i < m.numReqPerCycle; i++ {
+    	if !m.responsePipeline.CanAccept() {
+    		break
+    	}
+    	req := m.topPort.RetrieveIncoming()
+    	if req == nil {
+    		break
+    	}
+    	m.responsePipeline.Accept(&pipelineTLBReq{req: req.(*vm.TranslationReq)})
+    	madeProgress = true
+    }
+
+    // get latent req from post-pipeline buffer
+    for i := 0; i < m.numReqPerCycle; i++ {
+        item := m.responseBuffer.Peek()
+        if item == nil {
+            break
+        }
+        m.responseBuffer.Pop()
+
+        req := item.(*pipelineTLBReq).req
+
+        m.lookup(req)
+
+        madeProgress = true
+    }
+
+    return madeProgress
+}
+
 // Handle enable state
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
-	for i := 0; i < m.numReqPerCycle; i++ {
+	/*for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
-	}
+	}*/
 
-	madeProgress = m.pipeline.Tick() || madeProgress
-	madeProgress = m.sendFromPipeline() || madeProgress
+	//madeProgress = m.responsePipeline.Tick() || madeProgress
+	madeProgress = m.processPipeline() || madeProgress
 
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
@@ -103,8 +159,8 @@ func (m *tlbMiddleware) handleDrain() bool {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
-    madeProgress = m.pipeline.Tick() || madeProgress
-    madeProgress = m.sendFromPipeline() || madeProgress
+    //madeProgress = m.responsePipeline.Tick() || madeProgress
+    madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
@@ -128,7 +184,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		WithPage(page).
 		Build()
 
-	err := m.topPort.Send(rspToTop)
+    /*item := &tlbPipelineItem{rsp: rspToTop}
+
+    if !m.responsePipeline.CanAccept() {
+        return false
+    }
+    m.responsePipeline.Accept(item)*/
+
+    err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
 	}
@@ -143,13 +206,13 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup() bool {
-	msg := m.topPort.PeekIncoming()
+func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
+	/*msg := m.topPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
 
-	req := msg.(*vm.TranslationReq)
+	req := msg.(*vm.TranslationReq)*/
 
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
@@ -172,29 +235,17 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-    /*ok := m.sendRspToTop(req, page)
+    ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
-	}*/
-	if !m.pipeline.CanAccept() {
-        return false
-    }
-
-    rsp := vm.TranslationRspBuilder{}.
-    		WithSrc(m.topPort.AsRemote()).
-    		WithDst(req.Src).
-    		WithRspTo(req.ID).
-    		WithPage(page).
-    		Build()
-
-    m.pipeline.Accept(rsp)
+	}
 
 	m.visit(setID, wayID)
-	m.topPort.RetrieveIncoming()
+	//m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
-	//tracing.TraceReqComplete(req, m.Comp)
+	tracing.TraceReqComplete(req, m.Comp)
 
 	return true
 }
@@ -208,7 +259,7 @@ func (m *tlbMiddleware) handleTranslationMiss(
 
 	fetched := m.fetchBottom(req)
 	if fetched {
-		m.topPort.RetrieveIncoming()
+		//m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, m.Comp),
@@ -241,19 +292,6 @@ func (m *tlbMiddleware) sendRspToTop(
 
 	return err == nil
 }
-
-func (m *tlbMiddleware) sendFromPipeline() bool {
-	buffer := m.pipeline.(*pipelineImpl).postPipelineBuf
-    item := buffer.Peek()
-    if item != nil {
-    	err := m.topPort.Send(item) //if postPipelineBuf not empty, ends latency and send rsp to topPort
-    	if err == nil {
-    		buffer.Pop() //if send to topPort successfully, pop rsp from postPipelineBuf
-    		tracing.TraceReqComplete(item, m.Comp)
-    	}
-    }
-}
-
 
 func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,

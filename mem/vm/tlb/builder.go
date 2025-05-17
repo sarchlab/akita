@@ -1,6 +1,9 @@
 package tlb
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+    "github.com/sarchlab/akita/v4/sim"
+    "github.com/sarchlab/akita/v4/pipelining"
+)
 
 // A Builder can build TLBs
 type Builder struct {
@@ -103,6 +106,10 @@ func (b Builder) Build(name string) *Comp {
 	b.createPorts(name, tlb)
 
 	tlb.reset()
+
+	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
+    tlb.responseBuffer = buf
+    tlb.responsePipeline = pipelining.NewPipeline(name+".ResponsePipeline", b.latency, 1, buf)
 
 	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
 	tlb.AddMiddleware(ctrlMiddleware)
