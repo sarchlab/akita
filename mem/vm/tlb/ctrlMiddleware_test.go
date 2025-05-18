@@ -33,7 +33,7 @@ var _ = Describe("TLB", func() {
 		comp.topPort = topPort
 		comp.bottomPort = bottomPort
 		comp.controlPort = controlPort
-		comp.Sets = []internal.Set{set}
+		comp.sets = []internal.Set{set}
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
 		tlbMW = comp.Middlewares()[1].(*tlbMiddleware)
