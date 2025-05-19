@@ -162,7 +162,6 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
 	r.PathPrefix("/").Handler(fServer)
-	http.Handle("/", r)
 
 	actualPort := ":0"
 	if m.portNumber > 1000 {
