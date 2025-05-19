@@ -47,6 +47,12 @@ func (s *Simulation) GetVisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
 
+// Components returns all the components registered in the simulation. The
+// returned slice should be treated as read-only.
+func (s *Simulation) Components() []sim.Component {
+	return s.components
+}
+
 // RegisterComponent registers a component with the simulation.
 func (s *Simulation) RegisterComponent(c sim.Component) {
 	compName := c.Name()

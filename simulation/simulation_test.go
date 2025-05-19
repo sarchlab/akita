@@ -19,7 +19,7 @@ var _ = Describe("Simulation", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		simulation = MakeBuilder().Build()
+		simulation = MakeBuilder().WithoutMonitoring().Build()
 
 		comp = NewMockComponent(mockCtrl)
 		comp.EXPECT().Name().Return("comp").AnyTimes()
@@ -43,5 +43,15 @@ var _ = Describe("Simulation", func() {
 
 		Expect(simulation.GetComponentByName("comp")).To(Equal(comp))
 		Expect(simulation.GetPortByName("port")).To(Equal(port))
+	})
+
+	It("should return all registered components", func() {
+		comp.EXPECT().Ports().Return([]sim.Port{port}).AnyTimes()
+
+		simulation.RegisterComponent(comp)
+
+		comps := simulation.Components()
+		Expect(comps).To(HaveLen(1))
+		Expect(comps[0]).To(Equal(comp))
 	})
 })
