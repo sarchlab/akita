@@ -43,6 +43,7 @@ func (b Builder) Build() *Simulation {
 
 	s.monitor = monitoring.NewMonitor()
 	s.monitor.RegisterEngine(s.engine)
+	s.monitor.StartServer()
 
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
 
