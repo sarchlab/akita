@@ -79,7 +79,7 @@ func (b *bufferImpl) Pop() interface{} {
 	if b.NumHooks() > 0 {
 		b.InvokeHook(HookCtx{
 			Domain: b,
-			Pos:    HookPosBufPush,
+			Pos:    HookPosBufPop,
 			Item:   e,
 			Detail: nil,
 		})
