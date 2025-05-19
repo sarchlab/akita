@@ -2,6 +2,8 @@
 package directconnection
 
 import (
+	"fmt"
+
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -20,7 +22,12 @@ func (p *ports) getPortIndex(index int) sim.Port {
 }
 
 func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
-	return p.ports[p.portMap[name]]
+	portIndex, found := p.portMap[name]
+	if !found {
+		panic(fmt.Sprintf("port %s not found", name))
+	}
+
+	return p.ports[portIndex]
 }
 
 func (p *ports) list() []sim.Port {
