@@ -57,7 +57,9 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
 
-	s.monitor.RegisterComponent(c)
+	if s.monitor != nil {
+		s.monitor.RegisterComponent(c)
+	}
 
 	for _, p := range c.Ports() {
 		s.registerPort(p)
@@ -88,4 +90,8 @@ func (s *Simulation) GetPortByName(name string) sim.Port {
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
 	s.dataRecorder.Close()
+
+	if s.monitor != nil {
+		s.monitor.StopServer()
+	}
 }

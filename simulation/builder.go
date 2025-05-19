@@ -11,18 +11,26 @@ import (
 // Builder can be used to build a simulation.
 type Builder struct {
 	parallelEngine bool
+	monitorOn      bool
 }
 
 // MakeBuilder creates a new builder.
 func MakeBuilder() Builder {
 	return Builder{
 		parallelEngine: false,
+		monitorOn:      true,
 	}
 }
 
 // WithParallelEngine sets the simulation to use a parallel engine.
 func (b Builder) WithParallelEngine() Builder {
 	b.parallelEngine = true
+	return b
+}
+
+// WithoutMonitoring sets the simulation to not use monitoring.
+func (b Builder) WithoutMonitoring() Builder {
+	b.monitorOn = false
 	return b
 }
 
@@ -41,9 +49,11 @@ func (b Builder) Build() *Simulation {
 		s.engine = sim.NewParallelEngine()
 	}
 
-	s.monitor = monitoring.NewMonitor()
-	s.monitor.RegisterEngine(s.engine)
-	s.monitor.StartServer()
+	if b.monitorOn {
+		s.monitor = monitoring.NewMonitor()
+		s.monitor.RegisterEngine(s.engine)
+		s.monitor.StartServer()
+	}
 
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
 
