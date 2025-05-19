@@ -19,7 +19,7 @@ var _ = Describe("Simulation", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		simulation = MakeBuilder().Build()
+		simulation = MakeBuilder().WithoutMonitoring().Build()
 
 		comp = NewMockComponent(mockCtrl)
 		comp.EXPECT().Name().Return("comp").AnyTimes()
