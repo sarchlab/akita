@@ -1,11 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/sarchlab/akita/v4/tracing"
+	_ "github.com/mattn/go-sqlite3"
+
+	"github.com/sarchlab/akita/v4/sim"
 )
 
 func httpTrace(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +35,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query := tracing.TaskQuery{
+	query := TaskQuery{
 		ID:               r.FormValue("id"),
 		ParentID:         r.FormValue("parentid"),
 		Kind:             r.FormValue("kind"),
@@ -49,4 +53,249 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 
 	_, err = w.Write(rsp)
 	dieOnErr(err)
+}
+
+// TaskQuery is used to define the tasks to be queried. Not all the field has to
+// be set. If the fields are empty, the criteria is ignored.
+type TaskQuery struct {
+	// Use ID to select a single task by its ID.
+	ID string
+
+	// Use ParentID to select all the tasks that are children of a task.
+	ParentID string
+
+	// Use Kind to select all the tasks that are of a kind.
+	Kind string
+
+	// Use Where to select all the tasks that are executed at a location.
+	Where string
+
+	// Enable time range selection.
+	EnableTimeRange bool
+
+	// Use StartTime to select tasks that overlaps with the given task range.
+	StartTime, EndTime float64
+
+	// EnableParentTask will also query the parent task of the selected tasks.
+	EnableParentTask bool
+}
+
+// A Task is a task
+type Task struct {
+	ID        string         `json:"id"`
+	ParentID  string         `json:"parent_id"`
+	Kind      string         `json:"kind"`
+	What      string         `json:"what"`
+	Location  string         `json:"location"`
+	StartTime sim.VTimeInSec `json:"start_time"`
+	EndTime   sim.VTimeInSec `json:"end_time"`
+	// Steps      []TaskStep     `json:"steps"`
+	Detail     interface{} `json:"-"`
+	ParentTask *Task       `json:"-"`
+}
+
+// TraceReader can parse a trace file.
+type TraceReader interface {
+	// ListComponents returns all the locations used in the trace.
+	ListComponents() []string
+
+	// ListTasks queries tasks .
+	ListTasks(query TaskQuery) []Task
+}
+
+// SQLiteTraceReader is a reader that reads trace data from a SQLite database.
+type SQLiteTraceReader struct {
+	*sql.DB
+
+	filename string
+}
+
+// NewSQLiteTraceReader creates a new SQLiteTraceReader.
+func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
+	r := &SQLiteTraceReader{
+		filename: filename,
+	}
+
+	return r
+}
+
+// Init establishes a connection to the database.
+func (r *SQLiteTraceReader) Init() {
+	db, err := sql.Open("sqlite3", r.filename)
+	if err != nil {
+		panic(err)
+	}
+
+	r.DB = db
+}
+
+// ListComponents returns a list of components in the trace.
+func (r *SQLiteTraceReader) ListComponents() []string {
+	var components []string
+
+	rows, err := r.Query("SELECT DISTINCT Location FROM trace")
+	if err != nil {
+		panic(err)
+	}
+
+	defer func() {
+		err := rows.Close()
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	for rows.Next() {
+		var component string
+
+		err := rows.Scan(&component)
+		if err != nil {
+			panic(err)
+		}
+
+		components = append(components, component)
+	}
+
+	return components
+}
+
+// ListTasks returns a list of tasks in the trace according to the given query.
+func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
+	sqlStr := r.prepareTaskQueryStr(query)
+
+	rows, err := r.Query(sqlStr)
+	if err != nil {
+		panic(err)
+	}
+
+	tasks := []Task{}
+
+	for rows.Next() {
+		t := Task{}
+		pt := Task{}
+
+		if query.EnableParentTask {
+			t.ParentTask = &pt
+			err := rows.Scan(
+				&t.ID,
+				&t.ParentID,
+				&t.Kind,
+				&t.What,
+				&t.Location,
+				&t.StartTime,
+				&t.EndTime,
+				&pt.ID,
+				&pt.ParentID,
+				&pt.Kind,
+				&pt.What,
+				&pt.Location,
+				&pt.StartTime,
+				&pt.EndTime,
+			)
+
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			err := rows.Scan(
+				&t.ID,
+				&t.ParentID,
+				&t.Kind,
+				&t.What,
+				&t.Location,
+				&t.StartTime,
+				&t.EndTime,
+			)
+
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		tasks = append(tasks, t)
+	}
+
+	return tasks
+}
+
+func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
+	sqlStr := `
+		SELECT 
+			t.ID, 
+			t.ParentID,
+			t.Kind,
+			t.What,
+			t.Location,
+			t.StartTime,
+			t.EndTime
+	`
+
+	if query.EnableParentTask {
+		sqlStr += `,
+			pt.ID,
+			pt.ParentID,
+			pt.Kind,
+			pt.What,
+			pt.Location,
+			pt.StartTime,
+			pt.EndTime
+		`
+	}
+
+	sqlStr += `
+		FROM trace t
+	`
+
+	if query.EnableParentTask {
+		sqlStr += `
+			LEFT JOIN trace pt
+			ON t.ParentID = pt.ID
+		`
+	}
+
+	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
+
+	return sqlStr
+}
+
+func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
+	sqlStr string,
+	query TaskQuery,
+) string {
+	sqlStr += `
+		WHERE 1=1
+	`
+
+	if query.ID != "" {
+		sqlStr += `
+			AND t.ID = '` + query.ID + `'
+		`
+	}
+
+	if query.ParentID != "" {
+		sqlStr += `
+			AND t.ParentID = '` + query.ParentID + `'
+		`
+	}
+
+	if query.Kind != "" {
+		sqlStr += `
+			AND t.Kind = '` + query.Kind + `'
+		`
+	}
+
+	if query.Where != "" {
+		sqlStr += `
+			AND t.Location = '` + query.Where + `'
+		`
+	}
+
+	if query.EnableTimeRange {
+		sqlStr += fmt.Sprintf(
+			"AND t.EndTime > %.15f AND t.StartTime < %.15f",
+			query.StartTime,
+			query.EndTime)
+	}
+
+	return sqlStr
 }

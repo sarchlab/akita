@@ -38,6 +38,7 @@ type Monitor struct {
 	buffers      []sim.Buffer
 	portNumber   int
 	perfAnalyzer *analysis.PerfAnalyzer
+	httpServer   *http.Server
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
@@ -161,7 +162,6 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
 	r.PathPrefix("/").Handler(fServer)
-	http.Handle("/", r)
 
 	actualPort := ":0"
 	if m.portNumber > 1000 {
@@ -176,10 +176,23 @@ func (m *Monitor) StartServer() {
 		"Monitoring simulation with http://localhost:%d\n",
 		listener.Addr().(*net.TCPAddr).Port)
 
+	m.httpServer = &http.Server{Handler: r}
+
 	go func() {
-		err = http.Serve(listener, nil)
-		dieOnErr(err)
+		err = m.httpServer.Serve(listener)
+		if err != nil && err != http.ErrServerClosed {
+			dieOnErr(err)
+		}
 	}()
+}
+
+func (m *Monitor) StopServer() {
+	if m.httpServer != nil {
+		err := m.httpServer.Shutdown(nil)
+		if err != nil {
+			log.Printf("Error shutting down server: %v", err)
+		}
+	}
 }
 
 func (m *Monitor) pauseEngine(w http.ResponseWriter, _ *http.Request) {

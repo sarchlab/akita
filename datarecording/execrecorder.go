@@ -57,8 +57,8 @@ func (e *execRecorder) End() {
 	e.recorder.Flush()
 }
 
-// NewExecRecorderWithWriter creates a new ExecRecorder with given writer
-func NewExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
+// newExecRecorderWithWriter creates a new ExecRecorder with given writer
+func newExecRecorderWithWriter(writer *sqliteWriter) *execRecorder {
 	entrySlice := []execInfo{}
 
 	e := &execRecorder{

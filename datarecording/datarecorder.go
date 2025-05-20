@@ -61,20 +61,14 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 
 	createExecRecorder(w)
 
-	atexit.Register(func() {
-		w.Flush()
-	})
-
 	return w
 }
 
 func createExecRecorder(w *sqliteWriter) {
-	execRecorder := NewExecRecorderWithWriter(w)
+	execRecorder := newExecRecorderWithWriter(w)
 	execRecorder.Start()
 
-	atexit.Register(func() {
-		execRecorder.End()
-	})
+	w.execRecorder = execRecorder
 }
 
 type table struct {
@@ -87,10 +81,11 @@ type table struct {
 type sqliteWriter struct {
 	*sql.DB
 
-	dbName     string
-	tables     map[string]*table
-	batchSize  int
-	entryCount int
+	dbName       string
+	tables       map[string]*table
+	batchSize    int
+	entryCount   int
+	execRecorder *execRecorder
 }
 
 // Init establishes a connection to the database.
@@ -106,8 +101,6 @@ func (t *sqliteWriter) Init() {
 	if err == nil {
 		panic(fmt.Errorf("file %s already exists", filename))
 	}
-
-	fmt.Fprintf(os.Stderr, "Database created for recording: %s\n", filename)
 
 	db, err := sql.Open("sqlite3", filename)
 	if err != nil {
@@ -361,5 +354,16 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 }
 
 func (t *sqliteWriter) Close() error {
-	return t.DB.Close()
+	if t.execRecorder != nil {
+		t.execRecorder.End()
+	}
+
+	t.Flush()
+
+	err := t.DB.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close database connection: %w", err)
+	}
+
+	return nil
 }

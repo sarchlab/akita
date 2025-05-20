@@ -4,50 +4,10 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/tracing"
 )
-
-// Comp is a cache(TLB) that maintains some page information.
-type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
-
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
-
-	LowModule sim.RemotePort
-
-	numSets        int
-	numWays        int
-	pageSize       uint64
-	numReqPerCycle int
-	state          string
-
-	Sets []internal.Set
-
-	mshr                mshr
-	respondingMSHREntry *mshrEntry
-
-	isPaused bool
-}
-
-//Reset sets all the entries in the TLB to be invalid
-func (c *Comp) reset() {
-	c.Sets = make([]internal.Set, c.numSets)
-	for i := 0; i < c.numSets; i++ {
-		set := internal.NewSet(c.numWays)
-		c.Sets[i] = set
-	}
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
-}
 
 type tlbMiddleware struct {
 	*Comp
@@ -146,7 +106,7 @@ func (m *tlbMiddleware) lookup() bool {
 	}
 
 	setID := m.vAddrToSetID(req.VAddr)
-	set := m.Sets[setID]
+	set := m.sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
 
 	if found && page.Valid {
@@ -161,7 +121,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-    ok := m.sendRspToTop(req, page)
+	ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
@@ -236,7 +196,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.LowModule).
+		WithDst(m.addressMapper.Find(req.VAddr)).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
@@ -277,8 +237,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	setID := m.vAddrToSetID(page.VAddr)
-	set := m.Sets[setID]
-	wayID, ok := m.Sets[setID].Evict()
+	set := m.sets[setID]
+	wayID, ok := m.sets[setID].Evict()
 
 	if !ok {
 		panic("failed to evict")
@@ -310,14 +270,14 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
-    case *mem.ControlMsg:
-    	if req.Enable {
-    		m.state = "enable"
-    	} else if req.Drain {
-    		m.state = "drain"
-    	} else if req.Pause {
-    		m.state = "pause"
-    	}
+	case *mem.ControlMsg:
+		if req.Enable {
+			m.state = "enable"
+		} else if req.Drain {
+			m.state = "drain"
+		} else if req.Pause {
+			m.state = "pause"
+		}
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
@@ -326,7 +286,7 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 }
 
 func (m *tlbMiddleware) visit(setID, wayID int) {
-	set := m.Sets[setID]
+	set := m.sets[setID]
 	set.Visit(wayID)
 }
 
@@ -343,7 +303,7 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 
 	for _, vAddr := range req.VAddr {
 		setID := m.vAddrToSetID(vAddr)
-		set := m.Sets[setID]
+		set := m.sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
 
 		if !found {
