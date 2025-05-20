@@ -9,18 +9,14 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port,Engine,Buffer
-//go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/cache MSHR,Directory
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressToPortMapper
-
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		cacheModule *Comp
-		ms          *mshrStage
-		inBuf       *MockBuffer
-		mshr        *MockMSHR
-		topPort     *MockPort
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		ms                  *mshrStage
+		inBuf               *MockBuffer
+		mshr                *MockMSHR
+		topPort             *MockPort
 		addressToPortMapper *MockAddressToPortMapper
 	)
 

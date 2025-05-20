@@ -10,10 +10,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port,Engine,Buffer
-//go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/cache MSHR,Directory
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressToPortMapper
-
 var _ = Describe("Bank Stage", func() {
 	var (
 		mockCtrl            *gomock.Controller
