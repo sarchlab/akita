@@ -7,6 +7,8 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressToPortMapper
+
 var _ = Describe("TopParser", func() {
 	var (
 		mockCtrl *gomock.Controller
@@ -14,6 +16,7 @@ var _ = Describe("TopParser", func() {
 		parser   *topParser
 		port     *MockPort
 		buf      *MockBuffer
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -21,7 +24,10 @@ var _ = Describe("TopParser", func() {
 		port = NewMockPort(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
 
-		builder := MakeBuilder()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+
+    	builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cache = builder.Build("Cache")
 
 		parser = &topParser{
