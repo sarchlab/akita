@@ -36,7 +36,8 @@ var _ = Describe("DirectoryStage", func() {
 		bankBuf = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder()
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.dirStageBuffer = dirBuf
 		cacheModule.mshr = mshr
