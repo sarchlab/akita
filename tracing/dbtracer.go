@@ -1,6 +1,8 @@
 package tracing
 
 import (
+	"sync"
+
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
@@ -20,6 +22,7 @@ type taskTableEntry struct {
 // DBTracers can connect with different backends so that the tasks can be stored
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
 type DBTracer struct {
+	mu         sync.Mutex
 	timeTeller sim.TimeTeller
 	backend    datarecording.DataRecorder
 
@@ -30,6 +33,9 @@ type DBTracer struct {
 
 // StartTask marks the start of a task.
 func (t *DBTracer) StartTask(task Task) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	t.startingTaskMustBeValid(task)
 
 	task.StartTime = t.timeTeller.CurrentTime()
@@ -70,6 +76,9 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 
 // EndTask marks the end of a task.
 func (t *DBTracer) EndTask(task Task) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	task.EndTime = t.timeTeller.CurrentTime()
 
 	if t.startTime > 0 && task.EndTime < t.startTime {
