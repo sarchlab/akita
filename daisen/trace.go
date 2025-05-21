@@ -162,73 +162,85 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 // ListTasks returns a list of tasks in the trace according to the given query.
 func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 	sqlStr := r.prepareTaskQueryStr(query)
-
 	rows, err := r.Query(sqlStr)
 	if err != nil {
 		panic(err)
 	}
+	defer rows.Close()
 
 	tasks := []Task{}
-
 	for rows.Next() {
-		t := Task{}
-		pt := Task{}
-
-		if query.EnableParentTask {
-			t.ParentTask = &pt
-			var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
-			var ptStartTime, ptEndTime sql.NullFloat64
-
-			err := rows.Scan(
-				&t.ID,
-				&t.ParentID,
-				&t.Kind,
-				&t.What,
-				&t.Location,
-				&t.StartTime,
-				&t.EndTime,
-				&ptID,
-				&ptParentID,
-				&ptKind,
-				&ptWhat,
-				&ptLocation,
-				&ptStartTime,
-				&ptEndTime,
-			)
-
-			if err != nil {
-				panic(err)
-			}
-
-			if ptID.Valid {
-				pt.ID = ptID.String
-				pt.ParentID = ptParentID.String
-				pt.Kind = ptKind.String
-				pt.What = ptWhat.String
-				pt.Location = ptLocation.String
-				pt.StartTime = sim.VTimeInSec(ptStartTime.Float64)
-				pt.EndTime = sim.VTimeInSec(ptEndTime.Float64)
-			}
-		} else {
-			err := rows.Scan(
-				&t.ID,
-				&t.ParentID,
-				&t.Kind,
-				&t.What,
-				&t.Location,
-				&t.StartTime,
-				&t.EndTime,
-			)
-
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		tasks = append(tasks, t)
+		task := r.scanTaskFromRow(rows, query.EnableParentTask)
+		tasks = append(tasks, task)
 	}
 
 	return tasks
+}
+
+func (r *SQLiteTraceReader) scanTaskFromRow(
+	rows *sql.Rows,
+	enableParentTask bool,
+) Task {
+	t := Task{}
+
+	if enableParentTask {
+		t.ParentTask = &Task{}
+		r.scanTaskWithParent(rows, &t)
+	} else {
+		r.scanTaskWithoutParent(rows, &t)
+	}
+
+	return t
+}
+
+func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
+	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+	var ptStartTime, ptEndTime sql.NullFloat64
+
+	err := rows.Scan(
+		&t.ID,
+		&t.ParentID,
+		&t.Kind,
+		&t.What,
+		&t.Location,
+		&t.StartTime,
+		&t.EndTime,
+		&ptID,
+		&ptParentID,
+		&ptKind,
+		&ptWhat,
+		&ptLocation,
+		&ptStartTime,
+		&ptEndTime,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	if ptID.Valid {
+		t.ParentTask.ID = ptID.String
+		t.ParentTask.ParentID = ptParentID.String
+		t.ParentTask.Kind = ptKind.String
+		t.ParentTask.What = ptWhat.String
+		t.ParentTask.Location = ptLocation.String
+		t.ParentTask.StartTime = sim.VTimeInSec(ptStartTime.Float64)
+		t.ParentTask.EndTime = sim.VTimeInSec(ptEndTime.Float64)
+	}
+}
+
+func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
+	err := rows.Scan(
+		&t.ID,
+		&t.ParentID,
+		&t.Kind,
+		&t.What,
+		&t.Location,
+		&t.StartTime,
+		&t.EndTime,
+	)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
