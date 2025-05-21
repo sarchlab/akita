@@ -176,6 +176,9 @@ func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 
 		if query.EnableParentTask {
 			t.ParentTask = &pt
+			var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+			var ptStartTime, ptEndTime sql.NullFloat64
+
 			err := rows.Scan(
 				&t.ID,
 				&t.ParentID,
@@ -184,17 +187,27 @@ func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 				&t.Location,
 				&t.StartTime,
 				&t.EndTime,
-				&pt.ID,
-				&pt.ParentID,
-				&pt.Kind,
-				&pt.What,
-				&pt.Location,
-				&pt.StartTime,
-				&pt.EndTime,
+				&ptID,
+				&ptParentID,
+				&ptKind,
+				&ptWhat,
+				&ptLocation,
+				&ptStartTime,
+				&ptEndTime,
 			)
 
 			if err != nil {
 				panic(err)
+			}
+
+			if ptID.Valid {
+				pt.ID = ptID.String
+				pt.ParentID = ptParentID.String
+				pt.Kind = ptKind.String
+				pt.What = ptWhat.String
+				pt.Location = ptLocation.String
+				pt.StartTime = sim.VTimeInSec(ptStartTime.Float64)
+				pt.EndTime = sim.VTimeInSec(ptEndTime.Float64)
 			}
 		} else {
 			err := rows.Scan(
