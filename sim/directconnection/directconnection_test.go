@@ -200,7 +200,7 @@ var _ = Describe("Direct Connection Integration", func() {
 })
 
 func directConnectionTest(seed int64) sim.VTimeInSec {
-	rand.Seed(seed)
+	r := rand.New(rand.NewSource(seed))
 
 	numAgents := 100
 	numMsgsPerAgent := 1000
@@ -218,10 +218,10 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 		for i := 0; i < numMsgsPerAgent; i++ {
 			msg := NewSampleMsg()
 			msg.Src = agent.OutPort.AsRemote()
-			msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
+			msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 
 			for msg.Dst == msg.Src {
-				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
+				msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 			}
 
 			msg.ID = fmt.Sprintf("%s(%d)->%s",
