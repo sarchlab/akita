@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 
 	// Need to use SQLite connections.
 	_ "github.com/mattn/go-sqlite3"
@@ -81,6 +82,7 @@ type table struct {
 type sqliteWriter struct {
 	*sql.DB
 
+	mu           sync.Mutex
 	dbName       string
 	tables       map[string]*table
 	batchSize    int
@@ -271,6 +273,9 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 }
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	table, exists := t.tables[tableName]
 	if !exists {
 		panic(fmt.Sprintf("table %s does not exist", tableName))
