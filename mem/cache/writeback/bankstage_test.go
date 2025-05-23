@@ -43,7 +43,8 @@ var _ = Describe("Bank Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		builder := MakeBuilder()
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.dirToBankBuffers = []sim.Buffer{dirInBuf}
 		cacheModule.writeBufferToBankBuffers =

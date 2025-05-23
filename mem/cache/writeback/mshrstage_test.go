@@ -11,12 +11,13 @@ import (
 
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		cacheModule *Comp
-		ms          *mshrStage
-		inBuf       *MockBuffer
-		mshr        *MockMSHR
-		topPort     *MockPort
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		ms                  *mshrStage
+		inBuf               *MockBuffer
+		mshr                *MockMSHR
+		topPort             *MockPort
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -29,7 +30,10 @@ var _ = Describe("MSHR Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		builder := MakeBuilder()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.mshr = mshr
 		cacheModule.mshrStageBuffer = inBuf
