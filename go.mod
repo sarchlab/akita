@@ -39,6 +39,6 @@ require (
 
 // replace github.com/syifan/goseth => ../goseth
 
-go 1.23.0
+go 1.24
 
 toolchain go1.24.1

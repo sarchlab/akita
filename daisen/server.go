@@ -13,7 +13,7 @@ import (
 
 var (
 	httpFlag = flag.String("http",
-		"0.0.0.0:3001",
+		"localhost:3001",
 		"HTTP service address (e.g., ':6060')")
 	sqliteFileName = flag.String("sqlite",
 		"",
