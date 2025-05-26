@@ -72,10 +72,22 @@ func createExecRecorder(w *sqliteWriter) {
 	w.execRecorder = execRecorder
 }
 
+type location struct {
+	index    int
+	location string
+}
+
+type locationInfo struct {
+	containsLocation bool
+	locationTable    string
+	locationMap      map[string]int
+}
+
 type table struct {
 	structType reflect.Type
 	entries    []any
 	statement  *sql.Stmt
+	loc        location
 }
 
 // sqliteWriter is the writer that writes data into SQLite database
