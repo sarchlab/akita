@@ -4,12 +4,12 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
+	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
-	"github.com/sarchlab/akita/v4/pipelining"
 )
 
 /*type tlbPipelineItem struct {
@@ -59,7 +59,7 @@ type Comp struct {
 	responseBuffer   sim.Buffer
 }
 
-//Reset sets all the entries in the TLB to be invalid
+// Reset sets all the entries in the TLB to be invalid
 func (c *Comp) reset() {
 	c.Sets = make([]internal.Set, c.numSets)
 	for i := 0; i < c.numSets; i++ {
@@ -80,7 +80,7 @@ func (m *tlbMiddleware) Tick() bool {
 	madeProgress := m.performCtrlReq()
 
 	// tick pipeline
-    madeProgress = m.responsePipeline.Tick() || madeProgress
+	madeProgress = m.responsePipeline.Tick() || madeProgress
 
 	switch m.state {
 	case "drain":
@@ -96,38 +96,38 @@ func (m *tlbMiddleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *tlbMiddleware) processPipeline() bool{
-    madeProgress := false
+func (m *tlbMiddleware) processPipeline() bool {
+	madeProgress := false
 
-    // get req from port buffer and insert into pipeline
-    for i := 0; i < m.numReqPerCycle; i++ {
-    	if !m.responsePipeline.CanAccept() {
-    		break
-    	}
-    	req := m.topPort.RetrieveIncoming()
-    	if req == nil {
-    		break
-    	}
-    	m.responsePipeline.Accept(&pipelineTLBReq{req: req.(*vm.TranslationReq)})
-    	madeProgress = true
-    }
+	// get req from port buffer and insert into pipeline
+	for i := 0; i < m.numReqPerCycle; i++ {
+		if !m.responsePipeline.CanAccept() {
+			break
+		}
+		req := m.topPort.RetrieveIncoming()
+		if req == nil {
+			break
+		}
+		m.responsePipeline.Accept(&pipelineTLBReq{req: req.(*vm.TranslationReq)})
+		madeProgress = true
+	}
 
-    // get latent req from post-pipeline buffer
-    for i := 0; i < m.numReqPerCycle; i++ {
-        item := m.responseBuffer.Peek()
-        if item == nil {
-            break
-        }
-        m.responseBuffer.Pop()
+	// get latent req from post-pipeline buffer
+	for i := 0; i < m.numReqPerCycle; i++ {
+		item := m.responseBuffer.Peek()
+		if item == nil {
+			break
+		}
+		m.responseBuffer.Pop()
 
-        req := item.(*pipelineTLBReq).req
+		req := item.(*pipelineTLBReq).req
 
-        m.lookup(req)
+		m.lookup(req)
 
-        madeProgress = true
-    }
+		madeProgress = true
+	}
 
-    return madeProgress
+	return madeProgress
 }
 
 // Handle enable state
@@ -159,8 +159,8 @@ func (m *tlbMiddleware) handleDrain() bool {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
-    //madeProgress = m.responsePipeline.Tick() || madeProgress
-    madeProgress = m.processPipeline() || madeProgress
+	//madeProgress = m.responsePipeline.Tick() || madeProgress
+	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
@@ -184,14 +184,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		WithPage(page).
 		Build()
 
-    /*item := &tlbPipelineItem{rsp: rspToTop}
+	/*item := &tlbPipelineItem{rsp: rspToTop}
 
-    if !m.responsePipeline.CanAccept() {
-        return false
-    }
-    m.responsePipeline.Accept(item)*/
+	  if !m.responsePipeline.CanAccept() {
+	      return false
+	  }
+	  m.responsePipeline.Accept(item)*/
 
-    err := m.topPort.Send(rspToTop)
+	err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
 	}
@@ -235,7 +235,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-    ok := m.sendRspToTop(req, page)
+	ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
@@ -384,14 +384,14 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
-    case *mem.ControlMsg:
-    	if req.Enable {
-    		m.state = "enable"
-    	} else if req.Drain {
-    		m.state = "drain"
-    	} else if req.Pause {
-    		m.state = "pause"
-    	}
+	case *mem.ControlMsg:
+		if req.Enable {
+			m.state = "enable"
+		} else if req.Drain {
+			m.state = "drain"
+		} else if req.Pause {
+			m.state = "pause"
+		}
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
