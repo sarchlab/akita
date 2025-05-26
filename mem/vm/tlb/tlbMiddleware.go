@@ -12,17 +12,6 @@ import (
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
-/*type tlbPipelineItem struct {
-	taskID string
-    //req    *vm.TranslationReq
-    //page   vm.Page
-	rsp    *vm.TranslationRsp
-}
-
-func (i *tlbPipelineItem) TaskID() string {
-	return i.taskID
-}*/
-
 type pipelineTLBReq struct {
 	req *vm.TranslationReq
 }
@@ -150,11 +139,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
-	/*for i := 0; i < m.numReqPerCycle; i++ {
-		madeProgress = m.lookup() || madeProgress
-	}*/
 
-	//madeProgress = m.responsePipeline.Tick() || madeProgress
 	madeProgress = m.processPipeline() || madeProgress
 
 	for i := 0; i < m.numReqPerCycle; i++ {
@@ -173,7 +158,6 @@ func (m *tlbMiddleware) handleDrain() bool {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
-	//madeProgress = m.responsePipeline.Tick() || madeProgress
 	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
@@ -198,13 +182,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		WithPage(page).
 		Build()
 
-	/*item := &tlbPipelineItem{rsp: rspToTop}
-
-	  if !m.responsePipeline.CanAccept() {
-	      return false
-	  }
-	  m.responsePipeline.Accept(item)*/
-
 	err := m.topPort.Send(rspToTop)
 	if err != nil {
 		return false
@@ -221,12 +198,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
-	/*msg := m.topPort.PeekIncoming()
-	if msg == nil {
-		return false
-	}
-
-	req := msg.(*vm.TranslationReq)*/
 
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
@@ -255,7 +226,6 @@ func (m *tlbMiddleware) handleTranslationHit(
 	}
 
 	m.visit(setID, wayID)
-	//m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
@@ -273,7 +243,6 @@ func (m *tlbMiddleware) handleTranslationMiss(
 
 	fetched := m.fetchBottom(req)
 	if fetched {
-		//m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, m.Comp),
