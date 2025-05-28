@@ -28,7 +28,8 @@ type DBTracer struct {
 
 	startTime, endTime sim.VTimeInSec
 
-	tracingTasks map[string]Task
+	tracingTasks      map[string]Task
+	tracingMilestones map[string]Milestone
 }
 
 // StartTask marks the start of a task.
@@ -71,7 +72,29 @@ func (t *DBTracer) StepTask(_ Task) {
 
 // AddMilestone adds a milestone.
 func (t *DBTracer) AddMilestone(milestone Milestone) {
-	t.backend.InsertData("trace_milestones", milestone)
+	lastMS, found := t.tracingMilestones[milestone.TaskID]
+
+	if !found {
+		t.temporarilyRecordMilestone(milestone)
+
+		return
+	}
+
+	if !isTheSameMilestone(lastMS, milestone) {
+		t.backend.InsertData("trace_milestones", milestone)
+		t.temporarilyRecordMilestone(milestone)
+	}
+}
+
+func isTheSameMilestone(a, b Milestone) bool {
+	return a.BlockingCategory == b.BlockingCategory &&
+		a.BlockingReason == b.BlockingReason &&
+		a.BlockingLocation == b.BlockingLocation
+}
+
+func (t *DBTracer) temporarilyRecordMilestone(milestone Milestone) {
+	milestone.Time = float64(t.timeTeller.CurrentTime())
+	t.tracingMilestones[milestone.TaskID] = milestone
 }
 
 // EndTask marks the end of a task.
@@ -105,6 +128,10 @@ func (t *DBTracer) EndTask(task Task) {
 	}
 
 	t.backend.InsertData("trace", taskTable)
+
+	finalMS := t.tracingMilestones[task.ID]
+	t.backend.InsertData("trace_milestones", finalMS)
+	delete(t.tracingMilestones, task.ID)
 }
 
 // Terminate terminates the tracer.
