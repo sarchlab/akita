@@ -12,20 +12,6 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-type Milestone struct {
-	ID               string  `json:"id"`
-	TaskID           string  `json:"task_id"`
-	BlockingCategory string  `json:"blocking_category"`
-	BlockingReason   string  `json:"blocking_reason"`
-	BlockingLocation string  `json:"blocking_location"`
-	Time             float64 `json:"time"`
-}
-
-type TaskWithMilestones struct {
-	tracing.Task
-	Milestones []Milestone `json:"milestones,omitempty"`
-}
-
 func httpTrace(w http.ResponseWriter, r *http.Request) {
 	useTimeRange := true
 	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
@@ -64,15 +50,10 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 
 	tasksWithMilestones := make([]TaskWithMilestones, len(tasks))
 
-	sqliteReader, ok := traceReader.(*tracing.DataRecorderTraceReader)
-	if !ok {
-		panic("Unsupported trace reader type")
-	}
-
 	for i, task := range tasks {
 		tasksWithMilestones[i].Task = task
 
-		rows, err := sqliteReader.DB.Query(`
+		rows, err := traceReader.DB.Query(`
             SELECT ID, BlockingCategory, BlockingReason, BlockingLocation, Time
 			FROM trace_milestones
 			WHERE ID = ?
@@ -143,6 +124,20 @@ type Task struct {
 	// Steps      []TaskStep     `json:"steps"`
 	Detail     interface{} `json:"-"`
 	ParentTask *Task       `json:"-"`
+}
+
+type Milestone struct {
+	ID               string  `json:"id"`
+	TaskID           string  `json:"task_id"`
+	BlockingCategory string  `json:"blocking_category"`
+	BlockingReason   string  `json:"blocking_reason"`
+	BlockingLocation string  `json:"blocking_location"`
+	Time             float64 `json:"time"`
+}
+
+type TaskWithMilestones struct {
+	Task
+	Milestones []Milestone `json:"milestones,omitempty"`
 }
 
 // TraceReader can parse a trace file.

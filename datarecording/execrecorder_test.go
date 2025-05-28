@@ -10,7 +10,6 @@ import (
 
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/stretchr/testify/assert"
-	"github.com/tebeka/atexit"
 )
 
 // Struct ExecInfo is feed to DataRecorder
@@ -53,7 +52,7 @@ func TestRecorderSetUp(t *testing.T) {
 
 	fmt.Println(ExpectedInfo)
 
-	atexit.Exit(0)
+	writer.Close()
 }
 
 func handlePanic() {
