@@ -7,10 +7,14 @@
 <body>
 
     <nav id="navbar" class="navbar navbar-dark bg-dark">
-        <a class="navbar-brand" href="/">AkitaRTM</a>
+        <a class="navbar-brand" href="/">AkitaRTM 528 v433</a>
 
         <div class="btn-toolbar my-2 my-lg-0">
             <div class="btn-group me-3 ms-3" role="group">
+
+                <!-- Button to control stop tracing. Shows 'Stop' at first. -->
+                <button id="trace-toggle-btn" class="btn btn-danger" type="button">Stop</button>
+
                 <button class="btn btn-primary" type="button">
                     <span class="resource-type">CPU</span>
                     <span id="cpu-usage"></span>

@@ -42,6 +42,9 @@ type Monitor struct {
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
+
+	// VisTracer field for visualization tracing
+	visTrace any
 }
 
 // NewMonitor creates a new Monitor
@@ -141,6 +144,12 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBars = newBars
 }
 
+// RegisterVisTracer registers a VisTracer instance to the monitor.
+// replace the any later
+func (m *Monitor) RegisterVisTracer(vt any) {
+	m.visTrace = vt
+}
+
 // StartServer starts the monitor as a web server with a custom port if wanted.
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
@@ -161,6 +170,10 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
+	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
+	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
+	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
+	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
 	r.PathPrefix("/").Handler(fServer)
 
 	actualPort := ":0"
@@ -568,4 +581,34 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 
 	_, err := w.Write([]byte(backend))
 	dieOnErr(err)
+}
+
+// --- VisTracer API handlers ---
+func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/start triggered")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"started"}`))
+}
+
+func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/end triggered")
+	// later: add engine/backend相关function
+	// eg. m.engine.Pause()
+	//     	_, err := w.Write(nil)
+	//      dieOnErr(err)
+	// eg. 别的地方再定义Pause
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"ended"}`))
+}
+
+func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/is_tracing triggered")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"is_tracing":true}`))
+}
+
+func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/file_size triggered")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"file_size":123456}`))
 }

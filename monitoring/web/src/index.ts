@@ -1,4 +1,3 @@
-
 import './reset.css'
 import './styles.scss'
 import './style.css'
@@ -47,6 +46,25 @@ class App {
         });
 
         listComponents(this.monitor)
+
+        // --- Trace Toggle Button Logic ---
+        const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement;
+        let tracing = true; // initial state is tracing (Stop shown)
+        traceBtn.addEventListener("click", async () => {
+            if (tracing) {
+                await fetch("/api/trace/end", { method: "POST" });
+                traceBtn.classList.remove("btn-danger");
+                traceBtn.classList.add("btn-success");
+                traceBtn.textContent = "Start";
+                tracing = false;
+            } else {
+                await fetch("/api/trace/start", { method: "POST" });
+                traceBtn.classList.remove("btn-success");
+                traceBtn.classList.add("btn-danger");
+                traceBtn.textContent = "Stop";
+                tracing = true;
+            }
+        });
     }
 }
 
