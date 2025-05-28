@@ -14,6 +14,7 @@ type EventLogger struct {
 func NewEventLogger(logger *log.Logger) *EventLogger {
 	h := new(EventLogger)
 	h.Logger = logger
+
 	return h
 }
 

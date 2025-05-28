@@ -1,11 +1,11 @@
 package writearound
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Respond Stage", func() {
@@ -18,14 +18,20 @@ var _ = Describe("Respond Stage", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
+
 		cache = &Comp{
 			topPort: topPort,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, cache)
-		s = &respondStage{cache: cache}
 
+		s = &respondStage{cache: cache}
 	})
 
 	AfterEach(func() {

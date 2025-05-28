@@ -1,35 +1,44 @@
 package writeback
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		cacheModule *Comp
-		ms          *mshrStage
-		inBuf       *MockBuffer
-		mshr        *MockMSHR
-		topSender   *MockBufferedSender
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		ms                  *mshrStage
+		inBuf               *MockBuffer
+		mshr                *MockMSHR
+		topPort             *MockPort
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		inBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
-		topSender = NewMockBufferedSender(mockCtrl)
+		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 
-		builder := MakeBuilder()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.mshr = mshr
-		cacheModule.topSender = topSender
 		cacheModule.mshrStageBuffer = inBuf
 		cacheModule.inFlightTransactions = nil
+		cacheModule.topPort = topPort
 
 		ms = &mshrStage{
 			cache: cacheModule,
@@ -65,7 +74,7 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 		inBuf.EXPECT().Pop().Return(mshrEntry)
-		topSender.EXPECT().CanSend(1).Return(false)
+		topPort.EXPECT().CanSend().Return(false)
 
 		ret := ms.Tick()
 
@@ -97,8 +106,8 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 		inBuf.EXPECT().Pop().Return(mshrEntry)
-		topSender.EXPECT().CanSend(1).Return(true)
-		topSender.EXPECT().Send(gomock.Any()).
+		topPort.EXPECT().CanSend().Return(true)
+		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(dr *mem.DataReadyRsp) {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -136,8 +145,8 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 		ms.processingMSHREntry = mshrEntry
-		topSender.EXPECT().CanSend(1).Return(true)
-		topSender.EXPECT().Send(gomock.Any()).
+		topPort.EXPECT().CanSend().Return(true)
+		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(done *mem.WriteDoneRsp) {
 				Expect(done.RespondTo).To(Equal(write.ID))
 			})
@@ -171,7 +180,7 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 		inBuf.EXPECT().Pop().Return(mshrEntry)
-		topSender.EXPECT().CanSend(1).Return(true)
+		topPort.EXPECT().CanSend().Return(true)
 
 		ret := ms.Tick()
 

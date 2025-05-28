@@ -1,52 +1,56 @@
 package writeevict_test
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "github.com/sarchlab/akita/v4/mem/cache/writeevict"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	gomock "go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
 
 var _ = Describe("Cache", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		engine          sim.Engine
-		connection      sim.Connection
-		lowModuleFinder mem.LowModuleFinder
-		dram            *idealmemcontroller.Comp
-		cuPort          *MockPort
-		c               *Comp
+		mockCtrl            *gomock.Controller
+		engine              sim.Engine
+		connection          sim.Connection
+		addressToPortMapper mem.AddressToPortMapper
+		dram                *idealmemcontroller.Comp
+		cuPort              *MockPort
+		c                   *Comp
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		cuPort = NewMockPort(mockCtrl)
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("CuPort")).AnyTimes()
 
 		engine = sim.NewSerialEngine()
-		connection = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+		connection = directconnection.MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			Build("Conn")
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
-		lowModuleFinder = &mem.SingleLowModuleFinder{
-			LowModule: dram.GetPortByName("Top"),
+		addressToPortMapper = &mem.SinglePortMapper{
+			Port: dram.GetPortByName("Top").AsRemote(),
 		}
-		c = NewBuilder().
+		c = MakeBuilder().
 			WithEngine(engine).
-			WithLowModuleFinder(lowModuleFinder).
+			WithAddressToPortMapper(addressToPortMapper).
 			Build("Cache")
 
-		connection.PlugIn(dram.GetPortByName("Top"), 64)
-		connection.PlugIn(c.GetPortByName("Top"), 4)
-		connection.PlugIn(c.GetPortByName("Bottom"), 16)
+		connection.PlugIn(dram.GetPortByName("Top"))
+		connection.PlugIn(c.GetPortByName("Top"))
+		connection.PlugIn(c.GetPortByName("Bottom"))
 		cuPort.EXPECT().SetConnection(connection)
-		connection.PlugIn(cuPort, 4)
+		connection.PlugIn(cuPort)
 	})
 
 	AfterEach(func() {
@@ -56,8 +60,8 @@ var _ = Describe("Cache", func() {
 	It("should do read miss", func() {
 		dram.Storage.Write(0x100, []byte{1, 2, 3, 4})
 		read := mem.ReadReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x100).
 			WithByteSize(4).
 			Build()
@@ -74,16 +78,16 @@ var _ = Describe("Cache", func() {
 	It("should do read miss coalesce", func() {
 		dram.Storage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := mem.ReadReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x100).
 			WithByteSize(4).
 			Build()
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := mem.ReadReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
@@ -104,8 +108,8 @@ var _ = Describe("Cache", func() {
 	It("should do read hit", func() {
 		dram.Storage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := mem.ReadReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x100).
 			WithByteSize(4).
 			Build()
@@ -118,8 +122,8 @@ var _ = Describe("Cache", func() {
 		t1 := engine.CurrentTime()
 
 		read2 := mem.ReadReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x104).
 			WithByteSize(4).
 			Build()
@@ -136,8 +140,8 @@ var _ = Describe("Cache", func() {
 
 	It("should write partial line", func() {
 		write := mem.WriteReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x100).
 			WithData([]byte{1, 2, 3, 4}).
 			Build()
@@ -155,8 +159,8 @@ var _ = Describe("Cache", func() {
 
 	It("should write full line", func() {
 		write := mem.WriteReqBuilder{}.
-			WithSrc(cuPort).
-			WithDst(c.GetPortByName("Top")).
+			WithSrc(cuPort.AsRemote()).
+			WithDst(c.GetPortByName("Top").AsRemote()).
 			WithAddress(0x100).
 			WithData(
 				[]byte{
@@ -180,5 +184,4 @@ var _ = Describe("Cache", func() {
 		data, _ := dram.Storage.Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
-
 })

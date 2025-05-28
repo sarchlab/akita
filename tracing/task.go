@@ -14,7 +14,7 @@ type Task struct {
 	ParentID   string         `json:"parent_id"`
 	Kind       string         `json:"kind"`
 	What       string         `json:"what"`
-	Where      string         `json:"where"`
+	Location   string         `json:"location"`
 	StartTime  sim.VTimeInSec `json:"start_time"`
 	EndTime    sim.VTimeInSec `json:"end_time"`
 	Steps      []TaskStep     `json:"steps"` 

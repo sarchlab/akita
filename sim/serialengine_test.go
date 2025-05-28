@@ -4,9 +4,9 @@ import (
 	"math/rand"
 	"time"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega/gmeasure"
+	gomock "go.uber.org/mock/gomock"
 	// . "github.com/onsi/gomega"
 )
 
@@ -109,7 +109,9 @@ var _ = Describe("SerialEngine", func() {
 				time := VTimeInSec(float64(rand.Uint64()%10) * 0.01)
 				evt.EXPECT().Time().Return(time).AnyTimes()
 				evt.EXPECT().Handler().Return(handler).AnyTimes()
-				evt.EXPECT().IsSecondary().Return(rand.Uint32()%2 == 0).AnyTimes()
+				evt.EXPECT().IsSecondary().
+					Return(rand.Uint32()%2 == 0).
+					AnyTimes()
 				engine.Schedule(evt)
 			}
 		})

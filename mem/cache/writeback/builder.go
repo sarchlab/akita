@@ -12,11 +12,11 @@ import (
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine           sim.Engine
-	freq             sim.Freq
-	lowModuleFinder  mem.LowModuleFinder
-	wayAssociativity int
-	log2BlockSize    uint64
+	engine              sim.Engine
+	freq                sim.Freq
+	addressToPortMapper mem.AddressToPortMapper
+	wayAssociativity    int
+	log2BlockSize       uint64
 
 	interleaving          bool
 	numInterleavingBlock  int
@@ -32,6 +32,8 @@ type Builder struct {
 
 	dirLatency  int
 	bankLatency int
+
+	addressMapperType string
 }
 
 // MakeBuilder creates a new builder with default configurations.
@@ -80,9 +82,9 @@ func (b Builder) WithNumMSHREntry(n int) Builder {
 	return b
 }
 
-// WithLowModuleFinder sets the LowModuleFinder to be used.
-func (b Builder) WithLowModuleFinder(f mem.LowModuleFinder) Builder {
-	b.lowModuleFinder = f
+// WithAddressToPortMapper sets the AddressToPortMapper to be used.
+func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
+	b.addressToPortMapper = f
 	return b
 }
 
@@ -107,6 +109,7 @@ func (b Builder) WithInterleaving(
 	b.numInterleavingBlock = numBlock
 	b.interleavingUnitCount = unitCount
 	b.interleavingUnitIndex = unitIndex
+
 	return b
 }
 
@@ -145,6 +148,28 @@ func (b Builder) WithBankLatency(n int) Builder {
 	return b
 }
 
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	if b.addressMapperType == "single" {
+		if len(ports) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		b.addressToPortMapper = &mem.SinglePortMapper{Port: ports[0]}
+	} else if b.addressMapperType == "interleaved" {
+		finder := mem.NewInterleavedAddressPortMapper(256) 
+		finder.LowModules = append(finder.LowModules, ports...)
+		b.addressToPortMapper = finder
+	} else {
+		panic("unknown address mapper type")
+	}
+
+	return b
+}
+
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *Comp {
 	cache := new(Comp)
@@ -153,7 +178,6 @@ func (b Builder) Build(name string) *Comp {
 
 	b.configureCache(cache)
 	b.createPorts(cache)
-	b.createPortSenders(cache)
 	b.createInternalStages(cache)
 	b.createInternalBuffers(cache)
 
@@ -172,7 +196,8 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 
 	if b.interleaving {
 		directory.AddrConverter = &mem.InterleavingConverter{
-			InterleavingSize:    uint64(b.numInterleavingBlock) * (1 << b.log2BlockSize),
+			InterleavingSize: uint64(b.numInterleavingBlock) *
+				(1 << b.log2BlockSize),
 			TotalNumOfElements:  b.interleavingUnitCount,
 			CurrentElementIndex: b.interleavingUnitIndex,
 		}
@@ -186,45 +211,34 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 	cacheModule.directory = directory
 	cacheModule.mshr = mshr
 	cacheModule.storage = storage
-	cacheModule.lowModuleFinder = b.lowModuleFinder
+
+	if b.addressToPortMapper == nil {
+		panic(
+			"addressToPortMapper is nil. " +
+			"WithRemotePorts or WithAddressMapperType not set",
+		)
+	}
+
+	cacheModule.addressToPortMapper = b.addressToPortMapper
 	cacheModule.state = cacheStateRunning
 	cacheModule.evictingList = make(map[uint64]bool)
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".ToTop")
+	cache.topPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".ToTop")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".BottomPort")
+	cache.bottomPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewLimitNumMsgPort(cache,
-		cache.numReqPerCycle*2, cache.Name()+".ControlPort")
+	cache.controlPort = sim.NewPort(cache,
+		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
+		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
-}
-
-func (b *Builder) createPortSenders(cache *Comp) {
-	cache.topSender = sim.NewBufferedSender(
-		cache.topPort,
-		sim.NewBuffer(cache.Name()+".TopSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
-	cache.bottomSender = sim.NewBufferedSender(
-		cache.bottomPort,
-		sim.NewBuffer(
-			cache.Name()+".BottomSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
-	cache.controlPortSender = sim.NewBufferedSender(
-		cache.controlPort, sim.NewBuffer(
-			cache.Name()+".ControlSenderBuffer",
-			cache.numReqPerCycle*4,
-		),
-	)
 }
 
 func (b *Builder) createInternalStages(cache *Comp) {

@@ -57,8 +57,10 @@ func (p *bottomParser) processDataReady(
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
+
 	pid := trans.readToBottom.PID
 	bankBuf := p.getBankBuf(trans.block)
+
 	if !bankBuf.CanPush() {
 		return false
 	}
@@ -99,6 +101,7 @@ func (p *bottomParser) mergeMSHRData(
 
 		write := trans.write
 		offset := write.Address - mshrEntry.Block.Tag
+
 		for i := 0; i < len(write.Data); i++ {
 			if write.DirtyMask[i] {
 				data[offset+uint64(i)] = write.Data[i]
@@ -126,6 +129,7 @@ func (p *bottomParser) finalizeMSHRTrans(
 				preCTrans.done = true
 			}
 		}
+
 		p.removeTransaction(trans)
 
 		tracing.EndTask(trans.id, p.cache)
@@ -140,6 +144,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 			return trans
 		}
 	}
+
 	return nil
 }
 
@@ -151,6 +156,7 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 			return trans
 		}
 	}
+
 	return nil
 }
 
@@ -160,6 +166,7 @@ func (p *bottomParser) removeTransaction(trans *transaction) {
 			p.cache.postCoalesceTransactions = append(
 				(p.cache.postCoalesceTransactions)[:i],
 				(p.cache.postCoalesceTransactions)[i+1:]...)
+
 			return
 		}
 	}
@@ -169,5 +176,6 @@ func (p *bottomParser) getBankBuf(block *cache.Block) sim.Buffer {
 	numWaysPerSet := p.cache.wayAssociativity
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(p.cache.bankBufs)
+
 	return p.cache.bankBufs[bankID]
 }

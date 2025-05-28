@@ -49,6 +49,7 @@ func initSeed() {
 	} else {
 		seed = *seedFlag
 	}
+
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 }
@@ -61,17 +62,20 @@ func buildEnvironment() {
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+	conn := directconnection.MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("Conn")
 
 	agent = acceptancetests.NewMemAccessAgent(engine)
 	agent.MaxAddress = *maxAddressFlag
 	agent.WriteLeft = *numAccessFlag
 	agent.ReadLeft = *numAccessFlag
 
-	lowModuleFinder := new(mem.SingleLowModuleFinder)
-	builder := writethrough.NewBuilder().
+	addressToPortMapper := new(mem.SinglePortMapper)
+	builder := writethrough.MakeBuilder().
 		WithEngine(engine).
-		WithLowModuleFinder(lowModuleFinder).
+		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).
 		WithNumMSHREntry(4).
 		WithWayAssociativity(8).
@@ -95,14 +99,14 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
-	lowModuleFinder.LowModule = dram.GetPortByName("Top")
+	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
 	agent.LowModule = writeevictCache.GetPortByName("Top")
 
-	conn.PlugIn(agent.GetPortByName("Mem"), 16)
-	conn.PlugIn(writeevictCache.GetPortByName("Bottom"), 16)
-	conn.PlugIn(writeevictCache.GetPortByName("Top"), 16)
-	conn.PlugIn(dram.GetPortByName("Top"), 16)
+	conn.PlugIn(agent.GetPortByName("Mem"))
+	conn.PlugIn(writeevictCache.GetPortByName("Bottom"))
+	conn.PlugIn(writeevictCache.GetPortByName("Top"))
+	conn.PlugIn(dram.GetPortByName("Top"))
 
 	agent.TickLater()
 }

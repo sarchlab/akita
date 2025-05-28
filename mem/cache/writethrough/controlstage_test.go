@@ -1,11 +1,11 @@
 package writethrough
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cache2 "github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Control Stage", func() {
@@ -27,8 +27,21 @@ var _ = Describe("Control Stage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		ctrlPort = NewMockPort(mockCtrl)
+		ctrlPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("CtrlPort")).
+			AnyTimes()
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+
 		directory = NewMockDirectory(mockCtrl)
 		inBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)

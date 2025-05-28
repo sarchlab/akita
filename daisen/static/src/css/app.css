@@ -82,6 +82,7 @@ body {
 
 #dashboard-btn,
 #dashboard-filter-group,
+<<<<<<< HEAD
 #primary-selector-group,
 #secondary-selector-group {
   margin-top: 8px;
@@ -92,20 +93,86 @@ body {
   text-align: left;
   margin-bottom: 10px;
   margin-left: 16px; 
+=======
+#primary-selector-group {
+  display: flex;
+  flex-direction: row;
+  margin-left: 20px;
+}
+
+#dashboard-filter-group,
+#primary-selector-group,
+#secondary-selector-group {
+  display: flex;
+  flex-direction: row;
+  flex: 2;
+  width: 400px;;
+}
+
+#secondary-selector-group {
+  margin-right: 10px;
+}
+
+#dashboard-filter-input {
+  width: 40%;
+  margin-left: -3px;
+  height: 38px !important;
+}
+
+#dashboard-btn { 
+  height: 38px !important; 
+  flex: 0.5;
+  width: 150px;
+  text-align: center;
+}
+
+.input-group-text,
+.custom-select,
+.form-control {
+  height: 38px;
+}
+
+.custom-select {
+  width: 50%;
+  margin-left: -3px;
+}
+
+.dropdown-canvas #dashboard-btn {
+  text-align: center;
+  margin-bottom: 10px;
+  margin-left: 16px; 
+  width: 30%;
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19
 }
 
 .dropdown-canvas #dashboard-filter-group {
   text-align: left;
   margin-bottom: 10px;
   margin-left: 16px; 
+<<<<<<< HEAD
+=======
+  width: 80%;
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19
 }
 
 .dropdown-canvas .custom-select,
 .dropdown-canvas .input-group {
+<<<<<<< HEAD
   width: calc(100% - 20px);
   text-align: left;
   margin-bottom: 10px;
   margin-left: 0; 
+=======
+  width: 100%;
+  text-align: left;
+  margin-left: 16px; 
+}
+
+.dropdown-canvas #primary-selector-group {
+  width: 100%;
+  margin-left: 16px;
+  margin-bottom: 10px;
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19
 }
 
 .dropdown-canvas .input-group-text {
@@ -114,7 +181,15 @@ body {
   justify-content: flex-start;
 }
 
+<<<<<<< HEAD
 @media (max-width: 1300px) {
+=======
+.dropdown-canvas .custom-select {
+  width: 40%;
+}
+
+@media (max-width: 1365px) {
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19
   .burger-menu {
     display: block;
   }
@@ -136,12 +211,24 @@ body {
     height: 720px; */
 }
 
-.side-column {
+/*.side-column {
   background: #eeeeee;
   padding: 5px;
   height: 100%;
   user-select: none;
+}*/
+.side-column {
+  background-color: #eeeeee;             
+  padding: 16px;                       
+  height: 100%;
+  user-select: none;
+  border-radius: 12px;                 
+  border: 1px solid #ddd;            
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); 
+  margin: 12px;                        
 }
+
+
 
 .curr-task-info {
   width: 100%;
@@ -200,6 +287,13 @@ body {
   pointer-events: none;
 }
 
+<<<<<<< HEAD
+=======
+.navbar-brand {
+  margin-left: 10px;
+}
+
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19
 .dashboard {
   overflow-y: scroll;
   margin-top: 5px;
@@ -289,4 +383,10 @@ body {
   margin-top: 10px;
   font-size: 30px;
   font-weight: bold;
+<<<<<<< HEAD
 }
+=======
+}
+ 
+
+>>>>>>> 27ce57661819f89344554094bee151e0f4cfca19

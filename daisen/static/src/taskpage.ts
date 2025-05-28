@@ -162,7 +162,8 @@ export class TaskPage implements ZoomHandler {
     const locationLabel = document.createElement("div");
     locationLabel.setAttribute("id", "location-label");
     locationLabel.style.fontSize = "20px";
-    locationLabel.style.color = "gray";  
+    locationLabel.style.color = "black"; 
+    locationLabel.style.fontWeight = "bold"; 
     this._rightColumn.appendChild(locationLabel);
     this._rightColumn.style.width =
       this._rightColumnWidth.toString() + "px";
@@ -274,15 +275,15 @@ export class TaskPage implements ZoomHandler {
       parentTask = parentTask[0];
     }
     if (parentTask != null) {
-      this._componentView.setComponentName(parentTask.where);
+      this._componentView.setComponentName(parentTask.location);
     } else {
-      this._componentView.setComponentName(task.where);
+      this._componentView.setComponentName(task.location);
     }
 
     const traceRsps = await Promise.all([
       fetch(
         `/api/trace?` +
-        `where=${task.where}` +
+        `where=${task.location}` +
         `&starttime=${this._startTime}` +
         `&endtime=${this._endTime}`
       )
@@ -332,7 +333,9 @@ export class TaskPage implements ZoomHandler {
 
     this._taskColorCoder.recode(sameLocationTasks);
     this._legend.render();
-    console.log('ComponentView Component Name before render:', this._componentView._componentName);
+    console.log('ComponentView Component Name before render:', 
+      this._componentView._componentName);
+
     await this._componentView.render(sameLocationTasks);
   }
 

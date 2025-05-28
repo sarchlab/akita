@@ -45,6 +45,7 @@ func (r BandwidthFirstRouter) floydWarshallInit(
 			if i == j {
 				table[i][j].bandwidth = math.Inf(1)
 				table[i][j].nextHop = &remotes[0]
+
 				continue
 			}
 
@@ -73,7 +74,10 @@ func (r BandwidthFirstRouter) floydWarshall(table [][]bfRouteInfo) {
 	}
 }
 
-func (r BandwidthFirstRouter) tableToRoute(table [][]bfRouteInfo, nodes []Node) {
+func (r BandwidthFirstRouter) tableToRoute(
+	table [][]bfRouteInfo,
+	nodes []Node,
+) {
 	for i, n1 := range nodes {
 		swNode, isSwitch := n1.(*switchNode)
 		if !isSwitch {
@@ -88,7 +92,8 @@ func (r BandwidthFirstRouter) tableToRoute(table [][]bfRouteInfo, nodes []Node) 
 
 			remote := table[i][j].nextHop
 			for _, p := range epNode.ports {
-				swNode.Table().DefineRoute(p, remote.LocalPort)
+				swNode.Table().
+					DefineRoute(p.AsRemote(), remote.LocalPort.AsRemote())
 			}
 		}
 	}

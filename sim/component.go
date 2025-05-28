@@ -36,6 +36,7 @@ func NewComponentBase(name string) *ComponentBase {
 	c := new(ComponentBase)
 	c.name = name
 	c.PortOwnerBase = NewPortOwnerBase()
+
 	return c
 }
 

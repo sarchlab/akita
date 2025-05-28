@@ -22,6 +22,7 @@ func (s *respondStage) Tick() bool {
 		if trans.read != nil {
 			return s.respondReadTrans(trans)
 		}
+
 		return s.respondWriteTrans(trans)
 	}
 
@@ -35,11 +36,12 @@ func (s *respondStage) respondReadTrans(trans *transaction) bool {
 
 	read := trans.read
 	dr := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(read.Src).
 		WithRspTo(read.ID).
 		WithData(trans.data).
 		Build()
+
 	err := s.cache.topPort.Send(dr)
 	if err != nil {
 		return false
@@ -59,10 +61,11 @@ func (s *respondStage) respondWriteTrans(trans *transaction) bool {
 
 	write := trans.write
 	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort).
+		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(write.Src).
 		WithRspTo(write.ID).
 		Build()
+
 	err := s.cache.topPort.Send(done)
 	if err != nil {
 		return false

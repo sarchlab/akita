@@ -1,11 +1,12 @@
 package dram
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MemController", func() {
@@ -28,6 +29,8 @@ var _ = Describe("MemController", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
+
 		subTransactionQueue = NewMockSubTransactionQueue(mockCtrl)
 		subTransSplitter = NewMockSubTransSplitter(mockCtrl)
 		addrConverter = NewMockAddressConverter(mockCtrl)

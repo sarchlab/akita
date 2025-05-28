@@ -19,7 +19,7 @@ class Dashboard {
   _numCol: number;
   _currPage: number;
   _currFilter: string;
-  _filterTimer: string;
+  _filterTimer: NodeJS.Timeout;
   _primaryAxis: string;
   _secondaryAxis: string;
   _startTime: number;
@@ -28,6 +28,8 @@ class Dashboard {
   _yAxisOptions: Array<YAxisOption>;
   _initialWidth: number;
   _initialHeight: number;
+  _burgerMenu: HTMLDivElement;
+  _dropdownCanvas: HTMLDivElement;
 
   constructor() {
     this._numWidget = 16;
@@ -58,31 +60,38 @@ class Dashboard {
   
     this._canvas.classList.add('canvas-container');
     
-    const burgerMenu = document.createElement('div');
-    burgerMenu.classList.add('burger-menu');
-    burgerMenu.innerHTML = `
+    if (this._burgerMenu) {
+      this._burgerMenu.remove();
+    }
+    if (this._dropdownCanvas) {
+      this._dropdownCanvas.remove();
+    }
+    
+    this._burgerMenu = document.createElement('div');
+    this._burgerMenu.classList.add('burger-menu');
+    this._burgerMenu.innerHTML = `
       <div class="burger-bar"></div>
       <div class="burger-bar"></div>
       <div class="burger-bar"></div>
     `;
-    burgerMenu.style.position = 'absolute';
-    burgerMenu.style.top = '10px';
-    burgerMenu.style.right = '10px';
+    this._burgerMenu.style.position = 'absolute';
+    this._burgerMenu.style.top = '10px';
+    this._burgerMenu.style.right = '10px';
 
-    const dropdownCanvas = document.createElement('div');
-    dropdownCanvas.classList.add('dropdown-canvas');
-    dropdownCanvas.style.display = 'none';
+    this._dropdownCanvas = document.createElement('div');
+    this._dropdownCanvas.classList.add('dropdown-canvas');
+    this._dropdownCanvas.style.display = 'none';
 
-    document.body.appendChild(burgerMenu);
-    document.body.appendChild(dropdownCanvas);
+    document.body.appendChild(this._burgerMenu);
+    document.body.appendChild(this._dropdownCanvas);
   
-    burgerMenu.addEventListener('click', () => {
-      const isActive = dropdownCanvas.classList.toggle('active');
-      dropdownCanvas.style.display = isActive ? 'block' : 'none';
+    this._burgerMenu.addEventListener('click', () => {
+      const isActive = this._dropdownCanvas.classList.toggle('active');
+      this._dropdownCanvas.style.display = isActive ? 'block' : 'none';
     });
   
     window.addEventListener('resize', () => {
-      this._updateNavbarVisibility(); 
+      this._updateNavbarVisibility();
       this._resize();
       this._widgets.forEach((w: Widget) => {
         w.createWidget(this._widgetWidth(), this._widgetHeight());
@@ -102,10 +111,10 @@ class Dashboard {
     this._addFilterUI(this._toolBar);
     this._addPrimarySelector(this._toolBar);
     this._addSecondarySelector(this._toolBar);
-    this._addZoomResetButton(dropdownCanvas);
-    this._addFilterUI(dropdownCanvas);
-    this._addPrimarySelector(dropdownCanvas);
-    this._addSecondarySelector(dropdownCanvas);
+    this._addZoomResetButton(this._dropdownCanvas);
+    this._addFilterUI(this._dropdownCanvas);
+    this._addPrimarySelector(this._dropdownCanvas);
+    this._addSecondarySelector(this._dropdownCanvas);
     this._resize();
 
   }
@@ -113,17 +122,12 @@ class Dashboard {
   _updateNavbarVisibility() {
     if (window.innerWidth <= 1365) {
       this._toolBar.style.display = 'none';
-      const burgerMenu = document.querySelector('.burger-menu') as HTMLElement;
-      if (burgerMenu) burgerMenu.style.display = 'block';
+      this._burgerMenu.style.display = 'block';
     } else {
       this._toolBar.style.display = 'flex';
-      const burgerMenu = document.querySelector('.burger-menu') as HTMLElement;
-      if (burgerMenu) burgerMenu.style.display = 'none';
-      const dropdownCanvas = document.querySelector('.dropdown-canvas') as HTMLElement;
-      if (dropdownCanvas) {
-        dropdownCanvas.classList.remove('active');
-        dropdownCanvas.style.display = 'none';
-      }
+      this._burgerMenu.style.display = 'none';
+      this._dropdownCanvas.style.display = 'none';
+      this._dropdownCanvas.classList.remove('active');
     }
   }
 

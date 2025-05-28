@@ -1,24 +1,44 @@
 package sim
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	gomock "go.uber.org/mock/gomock"
 )
 
-var _ = Describe("LimitNumMsgPort", func() {
+type sampleMsg struct {
+	MsgMeta
+}
+
+func NewSampleMsg() *sampleMsg {
+	m := &sampleMsg{}
+	return m
+}
+
+func (m *sampleMsg) Meta() *MsgMeta {
+	return &m.MsgMeta
+}
+
+func (m *sampleMsg) Clone() Msg {
+	cloneMsg := *m
+	cloneMsg.ID = GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+var _ = Describe("DefaultPort", func() {
 	var (
 		mockController *gomock.Controller
 		comp           *MockComponent
 		conn           *MockConnection
-		port           *LimitNumMsgPort
+		port           *defaultPort
 	)
 
 	BeforeEach(func() {
 		mockController = gomock.NewController(GinkgoT())
 		comp = NewMockComponent(mockController)
 		conn = NewMockConnection(mockController)
-		port = NewLimitNumMsgPort(comp, 4, "Port")
+		port = NewPort(comp, 4, 4, "Port").(*defaultPort)
 		port.SetConnection(conn)
 	})
 
@@ -44,27 +64,26 @@ var _ = Describe("LimitNumMsgPort", func() {
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
-	It("should be panic if msg dst is nil", func() {
+	It("should be panic if msg dst is not set", func() {
 		msg := NewSampleMsg()
-		msg.Src = port
-		msg.Dst = nil
+		msg.Src = port.AsRemote()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
 		msg := NewSampleMsg()
-		msg.Src = port
-		msg.Dst = port
+		msg.Src = port.AsRemote()
+		msg.Dst = port.AsRemote()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should send successfully", func() {
-		dst := NewLimitNumMsgPort(comp, 4, "Port")
+		dst := NewPort(comp, 4, 4, "DstPort")
 		msg := &sampleMsg{}
-		msg.Src = port
-		msg.Dst = dst
+		msg.Src = port.AsRemote()
+		msg.Dst = dst.AsRemote()
 		conn.EXPECT().NotifySend()
 
 		err := port.Send(msg)
@@ -74,10 +93,10 @@ var _ = Describe("LimitNumMsgPort", func() {
 	})
 
 	It("should propagate error when outgoing buff is full", func() {
-		dst := NewLimitNumMsgPort(comp, 4, "Port")
+		dst := NewPort(comp, 4, 4, "DstPort")
 		msg := &sampleMsg{}
-		msg.Src = port
-		msg.Dst = dst
+		msg.Src = port.AsRemote()
+		msg.Dst = dst.AsRemote()
 
 		port.outgoingBuf.Push(msg)
 		port.outgoingBuf.Push(msg)
@@ -148,14 +167,15 @@ var _ = Describe("LimitNumMsgPort", func() {
 		Expect(msg).To(BeNil())
 	})
 
-	It("should allow component to retrieve message from incoming buffer", func() {
-		msg := &sampleMsg{}
-		port.incomingBuf.Push(msg)
+	It("should allow component to retrieve message from incoming buffer",
+		func() {
+			msg := &sampleMsg{}
+			port.incomingBuf.Push(msg)
 
-		msgRet := port.RetrieveIncoming()
+			msgRet := port.RetrieveIncoming()
 
-		Expect(msgRet).To(BeIdenticalTo(msg))
-	})
+			Expect(msgRet).To(BeIdenticalTo(msg))
+		})
 
 	It("should return nil when retrieving empty outgoing buffer", func() {
 		msg := port.RetrieveOutgoing()
@@ -163,12 +183,13 @@ var _ = Describe("LimitNumMsgPort", func() {
 		Expect(msg).To(BeNil())
 	})
 
-	It("should allow component to retrieve message from outgoing buffer", func() {
-		msg := &sampleMsg{}
-		port.outgoingBuf.Push(msg)
+	It("should allow component to retrieve message from outgoing buffer",
+		func() {
+			msg := &sampleMsg{}
+			port.outgoingBuf.Push(msg)
 
-		msgRet := port.RetrieveOutgoing()
+			msgRet := port.RetrieveOutgoing()
 
-		Expect(msgRet).To(BeIdenticalTo(msg))
-	})
+			Expect(msgRet).To(BeIdenticalTo(msg))
+		})
 })

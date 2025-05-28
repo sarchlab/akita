@@ -35,6 +35,7 @@ func (d *SampleDomain) Start() {
 		"something",
 		nil,
 	)
+
 	d.taskIDs = append(d.taskIDs, d.nextID)
 
 	d.nextID++
@@ -45,6 +46,7 @@ func (d *SampleDomain) End() {
 		fmt.Sprintf("%d", d.taskIDs[0]),
 		d,
 	)
+
 	d.taskIDs = d.taskIDs[1:]
 }
 
@@ -68,12 +70,19 @@ func ExampleTracer() {
 	tracing.CollectTrace(domain, avgTimeTracer)
 
 	timeTeller.time = 1
+
 	domain.Start()
+
 	timeTeller.time = 1.5
+
 	domain.Start()
+
 	timeTeller.time = 2
+
 	domain.End()
+
 	timeTeller.time = 3
+
 	domain.End()
 
 	fmt.Println(totalTimeTracer.TotalTime())

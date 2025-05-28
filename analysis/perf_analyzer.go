@@ -17,7 +17,7 @@ type PerfAnalyzerEntry struct {
 	Start       sim.VTimeInSec
 	End         sim.VTimeInSec
 	Where       string
-	WhereRemote string
+	WhereRemote sim.RemotePort
 	What        string
 	Value       float64
 	Unit        string
@@ -156,6 +156,7 @@ func (b PerfAnalyzerBuilder) WithPeriod(
 ) PerfAnalyzerBuilder {
 	b.usePeriod = true
 	b.period = period
+
 	return b
 }
 
@@ -183,6 +184,7 @@ func (b PerfAnalyzerBuilder) WithEngine(
 // Build creates a PerfAnalyzer.
 func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	var backend PerfAnalyzerBackend
+
 	if b.dbFilename != "" {
 		if b.backendType == "csv" {
 			backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
@@ -234,7 +236,7 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 				"start":      fmt.Sprintf("%.9f", data.Start),
 				"end":        fmt.Sprintf("%.9f", data.End),
 				"localPort":  data.Where,
-				"remotePort": data.WhereRemote,
+				"remotePort": string(data.WhereRemote),
 				"value":      fmt.Sprintf("%.0f", data.Value),
 				"unit":       data.Unit,
 			}

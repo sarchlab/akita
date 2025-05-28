@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 16.x
+          node-version: 18.x
 
       - name: Install dependencies
         working-directory: ./monitoring/web
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 16.x
+          node-version: 18.x
 
       - name: Install dependencies
         working-directory: ./daisen/static
@@ -58,17 +58,35 @@ jobs:
       - name: Build
         run: go build ./...
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: akita_compile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "stable"
+
+      - name: Clean Go cache
+        run: |
+          go clean -modcache
+          rm -rf $(go env GOMODCACHE)/*
+
+      - name: Install Mockgen
+        run: go install go.uber.org/mock/mockgen@latest
+
+      - name: Run Mockgen
+        run: go generate ./...
+
       - name: Lint
         uses: golangci/golangci-lint-action@v3
         with:
           version: "latest"
           args: --timeout=10m
-
-      - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
-
-      - name: Unit Test
-        run: ginkgo -r
 
   akita_unit_test:
     name: Akita Unit Test
@@ -86,6 +104,12 @@ jobs:
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
+
+      - name: Install Mockgen
+        run: go install go.uber.org/mock/mockgen@latest
+
+      - name: Run Mockgen
+        run: go generate ./...
 
       - name: Unit Test
         run: ginkgo -r

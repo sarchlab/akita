@@ -1,13 +1,13 @@
 package writearound
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bottom Parser", func() {
@@ -168,7 +168,8 @@ var _ = Describe("Bottom Parser", func() {
 					preCTrans2,
 				},
 			}
-			c.postCoalesceTransactions = append(c.postCoalesceTransactions, postCTrans1)
+			c.postCoalesceTransactions = append(
+				c.postCoalesceTransactions, postCTrans1)
 
 			postCWrite = mem.WriteReqBuilder{}.
 				WithAddress(0x100).
@@ -222,12 +223,14 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(preCTrans1.data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(preCTrans2.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans1))
+			Expect(c.postCoalesceTransactions).
+				NotTo(ContainElement(postCTrans1))
 		})
 
 		It("should combine write", func() {
 			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans2)
-			c.postCoalesceTransactions = append(c.postCoalesceTransactions, postCTrans2)
+			c.postCoalesceTransactions = append(
+				c.postCoalesceTransactions, postCTrans2)
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
@@ -268,8 +271,10 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(preCTrans3.done).To(BeTrue())
 			Expect(preCTrans4.done).To(BeTrue())
-			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans1))
-			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans2))
+			Expect(c.postCoalesceTransactions).
+				NotTo(ContainElement(postCTrans1))
+			Expect(c.postCoalesceTransactions).
+				NotTo(ContainElement(postCTrans2))
 		})
 	})
 

@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
 
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -42,26 +42,30 @@ var _ = Describe("DRAM Integration", func() {
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
+		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
 
-		conn = directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+		conn = directconnection.MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			Build("Conn")
 		srcPort.EXPECT().SetConnection(conn)
-		conn.PlugIn(memCtrl.topPort, 1)
-		conn.PlugIn(srcPort, 1)
+		conn.PlugIn(memCtrl.topPort)
+		conn.PlugIn(srcPort)
 	})
 
 	It("should read and write", func() {
 		write := mem.WriteReqBuilder{}.
 			WithAddress(0x40).
 			WithData([]byte{1, 2, 3, 4}).
-			WithSrc(srcPort).
-			WithDst(memCtrl.topPort).
+			WithSrc(srcPort.AsRemote()).
+			WithDst(memCtrl.topPort.AsRemote()).
 			Build()
 
 		read := mem.ReadReqBuilder{}.
 			WithAddress(0x40).
 			WithByteSize(4).
-			WithSrc(srcPort).
-			WithDst(memCtrl.topPort).
+			WithSrc(srcPort.AsRemote()).
+			WithDst(memCtrl.topPort.AsRemote()).
 			Build()
 
 		memCtrl.topPort.Deliver(write)

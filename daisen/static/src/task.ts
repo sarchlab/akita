@@ -12,7 +12,7 @@ export class Task {
   parent_id: string;
   kind: string;
   what: string;
-  where: string;
+  location: string;
   start_time: number;
   end_time: number;
 

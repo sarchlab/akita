@@ -119,7 +119,7 @@ func StartTaskWithSpecificLocation(
 		ParentID: parentID,
 		Kind:     kind,
 		What:     what,
-		Where:    location,
+		Location: location,
 		Detail:   detail,
 	}
 	ctx := sim.HookCtx{
@@ -157,7 +157,6 @@ func AddTaskStep(
 
 // AddMilestone records the time that that a blocking reason is resolved.
 func AddMilestone(
-	ID string,
 	taskID string,
 	blockingCategory string,
 	blockingReason string,
@@ -165,7 +164,7 @@ func AddMilestone(
 	domain NamedHookable,
 ) {
 	milestone := Milestone{
-		ID:               ID,
+		ID:               sim.GetIDGenerator().Generate(),
 		TaskID:           taskID,
 		BlockingCategory: blockingCategory,
 		BlockingReason:   blockingReason,

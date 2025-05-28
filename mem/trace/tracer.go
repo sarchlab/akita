@@ -24,9 +24,16 @@ func (t *tracer) StartTask(task tracing.Task) {
 	if !ok {
 		return
 	}
-	t.logger.Printf("start, %.12f, %s, %s, %s, 0x%x, %d\n",
-		task.StartTime, task.Where, task.ID, task.What,
-		req.GetAddress(), req.GetByteSize())
+
+	t.logger.Printf(
+		"start, %.12f, %s, %s, %s, 0x%x, %d\n",
+		task.StartTime,
+		task.Location,
+		task.ID,
+		task.What,
+		req.GetAddress(),
+		req.GetByteSize(),
+	)
 }
 
 // StepTask marks the memory transaction has completed a milestone
@@ -62,5 +69,6 @@ func NewTracer(logger *log.Logger, timeTeller sim.TimeTeller) tracing.Tracer {
 	t := new(tracer)
 	t.logger = logger
 	t.timeTeller = timeTeller
+
 	return t
 }

@@ -82,6 +82,7 @@ func (c *Connector) WithEngine(engine sim.Engine) *Connector {
 func (c *Connector) WithFrequency(freq sim.Freq) *Connector {
 	c.freq = freq
 	c.connector = c.connector.WithDefaultFreq(freq)
+
 	return c
 }
 

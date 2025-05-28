@@ -14,9 +14,7 @@ type Connection interface {
 	Named
 	Hookable
 
-	// PlugIn connects a port to the connection. The connection should reserve
-	// a buffer that can hold `sourceSideBufSize` messages.
-	PlugIn(port Port, sourceSideBufSize int)
+	PlugIn(port Port)
 	Unplug(port Port)
 	NotifyAvailable(port Port)
 	NotifySend()

@@ -27,6 +27,7 @@ func NewTotalTimeTracer(
 		filter:        filter,
 		inflightTasks: make(map[string]Task),
 	}
+
 	return t
 }
 
@@ -35,6 +36,7 @@ func (t *TotalTimeTracer) TotalTime() sim.VTimeInSec {
 	t.lock.Lock()
 	time := t.totalTime
 	t.lock.Unlock()
+
 	return time
 }
 
@@ -66,6 +68,7 @@ func (t *TotalTimeTracer) EndTask(task Task) {
 	task.EndTime = t.timeTeller.CurrentTime()
 
 	t.lock.Lock()
+
 	originalTask, ok := t.inflightTasks[task.ID]
 	if !ok {
 		t.lock.Unlock()

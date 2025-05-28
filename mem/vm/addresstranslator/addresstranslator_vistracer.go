@@ -38,7 +38,7 @@ func (t *AddressTranslatorVisTracer) StartTask(task tracing.Task) {
 		TaskID:           task.ID,
 		BlockingCategory: "Port Status",
 		BlockingReason:   "Task Enqueued",
-		BlockingLocation: task.Where,
+		BlockingLocation: task.Location,
 		Time:             float64(t.timeTeller.CurrentTime()),
 	})
 }

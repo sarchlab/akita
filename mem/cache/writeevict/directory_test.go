@@ -1,28 +1,28 @@
 package writeevict
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Directory", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		inBuf           *MockBuffer
-		dir             *MockDirectory
-		mshr            *MockMSHR
-		bankBuf         *MockBuffer
-		bottomPort      *MockPort
-		lowModuleFinder *MockLowModuleFinder
-		pipeline        *MockPipeline
-		buf             *MockBuffer
-		d               *directory
-		c               *Comp
+		mockCtrl            *gomock.Controller
+		inBuf               *MockBuffer
+		dir                 *MockDirectory
+		mshr                *MockMSHR
+		bankBuf             *MockBuffer
+		bottomPort          *MockPort
+		addressToPortMapper *MockAddressToPortMapper
+		pipeline            *MockPipeline
+		buf                 *MockBuffer
+		d                   *directory
+		c                   *Comp
 	)
 
 	BeforeEach(func() {
@@ -33,19 +33,23 @@ var _ = Describe("Directory", func() {
 		mshr = NewMockMSHR(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 		bottomPort = NewMockPort(mockCtrl)
-		lowModuleFinder = NewMockLowModuleFinder(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
 		c = &Comp{
-			log2BlockSize:    6,
-			bottomPort:       bottomPort,
-			directory:        dir,
-			dirBuf:           inBuf,
-			numReqPerCycle:   4,
-			lowModuleFinder:  lowModuleFinder,
-			mshr:             mshr,
-			wayAssociativity: 4,
-			bankBufs:         []sim.Buffer{bankBuf},
+			log2BlockSize:       6,
+			bottomPort:          bottomPort,
+			directory:           dir,
+			dirBuf:              inBuf,
+			numReqPerCycle:      4,
+			addressToPortMapper: addressToPortMapper,
+			mshr:                mshr,
+			wayAssociativity:    4,
+			bankBufs:            []sim.Buffer{bankBuf},
 		}
 		c.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, c)
@@ -198,7 +202,9 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			dir.EXPECT().Visit(block)
-			lowModuleFinder.EXPECT().Find(uint64(0x100)).Return(nil)
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(sim.RemotePort(""))
 			bottomPort.EXPECT().Send(gomock.Any()).Do(func(read *mem.ReadReq) {
 				readToBottom = read
 				Expect(read.Address).To(Equal(uint64(0x100)))
@@ -255,7 +261,9 @@ var _ = Describe("Directory", func() {
 		It("should stall if send to bottom failed", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
-			lowModuleFinder.EXPECT().Find(uint64(0x100)).Return(nil)
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(sim.RemotePort(""))
 			mshr.EXPECT().IsFull().Return(false)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
@@ -292,7 +300,7 @@ var _ = Describe("Directory", func() {
 			buf.EXPECT().Peek().Return(nil)
 			buf.EXPECT().Pop()
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
-			lowModuleFinder.EXPECT().Find(uint64(0x104))
+			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(write *mem.WriteReq) {
 					writeToBottom = write
@@ -335,7 +343,7 @@ var _ = Describe("Directory", func() {
 			buf.EXPECT().Pop()
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
-			lowModuleFinder.EXPECT().Find(uint64(0x104))
+			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(write *mem.WriteReq) {
@@ -398,7 +406,7 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(true)
-			lowModuleFinder.EXPECT().Find(uint64(0x104))
+			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
 			madeProgress := d.Tick()
@@ -431,7 +439,7 @@ var _ = Describe("Directory", func() {
 			buf.EXPECT().Pop()
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			lowModuleFinder.EXPECT().Find(uint64(0x100))
+			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(write *mem.WriteReq) {
 					Expect(write.Address).To(Equal(uint64(0x100)))

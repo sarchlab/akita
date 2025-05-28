@@ -24,13 +24,13 @@ type Builder struct {
 	bankLatency           int
 	numReqPerCycle        int
 	maxNumConcurrentTrans int
-	lowModuleFinder       mem.LowModuleFinder
+	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 }
 
-// NewBuilder creates a builder with default parameter setting
-func NewBuilder() *Builder {
-	return &Builder{
+// MakeBuilder creates a builder with default parameter setting
+func MakeBuilder() Builder {
+	return Builder{
 		freq:                  1 * sim.GHz,
 		log2BlockSize:         6,
 		totalByteSize:         4 * mem.KB,
@@ -45,57 +45,57 @@ func NewBuilder() *Builder {
 }
 
 // WithEngine sets the event driven simulation engine that the cache uses
-func (b *Builder) WithEngine(engine sim.Engine) *Builder {
+func (b Builder) WithEngine(engine sim.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the cache works at
-func (b *Builder) WithFreq(freq sim.Freq) *Builder {
+func (b Builder) WithFreq(freq sim.Freq) Builder {
 	b.freq = freq
 	return b
 }
 
 // WithWayAssociativity sets the way associativity the builder builds.
-func (b *Builder) WithWayAssociativity(wayAssociativity int) *Builder {
+func (b Builder) WithWayAssociativity(wayAssociativity int) Builder {
 	b.wayAssociativity = wayAssociativity
 	return b
 }
 
 // WithNumMSHREntry sets the number of mshr entry
-func (b *Builder) WithNumMSHREntry(num int) *Builder {
+func (b Builder) WithNumMSHREntry(num int) Builder {
 	b.numMSHREntry = num
 	return b
 }
 
 // WithLog2BlockSize sets the number of bytes in a cache line as a power of 2
-func (b *Builder) WithLog2BlockSize(n uint64) *Builder {
+func (b Builder) WithLog2BlockSize(n uint64) Builder {
 	b.log2BlockSize = n
 	return b
 }
 
 // WithTotalByteSize sets the capacity of the cache unit
-func (b *Builder) WithTotalByteSize(byteSize uint64) *Builder {
+func (b Builder) WithTotalByteSize(byteSize uint64) Builder {
 	b.totalByteSize = byteSize
 	return b
 }
 
 // WithNumBanks sets the number of banks in each cache
-func (b *Builder) WithNumBanks(n int) *Builder {
+func (b Builder) WithNumBanks(n int) Builder {
 	b.numBank = n
 	return b
 }
 
 // WithDirectoryLatency sets the number of cycles required to access the
 // directory.
-func (b *Builder) WithDirectoryLatency(n int) *Builder {
+func (b Builder) WithDirectoryLatency(n int) Builder {
 	b.dirLatency = n
 	return b
 }
 
 // WithBankLatency sets the number of cycles needed to read to write a
 // cacheline.
-func (b *Builder) WithBankLatency(n int) *Builder {
+func (b Builder) WithBankLatency(n int) Builder {
 	b.bankLatency = n
 	return b
 }
@@ -109,28 +109,28 @@ func (b *Builder) WithMaxNumConcurrentTrans(n int) *Builder {
 
 // WithNumReqsPerCycle sets the number of requests that the cache can process
 // per cycle
-func (b *Builder) WithNumReqsPerCycle(n int) *Builder {
+func (b Builder) WithNumReqsPerCycle(n int) Builder {
 	b.numReqPerCycle = n
 	return b
 }
 
 // WithVisTracer sets the visualization tracer
-func (b *Builder) WithVisTracer(tracer tracing.Tracer) *Builder {
+func (b Builder) WithVisTracer(tracer tracing.Tracer) Builder {
 	b.visTracer = tracer
 	return b
 }
 
-// WithLowModuleFinder specifies how the cache units to create should find low
-// level modules.
-func (b *Builder) WithLowModuleFinder(
-	lowModuleFinder mem.LowModuleFinder,
-) *Builder {
-	b.lowModuleFinder = lowModuleFinder
+// WithAddressToPortMapper specifies how the cache units to create should find
+// low level modules.
+func (b Builder) WithAddressToPortMapper(
+	addressToPortMapper mem.AddressToPortMapper,
+) Builder {
+	b.addressToPortMapper = addressToPortMapper
 	return b
 }
 
 // Build returns a new cache unit
-func (b *Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
 
 	c := &Comp{
@@ -147,6 +147,7 @@ func (b *Builder) Build(name string) *Comp {
 		b.numReqPerCycle,
 	)
 	c.bankBufs = make([]sim.Buffer, b.numBank)
+
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = sim.NewBuffer(
 			c.Name()+".BankBuf"+fmt.Sprint(i),
@@ -163,7 +164,7 @@ func (b *Builder) Build(name string) *Comp {
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
 	c.wayAssociativity = b.wayAssociativity
-	c.lowModuleFinder = b.lowModuleFinder
+	c.addressToPortMapper = b.addressToPortMapper
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.buildStages(c)
@@ -179,15 +180,15 @@ func (b *Builder) Build(name string) *Comp {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.topPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".TopPort")
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.bottomPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".BottomPort")
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewLimitNumMsgPort(cache, b.numReqPerCycle,
+	cache.controlPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
 		cache.Name()+".ControlPort")
 	cache.AddPort("Control", cache.controlPort)
 }

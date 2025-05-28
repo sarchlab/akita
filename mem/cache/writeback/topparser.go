@@ -33,6 +33,7 @@ func (p *topParser) Tick() bool {
 	case *mem.WriteReq:
 		trans.write = req
 	}
+
 	p.cache.dirStageBuffer.Push(trans)
 
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)

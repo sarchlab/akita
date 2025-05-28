@@ -5,10 +5,10 @@ import (
 
 	"github.com/sarchlab/akita/v4/sim"
 
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("BusyTimeTracer", func() {

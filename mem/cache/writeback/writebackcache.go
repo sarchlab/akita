@@ -32,10 +32,6 @@ type Comp struct {
 	mshrStageBuffer          sim.Buffer
 	writeBufferBuffer        sim.Buffer
 
-	topSender         sim.BufferedSender
-	bottomSender      sim.BufferedSender
-	controlPortSender sim.BufferedSender
-
 	topParser   *topParser
 	writeBuffer *writeBufferStage
 	dirStage    *directoryStage
@@ -43,21 +39,21 @@ type Comp struct {
 	mshrStage   *mshrStage
 	flusher     *flusher
 
-	storage         *mem.Storage
-	lowModuleFinder mem.LowModuleFinder
-	directory       cache.Directory
-	mshr            cache.MSHR
-	log2BlockSize   uint64
-	numReqPerCycle  int
+	storage             *mem.Storage
+	addressToPortMapper mem.AddressToPortMapper
+	directory           cache.Directory
+	mshr                cache.MSHR
+	log2BlockSize       uint64
+	numReqPerCycle      int
 
 	state                cacheState
 	inFlightTransactions []*transaction
 	evictingList         map[uint64]bool
 }
 
-// SetLowModuleFinder sets the LowModuleFinder used by the cache.
-func (c *Comp) SetLowModuleFinder(lmf mem.LowModuleFinder) {
-	c.lowModuleFinder = lmf
+// SetAddressToPortMapper sets the AddressToPortMapper used by the cache.
+func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
+	c.addressToPortMapper = lmf
 }
 
 func (c *Comp) Tick() bool {
@@ -72,8 +68,6 @@ type middleware struct {
 func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = m.controlPortSender.Tick() || madeProgress
-
 	if m.state != cacheStatePaused {
 		madeProgress = m.runPipeline() || madeProgress
 	}
@@ -86,8 +80,6 @@ func (m *middleware) Tick() bool {
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	madeProgress = m.runStage(m.topSender) || madeProgress
-	madeProgress = m.runStage(m.bottomSender) || madeProgress
 	madeProgress = m.runStage(m.mshrStage) || madeProgress
 
 	for _, bs := range m.bankStages {
@@ -106,6 +98,7 @@ func (m *middleware) runStage(stage sim.Ticker) bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = stage.Tick() || madeProgress
 	}
+
 	return madeProgress
 }
 
@@ -119,15 +112,15 @@ func (c *Comp) discardInflightTransactions() {
 	}
 
 	c.dirStage.Reset()
+
 	for _, bs := range c.bankStages {
 		bs.Reset()
 	}
+
 	c.mshrStage.Reset()
 	c.writeBuffer.Reset()
 
 	clearPort(c.topPort)
-
-	c.topSender.Clear()
 
 	// for _, t := range c.inFlightTransactions {
 	// 	fmt.Printf("%.10f, %s, transaction %s discarded due to flushing\n",
