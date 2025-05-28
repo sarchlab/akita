@@ -2,6 +2,7 @@ package datarecording_test
 
 import (
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/sarchlab/akita/v4/datarecording"
@@ -13,13 +14,6 @@ type Sample struct {
 	Name     string
 	ID       int
 	Location string
-}
-
-// NewSample represents Sample struct with Location converted to int indexing
-type NewSample struct {
-	Name     string
-	ID       int
-	Location int
 }
 
 // Struct mapping to location table
@@ -76,19 +70,21 @@ func TestDataRecorderWithLocation(t *testing.T) {
 		locs = append(locs, loc.where)
 	}
 
-	reader.MapTable("test_table", NewSample{})
+	reader.MapTable("test_table", Sample{})
 	results, _, err := reader.Query("test_table", datarecording.QueryParams{})
 	if err != nil {
 		panic(err)
 	}
 
 	for record, result := range results {
-		sample := result.(*NewSample)
-		locIndex := sample.Location
+		sample := result.(*Sample)
+		locIndex, err := strconv.Atoi(sample.Location)
+		if err != nil {
+			panic(err)
+		}
 		expectedSample := expectedSamples[record]
 		assert.True(t, expectedSample.Location == locs[locIndex])
 	}
 
 	reader.Close()
-
 }

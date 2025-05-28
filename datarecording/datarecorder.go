@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -72,11 +73,13 @@ func createExecRecorder(w *sqliteWriter) {
 	w.execRecorder = execRecorder
 }
 
+// Feed to location table when inserting data
 type location struct {
-	index    int
-	location string
+	id     int
+	locale string
 }
 
+// Tracking whether we need to deal with tables with location type
 type locationInfo struct {
 	containsLocation bool
 	locationTable    string
@@ -87,7 +90,7 @@ type table struct {
 	structType reflect.Type
 	entries    []any
 	statement  *sql.Stmt
-	loc        location
+	loc        *locationInfo
 }
 
 // sqliteWriter is the writer that writes data into SQLite database
@@ -191,10 +194,31 @@ func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
 	panic("akita_data tag can only be either ignore, unique, or index")
 }
 
+func (t *sqliteWriter) hasLocation(entry any) bool {
+	types := reflect.TypeOf(entry)
+
+	_, contains := types.FieldByName("Location")
+
+	return contains
+}
+
 func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
+	}
+
+	locInfo := &locationInfo{
+		containsLocation: false,
+	}
+
+	withLocation := t.hasLocation(sampleEntry)
+	if withLocation {
+		locInfo.containsLocation = true
+		locInfo.locationTable = tableName + "_location"
+		locInfo.locationMap = map[string]int{}
+
+		t.CreateTable(locInfo.locationTable, location{})
 	}
 
 	fieldNames := t.getFieldNames(sampleEntry)
@@ -209,6 +233,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleEntry),
 		entries:    []any{},
+		loc:        locInfo,
 	}
 	t.tables[tableName] = tableInfo
 
@@ -293,7 +318,68 @@ func (t *sqliteWriter) InsertData(tableName string, entry any) {
 		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
-	table.entries = append(table.entries, entry)
+	// if table.loc.containsLocation == false
+	//     directly append
+	// else
+	//     change field
+	//     insert data to location table
+
+	if table.loc.containsLocation {
+		fmt.Println("into has location logic")
+		// Get Location field
+		value := reflect.ValueOf(entry)
+		locVal := value.FieldByName("Location")
+
+		strLoc, ok := locVal.Interface().(string)
+		if !ok {
+			panic("Location field is not string type")
+		}
+		fmt.Println(strLoc)
+
+		// Check in accordance to locationTable
+		id, exists := table.loc.locationMap[strLoc]
+		fmt.Println(id, exists)
+		if !exists {
+			newID := len(table.loc.locationMap) + 1
+			table.loc.locationMap[strLoc] = newID
+			id = newID
+			fmt.Println(table.loc.locationMap)
+		}
+
+		// Create a new object with num field and insert it
+		strID := strconv.Itoa(id)
+
+		typ := value.Type()
+		newVal := reflect.New(typ).Elem()
+
+		for i := 0; i < value.NumField(); i++ {
+			field := typ.Field(i)
+			newField := newVal.Field(i)
+
+			if field.Name == "Location" && newField.CanSet() && newField.Kind() == reflect.String {
+				newField.SetString(strID)
+			} else if newField.CanSet() {
+				newField.Set(value.Field(i))
+			}
+		}
+
+		table.entries = append(table.entries, newVal)
+
+		locTableName := tableName + "_location"
+		locTable, exists := t.tables[locTableName]
+		if !exists {
+			panic(fmt.Sprintf("table %s does not exist", tableName))
+		}
+
+		locTable.entries = append(locTable.entries, location{id, strLoc})
+
+		t.entryCount += 1
+		if t.entryCount >= t.batchSize {
+			t.Flush()
+		}
+	} else {
+		table.entries = append(table.entries, entry)
+	}
 
 	t.entryCount += 1
 	if t.entryCount >= t.batchSize {
