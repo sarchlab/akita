@@ -26,6 +26,7 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing" //
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -43,8 +44,8 @@ type Monitor struct {
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
 
-	// VisTracer field for visualization tracing
-	visTrace any
+	// tracer field for visualization tracing
+	tracer *tracing.DBTracer //
 }
 
 // NewMonitor creates a new Monitor
@@ -144,10 +145,10 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBars = newBars
 }
 
-// RegisterVisTracer registers a VisTracer instance to the monitor.
-// replace the any later
-func (m *Monitor) RegisterVisTracer(vt any) {
-	m.visTrace = vt
+// Register tracer instance to the monitor.
+func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
+	m.tracer = tr
+	fmt.Println("Tracing registered successfully.")
 }
 
 // StartServer starts the monitor as a web server with a custom port if wanted.
@@ -592,11 +593,14 @@ func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
 
 func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
 	fmt.Println("/api/trace/end triggered")
-	// later: add engine/backend相关function
-	// eg. m.engine.Pause()
-	//     	_, err := w.Write(nil)
-	//      dieOnErr(err)
-	// eg. 别的地方再定义Pause
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+	m.tracer.StopTracingAtCurrentTime()
+
 	w.WriteHeader(200)
 	w.Write([]byte(`{"status":"ended"}`))
 }

@@ -49,13 +49,16 @@ func (b Builder) Build() *Simulation {
 		s.engine = sim.NewParallelEngine()
 	}
 
+	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
+
 	if b.monitorOn {
 		s.monitor = monitoring.NewMonitor()
 		s.monitor.RegisterEngine(s.engine)
+		s.monitor.RegisterVisTracer(s.visTracer)
 		s.monitor.StartServer()
 	}
 
-	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
-
 	return s
 }
+
+// register

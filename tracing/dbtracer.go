@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sarchlab/akita/v4/datarecording"
@@ -133,13 +134,13 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable("trace", taskTableEntry{})
+	dataRecorder.CreateTable("trace", taskTableEntry{}) // 挪到start 默认不开始（没有trace vis flag就不开始
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
-		tracingTasks: make(map[string]Task),
+		tracingTasks: make(map[string]Task), //已经开始还没结束的任务
 	}
 
 	atexit.Register(func() {
@@ -153,4 +154,39 @@ func NewDBTracer(
 func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 	t.startTime = startTime
 	t.endTime = endTime
+}
+
+// StopTracingAtCurrentTime stops tracing and finalizes tasks.
+func (t *DBTracer) StopTracingAtCurrentTime() {
+	print("Stopping tracing at current time...\n")
+
+	stopTracingTime := t.timeTeller.CurrentTime()
+	t.SetTimeRange(t.startTime, stopTracingTime)
+
+	// Generate a unique table name based on the stopTracingTime
+	tableName := fmt.Sprintf("trace_%d", int64(stopTracingTime))
+	t.backend.CreateTable(tableName, taskTableEntry{})
+
+	// Finish all tasks that started before stopTracingTime but did not end yet
+	for id, task := range t.tracingTasks {
+		if task.StartTime <= stopTracingTime {
+			task.EndTime = stopTracingTime // Set the end time to the current time
+
+			// Insert the finalized task into the newly created table
+			taskTable := taskTableEntry{
+				ID:        task.ID,
+				ParentID:  task.ParentID,
+				Kind:      task.Kind,
+				What:      task.What,
+				Location:  task.Location,
+				StartTime: float64(task.StartTime),
+				EndTime:   float64(task.EndTime),
+			}
+			t.backend.InsertData(tableName, taskTable)
+
+			delete(t.tracingTasks, id) // Remove finalized task
+		}
+	}
+
+	t.backend.Flush() // Ensure all data is written to the database
 }
