@@ -42,13 +42,16 @@ func (m *tlbMiddleware) Tick() bool {
 }
 
 func (m *tlbMiddleware) processPipeline() bool {
+	madeProgress := false
 
-	return m.outPipeline() || m.intoPipeline()
+	madeProgress = m.extractFromPipeline() || madeProgress
+	madeProgress = m.insertIntoPipeline() || madeProgress
 
+	return madeProgress
 }
 
 // get req from port buffer and insert into pipeline
-func (m *tlbMiddleware) intoPipeline() bool {
+func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
 
 	for i := 0; i < m.numReqPerCycle; i++ {
@@ -57,7 +60,6 @@ func (m *tlbMiddleware) intoPipeline() bool {
 		}
 
 		req := m.topPort.RetrieveIncoming()
-
 		if req == nil {
 			break
 		}
@@ -70,7 +72,7 @@ func (m *tlbMiddleware) intoPipeline() bool {
 }
 
 // get latent req from post-pipeline buffer
-func (m *tlbMiddleware) outPipeline() bool {
+func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
 
 	for i := 0; i < m.numReqPerCycle; i++ {

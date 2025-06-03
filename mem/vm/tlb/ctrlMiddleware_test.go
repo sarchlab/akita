@@ -13,7 +13,6 @@ var _ = Describe("TLB", func() {
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
 		comp        *Comp
-		tlbMW       *tlbMiddleware
 		ctrlMW      *ctrlMiddleware
 		set         *MockSet
 		topPort     *MockPort
@@ -36,27 +35,16 @@ var _ = Describe("TLB", func() {
 		comp.sets = []internal.Set{set}
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
-		tlbMW = comp.Middlewares()[1].(*tlbMiddleware)
 	})
 
 	AfterEach(func() {
 		mockCtrl.Finish()
 	})
 
-	It("should do nothing if there is no req in TopPort", func() {
-		topPort.EXPECT().PeekIncoming().Return(nil)
-
-		madeProgress := tlbMW.lookup()
-
-		Expect(madeProgress).To(BeFalse())
-	})
-
 	It("should do nothing if there is no req in ctrlPort", func() {
-		topPort.EXPECT().PeekIncoming().Return(nil)
 		controlPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := tlbMW.lookup()
-		madeProgress = ctrlMW.Tick() || madeProgress
+		madeProgress := ctrlMW.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
