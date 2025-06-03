@@ -487,6 +487,9 @@ class Dashboard {
     chatButton.style.display = "flex";
     chatButton.style.alignItems = "center";
     chatButton.style.paddingRight = "20px";
+    chatButton.style.marginRight = "15px";
+    chatButton.style.backgroundColor = "#0d6efd";
+    chatButton.style.borderColor = "#0d6efd";
     // chatButton.innerText = "Daisen Bot";
     chatButton.innerHTML = `
       <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
@@ -651,7 +654,7 @@ class Dashboard {
       this._showChatButton = false;
       this._addPaginationControl();
 
-    }, 300);
+    }, 200);
   }
 
   _addPageButtons(ul: HTMLUListElement) {
