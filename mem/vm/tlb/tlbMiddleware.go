@@ -82,10 +82,11 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		m.responseBuffer.Pop()
 		req := item.(*pipelineTLBReq).req
-		m.lookup(req)
-		madeProgress = true
+		madeProgress = m.lookup(req) || madeProgress
+		if madeProgress {
+			m.responseBuffer.Pop()
+		}
 	}
 
 	return madeProgress
