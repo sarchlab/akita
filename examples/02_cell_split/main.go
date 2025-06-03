@@ -42,16 +42,16 @@ func (h *handler) Handle(e sim.Event) error {
 	fmt.Printf("Cell %d split at %.10f, current count: %d\n",
 		evt.id, evt.Time(), h.count)
 
-	h.scheduleNextSplitEvent(evt.Time(), h.count-1)
-	h.scheduleNextSplitEvent(evt.Time(), h.count)
+	h.scheduleNextSplitEvent(evt.Time(), evt.id)
+	h.scheduleNextSplitEvent(evt.Time(), h.count) // h.count is the new cell
 
 	return nil
 }
 
 func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec, id int) {
-	timeToSplitLeft := sim.VTimeInSec(randGen.Float64() + 1)
+	timeUntilNextSplit := sim.VTimeInSec(randGen.Float64() + 1)
 	nextEvt := splitEvent{
-		time:    now + timeToSplitLeft,
+		time:    now + timeUntilNextSplit,
 		handler: h,
 		id:      id,
 	}
