@@ -14,7 +14,7 @@ type defaultTaskPrinter struct {
 }
 
 func (p *defaultTaskPrinter) Print(task Task) {
-	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Where)
+	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Location)
 }
 
 // BackTraceTracer can record tasks incomplete tasks
@@ -47,6 +47,11 @@ func (t *BackTraceTracer) StartTask(task Task) {
 
 func (t *BackTraceTracer) StepTask(task Task) {
 	// Do Nothing
+}
+
+// AddMilestone does nothing
+func (t *BackTraceTracer) AddMilestone(_ Milestone) {
+	// Do nothing
 }
 
 func (t *BackTraceTracer) EndTask(task Task) {

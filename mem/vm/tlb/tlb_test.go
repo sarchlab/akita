@@ -1,27 +1,30 @@
 package tlb
 
 import (
-    "fmt"
-	"github.com/golang/mock/gomock"
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TLB", func() {
 
 	var (
-		mockCtrl    *gomock.Controller
-		engine      *MockEngine
-		tlb         *Comp
-		tlbMW       *tlbMiddleware
-		set         *MockSet
-		topPort     *MockPort
-		bottomPort  *MockPort
-		controlPort *MockPort
+		mockCtrl      *gomock.Controller
+		engine        *MockEngine
+		tlb           *Comp
+		tlbMW         *tlbMiddleware
+		set           *MockSet
+		topPort       *MockPort
+		bottomPort    *MockPort
+		controlPort   *MockPort
+		addressMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -43,12 +46,16 @@ var _ = Describe("TLB", func() {
 			AsRemote().
 			Return(sim.RemotePort("ControlPort")).
 			AnyTimes()
+		addressMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		tlb = MakeBuilder().WithEngine(engine).Build("TLB")
+		tlb = MakeBuilder().
+			WithEngine(engine).
+			WithAddressMapper(addressMapper).
+			Build("TLB")
 		tlb.topPort = topPort
 		tlb.bottomPort = bottomPort
 		tlb.controlPort = controlPort
-		tlb.Sets = []internal.Set{set}
+		tlb.sets = []internal.Set{set}
 
 		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
 	})
@@ -131,6 +138,11 @@ var _ = Describe("TLB", func() {
 			set.EXPECT().
 				Lookup(vm.PID(1), uint64(0x100)).
 				Return(wayID, page, true).
+				AnyTimes()
+
+			addressMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(sim.RemotePort("RemotePort")).
 				AnyTimes()
 
 			req = vm.TranslationReqBuilder{}.
@@ -379,10 +391,14 @@ var _ = Describe("TLB Integration", func() {
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
+
+		addressMapper := &mem.SinglePortMapper{
+			Port: lowModule.AsRemote(),
+		}
 		tlb = MakeBuilder().
 			WithEngine(engine).
+			WithAddressMapper(addressMapper).
 			Build("TLB")
-		tlb.LowModule = lowModule.AsRemote()
 
 		agent.EXPECT().SetConnection(connection)
 		lowModule.EXPECT().SetConnection(connection)
@@ -430,7 +446,7 @@ var _ = Describe("TLB Integration", func() {
 
 		agent.EXPECT().Deliver(gomock.Any()).
 			Do(func(rsp *vm.TranslationRsp) {
-			    fmt.Println("Deliver() called with Page:", rsp.Page)
+				fmt.Println("Deliver() called with Page:", rsp.Page)
 				Expect(rsp.Page).To(Equal(page))
 			})
 

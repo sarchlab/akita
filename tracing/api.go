@@ -18,6 +18,7 @@ type NamedHookable interface {
 var (
 	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
 	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
+	HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
 
@@ -95,7 +96,7 @@ func StartTaskWithSpecificLocation(
 		ParentID: parentID,
 		Kind:     kind,
 		What:     what,
-		Where:    location,
+		Location: location,
 		Detail:   detail,
 	}
 	ctx := sim.HookCtx{
@@ -127,6 +128,30 @@ func AddTaskStep(
 		Domain: domain,
 		Item:   task,
 		Pos:    HookPosTaskStep,
+	}
+	domain.InvokeHook(ctx)
+}
+
+// AddMilestone records the time that that a blocking reason is resolved.
+func AddMilestone(
+	taskID string,
+	blockingCategory string,
+	blockingReason string,
+	blockingLocation string,
+	domain NamedHookable,
+) {
+	milestone := Milestone{
+		ID:               sim.GetIDGenerator().Generate(),
+		TaskID:           taskID,
+		BlockingCategory: blockingCategory,
+		BlockingReason:   blockingReason,
+		BlockingLocation: blockingLocation,
+	}
+
+	ctx := sim.HookCtx{
+		Domain: domain,
+		Item:   milestone,
+		Pos:    HookPosMilestone,
 	}
 	domain.InvokeHook(ctx)
 }

@@ -1,10 +1,10 @@
 package tlb
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TLB", func() {
@@ -33,7 +33,7 @@ var _ = Describe("TLB", func() {
 		comp.topPort = topPort
 		comp.bottomPort = bottomPort
 		comp.controlPort = controlPort
-		comp.Sets = []internal.Set{set}
+		comp.sets = []internal.Set{set}
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
 		tlbMW = comp.Middlewares()[1].(*tlbMiddleware)

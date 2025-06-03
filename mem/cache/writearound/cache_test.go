@@ -1,9 +1,9 @@
 package writearound_test
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	gomock "go.uber.org/mock/gomock"
 
 	. "github.com/sarchlab/akita/v4/mem/cache/writearound"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
@@ -45,7 +45,7 @@ var _ = Describe("Cache", func() {
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
 
-		c = NewBuilder().
+		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
 			Build("Cache")

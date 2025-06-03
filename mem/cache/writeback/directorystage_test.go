@@ -1,13 +1,13 @@
 package writeback
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("DirectoryStage", func() {
@@ -36,7 +36,8 @@ var _ = Describe("DirectoryStage", func() {
 		bankBuf = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder()
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.dirStageBuffer = dirBuf
 		cacheModule.mshr = mshr

@@ -1,27 +1,28 @@
 package writeback
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Flusher", func() {
 	var (
-		mockCtrl       *gomock.Controller
-		controlPort    *MockPort
-		topPort        *MockPort
-		bottomPort     *MockPort
-		directory      *MockDirectory
-		dirBuf         *MockBuffer
-		bankBuf        *MockBuffer
-		mshrStageBuf   *MockBuffer
-		writeBufferBuf *MockBuffer
-		mshr           *MockMSHR
-		cacheModule    *Comp
-		f              *flusher
+		mockCtrl            *gomock.Controller
+		controlPort         *MockPort
+		topPort             *MockPort
+		bottomPort          *MockPort
+		directory           *MockDirectory
+		dirBuf              *MockBuffer
+		bankBuf             *MockBuffer
+		mshrStageBuf        *MockBuffer
+		writeBufferBuf      *MockBuffer
+		mshr                *MockMSHR
+		cacheModule         *Comp
+		f                   *flusher
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -51,7 +52,10 @@ var _ = Describe("Flusher", func() {
 		writeBufferBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
 
-		builder := MakeBuilder()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.topPort = topPort
 		cacheModule.bottomPort = bottomPort
@@ -86,7 +90,7 @@ var _ = Describe("Flusher", func() {
 		It("should start flushing", func() {
 			req := cache.FlushReqBuilder{}.Build()
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming()
+			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
 			ret := f.Tick()
 
@@ -296,7 +300,7 @@ var _ = Describe("Flusher", func() {
 			}
 
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming()
+			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			directory.EXPECT().GetSets().Return(sets)
 			bankBuf.EXPECT().Clear()
 			dirBuf.EXPECT().Clear()
@@ -304,7 +308,8 @@ var _ = Describe("Flusher", func() {
 			cacheModule.dirStage.buf.(*MockBuffer).EXPECT().Clear()
 			mshrStageBuf.EXPECT().Clear()
 			writeBufferBuf.EXPECT().Clear()
-			topPort.EXPECT().RetrieveIncoming().Return(nil)
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
 			// bottomPortSender.EXPECT().Clear()
 
@@ -331,11 +336,11 @@ var _ = Describe("Flusher", func() {
 		It("should restart", func() {
 			req := cache.RestartReqBuilder{}.Build()
 			controlPort.EXPECT().PeekIncoming().Return(req)
-			controlPort.EXPECT().RetrieveIncoming()
+			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming().Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
 			madeProgress := f.Tick()
 

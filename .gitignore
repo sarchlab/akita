@@ -25,3 +25,6 @@ debug
 .vscode/*.log
 
 __debug_bin*
+
+# Mock files
+mock_*_test.go

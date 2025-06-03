@@ -73,7 +73,7 @@ func buildEnvironment() {
 	agent.ReadLeft = *numAccessFlag
 
 	addressToPortMapper := new(mem.SinglePortMapper)
-	builder := writearound.NewBuilder().
+	builder := writearound.MakeBuilder().
 		WithEngine(engine).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).

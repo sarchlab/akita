@@ -1,22 +1,23 @@
 package writeback
 
 import (
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl    *gomock.Controller
-		cacheModule *Comp
-		ms          *mshrStage
-		inBuf       *MockBuffer
-		mshr        *MockMSHR
-		topPort     *MockPort
+		mockCtrl            *gomock.Controller
+		cacheModule         *Comp
+		ms                  *mshrStage
+		inBuf               *MockBuffer
+		mshr                *MockMSHR
+		topPort             *MockPort
+		addressToPortMapper *MockAddressToPortMapper
 	)
 
 	BeforeEach(func() {
@@ -29,7 +30,10 @@ var _ = Describe("MSHR Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		builder := MakeBuilder()
+		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+
+		builder := MakeBuilder().
+			WithAddressToPortMapper(addressToPortMapper)
 		cacheModule = builder.Build("Cache")
 		cacheModule.mshr = mshr
 		cacheModule.mshrStageBuffer = inBuf
