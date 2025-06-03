@@ -1,4 +1,4 @@
-package printevent
+package main
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ func (e *EventPrinter) Handle(event sim.Event) error {
 	return nil
 }
 
-func Example() {
+func main() {
 	s := simulation.MakeBuilder().Build()
 
 	handler := &EventPrinter{}
@@ -31,7 +31,4 @@ func Example() {
 	}
 
 	s.Terminate()
-
-	// Output:
-	// Event: 1.0000000000
 }
