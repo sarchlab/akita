@@ -192,6 +192,9 @@ func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
 }
 
 func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
@@ -370,40 +373,16 @@ func (t *sqliteWriter) Flush() {
 	defer t.mustExecute("COMMIT TRANSACTION")
 
 	for tableName, table := range t.tables {
-		if len(table.entries) == 0 ||
-			tableName == "location" {
+		if len(table.entries) == 0 {
+			continue
+		}
+
+		if tableName == "location" {
 			continue
 		}
 
 		for _, task := range table.entries {
-			v := []any{}
-
-			value := reflect.ValueOf(task)
-			vType := value.Type()
-
-			if vType != table.structType {
-				panic("entry type mismatch")
-			}
-
-			for i := 0; i < value.NumField(); i++ {
-				field := vType.Field(i)
-
-				if t.fieldIgnored(field) {
-					continue
-				}
-
-				if t.fieldLocation(field) {
-					id := t.getLocationID(value, i)
-					v = append(v, id)
-				} else {
-					v = append(v, value.Field(i).Interface())
-				}
-			}
-
-			_, err := table.statement.Exec(v...)
-			if err != nil {
-				panic(err)
-			}
+			t.insertEntryForTable(task, table)
 		}
 
 		table.entries = nil
@@ -414,12 +393,50 @@ func (t *sqliteWriter) Flush() {
 	t.entryCount = 0
 }
 
+func (t *sqliteWriter) insertEntryForTable(
+	task any,
+	table *table,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	v := []any{}
+
+	value := reflect.ValueOf(task)
+	vType := value.Type()
+
+	if vType != table.structType {
+		panic("entry type mismatch")
+	}
+
+	for i := 0; i < value.NumField(); i++ {
+		field := vType.Field(i)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
+
+		if t.fieldLocation(field) {
+			id := t.getLocationID(value, i)
+			v = append(v, id)
+		} else {
+			v = append(v, value.Field(i).Interface())
+		}
+	}
+
+	_, err := table.statement.Exec(v...)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func (t *sqliteWriter) getLocationID(
 	value reflect.Value,
 	i int,
 ) int {
 	loc := value.Field(i).String()
 	id, exists := t.locationInfo[loc]
+
 	if !exists {
 		id = len(t.locationInfo) + 1
 		t.locationInfo[loc] = id
