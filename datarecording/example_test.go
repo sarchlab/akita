@@ -50,7 +50,8 @@ func Example() {
 
 	for _, result := range results {
 		task := result.(*Task)
-		fmt.Printf("ID: %d, Name: %s, Place: %s\n", task.ID, task.Name, task.Place)
+		fmt.Printf("ID: %d, Name: %s, Place: %s\n",
+			task.ID, task.Name, task.Place)
 	}
 
 	reader.Close()

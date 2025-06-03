@@ -187,7 +187,8 @@ func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
 		return
 	}
 
-	panic("akita_data tag can only be either ignore, unique, index, or location")
+	panic("akita_data tag can only be either " +
+		"ignore, unique, index, or location")
 }
 
 func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
@@ -205,7 +206,11 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 
 	t.createIndexesForTable(tableName, sampleEntry)
 
-	t.createLocationTable(sampleEntry)
+	hasLocTag := t.checkLocationTag(sampleEntry)
+	_, exists := t.tables["location"]
+	if !exists && hasLocTag {
+		t.createLocationTable()
+	}
 
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleEntry),
@@ -216,7 +221,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.prepareStatement(tableName, sampleEntry)
 }
 
-func (t *sqliteWriter) createLocationTable(entry any) {
+func (t *sqliteWriter) checkLocationTag(entry any) bool {
 	if t.locationInfo == nil {
 		t.locationInfo = make(map[string]int)
 	}
@@ -229,37 +234,36 @@ func (t *sqliteWriter) createLocationTable(entry any) {
 		field := sType.Field(i)
 
 		dbTag, ok := field.Tag.Lookup("akita_data")
-		if ok {
-			if dbTag == "location" {
-				kind := field.Type.Kind()
-				if kind != reflect.String {
-					panic("location field type mismatch")
-				}
-
-				hasLocation = true
+		if ok && dbTag == "location" {
+			kind := field.Type.Kind()
+			if kind != reflect.String {
+				panic("location field type mismatch")
 			}
+
+			hasLocation = true
 		}
 	}
 
-	_, exists := t.tables["location"]
-	if !exists && hasLocation {
-		sampleLoc := location{1, "A"}
+	return hasLocation
+}
 
-		fieldNames := t.getFieldNames(sampleLoc)
-		fields := strings.Join(fieldNames, ", \n\t")
+func (t *sqliteWriter) createLocationTable() {
+	sampleLoc := location{1, "A"}
 
-		createTableSQL := `CREATE TABLE ` + "location" +
-			` (` + "\n\t" + fields + "\n" + `);`
-		t.mustExecute(createTableSQL)
+	fieldNames := t.getFieldNames(sampleLoc)
+	fields := strings.Join(fieldNames, ", \n\t")
 
-		tableInfo := &table{
-			structType: reflect.TypeOf(sampleLoc),
-			entries:    []any{},
-		}
-		t.tables["location"] = tableInfo
+	createTableSQL := `CREATE TABLE ` + "location" +
+		` (` + "\n\t" + fields + "\n" + `);`
+	t.mustExecute(createTableSQL)
 
-		t.prepareStatement("location", sampleLoc)
+	tableInfo := &table{
+		structType: reflect.TypeOf(sampleLoc),
+		entries:    []any{},
 	}
+	t.tables["location"] = tableInfo
+
+	t.prepareStatement("location", sampleLoc)
 }
 
 func (t *sqliteWriter) prepareStatement(table string, task any) {
@@ -366,11 +370,8 @@ func (t *sqliteWriter) Flush() {
 	defer t.mustExecute("COMMIT TRANSACTION")
 
 	for tableName, table := range t.tables {
-		if len(table.entries) == 0 {
-			continue
-		}
-
-		if tableName == "location" {
+		if len(table.entries) == 0 ||
+			tableName == "location" {
 			continue
 		}
 
@@ -392,18 +393,7 @@ func (t *sqliteWriter) Flush() {
 				}
 
 				if t.fieldLocation(field) {
-					loc := value.Field(i).String()
-					id, exists := t.locationInfo[loc]
-					if !exists {
-						id = len(t.locationInfo) + 1
-						t.locationInfo[loc] = id
-
-						newLocation := location{id, loc}
-						locTable := t.tables["location"]
-						locTable.entries = append(locTable.entries, newLocation)
-						t.entryCount += 1
-					}
-
+					id := t.getLocationID(value, i)
 					v = append(v, id)
 				} else {
 					v = append(v, value.Field(i).Interface())
@@ -422,6 +412,25 @@ func (t *sqliteWriter) Flush() {
 	t.flushLocationTable()
 
 	t.entryCount = 0
+}
+
+func (t *sqliteWriter) getLocationID(
+	value reflect.Value,
+	i int,
+) int {
+	loc := value.Field(i).String()
+	id, exists := t.locationInfo[loc]
+	if !exists {
+		id = len(t.locationInfo) + 1
+		t.locationInfo[loc] = id
+
+		newLocation := location{id, loc}
+		locTable := t.tables["location"]
+		locTable.entries = append(locTable.entries, newLocation)
+		t.entryCount += 1
+	}
+
+	return id
 }
 
 func (t *sqliteWriter) fieldIgnored(field reflect.StructField) bool {
