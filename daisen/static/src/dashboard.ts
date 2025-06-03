@@ -643,7 +643,7 @@ class Dashboard {
     const chatContent = document.createElement("div");
     chatContent.style.flex = "1";
     chatContent.style.padding = "20px";
-    chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify compont styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
+    chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify component styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
     chatPanel.appendChild(chatContent);
 
     document.body.appendChild(chatPanel);
