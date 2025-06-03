@@ -136,6 +136,7 @@ func (gmmu *Comp) processRemoteMemReq(now sim.VTimeInSec, walkingIndex int) bool
 		WithPID(walking.PID).
 		WithVAddr(walking.VAddr).
 		WithDeviceID(walking.DeviceID).
+		WithWrite(walking.Write).
 		Build()
 
 	err := gmmu.bottomPort.Send(req)

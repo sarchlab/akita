@@ -11,7 +11,21 @@ type TranslationReq struct {
 	VAddr    uint64
 	PID      PID
 	DeviceID uint64
+	Write    bool
 }
+
+/*
+// MsgMeta contains the meta data that is attached to every message.
+type MsgMeta struct {
+	ID                 string
+	Src, Dst           Port
+	SendTime, RecvTime VTimeInSec
+	TrafficClass       int
+	TrafficBytes       int
+}
+
+
+*/
 
 // Meta returns the meta data associated with the message.
 func (r *TranslationReq) Meta() *sim.MsgMeta {
@@ -25,6 +39,9 @@ type TranslationReqBuilder struct {
 	vAddr    uint64
 	pid      PID
 	deviceID uint64
+	write    bool
+	//details map[string]any
+
 }
 
 // WithSendTime sets the send time of the request to build.:w
@@ -49,6 +66,7 @@ func (b TranslationReqBuilder) WithDst(dst sim.Port) TranslationReqBuilder {
 
 // WithVAddr sets the virtual address of the request to build.
 func (b TranslationReqBuilder) WithVAddr(vAddr uint64) TranslationReqBuilder {
+	//fmt.Printf("inside withAddr\n")
 	b.vAddr = vAddr
 	return b
 }
@@ -65,8 +83,17 @@ func (b TranslationReqBuilder) WithDeviceID(deviceID uint64) TranslationReqBuild
 	return b
 }
 
+func (b TranslationReqBuilder) WithWrite(write bool) TranslationReqBuilder {
+
+	b.write = write
+	//fmt.Printf("\ninside withWrite %d -> %d\n", write, b.write)
+
+	return b
+}
+
 // Build creates a new TranslationReq
 func (b TranslationReqBuilder) Build() *TranslationReq {
+
 	r := &TranslationReq{}
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
@@ -75,6 +102,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.Write = b.write
 	return r
 }
 
@@ -149,7 +177,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 }
 
 type PageMigrationInfo struct {
-	GPUReqToVAddrMap map[uint64][]uint64
+	GPUReqToVAddrMap map[uint64][]uint64 // maps a GPU request ID (key) to a list of virtual addresses (value) associated with that request.
 }
 
 // PageMigrationReqToDriver is a req to driver from MMU to start page migration process

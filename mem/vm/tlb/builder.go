@@ -32,21 +32,28 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 	return b
 }
 
+/*
+func (b Builder):
+This declares the function as a method with the receiver b of type 'Builder'.
+WithEngine(engine sim.Engine):
+The method is named 'WithEngine' with parameter name 'engine'. It is used to set or update the engine field of the Builder. 
+Return Type:
+Function returns value of type 'Builder'
+*/
+
 // WithFreq sets the freq the TLBs use
 func (b Builder) WithFreq(freq sim.Freq) Builder {
 	b.freq = freq
 	return b
 }
 
-// WithNumSets sets the number of sets in a TLB. Use 1 for fully associated
-// TLBs.
+// WithNumSets sets the number of sets in a TLB. Use 1 for fully associated TLBs.
 func (b Builder) WithNumSets(n int) Builder {
 	b.numSets = n
 	return b
 }
 
-// WithNumWays sets the number of ways in a TLB. Set this field to the number
-// of TLB entries for all the functions.
+// WithNumWays sets the number of ways in a TLB. Set this field to the number of TLB entries for all the functions.
 func (b Builder) WithNumWays(n int) Builder {
 	b.numWays = n
 	return b
@@ -58,15 +65,13 @@ func (b Builder) WithPageSize(n uint64) Builder {
 	return b
 }
 
-// WithNumReqPerCycle sets the number of requests per cycle can be processed by
-// a TLB
+// WithNumReqPerCycle sets the number of requests per cycle can be processed by a TLB
 func (b Builder) WithNumReqPerCycle(n int) Builder {
 	b.numReqPerCycle = n
 	return b
 }
 
-// WithLowModule sets the port that can provide the address translation in case
-// of tlb miss.
+// WithLowModule sets the port that can provide the address translation in case of tlb miss.
 func (b Builder) WithLowModule(lowModule sim.Port) Builder {
 	b.lowModule = lowModule
 	return b
@@ -82,7 +87,8 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 func (b Builder) Build(name string) *TLB {
 	tlb := &TLB{}
 	tlb.TickingComponent =
-		sim.NewTickingComponent(name, b.engine, b.freq, tlb)
+		sim.NewTickingComponent(name, b.engine, b.freq, tlb) //Every component that can handle the TickEvent is called a TickingComponent.
+		//read  2.3 https://syifan.notion.site/2-3-Smart-Ticking-Done-f28e11ee60de4f07855950164493980d 
 
 	tlb.numSets = b.numSets
 	tlb.numWays = b.numWays
@@ -98,9 +104,11 @@ func (b Builder) Build(name string) *TLB {
 	return tlb
 }
 
+// NewLimitNumMsgPort creates a new port that works for the provided component
+// NewLimitNumMsgPort(comp Component, capacity int, name string,) 
 func (b Builder) createPorts(name string, tlb *TLB) {
 	tlb.topPort = sim.NewLimitNumMsgPort(tlb, b.numReqPerCycle,
-		name+".TopPort")
+		name+".TopPort") 
 	tlb.AddPort("Top", tlb.topPort)
 
 	tlb.bottomPort = sim.NewLimitNumMsgPort(tlb, b.numReqPerCycle,

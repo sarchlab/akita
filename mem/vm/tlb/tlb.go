@@ -12,7 +12,8 @@ import (
 
 // A TLB is a cache that maintains some page information.
 type TLB struct {
-	*sim.TickingComponent
+	*sim.TickingComponent // Every component that can handle the TickEvent is called a TickingComponent.
+	//read  2.3 https://syifan.notion.site/2-3-Smart-Ticking-Done-f28e11ee60de4f07855950164493980d
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -42,7 +43,9 @@ func (tlb *TLB) reset() {
 	}
 }
 
-// Tick defines how TLB update states at each cycle
+// Tick defines how TLB update states at each cycle. There is three resons when TLB can change its state -performing control request, respondingMSHR,
+// TLB lookup and parseBottom(response from bottom unit)
+
 func (tlb *TLB) Tick(now sim.VTimeInSec) bool {
 	madeProgress := false
 
@@ -65,15 +68,32 @@ func (tlb *TLB) Tick(now sim.VTimeInSec) bool {
 	return madeProgress
 }
 
+/*
+ we require the Tick function to return a boolean value.
+ If the return value is true, the TickingComponent’s tick event handler will automatically schedule a tick event in the next cycle.
+ Otherwise, it will not schedule a tick event, putting the component to sleep.
+
+ In the tick function, we divide the component into a few smaller stages.
+ The whole tick function returns true (progress is made), if any of the stages made progress.
+*/
+
+/* This function respondMSHREntry processes pending translation requests stored in an MSHR entry.
+It builds a response, sends it, updates the MSHR entry to remove the completed request, and clears the respondingMSHREntry if all requests are processed.*/
+
 func (tlb *TLB) respondMSHREntry(now sim.VTimeInSec) bool {
-	if tlb.respondingMSHREntry == nil {
+	if tlb.respondingMSHREntry == nil { // check if tlb is reposnding to mshr entry
 		return false
 	}
 
 	mshrEntry := tlb.respondingMSHREntry
+	// respondingMSHREntry is of type mshr entry. It contains pid, vAddr, Requests([]*vm.TranslationReq), reqToBottom *vm.TranslationReq, page .
+
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
-	rspToTop := vm.TranslationRspBuilder{}.
+	rspToTop := vm.TranslationRspBuilder{}. /*sendTime sim.VTimeInSec
+		src, dst sim.Port
+		rspTo    string
+		page     Page*/
 		WithSendTime(now).
 		WithSrc(tlb.topPort).
 		WithDst(req.Src).
@@ -95,7 +115,8 @@ func (tlb *TLB) respondMSHREntry(now sim.VTimeInSec) bool {
 }
 
 func (tlb *TLB) lookup(now sim.VTimeInSec) bool {
-	msg := tlb.topPort.Peek()
+	msg := tlb.topPort.Peek() // Peek returns the first message in the port without removing it.
+
 	if msg == nil {
 		return false
 	}
@@ -201,6 +222,7 @@ func (tlb *TLB) fetchBottom(now sim.VTimeInSec, req *vm.TranslationReq) bool {
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
+		WithWrite(req.Write).
 		Build()
 	err := tlb.bottomPort.Send(fetchBottom)
 	if err != nil {
@@ -232,7 +254,8 @@ func (tlb *TLB) parseBottom(now sim.VTimeInSec) bool {
 
 	mshrEntryPresent := tlb.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
 	if !mshrEntryPresent {
-		tlb.bottomPort.Retrieve(now)
+		tlb.bottomPort.Retrieve(now) // Retrieve is used by the component to take a message from the incoming buffer
+
 		return true
 	}
 

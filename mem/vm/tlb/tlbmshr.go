@@ -14,6 +14,7 @@ type mshrEntry struct {
 	page        vm.Page
 }
 
+
 // newMSHREntry returns a new MSHR entry object
 func newMSHREntry() *mshrEntry {
 	e := new(mshrEntry)

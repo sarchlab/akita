@@ -9,7 +9,15 @@ import (
 type TickEvent struct {
 	EventBase
 }
+/*
+type EventBase struct {
+	ID        string
+	time      VTimeInSec
+	handler   Handler
+	secondary bool
+}
 
+*/
 // MakeTickEvent creates a new TickEvent
 func MakeTickEvent(t VTimeInSec, handler Handler) TickEvent {
 	evt := TickEvent{}
@@ -144,7 +152,7 @@ func (c *TickingComponent) Handle(e Event) error {
 	return nil
 }
 
-// NewTickingComponent creates a new ticking component
+// NewTickingComponent creates a new ticking component.  Every component that can handle the TickEvent is called a TickingComponent.
 func NewTickingComponent(
 	name string,
 	engine Engine,

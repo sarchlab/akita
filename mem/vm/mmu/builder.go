@@ -80,6 +80,14 @@ func (b Builder) Build(name string) *MMU {
 	b.createPageTable(mmu)
 	b.configureInternalStates(mmu)
 
+	mmu.paTable = vm.NewPATable(100)
+
+	mmu.paCache = vm.NewPACache(64, 4)
+
+	// mmu.paCache = tlb.NewPACache(64, 4)
+
+	//mmu.paCache = &vm.PACache{}
+
 	return mmu
 }
 

@@ -1,11 +1,12 @@
 package vm
 
 import (
-	"container/list"
-	"sync"
+	"container/list" //doubly linkedlist
+	"sync"           //synchronisation
 )
 
 // PID stands for Process ID.
+
 type PID uint32
 
 // A Page is an entry in the page table, maintaining the information about how
@@ -20,13 +21,16 @@ type Page struct {
 	Unified     bool
 	IsMigrating bool
 	IsPinned    bool
+	AccessCount uint64
+	// FaultCount  uint64
 }
 
 // A PageTable holds the a list of pages.
+// we can perform these operations on Page Table
 type PageTable interface {
-	Insert(page Page)
+	Insert(page Page) // first page is paramater name, second page is data  type.
 	Remove(pid PID, vAddr uint64)
-	Find(pid PID, Addr uint64) (Page, bool)
+	Find(pid PID, Addr uint64) (Page, bool) //(page,bool) is return type
 	Update(page Page)
 }
 
@@ -45,15 +49,15 @@ type pageTableImpl struct {
 	tables       map[PID]*processTable
 }
 
-func (pt *pageTableImpl) getTable(pid PID) *processTable {
-	pt.Lock()
-	defer pt.Unlock()
+func (pt *pageTableImpl) getTable(pid PID) *processTable { // Retrieves the processTable for a specific process ID (pid). If it doesn’t exist, a new one is created.
+	pt.Lock()         // ensures that access to the tables map is thread-safe.
+	defer pt.Unlock() //ensures the mutex is released when the function exits.
 
 	table, found := pt.tables[pid]
 	if !found {
 		table = &processTable{
-			entries:      list.New(),
-			entriesTable: make(map[uint64]*list.Element),
+			entries:      list.New(),                     //new doubly linked list
+			entriesTable: make(map[uint64]*list.Element), //An empty map with uint64 keys and pointers to list elements as values.
 		}
 		pt.tables[pid] = table
 	}
@@ -62,7 +66,8 @@ func (pt *pageTableImpl) getTable(pid PID) *processTable {
 }
 
 func (pt *pageTableImpl) alignToPage(addr uint64) uint64 {
-	return (addr >> pt.log2PageSize) << pt.log2PageSize
+	return (addr >> pt.log2PageSize) << pt.log2PageSize //>> : divides addr by the page size, discarding the offset within the page.
+	//<< : Shifts the bits of the result back to the left, multiplying it by the page size.
 }
 
 // Insert put a new page into the PageTable
@@ -93,18 +98,22 @@ func (pt *pageTableImpl) Update(page Page) {
 	table.update(page)
 }
 
-type processTable struct {
+type processTable struct { //This is a structure that models a page table for a specific process. The processTable holds the page mappings for a process.
 	sync.Mutex
 	entries      *list.List
 	entriesTable map[uint64]*list.Element
 }
 
+/*
+using a doubly linked list (entries) for managing the pages and a map (entriesTable) for fast lookups of pages by their virtual addresses.
+*/
+
 func (t *processTable) insert(page Page) {
 	t.Lock()
 	defer t.Unlock()
 
-	t.pageMustNotExist(page.VAddr)
-
+	//t.pageMustNotExist(page.VAddr)
+	page.AccessCount = 0
 	elem := t.entries.PushBack(page)
 	t.entriesTable[page.VAddr] = elem
 }
