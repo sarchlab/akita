@@ -23,6 +23,7 @@ func (m *tlbMiddleware) Tick() bool {
 	case "pause":
 		// No action
 
+	case "flush":
 	default: // When state is enable or in initial state
 		madeProgress = m.handleEnable() || madeProgress
 	}
