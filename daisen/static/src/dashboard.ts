@@ -488,8 +488,8 @@ class Dashboard {
     chatButton.style.alignItems = "center";
     chatButton.style.paddingRight = "20px";
     chatButton.style.marginRight = "15px";
-    chatButton.style.backgroundColor = "#0d6efd";
-    chatButton.style.borderColor = "#0d6efd";
+    // chatButton.style.backgroundColor = "#0d6efd";
+    // chatButton.style.borderColor = "#0d6efd";
     // chatButton.innerText = "Daisen Bot";
     chatButton.innerHTML = `
       <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
