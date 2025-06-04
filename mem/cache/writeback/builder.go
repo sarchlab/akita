@@ -32,6 +32,8 @@ type Builder struct {
 
 	dirLatency  int
 	bankLatency int
+
+	addressMapperType string
 }
 
 // MakeBuilder creates a new builder with default configurations.
@@ -146,6 +148,28 @@ func (b Builder) WithBankLatency(n int) Builder {
 	return b
 }
 
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	if b.addressMapperType == "single" {
+		if len(ports) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		b.addressToPortMapper = &mem.SinglePortMapper{Port: ports[0]}
+	} else if b.addressMapperType == "interleaved" {
+		finder := mem.NewInterleavedAddressPortMapper(256) 
+		finder.LowModules = append(finder.LowModules, ports...)
+		b.addressToPortMapper = finder
+	} else {
+		panic("unknown address mapper type")
+	}
+
+	return b
+}
+
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *Comp {
 	cache := new(Comp)
@@ -187,6 +211,14 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 	cacheModule.directory = directory
 	cacheModule.mshr = mshr
 	cacheModule.storage = storage
+
+	if b.addressToPortMapper == nil {
+		panic(
+			"addressToPortMapper is nil. " +
+			"WithRemotePorts or WithAddressMapperType not set",
+		)
+	}
+
 	cacheModule.addressToPortMapper = b.addressToPortMapper
 	cacheModule.state = cacheStateRunning
 	cacheModule.evictingList = make(map[uint64]bool)

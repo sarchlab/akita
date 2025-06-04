@@ -25,6 +25,8 @@ type Builder struct {
 	numReqPerCycle        int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
+	addressMapperType     string
+	remotePorts           []sim.RemotePort
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -127,6 +129,16 @@ func (b Builder) WithAddressToPortMapper(
 	return b
 }
 
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
 // Build returns a new cache unit
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
@@ -135,41 +147,12 @@ func (b Builder) Build(name string) *Comp {
 		log2BlockSize:  b.log2BlockSize,
 		numReqPerCycle: b.numReqPerCycle,
 	}
-	c.TickingComponent = sim.NewTickingComponent(
-		name, b.engine, b.freq, c)
 
-	c.topPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
-		name+".TopPort")
-	c.AddPort("Top", c.topPort)
-	c.bottomPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
-		name+".BottomPort")
-	c.AddPort("Bottom", c.bottomPort)
-	c.controlPort = sim.NewPort(c, b.numReqPerCycle, b.numReqPerCycle,
-		name+"ControlPort")
-	c.AddPort("Control", c.controlPort)
-
-	c.dirBuf = sim.NewBuffer(
-		name+".DirBuf",
-		b.numReqPerCycle)
-	c.bankBufs = make([]sim.Buffer, b.numBank)
-
-	for i := 0; i < b.numBank; i++ {
-		c.bankBufs[i] = sim.NewBuffer(
-			name+".BankBuf"+fmt.Sprint(i),
-			b.numReqPerCycle,
-		)
-	}
-
-	c.mshr = cache.NewMSHR(b.numMSHREntry)
-	blockSize := 1 << b.log2BlockSize
-	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
-	c.directory = cache.NewDirectory(
-		numSets, b.wayAssociativity, 1<<b.log2BlockSize,
-		cache.NewLRUVictimFinder())
-	c.storage = mem.NewStorage(b.totalByteSize)
-	c.bankLatency = b.bankLatency
-	c.wayAssociativity = b.wayAssociativity
-	c.addressToPortMapper = b.addressToPortMapper
+	b.setTickingComponent(c, name)
+	b.createPorts(c, name)
+	b.createBuffers(c, name)
+	b.configureCacheStructures(c)
+	b.configurAddressMapper(c)
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.buildStages(c)
@@ -183,6 +166,81 @@ func (b Builder) Build(name string) *Comp {
 
 	return c
 }
+
+func (b Builder) setTickingComponent(c *Comp, name string) {
+	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
+}
+
+func (b Builder) createPorts(c *Comp, name string) {
+	c.topPort = sim.NewPort(
+		c, b.numReqPerCycle, 
+		b.numReqPerCycle, 
+		name+".TopPort",
+	)
+	c.AddPort("Top", c.topPort)
+
+	c.bottomPort = sim.NewPort(
+		c, b.numReqPerCycle, 
+		b.numReqPerCycle, 
+		name+".BottomPort",
+	)
+	c.AddPort("Bottom", c.bottomPort)
+
+	c.controlPort = sim.NewPort(
+		c, b.numReqPerCycle, 
+		b.numReqPerCycle, 
+		name+".ControlPort",
+	)
+	c.AddPort("Control", c.controlPort)
+}
+
+func (b Builder) createBuffers(c *Comp, name string) {
+	c.dirBuf = sim.NewBuffer(name+".DirBuf", b.numReqPerCycle)
+	c.bankBufs = make([]sim.Buffer, b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		c.bankBufs[i] = sim.NewBuffer(
+			fmt.Sprintf("%s.BankBuf%d", name, i), 
+			b.numReqPerCycle,
+		)
+	}
+}
+
+func (b Builder) configureCacheStructures(c *Comp) {
+	blockSize := 1 << b.log2BlockSize
+	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
+
+	c.mshr = cache.NewMSHR(b.numMSHREntry)
+	c.directory = cache.NewDirectory(
+		numSets, b.wayAssociativity, blockSize, cache.NewLRUVictimFinder())
+	c.storage = mem.NewStorage(b.totalByteSize)
+	c.bankLatency = b.bankLatency
+	c.wayAssociativity = b.wayAssociativity
+}
+
+func (b Builder) configurAddressMapper(c *Comp) {
+	if b.addressToPortMapper != nil {
+		c.addressToPortMapper = b.addressToPortMapper
+		return
+	}
+
+	switch b.addressMapperType {
+	case "single":
+		if len(b.remotePorts) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		c.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
+	case "interleaved":
+		if len(b.remotePorts) == 0 {
+			panic("interleaved address mapper requires at least 1 port")
+		}
+		mapper := mem.NewInterleavedAddressPortMapper(4096)
+		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+		c.addressToPortMapper = mapper
+	default:
+		panic("addressToPortMapper is nil.")
+	}
+}
+
 
 func (b *Builder) buildStages(c *Comp) {
 	c.coalesceStage = &coalescer{cache: c}
