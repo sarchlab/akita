@@ -29,7 +29,12 @@ var _ = Describe("Port Analyzer", func() {
 		outgoingPort  *MockPort
 		timeTeller    *MockTimeTeller
 		portLogger    *MockPerfLogger
+<<<<<<< HEAD
 		portAnalyzer  *PortAnalyzer
+=======
+
+		portAnalyzer *PortAnalyzer
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	)
 
 	BeforeEach(func() {
@@ -53,6 +58,12 @@ var _ = Describe("Port Analyzer", func() {
 			Return(sim.RemotePort("OutgoingPort")).
 			AnyTimes()
 
+		incommingPort = NewMockPort(mockCtrl)
+		incommingPort.EXPECT().Name().Return("IncomingPort").AnyTimes()
+
+		outgoingPort = NewMockPort(mockCtrl)
+		outgoingPort.EXPECT().Name().Return("OutgoingPort").AnyTimes()
+
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		portLogger = NewMockPerfLogger(mockCtrl)
 
@@ -72,8 +83,13 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+<<<<<<< HEAD
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
+=======
+				Src:          port,
+				Dst:          outgoingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 
@@ -116,8 +132,13 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+<<<<<<< HEAD
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
+=======
+				Dst:          port,
+				Src:          incommingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 
@@ -160,15 +181,25 @@ var _ = Describe("Port Analyzer", func() {
 		outMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+<<<<<<< HEAD
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
+=======
+				Src:          port,
+				Dst:          outgoingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 		inMsg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 10000,
+<<<<<<< HEAD
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
+=======
+				Dst:          port,
+				Src:          incommingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 
@@ -237,8 +268,13 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+<<<<<<< HEAD
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
+=======
+				Src:          port,
+				Dst:          outgoingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 
@@ -281,8 +317,13 @@ var _ = Describe("Port Analyzer", func() {
 		msg := &sampleMsg{
 			meta: sim.MsgMeta{
 				TrafficBytes: 100,
+<<<<<<< HEAD
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
+=======
+				Src:          port,
+				Dst:          outgoingPort,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			},
 		}
 

@@ -51,6 +51,7 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 
 	p.csvWriter = csv.NewWriter(p.dbFile)
 
+<<<<<<< HEAD
 	header := []string{
 		"Start",
 		"End",
@@ -61,6 +62,9 @@ func NewCSVPerfAnalyzerBackend(dbFilename string) *CSVBackend {
 		"Unit",
 	}
 
+=======
+	header := []string{"Start", "End", "Where", "What", "EntryType", "Value", "Unit"}
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	err = p.csvWriter.Write(header)
 	if err != nil {
 		panic(err)

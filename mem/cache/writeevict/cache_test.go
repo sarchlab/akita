@@ -30,16 +30,26 @@ var _ = Describe("Cache", func() {
 		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("CuPort")).AnyTimes()
 
 		engine = sim.NewSerialEngine()
+<<<<<<< HEAD
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
+=======
+		connection = sim.NewDirectConnection("Conn", engine, 1*sim.GHz)
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
 			Build("DRAM")
+<<<<<<< HEAD
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
+=======
+
+		lowModuleFinder = &mem.SingleLowModuleFinder{
+			LowModule: dram.GetPortByName("Top"),
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 		}
 		c = MakeBuilder().
 			WithEngine(engine).

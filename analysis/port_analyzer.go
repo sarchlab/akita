@@ -8,7 +8,11 @@ import (
 )
 
 type portAnalyzerEntry struct {
+<<<<<<< HEAD
 	remotePort     sim.RemotePort
+=======
+	remotePortName string
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	OutTrafficByte int64
 	OutTrafficMsg  int64
 	InTrafficByte  int64
@@ -25,7 +29,11 @@ type PortAnalyzer struct {
 	port      sim.Port
 
 	lastTime           sim.VTimeInSec
+<<<<<<< HEAD
 	remoteToTrafficMap map[sim.RemotePort]portAnalyzerEntry
+=======
+	remoteToTrafficMap map[string]portAnalyzerEntry
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 }
 
 // Func writes the message information into the logger
@@ -45,18 +53,31 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	}
 
 	if h.remoteToTrafficMap == nil {
+<<<<<<< HEAD
 		h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
 	}
 
 	remotePortName := msg.Meta().Dst
 	if h.isIncoming(msg) {
 		remotePortName = msg.Meta().Src
+=======
+		h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
+	}
+
+	remotePortName := msg.Meta().Dst.Name()
+	if h.isIncoming(msg) {
+		remotePortName = msg.Meta().Src.Name()
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	}
 
 	entry, ok := h.remoteToTrafficMap[remotePortName]
 	if !ok {
 		h.remoteToTrafficMap[remotePortName] = portAnalyzerEntry{
+<<<<<<< HEAD
 			remotePort: remotePortName,
+=======
+			remotePortName: remotePortName,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 		}
 	}
 
@@ -76,7 +97,11 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 }
 
 func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
+<<<<<<< HEAD
 	return msg.Meta().Dst == h.port.AsRemote()
+=======
+	return msg.Meta().Dst == h.port
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 }
 
 func (h *PortAnalyzer) summarize() {
@@ -99,16 +124,28 @@ func (h *PortAnalyzer) summarize() {
 			Start:       startTime,
 			End:         endTime,
 			Where:       h.port.Name(),
+<<<<<<< HEAD
 			WhereRemote: entry.remotePort,
+=======
+			WhereRemote: entry.remotePortName,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			EntryType:   "Traffic",
 		}
 
 		if entry.InTrafficMsg != 0 {
 			perfEntry.What = "Incoming"
+<<<<<<< HEAD
 			perfEntry.Value = float64(entry.InTrafficByte)
 			perfEntry.Unit = "Byte"
 			h.PerfLogger.AddDataEntry(perfEntry)
 
+=======
+
+			perfEntry.Value = float64(entry.InTrafficByte)
+			perfEntry.Unit = "Byte"
+			h.PerfLogger.AddDataEntry(perfEntry)
+
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			perfEntry.Value = float64(entry.InTrafficMsg)
 			perfEntry.Unit = "Msg"
 			h.PerfLogger.AddDataEntry(perfEntry)
@@ -127,7 +164,11 @@ func (h *PortAnalyzer) summarize() {
 		}
 	}
 
+<<<<<<< HEAD
 	h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
+=======
+	h.remoteToTrafficMap = make(map[string]portAnalyzerEntry)
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 }
 
 func (h *PortAnalyzer) periodStartTime(t sim.VTimeInSec) sim.VTimeInSec {

@@ -99,7 +99,11 @@ func buildEnvironment() {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		Build("DRAM")
+<<<<<<< HEAD
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
+=======
+	lowModuleFinder.LowModule = dram.GetPortByName("Top")
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 
 	agent.LowModule = writeevictCache.GetPortByName("Top")
 

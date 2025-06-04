@@ -17,7 +17,11 @@ type PerfAnalyzerEntry struct {
 	Start       sim.VTimeInSec
 	End         sim.VTimeInSec
 	Where       string
+<<<<<<< HEAD
 	WhereRemote sim.RemotePort
+=======
+	WhereRemote string
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	What        string
 	Value       float64
 	Unit        string
@@ -184,7 +188,10 @@ func (b PerfAnalyzerBuilder) WithEngine(
 // Build creates a PerfAnalyzer.
 func (b PerfAnalyzerBuilder) Build() *PerfAnalyzer {
 	var backend PerfAnalyzerBackend
+<<<<<<< HEAD
 
+=======
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 	if b.dbFilename != "" {
 		if b.backendType == "csv" {
 			backend = NewCSVPerfAnalyzerBackend(b.dbFilename)
@@ -231,12 +238,20 @@ func (b *PerfAnalyzer) GetCurrentTraffic(comp string) string {
 	defer b.mu.Unlock()
 
 	for _, data := range b.portDataTable {
+<<<<<<< HEAD
 		if strings.Contains(data.Where, comp) {
+=======
+		if strings.Contains(data.Where, comp) || strings.Contains(data.WhereRemote, comp) {
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 			entry := map[string]string{
 				"start":      fmt.Sprintf("%.9f", data.Start),
 				"end":        fmt.Sprintf("%.9f", data.End),
 				"localPort":  data.Where,
+<<<<<<< HEAD
 				"remotePort": string(data.WhereRemote),
+=======
+				"remotePort": data.WhereRemote,
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930
 				"value":      fmt.Sprintf("%.0f", data.Value),
 				"unit":       data.Unit,
 			}

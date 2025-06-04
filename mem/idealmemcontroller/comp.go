@@ -48,8 +48,17 @@ type Comp struct {
 	width int
 }
 
+<<<<<<< HEAD:mem/idealmemcontroller/comp.go
 func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
+=======
+	topPort          sim.Port
+	Storage          *mem.Storage
+	Latency          int
+	addressConverter mem.AddressConverter
+
+	width int
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930:mem/idealmemcontroller/idealmemcontroller.go
 }
 
 // Handle defines how the Comp handles event
@@ -68,6 +77,7 @@ func (c *Comp) Handle(e sim.Event) error {
 	return nil
 }
 
+<<<<<<< HEAD:mem/idealmemcontroller/comp.go
 type middleware struct {
 	*Comp
 }
@@ -75,11 +85,30 @@ type middleware struct {
 // Tick updates ideal memory controller state.
 func (m *middleware) Tick() bool {
 	msg := m.topPort.RetrieveIncoming()
+=======
+func (c *Comp) Tick(now sim.VTimeInSec) bool {
+	madeProgress := false
+
+	for i := 0; i < c.width; i++ {
+		madeProgress = c.updateMemCtrl(now) || madeProgress
+	}
+
+	return madeProgress
+}
+
+// updateMemCtrl updates ideal memory controller state.
+func (c *Comp) updateMemCtrl(now sim.VTimeInSec) bool {
+	msg := c.topPort.Retrieve(now)
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930:mem/idealmemcontroller/idealmemcontroller.go
 	if msg == nil {
 		return false
 	}
 
+<<<<<<< HEAD:mem/idealmemcontroller/comp.go
 	tracing.TraceReqReceive(msg, m.Comp)
+=======
+	tracing.TraceReqReceive(msg, c)
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930:mem/idealmemcontroller/idealmemcontroller.go
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
@@ -91,7 +120,6 @@ func (m *middleware) Tick() bool {
 	default:
 		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
 	}
-
 	return false
 }
 
@@ -140,7 +168,11 @@ func (c *Comp) handleReadRespondEvent(e *readRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+<<<<<<< HEAD:mem/idealmemcontroller/comp.go
 	c.TickLater()
+=======
+	c.TickLater(now)
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930:mem/idealmemcontroller/idealmemcontroller.go
 
 	return nil
 }
@@ -193,6 +225,7 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 	}
 
 	tracing.TraceReqComplete(req, c)
+<<<<<<< HEAD:mem/idealmemcontroller/comp.go
 	c.TickLater()
 
 	return nil
@@ -201,3 +234,9 @@ func (c *Comp) handleWriteRespondEvent(e *writeRespondEvent) error {
 func (c *Comp) CurrentTime() sim.VTimeInSec {
 	return c.Engine.CurrentTime()
 }
+=======
+	c.TickLater(now)
+
+	return nil
+}
+>>>>>>> 674be9ab7565412cd39847012b7c9cb857680930:mem/idealmemcontroller/idealmemcontroller.go
