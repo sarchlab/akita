@@ -11,7 +11,7 @@ type TaskStep struct {
 type MilestoneKind string
 
 const (
-	MilestoneKindHardwareRecourse MilestoneKind = "hardware_recourse"
+	MilestoneKindHardwareResource MilestoneKind = "hardware_resource"
 	MilestoneKindNetworkTransfer  MilestoneKind = "network_transfer"
 	MilestoneKindNetworkBusy      MilestoneKind = "network_busy"
 	MilestoneKindQueue            MilestoneKind = "queue"
