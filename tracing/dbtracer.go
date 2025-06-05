@@ -52,14 +52,13 @@ func (t *DBTracer) StartTask(task Task) {
 		return
 	}
 
-	task, found := t.tracingTasks[task.ID]
+	existingTask, found := t.tracingTasks[task.ID]
 	if !found {
 		t.tracingTasks[task.ID] = task
 
 		return
 	}
 
-	existingTask := t.tracingTasks[task.ID]
 	existingTask.ParentID = task.ParentID
 	existingTask.Kind = task.Kind
 	existingTask.What = task.What

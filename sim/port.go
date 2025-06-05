@@ -11,9 +11,17 @@ var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
 var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
 
-// HookPosPortMsgRetrieve marks when an outbound message is sent over a
-// connection
-var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
+// HookPosPortMsgRetrieveIncoming marks when an inbound message is retrieved
+// from the incoming buffer.
+var HookPosPortMsgRetrieveIncoming = &HookPos{
+	Name: "Port Msg Retrieve Incoming",
+}
+
+// HookPosPortMsgRetrieveOutgoing marks when an outbound message is retrieved
+// from the outgoing buffer.
+var HookPosPortMsgRetrieveOutgoing = &HookPos{
+	Name: "Port Msg Retrieve Outgoing",
+}
 
 // A RemotePort is a string that refers to another port.
 type RemotePort string
@@ -171,7 +179,7 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 	msg := item.(Msg)
 	hookCtx := HookCtx{
 		Domain: p,
-		Pos:    HookPosPortMsgRetrieve,
+		Pos:    HookPosPortMsgRetrieveIncoming,
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
@@ -199,7 +207,7 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 	msg := item.(Msg)
 	hookCtx := HookCtx{
 		Domain: p,
-		Pos:    HookPosPortMsgRetrieve,
+		Pos:    HookPosPortMsgRetrieveOutgoing,
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
