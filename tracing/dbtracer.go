@@ -203,7 +203,7 @@ func NewDBTracer(
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
 	dataRecorder.CreateTable("trace", taskTableEntry{})
-	dataRecorder.CreateTable("trace_milestones", Milestone{})
+	dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,

@@ -12,7 +12,10 @@ type MilestoneKind string
 
 const (
 	MilestoneKindHardwareRecourse MilestoneKind = "hardware_recourse"
-	MilestoneKindNetwork          MilestoneKind = "network"
+	MilestoneKindNetworkTransfer  MilestoneKind = "network_transfer"
+	MilestoneKindNetworkBusy      MilestoneKind = "network_busy"
+	MilestoneKindQueue            MilestoneKind = "queue"
+	MilestoneKindData             MilestoneKind = "data"
 	MilestoneKindDependency       MilestoneKind = "dependency"
 	MilestoneKindOther            MilestoneKind = "other"
 )

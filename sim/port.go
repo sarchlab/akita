@@ -155,12 +155,18 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 // buffer
 func (p *defaultPort) RetrieveIncoming() Msg {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	item := p.incomingBuf.Pop()
 	if item == nil {
+		p.lock.Unlock()
 		return nil
 	}
+
+	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
+		p.conn.NotifyAvailable(p)
+	}
+
+	p.lock.Unlock()
 
 	msg := item.(Msg)
 	hookCtx := HookCtx{
@@ -169,10 +175,6 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
-
-	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
-		p.conn.NotifyAvailable(p)
-	}
 
 	return msg
 }
@@ -181,12 +183,18 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 // buffer
 func (p *defaultPort) RetrieveOutgoing() Msg {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	item := p.outgoingBuf.Pop()
 	if item == nil {
+		p.lock.Unlock()
 		return nil
 	}
+
+	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
+		p.comp.NotifyPortFree(p)
+	}
+
+	p.lock.Unlock()
 
 	msg := item.(Msg)
 	hookCtx := HookCtx{
@@ -195,10 +203,6 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
-
-	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
-		p.comp.NotifyPortFree(p)
-	}
 
 	return msg
 }
