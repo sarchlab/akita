@@ -15,6 +15,8 @@ type Builder struct {
 	numReqPerCycle      int
 	log2PageSize        uint64
 	deviceID            uint64
+	remotePorts         []sim.RemotePort
+	addressMapperType   string
 }
 
 // MakeBuilder creates a new builder
@@ -78,6 +80,16 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 	return b
 }
 
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
 // Build returns a new AddressTranslator
 func (b Builder) Build(name string) *Comp {
 	t := &Comp{}
@@ -86,8 +98,40 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, t)
 
-	t.translationProvider = b.translationProvider
-	t.addressToPortMapper = b.addressToPortMapper
+	if len(b.remotePorts) > 0 {
+		t.translationProvider = b.remotePorts[0]
+	}
+
+	switch b.addressMapperType {
+	case "single":
+		if len(b.remotePorts) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		t.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
+	case "interleaved":
+		if len(b.remotePorts) == 0 {
+			panic("interleaved address mapper requires at least 1 port")
+		}
+		mapper := mem.NewInterleavedAddressPortMapper(4096)
+		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+		t.addressToPortMapper = mapper
+	default:
+		switch len(b.remotePorts) {
+        case 0:
+            panic("no ports provided: cannot build address mapper")
+        case 1:
+            t.addressToPortMapper = &mem.SinglePortMapper{
+                Port: b.remotePorts[0],
+            }
+        default:
+            mapper := mem.NewInterleavedAddressPortMapper(4096)
+            mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+            t.addressToPortMapper = mapper
+        }
+	}
+
+	// t.translationProvider = b.translationProvider
+	// t.addressToPortMapper = b.addressToPortMapper
 	t.numReqPerCycle = b.numReqPerCycle
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
