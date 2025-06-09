@@ -64,7 +64,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		m.responsePipeline.Accept(&pipelineTLBReq{req: req.(*vm.TranslationReq)})
+		m.responsePipeline.Accept(&pipelineTLBReq{
+			req: req.(*vm.TranslationReq),
+		})
 		madeProgress = true
 	}
 
@@ -157,7 +159,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
-
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)

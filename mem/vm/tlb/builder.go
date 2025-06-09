@@ -116,7 +116,11 @@ func (b Builder) Build(name string) *Comp {
 
 	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
 	tlb.responseBuffer = buf
-	tlb.responsePipeline = pipelining.NewPipeline(name+".ResponsePipeline", b.latency, 1, buf)
+	tlb.responsePipeline = pipelining.NewPipeline(
+		name+".ResponsePipeline",
+		b.latency,
+		1,
+		buf)
 
 	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
 	tlb.AddMiddleware(ctrlMiddleware)

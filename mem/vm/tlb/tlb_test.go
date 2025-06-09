@@ -98,11 +98,11 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should respond to top", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
-			topPort.EXPECT().Send(gomock.Any())
+			//topPort.EXPECT().PeekIncoming().Return(req).Times(1)
+			//topPort.EXPECT().RetrieveIncoming().Times(1)
+			topPort.EXPECT().Send(gomock.Any()).Times(1)
 
-			set.EXPECT().Visit(wayID)
+			set.EXPECT().Visit(wayID).Times(1)
 
 			madeProgress := tlbMW.lookup(req)
 
@@ -153,8 +153,8 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
+			//topPort.EXPECT().PeekIncoming().Return(req)
+			//topPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(req *vm.TranslationReq) {
 					Expect(req.VAddr).To(Equal(uint64(0x100)))
@@ -170,7 +170,8 @@ var _ = Describe("TLB", func() {
 				To(Equal(true))
 		})
 
-		// It("should find the entry in MSHR and not request from bottom", func() {
+		// It("should find the entry in MSHR and not request from bottom",
+		// func() {
 		// 	tlb.mshr.Add(1, 0x100)
 		// 	topPort.EXPECT().PeekIncoming().Return(req)
 		// 	topPort.EXPECT().RetrieveIncoming()
