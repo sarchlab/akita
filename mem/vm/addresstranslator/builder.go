@@ -98,9 +98,7 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, t)
 
-	if len(b.remotePorts) > 0 {
-		t.translationProvider = b.remotePorts[0]
-	}
+	t.translationProvider = b.translationProvider
 
 	switch b.addressMapperType {
 	case "single":
@@ -117,17 +115,17 @@ func (b Builder) Build(name string) *Comp {
 		t.addressToPortMapper = mapper
 	default:
 		switch len(b.remotePorts) {
-        case 0:
-            panic("no ports provided: cannot build address mapper")
-        case 1:
-            t.addressToPortMapper = &mem.SinglePortMapper{
-                Port: b.remotePorts[0],
-            }
-        default:
-            mapper := mem.NewInterleavedAddressPortMapper(4096)
-            mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-            t.addressToPortMapper = mapper
-        }
+		case 0:
+			panic("no ports provided: cannot build address mapper")
+		case 1:
+			t.addressToPortMapper = &mem.SinglePortMapper{
+				Port: b.remotePorts[0],
+			}
+		default:
+			mapper := mem.NewInterleavedAddressPortMapper(4096)
+			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+			t.addressToPortMapper = mapper
+		}
 	}
 
 	// t.translationProvider = b.translationProvider
