@@ -20,10 +20,12 @@ func Example() {
 
 	recorder := datarecording.NewDataRecorder(dbPath)
 
-	cleanup := func() {
-		os.Remove(dbPath + ".sqlite3")
-	}
-	defer cleanup()
+	/*
+		cleanup := func() {
+			os.Remove(dbPath + ".sqlite3")
+		}
+		defer cleanup()
+	*/
 
 	task1 := Task{1, "task1", 30, "A"}
 	recorder.CreateTable("test_table", task1)
@@ -59,5 +61,5 @@ func Example() {
 	// Output:
 	// The stored table: test_table
 	// The stored table: test_table
-	// ID: 2, Name: task2, Place: 1
+	// ID: 2, Name: task2, Place: B
 }
