@@ -72,6 +72,19 @@ var _ = Describe("TLB", func() {
 		Expect(madeProgress).To(BeFalse())
 	})
 
+	It("should insert req into pipeline when topPort has req", func() {
+		req := vm.TranslationReqBuilder{}.
+			WithPID(1).
+			WithVAddr(uint64(0x100)).
+			WithDeviceID(1).
+			Build()
+
+		topPort.EXPECT().RetrieveIncoming().Return(req)
+		madeProgress := tlbMW.insertIntoPipeline()
+
+		Expect(madeProgress).To(BeTrue())
+	})
+
 	Context("hit", func() {
 		var (
 			wayID int
