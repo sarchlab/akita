@@ -651,17 +651,29 @@ class Dashboard {
     // chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify component styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
     // chatPanel.appendChild(chatContent);
 
+    // Status box
+    // const statusMsg = document.createElement("div");
+    // statusMsg.id = "chatStatusMsg";
+    // statusMsg.style.margin = "10px 20px 0 20px";
+    // statusMsg.style.color = "#888";
+    // statusMsg.style.fontStyle = "italic";
+    // chatPanel.appendChild(statusMsg);
+
     // Output box
     const testChatBoxOutput = document.createElement("div");
     testChatBoxOutput.id = "testChatBoxOutput";
     testChatBoxOutput.style.flex = "1";
-    testChatBoxOutput.style.margin = "800px 20px 20px 20px";
+    testChatBoxOutput.style.margin = "20px 20px 20px 20px";
     testChatBoxOutput.style.background = "rgba(255,255,255,0.9)";
     testChatBoxOutput.style.border = "1px solid #e0e0e0";
     testChatBoxOutput.style.borderRadius = "8px";
     testChatBoxOutput.style.padding = "12px 12px 12px 12px";
     testChatBoxOutput.style.overflowY = "auto";
-    testChatBoxOutput.innerText = "Welcome to Daisen Bot!";
+    testChatBoxOutput.innerHTML =
+        `<div style="margin-bottom:8px;">
+          <b>[Daisen Bot]</b><br>Welcome to Daisen Bot!
+        </div>
+        <hr style="border:0;border-top:1px solid #777777;margin:16px 0 16px 0;width:99%;">`;
 
     chatPanel.appendChild(testChatBoxOutput);
 
@@ -720,15 +732,24 @@ class Dashboard {
       sendButton.style.color = "#888";
       sendButton.style.cursor = "not-allowed";
 
-      testChatBoxOutput.innerText = "Sending to GPT...";
+      // testChatBoxOutput.innerText = "Sending to GPT...";
+      // statusMsg.innerText = "Sending to GPT...";
       testChatBoxInput.value = "";
 
 
       // Call GPT with full history
       const gptResponse = await sendPostGPT(messages);
 
-      testChatBoxOutput.innerText =
-        `You asked: "${userInput}"\n\nGPT says:\n${gptResponse}`;
+      // testChatBoxOutput.innerText =
+      //   `[You]\n"${userInput}"\n[Daisen Bot]\n${gptResponse}\n`;
+      testChatBoxOutput.innerHTML +=
+        `<div style="margin-bottom:8px;">
+          <b>[You]</b><br>${userInput}<br>
+          <b>[Daisen Bot]</b><br>${gptResponse}
+        </div>
+        <hr style="border:0;border-top:1px solid #777777;margin:16px 0 16px 0;width:99%;">`;
+      testChatBoxOutput.scrollTop = testChatBoxOutput.scrollHeight; // auto-scroll to bottom
+      // statusMsg.innerText = "";
       
       // Re-enable and restore style
       sendButton.disabled = false;
