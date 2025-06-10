@@ -117,11 +117,27 @@ func (m *middleware) translate() bool {
 		return false
 	}
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.translationPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	translation := &transaction{
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
 	}
 	m.transactions = append(m.transactions, translation)
+
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindHardwareResource,
+		"AddressTranslator.Transactions",
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.TraceReqInitiate(
@@ -140,6 +156,14 @@ func (m *middleware) parseTranslation() bool {
 	if rsp == nil {
 		return false
 	}
+
+	tracing.AddMilestone(
+		rsp.Meta().ID,
+		tracing.MilestoneKindQueue,
+		m.translationPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	transRsp := rsp.(*vm.TranslationRsp)
 	transaction := m.findTranslationByReqID(transRsp.RespondTo)
@@ -209,6 +233,13 @@ func (m *middleware) respond() bool {
 				WithData(rsp.Data).
 				Build()
 			rspToTop = drToTop
+			tracing.AddMilestone(
+				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+				tracing.MilestoneKindData,
+				"data",
+				m.Comp.Name(),
+				m.Comp,
+			)
 		}
 	case *mem.WriteDoneRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
@@ -230,6 +261,14 @@ func (m *middleware) respond() bool {
 		if err != nil {
 			return false
 		}
+
+		tracing.AddMilestone(
+			tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+			tracing.MilestoneKindNetworkBusy,
+			m.topPort.Name(),
+			m.Comp.Name(),
+			m.Comp,
+		)
 
 		m.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
 
