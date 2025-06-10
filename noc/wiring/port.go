@@ -146,7 +146,7 @@ func (p *Port) RetrieveOutgoing() sim.Msg {
 
 	hookCtx := sim.HookCtx{
 		Domain: p,
-		Pos:    sim.HookPosPortMsgRetrieve,
+		Pos:    sim.HookPosPortMsgRetrieveOutgoing,
 		Item:   msg,
 	}
 	p.InvokeHook(hookCtx)
