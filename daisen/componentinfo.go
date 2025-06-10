@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type TimeValue struct {
@@ -470,4 +475,51 @@ func isTaskOverlapsWithBin(
 	}
 
 	return true
+}
+
+func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
+	// Load .env file (only needed once, but safe to call multiple times)
+	// fmt.Printf("Loading .env file...\n")
+
+	_ = godotenv.Load(".env")
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		http.Error(w, "apiKey not found in .env", http.StatusInternalServerError)
+		return
+	}
+	// fmt.Print("Loaded apiKey from .env\n")
+
+	// Parse user input from frontend
+	var req struct {
+		Messages []map[string]string `json:"messages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Prepare request to OpenAI
+	openaiURL := "https://ceyifan.openai.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview"
+	payload := map[string]interface{}{
+		"messages":    req.Messages,
+		"temperature": 0.7,
+	}
+	payloadBytes, _ := json.Marshal(payload)
+	openaiReq, _ := http.NewRequest("POST", openaiURL, bytes.NewReader(payloadBytes))
+	openaiReq.Header.Set("Content-Type", "application/json")
+	openaiReq.Header.Set("api-key", apiKey)
+
+	// Send request to OpenAI
+	resp, err := http.DefaultClient.Do(openaiReq)
+	if err != nil {
+		http.Error(w, "Failed to contact OpenAI: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read and forward OpenAI response
+	body, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
 }

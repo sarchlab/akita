@@ -1,6 +1,7 @@
 import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
+import { sendPostGPT } from "./sendPostGPT";
 
 class YAxisOption {
   optionValue: string;
@@ -488,8 +489,8 @@ class Dashboard {
     chatButton.style.alignItems = "center";
     chatButton.style.paddingRight = "20px";
     chatButton.style.marginRight = "15px";
-    // chatButton.style.backgroundColor = "#0d6efd";
-    // chatButton.style.borderColor = "#0d6efd";
+    chatButton.style.backgroundColor = "#0d6efd";
+    chatButton.style.borderColor = "#0d6efd";
     // chatButton.innerText = "Daisen Bot";
     chatButton.innerHTML = `
       <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
@@ -571,6 +572,9 @@ class Dashboard {
   }
 
   _showChatPanel() {
+    let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
+      { role: "system", content: "You are Daisen Bot." }
+    ];
     this._injectChatPanelCSS();
 
     // Remove existing panel if any
@@ -640,11 +644,107 @@ class Dashboard {
 
     chatPanel.appendChild(closeBtn);
 
-    const chatContent = document.createElement("div");
-    chatContent.style.flex = "1";
-    chatContent.style.padding = "20px";
-    chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify component styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
-    chatPanel.appendChild(chatContent);
+    // Add Test Content for Input and Output
+    // const chatContent = document.createElement("div");
+    // chatContent.style.flex = "1";
+    // chatContent.style.padding = "20px";
+    // chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify component styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
+    // chatPanel.appendChild(chatContent);
+
+    // Output box
+    const testChatBoxOutput = document.createElement("div");
+    testChatBoxOutput.id = "testChatBoxOutput";
+    testChatBoxOutput.style.flex = "1";
+    testChatBoxOutput.style.margin = "800px 20px 20px 20px";
+    testChatBoxOutput.style.background = "rgba(255,255,255,0.9)";
+    testChatBoxOutput.style.border = "1px solid #e0e0e0";
+    testChatBoxOutput.style.borderRadius = "8px";
+    testChatBoxOutput.style.padding = "12px 12px 12px 12px";
+    testChatBoxOutput.style.overflowY = "auto";
+    testChatBoxOutput.innerText = "Welcome to Daisen Bot!";
+
+    chatPanel.appendChild(testChatBoxOutput);
+
+    // Input row
+    const inputRow = document.createElement("div");
+    inputRow.style.display = "flex";
+    inputRow.style.alignItems = "center";
+    inputRow.style.padding = "16px 20px 20px 20px";
+    inputRow.style.background = "rgba(255,255,255,0.85)";
+
+    // Input box
+    const testChatBoxInput = document.createElement("input");
+    testChatBoxInput.id = "testChatBoxInput";
+    testChatBoxInput.type = "text";
+    testChatBoxInput.placeholder = "Type your message...";
+    testChatBoxInput.style.flex = "1";
+    testChatBoxInput.style.marginRight = "12px";
+    testChatBoxInput.style.padding = "8px 12px";
+    testChatBoxInput.style.border = "1px solid #b0cfff";
+    testChatBoxInput.style.borderRadius = "6px";
+    testChatBoxInput.style.fontSize = "1em";
+    testChatBoxInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        sendButton.click();
+      }
+    });
+
+    // Send button
+    const sendButton = document.createElement("button");
+    sendButton.innerText = "Send";
+    sendButton.style.background = "#0d6efd";
+    sendButton.style.color = "#fff";
+    sendButton.style.border = "none";
+    sendButton.style.borderRadius = "6px";
+    sendButton.style.padding = "8px 20px";
+    sendButton.style.fontWeight = "bold";
+    sendButton.style.cursor = "pointer";
+    sendButton.style.fontSize = "1em";
+    sendButton.onclick = async () => {
+
+      // Test: repeat the input
+      // testChatBoxOutput.innerText = testChatBoxInput.value;
+      // testChatBoxInput.value = "";
+      const userInput = testChatBoxInput.value.trim();
+      if (!userInput) return;
+
+      // Add user message to history
+      messages.push({ role: "user", content: userInput });
+
+
+      // Disable and style the button
+      sendButton.disabled = true;
+      sendButton.style.background = "rgba(255,255,255,0.9)";
+      sendButton.style.border = "1px solid #e0e0e0";
+      sendButton.style.color = "#888";
+      sendButton.style.cursor = "not-allowed";
+
+      testChatBoxOutput.innerText = "Sending to GPT...";
+      testChatBoxInput.value = "";
+
+
+      // Call GPT with full history
+      const gptResponse = await sendPostGPT(messages);
+
+      testChatBoxOutput.innerText =
+        `You asked: "${userInput}"\n\nGPT says:\n${gptResponse}`;
+      
+      // Re-enable and restore style
+      sendButton.disabled = false;
+      sendButton.style.background = "#0d6efd";
+      sendButton.style.border = "none";
+      sendButton.style.color = "#fff";
+      sendButton.style.cursor = "pointer";
+    };
+
+    inputRow.appendChild(testChatBoxInput);
+    inputRow.appendChild(sendButton);
+
+    chatPanel.appendChild(inputRow);
+
+
+
 
     document.body.appendChild(chatPanel);
     // Animate in

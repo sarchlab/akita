@@ -59,6 +59,9 @@ func startAPIServer() {
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 
+	// For Front-end GPT Use
+	http.HandleFunc("/api/gpt", httpGPTProxy)
+
 	fmt.Printf("Listening %s\n", *httpFlag)
 
 	go func() {
