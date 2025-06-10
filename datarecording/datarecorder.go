@@ -340,19 +340,25 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	table, exists := t.tables[tableName]
 	if !exists {
+		t.mu.Unlock()
 		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
 	table.entries = append(table.entries, entry)
 
 	t.entryCount += 1
+
 	if t.entryCount >= t.batchSize {
+		t.mu.Unlock()
 		t.Flush()
+
+		return
 	}
+
+	t.mu.Unlock()
 }
 
 func (t *sqliteWriter) ListTables() []string {
