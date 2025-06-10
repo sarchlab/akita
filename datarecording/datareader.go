@@ -221,12 +221,12 @@ func (r *sqliteReader) restoreStrLocation(
 			fieldVal := structVal.Field(i)
 			index := fieldVal.String()
 
-			stmt := fmt.Sprintf("SELECT Locale FROM location WHERE ID = %s", index)
+			stmt := fmt.Sprintf("SELECT Locale FROM"+
+				" location WHERE ID = %s", index)
 			r.DB.QueryRow(stmt).Scan(&strLocation)
 
 			fieldVal.SetString(strLocation)
 		}
-
 	}
 }
 
