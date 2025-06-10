@@ -488,9 +488,9 @@ class Dashboard {
     chatButton.style.alignItems = "center";
     chatButton.style.paddingRight = "20px";
     chatButton.style.marginRight = "15px";
-    // chatButton.style.backgroundColor = "#0d6efd";
-    // chatButton.style.borderColor = "#0d6efd";
-    // chatButton.innerText = "Daisen Bot";
+    chatButton.style.backgroundColor = "#0d6efd";
+    chatButton.style.borderColor = "#0d6efd";
+    chatButton.innerText = "Daisen Bot";
     chatButton.innerHTML = `
       <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
         <svg width="30" height="30" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
@@ -581,10 +581,8 @@ class Dashboard {
     const chatPanel = document.createElement("div");
     chatPanel.id = "chat-panel";
     chatPanel.style.position = "fixed";
-    chatPanel.style.top = "0";
     chatPanel.style.right = "0";
     chatPanel.style.width = "400px";
-    chatPanel.style.height = "100vh";
     chatPanel.style.background = "rgba(255,255,255,0.7)";
     chatPanel.style.zIndex = "9999";
     chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
@@ -593,11 +591,29 @@ class Dashboard {
     chatPanel.style.justifyContent = "flex-start";
     chatPanel.style.overflow = "hidden";
 
-    // Make it take the height of #inner-container if it exists
+    // Set chat panel height and top to match #inner-container
     const innerContainer = document.getElementById("inner-container");
     if (innerContainer) {
-      chatPanel.style.height = innerContainer.offsetHeight + "px";
-      chatPanel.style.top = innerContainer.getBoundingClientRect().top + "px";
+      const rect = innerContainer.getBoundingClientRect();
+      chatPanel.style.top = rect.top + "px";
+      chatPanel.style.height = rect.height + "px";
+    } else {
+      // fallback to full viewport height if not found
+      chatPanel.style.top = "0";
+      chatPanel.style.height = "100vh";
+    }
+
+    // Store the original width before shrinking
+    const canvasContainer = this._canvas;
+    let originalCanvasWidth = "";
+    if (canvasContainer) {
+      originalCanvasWidth = canvasContainer.style.width;
+      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+      canvasContainer.style.width = "calc(100% - 400px)";
+      setTimeout(() => {
+        this._resize();
+        this._renderPage();
+      }, 300);
     }
 
     // Triangle close button
@@ -613,7 +629,6 @@ class Dashboard {
     closeBtn.style.cursor = "pointer";
     closeBtn.title = "Close";
 
-    // Simple triangle SVG (replace with your icon later)
     closeBtn.innerHTML = `
       <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -635,6 +650,14 @@ class Dashboard {
         chatPanel.remove();
         this._showChatButton = true;
         this._addPaginationControl();
+        // Restore the canvas container width to its original value
+        if (canvasContainer) {
+          canvasContainer.style.width = originalCanvasWidth || "100%";
+          setTimeout(() => {
+            this._resize();
+            this._renderPage();
+          }, 300);
+        }
       }, 200); // Match the CSS transition duration
     };
 
@@ -642,18 +665,99 @@ class Dashboard {
 
     const chatContent = document.createElement("div");
     chatContent.style.flex = "1";
+    chatContent.style.display = "flex";
+    chatContent.style.flexDirection = "column";
     chatContent.style.padding = "20px";
-    chatContent.innerHTML = "<b>Daisen Bot</b><br>Hello world! What can I help you with today?<br>1. Modify component styles.<br>2. Add chat bubbles.<br>3. Whatever you want to do!";
+    chatContent.style.minHeight = "0";
     chatPanel.appendChild(chatContent);
 
+    // Message display area
+    const messagesDiv = document.createElement("div");
+    messagesDiv.style.flex = "1 1 0%";
+    messagesDiv.style.height = "0";
+    messagesDiv.style.overflowY = "auto";
+    messagesDiv.style.marginBottom = "10px";
+    messagesDiv.style.background = "rgba(255, 255, 255, 0.5)";
+    messagesDiv.style.borderRadius = "6px";
+    messagesDiv.style.padding = "8px";
+    chatContent.appendChild(messagesDiv);
+
+    // Initial welcome message
+    const welcomeDiv = document.createElement("div");
+    welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+    welcomeDiv.style.textAlign = "left";
+    welcomeDiv.style.marginBottom = "8px";
+    messagesDiv.appendChild(welcomeDiv);
+
+    // Input area
+    const inputContainer = document.createElement("div");
+    inputContainer.style.display = "flex";
+    inputContainer.style.gap = "8px";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Type a message...";
+    input.style.flex = "1";
+    input.style.padding = "6px";
+    input.style.borderRadius = "4px";
+    input.style.border = "1px solid #ccc";
+
+    const sendBtn = document.createElement("button");
+    sendBtn.textContent = "Send";
+    sendBtn.className = "btn btn-primary";
+
+    // Send handler
+    function sendMessage() {
+      const userMsg = input.value.trim();
+      if (!userMsg) return;
+
+      // User message
+      const userDiv = document.createElement("div");
+      userDiv.style.display = "flex";
+      userDiv.style.justifyContent = "flex-end";
+      userDiv.style.margin = "4px 0";
+
+      const userBubble = document.createElement("span");
+      userBubble.innerHTML = "<b>You:</b> " + userMsg;
+      userBubble.style.background = "#0d6efd";
+      userBubble.style.color = "white";
+      userBubble.style.padding = "8px 12px";
+      userBubble.style.borderRadius = "16px";
+      userBubble.style.maxWidth = "90%";
+      userBubble.style.display = "inline-block";
+      userBubble.style.wordBreak = "break-word";
+      userDiv.appendChild(userBubble);
+
+      messagesDiv.appendChild(userDiv);
+
+      // Bot echo
+      const botDiv = document.createElement("div");
+      botDiv.innerHTML = "<b>Daisen Bot:</b> " + userMsg;
+      botDiv.style.textAlign = "left";
+      botDiv.style.margin = "4px 0";
+      messagesDiv.appendChild(botDiv);
+
+      input.value = "";
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    sendBtn.onclick = sendMessage;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(sendBtn);
+    chatContent.appendChild(inputContainer);
+
     document.body.appendChild(chatPanel);
+
     // Animate in
     setTimeout(() => {
       chatPanel.classList.add('open');
       // Hide the chat button
       this._showChatButton = false;
       this._addPaginationControl();
-
     }, 200);
   }
 
