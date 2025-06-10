@@ -1,10 +1,11 @@
-package cellsplit
+package main
 
 import (
 	"fmt"
 	"math/rand"
 
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/simulation"
 )
 
 var endTime = sim.VTimeInSec(10)
@@ -15,6 +16,7 @@ var randGen *rand.Rand
 type splitEvent struct {
 	time    sim.VTimeInSec
 	handler sim.Handler
+	id      int
 }
 
 func (e splitEvent) Time() sim.VTimeInSec {
@@ -36,19 +38,22 @@ type handler struct {
 func (h *handler) Handle(e sim.Event) error {
 	h.count += 1
 
-	// fmt.Printf("Cell count: %d\n", h.count)
+	evt := e.(splitEvent)
+	fmt.Printf("Cell %d split at %.10f, current count: %d\n",
+		evt.id, evt.Time(), h.count)
 
-	h.scheduleNextSplitEvent(e.Time())
-	h.scheduleNextSplitEvent(e.Time())
+	h.scheduleNextSplitEvent(evt.Time(), evt.id)
+	h.scheduleNextSplitEvent(evt.Time(), h.count) // h.count is the new cell
 
 	return nil
 }
 
-func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec) {
-	timeToSplitLeft := sim.VTimeInSec(randGen.Float64() + 1)
+func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec, id int) {
+	timeUntilNextSplit := sim.VTimeInSec(randGen.Float64() + 1)
 	nextEvt := splitEvent{
-		time:    now + timeToSplitLeft,
+		time:    now + timeUntilNextSplit,
 		handler: h,
+		id:      id,
 	}
 
 	if nextEvt.time < endTime {
@@ -56,10 +61,11 @@ func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec) {
 	}
 }
 
-func Example_cellSplit() {
+func main() {
 	randGen = rand.New(rand.NewSource(0))
 
-	engine = sim.NewSerialEngine()
+	s := simulation.MakeBuilder().Build()
+	engine = s.GetEngine()
 	h := handler{
 		count: 1,
 	}
@@ -68,14 +74,17 @@ func Example_cellSplit() {
 	firstEvt := splitEvent{
 		time:    firstEvtTime,
 		handler: &h,
+		id:      0,
 	}
 
 	engine.Schedule(firstEvt)
 
-	engine.Run()
+	err := engine.Run()
+	if err != nil {
+		panic(err)
+	}
+
+	s.Terminate()
 
 	fmt.Printf("Cell count at time %.0f: %d\n", endTime, h.count)
-
-	// Output:
-	// Cell count at time 10: 75
 }
