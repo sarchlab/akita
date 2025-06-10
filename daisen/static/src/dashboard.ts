@@ -30,6 +30,7 @@ class Dashboard {
   _initialHeight: number;
   _burgerMenu: HTMLDivElement;
   _dropdownCanvas: HTMLDivElement;
+  _showChatButton: boolean = true; // Add this flag to control the right chat button visibility
 
   constructor() {
     this._numWidget = 16;
@@ -479,16 +480,285 @@ class Dashboard {
 
     const pageInfo = document.createElement("div");
     pageInfo.classList.add("page-info");
-  
+
+    // Create the right button
+    const chatButton = document.createElement("button");
+    chatButton.classList.add("btn", "btn-secondary", "ml-3");
+    chatButton.style.display = "flex";
+    chatButton.style.alignItems = "center";
+    chatButton.style.paddingRight = "20px";
+    chatButton.style.marginRight = "15px";
+    chatButton.style.backgroundColor = "#0d6efd";
+    chatButton.style.borderColor = "#0d6efd";
+    chatButton.innerText = "Daisen Bot";
+    chatButton.innerHTML = `
+      <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
+        <svg width="30" height="30" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+          <!-- Central sparkle border -->
+          <path d="M30,12 L29,13 L29,15 L28,16 L28,17 L27,18 L27,20 L26,21 L26,22 L24,24 L23,24 L22,25 L21,25 L20,26 L19,26 L18,27 L16,27 L15,28 L14,28 L13,29 L13,30 L14,31 L16,31 L17,32 L18,32 L19,33 L21,33 L22,34 L23,34 L25,36 L25,37 L26,38 L26,39 L27,40 L27,41 L28,42 L28,44 L29,45 L29,46 L30,47 L31,47 L32,46 L32,44 L33,43 L33,42 L34,41 L34,39 L35,38 L35,37 L37,35 L38,35 L39,34 L40,34 L41,33 L42,33 L43,32 L45,32 L46,31 L47,31 L48,30 L48,29 L47,28 L45,28 L44,27 L43,27 L42,26 L40,26 L39,25 L38,25 L36,23 L36,22 L35,21 L35,20 L34,19 L34,18 L33,17 L33,15 L32,14 L32,13 L31,12 Z"
+                fill="none" stroke="white" stroke-width="2" />
+
+          <!-- Top-right "+" sign -->
+          <line x1="44" y1="10" x2="44" y2="18" stroke="white" stroke-width="2"/>
+          <line x1="40" y1="14" x2="48" y2="14" stroke="white" stroke-width="2"/>
+
+          <!-- Bottom-left "+" sign -->
+          <line x1="16" y1="42" x2="16" y2="50" stroke="white" stroke-width="2"/>
+          <line x1="12" y1="46" x2="20" y2="46" stroke="white" stroke-width="2"/>
+        </svg>
+      </span>
+      Daisen Bot
+    `;
+    chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+    chatButton.onclick = () => {
+      // alert("AI Chat clicked!");
+      this._showChatPanel();
+    };
+
+    // Pagination container with flexbox
     const paginationContainer = document.createElement("div");
     paginationContainer.classList.add("pagination-container");
-    paginationContainer.appendChild(nav);
-    paginationContainer.appendChild(pageInfo);
+    paginationContainer.style.display = "flex";
+    paginationContainer.style.alignItems = "center";
+    paginationContainer.style.justifyContent = "space-between";
+
+    // Left: nav + pageInfo, Right: button
+    const leftContainer = document.createElement("div");
+    leftContainer.style.display = "flex";
+    leftContainer.style.alignItems = "center";
+    leftContainer.style.flex = "1";
+    leftContainer.style.justifyContent = "center"; // Center the left part
+    leftContainer.appendChild(nav);
+    leftContainer.appendChild(pageInfo);
+
+    paginationContainer.appendChild(leftContainer);
+    paginationContainer.appendChild(chatButton);
+
+  
+    // const paginationContainer = document.createElement("div");
+    // paginationContainer.classList.add("pagination-container");
+    // paginationContainer.appendChild(nav);
+    // paginationContainer.appendChild(pageInfo);
+
+
     if (this._canvas.querySelector('.pagination-container')) {
       this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
     }
     this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
+  }
+
+  _injectChatPanelCSS() {
+    if (document.getElementById('chat-panel-anim-style')) return;
+    const style = document.createElement('style');
+    style.id = 'chat-panel-anim-style';
+    style.innerHTML = `
+      #chat-panel {
+        transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s cubic-bezier(.4,0,.2,1);
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      #chat-panel.open {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      #chat-panel.closing {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  _showChatPanel() {
+    this._injectChatPanelCSS();
+
+    // Remove existing panel if any
+    let oldPanel = document.getElementById("chat-panel");
+    if (oldPanel) oldPanel.remove();
+
+    // Create the chat panel
+    const chatPanel = document.createElement("div");
+    chatPanel.id = "chat-panel";
+    chatPanel.style.position = "fixed";
+    chatPanel.style.right = "0";
+    chatPanel.style.width = "400px";
+    chatPanel.style.background = "rgba(255,255,255,0.7)";
+    chatPanel.style.zIndex = "9999";
+    chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
+    chatPanel.style.display = "flex";
+    chatPanel.style.flexDirection = "column";
+    chatPanel.style.justifyContent = "flex-start";
+    chatPanel.style.overflow = "hidden";
+
+    // Set chat panel height and top to match #inner-container
+    const innerContainer = document.getElementById("inner-container");
+    if (innerContainer) {
+      const rect = innerContainer.getBoundingClientRect();
+      chatPanel.style.top = rect.top + "px";
+      chatPanel.style.height = rect.height + "px";
+    } else {
+      // fallback to full viewport height if not found
+      chatPanel.style.top = "0";
+      chatPanel.style.height = "100vh";
+    }
+
+    // Store the original width before shrinking
+    const canvasContainer = this._canvas;
+    let originalCanvasWidth = "";
+    if (canvasContainer) {
+      originalCanvasWidth = canvasContainer.style.width;
+      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+      canvasContainer.style.width = "calc(100% - 400px)";
+      setTimeout(() => {
+        this._resize();
+        this._renderPage();
+      }, 300);
+    }
+
+    // Triangle close button
+    const closeBtn = document.createElement("button");
+    closeBtn.style.position = "absolute";
+    closeBtn.style.left = "-4px";
+    closeBtn.style.top = "50%";
+    closeBtn.style.transform = "translateY(-50%)";
+    closeBtn.style.width = "12px";
+    closeBtn.style.height = "40px";
+    closeBtn.style.background = "transparent";
+    closeBtn.style.border = "none";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.title = "Close";
+
+    closeBtn.innerHTML = `
+      <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="silverGradient" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#d9d9d9"/>
+            <stop offset="50%" stop-color="#b0b0b0"/>
+            <stop offset="100%" stop-color="#f5f5f5"/>
+          </linearGradient>
+        </defs>
+        <polygon points="0,0 12,20 0,40" fill="url(#silverGradient)" stroke="#aaa" stroke-width="0.5"/>
+      </svg>
+    `;
+
+    closeBtn.onclick = () => {
+      // Animate out
+      chatPanel.classList.remove('open');
+      chatPanel.classList.add('closing');
+      setTimeout(() => {
+        chatPanel.remove();
+        this._showChatButton = true;
+        this._addPaginationControl();
+        // Restore the canvas container width to its original value
+        if (canvasContainer) {
+          canvasContainer.style.width = originalCanvasWidth || "100%";
+          setTimeout(() => {
+            this._resize();
+            this._renderPage();
+          }, 300);
+        }
+      }, 200); // Match the CSS transition duration
+    };
+
+    chatPanel.appendChild(closeBtn);
+
+    const chatContent = document.createElement("div");
+    chatContent.style.flex = "1";
+    chatContent.style.display = "flex";
+    chatContent.style.flexDirection = "column";
+    chatContent.style.padding = "20px";
+    chatContent.style.minHeight = "0";
+    chatPanel.appendChild(chatContent);
+
+    // Message display area
+    const messagesDiv = document.createElement("div");
+    messagesDiv.style.flex = "1 1 0%";
+    messagesDiv.style.height = "0";
+    messagesDiv.style.overflowY = "auto";
+    messagesDiv.style.marginBottom = "10px";
+    messagesDiv.style.background = "rgba(255, 255, 255, 0.5)";
+    messagesDiv.style.borderRadius = "6px";
+    messagesDiv.style.padding = "8px";
+    chatContent.appendChild(messagesDiv);
+
+    // Initial welcome message
+    const welcomeDiv = document.createElement("div");
+    welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+    welcomeDiv.style.textAlign = "left";
+    welcomeDiv.style.marginBottom = "8px";
+    messagesDiv.appendChild(welcomeDiv);
+
+    // Input area
+    const inputContainer = document.createElement("div");
+    inputContainer.style.display = "flex";
+    inputContainer.style.gap = "8px";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "Type a message...";
+    input.style.flex = "1";
+    input.style.padding = "6px";
+    input.style.borderRadius = "4px";
+    input.style.border = "1px solid #ccc";
+
+    const sendBtn = document.createElement("button");
+    sendBtn.textContent = "Send";
+    sendBtn.className = "btn btn-primary";
+
+    // Send handler
+    function sendMessage() {
+      const userMsg = input.value.trim();
+      if (!userMsg) return;
+
+      // User message
+      const userDiv = document.createElement("div");
+      userDiv.style.display = "flex";
+      userDiv.style.justifyContent = "flex-end";
+      userDiv.style.margin = "4px 0";
+
+      const userBubble = document.createElement("span");
+      userBubble.innerHTML = "<b>You:</b> " + userMsg;
+      userBubble.style.background = "#0d6efd";
+      userBubble.style.color = "white";
+      userBubble.style.padding = "8px 12px";
+      userBubble.style.borderRadius = "16px";
+      userBubble.style.maxWidth = "90%";
+      userBubble.style.display = "inline-block";
+      userBubble.style.wordBreak = "break-word";
+      userDiv.appendChild(userBubble);
+
+      messagesDiv.appendChild(userDiv);
+
+      // Bot echo
+      const botDiv = document.createElement("div");
+      botDiv.innerHTML = "<b>Daisen Bot:</b> " + userMsg;
+      botDiv.style.textAlign = "left";
+      botDiv.style.margin = "4px 0";
+      messagesDiv.appendChild(botDiv);
+
+      input.value = "";
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    sendBtn.onclick = sendMessage;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(sendBtn);
+    chatContent.appendChild(inputContainer);
+
+    document.body.appendChild(chatPanel);
+
+    // Animate in
+    setTimeout(() => {
+      chatPanel.classList.add('open');
+      // Hide the chat button
+      this._showChatButton = false;
+      this._addPaginationControl();
+    }, 200);
   }
 
   _addPageButtons(ul: HTMLUListElement) {
