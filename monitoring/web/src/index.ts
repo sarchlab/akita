@@ -49,22 +49,37 @@ class App {
 
         // --- Trace Toggle Button Logic ---
         const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement;
-        let tracing = true; // initial state is tracing (Stop shown)
-        traceBtn.addEventListener("click", async () => {
-            if (tracing) {
-                await fetch("/api/trace/end", { method: "POST" });
-                traceBtn.classList.remove("btn-danger");
-                traceBtn.classList.add("btn-success");
-                traceBtn.textContent = "Start";
-                tracing = false;
-            } else {
-                await fetch("/api/trace/start", { method: "POST" });
-                traceBtn.classList.remove("btn-success");
-                traceBtn.classList.add("btn-danger");
-                traceBtn.textContent = "Stop";
-                tracing = true;
-            }
-        });
+
+        // Fetch the initial tracing status from the backend
+        fetch("/api/trace/is_tracing")
+            .then((response) => response.json())
+            .then((data) => {
+                let tracing = data.isTracing; // Initialize tracing state
+                if (tracing) {
+                    traceBtn.classList.add("btn-danger");
+                    traceBtn.textContent = "Stop";
+                } else {
+                    traceBtn.classList.add("btn-success");
+                    traceBtn.textContent = "Start";
+                }
+
+                // Add click event listener to toggle tracing
+                traceBtn.addEventListener("click", async () => {
+                    if (tracing) {
+                        await fetch("/api/trace/end", { method: "POST" });
+                        traceBtn.classList.remove("btn-danger");
+                        traceBtn.classList.add("btn-success");
+                        traceBtn.textContent = "Start";
+                        tracing = false;
+                    } else {
+                        await fetch("/api/trace/start", { method: "POST" });
+                        traceBtn.classList.remove("btn-success");
+                        traceBtn.classList.add("btn-danger");
+                        traceBtn.textContent = "Stop";
+                        tracing = true;
+                    }
+                });
+            });
     }
 }
 

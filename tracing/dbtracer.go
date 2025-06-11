@@ -29,7 +29,28 @@ type DBTracer struct {
 
 	startTime, endTime sim.VTimeInSec
 
-	tracingTasks map[string]Task
+	tracingTasks  map[string]Task
+	isTracingFlag bool // Optional: internal flag for manual control
+}
+
+// EnableTracing manually enables tracing.
+func (t *DBTracer) EnableTracing() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.isTracingFlag = true
+}
+
+// DisableTracing manually disables tracing.
+func (t *DBTracer) DisableTracing() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.isTracingFlag = false
+}
+
+// to check later
+func (t *DBTracer) IsTracing() bool {
+	// Combine manual control with dynamic checks
+	return t.isTracingFlag && *visTracing && t.backend.IsReady()
 }
 
 // StartTask marks the start of a task.

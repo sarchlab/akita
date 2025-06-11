@@ -605,10 +605,22 @@ func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
 	w.Write([]byte(`{"status":"ended"}`))
 }
 
+// 还得接着改， 找visTracing怎么连过来
 func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
+	// Check if tracing is enabled based on *visTracing and the tracer state
+	isTracing := false
+	if *visTracing && m.tracer != nil {
+		isTracing = m.tracer.IsTracing() // Call the IsTracing method of DBTracer
+	}
+
+	// Prepare the response
+	response := map[string]bool{"isTracing": isTracing}
+
+	// Write the response as JSON
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
 	fmt.Println("/api/trace/is_tracing triggered")
-	w.WriteHeader(200)
-	w.Write([]byte(`{"is_tracing":true}`))
 }
 
 func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
