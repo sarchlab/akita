@@ -43,7 +43,6 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 	madeProgress = m.extractFromPipeline() || madeProgress
 
-	// tick pipeline
 	madeProgress = m.responsePipeline.Tick() || madeProgress
 
 	madeProgress = m.insertIntoPipeline() || madeProgress
@@ -74,7 +73,6 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 	return madeProgress
 }
 
-// get latent req from post-pipeline buffer
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
 
@@ -96,22 +94,21 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 	return madeProgress
 }
 
-// Handle enable state
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
 
-	madeProgress = m.processPipeline() || madeProgress
-
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+	madeProgress = m.processPipeline() || madeProgress
+
 	return madeProgress
 }
 
-// Handle drain state
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {

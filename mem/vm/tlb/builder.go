@@ -117,7 +117,8 @@ func (b Builder) Build(name string) *Comp {
 	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
 	tlb.responseBuffer = buf
 	tlb.responsePipeline = pipelining.MakeBuilder().
-		WithCyclePerStage(b.latency).
+		WithNumStage(b.latency).
+		WithCyclePerStage(1).
 		WithPipelineWidth(tlb.numReqPerCycle).
 		WithPostPipelineBuffer(buf).
 		Build(name + ".ResponsePipeline")
