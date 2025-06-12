@@ -22,9 +22,11 @@ var linterCmd = &cobra.Command{
 
 		err := checkComponentFormat(folderPath)
 		if err != nil {
-			log.Fatalf("Validation failed: %s", err)
+			log.Printf("Validation failed: %s", err)
+			os.Exit(1)
 		} else {
-			log.Fatalf("Validation succeed!")
+			log.Printf("Validation succeed!")
+			os.Exit(0)
 		}
 
 	},
