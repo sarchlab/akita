@@ -59,5 +59,5 @@ func Example() {
 	// Output:
 	// The stored table: test_table
 	// The stored table: test_table
-	// ID: 2, Name: task2, Place: 1
+	// ID: 2, Name: task2, Place: B
 }
