@@ -24,9 +24,6 @@ type tlbMiddleware struct {
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := m.performCtrlReq()
 
-	// tick pipeline
-	madeProgress = m.responsePipeline.Tick() || madeProgress
-
 	switch m.state {
 	case "drain":
 		madeProgress = m.handleDrain() || madeProgress
@@ -45,6 +42,10 @@ func (m *tlbMiddleware) processPipeline() bool {
 	madeProgress := false
 
 	madeProgress = m.extractFromPipeline() || madeProgress
+
+	// tick pipeline
+	madeProgress = m.responsePipeline.Tick() || madeProgress
+
 	madeProgress = m.insertIntoPipeline() || madeProgress
 
 	return madeProgress
@@ -85,9 +86,10 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		}
 
 		req := item.(*pipelineTLBReq).req
-		madeProgress = m.lookup(req) || madeProgress
-		if madeProgress {
+		ok := m.lookup(req)
+		if ok {
 			m.responseBuffer.Pop()
+			madeProgress = true
 		}
 	}
 
