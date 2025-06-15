@@ -9,6 +9,14 @@ import (
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
+type pipelineTLBReq struct {
+	req *vm.TranslationReq
+}
+
+func (r *pipelineTLBReq) TaskID() string {
+	return r.req.ID
+}
+
 type tlbMiddleware struct {
 	*Comp
 }
@@ -30,22 +38,77 @@ func (m *tlbMiddleware) Tick() bool {
 	return madeProgress
 }
 
-// Handle enable state
+func (m *tlbMiddleware) processPipeline() bool {
+	madeProgress := false
+
+	madeProgress = m.extractFromPipeline() || madeProgress
+
+	madeProgress = m.responsePipeline.Tick() || madeProgress
+
+	madeProgress = m.insertIntoPipeline() || madeProgress
+
+	return madeProgress
+}
+
+// get req from port buffer and insert into pipeline
+func (m *tlbMiddleware) insertIntoPipeline() bool {
+	madeProgress := false
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		if !m.responsePipeline.CanAccept() {
+			break
+		}
+
+		req := m.topPort.RetrieveIncoming()
+		if req == nil {
+			break
+		}
+
+		m.responsePipeline.Accept(&pipelineTLBReq{
+			req: req.(*vm.TranslationReq),
+		})
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
+func (m *tlbMiddleware) extractFromPipeline() bool {
+	madeProgress := false
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		item := m.responseBuffer.Peek()
+
+		if item == nil {
+			break
+		}
+
+		req := item.(*pipelineTLBReq).req
+		ok := m.lookup(req)
+		if ok {
+			m.responseBuffer.Pop()
+			madeProgress = true
+		}
+	}
+
+	return madeProgress
+}
+
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
-	for i := 0; i < m.numReqPerCycle; i++ {
-		madeProgress = m.lookup() || madeProgress
-	}
+
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+	madeProgress = m.processPipeline() || madeProgress
+
 	return madeProgress
 }
 
-// Handle drain state
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
@@ -54,6 +117,8 @@ func (m *tlbMiddleware) handleDrain() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
@@ -92,14 +157,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup() bool {
-	msg := m.topPort.PeekIncoming()
-	if msg == nil {
-		return false
-	}
-
-	req := msg.(*vm.TranslationReq)
-
+func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)
@@ -127,7 +185,6 @@ func (m *tlbMiddleware) handleTranslationHit(
 	}
 
 	m.visit(setID, wayID)
-	m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
@@ -145,7 +202,6 @@ func (m *tlbMiddleware) handleTranslationMiss(
 
 	fetched := m.fetchBottom(req)
 	if fetched {
-		m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, m.Comp),
