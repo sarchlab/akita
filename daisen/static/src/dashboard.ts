@@ -1,6 +1,7 @@
 import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
+import { sendPostGPT } from "./sendPostGPT";
 
 class YAxisOption {
   optionValue: string;
@@ -571,6 +572,9 @@ class Dashboard {
   }
 
   _showChatPanel() {
+    let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
+      { role: "system", content: "You are Daisen Bot."}
+    ];
     this._injectChatPanelCSS();
 
     // Remove existing panel if any
@@ -642,12 +646,35 @@ class Dashboard {
       </svg>
     `;
 
+    const handleResize = () => {
+      //Adjust chat panel height and top
+      const innerContainer = document.getElementById("inner-container");
+      if (innerContainer) {
+        const rect = innerContainer.getBoundingClientRect();
+        chatPanel.style.top = rect.top + "px";
+        chatPanel.style.height = rect.height + "px";
+      } else {
+        chatPanel.style.top = "0";
+        chatPanel.style.height = "100vh";
+      }
+      // Shrink canvas again (in case window size changed)
+      if (canvasContainer) {
+        canvasContainer.style.width = "calc(100% - 400px)";
+      }
+      // Re-render widgets
+      this._resize();
+      this._renderPage();
+    }
+
+    window.addEventListener("resize", handleResize);
+
     closeBtn.onclick = () => {
       // Animate out
       chatPanel.classList.remove('open');
       chatPanel.classList.add('closing');
       setTimeout(() => {
         chatPanel.remove();
+        window.removeEventListener("resize", handleResize);
         this._showChatButton = true;
         this._addPaginationControl();
         // Restore the canvas container width to its original value
@@ -682,6 +709,54 @@ class Dashboard {
     messagesDiv.style.padding = "8px";
     chatContent.appendChild(messagesDiv);
 
+    const historyMenu = document.createElement("div");
+    historyMenu.style.display = "flex";
+    historyMenu.style.flexDirection = "column";
+    historyMenu.style.marginBottom = "8px";
+    chatContent.appendChild(historyMenu);
+
+    function renderHistoryMenu() {
+      const lastUserMessages = messages.filter(m => m.role === "user").slice(-3);
+      historyMenu.innerHTML = "";
+      lastUserMessages.forEach(msg => {
+        const item = document.createElement("button");
+        // Limit to 10 words for display
+        const words = msg.content.split(" ");
+        let displayText = msg.content;
+        if (words.length > 10) {
+          displayText = words.slice(0, 10).join(" ") + "...";
+        }
+        item.textContent = displayText;
+        item.style.background = "#f8f9fa";
+        item.style.border = "none";
+        item.style.borderRadius = "16px";
+        item.style.padding = "10px 16px";
+        item.style.margin = "4px 0";
+        item.style.fontSize = "1em";
+        item.style.color = "#222";
+        item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
+        item.style.cursor = "pointer";
+        item.style.transition = "background 0.15s, box-shadow 0.15s";
+        // Hover effect
+        item.onmouseenter = () => {
+          item.style.background = "#e9ecef";
+        };
+        item.onmouseleave = () => {
+          item.style.background = "#f8f9fa";
+        }; 
+
+        // Fills input on click
+        item.onclick = () => {
+          input.value = msg.content;
+          input.focus();
+        };
+        historyMenu.appendChild(item);
+      });
+    }
+
+    // When panel opens
+    renderHistoryMenu();
+
     // Initial welcome message
     const welcomeDiv = document.createElement("div");
     welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
@@ -711,6 +786,10 @@ class Dashboard {
       const userMsg = input.value.trim();
       if (!userMsg) return;
 
+      // Disable send button while waiting
+      sendBtn.disabled = true;
+      input.disabled = true;
+
       // User message
       const userDiv = document.createElement("div");
       userDiv.style.display = "flex";
@@ -730,15 +809,33 @@ class Dashboard {
 
       messagesDiv.appendChild(userDiv);
 
-      // Bot echo
+      // Call GPT with full history
+      messages.push({ role: "user", content: userMsg });
+
+      // Show history menu
+      renderHistoryMenu();
+      
+      // Clear input field
+      input.value = "";
+
+      // Show "thinking message"
       const botDiv = document.createElement("div");
-      botDiv.innerHTML = "<b>Daisen Bot:</b> " + userMsg;
+      botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
       botDiv.style.textAlign = "left";
       botDiv.style.margin = "4px 0";
       messagesDiv.appendChild(botDiv);
 
-      input.value = "";
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      // Call GPT and update the message
+      sendPostGPT(messages).then((gptResponse) => {
+        botDiv.innerHTML = "<b>Daisen Bot:</b> " + gptResponse;
+        messages.push({ role: "assistant", content: gptResponse });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+        // Re-enable send button
+        sendBtn.disabled = false;
+        input.disabled = false;
+        input.focus();
+      });
     }
 
     sendBtn.onclick = sendMessage;
