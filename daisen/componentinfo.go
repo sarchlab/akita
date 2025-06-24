@@ -510,12 +510,21 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		"messages":    req.Messages,
 		"temperature": 0.7,
 	}
-	payloadBytes, _ := json.Marshal(payload)
-	openaiReq, _ := http.NewRequest(
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	openaiReq, err := http.NewRequestWithContext(
+		r.Context(),
 		"POST",
 		openaiURL,
 		bytes.NewReader(payloadBytes),
 	)
+	if err != nil {
+		http.Error(w, "Failed to create OpenAI request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 	openaiReq.Header.Set("Content-Type", "application/json")
 	openaiReq.Header.Set("api-key", apiKey)
 
