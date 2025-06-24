@@ -2,6 +2,8 @@ import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
 import { sendPostGPT } from "./sendPostGPT";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 
 class YAxisOption {
   optionValue: string;
@@ -32,6 +34,9 @@ class Dashboard {
   _burgerMenu: HTMLDivElement;
   _dropdownCanvas: HTMLDivElement;
   _showChatButton: boolean = true; // Add this flag to control the right chat button visibility
+  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
+    { role: "system", content: "You are Daisen Bot." }
+  ];  // Make the message history global
 
   constructor() {
     this._numWidget = 16;
@@ -572,9 +577,10 @@ class Dashboard {
   }
 
   _showChatPanel() {
-    let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
-      { role: "system", content: "You are Daisen Bot."}
-    ];
+    // let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
+    //   { role: "system", content: "You are Daisen Bot."}
+    // ];
+    let messages = this._chatMessages;
     this._injectChatPanelCSS();
 
     // Remove existing panel if any
@@ -709,6 +715,50 @@ class Dashboard {
     messagesDiv.style.padding = "8px";
     chatContent.appendChild(messagesDiv);
 
+    // Loading messages
+    messages
+      .filter(m => m.role !== "system")
+      .forEach(m => {
+        if (m.role === "user") {
+          const userDiv = document.createElement("div");
+          userDiv.style.display = "flex";
+          userDiv.style.justifyContent = "flex-end";
+          userDiv.style.margin = "4px 0";
+
+          const userBubble = document.createElement("span");
+          userBubble.innerHTML = "<b>You:</b> " + m.content;
+          userBubble.style.background = "#0d6efd";
+          userBubble.style.color = "white";
+          userBubble.style.padding = "8px 12px";
+          userBubble.style.borderRadius = "16px";
+          userBubble.style.maxWidth = "90%";
+          userBubble.style.display = "inline-block";
+          userBubble.style.wordBreak = "break-word";
+          userDiv.appendChild(userBubble);
+
+          messagesDiv.appendChild(userDiv);
+        } else if (m.role === "assistant") {
+          const botDiv = document.createElement("div");
+          botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(m.content));
+          botDiv.style.textAlign = "left";
+          botDiv.style.margin = "4px 0";
+          messagesDiv.appendChild(botDiv);
+          
+        }
+      });
+    // apply KaTeX rendering for math
+    messagesDiv.querySelectorAll('.math').forEach(el => {
+      try {
+        const tex = el.textContent || "";
+        const displayMode = el.getAttribute("data-display") === "block";
+        console.log("Rendering math:", tex, "Display mode:", displayMode);
+        el.innerHTML = katex.renderToString(tex, { displayMode });
+      } catch (e) {
+        el.innerHTML = "<span style='color:red'>Invalid math</span>";
+        console.log("KaTeX error:", e, "for tex:", el.textContent);
+      }
+    });
+
     const historyMenu = document.createElement("div");
     historyMenu.style.display = "flex";
     historyMenu.style.flexDirection = "column";
@@ -827,15 +877,30 @@ class Dashboard {
 
       // Call GPT and update the message
       sendPostGPT(messages).then((gptResponse) => {
-        botDiv.innerHTML = "<b>Daisen Bot:</b> " + gptResponse;
+        botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponse));
         messages.push({ role: "assistant", content: gptResponse });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
+        // Apply KaTeX rendering for math in the new messages
+        botDiv.querySelectorAll('.math').forEach(el => {
+          try {
+            const tex = el.textContent || "";
+            const displayMode = el.getAttribute("data-display") === "block";
+            console.log("Rendering math:", tex, "Display mode:", displayMode);
+            el.innerHTML = katex.renderToString(tex, { displayMode });
+          } catch (e) {
+            el.innerHTML = "<span style='color:red'>Invalid math</span>";
+            console.log("KaTeX error:", e, "for tex:", el.textContent);
+          }
+        });
+        
         // Re-enable send button
         sendBtn.disabled = false;
         input.disabled = false;
         input.focus();
       });
+      this._chatMessages = messages; // Update chat messages in the class
+
     }
 
     sendBtn.onclick = sendMessage;
@@ -1029,6 +1094,74 @@ class Dashboard {
     });
     this._addPaginationControl();
   }
+}
+
+function convertMarkdownToHTML(text: string): string {
+  // // Headings: ###, ##, #
+  // text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  // text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  // text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // // Horizontal rule: ---
+  // text = text.replace(/^-{3,}$/gm, '<hr>');
+  // // Bold: **text**
+  // text = text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  // // Italic: *text*
+  // text = text.replace(/\*(.+?)\*/g, "<i>$1</i>");
+  // // // Inline code: `code`
+  // // text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // // Math: \[ ... \] (block)
+  // text = text.replace(/\\\[(.+?)\\\]/gs, '<span class="math" data-display="block">$1</span>');
+  // // Math: \( ... \) (inline)
+  // text = text.replace(/\\\((.+?)\\\)/gs, '<span class="math" data-display="inline">$1</span>');
+  // // Line breaks
+  // text = text.replace(/\n/g, "<br>");
+  // return text;
+    // Headings: ###, ##, #
+  text = text.replace(/^### (.+)$/gm, (match, p1) => {
+    console.log("Matched h3:", match);
+    return `<h3>${p1}</h3>`;
+  });
+  text = text.replace(/^## (.+)$/gm, (match, p1) => {
+    console.log("Matched h2:", match);
+    return `<h2>${p1}</h2>`;
+  });
+  text = text.replace(/^# (.+)$/gm, (match, p1) => {
+    console.log("Matched h1:", match);
+    return `<h1>${p1}</h1>`;
+  });
+  // Horizontal rule: ---
+  text = text.replace(/^-{3,}$/gm, (match) => {
+    console.log("Matched hr:", match);
+    return '<hr>';
+  });
+  // Bold: **text**
+  text = text.replace(/\*\*(.+?)\*\*/g, (match, p1) => {
+    console.log("Matched bold:", match);
+    return `<b>${p1}</b>`;
+  });
+  // Italic: *text*
+  text = text.replace(/\*(.+?)\*/g, (match, p1) => {
+    console.log("Matched italic:", match);
+    return `<i>${p1}</i>`;
+  });
+  // Math: \[ ... \] (block)
+  text = text.replace(/\\\[(.+?)\\\]/gs, (match, p1) => {
+    console.log("Matched block math:", match);
+    return `<span class="math" data-display="block">${p1}</span>`;
+  });
+  // Math: \( ... \) (inline)
+  text = text.replace(/\\\((.+?)\\\)/gs, (match, p1) => {
+    console.log("Matched inline math:", match);
+    return `<span class="math" data-display="inline">${p1}</span>`;
+  });
+  // Line breaks
+  text = text.replace(/\n/g, "<br>");
+  return text;
+}
+
+function autoWrapMath(text: string): string {
+  // Wrap lines that look like math (very basic, may need tuning)
+  return text.replace(/^([^\n]*[0-9].*?=.+)$/gm, '\\[$1\\]');
 }
 
 export default Dashboard;
