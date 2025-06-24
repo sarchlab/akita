@@ -526,7 +526,7 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("api-key", apiKey)
+	openaiReq.Header.Set("Api-Key", apiKey)
 
 	// Send request to OpenAI
 	resp, err := http.DefaultClient.Do(openaiReq)
