@@ -355,4 +355,20 @@ body {
   font-weight: bold;
 }
  
+.code-block {
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+  overflow-x: auto;
+}
 
+.inline-code {
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+}

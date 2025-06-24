@@ -592,7 +592,7 @@ class Dashboard {
     chatPanel.id = "chat-panel";
     chatPanel.style.position = "fixed";
     chatPanel.style.right = "0";
-    chatPanel.style.width = "400px";
+    chatPanel.style.width = "600px";
     chatPanel.style.background = "rgba(255,255,255,0.7)";
     chatPanel.style.zIndex = "9999";
     chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
@@ -619,7 +619,7 @@ class Dashboard {
     if (canvasContainer) {
       originalCanvasWidth = canvasContainer.style.width;
       canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
-      canvasContainer.style.width = "calc(100% - 400px)";
+      canvasContainer.style.width = "calc(100% - 600px)";
       setTimeout(() => {
         this._resize();
         this._renderPage();
@@ -665,7 +665,7 @@ class Dashboard {
       }
       // Shrink canvas again (in case window size changed)
       if (canvasContainer) {
-        canvasContainer.style.width = "calc(100% - 400px)";
+        canvasContainer.style.width = "calc(100% - 600px)";
       }
       // Re-render widgets
       this._resize();
@@ -880,6 +880,7 @@ class Dashboard {
         botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponse));
         messages.push({ role: "assistant", content: gptResponse });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        console.log("GPT response:", gptResponse);
 
         // Apply KaTeX rendering for math in the new messages
         botDiv.querySelectorAll('.math').forEach(el => {
@@ -1116,18 +1117,34 @@ function convertMarkdownToHTML(text: string): string {
   // // Line breaks
   // text = text.replace(/\n/g, "<br>");
   // return text;
-    // Headings: ###, ##, #
+  
+  // Code blocks: ```lang\ncode\n```
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    // Remove leading/trailing empty lines (including multiple)
+    const trimmed = code.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
+    // Escape HTML special chars in code
+    const escaped = trimmed.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<pre class="code-block"><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`;
+  });
+
+  // Inline code: `code`
+  text = text.replace(/`([^`]+)`/g, (match, code) => {
+    const escaped = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<code class="inline-code">${escaped}</code>`;
+  });
+
+  // Headings: ###, ##, #
   text = text.replace(/^### (.+)$/gm, (match, p1) => {
     console.log("Matched h3:", match);
-    return `<h3>${p1}</h3>`;
+    return `<h5>${p1}</h5>`;
   });
   text = text.replace(/^## (.+)$/gm, (match, p1) => {
     console.log("Matched h2:", match);
-    return `<h2>${p1}</h2>`;
+    return `<h4>${p1}</h4>`;
   });
   text = text.replace(/^# (.+)$/gm, (match, p1) => {
     console.log("Matched h1:", match);
-    return `<h1>${p1}</h1>`;
+    return `<h3>${p1}</h3>`;
   });
   // Horizontal rule: ---
   text = text.replace(/^-{3,}$/gm, (match) => {
@@ -1147,7 +1164,9 @@ function convertMarkdownToHTML(text: string): string {
   // Math: \[ ... \] (block)
   text = text.replace(/\\\[(.+?)\\\]/gs, (match, p1) => {
     console.log("Matched block math:", match);
-    return `<span class="math" data-display="block">${p1}</span>`;
+    // Remove any stray \[ or \] inside p1
+    const clean = p1.replace(/\\\[|\\\]/g, '').trim();
+    return `<span class="math" data-display="block">${clean}</span>`;
   });
   // Math: \( ... \) (inline)
   text = text.replace(/\\\((.+?)\\\)/gs, (match, p1) => {
@@ -1156,12 +1175,20 @@ function convertMarkdownToHTML(text: string): string {
   });
   // Line breaks
   text = text.replace(/\n/g, "<br>");
+  // Remove any line that is just \] or \[
+  text = text.replace(/(<br>)*\\\](<br>)*/g, "");
+  text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
+  // Remove multiple consecutive <br> (leave only one)
+  text = text.replace(/(<br>\s*){2,}/g, "<br>");
   return text;
 }
 
 function autoWrapMath(text: string): string {
-  // Wrap lines that look like math (very basic, may need tuning)
-  return text.replace(/^([^\n]*[0-9].*?=.+)$/gm, '\\[$1\\]');
+  // Only wrap lines that are just math, not sentences, and not already wrapped
+  return text.replace(
+    /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
+    '\\[$1\\]'
+  );
 }
 
 export default Dashboard;
