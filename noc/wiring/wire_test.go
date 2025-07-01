@@ -34,6 +34,7 @@ func (m *sampleMsg) Clone() sim.Msg {
 // testComponent is a simple component for testing
 type testComponent struct {
 	*sim.ComponentBase
+
 	notified bool
 }
 
