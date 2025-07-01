@@ -17,6 +17,7 @@ type EventQueue interface {
 // EventQueueImpl provides a thread safe event queue
 type EventQueueImpl struct {
 	sync.Mutex
+
 	events eventHeap
 }
 
