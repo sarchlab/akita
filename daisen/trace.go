@@ -164,12 +164,14 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 	sqlStr := r.prepareTaskQueryStr(query)
 	rows, err := r.QueryContext(context.Background(), sqlStr)
+
 	if err != nil {
 		panic(err)
 	}
 	defer rows.Close()
 
 	tasks := []Task{}
+
 	for rows.Next() {
 		task := r.scanTaskFromRow(rows, query.EnableParentTask)
 		tasks = append(tasks, task)

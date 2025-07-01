@@ -29,7 +29,9 @@ func TestRecorderSetUp(t *testing.T) {
 	path := "test"
 
 	originalCL := os.Args
+
 	defer func() { os.Args = originalCL }()
+
 	os.Args = []string{"test_program", "arg1", "arg2"}
 	ExpectedInfo[0] = strings.Join(os.Args, " ")
 
@@ -37,6 +39,7 @@ func TestRecorderSetUp(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+
 	expectedPath := filepath.Dir(ex)
 	ExpectedInfo[1] = expectedPath
 

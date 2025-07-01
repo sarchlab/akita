@@ -211,6 +211,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 
 	hasLocTag := t.checkLocationTag(sampleEntry)
 	_, exists := t.tables["location"]
+
 	if !exists && hasLocTag {
 		t.createLocationTable()
 	}

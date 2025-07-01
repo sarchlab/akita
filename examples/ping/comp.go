@@ -88,6 +88,7 @@ func (c *Comp) Handle(e sim.Event) error {
 	default:
 		panic("cannot handle event of type " + reflect.TypeOf(e).String())
 	}
+
 	return nil
 }
 

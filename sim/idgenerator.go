@@ -64,6 +64,7 @@ func GetIDGenerator() IDGenerator {
 	}
 
 	idGeneratorMutex.Lock()
+
 	if idGeneratorInstantiated {
 		idGeneratorMutex.Unlock()
 		return idGenerator

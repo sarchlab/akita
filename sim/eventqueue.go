@@ -122,10 +122,12 @@ func (q *InsertionQueue) Push(evt Event) {
 			break
 		}
 	}
+
 	q.lock.RUnlock()
 
 	// Insertion
 	q.lock.Lock()
+
 	if ele != nil {
 		q.l.InsertBefore(evt, ele)
 	} else {
