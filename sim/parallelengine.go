@@ -48,10 +48,12 @@ func NewParallelEngine() *ParallelEngine {
 		queue := NewEventQueue()
 		//queue := NewInsertionQueue()
 		e.queueChan <- queue
+
 		e.queues = append(e.queues, queue)
 
 		secondaryQueue := NewEventQueue()
 		e.secondaryQueueChan <- secondaryQueue
+
 		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
 	}
 

@@ -8,6 +8,7 @@ import (
 // A TranslationReq asks the receiver component to translate the request.
 type TranslationReq struct {
 	sim.MsgMeta
+
 	VAddr    uint64
 	PID      PID
 	DeviceID uint64
