@@ -100,6 +100,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 // address.
 type TranslationRsp struct {
 	sim.MsgMeta
+
 	RespondTo string // The ID of the request it replies
 	Page      Page
 }
