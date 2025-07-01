@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -133,7 +134,7 @@ func (r *SQLiteTraceReader) Init() {
 func (r *SQLiteTraceReader) ListComponents() []string {
 	var components []string
 
-	rows, err := r.Query("SELECT DISTINCT Location FROM trace")
+	rows, err := r.QueryContext(context.Background(), "SELECT DISTINCT Location FROM trace")
 	if err != nil {
 		panic(err)
 	}
@@ -162,7 +163,7 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 // ListTasks returns a list of tasks in the trace according to the given query.
 func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 	sqlStr := r.prepareTaskQueryStr(query)
-	rows, err := r.Query(sqlStr)
+	rows, err := r.QueryContext(context.Background(), sqlStr)
 	if err != nil {
 		panic(err)
 	}

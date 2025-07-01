@@ -379,6 +379,7 @@ func calculateAvgTaskCount(
 	binStartTime, binEndTime float64,
 ) float64 {
 	var count int
+
 	var timeByCount float64
 
 	prevTime := binStartTime
@@ -399,6 +400,7 @@ func calculateAvgTaskCount(
 			if duration < 0 {
 				panic("duration is smaller than 0")
 			}
+
 			timeByCount += duration * float64(count)
 			prevTime = ts.time
 

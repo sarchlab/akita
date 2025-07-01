@@ -149,7 +149,8 @@ func (p *SQLiteBackend) Flush() {
 	}()
 
 	for _, entry := range p.entries {
-		_, err = tx.StmtContext(context.Background(), p.statement).Exec(
+		_, err = tx.StmtContext(context.Background(), p.statement).ExecContext(
+			context.Background(),
 			entry.Start,
 			entry.End,
 			entry.Where,

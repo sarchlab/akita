@@ -114,6 +114,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 	if evt.IsSecondary() {
 		queue := <-e.secondaryQueueChan
 		queue.Push(evt)
+
 		e.secondaryQueueChan <- queue
 
 		return
@@ -121,6 +122,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 
 	queue := <-e.queueChan
 	queue.Push(evt)
+
 	e.queueChan <- queue
 }
 
@@ -245,6 +247,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 				break
 			}
 		}
+
 		queueChan <- queue
 	}
 }
@@ -257,6 +260,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 
 func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 	e.waitGroup.Add(1)
+
 	go e.tempWorkerRun(evt)
 }
 
