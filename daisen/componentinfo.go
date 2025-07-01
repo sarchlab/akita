@@ -482,16 +482,18 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	// fmt.Printf("Loading .env file...\n")
 
 	_ = godotenv.Load(".env")
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+
+	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
 		http.Error(
 			w,
-			"apiKey not found in .env",
+			"openaiApiKey or openaiURL or openaiModel not found in .env",
 			http.StatusInternalServerError,
 		)
 		return
 	}
-	// fmt.Print("Loaded apiKey from .env\n")
 
 	// Parse user input from frontend
 	var req struct {
@@ -503,10 +505,9 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare request to OpenAI
-	openaiURL :=
-		"https://ceyifan.openai.azure.com/openai/deployments/gpt-4o/" +
-			"chat/completions?api-version=2025-01-01-preview"
+
 	payload := map[string]interface{}{
+		"model":       openaiModel,
 		"messages":    req.Messages,
 		"temperature": 0.7,
 	}
@@ -526,7 +527,7 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("Api-Key", apiKey)
+	openaiReq.Header.Set("Authorization", openaiApiKey)
 
 	// Send request to OpenAI
 	resp, err := http.DefaultClient.Do(openaiReq)
