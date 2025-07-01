@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,7 +71,7 @@ func TestExecutionRecord(t *testing.T) {
 	tableName := "exec_info"
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 	fmt.Println(results)
 
 	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
@@ -85,7 +86,7 @@ func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 	expectedCMD := ExpectedInfo[0]
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -102,7 +103,7 @@ func testPathLog(tableName string, reader datarecording.DataReader) bool {
 	expectedPath := ExpectedInfo[1]
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -121,7 +122,7 @@ func testStartTimeLog(
 	reader datarecording.DataReader,
 ) bool {
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -140,7 +141,7 @@ func testEndTimeLog(
 	reader datarecording.DataReader,
 ) bool {
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
