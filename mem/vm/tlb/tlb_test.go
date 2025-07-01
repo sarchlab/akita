@@ -327,7 +327,6 @@ var _ = Describe("TLB", func() {
 				Return(pauseMsg)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pauseMsg)
-			// controlPort.EXPECT().Send(gomock.Any())
 
 			madeProgress := tlbMW.performCtrlReq()
 
@@ -346,7 +345,6 @@ var _ = Describe("TLB", func() {
 				Return(pause)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pause)
-			// controlPort.EXPECT().Send(gomock.Any())
 
 			madeProgress := tlbMW.performCtrlReq()
 
@@ -380,7 +378,6 @@ var _ = Describe("TLB", func() {
 				Return(drainMsg)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(drainMsg)
-			// controlPort.EXPECT().Send(gomock.Any())
 
 			madeProgress := tlbMW.performCtrlReq()
 
