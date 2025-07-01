@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"database/sql"
 	"encoding/csv"
 	"fmt"
@@ -94,8 +95,8 @@ func (p *CSVBackend) Flush() {
 // to a SQLite database.
 type SQLiteBackend struct {
 	*sql.DB
-	statement *sql.Stmt
 
+	statement *sql.Stmt
 	batchSize int
 	entries   []PerfAnalyzerEntry
 }
@@ -135,7 +136,7 @@ func (p *SQLiteBackend) Flush() {
 		return
 	}
 
-	tx, err := p.Begin()
+	tx, err := p.BeginTx(context.Background(), nil)
 	if err != nil {
 		panic(err)
 	}
@@ -148,7 +149,7 @@ func (p *SQLiteBackend) Flush() {
 	}()
 
 	for _, entry := range p.entries {
-		_, err = tx.Stmt(p.statement).Exec(
+		_, err = tx.StmtContext(context.Background(), p.statement).Exec(
 			entry.Start,
 			entry.End,
 			entry.Where,
@@ -198,7 +199,7 @@ func (p *SQLiteBackend) createTable() {
 	);
 	`
 
-	_, err := p.Exec(sqlStmt)
+	_, err := p.ExecContext(context.Background(), sqlStmt)
 	if err != nil {
 		panic(err)
 	}
@@ -212,7 +213,7 @@ func (p *SQLiteBackend) prepareStatement() {
 	values(?, ?, ?, ?, ?, ?, ?)
 	`
 
-	p.statement, err = p.Prepare(sqlStmt)
+	p.statement, err = p.PrepareContext(context.Background(), sqlStmt)
 	if err != nil {
 		panic(err)
 	}

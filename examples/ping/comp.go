@@ -56,11 +56,13 @@ func (p *PingRsp) GetRspTo() string {
 
 type StartPingEvent struct {
 	*sim.EventBase
+
 	Dst sim.RemotePort
 }
 
 type RspPingEvent struct {
 	*sim.EventBase
+
 	pingMsg *PingReq
 }
 
