@@ -67,6 +67,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		m.responsePipeline.Accept(&pipelineTLBReq{
 			req: req.(*vm.TranslationReq),
 		})
+
 		madeProgress = true
 	}
 
@@ -88,6 +89,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		ok := m.lookup(req)
 		if ok {
 			m.responseBuffer.Pop()
+
 			madeProgress = true
 		}
 	}
@@ -321,6 +323,7 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 	if item == nil {
 		return false
 	}
+
 	item = m.controlPort.RetrieveIncoming()
 
 	switch req := item.(type) {

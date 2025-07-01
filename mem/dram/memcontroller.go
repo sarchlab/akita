@@ -125,6 +125,7 @@ func (m *middleware) assignTransInternalAddress(trans *signal.Transaction) {
 	if m.addrConverter != nil {
 		trans.InternalAddress = m.addrConverter.ConvertExternalToInternal(
 			trans.GlobalAddress())
+
 		return
 	}
 
