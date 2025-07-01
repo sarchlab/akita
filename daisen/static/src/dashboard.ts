@@ -819,17 +819,32 @@ class Dashboard {
     inputContainer.style.display = "flex";
     inputContainer.style.gap = "8px";
 
-    const input = document.createElement("input");
-    input.type = "text";
+    const input = document.createElement("textarea");
     input.placeholder = "Type a message...";
+    input.rows = 1;
     input.style.flex = "1";
     input.style.padding = "6px";
     input.style.borderRadius = "4px";
     input.style.border = "1px solid #ccc";
+    input.style.resize = "none";
+    input.style.overflowY = "auto";
+    input.style.minHeight = "38px";
+    input.style.maxHeight = "130px";
+
+    // Auto-resize as user types
+    input.addEventListener("input", function() {
+      this.style.height = "auto";
+      this.style.height = (this.scrollHeight) + "px";
+    });
 
     const sendBtn = document.createElement("button");
     sendBtn.textContent = "Send";
     sendBtn.className = "btn btn-primary";
+
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear";
+    clearBtn.className = "btn btn-secondary";
+    clearBtn.style.marginLeft = "4px";
 
     // Send handler
     function sendMessage() {
@@ -906,11 +921,30 @@ class Dashboard {
 
     sendBtn.onclick = sendMessage;
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendMessage();
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
     });
+
+    clearBtn.onclick = () => {
+      messages.length = 0;
+      messages.push({ role: "system", content: "You are Daisen Bot." });
+      input.value = "";
+      // Remove all messages from the chat panel except the welcome message
+      messagesDiv.innerHTML = "";
+      const welcomeDiv = document.createElement("div");
+      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+      welcomeDiv.style.textAlign = "left";
+      welcomeDiv.style.marginBottom = "8px";
+      messagesDiv.appendChild(welcomeDiv);
+      renderHistoryMenu();
+      input.style.height = "38px";
+    };
 
     inputContainer.appendChild(input);
     inputContainer.appendChild(sendBtn);
+    inputContainer.appendChild(clearBtn);
     chatContent.appendChild(inputContainer);
 
     document.body.appendChild(chatPanel);
