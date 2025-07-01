@@ -84,6 +84,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 		}
 
 		req := item.(*pipelineTLBReq).req
+
 		ok := m.lookup(req)
 		if ok {
 			m.responseBuffer.Pop()
@@ -114,6 +115,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
+
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}

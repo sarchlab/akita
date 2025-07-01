@@ -82,6 +82,7 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	}
 
 	trans := &signal.Transaction{}
+
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
 		trans.Read = msg

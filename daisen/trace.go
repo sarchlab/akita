@@ -164,10 +164,10 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 	sqlStr := r.prepareTaskQueryStr(query)
 	rows, err := r.QueryContext(context.Background(), sqlStr)
-
 	if err != nil {
 		panic(err)
 	}
+
 	defer rows.Close()
 
 	tasks := []Task{}
@@ -198,6 +198,7 @@ func (r *SQLiteTraceReader) scanTaskFromRow(
 
 func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+
 	var ptStartTime, ptEndTime sql.NullFloat64
 
 	err := rows.Scan(

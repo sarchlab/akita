@@ -117,6 +117,7 @@ func (q *InsertionQueue) Push(evt Event) {
 	var ele *list.Element
 
 	q.lock.RLock()
+
 	for ele = q.l.Front(); ele != nil; ele = ele.Next() {
 		if ele.Value.(Event).Time() > evt.Time() {
 			break
