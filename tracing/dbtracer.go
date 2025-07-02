@@ -59,7 +59,7 @@ func (t *DBTracer) DisableTracing() {
 // to check later
 func (t *DBTracer) IsTracing() bool {
 	// Combine manual control with dynamic checks
-	return t.isTracingFlag && *visTracing && t.backend.IsReady()
+	return t.isTracingFlag
 }
 
 // StartTask marks the start of a task.
@@ -227,9 +227,10 @@ func NewDBTracer(
 	dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
 
 	t := &DBTracer{
-		timeTeller:   timeTeller,
-		backend:      dataRecorder,
-		tracingTasks: make(map[string]Task), //已经开始还没结束的任务
+		timeTeller:    timeTeller,
+		backend:       dataRecorder,
+		tracingTasks:  make(map[string]Task), //已经开始还没结束的任务
+		isTracingFlag: false,                 //默认不开始
 	}
 
 	atexit.Register(func() {

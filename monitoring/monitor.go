@@ -605,15 +605,15 @@ func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
 	w.Write([]byte(`{"status":"ended"}`))
 }
 
-// 还得接着改， 找visTracing怎么连过来
+// 改完了
 func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	// Check if tracing is enabled based on *visTracing and the tracer state
-	isTracing := false
-	if *visTracing && m.tracer != nil {
-		isTracing = m.tracer.IsTracing() // Call the IsTracing method of DBTracer
+	var isTracing bool
+	if m.tracer != nil {
+		isTracing = m.tracer.IsTracing() // Call the IsTracing flag of DBTracer Go 语言的导出规则：只有首字母大写的字段或方法才可以被包外访问
+	} else {
+		fmt.Println("tracer is nil")
 	}
-
-	// Prepare the response
 	response := map[string]bool{"isTracing": isTracing}
 
 	// Write the response as JSON

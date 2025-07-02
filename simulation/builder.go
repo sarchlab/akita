@@ -54,11 +54,9 @@ func (b Builder) Build() *Simulation {
 	if b.monitorOn {
 		s.monitor = monitoring.NewMonitor()
 		s.monitor.RegisterEngine(s.engine)
-		s.monitor.RegisterVisTracer(s.visTracer)
+		s.monitor.RegisterVisTracer(s.visTracer) //register visTracer to monitor
 		s.monitor.StartServer()
 	}
 
 	return s
 }
-
-// register
