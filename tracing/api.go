@@ -135,17 +135,17 @@ func AddTaskStep(
 // AddMilestone records the time that that a blocking reason is resolved.
 func AddMilestone(
 	taskID string,
-	blockingCategory string,
-	blockingReason string,
-	blockingLocation string,
+	kind MilestoneKind,
+	what string,
+	location string,
 	domain NamedHookable,
 ) {
 	milestone := Milestone{
-		ID:               sim.GetIDGenerator().Generate(),
-		TaskID:           taskID,
-		BlockingCategory: blockingCategory,
-		BlockingReason:   blockingReason,
-		BlockingLocation: blockingLocation,
+		ID:       sim.GetIDGenerator().Generate(),
+		TaskID:   taskID,
+		Kind:     kind,
+		What:     what,
+		Location: location,
 	}
 
 	ctx := sim.HookCtx{
