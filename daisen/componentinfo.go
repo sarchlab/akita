@@ -485,7 +485,8 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
 		http.Error(
 			w,
-			"[Error: \".env\" not found or variable missing] Please create or update file \"akita/daisen/.env\" and write these contents (example):\n\n"+
+			"[Error: \".env\" not found or variable missing] Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
 				"```\n"+
 				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
 				"OPENAI_MODEL=\"gpt-4o\"\n"+
