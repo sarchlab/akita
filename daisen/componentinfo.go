@@ -478,9 +478,6 @@ func isTaskOverlapsWithBin(
 }
 
 func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
-	// Load .env file (only needed once, but safe to call multiple times)
-	// fmt.Printf("Loading .env file...\n")
-
 	_ = godotenv.Load(".env")
 	openaiApiKey := os.Getenv("OPENAI_API_KEY")
 	openaiURL := os.Getenv("OPENAI_URL")
@@ -495,7 +492,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse user input from frontend
 	var req struct {
 		Messages []map[string]string `json:"messages"`
 	}
@@ -503,8 +499,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
-	// Prepare request to OpenAI
 
 	payload := map[string]interface{}{
 		"model":       openaiModel,
@@ -529,7 +523,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	openaiReq.Header.Set("Content-Type", "application/json")
 	openaiReq.Header.Set("Authorization", openaiApiKey)
 
-	// Send request to OpenAI
 	resp, err := http.DefaultClient.Do(openaiReq)
 	if err != nil {
 		http.Error(
@@ -541,7 +534,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Read and forward OpenAI response
 	body, _ := io.ReadAll(resp.Body)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
