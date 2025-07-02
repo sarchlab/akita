@@ -482,16 +482,19 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	openaiApiKey := os.Getenv("OPENAI_API_KEY")
 	openaiURL := os.Getenv("OPENAI_URL")
 	openaiModel := os.Getenv("OPENAI_MODEL")
-
 	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
 		http.Error(
 			w,
-			"openaiApiKey or openaiURL or openaiModel not found in .env",
+			"[Error: \".env\" not found or variable missing] Please create or update file \"akita/daisen/.env\" and write these contents (example):\n\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"```\n",
 			http.StatusInternalServerError,
 		)
 		return
 	}
-
 	var req struct {
 		Messages []map[string]string `json:"messages"`
 	}
@@ -499,7 +502,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
 	payload := map[string]interface{}{
 		"model":       openaiModel,
 		"messages":    req.Messages,
@@ -511,10 +513,7 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	openaiReq, err := http.NewRequestWithContext(
-		r.Context(),
-		"POST",
-		openaiURL,
-		bytes.NewReader(payloadBytes),
+		r.Context(), "POST", openaiURL, bytes.NewReader(payloadBytes),
 	)
 	if err != nil {
 		http.Error(w, "Failed to create OpenAI request: "+err.Error(), http.StatusInternalServerError)
@@ -522,7 +521,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	openaiReq.Header.Set("Content-Type", "application/json")
 	openaiReq.Header.Set("Authorization", openaiApiKey)
-
 	resp, err := http.DefaultClient.Do(openaiReq)
 	if err != nil {
 		http.Error(
@@ -533,7 +531,6 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-
 	body, _ := io.ReadAll(resp.Body)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
