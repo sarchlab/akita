@@ -1,6 +1,9 @@
 import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
+import { sendPostGPT } from "./sendPostGPT";
+import katex from "katex";
+import "katex/dist/katex.min.css";
 
 class YAxisOption {
   optionValue: string;
@@ -30,6 +33,10 @@ class Dashboard {
   _initialHeight: number;
   _burgerMenu: HTMLDivElement;
   _dropdownCanvas: HTMLDivElement;
+  _showChatButton: boolean = true; // Add this flag to control the right chat button visibility
+  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
+    { role: "system", content: "You are Daisen Bot." }
+  ];  // Make the message history global
 
   constructor() {
     this._numWidget = 16;
@@ -479,16 +486,476 @@ class Dashboard {
 
     const pageInfo = document.createElement("div");
     pageInfo.classList.add("page-info");
-  
+
+    // Create the right button
+    const chatButton = document.createElement("button");
+    chatButton.classList.add("btn", "btn-secondary", "ml-3");
+    chatButton.style.display = "flex";
+    chatButton.style.alignItems = "center";
+    chatButton.style.paddingRight = "20px";
+    chatButton.style.marginRight = "15px";
+    chatButton.style.backgroundColor = "#0d6efd";
+    chatButton.style.borderColor = "#0d6efd";
+    chatButton.innerText = "Daisen Bot";
+    chatButton.innerHTML = `
+      <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
+        <svg width="30" height="30" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+          <!-- Central sparkle border -->
+          <path d="M30,12 L29,13 L29,15 L28,16 L28,17 L27,18 L27,20 L26,21 L26,22 L24,24 L23,24 L22,25 L21,25 L20,26 L19,26 L18,27 L16,27 L15,28 L14,28 L13,29 L13,30 L14,31 L16,31 L17,32 L18,32 L19,33 L21,33 L22,34 L23,34 L25,36 L25,37 L26,38 L26,39 L27,40 L27,41 L28,42 L28,44 L29,45 L29,46 L30,47 L31,47 L32,46 L32,44 L33,43 L33,42 L34,41 L34,39 L35,38 L35,37 L37,35 L38,35 L39,34 L40,34 L41,33 L42,33 L43,32 L45,32 L46,31 L47,31 L48,30 L48,29 L47,28 L45,28 L44,27 L43,27 L42,26 L40,26 L39,25 L38,25 L36,23 L36,22 L35,21 L35,20 L34,19 L34,18 L33,17 L33,15 L32,14 L32,13 L31,12 Z"
+                fill="none" stroke="white" stroke-width="2" />
+
+          <!-- Top-right "+" sign -->
+          <line x1="44" y1="10" x2="44" y2="18" stroke="white" stroke-width="2"/>
+          <line x1="40" y1="14" x2="48" y2="14" stroke="white" stroke-width="2"/>
+
+          <!-- Bottom-left "+" sign -->
+          <line x1="16" y1="42" x2="16" y2="50" stroke="white" stroke-width="2"/>
+          <line x1="12" y1="46" x2="20" y2="46" stroke="white" stroke-width="2"/>
+        </svg>
+      </span>
+      Daisen Bot
+    `;
+    chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+    chatButton.onclick = () => {
+      // alert("AI Chat clicked!");
+      this._showChatPanel();
+    };
+
+    // Pagination container with flexbox
     const paginationContainer = document.createElement("div");
     paginationContainer.classList.add("pagination-container");
-    paginationContainer.appendChild(nav);
-    paginationContainer.appendChild(pageInfo);
+    paginationContainer.style.display = "flex";
+    paginationContainer.style.alignItems = "center";
+    paginationContainer.style.justifyContent = "space-between";
+
+    // Left: nav + pageInfo, Right: button
+    const leftContainer = document.createElement("div");
+    leftContainer.style.display = "flex";
+    leftContainer.style.alignItems = "center";
+    leftContainer.style.flex = "1";
+    leftContainer.style.justifyContent = "center"; // Center the left part
+    leftContainer.appendChild(nav);
+    leftContainer.appendChild(pageInfo);
+
+    paginationContainer.appendChild(leftContainer);
+    paginationContainer.appendChild(chatButton);
+
+  
+    // const paginationContainer = document.createElement("div");
+    // paginationContainer.classList.add("pagination-container");
+    // paginationContainer.appendChild(nav);
+    // paginationContainer.appendChild(pageInfo);
+
+
     if (this._canvas.querySelector('.pagination-container')) {
       this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
     }
     this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
+  }
+
+  _injectChatPanelCSS() {
+    if (document.getElementById('chat-panel-anim-style')) return;
+    const style = document.createElement('style');
+    style.id = 'chat-panel-anim-style';
+    style.innerHTML = `
+      #chat-panel {
+        transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s cubic-bezier(.4,0,.2,1);
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      #chat-panel.open {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      #chat-panel.closing {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  _showChatPanel() {
+    // let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
+    //   { role: "system", content: "You are Daisen Bot."}
+    // ];
+    let messages = this._chatMessages;
+    this._injectChatPanelCSS();
+
+    // Remove existing panel if any
+    let oldPanel = document.getElementById("chat-panel");
+    if (oldPanel) oldPanel.remove();
+
+    // Create the chat panel
+    const chatPanel = document.createElement("div");
+    chatPanel.id = "chat-panel";
+    chatPanel.style.position = "fixed";
+    chatPanel.style.right = "0";
+    chatPanel.style.width = "600px";
+    chatPanel.style.background = "rgba(255,255,255,0.7)";
+    chatPanel.style.zIndex = "9999";
+    chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
+    chatPanel.style.display = "flex";
+    chatPanel.style.flexDirection = "column";
+    chatPanel.style.justifyContent = "flex-start";
+    chatPanel.style.overflow = "hidden";
+
+    // Set chat panel height and top to match #inner-container
+    const innerContainer = document.getElementById("inner-container");
+    if (innerContainer) {
+      const rect = innerContainer.getBoundingClientRect();
+      chatPanel.style.top = rect.top + "px";
+      chatPanel.style.height = rect.height + "px";
+    } else {
+      // fallback to full viewport height if not found
+      chatPanel.style.top = "0";
+      chatPanel.style.height = "100vh";
+    }
+
+    // Store the original width before shrinking
+    const canvasContainer = this._canvas;
+    let originalCanvasWidth = "";
+    if (canvasContainer) {
+      originalCanvasWidth = canvasContainer.style.width;
+      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+      canvasContainer.style.width = "calc(100% - 600px)";
+      setTimeout(() => {
+        this._resize();
+        this._renderPage();
+      }, 300);
+    }
+
+    // Triangle close button
+    const closeBtn = document.createElement("button");
+    closeBtn.style.position = "absolute";
+    closeBtn.style.left = "-4px";
+    closeBtn.style.top = "50%";
+    closeBtn.style.transform = "translateY(-50%)";
+    closeBtn.style.width = "12px";
+    closeBtn.style.height = "40px";
+    closeBtn.style.background = "transparent";
+    closeBtn.style.border = "none";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.title = "Close";
+
+    closeBtn.innerHTML = `
+      <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="silverGradient" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#d9d9d9"/>
+            <stop offset="50%" stop-color="#b0b0b0"/>
+            <stop offset="100%" stop-color="#f5f5f5"/>
+          </linearGradient>
+        </defs>
+        <polygon points="0,0 12,20 0,40" fill="url(#silverGradient)" stroke="#aaa" stroke-width="0.5"/>
+      </svg>
+    `;
+
+    const handleResize = () => {
+      //Adjust chat panel height and top
+      const innerContainer = document.getElementById("inner-container");
+      if (innerContainer) {
+        const rect = innerContainer.getBoundingClientRect();
+        chatPanel.style.top = rect.top + "px";
+        chatPanel.style.height = rect.height + "px";
+      } else {
+        chatPanel.style.top = "0";
+        chatPanel.style.height = "100vh";
+      }
+      // Shrink canvas again (in case window size changed)
+      if (canvasContainer) {
+        canvasContainer.style.width = "calc(100% - 600px)";
+      }
+      // Re-render widgets
+      this._resize();
+      this._renderPage();
+    }
+
+    window.addEventListener("resize", handleResize);
+
+    closeBtn.onclick = () => {
+      // Animate out
+      chatPanel.classList.remove('open');
+      chatPanel.classList.add('closing');
+      setTimeout(() => {
+        chatPanel.remove();
+        window.removeEventListener("resize", handleResize);
+        this._showChatButton = true;
+        this._addPaginationControl();
+        // Restore the canvas container width to its original value
+        if (canvasContainer) {
+          canvasContainer.style.width = originalCanvasWidth || "100%";
+          setTimeout(() => {
+            this._resize();
+            this._renderPage();
+          }, 300);
+        }
+      }, 200); // Match the CSS transition duration
+    };
+
+    chatPanel.appendChild(closeBtn);
+
+    const chatContent = document.createElement("div");
+    chatContent.style.flex = "1";
+    chatContent.style.display = "flex";
+    chatContent.style.flexDirection = "column";
+    chatContent.style.padding = "20px";
+    chatContent.style.minHeight = "0";
+    chatPanel.appendChild(chatContent);
+
+    // Message display area
+    const messagesDiv = document.createElement("div");
+    messagesDiv.style.flex = "1 1 0%";
+    messagesDiv.style.height = "0";
+    messagesDiv.style.overflowY = "auto";
+    messagesDiv.style.marginBottom = "10px";
+    messagesDiv.style.background = "rgba(255, 255, 255, 0.5)";
+    messagesDiv.style.borderRadius = "6px";
+    messagesDiv.style.padding = "8px";
+    chatContent.appendChild(messagesDiv);
+
+    // Loading messages
+    messages
+      .filter(m => m.role !== "system")
+      .forEach(m => {
+        if (m.role === "user") {
+          const userDiv = document.createElement("div");
+          userDiv.style.display = "flex";
+          userDiv.style.justifyContent = "flex-end";
+          userDiv.style.margin = "4px 0";
+
+          const userBubble = document.createElement("span");
+          userBubble.innerHTML = "<b>You:</b> " + m.content;
+          userBubble.style.background = "#0d6efd";
+          userBubble.style.color = "white";
+          userBubble.style.padding = "8px 12px";
+          userBubble.style.borderRadius = "16px";
+          userBubble.style.maxWidth = "90%";
+          userBubble.style.display = "inline-block";
+          userBubble.style.wordBreak = "break-word";
+          userDiv.appendChild(userBubble);
+
+          messagesDiv.appendChild(userDiv);
+        } else if (m.role === "assistant") {
+          const botDiv = document.createElement("div");
+          botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(m.content));
+          botDiv.style.textAlign = "left";
+          botDiv.style.margin = "4px 0";
+          messagesDiv.appendChild(botDiv);
+          
+        }
+      });
+    // apply KaTeX rendering for math
+    messagesDiv.querySelectorAll('.math').forEach(el => {
+      try {
+        const tex = el.textContent || "";
+        const displayMode = el.getAttribute("data-display") === "block";
+        console.log("Rendering math:", tex, "Display mode:", displayMode);
+        el.innerHTML = katex.renderToString(tex, { displayMode });
+      } catch (e) {
+        el.innerHTML = "<span style='color:red'>Invalid math</span>";
+        console.log("KaTeX error:", e, "for tex:", el.textContent);
+      }
+    });
+
+    const historyMenu = document.createElement("div");
+    historyMenu.style.display = "flex";
+    historyMenu.style.flexDirection = "column";
+    historyMenu.style.marginBottom = "8px";
+    chatContent.appendChild(historyMenu);
+
+    function renderHistoryMenu() {
+      const lastUserMessages = messages.filter(m => m.role === "user").slice(-3);
+      historyMenu.innerHTML = "";
+      lastUserMessages.forEach(msg => {
+        const item = document.createElement("button");
+        // Limit to 10 words for display
+        const words = msg.content.split(" ");
+        let displayText = msg.content;
+        if (words.length > 10) {
+          displayText = words.slice(0, 10).join(" ") + "...";
+        }
+        item.textContent = displayText;
+        item.style.background = "#f8f9fa";
+        item.style.border = "none";
+        item.style.borderRadius = "16px";
+        item.style.padding = "10px 16px";
+        item.style.margin = "4px 0";
+        item.style.fontSize = "1em";
+        item.style.color = "#222";
+        item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
+        item.style.cursor = "pointer";
+        item.style.transition = "background 0.15s, box-shadow 0.15s";
+        // Hover effect
+        item.onmouseenter = () => {
+          item.style.background = "#e9ecef";
+        };
+        item.onmouseleave = () => {
+          item.style.background = "#f8f9fa";
+        }; 
+
+        // Fills input on click
+        item.onclick = () => {
+          input.value = msg.content;
+          input.focus();
+        };
+        historyMenu.appendChild(item);
+      });
+    }
+
+    // When panel opens
+    renderHistoryMenu();
+
+    // Initial welcome message
+    const welcomeDiv = document.createElement("div");
+    welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+    welcomeDiv.style.textAlign = "left";
+    welcomeDiv.style.marginBottom = "8px";
+    messagesDiv.appendChild(welcomeDiv);
+
+    // Input area
+    const inputContainer = document.createElement("div");
+    inputContainer.style.display = "flex";
+    inputContainer.style.gap = "8px";
+
+    const input = document.createElement("textarea");
+    input.placeholder = "Type a message...";
+    input.rows = 1;
+    input.style.flex = "1";
+    input.style.padding = "6px";
+    input.style.borderRadius = "4px";
+    input.style.border = "1px solid #ccc";
+    input.style.resize = "none";
+    input.style.overflowY = "auto";
+    input.style.minHeight = "38px";
+    input.style.maxHeight = "130px";
+
+    // Auto-resize as user types
+    input.addEventListener("input", function() {
+      this.style.height = "auto";
+      this.style.height = (this.scrollHeight) + "px";
+    });
+
+    const sendBtn = document.createElement("button");
+    sendBtn.textContent = "Send";
+    sendBtn.className = "btn btn-primary";
+
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear";
+    clearBtn.className = "btn btn-secondary";
+    clearBtn.style.marginLeft = "4px";
+
+    // Send handler
+    function sendMessage() {
+      const userMsg = input.value.trim();
+      if (!userMsg) return;
+
+      // Disable send button while waiting
+      sendBtn.disabled = true;
+      input.disabled = true;
+
+      // User message
+      const userDiv = document.createElement("div");
+      userDiv.style.display = "flex";
+      userDiv.style.justifyContent = "flex-end";
+      userDiv.style.margin = "4px 0";
+
+      const userBubble = document.createElement("span");
+      userBubble.innerHTML = "<b>You:</b> " + userMsg;
+      userBubble.style.background = "#0d6efd";
+      userBubble.style.color = "white";
+      userBubble.style.padding = "8px 12px";
+      userBubble.style.borderRadius = "16px";
+      userBubble.style.maxWidth = "90%";
+      userBubble.style.display = "inline-block";
+      userBubble.style.wordBreak = "break-word";
+      userDiv.appendChild(userBubble);
+
+      messagesDiv.appendChild(userDiv);
+
+      // Call GPT with full history
+      messages.push({ role: "user", content: userMsg });
+
+      // Show history menu
+      renderHistoryMenu();
+      
+      // Clear input field
+      input.value = "";
+
+      // Show "thinking message"
+      const botDiv = document.createElement("div");
+      botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
+      botDiv.style.textAlign = "left";
+      botDiv.style.margin = "4px 0";
+      messagesDiv.appendChild(botDiv);
+
+      // Call GPT and update the message
+      sendPostGPT(messages).then((gptResponse) => {
+        botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponse));
+        messages.push({ role: "assistant", content: gptResponse });
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        console.log("GPT response:", gptResponse);
+
+        // Apply KaTeX rendering for math in the new messages
+        botDiv.querySelectorAll('.math').forEach(el => {
+          try {
+            const tex = el.textContent || "";
+            const displayMode = el.getAttribute("data-display") === "block";
+            console.log("Rendering math:", tex, "Display mode:", displayMode);
+            el.innerHTML = katex.renderToString(tex, { displayMode });
+          } catch (e) {
+            el.innerHTML = "<span style='color:red'>Invalid math</span>";
+            console.log("KaTeX error:", e, "for tex:", el.textContent);
+          }
+        });
+        
+        // Re-enable send button
+        sendBtn.disabled = false;
+        input.disabled = false;
+        input.focus();
+      });
+      this._chatMessages = messages; // Update chat messages in the class
+
+    }
+
+    sendBtn.onclick = sendMessage;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    clearBtn.onclick = () => {
+      messages.length = 0;
+      messages.push({ role: "system", content: "You are Daisen Bot." });
+      input.value = "";
+      // Remove all messages from the chat panel except the welcome message
+      messagesDiv.innerHTML = "";
+      const welcomeDiv = document.createElement("div");
+      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+      welcomeDiv.style.textAlign = "left";
+      welcomeDiv.style.marginBottom = "8px";
+      messagesDiv.appendChild(welcomeDiv);
+      renderHistoryMenu();
+      input.style.height = "38px";
+    };
+
+    inputContainer.appendChild(input);
+    inputContainer.appendChild(sendBtn);
+    inputContainer.appendChild(clearBtn);
+    chatContent.appendChild(inputContainer);
+
+    document.body.appendChild(chatPanel);
+
+    // Animate in
+    setTimeout(() => {
+      chatPanel.classList.add('open');
+      // Hide the chat button
+      this._showChatButton = false;
+      this._addPaginationControl();
+    }, 200);
   }
 
   _addPageButtons(ul: HTMLUListElement) {
@@ -662,6 +1129,100 @@ class Dashboard {
     });
     this._addPaginationControl();
   }
+}
+
+function convertMarkdownToHTML(text: string): string {
+  // // Headings: ###, ##, #
+  // text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  // text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  // text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  // // Horizontal rule: ---
+  // text = text.replace(/^-{3,}$/gm, '<hr>');
+  // // Bold: **text**
+  // text = text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  // // Italic: *text*
+  // text = text.replace(/\*(.+?)\*/g, "<i>$1</i>");
+  // // // Inline code: `code`
+  // // text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // // Math: \[ ... \] (block)
+  // text = text.replace(/\\\[(.+?)\\\]/gs, '<span class="math" data-display="block">$1</span>');
+  // // Math: \( ... \) (inline)
+  // text = text.replace(/\\\((.+?)\\\)/gs, '<span class="math" data-display="inline">$1</span>');
+  // // Line breaks
+  // text = text.replace(/\n/g, "<br>");
+  // return text;
+  
+  // Code blocks: ```lang\ncode\n```
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+    // Remove leading/trailing empty lines (including multiple)
+    const trimmed = code.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
+    // Escape HTML special chars in code
+    const escaped = trimmed.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<pre class="code-block"><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`;
+  });
+
+  // Inline code: `code`
+  text = text.replace(/`([^`]+)`/g, (match, code) => {
+    const escaped = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<code class="inline-code">${escaped}</code>`;
+  });
+
+  // Headings: ###, ##, #
+  text = text.replace(/^### (.+)$/gm, (match, p1) => {
+    console.log("Matched h3:", match);
+    return `<h5>${p1}</h5>`;
+  });
+  text = text.replace(/^## (.+)$/gm, (match, p1) => {
+    console.log("Matched h2:", match);
+    return `<h4>${p1}</h4>`;
+  });
+  text = text.replace(/^# (.+)$/gm, (match, p1) => {
+    console.log("Matched h1:", match);
+    return `<h3>${p1}</h3>`;
+  });
+  // Horizontal rule: ---
+  text = text.replace(/^-{3,}$/gm, (match) => {
+    console.log("Matched hr:", match);
+    return '<hr>';
+  });
+  // Bold: **text**
+  text = text.replace(/\*\*(.+?)\*\*/g, (match, p1) => {
+    console.log("Matched bold:", match);
+    return `<b>${p1}</b>`;
+  });
+  // Italic: *text*
+  text = text.replace(/\*(.+?)\*/g, (match, p1) => {
+    console.log("Matched italic:", match);
+    return `<i>${p1}</i>`;
+  });
+  // Math: \[ ... \] (block)
+  text = text.replace(/\\\[(.+?)\\\]/gs, (match, p1) => {
+    console.log("Matched block math:", match);
+    // Remove any stray \[ or \] inside p1
+    const clean = p1.replace(/\\\[|\\\]/g, '').trim();
+    return `<span class="math" data-display="block">${clean}</span>`;
+  });
+  // Math: \( ... \) (inline)
+  text = text.replace(/\\\((.+?)\\\)/gs, (match, p1) => {
+    console.log("Matched inline math:", match);
+    return `<span class="math" data-display="inline">${p1}</span>`;
+  });
+  // Line breaks
+  text = text.replace(/\n/g, "<br>");
+  // Remove any line that is just \] or \[
+  text = text.replace(/(<br>)*\\\](<br>)*/g, "");
+  text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
+  // Remove multiple consecutive <br> (leave only one)
+  text = text.replace(/(<br>\s*){2,}/g, "<br>");
+  return text;
+}
+
+function autoWrapMath(text: string): string {
+  // Only wrap lines that are just math, not sentences, and not already wrapped
+  return text.replace(
+    /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
+    '\\[$1\\]'
+  );
 }
 
 export default Dashboard;

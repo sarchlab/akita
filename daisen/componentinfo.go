@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 type TimeValue struct {
@@ -470,4 +475,65 @@ func isTaskOverlapsWithBin(
 	}
 
 	return true
+}
+
+func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or variable missing] Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"```\n",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	var req struct {
+		Messages []map[string]string `json:"messages"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	payload := map[string]interface{}{
+		"model":       openaiModel,
+		"messages":    req.Messages,
+		"temperature": 0.7,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	openaiReq, err := http.NewRequestWithContext(
+		r.Context(), "POST", openaiURL, bytes.NewReader(payloadBytes),
+	)
+	if err != nil {
+		http.Error(w, "Failed to create OpenAI request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	openaiReq.Header.Set("Content-Type", "application/json")
+	openaiReq.Header.Set("Authorization", openaiApiKey)
+	resp, err := http.DefaultClient.Do(openaiReq)
+	if err != nil {
+		http.Error(
+			w,
+			"Failed to contact OpenAI: "+err.Error(),
+			http.StatusBadGateway,
+		)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
 }
