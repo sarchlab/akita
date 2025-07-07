@@ -478,82 +478,91 @@ class Dashboard {
   }
 
   _addPaginationControl() {
-    const nav = document.createElement("nav");
-    nav.classList.add("mt-4");
-    const ul = document.createElement("ul");
-    ul.classList.add("pagination");
-    nav.appendChild(ul);
+      const nav = document.createElement("nav");
+      nav.classList.add("mt-4");
+      const ul = document.createElement("ul");
+      ul.classList.add("pagination");
+      nav.appendChild(ul);
 
-    const pageInfo = document.createElement("div");
-    pageInfo.classList.add("page-info");
+      const pageInfo = document.createElement("div");
+      pageInfo.classList.add("page-info");
 
-    // Create the right button
-    const chatButton = document.createElement("button");
-    chatButton.classList.add("btn", "btn-secondary", "ml-3");
-    chatButton.style.display = "flex";
-    chatButton.style.alignItems = "center";
-    chatButton.style.paddingRight = "20px";
-    chatButton.style.marginRight = "15px";
-    chatButton.style.backgroundColor = "#0d6efd";
-    chatButton.style.borderColor = "#0d6efd";
-    chatButton.innerText = "Daisen Bot";
-    chatButton.innerHTML = `
-      <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
-        <svg width="30" height="30" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
-          <!-- Central sparkle border -->
-          <path d="M30,12 L29,13 L29,15 L28,16 L28,17 L27,18 L27,20 L26,21 L26,22 L24,24 L23,24 L22,25 L21,25 L20,26 L19,26 L18,27 L16,27 L15,28 L14,28 L13,29 L13,30 L14,31 L16,31 L17,32 L18,32 L19,33 L21,33 L22,34 L23,34 L25,36 L25,37 L26,38 L26,39 L27,40 L27,41 L28,42 L28,44 L29,45 L29,46 L30,47 L31,47 L32,46 L32,44 L33,43 L33,42 L34,41 L34,39 L35,38 L35,37 L37,35 L38,35 L39,34 L40,34 L41,33 L42,33 L43,32 L45,32 L46,31 L47,31 L48,30 L48,29 L47,28 L45,28 L44,27 L43,27 L42,26 L40,26 L39,25 L38,25 L36,23 L36,22 L35,21 L35,20 L34,19 L34,18 L33,17 L33,15 L32,14 L32,13 L31,12 Z"
-                fill="none" stroke="white" stroke-width="2" />
+      // Create the right button
+      const chatButton = document.createElement("button");
+      chatButton.classList.add("btn", "btn-secondary", "ml-3");
+      chatButton.style.display = "flex";
+      chatButton.style.alignItems = "center";
+      chatButton.style.paddingRight = "20px";
+      chatButton.style.marginRight = "15px";
+      chatButton.style.backgroundColor = "#0d6efd";
+      chatButton.style.borderColor = "#0d6efd";
+      chatButton.innerText = "Daisen Bot";
+      chatButton.innerHTML = `
+        <span style="display:inline-block;width:30px;height:30px;margin-right:px;">
+          <svg width="30" height="30" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+            <!-- Central sparkle border -->
+            <path d="M30,12 L29,13 L29,15 L28,16 L28,17 L27,18 L27,20 L26,21 L26,22 L24,24 L23,24 L22,25 L21,25 L20,26 L19,26 L18,27 L16,27 L15,28 L14,28 L13,29 L13,30 L14,31 L16,31 L17,32 L18,32 L19,33 L21,33 L22,34 L23,34 L25,36 L25,37 L26,38 L26,39 L27,40 L27,41 L28,42 L28,44 L29,45 L29,46 L30,47 L31,47 L32,46 L32,44 L33,43 L33,42 L34,41 L34,39 L35,38 L35,37 L37,35 L38,35 L39,34 L40,34 L41,33 L42,33 L43,32 L45,32 L46,31 L47,31 L48,30 L48,29 L47,28 L45,28 L44,27 L43,27 L42,26 L40,26 L39,25 L38,25 L36,23 L36,22 L35,21 L35,20 L34,19 L34,18 L33,17 L33,15 L32,14 L32,13 L31,12 Z"
+                  fill="none" stroke="white" stroke-width="2" />
 
-          <!-- Top-right "+" sign -->
-          <line x1="44" y1="10" x2="44" y2="18" stroke="white" stroke-width="2"/>
-          <line x1="40" y1="14" x2="48" y2="14" stroke="white" stroke-width="2"/>
+            <!-- Top-right "+" sign -->
+            <line x1="44" y1="10" x2="44" y2="18" stroke="white" stroke-width="2"/>
+            <line x1="40" y1="14" x2="48" y2="14" stroke="white" stroke-width="2"/>
 
-          <!-- Bottom-left "+" sign -->
-          <line x1="16" y1="42" x2="16" y2="50" stroke="white" stroke-width="2"/>
-          <line x1="12" y1="46" x2="20" y2="46" stroke="white" stroke-width="2"/>
-        </svg>
-      </span>
-      Daisen Bot
-    `;
-    chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
-    chatButton.onclick = () => {
-      // alert("AI Chat clicked!");
-      this._showChatPanel();
-    };
+            <!-- Bottom-left "+" sign -->
+            <line x1="16" y1="42" x2="16" y2="50" stroke="white" stroke-width="2"/>
+            <line x1="12" y1="46" x2="20" y2="46" stroke="white" stroke-width="2"/>
+          </svg>
+        </span>
+        Daisen Bot
+      `;
+      chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+      chatButton.onclick = () => {
+        this._showChatPanel();
+      };
 
-    // Pagination container with flexbox
-    const paginationContainer = document.createElement("div");
-    paginationContainer.classList.add("pagination-container");
-    paginationContainer.style.display = "flex";
-    paginationContainer.style.alignItems = "center";
-    paginationContainer.style.justifyContent = "space-between";
+      // Pagination container with flexbox
+      const paginationContainer = document.createElement("div");
+      paginationContainer.classList.add("pagination-container");
+      paginationContainer.style.display = "flex";
+      paginationContainer.style.alignItems = "center";
+      paginationContainer.style.justifyContent = "space-between";
+      paginationContainer.style.position = "relative";
+      paginationContainer.style.width = "100%";
+      paginationContainer.style.minHeight = "60px";
 
-    // Left: nav + pageInfo, Right: button
-    const leftContainer = document.createElement("div");
-    leftContainer.style.display = "flex";
-    leftContainer.style.alignItems = "center";
-    leftContainer.style.flex = "1";
-    leftContainer.style.justifyContent = "center"; // Center the left part
-    leftContainer.appendChild(nav);
-    leftContainer.appendChild(pageInfo);
+      // Left: nav + pageInfo, Right: button
+      const leftContainer = document.createElement("div");
+      leftContainer.style.display = "flex";
+      leftContainer.style.alignItems = "center";
+      leftContainer.style.flex = "1";
+      leftContainer.style.justifyContent = "center";
+      leftContainer.appendChild(nav);
+      leftContainer.appendChild(pageInfo);
 
-    paginationContainer.appendChild(leftContainer);
-    paginationContainer.appendChild(chatButton);
+      // When chat panel is open, shift leftContainer right by 600px
+      if (!this._showChatButton) {
+        leftContainer.style.marginLeft = "600px";
+      } else {
+        leftContainer.style.marginLeft = "0";
+      }
 
-  
-    // const paginationContainer = document.createElement("div");
-    // paginationContainer.classList.add("pagination-container");
-    // paginationContainer.appendChild(nav);
-    // paginationContainer.appendChild(pageInfo);
+      // Absolutely position the chat button to the right
+      chatButton.style.position = "absolute";
+      chatButton.style.right = "0";
+      chatButton.style.top = "50%";
+      chatButton.style.transform = "translateY(-50%)";
+      chatButton.style.zIndex = "2";
 
+      paginationContainer.appendChild(leftContainer);
+      paginationContainer.appendChild(chatButton);
 
-    if (this._canvas.querySelector('.pagination-container')) {
-      this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
+      if (this._canvas.querySelector('.pagination-container')) {
+        this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
+      }
+      this._canvas.appendChild(paginationContainer);
+      this._addPageButtons(ul);
     }
-    this._canvas.appendChild(paginationContainer);
-    this._addPageButtons(ul);
-  }
-
+  
   _injectChatPanelCSS() {
     if (document.getElementById('chat-panel-anim-style')) return;
     const style = document.createElement('style');
