@@ -634,6 +634,8 @@ class Dashboard {
       }
     });
 
+    document.body.appendChild(chatPanel);
+
     // Set chat panel height and top to match #inner-container
     const innerContainer = document.getElementById("inner-container");
     if (innerContainer) {
@@ -645,6 +647,14 @@ class Dashboard {
       chatPanel.style.top = "0";
       chatPanel.style.height = "100vh";
     }
+
+    // Force reflow to ensure the browser registers the new height before animating
+    void chatPanel.offsetHeight;
+
+    // Animate in
+    chatPanel.classList.add('open');
+    this._showChatButton = false;
+    this._addPaginationControl();
 
     // Store the original width before shrinking
     const canvasContainer = this._canvas;
@@ -1115,15 +1125,15 @@ class Dashboard {
     inputContainer.appendChild(clearBtn);
     chatContent.appendChild(inputContainer);
 
-    document.body.appendChild(chatPanel);
+    // document.body.appendChild(chatPanel);
 
-    // Animate in
-    setTimeout(() => {
-      chatPanel.classList.add('open');
-      // Hide the chat button
-      this._showChatButton = false;
-      this._addPaginationControl();
-    }, 200);
+    // // Animate in
+    // setTimeout(() => {
+    //   chatPanel.classList.add('open');
+    //   // Hide the chat button
+    //   this._showChatButton = false;
+    //   this._addPaginationControl();
+    // }, 200);
   }
 
   _addPageButtons(ul: HTMLUListElement) {
