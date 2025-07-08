@@ -37,6 +37,9 @@ class Dashboard {
   _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
     { role: "system", content: "You are Daisen Bot." }
   ];  // Make the message history global
+  _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
+  _fileIdCounter: number;
+  _fileListRow: HTMLDivElement; // Add this to hold the file list container
 
   constructor() {
     this._numWidget = 16;
@@ -54,6 +57,9 @@ class Dashboard {
     ];
     this._initialWidth = window.innerWidth;
     this._initialHeight = window.innerHeight;
+    this._fileIdCounter = 0;
+    this._fileListRow = document.createElement("div");
+    this._uploadedFiles = [];
   }
 
   setCanvas(
@@ -775,20 +781,44 @@ class Dashboard {
     chatContent.appendChild(historyMenu);
 
     function renderHistoryMenu() {
-      const lastUserMessages = messages.filter(m => m.role === "user").slice(-3);
+      const lastUserMessages = messages.filter(m => m.role === "user");
+
+      // Remove uploaded files prefix if present
+      const cleanedMessages = lastUserMessages.map(m => {
+        const idx = m.content.indexOf("[End Uploaded Files]");
+        if (idx !== -1) {
+          // Remove everything up to and including "[End Uploaded Files]" and the next \n if present
+          let after = m.content.slice(idx + "[End Uploaded Files]".length);
+          if (after.startsWith("\n")) after = after.slice(1);
+          return after;
+        }
+        return m.content;
+      });
+
+      // Remove duplicates, keep only the latest occurrence
+      const seen = new Set<string>();
+      const uniqueRecent: string[] = [];
+      for (let i = cleanedMessages.length - 1; i >= 0 && uniqueRecent.length < 3; i--) {
+        const msg = cleanedMessages[i];
+        if (!seen.has(msg)) {
+          seen.add(msg);
+          uniqueRecent.unshift(msg); // Insert at the beginning to keep order
+        }
+      }
+      
       historyMenu.innerHTML = "";
-      lastUserMessages.forEach(msg => {
+      uniqueRecent.forEach(msgContent => {
         const item = document.createElement("button");
         // Limit to 10 words for display
-        const words = msg.content.split(" ");
-        let displayText = msg.content;
+        const words = msgContent.split(" ");
+        let displayText = msgContent;
         if (words.length > 10) {
           displayText = words.slice(0, 10).join(" ") + "...";
         }
         item.textContent = displayText;
         item.style.background = "#f8f9fa";
         item.style.border = "none";
-        item.style.borderRadius = "16px";
+        item.style.borderRadius = "6px";
         item.style.padding = "10px 16px";
         item.style.margin = "4px 0";
         item.style.fontSize = "1em";
@@ -796,6 +826,8 @@ class Dashboard {
         item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
         item.style.cursor = "pointer";
         item.style.transition = "background 0.15s, box-shadow 0.15s";
+        item.style.alignItems = "center";
+        item.style.width = "auto";
         // Hover effect
         item.onmouseenter = () => {
           item.style.background = "#e9ecef";
@@ -806,7 +838,7 @@ class Dashboard {
 
         // Fills input on click
         item.onclick = () => {
-          input.value = msg.content;
+          input.value = msgContent;
           input.focus();
         };
         historyMenu.appendChild(item);
@@ -822,6 +854,88 @@ class Dashboard {
     welcomeDiv.style.textAlign = "left";
     welcomeDiv.style.marginBottom = "8px";
     messagesDiv.appendChild(welcomeDiv);
+
+    // File list container (above upload button row)
+    const fileListRow = document.createElement("div");
+    fileListRow.style.display = "flex";
+    fileListRow.style.flexDirection = "column";
+    fileListRow.style.gap = "4px";
+    chatContent.appendChild(fileListRow);
+
+    // Make it accessible to renderFileList
+    this._fileListRow = fileListRow;
+
+    // Action buttons row (above input)
+    const actionRow = document.createElement("div");
+    actionRow.style.display = "flex";
+    actionRow.style.gap = "8px";
+    actionRow.style.marginBottom = "8px";
+
+    // File upload button
+    const fileUploadBtn = document.createElement("button");
+    fileUploadBtn.type = "button";
+    fileUploadBtn.title = "Upload File";
+    fileUploadBtn.style.background = "#f6f8fa";
+    fileUploadBtn.style.border = "1px solid #ccc";
+    fileUploadBtn.style.borderRadius = "6px";
+    fileUploadBtn.style.width = "38px";
+    fileUploadBtn.style.height = "38px";
+    fileUploadBtn.style.display = "flex";
+    fileUploadBtn.style.alignItems = "center";
+    fileUploadBtn.style.justifyContent = "center";
+    fileUploadBtn.style.cursor = "pointer";
+    fileUploadBtn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M14.3352 17.5003V15.6654H12.5002C12.1331 15.6654 11.8354 15.3674 11.8352 15.0003C11.8352 14.6331 12.133 14.3353 12.5002 14.3353H14.3352V12.5003C14.3352 12.1331 14.633 11.8353 15.0002 11.8353C15.3674 11.8355 15.6653 12.1332 15.6653 12.5003V14.3353H17.5002L17.634 14.349C17.937 14.411 18.1653 14.679 18.1653 15.0003C18.1651 15.3215 17.9369 15.5897 17.634 15.6517L17.5002 15.6654H15.6653V17.5003C15.6651 17.8673 15.3673 18.1652 15.0002 18.1654C14.6331 18.1654 14.3354 17.8674 14.3352 17.5003ZM16.0012 8.33333V7.33333C16.0012 6.62229 16.0013 6.12896 15.97 5.74544C15.9469 5.46349 15.9091 5.27398 15.8577 5.1302L15.802 5.00032C15.6481 4.69821 15.4137 4.44519 15.1262 4.26888L14.9993 4.19856C14.8413 4.11811 14.6297 4.06128 14.2542 4.03059C13.8707 3.99928 13.3772 3.99837 12.6663 3.99837H9.16431C9.16438 4.04639 9.15951 4.09505 9.14868 4.14388L8.61646 4.02571H8.61548L9.14868 4.14388L8.69263 6.19954C8.5874 6.67309 8.50752 7.06283 8.33911 7.3929L8.26196 7.53059C8.12314 7.75262 7.94729 7.94837 7.74341 8.11067L7.53052 8.26204C7.26187 8.42999 6.95158 8.52024 6.58521 8.60579L6.19946 8.6927L4.1438 9.14876L4.02564 8.61556V8.61653L4.1438 9.14876C4.09497 9.15959 4.04631 9.16446 3.99829 9.16438V12.6663C3.99829 13.3772 3.9992 13.8707 4.03052 14.2542C4.0612 14.6298 4.11803 14.8413 4.19849 14.9993L4.2688 15.1263C4.44511 15.4137 4.69813 15.6481 5.00024 15.8021L5.13013 15.8577C5.2739 15.9092 5.46341 15.947 5.74536 15.97C6.12888 16.0014 6.62221 16.0013 7.33325 16.0013H8.28442C8.65158 16.0013 8.94929 16.2992 8.94946 16.6663C8.94946 17.0336 8.65169 17.3314 8.28442 17.3314H7.33325C6.64416 17.3314 6.0872 17.332 5.63696 17.2952C5.23642 17.2625 4.87552 17.1982 4.53931 17.054L4.39673 16.9866C3.87561 16.7211 3.43911 16.3174 3.13501 15.8216L3.01294 15.6038C2.82097 15.2271 2.74177 14.8206 2.70435 14.3626C2.66758 13.9124 2.66821 13.3553 2.66821 12.6663V9.00032C2.66821 7.44077 3.58925 5.86261 4.76196 4.70638C5.9331 3.55172 7.50845 2.6675 9.00024 2.66927V2.66829H12.6663C13.3553 2.66829 13.9123 2.66765 14.3625 2.70442C14.8206 2.74184 15.227 2.82105 15.6038 3.01302L15.8215 3.13509C16.3174 3.43919 16.7211 3.87569 16.9866 4.39681L17.053 4.53938C17.1973 4.8757 17.2624 5.23636 17.2952 5.63704C17.332 6.08728 17.3313 6.64424 17.3313 7.33333V8.33333C17.3313 8.7006 17.0335 8.99837 16.6663 8.99837C16.2991 8.99819 16.0012 8.70049 16.0012 8.33333ZM7.76001 4.26204C7.06176 4.53903 6.3362 5.02201 5.69556 5.65364C5.04212 6.29794 4.53764 7.03653 4.25415 7.76204L5.91138 7.39388L6.30689 7.30403C6.62563 7.22833 6.73681 7.18952 6.82544 7.13411L6.91528 7.07063C7.00136 7.00214 7.07542 6.91924 7.13403 6.82552L7.18579 6.722C7.23608 6.59782 7.28758 6.38943 7.3938 5.91145L7.76001 4.26204Z" />
+      </svg>
+  `;
+
+    // Hidden file input
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.style.display = "none";
+    fileInput.accept = ".sqlite,.sqlite3,.csv,.txt,.json,.py,.js,.c,.cpp,.java";
+    fileUploadBtn.onclick = () => fileInput.click();
+
+    fileInput.onchange = () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      // Check suffix
+      const allowed = [".sqlite", ".sqlite3", ".csv", ".txt", ".json", ".py", ".js", ".c", ".cpp", ".java"];
+      const name = file.name.toLowerCase();
+      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
+      if (!validSuffix) {
+        window.alert("Invalid file type. Allowed: .sqlite, .sqlite3, .csv, .txt, .json");
+        return;
+      }
+
+      // Check size
+      if (file.size > 32 * 1024) {
+        window.alert("File too large. Max size is 32 KB.");
+        return;
+      }
+
+      // Read file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        // console.log("File content:", e.target?.result);
+        // Add to uploadedFiles with unique id
+        const sizeStr = formatFileSize(file.size);
+        this._uploadedFiles.push({
+          id: ++this._fileIdCounter,
+          name: file.name,
+          content: e.target?.result as string,
+          size: sizeStr,
+        });
+        renderFileList.call(this);
+      };
+      reader.readAsText(file);
+    };
+
+    actionRow.appendChild(fileUploadBtn);
+    actionRow.appendChild(fileInput);
+    chatContent.appendChild(actionRow);
 
     // Input area
     const inputContainer = document.createElement("div");
@@ -856,9 +970,22 @@ class Dashboard {
     clearBtn.style.marginLeft = "4px";
 
     // Send handler
-    function sendMessage() {
+    const sendMessage = () => {
       const userMsg = input.value.trim();
       if (!userMsg) return;
+
+      // Build uploaded files prefix if any
+      let prefix = "";
+      if (this._uploadedFiles.length > 0) {
+        prefix += "[Uploaded Files]\n";
+        this._uploadedFiles.forEach(f => {
+          prefix += `[Uploaded File "${f.name}"]\n${f.content}\n`;
+        });
+        prefix += "[End Uploaded Files]\n";
+      }
+
+      // Compose the full message
+      const fullMsg = prefix + userMsg;
 
       // Disable send button while waiting
       sendBtn.disabled = true;
@@ -884,7 +1011,7 @@ class Dashboard {
       messagesDiv.appendChild(userDiv);
 
       // Call GPT with full history
-      messages.push({ role: "user", content: userMsg });
+      messages.push({ role: "user", content: fullMsg });
 
       // Show history menu
       renderHistoryMenu();
@@ -894,10 +1021,19 @@ class Dashboard {
 
       // Show "thinking message"
       const botDiv = document.createElement("div");
-      botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
+      botDiv.innerHTML = `<b>Daisen Bot:</b> <i>Thinking<span id="thinking-dots">.</span></i>`;
+      // botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
       botDiv.style.textAlign = "left";
       botDiv.style.margin = "4px 0";
       messagesDiv.appendChild(botDiv);
+
+      let dotCount = 1;
+      const maxDots = 3;
+      const thinkingDots = botDiv.querySelector("#thinking-dots");
+      const dotsInterval = setInterval(() => {
+        dotCount = (dotCount % maxDots) + 1;
+        if (thinkingDots) thinkingDots.textContent = ".".repeat(dotCount);
+      }, 500);
 
       // Call GPT and update the message
       sendPostGPT(messages).then((gptResponse) => {
@@ -926,6 +1062,10 @@ class Dashboard {
       });
       this._chatMessages = messages; // Update chat messages in the class
 
+      // Clear uploaded files and reset index
+      this._uploadedFiles = [];
+      this._fileIdCounter = 0;
+      renderFileList.call(this);
     }
 
     sendBtn.onclick = sendMessage;
@@ -1232,6 +1372,71 @@ function autoWrapMath(text: string): string {
     /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
     '\\[$1\\]'
   );
+}
+
+function renderFileList() {
+  this._fileListRow.innerHTML = "";
+  this._uploadedFiles.forEach(file => {
+    const fileRow = document.createElement("div");
+    fileRow.style.display = "flex";
+    fileRow.style.alignItems = "center";
+    fileRow.style.background = "#f6f8fa";
+    fileRow.style.border = "1px solid #ccc";
+    fileRow.style.borderRadius = "6px";
+    fileRow.style.width = "auto"; // "100%";
+    fileRow.style.height = "38px";
+    fileRow.style.marginBottom = "4px";
+    fileRow.style.padding = "0 8px";
+    fileRow.style.fontSize = "15px";
+    fileRow.style.justifyContent = "flex-start"; // "space-between"; 
+
+    // File name (not clickable)
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = file.name;
+    nameSpan.style.flex = "1";
+    nameSpan.style.overflow = "hidden";
+    nameSpan.style.textOverflow = "ellipsis";
+    nameSpan.style.whiteSpace = "nowrap";
+    fileRow.appendChild(nameSpan);
+
+    // File size
+    const sizeSpan = document.createElement("span");
+    sizeSpan.textContent = `(${file.size})`;
+    sizeSpan.style.color = "#aaa";
+    sizeSpan.style.fontSize = "14px";
+    sizeSpan.style.marginRight = "6px";
+    fileRow.appendChild(sizeSpan);
+
+    // Remove ("x") button
+    const removeBtn = document.createElement("button");
+    removeBtn.textContent = "✕";
+    removeBtn.title = "Remove file";
+    removeBtn.style.background = "transparent";
+    removeBtn.style.border = "none";
+    removeBtn.style.color = "#888";
+    removeBtn.style.fontSize = "18px";
+    removeBtn.style.cursor = "pointer";
+    removeBtn.style.marginLeft = "8px";
+    removeBtn.onclick = () => {
+      // Remove by id
+      this._uploadedFiles = this._uploadedFiles.filter(f => f.id !== file.id);
+      renderFileList.call(this);
+      // Log current file list with ids
+      console.log("Uploaded files:", this._uploadedFiles.map(f => ({ id: f.id, name: f.name })));
+    };
+    fileRow.appendChild(removeBtn);
+
+    this._fileListRow.appendChild(fileRow);
+  });
+  this._fileListRow.style.marginBottom = "4px";
+  // Log current file list with ids after every render
+  console.log("Uploaded files:", this._uploadedFiles.map(f => ({ id: f.id, name: f.name })));
+}
+
+function formatFileSize(size: number): string {
+  if (size < 1024) return `${size.toFixed(1)} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default Dashboard;
