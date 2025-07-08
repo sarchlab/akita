@@ -49,7 +49,6 @@ class App {
 
         // --- Trace Toggle Button Logic ---
         const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement;
-        let tracing = false;
 
         // Helper to update button UI
         function updateTraceBtn(tracing: boolean) {
@@ -64,29 +63,30 @@ class App {
             }
         }
 
-        // Fetch the initial tracing status from the backend 
+        // Fetch the initial tracing status from the backend
         fetch("/api/trace/is_tracing")
             .then((response) => response.json())
             .then((data) => {
-                tracing = data.isTracing;
-                updateTraceBtn(tracing);
+                // Initialize button format based on backend response
+                updateTraceBtn(data.isTracing);
 
                 // Add click event listener to toggle tracing
                 traceBtn.addEventListener("click", async () => {
-                    if (tracing) {
+                    if (data.isTracing) {
                         await fetch("/api/trace/end", { method: "POST" });
-                        tracing = false;
+                        data.isTracing = false;
                     } else {
                         await fetch("/api/trace/start", { method: "POST" });
-                        tracing = true;
+                        data.isTracing = true;
                     }
-                    updateTraceBtn(tracing);
+                    updateTraceBtn(data.isTracing);
                 });
+            })
+            .catch((error) => {
+                console.error("Failed to fetch tracing status:", error);
             });
-        
-        
     }
 }
 
 const app = new App();
-app.start()
+app.start();

@@ -587,6 +587,16 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 // --- VisTracer API handlers ---
 func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
 	fmt.Println("/api/trace/start triggered")
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the EnableTracing() method of DBTracer
+	m.tracer.EnableTracing()
+
 	w.WriteHeader(200)
 	w.Write([]byte(`{"status":"started"}`))
 }
@@ -608,9 +618,13 @@ func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
 // 改完了
 func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	// Check if tracing is enabled based on *visTracing and the tracer state
+	fmt.Println("/api/trace/is_tracing triggered")
+	fmt.Println("m.tracer:", m.tracer)
+
 	var isTracing bool
 	if m.tracer != nil {
 		isTracing = m.tracer.IsTracing() // Call the IsTracing flag of DBTracer Go 语言的导出规则：只有首字母大写的字段或方法才可以被包外访问
+		fmt.Println("isTracing:", isTracing)
 	} else {
 		fmt.Println("tracer is nil")
 	}
@@ -619,8 +633,6 @@ func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	// Write the response as JSON
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-
-	fmt.Println("/api/trace/is_tracing triggered")
 }
 
 func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
