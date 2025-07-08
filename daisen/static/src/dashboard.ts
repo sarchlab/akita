@@ -1012,6 +1012,7 @@ class Dashboard {
 
       // Call GPT with full history
       messages.push({ role: "user", content: fullMsg });
+      console.log("[Sent to GPT]", fullMsg);
 
       // Show history menu
       renderHistoryMenu();
@@ -1040,7 +1041,7 @@ class Dashboard {
         botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponse));
         messages.push({ role: "assistant", content: gptResponse });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        console.log("GPT response:", gptResponse);
+        console.log("[Received from GPT]", gptResponse);
 
         // Apply KaTeX rendering for math in the new messages
         botDiv.querySelectorAll('.math').forEach(el => {
