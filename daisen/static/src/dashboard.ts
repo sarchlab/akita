@@ -616,6 +616,24 @@ class Dashboard {
     chatPanel.style.justifyContent = "flex-start";
     chatPanel.style.overflow = "hidden";
 
+    // 
+    chatPanel.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      chatPanel.style.background = "rgba(220,240,255,0.7)";
+    });
+    chatPanel.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      chatPanel.style.background = "rgba(255,255,255,0.7)";
+    });
+    chatPanel.addEventListener("drop", (e) => {
+      e.preventDefault();
+      chatPanel.style.background = "rgba(255,255,255,0.7)";
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        handleFileUpload(files[0]);
+      }
+    });
+
     // Set chat panel height and top to match #inner-container
     const innerContainer = document.getElementById("inner-container");
     if (innerContainer) {
@@ -871,6 +889,37 @@ class Dashboard {
     actionRow.style.gap = "8px";
     actionRow.style.marginBottom = "8px";
 
+    // File upload functionality
+    const handleFileUpload = (file: File) => {
+      const allowed = [".sqlite", ".sqlite3", ".csv", ".txt", ".json", ".py", ".js", ".c", ".cpp", ".java"];
+      const name = file.name.toLowerCase();
+      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
+      if (!validSuffix) {
+        window.alert("Invalid file type. Allowed: .sqlite, .sqlite3, .csv, .txt, .json, .py, .js, .c, .cpp, .java");
+        return;
+      }
+
+      // Check size
+      if (file.size > 32 * 1024) {
+        window.alert("File too large. Max size is 32 KB.");
+        return;
+      }
+
+      // Read file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const sizeStr = formatFileSize(file.size);
+        this._uploadedFiles.push({
+          id: ++this._fileIdCounter,
+          name: file.name,
+          content: e.target?.result as string,
+          size: sizeStr,
+        });
+        renderFileList.call(this);
+      };
+      reader.readAsText(file);
+    };
+
     // File upload button
     const fileUploadBtn = document.createElement("button");
     fileUploadBtn.type = "button";
@@ -899,38 +948,7 @@ class Dashboard {
 
     fileInput.onchange = () => {
       const file = fileInput.files?.[0];
-      if (!file) return;
-
-      // Check suffix
-      const allowed = [".sqlite", ".sqlite3", ".csv", ".txt", ".json", ".py", ".js", ".c", ".cpp", ".java"];
-      const name = file.name.toLowerCase();
-      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
-      if (!validSuffix) {
-        window.alert("Invalid file type. Allowed: .sqlite, .sqlite3, .csv, .txt, .json");
-        return;
-      }
-
-      // Check size
-      if (file.size > 32 * 1024) {
-        window.alert("File too large. Max size is 32 KB.");
-        return;
-      }
-
-      // Read file
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        // console.log("File content:", e.target?.result);
-        // Add to uploadedFiles with unique id
-        const sizeStr = formatFileSize(file.size);
-        this._uploadedFiles.push({
-          id: ++this._fileIdCounter,
-          name: file.name,
-          content: e.target?.result as string,
-          size: sizeStr,
-        });
-        renderFileList.call(this);
-      };
-      reader.readAsText(file);
+      if (file) handleFileUpload(file);
     };
 
     actionRow.appendChild(fileUploadBtn);
@@ -1423,7 +1441,7 @@ function renderFileList() {
       this._uploadedFiles = this._uploadedFiles.filter(f => f.id !== file.id);
       renderFileList.call(this);
       // Log current file list with ids
-      console.log("Uploaded files:", this._uploadedFiles.map(f => ({ id: f.id, name: f.name })));
+      console.log("[File Removed] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, size: f.size })));
     };
     fileRow.appendChild(removeBtn);
 
@@ -1431,7 +1449,7 @@ function renderFileList() {
   });
   this._fileListRow.style.marginBottom = "4px";
   // Log current file list with ids after every render
-  console.log("Uploaded files:", this._uploadedFiles.map(f => ({ id: f.id, name: f.name })));
+  console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, size: f.size })));
 }
 
 function formatFileSize(size: number): string {
