@@ -1,6 +1,7 @@
 package datarecording
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -211,6 +212,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 
 	hasLocTag := t.checkLocationTag(sampleEntry)
 	_, exists := t.tables["location"]
+
 	if !exists && hasLocTag {
 		t.createLocationTable()
 	}
@@ -280,7 +282,7 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
 	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
-	stmt, err := t.Prepare(sqlStr)
+	stmt, err := t.PrepareContext(context.Background(), sqlStr)
 	if err != nil {
 		panic(err)
 	}
@@ -290,6 +292,7 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 
 func (t *sqliteWriter) getFieldNames(entry any) []string {
 	sType := reflect.TypeOf(entry)
+
 	var fieldNames []string
 
 	for i := 0; i < sType.NumField(); i++ {
@@ -430,7 +433,7 @@ func (t *sqliteWriter) insertEntryForTable(
 		}
 	}
 
-	_, err := table.statement.Exec(v...)
+	_, err := table.statement.ExecContext(context.Background(), v...)
 	if err != nil {
 		panic(err)
 	}
@@ -497,7 +500,7 @@ func (t *sqliteWriter) flushLocationTable() {
 			v = append(v, value.Field(i).Interface())
 		}
 
-		_, err := table.statement.Exec(v...)
+		_, err := table.statement.ExecContext(context.Background(), v...)
 		if err != nil {
 			panic(err)
 		}
@@ -507,7 +510,7 @@ func (t *sqliteWriter) flushLocationTable() {
 }
 
 func (t *sqliteWriter) mustExecute(query string) sql.Result {
-	res, err := t.Exec(query)
+	res, err := t.ExecContext(context.Background(), query)
 	if err != nil {
 		fmt.Printf("Failed to execute: %s\n", query)
 		panic(err)

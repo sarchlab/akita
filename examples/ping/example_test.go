@@ -27,6 +27,7 @@ func Example_pingWithEvents() {
 		EventBase: sim.NewEventBase(3, agentA),
 		Dst:       agentB.OutPort.AsRemote(),
 	}
+
 	engine.Schedule(e1)
 	engine.Schedule(e2)
 

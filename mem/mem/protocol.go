@@ -484,6 +484,7 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	b.Flush = flush
 	b.Pause = pause
 	b.Invalid = invalid
+
 	return b
 }
 

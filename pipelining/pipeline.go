@@ -60,6 +60,7 @@ type pipelineStageInfo struct {
 
 type pipelineImpl struct {
 	sim.HookableBase
+
 	name            string
 	width           int
 	numStage        int

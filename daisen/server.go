@@ -66,7 +66,9 @@ func startAPIServer() {
 		if (*httpFlag)[0] != ':' {
 			url = fmt.Sprintf("http://%s", *httpFlag)
 		}
-		if err := browser.OpenURL(url); err != nil {
+
+		err := browser.OpenURL(url)
+		if err != nil {
 			log.Printf("Error opening browser: %v\n", err)
 		}
 	}()
@@ -77,6 +79,7 @@ func startAPIServer() {
 
 func serveIndex(w http.ResponseWriter, r *http.Request) {
 	var err error
+
 	f, err := fs.Open("index.html")
 	dieOnErr(err)
 

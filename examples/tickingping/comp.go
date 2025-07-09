@@ -133,12 +133,14 @@ func (m *middleware) processingPingRsp(
 
 func (m *middleware) countDown() bool {
 	madeProgress := false
+
 	for _, trans := range m.currentTransactions {
 		if trans.cycleLeft > 0 {
 			trans.cycleLeft--
 			madeProgress = true
 		}
 	}
+
 	return madeProgress
 }
 

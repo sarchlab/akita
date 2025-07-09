@@ -25,6 +25,7 @@ const (
 
 type transaction struct {
 	action
+
 	id                string
 	read              *mem.ReadReq
 	write             *mem.WriteReq

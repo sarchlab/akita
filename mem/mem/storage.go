@@ -24,6 +24,7 @@ const (
 // it not touched by Read and Write function, no memory will be allocated.
 type Storage struct {
 	sync.Mutex
+
 	Capacity uint64
 	unitSize uint64
 	data     map[uint64]*storageUnit
@@ -31,6 +32,7 @@ type Storage struct {
 
 type storageUnit struct {
 	sync.RWMutex
+
 	data []byte
 }
 

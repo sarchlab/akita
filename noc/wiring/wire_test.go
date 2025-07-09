@@ -16,6 +16,7 @@ type sampleMsg struct {
 func newSampleMsg() *sampleMsg {
 	m := &sampleMsg{}
 	m.ID = sim.GetIDGenerator().Generate()
+
 	return m
 }
 
@@ -26,12 +27,14 @@ func (m *sampleMsg) Meta() *sim.MsgMeta {
 func (m *sampleMsg) Clone() sim.Msg {
 	cloneMsg := *m
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
 	return &cloneMsg
 }
 
 // testComponent is a simple component for testing
 type testComponent struct {
 	*sim.ComponentBase
+
 	notified bool
 }
 
@@ -39,6 +42,7 @@ func newTestComponent(name string) *testComponent {
 	c := &testComponent{
 		ComponentBase: sim.NewComponentBase(name),
 	}
+
 	return c
 }
 

@@ -314,6 +314,84 @@ var _ = Describe("TLB", func() {
 			Expect(tlb.isPaused).To(BeFalse())
 		})
 	})
+
+	Context("other control signals", func() {
+		It("should handle pause ctrl msg", func() {
+			pauseMsg := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, false, false, true, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(pauseMsg)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(pauseMsg)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("pause"))
+		})
+
+		It("should handle enable ctrl msg after pause", func() {
+			pause := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, false, false, true, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(pause)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(pause)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("pause"))
+
+			enable := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(true, false, false, false, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(enable)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(enable)
+
+			madeProgress = tlbMW.performCtrlReq()
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("enable"))
+		})
+
+		It("should handle drain ctrl msg", func() {
+			drainMsg := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, true, false, false, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(drainMsg)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(drainMsg)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("drain"))
+
+			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			madeProgress = tlbMW.handleDrain()
+			Expect(madeProgress).To(BeFalse())
+			Expect(tlb.state).To(Equal("pause"))
+		})
+	})
 })
 
 var _ = Describe("TLB Integration", func() {
@@ -446,5 +524,4 @@ var _ = Describe("TLB Integration", func() {
 
 		Expect(time3 - time2).To(BeNumerically("<", time2-time1))
 	})
-
 })

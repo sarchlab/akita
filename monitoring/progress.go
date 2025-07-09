@@ -8,6 +8,7 @@ import (
 // A ProgressBar is a tracker of the progress
 type ProgressBar struct {
 	sync.Mutex
+
 	ID         string    `json:"id"`
 	Name       string    `json:"name"`
 	StartTime  time.Time `json:"start_time"`

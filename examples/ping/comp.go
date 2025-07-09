@@ -56,11 +56,13 @@ func (p *PingRsp) GetRspTo() string {
 
 type StartPingEvent struct {
 	*sim.EventBase
+
 	Dst sim.RemotePort
 }
 
 type RspPingEvent struct {
 	*sim.EventBase
+
 	pingMsg *PingReq
 }
 
@@ -86,6 +88,7 @@ func (c *Comp) Handle(e sim.Event) error {
 	default:
 		panic("cannot handle event of type " + reflect.TypeOf(e).String())
 	}
+
 	return nil
 }
 
