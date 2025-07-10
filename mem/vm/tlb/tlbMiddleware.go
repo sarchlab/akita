@@ -326,7 +326,7 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
-	case *mem.ControlMsg:
+	case *mem.ControlReq:
 		if req.Enable {
 			m.state = "enable"
 		} else if req.Drain {

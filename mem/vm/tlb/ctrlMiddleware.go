@@ -22,7 +22,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *mem.ControlMsg:
+	case *mem.ControlReq:
 		madeProgress = m.handleControlMsg(msg) || madeProgress
 	default:
 		panic("Unhandled message")
@@ -32,12 +32,12 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 }
 
 func (m *ctrlMiddleware) handleControlMsg(
-	msg *mem.ControlMsg) (madeProgress bool) {
+	msg *mem.ControlReq) (madeProgress bool) {
 	m.ctrlMsgMustBeValid(msg)
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) ctrlMsgMustBeValid(msg *mem.ControlMsg) {
+func (m *ctrlMiddleware) ctrlMsgMustBeValid(msg *mem.ControlReq) {
 	if msg.Enable {
 
 	}

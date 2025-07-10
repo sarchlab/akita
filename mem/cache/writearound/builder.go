@@ -177,8 +177,13 @@ func (b Builder) Build(name string) *Comp {
 		tracing.CollectTrace(c, b.visTracer)
 	}
 
+	ctrlMiddleware := &ctrlMiddleware{Comp: c}
+	c.AddMiddleware(ctrlMiddleware)
+
 	middleware := &middleware{Comp: c}
 	c.AddMiddleware(middleware)
+
+	c.isDrained = false
 
 	return c
 }

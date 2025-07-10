@@ -27,7 +27,9 @@ func (p *bottomParser) Tick() bool {
 	}
 }
 
-func (p *bottomParser) processDoneRsp(done *mem.WriteDoneRsp) bool {
+func (p *bottomParser) processDoneRsp(
+	done *mem.WriteDoneRsp,
+) bool {
 	trans := p.findTransactionByWriteToBottomID(done.GetRspTo())
 	if trans == nil || trans.fetchAndWrite {
 		p.cache.bottomPort.RetrieveIncoming()
@@ -76,6 +78,7 @@ func (p *bottomParser) processDataReady(
 	trans.data = data
 	trans.writeFetchedDirtyMask = dirtyMask
 	bankBuf.Push(trans)
+
 	p.removeTransaction(trans)
 	p.cache.bottomPort.RetrieveIncoming()
 

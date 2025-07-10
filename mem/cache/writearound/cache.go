@@ -39,6 +39,9 @@ type Comp struct {
 	postCoalesceTransactions []*transaction
 
 	isPaused bool
+
+	state     string
+	isDrained bool
 }
 
 // SetAddressToPortMapper sets the finder that tells which remote port can serve
@@ -59,7 +62,7 @@ type middleware struct {
 func (m *middleware) Tick() bool {
 	madeProgress := false
 
-	if !m.isPaused {
+	if m.state == "enable" {
 		madeProgress = m.runPipeline() || madeProgress
 	}
 

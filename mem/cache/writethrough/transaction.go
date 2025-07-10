@@ -50,3 +50,24 @@ func (t *transaction) PID() vm.PID {
 
 	return t.write.PID
 }
+
+// Implementation of the Transaction interface for coalescer middleware
+func (t *transaction) IsRead() bool {
+	return t.read != nil
+}
+
+func (t *transaction) IsWrite() bool {
+	return t.write != nil
+}
+
+func (t *transaction) GetReadReq() *mem.ReadReq {
+	return t.read
+}
+
+func (t *transaction) GetWriteReq() *mem.WriteReq {
+	return t.write
+}
+
+func (t *transaction) ID() string {
+	return t.id
+}

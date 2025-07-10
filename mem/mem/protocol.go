@@ -405,7 +405,7 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 // ControlMsg is the commonly used message type for controlling the components
 // on the memory hierarchy. It is also used for resonpding the original
 // requester with the Done field.
-type ControlMsg struct {
+type ControlReq struct {
 	sim.MsgMeta
 
 	DiscardTransations bool
@@ -418,21 +418,21 @@ type ControlMsg struct {
 	Invalid            bool
 }
 
-// Meta returns the meta data assocated with the ControlMsg.
-func (m *ControlMsg) Meta() *sim.MsgMeta {
+// Meta returns the meta data assocated with the ControlReq.
+func (m *ControlReq) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
 
-// Clone returns cloned ControlMsg with different ID
-func (m *ControlMsg) Clone() sim.Msg {
+// Clone returns cloned ControlReq with different ID
+func (m *ControlReq) Clone() sim.Msg {
 	cloneMsg := *m
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
 	return &cloneMsg
 }
 
-// A ControlMsgBuilder can build control messages.
-type ControlMsgBuilder struct {
+// A ControlReqBuilder can build control messages.
+type ControlReqBuilder struct {
 	src, dst            sim.RemotePort
 	discardTransactions bool
 	restart             bool
@@ -445,40 +445,40 @@ type ControlMsgBuilder struct {
 }
 
 // WithSrc sets the source of the request to build.
-func (b ControlMsgBuilder) WithSrc(src sim.RemotePort) ControlMsgBuilder {
+func (b ControlReqBuilder) WithSrc(src sim.RemotePort) ControlReqBuilder {
 	b.src = src
 	return b
 }
 
 // WithDst sets the destination of the request to build.
-func (b ControlMsgBuilder) WithDst(dst sim.RemotePort) ControlMsgBuilder {
+func (b ControlReqBuilder) WithDst(dst sim.RemotePort) ControlReqBuilder {
 	b.dst = dst
 	return b
 }
 
 // ToDiscardTransactions sets the discard transactions bit of the control
 // messages to 1.
-func (b ControlMsgBuilder) ToDiscardTransactions() ControlMsgBuilder {
+func (b ControlReqBuilder) ToDiscardTransactions() ControlReqBuilder {
 	b.discardTransactions = true
 	return b
 }
 
 // ToRestart sets the restart bit of the control messages to 1.
-func (b ControlMsgBuilder) ToRestart() ControlMsgBuilder {
+func (b ControlReqBuilder) ToRestart() ControlReqBuilder {
 	b.restart = true
 	return b
 }
 
 // ToNotifyDone sets the "notify done" bit of the control messages to 1.
-func (b ControlMsgBuilder) ToNotifyDone() ControlMsgBuilder {
+func (b ControlReqBuilder) ToNotifyDone() ControlReqBuilder {
 	b.notifyDone = true
 	return b
 }
 
 // WithCtrlInfo sets the enable bit of the control messages to 1.
-func (b ControlMsgBuilder) WithCtrlInfo(
+func (b ControlReqBuilder) WithCtrlInfo(
 	enable bool, drain bool, flush bool, pause bool, invalid bool,
-) ControlMsgBuilder {
+) ControlReqBuilder {
 	b.Enable = enable
 	b.Drain = drain
 	b.Flush = flush
@@ -487,9 +487,9 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	return b
 }
 
-// Build creates a new ControlMsg.
-func (b ControlMsgBuilder) Build() *ControlMsg {
-	m := &ControlMsg{}
+// Build creates a new ControlReq.
+func (b ControlReqBuilder) Build() *ControlReq {
+	m := &ControlReq{}
 	m.ID = sim.GetIDGenerator().Generate()
 	m.Src = b.src
 	m.Dst = b.dst
@@ -503,6 +503,96 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Flush = b.Flush
 	m.Pause = b.Pause
 	m.Invalid = b.Invalid
+
+	return m
+}
+
+// ControlRsp is the response to a ControlReq.
+type ControlRsp struct {
+	sim.MsgMeta
+
+	DiscardTransations bool
+	Restart            bool
+	NotifyDone         bool
+	Enable             bool
+	Drain              bool
+	Flush              bool
+	Pause              bool
+	Invalid            bool
+}
+
+// Meta returns the meta data assocated with the ControlRsp.
+func (m *ControlRsp) Meta() *sim.MsgMeta {
+	return &m.MsgMeta
+}
+
+// Clone returns cloned ControlRsp with different ID
+func (m *ControlRsp) Clone() sim.Msg {
+	cloneMsg := *m
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+
+	return &cloneMsg
+}
+
+// A ControlRspBuilder can build control responses.
+type ControlRspBuilder struct {
+	src, dst            sim.RemotePort
+	discardTransactions bool
+	notifyDone          bool
+	enable              bool
+	drain               bool
+	pause               bool
+	invalid             bool
+}
+
+// WithSrc sets the source of the response to build.
+func (b ControlRspBuilder) WithSrc(src sim.RemotePort) ControlRspBuilder {
+	b.src = src
+	return b
+}
+
+// WithDst sets the destination of the response to build.
+func (b ControlRspBuilder) WithDst(dst sim.RemotePort) ControlRspBuilder {
+	b.dst = dst
+	return b
+}
+
+// ToDiscardTransactions sets the discard transactions bit of the control
+// messages to 1.
+func (b ControlRspBuilder) ToDiscardTransactions() ControlRspBuilder {
+	b.discardTransactions = true
+	return b
+}
+
+// ToNotifyDone sets the "notify done" bit of the control messages to 1.
+func (b ControlRspBuilder) ToNotifyDone() ControlRspBuilder {
+	b.notifyDone = true
+	return b
+}
+
+// WithCtrlInfo sets the enable bit of the control messages to 1.
+func (b ControlRspBuilder) WithCtrlInfo(
+	enable bool, drain bool, pause bool,
+) ControlRspBuilder {
+	b.enable = enable
+	b.drain = drain
+	b.pause = pause
+	return b
+}
+
+// Build creates a new ControlRsp.
+func (b ControlRspBuilder) Build() *ControlRsp {
+	m := &ControlRsp{}
+	m.ID = sim.GetIDGenerator().Generate()
+	m.Src = b.src
+	m.Dst = b.dst
+	m.TrafficBytes = controlMsgByteOverhead
+
+	m.DiscardTransations = b.discardTransactions
+	m.NotifyDone = b.notifyDone
+	m.Enable = b.enable
+	m.Drain = b.drain
+	m.Pause = b.pause
 
 	return m
 }
