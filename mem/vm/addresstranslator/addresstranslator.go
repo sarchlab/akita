@@ -117,6 +117,14 @@ func (m *middleware) translate() bool {
 		return false
 	}
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.translationPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	translation := &transaction{
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
@@ -151,6 +159,15 @@ func (m *middleware) parseTranslation() bool {
 
 	transaction.translationRsp = transRsp
 	transaction.translationDone = true
+
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(transRsp, m.Comp),
+		tracing.MilestoneKindTranslation,
+		m.translationPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	reqFromTop := transaction.incomingReqs[0]
 	translatedReq := m.createTranslatedReq(
 		reqFromTop,
@@ -160,6 +177,14 @@ func (m *middleware) parseTranslation() bool {
 	if err != nil {
 		return false
 	}
+
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(translatedReq, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.translationPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	m.inflightReqToBottom = append(m.inflightReqToBottom,
 		reqToBottom{
@@ -209,6 +234,13 @@ func (m *middleware) respond() bool {
 				WithData(rsp.Data).
 				Build()
 			rspToTop = drToTop
+			tracing.AddMilestone(
+				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+				tracing.MilestoneKindData,
+				"data",
+				m.Comp.Name(),
+				m.Comp,
+			)
 		}
 	case *mem.WriteDoneRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RespondTo)
@@ -220,6 +252,13 @@ func (m *middleware) respond() bool {
 				WithDst(reqFromTop.Meta().Src).
 				WithRspTo(reqFromTop.Meta().ID).
 				Build()
+			tracing.AddMilestone(
+				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+				tracing.MilestoneKindSubTask,
+				"subtask",
+				m.Comp.Name(),
+				m.Comp,
+			)
 		}
 	default:
 		log.Panicf("cannot handle respond of type %s", reflect.TypeOf(rsp))
@@ -230,6 +269,14 @@ func (m *middleware) respond() bool {
 		if err != nil {
 			return false
 		}
+
+		tracing.AddMilestone(
+			tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+			tracing.MilestoneKindNetworkBusy,
+			m.topPort.Name(),
+			m.Comp.Name(),
+			m.Comp,
+		)
 
 		m.removeReqToBottomByID(rsp.(mem.AccessRsp).GetRspTo())
 

@@ -36,15 +36,27 @@ var _ = Describe("TLB", func() {
 			AsRemote().
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
+		topPort.EXPECT().
+			Name().
+			Return("TopPort").
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
+		bottomPort.EXPECT().
+			Name().
+			Return("BottomPort").
+			AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("ControlPort")).
+			AnyTimes()
+		controlPort.EXPECT().
+			Name().
+			Return("ControlPort").
 			AnyTimes()
 		addressMapper = NewMockAddressToPortMapper(mockCtrl)
 
