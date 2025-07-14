@@ -74,7 +74,7 @@ func TestExecutionRecord(t *testing.T) {
 	tableName := "exec_info"
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(t.Context(), tableName, datarecording.QueryParams{})
 	fmt.Println(results)
 
 	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
