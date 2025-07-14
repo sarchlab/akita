@@ -21,6 +21,7 @@ const (
 // BankImpl provides a basic implementation of a bank.
 type BankImpl struct {
 	sim.HookableBase
+
 	BankName             string
 	state                BankState
 	currentCmd           *signal.Command

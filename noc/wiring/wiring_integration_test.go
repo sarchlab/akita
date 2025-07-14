@@ -12,6 +12,7 @@ import (
 // wireTestComponent is a component that can send and receive messages
 type wireTestComponent struct {
 	*sim.TickingComponent
+
 	port         *Port
 	msgsToSend   []*sampleMsg
 	msgsReceived []*sampleMsg

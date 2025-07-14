@@ -194,5 +194,6 @@ func NewPort(comp sim.Component, name string, timeTeller sim.TimeTeller) *Port {
 	p.comp = comp
 	p.name = name
 	p.timeTeller = timeTeller
+
 	return p
 }

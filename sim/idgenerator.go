@@ -27,6 +27,7 @@ func UseSequentialIDGenerator() {
 	}
 
 	idGeneratorMutex.Lock()
+
 	if idGeneratorInstantiated {
 		log.Panic("cannot change id generator type after using it")
 	}
@@ -45,6 +46,7 @@ func UseParallelIDGenerator() {
 	}
 
 	idGeneratorMutex.Lock()
+
 	if idGeneratorInstantiated {
 		log.Panic("cannot change id generator type after using it")
 	}
@@ -62,6 +64,7 @@ func GetIDGenerator() IDGenerator {
 	}
 
 	idGeneratorMutex.Lock()
+
 	if idGeneratorInstantiated {
 		idGeneratorMutex.Unlock()
 		return idGenerator
@@ -69,6 +72,7 @@ func GetIDGenerator() IDGenerator {
 
 	idGenerator = &sequentialIDGenerator{}
 	idGeneratorInstantiated = true
+
 	idGeneratorMutex.Unlock()
 
 	return idGenerator

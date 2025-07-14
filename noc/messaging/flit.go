@@ -9,6 +9,7 @@ import (
 // Flit is the smallest trasferring unit on a network.
 type Flit struct {
 	sim.MsgMeta
+
 	SeqID        int
 	NumFlitInMsg int
 	Msg          sim.Msg

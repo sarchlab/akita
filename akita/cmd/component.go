@@ -80,7 +80,8 @@ func inGitRepo() bool {
 
 // Create folder for the new component
 func createComponentFolder(name string) error {
-	if _, err := os.Stat(name); err == nil {
+	_, err := os.Stat(name)
+	if err == nil {
 		return fmt.Errorf("folder '%s' already exists", name)
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("%v", err)
