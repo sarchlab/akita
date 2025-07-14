@@ -2,6 +2,7 @@ package cmd
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -20,43 +21,67 @@ var linterCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		folderPath := args[0]
 
+		hasError := false
 		err := checkComponentFormat(folderPath)
 		if err != nil {
 			fmt.Printf("Comp validation error: %s\n", err)
 			//os.Exit(1)
-		} else {
-			fmt.Printf("Comp validation succeed!\n")
-			//os.Exit(0)
+			hasError = true
 		}
+		// else {
+		// 	fmt.Printf("Comp validation succeed!\n")
+		// 	//os.Exit(0)
+		// }
 
 		errBuilder := checkBuilderFormat(folderPath)
 		if errBuilder != nil {
 			fmt.Printf("Builder format error: %s\n", errBuilder)
-		} else {
-			fmt.Printf("Builder format validation succeed!\n")
+			hasError = true
 		}
+		// else {
+		// 	fmt.Printf("Builder format validation succeed!\n")
+		// }
 
 		errBuilderReturn := checkBuilderReturn(folderPath)
 		if errBuilderReturn != nil {
 			fmt.Printf("Builder return error: %s\n", errBuilderReturn)
-		} else {
-			fmt.Printf("Builder return validation succeed!\n")
+			hasError = true
 		}
+		// else {
+		// 	fmt.Printf("Builder return validation succeed!\n")
+		// }
 
 		errBuilderParameter := checkBuilderParameters(folderPath)
 		if errBuilderParameter != nil {
 			fmt.Printf("Builder parameter error: %s\n", errBuilderParameter)
-		} else {
-			fmt.Printf("Builder parameter validation succeed!\n")
+			hasError = true
 		}
+		// else {
+		// 	fmt.Printf("Builder parameter validation succeed!\n")
+		// }
+
+		errBuilderFunc := checkBuilderFunction(folderPath)
+		if errBuilderFunc != nil {
+			fmt.Printf("Builder function error: %s\n", errBuilderFunc)
+			hasError = true
+		}
+		// else {
+		// 	fmt.Printf("Builder function validation succeed!\n")
+		// }
 
 		errManifest := checkManifestFormat(folderPath)
 		if errManifest != nil {
-			fmt.Printf("Manifest validation error: %v", errManifest)
-			//os.Exit(1)
+			fmt.Printf("Manifest error: %v", errManifest)
+			hasError = true
+		}
+		// else {
+		// 	fmt.Printf("Manifest validation succeed!")
+		// }
+
+		if hasError {
+			os.Exit(1)
 		} else {
-			fmt.Printf("Manifest validation succeed!")
-			//os.Exit(0)
+			os.Exit(0)
 		}
 
 	},
@@ -247,7 +272,7 @@ func checkBuilderReturn(folderPath string) error {
 func checkBuilderParameters(folderPath string) error {
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
-	// parse the builder file
+	// Parse the builder file
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
@@ -257,7 +282,7 @@ func checkBuilderParameters(folderPath string) error {
 	var parameters []string
 	var mustInclude = 0
 
-	// find all field in Builder struct
+	// Find all field in Builder struct
 	for _, decl := range node.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -284,45 +309,97 @@ func checkBuilderParameters(folderPath string) error {
 	}
 
 	if len(parameters) < 2 || mustInclude != 2 {
-		return fmt.Errorf("builder must include atleast 2 parameters, including `Freq` and `Engine`")
+		return fmt.Errorf("builder must include at least 2 parameters, including `Freq` and `Engine`")
 	}
 
 	return nil
 }
 
-// func checkBuilderFunction(folderPath string) error {
-// 	builderFilePath := filepath.Join(folderPath, "builder.go")
+func checkBuilderFunction(folderPath string) error {
+	builderFilePath := filepath.Join(folderPath, "builder.go")
 
-// 	// parse the builder file
-// 	fs := token.NewFileSet()
-// 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
-// 	}
+	// Parse the builder file
+	fs := token.NewFileSet()
+	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
+	if err != nil {
+		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+	}
 
-// 	for _, decl := range node.Decls {
-// 		funcDecl, ok := decl.(*ast.FuncDecl)
-// 		if !ok || funcDecl.Name != "Builder" {
-// 			continue
-// 		}
-// 		// if takes only a name (string) as an argument{
-// 		// 	if returns to the pointer of the newly created component{
-// 		// 		return nil
-// 		// 	}else{
-// 		// 		error: does not return to the pointer
-// 		// 	}
-// 		// else{
-// 		// 	does not only take name as argument
-// 		// }
-// 	}
-// }
+	found := false
+	for _, decl := range node.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok || funcDecl.Name.Name != "Build" {
+			continue
+		}
+		found = true
+
+		// Check if func has exactly one parameter
+		if funcDecl.Type.Params.NumFields() != 1 {
+			return fmt.Errorf("`Build` function must take exactly one argument")
+		}
+
+		// Check if the parameter type is string
+		param := funcDecl.Type.Params.List[0]
+		ident, ok := param.Type.(*ast.Ident)
+		if !ok || ident.Name != "string" {
+			return fmt.Errorf("`Build` function's argument must be of type string")
+		}
+
+		// Check if func returns
+		if funcDecl.Type.Results == nil {
+			return fmt.Errorf("`Build` function must return the new component")
+		}
+
+		// Check if the return type is a pointer
+		retType := funcDecl.Type.Results.List[0].Type
+		_, ok = retType.(*ast.StarExpr)
+		if !ok {
+			return fmt.Errorf("`Build` function must return the new component as a pointer type")
+		}
+	}
+
+	if !found {
+		return fmt.Errorf("`Build` function not found in builder")
+	}
+
+	return nil
+}
 
 func checkManifestFormat(folderPath string) error {
-	// check manifest.json existence
+	// Check manifest.json existence
 	jsonFilePath := filepath.Join(folderPath, "manifest.json")
 	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
 		return fmt.Errorf("manifest.json file does not exist")
 	}
 
+	// Read the json file
+	fileContent, err := os.ReadFile(jsonFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read manifest.json: %v", err)
+	}
+
+	// Parse the json file
+	var manifest map[string]any
+	if err := json.Unmarshal(fileContent, &manifest); err != nil {
+		return fmt.Errorf("failed to parse manifest.json: %v", err)
+	}
+
+	// Must have `name` attribute with a non-empty string value
+	nameAtt, ok := manifest["name"].(string)
+	if !ok || nameAtt == "" {
+		return fmt.Errorf("manifest.json must contain a non-empty 'name' attribute")
+	}
+
+	// Must have `ports`
+	if _, ok := manifest["ports"]; !ok {
+		return fmt.Errorf("manifest.json must contain `ports` attribute")
+	}
+
+	// Must have `parameters`
+	if _, ok := manifest["parameters"]; !ok {
+		return fmt.Errorf("manifest.json must contain `parameters` attribute")
+	}
+
+	// All checks passed
 	return nil
 }
