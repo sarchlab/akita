@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -477,6 +478,25 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
+func buildOpenAIPayload(model string, messages []map[string]string) ([]byte, error) {
+	payload := map[string]interface{}{
+		"model":       model,
+		"messages":    messages,
+		"temperature": 0.7,
+	}
+	return json.Marshal(payload)
+}
+
+func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []byte) (*http.Response, error) {
+	openaiReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return nil, err
+	}
+	openaiReq.Header.Set("Content-Type", "application/json")
+	openaiReq.Header.Set("Authorization", apiKey)
+	return http.DefaultClient.Do(openaiReq)
+}
+
 func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	_ = godotenv.Load(".env")
 	openaiApiKey := os.Getenv("OPENAI_API_KEY")
@@ -499,32 +519,21 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Messages []map[string]string `json:"messages"`
+		Messages                  []map[string]string    `json:"messages"`
+		TraceInfo                 map[string]interface{} `json:"traceInfo"`
+		SelectedGitHubRoutineKeys []string               `json:"selectedGitHubRoutineKeys"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	payload := map[string]interface{}{
-		"model":       openaiModel,
-		"messages":    req.Messages,
-		"temperature": 0.7,
-	}
-	payloadBytes, err := json.Marshal(payload)
+	payloadBytes, err := buildOpenAIPayload(openaiModel, req.Messages)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	openaiReq, err := http.NewRequestWithContext(
-		r.Context(), "POST", openaiURL, bytes.NewReader(payloadBytes),
-	)
-	if err != nil {
-		http.Error(w, "Failed to create OpenAI request: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	openaiReq.Header.Set("Content-Type", "application/json")
-	openaiReq.Header.Set("Authorization", openaiApiKey)
-	resp, err := http.DefaultClient.Do(openaiReq)
+
+	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
 	if err != nil {
 		http.Error(
 			w,

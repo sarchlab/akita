@@ -1,4 +1,4 @@
-import { sendGetGitHubIsAvailable, sendPostGPT } from "./chatpanelrequests";
+import { sendGetGitHubIsAvailable, sendPostGPT, GPTRequest } from "./chatpanelrequests";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -672,7 +672,19 @@ export class ChatPanel {
       }, 500);
 
       // Call GPT and update the message
-      sendPostGPT(messages).then((gptResponse) => {
+      const selectedGitHubRoutineKeys = Object.keys(this._attachRepoChecks).filter(k => this._attachRepoChecks[k]);
+      const gptRequest: GPTRequest = {
+        messages: messages,
+        traceInfo: {
+            selected: 0,
+            starttime: 0,
+            endtime: 0.00008
+        },
+        selectedGitHubRoutineKeys: selectedGitHubRoutineKeys
+      };
+      console.log("GPTRequest:", gptRequest);
+      
+      sendPostGPT(gptRequest).then((gptResponse) => {
         const gptResponseContent = gptResponse.content;
         const gptResponseTotalTokens = gptResponse.totalTokens;
         console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");

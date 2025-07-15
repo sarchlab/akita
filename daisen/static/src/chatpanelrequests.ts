@@ -14,11 +14,23 @@ export interface GitHubIsAvailableResponse {
   routine_keys: string[];
 }
 
-export async function sendPostGPT(messages: ChatMessage[]): Promise<GPTResponse> {
+export interface TraceInformation {
+  selected: number;
+  starttime: number;
+  endtime: number;
+}
+
+export interface GPTRequest {
+  messages: ChatMessage[];
+  traceInfo: TraceInformation;
+  selectedGitHubRoutineKeys: string[];
+}
+
+export async function sendPostGPT(request: GPTRequest): Promise<GPTResponse> {
   const response = await fetch("/api/gpt", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages })
+    body: JSON.stringify(request)
   });
   if (!response.ok) {
     return {
