@@ -1,7 +1,7 @@
 import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
-import { sendPostGPT } from "./sendPostGPT";
+import { sendGetGitHubIsAvailable, sendPostGPT } from "./chatpanelrequests";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
@@ -38,8 +38,14 @@ class Dashboard {
     { role: "system", content: "You are Daisen Bot." }
   ];  // Make the message history global
   _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
+  _fileUploadBtn: HTMLButtonElement;
   _fileIdCounter: number;
   _fileListRow: HTMLDivElement; // Add this to hold the file list container
+
+  _attachRepoVisible: boolean = false;
+  _attachRepoChecks: { [key: string]: boolean } = {};
+  _githubIsAvailableResponse: { available: number; routine_keys: string[] } | null = null;
+
 
   constructor() {
     this._numWidget = 16;
@@ -60,6 +66,10 @@ class Dashboard {
     this._fileIdCounter = 0;
     this._fileListRow = document.createElement("div");
     this._uploadedFiles = [];
+    sendGetGitHubIsAvailable().then((resp) => {
+      this._githubIsAvailableResponse = resp;
+      console.log("[GitHubIsAvailableResponse]", resp);
+    });
   }
 
   setCanvas(
@@ -186,7 +196,7 @@ class Dashboard {
     if (width < 800) {
       this._numCol = 2;
     }
-    console.log(width, height);
+    // console.log(width, height);
   }
 
   _widgetWidth(): number {
@@ -965,6 +975,8 @@ class Dashboard {
     actionRow.appendChild(fileInput);
     chatContent.appendChild(actionRow);
 
+    this._fileUploadBtn = fileUploadBtn;
+
     // Upload Daisen Trace button
     const traceUploadBtn = document.createElement("button");
     traceUploadBtn.type = "button";
@@ -1008,10 +1020,191 @@ class Dashboard {
         <path d="M69.12158,94.14551,28.49658,128l40.625,33.85449a7.99987,7.99987,0,1,1-10.24316,12.291l-48-40a7.99963,7.99963,0,0,1,0-12.291l48-40a7.99987,7.99987,0,1,1,10.24316,12.291Zm176,27.709-48-40a7.99987,7.99987,0,1,0-10.24316,12.291L227.50342,128l-40.625,33.85449a7.99987,7.99987,0,1,0,10.24316,12.291l48-40a7.99963,7.99963,0,0,0,0-12.291Zm-82.38769-89.373a8.00439,8.00439,0,0,0-10.25244,4.78418l-64,176a8.00034,8.00034,0,1,0,15.0371,5.46875l64-176A8.0008,8.0008,0,0,0,162.73389,32.48145Z"  />
       </svg>
     `;
+    // Create the floating div (hidden by default)
+    const attachRepoDiv = document.createElement("div");
+    attachRepoDiv.style.position = "absolute";
+    attachRepoDiv.style.left = "100px";
+    attachRepoDiv.style.bottom = "44px"; // 38px button + 4px gap
+    attachRepoDiv.style.background = "#fff";
+    attachRepoDiv.style.border = "1px solid #ccc";
+    attachRepoDiv.style.borderRadius = "8px";
+    attachRepoDiv.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
+    attachRepoDiv.style.padding = "12px 16px";
+    attachRepoDiv.style.zIndex = "10001";
+    attachRepoDiv.style.display = "none";
+    attachRepoDiv.style.maxWidth = "340px";
 
-    attachRepoBtn.onclick = () => {}; // Do nothing for now
+    // Add rows
+    let repoRows = [];
+    if (this._githubIsAvailableResponse && this._githubIsAvailableResponse.available === 1) {
+      repoRows = [...this._githubIsAvailableResponse.routine_keys].sort();
+    }
+
+    // repoRows.forEach(row => {
+    //   const rowDiv = document.createElement("div");
+    //   rowDiv.style.display = "flex";
+    //   rowDiv.style.alignItems = "center";
+    //   rowDiv.style.justifyContent = "space-between";
+    //   rowDiv.style.marginBottom = "8px";
+
+    //   const label = document.createElement("span");
+    //   label.textContent = row;
+    //   label.style.fontSize = "15px";
+    //   label.style.color = "#222";
+    //   label.style.maxWidth = "270px";
+    //   label.style.overflow = "hidden";
+    //   label.style.textOverflow = "ellipsis";
+    //   label.style.whiteSpace = "nowrap";
+
+    //   const checkbox = document.createElement("input");
+    //   checkbox.type = "checkbox";
+    //   checkbox.checked = (row in this._attachRepoChecks) ? this._attachRepoChecks[row] : false;
+    //   checkbox.onchange = () => {
+    //     this._attachRepoChecks[row] = checkbox.checked;
+    //     const checkedCount = Object.values(this._attachRepoChecks).filter(Boolean).length;
+    //     this._renderBubble(attachRepoBtn, checkedCount, "bubble-attach-repo");
+    //   };
+    //   checkbox.style.marginLeft = "8px";
+
+    //   rowDiv.appendChild(label);
+    //   rowDiv.appendChild(checkbox);
+    //   attachRepoDiv.appendChild(rowDiv);
+    // });
+    // Top row: Select All / Deselect All
+    const topRow = document.createElement("div");
+    topRow.style.display = "flex";
+    topRow.style.justifyContent = "flex-start";
+    topRow.style.alignItems = "center";
+    topRow.style.marginBottom = "8px";
+
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.style.marginRight = "8px";
+    selectAllBtn.textContent = "Select All";
+    selectAllBtn.style.background = "#0d6efd";
+    selectAllBtn.style.color = "#fff";
+    selectAllBtn.style.border = "none";
+    selectAllBtn.style.borderRadius = "4px";
+    selectAllBtn.style.padding = "4px 10px";
+    selectAllBtn.style.cursor = "pointer";
+    selectAllBtn.style.fontSize = "13px";
+
+    const deselectAllBtn = document.createElement("button");
+    deselectAllBtn.textContent = "Deselect All";
+    deselectAllBtn.style.background = "#6c757d";
+    deselectAllBtn.style.color = "#fff";
+    deselectAllBtn.style.border = "none";
+    deselectAllBtn.style.borderRadius = "4px";
+    deselectAllBtn.style.padding = "4px 10px";
+    deselectAllBtn.style.cursor = "pointer";
+    deselectAllBtn.style.fontSize = "13px";
+
+    topRow.appendChild(selectAllBtn);
+    topRow.appendChild(deselectAllBtn);
+    attachRepoDiv.appendChild(topRow);
+
+    // Scrollable region for checkboxes
+    const scrollRegion = document.createElement("div");
+    scrollRegion.style.maxHeight = "300px";
+    scrollRegion.style.overflowY = "auto";
+    scrollRegion.style.paddingRight = "4px";
+
+    // Store checkbox elements for easy access
+    const checkboxMap: { [key: string]: HTMLInputElement } = {};
+
+    repoRows.forEach(row => {
+      const rowDiv = document.createElement("div");
+      rowDiv.style.display = "flex";
+      rowDiv.style.alignItems = "center";
+      rowDiv.style.justifyContent = "space-between";
+      rowDiv.style.marginBottom = "8px";
+
+      const label = document.createElement("span");
+      label.textContent = row;
+      label.style.fontSize = "15px";
+      label.style.color = "#222";
+      label.style.maxWidth = "280px";
+      label.style.overflow = "hidden";
+      label.style.textOverflow = "ellipsis";
+      label.style.whiteSpace = "nowrap";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = (row in this._attachRepoChecks) ? this._attachRepoChecks[row] : false;
+      checkbox.onchange = () => {
+        this._attachRepoChecks[row] = checkbox.checked;
+        const checkedCount = Object.values(this._attachRepoChecks).filter(Boolean).length;
+        this._renderBubble(attachRepoBtn, checkedCount, "bubble-attach-repo");
+      };
+      checkbox.style.marginLeft = "8px";
+      checkboxMap[row] = checkbox;
+
+      rowDiv.appendChild(label);
+      rowDiv.appendChild(checkbox);
+      scrollRegion.appendChild(rowDiv);
+    });
+
+    attachRepoDiv.appendChild(scrollRegion);
+
+    // Select All / Deselect All logic
+    selectAllBtn.onclick = () => {
+      repoRows.forEach(row => {
+        this._attachRepoChecks[row] = true;
+        checkboxMap[row].checked = true;
+      });
+      const checkedCount = repoRows.length;
+      this._renderBubble(attachRepoBtn, checkedCount, "bubble-attach-repo");
+    };
+
+    deselectAllBtn.onclick = () => {
+      repoRows.forEach(row => {
+        this._attachRepoChecks[row] = false;
+        checkboxMap[row].checked = false;
+      });
+      this._renderBubble(attachRepoBtn, 0, "bubble-attach-repo");
+    };
+
+
+    // Insert attachRepoDiv into actionRow (relative positioning)
+    actionRow.style.position = "relative";
+    actionRow.appendChild(attachRepoDiv);
+
+    // Toggle logic
+    attachRepoBtn.onclick = () => {
+      this._attachRepoVisible = !this._attachRepoVisible;
+      if (this._attachRepoVisible) {
+        attachRepoDiv.style.display = "block";
+        // const currentWidth = attachRepoDiv.offsetWidth;
+        // attachRepoDiv.style.width = (currentWidth + 10) + "px";
+        attachRepoBtn.style.background = "#0d6efd";
+        attachRepoBtn.style.color = "#fff";
+      } else {
+        attachRepoDiv.style.display = "none";
+        attachRepoBtn.style.background = "#f6f8fa";
+        attachRepoBtn.style.color = "#222";
+      }
+    };
+
+    if (this._githubIsAvailableResponse && this._githubIsAvailableResponse.available === 0) {
+      attachRepoBtn.disabled = true;
+      attachRepoBtn.title = "Attach Repository Code\n(GitHub REST API is not available now)";
+      // Add a slash from top-left to bottom-right over the icon
+      attachRepoBtn.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 256 256" fill="currentColor" style="position:relative;">
+          <path d="M69.12158,94.14551,28.49658,128l40.625,33.85449a7.99987,7.99987,0,1,1-10.24316,12.291l-48-40a7.99963,7.99963,0,0,1,0-12.291l48-40a7.99987,7.99987,0,1,1,10.24316,12.291Zm176,27.709-48-40a7.99987,7.99987,0,1,0-10.24316,12.291L227.50342,128l-40.625,33.85449a7.99987,7.99987,0,1,0,10.24316,12.291l48-40a7.99963,7.99963,0,0,0,0-12.291Zm-82.38769-89.373a8.00439,8.00439,0,0,0-10.25244,4.78418l-64,176a8.00034,8.00034,0,1,0,15.0371,5.46875l64-176A8.0008,8.0008,0,0,0,162.73389,32.48145Z"/>
+          <line x1="6" y1="6" x2="18" y2="18" stroke="#e53935" stroke-width="2"/>
+        </svg>
+      `;
+    }
 
     actionRow.appendChild(attachRepoBtn);
+
+    // Initial bubble for file upload button
+    this._renderBubble(fileUploadBtn, this._uploadedFiles.length, "bubble-upload-file");
+
+    // Initial bubble for attach repo button
+    const checkedCount = Object.values(this._attachRepoChecks).filter(Boolean).length;
+    this._renderBubble(attachRepoBtn, checkedCount, "bubble-attach-repo");
+
 
     // Input area
     const inputContainer = document.createElement("div");
@@ -1041,9 +1234,9 @@ class Dashboard {
     sendBtn.className = "btn btn-primary";
 
     const clearBtn = document.createElement("button");
-    clearBtn.textContent = "Clear";
+    clearBtn.textContent = "New Chat";
     clearBtn.className = "btn btn-secondary";
-    clearBtn.style.marginLeft = "4px";
+    // clearBtn.style.marginLeft = "4px";
 
     // Send handler
     const sendMessage = () => {
@@ -1114,8 +1307,12 @@ class Dashboard {
 
       // Call GPT and update the message
       sendPostGPT(messages).then((gptResponse) => {
-        botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponse));
-        messages.push({ role: "assistant", content: gptResponse });
+        const gptResponseContent = gptResponse.content;
+        const gptResponseTotalTokens = gptResponse.totalTokens;
+        console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");
+        botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponseContent));
+
+        messages.push({ role: "assistant", content: gptResponseContent });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
         console.log("[Received from GPT]", gptResponse);
 
@@ -1143,6 +1340,17 @@ class Dashboard {
       this._uploadedFiles = [];
       this._fileIdCounter = 0;
       renderFileList.call(this);
+
+      // Clear all checkboxes and hide attachRepoDiv
+      Object.keys(this._attachRepoChecks).forEach(key => {
+        this._attachRepoChecks[key] = false;
+        if (checkboxMap[key]) checkboxMap[key].checked = false;
+      });
+      this._attachRepoVisible = false;
+      attachRepoDiv.style.display = "none";
+      attachRepoBtn.style.background = "#f6f8fa";
+      attachRepoBtn.style.color = "#222";
+      this._renderBubble(attachRepoBtn, 0, "bubble-attach-repo");
     }
 
     sendBtn.onclick = sendMessage;
@@ -1355,6 +1563,48 @@ class Dashboard {
     });
     this._addPaginationControl();
   }
+
+  // Add this method to Dashboard class for reusable bubble rendering
+  _renderBubble(btn: HTMLButtonElement, value: number, bubbleId: string) {
+    let bubble = btn.querySelector(`#${bubbleId}`) as HTMLDivElement;
+    if (!bubble) {
+      bubble = document.createElement("div");
+      bubble.id = bubbleId;
+      bubble.style.position = "absolute";
+      bubble.style.top = "-7px";
+      bubble.style.right = "-7px";
+      bubble.style.minWidth = "18px";
+      bubble.style.height = "18px";
+      bubble.style.background = "#e53935";
+      bubble.style.color = "#fff";
+      bubble.style.borderRadius = "50%";
+      bubble.style.display = "flex";
+      bubble.style.alignItems = "center";
+      bubble.style.justifyContent = "center";
+      bubble.style.fontSize = "12px";
+      bubble.style.fontWeight = "bold";
+      bubble.style.boxShadow = "0 1px 4px rgba(0,0,0,0.15)";
+      bubble.style.pointerEvents = "none";
+      bubble.style.zIndex = "10";
+      bubble.style.padding = "0 4px";
+      bubble.style.userSelect = "none";
+      bubble.style.transition = "opacity 0.2s";
+      bubble.style.opacity = value > 0 ? "1" : "0";
+      btn.style.position = "relative";
+      btn.appendChild(bubble);
+    }
+    let displayValue = "";
+    if (value === 0) {
+      bubble.style.opacity = "0";
+      bubble.textContent = "";
+    } else if (value > 9) {
+      bubble.style.opacity = "1";
+      bubble.textContent = "9+";
+    } else {
+      bubble.style.opacity = "1";
+      bubble.textContent = value.toString();
+    }
+  }
 }
 
 function convertMarkdownToHTML(text: string): string {
@@ -1506,6 +1756,8 @@ function renderFileList() {
     this._fileListRow.appendChild(fileRow);
   });
   this._fileListRow.style.marginBottom = "4px";
+  // Update bubble
+  this._renderBubble(this._fileUploadBtn, this._uploadedFiles.length, "bubble-upload-file");
   // Log current file list with ids after every render
   console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, size: f.size })));
 }

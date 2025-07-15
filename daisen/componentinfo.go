@@ -485,12 +485,14 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
 		http.Error(
 			w,
-			"[Error: \".env\" not found or variable missing] Please create or update file "+
+			"[Error: \".env\" not found or OpenAI-related variable missing] "+
+				"Please create or update file "+
 				"\"akita/daisen/.env\" and write these contents (example):\n"+
 				"```\n"+
 				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
 				"OPENAI_MODEL=\"gpt-4o\"\n"+
 				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
 				"```\n",
 			http.StatusInternalServerError,
 		)
@@ -536,4 +538,66 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
+}
+
+func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+	if githubPAT == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or GitHub-related variable missing] "+
+				"Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
+				"```\n",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	if err != nil {
+		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", githubPAT)
+
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"available":    0,
+			"routine_keys": []string{},
+		})
+		// fmt.Printf("available: 0, error: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Read routine keys from componentgithubroutine.json
+	routineKeys := []string{}
+	routineFile := "componentgithubroutine.json"
+	data, err := os.ReadFile(routineFile)
+	if err == nil {
+		var routineMap map[string]interface{}
+		if err := json.Unmarshal(data, &routineMap); err == nil {
+			for k := range routineMap {
+				routineKeys = append(routineKeys, k)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"available":    1,
+		"routine_keys": routineKeys,
+	})
+	// fmt.Printf("available: 1, routine_keys: %v\n", routineKeys)
 }

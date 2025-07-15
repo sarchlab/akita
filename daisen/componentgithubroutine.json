@@ -1,0 +1,38 @@
+{
+    "Driver": [
+        "https://raw.githubusercontent.com/sarchlab/mgpusim/main/amd/driver/driver.go",
+        "https://raw.githubusercontent.com/sarchlab/mgpusim/main/amd/driver/builder.go"
+    ],
+    "GPU.CommandProcessor": [
+        "https://raw.githubusercontent.com/sarchlab/mgpusim/main/amd/timing/cp/commandprocessor.go",
+        "https://raw.githubusercontent.com/sarchlab/mgpusim/main/amd/timing/cp/builder.go"
+    ],
+    "GPU.CommandProcessor.Dispatcher": [],
+    "GPU.DMA": [],
+    "GPU.DRAM": [],
+    "GPU.L2Cache": [],
+    "GPU.L2TLB": [],
+    "GPU.SA.CU": [],
+    "GPU.SA.CU.Branch": [],
+    "GPU.SA.CU.Scalar": [],
+    "GPU.SA.CU.Special": [],
+    "GPU.SA.CU.VALU": [],
+    "GPU.SA.CU.VMem": [],
+    "GPU.SA.CU.WFPool": [],
+    "GPU.SA.L1IAddrTrans": [],
+    "GPU.SA.L1ICache": [],
+    "GPU.SA.L1ICache.Local": [],
+    "GPU.SA.L1IROB": [],
+    "GPU.SA.L1ITLB": [],
+    "GPU.SA.L1SAddrTrans": [],
+    "GPU.SA.L1SCache": [],
+    "GPU.SA.L1SCache.Local": [],
+    "GPU.SA.L1SROB": [],
+    "GPU.SA.L1STLB": [],
+    "GPU.SA.L1VAddrTrans": [],
+    "GPU.SA.L1VCache": [],
+    "GPU.SA.L1VCache.Local": [],
+    "GPU.SA.L1VROB": [],
+    "GPU.SA.L1VTLB": [],
+    "MMU": []
+}
