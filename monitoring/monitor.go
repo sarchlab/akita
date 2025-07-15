@@ -619,7 +619,6 @@ func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
 func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	// Check if tracing is enabled based on *visTracing and the tracer state
 	fmt.Println("/api/trace/is_tracing triggered")
-	fmt.Println("m.tracer:", m.tracer)
 
 	var isTracing bool
 	if m.tracer != nil {

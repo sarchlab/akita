@@ -10,13 +10,17 @@ import (
 )
 
 type taskTableEntry struct {
+	TableName    string  `json:"table_name"`
+	SessionStart float64 `json:"start_time"` //trace session的全局时间
+	SessionEnd   float64 `json:"end_time"`
+
 	ID        string  `json:"id" akita_data:"unique"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
 	Location  string  `json:"location" akita_data:"index"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
-	EndTime   float64 `json:"end_time" akita_data:"index"`
+	EndTime   float64 `json:"end_time" akita_data:"index"` //task的时间
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -31,6 +35,11 @@ type DBTracer struct {
 
 	tracingTasks  map[string]Task
 	isTracingFlag bool // Optional: internal flag for manual control
+
+	traceCount       int
+	currentTableName string
+	sessionStartTime sim.VTimeInSec
+	sessionEndTime   sim.VTimeInSec
 }
 
 // EnableTracing manually enables tracing.
@@ -38,6 +47,11 @@ func (t *DBTracer) EnableTracing() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.isTracingFlag = true
+	t.traceCount++
+	t.sessionStartTime = t.timeTeller.CurrentTime()
+	t.sessionEndTime = 0
+	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
+	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
 }
 
 // DisableTracing manually disables tracing.
@@ -49,8 +63,9 @@ func (t *DBTracer) DisableTracing() {
 
 // to check later
 func (t *DBTracer) IsTracing() bool {
-	// Combine manual control with dynamic checks
-	return t.isTracingFlag && *visTracing && t.backend.IsReady()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.isTracingFlag
 }
 
 // StartTask marks the start of a task.
@@ -180,34 +195,31 @@ func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 // StopTracingAtCurrentTime stops tracing and finalizes tasks.
 func (t *DBTracer) StopTracingAtCurrentTime() {
 	print("Stopping tracing at current time...\n")
-
-	stopTracingTime := t.timeTeller.CurrentTime()
-	t.SetTimeRange(t.startTime, stopTracingTime)
-
-	// Generate a unique table name based on the stopTracingTime
-	tableName := fmt.Sprintf("trace_%d", int64(stopTracingTime))
-	t.backend.CreateTable(tableName, taskTableEntry{})
-
-	// Finish all tasks that started before stopTracingTime but did not end yet
-	for id, task := range t.tracingTasks {
-		if task.StartTime <= stopTracingTime {
-			task.EndTime = stopTracingTime // Set the end time to the current time
-
-			// Insert the finalized task into the newly created table
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.isTracingFlag = false
+	t.sessionEndTime = t.timeTeller.CurrentTime() // t.sessionEndTime 类型为 sim.VTimeInSec
+	for _, task := range t.tracingTasks {
+		taskEnd := task.EndTime
+		if taskEnd == 0 {
+			taskEnd = t.sessionEndTime
+		}
+		// 判断任务与session是否有重叠（全部用sim.VTimeInSec类型）
+		if task.StartTime <= t.sessionEndTime && taskEnd >= t.sessionStartTime {
 			taskTable := taskTableEntry{
-				ID:        task.ID,
-				ParentID:  task.ParentID,
-				Kind:      task.Kind,
-				What:      task.What,
-				Location:  task.Location,
-				StartTime: float64(task.StartTime),
-				EndTime:   float64(task.EndTime),
+				TableName:    t.currentTableName,
+				SessionStart: float64(t.sessionStartTime),
+				SessionEnd:   float64(t.sessionEndTime),
+				ID:           task.ID,
+				ParentID:     task.ParentID,
+				Kind:         task.Kind,
+				What:         task.What,
+				Location:     task.Location,
+				StartTime:    float64(task.StartTime),
+				EndTime:      float64(taskEnd),
 			}
-			t.backend.InsertData(tableName, taskTable)
-
-			delete(t.tracingTasks, id) // Remove finalized task
+			t.backend.InsertData(t.currentTableName, taskTable)
 		}
 	}
-
-	t.backend.Flush() // Ensure all data is written to the database
+	t.backend.Flush()
 }
