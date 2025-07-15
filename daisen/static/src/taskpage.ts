@@ -10,7 +10,7 @@ import { Task } from "./task";
 import { smartString } from "./smartvalue";
 import { Widget, TimeValue } from "./widget";
 import Dashboard from "./dashboard";
-import { sendPostGPT } from "./sendPostGPT";
+import { sendPostGPT } from "./chatpanelrequests";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
