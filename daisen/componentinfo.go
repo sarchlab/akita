@@ -561,7 +561,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://api.github.com/user", nil)
+	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
 	if err != nil {
 		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -572,15 +572,15 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"available":    0,
 			"routine_keys": []string{},
-		})
-		// fmt.Printf("available: 0, error: %v\n", err)
-		return
+		}); err != nil {
+			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	defer resp.Body.Close()
-
 	// Read routine keys from componentgithubroutine.json
 	routineKeys := []string{}
 	routineFile := "componentgithubroutine.json"
@@ -595,9 +595,11 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"available":    1,
 		"routine_keys": routineKeys,
-	})
-	// fmt.Printf("available: 1, routine_keys: %v\n", routineKeys)
+	}); err != nil {
+		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
