@@ -10,11 +10,10 @@ import { Task } from "./task";
 import { smartString } from "./smartvalue";
 import { Widget, TimeValue } from "./widget";
 import Dashboard from "./dashboard";
-import { sendPostGPT } from "./chatpanelrequests";
-import katex from "katex";
-import "katex/dist/katex.min.css";
 
-export class TaskPage implements ZoomHandler {
+import { ChatPanel } from "./chatpanel";
+
+export class TaskPage extends ChatPanel implements ZoomHandler {
   _container: HTMLElement;
   _taskViewCanvas: HTMLElement;
   _componentViewCanvas: HTMLElement;
@@ -35,11 +34,13 @@ export class TaskPage implements ZoomHandler {
   _taskView: TaskView;
   _componentView: ComponentView;
   _widget: Widget;
-  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
-    { role: "system", content: "You are Daisen Bot." }
-  ];
+  _showChatButton: boolean = true; // Add this flag to control the right chat button visibility
+  _originalCanvasWidth: string = ""; // Store the original width of the canvas before shrinking
+  _handleResize: () => void;
+
 
   constructor() {
+    super();
     this._container = null;
     this._taskViewCanvas = null;
     this._componentViewCanvas = null;
@@ -151,7 +152,7 @@ export class TaskPage implements ZoomHandler {
     const containerHeight = window.innerHeight - 76;
     this._container.style.height = containerHeight.toString() + "px";
 
-    this._addChatButton();
+    this._addChatButtons();
     this._layoutLeftColumn();
     this._layoutRightColumn();
 
@@ -379,61 +380,98 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 
-  async sendChatMessage(message: string) {
-    this._chatMessages.push({ role: "user", content: message });
+  // async sendChatMessage(message: string) {
+  //   this._chatMessages.push({ role: "user", content: message });
 
-    const response = await sendPostGPT(this._chatMessages);
+  //   const response = await sendPostGPT(this._chatMessages);
 
-    const botMessage = response.choices[0].message.content;
-    this._chatMessages.push({ role: "assistant", content: botMessage });
+  //   const botMessage = response.choices[0].message.content;
+  //   this._chatMessages.push({ role: "assistant", content: botMessage });
 
-    this._renderChatMessage("user", message);
-    this._renderChatMessage("assistant", botMessage);
-  }
+  //   this._renderChatMessage("user", message);
+  //   this._renderChatMessage("assistant", botMessage);
+  // }
 
-  _renderChatMessage(role: "user" | "assistant", content: string) {
-    const chatPanel = document.getElementById("chat-panel");
+  // _renderChatMessage(role: "user" | "assistant", content: string) {
+  //   const chatPanel = document.getElementById("chat-panel");
 
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("chat-message");
-    messageElement.classList.add(role);
+  //   const messageElement = document.createElement("div");
+  //   messageElement.classList.add("chat-message");
+  //   messageElement.classList.add(role);
 
-    const contentElement = document.createElement("div");
-    contentElement.classList.add("chat-content");
-    contentElement.innerHTML = content;
+  //   const contentElement = document.createElement("div");
+  //   contentElement.classList.add("chat-content");
+  //   contentElement.innerHTML = content;
 
-    messageElement.appendChild(contentElement);
-    chatPanel.appendChild(messageElement);
+  //   messageElement.appendChild(contentElement);
+  //   chatPanel.appendChild(messageElement);
 
-    // Scroll to the bottom of the chat panel
-    chatPanel.scrollTop = chatPanel.scrollHeight;
-  }
+  //   // Scroll to the bottom of the chat panel
+  //   chatPanel.scrollTop = chatPanel.scrollHeight;
+  // }
 
-  toggleChatPanel() {
-    const chatPanel = document.getElementById("chat-panel");
-    chatPanel.style.display =
-      chatPanel.style.display === "none" || chatPanel.style.display === ""
-        ? "block"
-        : "none";
-  }
+  // toggleChatPanel() {
+  //   const chatPanel = document.getElementById("chat-panel");
+  //   chatPanel.style.display =
+  //     chatPanel.style.display === "none" || chatPanel.style.display === ""
+  //       ? "block"
+  //       : "none";
+  // }
 
-  clearChat() {
-    this._chatMessages = [];
-    const chatPanel = document.getElementById("chat-panel");
-    chatPanel.innerHTML = "";
-  }
+  // clearChat() {
+  //   this._chatMessages = [];
+  //   const chatPanel = document.getElementById("chat-panel");
+  //   chatPanel.innerHTML = "";
+  // }
 
-  renderMath(expression: string, elementId: string) {
-    const element = document.getElementById(elementId);
-    if (element) {
-      element.innerHTML = ""; // Clear previous content
-      katex.render(expression, element, {
-        throwOnError: false
-      });
+  // renderMath(expression: string, elementId: string) {
+  //   const element = document.getElementById(elementId);
+  //   if (element) {
+  //     element.innerHTML = ""; // Clear previous content
+  //     katex.render(expression, element, {
+  //       throwOnError: false
+  //     });
+  //   }
+  // }
+
+  protected _onChatPanelOpen() {
+    // this._resize();
+    // this._renderPage();
+    // this._addPaginationControl();
+    this._showChatButton = false;
+
+    // Store the original width before shrinking
+    const canvasContainer = this._container;
+    // let originalCanvasWidth = "";
+    if (canvasContainer) {
+      this._originalCanvasWidth = canvasContainer.style.width;
+      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+      canvasContainer.style.width = "calc(100% - 600px)";
+      setTimeout(() => {
+      }, 300);
     }
+
+    this._handleResize = () => {
+      //Adjust chat panel height and top
+      const innerContainer = document.getElementById("inner-container");
+      if (innerContainer) {
+        const rect = innerContainer.getBoundingClientRect();
+        this._chatPanel.style.top = rect.top + "px";
+        this._chatPanel.style.height = rect.height + "px";
+      } else {
+        this._chatPanel.style.top = "0";
+        this._chatPanel.style.height = "100vh";
+      }
+      // Shrink canvas again (in case window size changed)
+      if (canvasContainer) {
+        canvasContainer.style.width = "calc(100% - 600px)";
+      }
+    }
+
+    window.addEventListener("resize", this._handleResize);
   }
 
-  _addChatButton() {
+  _addChatButtons() {
     const topNav = document.getElementById("top-nav");
     if (!topNav) return;
 
@@ -471,421 +509,493 @@ export class TaskPage implements ZoomHandler {
       </span>
       Daisen Bot
     `;
-
+    chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+    const container = document.getElementById("container");
     chatButton.onclick = () => {
+      this._showChatButton = false;
+      chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+      this._originalCanvasWidth = container.style.width;
       this._showChatPanel();
+      // Triangle close button
+      const closeBtn = document.createElement("button");
+      closeBtn.style.position = "absolute";
+      closeBtn.style.left = "-4px";
+      closeBtn.style.top = "50%";
+      closeBtn.style.transform = "translateY(-50%)";
+      closeBtn.style.width = "12px";
+      closeBtn.style.height = "40px";
+      closeBtn.style.background = "transparent";
+      closeBtn.style.border = "none";
+      closeBtn.style.cursor = "pointer";
+      closeBtn.style.zIndex = "10001";
+      closeBtn.title = "Close";
+      closeBtn.style.visibility = this._showChatButton ? "hidden": "visible";
+
+      closeBtn.innerHTML = `
+        <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="silverGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#d9d9d9"/>
+              <stop offset="50%" stop-color="#b0b0b0"/>
+              <stop offset="100%" stop-color="#f5f5f5"/>
+            </linearGradient>
+          </defs>
+          <polygon points="0,0 12,20 0,40" fill="url(#silverGradient)" stroke="#aaa" stroke-width="0.5"/>
+        </svg>
+      `;
+
+      closeBtn.onclick = () => {
+        // Animate out
+        this._chatPanel.classList.remove('open');
+        this._chatPanel.classList.add('closing');
+        setTimeout(() => {
+          this._chatPanel.remove();
+          window.removeEventListener("resize", this._handleResize);
+          this._showChatButton = true;
+          // this._addPaginationControl();
+          // Restore the canvas container width to its original value
+          if (this._container) {
+            this._container.style.width = this._originalCanvasWidth;// || "100%";
+            setTimeout(() => {
+              // this.layout();
+              this._showChatButton = true;
+              chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
+            }, 0);
+          }
+        }, 200); // Match the CSS transition duration
+      };
+      this._chatPanel.appendChild(closeBtn);
     };
 
     topNav.appendChild(chatButton);
   }
 
-  _injectChatPanelCSS() {
-    if (document.getElementById('chat-panel-anim-style')) return;
-    const style = document.createElement('style');
-    style.id = 'chat-panel-anim-style';
-    style.innerHTML = `
-      #chat-panel {
-        transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s cubic-bezier(.4,0,.2,1);
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      #chat-panel.open {
-        transform: translateX(0);
-        opacity: 1;
-      }
-      #chat-panel.closing {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-    `;
-    document.head.appendChild(style);
-  }
 
-  _showChatPanel() {
-    let messages = this._chatMessages;
-    this._injectChatPanelCSS();
 
-    // Remove existing panel if any
-    let oldPanel = document.getElementById("chat-panel");
-    if (oldPanel) oldPanel.remove();
+    //   closeBtn.onclick = () => {
+    //   // Animate out
+    //   chatPanel.classList.remove('open');
+    //   chatPanel.classList.add('closing');
+    //   setTimeout(() => {
+    //     chatPanel.remove();
+    //     window.removeEventListener("resize", handleResize);
+    //     // Restore the canvas container width to its original value
+    //     if (canvasContainer) {
+    //       canvasContainer.style.width = originalCanvasWidth || "100%";
+    //       setTimeout(() => {
+    //         this.layout();
+    //       }, 300);
+    //     }
+    //   }, 200); // Match the CSS transition duration
+    // };
 
-    // Create the chat panel
-    const chatPanel = document.createElement("div");
-    chatPanel.id = "chat-panel";
-    chatPanel.style.position = "fixed";
-    chatPanel.style.right = "0";
-    chatPanel.style.width = "600px";
-    chatPanel.style.background = "rgba(255,255,255,0.7)";
-    chatPanel.style.zIndex = "9999";
-    chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
-    chatPanel.style.display = "flex";
-    chatPanel.style.flexDirection = "column";
-    chatPanel.style.justifyContent = "flex-start";
-    chatPanel.style.overflow = "hidden";
+  // _injectChatPanelCSS() {
+  //   if (document.getElementById('chat-panel-anim-style')) return;
+  //   const style = document.createElement('style');
+  //   style.id = 'chat-panel-anim-style';
+  //   style.innerHTML = `
+  //     #chat-panel {
+  //       transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s cubic-bezier(.4,0,.2,1);
+  //       transform: translateX(100%);
+  //       opacity: 0;
+  //     }
+  //     #chat-panel.open {
+  //       transform: translateX(0);
+  //       opacity: 1;
+  //     }
+  //     #chat-panel.closing {
+  //       transform: translateX(100%);
+  //       opacity: 0;
+  //     }
+  //   `;
+  //   document.head.appendChild(style);
+  // }
 
-    // Set chat panel height and top to match #inner-container
-    const innerContainer = document.getElementById("inner-container");
-    if (innerContainer) {
-      const rect = innerContainer.getBoundingClientRect();
-      chatPanel.style.top = rect.top + "px";
-      chatPanel.style.height = rect.height + "px";
-    } else {
-      // fallback to full viewport height if not found
-      chatPanel.style.top = "0";
-      chatPanel.style.height = "100vh";
-    }
+  // _showChatPanel() {
+  //   let messages = this._chatMessages;
+  //   this._injectChatPanelCSS();
 
-    // Store the original width before shrinking
-    const canvasContainer = this._container;
-    let originalCanvasWidth = "";
-    if (canvasContainer) {
-      originalCanvasWidth = canvasContainer.style.width;
-      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
-      canvasContainer.style.width = "calc(100% - 600px)";
-      setTimeout(() => {
-        this.layout();
-      }, 300);
-    }
+  //   // Remove existing panel if any
+  //   let oldPanel = document.getElementById("chat-panel");
+  //   if (oldPanel) oldPanel.remove();
 
-    // Triangle close button
-    const closeBtn = document.createElement("button");
-    closeBtn.style.position = "absolute";
-    closeBtn.style.left = "-4px";
-    closeBtn.style.top = "50%";
-    closeBtn.style.transform = "translateY(-50%)";
-    closeBtn.style.width = "12px";
-    closeBtn.style.height = "40px";
-    closeBtn.style.background = "transparent";
-    closeBtn.style.border = "none";
-    closeBtn.style.cursor = "pointer";
-    closeBtn.title = "Close";
+  //   // Create the chat panel
+  //   const chatPanel = document.createElement("div");
+  //   chatPanel.id = "chat-panel";
+  //   chatPanel.style.position = "fixed";
+  //   chatPanel.style.right = "0";
+  //   chatPanel.style.width = "600px";
+  //   chatPanel.style.background = "rgba(255,255,255,0.7)";
+  //   chatPanel.style.zIndex = "9999";
+  //   chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
+  //   chatPanel.style.display = "flex";
+  //   chatPanel.style.flexDirection = "column";
+  //   chatPanel.style.justifyContent = "flex-start";
+  //   chatPanel.style.overflow = "hidden";
 
-    closeBtn.innerHTML = `
-      <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="silverGradient" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stop-color="#d9d9d9"/>
-            <stop offset="50%" stop-color="#b0b0b0"/>
-            <stop offset="100%" stop-color="#f5f5f5"/>
-          </linearGradient>
-        </defs>
-        <polygon points="0,0 12,20 0,40" fill="url(#silverGradient)" stroke="#aaa" stroke-width="0.5"/>
-      </svg>
-    `;
+  //   // Set chat panel height and top to match #inner-container
+  //   const innerContainer = document.getElementById("inner-container");
+  //   if (innerContainer) {
+  //     const rect = innerContainer.getBoundingClientRect();
+  //     chatPanel.style.top = rect.top + "px";
+  //     chatPanel.style.height = rect.height + "px";
+  //   } else {
+  //     // fallback to full viewport height if not found
+  //     chatPanel.style.top = "0";
+  //     chatPanel.style.height = "100vh";
+  //   }
 
-    const handleResize = () => {
-      //Adjust chat panel height and top
-      const innerContainer = document.getElementById("inner-container");
-      if (innerContainer) {
-        const rect = innerContainer.getBoundingClientRect();
-        chatPanel.style.top = rect.top + "px";
-        chatPanel.style.height = rect.height + "px";
-      } else {
-        chatPanel.style.top = "0";
-        chatPanel.style.height = "100vh";
-      }
-      // Shrink canvas again (in case window size changed)
-      if (canvasContainer) {
-        canvasContainer.style.width = "calc(100% - 600px)";
-      }
-      // Re-render
-      this.layout();
-    }
+  //   // Store the original width before shrinking
+  //   const canvasContainer = this._container;
+  //   let originalCanvasWidth = "";
+  //   if (canvasContainer) {
+  //     originalCanvasWidth = canvasContainer.style.width;
+  //     canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+  //     canvasContainer.style.width = "calc(100% - 600px)";
+  //     setTimeout(() => {
+  //       this.layout();
+  //     }, 300);
+  //   }
 
-    window.addEventListener("resize", handleResize);
+  //   // Triangle close button
+  //   const closeBtn = document.createElement("button");
+  //   closeBtn.style.position = "absolute";
+  //   closeBtn.style.left = "-4px";
+  //   closeBtn.style.top = "50%";
+  //   closeBtn.style.transform = "translateY(-50%)";
+  //   closeBtn.style.width = "12px";
+  //   closeBtn.style.height = "40px";
+  //   closeBtn.style.background = "transparent";
+  //   closeBtn.style.border = "none";
+  //   closeBtn.style.cursor = "pointer";
+  //   closeBtn.title = "Close";
 
-    closeBtn.onclick = () => {
-      // Animate out
-      chatPanel.classList.remove('open');
-      chatPanel.classList.add('closing');
-      setTimeout(() => {
-        chatPanel.remove();
-        window.removeEventListener("resize", handleResize);
-        // Restore the canvas container width to its original value
-        if (canvasContainer) {
-          canvasContainer.style.width = originalCanvasWidth || "100%";
-          setTimeout(() => {
-            this.layout();
-          }, 300);
-        }
-      }, 200); // Match the CSS transition duration
-    };
+  //   closeBtn.innerHTML = `
+  //     <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">
+  //       <defs>
+  //         <linearGradient id="silverGradient" x1="0" y1="0" x2="1" y2="0">
+  //           <stop offset="0%" stop-color="#d9d9d9"/>
+  //           <stop offset="50%" stop-color="#b0b0b0"/>
+  //           <stop offset="100%" stop-color="#f5f5f5"/>
+  //         </linearGradient>
+  //       </defs>
+  //       <polygon points="0,0 12,20 0,40" fill="url(#silverGradient)" stroke="#aaa" stroke-width="0.5"/>
+  //     </svg>
+  //   `;
 
-    chatPanel.appendChild(closeBtn);
+  //   const handleResize = () => {
+  //     //Adjust chat panel height and top
+  //     const innerContainer = document.getElementById("inner-container");
+  //     if (innerContainer) {
+  //       const rect = innerContainer.getBoundingClientRect();
+  //       chatPanel.style.top = rect.top + "px";
+  //       chatPanel.style.height = rect.height + "px";
+  //     } else {
+  //       chatPanel.style.top = "0";
+  //       chatPanel.style.height = "100vh";
+  //     }
+  //     // Shrink canvas again (in case window size changed)
+  //     if (canvasContainer) {
+  //       canvasContainer.style.width = "calc(100% - 600px)";
+  //     }
+  //     // Re-render
+  //     this.layout();
+  //   }
 
-    const chatContent = document.createElement("div");
-    chatContent.style.flex = "1";
-    chatContent.style.display = "flex";
-    chatContent.style.flexDirection = "column";
-    chatContent.style.padding = "20px";
-    chatContent.style.minHeight = "0";
-    chatPanel.appendChild(chatContent);
+  //   window.addEventListener("resize", handleResize);
 
-    // Message display area
-    const messagesDiv = document.createElement("div");
-    messagesDiv.style.flex = "1 1 0%";
-    messagesDiv.style.height = "0";
-    messagesDiv.style.overflowY = "auto";
-    messagesDiv.style.marginBottom = "10px";
-    messagesDiv.style.background = "rgba(255, 255, 255, 0.5)";
-    messagesDiv.style.borderRadius = "6px";
-    messagesDiv.style.padding = "8px";
-    chatContent.appendChild(messagesDiv);
+  //   closeBtn.onclick = () => {
+  //     // Animate out
+  //     chatPanel.classList.remove('open');
+  //     chatPanel.classList.add('closing');
+  //     setTimeout(() => {
+  //       chatPanel.remove();
+  //       window.removeEventListener("resize", handleResize);
+  //       // Restore the canvas container width to its original value
+  //       if (canvasContainer) {
+  //         canvasContainer.style.width = originalCanvasWidth || "100%";
+  //         setTimeout(() => {
+  //           this.layout();
+  //         }, 300);
+  //       }
+  //     }, 200); // Match the CSS transition duration
+  //   };
 
-    // Loading messages
-    messages
-      .filter(m => m.role !== "system")
-      .forEach(m => {
-        if (m.role === "user") {
-          const userDiv = document.createElement("div");
-          userDiv.style.display = "flex";
-          userDiv.style.justifyContent = "flex-end";
-          userDiv.style.margin = "4px 0";
+  //   chatPanel.appendChild(closeBtn);
 
-          const userBubble = document.createElement("span");
-          userBubble.innerHTML = "<b>You:</b> " + m.content;
-          userBubble.style.background = "#0d6efd";
-          userBubble.style.color = "white";
-          userBubble.style.padding = "8px 12px";
-          userBubble.style.borderRadius = "16px";
-          userBubble.style.maxWidth = "90%";
-          userBubble.style.display = "inline-block";
-          userBubble.style.wordBreak = "break-word";
-          userDiv.appendChild(userBubble);
+  //   const chatContent = document.createElement("div");
+  //   chatContent.style.flex = "1";
+  //   chatContent.style.display = "flex";
+  //   chatContent.style.flexDirection = "column";
+  //   chatContent.style.padding = "20px";
+  //   chatContent.style.minHeight = "0";
+  //   chatPanel.appendChild(chatContent);
 
-          messagesDiv.appendChild(userDiv);
-        } else if (m.role === "assistant") {
-          const botDiv = document.createElement("div");
-          botDiv.innerHTML = "<b>Daisen Bot:</b> " + this._convertMarkdownToHTML(this._autoWrapMath(m.content));
-          botDiv.style.textAlign = "left";
-          botDiv.style.margin = "4px 0";
-          messagesDiv.appendChild(botDiv);
-        }
-      });
+  //   // Message display area
+  //   const messagesDiv = document.createElement("div");
+  //   messagesDiv.style.flex = "1 1 0%";
+  //   messagesDiv.style.height = "0";
+  //   messagesDiv.style.overflowY = "auto";
+  //   messagesDiv.style.marginBottom = "10px";
+  //   messagesDiv.style.background = "rgba(255, 255, 255, 0.5)";
+  //   messagesDiv.style.borderRadius = "6px";
+  //   messagesDiv.style.padding = "8px";
+  //   chatContent.appendChild(messagesDiv);
 
-    // apply KaTeX rendering for math
-    messagesDiv.querySelectorAll('.math').forEach(el => {
-      try {
-        const tex = el.textContent || "";
-        const displayMode = el.getAttribute("data-display") === "block";
-        console.log("Rendering math:", tex, "Display mode:", displayMode);
-        el.innerHTML = katex.renderToString(tex, { displayMode });
-      } catch (e) {
-        el.innerHTML = "<span style='color:red'>Invalid math</span>";
-        console.log("KaTeX error:", e, "for tex:", el.textContent);
-      }
-    });
+  //   // Loading messages
+  //   messages
+  //     .filter(m => m.role !== "system")
+  //     .forEach(m => {
+  //       if (m.role === "user") {
+  //         const userDiv = document.createElement("div");
+  //         userDiv.style.display = "flex";
+  //         userDiv.style.justifyContent = "flex-end";
+  //         userDiv.style.margin = "4px 0";
 
-    const historyMenu = document.createElement("div");
-    historyMenu.style.display = "flex";
-    historyMenu.style.flexDirection = "column";
-    historyMenu.style.marginBottom = "8px";
-    chatContent.appendChild(historyMenu);
+  //         const userBubble = document.createElement("span");
+  //         userBubble.innerHTML = "<b>You:</b> " + m.content;
+  //         userBubble.style.background = "#0d6efd";
+  //         userBubble.style.color = "white";
+  //         userBubble.style.padding = "8px 12px";
+  //         userBubble.style.borderRadius = "16px";
+  //         userBubble.style.maxWidth = "90%";
+  //         userBubble.style.display = "inline-block";
+  //         userBubble.style.wordBreak = "break-word";
+  //         userDiv.appendChild(userBubble);
 
-    function renderHistoryMenu() {
-      const lastUserMessages = messages.filter(m => m.role === "user").slice(-3);
-      historyMenu.innerHTML = "";
-      lastUserMessages.forEach(msg => {
-        const item = document.createElement("button");
-        // Limit to 10 words for display
-        const words = msg.content.split(" ");
-        let displayText = msg.content;
-        if (words.length > 10) {
-          displayText = words.slice(0, 10).join(" ") + "...";
-        }
-        item.textContent = displayText;
-        item.style.background = "#f8f9fa";
-        item.style.border = "none";
-        item.style.borderRadius = "16px";
-        item.style.padding = "10px 16px";
-        item.style.margin = "4px 0";
-        item.style.fontSize = "1em";
-        item.style.color = "#222";
-        item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
-        item.style.cursor = "pointer";
-        item.style.transition = "background 0.15s, box-shadow 0.15s";
-        // Hover effect
-        item.onmouseenter = () => {
-          item.style.background = "#e9ecef";
-        };
-        item.onmouseleave = () => {
-          item.style.background = "#f8f9fa";
-        }; 
+  //         messagesDiv.appendChild(userDiv);
+  //       } else if (m.role === "assistant") {
+  //         const botDiv = document.createElement("div");
+  //         botDiv.innerHTML = "<b>Daisen Bot:</b> " + this._convertMarkdownToHTML(this._autoWrapMath(m.content));
+  //         botDiv.style.textAlign = "left";
+  //         botDiv.style.margin = "4px 0";
+  //         messagesDiv.appendChild(botDiv);
+  //       }
+  //     });
 
-        // Fills input on click
-        item.onclick = () => {
-          input.value = msg.content;
-          input.focus();
-        };
-        historyMenu.appendChild(item);
-      });
-    }
+  //   // apply KaTeX rendering for math
+  //   messagesDiv.querySelectorAll('.math').forEach(el => {
+  //     try {
+  //       const tex = el.textContent || "";
+  //       const displayMode = el.getAttribute("data-display") === "block";
+  //       console.log("Rendering math:", tex, "Display mode:", displayMode);
+  //       el.innerHTML = katex.renderToString(tex, { displayMode });
+  //     } catch (e) {
+  //       el.innerHTML = "<span style='color:red'>Invalid math</span>";
+  //       console.log("KaTeX error:", e, "for tex:", el.textContent);
+  //     }
+  //   });
 
-    // When panel opens
-    renderHistoryMenu();
+  //   const historyMenu = document.createElement("div");
+  //   historyMenu.style.display = "flex";
+  //   historyMenu.style.flexDirection = "column";
+  //   historyMenu.style.marginBottom = "8px";
+  //   chatContent.appendChild(historyMenu);
 
-    // Initial welcome message
-    const welcomeDiv = document.createElement("div");
-    welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
-    welcomeDiv.style.textAlign = "left";
-    welcomeDiv.style.marginBottom = "8px";
-    messagesDiv.appendChild(welcomeDiv);
+  //   function renderHistoryMenu() {
+  //     const lastUserMessages = messages.filter(m => m.role === "user").slice(-3);
+  //     historyMenu.innerHTML = "";
+  //     lastUserMessages.forEach(msg => {
+  //       const item = document.createElement("button");
+  //       // Limit to 10 words for display
+  //       const words = msg.content.split(" ");
+  //       let displayText = msg.content;
+  //       if (words.length > 10) {
+  //         displayText = words.slice(0, 10).join(" ") + "...";
+  //       }
+  //       item.textContent = displayText;
+  //       item.style.background = "#f8f9fa";
+  //       item.style.border = "none";
+  //       item.style.borderRadius = "16px";
+  //       item.style.padding = "10px 16px";
+  //       item.style.margin = "4px 0";
+  //       item.style.fontSize = "1em";
+  //       item.style.color = "#222";
+  //       item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
+  //       item.style.cursor = "pointer";
+  //       item.style.transition = "background 0.15s, box-shadow 0.15s";
+  //       // Hover effect
+  //       item.onmouseenter = () => {
+  //         item.style.background = "#e9ecef";
+  //       };
+  //       item.onmouseleave = () => {
+  //         item.style.background = "#f8f9fa";
+  //       }; 
 
-    // Input area
-    const inputContainer = document.createElement("div");
-    inputContainer.style.display = "flex";
-    inputContainer.style.gap = "8px";
+  //       // Fills input on click
+  //       item.onclick = () => {
+  //         input.value = msg.content;
+  //         input.focus();
+  //       };
+  //       historyMenu.appendChild(item);
+  //     });
+  //   }
 
-    const input = document.createElement("textarea");
-    input.placeholder = "Type a message...";
-    input.rows = 1;
-    input.style.flex = "1";
-    input.style.padding = "6px";
-    input.style.borderRadius = "4px";
-    input.style.border = "1px solid #ccc";
-    input.style.resize = "none";
-    input.style.overflowY = "auto";
-    input.style.minHeight = "38px";
-    input.style.maxHeight = "130px";
+  //   // When panel opens
+  //   renderHistoryMenu();
 
-    // Auto-resize as user types
-    input.addEventListener("input", function() {
-      this.style.height = "auto";
-      this.style.height = (this.scrollHeight) + "px";
-    });
+  //   // Initial welcome message
+  //   const welcomeDiv = document.createElement("div");
+  //   welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+  //   welcomeDiv.style.textAlign = "left";
+  //   welcomeDiv.style.marginBottom = "8px";
+  //   messagesDiv.appendChild(welcomeDiv);
 
-    const sendBtn = document.createElement("button");
-    sendBtn.textContent = "Send";
-    sendBtn.className = "btn btn-primary";
+  //   // Input area
+  //   const inputContainer = document.createElement("div");
+  //   inputContainer.style.display = "flex";
+  //   inputContainer.style.gap = "8px";
 
-    const clearBtn = document.createElement("button");
-    clearBtn.textContent = "Clear";
-    clearBtn.className = "btn btn-secondary";
-    clearBtn.style.marginLeft = "4px";
+  //   const input = document.createElement("textarea");
+  //   input.placeholder = "Type a message...";
+  //   input.rows = 1;
+  //   input.style.flex = "1";
+  //   input.style.padding = "6px";
+  //   input.style.borderRadius = "4px";
+  //   input.style.border = "1px solid #ccc";
+  //   input.style.resize = "none";
+  //   input.style.overflowY = "auto";
+  //   input.style.minHeight = "38px";
+  //   input.style.maxHeight = "130px";
 
-    // Send handler
-    const sendMessage = () => {
-      const userMsg = input.value.trim();
-      if (!userMsg) return;
+  //   // Auto-resize as user types
+  //   input.addEventListener("input", function() {
+  //     this.style.height = "auto";
+  //     this.style.height = (this.scrollHeight) + "px";
+  //   });
 
-      // Disable send button while waiting
-      sendBtn.disabled = true;
-      input.disabled = true;
+  //   const sendBtn = document.createElement("button");
+  //   sendBtn.textContent = "Send";
+  //   sendBtn.className = "btn btn-primary";
 
-      // User message
-      const userDiv = document.createElement("div");
-      userDiv.style.display = "flex";
-      userDiv.style.justifyContent = "flex-end";
-      userDiv.style.margin = "4px 0";
+  //   const clearBtn = document.createElement("button");
+  //   clearBtn.textContent = "Clear";
+  //   clearBtn.className = "btn btn-secondary";
+  //   clearBtn.style.marginLeft = "4px";
 
-      const userBubble = document.createElement("span");
-      userBubble.innerHTML = "<b>You:</b> " + userMsg;
-      userBubble.style.background = "#0d6efd";
-      userBubble.style.color = "white";
-      userBubble.style.padding = "8px 12px";
-      userBubble.style.borderRadius = "16px";
-      userBubble.style.maxWidth = "90%";
-      userBubble.style.display = "inline-block";
-      userBubble.style.wordBreak = "break-word";
-      userDiv.appendChild(userBubble);
+  //   // Send handler
+  //   const sendMessage = () => {
+  //     const userMsg = input.value.trim();
+  //     if (!userMsg) return;
 
-      messagesDiv.appendChild(userDiv);
+  //     // Disable send button while waiting
+  //     sendBtn.disabled = true;
+  //     input.disabled = true;
 
-      // Call GPT with full history
-      messages.push({ role: "user", content: userMsg });
+  //     // User message
+  //     const userDiv = document.createElement("div");
+  //     userDiv.style.display = "flex";
+  //     userDiv.style.justifyContent = "flex-end";
+  //     userDiv.style.margin = "4px 0";
 
-      // Show history menu
-      renderHistoryMenu();
+  //     const userBubble = document.createElement("span");
+  //     userBubble.innerHTML = "<b>You:</b> " + userMsg;
+  //     userBubble.style.background = "#0d6efd";
+  //     userBubble.style.color = "white";
+  //     userBubble.style.padding = "8px 12px";
+  //     userBubble.style.borderRadius = "16px";
+  //     userBubble.style.maxWidth = "90%";
+  //     userBubble.style.display = "inline-block";
+  //     userBubble.style.wordBreak = "break-word";
+  //     userDiv.appendChild(userBubble);
+
+  //     messagesDiv.appendChild(userDiv);
+
+  //     // Call GPT with full history
+  //     messages.push({ role: "user", content: userMsg });
+
+  //     // Show history menu
+  //     renderHistoryMenu();
       
-      // Clear input field
-      input.value = "";
+  //     // Clear input field
+  //     input.value = "";
 
-      // Show "thinking message"
-      const botDiv = document.createElement("div");
-      botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
-      botDiv.style.textAlign = "left";
-      botDiv.style.margin = "4px 0";
-      messagesDiv.appendChild(botDiv);
+  //     // Show "thinking message"
+  //     const botDiv = document.createElement("div");
+  //     botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
+  //     botDiv.style.textAlign = "left";
+  //     botDiv.style.margin = "4px 0";
+  //     messagesDiv.appendChild(botDiv);
 
-      // Call GPT and update the message
-      sendPostGPT(messages).then((gptResponse) => {
-        botDiv.innerHTML = "<b>Daisen Bot:</b> " + this._convertMarkdownToHTML(this._autoWrapMath(gptResponse));
-        messages.push({ role: "assistant", content: gptResponse });
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        console.log("GPT response:", gptResponse);
+  //     // Call GPT and update the message
+  //     sendPostGPT(messages).then((gptResponse) => {
+  //       botDiv.innerHTML = "<b>Daisen Bot:</b> " + this._convertMarkdownToHTML(this._autoWrapMath(gptResponse));
+  //       messages.push({ role: "assistant", content: gptResponse });
+  //       messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  //       console.log("GPT response:", gptResponse);
 
-        // Apply KaTeX rendering for math in the new messages
-        botDiv.querySelectorAll('.math').forEach(el => {
-          try {
-            const tex = el.textContent || "";
-            const displayMode = el.getAttribute("data-display") === "block";
-            console.log("Rendering math:", tex, "Display mode:", displayMode);
-            el.innerHTML = katex.renderToString(tex, { displayMode });
-          } catch (e) {
-            el.innerHTML = "<span style='color:red'>Invalid math</span>";
-            console.log("KaTeX error:", e, "for tex:", el.textContent);
-          }
-        });
+  //       // Apply KaTeX rendering for math in the new messages
+  //       botDiv.querySelectorAll('.math').forEach(el => {
+  //         try {
+  //           const tex = el.textContent || "";
+  //           const displayMode = el.getAttribute("data-display") === "block";
+  //           console.log("Rendering math:", tex, "Display mode:", displayMode);
+  //           el.innerHTML = katex.renderToString(tex, { displayMode });
+  //         } catch (e) {
+  //           el.innerHTML = "<span style='color:red'>Invalid math</span>";
+  //           console.log("KaTeX error:", e, "for tex:", el.textContent);
+  //         }
+  //       });
         
-        // Re-enable send button
-        sendBtn.disabled = false;
-        input.disabled = false;
-        input.focus();
-      });
-      this._chatMessages = messages; // Update chat messages in the class
-    };
+  //       // Re-enable send button
+  //       sendBtn.disabled = false;
+  //       input.disabled = false;
+  //       input.focus();
+  //     });
+  //     this._chatMessages = messages; // Update chat messages in the class
+  //   };
 
-    sendBtn.onclick = sendMessage;
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
+  //   sendBtn.onclick = sendMessage;
+  //   input.addEventListener("keydown", (e) => {
+  //     if (e.key === "Enter" && !e.shiftKey) {
+  //       e.preventDefault();
+  //       sendMessage();
+  //     }
+  //   });
 
-    clearBtn.onclick = () => {
-      messages.length = 0;
-      messages.push({ role: "system", content: "You are Daisen Bot." });
-      input.value = "";
-      // Remove all messages from the chat panel except the welcome message
-      messagesDiv.innerHTML = "";
-      const welcomeDiv = document.createElement("div");
-      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
-      welcomeDiv.style.textAlign = "left";
-      welcomeDiv.style.marginBottom = "8px";
-      messagesDiv.appendChild(welcomeDiv);
-      renderHistoryMenu();
-      input.style.height = "38px";
-    };
+  //   clearBtn.onclick = () => {
+  //     messages.length = 0;
+  //     messages.push({ role: "system", content: "You are Daisen Bot." });
+  //     input.value = "";
+  //     // Remove all messages from the chat panel except the welcome message
+  //     messagesDiv.innerHTML = "";
+  //     const welcomeDiv = document.createElement("div");
+  //     welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+  //     welcomeDiv.style.textAlign = "left";
+  //     welcomeDiv.style.marginBottom = "8px";
+  //     messagesDiv.appendChild(welcomeDiv);
+  //     renderHistoryMenu();
+  //     input.style.height = "38px";
+  //   };
 
-    inputContainer.appendChild(input);
-    inputContainer.appendChild(sendBtn);
-    inputContainer.appendChild(clearBtn);
-    chatContent.appendChild(inputContainer);
+  //   inputContainer.appendChild(input);
+  //   inputContainer.appendChild(sendBtn);
+  //   inputContainer.appendChild(clearBtn);
+  //   chatContent.appendChild(inputContainer);
 
-    document.body.appendChild(chatPanel);
+  //   document.body.appendChild(chatPanel);
 
-    // Animate in
-    setTimeout(() => {
-      chatPanel.classList.add('open');
-    }, 200);
-  }
+  //   // Animate in
+  //   setTimeout(() => {
+  //     chatPanel.classList.add('open');
+  //   }, 200);
+  // }
 
-  _convertMarkdownToHTML(text: string): string {
-    // Basic markdown conversion (you can enhance this)
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>');
-  }
+  // _convertMarkdownToHTML(text: string): string {
+  //   // Basic markdown conversion (you can enhance this)
+  //   return text
+  //     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+  //     .replace(/\*(.*?)\*/g, '<em>$1</em>')
+  //     .replace(/`([^`]+)`/g, '<code>$1</code>')
+  //     .replace(/\n/g, '<br>');
+  // }
 
-  _autoWrapMath(text: string): string {
-    // Wrap math expressions with proper HTML for KaTeX rendering
-    return text
-      .replace(/\$\$([^$]+)\$\$/g, '<span class="math" data-display="block">$1</span>')
-      .replace(/\$([^$]+)\$/g, '<span class="math" data-display="inline">$1</span>');
-  }
+  // _autoWrapMath(text: string): string {
+  //   // Wrap math expressions with proper HTML for KaTeX rendering
+  //   return text
+  //     .replace(/\$\$([^$]+)\$\$/g, '<span class="math" data-display="block">$1</span>')
+  //     .replace(/\$([^$]+)\$/g, '<span class="math" data-display="inline">$1</span>');
+  // }
 }
 
 export default TaskPage;
