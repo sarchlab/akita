@@ -1,0 +1,12 @@
+{
+  "name": "daisen-backend",
+  "version": "1.0.0",
+  "description": "Daisen backend server",
+  "private": true,
+  "scripts": {
+    "build": "cd static && npm run build && cd .. && go build",
+    "dev": "cd static && npm run dev:full",
+    "start": "./daisen -sqlite akita_sim_d1mhko83fvio5p4hh1u0.sqlite3",
+    "install": "cd static && npm install"
+  }
+}

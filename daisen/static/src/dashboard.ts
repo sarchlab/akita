@@ -40,6 +40,7 @@ class Dashboard {
   _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
   _fileIdCounter: number;
   _fileListRow: HTMLDivElement; // Add this to hold the file list container
+  _chatPanelWidth: number = 0; // Width of the chat panel, used to adjust canvas width
 
   constructor() {
     this._numWidget = 16;
@@ -60,6 +61,11 @@ class Dashboard {
     this._fileIdCounter = 0;
     this._fileListRow = document.createElement("div");
     this._uploadedFiles = [];
+
+    // Make dashboard accessible globally for testing
+    (window as any).dashboard = this;
+    console.log("🌍 Dashboard instance available as window.dashboard");
+    console.log("🧪 Use window.dashboard.testChatPanelWidth() to test width functionality");
   }
 
   setCanvas(
@@ -177,16 +183,53 @@ class Dashboard {
     const height = window.innerHeight;
     this._numCol = rowColTable[this._numWidget][0];
     this._numRow = rowColTable[this._numWidget][1];
-    if (width >= 1200) {
+    if (width - this._chatPanelWidth >= 1200) {
       this._numCol = 4;
     }
-    if (width < 1200 && width >= 800) {
+    if (width - this._chatPanelWidth < 1200 && width - this._chatPanelWidth >= 800) {
       this._numCol = 3;
     }
-    if (width < 800) {
+    if (width - this._chatPanelWidth < 800) {
       this._numCol = 2;
     }
     console.log(width, height);
+  }
+
+  // Function to get and update chat panel width
+  _getChatPanelWidth(): number {
+    const chatPanel = document.getElementById("chat-panel");
+    if (chatPanel) {
+      const computedStyle = window.getComputedStyle(chatPanel);
+      const width = parseInt(computedStyle.width);
+      this._chatPanelWidth = width;
+      console.log(`📏 Chat Panel Width updated: ${width}px`);
+      return width;
+    } else {
+      this._chatPanelWidth = 0;
+      console.log(`📏 Chat Panel not found, width set to 0px`);
+      return 0;
+    }
+  }
+
+  // Function to manually update chat panel width (for testing)
+  _updateChatPanelWidth(width: number) {
+    console.log(`[DEBUG] _updateChatPanelWidth called with width: ${width}, current: ${this._chatPanelWidth}`);
+    if (this._chatPanelWidth !== width) {
+      this._chatPanelWidth = width;
+      console.log(`🔍 Chat Panel Width: ${width}px`);
+      console.warn(`📏 Chat Panel Width Changed: ${width}px`);
+    } else {
+      console.log(`[DEBUG] Width unchanged: ${width}px`);
+    }
+  }
+
+  // Test methods for chat panel width
+  testChatPanelWidth() {
+    console.log("🧪 Testing chat panel width functionality...");
+    console.log("Current _chatPanelWidth:", this._chatPanelWidth);
+    const actualWidth = this._getChatPanelWidth();
+    console.log("Actual width from DOM:", actualWidth);
+    console.log("🧪 Test completed");
   }
 
   _widgetWidth(): number {
@@ -648,6 +691,11 @@ class Dashboard {
       chatPanel.style.height = "100vh";
     }
 
+    // Get and update chat panel width after it's added to DOM
+    setTimeout(() => {
+      this._getChatPanelWidth();
+    }, 10);
+
     // Force reflow to ensure the browser registers the new height before animating
     void chatPanel.offsetHeight;
 
@@ -710,6 +758,8 @@ class Dashboard {
       if (canvasContainer) {
         canvasContainer.style.width = "calc(100% - 600px)";
       }
+      // Update chat panel width
+      this._getChatPanelWidth();
       // Re-render widgets
       this._resize();
       this._renderPage();
@@ -726,6 +776,9 @@ class Dashboard {
         window.removeEventListener("resize", handleResize);
         this._showChatButton = true;
         this._addPaginationControl();
+        // Reset chat panel width when closed
+        this._chatPanelWidth = 0;
+        console.log("❌ Chat Panel Closed - Width reset to 0px");
         // Restore the canvas container width to its original value
         if (canvasContainer) {
           canvasContainer.style.width = originalCanvasWidth || "100%";

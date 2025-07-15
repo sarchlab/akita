@@ -6,12 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build:go": "npm run build && cd .. && go build",
+    "preview": "vite preview",
+    "dev:backend": "cd .. && ./daisen -sqlite akita_sim_d1mhko83fvio5p4hh1u0.sqlite3",
+    "dev:full": "concurrently \"npm run dev\" \"npm run dev:backend\" --names \"frontend,backend\" --prefix-colors \"blue,green\""
   },
   "author": "Yifan Sun",
   "license": "MIT",
   "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "@types/katex": "^0.16.7",
     "clean-webpack-plugin": "^4.0.0",
+    "concurrently": "^9.2.0",
     "html-webpack-plugin": "^5.5.1",
     "source-map-loader": "^4.0.1",
     "style-loader": "^3.3.2",
@@ -24,7 +30,6 @@
   "dependencies": {
     "@fortawesome/fontawesome-free": "^5.15.4",
     "@types/chroma-js": "^2.0.0",
-    "@types/d3": "^5.7.2",
     "bootstrap": "^5.0.0",
     "chroma-js": "^2.0.3",
     "css-loader": "^6.7.3",
