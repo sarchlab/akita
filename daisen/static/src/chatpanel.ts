@@ -14,8 +14,8 @@ export class ChatPanel {
   _attachRepoChecks: { [key: string]: boolean } = {};
   _githubIsAvailableResponse: { available: number; routine_keys: string[] } | null = null;
   _chatPanel: HTMLDivElement | null = null;
+  _chatPanelWidth: number = 0;
   protected _onChatPanelOpen() {}
-//   protected _onChatPanelClose() {}
 
   constructor() {
     this._fileIdCounter = 0;
@@ -83,6 +83,11 @@ export class ChatPanel {
       chatPanel.style.top = "0";
       chatPanel.style.height = "100vh";
     }
+
+    // Get and update chat panel width after it's added to DOM
+    setTimeout(() => {
+      this._getChatPanelWidth();
+    }, 10);
 
     // Force reflow to ensure the browser registers the new height before animating
     void chatPanel.offsetHeight;
@@ -815,6 +820,21 @@ export class ChatPanel {
       }
     `;
     document.head.appendChild(style);
+  }
+
+  _getChatPanelWidth(): number {
+    const chatPanel = document.getElementById("chat-panel");
+    if (chatPanel) {
+      const computedStyle = window.getComputedStyle(chatPanel);
+      const width = parseInt(computedStyle.width);
+      this._chatPanelWidth = width;
+      console.log(`Chat Panel Width updated: ${width}px`);
+      return width;
+    } else {
+      this._chatPanelWidth = 0;
+      console.log(`Chat Panel not found, width set to 0px`);
+      return 0;
+    }
   }
 }
 

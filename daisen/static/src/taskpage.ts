@@ -447,6 +447,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
       this._originalCanvasWidth = canvasContainer.style.width;
       canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
       canvasContainer.style.width = "calc(100% - 600px)";
+      this._getChatPanelWidth();
       setTimeout(() => {
       }, 300);
     }
@@ -552,6 +553,8 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
           this._chatPanel.remove();
           window.removeEventListener("resize", this._handleResize);
           this._showChatButton = true;
+          this._chatPanelWidth = 0;
+          console.log("❌ Chat Panel Closed - Width reset to 0px");
           // this._addPaginationControl();
           // Restore the canvas container width to its original value
           if (this._container) {

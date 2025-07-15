@@ -158,6 +158,7 @@ class Dashboard extends ChatPanel {
       this._originalCanvasWidth = canvasContainer.style.width;
       canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
       canvasContainer.style.width = "calc(100% - 600px)";
+      this._getChatPanelWidth();
       setTimeout(() => {
         this._resize();
         this._renderPage();
@@ -239,15 +240,16 @@ class Dashboard extends ChatPanel {
     const height = window.innerHeight;
     this._numCol = rowColTable[this._numWidget][0];
     this._numRow = rowColTable[this._numWidget][1];
-    if (width >= 1200) {
+    if (width - this._chatPanelWidth >= 1200) { // if (width >= 1200) {
       this._numCol = 4;
     }
-    if (width < 1200 && width >= 800) {
+    if (width - this._chatPanelWidth < 1200 && width - this._chatPanelWidth >= 800) { // if (width < 1200 && width >= 800) {
       this._numCol = 3;
     }
-    if (width < 800) {
+    if (width - this._chatPanelWidth < 800) { // if (width < 800) {
       this._numCol = 2;
     }
+    console.log("width, chatPanelWidth:", width, this._chatPanelWidth);
     // console.log(width, height);
   }
 
@@ -623,6 +625,8 @@ class Dashboard extends ChatPanel {
           this._chatPanel.remove();
           window.removeEventListener("resize", this._handleResize);
           this._showChatButton = true;
+          this._chatPanelWidth = 0;
+          console.log("❌ Chat Panel Closed - Width reset to 0px");
           this._addPaginationControl();
           // Restore the canvas container width to its original value
           if (this._canvas) {
