@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -478,7 +479,60 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
-func buildOpenAIPayload(model string, messages []map[string]string) ([]byte, error) {
+func buildOpenAIPayload(model string, messages []map[string]string, selectedGitHubRoutineKeys []string) ([]byte, error) {
+	// Read componentgithubroutine.json
+	routineFile := "componentgithubroutine.json"
+	data, err := os.ReadFile(routineFile)
+	if err != nil {
+		log.Println("Failed to read routine file:", err)
+		return nil, err
+	}
+	var routineMap map[string][]string
+	if err := json.Unmarshal(data, &routineMap); err != nil {
+		log.Println("Failed to unmarshal routine file:", err)
+		return nil, err
+	}
+
+	// Collect all URLs from selected keys
+	urlSet := make(map[string]struct{})
+	for _, key := range selectedGitHubRoutineKeys {
+		if urls, ok := routineMap[key]; ok {
+			for _, u := range urls {
+				urlSet[u] = struct{}{}
+			}
+		}
+	}
+	// Flatten, deduplicate, and sort
+	urlList := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		urlList = append(urlList, u)
+	}
+	sort.Strings(urlList)
+
+	// Fetch raw contents and build reference header
+	combined_reference_message_header := ""
+	for _, url := range urlList {
+		content := httpGithubRaw(url)
+		if content == "" {
+			continue
+		}
+		// Extract file name starting from "sarchlab"
+		fileName := url
+		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
+			fileName = url[idx:]
+		}
+		combined_reference_message_header += "[Reference File " + fileName + "]\n"
+		combined_reference_message_header += content + "\n"
+		combined_reference_message_header += "[End " + fileName + "]\n"
+	}
+
+	// Add reference header to the last message's content
+	if len(messages) > 0 {
+		messages[len(messages)-1]["content"] = combined_reference_message_header + messages[len(messages)-1]["content"]
+	}
+
+	// log.Println("Updated messages with reference header:", messages)
+
 	payload := map[string]interface{}{
 		"model":       model,
 		"messages":    messages,
@@ -495,6 +549,31 @@ func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []b
 	openaiReq.Header.Set("Content-Type", "application/json")
 	openaiReq.Header.Set("Authorization", apiKey)
 	return http.DefaultClient.Do(openaiReq)
+}
+
+func httpGithubRaw(url string) string {
+	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Println("Failed to create GitHub raw request:", err)
+		return ""
+	}
+	if githubPAT != "" {
+		req.Header.Set("Authorization", githubPAT)
+	}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		log.Printf("Failed to fetch raw GitHub file: %s, status: %d, err: %v\n", url, resp.StatusCode, err)
+		return ""
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Failed to read GitHub raw response body:", err)
+		return ""
+	}
+	return string(body)
 }
 
 func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
@@ -527,7 +606,11 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	payloadBytes, err := buildOpenAIPayload(openaiModel, req.Messages)
+	// Print the fields for testing
+	// log.Println("GPTRequest.messages:", req.Messages)
+	// log.Println("GPTRequest.traceInfo:", req.TraceInfo)
+	// log.Println("GPTRequest.selectedGitHubRoutineKeys:", req.SelectedGitHubRoutineKeys)
+	payloadBytes, err := buildOpenAIPayload(openaiModel, req.Messages, req.SelectedGitHubRoutineKeys)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return

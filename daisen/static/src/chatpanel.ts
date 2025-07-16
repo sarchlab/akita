@@ -688,7 +688,7 @@ export class ChatPanel {
         const gptResponseContent = gptResponse.content;
         const gptResponseTotalTokens = gptResponse.totalTokens;
         console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");
-        botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(gptResponseContent));
+        botDiv.innerHTML = `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${gptResponseTotalTokens.toLocaleString()} tokens)</span> ` + convertMarkdownToHTML(autoWrapMath(gptResponseContent));
 
         messages.push({ role: "assistant", content: gptResponseContent });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
