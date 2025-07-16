@@ -657,18 +657,28 @@ export class ChatPanel {
 
       // Show "thinking message"
       const botDiv = document.createElement("div");
-      botDiv.innerHTML = `<b>Daisen Bot:</b> <i>Thinking<span id="thinking-dots">.</span></i>`;
-      // botDiv.innerHTML = "<b>Daisen Bot:</b> <i>Thinking...</i>";;
+      botDiv.innerHTML = `<b>Daisen Bot:</b> Thinking...&nbsp;&nbsp;<span id="thinking-spinner">|</span>`;
       botDiv.style.textAlign = "left";
       botDiv.style.margin = "4px 0";
       messagesDiv.appendChild(botDiv);
 
       let dotCount = 1;
       const maxDots = 3;
-      const thinkingDots = botDiv.querySelector("#thinking-dots");
+      let spinnerIndex = 0;
+      const spinnerChars = ["|", "/", "-", "\\"];
+      // const thinkingDots = botDiv.querySelector("#thinking-dots");
+      const thinkingSpinner = botDiv.querySelector("#thinking-spinner");
       const dotsInterval = setInterval(() => {
         dotCount = (dotCount % maxDots) + 1;
-        if (thinkingDots) thinkingDots.textContent = ".".repeat(dotCount);
+        spinnerIndex = (spinnerIndex + 1) % spinnerChars.length;
+        // if (thinkingDots) {
+        //     const dots = ".".repeat(dotCount) + "&nbsp;".repeat(maxDots - dotCount);
+        //     thinkingDots.innerHTML = dots;
+        // }
+
+        if (thinkingSpinner) {
+            thinkingSpinner.textContent = spinnerChars[spinnerIndex];
+        }
       }, 500);
 
       // Call GPT and update the message

@@ -479,7 +479,12 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
-func buildOpenAIPayload(model string, messages []map[string]string, selectedGitHubRoutineKeys []string) ([]byte, error) {
+func buildOpenAIPayload(
+	ctx context.Context,
+	model string,
+	messages []map[string]string,
+	selectedGitHubRoutineKeys []string,
+) ([]byte, error) {
 	// Read componentgithubroutine.json
 	routineFile := "componentgithubroutine.json"
 	data, err := os.ReadFile(routineFile)
@@ -512,7 +517,7 @@ func buildOpenAIPayload(model string, messages []map[string]string, selectedGitH
 	// Fetch raw contents and build reference header
 	combined_reference_message_header := ""
 	for _, url := range urlList {
-		content := httpGithubRaw(url)
+		content := httpGithubRaw(ctx, url)
 		if content == "" {
 			continue
 		}
@@ -551,10 +556,10 @@ func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []b
 	return http.DefaultClient.Do(openaiReq)
 }
 
-func httpGithubRaw(url string) string {
+func httpGithubRaw(ctx context.Context, url string) string {
 	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Println("Failed to create GitHub raw request:", err)
 		return ""
@@ -610,7 +615,7 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	// log.Println("GPTRequest.messages:", req.Messages)
 	// log.Println("GPTRequest.traceInfo:", req.TraceInfo)
 	// log.Println("GPTRequest.selectedGitHubRoutineKeys:", req.SelectedGitHubRoutineKeys)
-	payloadBytes, err := buildOpenAIPayload(openaiModel, req.Messages, req.SelectedGitHubRoutineKeys)
+	payloadBytes, err := buildOpenAIPayload(r.Context(), openaiModel, req.Messages, req.SelectedGitHubRoutineKeys)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return
