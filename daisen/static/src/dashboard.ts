@@ -461,9 +461,11 @@ class Dashboard extends ChatPanel {
         return Promise.all([simulation.json(), compNames.json()]);
       })
       .then(([simulation, compNames]) => {
+        console.log("simulation[0]:", simulation[0]);
+        console.log("compNames:", compNames);
         simulation = simulation[0];
 
-        compNames.sort();
+        // compNames.sort();
 
         this._componentNames = compNames;
         this._filteredNames = compNames;
