@@ -64,14 +64,6 @@ class Dashboard extends ChatPanel {
     ];
     this._initialWidth = window.innerWidth;
     this._initialHeight = window.innerHeight;
-
-    // this._fileIdCounter = 0;
-    // this._fileListRow = document.createElement("div");
-    // this._uploadedFiles = [];
-    // sendGetGitHubIsAvailable().then((resp) => {
-    //   this._githubIsAvailableResponse = resp;
-    //   console.log("[GitHubIsAvailableResponse]", resp);
-    // });
   }
 
   setCanvas(
@@ -188,12 +180,16 @@ class Dashboard extends ChatPanel {
     window.addEventListener("resize", this._handleResize);
   }
 
-  // protected _onChatPanelClose() {
-  //   // this._showChatButton = true;
-  //   // this._addPaginationControl();
-    
-
-  // }
+  protected _setTraceComponentNames() {
+    this._traceStartTime = this._startTime;
+    this._traceEndTime = this._endTime;
+    this._traceAllComponentNames = this._componentNames;
+    this._traceCurrentComponentNames = this._filteredNames.slice(this._currPage * this._numRow * this._numCol, (this._currPage + 1) * this._numRow * this._numCol);
+    // console.log("_traceCurrentComponentNames:", this._traceCurrentComponentNames.length, this._traceCurrentComponentNames);
+    // console.log("this._numCol:", this._numCol, "this._numRow:", this._numRow);
+    // console.log("_currPage:", this._currPage, "this._numWidget:", this._numWidget);
+    // console.log("this._startTime:", this._startTime, "this._endTime:", this._endTime);
+  }
 
   _updateNavbarVisibility() {
     if (window.innerWidth <= 1365) {
@@ -249,7 +245,6 @@ class Dashboard extends ChatPanel {
     if (width - this._chatPanelWidth < 800) { // if (width < 800) {
       this._numCol = 2;
     }
-    console.log("width, chatPanelWidth:", width, this._chatPanelWidth);
     // console.log(width, height);
   }
 
@@ -605,6 +600,16 @@ class Dashboard extends ChatPanel {
       closeBtn.style.zIndex = "10001";
       closeBtn.title = "Close";
       closeBtn.style.visibility = this._showChatButton ? "hidden": "visible";
+
+  //     closeBtn.innerHTML = `
+  // <svg width="14.4" height="48" viewBox="0 0 14.4 48" xmlns="http://www.w3.org/2000/svg">
+  //   <!-- Blue triangle background, 20% larger -->
+  //   <polygon points="0,0 14.4,24 0,48" fill="#0d6efd" stroke="#0d6efd" stroke-width="0.5"/>
+  //   <!-- Centered white SVG path (example: a check mark) -->
+  //   <path d="M4 24 L7 31 L11 17" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  //   <!-- You can replace the above path with any full SVG path starting with M and ending with Z -->
+  // </svg>
+  //     `;
 
       closeBtn.innerHTML = `
         <svg width="12" height="40" viewBox="0 0 12 40" xmlns="http://www.w3.org/2000/svg">

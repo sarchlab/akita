@@ -86,6 +86,13 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._componentView.setTimeAxis(this._startTime, this._endTime);
   }
 
+  protected _setTraceComponentNames() {
+    this._traceStartTime = this._startTime;
+    this._traceEndTime = this._endTime;
+    this._traceAllComponentNames = [this._componentName];
+    this._traceCurrentComponentNames = [this._componentName];
+  }
+
   _handleMouseMove(e: MouseEvent) {
     document
       .getElementById("mouse-x-coordinate")

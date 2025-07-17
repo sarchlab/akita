@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -479,13 +480,99 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
+// Add this helper function outside buildOpenAIPayload:
+func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
+	selected, _ := traceInfo["selected"].(float64)
+	if selected == 0 {
+		return ""
+	}
+	startTime, _ := traceInfo["startTime"].(float64)
+	endTime, _ := traceInfo["endTime"].(float64)
+	selectedComponentNameList, _ := traceInfo["selectedComponentNameList"].([]interface{})
+	locations := extractLocations(selectedComponentNameList)
+	if len(locations) == 0 {
+		return ""
+	}
+	sqlStr := buildTraceSQL(locations, startTime, endTime)
+	return formatTraceRows(traceReader, sqlStr)
+}
+
+func extractLocations(selectedComponentNameList []interface{}) []string {
+	locations := make([]string, 0, len(selectedComponentNameList))
+	for _, v := range selectedComponentNameList {
+		if s, ok := v.(string); ok {
+			locations = append(locations, s)
+		}
+	}
+	return locations
+}
+
+func buildTraceSQL(locations []string, startTime, endTime float64) string {
+	quoted := make([]string, 0, len(locations))
+	for _, loc := range locations {
+		quoted = append(quoted, "'"+loc+"'")
+	}
+	whereClause := "Location IN (" + strings.Join(quoted, ",") + ")"
+	timeClause := fmt.Sprintf("StartTime >= %.15f AND EndTime <= %.15f", startTime, endTime)
+	return `
+SELECT *
+FROM trace
+WHERE ` + whereClause + `
+AND ` + timeClause
+}
+
+func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
+	rows, err := traceReader.Query(sqlStr)
+	if err != nil {
+		log.Println("Failed to query trace:", err)
+		return ""
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		log.Println("Failed to get columns:", err)
+		return ""
+	}
+
+	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			log.Println("Failed to scan trace row:", err)
+			continue
+		}
+		rowStrs := make([]string, 0, len(values))
+		for _, val := range values {
+			switch v := val.(type) {
+			case nil:
+				rowStrs = append(rowStrs, "")
+			case []byte:
+				rowStrs = append(rowStrs, string(v))
+			case float64:
+				rowStrs = append(rowStrs, fmt.Sprintf("%.9f", v))
+			default:
+				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
+			}
+		}
+		header += strings.Join(rowStrs, ",") + "\n"
+	}
+	header += "[End Akita Trace File]\n"
+	return header
+}
+
 func buildOpenAIPayload(
 	ctx context.Context,
 	model string,
 	messages []map[string]string,
+	traceInfo map[string]interface{},
 	selectedGitHubRoutineKeys []string,
 ) ([]byte, error) {
-	// Read componentgithubroutine.json
+	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
 	routineFile := "componentgithubroutine.json"
 	data, err := os.ReadFile(routineFile)
 	if err != nil {
@@ -515,7 +602,7 @@ func buildOpenAIPayload(
 	sort.Strings(urlList)
 
 	// Fetch raw contents and build reference header
-	combined_reference_message_header := ""
+	combinedRepoHeader := ""
 	for _, url := range urlList {
 		content := httpGithubRaw(ctx, url)
 		if content == "" {
@@ -526,17 +613,17 @@ func buildOpenAIPayload(
 		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
 			fileName = url[idx:]
 		}
-		combined_reference_message_header += "[Reference File " + fileName + "]\n"
-		combined_reference_message_header += content + "\n"
-		combined_reference_message_header += "[End " + fileName + "]\n"
+		combinedRepoHeader += "[Reference File " + fileName + "]\n"
+		combinedRepoHeader += content + "\n"
+		combinedRepoHeader += "[End " + fileName + "]\n"
 	}
 
 	// Add reference header to the last message's content
 	if len(messages) > 0 {
-		messages[len(messages)-1]["content"] = combined_reference_message_header + messages[len(messages)-1]["content"]
+		messages[len(messages)-1]["content"] = combinedTraceHeader + combinedRepoHeader + messages[len(messages)-1]["content"]
 	}
 
-	// log.Println("Updated messages with reference header:", messages)
+	// log.Println("Updated messages:", messages)
 
 	payload := map[string]interface{}{
 		"model":       model,
@@ -611,11 +698,8 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	// Print the fields for testing
-	// log.Println("GPTRequest.messages:", req.Messages)
-	// log.Println("GPTRequest.traceInfo:", req.TraceInfo)
-	// log.Println("GPTRequest.selectedGitHubRoutineKeys:", req.SelectedGitHubRoutineKeys)
-	payloadBytes, err := buildOpenAIPayload(r.Context(), openaiModel, req.Messages, req.SelectedGitHubRoutineKeys)
+	payloadBytes, err := buildOpenAIPayload(
+		r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return

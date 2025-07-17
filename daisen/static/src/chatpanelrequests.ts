@@ -16,8 +16,9 @@ export interface GitHubIsAvailableResponse {
 
 export interface TraceInformation {
   selected: number;
-  starttime: number;
-  endtime: number;
+  startTime: number;
+  endTime: number;
+  selectedComponentNameList: string[];
 }
 
 export interface GPTRequest {

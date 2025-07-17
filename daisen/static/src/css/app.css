@@ -372,3 +372,10 @@ body {
   font-family: "Fira Mono", "Consolas", "Monaco", monospace;
   font-size: 0.95em;
 }
+
+/* Add this to your injected CSS */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
