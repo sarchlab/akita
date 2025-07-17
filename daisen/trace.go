@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
 	"strconv"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -129,6 +131,29 @@ func (r *SQLiteTraceReader) Init() {
 	r.DB = db
 }
 
+func naturalLess(a, b string) bool {
+	re := regexp.MustCompile(`\d+|\D+`)
+	as := re.FindAllString(a, -1)
+	bs := re.FindAllString(b, -1)
+
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		anum, aErr := strconv.Atoi(as[i])
+		bnum, bErr := strconv.Atoi(bs[i])
+
+		if aErr == nil && bErr == nil {
+			if anum != bnum {
+				return anum < bnum
+			}
+		} else {
+			if as[i] != bs[i] {
+				return as[i] < bs[i]
+			}
+		}
+	}
+
+	return len(as) < len(bs)
+}
+
 // ListComponents returns a list of components in the trace.
 func (r *SQLiteTraceReader) ListComponents() []string {
 	var components []string
@@ -155,6 +180,12 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 
 		components = append(components, component)
 	}
+
+	sort.Slice(components, func(i, j int) bool {
+		return naturalLess(components[i], components[j])
+	})
+
+	// fmt.Printf("%v\n", components)
 
 	return components
 }
