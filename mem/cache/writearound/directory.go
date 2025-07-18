@@ -29,14 +29,14 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		item := d.cache.dirBuf.Peek()
+		item := d.cache.dirStageBuffer.Peek()
 		if item == nil {
 			break
 		}
 
 		trans := item.(*transaction)
 		d.pipeline.Accept(dirPipelineItem{trans})
-		d.cache.dirBuf.Pop()
+		d.cache.dirStageBuffer.Pop()
 
 		madeProgress = true
 	}

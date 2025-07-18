@@ -149,7 +149,7 @@ func (b Builder) Build(name string) *Comp {
 		name+".ControlPort")
 	c.AddPort("Control", c.controlPort)
 
-	c.dirBuf = sim.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
+	c.dirStageBuffer = sim.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
 	c.bankBufs = make([]sim.Buffer, b.numBank)
 
 	for i := 0; i < b.numBank; i++ {

@@ -160,7 +160,7 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 		}
 		b.addressToPortMapper = &mem.SinglePortMapper{Port: ports[0]}
 	} else if b.addressMapperType == "interleaved" {
-		finder := mem.NewInterleavedAddressPortMapper(256) 
+		finder := mem.NewInterleavedAddressPortMapper(256)
 		finder.LowModules = append(finder.LowModules, ports...)
 		b.addressToPortMapper = finder
 	} else {
@@ -215,12 +215,13 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 	if b.addressToPortMapper == nil {
 		panic(
 			"addressToPortMapper is nil. " +
-			"WithRemotePorts or WithAddressMapperType not set",
+				"WithRemotePorts or WithAddressMapperType not set",
 		)
 	}
 
 	cacheModule.addressToPortMapper = b.addressToPortMapper
-	cacheModule.state = cacheStateRunning
+	cacheModule.state = "enable"
+	cacheModule.isDrained = false
 	cacheModule.evictingList = make(map[uint64]bool)
 }
 

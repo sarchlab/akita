@@ -57,7 +57,7 @@ func (s *controlStage) processCurrentFlush() bool {
 func (s *controlStage) hardResetCache() {
 	s.flushPort(s.cache.topPort)
 	s.flushPort(s.cache.bottomPort)
-	s.flushBuffer(s.cache.dirBuf)
+	s.flushBuffer(s.cache.dirStageBuffer)
 
 	for _, bankBuf := range s.cache.bankBufs {
 		s.flushBuffer(bankBuf)

@@ -11,21 +11,21 @@ import (
 
 var _ = Describe("Coalescer", func() {
 	var (
-		mockCtrl *gomock.Controller
-		cache    *Comp
-		topPort  *MockPort
-		dirBuf   *MockBuffer
-		c        coalescer
+		mockCtrl       *gomock.Controller
+		cache          *Comp
+		topPort        *MockPort
+		dirStageBuffer *MockBuffer
+		c              coalescer
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
-		dirBuf = NewMockBuffer(mockCtrl)
+		dirStageBuffer = NewMockBuffer(mockCtrl)
 		cache = &Comp{
 			log2BlockSize:         6,
 			topPort:               topPort,
-			dirBuf:                dirBuf,
+			dirStageBuffer:        dirStageBuffer,
 			maxNumConcurrentTrans: 32,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
@@ -80,9 +80,9 @@ var _ = Describe("Coalescer", func() {
 					CanWaitForCoalesce().
 					Build()
 
-				dirBuf.EXPECT().CanPush().
+				dirStageBuffer.EXPECT().CanPush().
 					Return(true)
-				dirBuf.EXPECT().Push(gomock.Any()).
+				dirStageBuffer.EXPECT().Push(gomock.Any()).
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
@@ -104,7 +104,7 @@ var _ = Describe("Coalescer", func() {
 					WithByteSize(4).
 					Build()
 
-				dirBuf.EXPECT().CanPush().
+				dirStageBuffer.EXPECT().CanPush().
 					Return(false)
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
@@ -124,10 +124,10 @@ var _ = Describe("Coalescer", func() {
 					WithByteSize(4).
 					Build()
 
-				dirBuf.EXPECT().
+				dirStageBuffer.EXPECT().
 					CanPush().
 					Return(true)
-				dirBuf.EXPECT().
+				dirStageBuffer.EXPECT().
 					Push(gomock.Any()).
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(3))
@@ -153,7 +153,7 @@ var _ = Describe("Coalescer", func() {
 					WithByteSize(4).
 					Build()
 
-				dirBuf.EXPECT().CanPush().
+				dirStageBuffer.EXPECT().CanPush().
 					Return(false)
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
@@ -173,13 +173,13 @@ var _ = Describe("Coalescer", func() {
 					WithByteSize(4).
 					Build()
 
-				dirBuf.EXPECT().CanPush().
+				dirStageBuffer.EXPECT().CanPush().
 					Return(true).Times(2)
-				dirBuf.EXPECT().Push(gomock.Any()).
+				dirStageBuffer.EXPECT().Push(gomock.Any()).
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
-				dirBuf.EXPECT().Push(gomock.Any()).
+				dirStageBuffer.EXPECT().Push(gomock.Any()).
 					Do(func(trans *transaction) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
 					})
@@ -201,7 +201,7 @@ var _ = Describe("Coalescer", func() {
 					WithByteSize(4).
 					Build()
 
-				dirBuf.EXPECT().CanPush().
+				dirStageBuffer.EXPECT().CanPush().
 					Return(false)
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
@@ -220,13 +220,13 @@ var _ = Describe("Coalescer", func() {
 						WithByteSize(4).
 						Build()
 
-					dirBuf.EXPECT().CanPush().Return(true)
-					dirBuf.EXPECT().
+					dirStageBuffer.EXPECT().CanPush().Return(true)
+					dirStageBuffer.EXPECT().
 						Push(gomock.Any()).
 						Do(func(trans *transaction) {
 							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 						})
-					dirBuf.EXPECT().CanPush().Return(false)
+					dirStageBuffer.EXPECT().CanPush().Return(false)
 					topPort.EXPECT().PeekIncoming().Return(read3)
 
 					madeProgress := c.Tick()
@@ -267,8 +267,8 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
-			dirBuf.EXPECT().CanPush().Return(true)
-			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
+			dirStageBuffer.EXPECT().CanPush().Return(true)
+			dirStageBuffer.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
 				Expect(trans.write.Address).To(Equal(uint64(0x100)))
 				Expect(trans.write.PID).To(Equal(vm.PID(1)))
 				Expect(trans.write.Data).To(Equal([]byte{

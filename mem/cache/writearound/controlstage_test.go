@@ -51,11 +51,11 @@ var _ = Describe("Control Stage", func() {
 		transactions = nil
 
 		cache = &Comp{
-			topPort:       topPort,
-			bottomPort:    bottomPort,
-			dirBuf:        inBuf,
-			mshr:          mshr,
-			coalesceStage: c,
+			topPort:        topPort,
+			bottomPort:     bottomPort,
+			dirStageBuffer: inBuf,
+			mshr:           mshr,
+			coalesceStage:  c,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, cache)

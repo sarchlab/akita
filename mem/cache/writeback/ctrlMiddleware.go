@@ -1,4 +1,4 @@
-package writearound
+package writeback
 
 import (
 	"log"
@@ -134,7 +134,7 @@ func (c *ctrlMiddleware) processFlushQueue() bool {
 func (c *ctrlMiddleware) hardResetCache() {
 	c.flushPort(c.topPort)
 	c.flushPort(c.bottomPort)
-	c.flushBuffer(c.dirStageBuffer)
+	c.flushBuffer(c.dirBuf)
 
 	for _, bankBuf := range c.bankBufs {
 		c.flushBuffer(bankBuf)

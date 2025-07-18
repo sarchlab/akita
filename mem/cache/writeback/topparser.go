@@ -11,7 +11,7 @@ type topParser struct {
 }
 
 func (p *topParser) Tick() bool {
-	if p.cache.state != cacheStateRunning {
+	if p.cache.state != "enable" {
 		return false
 	}
 

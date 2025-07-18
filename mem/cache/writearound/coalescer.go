@@ -59,7 +59,7 @@ func (c *coalescer) processReqCoalescable(req mem.AccessReq) bool {
 }
 
 func (c *coalescer) processReqNoncoalescable(req mem.AccessReq) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirStageBuffer.CanPush() {
 		return false
 	}
 
@@ -76,7 +76,7 @@ func (c *coalescer) processReqNoncoalescable(req mem.AccessReq) bool {
 }
 
 func (c *coalescer) processReqLastInWaveCoalescable(req mem.AccessReq) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirStageBuffer.CanPush() {
 		return false
 	}
 
@@ -92,13 +92,13 @@ func (c *coalescer) processReqLastInWaveCoalescable(req mem.AccessReq) bool {
 }
 
 func (c *coalescer) processReqLastInWaveNoncoalescable(req mem.AccessReq) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirStageBuffer.CanPush() {
 		return false
 	}
 
 	c.coalesceAndSend()
 
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirStageBuffer.CanPush() {
 		return true
 	}
 
@@ -167,7 +167,7 @@ func (c *coalescer) coalesceAndSend() bool {
 			nil)
 	}
 
-	c.cache.dirBuf.Push(trans)
+	c.cache.dirStageBuffer.Push(trans)
 	c.cache.postCoalesceTransactions =
 		append(c.cache.postCoalesceTransactions, trans)
 	c.toCoalesce = nil

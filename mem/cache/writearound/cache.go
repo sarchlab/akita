@@ -24,8 +24,8 @@ type Comp struct {
 	wayAssociativity    int
 	addressToPortMapper mem.AddressToPortMapper
 
-	dirBuf   sim.Buffer
-	bankBufs []sim.Buffer
+	dirStageBuffer sim.Buffer
+	bankBufs       []sim.Buffer
 
 	coalesceStage    *coalescer
 	directoryStage   *directory

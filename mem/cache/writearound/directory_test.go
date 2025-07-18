@@ -46,7 +46,7 @@ var _ = Describe("Directory", func() {
 			log2BlockSize:       6,
 			bottomPort:          bottomPort,
 			directory:           dir,
-			dirBuf:              inBuf,
+			dirStageBuffer:      inBuf,
 			addressToPortMapper: addressToPortMapper,
 			numReqPerCycle:      4,
 			mshr:                mshr,

@@ -16,12 +16,12 @@ type flusher struct {
 }
 
 func (f *flusher) Tick() bool {
-	if f.processingFlush != nil && f.cache.state == cacheStatePreFlushing {
+	if f.processingFlush != nil && f.cache.state == "PreFlushing" {
 		return f.processPreFlushing()
 	}
 
 	madeProgress := false
-	if f.processingFlush != nil && f.cache.state == cacheStateFlushing {
+	if f.processingFlush != nil && f.cache.state == "Flush" {
 		madeProgress = f.finalizeFlushing() || madeProgress
 		madeProgress = f.processFlush() || madeProgress
 
@@ -37,7 +37,7 @@ func (f *flusher) processPreFlushing() bool {
 	}
 
 	f.prepareBlockToFlushList()
-	f.cache.state = cacheStateFlushing
+	f.cache.state = "Flush"
 
 	return true
 }
@@ -117,7 +117,7 @@ func (f *flusher) startProcessingFlush(
 		f.cache.discardInflightTransactions()
 	}
 
-	f.cache.state = cacheStatePreFlushing
+	f.cache.state = "PreFlushing"
 	f.cache.controlPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, f.cache)
@@ -135,7 +135,7 @@ func (f *flusher) handleCacheRestart(
 	clearPort(f.cache.topPort)
 	clearPort(f.cache.bottomPort)
 
-	f.cache.state = cacheStateRunning
+	f.cache.state = "enable"
 
 	rsp := cache.RestartRspBuilder{}.
 		WithSrc(f.cache.controlPort.AsRemote()).
@@ -173,9 +173,9 @@ func (f *flusher) finalizeFlushing() bool {
 	f.cache.directory.Reset()
 
 	if f.processingFlush.PauseAfterFlushing {
-		f.cache.state = cacheStatePaused
+		f.cache.state = "pause"
 	} else {
-		f.cache.state = cacheStateRunning
+		f.cache.state = "enable"
 	}
 
 	tracing.TraceReqComplete(f.processingFlush, f.cache)
