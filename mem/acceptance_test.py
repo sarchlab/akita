@@ -174,6 +174,20 @@ def main():
                       './writearoundcache -max-address=1024 -parallel -num-access=10000', 'acceptancetests/writearoundcache')
     error |= run_test("Write-around cache 6",
                       './writearoundcache -max-address=1048576 -parallel -num-access=10000', 'acceptancetests/writearoundcache')
+    
+    error |= compile_test('acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 1",
+                  './virtualmem -max-address=64 -num-access=10000', 'acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 2",
+                  './virtualmem -max-address=1024 -num-access=10000', 'acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 3",
+                  './virtualmem -max-address=1048576 -num-access=10000', 'acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 4",
+                  './virtualmem -max-address=64 -parallel -num-access=10000', 'acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 5",
+                  './virtualmem -max-address=1024 -parallel -num-access=10000', 'acceptancetests/virtualmem')
+    error |= run_test("Virtual Memory test 6",
+                  './virtualmem -max-address=1048576 -parallel -num-access=10000', 'acceptancetests/virtualmem')
 
     if error:
         sys.exit(1)

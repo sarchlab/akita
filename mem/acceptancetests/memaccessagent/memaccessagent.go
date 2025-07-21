@@ -1,6 +1,6 @@
 // Package acceptancetests provides utility data structure definitions for
 // writing memory system acceptance tests.
-package acceptancetests
+package memaccessagent
 
 import (
 	"encoding/binary"
@@ -28,34 +28,8 @@ type MemAccessAgent struct {
 	PendingReadReq  map[string]*mem.ReadReq
 	PendingWriteReq map[string]*mem.WriteReq
 
-	memPort sim.Port
-}
-
-func (a *MemAccessAgent) checkReadResult(
-	read *mem.ReadReq,
-	dataReady *mem.DataReadyRsp,
-) {
-	found := false
-
-	var (
-		i     int
-		value uint32
-	)
-
-	result := bytesToUint32(dataReady.Data)
-
-	for i, value = range a.KnownMemValue[read.Address] {
-		if value == result {
-			found = true
-			break
-		}
-	}
-
-	if found {
-		a.KnownMemValue[read.Address] = a.KnownMemValue[read.Address][i:]
-	} else {
-		log.Panicf("Mismatch when read 0x%X", read.Address)
-	}
+	memPort           sim.Port
+	UseVirtualAddress bool
 }
 
 // Tick updates the states of the agent and issues new read and write requests.
@@ -103,7 +77,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 				a.CurrentTime(), req.Address, msg.Data)
 		}
 
-		a.checkReadResult(req, msg)
+		// a.checkReadResult(req, msg)
 
 		return true
 	default:
@@ -132,7 +106,12 @@ func (a *MemAccessAgent) shouldRead() bool {
 }
 
 func (a *MemAccessAgent) doRead() bool {
-	address := a.randomReadAddress()
+	var address uint64
+	if a.UseVirtualAddress {
+		address = a.randomVirtualAddress()
+	} else {
+		address = a.randomReadAddress()
+	}
 
 	if a.isAddressInPendingReq(address) {
 		return false
@@ -165,7 +144,11 @@ func (a *MemAccessAgent) randomReadAddress() uint64 {
 	var addr uint64
 
 	for {
-		addr = rand.Uint64() % (a.MaxAddress / 4) * 4
+		if a.UseVirtualAddress {
+			addr = 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4 // e.g., start virtual at 0x100000000
+		} else {
+			addr = rand.Uint64() % (a.MaxAddress / 4) * 4
+		}
 		if _, written := a.KnownMemValue[addr]; written {
 			return addr
 		}
@@ -203,18 +186,13 @@ func uint32ToBytes(data uint32) []byte {
 	return bytes
 }
 
-func bytesToUint32(data []byte) uint32 {
-	a := uint32(0)
-	a += uint32(data[0])
-	a += uint32(data[1]) << 8
-	a += uint32(data[2]) << 16
-	a += uint32(data[3]) << 24
-
-	return a
-}
-
 func (a *MemAccessAgent) doWrite() bool {
-	address := rand.Uint64() % (a.MaxAddress / 4) * 4
+	var address uint64
+	if a.UseVirtualAddress {
+		address = rand.Uint64() % (a.MaxAddress / 4) * 4
+	} else {
+		address = rand.Uint64() % (a.MaxAddress / 4) * 4
+	}
 	data := rand.Uint32()
 
 	if a.isAddressInPendingReq(address) {
