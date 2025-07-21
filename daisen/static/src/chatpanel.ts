@@ -24,6 +24,20 @@ export class ChatPanel {
   _traceSelectedStartTime: number;
   _traceSelectedEndTime: number;
   _tracePeriodUnitSwitch: boolean = true; // true for us, false for seconds
+  
+  // Chat history management
+  _chatHistory: { 
+    id: string; 
+    title: string; 
+    messages: { role: "user" | "assistant" | "system"; content: string }[];
+    timestamp: number;
+  }[] = [];
+  _currentChatId: string = "";
+  _chatIdCounter: number = 0;
+  
+  // Message navigation for current chat
+  _messageNavigationIndex: number = -1; // Current position in navigation (-1 means not navigating)
+
   protected _onChatPanelOpen() {}
   protected _setTraceComponentNames() {}
 
@@ -31,10 +45,136 @@ export class ChatPanel {
     this._fileIdCounter = 0;
     this._fileListRow = document.createElement("div");
     this._uploadedFiles = [];
+    
+    // Initialize with first chat
+    this._createNewChat();
+    
     sendGetGitHubIsAvailable().then((resp) => {
       this._githubIsAvailableResponse = resp;
-      // console.log("[GitHubIsAvailableResponse]", resp);
     });
+  }
+
+  // Chat history management methods
+  _createNewChat(): string {
+    const chatId = `chat_${++this._chatIdCounter}`;
+    const newChat = {
+      id: chatId,
+      title: "New Chat",
+      messages: [{ role: "system" as const, content: "You are Daisen Bot." }],
+      timestamp: Date.now()
+    };
+    
+    // Save current chat if it exists and has user messages
+    if (this._currentChatId && this._chatMessages.some(m => m.role === "user")) {
+      this._saveChatToHistory();
+    }
+    
+    this._chatHistory.push(newChat);
+    this._currentChatId = chatId;
+    this._chatMessages = [...newChat.messages];
+    
+    return chatId;
+  }
+
+  _saveChatToHistory(): void {
+    if (!this._currentChatId) return;
+    
+    const chatIndex = this._chatHistory.findIndex(c => c.id === this._currentChatId);
+    if (chatIndex !== -1) {
+      this._chatHistory[chatIndex].messages = [...this._chatMessages];
+      this._chatHistory[chatIndex].timestamp = Date.now();
+      
+      // Update title based on first user message
+      const firstUserMessage = this._chatMessages.find(m => m.role === "user");
+      if (firstUserMessage) {
+        const words = firstUserMessage.content.split(" ").slice(0, 6);
+        this._chatHistory[chatIndex].title = words.join(" ") + (words.length === 6 ? "..." : "");
+      }
+    }
+  }
+
+  _loadChat(chatId: string): void {
+    // Save current chat first
+    this._saveChatToHistory();
+    
+    const chat = this._chatHistory.find(c => c.id === chatId);
+    if (chat) {
+      this._currentChatId = chatId;
+      this._chatMessages = [...chat.messages];
+    }
+  }
+
+  _deleteChat(chatId: string): void {
+    this._chatHistory = this._chatHistory.filter(c => c.id !== chatId);
+    
+    if (this._currentChatId === chatId) {
+      if (this._chatHistory.length > 0) {
+        // Load the most recent chat
+        const mostRecent = this._chatHistory.reduce((latest, chat) => 
+          chat.timestamp > latest.timestamp ? chat : latest, this._chatHistory[0]
+        );
+        this._loadChat(mostRecent.id);
+      } else {
+        // Create a new chat if no history exists
+        this._createNewChat();
+      }
+    }
+  }
+
+  // Message navigation methods
+  _getCurrentChatUserMessages(): string[] {
+    // Extract user messages from current chat (excluding system messages and file prefixes)
+    const currentChat = this._chatHistory.find(c => c.id === this._currentChatId);
+    if (!currentChat) return [];
+
+    return currentChat.messages
+      .filter(m => m.role === "user")
+      .map(m => {
+        // Remove uploaded files prefix if present
+        const idx = m.content.indexOf("[End Uploaded Files]");
+        if (idx !== -1) {
+          let after = m.content.slice(idx + "[End Uploaded Files]".length);
+          if (after.startsWith("\n")) after = after.slice(1);
+          return after;
+        }
+        return m.content;
+      })
+      .filter(content => content.trim().length > 0); // Remove empty messages
+  }
+
+  _navigateMessageHistory(direction: "up" | "down", inputElement: HTMLTextAreaElement): void {
+    const userMessages = this._getCurrentChatUserMessages();
+    if (userMessages.length === 0) return;
+
+    if (direction === "up") {
+      // Go back in history (older messages)
+      if (this._messageNavigationIndex === -1) {
+        // First time navigating - start from the most recent message
+        this._messageNavigationIndex = userMessages.length - 1;
+      } else if (this._messageNavigationIndex > 0) {
+        this._messageNavigationIndex--;
+      }
+    } else if (direction === "down") {
+      // Go forward in history (newer messages)
+      if (this._messageNavigationIndex !== -1) {
+        this._messageNavigationIndex++;
+        if (this._messageNavigationIndex >= userMessages.length) {
+          // Reached the end, clear input
+          this._messageNavigationIndex = -1;
+          inputElement.value = "";
+          inputElement.style.height = "38px";
+          return;
+        }
+      }
+    }
+
+    // Set the input value and adjust height
+    if (this._messageNavigationIndex !== -1 && this._messageNavigationIndex < userMessages.length) {
+      inputElement.value = userMessages[this._messageNavigationIndex];
+      // Trigger the auto-resize
+      inputElement.style.height = "auto";
+      inputElement.style.height = (inputElement.scrollHeight) + "px";
+    }
   }
 
   _showChatPanel() {
@@ -130,6 +270,108 @@ export class ChatPanel {
     
     this._chatPanel = chatPanel;
 
+    // Top bar with chat history dropdown and New Chat button
+    const topBar = document.createElement("div");
+    topBar.style.display = "flex";
+    topBar.style.justifyContent = "space-between";
+    topBar.style.alignItems = "center";
+    topBar.style.marginBottom = "10px";
+    topBar.style.minHeight = "32px";
+    chatContent.appendChild(topBar);
+
+    // Chat history dropdown container
+    const chatHistoryContainer = document.createElement("div");
+    chatHistoryContainer.style.position = "relative";
+    chatHistoryContainer.style.display = "flex";
+    chatHistoryContainer.style.alignItems = "center";
+    chatHistoryContainer.style.gap = "8px";
+    
+    // Chat history dropdown
+    const chatHistorySelect = document.createElement("select");
+    chatHistorySelect.style.padding = "4px 8px";
+    chatHistorySelect.style.borderRadius = "4px";
+    chatHistorySelect.style.border = "1px solid #ccc";
+    chatHistorySelect.style.background = "#fff";
+    chatHistorySelect.style.fontSize = "13px";
+    chatHistorySelect.style.maxWidth = "200px";
+    
+    // Function to update the dropdown options
+    const updateChatHistoryDropdown = () => {
+      chatHistorySelect.innerHTML = "";
+      
+      // Sort chats by timestamp (most recent first)
+      const sortedChats = [...this._chatHistory].sort((a, b) => b.timestamp - a.timestamp);
+      
+      sortedChats.forEach(chat => {
+        const option = document.createElement("option");
+        option.value = chat.id;
+        option.textContent = chat.title;
+        option.selected = chat.id === this._currentChatId;
+        chatHistorySelect.appendChild(option);
+      });
+      
+      // Add "No chats" option if empty
+      if (this._chatHistory.length === 0) {
+        const option = document.createElement("option");
+        option.textContent = "No chat history";
+        option.disabled = true;
+        chatHistorySelect.appendChild(option);
+      }
+    };
+    
+    // Handle chat selection
+    chatHistorySelect.onchange = () => {
+      const selectedChatId = chatHistorySelect.value;
+      if (selectedChatId && selectedChatId !== this._currentChatId) {
+        this._loadChat(selectedChatId);
+        // Re-render the panel to show the selected chat
+        this._showChatPanel();
+      }
+    };
+    
+    // Delete button for current chat
+    const deleteChatBtn = document.createElement("button");
+    deleteChatBtn.textContent = "×";
+    deleteChatBtn.title = "Delete current chat";
+    deleteChatBtn.style.background = "#dc3545";
+    deleteChatBtn.style.color = "#fff";
+    deleteChatBtn.style.border = "none";
+    deleteChatBtn.style.borderRadius = "4px";
+    deleteChatBtn.style.width = "24px";
+    deleteChatBtn.style.height = "24px";
+    deleteChatBtn.style.fontSize = "16px";
+    deleteChatBtn.style.cursor = "pointer";
+    deleteChatBtn.style.display = "flex";
+    deleteChatBtn.style.alignItems = "center";
+    deleteChatBtn.style.justifyContent = "center";
+    deleteChatBtn.onclick = () => {
+      if (confirm("Are you sure you want to delete this chat?")) {
+        this._deleteChat(this._currentChatId);
+        this._showChatPanel(); // Re-render after deletion
+      }
+    };
+    
+    chatHistoryContainer.appendChild(chatHistorySelect);
+    chatHistoryContainer.appendChild(deleteChatBtn);
+    topBar.appendChild(chatHistoryContainer);
+
+    // Create New Chat button for top bar
+    const newChatBtn = document.createElement("button");
+    newChatBtn.textContent = "New Chat";
+    newChatBtn.className = "btn btn-secondary";
+    newChatBtn.style.flexShrink = "0";
+    newChatBtn.onclick = () => {
+      this._createNewChat();
+      this._showChatPanel(); // Re-render the panel with the new chat
+    };
+    topBar.appendChild(newChatBtn);
+    
+    // Update dropdown with current data
+    updateChatHistoryDropdown();
+    
+    // Reset message navigation index for current chat
+    this._messageNavigationIndex = -1;
+
     // Message display area
     const messagesDiv = document.createElement("div");
     messagesDiv.style.flex = "1 1 0%";
@@ -184,80 +426,6 @@ export class ChatPanel {
         console.log("KaTeX error:", e, "for tex:", el.textContent);
       }
     });
-
-    const historyMenu = document.createElement("div");
-    historyMenu.style.display = "flex";
-    historyMenu.style.flexDirection = "column";
-    historyMenu.style.marginBottom = "8px";
-    chatContent.appendChild(historyMenu);
-
-    function renderHistoryMenu() {
-      const lastUserMessages = messages.filter(m => m.role === "user");
-
-      // Remove uploaded files prefix if present
-      const cleanedMessages = lastUserMessages.map(m => {
-        const idx = m.content.indexOf("[End Uploaded Files]");
-        if (idx !== -1) {
-          // Remove everything up to and including "[End Uploaded Files]" and the next \n if present
-          let after = m.content.slice(idx + "[End Uploaded Files]".length);
-          if (after.startsWith("\n")) after = after.slice(1);
-          return after;
-        }
-        return m.content;
-      });
-
-      // Remove duplicates, keep only the latest occurrence
-      const seen = new Set<string>();
-      const uniqueRecent: string[] = [];
-      for (let i = cleanedMessages.length - 1; i >= 0 && uniqueRecent.length < 3; i--) {
-        const msg = cleanedMessages[i];
-        if (!seen.has(msg)) {
-          seen.add(msg);
-          uniqueRecent.unshift(msg); // Insert at the beginning to keep order
-        }
-      }
-      
-      historyMenu.innerHTML = "";
-      uniqueRecent.forEach(msgContent => {
-        const item = document.createElement("button");
-        // Limit to 10 words for display
-        const words = msgContent.split(" ");
-        let displayText = msgContent;
-        if (words.length > 10) {
-          displayText = words.slice(0, 10).join(" ") + "...";
-        }
-        item.textContent = displayText;
-        item.style.background = "#f8f9fa";
-        item.style.border = "none";
-        item.style.borderRadius = "6px";
-        item.style.padding = "10px 16px";
-        item.style.margin = "4px 0";
-        item.style.fontSize = "1em";
-        item.style.color = "#222";
-        item.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
-        item.style.cursor = "pointer";
-        item.style.transition = "background 0.15s, box-shadow 0.15s";
-        item.style.alignItems = "center";
-        item.style.width = "auto";
-        // Hover effect
-        item.onmouseenter = () => {
-          item.style.background = "#e9ecef";
-        };
-        item.onmouseleave = () => {
-          item.style.background = "#f8f9fa";
-        }; 
-
-        // Fills input on click
-        item.onclick = () => {
-          input.value = msgContent;
-          input.focus();
-        };
-        historyMenu.appendChild(item);
-      });
-    }
-
-    // When panel opens
-    renderHistoryMenu();
 
     // Initial welcome message
     const welcomeDiv = document.createElement("div");
@@ -1146,7 +1314,7 @@ export class ChatPanel {
       // Add a slash from top-left to bottom-right over the icon
       attachRepoBtn.innerHTML = `
         <svg width="24" height="24" viewBox="0 0 256 256" fill="currentColor" style="position:relative;">
-          <path d="M69.12158,94.14551,28.49658,128l40.625,33.85449a7.99987,7.99987,0,1,1-10.24316,12.291l-48-40a7.99963,7.99963,0,0,1,0-12.291l48-40a7.99987,7.99987,0,1,1,10.24316,12.291Zm176,27.709-48-40a7.99987,7.99987,0,1,0-10.24316,12.291L227.50342,128l-40.625,33.85449a7.99987,7.99987,0,1,0,10.24316,12.291l48-40a7.99963,7.99963,0,0,0,0-12.291Zm-82.38769-89.373a8.00439,8.00439,0,0,0-10.25244,4.78418l-64,176a8.00034,8.00034,0,1,0,15.0371,5.46875l64-176A8.0008,8.0008,0,0,0,162.73389,32.48145Z"/>
+          <path d="M69.12158,94.14551,28.49658,128l40.625,33.85449a7.99987,7.99987,0,1,1-10.24316,12.291l-48-40a7.99963,7.99963,0,0,1,0-12.291l48-40a7.99987,7.99987,0,1,1,10.24316,12.291Zm176,27.709-48-40a7.99987,7.99987,0,1,0-10.24316,12.291L227.50342,128l-40.625,33.85449a7.99987,7.99987,0,1,0,10.24316,12.291l48-40a7.99963,7.99963,0,0,0,0-12.291Zm-82.38769-89.3734a8.00439,8.00439,0,0,0-10.25244,4.78418l-64,176a8.00034,8.00034,0,1,0,15.0371,5.46875l64-176A8.0008,8.0008,0,0,0,162.73389,32.48145Z"/>
           <line x1="6" y1="6" x2="18" y2="18" stroke="#e53935" stroke-width="2"/>
         </svg>
       `;
@@ -1174,7 +1342,7 @@ export class ChatPanel {
     inputContainer.style.gap = "8px";
 
     const input = document.createElement("textarea");
-    input.placeholder = "Type a message...";
+    input.placeholder = "Type a message... (Use ↑↓ arrows to navigate message history)";
     input.rows = 1;
     input.style.flex = "1";
     input.style.padding = "6px";
@@ -1191,14 +1359,33 @@ export class ChatPanel {
       this.style.height = (this.scrollHeight) + "px";
     });
 
+    // Add keyboard navigation for message history
+    input.addEventListener("keydown", (e) => {
+      // Check for arrow key navigation when input cursor is at start/end
+      const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+      const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+      
+      if (e.key === "ArrowUp" && (atStart || e.ctrlKey || e.metaKey)) {
+        // Up arrow at start of input or Ctrl/Cmd + Up: Navigate to older messages
+        e.preventDefault();
+        this._navigateMessageHistory("up", input);
+      } else if (e.key === "ArrowDown" && (atEnd || e.ctrlKey || e.metaKey)) {
+        // Down arrow at end of input or Ctrl/Cmd + Down: Navigate to newer messages  
+        e.preventDefault();
+        this._navigateMessageHistory("down", input);
+      } else if (e.key === "Enter" && !e.shiftKey) {
+        // Send message on Enter (without Shift)
+        e.preventDefault();
+        sendMessage();
+      } else if (e.key !== "ArrowUp" && e.key !== "ArrowDown") {
+        // Reset navigation when user starts typing something new (except arrow keys for cursor movement)
+        this._messageNavigationIndex = -1;
+      }
+    });
+
     const sendBtn = document.createElement("button");
     sendBtn.textContent = "Send";
     sendBtn.className = "btn btn-primary";
-
-    const clearBtn = document.createElement("button");
-    clearBtn.textContent = "New Chat";
-    clearBtn.className = "btn btn-secondary";
-    // clearBtn.style.marginLeft = "4px";
 
     // Send handler
     const sendMessage = () => {
@@ -1243,11 +1430,10 @@ export class ChatPanel {
 
       // Call GPT with full history
       messages.push({ role: "user", content: fullMsg });
+      this._chatMessages = messages; // Update the instance messages
+      this._saveChatToHistory(); // Save the updated chat
       console.log("[Sent to GPT]", fullMsg);
 
-      // Show history menu
-      renderHistoryMenu();
-      
       // Clear input field
       input.value = "";
 
@@ -1309,6 +1495,8 @@ export class ChatPanel {
           convertMarkdownToHTML(autoWrapMath(gptResponseContent));
 
         messages.push({ role: "assistant", content: gptResponseContent });
+        this._chatMessages = messages; // Update the instance messages
+        this._saveChatToHistory(); // Save the updated chat
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
         console.log("[Received from GPT]", gptResponse);
 
@@ -1373,24 +1561,10 @@ export class ChatPanel {
       }
     });
 
-    clearBtn.onclick = () => {
-      messages.length = 0;
-      messages.push({ role: "system", content: "You are Daisen Bot." });
-      input.value = "";
-      // Remove all messages from the chat panel except the welcome message
-      messagesDiv.innerHTML = "";
-      const welcomeDiv = document.createElement("div");
-      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
-      welcomeDiv.style.textAlign = "left";
-      welcomeDiv.style.marginBottom = "8px";
-      messagesDiv.appendChild(welcomeDiv);
-      renderHistoryMenu();
-      input.style.height = "38px";
-    };
+    // The New Chat button functionality is now handled in the topBar creation above
 
     inputContainer.appendChild(input);
     inputContainer.appendChild(sendBtn);
-    inputContainer.appendChild(clearBtn);
     chatContent.appendChild(inputContainer);
 
     // document.body.appendChild(chatPanel);
