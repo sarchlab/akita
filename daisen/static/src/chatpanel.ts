@@ -576,30 +576,97 @@ export class ChatPanel {
 
     // Reset logic
     uploadTraceResetPeriodBtn.onclick = () => {
-    this._traceSelectedStartTime = this._traceStartTime;
-    this._traceSelectedEndTime = this._traceEndTime;
-    updateSticksAndEdits.call(this);
-    };
-
-    // Create the Switch Unit button
-    const uploadTraceSwitchUnitBtn = document.createElement("button");
-    uploadTraceSwitchUnitBtn.textContent = "μs/s";
-    uploadTraceSwitchUnitBtn.style.background = "#0d6efd";
-    uploadTraceSwitchUnitBtn.style.color = "#fff";
-    uploadTraceSwitchUnitBtn.style.border = "none";
-    uploadTraceSwitchUnitBtn.style.borderRadius = "4px";
-    uploadTraceSwitchUnitBtn.style.padding = "4px 10px";
-    uploadTraceSwitchUnitBtn.style.cursor = "pointer";
-    uploadTraceSwitchUnitBtn.style.fontSize = "13px";
-    uploadTraceSwitchUnitBtn.style.marginRight = "8px";
-
-    // Switch logic
-    uploadTraceSwitchUnitBtn.onclick = () => {
-      this._tracePeriodUnitSwitch = !this._tracePeriodUnitSwitch;
+      this._traceSelectedStartTime = this._traceStartTime;
+      this._traceSelectedEndTime = this._traceEndTime;
       updateSticksAndEdits.call(this);
     };
 
     uploadTracePeriodButtonRow.appendChild(uploadTraceResetPeriodBtn);
+
+    // Create the improved toggle switch button for unit
+    const uploadTraceSwitchUnitBtn = document.createElement("button");
+    uploadTraceSwitchUnitBtn.type = "button";
+    uploadTraceSwitchUnitBtn.title = "Switch between μs and s";
+    uploadTraceSwitchUnitBtn.style.background = "#0d6efd";
+    uploadTraceSwitchUnitBtn.style.border = "none";
+    uploadTraceSwitchUnitBtn.style.borderRadius = "4px";
+    uploadTraceSwitchUnitBtn.style.padding = "0";
+    uploadTraceSwitchUnitBtn.style.width = "56px";
+    uploadTraceSwitchUnitBtn.style.height = "27.5px";
+    uploadTraceSwitchUnitBtn.style.display = "flex";
+    uploadTraceSwitchUnitBtn.style.alignItems = "center";
+    uploadTraceSwitchUnitBtn.style.position = "relative";
+    uploadTraceSwitchUnitBtn.style.cursor = "pointer";
+    uploadTraceSwitchUnitBtn.style.transition = "background 0.2s";
+    uploadTraceSwitchUnitBtn.style.marginRight = "8px";
+    uploadTraceSwitchUnitBtn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.10)";
+
+    // Remove any textContent
+    uploadTraceSwitchUnitBtn.textContent = "";
+
+    // Add the inner rounded square (the "thumb")
+    const switchThumb = document.createElement("div");
+    switchThumb.style.position = "absolute";
+    switchThumb.style.left = "6px";
+    switchThumb.style.top = "5px";
+    switchThumb.style.width = "17.5px";
+    switchThumb.style.height = "17.5px";
+    switchThumb.style.background = "#fff";
+    switchThumb.style.borderRadius = "4px";
+    // switchThumb.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
+    // switchThumb.style.boxShadow = "inset 2px 0 6px -2px rgba(0,0,0,0.10), inset 0 2px 6px -2px rgba(0,0,0,0.13)";
+    switchThumb.style.transition = "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)";
+    switchThumb.style.zIndex = "2";
+    uploadTraceSwitchUnitBtn.appendChild(switchThumb);
+
+    // Add the "μs" and "s" labels
+    const usLabel = document.createElement("span");
+    usLabel.textContent = "μs";
+    usLabel.style.position = "absolute";
+    usLabel.style.right = "10px";
+    usLabel.style.color = "#fff";
+    // usLabel.style.fontWeight = "bold";
+    usLabel.style.fontSize = "13px";
+    usLabel.style.zIndex = "1";
+    usLabel.style.transition = "opacity 0.2s";
+    uploadTraceSwitchUnitBtn.appendChild(usLabel);
+
+    const sLabel = document.createElement("span");
+    sLabel.textContent = "s";
+    sLabel.style.position = "absolute";
+    sLabel.style.left = "14px";
+    sLabel.style.color = "#fff";
+    // sLabel.style.fontWeight = "bold";
+    sLabel.style.fontSize = "13px";
+    sLabel.style.zIndex = "1";
+    sLabel.style.transition = "opacity 0.2s";
+    uploadTraceSwitchUnitBtn.appendChild(sLabel);
+
+    // Helper to update the switch UI
+    const updateSwitchUI = () => {
+    if (this._tracePeriodUnitSwitch) {
+        // μs mode: thumb left, μs visible, s faded
+        switchThumb.style.left = "6px";
+        usLabel.style.opacity = "1";
+        sLabel.style.opacity = "0.0";
+        uploadTraceSwitchUnitBtn.style.background = "#0d6efd";
+    } else {
+        // s mode: thumb right, s visible, μs faded
+        switchThumb.style.left = "32.5px";
+        usLabel.style.opacity = "0.0";
+        sLabel.style.opacity = "1";
+        uploadTraceSwitchUnitBtn.style.background = "#0d6efd";
+    }
+    };
+    updateSwitchUI();
+
+    // Toggle logic
+    uploadTraceSwitchUnitBtn.onclick = () => {
+      this._tracePeriodUnitSwitch = !this._tracePeriodUnitSwitch;
+      updateSwitchUI();
+      updateSticksAndEdits.call(this);
+    };
+
     uploadTracePeriodButtonRow.appendChild(uploadTraceSwitchUnitBtn);
 
     uploadTraceDiv.appendChild(uploadTracePeriodButtonRow);
@@ -650,7 +717,7 @@ export class ChatPanel {
       stick.style.width = "12px";
       stick.style.height = "20px";
       stick.style.background = "#0d6efd";
-      stick.style.border = "1px solid rgb(204, 204, 204)";
+      stick.style.border = "1px solid rgb(255, 255, 255)";
       stick.style.borderRadius = "4px";
       stick.style.cursor = "pointer";
       stick.style.boxShadow = "0 1px 4px rgba(0,0,0,0.10)";
@@ -692,21 +759,21 @@ export class ChatPanel {
     endTimeEdit.style.resize = "none";
     endTimeEdit.style.appearance = "textfield";
 
-    const startUnitLabel = document.createElement("span");
-    const endUnitLabel = document.createElement("span");
-    startUnitLabel.style.marginLeft = "4px";
-    startUnitLabel.style.fontSize = "15px";
-    startUnitLabel.style.color = "#888";
-    endUnitLabel.style.marginLeft = "4px";
-    endUnitLabel.style.fontSize = "15px";
-    endUnitLabel.style.color = "#888";
+    // const startUnitLabel = document.createElement("span");
+    // const endUnitLabel = document.createElement("span");
+    // startUnitLabel.style.marginLeft = "4px";
+    // startUnitLabel.style.fontSize = "15px";
+    // startUnitLabel.style.color = "#888";
+    // endUnitLabel.style.marginLeft = "4px";
+    // endUnitLabel.style.fontSize = "15px";
+    // endUnitLabel.style.color = "#888";
     
     // Helper for Greek mu (μ)
     const getUnitText = () => this._tracePeriodUnitSwitch ? "μs" : "s";
 
-    // Initial unit label
-    startUnitLabel.textContent = getUnitText();
-    endUnitLabel.textContent = getUnitText();
+    // // Initial unit label
+    // startUnitLabel.textContent = getUnitText();
+    // endUnitLabel.textContent = getUnitText();
 
     // textRow.appendChild(startTimeEdit);
     // textRow.appendChild(startUnitLabel);
@@ -717,15 +784,15 @@ export class ChatPanel {
     startTimeRow.style.display = "flex";
     startTimeRow.style.alignItems = "center";
     startTimeRow.appendChild(startTimeEdit);
-    startUnitLabel.style.marginLeft = "2px"; // reduce gap
-    startTimeRow.appendChild(startUnitLabel);
+    // startUnitLabel.style.marginLeft = "2px"; // reduce gap
+    // startTimeRow.appendChild(startUnitLabel);
 
     const endTimeRow = document.createElement("div");
     endTimeRow.style.display = "flex";
     endTimeRow.style.alignItems = "center";
     endTimeRow.appendChild(endTimeEdit);
-    endUnitLabel.style.marginLeft = "2px"; // reduce gap
-    endTimeRow.appendChild(endUnitLabel);
+    // endUnitLabel.style.marginLeft = "2px"; // reduce gap
+    // endTimeRow.appendChild(endUnitLabel);
 
     textRow.appendChild(startTimeRow);
     textRow.appendChild(endTimeRow);
@@ -761,15 +828,15 @@ export class ChatPanel {
         endTimeEdit.value = (e * 1e6).toFixed(3);
         startTimeEdit.placeholder = "Start (μs)";
         endTimeEdit.placeholder = "End (μs)";
-        startUnitLabel.textContent = "μs";
-        endUnitLabel.textContent = "μs";
+        // startUnitLabel.textContent = "μs";
+        // endUnitLabel.textContent = "μs";
       } else {
         startTimeEdit.value = s.toFixed(9);
         endTimeEdit.value = e.toFixed(9);
         startTimeEdit.placeholder = "Start (s)";
         endTimeEdit.placeholder = "End (s)";
-        startUnitLabel.textContent = "s";
-        endUnitLabel.textContent = "s";
+        // startUnitLabel.textContent = "s";
+        // endUnitLabel.textContent = "s";
       }
 
       // Draw blue selection bar between sticks
