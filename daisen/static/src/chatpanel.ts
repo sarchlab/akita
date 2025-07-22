@@ -615,7 +615,7 @@ export class ChatPanel {
     switchThumb.style.borderRadius = "4px";
     // switchThumb.style.boxShadow = "0 2px 8px rgba(0,0,0,0.15)";
     // switchThumb.style.boxShadow = "inset 2px 0 6px -2px rgba(0,0,0,0.10), inset 0 2px 6px -2px rgba(0,0,0,0.13)";
-    switchThumb.style.transition = "left 0.3s cubic-bezier(0.4, 0, 0.2, 1)";
+    switchThumb.style.transition = "left 0.25s cubic-bezier(0.4, 0, 0.2, 1)";
     switchThumb.style.zIndex = "2";
     uploadTraceSwitchUnitBtn.appendChild(switchThumb);
 
