@@ -1250,7 +1250,7 @@ export class ChatPanel {
       
       // Clear input field
       input.value = "";
-
+      input.style.height = "38px"; // Reset to one line
       // Show "thinking message"
       const botDiv = document.createElement("div");
       botDiv.innerHTML = `<b>Daisen Bot:</b> Thinking...&nbsp;&nbsp;<span id="thinking-spinner">|</span>`;
