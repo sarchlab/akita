@@ -1409,7 +1409,7 @@ export class ChatPanel {
     inputContainer.style.gap = "8px";
 
     const input = document.createElement("textarea");
-    input.placeholder = "Type a message... (Use ↑↓ arrows to navigate message history)";
+    input.placeholder = "Ask anything (↑↓ for history)";
     input.rows = 1;
     input.style.flex = "1";
     input.style.padding = "6px";
