@@ -3,9 +3,7 @@ import katex from "katex";
 import "katex/dist/katex.min.css";
 
 export class ChatPanel {
-  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
-    { role: "system", content: "You are Daisen Bot." }
-  ];
+  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [];
   _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
   _fileUploadBtn: HTMLButtonElement;
   _fileIdCounter: number = 0;
@@ -60,7 +58,7 @@ export class ChatPanel {
     const newChat = {
       id: chatId,
       title: "New Chat",
-      messages: [{ role: "system" as const, content: "You are Daisen Bot." }],
+      messages: [{ role: "assistant" as const, content: "Hello! What can I help you with today?" }],
       timestamp: Date.now()
     };
     
@@ -294,6 +292,7 @@ export class ChatPanel {
     chatHistorySelect.style.background = "#fff";
     chatHistorySelect.style.fontSize = "13px";
     chatHistorySelect.style.maxWidth = "200px";
+    chatHistorySelect.style.height = "38px";
     
     // Function to update the dropdown options
     const updateChatHistoryDropdown = () => {
@@ -337,8 +336,8 @@ export class ChatPanel {
     deleteChatBtn.style.color = "#fff";
     deleteChatBtn.style.border = "none";
     deleteChatBtn.style.borderRadius = "4px";
-    deleteChatBtn.style.width = "24px";
-    deleteChatBtn.style.height = "24px";
+    deleteChatBtn.style.width = "38px";
+    deleteChatBtn.style.height = "38px";
     deleteChatBtn.style.fontSize = "16px";
     deleteChatBtn.style.cursor = "pointer";
     deleteChatBtn.style.display = "flex";
@@ -371,6 +370,14 @@ export class ChatPanel {
     
     // Reset message navigation index for current chat
     this._messageNavigationIndex = -1;
+
+    // Add separator bar between top controls and chat content
+    const separatorBar = document.createElement("div");
+    separatorBar.style.width = "100%";
+    separatorBar.style.height = "1px";
+    separatorBar.style.backgroundColor = "#666";
+    separatorBar.style.marginBottom = "10px";
+    chatContent.appendChild(separatorBar);
 
     // Message display area
     const messagesDiv = document.createElement("div");
@@ -427,12 +434,15 @@ export class ChatPanel {
       }
     });
 
-    // Initial welcome message
-    const welcomeDiv = document.createElement("div");
-    welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
-    welcomeDiv.style.textAlign = "left";
-    welcomeDiv.style.marginBottom = "8px";
-    messagesDiv.appendChild(welcomeDiv);
+    // Show welcome message only if there are no messages (new empty chat)
+    const hasMessages = messages.some(m => m.role === "user" || m.role === "assistant");
+    if (!hasMessages) {
+      const welcomeDiv = document.createElement("div");
+      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+      welcomeDiv.style.textAlign = "left";
+      welcomeDiv.style.marginBottom = "8px";
+      messagesDiv.appendChild(welcomeDiv);
+    }
 
     // File list container (above upload button row)
     const fileListRow = document.createElement("div");
@@ -1407,6 +1417,7 @@ export class ChatPanel {
     const inputContainer = document.createElement("div");
     inputContainer.style.display = "flex";
     inputContainer.style.gap = "8px";
+    inputContainer.style.alignItems = "flex-end";
 
     const input = document.createElement("textarea");
     input.placeholder = "Ask anything (↑↓ for history)";
@@ -1453,6 +1464,7 @@ export class ChatPanel {
     const sendBtn = document.createElement("button");
     sendBtn.textContent = "Send";
     sendBtn.className = "btn btn-primary";
+    sendBtn.style.maxHeight = "38px";
 
     // Send handler
     const sendMessage = () => {
