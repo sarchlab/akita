@@ -286,11 +286,11 @@ export class ChatPanel {
     
     // Chat history dropdown
     const chatHistorySelect = document.createElement("select");
-    chatHistorySelect.style.padding = "4px 8px";
+    chatHistorySelect.style.padding = "6px";
     chatHistorySelect.style.borderRadius = "4px";
     chatHistorySelect.style.border = "1px solid #ccc";
     chatHistorySelect.style.background = "#fff";
-    chatHistorySelect.style.fontSize = "14px";
+    chatHistorySelect.style.fontSize = "16px";
     chatHistorySelect.style.width = "150px";
     chatHistorySelect.style.height = "38px";
     
@@ -330,19 +330,27 @@ export class ChatPanel {
     
     // Delete button for current chat
     const deleteChatBtn = document.createElement("button");
-    deleteChatBtn.textContent = "×";
-    deleteChatBtn.title = "Delete current chat";
+    // deleteChatBtn.textContent = "×";
+    deleteChatBtn.title = "Delete selected chat";
     deleteChatBtn.style.background = "#dc3545";
     deleteChatBtn.style.color = "#fff";
     deleteChatBtn.style.border = "none";
-    deleteChatBtn.style.borderRadius = "4px";
-    deleteChatBtn.style.width = "34px";
-    deleteChatBtn.style.height = "34px";
-    deleteChatBtn.style.fontSize = "24px";
+    deleteChatBtn.style.borderRadius = "6px";
+    deleteChatBtn.style.width = "38px";
+    deleteChatBtn.style.height = "38px";
+    // deleteChatBtn.style.fontSize = "24px";
     deleteChatBtn.style.cursor = "pointer";
     deleteChatBtn.style.display = "flex";
     deleteChatBtn.style.alignItems = "center";
     deleteChatBtn.style.justifyContent = "center";
+    deleteChatBtn.innerHTML = `
+      <svg class="svg-icon" style="width: 24px; height: 24px; vertical-align: middle; fill: currentColor; overflow: hidden;" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+        <path d="M262.2 304.9h-4.8c0.8-0.1 1.6-0.1 2.4-0.1 0.8 0 1.6 0 2.4 0.1z" fill="#fff"/>
+        <path d="M589.4 358.4c0 15.2 12.3 27.5 27.4 27.5h25.8c15.2 0 27.5-12.3 27.5-27.4 0-15.2-12.3-27.4-27.5-27.4h-25.8c-15.1-0.1-27.4 12.2-27.4 27.3zM616.3 850.4c15.2 0.6 27.9-11.3 28.4-26.4l0.9-351c0.6-15.2-11.3-27.9-26.4-28.4-15.2-0.6-27.9 11.3-28.4 26.4l-0.9 351c-0.6 15.1 11.3 27.9 26.4 28.4zM457.1 822l-0.9-351c-0.6-15.2-13.3-27-28.4-26.4-15.1 0.6-27 13.3-26.4 28.4l0.9 351c0.6 15.1 13.3 27 28.4 26.4 15.1-0.5 27-13.3 26.4-28.4z" fill="#fff"/>
+        <path d="M826.5 358.3l-1.7 27.6-27.9 502.4-0.4 6.9c0 24.5-19.6 44.4-43.9 45H272.1c-24.3-0.6-43.9-20.6-43.9-45l-0.4-6.8L200 385.9l-1.7-27.6v-0.3c0.2-14.2 11.1-25.8 25.1-27H518c15.2 0 27.5 12.3 27.5 27.4 0 15.2-12.3 27.4-27.5 27.4H255l22.5 405.8 4.9 79.3 0.5 7.9 0.4 6.7h458.4l0.4-6.7 0.5-7.9 4.9-79.3L770 385.8h-28.3c-15.2 0-27.4-12.3-27.4-27.4 0-15.2 12.3-27.4 27.4-27.4h59.8c14 1.2 25 12.9 25.1 27.1-0.1 0.1-0.1 0.1-0.1 0.2zM475.2 143.2l-4.6-27c-2.5-14.9 7.5-29.1 22.5-31.7C508 82 522.2 92 524.8 107l4.6 27c2.5 14.9-7.5 29.1-22.5 31.7-15 2.5-29.2-7.5-31.7-22.5z" fill="#fff"/>
+        <path d="M792.6 150.4l-560.5 95.4c-14.9 2.5-29.1-7.5-31.7-22.5-2.5-14.9 7.5-29.1 22.5-31.7l560.5-95.4c14.9-2.5 29.1 7.5 31.7 22.5 2.5 14.9-7.5 29.1-22.5 31.7z" fill="#fff"/>
+      </svg>
+    `;
     deleteChatBtn.onclick = () => {
       if (confirm("Are you sure you want to delete this chat?")) {
         this._deleteChat(this._currentChatId);
@@ -356,9 +364,23 @@ export class ChatPanel {
 
     // Create New Chat button for top bar
     const newChatBtn = document.createElement("button");
-    newChatBtn.textContent = "New Chat";
-    newChatBtn.className = "btn btn-secondary";
+    newChatBtn.title = "New chat";
+    // newChatBtn.className = "btn btn-secondary";
     newChatBtn.style.flexShrink = "0";
+    newChatBtn.style.display = "flex";
+    newChatBtn.style.alignItems = "center";
+    newChatBtn.style.justifyContent = "center";
+    newChatBtn.style.width = "38px";
+    newChatBtn.style.height = "38px";
+    newChatBtn.style.borderRadius = "6px";
+    newChatBtn.style.background = "#0d6efd";
+    newChatBtn.style.border = "none";
+    newChatBtn.style.cursor = "pointer";
+    newChatBtn.innerHTML = `
+      <svg class="svg-icon" style="width: 24px; height: 24px; vertical-align: middle; fill: currentColor; overflow: hidden;" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z" fill="#fff"/>
+      </svg>
+    `;
     newChatBtn.onclick = () => {
       // Check if current chat is already new/empty (only has initial greeting, no user messages)
       const hasUserMessages = this._chatMessages.some(m => m.role === "user");
@@ -386,8 +408,9 @@ export class ChatPanel {
     const separatorBar = document.createElement("div");
     separatorBar.style.width = "100%";
     separatorBar.style.height = "1px";
-    separatorBar.style.backgroundColor = "#666";
-    separatorBar.style.marginBottom = "10px";
+    separatorBar.style.backgroundColor = "rgb(204, 204, 204)";
+    separatorBar.style.marginTop = "6px";
+    separatorBar.style.marginBottom = "8px";
     chatContent.appendChild(separatorBar);
 
     // Message display area
@@ -1440,6 +1463,7 @@ export class ChatPanel {
     input.style.resize = "none";
     input.style.overflowY = "auto";
     input.style.minHeight = "38px";
+    input.style.fontSize = "16px";
     input.style.maxHeight = "130px";
 
     // Auto-resize as user types
@@ -1473,9 +1497,28 @@ export class ChatPanel {
     });
 
     const sendBtn = document.createElement("button");
-    sendBtn.textContent = "Send";
-    sendBtn.className = "btn btn-primary";
+    sendBtn.title = "Send";
+    // sendBtn.className = "btn btn-primary";
     sendBtn.style.maxHeight = "38px";
+    sendBtn.style.width = "38px";
+    sendBtn.style.height = "38px";
+    sendBtn.style.display = "flex";
+    sendBtn.style.alignItems = "center";
+    sendBtn.style.justifyContent = "center";
+    sendBtn.style.borderRadius = "6px";
+    sendBtn.style.background = "#0d6efd";
+    sendBtn.style.border = "none";
+    sendBtn.style.cursor = "pointer";
+    // sendBtn.innerHTML = `
+    //   <svg class="svg-icon" style="width: 24px; height: 24px; vertical-align: middle; fill: currentColor; overflow: hidden;" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    //     <path d="M757.6 811.1 852.4 191 424.5 722.5c.6 67 .7 107.1.6 131.4L536 743c3.8-3.8 9.6-5 14.7-3.1l206.9 71.2ZM887.8 138.6c.1 1 .2 2 0 3.1L782.3 832.3c-.6 4.2-3.1 7.8-6.7 9.9-3.6 2-8 2.4-11.9.9L549.1 768.9 420.4 897.6c-2.7 2.7-6.2 4.1-9.8 4.1-2.5 0-5-.7-7.3-2.1-4.8-3-7.3-8.7-6.3-14.2.9-10.4.3-107.8-.2-167.4-.1-3 .9-6 2.8-8.5L817.2 191.2 174.6 562.9l171 102.5c6.5 4 8.4 12.5 4.4 19-2.6 4.2-7.1 6.5-11.7 6.5-2.5 0-5-.7-7.3-2.1L141.2 574.5c-4-2.5-6.5-6.9-6.5-11.7 0-4.7 2.4-9.2 6.5-11.7l725.3-423 .1-.1.2-.1c.2-.1.3-.1.5-.2 1.3-.8 2.7-1.3 4.2-1.6.4-.1.9-.1 1.3-.1 1.2-.1 2.4-.1 3.6.1.6.1 1.1.2 1.7.4.4.2.9.2 1.4.4.6.3 1 .7 1.5 1 .6.3 1.1.6 1.6 1 1 .7 1.9 1.7 2.6 2.7.2.2.5.4.7.7.1.1.1.2.1.3.9 1.4 1.5 3 1.8 4.7.1.4 0 .9 0 1.3Z" fill="#ffffff"/>
+    //   </svg>
+    // `;
+    sendBtn.innerHTML = `
+      <svg class="svg-icon" style="width: 20px; height: 20px; vertical-align: middle; fill: currentColor; overflow: hidden;" viewBox="0 0 386 386" xmlns="http://www.w3.org/2000/svg">
+        <path d="M304.428 353.475l-101.2-87.2c-2-1.6-4-2.4-6.4-2-2.4 0-4.4 1.2-5.6 3.2l-50 72.4c-1.6 2.4-4 2-4.8 1.6-.8 0-2.8-1.2-2.8-3.6v-101.6c0-3.6-2.4-6.4-5.6-7.6l-112.4-37.6 351.2-153.2-62.4 315.6Zm0 16c1.6 0 3.6-.4 5.6-1.2 5.2-1.6 9.2-6.4 10.4-12l65.2-330.4c.8-2.8-.4-5.6-2.8-7.6s-5.6-2.4-8.4-1.2l-365.2 159.6c-5.6 2.8-9.6 8.8-9.2 15.2.4 6.8 4.4 12.4 10.8 14.8l106.8 35.6v96c0 8.8 5.6 16 14 18.8 8.8 2.8 17.6-.4 22.8-7.6l44.8-65.2 94.8 81.6c3.2 2.4 6.8 3.6 10.4 3.6Zm-106.8-89.2c2.4 0 4.8-1.2 6.4-3.2l176-240c2.8-3.6 2-8.4-1.6-11.2s-8.4-2-11.2 1.6l-176 240c-2.8 3.6-2 8.4 1.6 11.2 1.6 1.2 3.2 1.6 4.8 1.6Zm-46.4-57.2c1.6 0 3.6-.4 4.8-1.6l12.8-10.4c3.6-2.8 4-7.6 1.2-11.2s-7.6-4-11.2-1.2l-12.8 10.4c-3.6 2.8-4 7.6-1.2 11.2 1.6 1.6 4 2.8 6.4 2.8Zm34.4-28c1.6 0 3.6-.4 5.2-1.6l188-154.8c3.6-2.8 4-7.6 1.2-11.2-2.8-3.6-7.6-4-11.2-1.2l-188 154.8c-3.6 2.8-4 7.6-1.2 11.2 1.6 2 3.6 2.8 6 2.8Z" fill="#ffffff"/>
+      </svg>
+    `;
 
     // Send handler
     const sendMessage = () => {
