@@ -36,22 +36,7 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
 
-func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
-	s := simulation.MakeBuilder().Build()
-	var engine = s.GetEngine()
-	if *parallelFlag {
-		engine = sim.NewParallelEngine()
-	} else {
-		engine = sim.NewSerialEngine()
-	}
-
-	memCtrl := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
-		WithNewStorage(4 * mem.GB).
-		WithLatency(100).
-		Build("MemCtrl")
-	s.RegisterComponent(memCtrl)
-
+func setupPageTable() vm.PageTable {
 	// construct a page table
 	pageTable := vm.NewPageTable(12) // 4096 = 2^12
 
@@ -71,6 +56,27 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		}
 		pageTable.Insert(page)
 	}
+
+	return pageTable
+}
+
+func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
+	s := simulation.MakeBuilder().Build()
+	var engine sim.Engine
+	if *parallelFlag {
+		engine = sim.NewParallelEngine()
+	} else {
+		engine = sim.NewSerialEngine()
+	}
+
+	memCtrl := idealmemcontroller.MakeBuilder().
+		WithEngine(engine).
+		WithNewStorage(4 * mem.GB).
+		WithLatency(100).
+		Build("MemCtrl")
+	s.RegisterComponent(memCtrl)
+
+	pageTable := setupPageTable()
 
 	L2Cache := writeback.MakeBuilder().
 		WithEngine(engine).
@@ -165,6 +171,25 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 
+	setupConnection(engine, agent, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl)
+
+	if *traceFileFlag != "" {
+		traceFile, err := os.Create(*traceFileFlag)
+		if err != nil {
+			panic(err)
+		}
+		logger := log.New(traceFile, "", 0)
+		tracer := trace.NewTracer(logger, engine)
+		tracing.CollectTrace(memCtrl, tracer)
+	}
+
+	return engine, agent
+}
+
+func setupConnection(
+	engine sim.Engine, agent,
+	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl sim.Component,
+) {
 	Conn1 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn1")
 	Conn1.PlugIn(agent.GetPortByName("Mem"))
 	Conn1.PlugIn(AT.GetPortByName("Top"))
@@ -192,18 +217,6 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	Conn7 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn7")
 	Conn7.PlugIn(L2Cache.GetPortByName("Bottom"))
 	Conn7.PlugIn(memCtrl.GetPortByName("Top"))
-
-	if *traceFileFlag != "" {
-		traceFile, err := os.Create(*traceFileFlag)
-		if err != nil {
-			panic(err)
-		}
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(memCtrl, tracer)
-	}
-
-	return engine, agent
 }
 
 func main() {
