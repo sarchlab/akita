@@ -36,30 +36,7 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
 
-func setupPageTable() vm.PageTable {
-	// construct a page table
-	pageTable := vm.NewPageTable(12) // 4096 = 2^12
-
-	ptBase := uint64(0x100000) // physical starting Addr
-	pageSize := uint64(4096)
-	numEntries := 512
-
-	for i := 0; i < numEntries; i++ {
-		vAddr := uint64(i) * pageSize
-		pAddr := ptBase + uint64(i)*pageSize
-		page := vm.Page{
-			PID:      1, // process ID
-			VAddr:    vAddr,
-			PAddr:    pAddr,
-			PageSize: pageSize,
-			Valid:    true,
-		}
-		pageTable.Insert(page)
-	}
-
-	return pageTable
-}
-
+//nolint:funlen
 func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	s := simulation.MakeBuilder().Build()
 	var engine sim.Engine
@@ -184,6 +161,30 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	}
 
 	return engine, agent
+}
+
+func setupPageTable() vm.PageTable {
+	// construct a page table
+	pageTable := vm.NewPageTable(12) // 4096 = 2^12
+
+	ptBase := uint64(0x100000) // physical starting Addr
+	pageSize := uint64(4096)
+	numEntries := 512
+
+	for i := 0; i < numEntries; i++ {
+		vAddr := uint64(i) * pageSize
+		pAddr := ptBase + uint64(i)*pageSize
+		page := vm.Page{
+			PID:      1, // process ID
+			VAddr:    vAddr,
+			PAddr:    pAddr,
+			PageSize: pageSize,
+			Valid:    true,
+		}
+		pageTable.Insert(page)
+	}
+
+	return pageTable
 }
 
 func setupConnection(
