@@ -290,8 +290,8 @@ export class ChatPanel {
     chatHistorySelect.style.borderRadius = "4px";
     chatHistorySelect.style.border = "1px solid #ccc";
     chatHistorySelect.style.background = "#fff";
-    chatHistorySelect.style.fontSize = "13px";
-    chatHistorySelect.style.maxWidth = "200px";
+    chatHistorySelect.style.fontSize = "14px";
+    chatHistorySelect.style.width = "150px";
     chatHistorySelect.style.height = "38px";
     
     // Function to update the dropdown options
@@ -336,9 +336,9 @@ export class ChatPanel {
     deleteChatBtn.style.color = "#fff";
     deleteChatBtn.style.border = "none";
     deleteChatBtn.style.borderRadius = "4px";
-    deleteChatBtn.style.width = "38px";
-    deleteChatBtn.style.height = "38px";
-    deleteChatBtn.style.fontSize = "16px";
+    deleteChatBtn.style.width = "34px";
+    deleteChatBtn.style.height = "34px";
+    deleteChatBtn.style.fontSize = "24px";
     deleteChatBtn.style.cursor = "pointer";
     deleteChatBtn.style.display = "flex";
     deleteChatBtn.style.alignItems = "center";
@@ -360,6 +360,17 @@ export class ChatPanel {
     newChatBtn.className = "btn btn-secondary";
     newChatBtn.style.flexShrink = "0";
     newChatBtn.onclick = () => {
+      // Check if current chat is already new/empty (only has initial greeting, no user messages)
+      const hasUserMessages = this._chatMessages.some(m => m.role === "user");
+      const hasOnlyGreeting = this._chatMessages.length === 1 && 
+                              this._chatMessages[0].role === "assistant" && 
+                              this._chatMessages[0].content === "Hello! What can I help you with today?";
+      
+      // Do nothing if chat is already new/empty
+      if (!hasUserMessages && (this._chatMessages.length === 0 || hasOnlyGreeting)) {
+        return;
+      }
+      
       this._createNewChat();
       this._showChatPanel(); // Re-render the panel with the new chat
     };
