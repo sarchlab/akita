@@ -2,8 +2,6 @@
 package memaccessagent
 
 import (
-	"math/rand"
-
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -61,10 +59,6 @@ func (b *Builder) WithReadLeft(read int) *Builder {
 func (b *Builder) UseVirtualAddress(use bool) *Builder {
 	b.useVirtualAddress = use
 	return b
-}
-
-func (a *MemAccessAgent) randomVirtualAddress() uint64 {
-	return rand.Uint64() % (a.MaxAddress / 4) * 4
 }
 
 func (b *Builder) WithLowModule(port sim.Port) *Builder {

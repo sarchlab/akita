@@ -176,15 +176,20 @@ func (a *MemAccessAgent) doRead() bool {
 	return false
 }
 
+func (a *MemAccessAgent) randomVirtualAddress() uint64 {
+	return 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4
+}
+
 func (a *MemAccessAgent) randomReadAddress() uint64 {
 	var addr uint64
 
 	for {
-		if a.UseVirtualAddress {
-			addr = 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4 // e.g., start virtual at 0x100000000
-		} else {
-			addr = rand.Uint64() % (a.MaxAddress / 4) * 4
-		}
+		// if a.UseVirtualAddress {
+		// 	addr = 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4 // e.g., start virtual at 0x100000000
+		// } else {
+		// 	addr = rand.Uint64() % (a.MaxAddress / 4) * 4
+		// }
+		addr = rand.Uint64() % (a.MaxAddress / 4) * 4
 
 		if _, written := a.KnownMemValue[addr]; written {
 			return addr
@@ -224,12 +229,13 @@ func uint32ToBytes(data uint32) []byte {
 }
 
 func (a *MemAccessAgent) doWrite() bool {
-	var address uint64
-	if a.UseVirtualAddress {
-		address = rand.Uint64() % (a.MaxAddress / 4) * 4
-	} else {
-		address = rand.Uint64() % (a.MaxAddress / 4) * 4
-	}
+	// var address uint64
+	// if a.UseVirtualAddress {
+	// 	address = rand.Uint64() % (a.MaxAddress / 4) * 4
+	// } else {
+	// 	address = rand.Uint64() % (a.MaxAddress / 4) * 4
+	// }
+	address := rand.Uint64() % (a.MaxAddress / 4) * 4
 
 	data := rand.Uint32()
 
