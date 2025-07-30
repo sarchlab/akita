@@ -32,6 +32,42 @@ type MemAccessAgent struct {
 	UseVirtualAddress bool
 }
 
+func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
+	dataReady *mem.DataReadyRsp,
+) {
+	found := false
+
+	var (
+		i     int
+		value uint32
+	)
+
+	result := bytesToUint32(dataReady.Data)
+
+	for i, value = range a.KnownMemValue[read.Address] {
+		if value == result {
+			found = true
+			break
+		}
+	}
+
+	if found {
+		a.KnownMemValue[read.Address] = a.KnownMemValue[read.Address][i:]
+	} else {
+		log.Panicf("Mismatch when read 0x%X", read.Address)
+	}
+}
+
+func bytesToUint32(data []byte) uint32 {
+	a := uint32(0)
+	a += uint32(data[0])
+	a += uint32(data[1]) << 8
+	a += uint32(data[2]) << 16
+	a += uint32(data[3]) << 24
+
+	return a
+}
+
 // Tick updates the states of the agent and issues new read and write requests.
 func (a *MemAccessAgent) Tick() bool {
 	madeProgress := false
@@ -77,7 +113,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 				a.CurrentTime(), req.Address, msg.Data)
 		}
 
-		// a.checkReadResult(req, msg)
+		a.checkReadResult(req, msg)
 
 		return true
 	default:
@@ -149,6 +185,7 @@ func (a *MemAccessAgent) randomReadAddress() uint64 {
 		} else {
 			addr = rand.Uint64() % (a.MaxAddress / 4) * 4
 		}
+
 		if _, written := a.KnownMemValue[addr]; written {
 			return addr
 		}
@@ -193,6 +230,7 @@ func (a *MemAccessAgent) doWrite() bool {
 	} else {
 		address = rand.Uint64() % (a.MaxAddress / 4) * 4
 	}
+
 	data := rand.Uint32()
 
 	if a.isAddressInPendingReq(address) {

@@ -36,9 +36,9 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
 
-//nolint:funlen
 func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	s := simulation.MakeBuilder().Build()
+
 	var engine sim.Engine
 	if *parallelFlag {
 		engine = sim.NewParallelEngine()
@@ -46,14 +46,54 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		engine = sim.NewSerialEngine()
 	}
 
+	L1Cache, L2Cache, memCtrl := buildMemoryHierarchy(engine, s)
+	IoMMU, TLB, L2TLB := buildTranslationHierachy(engine, s)
+
+	ATmapper := &mem.SinglePortMapper{
+		Port: L1Cache.GetPortByName("Top").AsRemote(),
+	}
+
+	AT := addresstranslator.MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		WithLog2PageSize(12).
+		WithNumReqPerCycle(4).
+		WithTranslationProvider(TLB.GetPortByName("Top").AsRemote()).
+		//WithRemotePorts(L1Cache.GetPortByName("Top").AsRemote()).
+		//WithAddressMapperType("single").
+		WithAddressToPortMapper(ATmapper).
+		Build("AT")
+	s.RegisterComponent(AT)
+
+	for portName := range AT.Ports() {
+		fmt.Println("[AT] Registered Port:", portName)
+	}
+
+	agent = memaccessagent.MakeBuilder().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		WithMaxAddress(*maxAddressFlag).
+		WithReadLeft(*numAccessFlag).
+		WithWriteLeft(*numAccessFlag).
+		WithLowModule(AT.GetPortByName("Top")).
+		Build("MemAccessAgent")
+	s.RegisterComponent(agent)
+
+	setupConnection(engine, agent, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl)
+	setupTracing(engine, memCtrl)
+
+	return engine, agent
+}
+
+func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
+	*writethrough.Comp, *writeback.Comp, *idealmemcontroller.Comp,
+) {
 	memCtrl := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		WithLatency(100).
 		Build("MemCtrl")
 	s.RegisterComponent(memCtrl)
-
-	pageTable := setupPageTable()
 
 	L2Cache := writeback.MakeBuilder().
 		WithEngine(engine).
@@ -73,6 +113,14 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithRemotePorts(L2Cache.GetPortByName("Top").AsRemote()).
 		Build("L1Cache")
 	s.RegisterComponent(L1Cache)
+
+	return L1Cache, L2Cache, memCtrl
+}
+
+func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
+	*mmu.Comp, *tlb.Comp, *tlb.Comp,
+) {
+	pageTable := setupPageTable()
 
 	IoMMU := mmu.MakeBuilder().
 		WithEngine(engine).
@@ -118,49 +166,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		Build("TLB")
 	s.RegisterComponent(TLB)
 
-	ATmapper := &mem.SinglePortMapper{
-		Port: L1Cache.GetPortByName("Top").AsRemote(),
-	}
-
-	AT := addresstranslator.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
-		WithLog2PageSize(12).
-		WithNumReqPerCycle(4).
-		WithTranslationProvider(TLB.GetPortByName("Top").AsRemote()).
-		//WithRemotePorts(L1Cache.GetPortByName("Top").AsRemote()).
-		//WithAddressMapperType("single").
-		WithAddressToPortMapper(ATmapper).
-		Build("AT")
-	s.RegisterComponent(AT)
-
-	for portName := range AT.Ports() {
-		fmt.Println("[AT] Registered Port:", portName)
-	}
-
-	agent = memaccessagent.MakeBuilder().
-		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
-		WithMaxAddress(*maxAddressFlag).
-		WithReadLeft(*numAccessFlag).
-		WithWriteLeft(*numAccessFlag).
-		WithLowModule(AT.GetPortByName("Top")).
-		Build("MemAccessAgent")
-	s.RegisterComponent(agent)
-
-	setupConnection(engine, agent, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl)
-
-	if *traceFileFlag != "" {
-		traceFile, err := os.Create(*traceFileFlag)
-		if err != nil {
-			panic(err)
-		}
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(memCtrl, tracer)
-	}
-
-	return engine, agent
+	return IoMMU, TLB, L2TLB
 }
 
 func setupPageTable() vm.PageTable {
@@ -187,37 +193,39 @@ func setupPageTable() vm.PageTable {
 	return pageTable
 }
 
+func connect(engine sim.Engine, name string, p1, p2 sim.Port) {
+	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build(name)
+	conn.PlugIn(p1)
+	conn.PlugIn(p2)
+}
+
 func setupConnection(
-	engine sim.Engine, agent,
+	engine sim.Engine,
+	agent *memaccessagent.MemAccessAgent,
 	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl sim.Component,
 ) {
-	Conn1 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn1")
-	Conn1.PlugIn(agent.GetPortByName("Mem"))
-	Conn1.PlugIn(AT.GetPortByName("Top"))
+	connect(engine, "Conn1", agent.GetPortByName("Mem"), AT.GetPortByName("Top"))
+	connect(engine, "Conn2", AT.GetPortByName("Translation"), TLB.GetPortByName("Top"))
+	connect(engine, "Conn3", TLB.GetPortByName("Bottom"), L2TLB.GetPortByName("Top"))
+	connect(engine, "Conn4", L2TLB.GetPortByName("Bottom"), IoMMU.GetPortByName("Top"))
+	connect(engine, "Conn5", AT.GetPortByName("Bottom"), L1Cache.GetPortByName("Top"))
+	connect(engine, "Conn6", L1Cache.GetPortByName("Bottom"), L2Cache.GetPortByName("Top"))
+	connect(engine, "Conn7", L2Cache.GetPortByName("Bottom"), memCtrl.GetPortByName("Top"))
+}
 
-	Conn2 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn2")
-	Conn2.PlugIn(AT.GetPortByName("Translation"))
-	Conn2.PlugIn(TLB.GetPortByName("Top"))
+func setupTracing(engine sim.Engine, memCtrl *idealmemcontroller.Comp) {
+	if *traceFileFlag == "" {
+		return
+	}
 
-	Conn3 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn3")
-	Conn3.PlugIn(TLB.GetPortByName("Bottom"))
-	Conn3.PlugIn(L2TLB.GetPortByName("Top"))
+	traceFile, err := os.Create(*traceFileFlag)
+	if err != nil {
+		panic(err)
+	}
 
-	Conn4 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn4")
-	Conn4.PlugIn(L2TLB.GetPortByName("Bottom"))
-	Conn4.PlugIn(IoMMU.GetPortByName("Top"))
-
-	Conn5 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn5")
-	Conn5.PlugIn(AT.GetPortByName("Bottom"))
-	Conn5.PlugIn(L1Cache.GetPortByName("Top"))
-
-	Conn6 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn6")
-	Conn6.PlugIn(L1Cache.GetPortByName("Bottom"))
-	Conn6.PlugIn(L2Cache.GetPortByName("Top"))
-
-	Conn7 := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn7")
-	Conn7.PlugIn(L2Cache.GetPortByName("Bottom"))
-	Conn7.PlugIn(memCtrl.GetPortByName("Top"))
+	logger := log.New(traceFile, "", 0)
+	tracer := trace.NewTracer(logger, engine)
+	tracing.CollectTrace(memCtrl, tracer)
 }
 
 func main() {
