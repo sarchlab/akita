@@ -156,8 +156,8 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		WithNumSets(8).
 		WithPageSize(4096).
 		WithNumReqPerCycle(2).
-		//WithLowModule(L2TLB.GetPortByName("Top").AsRemote()).
-		//WithAddressMapperType("single").
+		WithLowModule(L2TLB.GetPortByName("Top").AsRemote()).
+		WithAddressMapperType("single").
 		WithAddressMapper(TLBmapper).
 		Build("TLB")
 	s.RegisterComponent(TLB)
