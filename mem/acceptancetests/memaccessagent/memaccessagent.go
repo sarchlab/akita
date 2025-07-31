@@ -224,12 +224,6 @@ func uint32ToBytes(data uint32) []byte {
 }
 
 func (a *MemAccessAgent) doWrite() bool {
-	// var address uint64
-	// if a.UseVirtualAddress {
-	// 	address = rand.Uint64() % (a.MaxAddress / 4) * 4
-	// } else {
-	// 	address = rand.Uint64() % (a.MaxAddress / 4) * 4
-	// }
 	address := rand.Uint64() % (a.MaxAddress / 4) * 4
 
 	data := rand.Uint32()
