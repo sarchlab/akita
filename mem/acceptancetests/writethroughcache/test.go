@@ -67,10 +67,6 @@ func buildEnvironment() {
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	// agent = acceptancetests.NewMemAccessAgent(engine)
-	// agent.MaxAddress = *maxAddressFlag
-	// agent.WriteLeft = *numAccessFlag
-	// agent.ReadLeft = *numAccessFlag
 	agent = memaccessagent.MakeBuilder().
 		WithEngine(engine).
 		WithMaxAddress(*maxAddressFlag).

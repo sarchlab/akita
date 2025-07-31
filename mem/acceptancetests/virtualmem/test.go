@@ -156,8 +156,6 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		WithNumSets(8).
 		WithPageSize(4096).
 		WithNumReqPerCycle(2).
-		WithLowModule(L2TLB.GetPortByName("Top").AsRemote()).
-		WithAddressMapperType("single").
 		WithAddressMapper(TLBmapper).
 		Build("TLB")
 	s.RegisterComponent(TLB)
@@ -200,13 +198,34 @@ func setupConnection(
 	agent *memaccessagent.MemAccessAgent,
 	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl sim.Component,
 ) {
-	connect(engine, "Conn1", agent.GetPortByName("Mem"), AT.GetPortByName("Top"))
-	connect(engine, "Conn2", AT.GetPortByName("Translation"), TLB.GetPortByName("Top"))
-	connect(engine, "Conn3", TLB.GetPortByName("Bottom"), L2TLB.GetPortByName("Top"))
-	connect(engine, "Conn4", L2TLB.GetPortByName("Bottom"), IoMMU.GetPortByName("Top"))
-	connect(engine, "Conn5", AT.GetPortByName("Bottom"), L1Cache.GetPortByName("Top"))
-	connect(engine, "Conn6", L1Cache.GetPortByName("Bottom"), L2Cache.GetPortByName("Top"))
-	connect(engine, "Conn7", L2Cache.GetPortByName("Bottom"), memCtrl.GetPortByName("Top"))
+	connect(engine, "Conn1",
+		agent.GetPortByName("Mem"),
+		AT.GetPortByName("Top"),
+	)
+	connect(engine, "Conn2",
+		AT.GetPortByName("Translation"),
+		TLB.GetPortByName("Top"),
+	)
+	connect(engine, "Conn3",
+		TLB.GetPortByName("Bottom"),
+		L2TLB.GetPortByName("Top"),
+	)
+	connect(engine, "Conn4",
+		L2TLB.GetPortByName("Bottom"),
+		IoMMU.GetPortByName("Top"),
+	)
+	connect(engine, "Conn5",
+		AT.GetPortByName("Bottom"),
+		L1Cache.GetPortByName("Top"),
+	)
+	connect(engine, "Conn6",
+		L1Cache.GetPortByName("Bottom"),
+		L2Cache.GetPortByName("Top"),
+	)
+	connect(engine, "Conn7",
+		L2Cache.GetPortByName("Bottom"),
+		memCtrl.GetPortByName("Top"),
+	)
 }
 
 func setupTracing(engine sim.Engine, memCtrl *idealmemcontroller.Comp) {
