@@ -63,10 +63,6 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		Build("AT")
 	s.RegisterComponent(AT)
 
-	for portName := range AT.Ports() {
-		fmt.Println("[AT] Registered Port:", portName)
-	}
-
 	agent = memaccessagent.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
