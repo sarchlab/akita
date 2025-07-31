@@ -184,11 +184,6 @@ func (a *MemAccessAgent) randomReadAddress() uint64 {
 	var addr uint64
 
 	for {
-		// if a.UseVirtualAddress {
-		// 	addr = 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4 // e.g., start virtual at 0x100000000
-		// } else {
-		// 	addr = rand.Uint64() % (a.MaxAddress / 4) * 4
-		// }
 		addr = rand.Uint64() % (a.MaxAddress / 4) * 4
 
 		if _, written := a.KnownMemValue[addr]; written {
