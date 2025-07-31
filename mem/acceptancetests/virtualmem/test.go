@@ -160,18 +160,17 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 }
 
 func setupPageTable(maxAddress uint64) vm.PageTable {
-	// construct a page table
-	pageTable := vm.NewPageTable(12) // 4096 = 2^12
+	pageTable := vm.NewPageTable(12)
 
-	ptBase := uint64(0x100000) // physical starting Addr
+	ptBase := uint64(0x100000)
 	pageSize := uint64(4096)
 	numEntries := (maxAddress-1)/pageSize + 1
 
 	for i := uint64(0); i < numEntries; i++ {
-		vAddr := uint64(i) * pageSize
-		pAddr := ptBase + uint64(i)*pageSize
+		vAddr := i * pageSize
+		pAddr := ptBase + i*pageSize
 		page := vm.Page{
-			PID:      1, // process ID
+			PID:      1,
 			VAddr:    vAddr,
 			PAddr:    pAddr,
 			PageSize: pageSize,
