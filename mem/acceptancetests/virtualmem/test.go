@@ -141,8 +141,6 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		WithNumSets(64).
 		WithPageSize(4096).
 		WithNumReqPerCycle(4).
-		//WithLowModule(IoMMU.GetPortByName("Top").AsRemote()).
-		//WithAddressMapperType("single").
 		WithAddressMapper(L2TLBmapper).
 		Build("L2TLB")
 	s.RegisterComponent(L2TLB)
