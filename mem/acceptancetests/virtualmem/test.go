@@ -59,8 +59,6 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
 		WithTranslationProvider(TLB.GetPortByName("Top").AsRemote()).
-		//WithRemotePorts(L1Cache.GetPortByName("Top").AsRemote()).
-		//WithAddressMapperType("single").
 		WithAddressToPortMapper(ATmapper).
 		Build("AT")
 	s.RegisterComponent(AT)
