@@ -142,12 +142,7 @@ func (a *MemAccessAgent) shouldRead() bool {
 }
 
 func (a *MemAccessAgent) doRead() bool {
-	var address uint64
-	if a.UseVirtualAddress {
-		address = a.randomVirtualAddress()
-	} else {
-		address = a.randomReadAddress()
-	}
+	address := a.randomReadAddress()
 
 	if a.isAddressInPendingReq(address) {
 		return false
@@ -174,10 +169,6 @@ func (a *MemAccessAgent) doRead() bool {
 	}
 
 	return false
-}
-
-func (a *MemAccessAgent) randomVirtualAddress() uint64 {
-	return 0x100000000 + rand.Uint64()%(a.MaxAddress/4)*4
 }
 
 func (a *MemAccessAgent) randomReadAddress() uint64 {

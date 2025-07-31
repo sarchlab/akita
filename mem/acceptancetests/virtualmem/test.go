@@ -114,7 +114,7 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 	*mmu.Comp, *tlb.Comp, *tlb.Comp,
 ) {
-	pageTable := setupPageTable()
+	pageTable := setupPageTable(*maxAddressFlag)
 
 	IoMMU := mmu.MakeBuilder().
 		WithEngine(engine).
@@ -159,15 +159,15 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 	return IoMMU, TLB, L2TLB
 }
 
-func setupPageTable() vm.PageTable {
+func setupPageTable(maxAddress uint64) vm.PageTable {
 	// construct a page table
 	pageTable := vm.NewPageTable(12) // 4096 = 2^12
 
 	ptBase := uint64(0x100000) // physical starting Addr
 	pageSize := uint64(4096)
-	numEntries := 512
+	numEntries := (maxAddress-1)/pageSize + 1
 
-	for i := 0; i < numEntries; i++ {
+	for i := uint64(0); i < numEntries; i++ {
 		vAddr := uint64(i) * pageSize
 		pAddr := ptBase + uint64(i)*pageSize
 		page := vm.Page{
