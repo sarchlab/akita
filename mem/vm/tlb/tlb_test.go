@@ -358,6 +358,7 @@ var _ = Describe("TLB Integration", func() {
 		tlb = MakeBuilder().
 			WithEngine(engine).
 			WithAddressMapper(addressMapper).
+			WithLowModule(lowModule.AsRemote()).
 			Build("TLB")
 
 		agent.EXPECT().SetConnection(connection)
