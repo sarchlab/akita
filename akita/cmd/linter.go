@@ -22,61 +22,47 @@ var linterCmd = &cobra.Command{
 		folderPath := args[0]
 
 		hasError := false
-		err := checkComponentFormat(folderPath)
-		if err != nil {
-			fmt.Printf("Comp validation error: %s\n", err)
-			//os.Exit(1)
+		errCompStruct := checkComponentFormat(folderPath)
+		if errCompStruct != nil {
+			fmt.Printf("<1a> Component structure error: %s\n", errCompStruct)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Comp validation succeed!\n")
-		// 	//os.Exit(0)
-		// }
+
+		errBuilderStruct := checkBuilderStruct(folderPath)
+		if errBuilderStruct != nil {
+			fmt.Printf("<2a> Builder structure error: %s\n", errBuilderStruct)
+			hasError = true
+		}
 
 		errBuilder := checkBuilderFormat(folderPath)
 		if errBuilder != nil {
-			fmt.Printf("Builder format error: %s\n", errBuilder)
+			fmt.Printf("<2b> Builder format error: %s\n", errBuilder)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Builder format validation succeed!\n")
-		// }
 
 		errBuilderReturn := checkBuilderReturn(folderPath)
 		if errBuilderReturn != nil {
-			fmt.Printf("Builder return error: %s\n", errBuilderReturn)
+			fmt.Printf("<2b> Builder return error: %s\n", errBuilderReturn)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Builder return validation succeed!\n")
-		// }
 
 		errBuilderParameter := checkBuilderParameters(folderPath)
 		if errBuilderParameter != nil {
-			fmt.Printf("Builder parameter error: %s\n", errBuilderParameter)
+			fmt.Printf("<2c> Builder parameter error: %s\n", errBuilderParameter)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Builder parameter validation succeed!\n")
-		// }
 
 		errBuilderFunc := checkBuilderFunction(folderPath)
 		if errBuilderFunc != nil {
-			fmt.Printf("Builder function error: %s\n", errBuilderFunc)
+			fmt.Printf("<2d> Builder function error: %s\n", errBuilderFunc)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Builder function validation succeed!\n")
-		// }
 
 		errManifest := checkManifestFormat(folderPath)
 		if errManifest != nil {
-			fmt.Printf("Manifest error: %v", errManifest)
+			fmt.Printf("<3a/b> Manifest error: %v", errManifest)
 			hasError = true
 		}
-		// else {
-		// 	fmt.Printf("Manifest validation succeed!")
-		// }
 
 		if hasError {
 			os.Exit(1)
@@ -122,7 +108,44 @@ func checkComponentFormat(folderPath string) error {
 		}
 	}
 	if !existCompStruct {
-		return fmt.Errorf("no type Comp struct in comp.go")
+		return fmt.Errorf("no Comp struct in comp.go")
+	}
+
+	return nil
+}
+
+func checkBuilderStruct(folderPath string) error {
+	// check builder.go existence
+	builderFilePath := filepath.Join(folderPath, "builder.go")
+	if _, err := os.Stat(builderFilePath); os.IsNotExist(err) {
+		return fmt.Errorf("builder.go file does not exist")
+	}
+
+	// parse the builder file
+	fs := token.NewFileSet()
+	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
+	if err != nil {
+		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+	}
+
+	existBuilderStruct := false
+	for _, decl := range node.Decls { // iterate all declaration
+		genDecl, ok := decl.(*ast.GenDecl)    // check if declaration is one of the GenDecl
+		if !ok || genDecl.Tok != token.TYPE { // check if declaration is a type decl
+			continue
+		}
+		for _, spec := range genDecl.Specs { // iterate specs in the type decl
+			typeSpec, ok := spec.(*ast.TypeSpec)       //check if spec is one of the Expr
+			if ok && typeSpec.Name.Name == "Builder" { // check struct name
+				if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
+					existBuilderStruct = true
+					break
+				}
+			}
+		}
+	}
+	if !existBuilderStruct {
+		return fmt.Errorf("no Builder struct in builder.go")
 	}
 
 	return nil
@@ -206,16 +229,6 @@ func checkBuilderFormat(folderPath string) error {
 			}
 			return true
 		})
-
-		// fmt.Println("builderFields keys:")
-		// for key, value := range builderFields {
-		// 	fmt.Println("-", key, value)
-		// }
-
-		// fmt.Println("configurableFields keys:")
-		// for c, value := range configurableFields {
-		// 	fmt.Println("-", c, value)
-		// }
 
 		var unconfigs []string
 		for key, value := range configurableFields {
