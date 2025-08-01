@@ -187,28 +187,7 @@ func (b Builder) Build(name string) *Comp {
 	// c.addressToPortMapper = b.addressToPortMapper
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
-	if b.addressToPortMapper != nil {
-		c.addressToPortMapper = b.addressToPortMapper
-	} else {
-		switch b.addressMapperType {
-		case "single":
-			if len(b.remotePorts) != 1 {
-				panic("single address mapper requires exactly 1 port")
-			}
-			c.addressToPortMapper = &mem.SinglePortMapper{
-				Port: b.remotePorts[0],
-			}
-		case "interleaved":
-			if len(b.remotePorts) == 0 {
-				panic("interleaved address mapper requires at least 1 port")
-			}
-			mapper := mem.NewInterleavedAddressPortMapper(4096)
-			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-			c.addressToPortMapper = mapper
-		default:
-			panic("addressMapperType must be “single” or “interleaved”")
-		}
-	}
+	b.configureAddressMapper(c)
 
 	b.buildStages(c)
 
@@ -283,6 +262,32 @@ func (b *Builder) buildBankStages(c *Comp) {
 		if b.visTracer != nil {
 			tracing.CollectTrace(bs.pipeline, b.visTracer)
 		}
+	}
+}
+
+func (b *Builder) configureAddressMapper(c *Comp) {
+	if b.addressToPortMapper != nil {
+		c.addressToPortMapper = b.addressToPortMapper
+		return
+	}
+
+	switch b.addressMapperType {
+	case "single":
+		if len(b.remotePorts) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		c.addressToPortMapper = &mem.SinglePortMapper{
+			Port: b.remotePorts[0],
+		}
+	case "interleaved":
+		if len(b.remotePorts) == 0 {
+			panic("interleaved address mapper requires at least 1 port")
+		}
+		mapper := mem.NewInterleavedAddressPortMapper(4096)
+		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+		c.addressToPortMapper = mapper
+	default:
+		panic("addressMapperType must be “single” or “interleaved”")
 	}
 }
 
