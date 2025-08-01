@@ -1,7 +1,7 @@
 package tlb
 
 import (
-	// "github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -16,7 +16,7 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	// addressMapper mem.AddressToPortMapper
+	addressMapper mem.AddressToPortMapper
 
 	numSets        int
 	numWays        int

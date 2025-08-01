@@ -25,6 +25,9 @@ type Builder struct {
 	maxNumConcurrentTrans int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
+	
+	addressMapperType	  string
+	remotePorts           []sim.RemotePort
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -128,6 +131,19 @@ func (b Builder) WithAddressToPortMapper(
 	return b
 }
 
+// WithAddressMapperType sets the type of address mapper to use
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+// WithRemotePorts sets the remote ports that the cache can use to send
+// requests to other components.
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
 // Build returns a new cache unit
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
@@ -168,8 +184,31 @@ func (b Builder) Build(name string) *Comp {
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
 	c.wayAssociativity = b.wayAssociativity
-	c.addressToPortMapper = b.addressToPortMapper
+	// c.addressToPortMapper = b.addressToPortMapper
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
+
+	if b.addressToPortMapper != nil {
+		c.addressToPortMapper = b.addressToPortMapper
+	} else {
+		switch b.addressMapperType {
+		case "single":
+			if len(b.remotePorts) != 1 {
+				panic("single address mapper requires exactly 1 port")
+			}
+			c.addressToPortMapper = &mem.SinglePortMapper{
+				Port: b.remotePorts[0],
+			}
+		case "interleaved":
+			if len(b.remotePorts) == 0 {
+				panic("interleaved address mapper requires at least 1 port")
+			}
+			mapper := mem.NewInterleavedAddressPortMapper(4096)
+			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+			c.addressToPortMapper = mapper
+		default:
+			panic("addressMapperType must be “single” or “interleaved”")
+		}
+	}
 
 	b.buildStages(c)
 

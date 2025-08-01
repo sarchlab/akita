@@ -100,31 +100,37 @@ func (b Builder) Build(name string) *Comp {
 
 	t.translationProvider = b.translationProvider
 
-	switch b.addressMapperType {
-	case "single":
-		if len(b.remotePorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
-		t.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
-	case "interleaved":
-		if len(b.remotePorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
-		mapper := mem.NewInterleavedAddressPortMapper(4096)
-		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-		t.addressToPortMapper = mapper
-	default:
-		switch len(b.remotePorts) {
-		case 0:
-			panic("no ports provided: cannot build address mapper")
-		case 1:
-			t.addressToPortMapper = &mem.SinglePortMapper{
-				Port: b.remotePorts[0],
+	// Use the provided addressToPortMapper if it's set
+	if b.addressToPortMapper != nil {
+		t.addressToPortMapper = b.addressToPortMapper
+	} else {
+		// Fall back to creating a mapper based on remotePorts and addressMapperType
+		switch b.addressMapperType {
+		case "single":
+			if len(b.remotePorts) != 1 {
+				panic("single address mapper requires exactly 1 port")
 			}
-		default:
+			t.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
+		case "interleaved":
+			if len(b.remotePorts) == 0 {
+				panic("interleaved address mapper requires at least 1 port")
+			}
 			mapper := mem.NewInterleavedAddressPortMapper(4096)
 			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
 			t.addressToPortMapper = mapper
+		default:
+			switch len(b.remotePorts) {
+			case 0:
+				panic("no ports provided: cannot build address mapper")
+			case 1:
+				t.addressToPortMapper = &mem.SinglePortMapper{
+					Port: b.remotePorts[0],
+				}
+			default:
+				mapper := mem.NewInterleavedAddressPortMapper(4096)
+				mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+				t.addressToPortMapper = mapper
+			}
 		}
 	}
 

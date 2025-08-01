@@ -118,13 +118,15 @@ func (b Builder) Build(name string) *Comp {
 	tlb.numWays = b.numWays
 	tlb.numReqPerCycle = b.numReqPerCycle
 	tlb.pageSize = b.pageSize
-	// tlb.addressMapper = b.addressMapper
+	tlb.addressMapper = b.addressMapper
 	tlb.mshr = newMSHR(b.numMSHREntry)
 
 	b.createPorts(name, tlb)
 
 	if len(b.remotePorts) > 0 {
 		tlb.translationProvider = b.remotePorts[0]
+	} else if b.lowModule != "" {
+		tlb.translationProvider = b.lowModule
 	}
 
 
