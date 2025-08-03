@@ -11,9 +11,17 @@ var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
 var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
 
-// HookPosPortMsgRetrieve marks when an outbound message is sent over a
-// connection
-var HookPosPortMsgRetrieve = &HookPos{Name: "Port Msg Retrieve"}
+// HookPosPortMsgRetrieveIncoming marks when an inbound message is retrieved
+// from the incoming buffer.
+var HookPosPortMsgRetrieveIncoming = &HookPos{
+	Name: "Port Msg Retrieve Incoming",
+}
+
+// HookPosPortMsgRetrieveOutgoing marks when an outbound message is retrieved
+// from the outgoing buffer.
+var HookPosPortMsgRetrieveOutgoing = &HookPos{
+	Name: "Port Msg Retrieve Outgoing",
+}
 
 // A RemotePort is a string that refers to another port.
 type RemotePort string
@@ -155,24 +163,26 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 // buffer
 func (p *defaultPort) RetrieveIncoming() Msg {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	item := p.incomingBuf.Pop()
 	if item == nil {
+		p.lock.Unlock()
 		return nil
 	}
-
-	msg := item.(Msg)
-	hookCtx := HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgRetrieve,
-		Item:   msg,
-	}
-	p.InvokeHook(hookCtx)
 
 	if p.incomingBuf.Size() == p.incomingBuf.Capacity()-1 {
 		p.conn.NotifyAvailable(p)
 	}
+
+	p.lock.Unlock()
+
+	msg := item.(Msg)
+	hookCtx := HookCtx{
+		Domain: p,
+		Pos:    HookPosPortMsgRetrieveIncoming,
+		Item:   msg,
+	}
+	p.InvokeHook(hookCtx)
 
 	return msg
 }
@@ -181,24 +191,26 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 // buffer
 func (p *defaultPort) RetrieveOutgoing() Msg {
 	p.lock.Lock()
-	defer p.lock.Unlock()
 
 	item := p.outgoingBuf.Pop()
 	if item == nil {
+		p.lock.Unlock()
 		return nil
 	}
-
-	msg := item.(Msg)
-	hookCtx := HookCtx{
-		Domain: p,
-		Pos:    HookPosPortMsgRetrieve,
-		Item:   msg,
-	}
-	p.InvokeHook(hookCtx)
 
 	if p.outgoingBuf.Size() == p.outgoingBuf.Capacity()-1 {
 		p.comp.NotifyPortFree(p)
 	}
+
+	p.lock.Unlock()
+
+	msg := item.(Msg)
+	hookCtx := HookCtx{
+		Domain: p,
+		Pos:    HookPosPortMsgRetrieveOutgoing,
+		Item:   msg,
+	}
+	p.InvokeHook(hookCtx)
 
 	return msg
 }

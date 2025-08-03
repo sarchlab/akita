@@ -72,6 +72,12 @@ func createExecRecorder(w *sqliteWriter) {
 	w.execRecorder = execRecorder
 }
 
+// Feed to location table when inserting data
+type location struct {
+	ID     int
+	Locale string
+}
+
 type table struct {
 	structType reflect.Type
 	entries    []any
@@ -85,6 +91,7 @@ type sqliteWriter struct {
 	mu           sync.Mutex
 	dbName       string
 	tables       map[string]*table
+	locationInfo map[string]int
 	batchSize    int
 	entryCount   int
 	execRecorder *execRecorder
@@ -176,10 +183,18 @@ func (t *sqliteWriter) mustHaveAtMostOneTag(field reflect.StructField) {
 		return
 	}
 
-	panic("akita_data tag can only be either ignore, unique, or index")
+	if tags == "location" {
+		return
+	}
+
+	panic("akita_data tag can only be either " +
+		"ignore, unique, index, or location")
 }
 
 func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	err := t.checkStructFields(sampleEntry)
 	if err != nil {
 		panic(err)
@@ -194,6 +209,12 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 
 	t.createIndexesForTable(tableName, sampleEntry)
 
+	hasLocTag := t.checkLocationTag(sampleEntry)
+	_, exists := t.tables["location"]
+	if !exists && hasLocTag {
+		t.createLocationTable()
+	}
+
 	tableInfo := &table{
 		structType: reflect.TypeOf(sampleEntry),
 		entries:    []any{},
@@ -201,6 +222,51 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 	t.tables[tableName] = tableInfo
 
 	t.prepareStatement(tableName, sampleEntry)
+}
+
+func (t *sqliteWriter) checkLocationTag(entry any) bool {
+	if t.locationInfo == nil {
+		t.locationInfo = make(map[string]int)
+	}
+
+	hasLocation := false
+
+	sType := reflect.TypeOf(entry)
+
+	for i := 0; i < sType.NumField(); i++ {
+		field := sType.Field(i)
+
+		dbTag, ok := field.Tag.Lookup("akita_data")
+		if ok && dbTag == "location" {
+			kind := field.Type.Kind()
+			if kind != reflect.String {
+				panic("location field type mismatch")
+			}
+
+			hasLocation = true
+		}
+	}
+
+	return hasLocation
+}
+
+func (t *sqliteWriter) createLocationTable() {
+	sampleLoc := location{1, "A"}
+
+	fieldNames := t.getFieldNames(sampleLoc)
+	fields := strings.Join(fieldNames, ", \n\t")
+
+	createTableSQL := `CREATE TABLE ` + "location" +
+		` (` + "\n\t" + fields + "\n" + `);`
+	t.mustExecute(createTableSQL)
+
+	tableInfo := &table{
+		structType: reflect.TypeOf(sampleLoc),
+		entries:    []any{},
+	}
+	t.tables["location"] = tableInfo
+
+	t.prepareStatement("location", sampleLoc)
 }
 
 func (t *sqliteWriter) prepareStatement(table string, task any) {
@@ -274,19 +340,25 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	table, exists := t.tables[tableName]
 	if !exists {
+		t.mu.Unlock()
 		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
 	table.entries = append(table.entries, entry)
 
 	t.entryCount += 1
+
 	if t.entryCount >= t.batchSize {
+		t.mu.Unlock()
 		t.Flush()
+
+		return
 	}
+
+	t.mu.Unlock()
 }
 
 func (t *sqliteWriter) ListTables() []string {
@@ -306,46 +378,132 @@ func (t *sqliteWriter) Flush() {
 	t.mustExecute("BEGIN TRANSACTION")
 	defer t.mustExecute("COMMIT TRANSACTION")
 
-	for _, table := range t.tables {
+	for tableName, table := range t.tables {
 		if len(table.entries) == 0 {
 			continue
 		}
 
+		if tableName == "location" {
+			continue
+		}
+
 		for _, task := range table.entries {
-			v := []any{}
-
-			value := reflect.ValueOf(task)
-			vType := value.Type()
-
-			if vType != table.structType {
-				panic("entry type mismatch")
-			}
-
-			for i := 0; i < value.NumField(); i++ {
-				field := vType.Field(i)
-
-				if t.fieldIgnored(field) {
-					continue
-				}
-
-				v = append(v, value.Field(i).Interface())
-			}
-
-			_, err := table.statement.Exec(v...)
-			if err != nil {
-				panic(err)
-			}
+			t.insertEntryForTable(task, table)
 		}
 
 		table.entries = nil
 	}
 
+	t.flushLocationTable()
+
 	t.entryCount = 0
+}
+
+func (t *sqliteWriter) insertEntryForTable(
+	task any,
+	table *table,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	v := []any{}
+
+	value := reflect.ValueOf(task)
+	vType := value.Type()
+
+	if vType != table.structType {
+		panic("entry type mismatch")
+	}
+
+	for i := 0; i < value.NumField(); i++ {
+		field := vType.Field(i)
+
+		if t.fieldIgnored(field) {
+			continue
+		}
+
+		if t.fieldLocation(field) {
+			id := t.getLocationID(value, i)
+			v = append(v, id)
+		} else {
+			v = append(v, value.Field(i).Interface())
+		}
+	}
+
+	_, err := table.statement.Exec(v...)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (t *sqliteWriter) getLocationID(
+	value reflect.Value,
+	i int,
+) int {
+	loc := value.Field(i).String()
+	id, exists := t.locationInfo[loc]
+
+	if !exists {
+		id = len(t.locationInfo) + 1
+		t.locationInfo[loc] = id
+
+		newLocation := location{id, loc}
+		locTable := t.tables["location"]
+		locTable.entries = append(locTable.entries, newLocation)
+		t.entryCount += 1
+	}
+
+	return id
 }
 
 func (t *sqliteWriter) fieldIgnored(field reflect.StructField) bool {
 	tag, ok := field.Tag.Lookup("akita_data")
 	return ok && strings.Contains(tag, "ignore")
+}
+
+func (t *sqliteWriter) fieldLocation(field reflect.StructField) bool {
+	tag, ok := field.Tag.Lookup("akita_data")
+
+	return ok && strings.Contains(tag, "location")
+}
+
+func (t *sqliteWriter) flushLocationTable() {
+	table, exists := t.tables["location"]
+	if !exists {
+		return
+	}
+
+	if len(table.entries) == 0 {
+		return
+	}
+
+	for _, task := range table.entries {
+		v := []any{}
+
+		value := reflect.ValueOf(task)
+		vType := value.Type()
+
+		if vType != table.structType {
+			panic("entry type mismatch")
+		}
+
+		for i := 0; i < value.NumField(); i++ {
+			field := vType.Field(i)
+
+			if t.fieldIgnored(field) {
+				continue
+			}
+
+			v = append(v, value.Field(i).Interface())
+		}
+
+		_, err := table.statement.Exec(v...)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	table.entries = nil
 }
 
 func (t *sqliteWriter) mustExecute(query string) sql.Result {

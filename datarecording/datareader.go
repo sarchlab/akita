@@ -159,6 +159,8 @@ func (r *sqliteReader) scanRowsToSlice(
 		return nil // Error getting columns
 	}
 
+	hasLocation := r.checkLocationTag(structType)
+
 	fieldMap := make(map[string]int)
 
 	for i := 0; i < structType.NumField(); i++ {
@@ -186,6 +188,10 @@ func (r *sqliteReader) scanRowsToSlice(
 			panic(err)
 		}
 
+		if hasLocation {
+			r.restoreStrLocation(structVal, structType)
+		}
+
 		results = append(results, structPtr.Interface())
 	}
 
@@ -198,4 +204,51 @@ func (r *sqliteReader) scanRowsToSlice(
 
 func (r *sqliteReader) Close() error {
 	return r.DB.Close()
+}
+
+// Helper function that restores location index back to string
+func (r *sqliteReader) restoreStrLocation(
+	structVal reflect.Value,
+	structType reflect.Type,
+) {
+	var strLocation string // Retrieves the real location
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		dbTag, ok := field.Tag.Lookup("akita_data")
+		if ok && dbTag == "location" {
+			fieldVal := structVal.Field(i)
+			index := fieldVal.String()
+
+			stmt := fmt.Sprintf("SELECT Locale FROM"+
+				" location WHERE ID = %s", index)
+			r.DB.QueryRow(stmt).Scan(&strLocation)
+
+			fieldVal.SetString(strLocation)
+		}
+	}
+}
+
+// Helper function that checks whehter this struct has location tag
+func (r *sqliteReader) checkLocationTag(
+	structType reflect.Type,
+) bool {
+	hasLocation := false
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		dbTag, ok := field.Tag.Lookup("akita_data")
+		if ok && dbTag == "location" {
+			kind := field.Type.Kind()
+			if kind != reflect.String {
+				panic("location field type mismatch")
+			}
+
+			hasLocation = true
+		}
+	}
+
+	return hasLocation
 }

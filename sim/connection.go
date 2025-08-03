@@ -17,6 +17,9 @@ type Connection interface {
 	PlugIn(port Port)
 	Unplug(port Port)
 	NotifyAvailable(port Port)
+
+	// V5: Add port information to NotifySend. Knowing the port is helpful
+	// for the wire implementation to notify the right destination.
 	NotifySend()
 }
 

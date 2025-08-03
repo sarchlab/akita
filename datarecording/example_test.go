@@ -8,9 +8,10 @@ import (
 )
 
 type Task struct {
-	ID   int    `json:"id" akita_data:"unique"`
-	Name string `json:"name" akita_data:"index"`
-	Age  int    `json:"age" akita_data:"ignore"`
+	ID    int    `json:"id" akita_data:"unique"`
+	Name  string `json:"name" akita_data:"index"`
+	Age   int    `json:"age" akita_data:"ignore"`
+	Place string `json:"place" akita_data:"location"`
 }
 
 func Example() {
@@ -24,15 +25,15 @@ func Example() {
 	}
 	defer cleanup()
 
-	task1 := Task{1, "task1", 30}
+	task1 := Task{1, "task1", 30, "A"}
 	recorder.CreateTable("test_table", task1)
 
-	task2 := Task{2, "task2", 15}
+	task2 := Task{2, "task2", 15, "B"}
 	recorder.InsertData("test_table", task2)
 	recorder.Flush()
 
 	tables := recorder.ListTables()
-	fmt.Printf("The stored table: %s\n", tables[1])
+	fmt.Printf("The stored table: %s\n", tables[2])
 
 	recorder.Close()
 
@@ -49,7 +50,8 @@ func Example() {
 
 	for _, result := range results {
 		task := result.(*Task)
-		fmt.Printf("ID: %d, Name: %s\n", task.ID, task.Name)
+		fmt.Printf("ID: %d, Name: %s, Place: %s\n",
+			task.ID, task.Name, task.Place)
 	}
 
 	reader.Close()
@@ -57,5 +59,5 @@ func Example() {
 	// Output:
 	// The stored table: test_table
 	// The stored table: test_table
-	// ID: 2, Name: task2
+	// ID: 2, Name: task2, Place: B
 }
