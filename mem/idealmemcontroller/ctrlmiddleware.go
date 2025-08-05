@@ -26,6 +26,7 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 	}
 
 	rsp := m.currentCmd.GenerateRsp()
+
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
 		return false
@@ -56,7 +57,12 @@ func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 	if ctrlMsg.Enable {
 		m.state = "enable"
 		rsp := ctrlMsg.GenerateRsp()
-		m.ctrlPort.Send(rsp)
+		err := m.ctrlPort.Send(rsp)
+
+		if err != nil {
+			return false
+		}
+
 		m.ctrlPort.RetrieveIncoming()
 		return true
 	}
@@ -68,7 +74,12 @@ func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && !ctrlMsg.Drain {
 		m.state = "pause"
 		rsp := ctrlMsg.GenerateRsp()
-		m.ctrlPort.Send(rsp)
+		err := m.ctrlPort.Send(rsp)
+
+		if err != nil {
+			return false
+		}
+
 		m.ctrlPort.RetrieveIncoming()
 		return true
 	}
