@@ -23,6 +23,7 @@ export class TaskPage implements ZoomHandler {
   _legendCanvas: HTMLElement;
   _componentOnlyMode: boolean;
   _componentName: string;
+  _dissectionMode: boolean;
   _currTasks: Object;
   _startTime: number;
   _endTime: number;
@@ -44,6 +45,7 @@ export class TaskPage implements ZoomHandler {
     this._legendCanvas = null;
     this._componentOnlyMode = false;
     this._componentName = "";
+    this._dissectionMode = false;
     this._widget = null;
 
     this._currTasks = {
@@ -67,6 +69,7 @@ export class TaskPage implements ZoomHandler {
       new TaskRenderer(this, this._taskColorCoder),
       new XAxisDrawer()
     );
+    this._taskView.setToggleCallback(() => this._toggleDissectionMode());
     this._componentView = new ComponentView(
       this._yIndexAssigner,
       new TaskRenderer(this, this._taskColorCoder),
@@ -150,6 +153,7 @@ export class TaskPage implements ZoomHandler {
     this._taskView.setCanvas(this._taskViewCanvas, this._tooltip);
     this._componentView.setCanvas(this._componentViewCanvas, this._tooltip);
     this._legend.setCanvas(this._legendCanvas);
+    this._updateLayout();
   }
 
   _layoutRightColumn() {
@@ -259,12 +263,6 @@ export class TaskPage implements ZoomHandler {
     task = task[0];
     const subTasks = await rsps[1].json();
 
-    if (!keepView) {
-      this._updateTimeAxisAccordingToTask(task);
-      this._taskView.updateLayout();
-      this._componentView.updateLayout();
-    }
-
     let parentTask = null;
     if (task.parent_id != "") {
       parentTask = await fetch(`/api/trace?id=${task.parent_id}`).then(rsp =>
@@ -273,6 +271,12 @@ export class TaskPage implements ZoomHandler {
     }
     if (parentTask != null && parentTask.length > 0) {
       parentTask = parentTask[0];
+    }
+
+    if (!keepView) {
+      this._updateTimeAxisAccordingToTask(task);
+      this._taskView.updateLayout();
+      this._componentView.updateLayout();
     }
     if (parentTask != null) {
       this._componentView.setComponentName(parentTask.location);
@@ -361,6 +365,36 @@ export class TaskPage implements ZoomHandler {
     // this._taskViewCanvas.style.height = 200
     // this._componentViewCanvas.style.height =
     //     this._leftColumn.offsetHeight - 200
+  }
+
+  _toggleDissectionMode() {
+    this._dissectionMode = !this._dissectionMode;
+    this._updateLayout();
+  }
+
+  _updateLayout() {
+    if (this._dissectionMode) {
+      // In dissection mode: hide component view, show dissection view in its place
+      this._componentViewCanvas.style.display = 'none';
+      this._taskView.showDissectionView();
+    } else {
+      // Normal mode: show both views (or just component view if in component-only mode)
+      if (!this._componentOnlyMode) {
+        this._taskViewCanvas.style.display = 'block';
+        this._componentViewCanvas.style.height = (this._leftColumn.offsetHeight - 200).toString() + 'px';
+      } else {
+        this._taskViewCanvas.style.display = 'none';
+        this._componentViewCanvas.style.height = this._leftColumn.offsetHeight.toString() + 'px';
+      }
+      this._componentViewCanvas.style.display = 'block';
+      this._taskView.hideDissectionView();
+    }
+    
+    // Update layouts
+    this._taskView.updateLayout();
+    if (!this._dissectionMode) {
+      this._componentView.updateLayout();
+    }
   }
 
   _updateTimeAxisAccordingToTask(task: Task) {

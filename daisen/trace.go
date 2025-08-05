@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -81,6 +82,12 @@ type TaskQuery struct {
 }
 
 // A Task is a task
+type TaskStep struct {
+	Time sim.VTimeInSec `json:"time"`
+	What string         `json:"what"`
+	Kind string         `json:"kind"`
+}
+
 type Task struct {
 	ID        string         `json:"id"`
 	ParentID  string         `json:"parent_id"`
@@ -89,7 +96,7 @@ type Task struct {
 	Location  string         `json:"location"`
 	StartTime sim.VTimeInSec `json:"start_time"`
 	EndTime   sim.VTimeInSec `json:"end_time"`
-	// Steps      []TaskStep     `json:"steps"`
+	Steps      []TaskStep     `json:"steps"`
 	Detail     interface{} `json:"-"`
 	ParentTask *Task       `json:"-"`
 }
@@ -174,7 +181,61 @@ func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 		tasks = append(tasks, task)
 	}
 
+	// Load milestones for tasks if a specific task ID is requested
+	if query.ID != "" {
+		r.loadMilestonesForTasks(tasks)
+	}
+
 	return tasks
+}
+
+// loadMilestonesForTasks loads milestones for the given tasks from the database
+func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
+	if len(tasks) == 0 {
+		return
+	}
+
+	// Build a map for quick task lookup
+	taskMap := make(map[string]*Task)
+	var taskIDs []string
+	for i := range tasks {
+		taskMap[tasks[i].ID] = &tasks[i]
+		taskIDs = append(taskIDs, "'"+tasks[i].ID+"'")
+	}
+
+	// Query milestones for all tasks
+	sqlStr := fmt.Sprintf(`
+		SELECT TaskID, Time, Kind, What, Location 
+		FROM trace_milestones 
+		WHERE TaskID IN (%s)
+		ORDER BY TaskID, Time`, 
+		strings.Join(taskIDs, ","))
+
+	rows, err := r.Query(sqlStr)
+	if err != nil {
+		// If trace_milestones table doesn't exist, just return without error
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var taskID, kind, what, location string
+		var time float64
+
+		err := rows.Scan(&taskID, &time, &kind, &what, &location)
+		if err != nil {
+			continue
+		}
+
+		if task, exists := taskMap[taskID]; exists {
+			step := TaskStep{
+				Time:     sim.VTimeInSec(time),
+				What:     what,
+				Kind:     kind,
+			}
+			task.Steps = append(task.Steps, step)
+		}
+	}
 }
 
 func (r *SQLiteTraceReader) scanTaskFromRow(
