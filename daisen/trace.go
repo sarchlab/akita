@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -46,7 +47,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		EnableParentTask: false,
 	}
 
-	tasks := traceReader.ListTasks(query)
+	tasks := traceReader.ListTasks(r.Context(), query)
 
 	rsp, err := json.Marshal(tasks)
 	dieOnErr(err)
@@ -97,10 +98,10 @@ type Task struct {
 // TraceReader can parse a trace file.
 type TraceReader interface {
 	// ListComponents returns all the locations used in the trace.
-	ListComponents() []string
+	ListComponents(ctx context.Context) []string
 
 	// ListTasks queries tasks .
-	ListTasks(query TaskQuery) []Task
+	ListTasks(ctx context.Context, query TaskQuery) []Task
 }
 
 // SQLiteTraceReader is a reader that reads trace data from a SQLite database.
@@ -130,10 +131,10 @@ func (r *SQLiteTraceReader) Init() {
 }
 
 // ListComponents returns a list of components in the trace.
-func (r *SQLiteTraceReader) ListComponents() []string {
+func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 	var components []string
 
-	rows, err := r.Query("SELECT DISTINCT Location FROM trace")
+	rows, err := r.QueryContext(ctx, "SELECT DISTINCT Location FROM trace")
 	if err != nil {
 		panic(err)
 	}
@@ -160,15 +161,18 @@ func (r *SQLiteTraceReader) ListComponents() []string {
 }
 
 // ListTasks returns a list of tasks in the trace according to the given query.
-func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
+func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Task {
 	sqlStr := r.prepareTaskQueryStr(query)
-	rows, err := r.Query(sqlStr)
+
+	rows, err := r.QueryContext(ctx, sqlStr)
 	if err != nil {
 		panic(err)
 	}
+
 	defer rows.Close()
 
 	tasks := []Task{}
+
 	for rows.Next() {
 		task := r.scanTaskFromRow(rows, query.EnableParentTask)
 		tasks = append(tasks, task)
@@ -195,6 +199,7 @@ func (r *SQLiteTraceReader) scanTaskFromRow(
 
 func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+
 	var ptStartTime, ptEndTime sql.NullFloat64
 
 	err := rows.Scan(

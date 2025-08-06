@@ -8,6 +8,7 @@ import (
 
 type readRespondEvent struct {
 	*sim.EventBase
+
 	req *mem.ReadReq
 }
 
@@ -19,6 +20,7 @@ func newReadRespondEvent(time sim.VTimeInSec, handler sim.Handler,
 
 type writeRespondEvent struct {
 	*sim.EventBase
+
 	req *mem.WriteReq
 }
 

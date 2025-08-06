@@ -16,6 +16,7 @@ const (
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
+
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
