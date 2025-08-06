@@ -57,8 +57,8 @@ func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 	if ctrlMsg.Enable {
 		m.state = "enable"
 		rsp := ctrlMsg.GenerateRsp()
-		err := m.ctrlPort.Send(rsp)
 
+		err := m.ctrlPort.Send(rsp)
 		if err != nil {
 			return false
 		}
@@ -74,8 +74,8 @@ func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && !ctrlMsg.Drain {
 		m.state = "pause"
 		rsp := ctrlMsg.GenerateRsp()
-		err := m.ctrlPort.Send(rsp)
 
+		err := m.ctrlPort.Send(rsp)
 		if err != nil {
 			return false
 		}
@@ -114,14 +114,16 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValid(ctrlMsg *mem.ControlMsg) {
 	}
 
 	if !ctrlMsg.Enable {
-		if ctrlMsg.Drain {
-			if ctrlMsg.Invalid {
-				panic("Drain and Invalid should not be set at the same time")
-			}
+		m.drainSignalMustNotInvalidate(ctrlMsg)
+	}
+}
 
-			if ctrlMsg.Flush {
-				panic("Drain and Flush should not be set at the same time")
-			}
-		}
+func (m *ctrlMiddleware) drainSignalMustNotInvalidate(ctrlMsg *mem.ControlMsg) {
+	if ctrlMsg.Drain && ctrlMsg.Invalid {
+		panic("Drain and Invalid should not be set at the same time")
+	}
+
+	if ctrlMsg.Drain && ctrlMsg.Flush {
+		panic("Drain and Flush should not be set at the same time")
 	}
 }
