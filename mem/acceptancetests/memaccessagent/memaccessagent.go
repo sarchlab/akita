@@ -1,6 +1,6 @@
 // Package acceptancetests provides utility data structure definitions for
 // writing memory system acceptance tests.
-package acceptancetests
+package memaccessagent
 
 import (
 	"encoding/binary"
@@ -28,11 +28,11 @@ type MemAccessAgent struct {
 	PendingReadReq  map[string]*mem.ReadReq
 	PendingWriteReq map[string]*mem.WriteReq
 
-	memPort sim.Port
+	memPort           sim.Port
+	UseVirtualAddress bool
 }
 
-func (a *MemAccessAgent) checkReadResult(
-	read *mem.ReadReq,
+func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
 	dataReady *mem.DataReadyRsp,
 ) {
 	found := false
@@ -56,6 +56,16 @@ func (a *MemAccessAgent) checkReadResult(
 	} else {
 		log.Panicf("Mismatch when read 0x%X", read.Address)
 	}
+}
+
+func bytesToUint32(data []byte) uint32 {
+	a := uint32(0)
+	a += uint32(data[0])
+	a += uint32(data[1]) << 8
+	a += uint32(data[2]) << 16
+	a += uint32(data[3]) << 24
+
+	return a
 }
 
 // Tick updates the states of the agent and issues new read and write requests.
@@ -166,6 +176,7 @@ func (a *MemAccessAgent) randomReadAddress() uint64 {
 
 	for {
 		addr = rand.Uint64() % (a.MaxAddress / 4) * 4
+
 		if _, written := a.KnownMemValue[addr]; written {
 			return addr
 		}
@@ -203,18 +214,9 @@ func uint32ToBytes(data uint32) []byte {
 	return bytes
 }
 
-func bytesToUint32(data []byte) uint32 {
-	a := uint32(0)
-	a += uint32(data[0])
-	a += uint32(data[1]) << 8
-	a += uint32(data[2]) << 16
-	a += uint32(data[3]) << 24
-
-	return a
-}
-
 func (a *MemAccessAgent) doWrite() bool {
 	address := rand.Uint64() % (a.MaxAddress / 4) * 4
+
 	data := rand.Uint32()
 
 	if a.isAddressInPendingReq(address) {
