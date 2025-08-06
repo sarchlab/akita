@@ -1,12 +1,12 @@
 package writethrough
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bankstage", func() {

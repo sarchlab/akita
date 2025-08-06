@@ -8,11 +8,11 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
+	"go.uber.org/mock/gomock"
 )
 
 //go:generate mockgen -destination "mock_cache_test.go" -package $GOPACKAGE  -write_package_comment=false github.com/sarchlab/akita/v4/mem/cache Directory,MSHR

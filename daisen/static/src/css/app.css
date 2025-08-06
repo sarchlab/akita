@@ -184,12 +184,24 @@ body {
     height: 720px; */
 }
 
-.side-column {
+/*.side-column {
   background: #eeeeee;
   padding: 5px;
   height: 100%;
   user-select: none;
+}*/
+.side-column {
+  background-color: #eeeeee;             
+  padding: 16px;                       
+  height: 100%;
+  user-select: none;
+  border-radius: 12px;                 
+  border: 1px solid #ddd;            
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); 
+  margin: 12px;                        
 }
+
+
 
 .curr-task-info {
   width: 100%;
@@ -342,3 +354,5 @@ body {
   font-size: 30px;
   font-weight: bold;
 }
+ 
+

@@ -4,49 +4,17 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/mem/mem"
-	"github.com/sarchlab/akita/v4/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
-// Comp is a cache(TLB) that maintains some page information.
-type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
-
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
-
-	LowModule sim.RemotePort
-
-	numSets        int
-	numWays        int
-	pageSize       uint64
-	numReqPerCycle int
-	state          string
-
-	Sets []internal.Set
-
-	mshr                mshr
-	respondingMSHREntry *mshrEntry
-
-	isPaused bool
+type pipelineTLBReq struct {
+	req *vm.TranslationReq
 }
 
-//Reset sets all the entries in the TLB to be invalid
-func (c *Comp) reset() {
-	c.Sets = make([]internal.Set, c.numSets)
-	for i := 0; i < c.numSets; i++ {
-		set := internal.NewSet(c.numWays)
-		c.Sets[i] = set
-	}
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
+func (r *pipelineTLBReq) TaskID() string {
+	return r.req.ID
 }
 
 type tlbMiddleware struct {
@@ -70,22 +38,77 @@ func (m *tlbMiddleware) Tick() bool {
 	return madeProgress
 }
 
-// Handle enable state
+func (m *tlbMiddleware) processPipeline() bool {
+	madeProgress := false
+
+	madeProgress = m.extractFromPipeline() || madeProgress
+
+	madeProgress = m.responsePipeline.Tick() || madeProgress
+
+	madeProgress = m.insertIntoPipeline() || madeProgress
+
+	return madeProgress
+}
+
+// get req from port buffer and insert into pipeline
+func (m *tlbMiddleware) insertIntoPipeline() bool {
+	madeProgress := false
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		if !m.responsePipeline.CanAccept() {
+			break
+		}
+
+		req := m.topPort.RetrieveIncoming()
+		if req == nil {
+			break
+		}
+
+		m.responsePipeline.Accept(&pipelineTLBReq{
+			req: req.(*vm.TranslationReq),
+		})
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
+func (m *tlbMiddleware) extractFromPipeline() bool {
+	madeProgress := false
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		item := m.responseBuffer.Peek()
+
+		if item == nil {
+			break
+		}
+
+		req := item.(*pipelineTLBReq).req
+		ok := m.lookup(req)
+		if ok {
+			m.responseBuffer.Pop()
+			madeProgress = true
+		}
+	}
+
+	return madeProgress
+}
+
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
-	for i := 0; i < m.numReqPerCycle; i++ {
-		madeProgress = m.lookup() || madeProgress
-	}
+
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+	madeProgress = m.processPipeline() || madeProgress
+
 	return madeProgress
 }
 
-// Handle drain state
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
 	for i := 0; i < m.numReqPerCycle; i++ {
@@ -94,6 +117,8 @@ func (m *tlbMiddleware) handleDrain() bool {
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
+
+	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
@@ -132,21 +157,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup() bool {
-	msg := m.topPort.PeekIncoming()
-	if msg == nil {
-		return false
-	}
-
-	req := msg.(*vm.TranslationReq)
-
+func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
 	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)
 	}
 
 	setID := m.vAddrToSetID(req.VAddr)
-	set := m.Sets[setID]
+	set := m.sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
 
 	if found && page.Valid {
@@ -161,13 +179,12 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-    ok := m.sendRspToTop(req, page)
+	ok := m.sendRspToTop(req, page)
 	if !ok {
 		return false
 	}
 
 	m.visit(setID, wayID)
-	m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
@@ -185,7 +202,6 @@ func (m *tlbMiddleware) handleTranslationMiss(
 
 	fetched := m.fetchBottom(req)
 	if fetched {
-		m.topPort.RetrieveIncoming()
 		tracing.TraceReqReceive(req, m.Comp)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, m.Comp),
@@ -225,7 +241,6 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
-	m.topPort.RetrieveIncoming()
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
@@ -236,7 +251,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.LowModule).
+		WithDst(m.addressMapper.Find(req.VAddr)).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
@@ -277,8 +292,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	setID := m.vAddrToSetID(page.VAddr)
-	set := m.Sets[setID]
-	wayID, ok := m.Sets[setID].Evict()
+	set := m.sets[setID]
+	wayID, ok := m.sets[setID].Evict()
 
 	if !ok {
 		panic("failed to evict")
@@ -310,14 +325,14 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 		return m.handleTLBFlush(req)
 	case *RestartReq:
 		return m.handleTLBRestart(req)
-    case *mem.ControlMsg:
-    	if req.Enable {
-    		m.state = "enable"
-    	} else if req.Drain {
-    		m.state = "drain"
-    	} else if req.Pause {
-    		m.state = "pause"
-    	}
+	case *mem.ControlMsg:
+		if req.Enable {
+			m.state = "enable"
+		} else if req.Drain {
+			m.state = "drain"
+		} else if req.Pause {
+			m.state = "pause"
+		}
 	default:
 		log.Panicf("cannot process request %s", reflect.TypeOf(req))
 	}
@@ -326,7 +341,7 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 }
 
 func (m *tlbMiddleware) visit(setID, wayID int) {
-	set := m.Sets[setID]
+	set := m.sets[setID]
 	set.Visit(wayID)
 }
 
@@ -343,7 +358,7 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 
 	for _, vAddr := range req.VAddr {
 		setID := m.vAddrToSetID(vAddr)
-		set := m.Sets[setID]
+		set := m.sets[setID]
 		wayID, page, found := set.Lookup(req.PID, vAddr)
 
 		if !found {

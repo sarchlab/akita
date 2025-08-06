@@ -28,7 +28,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 	t.logger.Printf(
 		"start, %.12f, %s, %s, %s, 0x%x, %d\n",
 		task.StartTime,
-		task.Where,
+		task.Location,
 		task.ID,
 		task.What,
 		req.GetAddress(),
@@ -44,6 +44,11 @@ func (t *tracer) StepTask(task tracing.Task) {
 		task.Steps[0].Time,
 		task.ID,
 		task.Steps[0].What)
+}
+
+// AddMilestone adds a milestone to the task
+func (t *tracer) AddMilestone(milestone tracing.Milestone) {
+	// Do nothing
 }
 
 // EndTask marks the end of a memory transaction

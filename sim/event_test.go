@@ -7,6 +7,8 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+var r = rand.New(rand.NewSource(1))
+
 type SplitEvent struct {
 	time    sim.VTimeInSec
 	handler sim.Handler
@@ -30,7 +32,7 @@ type SplitHandler struct {
 func (h *SplitHandler) Handle(evt sim.Event) error {
 	h.total++
 	now := evt.Time()
-	nextTime := now + sim.VTimeInSec(rand.Float64()*2+0.5)
+	nextTime := now + sim.VTimeInSec(r.Float64()*2+0.5)
 
 	if nextTime < 10.0 {
 		nextEvt := SplitEvent{
@@ -40,7 +42,7 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 		h.engine.Schedule(nextEvt)
 	}
 
-	nextTime = now + sim.VTimeInSec(rand.Float64()*2+0.5)
+	nextTime = now + sim.VTimeInSec(r.Float64()*2+0.5)
 	if nextTime < 10.0 {
 		nextEvt := SplitEvent{
 			time:    nextTime,
@@ -53,8 +55,6 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 }
 
 func ExampleEvent() {
-	rand.Seed(1)
-
 	engine := sim.NewSerialEngine()
 
 	splitHandler := SplitHandler{

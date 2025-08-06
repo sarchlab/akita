@@ -1,6 +1,10 @@
 package tlb
 
-import "github.com/sarchlab/akita/v4/sim"
+import (
+	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/pipelining"
+	"github.com/sarchlab/akita/v4/sim"
+)
 
 // A Builder can build TLBs
 type Builder struct {
@@ -14,6 +18,7 @@ type Builder struct {
 	numMSHREntry   int
 	state          string
 	latency        int
+	addressMapper  mem.AddressToPortMapper
 }
 
 // MakeBuilder returns a Builder
@@ -82,9 +87,14 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 	return b
 }
 
-func (b Builder) WithLatency(cycles int) Builder{
-    b.latency = cycles
-    return b
+func (b Builder) WithLatency(cycles int) Builder {
+	b.latency = cycles
+	return b
+}
+
+func (b Builder) WithAddressMapper(mapper mem.AddressToPortMapper) Builder {
+	b.addressMapper = mapper
+	return b
 }
 
 // Build creates a new TLB
@@ -97,12 +107,21 @@ func (b Builder) Build(name string) *Comp {
 	tlb.numWays = b.numWays
 	tlb.numReqPerCycle = b.numReqPerCycle
 	tlb.pageSize = b.pageSize
-	tlb.LowModule = b.lowModule
+	tlb.addressMapper = b.addressMapper
 	tlb.mshr = newMSHR(b.numMSHREntry)
 
 	b.createPorts(name, tlb)
 
 	tlb.reset()
+
+	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
+	tlb.responseBuffer = buf
+	tlb.responsePipeline = pipelining.MakeBuilder().
+		WithNumStage(b.latency).
+		WithCyclePerStage(1).
+		WithPipelineWidth(tlb.numReqPerCycle).
+		WithPostPipelineBuffer(buf).
+		Build(name + ".ResponsePipeline")
 
 	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
 	tlb.AddMiddleware(ctrlMiddleware)

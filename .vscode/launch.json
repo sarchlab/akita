@@ -95,11 +95,8 @@
             "mode": "auto",
             "program": "${workspaceFolder}/daisen",
             "args": [
-                "-csv=sample_trace_small.csv"
+                "-sqlite=sample.sqlite3"
             ],
-            "env": {
-                "AKITA_DAISEN_DEV_SERVER": "http://localhost:5173"
-            }
         },
     ]
 }

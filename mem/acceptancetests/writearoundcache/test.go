@@ -11,7 +11,7 @@ import (
 
 	"os"
 
-	"github.com/sarchlab/akita/v4/mem/acceptancetests"
+	"github.com/sarchlab/akita/v4/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v4/mem/cache/writearound"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/mem/mem"
@@ -31,7 +31,7 @@ var traceWithStdoutFlag = flag.Bool("trace-stdout", false, "Trace with stdout")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var engine sim.Engine
-var agent *acceptancetests.MemAccessAgent
+var agent *memaccessagent.MemAccessAgent
 
 func main() {
 	flag.Parse()
@@ -67,13 +67,15 @@ func buildEnvironment() {
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	agent = acceptancetests.NewMemAccessAgent(engine)
-	agent.MaxAddress = *maxAddressFlag
-	agent.WriteLeft = *numAccessFlag
-	agent.ReadLeft = *numAccessFlag
+	agent = memaccessagent.MakeBuilder().
+		WithEngine(engine).
+		WithMaxAddress(*maxAddressFlag).
+		WithWriteLeft(*numAccessFlag).
+		WithReadLeft(*numAccessFlag).
+		Build("MemAccessAgent")
 
 	addressToPortMapper := new(mem.SinglePortMapper)
-	builder := writearound.NewBuilder().
+	builder := writearound.MakeBuilder().
 		WithEngine(engine).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).
