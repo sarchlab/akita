@@ -434,7 +434,7 @@ func (m *ControlMsg) Clone() sim.Msg {
 	return &cloneMsg
 }
 
-// GenerateRsp generate GeneralRsp to ControlMsg
+// GenerateRsp generates a GeneralRsp for ControlMsg.
 func (m *ControlMsg) GenerateRsp() sim.Rsp {
 	rsp := sim.GeneralRspBuilder{}.
 		WithSrc(m.Dst).
