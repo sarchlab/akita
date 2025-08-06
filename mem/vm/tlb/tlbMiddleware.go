@@ -241,7 +241,6 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
-	m.topPort.RetrieveIncoming()
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
