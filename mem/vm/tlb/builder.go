@@ -130,7 +130,6 @@ func (b Builder) Build(name string) *Comp {
 		tlb.translationProvider = b.lowModule
 	}
 
-
 	tlb.reset()
 
 	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)

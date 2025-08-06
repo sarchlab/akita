@@ -27,8 +27,8 @@ type Builder struct {
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 
-	addressMapperType 	  string
-	remotePorts 	 	  []sim.RemotePort
+	addressMapperType string
+	remotePorts       []sim.RemotePort
 }
 
 // MakeBuilder creates a builder with default parameter setting

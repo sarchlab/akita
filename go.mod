@@ -1,7 +1,6 @@
 module github.com/sarchlab/akita/v4
 
 require (
-	github.com/golang/mock v1.6.0
 	github.com/google/pprof v0.0.0-20240829160300-da1f7e9f2b25
 	github.com/gorilla/mux v1.8.1
 	github.com/mattn/go-sqlite3 v1.14.22

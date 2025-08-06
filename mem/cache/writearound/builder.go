@@ -25,8 +25,8 @@ type Builder struct {
 	maxNumConcurrentTrans int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
-	
-	addressMapperType	  string
+
+	addressMapperType 	  string
 	remotePorts           []sim.RemotePort
 }
 
