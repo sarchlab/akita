@@ -2,6 +2,8 @@
 package vm
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -91,6 +93,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.TrafficClass = reflect.TypeOf(TranslationReq{}).String()
 
 	return r
 }
@@ -164,6 +167,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Dst = b.dst
 	r.RespondTo = b.rspTo
 	r.Page = b.page
+	r.TrafficClass = reflect.TypeOf(TranslationReq{}).String()
 
 	return r
 }
@@ -212,6 +216,7 @@ func NewPageMigrationReqToDriver(
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
 	cmd.Dst = dst
+	cmd.TrafficClass = reflect.TypeOf(PageMigrationReqToDriver{}).String()
 
 	return cmd
 }
@@ -252,6 +257,7 @@ func NewPageMigrationRspFromDriver(
 	cmd.Src = src
 	cmd.Dst = dst
 	cmd.OriginalReq = originalReq
+	cmd.TrafficClass = reflect.TypeOf(PageMigrationReqToDriver{}).String()
 
 	return cmd
 }

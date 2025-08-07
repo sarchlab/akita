@@ -31,6 +31,7 @@ func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
 	msg.Src = src
 	msg.Dst = dst
 	msg.TrafficBytes = byteSize
+	msg.TrafficClass = reflect.TypeOf(TrafficMsg{}).String()
 
 	return msg
 }
@@ -46,12 +47,10 @@ func NewStartSendEvent(
 	time sim.VTimeInSec,
 	src, dst *Agent,
 	byteSize int,
-	trafficClass int,
 ) *StartSendEvent {
 	e := new(StartSendEvent)
 	e.EventBase = sim.NewEventBase(time, src)
 	e.Msg = NewTrafficMsg(src.ToOut.AsRemote(), dst.ToOut.AsRemote(), byteSize)
-	e.Msg.Meta().TrafficClass = trafficClass
 
 	return e
 }

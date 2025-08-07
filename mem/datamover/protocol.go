@@ -1,6 +1,8 @@
 package datamover
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -136,6 +138,7 @@ func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.ByteSize = b.byteSize
 	r.SrcSide = b.srcSide
 	r.DstSide = b.dstSide
+	r.TrafficClass = reflect.TypeOf(DataMoveRequest{}).String()
 
 	return r
 }
