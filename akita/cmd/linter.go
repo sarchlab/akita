@@ -17,7 +17,7 @@ import (
 var linterCmd = &cobra.Command{
 	Use:   "check",
 	Short: "Check component format.",
-	Long:  "Use `check [component folder path]` to check the format of the component in the filder.",
+	Long:  "`check [component folder path]` checks the component format.",
 	Run: func(cmd *cobra.Command, args []string) {
 		folderPath := args[0]
 
@@ -48,7 +48,8 @@ var linterCmd = &cobra.Command{
 
 		errBuilderParameter := checkBuilderParameters(folderPath)
 		if errBuilderParameter != nil {
-			fmt.Printf("<2c> Builder parameter error: %s\n", errBuilderParameter)
+			fmt.Printf("<2c> Builder parameter error: %s\n",
+				errBuilderParameter)
 			hasError = true
 		}
 
@@ -88,17 +89,18 @@ func checkComponentFormat(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, compFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse comp.go file %s: %v", compFilePath, err)
+		return fmt.Errorf("failed to parse comp.go file %s: %v",
+			compFilePath, err)
 	}
 
 	existCompStruct := false
 	for _, decl := range node.Decls { // iterate all declaration
-		genDecl, ok := decl.(*ast.GenDecl)    // check if declaration is one of the GenDecl
-		if !ok || genDecl.Tok != token.TYPE { // check if declaration is a type decl
+		genDecl, ok := decl.(*ast.GenDecl)    // check if decl is in GenDecl
+		if !ok || genDecl.Tok != token.TYPE { // check if decl is a type decl
 			continue
 		}
 		for _, spec := range genDecl.Specs { // iterate specs in the type decl
-			typeSpec, ok := spec.(*ast.TypeSpec)    //check if spec is one of the Expr
+			typeSpec, ok := spec.(*ast.TypeSpec)    //check if spec is in Expr
 			if ok && typeSpec.Name.Name == "Comp" { // check struct name
 				if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
 					existCompStruct = true
@@ -125,17 +127,18 @@ func checkBuilderStruct(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+		return fmt.Errorf("failed to parse builder.go file %s: %v",
+			builderFilePath, err)
 	}
 
 	existBuilderStruct := false
 	for _, decl := range node.Decls { // iterate all declaration
-		genDecl, ok := decl.(*ast.GenDecl)    // check if declaration is one of the GenDecl
-		if !ok || genDecl.Tok != token.TYPE { // check if declaration is a type decl
+		genDecl, ok := decl.(*ast.GenDecl)    // check if decl is one of GenDecl
+		if !ok || genDecl.Tok != token.TYPE { // check if decl is a type decl
 			continue
 		}
 		for _, spec := range genDecl.Specs { // iterate specs in the type decl
-			typeSpec, ok := spec.(*ast.TypeSpec)       //check if spec is one of the Expr
+			typeSpec, ok := spec.(*ast.TypeSpec)       //check if spec in Expr
 			if ok && typeSpec.Name.Name == "Builder" { // check struct name
 				if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
 					existBuilderStruct = true
@@ -151,8 +154,10 @@ func checkBuilderStruct(folderPath string) error {
 	return nil
 }
 
-// Logic: if the parameter in the builder has a setter statement in a `With` function or has no setter at all, pass;
-// if it has a setter statement but located in a func not named by `With...`, return error.
+// Logic: if the builder field has a setter statement in a `With` function,
+// or has no setter at all, pass;
+// if it has a setter statement but located in a func not named by `With...`,
+// return error.
 func checkBuilderFormat(folderPath string) error {
 	// check builder.go existence
 	builderFilePath := filepath.Join(folderPath, "builder.go")
@@ -164,7 +169,8 @@ func checkBuilderFormat(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+		return fmt.Errorf("failed to parse builder.go file %s: %v",
+			builderFilePath, err)
 	}
 
 	builderFields := map[string]bool{}
@@ -187,7 +193,8 @@ func checkBuilderFormat(folderPath string) error {
 			}
 			for _, field := range structType.Fields.List {
 				for _, fieldName := range field.Names {
-					builderFields[fieldName.Name] = true // Assume all parameters are configurable
+					// Assume all parameters are configurable
+					builderFields[fieldName.Name] = true
 					configurableFields[fieldName.Name] = true
 				}
 			}
@@ -210,18 +217,20 @@ func checkBuilderFormat(folderPath string) error {
 		}
 
 		// find assignment receiver.<field> = ...
-		ast.Inspect(funcDecl.Body, func(n ast.Node) bool { // iterate every node(statement)
-			assign, ok := n.(*ast.AssignStmt) // check if statement is an assignment
+		ast.Inspect(funcDecl.Body, func(n ast.Node) bool { // iterate statements
+			assign, ok := n.(*ast.AssignStmt) // check if stmt is an assignment
 			if !ok {
 				return true // continue to iterate every subnode of the node
 			}
 			for _, lhs := range assign.Lhs {
-				if sel, ok := lhs.(*ast.SelectorExpr); ok { // if left is a selector expression
+				// if left is a selector expression
+				if sel, ok := lhs.(*ast.SelectorExpr); ok {
 					ident, ok := sel.X.(*ast.Ident)
 					if ok && ident.Name == receiverName {
 						fieldName := sel.Sel.Name
 						//fmt.Println(funcDecl.Name.Name)
-						if builderFields[fieldName] && !strings.HasPrefix(funcDecl.Name.Name, "With") {
+						if builderFields[fieldName] && !strings.HasPrefix(
+							funcDecl.Name.Name, "With") {
 							configurableFields[fieldName] = false
 						}
 					}
@@ -239,7 +248,8 @@ func checkBuilderFormat(folderPath string) error {
 
 		if len(unconfigs) != 0 {
 			unconfig := strings.Join(unconfigs, ", ")
-			return fmt.Errorf("configurable parameter(s) [%s] does not have proper setter functions starting with 'With'", unconfig)
+			return fmt.Errorf(`configurable parameter(s) [%s] does not 
+			have proper setter functions starting with 'With'`, unconfig)
 		}
 	}
 
@@ -253,30 +263,34 @@ func checkBuilderReturn(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+		return fmt.Errorf("failed to parse builder.go file %s: %v",
+			builderFilePath, err)
 	}
 
 	var improperReturns []string
 	for _, decl := range node.Decls { // iterate all declaration
-		funcDecl, ok := decl.(*ast.FuncDecl) // check if declaration is a FuncDecl
+		funcDecl, ok := decl.(*ast.FuncDecl) // check if decl is a FuncDecl
 		if !ok || funcDecl.Recv == nil || funcDecl.Name == nil {
 			continue
 		}
-		if !strings.HasPrefix(funcDecl.Name.Name, "With") { //if func name start with With
+		//if func name start with With
+		if !strings.HasPrefix(funcDecl.Name.Name, "With") {
 			continue
 		}
 		if funcDecl.Type.Results == nil {
 			continue
 		}
 		for _, result := range funcDecl.Type.Results.List {
-			if ident, ok := result.Type.(*ast.Ident); !ok || ident.Name != "Builder" {
+			ident, ok := result.Type.(*ast.Ident)
+			if !ok || ident.Name != "Builder" {
 				improperReturns = append(improperReturns, funcDecl.Name.Name)
 			}
 		}
 	}
 	if len(improperReturns) != 0 {
 		funcList := strings.Join(improperReturns, ", ")
-		return fmt.Errorf("'With' function(s) [%s] does not return builder type value", funcList)
+		return fmt.Errorf(`'With' function(s) [%s] does not return 
+		builder type value`, funcList)
 	}
 
 	return nil
@@ -289,7 +303,8 @@ func checkBuilderParameters(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+		return fmt.Errorf("failed to parse builder.go file %s: %v",
+			builderFilePath, err)
 	}
 
 	var parameters []string
@@ -322,7 +337,8 @@ func checkBuilderParameters(folderPath string) error {
 	}
 
 	if len(parameters) < 2 || mustInclude != 2 {
-		return fmt.Errorf("builder must include at least 2 parameters, including `Freq` and `Engine`")
+		return fmt.Errorf(`"builder must include at least 2 parameters, 
+		including Freq and Engine"`)
 	}
 
 	return nil
@@ -335,7 +351,8 @@ func checkBuilderFunction(folderPath string) error {
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v", builderFilePath, err)
+		return fmt.Errorf("failed to parse builder.go file %s: %v",
+			builderFilePath, err)
 	}
 
 	found := false
@@ -355,7 +372,7 @@ func checkBuilderFunction(folderPath string) error {
 		param := funcDecl.Type.Params.List[0]
 		ident, ok := param.Type.(*ast.Ident)
 		if !ok || ident.Name != "string" {
-			return fmt.Errorf("`Build` function's argument must be of type string")
+			return fmt.Errorf("`Build` function takes only string as argument")
 		}
 
 		// Check if func returns
@@ -367,7 +384,7 @@ func checkBuilderFunction(folderPath string) error {
 		retType := funcDecl.Type.Results.List[0].Type
 		_, ok = retType.(*ast.StarExpr)
 		if !ok {
-			return fmt.Errorf("`Build` function must return the new component as a pointer type")
+			return fmt.Errorf("`Build` function must return pointer type")
 		}
 	}
 
@@ -400,7 +417,8 @@ func checkManifestFormat(folderPath string) error {
 	// Must have `name` attribute with a non-empty string value
 	nameAtt, ok := manifest["name"].(string)
 	if !ok || nameAtt == "" {
-		return fmt.Errorf("manifest.json must contain a non-empty 'name' attribute")
+		return fmt.Errorf(`manifest.json must contain a 
+		non-empty 'name' attribute`)
 	}
 
 	// Must have `ports`
