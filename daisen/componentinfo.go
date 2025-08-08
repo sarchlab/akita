@@ -630,7 +630,26 @@ func buildOpenAIPayload(
 		}
 	}
 
-	// log.Println("Updated messages:", messages)
+	// detect whether to add the deforehand prompt
+	if len(messages) == 0 || messages[0]["role"] != "system" {
+		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
+		if err != nil {
+			log.Println("Failed to read beforehandprompt.txt:", err)
+			return nil, err
+		}
+		loadedText := string(loadedTextBytes)
+		systemMsg := map[string]interface{}{
+			"role": "system",
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "text",
+					"text": loadedText,
+				},
+			},
+		}
+		// Prepend systemMsg to messages
+		messages = append([]map[string]interface{}{systemMsg}, messages...)
+	}
 
 	payload := map[string]interface{}{
 		"model":       model,

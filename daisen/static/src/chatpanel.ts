@@ -1,16 +1,19 @@
 import { sendGetGitHubIsAvailable, sendPostGPT, GPTRequest, UnitContent } from "./chatpanelrequests";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import html2canvas from "html2canvas";
 
 type ChatContent = UnitContent[];
 
 
 export class ChatPanel {
   _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent }[] = [];
-  _uploadedFiles: { id: number; name: string; content: string; type: "file" | "image"; size: string }[] = [];
+  _uploadedFiles: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] = [];
   _fileUploadBtn: HTMLButtonElement;
   _imageUploadBtn: HTMLButtonElement;
+  _screenshotUploadBtn: HTMLButtonElement;
   _fileIdCounter: number = 0;
+  _screenshotIdCounter: number = 0;
   _fileListRow: HTMLDivElement = document.createElement("div");
   _attachRepoVisible: boolean = false;
   _attachRepoChecks: { [key: string]: boolean } = {};
@@ -671,15 +674,15 @@ export class ChatPanel {
       }
 
       // Check size
-      if (file.size > 64 * 1024) {
-        window.alert("File too large. Max size is 64 KB.");
+      if (file.size > 256 * 1024) {
+        window.alert("File too large. Max size is 256 KB.");
         return;
       }
 
       // Read image file
       const reader = new FileReader();
       reader.onload = (e) => {
-        console.log("Image file loaded:", file.name, e.target?.result);
+        // console.log("Image file loaded:", file.name, e.target?.result);
         const sizeStr = formatFileSize(file.size);
         this._uploadedFiles.push({
           id: ++this._fileIdCounter,
@@ -726,11 +729,117 @@ export class ChatPanel {
 
     actionRow.appendChild(imageUploadBtn);
     actionRow.appendChild(imageInput);
-    chatContent.appendChild(actionRow);
+    
 
     this._imageUploadBtn = imageUploadBtn;
 
 
+
+
+    // Screenshot upload button
+    const screenshotUploadBtn = document.createElement("button");
+    screenshotUploadBtn.type = "button";
+    screenshotUploadBtn.title = "Upload Screenshot";
+    screenshotUploadBtn.style.background = "#f6f8fa";
+    screenshotUploadBtn.style.border = "1px solid #ccc";
+    screenshotUploadBtn.style.borderRadius = "6px";
+    screenshotUploadBtn.style.width = "38px";
+    screenshotUploadBtn.style.height = "38px";
+    screenshotUploadBtn.style.display = "flex";
+    screenshotUploadBtn.style.alignItems = "center";
+    screenshotUploadBtn.style.justifyContent = "center";
+    screenshotUploadBtn.style.cursor = "pointer";
+    screenshotUploadBtn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 21 21" fill="currentColor">
+        <path d="M4 19h3v-2H5v-2H3v3a1 1 0 001 1zM19 4a1 1 0 00-1-1h-3v2h2v2h2V4zM5 5h2V3H4A1 1 0 003 4v3h2V5zM3 9h2v4H3zm14 0h2v3h-2zM9 3h4v2H9zm0 14h3v2H9z M15.9469 18.9611v-1.7557h-1.7558c-.3512 0-.6361-.2851-.6363-.6364 0-.3513.2849-.6363.6363-.6363H15.9469v-1.7558c0-.3513.2849-.6363.6363-.6363.3513.0002.6364.285.6364.6363v1.7558h1.7557l.128.0131c.2899.0593.5084.3157.5084.6232-.0002.3073-.2185.5639-.5084.6233l-.128.0131h-1.7557v1.7557c-.0002.3512-.2851.6362-.6364.6364-.3512 0-.6361-.2851-.6363-.6364z" />
+      </svg>
+    `;
+
+    screenshotUploadBtn.onclick = async () => {
+      const innerContainer = document.getElementById("container");
+      if (!innerContainer) {
+        alert("No inner-container found!");
+        return;
+      }
+
+      // Capture as PNG
+      const canvas = await html2canvas(innerContainer);
+
+      const img = document.createElement("img");
+      img.src = canvas.toDataURL("image/png");
+      img.style.position = "fixed";
+      img.style.left = innerContainer.getBoundingClientRect().left + "px";
+      img.style.top = innerContainer.getBoundingClientRect().top + "px";
+      img.style.width = innerContainer.offsetWidth + "px";
+      img.style.height = innerContainer.offsetHeight + "px";
+      img.style.zIndex = "99999";
+      img.style.transition = "all 1.2s cubic-bezier(.4,0,.2,1), opacity 0.5s";
+      img.style.border = "10px solid #fff";
+      img.style.borderRadius = "10px";
+      img.style.boxShadow = "0 8px 32px rgba(0,0,0,0.25), 0 2px 8px rgba(0,0,0,0.10)";
+      document.body.appendChild(img);
+
+      // Start animation after a tick
+      const imgWidth = 500;
+      const imgHeight = innerContainer.offsetHeight * (imgWidth / innerContainer.offsetWidth);
+      console.log("Image dimensions:", img.naturalWidth, img.naturalHeight, "Scaled height:", imgHeight);
+      
+      setTimeout(() => {
+        img.style.left = "20px";
+        img.style.top = `calc(100vh - ${imgHeight + 20}px)`;
+        img.style.width = `${imgWidth}px`;
+        img.style.height = "auto";
+        img.style.opacity = "0.9";
+      }, 200);
+
+      // Fade out and remove after 2 seconds
+      setTimeout(() => {
+        img.style.opacity = "0";
+        setTimeout(() => img.remove(), 1000);
+      }, 4000);
+
+      const scale = 0.4; // 0.4 = 40% size, adjust as needed
+      const smallCanvas = document.createElement("canvas");
+      smallCanvas.width = canvas.width * scale;
+      smallCanvas.height = canvas.height * scale;
+      const ctx = smallCanvas.getContext("2d");
+      ctx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+
+      smallCanvas.toBlob((blob) => {
+        if (blob) {
+          // Save as screenshot.png
+          // const url = URL.createObjectURL(blob);
+          // const a = document.createElement("a");
+          // a.href = url;
+          // a.download = "screenshot.png";
+          // document.body.appendChild(a);
+          // a.click();
+          // document.body.removeChild(a);
+          // URL.revokeObjectURL(url);
+
+          // Read as DataURL and log base64
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            console.log("PNG DataURL:", e.target?.result);
+            const sizeStr = formatFileSize(blob.size);
+            this._uploadedFiles.push({
+              id: ++this._fileIdCounter,
+              name: `Screenshot #${++this._screenshotIdCounter}`,
+              content: e.target?.result as string,
+              type: "image-screenshot",
+              size: sizeStr,
+            });
+            renderFileList.call(this);
+          };
+          reader.readAsDataURL(blob);
+        }
+      }, "image/png");
+    };
+
+    actionRow.appendChild(screenshotUploadBtn);
+    this._screenshotUploadBtn = screenshotUploadBtn;
+
+    chatContent.appendChild(actionRow);
 
 
 
@@ -1624,7 +1733,7 @@ export class ChatPanel {
     graphtestBtn.style.fontWeight = "bold";
     graphtestBtn.style.fontFamily = "Arial, sans-serif";
     graphtestBtn.style.color = "#222";
-    graphtestBtn.textContent = "T";
+    graphtestBtn.textContent = "Test";
     
     // Add event listener for graphtest button
     graphtestBtn.addEventListener("click", () => {
@@ -1738,8 +1847,15 @@ export class ChatPanel {
       }
 
       // Compose the full message
+      const urlPrefix = `[Current URL (Remember it, but there is no need to mention it unless the user asks for it)] ${this._getCurrentFrontendURL()}\n`;
+      // console.log("Current URL:", urlPrefix);
+      let urlContent: any = [
+        { type: "text", text: urlPrefix }
+      ];
+      messages.push({ role: "system", content: urlContent });
       const fullMsg = prefix + userMsg;
-      const imageFiles = this._uploadedFiles.filter(f => f.type === "image");
+      // console.log("Full message to send:", fullMsg);
+      const imageFiles = this._uploadedFiles.filter(f => f.type === "image" || f.type === "image-screenshot");
       let fullContentForAPI: any = [
         { type: "text", text: fullMsg }
       ];
@@ -2085,6 +2201,10 @@ export class ChatPanel {
       return 0;
     }
   }
+
+  _getCurrentFrontendURL(): string {
+    return window.location.href;
+  }
 }
 
 
@@ -2212,8 +2332,12 @@ function renderFileList() {
         ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 17H15M9 13H15M9 9H10M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
           </svg>`
-        : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        : file.type === "image"
+        ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M8 11H10M8 18L11 15L13 17L16 14M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+          </svg>`
+        : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19M8 6H10M8 9H10M16 17H14L13 15.5L12 17L10 14L9.5 17H8"/>
           </svg>`;
     fileRow.appendChild(iconSpan);
 
@@ -2259,9 +2383,11 @@ function renderFileList() {
   // Count files by type
   const fileCount = this._uploadedFiles.filter(f => f.type === "file").length;
   const imageCount = this._uploadedFiles.filter(f => f.type === "image").length;
+  const screenshotCount = this._uploadedFiles.filter(f => f.type === "image-screenshot").length;
   // Update bubbles
   this._renderBubble(this._fileUploadBtn, fileCount, "bubble-upload-file");
   this._renderBubble(this._imageUploadBtn, imageCount, "bubble-upload-image");
+  this._renderBubble(this._screenshotUploadBtn, screenshotCount, "bubble-upload-screenshot");
   // Log current file list with ids after every render
   console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size })));
 }
