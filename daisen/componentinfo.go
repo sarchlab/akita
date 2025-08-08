@@ -565,6 +565,24 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 	return header
 }
 
+func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
+	combinedRepoHeader := ""
+	for _, url := range urlList {
+		content := httpGithubRaw(ctx, url)
+		if content == "" {
+			continue
+		}
+		fileName := url
+		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
+			fileName = url[idx:]
+		}
+		combinedRepoHeader += "[Reference File " + fileName + "]\n"
+		combinedRepoHeader += content + "\n"
+		combinedRepoHeader += "[End " + fileName + "]\n"
+	}
+	return combinedRepoHeader
+}
+
 func buildOpenAIPayload(
 	ctx context.Context,
 	model string,
@@ -600,20 +618,7 @@ func buildOpenAIPayload(
 	}
 	sort.Strings(urlList)
 
-	combinedRepoHeader := ""
-	for _, url := range urlList {
-		content := httpGithubRaw(ctx, url)
-		if content == "" {
-			continue
-		}
-		fileName := url
-		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
-			fileName = url[idx:]
-		}
-		combinedRepoHeader += "[Reference File " + fileName + "]\n"
-		combinedRepoHeader += content + "\n"
-		combinedRepoHeader += "[End " + fileName + "]\n"
-	}
+	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
 
 	if len(messages) > 0 {
 		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
