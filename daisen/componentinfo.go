@@ -583,6 +583,31 @@ func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
 	return combinedRepoHeader
 }
 
+func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, error) {
+	data, err := os.ReadFile(routineFile)
+	if err != nil {
+		return nil, err
+	}
+	var routineMap map[string][]string
+	if err := json.Unmarshal(data, &routineMap); err != nil {
+		return nil, err
+	}
+	urlSet := make(map[string]struct{})
+	for _, key := range selectedKeys {
+		if urls, ok := routineMap[key]; ok {
+			for _, u := range urls {
+				urlSet[u] = struct{}{}
+			}
+		}
+	}
+	urlList := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		urlList = append(urlList, u)
+	}
+	sort.Strings(urlList)
+	return urlList, nil
+}
+
 func buildOpenAIPayload(
 	ctx context.Context,
 	model string,
@@ -592,32 +617,11 @@ func buildOpenAIPayload(
 ) ([]byte, error) {
 	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
 	routineFile := "componentgithubroutine.json"
-	data, err := os.ReadFile(routineFile)
+	urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
 	if err != nil {
-		log.Println("Failed to read routine file:", err)
+		log.Println("Failed to get routine URL list:", err)
 		return nil, err
 	}
-	var routineMap map[string][]string
-	if err := json.Unmarshal(data, &routineMap); err != nil {
-		log.Println("Failed to unmarshal routine file:", err)
-		return nil, err
-	}
-
-	urlSet := make(map[string]struct{})
-	for _, key := range selectedGitHubRoutineKeys {
-		if urls, ok := routineMap[key]; ok {
-			for _, u := range urls {
-				urlSet[u] = struct{}{}
-			}
-		}
-	}
-	// Flatten, deduplicate, and sort
-	urlList := make([]string, 0, len(urlSet))
-	for u := range urlSet {
-		urlList = append(urlList, u)
-	}
-	sort.Strings(urlList)
-
 	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
 
 	if len(messages) > 0 {
@@ -629,7 +633,6 @@ func buildOpenAIPayload(
 		}
 	}
 
-	// detect whether to add the deforehand prompt
 	if len(messages) == 0 || messages[0]["role"] != "system" {
 		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
 		if err != nil {
@@ -646,7 +649,6 @@ func buildOpenAIPayload(
 				},
 			},
 		}
-		// Prepend systemMsg to messages
 		messages = append([]map[string]interface{}{systemMsg}, messages...)
 	}
 
