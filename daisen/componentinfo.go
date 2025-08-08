@@ -30,7 +30,7 @@ type ComponentInfo struct {
 }
 
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
-	componentNames := traceReader.ListComponents()
+	componentNames := traceReader.ListComponents(r.Context())
 
 	rsp, err := json.Marshal(componentNames)
 	dieOnErr(err)
@@ -57,22 +57,22 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	switch infoType {
 	case "ReqInCount":
 		compInfo = calculateReqIn(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ReqCompleteCount":
 		compInfo = calculateReqComplete(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "AvgLatency":
 		compInfo = calculateAvgLatency(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ConcurrentTask":
 		compInfo = calculateConcurrentTask(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "BufferPressure":
 		compInfo = calculateBufferPressure(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
 		compInfo = calculatePendingReqOut(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	default:
 		log.Panicf("unknown info_type %s\n", infoType)
 	}
@@ -85,13 +85,14 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func calculateConcurrentTask(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return true },
 		func(t Task) float64 { return float64(t.StartTime) },
@@ -102,13 +103,14 @@ func calculateConcurrentTask(
 }
 
 func calculateBufferPressure(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		taskIsReqIn,
 		func(t Task) float64 {
@@ -123,13 +125,14 @@ func calculateBufferPressure(
 }
 
 func calculatePendingReqOut(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return t.Kind == "req_out" },
 		func(t Task) float64 { return float64(t.StartTime) },
@@ -144,6 +147,7 @@ func taskIsReqIn(t Task) bool {
 }
 
 func calculateReqIn(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -163,7 +167,7 @@ func calculateReqIn(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -193,6 +197,7 @@ func calculateReqIn(
 }
 
 func calculateReqComplete(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -212,7 +217,7 @@ func calculateReqComplete(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -242,6 +247,7 @@ func calculateReqComplete(
 }
 
 func calculateAvgLatency(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -261,7 +267,7 @@ func calculateAvgLatency(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -320,6 +326,7 @@ type taskFilter func(t Task) bool
 type taskTime func(t Task) float64
 
 func calculateTimeWeightedTaskCount(
+	ctx context.Context,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int,
@@ -340,7 +347,7 @@ func calculateTimeWeightedTaskCount(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	tasks := traceReader.ListTasks(query)
+	tasks := traceReader.ListTasks(ctx, query)
 	tasks = filterTask(tasks, filter)
 
 	totalDuration := endTime - startTime
@@ -387,6 +394,7 @@ func calculateAvgTaskCount(
 	binStartTime, binEndTime float64,
 ) float64 {
 	var count int
+
 	var timeByCount float64
 
 	prevTime := binStartTime
@@ -407,6 +415,7 @@ func calculateAvgTaskCount(
 			if duration < 0 {
 				panic("duration is smaller than 0")
 			}
+
 			timeByCount += duration * float64(count)
 			prevTime = ts.time
 

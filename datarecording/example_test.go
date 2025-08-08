@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -43,7 +44,7 @@ func Example() {
 	tables = reader.ListTables()
 	fmt.Printf("The stored table: %s\n", tables[0])
 
-	results, _, err := reader.Query("test_table", datarecording.QueryParams{})
+	results, _, err := reader.Query(context.Background(), "test_table", datarecording.QueryParams{})
 	if err != nil {
 		panic(err)
 	}

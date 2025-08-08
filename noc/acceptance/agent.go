@@ -9,6 +9,7 @@ import (
 // Agent can send and receive request.
 type Agent struct {
 	*sim.TickingComponent
+
 	test       *Test
 	AgentPorts []sim.Port
 	MsgsToSend []sim.Msg

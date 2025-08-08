@@ -9,6 +9,7 @@ import (
 // the cache lines.
 type FlushReq struct {
 	sim.MsgMeta
+
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool
@@ -95,6 +96,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 // flush
 type FlushRsp struct {
 	sim.MsgMeta
+
 	RspTo string
 }
 
@@ -210,6 +212,7 @@ func (b RestartReqBuilder) Build() *RestartReq {
 // flush
 type RestartRsp struct {
 	sim.MsgMeta
+
 	RspTo string
 }
 
