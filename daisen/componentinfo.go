@@ -568,7 +568,7 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 func buildOpenAIPayload(
 	ctx context.Context,
 	model string,
-	messages []map[string]string,
+	messages []map[string]interface{},
 	traceInfo map[string]interface{},
 	selectedGitHubRoutineKeys []string,
 ) ([]byte, error) {
@@ -620,7 +620,14 @@ func buildOpenAIPayload(
 
 	// Add reference header to the last message's content
 	if len(messages) > 0 {
-		messages[len(messages)-1]["content"] = combinedTraceHeader + combinedRepoHeader + messages[len(messages)-1]["content"]
+		// Type assert to []interface{}
+		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
+			// Type assert to map[string]interface{}
+			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
+				firstText, _ := firstContent["text"].(string)
+				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
+			}
+		}
 	}
 
 	// log.Println("Updated messages:", messages)
@@ -690,9 +697,9 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Messages                  []map[string]string    `json:"messages"`
-		TraceInfo                 map[string]interface{} `json:"traceInfo"`
-		SelectedGitHubRoutineKeys []string               `json:"selectedGitHubRoutineKeys"`
+		Messages                  []map[string]interface{} `json:"messages"`
+		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
+		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)

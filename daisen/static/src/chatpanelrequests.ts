@@ -1,7 +1,11 @@
+export type UnitContent =
+  | { type: "text"; text: string }           // typeValue is text
+  | { type: "image_url"; image_url: { url: string } };     // typeValue is image URL
+
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
-  content: string;
+  content: UnitContent[];
 }
 
 export interface GPTResponse {

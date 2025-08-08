@@ -1,11 +1,15 @@
-import { sendGetGitHubIsAvailable, sendPostGPT, GPTRequest } from "./chatpanelrequests";
+import { sendGetGitHubIsAvailable, sendPostGPT, GPTRequest, UnitContent } from "./chatpanelrequests";
 import katex from "katex";
 import "katex/dist/katex.min.css";
 
+type ChatContent = UnitContent[];
+
+
 export class ChatPanel {
-  _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [];
-  _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
+  _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent }[] = [];
+  _uploadedFiles: { id: number; name: string; content: string; type: "file" | "image"; size: string }[] = [];
   _fileUploadBtn: HTMLButtonElement;
+  _imageUploadBtn: HTMLButtonElement;
   _fileIdCounter: number = 0;
   _fileListRow: HTMLDivElement = document.createElement("div");
   _attachRepoVisible: boolean = false;
@@ -28,7 +32,7 @@ export class ChatPanel {
   _chatHistory: { 
     id: string; 
     title: string; 
-    messages: { role: "user" | "assistant" | "system"; content: string }[];
+    messages: { role: "user" | "assistant" | "system"; content: ChatContent }[];
     timestamp: number;
   }[] = [];
   _currentChatId: string = "";
@@ -123,7 +127,7 @@ export class ChatPanel {
     const newChat = {
       id: chatId,
       title: "New Chat",
-      messages: [{ role: "assistant" as const, content: "Hello! What can I help you with today?" }],
+      messages: [{ role: "assistant" as const, content: [{ type: "text" as const, text: "Hello! What can I help you with today?" }] }],
       timestamp: Date.now()
     };
     
@@ -150,8 +154,15 @@ export class ChatPanel {
       // Update title based on first user message
       const firstUserMessage = this._chatMessages.find(m => m.role === "user");
       if (firstUserMessage) {
-        const words = firstUserMessage.content.split(" ").slice(0, 6);
-        this._chatHistory[chatIndex].title = words.join(" ") + (words.length === 6 ? "..." : "");
+        if (firstUserMessage.content[0].type === "text") {
+          const words = firstUserMessage.content[0].text.split(" ").slice(0, 6);
+          this._chatHistory[chatIndex].title = words.join(" ") + (words.length === 6 ? "..." : "");
+        } else {
+          this._chatHistory[chatIndex].title = "Unknown Title";
+        }
+
+        // const words = firstUserMessage.content[0].text.split(" ").slice(0, 6);
+        // this._chatHistory[chatIndex].title = words.join(" ") + (words.length === 6 ? "..." : "");
       }
     }
   }
@@ -193,14 +204,19 @@ export class ChatPanel {
     return currentChat.messages
       .filter(m => m.role === "user")
       .map(m => {
-        // Remove uploaded files prefix if present
-        const idx = m.content.indexOf("[End Uploaded Files]");
-        if (idx !== -1) {
-          let after = m.content.slice(idx + "[End Uploaded Files]".length);
-          if (after.startsWith("\n")) after = after.slice(1);
-          return after;
+        const firstContent = m.content[0];
+        if (firstContent.type === "text") {
+          // Remove uploaded files prefix if present
+          const idx = firstContent.text.indexOf("[End Uploaded Files]");
+          if (idx !== -1) {
+            let after = firstContent.text.slice(idx + "[End Uploaded Files]".length);
+            if (after.startsWith("\n")) after = after.slice(1);
+            return after;
+          }
+          return firstContent.text;
         }
-        return m.content;
+        // If not text, skip or return empty string
+        return "";
       })
       .filter(content => content.trim().length > 0); // Remove empty messages
   }
@@ -453,7 +469,8 @@ export class ChatPanel {
       const hasUserMessages = this._chatMessages.some(m => m.role === "user");
       const hasOnlyGreeting = this._chatMessages.length === 1 && 
                               this._chatMessages[0].role === "assistant" && 
-                              this._chatMessages[0].content === "Hello! What can I help you with today?";
+                              this._chatMessages[0].content[0].type === "text" &&
+                              this._chatMessages[0].content[0].text === "Hello! What can I help you with today?";
       
       // Do nothing if chat is already new/empty
       if (!hasUserMessages && (this._chatMessages.length === 0 || hasOnlyGreeting)) {
@@ -517,7 +534,12 @@ export class ChatPanel {
           messagesDiv.appendChild(userDiv);
         } else if (m.role === "assistant") {
           const botDiv = document.createElement("div");
-          botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(m.content));
+          const firstContent = m.content[0];
+          if (firstContent.type === "text") {
+            botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(firstContent.text));
+          } else if (firstContent.type === "image_url") {
+            botDiv.innerHTML = "<b>Daisen Bot:</b> " + "Something went wrong, I can't display history right now.";
+          }
           botDiv.style.textAlign = "left";
           botDiv.style.margin = "4px 0";
           messagesDiv.appendChild(botDiv);
@@ -587,6 +609,7 @@ export class ChatPanel {
           id: ++this._fileIdCounter,
           name: file.name,
           content: e.target?.result as string,
+          type: "file",
           size: sizeStr,
         });
         renderFileList.call(this);
@@ -627,9 +650,90 @@ export class ChatPanel {
 
     actionRow.appendChild(fileUploadBtn);
     actionRow.appendChild(fileInput);
-    chatContent.appendChild(actionRow);
 
     this._fileUploadBtn = fileUploadBtn;
+
+
+
+
+
+
+    // Image upload Button
+
+    // File upload functionality
+    const handleImageUpload = (file: File) => {
+      const allowed = [".png", ".jpg", ".jpeg"];
+      const name = file.name.toLowerCase();
+      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
+      if (!validSuffix) {
+        window.alert("Invalid file type. Allowed: .png, .jpg, .jpeg");
+        return;
+      }
+
+      // Check size
+      if (file.size > 64 * 1024) {
+        window.alert("File too large. Max size is 64 KB.");
+        return;
+      }
+
+      // Read image file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        console.log("Image file loaded:", file.name, e.target?.result);
+        const sizeStr = formatFileSize(file.size);
+        this._uploadedFiles.push({
+          id: ++this._fileIdCounter,
+          name: file.name,
+          content: e.target?.result as string,
+          type: "image",
+          size: sizeStr,
+        });
+        renderFileList.call(this);
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // Image upload button
+    const imageUploadBtn = document.createElement("button");
+    imageUploadBtn.type = "button";
+    imageUploadBtn.title = "Upload Image";
+    imageUploadBtn.style.background = "#f6f8fa";
+    imageUploadBtn.style.border = "1px solid #ccc";
+    imageUploadBtn.style.borderRadius = "6px";
+    imageUploadBtn.style.width = "38px";
+    imageUploadBtn.style.height = "38px";
+    imageUploadBtn.style.display = "flex";
+    imageUploadBtn.style.alignItems = "center";
+    imageUploadBtn.style.justifyContent = "center";
+    imageUploadBtn.style.cursor = "pointer";
+    imageUploadBtn.innerHTML = `
+      <svg width="24" height="24" viewBox="0 0 64 64" fill="currentColor">
+        <path d="M25 20.775c0-2.325-1.9-4.225-4.225-4.225-2.325 0-4.225 1.9-4.225 4.225 0 2.325 1.9 4.225 4.225 4.225S25 23.1 25 20.775zm14.025 21.55H42.5V38.85c0-2.575 1.55-4.775 3.75-5.775l-.575-2v-.15l-3.8-11.525-13.325 17.175-3.575-6.05L10.825 44.8h20.85 2.35c1.125-1.5 2.95-2.475 5-2.475zM61.5 11.95c0-5.2-4.25-9.45-9.45-9.45H11.95c-5.2 0-9.45 4.25-9.45 9.45v40.125c0 5.175 4.25 9.425 9.45 9.425h28.3s0 0 0 0c.975 0 1.775-.8 1.775-1.775s-.8-1.775-1.775-1.775c0 0 0 0 0 0H11.95c-3.25 0-5.9-2.65-5.9-5.9V11.95c0-3.25 2.65-5.9 5.9-5.9h40.125c3.25 0 5.9 2.65 5.9 5.9V40.1c0 .025 0 .025 0 .05 0 .975.8 1.775 1.775 1.775s1.775-.8 1.775-1.775c0 0 0 0 0-.025h.025V11.95H61.5zM50 59.4509v-5.5047h-5.505c-1.1013 0-1.9944-.894-1.995-1.9953 0-1.1016.8934-1.995 1.995-1.995H50v-5.505c0-1.1016.8934-1.995 1.995-1.995 1.1016.0006 1.9953.8937 1.9953 1.995v5.505h5.5047l.4014.0411c.909.186 1.5939.99 1.5939 1.9539-.0006.9636-.6852 1.7682-1.5939 1.9542l-.4014.0411h-5.5047v5.5047c-.0006 1.101-.894 1.9947-1.9953 1.9953-1.1013 0-1.9944-.894-1.995-1.9953z" />
+      </svg>
+    `;
+
+    // Hidden image input
+    const imageInput = document.createElement("input");
+    imageInput.type = "file";
+    imageInput.style.display = "none";
+    imageInput.accept = ".png,.jpg,.jpeg";
+    imageUploadBtn.onclick = () => imageInput.click();
+
+    imageInput.onchange = () => {
+      const file = imageInput.files?.[0];
+      if (file) handleImageUpload(file);
+    };
+
+    actionRow.appendChild(imageUploadBtn);
+    actionRow.appendChild(imageInput);
+    chatContent.appendChild(actionRow);
+
+    this._imageUploadBtn = imageUploadBtn;
+
+
+
+
+
 
     this._setTraceComponentNames();
 
@@ -1625,9 +1729,9 @@ export class ChatPanel {
 
       // Build uploaded files prefix if any
       let prefix = "";
-      if (this._uploadedFiles.length > 0) {
+      if (this._uploadedFiles.some(f => f.type === "file")) {
         prefix += "[Uploaded Files]\n";
-        this._uploadedFiles.forEach(f => {
+        this._uploadedFiles.filter(f => f.type === "file").forEach(f => {
           prefix += `[Uploaded File "${f.name}"]\n${f.content}\n`;
         });
         prefix += "[End Uploaded Files]\n";
@@ -1635,6 +1739,16 @@ export class ChatPanel {
 
       // Compose the full message
       const fullMsg = prefix + userMsg;
+      const imageFiles = this._uploadedFiles.filter(f => f.type === "image");
+      let fullContentForAPI: any = [
+        { type: "text", text: fullMsg }
+      ];
+      imageFiles.forEach(img => {
+        fullContentForAPI.push({
+          type: "image_url",
+          image_url: { url: img.content }
+        });
+      });
 
       // Disable send button while waiting
       sendBtn.disabled = true;
@@ -1665,7 +1779,7 @@ export class ChatPanel {
         this._graphTestButtonClicked = false;
         
         // Add user message to chat history
-        messages.push({ role: "user", content: fullMsg });
+        messages.push({ role: "user", content: [{ type: "text", text: fullMsg }] });
         this._chatMessages = messages;
         this._saveChatToHistory();
         
@@ -1691,12 +1805,12 @@ export class ChatPanel {
           botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
           
           // Add bot message to chat history
-          messages.push({ role: "assistant", content: responseContent });
+          messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }] });
         } catch (error) {
           // Handle error case
           const errorMessage = `Error loading graph data: ${error.message}`;
           botDiv.innerHTML = `<b>Daisen Bot:</b> ${errorMessage}`;
-          messages.push({ role: "assistant", content: errorMessage });
+          messages.push({ role: "assistant", content: [{ type: "text", text: errorMessage }] });
         }
         
         this._chatMessages = messages;
@@ -1744,7 +1858,7 @@ export class ChatPanel {
       }
 
       // Call GPT with full history
-      messages.push({ role: "user", content: fullMsg });
+      messages.push({ role: "user", content: fullContentForAPI });
       this._chatMessages = messages; // Update the instance messages
       this._saveChatToHistory(); // Save the updated chat
       console.log("[Sent to GPT]", fullMsg);
@@ -1809,7 +1923,7 @@ export class ChatPanel {
           })</span> ` +
           convertMarkdownToHTML(autoWrapMath(gptResponseContent));
 
-        messages.push({ role: "assistant", content: gptResponseContent });
+        messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}] });
         this._chatMessages = messages; // Update the instance messages
         this._saveChatToHistory(); // Save the updated chat
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -2083,7 +2197,25 @@ function renderFileList() {
     fileRow.style.marginBottom = "4px";
     fileRow.style.padding = "0 8px";
     fileRow.style.fontSize = "15px";
-    fileRow.style.justifyContent = "flex-start"; // "space-between"; 
+    fileRow.style.justifyContent = "flex-start"; // "space-between";
+
+    // SVG icon for file or image
+    const iconSpan = document.createElement("span");
+    iconSpan.style.display = "flex";
+    iconSpan.style.alignItems = "center";
+    iconSpan.style.justifyContent = "center";
+    iconSpan.style.width = "24px";
+    iconSpan.style.height = "24px";
+    iconSpan.style.marginRight = "8px";
+    iconSpan.innerHTML =
+      file.type === "file"
+        ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 17H15M9 13H15M9 9H10M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+          </svg>`
+        : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0d6efd" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 11H10M8 18L11 15L13 17L16 14M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+          </svg>`;
+    fileRow.appendChild(iconSpan);
 
     // File name (not clickable)
     const nameSpan = document.createElement("span");
@@ -2117,17 +2249,21 @@ function renderFileList() {
       this._uploadedFiles = this._uploadedFiles.filter(f => f.id !== file.id);
       renderFileList.call(this);
       // Log current file list with ids
-      console.log("[File Removed] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, size: f.size })));
+      console.log("[File Removed] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size })));
     };
     fileRow.appendChild(removeBtn);
 
     this._fileListRow.appendChild(fileRow);
   });
   this._fileListRow.style.marginBottom = "4px";
-  // Update bubble
-  this._renderBubble(this._fileUploadBtn, this._uploadedFiles.length, "bubble-upload-file");
+  // Count files by type
+  const fileCount = this._uploadedFiles.filter(f => f.type === "file").length;
+  const imageCount = this._uploadedFiles.filter(f => f.type === "image").length;
+  // Update bubbles
+  this._renderBubble(this._fileUploadBtn, fileCount, "bubble-upload-file");
+  this._renderBubble(this._imageUploadBtn, imageCount, "bubble-upload-image");
   // Log current file list with ids after every render
-  console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, size: f.size })));
+  console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size })));
 }
 
 function formatFileSize(size: number): string {
