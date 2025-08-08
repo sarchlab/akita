@@ -585,7 +585,6 @@ func buildOpenAIPayload(
 		return nil, err
 	}
 
-	// Collect all URLs from selected keys
 	urlSet := make(map[string]struct{})
 	for _, key := range selectedGitHubRoutineKeys {
 		if urls, ok := routineMap[key]; ok {
@@ -601,14 +600,12 @@ func buildOpenAIPayload(
 	}
 	sort.Strings(urlList)
 
-	// Fetch raw contents and build reference header
 	combinedRepoHeader := ""
 	for _, url := range urlList {
 		content := httpGithubRaw(ctx, url)
 		if content == "" {
 			continue
 		}
-		// Extract file name starting from "sarchlab"
 		fileName := url
 		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
 			fileName = url[idx:]
@@ -618,11 +615,8 @@ func buildOpenAIPayload(
 		combinedRepoHeader += "[End " + fileName + "]\n"
 	}
 
-	// Add reference header to the last message's content
 	if len(messages) > 0 {
-		// Type assert to []interface{}
 		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
-			// Type assert to map[string]interface{}
 			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
 				firstText, _ := firstContent["text"].(string)
 				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
