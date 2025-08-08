@@ -64,14 +64,14 @@ var linterCmd = &cobra.Command{
 				fmt.Printf("<2d> Builder function error: %s\n", errBuilderFunc)
 				hasError = true
 			} else {
-				err1 := checkBuildFunction1(folderPath)
-				if err1 != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", err1)
+				errParam := checkBuildFunctionParam(folderPath)
+				if errParam != nil {
+					fmt.Printf("<2d> Builder function error: %s\n", errParam)
 					hasError = true
 				}
-				err2 := checkBuildFunction2(folderPath)
-				if err2 != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", err2)
+				errReturn := checkBuildFunctionReturn(folderPath)
+				if errReturn != nil {
+					fmt.Printf("<2d> Builder function error: %s\n", errReturn)
 					hasError = true
 				}
 			}
@@ -207,8 +207,8 @@ func checkWithFunc(folderPath string) error {
 
 	if len(unconfigs) != 0 {
 		unconfig := strings.Join(unconfigs, ", ")
-		return fmt.Errorf(`configurable parameter(s) [%s] does not 
-			have proper setter functions starting with 'With'`, unconfig)
+		return fmt.Errorf("configurable parameter(s) [%s] does not "+
+			"have proper setter functions starting with 'With'", unconfig)
 	}
 
 	return nil
@@ -237,7 +237,7 @@ func getBuilderFields(node *ast.File) (map[string]bool, map[string]bool) {
 				for _, fieldName := range field.Names {
 					// Assume all parameters are configurable
 					builderFields[fieldName.Name] = true
-					configurableFields[fieldName.Name] = true
+					configurableFields[fieldName.Name] = false
 				}
 			}
 		}
@@ -247,8 +247,7 @@ func getBuilderFields(node *ast.File) (map[string]bool, map[string]bool) {
 }
 
 func getConfigurableFields(builderFields map[string]bool,
-	configurableFields map[string]bool,
-	funcDecl *ast.FuncDecl) {
+	configurableFields map[string]bool, funcDecl *ast.FuncDecl) {
 	receiverName := getRecieverName(funcDecl)
 
 	// find assignment receiver.<field> = ...
@@ -263,10 +262,9 @@ func getConfigurableFields(builderFields map[string]bool,
 				ident, ok := sel.X.(*ast.Ident)
 				if ok && ident.Name == receiverName {
 					fieldName := sel.Sel.Name
-					//fmt.Println(funcDecl.Name.Name)
-					if builderFields[fieldName] && !strings.HasPrefix(
+					if builderFields[fieldName] && strings.HasPrefix(
 						funcDecl.Name.Name, "With") {
-						configurableFields[fieldName] = false
+						configurableFields[fieldName] = true
 						// changes the original configurableFields
 					}
 				}
@@ -310,8 +308,8 @@ func checkWithFuncReturn(folderPath string) error {
 	}
 	if len(improperReturns) != 0 {
 		funcList := strings.Join(improperReturns, ", ")
-		return fmt.Errorf(`'With' function(s) [%s] does not return 
-		builder type value`, funcList)
+		return fmt.Errorf("'With' function(s) [%s] does not return "+
+			"builder type value", funcList)
 	}
 
 	return nil
@@ -365,8 +363,8 @@ func checkBuilderParameters(folderPath string) error {
 	}
 
 	if len(parameters) < 2 || mustInclude != 2 {
-		return fmt.Errorf(`"builder must include at least 2 parameters, 
-		including Freq and Engine"`)
+		return fmt.Errorf("builder must include at least 2 parameters, " +
+			"including Freq and Engine")
 	}
 
 	return nil
@@ -428,7 +426,7 @@ func checkBuildFunction(folderPath string) error {
 	return nil
 }
 
-func checkBuildFunction1(folderPath string) error {
+func checkBuildFunctionParam(folderPath string) error {
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
 	// Parse the builder file
@@ -446,7 +444,7 @@ func checkBuildFunction1(folderPath string) error {
 	return nil
 }
 
-func checkBuildFunction2(folderPath string) error {
+func checkBuildFunctionReturn(folderPath string) error {
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
 	// Parse the builder file
@@ -531,8 +529,8 @@ func checkManifestFormat(folderPath string) error {
 	// Must have `name` attribute with a non-empty string value
 	nameAtt, ok := manifest["name"].(string)
 	if !ok || nameAtt == "" {
-		return fmt.Errorf(`manifest.json must contain a 
-		non-empty 'name' attribute`)
+		return fmt.Errorf("manifest.json must contain a " +
+			"non-empty 'name' attribute")
 	}
 
 	// Must have `ports`
