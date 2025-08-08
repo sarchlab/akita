@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Page</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+            height: 100vh;
+        }
+        .left-half {
+            width: 50%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(255,255,255,0.7);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .right-half {
+            width: 50%;
+            padding: 20px;
+            background: rgba(255,255,255,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        .csv-editor {
+            width: 100%;
+            height: 400px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+        }
+        .csv-editor:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+        }
+        .csv-label {
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: normal;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            position: relative;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-half">
+        <h2>Graph Data Visualization</h2>
+        <div class="chart-container">
+            <canvas id="barChart"></canvas>
+        </div>
+    </div>
+    <div class="right-half">
+        <h3 class="csv-label">Edit CSV Data:</h3>
+        <textarea id="csvEditor" class="csv-editor" placeholder="Enter CSV data here..."></textarea>
+    </div>
+
+    <script>
+        // CSV data from chatpanel.ts
+        let csvData = [
+            ['TIME', 'CAR SPEED'],
+            ['0', '0'],
+            ['1', '1'],
+            ['2', '4'],
+            ['3', '9'],
+            ['4', '16'],
+            ['5', '25']
+        ];
+
+        // Global chart variable
+        let barChart;
+
+        // Function to convert CSV data array to text
+        function csvDataToText(data) {
+            return data.map(row => row.join(',')).join('\n');
+        }
+
+        // Function to parse CSV text to data array
+        function parseCSVText(text) {
+            const lines = text.trim().split('\n');
+            return lines.map(line => line.split(',').map(cell => cell.trim()));
+        }
+
+        // Function to create/update the chart
+        function createChart(data) {
+            // Extract headers and data
+            const headers = data[0];
+            const chartData = data.slice(1);
+            
+            // Prepare data for Chart.js
+            const labels = chartData.map(row => row[0]); // First column as labels
+            const values = chartData.map(row => parseFloat(row[1]) || 0); // Second column as values
+
+            const ctx = document.getElementById('barChart').getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (barChart) {
+                barChart.destroy();
+            }
+
+            // Create new chart
+            barChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: headers[1] || 'Data', // Second column header or 'Data'
+                        data: values,
+                        backgroundColor: 'rgba(13, 110, 253, 0.6)', // #0d6efd with transparency
+                        borderColor: '#0d6efd', // Primary blue from chatpanel
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 800, // Animation duration in milliseconds
+                        easing: 'easeInOutQuart', // Smooth easing function
+                        animateRotate: true,
+                        animateScale: true
+                    },
+                    animations: {
+                        x: {
+                            type: 'number',
+                            easing: 'easeInOutQuart',
+                            duration: 800,
+                            from: (ctx) => ctx.type === 'data' && ctx.mode === 'default' && !ctx.dropped ? ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex].x : undefined
+                        },
+                        y: {
+                            type: 'number',
+                            easing: 'easeInOutQuart',
+                            duration: 800,
+                            from: (ctx) => ctx.type === 'data' && ctx.mode === 'default' && !ctx.dropped ? ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex].y : undefined
+                        }
+                    },
+                    transitions: {
+                        active: {
+                            animation: {
+                                duration: 400
+                            }
+                        },
+                        resize: {
+                            animation: {
+                                duration: 0
+                            }
+                        },
+                        show: {
+                            animations: {
+                                x: {
+                                    from: 0
+                                },
+                                y: {
+                                    from: 0
+                                }
+                            }
+                        },
+                        hide: {
+                            animations: {
+                                x: {
+                                    to: 0
+                                },
+                                y: {
+                                    to: 0
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `${headers[1] || 'Data'} vs ${headers[0] || 'Categories'}`,
+                            color: '#333',
+                            font: {
+                                family: 'Arial, sans-serif',
+                                size: 16,
+                                weight: 'normal'
+                            },
+                            padding: 20
+                        },
+                        legend: {
+                            labels: {
+                                color: '#333',
+                                font: {
+                                    family: 'Arial, sans-serif'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: headers[1] || 'Values',
+                                color: '#333',
+                                font: {
+                                    family: 'Arial, sans-serif',
+                                    weight: 'normal'
+                                }
+                            },
+                            ticks: {
+                                color: '#666',
+                                font: {
+                                    family: 'Arial, sans-serif'
+                                }
+                            },
+                            grid: {
+                                color: '#ddd',
+                                borderColor: '#ccc'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: headers[0] || 'Categories',
+                                color: '#333',
+                                font: {
+                                    family: 'Arial, sans-serif',
+                                    weight: 'normal'
+                                }
+                            },
+                            ticks: {
+                                color: '#666',
+                                font: {
+                                    family: 'Arial, sans-serif'
+                                }
+                            },
+                            grid: {
+                                color: '#ddd',
+                                borderColor: '#ccc'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            const csvEditor = document.getElementById('csvEditor');
+            let updateTimeout;
+
+            // Populate the text area with initial CSV data
+            csvEditor.value = csvDataToText(csvData);
+
+            // Create initial chart
+            createChart(csvData);
+
+            // Function to update the chart with debouncing
+            function updateChart() {
+                try {
+                    const newCsvData = parseCSVText(csvEditor.value);
+                    if (newCsvData.length < 2) {
+                        // Don't update if insufficient data, but don't show error
+                        return;
+                    }
+                    csvData = newCsvData;
+                    createChart(csvData);
+                } catch (error) {
+                    // Silently handle parsing errors during typing
+                    console.warn('CSV parsing error (will retry):', error);
+                }
+            }
+
+            // Auto-update chart with debouncing (wait 500ms after user stops typing)
+            csvEditor.addEventListener('input', function() {
+                clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(updateChart, 500);
+            });
+
+            // Immediate update on paste
+            csvEditor.addEventListener('paste', function() {
+                setTimeout(updateChart, 100); // Small delay to let paste complete
+            });
+        });
+    </script>
+</body>
+</html>

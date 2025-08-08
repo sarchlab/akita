@@ -59,6 +59,10 @@ func startAPIServer() {
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 
+	http.HandleFunc("/api/gpt", httpGPTProxy)
+	http.HandleFunc("/api/githubisavailable", httpGithubIsAvailableProxy)
+	// http.HandleFunc("/api/github", httpGithubProxy)
+
 	fmt.Printf("Listening %s\n", *httpFlag)
 
 	go func() {
