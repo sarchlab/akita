@@ -1,6 +1,8 @@
 package mem
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -138,6 +140,7 @@ func (b ReadReqBuilder) Build() *ReadReq {
 	r.Info = b.info
 	r.AccessByteSize = b.byteSize
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
 
 	return r
 }
@@ -265,6 +268,7 @@ func (b WriteReqBuilder) Build() *WriteReq {
 	r.TrafficBytes = len(r.Data) + accessReqByteOverhead
 	r.DirtyMask = b.dirtyMask
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
 
 	return r
 }
@@ -336,6 +340,7 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.TrafficBytes = len(b.data) + accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Data = b.data
+	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
 
 	return r
 }
@@ -398,6 +403,7 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	r.Dst = b.dst
 	r.TrafficBytes = accessRspByteOverhead
 	r.RespondTo = b.rspTo
+	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
 
 	return r
 }
@@ -523,6 +529,7 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Flush = b.Flush
 	m.Pause = b.Pause
 	m.Invalid = b.Invalid
+	m.TrafficClass = reflect.TypeOf(ControlMsg{}).String()
 
 	return m
 }
