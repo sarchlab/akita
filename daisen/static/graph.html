@@ -33,7 +33,7 @@
         }
         .csv-editor {
             width: 100%;
-            height: 400px;
+            height: 350px;
             padding: 15px;
             border: 1px solid #ddd;
             border-radius: 6px;
@@ -43,6 +43,7 @@
             resize: none;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             overflow: auto;
+            margin-bottom: 15px;
         }
         .csv-editor:focus {
             outline: 2px solid #0d6efd;
@@ -53,6 +54,24 @@
             color: #333;
             font-weight: normal;
         }
+        .update-button {
+            padding: 10px 20px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .update-button:hover {
+            background-color: #0b5ed7;
+        }
+        .update-button:active {
+            background-color: #0a58ca;
+            transform: translateY(1px);
+        }
         .chart-container {
             width: 100%;
             height: 400px;
@@ -62,6 +81,24 @@
             border-radius: 6px;
             padding: 15px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chart-controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .chart-type-selector {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            outline: none;
+        }
+        .chart-type-selector:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
         }
         h2 {
             text-align: center;
@@ -74,6 +111,14 @@
 <body>
     <div class="left-half">
         <h2>Graph Data Visualization</h2>
+        <div class="chart-controls">
+            <label for="chartType" style="margin-right: 10px; color: #333;">Chart Type:</label>
+            <select id="chartType" class="chart-type-selector">
+                <option value="bar">Bar Chart</option>
+                <option value="line">Line Chart</option>
+                <option value="pie">Pie Chart</option>
+            </select>
+        </div>
         <div class="chart-container">
             <canvas id="barChart"></canvas>
         </div>
@@ -81,6 +126,7 @@
     <div class="right-half">
         <h3 class="csv-label">Edit CSV Data:</h3>
         <textarea id="csvEditor" class="csv-editor" placeholder="Enter CSV data here..."></textarea>
+        <button id="updateButton" class="update-button">Update Graph</button>
     </div>
 
     <script>
@@ -110,7 +156,7 @@
         }
 
         // Function to create/update the chart
-        function createChart(data) {
+        function createChart(data, chartType = 'bar') {
             // Extract headers and data
             const headers = data[0];
             const chartData = data.slice(1);
@@ -126,80 +172,46 @@
                 barChart.destroy();
             }
 
-            // Create new chart
-            barChart = new Chart(ctx, {
-                type: 'bar',
+            // Generate colors for pie/doughnut charts
+            const colors = [
+                '#0d6efd', '#6610f2', '#6f42c1', '#d63384', '#dc3545',
+                '#fd7e14', '#ffc107', '#198754', '#20c997', '#0dcaf0'
+            ];
+            
+            let backgroundColor, borderColor;
+            
+            if (chartType === 'pie') {
+                backgroundColor = values.map((_, index) => colors[index % colors.length] + '80'); // Add transparency
+                borderColor = values.map((_, index) => colors[index % colors.length]);
+            } else {
+                backgroundColor = 'rgba(13, 110, 253, 0.6)';
+                borderColor = '#0d6efd';
+            }
+
+            // Chart configuration based on type
+            let chartConfig = {
+                type: chartType,
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: headers[1] || 'Data', // Second column header or 'Data'
+                        label: headers[1] || 'Data',
                         data: values,
-                        backgroundColor: 'rgba(13, 110, 253, 0.6)', // #0d6efd with transparency
-                        borderColor: '#0d6efd', // Primary blue from chatpanel
-                        borderWidth: 1,
-                        borderRadius: 4,
-                        borderSkipped: false,
+                        backgroundColor: backgroundColor,
+                        borderColor: borderColor,
+                        borderWidth: chartType === 'line' ? 3 : 1,
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     animation: {
-                        duration: 800, // Animation duration in milliseconds
-                        easing: 'easeInOutQuart', // Smooth easing function
-                        animateRotate: true,
-                        animateScale: true
-                    },
-                    animations: {
-                        x: {
-                            type: 'number',
-                            easing: 'easeInOutQuart',
-                            duration: 800,
-                            from: (ctx) => ctx.type === 'data' && ctx.mode === 'default' && !ctx.dropped ? ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex].x : undefined
-                        },
-                        y: {
-                            type: 'number',
-                            easing: 'easeInOutQuart',
-                            duration: 800,
-                            from: (ctx) => ctx.type === 'data' && ctx.mode === 'default' && !ctx.dropped ? ctx.chart.getDatasetMeta(ctx.datasetIndex).data[ctx.dataIndex].y : undefined
-                        }
-                    },
-                    transitions: {
-                        active: {
-                            animation: {
-                                duration: 400
-                            }
-                        },
-                        resize: {
-                            animation: {
-                                duration: 0
-                            }
-                        },
-                        show: {
-                            animations: {
-                                x: {
-                                    from: 0
-                                },
-                                y: {
-                                    from: 0
-                                }
-                            }
-                        },
-                        hide: {
-                            animations: {
-                                x: {
-                                    to: 0
-                                },
-                                y: {
-                                    to: 0
-                                }
-                            }
-                        }
+                        duration: 800,
+                        easing: 'easeInOutQuart',
                     },
                     plugins: {
                         title: {
                             display: true,
-                            text: `${headers[1] || 'Data'} vs ${headers[0] || 'Categories'}`,
+                            text: `${headers[1] || 'Data'} ${chartType === 'pie' ? 'Distribution' : 'vs ' + (headers[0] || 'Categories')}`,
                             color: '#333',
                             font: {
                                 family: 'Arial, sans-serif',
@@ -216,92 +228,119 @@
                                 }
                             }
                         }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: headers[1] || 'Values',
-                                color: '#333',
-                                font: {
-                                    family: 'Arial, sans-serif',
-                                    weight: 'normal'
-                                }
-                            },
-                            ticks: {
-                                color: '#666',
-                                font: {
-                                    family: 'Arial, sans-serif'
-                                }
-                            },
-                            grid: {
-                                color: '#ddd',
-                                borderColor: '#ccc'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: headers[0] || 'Categories',
-                                color: '#333',
-                                font: {
-                                    family: 'Arial, sans-serif',
-                                    weight: 'normal'
-                                }
-                            },
-                            ticks: {
-                                color: '#666',
-                                font: {
-                                    family: 'Arial, sans-serif'
-                                }
-                            },
-                            grid: {
-                                color: '#ddd',
-                                borderColor: '#ccc'
-                            }
-                        }
                     }
                 }
-            });
+            };
+
+            // Add specific configurations for different chart types
+            if (chartType === 'line') {
+                chartConfig.data.datasets[0].fill = false;
+                chartConfig.data.datasets[0].tension = 0.1;
+                chartConfig.data.datasets[0].pointBackgroundColor = '#0d6efd';
+                chartConfig.data.datasets[0].pointBorderColor = '#fff';
+                chartConfig.data.datasets[0].pointRadius = 5;
+                chartConfig.data.datasets[0].pointHoverRadius = 7;
+            }
+
+            // Add scales for charts that need them
+            if (chartType === 'bar' || chartType === 'line') {
+                chartConfig.options.scales = {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: headers[1] || 'Values',
+                            color: '#333',
+                            font: {
+                                family: 'Arial, sans-serif',
+                                weight: 'normal'
+                            }
+                        },
+                        ticks: {
+                            color: '#666',
+                            font: {
+                                family: 'Arial, sans-serif'
+                            }
+                        },
+                        grid: {
+                            color: '#ddd',
+                            borderColor: '#ccc'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: headers[0] || 'Categories',
+                            color: '#333',
+                            font: {
+                                family: 'Arial, sans-serif',
+                                weight: 'normal'
+                            }
+                        },
+                        ticks: {
+                            color: '#666',
+                            font: {
+                                family: 'Arial, sans-serif'
+                            }
+                        },
+                        grid: {
+                            color: '#ddd',
+                            borderColor: '#ccc'
+                        }
+                    }
+                };
+            }
+
+            if (chartType === 'bar') {
+                chartConfig.data.datasets[0].borderRadius = 4;
+                chartConfig.data.datasets[0].borderSkipped = false;
+            }
+
+            // Create new chart
+            barChart = new Chart(ctx, chartConfig);
         }
 
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             const csvEditor = document.getElementById('csvEditor');
-            let updateTimeout;
+            const chartTypeSelector = document.getElementById('chartType');
+            const updateButton = document.getElementById('updateButton');
 
             // Populate the text area with initial CSV data
             csvEditor.value = csvDataToText(csvData);
 
             // Create initial chart
-            createChart(csvData);
+            createChart(csvData, chartTypeSelector.value);
 
-            // Function to update the chart with debouncing
+            // Function to update the chart
             function updateChart() {
                 try {
                     const newCsvData = parseCSVText(csvEditor.value);
                     if (newCsvData.length < 2) {
-                        // Don't update if insufficient data, but don't show error
+                        alert('Please enter at least one header row and one data row.');
                         return;
                     }
                     csvData = newCsvData;
-                    createChart(csvData);
+                    createChart(csvData, chartTypeSelector.value);
                 } catch (error) {
-                    // Silently handle parsing errors during typing
-                    console.warn('CSV parsing error (will retry):', error);
+                    alert('Error parsing CSV data. Please check the format.');
+                    console.error('CSV parsing error:', error);
                 }
             }
 
-            // Auto-update chart with debouncing (wait 500ms after user stops typing)
-            csvEditor.addEventListener('input', function() {
-                clearTimeout(updateTimeout);
-                updateTimeout = setTimeout(updateChart, 500);
+            // Chart type change handler (still updates immediately)
+            chartTypeSelector.addEventListener('change', function() {
+                createChart(csvData, this.value);
             });
 
-            // Immediate update on paste
-            csvEditor.addEventListener('paste', function() {
-                setTimeout(updateChart, 100); // Small delay to let paste complete
+            // Update button click handler
+            updateButton.addEventListener('click', updateChart);
+
+            // Optional: Update on Ctrl+Enter or Cmd+Enter
+            csvEditor.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    updateChart();
+                }
             });
         });
     </script>
