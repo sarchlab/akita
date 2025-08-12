@@ -11,6 +11,7 @@ import (
 // all incoming and outgoing ports
 type FlushReq struct {
 	sim.MsgMeta
+
 	VAddr []uint64
 	PID   vm.PID
 }

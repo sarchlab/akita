@@ -39,6 +39,7 @@ func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
 // StartSendEvent is an event that triggers an agent to send a message.
 type StartSendEvent struct {
 	*sim.EventBase
+
 	Msg *TrafficMsg
 }
 

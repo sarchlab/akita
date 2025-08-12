@@ -20,6 +20,8 @@ export class TaskColorCoder {
     let taskTypeArray = Object.keys(taskTypes);
     taskTypeArray.sort();
 
+    console.log("typeof chroma.cubehelix", typeof chroma.cubehelix);
+
     const colors = chroma
       .cubehelix()
       .gamma(0.7)

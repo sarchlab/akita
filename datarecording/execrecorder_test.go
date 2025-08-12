@@ -1,6 +1,7 @@
 package datarecording_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,7 +29,9 @@ func TestRecorderSetUp(t *testing.T) {
 	path := "test"
 
 	originalCL := os.Args
+
 	defer func() { os.Args = originalCL }()
+
 	os.Args = []string{"test_program", "arg1", "arg2"}
 	ExpectedInfo[0] = strings.Join(os.Args, " ")
 
@@ -36,6 +39,7 @@ func TestRecorderSetUp(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
+
 	expectedPath := filepath.Dir(ex)
 	ExpectedInfo[1] = expectedPath
 
@@ -70,7 +74,7 @@ func TestExecutionRecord(t *testing.T) {
 	tableName := "exec_info"
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(t.Context(), tableName, datarecording.QueryParams{})
 	fmt.Println(results)
 
 	assert.True(t, testArgsLog(tableName, reader), "Command should be logged")
@@ -85,7 +89,7 @@ func testArgsLog(tableName string, reader datarecording.DataReader) bool {
 	expectedCMD := ExpectedInfo[0]
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -102,7 +106,7 @@ func testPathLog(tableName string, reader datarecording.DataReader) bool {
 	expectedPath := ExpectedInfo[1]
 
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -121,7 +125,7 @@ func testStartTimeLog(
 	reader datarecording.DataReader,
 ) bool {
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
@@ -140,7 +144,7 @@ func testEndTimeLog(
 	reader datarecording.DataReader,
 ) bool {
 	reader.MapTable(tableName, execInfo{})
-	results, _, _ := reader.Query(tableName, datarecording.QueryParams{})
+	results, _, _ := reader.Query(context.Background(), tableName, datarecording.QueryParams{})
 
 	flag := true
 	flag = flag && (len(results) == 4)
