@@ -246,21 +246,23 @@ class TaskView {
     // Get left column width, don't block right column
     const leftColumnWidth = this._canvas.parentElement.offsetWidth;
     
+    const leftColumn = this._canvas.parentElement;
     this._dissectionView.style.cssText = `
-      position: absolute;
-      top: 200px;
-      left: 0;
+      position: fixed;
+      top: ${leftColumn.getBoundingClientRect().top + 200}px;
+      left: ${leftColumn.getBoundingClientRect().left}px;
       width: ${leftColumnWidth}px;
-      bottom: 0;
+      height: ${leftColumn.offsetHeight - 200}px;
       background: white;
       padding: 20px;
       overflow-y: auto;
       border-top: 2px solid #ccc;
+      z-index: 1000;
     `;
 
     // Parent Task section
     if (this._parentTask) {
-      const parentSection = this._createTaskSection('Parent Task', this._parentTask, '#a5dee5', true);
+      const parentSection = this._createTaskSection('Parent Task', this._parentTask, '#a5dee5', false);
       this._dissectionView.appendChild(parentSection);
     }
 
@@ -276,8 +278,8 @@ class TaskView {
     const subTasksSection = this._createSubTasksSection();
     this._dissectionView.appendChild(subTasksSection);
 
-    // Add to container
-    this._canvas.parentElement.appendChild(this._dissectionView);
+    // Add to body since we're using fixed positioning
+    document.body.appendChild(this._dissectionView);
   }
 
   private _createTaskSection(title: string, task: Task, bgColor: string, showSteps: boolean = true): HTMLElement {
@@ -345,7 +347,18 @@ class TaskView {
             background: #ff0000;
             border-radius: 50%;
             border: 1px solid #ffffff;
+            cursor: pointer;
           `;
+          
+          // Add tooltip for milestone dot
+          stepDot.addEventListener('mouseenter', (e) => {
+            this._showMilestoneInfo(step, 1);
+          });
+          
+          stepDot.addEventListener('mouseleave', () => {
+            // Don't hide tooltip immediately, let it stay
+          });
+          
           timeAxisContainer.appendChild(stepDot);
         }
       });
@@ -556,7 +569,7 @@ class TaskView {
 
     if (this._subTasks && this._subTasks.length > 0) {
       this._subTasks.forEach(subTask => {
-        const subTaskDiv = this._createTaskSection('', subTask, '#fefdca', true);
+        const subTaskDiv = this._createTaskSection('', subTask, '#fefdca', false);
         subTaskDiv.style.marginBottom = '10px'; // remove left margin, keep alignment
         section.appendChild(subTaskDiv);
       });

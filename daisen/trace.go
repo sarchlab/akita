@@ -181,10 +181,8 @@ func (r *SQLiteTraceReader) ListTasks(query TaskQuery) []Task {
 		tasks = append(tasks, task)
 	}
 
-	// Load milestones for tasks if a specific task ID is requested
-	if query.ID != "" {
-		r.loadMilestonesForTasks(tasks)
-	}
+	// Always load milestones for tasks
+	r.loadMilestonesForTasks(tasks)
 
 	return tasks
 }
