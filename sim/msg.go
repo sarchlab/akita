@@ -1,5 +1,7 @@
 package sim
 
+import "reflect"
+
 // A Msg is a piece of information that is transferred between components.
 type Msg interface {
 	Meta() *MsgMeta
@@ -11,7 +13,7 @@ type Msg interface {
 type MsgMeta struct {
 	ID           string
 	Src, Dst     RemotePort
-	TrafficClass int
+	TrafficClass string
 	TrafficBytes int
 }
 
@@ -56,7 +58,6 @@ func (r *GeneralRsp) GetRspTo() string {
 // GeneralRspBuilder can build general response messages.
 type GeneralRspBuilder struct {
 	Src, Dst     RemotePort
-	TrafficClass int
 	TrafficBytes int
 	OriginalReq  Msg
 }
@@ -70,14 +71,6 @@ func (c GeneralRspBuilder) WithSrc(src RemotePort) GeneralRspBuilder {
 // WithDst sets the destination of the general response message.
 func (c GeneralRspBuilder) WithDst(dst RemotePort) GeneralRspBuilder {
 	c.Dst = dst
-	return c
-}
-
-// WithTrafficClass sets the traffic class of the general response message.
-func (c GeneralRspBuilder) WithTrafficClass(
-	trafficClass int,
-) GeneralRspBuilder {
-	c.TrafficClass = trafficClass
 	return c
 }
 
@@ -101,7 +94,7 @@ func (c GeneralRspBuilder) Build() *GeneralRsp {
 		MsgMeta: MsgMeta{
 			Src:          c.Src,
 			Dst:          c.Dst,
-			TrafficClass: c.TrafficClass,
+			TrafficClass: reflect.TypeOf(GeneralRsp{}).String(),
 			TrafficBytes: c.TrafficBytes,
 			ID:           GetIDGenerator().Generate(),
 		},
