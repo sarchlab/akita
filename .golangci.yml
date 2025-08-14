@@ -40,9 +40,6 @@ linters-settings:
     statements: 40
 
   govet:
-    # report about shadowed variables
-    enable:
-      - shadow
 
     # settings per analyzer
     settings:
@@ -56,6 +53,7 @@ linters-settings:
     # enable or disable analyzers by name
     enable:
       - atomicalign
+      - shadow
 
     enable-all: false
     disable:
