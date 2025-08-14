@@ -33,46 +33,55 @@ var linterCmd = &cobra.Command{
 			fmt.Printf("<2> Builder error: %s\n", errBuilder)
 			hasError = true
 		} else {
-			errBuilderStruct := checkBuilderStruct(folderPath)
-			if errBuilderStruct != nil {
-				fmt.Printf("<2a> Builder structure error: %s\n",
-					errBuilderStruct)
-				hasError = true
-			}
-
-			errWithFunc := checkWithFunc(folderPath)
-			if errWithFunc != nil {
-				fmt.Printf("<2b> Builder format error: %s\n", errWithFunc)
-				hasError = true
-			}
-
-			errWithReturn := checkWithFuncReturn(folderPath)
-			if errWithReturn != nil {
-				fmt.Printf("<2b> Builder return error: %s\n", errWithReturn)
-				hasError = true
-			}
-
-			errBuilderParameter := checkBuilderParameters(folderPath)
-			if errBuilderParameter != nil {
-				fmt.Printf("<2c> Builder parameter error: %s\n",
-					errBuilderParameter)
-				hasError = true
-			}
-
-			errBuilderFunc := checkBuildFunction(folderPath)
-			if errBuilderFunc != nil {
-				fmt.Printf("<2d> Builder function error: %s\n", errBuilderFunc)
+			node, errParseBuilder := ParseBuilderFile(folderPath)
+			if errParseBuilder != nil {
+				fmt.Printf("<2> Builder parse error: %s\n", errParseBuilder)
 				hasError = true
 			} else {
-				errParam := checkBuildFunctionParam(folderPath)
-				if errParam != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", errParam)
+				errBuilderStruct := checkBuilderStruct(node)
+				if errBuilderStruct != nil {
+					fmt.Printf("<2a> Builder structure error: %s\n",
+						errBuilderStruct)
 					hasError = true
 				}
-				errReturn := checkBuildFunctionReturn(folderPath)
-				if errReturn != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", errReturn)
+
+				errWithFunc := checkWithFunc(node)
+				if errWithFunc != nil {
+					fmt.Printf("<2b> Builder format error: %s\n", errWithFunc)
 					hasError = true
+				}
+
+				errWithReturn := checkWithFuncReturn(node)
+				if errWithReturn != nil {
+					fmt.Printf("<2b> Builder return error: %s\n", errWithReturn)
+					hasError = true
+				}
+
+				errBuilderParameter := checkBuilderParameters(node)
+				if errBuilderParameter != nil {
+					fmt.Printf("<2c> Builder parameter error: %s\n",
+						errBuilderParameter)
+					hasError = true
+				}
+
+				errBuilderFunc := checkBuildFunction(node)
+				if errBuilderFunc != nil {
+					fmt.Printf("<2d> Builder function error: %s\n",
+						errBuilderFunc)
+					hasError = true
+				} else {
+					errParam := checkBuildFunctionParam(node)
+					if errParam != nil {
+						fmt.Printf("<2d> Builder function error: %s\n",
+							errParam)
+						hasError = true
+					}
+					errReturn := checkBuildFunctionReturn(node)
+					if errReturn != nil {
+						fmt.Printf("<2d> Builder function error: %s\n",
+							errReturn)
+						hasError = true
+					}
 				}
 			}
 		}
@@ -137,18 +146,20 @@ func checkBuilderFileExistence(folderPath string) error {
 	return nil
 }
 
-func checkBuilderStruct(folderPath string) error {
-	// get builder.go path
+func ParseBuilderFile(folderPath string) (*ast.File, error) {
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
 	// parse the builder file
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
+		return nil, fmt.Errorf("failed to parse builder.go file %s: %v",
 			builderFilePath, err)
 	}
+	return node, nil
+}
 
+func checkBuilderStruct(node *ast.File) error {
 	existBuilderStruct := false
 	for _, decl := range node.Decls { // iterate all declaration
 		genDecl, ok := decl.(*ast.GenDecl)    // check if decl is one of GenDecl
@@ -176,17 +187,7 @@ func checkBuilderStruct(folderPath string) error {
 // or has no setter at all, pass;
 // if it has a setter statement but located in a func not named by `With...`,
 // return error.
-func checkWithFunc(folderPath string) error {
-	// get builder.go path
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
+func checkWithFunc(node *ast.File) error {
 	builderFields, configurableFields := getBuilderFields(node)
 
 	// find the object of all configuration func
@@ -285,17 +286,7 @@ func getRecieverName(funcDecl *ast.FuncDecl) string {
 	return receiverName
 }
 
-func checkWithFuncReturn(folderPath string) error {
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
-
+func checkWithFuncReturn(node *ast.File) error {
 	var improperReturns []string
 	for _, decl := range node.Decls { // iterate all declaration
 		funcDecl, ok := decl.(*ast.FuncDecl) // check if decl is a FuncDecl
@@ -335,17 +326,7 @@ func isImproperWithFunction(funcDecl *ast.FuncDecl) bool {
 	return false
 }
 
-func checkBuilderParameters(folderPath string) error {
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// Parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
-
+func checkBuilderParameters(node *ast.File) error {
 	parameters := []string{}
 	mustInclude := 0
 	isBuilderStruct := false
@@ -399,17 +380,7 @@ func countBuilderFields(genDecl *ast.GenDecl) ([]string, int, bool) {
 	return parameters, mustInclude, isBuilderStruct
 }
 
-func checkBuildFunction(folderPath string) error {
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// Parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
-
+func checkBuildFunction(node *ast.File) error {
 	found := false
 	for _, decl := range node.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
@@ -426,17 +397,7 @@ func checkBuildFunction(folderPath string) error {
 	return nil
 }
 
-func checkBuildFunctionParam(folderPath string) error {
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// Parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
-
+func checkBuildFunctionParam(node *ast.File) error {
 	if err := getBuildFunctionParamErr(node); err != nil {
 		return err
 	}
@@ -444,17 +405,7 @@ func checkBuildFunctionParam(folderPath string) error {
 	return nil
 }
 
-func checkBuildFunctionReturn(folderPath string) error {
-	builderFilePath := filepath.Join(folderPath, "builder.go")
-
-	// Parse the builder file
-	fs := token.NewFileSet()
-	node, err := parser.ParseFile(fs, builderFilePath, nil, 0)
-	if err != nil {
-		return fmt.Errorf("failed to parse builder.go file %s: %v",
-			builderFilePath, err)
-	}
-
+func checkBuildFunctionReturn(node *ast.File) error {
 	if err := getBuildFunctionReturnErr(node); err != nil {
 		return err
 	}
