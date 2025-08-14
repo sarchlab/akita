@@ -24,7 +24,7 @@ var linterCmd = &cobra.Command{
 		hasError := false
 		errCompStruct := checkComponentFormat(folderPath)
 		if errCompStruct != nil {
-			fmt.Printf("<1a> Component structure error: %s\n", errCompStruct)
+			fmt.Print(errCompStruct, "\n")
 			hasError = true
 		}
 
@@ -86,10 +86,29 @@ var linterCmd = &cobra.Command{
 			}
 		}
 
-		errManifest := checkManifestFormat(folderPath)
+		manifest, errManifest := checkManifestFile(folderPath)
 		if errManifest != nil {
-			fmt.Printf("<3a/b> Manifest error: %v", errManifest)
+			fmt.Printf("<3> Manifest error: %v", errManifest)
 			hasError = true
+		} else {
+			errManifestName := checkManifestName(manifest)
+			if errManifestName != nil {
+				fmt.Printf("<3a> Manifest name error: %s\n",
+					errManifestName)
+				hasError = true
+			}
+			errManifestPort := checkManifestPort(manifest)
+			if errManifestPort != nil {
+				fmt.Printf("<3b> Manifest port error: %s\n",
+					errManifestPort)
+				hasError = true
+			}
+			errManifestParam := checkManifestParam(manifest)
+			if errManifestParam != nil {
+				fmt.Printf("<3b> Manifest parameter error: %s\n",
+					errManifestParam)
+				hasError = true
+			}
 		}
 
 		if hasError {
@@ -109,15 +128,15 @@ func checkComponentFormat(folderPath string) error {
 	// check comp.go existence
 	compFilePath := filepath.Join(folderPath, "comp.go")
 	if _, err := os.Stat(compFilePath); os.IsNotExist(err) {
-		return fmt.Errorf("comp.go file does not exist")
+		return fmt.Errorf("<1> Component error: comp.go file does not exist")
 	}
 
 	// parse the comp file
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, compFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("failed to parse comp.go file %s: %v",
-			compFilePath, err)
+		return fmt.Errorf("<1> Component error: failed to parse comp.go "+
+			"file %s: %v", compFilePath, err)
 	}
 
 	for _, decl := range node.Decls { // iterate all declaration
@@ -134,7 +153,8 @@ func checkComponentFormat(folderPath string) error {
 			}
 		}
 	}
-	return fmt.Errorf("no Comp struct in comp.go")
+	return fmt.Errorf("<1a> Component structure error: " +
+		"no Comp struct in comp.go")
 }
 
 func checkBuilderFileExistence(folderPath string) error {
@@ -299,7 +319,7 @@ func checkWithFuncReturn(node *ast.File) error {
 	}
 	if len(improperReturns) != 0 {
 		funcList := strings.Join(improperReturns, ", ")
-		return fmt.Errorf("'With' function(s) [%s] does not return "+
+		return fmt.Errorf("'With' function(s) [%s] not returning "+
 			"builder type value", funcList)
 	}
 
@@ -443,40 +463,45 @@ func getBuildFunctionReturnErr(node *ast.File) error {
 			continue
 		}
 
-		// Check if func returns
-		if funcDecl.Type.Results == nil {
-			return fmt.Errorf("`Build` function must return the new component")
-		}
-
 		// Check if the return type is a pointer
 		retType := funcDecl.Type.Results.List[0].Type
 		_, ok = retType.(*ast.StarExpr)
 		if !ok {
 			return fmt.Errorf("`Build` function must return pointer type")
 		}
+
+		// check if the return type is Comp
+		retIdent, ok := retType.(*ast.StarExpr).X.(*ast.Ident)
+		if !ok || retIdent.Name != "Comp" {
+			return fmt.Errorf("`Build` function must return pointer to Comp")
+		}
 	}
 	return nil
 }
 
-func checkManifestFormat(folderPath string) error {
+func checkManifestFile(folderPath string) (map[string]any, error) {
 	// Check manifest.json existence
 	jsonFilePath := filepath.Join(folderPath, "manifest.json")
 	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
-		return fmt.Errorf("manifest.json file does not exist")
+		return nil, fmt.Errorf("manifest.json file does not exist")
 	}
 
 	// Read the json file
 	fileContent, err := os.ReadFile(jsonFilePath)
 	if err != nil {
-		return fmt.Errorf("failed to read manifest.json: %v", err)
+		return nil, fmt.Errorf("failed to read manifest.json: %v", err)
 	}
 
 	// Parse the json file
 	var manifest map[string]any
 	if err := json.Unmarshal(fileContent, &manifest); err != nil {
-		return fmt.Errorf("failed to parse manifest.json: %v", err)
+		return nil, fmt.Errorf("failed to parse manifest.json: %v", err)
 	}
 
+	return manifest, nil
+}
+
+func checkManifestName(manifest map[string]any) error {
 	// Must have `name` attribute with a non-empty string value
 	nameAtt, ok := manifest["name"].(string)
 	if !ok || nameAtt == "" {
@@ -484,16 +509,23 @@ func checkManifestFormat(folderPath string) error {
 			"non-empty 'name' attribute")
 	}
 
+	return nil
+}
+
+func checkManifestPort(manifest map[string]any) error {
 	// Must have `ports`
 	if _, ok := manifest["ports"]; !ok {
 		return fmt.Errorf("manifest.json must contain `ports` attribute")
 	}
 
+	return nil
+}
+
+func checkManifestParam(manifest map[string]any) error {
 	// Must have `parameters`
 	if _, ok := manifest["parameters"]; !ok {
 		return fmt.Errorf("manifest.json must contain `parameters` attribute")
 	}
 
-	// All checks passed
 	return nil
 }
