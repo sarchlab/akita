@@ -138,7 +138,7 @@ func checkBuilderFileExistence(folderPath string) error {
 }
 
 func checkBuilderStruct(folderPath string) error {
-	// check builder.go existence
+	// get builder.go path
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
 	// parse the builder file
@@ -177,7 +177,7 @@ func checkBuilderStruct(folderPath string) error {
 // if it has a setter statement but located in a func not named by `With...`,
 // return error.
 func checkWithFunc(folderPath string) error {
-	// check builder.go existence
+	// get builder.go path
 	builderFilePath := filepath.Join(folderPath, "builder.go")
 
 	// parse the builder file
@@ -207,8 +207,8 @@ func checkWithFunc(folderPath string) error {
 
 	if len(unconfigs) != 0 {
 		unconfig := strings.Join(unconfigs, ", ")
-		return fmt.Errorf("configurable parameter(s) [%s] does not "+
-			"have proper setter functions starting with 'With'", unconfig)
+		return fmt.Errorf("configurable parameter(s) [%s] missing "+
+			"proper setter function(s) starting with 'With'", unconfig)
 	}
 
 	return nil
