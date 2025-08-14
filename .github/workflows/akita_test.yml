@@ -74,7 +74,7 @@ jobs:
       - name: Clean Go cache
         run: |
           go clean -modcache
-          rm -rf $(go env GOMODCACHE)/*
+          go clean -cache
 
       - name: Install Mockgen
         run: go install go.uber.org/mock/mockgen@latest
