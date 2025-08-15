@@ -8,17 +8,19 @@ import (
 
 // A Builder can build TLBs
 type Builder struct {
-	engine         sim.Engine
-	freq           sim.Freq
-	numReqPerCycle int
-	numSets        int
-	numWays        int
-	pageSize       uint64
-	lowModule      sim.RemotePort
-	numMSHREntry   int
-	state          string
-	latency        int
-	addressMapper  mem.AddressToPortMapper
+	engine            sim.Engine
+	freq              sim.Freq
+	numReqPerCycle    int
+	numSets           int
+	numWays           int
+	pageSize          uint64
+	lowModule         sim.RemotePort
+	numMSHREntry      int
+	state             string
+	latency           int
+	addressMapper     mem.AddressToPortMapper
+	addressMapperType string
+	remotePorts       []sim.RemotePort
 }
 
 // MakeBuilder returns a Builder
@@ -97,6 +99,16 @@ func (b Builder) WithAddressMapper(mapper mem.AddressToPortMapper) Builder {
 	return b
 }
 
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
 	tlb := &Comp{}
@@ -111,6 +123,12 @@ func (b Builder) Build(name string) *Comp {
 	tlb.mshr = newMSHR(b.numMSHREntry)
 
 	b.createPorts(name, tlb)
+
+	if len(b.remotePorts) > 0 {
+		tlb.translationProvider = b.remotePorts[0]
+	} else if b.lowModule != "" {
+		tlb.translationProvider = b.lowModule
+	}
 
 	tlb.reset()
 

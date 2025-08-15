@@ -33,6 +33,8 @@ type Comp struct {
 	responseBuffer      sim.Buffer
 
 	isPaused bool
+
+	translationProvider sim.RemotePort
 }
 
 // reset sets all the entries in the TLB to be invalid
