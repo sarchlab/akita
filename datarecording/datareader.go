@@ -1,6 +1,7 @@
 package datarecording
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -37,7 +38,7 @@ type DataReader interface {
 	ListTables() []string
 
 	// Query executes a query on a table and returns the results.
-	Query(tableName string, params QueryParams) (
+	Query(ctx context.Context, tableName string, params QueryParams) (
 		results []any,
 		totalCount int,
 		err error,
@@ -50,6 +51,7 @@ type DataReader interface {
 // SQLiteReader reads data from SQLite database
 type sqliteReader struct {
 	*sql.DB
+
 	typeMap map[string]reflect.Type // Maps table names to struct types
 }
 
@@ -89,6 +91,7 @@ func (r *sqliteReader) ListTables() []string {
 }
 
 func (r *sqliteReader) Query(
+	ctx context.Context,
 	tableName string,
 	params QueryParams,
 ) ([]any, int, error) {
@@ -114,32 +117,34 @@ func (r *sqliteReader) Query(
 		}
 	}
 
-	totalCount, err := r.queryTotalCount(tableName, params)
+	totalCount, err := r.queryTotalCount(ctx, tableName, params)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	rows, err := r.DB.Query(query, params.Args...)
+	rows, err := r.DB.QueryContext(ctx, query, params.Args...)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
 
-	return r.scanRowsToSlice(rows, structType), totalCount, nil
+	return r.scanRowsToSlice(ctx, rows, structType), totalCount, nil
 }
 
 func (r *sqliteReader) queryTotalCount(
+	ctx context.Context,
 	tableName string,
 	params QueryParams,
 ) (int, error) {
 	var totalCount int
+
 	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)
 
 	if params.Where != "" {
 		countQuery += " WHERE " + params.Where
 	}
 
-	err := r.DB.QueryRow(countQuery, params.Args...).Scan(&totalCount)
+	err := r.DB.QueryRowContext(ctx, countQuery, params.Args...).Scan(&totalCount)
 	if err != nil {
 		return 0, err
 	}
@@ -149,6 +154,7 @@ func (r *sqliteReader) queryTotalCount(
 
 // Helper function to scan rows into struct instances
 func (r *sqliteReader) scanRowsToSlice(
+	ctx context.Context,
 	rows *sql.Rows,
 	structType reflect.Type,
 ) []any {
@@ -158,6 +164,8 @@ func (r *sqliteReader) scanRowsToSlice(
 	if err != nil {
 		return nil // Error getting columns
 	}
+
+	hasLocation := r.checkLocationTag(structType)
 
 	fieldMap := make(map[string]int)
 
@@ -177,6 +185,7 @@ func (r *sqliteReader) scanRowsToSlice(
 				scanTargets[i] = fieldVal.Addr().Interface()
 			} else {
 				var placeholder interface{}
+
 				scanTargets[i] = &placeholder
 			}
 		}
@@ -186,10 +195,15 @@ func (r *sqliteReader) scanRowsToSlice(
 			panic(err)
 		}
 
+		if hasLocation {
+			r.restoreStrLocation(ctx, structVal, structType)
+		}
+
 		results = append(results, structPtr.Interface())
 	}
 
-	if err := rows.Err(); err != nil {
+	err = rows.Err()
+	if err != nil {
 		panic(err)
 	}
 
@@ -198,4 +212,52 @@ func (r *sqliteReader) scanRowsToSlice(
 
 func (r *sqliteReader) Close() error {
 	return r.DB.Close()
+}
+
+// Helper function that restores location index back to string
+func (r *sqliteReader) restoreStrLocation(
+	ctx context.Context,
+	structVal reflect.Value,
+	structType reflect.Type,
+) {
+	var strLocation string // Retrieves the real location
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		dbTag, ok := field.Tag.Lookup("akita_data")
+		if ok && dbTag == "location" {
+			fieldVal := structVal.Field(i)
+			index := fieldVal.String()
+
+			stmt := fmt.Sprintf("SELECT Locale FROM"+
+				" location WHERE ID = %s", index)
+			r.DB.QueryRowContext(ctx, stmt).Scan(&strLocation)
+
+			fieldVal.SetString(strLocation)
+		}
+	}
+}
+
+// Helper function that checks whehter this struct has location tag
+func (r *sqliteReader) checkLocationTag(
+	structType reflect.Type,
+) bool {
+	hasLocation := false
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		dbTag, ok := field.Tag.Lookup("akita_data")
+		if ok && dbTag == "location" {
+			kind := field.Type.Kind()
+			if kind != reflect.String {
+				panic("location field type mismatch")
+			}
+
+			hasLocation = true
+		}
+	}
+
+	return hasLocation
 }

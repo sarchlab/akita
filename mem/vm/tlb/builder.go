@@ -2,6 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v4/mem/mem"
+	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -112,6 +113,15 @@ func (b Builder) Build(name string) *Comp {
 	b.createPorts(name, tlb)
 
 	tlb.reset()
+
+	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
+	tlb.responseBuffer = buf
+	tlb.responsePipeline = pipelining.MakeBuilder().
+		WithNumStage(b.latency).
+		WithCyclePerStage(1).
+		WithPipelineWidth(tlb.numReqPerCycle).
+		WithPostPipelineBuffer(buf).
+		Build(name + ".ResponsePipeline")
 
 	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
 	tlb.AddMiddleware(ctrlMiddleware)

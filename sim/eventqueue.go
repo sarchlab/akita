@@ -17,6 +17,7 @@ type EventQueue interface {
 // EventQueueImpl provides a thread safe event queue
 type EventQueueImpl struct {
 	sync.Mutex
+
 	events eventHeap
 }
 
@@ -117,15 +118,18 @@ func (q *InsertionQueue) Push(evt Event) {
 	var ele *list.Element
 
 	q.lock.RLock()
+
 	for ele = q.l.Front(); ele != nil; ele = ele.Next() {
 		if ele.Value.(Event).Time() > evt.Time() {
 			break
 		}
 	}
+
 	q.lock.RUnlock()
 
 	// Insertion
 	q.lock.Lock()
+
 	if ele != nil {
 		q.l.InsertBefore(evt, ele)
 	} else {

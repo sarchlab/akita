@@ -65,11 +65,25 @@ var _ = Describe("TLB", func() {
 	})
 
 	It("should do nothing if there is no req in TopPort", func() {
-		topPort.EXPECT().PeekIncoming().Return(nil)
+		topPort.EXPECT().RetrieveIncoming().Return(nil)
 
-		madeProgress := tlbMW.lookup()
+		madeProgress := tlbMW.insertIntoPipeline()
 
 		Expect(madeProgress).To(BeFalse())
+	})
+
+	It("should insert req into pipeline when topPort has req", func() {
+		req := vm.TranslationReqBuilder{}.
+			WithPID(1).
+			WithVAddr(uint64(0x100)).
+			WithDeviceID(1).
+			Build()
+
+		topPort.EXPECT().RetrieveIncoming().Return(req).Times(1)
+		topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+		madeProgress := tlbMW.insertIntoPipeline()
+
+		Expect(madeProgress).To(BeTrue())
 	})
 
 	Context("hit", func() {
@@ -98,25 +112,13 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should respond to top", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
-			topPort.EXPECT().Send(gomock.Any())
+			topPort.EXPECT().Send(gomock.Any()).Times(1)
 
-			set.EXPECT().Visit(wayID)
+			set.EXPECT().Visit(wayID).Times(1)
 
-			madeProgress := tlbMW.lookup()
+			madeProgress := tlbMW.lookup(req)
 
 			Expect(madeProgress).To(BeTrue())
-		})
-
-		It("should stall if cannot send to top", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().Send(gomock.Any()).
-				Return(&sim.SendError{})
-
-			madeProgress := tlbMW.lookup()
-
-			Expect(madeProgress).To(BeFalse())
 		})
 	})
 
@@ -153,8 +155,6 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(req *vm.TranslationReq) {
 					Expect(req.VAddr).To(Equal(uint64(0x100)))
@@ -163,32 +163,11 @@ var _ = Describe("TLB", func() {
 				}).
 				Return(nil)
 
-			madeProgress := tlbMW.lookup()
+			madeProgress := tlbMW.lookup(req)
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).
 				To(Equal(true))
-		})
-
-		It("should find the entry in MSHR and not request from bottom", func() {
-			tlb.mshr.Add(1, 0x100)
-			topPort.EXPECT().PeekIncoming().Return(req)
-			topPort.EXPECT().RetrieveIncoming()
-
-			madeProgress := tlbMW.lookup()
-			Expect(tlb.mshr.IsEntryPresent(vm.PID(1), uint64(0x100))).
-				To(Equal(true))
-			Expect(madeProgress).To(BeTrue())
-		})
-
-		It("should stall if bottom is busy", func() {
-			topPort.EXPECT().PeekIncoming().Return(req)
-			bottomPort.EXPECT().Send(gomock.Any()).
-				Return(&sim.SendError{})
-
-			madeProgress := tlbMW.lookup()
-
-			Expect(madeProgress).To(BeFalse())
 		})
 	})
 
@@ -254,12 +233,6 @@ var _ = Describe("TLB", func() {
 			set.EXPECT().Update(wayID, page)
 			set.EXPECT().Visit(wayID)
 
-			// topPort.EXPECT().Send(gomock.Any()).
-			// 	Do(func(rsp *vm.TranslationRsp) {
-			// 		Expect(rsp.Page).To(Equal(page))
-			// 		Expect(rsp.RespondTo).To(Equal(req.ID))
-			// 	})
-
 			madeProgress := tlbMW.parseBottom()
 
 			Expect(madeProgress).To(BeTrue())
@@ -284,19 +257,6 @@ var _ = Describe("TLB", func() {
 	})
 
 	Context("flush related handling", func() {
-		var (
-		// flushReq   *TLBFlushReq
-		// restartReq *TLBRestartReq
-		)
-
-		BeforeEach(func() {
-
-			// restartReq = TLBRestartReqBuilder{}.
-			// 	WithSrc(nil).
-			// 	WithDst(nil).
-			// 	WithSendTime(10).
-			// 	Build()
-		})
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
@@ -352,6 +312,84 @@ var _ = Describe("TLB", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeFalse())
+		})
+	})
+
+	Context("other control signals", func() {
+		It("should handle pause ctrl msg", func() {
+			pauseMsg := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, false, false, true, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(pauseMsg)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(pauseMsg)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("pause"))
+		})
+
+		It("should handle enable ctrl msg after pause", func() {
+			pause := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, false, false, true, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(pause)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(pause)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("pause"))
+
+			enable := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(true, false, false, false, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(enable)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(enable)
+
+			madeProgress = tlbMW.performCtrlReq()
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("enable"))
+		})
+
+		It("should handle drain ctrl msg", func() {
+			drainMsg := mem.ControlMsgBuilder{}.
+				WithSrc(sim.RemotePort("")).
+				WithDst(controlPort.AsRemote()).
+				WithCtrlInfo(false, true, false, false, false).
+				Build()
+
+			controlPort.EXPECT().PeekIncoming().
+				Return(drainMsg)
+			controlPort.EXPECT().RetrieveIncoming().
+				Return(drainMsg)
+
+			madeProgress := tlbMW.performCtrlReq()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(tlb.state).To(Equal("drain"))
+
+			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			madeProgress = tlbMW.handleDrain()
+			Expect(madeProgress).To(BeFalse())
+			Expect(tlb.state).To(Equal("pause"))
 		})
 	})
 })
@@ -486,40 +524,4 @@ var _ = Describe("TLB Integration", func() {
 
 		Expect(time3 - time2).To(BeNumerically("<", time2-time1))
 	})
-
-	/*It("should have miss after shootdown ", func() {
-		time1 := sim.VTimeInSec(10)
-		req := vm.NewTranslationReq(time1, agent, tlb.TopPort, 1, 0x1000, 1)
-		req.SetRecvTime(time1)
-		tlb.TopPort.Recv(*req)
-		agent.EXPECT().Recv(gomock.Any()).
-			Do(func(rsp vm.TranslationReadyRsp) {
-				Expect(rsp.Page).To(Equal(&page))
-			})
-		engine.Run()
-
-		time2 := engine.CurrentTime()
-		shootdownReq := vm.NewPTEInvalidationReq(
-			time2, agent, tlb.ControlPort, 1, []uint64{0x1000})
-		shootdownReq.SetRecvTime(time2)
-		tlb.ControlPort.Recv(*shootdownReq)
-		agent.EXPECT().Recv(gomock.Any()).
-			Do(func(rsp vm.InvalidationCompleteRsp) {
-				Expect(rsp.RespondTo).To(Equal(shootdownReq.ID))
-			})
-		engine.Run()
-
-		time3 := engine.CurrentTime()
-		req.SetRecvTime(time3)
-		tlb.TopPort.Recv(*req)
-		agent.EXPECT().Recv(gomock.Any()).
-			Do(func(rsp vm.TranslationReadyRsp) {
-				Expect(rsp.Page).To(Equal(&page))
-			})
-		engine.Run()
-		time4 := engine.CurrentTime()
-
-		Expect(time4 - time3).To(BeNumerically("~", time2-time1))
-	})*/
-
 })

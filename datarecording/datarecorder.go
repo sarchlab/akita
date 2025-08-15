@@ -1,6 +1,7 @@
 package datarecording
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -211,6 +212,7 @@ func (t *sqliteWriter) CreateTable(tableName string, sampleEntry any) {
 
 	hasLocTag := t.checkLocationTag(sampleEntry)
 	_, exists := t.tables["location"]
+
 	if !exists && hasLocTag {
 		t.createLocationTable()
 	}
@@ -280,7 +282,7 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 	entryToFill := "(" + strings.Join(placeholders, ", ") + ")"
 	sqlStr := "INSERT INTO " + table + " VALUES " + entryToFill
 
-	stmt, err := t.Prepare(sqlStr)
+	stmt, err := t.PrepareContext(context.Background(), sqlStr)
 	if err != nil {
 		panic(err)
 	}
@@ -290,6 +292,7 @@ func (t *sqliteWriter) prepareStatement(table string, task any) {
 
 func (t *sqliteWriter) getFieldNames(entry any) []string {
 	sType := reflect.TypeOf(entry)
+
 	var fieldNames []string
 
 	for i := 0; i < sType.NumField(); i++ {
@@ -340,19 +343,25 @@ func (t *sqliteWriter) createIndex(tableName, fieldName string, unique bool) {
 
 func (t *sqliteWriter) InsertData(tableName string, entry any) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	table, exists := t.tables[tableName]
 	if !exists {
+		t.mu.Unlock()
 		panic(fmt.Sprintf("table %s does not exist", tableName))
 	}
 
 	table.entries = append(table.entries, entry)
 
 	t.entryCount += 1
+
 	if t.entryCount >= t.batchSize {
+		t.mu.Unlock()
 		t.Flush()
+
+		return
 	}
+
+	t.mu.Unlock()
 }
 
 func (t *sqliteWriter) ListTables() []string {
@@ -424,7 +433,7 @@ func (t *sqliteWriter) insertEntryForTable(
 		}
 	}
 
-	_, err := table.statement.Exec(v...)
+	_, err := table.statement.ExecContext(context.Background(), v...)
 	if err != nil {
 		panic(err)
 	}
@@ -491,7 +500,7 @@ func (t *sqliteWriter) flushLocationTable() {
 			v = append(v, value.Field(i).Interface())
 		}
 
-		_, err := table.statement.Exec(v...)
+		_, err := table.statement.ExecContext(context.Background(), v...)
 		if err != nil {
 			panic(err)
 		}
@@ -501,7 +510,7 @@ func (t *sqliteWriter) flushLocationTable() {
 }
 
 func (t *sqliteWriter) mustExecute(query string) sql.Result {
-	res, err := t.Exec(query)
+	res, err := t.ExecContext(context.Background(), query)
 	if err != nil {
 		fmt.Printf("Failed to execute: %s\n", query)
 		panic(err)
