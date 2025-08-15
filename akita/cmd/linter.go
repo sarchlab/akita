@@ -468,6 +468,9 @@ func getBuildFunctionReturnErr(node *ast.File) error {
 		}
 
 		// Check if the return type is a pointer
+		if funcDecl.Type.Results == nil || len(funcDecl.Type.Results.List) == 0 {
+			return fmt.Errorf("`Build` function must have a return value")
+		}
 		retType := funcDecl.Type.Results.List[0].Type
 		_, ok = retType.(*ast.StarExpr)
 		if !ok {
