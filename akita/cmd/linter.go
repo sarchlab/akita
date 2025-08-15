@@ -19,6 +19,10 @@ var linterCmd = &cobra.Command{
 	Short: "Check component format.",
 	Long:  "`check [component folder path]` checks the component format.",
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 1 {
+			fmt.Fprintln(os.Stderr, "Error: component folder path argument is required")
+			os.Exit(1)
+		}
 		folderPath := args[0]
 
 		hasError := false
