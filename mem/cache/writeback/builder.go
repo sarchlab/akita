@@ -158,6 +158,7 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 		if len(ports) != 1 {
 			panic("single address mapper requires exactly 1 port")
 		}
+
 		b.addressToPortMapper = &mem.SinglePortMapper{Port: ports[0]}
 	} else if b.addressMapperType == "interleaved" {
 		finder := mem.NewInterleavedAddressPortMapper(256)
