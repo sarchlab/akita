@@ -92,7 +92,7 @@ var linterCmd = &cobra.Command{
 
 		manifest, errManifest := checkManifestFile(folderPath)
 		if errManifest != nil {
-			fmt.Printf("<3> Manifest error: %v", errManifest)
+			fmt.Printf("<3> Manifest error: %v\n", errManifest)
 			hasError = true
 		} else {
 			errManifestName := checkManifestName(manifest)
