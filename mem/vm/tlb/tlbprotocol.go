@@ -1,6 +1,8 @@
 package tlb
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -66,6 +68,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.Dst = b.dst
 	r.VAddr = b.vAddrs
 	r.PID = b.pid
+	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
 
 	return r
 }
@@ -111,6 +114,7 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
+	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
 
 	return r
 }
@@ -157,6 +161,7 @@ func (b RestartReqBuilder) Build() *RestartReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
+	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
 
 	return r
 }
@@ -202,6 +207,7 @@ func (b RestartRspBuilder) Build() *RestartRsp {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
+	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
 
 	return r
 }

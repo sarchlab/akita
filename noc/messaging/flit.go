@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -79,6 +80,8 @@ func (b FlitBuilder) Build() *Flit {
 	f.Msg = b.msg
 	f.SeqID = b.seqID
 	f.NumFlitInMsg = b.numFlitInMsg
+	msgValue := reflect.TypeOf(f.Msg).Elem()
+	f.TrafficClass = msgValue.String()
 
 	return f
 }
