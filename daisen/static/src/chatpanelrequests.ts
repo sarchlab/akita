@@ -60,3 +60,20 @@ export async function sendGetGitHubIsAvailable(): Promise<GitHubIsAvailableRespo
   // console.log("Response from /api/githubisavailable:", data);
   return data;
 }
+
+export async function sendGetCheckEnvFile(): Promise<{ exists: boolean }> {
+  try {
+    const response = await fetch("/api/checkenv", {
+      method: "GET",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!response.ok) {
+      console.error("Failed to check .env file:", response.status);
+      return { exists: false };
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error checking .env file:", error);
+    return { exists: false };
+  }
+}

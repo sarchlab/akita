@@ -12,14 +12,25 @@ If you are developing a new simulator, you need to instrument your simulator wit
 
 ### [Optional] Enable Daisen Bot
 
-To enable the Daisen Bot feature, you need to provide your OpenAI API credentials.  
+1. To enable the Daisen Bot feature, you need to provide your OpenAI API credentials.  
 Please create or update a file named `.env` in the `akita/daisen` directory with the following contents:
 ```
 OPENAI_URL="https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL="gpt-4o"
 OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
 ```
-Replace `sk-proj-XXXXXXXXXXXX` with your actual OpenAI API key. This file is required for Daisen Bot to function properly.
+Note: Replace `sk-proj-XXXXXXXXXXXX` with your actual OpenAI API key. The `.env` file is required for Daisen Bot to function properly.
+
+2. (Optional) If you want to enable GitHub REST API access for retrieving the source code of MGPUSim and Akita, you will need a GitHub Personal Access Token (PAT).
+On GitHub, go to Settings -> Developer settings -> Personal access tokens -> Tokens (classic) -> Generate new token (classic).
+Grant only the repo -> public_repo scope (since MGPUSim and Akita are publicly released).
+Add the following line below your OpenAI credentials in `.env`:
+```
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX"" 
+```
+Note: This GitHub PAT is optional and only required if you plan to attach source code within DaisenBot.
+
+
 
 ### Build Server
 
