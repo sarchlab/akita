@@ -820,3 +820,35 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+// httpCheckEnvFile handles the API endpoint to check if .env file exists
+func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Check if .env file exists
+	envFileExists := false
+	if _, err := os.Stat(".env"); err == nil {
+		envFileExists = true
+	}
+
+	// Create response JSON
+	response := map[string]interface{}{
+		"exists": envFileExists,
+	}
+
+	// Encode and send response
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}

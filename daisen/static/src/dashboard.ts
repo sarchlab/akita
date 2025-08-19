@@ -2,6 +2,7 @@ import * as d3 from "d3";
 import Widget from "./widget";
 import { thresholdFreedmanDiaconis } from "d3";
 import { ChatPanel } from "./chatpanel";
+import { sendGetCheckEnvFile } from "./chatpanelrequests";
 
 class YAxisOption {
   optionValue: string;
@@ -583,7 +584,19 @@ class Dashboard extends ChatPanel {
       Daisen Bot
     `;
     chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
-    chatButton.onclick = () => {
+    chatButton.onclick = async () => {
+      // Check if .env file exists before opening chat
+      const envCheck = await sendGetCheckEnvFile();
+      if (!envCheck.exists) {
+        const userConfirms = confirm(
+          'The .env file does not exist. This is required for Daisen Bot to function properly.\n\n' +
+          'Please create an .env file in the akita/daisen/ directory with your API keys.'
+        );
+        if (!userConfirms) {
+          return; // Don't open chat if user cancels
+        }
+      }
+      
       this._showChatPanel();
 
       // Triangle close button
