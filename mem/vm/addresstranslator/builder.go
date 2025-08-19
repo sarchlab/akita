@@ -135,7 +135,6 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	// t.translationProvider = b.translationProvider
-	// t.addressToPortMapper = b.addressToPortMapper
 	t.numReqPerCycle = b.numReqPerCycle
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
