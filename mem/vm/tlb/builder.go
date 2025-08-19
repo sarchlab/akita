@@ -126,7 +126,7 @@ func (b Builder) Build(name string) *Comp {
 
 	if len(b.remotePorts) > 0 {
 		tlb.translationProvider = b.remotePorts[0]
-	} else if b.lowModule != "" {
+	} else if b.lowModule != nil {
 		tlb.translationProvider = b.lowModule
 	}
 
