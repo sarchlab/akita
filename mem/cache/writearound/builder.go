@@ -184,7 +184,6 @@ func (b Builder) Build(name string) *Comp {
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
 	c.wayAssociativity = b.wayAssociativity
-	// c.addressToPortMapper = b.addressToPortMapper
 	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.configureAddressMapper(c)
