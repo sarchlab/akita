@@ -266,66 +266,77 @@ export class ChatPanel {
     let messages = this._chatMessages;
     this._injectChatPanelCSS();
 
-    // Remove existing panel if any
-    let oldPanel = document.getElementById("chat-panel");
-    if (oldPanel) oldPanel.remove();
-
-    // Create the chat panel
-    const chatPanel = document.createElement("div");
-    chatPanel.id = "chat-panel";
-    chatPanel.style.position = "fixed";
-    chatPanel.style.right = "0";
-    chatPanel.style.width = "600px";
-    chatPanel.style.background = "rgba(255,255,255,0.7)";
-    chatPanel.style.zIndex = "9999";
-    chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
-    chatPanel.style.display = "flex";
-    chatPanel.style.flexDirection = "column";
-    chatPanel.style.justifyContent = "flex-start";
-    chatPanel.style.overflow = "hidden";
-
-    chatPanel.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      chatPanel.style.background = "rgba(220,240,255,0.7)";
-    });
-    chatPanel.addEventListener("dragleave", (e) => {
-      e.preventDefault();
-      chatPanel.style.background = "rgba(255,255,255,0.7)";
-    });
-    chatPanel.addEventListener("drop", (e) => {
-      e.preventDefault();
-      chatPanel.style.background = "rgba(255,255,255,0.7)";
-      const files = e.dataTransfer?.files;
-      if (files && files.length > 0) {
-        handleFileUpload(files[0]);
+    // Check if panel already exists
+    let chatPanel = document.getElementById("chat-panel") as HTMLElement;
+    let isNewPanel = false;
+    
+    if (chatPanel) {
+      // Clear existing content but preserve the panel structure
+      const existingContent = chatPanel.querySelector('.chat-content');
+      if (existingContent) {
+        existingContent.remove();
       }
-    });
-
-    document.body.appendChild(chatPanel);
-
-    // Set chat panel height and top to match #inner-container
-    const innerContainer = document.getElementById("inner-container");
-    if (innerContainer) {
-      const rect = innerContainer.getBoundingClientRect();
-      chatPanel.style.top = rect.top + "px";
-      chatPanel.style.height = rect.height + "px";
     } else {
-      // fallback to full viewport height if not found
-      chatPanel.style.top = "0";
-      chatPanel.style.height = "100vh";
+      isNewPanel = true;
+      // Create the chat panel
+      chatPanel = document.createElement("div");
+      chatPanel.id = "chat-panel";
+      chatPanel.style.position = "fixed";
+      chatPanel.style.right = "0";
+      chatPanel.style.width = "600px";
+      chatPanel.style.background = "rgba(255,255,255,0.7)";
+      chatPanel.style.zIndex = "9999";
+      chatPanel.style.boxShadow = "0 0 10px rgba(0,0,0,0.2)";
+      chatPanel.style.display = "flex";
+      chatPanel.style.flexDirection = "column";
+      chatPanel.style.justifyContent = "flex-start";
+      chatPanel.style.overflow = "hidden";
+
+      chatPanel.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        chatPanel.style.background = "rgba(220,240,255,0.7)";
+      });
+      chatPanel.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        chatPanel.style.background = "rgba(255,255,255,0.7)";
+      });
+      chatPanel.addEventListener("drop", (e) => {
+        e.preventDefault();
+        chatPanel.style.background = "rgba(255,255,255,0.7)";
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          handleFileUpload(files[0]);
+        }
+      });
+
+      document.body.appendChild(chatPanel);
+
+      // Set chat panel height and top to match #inner-container
+      const innerContainer = document.getElementById("inner-container");
+      if (innerContainer) {
+        const rect = innerContainer.getBoundingClientRect();
+        chatPanel.style.top = rect.top + "px";
+        chatPanel.style.height = rect.height + "px";
+      } else {
+        // fallback to full viewport height if not found
+        chatPanel.style.top = "0";
+        chatPanel.style.height = "100vh";
+      }
     }
 
-    // Get and update chat panel width after it's added to DOM
-    setTimeout(() => {
-      this._getChatPanelWidth();
-    }, 10);
+    // Get and update chat panel width after it's added to DOM (only for new panels)
+    if (isNewPanel) {
+      setTimeout(() => {
+        this._getChatPanelWidth();
+      }, 10);
 
-    // Force reflow to ensure the browser registers the new height before animating
-    void chatPanel.offsetHeight;
+      // Force reflow to ensure the browser registers the new height before animating
+      void chatPanel.offsetHeight;
 
-    // Animate in
-    chatPanel.classList.add('open');
-    this._onChatPanelOpen();
+      // Animate in
+      chatPanel.classList.add('open');
+      this._onChatPanelOpen();
+    }
     // this._showChatButton = false;
     // this._addPaginationControl();
 
@@ -343,6 +354,7 @@ export class ChatPanel {
     // }
 
     const chatContent = document.createElement("div");
+    chatContent.className = "chat-content";
     chatContent.style.flex = "1";
     chatContent.style.display = "flex";
     chatContent.style.flexDirection = "column";
@@ -350,7 +362,7 @@ export class ChatPanel {
     chatContent.style.minHeight = "0";
     chatPanel.appendChild(chatContent);
     
-    this._chatPanel = chatPanel;
+    this._chatPanel = chatPanel as HTMLDivElement;
 
     // Top bar with chat history dropdown and New Chat button
     const topBar = document.createElement("div");
@@ -520,11 +532,14 @@ export class ChatPanel {
         if (m.role === "user") {
           const userDiv = document.createElement("div");
           userDiv.style.display = "flex";
-          userDiv.style.justifyContent = "flex-end";
+          userDiv.style.flexDirection = "column";
+          userDiv.style.alignItems = "flex-end";
           userDiv.style.margin = "4px 0";
 
           const userBubble = document.createElement("span");
-          userBubble.innerHTML = "<b>You:</b> " + m.content;
+          const firstContent = m.content[0];
+          const userText = firstContent && firstContent.type === "text" ? firstContent.text : "Unable to display message";
+          userBubble.innerHTML = "<b>You:</b> " + userText;
           userBubble.style.background = "#0d6efd";
           userBubble.style.color = "white";
           userBubble.style.padding = "8px 12px";
@@ -533,6 +548,17 @@ export class ChatPanel {
           userBubble.style.display = "inline-block";
           userBubble.style.wordBreak = "break-word";
           userDiv.appendChild(userBubble);
+
+          // Add URL underneath the user bubble
+          const urlDiv = document.createElement("div");
+          urlDiv.innerHTML = this._getCurrentFrontendURL();
+          urlDiv.style.fontSize = "10px";
+          urlDiv.style.color = "#999999";
+          urlDiv.style.marginTop = "2px";
+          urlDiv.style.textAlign = "right";
+          urlDiv.style.maxWidth = "90%";
+          urlDiv.style.wordBreak = "break-all";
+          userDiv.appendChild(urlDiv);
 
           messagesDiv.appendChild(userDiv);
         } else if (m.role === "assistant") {
@@ -1873,7 +1899,8 @@ export class ChatPanel {
       // User message
       const userDiv = document.createElement("div");
       userDiv.style.display = "flex";
-      userDiv.style.justifyContent = "flex-end";
+      userDiv.style.flexDirection = "column";
+      userDiv.style.alignItems = "flex-end";
       userDiv.style.margin = "4px 0";
 
       const userBubble = document.createElement("span");
@@ -1886,6 +1913,17 @@ export class ChatPanel {
       userBubble.style.display = "inline-block";
       userBubble.style.wordBreak = "break-word";
       userDiv.appendChild(userBubble);
+
+      // Add URL underneath the user bubble
+      const urlDiv = document.createElement("div");
+      urlDiv.innerHTML = this._getCurrentFrontendURL();
+      urlDiv.style.fontSize = "10px";
+      urlDiv.style.color = "#999999";
+      urlDiv.style.marginTop = "2px";
+      urlDiv.style.textAlign = "right";
+      urlDiv.style.maxWidth = "90%";
+      urlDiv.style.wordBreak = "break-all";
+      userDiv.appendChild(urlDiv);
 
       messagesDiv.appendChild(userDiv);
 
