@@ -26,7 +26,7 @@ type Builder struct {
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 
-	addressMapperType 	  string
+	addressMapperType     string
 	remotePorts           []sim.RemotePort
 }
 
