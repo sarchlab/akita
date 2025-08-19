@@ -778,7 +778,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
-
 	client := &http.Client{}
 	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
 	if err != nil {
@@ -787,7 +786,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", githubPAT)
-
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
 		w.Header().Set("Content-Type", "application/json")
@@ -800,7 +798,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	defer resp.Body.Close()
-	// Read routine keys from componentgithubroutine.json
 	routineKeys := []string{}
 	routineFile := "componentgithubroutine.json"
 	data, err := os.ReadFile(routineFile)
@@ -812,7 +809,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"available":    1,
