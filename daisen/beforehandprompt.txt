@@ -10,7 +10,7 @@ Current User Workflow:
 - The user is using Akita Daisen Tool to visualize trace files collected by MGPUSim.
 - There are three views in Daisen: (a) Dashboard View (b) Component View (c) Task View  
 - The current view can be inferred from the URL (e.g., `http://localhost:5173/dashboard?starttime=0&endtime=0.000084652&page=16`).
-- If "starttime" and "endtime" appear in the URL, they indicate the simulation time window being viewed.
+- If "starttime" and "endtime" appear in the URL, they indicate the simulation time window being viewed. The URL will be attached to the request.
 
 Dashboard View Details:
 - Displays dashboards for different components in widgets.
