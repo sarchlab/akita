@@ -286,7 +286,7 @@ func (b *Builder) configureAddressMapper(c *Comp) {
 		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
 		c.addressToPortMapper = mapper
 	default:
-		panic("addressMapperType must be “single” or “interleaved”")
+		panic("addressMapperType must be \"single\" or \"interleaved\"")
 	}
 }
 
