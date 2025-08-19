@@ -236,13 +236,13 @@ class Dashboard extends ChatPanel {
     const height = window.innerHeight;
     this._numCol = rowColTable[this._numWidget][0];
     this._numRow = rowColTable[this._numWidget][1];
-    if (width - this._chatPanelWidth >= 1200) { // if (width >= 1200) {
+    if (width - this._chatPanelWidth >= 1500) { // if (width >= 1200) {
       this._numCol = 4;
     }
-    if (width - this._chatPanelWidth < 1200 && width - this._chatPanelWidth >= 800) { // if (width < 1200 && width >= 800) {
+    if (width - this._chatPanelWidth < 1500 && width - this._chatPanelWidth >= 1000) { // if (width < 1200 && width >= 800) {
       this._numCol = 3;
     }
-    if (width - this._chatPanelWidth < 800) { // if (width < 800) {
+    if (width - this._chatPanelWidth < 1000) { // if (width < 800) {
       this._numCol = 2;
     }
     // console.log(width, height);

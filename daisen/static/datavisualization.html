@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Graph Page</title>
+    <title>DaisenBot Data Visualization</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -15,7 +15,7 @@
             height: 100vh;
         }
         .left-half {
-            width: 50%;
+            width: 47%;
             padding: 20px;
             display: flex;
             flex-direction: column;
@@ -25,15 +25,15 @@
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
         }
         .right-half {
-            width: 50%;
+            width: 47%;
             padding: 20px;
             background: rgba(255,255,255,0.5);
             display: flex;
             flex-direction: column;
         }
-        .csv-editor {
+        /* .csv-editor {
             width: 100%;
-            height: 350px;
+            height: 80vh;
             padding: 15px;
             border: 1px solid #ddd;
             border-radius: 6px;
@@ -44,6 +44,22 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             overflow: auto;
             margin-bottom: 15px;
+        } */
+        .csv-editor {
+            width: 100%;
+            height: 80vh;
+            padding: 15px;
+            border: 1px solid #222;
+            border-radius: 6px;
+            background: #23272e; /* code-like dark grey */
+            color: #eaeaea;
+            font-family: 'Fira Mono', 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+            margin-bottom: 15px;
+            line-height: 1.5;
         }
         .csv-editor:focus {
             outline: 2px solid #0d6efd;
@@ -74,7 +90,7 @@
         }
         .chart-container {
             width: 100%;
-            height: 400px;
+            height: 60vh;
             position: relative;
             background: #fff;
             border: 1px solid #ddd;
@@ -110,7 +126,7 @@
 </head>
 <body>
     <div class="left-half">
-        <h2>Graph Data Visualization</h2>
+        <h2>DaisenBot Data Visualization</h2>
         <div class="chart-controls">
             <label for="chartType" style="margin-right: 10px; color: #333;">Chart Type:</label>
             <select id="chartType" class="chart-type-selector">
@@ -124,22 +140,41 @@
         </div>
     </div>
     <div class="right-half">
-        <h3 class="csv-label">Edit CSV Data:</h3>
+        <h3 class="csv-label">Edit Data:</h3>
         <textarea id="csvEditor" class="csv-editor" placeholder="Enter CSV data here..."></textarea>
+        <!-- <div id="csvRainbowPreview" style="font-family: 'Fira Mono', 'Consolas', monospace; font-size: 14px; margin-top: 8px;"></div> -->
         <button id="updateButton" class="update-button">Update Graph</button>
     </div>
 
     <script>
         // CSV data from chatpanel.ts
-        let csvData = [
-            ['TIME', 'CAR SPEED'],
-            ['0', '0'],
-            ['1', '1'],
-            ['2', '4'],
-            ['3', '9'],
-            ['4', '16'],
-            ['5', '25']
-        ];
+        let csvData;
+        try {
+            const stored = localStorage.getItem("visualization_data");
+            if (stored) {
+                csvData = JSON.parse(stored);
+            } else {
+                csvData = [
+                    ['TIME', 'CAR SPEED'],
+                    ['0', '0'],
+                    ['1', '1'],
+                    ['2', '4'],
+                    ['3', '9'],
+                    ['4', '16'],
+                    ['5', '25']
+                ];
+            }
+        } catch (e) {
+            csvData = [
+                ['TIME', 'CAR SPEED'],
+                ['0', '0'],
+                ['1', '1'],
+                ['2', '4'],
+                ['3', '9'],
+                ['4', '16'],
+                ['5', '25']
+            ];
+        }
 
         // Global chart variable
         let barChart;
@@ -211,7 +246,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: `${headers[1] || 'Data'} ${chartType === 'pie' ? 'Distribution' : 'vs ' + (headers[0] || 'Categories')}`,
+                            text: `${headers[1] || 'Data'} ${chartType === 'pie' ? 'Distribution' : 'vs. ' + (headers[0] || 'Categories')}`,
                             color: '#333',
                             font: {
                                 family: 'Arial, sans-serif',
@@ -303,11 +338,13 @@
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             const csvEditor = document.getElementById('csvEditor');
+            // const csvRainbowPreview = document.getElementById('csvRainbowPreview');
             const chartTypeSelector = document.getElementById('chartType');
             const updateButton = document.getElementById('updateButton');
 
             // Populate the text area with initial CSV data
             csvEditor.value = csvDataToText(csvData);
+            // csvRainbowPreview.value = csvDataToText(csvData);
 
             // Create initial chart
             createChart(csvData, chartTypeSelector.value);
@@ -341,6 +378,48 @@
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
                     updateChart();
                 }
+            });
+        });
+        
+        // Rainbow colors for columns
+        const rainbowColors = [
+            "#e53935", // red
+            "#fb8c00", // orange
+            "#fdd835", // yellow
+            "#43a047", // green
+            "#1e88e5", // blue
+            "#8e24aa", // purple
+            "#00bcd4", // cyan
+            "#ff4081", // pink
+            "#cddc39", // lime
+            "#ff9800", // deep orange
+        ];
+
+        // Function to render rainbow CSV preview
+        function renderRainbowCSVPreview(text) {
+            const previewDiv = document.getElementById('csvRainbowPreview');
+            const lines = text.trim().split('\n');
+            let html = '';
+            lines.forEach(line => {
+                const cells = line.split(',');
+                html += '<div>';
+                cells.forEach((cell, i) => {
+                    const color = rainbowColors[i % rainbowColors.length];
+                    html += `<span style="color:${color};white-space:pre;">${cell}${i < cells.length - 1 ? ',' : ''}</span>`;
+                });
+                html += '</div>';
+            });
+            previewDiv.innerHTML = html;
+        }
+
+        // Initial render
+        document.addEventListener('DOMContentLoaded', function() {
+            const csvEditor = document.getElementById('csvEditor');
+            renderRainbowCSVPreview(csvEditor.value);
+
+            // Update preview on input
+            csvEditor.addEventListener('input', function() {
+                renderRainbowCSVPreview(csvEditor.value);
             });
         });
     </script>

@@ -29,8 +29,9 @@ export class ChatPanel {
   _traceSelectedStartTime: number;
   _traceSelectedEndTime: number;
   _tracePeriodUnitSwitch: boolean = true; // true for us, false for seconds
-  _graphTestButtonClicked: boolean = false; // Flag to track if graphtest button was clicked
-  
+  _graphTestButtonClicked: boolean = false; // Flag to track if graphTest button was clicked
+  _subpageTestButtonClicked: boolean = false; // Flag to track if subpageTest button was clicked
+
   // Chat history management
   _chatHistory: { 
     id: string; 
@@ -47,19 +48,63 @@ export class ChatPanel {
   protected _onChatPanelOpen() {}
   protected _setTraceComponentNames() {}
 
-  // Helper function to fetch and parse graphtest.csv
+  // Helper function to fetch and parse graphTest.csv
   async _fetchGraphTestCSV(): Promise<string[][]> {
     try {
       // Since the CSV fetch is returning HTML, let's embed the CSV data directly
-      // This is the content from graphtest.csv in the src folder
-      const csvText = `TIME,CAR SPEED
-0,0
-1,1
-2,4
-3,9
-4,16
-5,25`;
+      // This is the content from graphTest.csv in the src folder
+      const csvText = `Component Class,Event Count
+GPU.SA.CU.VALU,16064
+GPU.SA.L1VAddrTrans,15936
+GPU.SA.CU,13392
+GPU.SA.L1VROB,10624
+GPU.SA.L1IROB,6784
+GPU.SA.L1VCache,5840
+GPU.SA.CU.Scalar,5696
+GPU.SA.L1VTLB,5348
+GPU.SA.L1VCache.Local,5312
+GPU.SA.L1SAddrTrans,3840
+GPU.SA.L1ICache,3408
+GPU.SA.L1ICache.Local,3392
+GPU.SA.L1SROB,2560
+GPU.SA.L1STLB,1292
+GPU.SA.L1SCache,1292
+GPU.SA.L1SCache.Local,1280
+GPU.SA.CU.Special,1152
+GPU.SA.CU.VMem,1088
+GPU.SA.CU.Branch,1088
+GPU.L2Cache,820
+GPU.DRAM,531
+GPU.DMA,275
+GPU.L2TLB,65
+GPU.SA.CU.WFPool,64
+GPU.SA.L1IAddrTrans,48
+GPU.SA.L1ITLB,20
+Driver,16
+GPU.CommandProcessor.Dispatcher0,16
+MMU,13
+GPU.CommandProcessor,9
+`;
       
+      // Parse CSV - simple parser for comma-separated values
+      const lines = csvText.trim().split('\n');
+      const data: string[][] = [];
+      
+      for (const line of lines) {
+        // Split by comma and trim whitespace
+        const cells = line.split(',').map(cell => cell.trim());
+        data.push(cells);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error processing CSV data:', error);
+      throw error;
+    }
+  }
+
+    async _csvStringToArray(csvText: string): Promise<string[][]> {
+    try {
       // Parse CSV - simple parser for comma-separated values
       const lines = csvText.trim().split('\n');
       const data: string[][] = [];
@@ -97,10 +142,21 @@ export class ChatPanel {
     // Add data rows
     if (csvData.length > 1) {
       html += '<tbody>';
-      for (let i = 1; i < csvData.length; i++) {
+      const maxRows = 10;
+      const rowCount = csvData.length - 1;
+      const showRows = Math.min(rowCount, maxRows);
+      for (let i = 1; i <= showRows; i++) {
         html += '<tr>';
         for (const cell of csvData[i]) {
           html += `<td style="border: 1px solid #ddd; padding: 8px;">${cell}</td>`;
+        }
+        html += '</tr>';
+      }
+      if (rowCount > maxRows) {
+        // Add ... row
+        html += '<tr>';
+        for (let j = 0; j < csvData[0].length; j++) {
+          html += `<td style="border: 1px solid #ddd; padding: 8px;">...</td>`;
         }
         html += '</tr>';
       }
@@ -756,7 +812,7 @@ export class ChatPanel {
     `;
 
     screenshotUploadBtn.onclick = async () => {
-      const innerContainer = document.getElementById("container");
+      const innerContainer = document.body; //document.getElementById("container");
       if (!innerContainer) {
         alert("No inner-container found!");
         return;
@@ -780,13 +836,13 @@ export class ChatPanel {
       document.body.appendChild(img);
 
       // Start animation after a tick
-      const imgWidth = 500;
+      const imgWidth = 400;
       const imgHeight = innerContainer.offsetHeight * (imgWidth / innerContainer.offsetWidth);
       console.log("Image dimensions:", img.naturalWidth, img.naturalHeight, "Scaled height:", imgHeight);
       
       setTimeout(() => {
-        img.style.left = "20px";
-        img.style.top = `calc(100vh - ${imgHeight + 20}px)`;
+        img.style.left = `calc(100vw - ${imgWidth + 20}px)`; //"20px";
+        img.style.top = `calc(100vh - ${imgHeight + 300}px)`;
         img.style.width = `${imgWidth}px`;
         img.style.height = "auto";
         img.style.opacity = "0.9";
@@ -1716,33 +1772,91 @@ export class ChatPanel {
     actionRow.appendChild(attachRepoBtn);
 
     // Graphtest button
-    const graphtestBtn = document.createElement("button");
-    graphtestBtn.type = "button";
-    graphtestBtn.title = "Graph Test";
-    graphtestBtn.style.background = "#f6f8fa";
-    graphtestBtn.style.border = "1px solid #ccc";
-    graphtestBtn.style.borderRadius = "6px";
-    graphtestBtn.style.width = "38px";
-    graphtestBtn.style.height = "38px";
-    graphtestBtn.style.display = "flex";
-    graphtestBtn.style.alignItems = "center";
-    graphtestBtn.style.justifyContent = "center";
-    graphtestBtn.style.cursor = "pointer";
-    graphtestBtn.style.marginLeft = "4px";
-    graphtestBtn.style.fontSize = "16px";
-    graphtestBtn.style.fontWeight = "bold";
-    graphtestBtn.style.fontFamily = "Arial, sans-serif";
-    graphtestBtn.style.color = "#222";
-    graphtestBtn.textContent = "Test";
+    const graphTestBtn = document.createElement("button");
+    graphTestBtn.type = "button";
+    graphTestBtn.title = "Graph Test";
+    graphTestBtn.style.background = "#f6f8fa";
+    graphTestBtn.style.border = "1px solid #ccc";
+    graphTestBtn.style.borderRadius = "6px";
+    graphTestBtn.style.width = "38px";
+    graphTestBtn.style.height = "38px";
+    graphTestBtn.style.display = "flex";
+    graphTestBtn.style.alignItems = "center";
+    graphTestBtn.style.justifyContent = "center";
+    graphTestBtn.style.cursor = "pointer";
+    graphTestBtn.style.marginLeft = "4px";
+    graphTestBtn.style.fontSize = "8px";
+    graphTestBtn.style.fontWeight = "bold";
+    graphTestBtn.style.fontFamily = "Arial, sans-serif";
+    graphTestBtn.style.color = "#222";
+    graphTestBtn.textContent = "Graph\nTest";
+
+    graphTestBtn.style.opacity = "0";
+    graphTestBtn.style.pointerEvents = "none";
+    graphTestBtn.style.transition = "opacity 0.2s";
     
-    // Add event listener for graphtest button
-    graphtestBtn.addEventListener("click", () => {
+    // Add event listener for graphTest button
+    let graphTestPrompt = "Please read the current trace file and count the number of each component class's event for me. Note that in the trace table the column \"Location\" may look like \"GPU[1].SA[1].CU[1].VALU\", you need to remove the \"[xx]\" part(s) in it to get the component class name, e.g. \"GPU.SA.CU.VALU\".";
+    
+
+    graphTestBtn.addEventListener("click", () => {
       this._graphTestButtonClicked = true; // Set flag to indicate button was clicked
-      input.value = "Generate graph.";
+      input.value = graphTestPrompt
       sendMessage();
     });
 
-    actionRow.appendChild(graphtestBtn);
+    // Subpagetest button
+    const subpageTestBtn = document.createElement("button");
+    subpageTestBtn.type = "button";
+    subpageTestBtn.title = "Subpage Test";
+    subpageTestBtn.style.background = "#f6f8fa";
+    subpageTestBtn.style.border = "1px solid #ccc";
+    subpageTestBtn.style.borderRadius = "6px";
+    subpageTestBtn.style.width = "38px";
+    subpageTestBtn.style.height = "38px";
+    subpageTestBtn.style.display = "flex";
+    subpageTestBtn.style.alignItems = "center";
+    subpageTestBtn.style.justifyContent = "center";
+    subpageTestBtn.style.cursor = "pointer";
+    subpageTestBtn.style.marginLeft = "4px";
+    subpageTestBtn.style.fontSize = "8px";
+    subpageTestBtn.style.fontWeight = "bold";
+    subpageTestBtn.style.fontFamily = "Arial, sans-serif";
+    subpageTestBtn.style.color = "#222";
+    subpageTestBtn.textContent = "Subpage\nTest";
+
+    subpageTestBtn.style.opacity = "0";
+    subpageTestBtn.style.pointerEvents = "none";
+    subpageTestBtn.style.transition = "opacity 0.2s";
+
+    // Add event listener for subpageTest button
+    let subpageTestPrompt = "In this GPU task simulation, which takes longer—the host-to-GPU memory transfer or the kernel execution time? Also, what's the measured duration of the host-to-GPU memory copy?";
+
+    subpageTestBtn.addEventListener("click", () => {
+      this._subpageTestButtonClicked = true; // Set flag to indicate button was clicked
+      input.value = subpageTestPrompt
+      sendMessage();
+    });
+
+
+    actionRow.appendChild(graphTestBtn);
+    actionRow.appendChild(subpageTestBtn);
+
+
+    // Make test buttons appear on hover over
+    actionRow.addEventListener("mouseenter", () => {
+      graphTestBtn.style.opacity = "1";
+      graphTestBtn.style.pointerEvents = "auto";
+      subpageTestBtn.style.opacity = "1";
+      subpageTestBtn.style.pointerEvents = "auto";
+    });
+    actionRow.addEventListener("mouseleave", () => {
+      graphTestBtn.style.opacity = "0";
+      graphTestBtn.style.pointerEvents = "none";
+      subpageTestBtn.style.opacity = "0";
+      subpageTestBtn.style.pointerEvents = "none";
+    });
+
 
     // Initial bubble for file upload button
     this._renderBubble(fileUploadBtn, this._uploadedFiles.length, "bubble-upload-file");
@@ -1889,8 +2003,8 @@ export class ChatPanel {
 
       messagesDiv.appendChild(userDiv);
 
-      // Check if this is a "Generate graph." message from the graphtest button
-      if (this._graphTestButtonClicked && (userMsg.toLowerCase() === "generate graph" || userMsg.toLowerCase() === "generate graph.")) {
+      // Check if this is a "Generate graph." message from the graphTest button
+      if (this._graphTestButtonClicked && (userMsg.toLowerCase() === graphTestPrompt.toLowerCase() || userMsg.toLowerCase() === "generate graph")) {
         // Reset the flag
         this._graphTestButtonClicked = false;
         
@@ -1914,9 +2028,13 @@ export class ChatPanel {
         try {
           const csvData = await this._fetchGraphTestCSV();
           const tableHTML = this._csvToHTMLTable(csvData);
-          const graphLink = '<a href="http://localhost:5173/graph.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">View Graph Page</a>';
-          const responseContent = `Graph generated. Here is the data from graphtest.csv:<br><br>${tableHTML}<br><br>${graphLink}`;
-          
+          localStorage.setItem("visualization_data", JSON.stringify(csvData));
+          const graphLink = '<a href="http://localhost:5173/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/datavisualization.html</a>';
+          const responseContent =
+            `Got it! I've processed the trace file and summarized the event counts for each unique component class. Here's the table:<br>${tableHTML}` +
+            `I've also generated a graph visualization of the distribution, which you can access here: ${graphLink}.<br>` +
+            `Would you like me to also provide a Python script so you can reproduce this analysis on your own?`;
+
           // Update bot response with table
           botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
           
@@ -1928,6 +2046,154 @@ export class ChatPanel {
           botDiv.innerHTML = `<b>Daisen Bot:</b> ${errorMessage}`;
           messages.push({ role: "assistant", content: [{ type: "text", text: errorMessage }] });
         }
+        
+        this._chatMessages = messages;
+        this._saveChatToHistory();
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        
+        // Re-enable controls
+        sendBtn.disabled = false;
+        input.disabled = false;
+        input.focus();
+        
+        // Clear uploaded files and reset UI state
+        this._uploadedFiles = [];
+        this._fileIdCounter = 0;
+        renderFileList.call(this);
+
+        // Clear all checkboxes and hide attachRepoDiv
+        Object.keys(this._attachRepoChecks).forEach(key => {
+          this._attachRepoChecks[key] = false;
+          if (AttachRepoCheckboxMap[key]) AttachRepoCheckboxMap[key].checked = false;
+        });
+        this._attachRepoVisible = false;
+        attachRepoDiv.style.display = "none";
+        attachRepoBtn.style.background = "#f6f8fa";
+        attachRepoBtn.style.color = "#222";
+        this._renderBubble(attachRepoBtn, 0, "bubble-attach-repo");
+
+        // Reset all checkboxes in uploadTraceDiv
+        Object.keys(this._uploadTraceChecks).forEach(key => {
+          this._uploadTraceChecks[key] = false;
+          if (UploadTraceCheckboxMap[key]) UploadTraceCheckboxMap[key].checked = false;
+        });
+        this._uploadTraceVisible = false;
+        uploadTraceDiv.style.display = "none";
+        uploadTraceBtn.style.background = "#f6f8fa";
+        uploadTraceBtn.style.color = "#222";
+        this._renderBubble(uploadTraceBtn, 0, "bubble-upload-trace");
+
+        // Reset selected start/end time and update sticks/textedits
+        this._traceSelectedStartTime = this._traceStartTime;
+        this._traceSelectedEndTime = this._traceEndTime;
+        if (typeof updateSticksAndEdits === "function") updateSticksAndEdits.call(this);
+        
+        return; // Exit early, don't call GPT API
+      }
+      else if (this._subpageTestButtonClicked && (userMsg.toLowerCase() === subpageTestPrompt.toLowerCase() || userMsg.toLowerCase() === "generate subpage")) {
+        // Handle subpage test button click
+        // Reset the flag
+        this._subpageTestButtonClicked = false;
+
+        // Add user message to chat history
+        messages.push({ role: "user", content: [{ type: "text", text: fullMsg }] });
+        this._chatMessages = messages;
+        this._saveChatToHistory();
+        
+        // Clear input field
+        input.value = "";
+        input.style.height = "38px";
+        
+        // Show "loading" message while fetching CSV
+        const botDiv = document.createElement("div");
+        botDiv.innerHTML = `<b>Daisen Bot:</b> Loading ...`;
+
+        botDiv.style.textAlign = "left";
+        botDiv.style.margin = "4px 0";
+        messagesDiv.appendChild(botDiv);
+        
+
+        const subLink = '<a href="http://localhost:5173/task?id=d240btg3fvio1hp2d3eg" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/task?id=d240btg3fvio1hp2d3eg</a>';
+        const responseContent =
+            `In MGPUSim, the host-to-GPU memory transfer is recorded as **"MemCopyH2D"**. ` +
+            `From this simulation, the duration of MemCopyH2D is **76.68 µs** (0 → 76.68 µs), ` +
+            `while the kernel execution takes **7.97 µs** (76.68 → 84.65 µs). ` +
+            `Therefore, the host-to-GPU memory transfer is longer than the kernel execution time. ` +
+            `For more details, you can check the Task View Page here:<br>${subLink}.<br>` +
+            `Would you like me to also generate a breakdown chart for better visualization?`;
+
+        // Update bot response with table
+        // botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
+        botDiv.innerHTML =
+          `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(1,923 tokens)</span> ` +
+          convertMarkdownToHTML(autoWrapMath(responseContent));
+
+        const userDivSecond = document.createElement("div");
+        userDivSecond.style.display = "flex";
+        userDivSecond.style.justifyContent = "flex-end";
+        userDivSecond.style.margin = "4px 0";
+
+        const userMsgSecond = "yes"; // Simulate user response
+
+        const userBubbleSecond = document.createElement("span");
+        userBubbleSecond.innerHTML = "<b>You:</b> " + userMsgSecond;
+        userBubbleSecond.style.background = "#0d6efd";
+        userBubbleSecond.style.color = "white";
+        userBubbleSecond.style.padding = "8px 12px";
+        userBubbleSecond.style.borderRadius = "16px";
+        userBubbleSecond.style.maxWidth = "90%";
+        userBubbleSecond.style.display = "inline-block";
+        userBubbleSecond.style.wordBreak = "break-word";
+        userDivSecond.appendChild(userBubbleSecond);
+
+        messagesDiv.appendChild(userDivSecond);
+
+        const csvDataSub = await this._csvStringToArray(`Operation,Start (µs),End (µs),Duration (µs)
+Host-to-GPU MemCopy,0.00,76.68,76.68
+Kernel Execution,76.68,84.65,7.97`);
+        const tableHTML = this._csvToHTMLTable(csvDataSub);
+
+        const responseContentSecond = 
+          `Great! I've generated a breakdown chart comparing the host-to-GPU memory copy time and the kernel execution time. ` +
+          `This visualization will help you see how much longer the memory transfer takes compared to the kernel. ` +
+          `Here's the detailed timing table:<br>${tableHTML}`
+        const botDivSecond = document.createElement("div");
+        botDivSecond.innerHTML = `<b>Daisen Bot:</b> Loading ...`;
+
+        botDivSecond.style.textAlign = "left";
+        botDivSecond.style.margin = "4px 0";
+        messagesDiv.appendChild(botDivSecond);
+
+        botDivSecond.innerHTML =
+          `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(2,341 tokens)</span> ` +
+          convertMarkdownToHTML(autoWrapMath(responseContentSecond));
+        
+        // Add bot message to chat history
+        messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }] });
+        messages.push({ role: "user", content: [{ type: "text", text: userMsgSecond }] });
+        messages.push({ role: "assistant", content: [{ type: "text", text: responseContentSecond }] });
+
+
+        
+
+        // this._chatMessages = messages; // Update the instance messages
+        // this._saveChatToHistory(); // Save the updated chat
+        // messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        // console.log("[Received from GPT]", gptResponse);
+
+        // // Apply KaTeX rendering for math in the new messages
+        // botDiv.querySelectorAll('.math').forEach(el => {
+        //   try {
+        //     const tex = el.textContent || "";
+        //     const displayMode = el.getAttribute("data-display") === "block";
+        //     console.log("Rendering math:", tex, "Display mode:", displayMode);
+        //     el.innerHTML = katex.renderToString(tex, { displayMode });
+        //   } catch (e) {
+        //     el.innerHTML = "<span style='color:red'>Invalid math</span>";
+        //     console.log("KaTeX error:", e, "for tex:", el.textContent);
+        //   }
+        // });
+   
         
         this._chatMessages = messages;
         this._saveChatToHistory();
@@ -2228,6 +2494,15 @@ function convertMarkdownToHTML(text: string): string {
   // // Line breaks
   // text = text.replace(/\n/g, "<br>");
   // return text;
+  text = text.replace(/```html\n([\s\S]*?)```/g, (match, code) => {
+    // Remove leading/trailing empty lines
+    let trimmed = code.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '').replace(/(<br>\s*){1,}/g, "<br>");
+    trimmed = trimmed.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
+    trimmed = trimmed.replace(/(<br>\s*)+(<table)/g, "$2");
+    // Remove leading <br> at the very start
+    trimmed = trimmed.replace(/^(<br>\s*)+/, "");
+    return trimmed;
+  });
   
   // Code blocks: ```lang\ncode\n```
   text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
@@ -2292,6 +2567,12 @@ function convertMarkdownToHTML(text: string): string {
   text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
   // Remove multiple consecutive <br> (leave only one)
   text = text.replace(/(<br>\s*){2,}/g, "<br>");
+  // Remove <br> right after block elements that already imply a newline
+  text = text.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
+  // Remove <br> right before a table
+  text = text.replace(/(<br>\s*)+(<table)/g, "$2");
+  // Remove leading <br> at the very start
+  text = text.replace(/^(<br>\s*)+/, "");
   return text;
 }
 
