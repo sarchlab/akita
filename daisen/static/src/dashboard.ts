@@ -589,8 +589,16 @@ class Dashboard extends ChatPanel {
       const envCheck = await sendGetCheckEnvFile();
       if (!envCheck.exists) {
         const userConfirms = confirm(
-          'The .env file does not exist. This is required for Daisen Bot to function properly.\n\n' +
-          'Please create an .env file in the akita/daisen/ directory with your API keys.'
+          'The .env file does not exist. This is required for DaisenBot to function properly.\n' +
+          'Please create an .env file in the akita/daisen/ directory with your OpenAIAPI credentials.\n' +
+          "Example:\n"+
+          "```\n"+
+          "OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+          "OPENAI_MODEL=\"gpt-4o\"\n"+
+          "OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+          "GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
+          "```\n"+
+          "Please refer to https://github.com/sarchlab/akita/tree/main/daisen#readme for more details.\n",
         );
         if (!userConfirms) {
           return; // Don't open chat if user cancels

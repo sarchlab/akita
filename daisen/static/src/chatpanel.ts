@@ -1658,6 +1658,10 @@ GPU.CommandProcessor,9
     if (this._githubIsAvailableResponse && this._githubIsAvailableResponse.available === 1) {
       attachRepoRows = [...this._githubIsAvailableResponse.routine_keys].sort();
     }
+    else {
+      attachRepoBtn.disabled = true;
+      attachRepoBtn.style.cursor = "default";
+    }
 
     const attachRepoTopRow = document.createElement("div");
     attachRepoTopRow.style.display = "flex";

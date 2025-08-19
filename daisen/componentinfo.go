@@ -763,7 +763,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	if githubPAT == "" {
 		http.Error(
 			w,
-			"[Error: \".env\" not found or GitHub-related variable missing] "+
+			"\n[Error: \".env\" not found or GitHub-related variable missing]\n"+
 				"Please create or update file "+
 				"\"akita/daisen/.env\" and write these contents (example):\n"+
 				"```\n"+
@@ -771,7 +771,9 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 				"OPENAI_MODEL=\"gpt-4o\"\n"+
 				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
 				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"```\n",
+				"Please refer to "+
+				"https://github.com/sarchlab/akita/tree/main/daisen#readme "+
+				"for more details.```\n",
 			http.StatusInternalServerError,
 		)
 		return
