@@ -3,6 +3,7 @@ package trace_test
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/mem/trace"
@@ -78,6 +79,7 @@ func Example() {
 
 	// List available tables
 	tables := dataRecorder.ListTables()
+	sort.Strings(tables) // Sort tables for consistent output
 	fmt.Printf("Tables created: %v\n", tables)
 
 	fmt.Println("Memory trace example completed successfully!")
@@ -92,7 +94,7 @@ func Example() {
 	// Started memory read at time 100.0 ns
 	// Cache miss recorded at time 150.0 ns
 	// Completed memory read at time 200.0 ns
-	// Tables created: [exec_info memory_transactions memory_steps]
+	// Tables created: [exec_info memory_steps memory_transactions]
 	// Memory trace example completed successfully!
 	// Database saved to: memory_trace_example.sqlite3
 }
