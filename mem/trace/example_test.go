@@ -59,7 +59,6 @@ func (r *ExampleReadReq) GetPID() vm.PID {
 
 // Example demonstrates using the database-based memory tracer
 func Example() {
-	// Clean up any existing database file
 	dbPath := "memory_trace_example"
 	os.Remove(dbPath + ".sqlite3")
 

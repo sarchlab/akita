@@ -47,7 +47,9 @@ memTracer := trace.NewDBTracer(dataRecorder, timeTeller)
 tracing.CollectTrace(memoryComponent, memTracer)
 ```
 
-### Logger-Based Tracer (Existing)
+### Logger-Based Tracer (Deprecated)
+
+**Deprecated: Please use the database-based tracer (NewDBTracer) for new projects.**
 
 ```go
 import (

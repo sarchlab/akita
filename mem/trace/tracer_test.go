@@ -24,6 +24,7 @@ type TracerTestSuite struct {
 	tracer       tracing.Tracer
 	timeTeller   *MockTimeTeller
 	mockCtrl     *gomock.Controller
+	tempFileName string
 }
 
 func (suite *TracerTestSuite) SetupTest() {
@@ -33,9 +34,10 @@ func (suite *TracerTestSuite) SetupTest() {
 	// Create temporary file database for testing (instead of in-memory)
 	tempFile, err := os.CreateTemp("", "tracer_test_*.db")
 	suite.Require().NoError(err)
+	suite.tempFileName = tempFile.Name()
 	tempFile.Close()
 
-	db, err := sql.Open("sqlite3", tempFile.Name())
+	db, err := sql.Open("sqlite3", suite.tempFileName)
 	suite.Require().NoError(err)
 
 	suite.db = db
@@ -53,6 +55,9 @@ func (suite *TracerTestSuite) TearDownTest() {
 	}
 	if suite.mockCtrl != nil {
 		suite.mockCtrl.Finish()
+	}
+	if suite.tempFileName != "" {
+		os.Remove(suite.tempFileName)
 	}
 }
 
@@ -105,6 +110,11 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 		Detail:   req,
 	}
 
+	suite.runBasicTrace(task)
+	suite.verifyBasicTransaction(task)
+}
+
+func (suite *TracerTestSuite) runBasicTrace(task tracing.Task) {
 	// Set up mock expectations
 	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(100.0)).Times(1) // StartTask
 	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(200.0)).Times(1) // EndTask
@@ -117,7 +127,9 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 
 	// Flush data to ensure it's written
 	suite.dataRecorder.Flush()
+}
 
+func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 	// Check row count first
 	countRows, err := suite.db.Query("SELECT COUNT(*) FROM memory_transactions")
 	suite.Require().NoError(err)
@@ -129,7 +141,8 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 	suite.Require().Equal(1, count, "Should have exactly one transaction")
 
 	// Verify the transaction was recorded
-	rows, err := suite.db.Query("SELECT ID, Location, What, StartTime, EndTime, Address, ByteSize FROM memory_transactions")
+	query := "SELECT ID, Location, What, StartTime, EndTime, Address, ByteSize FROM memory_transactions"
+	rows, err := suite.db.Query(query)
 	suite.Require().NoError(err)
 	defer rows.Close()
 
@@ -223,6 +236,12 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 		},
 	}
 
+	suite.runCompleteTrace(task)
+	suite.verifyCompleteTransaction(task)
+	suite.verifyCompleteStep(task)
+}
+
+func (suite *TracerTestSuite) runCompleteTrace(task tracing.Task) {
 	// Set up mock expectations in order
 	gomock.InOrder(
 		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(50.0)).Times(1),  // StartTask
@@ -241,9 +260,11 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 
 	// Flush data
 	suite.dataRecorder.Flush()
+}
 
-	// Verify transaction
-	transactionRows, err := suite.db.Query("SELECT ID, Location, What, StartTime, EndTime, Address, ByteSize FROM memory_transactions")
+func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
+	transactionQuery := "SELECT ID, Location, What, StartTime, EndTime, Address, ByteSize FROM memory_transactions"
+	transactionRows, err := suite.db.Query(transactionQuery)
 	suite.Require().NoError(err)
 	defer transactionRows.Close()
 
@@ -262,8 +283,9 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 	suite.Equal(100.0, endTime)
 	suite.Equal(uint64(0x3000), address)
 	suite.Equal(uint64(128), byteSize)
+}
 
-	// Verify step
+func (suite *TracerTestSuite) verifyCompleteStep(task tracing.Task) {
 	stepRows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_steps")
 	suite.Require().NoError(err)
 	defer stepRows.Close()
