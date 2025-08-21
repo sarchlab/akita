@@ -87,6 +87,7 @@ func (t *tracer) EndTask(task tracing.Task) {
 }
 
 // NewTracer creates a new Tracer.
+// Deprecated: Use NewDBTracer instead for structured database storage.
 func NewTracer(logger *log.Logger, timeTeller sim.TimeTeller) tracing.Tracer {
 	t := new(tracer)
 	t.logger = logger
@@ -134,6 +135,10 @@ func (t *dbTracer) StartTask(task tracing.Task) {
 
 // StepTask marks the memory transaction has completed a milestone
 func (t *dbTracer) StepTask(task tracing.Task) {
+	if task.Steps == nil || len(task.Steps) == 0 {
+		return
+	}
+
 	task.Steps[0].Time = t.timeTeller.CurrentTime()
 
 	entry := memoryStepEntry{

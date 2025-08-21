@@ -59,7 +59,6 @@ func (r *ExampleReadReq) GetPID() vm.PID {
 
 // Example demonstrates using the database-based memory tracer
 func Example() {
-	// Clean up any existing database file
 	dbPath := "memory_trace_example"
 	os.Remove(dbPath + ".sqlite3")
 
@@ -72,6 +71,33 @@ func Example() {
 	// Create the database-based memory tracer
 	memTracer := trace.NewDBTracer(dataRecorder, timeTeller)
 
+	runExampleTrace(memTracer, timeTeller)
+
+	// Flush data to database
+	dataRecorder.Flush()
+
+	// List available tables
+	tables := dataRecorder.ListTables()
+	fmt.Printf("Tables created: %v\n", tables)
+
+	fmt.Println("Memory trace example completed successfully!")
+	fmt.Printf("Database saved to: %s.sqlite3\n", dbPath)
+
+	// Clean up
+	dataRecorder.Close()
+	os.Remove(dbPath + ".sqlite3")
+
+	// Output:
+	// Starting memory trace example...
+	// Started memory read at time 100.0 ns
+	// Cache miss recorded at time 150.0 ns
+	// Completed memory read at time 200.0 ns
+	// Tables created: [exec_info memory_transactions memory_steps]
+	// Memory trace example completed successfully!
+	// Database saved to: memory_trace_example.sqlite3
+}
+
+func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 	// Simulate a memory read operation
 	readReq := &ExampleReadReq{
 		address:  0x1000,
@@ -105,27 +131,4 @@ func Example() {
 	timeTeller.AdvanceTime(50)
 	memTracer.EndTask(task)
 	fmt.Printf("Completed memory read at time %.1f ns\n", float64(timeTeller.CurrentTime()))
-
-	// Flush data to database
-	dataRecorder.Flush()
-
-	// List available tables
-	tables := dataRecorder.ListTables()
-	fmt.Printf("Tables created: %v\n", tables)
-
-	fmt.Println("Memory trace example completed successfully!")
-	fmt.Printf("Database saved to: %s.sqlite3\n", dbPath)
-
-	// Clean up
-	dataRecorder.Close()
-	os.Remove(dbPath + ".sqlite3")
-
-	// Output:
-	// Starting memory trace example...
-	// Started memory read at time 100.0 ns
-	// Cache miss recorded at time 150.0 ns
-	// Completed memory read at time 200.0 ns
-	// Tables created: [exec_info memory_transactions memory_steps]
-	// Memory trace example completed successfully!
-	// Database saved to: memory_trace_example.sqlite3
 }
