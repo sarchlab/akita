@@ -155,7 +155,7 @@ This is harmless and can be ignored. The tests will run correctly despite this w
 ## Key Files and Configuration
 
 ### Go Configuration
-- **`go.mod`**: Go 1.24 with standard simulation dependencies
+- **`go.mod`**: Go 1.25 with standard simulation dependencies
 - **`.golangci.yml`**: Linting configuration (relaxed rules for simulation code)
 - **`run_before_merge.sh`**: Complete validation script (useful reference)
 
