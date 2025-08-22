@@ -69,7 +69,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.25"
 
       - name: Clean Go cache
         run: |
@@ -100,7 +100,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.25"
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.0
