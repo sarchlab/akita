@@ -19,6 +19,7 @@ import (
 
 type TracerTestSuite struct {
 	suite.Suite
+
 	dataRecorder datarecording.DataRecorder
 	db           *sql.DB
 	tracer       tracing.Tracer
@@ -64,6 +65,7 @@ func (suite *TracerTestSuite) TearDownTest() {
 // MockAccessReq implements mem.AccessReq for testing
 type MockAccessReq struct {
 	sim.MsgMeta
+
 	address  uint64
 	byteSize uint64
 	pid      vm.PID
