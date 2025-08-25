@@ -13,7 +13,7 @@ export PATH=$PATH:$(go env GOPATH)/bin
 
 # 2. Install required tools
 go install go.uber.org/mock/mockgen@latest
-go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.0
+go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
 
 # 3. Generate mock files
 go generate ./...
@@ -24,7 +24,7 @@ go build ./...
 # Takes ~60 seconds including dependency downloads. NEVER CANCEL. Set timeout to 120+ seconds.
 
 # 5. Install golangci-lint for linting
-curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v2.1.5
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v2.4.0
 
 # 6. Build web components (required for full functionality)
 cd monitoring/web && npm install && npm run build
@@ -150,7 +150,7 @@ When running tests, you may see a version mismatch warning:
 ```
 Ginkgo detected a version mismatch between the Ginkgo CLI and the version of Ginkgo imported by your packages
 ```
-This is harmless and can be ignored. The tests will run correctly despite this warning. The project uses Ginkgo v2.25.0 in go.mod but the CLI installs the same version.
+This is harmless and can be ignored. The tests will run correctly despite this warning. The project uses Ginkgo v2.25.1 in go.mod but the CLI installs the same version.
 
 ## Key Files and Configuration
 

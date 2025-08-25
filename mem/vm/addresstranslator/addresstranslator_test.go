@@ -97,6 +97,10 @@ var _ = Describe("Address Translator", func() {
 			t.transactions = append(t.transactions, translation)
 			req.Address = 0x1040
 
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x1040)).
+				Return(translationPort.AsRemote())
+
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			translationPort.EXPECT().Send(gomock.Any()).
@@ -115,6 +119,9 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if cannot send for translation", func() {
+			addressToPortMapper.EXPECT().
+				Find(uint64(0x100)).
+				Return(translationPort.AsRemote())
 			topPort.EXPECT().PeekIncoming().Return(req)
 			translationPort.EXPECT().
 				Send(gomock.Any()).

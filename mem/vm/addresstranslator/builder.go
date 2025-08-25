@@ -7,14 +7,17 @@ import (
 
 // A Builder can create address translators
 type Builder struct {
-	engine              sim.Engine
-	freq                sim.Freq
-	translationProvider sim.RemotePort
-	ctrlPort            sim.Port
+	engine   sim.Engine
+	freq     sim.Freq
+	ctrlPort sim.Port
+
+	numReqPerCycle int
+	log2PageSize   uint64
+	deviceID       uint64
+
 	addressToPortMapper mem.AddressToPortMapper
-	numReqPerCycle      int
-	log2PageSize        uint64
-	deviceID            uint64
+	addressMapperType   string
+	remotePorts         []sim.RemotePort
 }
 
 // MakeBuilder creates a new builder
@@ -36,20 +39,6 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 // WithFreq sets the frequency of the address translators
 func (b Builder) WithFreq(freq sim.Freq) Builder {
 	b.freq = freq
-	return b
-}
-
-// WithTranslationProvider sets the port that can provide the translation
-// service. The port must be a port on a TLB or an MMU.
-func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
-	b.translationProvider = p
-	return b
-}
-
-// WithAddressToPortMapper sets the low modules finder that can tell the address
-// translators where to send the memory access request to.
-func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
-	b.addressToPortMapper = f
 	return b
 }
 
@@ -78,6 +67,60 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 	return b
 }
 
+// WithTranslationProviderMapper sets the mapper that can find the remote port
+// that can provide the translation service according to the virtual address.
+func (b Builder) WithTranslationProviderMapper(
+	table mem.AddressToPortMapper,
+) Builder {
+	b.addressToPortMapper = table
+	return b
+}
+
+// WithTranslationProvider sets the port that can provide the translation
+// service. The port must be a port on a TLB or an MMU.
+//
+// Deprecated: Use `WithTranslationProviderMapper`, or use
+// `WithTranslatorProviderMapperType` and `WithTranslationProviders` in
+// combination instead.
+func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
+	b.addressToPortMapper = &mem.SinglePortMapper{
+		Port: p,
+	}
+
+	return b
+}
+
+// WithAddressToPortMapper sets the low modules finder that can tell the address
+// translators where to send the memory access request to.
+//
+// Deprecated: Use `WithTranslationProviderMapper` instead.
+func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
+	b.addressToPortMapper = f
+	return b
+}
+
+// WithTranslationProviderMapperType sets the type of the translation provider
+// mapper. The mapper can find the remote port that can provide the translation
+// service according to the virtual address. The type can be "single" or
+// "interleaved".
+func (b Builder) WithTranslationProviderMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+// WithTranslationProviders registers the remote ports that handle address
+// translation requests.
+//
+// Use together with `WithTranslationProviderMapperType` to control request
+// distribution:
+//   - "single": exactly one port must be provided.
+//   - "interleaved": the number of ports must be a power of two; requests are
+//     interleaved at page granularity (4 KiB by default).
+func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
+	return b
+}
+
 // Build returns a new AddressTranslator
 func (b Builder) Build(name string) *Comp {
 	t := &Comp{}
@@ -86,8 +129,30 @@ func (b Builder) Build(name string) *Comp {
 
 	b.createPorts(name, t)
 
-	t.translationProvider = b.translationProvider
-	t.addressToPortMapper = b.addressToPortMapper
+	if b.addressToPortMapper != nil {
+		t.addressToPortMapper = b.addressToPortMapper
+	} else {
+		switch b.addressMapperType {
+		case "single":
+			if len(b.remotePorts) != 1 {
+				panic("single address mapper requires exactly 1 port")
+			}
+			t.addressToPortMapper = &mem.SinglePortMapper{
+				Port: b.remotePorts[0],
+			}
+		case "interleaved":
+			if len(b.remotePorts) == 0 {
+				panic("interleaved address mapper requires at least 1 port")
+			}
+			mapper := mem.NewInterleavedAddressPortMapper(1 << b.log2PageSize)
+			mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+			t.addressToPortMapper = mapper
+		default:
+			panic("invalid address mapper type: " + b.addressMapperType)
+		}
+	}
+
+	// t.translationProvider = b.translationProvider
 	t.numReqPerCycle = b.numReqPerCycle
 	t.log2PageSize = b.log2PageSize
 	t.deviceID = b.deviceID
