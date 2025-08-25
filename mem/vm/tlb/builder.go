@@ -191,6 +191,10 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createTranslationProviderMapper(c *Comp) {
+	if c.addressMapper != nil {
+		return
+	}
+
 	switch b.addressMapperType {
 	case "single":
 		if len(b.remotePorts) != 1 {
