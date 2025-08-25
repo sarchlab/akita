@@ -99,7 +99,6 @@ cd ../.. # return to root
 
 ### Examples and Documentation
 - **`examples/`**: Sample simulators including ping, tickingping, and cell_split
-- **`doc/`**: Documentation including testing guidelines, Go modules, and component systems
 
 ## Common Development Tasks
 
@@ -108,6 +107,13 @@ cd ../.. # return to root
 2. Create builder pattern for component configuration (see existing examples)
 3. Add Ginkgo unit tests with mocking using gomock
 4. Ensure "With" functions return builder pointer for method chaining
+
+### Coding Style
+- We do not write comments within functions, unless the code is tricky. If in-function comments are needed, we should break down the function into smaller functions and use the function name to describe the behavior.
+- But we write function/struct/package level documentation with comments.
+- We do not allow long functions that is more than 60 lines. If a function is too long, we should break it down into smaller functions. 
+- We do not like long lines. 
+- We do not use more than 3 levels of indentation within a function.
 
 ### Testing Strategy
 - **Unit tests**: Test individual component logic using mocks (Ginkgo + Gomega)
