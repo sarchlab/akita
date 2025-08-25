@@ -255,7 +255,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.Comp.translationProvider).
+		WithDst(m.addressMapper.Find(req.VAddr)).
 		WithPID(req.PID).
 		WithVAddr(req.VAddr).
 		WithDeviceID(req.DeviceID).
