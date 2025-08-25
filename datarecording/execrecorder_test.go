@@ -15,7 +15,8 @@ type execInfo struct {
 	Value    string
 }
 
-// TestDataRecorderExecution tests that the data recorder properly records execution information
+// TestDataRecorderExecution tests that the data recorder properly records
+// execution information
 func TestDataRecorderExecution(t *testing.T) {
 	path := "test"
 	dbFile := path + ".sqlite3"
