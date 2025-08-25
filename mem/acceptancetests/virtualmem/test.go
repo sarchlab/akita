@@ -49,7 +49,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	L1Cache, L2Cache, memCtrl := buildMemoryHierarchy(engine, s)
 	IoMMU, TLB, L2TLB := buildTranslationHierachy(engine, s)
 
-	ATmapper := &mem.SinglePortMapper{
+	ATMapper := &mem.SinglePortMapper{
 		Port: L1Cache.GetPortByName("Top").AsRemote(),
 	}
 
@@ -58,8 +58,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithFreq(1 * sim.GHz).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
-		WithTranslationProvider(TLB.GetPortByName("Top").AsRemote()).
-		WithAddressToPortMapper(ATmapper).
+		WithTranslationProviderMapper(ATMapper).
 		Build("AT")
 	s.RegisterComponent(AT)
 
@@ -126,7 +125,7 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		Build("IoMMU")
 	s.RegisterComponent(IoMMU)
 
-	L2TLBmapper := &mem.SinglePortMapper{
+	L2TLBMapper := &mem.SinglePortMapper{
 		Port: IoMMU.GetPortByName("Top").AsRemote(),
 	}
 
@@ -135,14 +134,13 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		WithFreq(1 * sim.GHz).
 		WithNumWays(64).
 		WithNumSets(64).
-		WithPageSize(4096).
+		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
-		WithAddressMapper(L2TLBmapper).
-		WithLowModule(IoMMU.GetPortByName("Top").AsRemote()).
+		WithTranslationProviderMapper(L2TLBMapper).
 		Build("L2TLB")
 	s.RegisterComponent(L2TLB)
 
-	TLBmapper := &mem.SinglePortMapper{
+	TLBMapper := &mem.SinglePortMapper{
 		Port: L2TLB.GetPortByName("Top").AsRemote(),
 	}
 
@@ -151,10 +149,9 @@ func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
 		WithFreq(1 * sim.GHz).
 		WithNumWays(8).
 		WithNumSets(8).
-		WithPageSize(4096).
+		WithLog2PageSize(12).
 		WithNumReqPerCycle(2).
-		WithAddressMapper(TLBmapper).
-		WithLowModule(L2TLB.GetPortByName("Top").AsRemote()).
+		WithTranslationProviderMapper(TLBMapper).
 		Build("TLB")
 	s.RegisterComponent(TLB)
 
