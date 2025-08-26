@@ -38,7 +38,7 @@ Your Task:
 
 Appendix:
 1. About Table Format
-If you want to display a table in the response, you may follow the HTML format below. output html can directly be inserted into your response, please NOT use a code block like ```html ``` to contain it.
+Please be very active to provide data results in table format and provide the table following the HTML format below. Output html can directly be inserted into your response, please NOT use a code block like ```html ``` to contain it.
 
 _csvStringToArray(csvText: string): string[][] {
     try {
