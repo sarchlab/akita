@@ -33,16 +33,10 @@ func Example() {
 	recorder.InsertData("test_table", task2)
 	recorder.Flush()
 
-	tables := recorder.ListTables()
-	fmt.Printf("The stored table: %s\n", tables[2])
-
 	recorder.Close()
 
 	reader := datarecording.NewReader(dbPath + ".sqlite3")
 	reader.MapTable("test_table", Task{})
-
-	tables = reader.ListTables()
-	fmt.Printf("The stored table: %s\n", tables[0])
 
 	results, _, err := reader.Query(context.Background(), "test_table", datarecording.QueryParams{})
 	if err != nil {
@@ -58,7 +52,5 @@ func Example() {
 	reader.Close()
 
 	// Output:
-	// The stored table: test_table
-	// The stored table: test_table
 	// ID: 2, Name: task2, Place: B
 }

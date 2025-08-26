@@ -103,7 +103,7 @@ jobs:
           go-version: "1.25"
 
       - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.0
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
 
       - name: Install Mockgen
         run: go install go.uber.org/mock/mockgen@latest
