@@ -37,26 +37,27 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var agent *memaccessagent.MemAccessAgent
 
 func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
-	s := simulation.MakeBuilder().Build()
+	simBuilder := simulation.MakeBuilder()
 
-	var engine sim.Engine
 	if *parallelFlag {
-		engine = sim.NewParallelEngine()
-	} else {
-		engine = sim.NewSerialEngine()
+		simBuilder = simBuilder.WithParallelEngine()
 	}
 
-	L1Cache, L2Cache, memCtrl := buildMemoryHierarchy(engine, s)
-	IoMMU, TLB, L2TLB := buildTranslationHierachy(engine, s)
+	s := simBuilder.Build()
+
+	engine := s.GetEngine()
+
+	l1Cache, l2Cache, memCtrl := buildMemoryHierarchy(engine, s)
+	ioMMU, tlb, l2TLB := buildTranslationHierarchy(engine, s)
 
 	atMemoryMapper := &mem.SinglePortMapper{
-		Port: L1Cache.GetPortByName("Top").AsRemote(),
+		Port: l1Cache.GetPortByName("Top").AsRemote(),
 	}
 	atTranslationMapper := &mem.SinglePortMapper{
-		Port: TLB.GetPortByName("Top").AsRemote(),
+		Port: tlb.GetPortByName("Top").AsRemote(),
 	}
 
-	AT := addresstranslator.MakeBuilder().
+	at := addresstranslator.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
 		WithLog2PageSize(12).
@@ -64,7 +65,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithMemoryProviderMapper(atMemoryMapper).
 		WithTranslationProviderMapper(atTranslationMapper).
 		Build("AT")
-	s.RegisterComponent(AT)
+	s.RegisterComponent(at)
 
 	agent = memaccessagent.MakeBuilder().
 		WithEngine(engine).
@@ -72,13 +73,13 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithMaxAddress(*maxAddressFlag).
 		WithReadLeft(*numAccessFlag).
 		WithWriteLeft(*numAccessFlag).
-		WithLowModule(AT.GetPortByName("Top")).
+		WithLowModule(at.GetPortByName("Top")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 
 	setupConnection(engine, agent,
-		AT, TLB, L2TLB, IoMMU,
-		L1Cache, L2Cache, memCtrl)
+		at, tlb, l2TLB, ioMMU,
+		l1Cache, l2Cache, memCtrl)
 	setupTracing(engine, memCtrl)
 
 	return engine, agent
@@ -116,7 +117,7 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 	return L1Cache, L2Cache, memCtrl
 }
 
-func buildTranslationHierachy(engine sim.Engine, s *simulation.Simulation) (
+func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
 	*mmu.Comp, *tlb.Comp, *tlb.Comp,
 ) {
 	pageTable := setupPageTable(*maxAddressFlag)
