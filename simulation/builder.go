@@ -12,7 +12,7 @@ import (
 type Builder struct {
 	parallelEngine bool
 	monitorOn      bool
-	outputFile     string
+	outputFileName string
 }
 
 // MakeBuilder creates a new builder.
@@ -35,9 +35,9 @@ func (b Builder) WithoutMonitoring() Builder {
 	return b
 }
 
-// WithOutputFile sets the custom output file name for the data recorder.
-func (b Builder) WithOutputFile(filename string) Builder {
-	b.outputFile = filename
+// WithOutputFileName sets the custom output file name for the data recorder.
+func (b Builder) WithOutputFileName(filename string) Builder {
+	b.outputFileName = filename
 	return b
 }
 
@@ -50,8 +50,7 @@ func (b Builder) Build() *Simulation {
 
 	s.id = xid.New().String()
 	
-	// Use custom output file name if provided, otherwise use default pattern
-	outputPath := b.outputFile
+	outputPath := b.outputFileName
 	if outputPath == "" {
 		outputPath = "akita_sim_" + s.id
 	}

@@ -67,8 +67,9 @@ var _ = Describe("Simulation", func() {
 		})
 
 		It("should allow custom output file to be set", func() {
-			// Test that the builder method exists and can be called
-			builder := MakeBuilder().WithoutMonitoring().WithOutputFile("test_custom_output")
+			builder := MakeBuilder().
+				WithoutMonitoring().
+				WithOutputFileName("test_custom_output")
 			customSim = builder.Build()
 
 			Expect(customSim).ToNot(BeNil())
