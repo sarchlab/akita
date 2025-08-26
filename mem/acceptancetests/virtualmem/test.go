@@ -49,8 +49,11 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	L1Cache, L2Cache, memCtrl := buildMemoryHierarchy(engine, s)
 	IoMMU, TLB, L2TLB := buildTranslationHierachy(engine, s)
 
-	ATMapper := &mem.SinglePortMapper{
+	atMemoryMapper := &mem.SinglePortMapper{
 		Port: L1Cache.GetPortByName("Top").AsRemote(),
+	}
+	atTranslationMapper := &mem.SinglePortMapper{
+		Port: TLB.GetPortByName("Top").AsRemote(),
 	}
 
 	AT := addresstranslator.MakeBuilder().
@@ -58,7 +61,8 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithFreq(1 * sim.GHz).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
-		WithTranslationProviderMapper(ATMapper).
+		WithMemoryProviderMapper(atMemoryMapper).
+		WithTranslationProviderMapper(atTranslationMapper).
 		Build("AT")
 	s.RegisterComponent(AT)
 
@@ -72,7 +76,9 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 
-	setupConnection(engine, agent, AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl)
+	setupConnection(engine, agent,
+		AT, TLB, L2TLB, IoMMU,
+		L1Cache, L2Cache, memCtrl)
 	setupTracing(engine, memCtrl)
 
 	return engine, agent
