@@ -1874,18 +1874,18 @@ GPU.CommandProcessor,9
 
 
     // Make test buttons appear on hover over
-    actionRow.addEventListener("mouseenter", () => {
-      graphTestBtn.style.opacity = "1";
-      graphTestBtn.style.pointerEvents = "auto";
-      subpageTestBtn.style.opacity = "1";
-      subpageTestBtn.style.pointerEvents = "auto";
-    });
-    actionRow.addEventListener("mouseleave", () => {
-      graphTestBtn.style.opacity = "0";
-      graphTestBtn.style.pointerEvents = "none";
-      subpageTestBtn.style.opacity = "0";
-      subpageTestBtn.style.pointerEvents = "none";
-    });
+    // actionRow.addEventListener("mouseenter", () => {
+    //   graphTestBtn.style.opacity = "1";
+    //   graphTestBtn.style.pointerEvents = "auto";
+    //   subpageTestBtn.style.opacity = "1";
+    //   subpageTestBtn.style.pointerEvents = "auto";
+    // });
+    // actionRow.addEventListener("mouseleave", () => {
+    //   graphTestBtn.style.opacity = "0";
+    //   graphTestBtn.style.pointerEvents = "none";
+    //   subpageTestBtn.style.opacity = "0";
+    //   subpageTestBtn.style.pointerEvents = "none";
+    // });
 
 
     // Initial bubble for file upload button
