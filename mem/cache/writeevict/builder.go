@@ -26,6 +26,9 @@ type Builder struct {
 	maxNumConcurrentTrans int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
+
+	addressMapperType string
+	remotePorts       []sim.RemotePort
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -126,6 +129,19 @@ func (b Builder) WithAddressToPortMapper(
 	addressToPortMapper mem.AddressToPortMapper,
 ) Builder {
 	b.addressToPortMapper = addressToPortMapper
+	return b
+}
+
+// WithAddressMapperType sets the type of address mapper to use
+func (b Builder) WithAddressMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+// WithRemotePorts sets the remote ports that the cache can use to send
+// requests to other components.
+func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
 	return b
 }
 

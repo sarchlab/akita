@@ -50,7 +50,7 @@ var _ = Describe("TLB", func() {
 
 		tlb = MakeBuilder().
 			WithEngine(engine).
-			WithAddressMapper(addressMapper).
+			WithTranslationProviderMapper(addressMapper).
 			Build("TLB")
 		tlb.topPort = topPort
 		tlb.bottomPort = bottomPort
@@ -435,7 +435,8 @@ var _ = Describe("TLB Integration", func() {
 		}
 		tlb = MakeBuilder().
 			WithEngine(engine).
-			WithAddressMapper(addressMapper).
+			WithTranslationProviderMapper(addressMapper).
+			WithLowModule(lowModule.AsRemote()).
 			Build("TLB")
 
 		agent.EXPECT().SetConnection(connection)

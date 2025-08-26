@@ -1,5 +1,10 @@
 daisen
 __debug_bin
 sample_trace_medium.csv
+<<<<<<< HEAD
 .env
 TESTenv.txt
+=======
+.en*
+.env
+>>>>>>> ml-for-perf-analysis
