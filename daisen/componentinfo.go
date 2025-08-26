@@ -763,7 +763,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	if githubPAT == "" {
 		http.Error(
 			w,
-			"[Error: \".env\" not found or GitHub-related variable missing] "+
+			"\n[Error: \".env\" not found or GitHub-related variable missing]\n"+
 				"Please create or update file "+
 				"\"akita/daisen/.env\" and write these contents (example):\n"+
 				"```\n"+
@@ -771,12 +771,13 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 				"OPENAI_MODEL=\"gpt-4o\"\n"+
 				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
 				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-				"```\n",
+				"Please refer to "+
+				"https://github.com/sarchlab/akita/tree/main/daisen#readme "+
+				"for more details.```\n",
 			http.StatusInternalServerError,
 		)
 		return
 	}
-
 	client := &http.Client{}
 	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
 	if err != nil {
@@ -785,7 +786,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("Authorization", githubPAT)
-
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
 		w.Header().Set("Content-Type", "application/json")
@@ -798,7 +798,6 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	defer resp.Body.Close()
-	// Read routine keys from componentgithubroutine.json
 	routineKeys := []string{}
 	routineFile := "componentgithubroutine.json"
 	data, err := os.ReadFile(routineFile)
@@ -810,13 +809,44 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"available":    1,
 		"routine_keys": routineKeys,
 	}); err != nil {
 		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// httpCheckEnvFile handles the API endpoint to check if .env file exists
+func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Check if .env file exists
+	envFileExists := false
+	if _, err := os.Stat(".env"); err == nil {
+		envFileExists = true
+	}
+
+	// Create response JSON
+	response := map[string]interface{}{
+		"exists": envFileExists,
+	}
+
+	// Encode and send response
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
