@@ -49,7 +49,7 @@ func (ti *GreedyTrafficInjector) InjectTraffic() {
 			}
 
 			dst := ti.agents[dstID]
-			pkt := NewStartSendEvent(0, a, dst, ti.PacketSize, j)
+			pkt := NewStartSendEvent(0, a, dst, ti.PacketSize)
 			ti.engine.Schedule(pkt)
 		}
 	}

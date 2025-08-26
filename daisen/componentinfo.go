@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type TimeValue struct {
@@ -22,7 +30,7 @@ type ComponentInfo struct {
 }
 
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
-	componentNames := traceReader.ListComponents()
+	componentNames := traceReader.ListComponents(r.Context())
 
 	rsp, err := json.Marshal(componentNames)
 	dieOnErr(err)
@@ -49,22 +57,22 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	switch infoType {
 	case "ReqInCount":
 		compInfo = calculateReqIn(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ReqCompleteCount":
 		compInfo = calculateReqComplete(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "AvgLatency":
 		compInfo = calculateAvgLatency(
-			compName, startTime, endTime, int(numDots))
+			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ConcurrentTask":
 		compInfo = calculateConcurrentTask(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "BufferPressure":
 		compInfo = calculateBufferPressure(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
 		compInfo = calculatePendingReqOut(
-			compInfo, compName, infoType, startTime, endTime, numDots)
+			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	default:
 		log.Panicf("unknown info_type %s\n", infoType)
 	}
@@ -77,13 +85,14 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func calculateConcurrentTask(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return true },
 		func(t Task) float64 { return float64(t.StartTime) },
@@ -94,13 +103,14 @@ func calculateConcurrentTask(
 }
 
 func calculateBufferPressure(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		taskIsReqIn,
 		func(t Task) float64 {
@@ -115,13 +125,14 @@ func calculateBufferPressure(
 }
 
 func calculatePendingReqOut(
+	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
 	compInfo = calculateTimeWeightedTaskCount(
-		compName, infoType,
+		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return t.Kind == "req_out" },
 		func(t Task) float64 { return float64(t.StartTime) },
@@ -136,6 +147,7 @@ func taskIsReqIn(t Task) bool {
 }
 
 func calculateReqIn(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -155,7 +167,7 @@ func calculateReqIn(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -185,6 +197,7 @@ func calculateReqIn(
 }
 
 func calculateReqComplete(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -204,7 +217,7 @@ func calculateReqComplete(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -234,6 +247,7 @@ func calculateReqComplete(
 }
 
 func calculateAvgLatency(
+	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
 	numDots int,
@@ -253,7 +267,7 @@ func calculateAvgLatency(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(query)
+	reqs := traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -312,6 +326,7 @@ type taskFilter func(t Task) bool
 type taskTime func(t Task) float64
 
 func calculateTimeWeightedTaskCount(
+	ctx context.Context,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int,
@@ -332,7 +347,7 @@ func calculateTimeWeightedTaskCount(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	tasks := traceReader.ListTasks(query)
+	tasks := traceReader.ListTasks(ctx, query)
 	tasks = filterTask(tasks, filter)
 
 	totalDuration := endTime - startTime
@@ -379,6 +394,7 @@ func calculateAvgTaskCount(
 	binStartTime, binEndTime float64,
 ) float64 {
 	var count int
+
 	var timeByCount float64
 
 	prevTime := binStartTime
@@ -399,6 +415,7 @@ func calculateAvgTaskCount(
 			if duration < 0 {
 				panic("duration is smaller than 0")
 			}
+
 			timeByCount += duration * float64(count)
 			prevTime = ts.time
 
@@ -470,4 +487,336 @@ func isTaskOverlapsWithBin(
 	}
 
 	return true
+}
+
+// Add this helper function outside buildOpenAIPayload:
+func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
+	selected, _ := traceInfo["selected"].(float64)
+	if selected == 0 {
+		return ""
+	}
+	startTime, _ := traceInfo["startTime"].(float64)
+	endTime, _ := traceInfo["endTime"].(float64)
+	selectedComponentNameList, _ := traceInfo["selectedComponentNameList"].([]interface{})
+	locations := extractLocations(selectedComponentNameList)
+	if len(locations) == 0 {
+		return ""
+	}
+	sqlStr := buildTraceSQL(locations, startTime, endTime)
+	return formatTraceRows(traceReader, sqlStr)
+}
+
+func extractLocations(selectedComponentNameList []interface{}) []string {
+	locations := make([]string, 0, len(selectedComponentNameList))
+	for _, v := range selectedComponentNameList {
+		if s, ok := v.(string); ok {
+			locations = append(locations, s)
+		}
+	}
+	return locations
+}
+
+func buildTraceSQL(locations []string, startTime, endTime float64) string {
+	quoted := make([]string, 0, len(locations))
+	for _, loc := range locations {
+		quoted = append(quoted, "'"+loc+"'")
+	}
+	whereClause := "Location IN (" + strings.Join(quoted, ",") + ")"
+	timeClause := fmt.Sprintf("StartTime >= %.15f AND EndTime <= %.15f", startTime, endTime)
+	return `
+SELECT *
+FROM trace
+WHERE ` + whereClause + `
+AND ` + timeClause
+}
+
+func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
+	rows, err := traceReader.Query(sqlStr)
+	if err != nil {
+		log.Println("Failed to query trace:", err)
+		return ""
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		log.Println("Failed to get columns:", err)
+		return ""
+	}
+
+	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+		if err := rows.Scan(valuePtrs...); err != nil {
+			log.Println("Failed to scan trace row:", err)
+			continue
+		}
+		rowStrs := make([]string, 0, len(values))
+		for _, val := range values {
+			switch v := val.(type) {
+			case nil:
+				rowStrs = append(rowStrs, "")
+			case []byte:
+				rowStrs = append(rowStrs, string(v))
+			case float64:
+				rowStrs = append(rowStrs, fmt.Sprintf("%.9f", v))
+			default:
+				rowStrs = append(rowStrs, fmt.Sprintf("%v", v))
+			}
+		}
+		header += strings.Join(rowStrs, ",") + "\n"
+	}
+	header += "[End Akita Trace File]\n"
+	return header
+}
+
+func buildCombinedRepoHeader(ctx context.Context, urlList []string) string {
+	combinedRepoHeader := ""
+	for _, url := range urlList {
+		content := httpGithubRaw(ctx, url)
+		if content == "" {
+			continue
+		}
+		fileName := url
+		if idx := strings.Index(url, "sarchlab/"); idx != -1 {
+			fileName = url[idx:]
+		}
+		combinedRepoHeader += "[Reference File " + fileName + "]\n"
+		combinedRepoHeader += content + "\n"
+		combinedRepoHeader += "[End " + fileName + "]\n"
+	}
+	return combinedRepoHeader
+}
+
+func getRoutineURLList(routineFile string, selectedKeys []string) ([]string, error) {
+	data, err := os.ReadFile(routineFile)
+	if err != nil {
+		return nil, err
+	}
+	var routineMap map[string][]string
+	if err := json.Unmarshal(data, &routineMap); err != nil {
+		return nil, err
+	}
+	urlSet := make(map[string]struct{})
+	for _, key := range selectedKeys {
+		if urls, ok := routineMap[key]; ok {
+			for _, u := range urls {
+				urlSet[u] = struct{}{}
+			}
+		}
+	}
+	urlList := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		urlList = append(urlList, u)
+	}
+	sort.Strings(urlList)
+	return urlList, nil
+}
+
+func buildOpenAIPayload(
+	ctx context.Context,
+	model string,
+	messages []map[string]interface{},
+	traceInfo map[string]interface{},
+	selectedGitHubRoutineKeys []string,
+) ([]byte, error) {
+	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
+	routineFile := "componentgithubroutine.json"
+	urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
+	if err != nil {
+		log.Println("Failed to get routine URL list:", err)
+		return nil, err
+	}
+	combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
+
+	if len(messages) > 0 {
+		if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
+			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
+				firstText, _ := firstContent["text"].(string)
+				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
+			}
+		}
+	}
+
+	if len(messages) == 0 || messages[0]["role"] != "system" {
+		loadedTextBytes, err := os.ReadFile("beforehandprompt.txt")
+		if err != nil {
+			log.Println("Failed to read beforehandprompt.txt:", err)
+			return nil, err
+		}
+		loadedText := string(loadedTextBytes)
+		systemMsg := map[string]interface{}{
+			"role": "system",
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "text",
+					"text": loadedText,
+				},
+			},
+		}
+		messages = append([]map[string]interface{}{systemMsg}, messages...)
+	}
+
+	payload := map[string]interface{}{
+		"model":       model,
+		"messages":    messages,
+		"temperature": 0.7,
+	}
+	return json.Marshal(payload)
+}
+
+func sendOpenAIRequest(ctx context.Context, apiKey, url string, payloadBytes []byte) (*http.Response, error) {
+	openaiReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(payloadBytes))
+	if err != nil {
+		return nil, err
+	}
+	openaiReq.Header.Set("Content-Type", "application/json")
+	openaiReq.Header.Set("Authorization", apiKey)
+	return http.DefaultClient.Do(openaiReq)
+}
+
+func httpGithubRaw(ctx context.Context, url string) string {
+	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		log.Println("Failed to create GitHub raw request:", err)
+		return ""
+	}
+	if githubPAT != "" {
+		req.Header.Set("Authorization", githubPAT)
+	}
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		log.Printf("Failed to fetch raw GitHub file: %s, status: %d, err: %v\n", url, resp.StatusCode, err)
+		return ""
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("Failed to read GitHub raw response body:", err)
+		return ""
+	}
+	return string(body)
+}
+
+func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or OpenAI-related variable missing] "+
+				"Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
+				"```\n",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	var req struct {
+		Messages                  []map[string]interface{} `json:"messages"`
+		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
+		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	payloadBytes, err := buildOpenAIPayload(
+		r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys)
+	if err != nil {
+		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
+	if err != nil {
+		http.Error(
+			w,
+			"Failed to contact OpenAI: "+err.Error(),
+			http.StatusBadGateway,
+		)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
+func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+	if githubPAT == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or GitHub-related variable missing] "+
+				"Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
+				"```\n",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequestWithContext(r.Context(), "GET", "https://api.github.com/user", nil)
+	if err != nil {
+		http.Error(w, "Failed to create GitHub request: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("Authorization", githubPAT)
+
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
+			"available":    0,
+			"routine_keys": []string{},
+		}); err != nil {
+			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	defer resp.Body.Close()
+	// Read routine keys from componentgithubroutine.json
+	routineKeys := []string{}
+	routineFile := "componentgithubroutine.json"
+	data, err := os.ReadFile(routineFile)
+	if err == nil {
+		var routineMap map[string]interface{}
+		if err := json.Unmarshal(data, &routineMap); err == nil {
+			for k := range routineMap {
+				routineKeys = append(routineKeys, k)
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"available":    1,
+		"routine_keys": routineKeys,
+	}); err != nil {
+		http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
