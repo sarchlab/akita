@@ -175,6 +175,9 @@ GPU.CommandProcessor,9
     // Initialize with first chat
     this._createNewChat();
     
+    // Setup simple CTRL+click for URLs
+    this._setupUrlClickHandlers();
+    
     sendGetGitHubIsAvailable().then((resp) => {
       this._githubIsAvailableResponse = resp;
     });
@@ -608,12 +611,20 @@ GPU.CommandProcessor,9
           // Add URL underneath the user bubble
           const urlDiv = document.createElement("div");
           urlDiv.innerHTML = this._getCurrentFrontendURL();
+          urlDiv.className = 'chat-url';
           urlDiv.style.fontSize = "10px";
           urlDiv.style.color = "#999999";
           urlDiv.style.marginTop = "2px";
           urlDiv.style.textAlign = "right";
           urlDiv.style.maxWidth = "90%";
           urlDiv.style.wordBreak = "break-all";
+          urlDiv.style.cursor = "default";
+          urlDiv.style.textDecoration = "none";
+          urlDiv.addEventListener('click', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+              window.open(this._getCurrentFrontendURL(), '_blank');
+            }
+          });
           userDiv.appendChild(urlDiv);
 
           messagesDiv.appendChild(userDiv);
@@ -1909,7 +1920,7 @@ GPU.CommandProcessor,9
     inputContainer.style.alignItems = "flex-end";
 
     const input = document.createElement("textarea");
-    input.placeholder = "Ask anything (↑↓ for history)";
+    input.placeholder = "Ask anything (↑↓ for history, CTRL for links)";
     input.rows = 1;
     input.style.flex = "1";
     input.style.padding = "6px";
@@ -2035,12 +2046,20 @@ GPU.CommandProcessor,9
       // Add URL underneath the user bubble
       const urlDiv = document.createElement("div");
       urlDiv.innerHTML = this._getCurrentFrontendURL();
+      urlDiv.className = 'chat-url';
       urlDiv.style.fontSize = "10px";
       urlDiv.style.color = "#999999";
       urlDiv.style.marginTop = "2px";
       urlDiv.style.textAlign = "right";
       urlDiv.style.maxWidth = "90%";
       urlDiv.style.wordBreak = "break-all";
+      urlDiv.style.cursor = "default";
+      urlDiv.style.textDecoration = "none";
+      urlDiv.addEventListener('click', (e) => {
+        if (e.ctrlKey || e.metaKey) {
+          window.open(this._getCurrentFrontendURL(), '_blank');
+        }
+      });
       userDiv.appendChild(urlDiv);
 
       messagesDiv.appendChild(userDiv);
@@ -2512,6 +2531,37 @@ Kernel Execution,76.68,84.65,7.97`);
 
   _getCurrentFrontendURL(): string {
     return window.location.href;
+  }
+
+  _setupUrlClickHandlers(): void {
+    // Simple global CTRL key tracking for URL clicks
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Add underline to all chat URLs when CTRL is pressed
+        document.querySelectorAll('.chat-url').forEach(el => {
+          (el as HTMLElement).style.textDecoration = 'underline';
+          (el as HTMLElement).style.cursor = 'pointer';
+        });
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (!e.ctrlKey && !e.metaKey) {
+        // Remove underline when CTRL is released
+        document.querySelectorAll('.chat-url').forEach(el => {
+          (el as HTMLElement).style.textDecoration = 'none';
+          (el as HTMLElement).style.cursor = 'default';
+        });
+      }
+    });
+
+    // Reset on window blur
+    window.addEventListener('blur', () => {
+      document.querySelectorAll('.chat-url').forEach(el => {
+        (el as HTMLElement).style.textDecoration = 'none';
+        (el as HTMLElement).style.cursor = 'default';
+      });
+    });
   }
 }
 

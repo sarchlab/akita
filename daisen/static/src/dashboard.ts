@@ -585,24 +585,21 @@ class Dashboard extends ChatPanel {
     `;
     chatButton.style.visibility = this._showChatButton ? "visible" : "hidden";
     chatButton.onclick = async () => {
-      // Check if .env file exists before opening chat
+      // Check if .env file exists and validate credentials before opening chat
       const envCheck = await sendGetCheckEnvFile();
+      
       if (!envCheck.exists) {
-        const userConfirms = confirm(
-          'The .env file does not exist. This is required for DaisenBot to function properly.\n' +
-          'Please create an .env file in the akita/daisen/ directory with your OpenAIAPI credentials.\n' +
-          "Example:\n"+
-          "```\n"+
-          "OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
-          "OPENAI_MODEL=\"gpt-4o\"\n"+
-          "OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
-          "GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
-          "```\n"+
-          "Please refer to https://github.com/sarchlab/akita/tree/main/daisen#readme for more details.\n",
-        );
-        if (!userConfirms) {
-          return; // Don't open chat if user cancels
-        }
+        // Open env-config.html in a new tab
+        const envConfigUrl = `http://localhost:${window.location.port || '3001'}/env-config.html`;
+        window.open(envConfigUrl, '_blank');
+        return; // Don't open chat if .env file doesn't exist
+      }
+      
+      if (!envCheck.credentialsValid) {
+        // Open env-config.html in a new tab, similar to how datavisualization.html is opened
+        const envConfigUrl = `http://localhost:${window.location.port || '3001'}/env-config.html`;
+        window.open(envConfigUrl, '_blank');
+        return; // Don't open chat if credentials are invalid
       }
       
       this._showChatPanel();

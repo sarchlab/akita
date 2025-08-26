@@ -62,6 +62,7 @@ func startAPIServer() {
 	http.HandleFunc("/api/gpt", httpGPTProxy)
 	http.HandleFunc("/api/githubisavailable", httpGithubIsAvailableProxy)
 	http.HandleFunc("/api/checkenv", httpCheckEnvFile)
+	http.HandleFunc("/api/updateenv", httpUpdateEnvFile)
 	// http.HandleFunc("/api/github", httpGithubProxy)
 
 	fmt.Printf("Listening %s\n", *httpFlag)

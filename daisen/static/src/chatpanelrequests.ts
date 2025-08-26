@@ -61,7 +61,11 @@ export async function sendGetGitHubIsAvailable(): Promise<GitHubIsAvailableRespo
   return data;
 }
 
-export async function sendGetCheckEnvFile(): Promise<{ exists: boolean }> {
+export async function sendGetCheckEnvFile(): Promise<{ 
+  exists: boolean; 
+  credentialsValid: boolean; 
+  validationMessage: string 
+}> {
   try {
     const response = await fetch("/api/checkenv", {
       method: "GET",
@@ -69,11 +73,19 @@ export async function sendGetCheckEnvFile(): Promise<{ exists: boolean }> {
     });
     if (!response.ok) {
       console.error("Failed to check .env file:", response.status);
-      return { exists: false };
+      return { 
+        exists: false, 
+        credentialsValid: false, 
+        validationMessage: "Failed to check environment file" 
+      };
     }
     return await response.json();
   } catch (error) {
     console.error("Error checking .env file:", error);
-    return { exists: false };
+    return { 
+      exists: false, 
+      credentialsValid: false, 
+      validationMessage: "Network error checking environment file" 
+    };
   }
 }

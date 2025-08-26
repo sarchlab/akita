@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Environment Configuration - Daisen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .config-container {
+            width: 80%;
+            max-width: 800px;
+            padding: 40px;
+            background: rgba(255,255,255,0.9);
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .env-editor {
+            width: 100%;
+            height: 400px;
+            padding: 15px;
+            border: 1px solid #222;
+            border-radius: 6px;
+            background: #23272e; /* code-like dark grey */
+            color: #eaeaea;
+            font-family: 'Fira Mono', 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .env-editor:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+        }
+        .env-label {
+            margin-bottom: 15px;
+            color: #333;
+            font-weight: bold;
+            font-size: 18px;
+            text-align: center;
+        }
+        .submit-button {
+            padding: 12px 30px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .submit-button:hover {
+            background-color: #0b5ed7;
+            transform: translateY(-1px);
+        }
+        .submit-button:active {
+            background-color: #0a58ca;
+            transform: translateY(1px);
+        }
+        .submit-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .preview-section {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .preview-label {
+            color: #333;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .preview-content {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            font-family: 'Fira Mono', 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            color: #333;
+            white-space: pre;
+            margin-bottom: 15px;
+        }
+        .instructions {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 15px;
+            color: #155724;
+            margin-top: 20px;
+            display: none;
+        }
+        .instructions.show {
+            display: block;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-weight: normal;
+        }
+        .error-message {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 15px;
+            color: #721c24;
+            margin-top: 10px;
+            display: none;
+        }
+        .error-message.show {
+            display: block;
+        }
+        .success-message {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            color: #0c5460;
+            margin-top: 10px;
+            display: none;
+        }
+        .success-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <h2>🔧 Environment Configuration</h2>
+        
+        <div class="preview-section">
+            <span class="preview-label">Example .env file format:</span>
+            <div class="preview-content">OPENAI_URL="https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL="gpt-4o"
+OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX" (OPTIONAL)</div>
+        </div>
+        
+        <div class="env-label">Enter your environment configuration:</div>
+        <textarea id="envEditor" class="env-editor" placeholder="Enter your .env file contents here..."></textarea>
+        
+        <button id="submitButton" class="submit-button">💾 Save Configuration</button>
+        
+        <div id="errorMessage" class="error-message"></div>
+        <div id="successMessage" class="success-message"></div>
+        
+        <div id="instructions" class="instructions">
+            <strong>✅ Configuration saved successfully!</strong><br><br>
+            Important: Please rebuild the Go application for changes to take effect:<br>
+            <code>cd /path/to/akita/daisen && go build</code><br><br>
+            This page will close automatically in 5 seconds...
+        </div>
+    </div>
+
+    <script>
+        // Load current .env content when page loads
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/api/checkenv');
+                const data = await response.json();
+                
+                // If we can get current env content, show it
+                // Otherwise, show the default template
+                if (data.exists) {
+                    // Try to fetch current content - we'll need to add an endpoint for this
+                    document.getElementById('envEditor').value = `OPENAI_URL="https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL="gpt-4o"
+OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX (OPTIONAL)"`;
+                } else {
+                    document.getElementById('envEditor').value = `OPENAI_URL="https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL="gpt-4o"
+OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX (OPTIONAL)"`;
+                }
+            } catch (error) {
+                console.error('Failed to load current env content:', error);
+                // Show default template
+                document.getElementById('envEditor').value = `OPENAI_URL="https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL="gpt-4o"
+OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX (OPTIONAL)"`;
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('submitButton').addEventListener('click', async () => {
+            const submitButton = document.getElementById('submitButton');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+            const instructions = document.getElementById('instructions');
+            const envContent = document.getElementById('envEditor').value.trim();
+
+            // Clear previous messages
+            errorMessage.classList.remove('show');
+            successMessage.classList.remove('show');
+            instructions.classList.remove('show');
+
+            if (!envContent) {
+                errorMessage.textContent = 'Please enter the environment configuration.';
+                errorMessage.classList.add('show');
+                return;
+            }
+
+            // Basic validation
+            const requiredVars = ['OPENAI_URL', 'OPENAI_MODEL', 'OPENAI_API_KEY'];
+            const missingVars = requiredVars.filter(varName => !envContent.includes(varName));
+            
+            if (missingVars.length > 0) {
+                errorMessage.textContent = `Missing required variables: ${missingVars.join(', ')}`;
+                errorMessage.classList.add('show');
+                return;
+            }
+
+            // Disable button during submission
+            submitButton.disabled = true;
+            submitButton.textContent = '⏳ Saving...';
+            
+            try {
+                const response = await fetch('/api/updateenv', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        envContent: envContent
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    successMessage.textContent = '✅ Configuration saved successfully!';
+                    successMessage.classList.add('show');
+                    instructions.classList.add('show');
+                    
+                    // Auto-close after 5 seconds
+                    setTimeout(() => {
+                        window.close();
+                    }, 5000);
+                } else {
+                    throw new Error(result.message || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                errorMessage.textContent = `❌ Failed to save configuration: ${error.message}`;
+                errorMessage.classList.add('show');
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = '💾 Save Configuration';
+            }
+        });
+    </script>
+</body>
+</html>

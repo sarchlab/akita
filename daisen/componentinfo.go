@@ -819,7 +819,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// httpCheckEnvFile handles the API endpoint to check if .env file exists
+// httpCheckEnvFile handles the API endpoint to check if .env file exists and validates OpenAI credentials
 func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -835,13 +835,137 @@ func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 
 	// Check if .env file exists
 	envFileExists := false
+	credentialsValid := false
+	validationMessage := ""
+
 	if _, err := os.Stat(".env"); err == nil {
 		envFileExists = true
+
+		// Load and validate environment variables
+		_ = godotenv.Load(".env")
+		openaiApiKey := os.Getenv("OPENAI_API_KEY")
+		openaiURL := os.Getenv("OPENAI_URL")
+		openaiModel := os.Getenv("OPENAI_MODEL")
+
+		// Check if all required variables are present
+		missingVars := []string{}
+		if openaiURL == "" {
+			missingVars = append(missingVars, "OPENAI_URL")
+		}
+		if openaiModel == "" {
+			missingVars = append(missingVars, "OPENAI_MODEL")
+		}
+		if openaiApiKey == "" {
+			missingVars = append(missingVars, "OPENAI_API_KEY")
+		}
+
+		if len(missingVars) > 0 {
+			validationMessage = fmt.Sprintf("Missing required environment variables: %s", strings.Join(missingVars, ", "))
+		} else {
+			// Validate OpenAI API key format
+			if !strings.HasPrefix(openaiApiKey, "Bearer sk-") {
+				validationMessage = "OPENAI_API_KEY must start with 'Bearer sk-'"
+			} else if len(openaiApiKey) < 25 { // "Bearer sk-" (10 chars) + reasonable key length
+				validationMessage = "OPENAI_API_KEY appears to be too short"
+			} else {
+				credentialsValid = true
+				validationMessage = "All credentials are valid"
+			}
+		}
+	} else {
+		validationMessage = ".env file does not exist"
 	}
 
 	// Create response JSON
 	response := map[string]interface{}{
-		"exists": envFileExists,
+		"exists":            envFileExists,
+		"credentialsValid":  credentialsValid,
+		"validationMessage": validationMessage,
+	}
+
+	// Encode and send response
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
+// httpUpdateEnvFile handles the API endpoint to update .env file contents
+func httpUpdateEnvFile(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Content-Type", "application/json")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse request body
+	var req struct {
+		EnvContent string `json:"envContent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Write the new content to .env file
+	if err := os.WriteFile(".env", []byte(req.EnvContent), 0644); err != nil {
+		log.Printf("Failed to write .env file: %v", err)
+		http.Error(w, "Failed to write .env file", http.StatusInternalServerError)
+		return
+	}
+
+	// Validate the new credentials
+	_ = godotenv.Load(".env")
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+
+	credentialsValid := false
+	validationMessage := ""
+
+	// Check if all required variables are present
+	missingVars := []string{}
+	if openaiURL == "" {
+		missingVars = append(missingVars, "OPENAI_URL")
+	}
+	if openaiModel == "" {
+		missingVars = append(missingVars, "OPENAI_MODEL")
+	}
+	if openaiApiKey == "" {
+		missingVars = append(missingVars, "OPENAI_API_KEY")
+	}
+
+	if len(missingVars) > 0 {
+		validationMessage = fmt.Sprintf("Missing required environment variables: %s", strings.Join(missingVars, ", "))
+	} else {
+		// Validate OpenAI API key format
+		if !strings.HasPrefix(openaiApiKey, "Bearer sk-") {
+			validationMessage = "OPENAI_API_KEY must start with 'Bearer sk-'"
+		} else if len(openaiApiKey) < 25 {
+			validationMessage = "OPENAI_API_KEY appears to be too short"
+		} else {
+			credentialsValid = true
+			validationMessage = "All credentials are valid"
+		}
+	}
+
+	// Create response JSON
+	response := map[string]interface{}{
+		"success":           true,
+		"credentialsValid":  credentialsValid,
+		"validationMessage": validationMessage,
+		"message":           "Environment file updated successfully",
 	}
 
 	// Encode and send response
