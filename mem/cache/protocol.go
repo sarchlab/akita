@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"reflect"
+
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -9,6 +11,7 @@ import (
 // the cache lines.
 type FlushReq struct {
 	sim.MsgMeta
+
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool
@@ -87,6 +90,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 	r.InvalidateAllCachelines = b.invalidateAllCacheLines
 	r.DiscardInflight = b.discardInflight
 	r.PauseAfterFlushing = b.pauseAfterFlushing
+	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
 
 	return r
 }
@@ -95,6 +99,7 @@ func (b FlushReqBuilder) Build() *FlushReq {
 // flush
 type FlushRsp struct {
 	sim.MsgMeta
+
 	RspTo string
 }
 
@@ -146,6 +151,7 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.RspTo = b.rspTo
+	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
 
 	return r
 }
@@ -202,6 +208,7 @@ func (b RestartReqBuilder) Build() *RestartReq {
 	r.ID = sim.GetIDGenerator().Generate()
 	r.Src = b.src
 	r.Dst = b.dst
+	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
 
 	return r
 }
@@ -210,6 +217,7 @@ func (b RestartReqBuilder) Build() *RestartReq {
 // flush
 type RestartRsp struct {
 	sim.MsgMeta
+
 	RspTo string
 }
 
@@ -261,6 +269,7 @@ func (b RestartRspBuilder) Build() *RestartRsp {
 	r.Src = b.src
 	r.Dst = b.dst
 	r.RspTo = b.rspTo
+	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
 
 	return r
 }

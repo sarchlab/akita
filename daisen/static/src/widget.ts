@@ -114,7 +114,7 @@ export class Widget implements ZoomHandler {
   resize(width: number, height: number) {
     this.setDimensions(width, height);
     this._renderXAxis(this._svg);
-    if (!this._isPrimaryAxisSkipped()) {
+    if (!this._isPrimaryAxisSkipped() && this._primaryAxisData) {
       this._renderDataCurve(
         this._svg,
         this._primaryAxisData,
@@ -124,7 +124,7 @@ export class Widget implements ZoomHandler {
       this._drawYAxis(this._svg, this._primaryYScale, false);
     }
   
-    if (!this._isSecondaryAxisSkipped()) {
+    if (!this._isSecondaryAxisSkipped() && this._secondaryAxisData) {
       this._renderDataCurve(
         this._svg,
         this._secondaryAxisData,
@@ -160,7 +160,7 @@ export class Widget implements ZoomHandler {
   temporaryTimeShift(startTime: number, endTime: number) {
     this.setXAxis(startTime, endTime);
     this._renderXAxis(this._svg);
-    if (!this._isPrimaryAxisSkipped()) {
+    if (!this._isPrimaryAxisSkipped() && this._primaryAxisData) {
       this._renderDataCurve(
         this._svg,
         this._primaryAxisData,
@@ -169,7 +169,7 @@ export class Widget implements ZoomHandler {
       );
     }
 
-    if (!this._isSecondaryAxisSkipped()) {
+    if (!this._isSecondaryAxisSkipped() && this._secondaryAxisData) {
       this._renderDataCurve(
         this._svg,
         this._secondaryAxisData,
@@ -353,6 +353,11 @@ export class Widget implements ZoomHandler {
   }
 
   _renderAxisData(svg: SVGElement, data: object, isSecondary: boolean) {
+    // Check if data is valid before processing
+    if (!data || typeof data !== 'object') {
+      console.warn("_renderAxisData: Invalid data", data);
+      return;
+    }
     const yScale = this._calculateYScale(data);
     if (isSecondary) {
       this._secondaryYScale = yScale;
@@ -369,8 +374,18 @@ export class Widget implements ZoomHandler {
   _calculateYScale(data: Object) {
     let max = 0;
 
+    // Check if data and data.data exist before processing
+    if (!data || !data["data"] || !Array.isArray(data["data"])) {
+      console.warn("_calculateYScale: Invalid data structure", data);
+      // Return a default scale if data is invalid
+      return d3
+        .scaleLinear()
+        .domain([0, 1])
+        .range([this._graphContentHeight, 0]);
+    }
+
     data["data"].forEach((d: TimeValue) => {
-      if (d.value > max) {
+      if (d && typeof d.value === 'number' && d.value > max) {
         max = d.value;
       }
     });
@@ -424,6 +439,11 @@ export class Widget implements ZoomHandler {
     yScale: d3.ScaleLinear<number, number>,
     isSecondary: boolean
   ) {
+    // Check if data is valid and has required properties
+    if (!data || typeof data !== 'object' || !data["info_type"] || !data["data"] || !Array.isArray(data["data"])) {
+      console.warn("_renderDataCurve: Invalid data structure", data);
+      return;
+    }
     const canvas = d3.select(svg);
     const className = `curve-${data["info_type"]}`;
     canvas.selectAll(`.${className}`).remove();
@@ -439,7 +459,10 @@ export class Widget implements ZoomHandler {
 
     const pathData = [];
     data["data"].forEach((d: TimeValue) => {
-      pathData.push([d.time, d.value]);
+      // pathData.push([d.time, d.value]);
+      if (d && typeof d.time === 'number' && typeof d.value === 'number') {
+        pathData.push([d.time, d.value]);
+      }
     });
 
     const line = d3

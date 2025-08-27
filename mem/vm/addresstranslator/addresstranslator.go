@@ -33,26 +33,16 @@ type Comp struct {
 	translationPort sim.Port
 	ctrlPort        sim.Port
 
-	addressToPortMapper mem.AddressToPortMapper
-	translationProvider sim.RemotePort
-	log2PageSize        uint64
-	deviceID            uint64
-	numReqPerCycle      int
+	log2PageSize          uint64
+	deviceID              uint64
+	numReqPerCycle        int
+	memoryPortMapper      mem.AddressToPortMapper
+	translationPortMapper mem.AddressToPortMapper
 
 	isFlushing bool
 
 	transactions        []*transaction
 	inflightReqToBottom []reqToBottom
-}
-
-// SetTranslationProvider sets the remote port that can translate addresses.
-func (c *Comp) SetTranslationProvider(p sim.RemotePort) {
-	c.translationProvider = p
-}
-
-// SetAddressToPortMapper sets the table recording where to find an address.
-func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
-	c.addressToPortMapper = lmf
 }
 
 func (c *Comp) Tick() bool {
@@ -106,7 +96,7 @@ func (m *middleware) translate() bool {
 
 	transReq := vm.TranslationReqBuilder{}.
 		WithSrc(m.translationPort.AsRemote()).
-		WithDst(m.translationProvider).
+		WithDst(m.translationPortMapper.Find(vAddr)).
 		WithPID(req.GetPID()).
 		WithVAddr(vPageID).
 		WithDeviceID(m.deviceID).
@@ -312,7 +302,7 @@ func (m *middleware) createTranslatedReadReq(
 	addr := page.PAddr + offset
 	clone := mem.ReadReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressToPortMapper.Find(addr)).
+		WithDst(m.memoryPortMapper.Find(addr)).
 		WithAddress(addr).
 		WithByteSize(req.AccessByteSize).
 		WithPID(0).
@@ -331,7 +321,7 @@ func (m *middleware) createTranslatedWriteReq(
 	addr := page.PAddr + offset
 	clone := mem.WriteReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressToPortMapper.Find(addr)).
+		WithDst(m.memoryPortMapper.Find(addr)).
 		WithData(req.Data).
 		WithDirtyMask(req.DirtyMask).
 		WithAddress(addr).

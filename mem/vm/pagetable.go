@@ -41,6 +41,7 @@ func NewPageTable(log2PageSize uint64) PageTable {
 // pageTableImpl is the default implementation of a Page Table
 type pageTableImpl struct {
 	sync.Mutex
+
 	log2PageSize uint64
 	tables       map[PID]*processTable
 }
@@ -96,6 +97,7 @@ func (pt *pageTableImpl) Update(page Page) {
 
 type processTable struct {
 	sync.Mutex
+
 	entries      *list.List
 	entriesTable map[uint64]*list.Element
 }

@@ -82,6 +82,7 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	}
 
 	trans := &signal.Transaction{}
+
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
 		trans.Read = msg
@@ -124,6 +125,7 @@ func (m *middleware) assignTransInternalAddress(trans *signal.Transaction) {
 	if m.addrConverter != nil {
 		trans.InternalAddress = m.addrConverter.ConvertExternalToInternal(
 			trans.GlobalAddress())
+
 		return
 	}
 

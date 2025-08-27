@@ -10,6 +10,28 @@ If MGPUSim is used, collecting traces is as simple as adding a command line argu
 
 If you are developing a new simulator, you need to instrument your simulator with the `tracing` APIs. Please refer to the `tracing` APIs in [github.com/sarchlab/akita/tracing](../tracing) for more details. Then, a DB tracer will need to be attached to the components that may generate visualization traces. 
 
+### [Optional] Enable Daisen Bot
+
+1. To enable the Daisen Bot feature, you need to provide your OpenAI API credentials.  
+Please create or update a file named `.env` in the `akita/daisen` directory with the following contents:
+```
+OPENAI_URL="https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL="gpt-4o"
+OPENAI_API_KEY="Bearer sk-proj-XXXXXXXXXXXX"
+```
+Note: Replace `sk-proj-XXXXXXXXXXXX` with your actual OpenAI API key. The `.env` file is required for Daisen Bot to function properly.
+
+2. (Optional) If you want to enable GitHub REST API access for retrieving the source code of MGPUSim and Akita, you will need a GitHub Personal Access Token (PAT).
+On GitHub, go to Settings -> Developer settings -> Personal access tokens -> Tokens (classic) -> Generate new token (classic).
+Grant only the repo -> public_repo scope (since MGPUSim and Akita are publicly released).
+Add the following line below your OpenAI credentials in `.env`:
+```
+GITHUB_PERSONAL_ACCESS_TOKEN="Bearer ghp_XXXXXXXXXXXX"" 
+```
+Note: This GitHub PAT is optional and only required if you plan to attach source code within DaisenBot.
+
+
+
 ### Build Server
 
 In the `github.com/sarchlab/akita/daisen` directory, run `go build`. The `daisen` executable will be generated.
