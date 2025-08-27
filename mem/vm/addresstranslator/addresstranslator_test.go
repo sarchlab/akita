@@ -53,6 +53,10 @@ var _ = Describe("Address Translator", func() {
 			AsRemote().
 			Return(sim.RemotePort("TranslationPort")).
 			AnyTimes()
+		translationPort.EXPECT().
+			Name().
+			Return("TranslationPort").
+			AnyTimes()
 		memoryPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		translationPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
