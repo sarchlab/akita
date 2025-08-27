@@ -76,7 +76,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 			tracer.AddMilestone(milestone3) // Same time, different milestone - should be ignored
 
 			task := tracer.tracingTasks["task1"]
-			Expect(task.Milestones).To(HaveLen(1), "Only the first milestone should be recorded when multiple occur at the same time")
+			Expect(task.Milestones).To(HaveLen(1), "Only first milestone should be recorded at same time")
 			Expect(task.Milestones[0].ID).To(Equal("milestone1"))
 			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100.0)))
 		})
