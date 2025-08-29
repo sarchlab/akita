@@ -107,14 +107,6 @@ func (m *middleware) translate() bool {
 		return false
 	}
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.translationPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
-	)
-
 	translation := &transaction{
 		incomingReqs:   []mem.AccessReq{req},
 		translationReq: transReq,
@@ -150,14 +142,6 @@ func (m *middleware) parseTranslation() bool {
 	transaction.translationRsp = transRsp
 	transaction.translationDone = true
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(transRsp, m.Comp),
-		tracing.MilestoneKindTranslation,
-		m.translationPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
-	)
-
 	reqFromTop := transaction.incomingReqs[0]
 	translatedReq := m.createTranslatedReq(
 		reqFromTop,
@@ -168,6 +152,9 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(translatedReq, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
 		m.bottomPort.Name(),
 		m.Comp.Name(),
 		m.Comp,
@@ -183,6 +170,14 @@ func (m *middleware) parseTranslation() bool {
 	if len(transaction.incomingReqs) == 0 {
 		m.removeExistingTranslation(transaction)
 	}
+
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
+		tracing.MilestoneKindTranslation,
+		"translation",
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	m.translationPort.RetrieveIncoming()
 
