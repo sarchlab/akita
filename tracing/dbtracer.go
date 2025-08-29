@@ -114,6 +114,10 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 		if sameMilestone(existingMilestone, milestone) {
 			return
 		}
+		// Only record the first milestone if multiple milestones occur at the same time
+		if existingMilestone.Time == milestone.Time {
+			return
+		}
 	}
 
 	task.Milestones = append(task.Milestones, milestone)
