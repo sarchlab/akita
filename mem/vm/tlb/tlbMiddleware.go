@@ -145,13 +145,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
-		tracing.MilestoneKindData,
-		m.Comp.Name()+".MSHR",
-		m.Comp.Name(),
-		m.Comp,
-	)
 	rspToTop := vm.TranslationRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
 		WithDst(req.Src).
@@ -187,13 +180,6 @@ func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)
 	}
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
-		tracing.MilestoneKindData,
-		m.Comp.Name()+".MSHR",
-		m.Comp.Name(),
-		m.Comp,
-	)
 	setID := m.vAddrToSetID(req.VAddr)
 	set := m.sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
@@ -201,13 +187,6 @@ func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
 	if found && page.Valid {
 		return m.handleTranslationHit(req, setID, wayID, page)
 	}
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
-		tracing.MilestoneKindDependency,
-		m.Comp.Name()+".Sets",
-		m.Comp.Name(),
-		m.Comp,
-	)
 	return m.handleTranslationMiss(req)
 }
 
@@ -222,6 +201,14 @@ func (m *tlbMiddleware) handleTranslationHit(
 	}
 	m.visit(setID, wayID)
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindData,
+		m.Comp.Name()+".Sets",
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
 	tracing.TraceReqComplete(req, m.Comp)
@@ -233,15 +220,17 @@ func (m *tlbMiddleware) handleTranslationMiss(
 	req *vm.TranslationReq,
 ) bool {
 	if m.mshr.IsFull() {
-		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(req, m.Comp),
-			tracing.MilestoneKindHardwareResource,
-			m.Comp.Name()+".MSHR",
-			m.Comp.Name(),
-			m.Comp,
-		)
 		return false
 	}
+	
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindHardwareResource,
+		m.Comp.Name()+".MSHR",
+		m.Comp.Name(),
+		m.Comp,
+	)
+	
 	fetched := m.fetchBottom(req)
 	if fetched {
 		tracing.TraceReqReceive(req, m.Comp)
@@ -432,6 +421,7 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 		m.Comp.Name(),
 		m.Comp,
 	)
+
 	for _, vAddr := range req.VAddr {
 		setID := m.vAddrToSetID(vAddr)
 		set := m.sets[setID]
