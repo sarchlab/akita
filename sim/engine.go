@@ -25,4 +25,8 @@ type Engine interface {
 
 	// Continue will continue the paused simulation
 	Continue()
+
+	// SetRunUntilTime sets a time limit for the simulation. The Run method
+	// will return when this time is reached.
+	SetRunUntilTime(until VTimeInSec)
 }

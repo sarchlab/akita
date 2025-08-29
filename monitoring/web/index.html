@@ -42,6 +42,28 @@
                 </button>
                 <label id="now-label" class="input-group-text">
                 </label>
+                <div class="dropdown">
+                    <button id="step-dropdown-button" class="btn btn-secondary" type="button">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div id="step-panel" class="dropdown-menu p-3" style="display: none; position: absolute; top: 100%; right: 0; width: 300px; background: white; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 1000;">
+                        <div class="mb-3">
+                            <label class="form-label">Step Length</label>
+                            <div class="input-group">
+                                <input type="number" id="step-amount" class="form-control" value="1" min="0" step="any">
+                                <select id="step-unit" class="form-select">
+                                    <option value="ns" selected>ns</option>
+                                    <option value="us">μs</option>
+                                    <option value="ms">ms</option>
+                                    <option value="s">s</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button id="step-button" class="btn btn-success">
+                            <i class="fas fa-step-forward"></i> Step
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
