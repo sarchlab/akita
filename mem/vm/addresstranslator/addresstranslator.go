@@ -168,10 +168,7 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(translatedReq, m.Comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.translationPort.Name(),
+		m.bottomPort.Name(),
 		m.Comp.Name(),
 		m.Comp,
 	)
