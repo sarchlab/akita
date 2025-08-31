@@ -47,6 +47,43 @@ class App {
         });
 
         listComponents(this.monitor)
+
+        // --- Trace Toggle Button Logic ---
+        const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement;
+
+        // Fetch the initial tracing status from the backend
+        fetch("/api/trace/is_tracing")
+            .then((response) => response.json())
+            .then((data) => {
+                let tracing = data.isTracing; // Initialize tracing state
+
+                function updateTraceBtn(tracing: boolean) {
+                    const iconStyle = 'width: 24px; height: 24px; margin-right: 8px; background-color: transparent; border: none; filter: brightness(0) invert(1);';
+                    if (tracing) {
+                        traceBtn.classList.add("btn-danger");
+                        traceBtn.classList.remove("btn-success");
+                        traceBtn.innerHTML = `<img src="stop-button.png" alt="Stop Icon" style="${iconStyle}"> Stop`;
+                    } else {
+                        traceBtn.classList.add("btn-success");
+                        traceBtn.classList.remove("btn-danger");
+                        traceBtn.innerHTML = `<img src="play-button.png" alt="Play Icon" style="${iconStyle}"> Start`;
+                    }
+                }
+
+                updateTraceBtn(tracing);
+
+                // Add click event listener to toggle tracing
+                traceBtn.addEventListener("click", async () => {
+                    if (tracing) {
+                        await fetch("/api/trace/end", { method: "POST" });
+                        tracing = false;
+                    } else {
+                        await fetch("/api/trace/start", { method: "POST" });
+                        tracing = true;
+                    }
+                    updateTraceBtn(tracing);
+                });
+            });
     }
 }
 
