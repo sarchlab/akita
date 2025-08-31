@@ -50,43 +50,41 @@ class App {
         // --- Trace Toggle Button Logic ---
         const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement;
 
-        // Helper to update button UI
-        function updateTraceBtn(tracing: boolean) {
-            if (tracing) {
-                traceBtn.classList.remove("btn-success");
-                traceBtn.classList.add("btn-danger");
-                traceBtn.textContent = "Stop";
-            } else {
-                traceBtn.classList.remove("btn-danger");
-                traceBtn.classList.add("btn-success");
-                traceBtn.textContent = "Start";
-            }
-        }
-
         // Fetch the initial tracing status from the backend
         fetch("/api/trace/is_tracing")
             .then((response) => response.json())
             .then((data) => {
-                // Initialize button format based on backend response
-                updateTraceBtn(data.isTracing);
+                let tracing = data.isTracing; // Initialize tracing state
+
+                function updateTraceBtn(tracing: boolean) {
+                    const iconStyle = 'width: 24px; height: 24px; margin-right: 8px; background-color: transparent; border: none; filter: brightness(0) invert(1);';
+                    if (tracing) {
+                        traceBtn.classList.add("btn-danger");
+                        traceBtn.classList.remove("btn-success");
+                        traceBtn.innerHTML = `<img src="stop-button.png" alt="Stop Icon" style="${iconStyle}"> Stop`;
+                    } else {
+                        traceBtn.classList.add("btn-success");
+                        traceBtn.classList.remove("btn-danger");
+                        traceBtn.innerHTML = `<img src="play-button.png" alt="Play Icon" style="${iconStyle}"> Start`;
+                    }
+                }
+
+                updateTraceBtn(tracing);
 
                 // Add click event listener to toggle tracing
                 traceBtn.addEventListener("click", async () => {
-                    if (data.isTracing) {
+                    if (tracing) {
                         await fetch("/api/trace/end", { method: "POST" });
-                        data.isTracing = false;
+                        tracing = false;
                     } else {
                         await fetch("/api/trace/start", { method: "POST" });
-                        data.isTracing = true;
+                        tracing = true;
                     }
-                    updateTraceBtn(data.isTracing);
+                    updateTraceBtn(tracing);
                 });
-            })
-            .catch((error) => {
-                console.error("Failed to fetch tracing status:", error);
             });
     }
 }
 
 const app = new App();
-app.start();
+app.start()

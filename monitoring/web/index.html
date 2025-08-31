@@ -10,10 +10,14 @@
         <a class="navbar-brand" href="/">AkitaRTM 528 v433</a>
 
         <div class="btn-toolbar my-2 my-lg-0">
+            <!-- Button to control stop tracing. Shows 'Stop' at first. -->
+            <button id="trace-toggle-btn" class="btn btn-danger" type="button">
+                <img src="stop-button.png" alt="Stop Icon" style="width: 24px; height: 24px; margin-right: 8px; background-color: transparent; border: none; filter: brightness(0) invert(1);">
+                Stop
+            </button>
+            
             <div class="btn-group me-3 ms-3" role="group">
 
-                <!-- Button to control stop tracing. Shows 'Stop' at first. -->
-                <button id="trace-toggle-btn" class="btn btn-danger" type="button">Stop</button>
 
                 <button class="btn btn-primary" type="button">
                     <span class="resource-type">CPU</span>
