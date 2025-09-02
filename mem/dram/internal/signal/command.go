@@ -51,6 +51,7 @@ func (k CommandKind) String() string {
 // action.
 type Command struct {
 	addressmapping.Location
+
 	ID        string
 	Kind      CommandKind
 	Address   uint64

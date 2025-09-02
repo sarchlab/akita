@@ -355,4 +355,27 @@ body {
   font-weight: bold;
 }
  
+.code-block {
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+  overflow-x: auto;
+}
 
+.inline-code {
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+}
+
+/* Add this to your injected CSS */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
