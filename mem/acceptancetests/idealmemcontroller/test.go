@@ -13,7 +13,7 @@ import (
 
 	"log"
 
-	"github.com/sarchlab/akita/v4/mem/acceptancetests"
+	"github.com/sarchlab/akita/v4/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v4/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/trace"
@@ -27,7 +27,7 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var traceFileFlag = flag.String("trace", "", "Trace file")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-func setupTest() (sim.Engine, *acceptancetests.MemAccessAgent) {
+func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	var engine sim.Engine
 	if *parallelFlag {
 		engine = sim.NewParallelEngine()
@@ -42,10 +42,13 @@ func setupTest() (sim.Engine, *acceptancetests.MemAccessAgent) {
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	agent := acceptancetests.NewMemAccessAgent(engine)
-	agent.MaxAddress = *maxAddressFlag
-	agent.WriteLeft = *numAccessFlag
-	agent.ReadLeft = *numAccessFlag
+	agent := memaccessagent.MakeBuilder().
+		WithEngine(engine).
+		WithMaxAddress(*maxAddressFlag).
+		WithWriteLeft(*numAccessFlag).
+		WithReadLeft(*numAccessFlag).
+		Build("MemAccessAgent")
+
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).

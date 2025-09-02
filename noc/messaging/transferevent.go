@@ -5,6 +5,7 @@ import "github.com/sarchlab/akita/v4/sim"
 // A TransferEvent is an event that marks that a message completes transfer.
 type TransferEvent struct {
 	*sim.EventBase
+
 	msg sim.Msg
 	vc  int
 }
