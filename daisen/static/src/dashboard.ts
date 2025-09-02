@@ -10,6 +10,7 @@ class YAxisOption {
 }
 
 class Dashboard extends ChatPanel {
+class Dashboard extends ChatPanel {
   _canvas: HTMLDivElement;
   _pageBtnContainer: HTMLDivElement;
   _toolBar: HTMLFormElement;
@@ -47,8 +48,24 @@ class Dashboard extends ChatPanel {
   // _attachRepoChecks: { [key: string]: boolean } = {};
   // _githubIsAvailableResponse: { available: number; routine_keys: string[] } | null = null;
 
+  _showChatButton: boolean = true; // Add this flag to control the right chat button visibility
+  _originalCanvasWidth: string = ""; // Store the original width of the canvas before shrinking
+  _handleResize: () => void;
+  // _chatMessages: { role: "user" | "assistant" | "system"; content: string }[] = [
+  //   { role: "system", content: "You are Daisen Bot." }
+  // ];  // Make the message history global
+  // _uploadedFiles: { id: number; name: string; content: string; size: string }[] = [];
+  // _fileUploadBtn: HTMLButtonElement;
+  // _fileIdCounter: number;
+  // _fileListRow: HTMLDivElement; // Add this to hold the file list container
+
+  // _attachRepoVisible: boolean = false;
+  // _attachRepoChecks: { [key: string]: boolean } = {};
+  // _githubIsAvailableResponse: { available: number; routine_keys: string[] } | null = null;
+
 
   constructor() {
+    super();
     super();
     this._numWidget = 16;
     this._numRow = 4;
@@ -192,6 +209,61 @@ class Dashboard extends ChatPanel {
     // console.log("this._startTime:", this._startTime, "this._endTime:", this._endTime);
   }
 
+  protected _onChatPanelOpen() {
+    // this._resize();
+    // this._renderPage();
+    // this._addPaginationControl();
+    this._showChatButton = false;
+    this._addPaginationControl();
+
+    // Store the original width before shrinking
+    const canvasContainer = this._canvas;
+    // let originalCanvasWidth = "";
+    if (canvasContainer) {
+      this._originalCanvasWidth = canvasContainer.style.width;
+      canvasContainer.style.transition = "width 0.3s cubic-bezier(.4,0,.2,1)";
+      canvasContainer.style.width = "calc(100% - 600px)";
+      this._getChatPanelWidth();
+      setTimeout(() => {
+        this._resize();
+        this._renderPage();
+      }, 300);
+    }
+
+    this._handleResize = () => {
+      //Adjust chat panel height and top
+      const innerContainer = document.getElementById("inner-container");
+      if (innerContainer) {
+        const rect = innerContainer.getBoundingClientRect();
+        this._chatPanel.style.top = rect.top + "px";
+        this._chatPanel.style.height = rect.height + "px";
+      } else {
+        this._chatPanel.style.top = "0";
+        this._chatPanel.style.height = "100vh";
+      }
+      // Shrink canvas again (in case window size changed)
+      if (canvasContainer) {
+        canvasContainer.style.width = "calc(100% - 600px)";
+      }
+      // Re-render widgets
+      this._resize();
+      this._renderPage();
+    }
+
+    window.addEventListener("resize", this._handleResize);
+  }
+
+  protected _setTraceComponentNames() {
+    this._traceStartTime = this._startTime;
+    this._traceEndTime = this._endTime;
+    this._traceAllComponentNames = this._componentNames;
+    this._traceCurrentComponentNames = this._filteredNames.slice(this._currPage * this._numRow * this._numCol, (this._currPage + 1) * this._numRow * this._numCol);
+    // console.log("_traceCurrentComponentNames:", this._traceCurrentComponentNames.length, this._traceCurrentComponentNames);
+    // console.log("this._numCol:", this._numCol, "this._numRow:", this._numRow);
+    // console.log("_currPage:", this._currPage, "this._numWidget:", this._numWidget);
+    // console.log("this._startTime:", this._startTime, "this._endTime:", this._endTime);
+  }
+
   _updateNavbarVisibility() {
     if (window.innerWidth <= 1365) {
       this._toolBar.style.display = 'none';
@@ -246,6 +318,7 @@ class Dashboard extends ChatPanel {
     if (width - this._chatPanelWidth < 1000) { // if (width < 800) {
       this._numCol = 2;
     }
+    // console.log(width, height);
     // console.log(width, height);
   }
 
@@ -459,8 +532,11 @@ class Dashboard extends ChatPanel {
       .then(([simulation, compNames]) => {
         console.log("simulation[0]:", simulation[0]);
         console.log("compNames:", compNames);
+        console.log("simulation[0]:", simulation[0]);
+        console.log("compNames:", compNames);
         simulation = simulation[0];
 
+        // compNames.sort();
         // compNames.sort();
 
         this._componentNames = compNames;
@@ -710,12 +786,50 @@ class Dashboard extends ChatPanel {
     paginationContainer.appendChild(chatButton);
     // paginationContainer.appendChild(closeBtn);
 
+    paginationContainer.style.display = "flex";
+    paginationContainer.style.alignItems = "center";
+    paginationContainer.style.justifyContent = "space-between";
+    paginationContainer.style.position = "relative";
+    paginationContainer.style.width = "100%";
+    paginationContainer.style.minHeight = "60px";
+
+    // Left: nav + pageInfo, Right: button
+    const leftContainer = document.createElement("div");
+    leftContainer.style.display = "flex";
+    leftContainer.style.alignItems = "center";
+    leftContainer.style.flex = "1";
+    leftContainer.style.justifyContent = "center";
+    leftContainer.appendChild(nav);
+    leftContainer.appendChild(pageInfo);
+
+    // When chat panel is open, shift leftContainer right by 600px
+    if (!this._showChatButton) {
+      leftContainer.style.marginLeft = "600px";
+    } else {
+      leftContainer.style.marginLeft = "0";
+    }
+
+    // Absolutely position the chat button to the right
+    chatButton.style.position = "absolute";
+    chatButton.style.right = "0";
+    chatButton.style.top = "50%";
+    chatButton.style.transform = "translateY(-50%)";
+    chatButton.style.zIndex = "2";
+
+    paginationContainer.appendChild(leftContainer);
+    paginationContainer.appendChild(chatButton);
+    // paginationContainer.appendChild(closeBtn);
+
     if (this._canvas.querySelector('.pagination-container')) {
       this._canvas.removeChild(this._canvas.querySelector('.pagination-container'));
     }
     this._canvas.appendChild(paginationContainer);
     this._addPageButtons(ul);
   }
+  
+  
+
+  
   
   
 
