@@ -10,10 +10,6 @@ import (
 )
 
 type taskTableEntry struct {
-	TableName    string  `json:"table_name"`
-	SessionStart float64 `json:"start_time"` //trace session的全局时间
-	SessionEnd   float64 `json:"end_time"`
-
 	ID        string  `json:"id" akita_data:"unique"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
@@ -21,6 +17,13 @@ type taskTableEntry struct {
 	Location  string  `json:"location" akita_data:"index"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
 	EndTime   float64 `json:"end_time" akita_data:"index"` //task的时间
+}
+
+// traceIndexEntry 是trace表的索引结构，只包含session信息
+type traceIndexEntry struct {
+	TableName    string  `json:"table_name" akita_data:"unique"`
+	SessionStart float64 `json:"session_start" akita_data:"index"`
+	SessionEnd   float64 `json:"session_end" akita_data:"index"`
 }
 
 // DBTracer is a tracer that can store tasks into a database.
@@ -131,6 +134,7 @@ func (t *DBTracer) EndTask(task Task) {
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
 
+	// 将任务写入对应的task表
 	taskTable := taskTableEntry{
 		ID:        originalTask.ID,
 		ParentID:  originalTask.ParentID,
@@ -140,8 +144,7 @@ func (t *DBTracer) EndTask(task Task) {
 		StartTime: float64(originalTask.StartTime),
 		EndTime:   float64(originalTask.EndTime),
 	}
-
-	t.backend.InsertData("trace", taskTable)
+	t.backend.InsertData(t.currentTableName, taskTable)
 }
 
 // Terminate terminates the tracer.
@@ -157,7 +160,7 @@ func (t *DBTracer) Terminate() {
 			StartTime: float64(task.StartTime),
 			EndTime:   float64(task.EndTime),
 		}
-		t.backend.InsertData("trace", taskTable)
+		t.backend.InsertData(t.currentTableName, taskTable)
 	}
 
 	t.tracingTasks = nil
@@ -170,7 +173,7 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable("trace", taskTableEntry{}) // 挪到start 默认不开始（没有trace vis flag就不开始
+	dataRecorder.CreateTable("trace", traceIndexEntry{}) // 使用索引结构
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
 
 	t := &DBTracer{
@@ -199,6 +202,15 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 	defer t.mu.Unlock()
 	t.isTracingFlag = false
 	t.sessionEndTime = t.timeTeller.CurrentTime() // t.sessionEndTime 类型为 sim.VTimeInSec
+
+	// 写入索引信息到trace表
+	traceIndex := traceIndexEntry{
+		TableName:    t.currentTableName,
+		SessionStart: float64(t.sessionStartTime),
+		SessionEnd:   float64(t.sessionEndTime),
+	}
+	t.backend.InsertData("trace", traceIndex)
+
 	for _, task := range t.tracingTasks {
 		taskEnd := task.EndTime
 		if taskEnd == 0 {
@@ -207,16 +219,13 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 		// 判断任务与session是否有重叠（全部用sim.VTimeInSec类型）
 		if task.StartTime <= t.sessionEndTime && taskEnd >= t.sessionStartTime {
 			taskTable := taskTableEntry{
-				TableName:    t.currentTableName,
-				SessionStart: float64(t.sessionStartTime),
-				SessionEnd:   float64(t.sessionEndTime),
-				ID:           task.ID,
-				ParentID:     task.ParentID,
-				Kind:         task.Kind,
-				What:         task.What,
-				Location:     task.Location,
-				StartTime:    float64(task.StartTime),
-				EndTime:      float64(taskEnd),
+				ID:        task.ID,
+				ParentID:  task.ParentID,
+				Kind:      task.Kind,
+				What:      task.What,
+				Location:  task.Location,
+				StartTime: float64(task.StartTime),
+				EndTime:   float64(taskEnd),
 			}
 			t.backend.InsertData(t.currentTableName, taskTable)
 		}
