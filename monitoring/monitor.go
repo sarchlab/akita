@@ -569,3 +569,64 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 	_, err := w.Write([]byte(backend))
 	dieOnErr(err)
 }
+<<<<<<< HEAD
+=======
+
+// --- VisTracer API handlers ---
+func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/start triggered")
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the EnableTracing() method of DBTracer
+	m.tracer.EnableTracing()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"started"}`))
+}
+
+func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/end triggered")
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+	m.tracer.StopTracingAtCurrentTime()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"ended"}`))
+}
+
+// 改完了
+func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
+	// Check if tracing is enabled based on *visTracing and the tracer state
+	fmt.Println("/api/trace/is_tracing triggered")
+
+	var isTracing bool
+	if m.tracer != nil {
+		isTracing = m.tracer.IsTracing() // Call the IsTracing flag of DBTracer Go 语言的导出规则：只有首字母大写的字段或方法才可以被包外访问
+		fmt.Println("isTracing:", isTracing)
+	} else {
+		fmt.Println("tracer is nil - returning false")
+		isTracing = false
+	}
+	response := map[string]bool{"isTracing": isTracing}
+
+	// Write the response as JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/file_size triggered")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"file_size":123456}`))
+}
+>>>>>>> 19da771 (add rotate_icon in default condition)
