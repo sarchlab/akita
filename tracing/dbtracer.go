@@ -10,7 +10,7 @@ import (
 )
 
 type taskTableEntry struct {
-	ID        string  `json:"id" akita_data:"unique"`
+	ID        string  `json:"id" akita_data:"index"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
@@ -43,25 +43,8 @@ type DBTracer struct {
 	currentTableName string
 	sessionStartTime sim.VTimeInSec
 	sessionEndTime   sim.VTimeInSec
-}
 
-// EnableTracing manually enables tracing.
-func (t *DBTracer) EnableTracing() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.isTracingFlag = true
-	t.traceCount++
-	t.sessionStartTime = t.timeTeller.CurrentTime()
-	t.sessionEndTime = 0
-	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
-	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
-}
-
-// DisableTracing manually disables tracing.
-func (t *DBTracer) DisableTracing() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.isTracingFlag = false
+	batchBuffer []taskTableEntry // 预分配缓冲区
 }
 
 // to check later
@@ -132,39 +115,24 @@ func (t *DBTracer) EndTask(task Task) {
 	}
 
 	originalTask.EndTime = task.EndTime
-	delete(t.tracingTasks, task.ID)
 
-	// 将任务写入对应的task表
-	taskTable := taskTableEntry{
-		ID:        originalTask.ID,
-		ParentID:  originalTask.ParentID,
-		Kind:      originalTask.Kind,
-		What:      originalTask.What,
-		Location:  originalTask.Location,
-		StartTime: float64(originalTask.StartTime),
-		EndTime:   float64(originalTask.EndTime),
+	// Write immediately if tracing is enabled
+	if t.isTracingFlag && t.currentTableName != "" {
+		t.writeTaskToDB(originalTask)
 	}
-	t.backend.InsertData(t.currentTableName, taskTable)
+
+	// Remove from memory immediately
+	delete(t.tracingTasks, task.ID)
 }
 
 // Terminate terminates the tracer.
 func (t *DBTracer) Terminate() {
-	for _, task := range t.tracingTasks {
-		task.EndTime = t.timeTeller.CurrentTime()
-		taskTable := taskTableEntry{
-			ID:        task.ID,
-			ParentID:  task.ParentID,
-			Kind:      task.Kind,
-			What:      task.What,
-			Location:  task.Location,
-			StartTime: float64(task.StartTime),
-			EndTime:   float64(task.EndTime),
-		}
-		t.backend.InsertData(t.currentTableName, taskTable)
-	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// do not write anything
 
 	t.tracingTasks = nil
-
 	t.backend.Flush()
 }
 
@@ -173,13 +141,14 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable("trace", traceIndexEntry{}) // 使用索引结构
+	dataRecorder.CreateTable("trace", traceIndexEntry{})
 	dataRecorder.CreateTable("trace_milestones", Milestone{})
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
-		tracingTasks: make(map[string]Task), //已经开始还没结束的任务
+		tracingTasks: make(map[string]Task),
+		batchBuffer:  make([]taskTableEntry, 0, 1000),
 	}
 
 	atexit.Register(func() {
@@ -195,15 +164,33 @@ func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 	t.endTime = endTime
 }
 
+// EnableTracing manually enables tracing.
+func (t *DBTracer) EnableTracing() {
+	print("Enable tracing at current time...\n")
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// 清除之前的内存
+	t.tracingTasks = make(map[string]Task)
+
+	t.isTracingFlag = true
+	t.traceCount++
+	t.sessionStartTime = t.timeTeller.CurrentTime()
+	t.sessionEndTime = 0
+	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
+	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
+}
+
 // StopTracingAtCurrentTime stops tracing and finalizes tasks.
 func (t *DBTracer) StopTracingAtCurrentTime() {
 	print("Stopping tracing at current time...\n")
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.isTracingFlag = false
-	t.sessionEndTime = t.timeTeller.CurrentTime() // t.sessionEndTime 类型为 sim.VTimeInSec
 
-	// 写入索引信息到trace表
+	t.isTracingFlag = false
+	t.sessionEndTime = t.timeTeller.CurrentTime()
+
+	// Write session index
 	traceIndex := traceIndexEntry{
 		TableName:    t.currentTableName,
 		SessionStart: float64(t.sessionStartTime),
@@ -211,24 +198,41 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 	}
 	t.backend.InsertData("trace", traceIndex)
 
+	// Write ongoing tasks
+	t.batchWriteOngoingTasks()
+
+	// Clear memory
+	t.tracingTasks = make(map[string]Task)
+	t.backend.Flush()
+}
+
+// 提取公共方法
+func (t *DBTracer) writeTaskToDB(task Task) {
+	taskTable := taskTableEntry{
+		ID:        task.ID,
+		ParentID:  task.ParentID,
+		Kind:      task.Kind,
+		What:      task.What,
+		Location:  task.Location,
+		StartTime: float64(task.StartTime),
+		EndTime:   float64(task.EndTime),
+	}
+	t.backend.InsertData(t.currentTableName, taskTable)
+}
+
+// batchWriteOngoingTasks efficiently writes all ongoing tasks in batches
+func (t *DBTracer) batchWriteOngoingTasks() {
+	if !t.isTracingFlag || t.currentTableName == "" {
+		return
+	}
+
+	// 直接写入，不需要额外的缓冲区
 	for _, task := range t.tracingTasks {
-		taskEnd := task.EndTime
-		if taskEnd == 0 {
-			taskEnd = t.sessionEndTime
-		}
-		// 判断任务与session是否有重叠（全部用sim.VTimeInSec类型）
-		if task.StartTime <= t.sessionEndTime && taskEnd >= t.sessionStartTime {
-			taskTable := taskTableEntry{
-				ID:        task.ID,
-				ParentID:  task.ParentID,
-				Kind:      task.Kind,
-				What:      task.What,
-				Location:  task.Location,
-				StartTime: float64(task.StartTime),
-				EndTime:   float64(taskEnd),
-			}
-			t.backend.InsertData(t.currentTableName, taskTable)
+		if task.StartTime <= t.sessionEndTime {
+			// 创建临时任务，设置结束时间
+			tempTask := task
+			tempTask.EndTime = t.sessionEndTime
+			t.writeTaskToDB(tempTask)
 		}
 	}
-	t.backend.Flush()
 }
