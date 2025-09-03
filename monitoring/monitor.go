@@ -625,12 +625,14 @@ func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 		isTracing = m.tracer.IsTracing() // Call the IsTracing flag of DBTracer Go 语言的导出规则：只有首字母大写的字段或方法才可以被包外访问
 		fmt.Println("isTracing:", isTracing)
 	} else {
-		fmt.Println("tracer is nil")
+		fmt.Println("tracer is nil - returning false")
+		isTracing = false
 	}
 	response := map[string]bool{"isTracing": isTracing}
 
 	// Write the response as JSON
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 	json.NewEncoder(w).Encode(response)
 }
 
