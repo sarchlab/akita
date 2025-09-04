@@ -7,7 +7,7 @@ type ChatContent = UnitContent[];
 
 
 export class ChatPanel {
-  _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent }[] = [];
+  _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] }[] = [];
   _uploadedFiles: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] = [];
   _fileUploadBtn: HTMLButtonElement;
   _imageUploadBtn: HTMLButtonElement;
@@ -36,7 +36,7 @@ export class ChatPanel {
   _chatHistory: { 
     id: string; 
     title: string; 
-    messages: { role: "user" | "assistant" | "system"; content: ChatContent }[];
+    messages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] }[];
     timestamp: number;
   }[] = [];
   _currentChatId: string = "";
@@ -626,6 +626,14 @@ GPU.CommandProcessor,9
             }
           });
           userDiv.appendChild(urlDiv);
+
+          // Add file previews underneath URL if files are attached
+          if (m.files && m.files.length > 0) {
+            const filePreviewDiv = renderMessageFiles(m.files);
+            if (filePreviewDiv) {
+              userDiv.appendChild(filePreviewDiv);
+            }
+          }
 
           messagesDiv.appendChild(userDiv);
         } else if (m.role === "assistant") {
@@ -2033,7 +2041,7 @@ GPU.CommandProcessor,9
       userDiv.style.margin = "4px 0";
 
       const userBubble = document.createElement("span");
-      userBubble.innerHTML = "<b>You:</b> " + userMsg;
+      userBubble.innerHTML = "<b>You:</b> " + userMsg; // Show only the actual user message, not the full message with file prefix
       userBubble.style.background = "#0d6efd";
       userBubble.style.color = "white";
       userBubble.style.padding = "8px 12px";
@@ -2062,6 +2070,14 @@ GPU.CommandProcessor,9
       });
       userDiv.appendChild(urlDiv);
 
+      // Add file previews underneath URL if files are attached
+      if (this._uploadedFiles.length > 0) {
+        const filePreviewDiv = renderMessageFiles(this._uploadedFiles);
+        if (filePreviewDiv) {
+          userDiv.appendChild(filePreviewDiv);
+        }
+      }
+
       messagesDiv.appendChild(userDiv);
 
       // Check if this is a "Generate graph." message from the graphTest button
@@ -2070,7 +2086,8 @@ GPU.CommandProcessor,9
         this._graphTestButtonClicked = false;
         
         // Add user message to chat history
-        messages.push({ role: "user", content: [{ type: "text", text: fullMsg }] });
+        const attachedFiles = this._uploadedFiles.length > 0 ? [...this._uploadedFiles] : undefined;
+        messages.push({ role: "user", content: [{ type: "text", text: userMsg }], files: attachedFiles });
         this._chatMessages = messages;
         this._saveChatToHistory();
         
@@ -2157,7 +2174,8 @@ GPU.CommandProcessor,9
         this._subpageTestButtonClicked = false;
 
         // Add user message to chat history
-        messages.push({ role: "user", content: [{ type: "text", text: fullMsg }] });
+        const attachedFiles = this._uploadedFiles.length > 0 ? [...this._uploadedFiles] : undefined;
+        messages.push({ role: "user", content: [{ type: "text", text: userMsg }], files: attachedFiles });
         this._chatMessages = messages;
         this._saveChatToHistory();
         
@@ -2301,7 +2319,9 @@ Kernel Execution,76.68,84.65,7.97`);
       }
 
       // Call GPT with full history
-      messages.push({ role: "user", content: fullContentForAPI });
+      const attachedFiles = this._uploadedFiles.length > 0 ? [...this._uploadedFiles] : undefined;
+      // Store the clean user message for display, but send the full message with files to GPT
+      messages.push({ role: "user", content: [{ type: "text", text: userMsg }], files: attachedFiles });
       this._chatMessages = messages; // Update the instance messages
       this._saveChatToHistory(); // Save the updated chat
       console.log("[Sent to GPT]", fullMsg);
@@ -2349,8 +2369,18 @@ Kernel Execution,76.68,84.65,7.97`);
         endTime: this._traceSelectedEndTime,
         selectedComponentNameList: selectedComponentNameList,
       };
+      
+      // Create a separate message array for GPT that includes the full content with files
+      const gptMessages = [...messages];
+      // Replace the last user message with the full content version for GPT
+      gptMessages[gptMessages.length - 1] = { 
+        role: "user", 
+        content: fullContentForAPI, 
+        files: attachedFiles 
+      };
+      
       const gptRequest: GPTRequest = {
-        messages: messages,
+        messages: gptMessages,
         traceInfo: traceInfo,
         selectedGitHubRoutineKeys: selectedGitHubRoutineKeys
       };
@@ -2763,6 +2793,98 @@ function renderFileList() {
   this._renderBubble(this._screenshotUploadBtn, screenshotCount, "bubble-upload-screenshot");
   // Log current file list with ids after every render
   console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size })));
+}
+
+// Helper function to render message file previews
+function renderMessageFiles(files: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[]) {
+  if (!files || files.length === 0) {
+    return null;
+  }
+
+  const filePreviewContainer = document.createElement("div");
+  filePreviewContainer.style.marginTop = "4px";
+  filePreviewContainer.style.marginBottom = "2px";
+  filePreviewContainer.style.maxWidth = "90%";
+  filePreviewContainer.style.textAlign = "right";
+  
+  files.forEach((file, index) => {
+    const filePreview = document.createElement("div");
+    filePreview.style.display = "flex";
+    filePreview.style.alignItems = "center";
+    filePreview.style.justifyContent = "flex-end";
+    filePreview.style.background = "rgba(240, 242, 245, 0.8)";
+    filePreview.style.border = "1px solid rgba(204, 204, 204, 0.8)";
+    filePreview.style.borderRadius = "4px";
+    filePreview.style.padding = "4px 8px";
+    filePreview.style.marginBottom = index < files.length - 1 ? "2px" : "0";
+    filePreview.style.fontSize = "12px";
+    filePreview.style.color = "#555";
+
+    // Icon
+    const iconSpan = document.createElement("span");
+    iconSpan.style.display = "flex";
+    iconSpan.style.alignItems = "center";
+    iconSpan.style.justifyContent = "center";
+    iconSpan.style.width = "16px";
+    iconSpan.style.height = "16px";
+    iconSpan.style.marginRight = "6px";
+    iconSpan.innerHTML =
+      file.type === "file"
+        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 17H15M9 13H15M9 9H10M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+          </svg>`
+        : file.type === "image"
+        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 11H10M8 18L11 15L13 17L16 14M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+          </svg>`
+        : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19M8 6H10M8 9H10M16 17H14L13 15.5L12 17L10 14L9.5 17H8"/>
+          </svg>`;
+    filePreview.appendChild(iconSpan);
+
+    // File name and size container
+    const fileInfoContainer = document.createElement("div");
+    fileInfoContainer.style.display = "flex";
+    fileInfoContainer.style.alignItems = "center";
+    fileInfoContainer.style.flex = "1";
+    fileInfoContainer.style.minWidth = "0";
+    
+    // File name
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = file.name;
+    nameSpan.style.overflow = "hidden";
+    nameSpan.style.textOverflow = "ellipsis";
+    nameSpan.style.whiteSpace = "nowrap";
+    nameSpan.style.marginRight = "6px";
+    fileInfoContainer.appendChild(nameSpan);
+
+    // File size
+    const sizeSpan = document.createElement("span");
+    sizeSpan.textContent = `(${file.size})`;
+    sizeSpan.style.color = "#888";
+    sizeSpan.style.fontSize = "11px";
+    sizeSpan.style.flexShrink = "0";
+    fileInfoContainer.appendChild(sizeSpan);
+
+    filePreview.appendChild(fileInfoContainer);
+
+    // Add thumbnail for images
+    if (file.type === "image" || file.type === "image-screenshot") {
+      const thumbnail = document.createElement("img");
+      thumbnail.src = file.content;
+      thumbnail.style.width = "32px";
+      thumbnail.style.height = "32px";
+      thumbnail.style.objectFit = "cover";
+      thumbnail.style.borderRadius = "2px";
+      thumbnail.style.marginLeft = "6px";
+      thumbnail.style.border = "1px solid #ddd";
+      filePreview.appendChild(thumbnail);
+    }
+
+    filePreviewContainer.appendChild(filePreview);
+  });
+
+  return filePreviewContainer;
 }
 
 function formatFileSize(size: number): string {
