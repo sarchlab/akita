@@ -14,6 +14,7 @@ type Builder struct {
 	migrationServiceProvider sim.RemotePort
 	maxNumReqInFlight        int
 	pageWalkingLatency       int
+	autoPageAllocation       bool
 }
 
 // MakeBuilder creates a new builder
@@ -70,6 +71,14 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 	return b
 }
 
+// WithAutoPageAllocation enables or disables automatic page allocation.
+// When enabled, the MMU will automatically create page table entries for
+// virtual addresses that don't exist, instead of panicking.
+func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
+	b.autoPageAllocation = enabled
+	return b
+}
+
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *Comp {
 	mmu := new(Comp)
@@ -91,6 +100,8 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 	mmu.migrationQueueSize = 4096
 	mmu.maxRequestsInFlight = b.maxNumReqInFlight
 	mmu.latency = b.pageWalkingLatency
+	mmu.autoPageAllocation = b.autoPageAllocation
+	mmu.log2PageSize = b.log2PageSize
 	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
 }
 

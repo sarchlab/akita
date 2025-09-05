@@ -29,6 +29,8 @@ type Comp struct {
 	pageTable           vm.PageTable
 	latency             int
 	maxRequestsInFlight int
+	autoPageAllocation  bool
+	log2PageSize        uint64
 
 	walkingTranslations      []transaction
 	migrationQueue           []transaction
@@ -95,7 +97,12 @@ func (m *middleware) finalizePageWalk(
 	page, found := m.pageTable.Find(req.PID, req.VAddr)
 
 	if !found {
-		panic("page not found")
+		if m.autoPageAllocation {
+			page = m.createDefaultPage(req.PID, req.VAddr, req.DeviceID)
+			m.pageTable.Insert(page)
+		} else {
+			panic("page not found")
+		}
 	}
 
 	m.walkingTranslations[walkingIndex].page = page
@@ -344,6 +351,28 @@ func unique(intSlice []uint64) []uint64 {
 	}
 
 	return list
+}
+
+func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64) vm.Page {
+	// Align virtual address to page boundary
+	alignedVAddr := (vAddr >> m.log2PageSize) << m.log2PageSize
+	pageSize := uint64(1) << m.log2PageSize
+	
+	// For now, we use the virtual address as physical address
+	// In a real system, this would come from a physical memory allocator
+	pAddr := alignedVAddr
+	
+	return vm.Page{
+		PID:         pid,
+		VAddr:       alignedVAddr,
+		PAddr:       pAddr,
+		PageSize:    pageSize,
+		Valid:       true,
+		DeviceID:    deviceID,
+		Unified:     true,
+		IsMigrating: false,
+		IsPinned:    false,
+	}
 }
 
 func (m *middleware) createMigrationRequest(
