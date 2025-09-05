@@ -66,6 +66,12 @@ func (pt *pageTableImpl) alignToPage(addr uint64) uint64 {
 	return (addr >> pt.log2PageSize) << pt.log2PageSize
 }
 
+// GetLog2PageSize returns the log2 page size for this page table.
+// This method allows the MMU to validate page size consistency.
+func (pt *pageTableImpl) GetLog2PageSize() uint64 {
+	return pt.log2PageSize
+}
+
 // Insert put a new page into the PageTable
 func (pt *pageTableImpl) Insert(page Page) {
 	table := pt.getTable(page.PID)
@@ -93,13 +99,6 @@ func (pt *pageTableImpl) Find(pid PID, vAddr uint64) (Page, bool) {
 func (pt *pageTableImpl) Update(page Page) {
 	table := pt.getTable(page.PID)
 	table.update(page)
-}
-
-// GetLog2PageSize returns the log2 page size of the page table.
-// This method implements the PageSizeGetter interface used by the MMU builder
-// to validate page size consistency.
-func (pt *pageTableImpl) GetLog2PageSize() uint64 {
-	return pt.log2PageSize
 }
 
 type processTable struct {

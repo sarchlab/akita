@@ -103,6 +103,12 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 	mmu.autoPageAllocation = b.autoPageAllocation
 	mmu.log2PageSize = b.log2PageSize
 	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
+	
+	// Initialize physical page allocation tracking
+	if mmu.autoPageAllocation {
+		mmu.nextPhysicalPage = 0
+		mmu.usedPhysicalPages = make(map[uint64]bool)
+	}
 }
 
 func (b Builder) createPageTable(mmu *Comp) {
@@ -118,21 +124,15 @@ func (b Builder) createPageTable(mmu *Comp) {
 // validatePageTablePageSize checks if the provided page table's page size
 // is consistent with the MMU's log2PageSize configuration.
 func (b Builder) validatePageTablePageSize() {
-	// If the page table implements PageSizeGetter, validate the page size
-	if pageSizeGetter, ok := b.pageTable.(PageSizeGetter); ok {
+	// If the page table implements pageSizeGetter, validate the page size
+	if pageSizeGetter, ok := b.pageTable.(pageSizeGetter); ok {
 		pageTableLog2PageSize := pageSizeGetter.GetLog2PageSize()
 		if pageTableLog2PageSize != b.log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}
 	}
-	// For page tables that don't implement PageSizeGetter, we cannot validate
+	// For page tables that don't implement pageSizeGetter, we cannot validate
 	// the page size so we assume the user has ensured compatibility
-}
-
-// PageSizeGetter is an optional interface that page tables can implement
-// to expose their page size for validation purposes.
-type PageSizeGetter interface {
-	GetLog2PageSize() uint64
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {

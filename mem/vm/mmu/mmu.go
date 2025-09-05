@@ -40,22 +40,14 @@ type Comp struct {
 
 	toRemoveFromPTW        []int
 	PageAccessedByDeviceID map[uint64][]uint64
+
+	// Physical page allocation tracking for auto page allocation
+	nextPhysicalPage uint64
+	usedPhysicalPages map[uint64]bool
 }
 
 func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
-}
-
-// IsAutoPageAllocationEnabled returns whether auto page allocation is enabled.
-// This method is primarily for testing purposes.
-func (c *Comp) IsAutoPageAllocationEnabled() bool {
-	return c.autoPageAllocation
-}
-
-// GetPageTable returns the page table used by the MMU.
-// This method is primarily for testing purposes.
-func (c *Comp) GetPageTable() vm.PageTable {
-	return c.pageTable
 }
 
 type middleware struct {
@@ -370,9 +362,8 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 	alignedVAddr := (vAddr >> m.log2PageSize) << m.log2PageSize
 	pageSize := uint64(1) << m.log2PageSize
 	
-	// For now, we use the virtual address as physical address
-	// In a real system, this would come from a physical memory allocator
-	pAddr := alignedVAddr
+	// Allocate the smallest available physical page
+	pAddr := m.allocatePhysicalPage()
 	
 	return vm.Page{
 		PID:         pid,
@@ -384,6 +375,32 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 		Unified:     true,
 		IsMigrating: false,
 		IsPinned:    false,
+	}
+}
+
+// allocatePhysicalPage finds and allocates the smallest available physical page.
+// It returns the physical address of the allocated page.
+func (m *middleware) allocatePhysicalPage() uint64 {
+	pageSize := uint64(1) << m.log2PageSize
+	
+	// Find the smallest available physical page
+	for {
+		// Align to page boundary
+		candidatePage := (m.nextPhysicalPage >> m.log2PageSize) << m.log2PageSize
+		
+		// Check if this page is already in use
+		if !m.usedPhysicalPages[candidatePage] {
+			// Mark this page as used
+			m.usedPhysicalPages[candidatePage] = true
+			
+			// Update next physical page for future allocations
+			m.nextPhysicalPage = candidatePage + pageSize
+			
+			return candidatePage
+		}
+		
+		// Move to next page
+		m.nextPhysicalPage += pageSize
 	}
 }
 
