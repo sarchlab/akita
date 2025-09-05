@@ -104,7 +104,6 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 	mmu.log2PageSize = b.log2PageSize
 	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
 	
-	// Initialize physical page allocation tracking
 	if mmu.autoPageAllocation {
 		mmu.nextPhysicalPage = 0
 		mmu.usedPhysicalPages = make(map[uint64]bool)

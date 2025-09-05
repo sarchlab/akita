@@ -107,6 +107,8 @@ func (m *middleware) finalizePageWalk(
 		} else {
 			panic("page not found")
 		}
+	} else if m.autoPageAllocation {
+		m.usedPhysicalPages[page.PAddr] = true
 	}
 
 	m.walkingTranslations[walkingIndex].page = page
@@ -358,11 +360,8 @@ func unique(intSlice []uint64) []uint64 {
 }
 
 func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64) vm.Page {
-	// Align virtual address to page boundary
 	alignedVAddr := (vAddr >> m.log2PageSize) << m.log2PageSize
 	pageSize := uint64(1) << m.log2PageSize
-	
-	// Allocate the smallest available physical page
 	pAddr := m.allocatePhysicalPage()
 	
 	return vm.Page{
@@ -378,28 +377,18 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 	}
 }
 
-// allocatePhysicalPage finds and allocates the smallest available physical page.
-// It returns the physical address of the allocated page.
 func (m *middleware) allocatePhysicalPage() uint64 {
 	pageSize := uint64(1) << m.log2PageSize
 	
-	// Find the smallest available physical page
 	for {
-		// Align to page boundary
 		candidatePage := (m.nextPhysicalPage >> m.log2PageSize) << m.log2PageSize
 		
-		// Check if this page is already in use
 		if !m.usedPhysicalPages[candidatePage] {
-			// Mark this page as used
 			m.usedPhysicalPages[candidatePage] = true
-			
-			// Update next physical page for future allocations
 			m.nextPhysicalPage = candidatePage + pageSize
-			
 			return candidatePage
 		}
 		
-		// Move to next page
 		m.nextPhysicalPage += pageSize
 	}
 }
