@@ -28,6 +28,7 @@ type PageTable interface {
 	Remove(pid PID, vAddr uint64)
 	Find(pid PID, Addr uint64) (Page, bool)
 	Update(page Page)
+	ReverseLookup(pAddr uint64) (Page, bool)
 }
 
 // NewPageTable creates a new PageTable.
@@ -101,6 +102,19 @@ func (pt *pageTableImpl) Update(page Page) {
 	table.update(page)
 }
 
+// ReverseLookup finds a page by its physical address across all processes.
+func (pt *pageTableImpl) ReverseLookup(pAddr uint64) (Page, bool) {
+	pt.Lock()
+	defer pt.Unlock()
+
+	for _, processTable := range pt.tables {
+		if page, found := processTable.reverseLookup(pAddr); found {
+			return page, true
+		}
+	}
+	return Page{}, false
+}
+
 type processTable struct {
 	sync.Mutex
 
@@ -146,6 +160,20 @@ func (t *processTable) find(vAddr uint64) (Page, bool) {
 	elem, found := t.entriesTable[vAddr]
 	if found {
 		return elem.Value.(Page), true
+	}
+
+	return Page{}, false
+}
+
+func (t *processTable) reverseLookup(pAddr uint64) (Page, bool) {
+	t.Lock()
+	defer t.Unlock()
+
+	for elem := t.entries.Front(); elem != nil; elem = elem.Next() {
+		page := elem.Value.(Page)
+		if page.PAddr == pAddr {
+			return page, true
+		}
 	}
 
 	return Page{}, false

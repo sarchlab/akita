@@ -43,7 +43,6 @@ type Comp struct {
 
 	// Physical page allocation tracking for auto page allocation
 	nextPhysicalPage uint64
-	usedPhysicalPages map[uint64]bool
 }
 
 func (c *Comp) Tick() bool {
@@ -107,8 +106,6 @@ func (m *middleware) finalizePageWalk(
 		} else {
 			panic("page not found")
 		}
-	} else if m.autoPageAllocation {
-		m.usedPhysicalPages[page.PAddr] = true
 	}
 
 	m.walkingTranslations[walkingIndex].page = page
@@ -383,8 +380,7 @@ func (m *middleware) allocatePhysicalPage() uint64 {
 	for {
 		candidatePage := (m.nextPhysicalPage >> m.log2PageSize) << m.log2PageSize
 		
-		if !m.usedPhysicalPages[candidatePage] {
-			m.usedPhysicalPages[candidatePage] = true
+		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
 			m.nextPhysicalPage = candidatePage + pageSize
 			return candidatePage
 		}

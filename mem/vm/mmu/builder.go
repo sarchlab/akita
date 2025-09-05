@@ -106,7 +106,6 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 	
 	if mmu.autoPageAllocation {
 		mmu.nextPhysicalPage = 0
-		mmu.usedPhysicalPages = make(map[uint64]bool)
 	}
 }
 
@@ -123,14 +122,14 @@ func (b Builder) createPageTable(mmu *Comp) {
 // validatePageTablePageSize checks if the provided page table's page size
 // is consistent with the MMU's log2PageSize configuration.
 func (b Builder) validatePageTablePageSize() {
-	// If the page table implements pageSizeGetter, validate the page size
-	if pageSizeGetter, ok := b.pageTable.(pageSizeGetter); ok {
-		pageTableLog2PageSize := pageSizeGetter.GetLog2PageSize()
+	// If the page table implements pageTable interface with GetLog2PageSize, validate the page size
+	if pageTableInterface, ok := b.pageTable.(pageTable); ok {
+		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
 		if pageTableLog2PageSize != b.log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}
 	}
-	// For page tables that don't implement pageSizeGetter, we cannot validate
+	// For page tables that don't implement the local pageTable interface, we cannot validate
 	// the page size so we assume the user has ensured compatibility
 }
 

@@ -115,11 +115,6 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 	if mmu.autoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
 	}
-
-	// Physical page tracking should not be initialized
-	if mmu.usedPhysicalPages != nil {
-		t.Error("Physical page tracking should not be initialized when auto allocation is disabled")
-	}
 }
 
 // TestAutoPageAllocationEnabled tests that auto page allocation is properly enabled
@@ -136,10 +131,6 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 		t.Error("Auto page allocation should be enabled when set")
 	}
 
-	// Physical page tracking should be initialized
-	if mmu.usedPhysicalPages == nil {
-		t.Error("Physical page tracking should be initialized when auto allocation is enabled")
-	}
 	if mmu.nextPhysicalPage != 0 {
 		t.Errorf("Next physical page should start at 0, got %d", mmu.nextPhysicalPage)
 	}
