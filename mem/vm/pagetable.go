@@ -95,6 +95,13 @@ func (pt *pageTableImpl) Update(page Page) {
 	table.update(page)
 }
 
+// GetLog2PageSize returns the log2 page size of the page table.
+// This method implements the PageSizeGetter interface used by the MMU builder
+// to validate page size consistency.
+func (pt *pageTableImpl) GetLog2PageSize() uint64 {
+	return pt.log2PageSize
+}
+
 type processTable struct {
 	sync.Mutex
 

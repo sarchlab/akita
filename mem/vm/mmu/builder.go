@@ -107,10 +107,32 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 
 func (b Builder) createPageTable(mmu *Comp) {
 	if b.pageTable != nil {
+		// Check if the provided page table is compatible with the MMU's page size
+		b.validatePageTablePageSize()
 		mmu.pageTable = b.pageTable
 	} else {
 		mmu.pageTable = vm.NewPageTable(b.log2PageSize)
 	}
+}
+
+// validatePageTablePageSize checks if the provided page table's page size
+// is consistent with the MMU's log2PageSize configuration.
+func (b Builder) validatePageTablePageSize() {
+	// If the page table implements PageSizeGetter, validate the page size
+	if pageSizeGetter, ok := b.pageTable.(PageSizeGetter); ok {
+		pageTableLog2PageSize := pageSizeGetter.GetLog2PageSize()
+		if pageTableLog2PageSize != b.log2PageSize {
+			panic("page table page size does not match MMU page size")
+		}
+	}
+	// For page tables that don't implement PageSizeGetter, we cannot validate
+	// the page size so we assume the user has ensured compatibility
+}
+
+// PageSizeGetter is an optional interface that page tables can implement
+// to expose their page size for validation purposes.
+type PageSizeGetter interface {
+	GetLog2PageSize() uint64
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
