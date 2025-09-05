@@ -1,0 +1,212 @@
+# Akita Development Environment Setup Steps
+# This file provides structured setup instructions for GitHub Copilot and automated tools
+# to bootstrap the Akita computer architecture simulation framework development environment.
+
+name: "Akita Development Setup"
+description: "Setup steps for Akita computer architecture simulation framework"
+
+environment:
+  go_version: "1.25"
+  node_version: "18.x"
+  python_version: "3.10"
+
+prerequisites:
+  - name: "Go Programming Language"
+    version: "1.25"
+    required: true
+  - name: "Node.js"
+    version: "18.x"
+    required: true
+  - name: "Python"
+    version: "3.10"
+    required: false
+    note: "Required for acceptance tests only"
+
+setup_steps:
+  - step: 1
+    name: "Setup Go PATH"
+    description: "Add Go bin directory to PATH for tool access"
+    commands:
+      - "export PATH=$PATH:$(go env GOPATH)/bin"
+    timeout_seconds: 5
+    required: true
+
+  - step: 2
+    name: "Install Go Tools"
+    description: "Install required Go development tools"
+    commands:
+      - "go install go.uber.org/mock/mockgen@latest"
+      - "go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1"
+    timeout_seconds: 60
+    required: true
+    notes:
+      - "mockgen is required for generating mock files"
+      - "ginkgo is the testing framework used by Akita"
+
+  - step: 3
+    name: "Generate Mock Files"
+    description: "Generate Go mock files for testing"
+    commands:
+      - "go generate ./..."
+    timeout_seconds: 60
+    required: true
+    notes:
+      - "Takes approximately 30 seconds"
+      - "Never cancel this operation"
+      - "May encounter Go version compatibility issues with mockgen"
+      - "If mockgen fails, ensure latest version is installed"
+
+  - step: 4
+    name: "Build Go Packages"
+    description: "Build all Go packages in the project"
+    commands:
+      - "go build ./..."
+    timeout_seconds: 120
+    required: true
+    notes:
+      - "Takes 8-60 seconds depending on dependency downloads"
+      - "Never cancel this operation"
+
+  - step: 5
+    name: "Install golangci-lint"
+    description: "Install Go linting tool"
+    commands:
+      - "curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v2.4.0"
+    timeout_seconds: 60
+    required: true
+
+  - step: 6
+    name: "Build Web Components"
+    description: "Build frontend web components"
+    sub_steps:
+      - name: "Build AkitaRTM Monitoring Dashboard"
+        working_directory: "monitoring/web"
+        commands:
+          - "npm install"
+          - "npm run build"
+        timeout_seconds: 60
+        notes:
+          - "Takes approximately 12 seconds"
+      - name: "Build Daisen Visualization Frontend"
+        working_directory: "daisen/static"
+        commands:
+          - "npm install"
+          - "npm run build"
+        timeout_seconds: 60
+        notes:
+          - "Takes approximately 18 seconds"
+    required: true
+
+validation_steps:
+  - step: 1
+    name: "Build Validation"
+    description: "Ensure all packages compile"
+    commands:
+      - "go build ./..."
+    timeout_seconds: 120
+
+  - step: 2
+    name: "Unit Test Validation"
+    description: "Run all unit tests"
+    commands:
+      - "ginkgo -r"
+    timeout_seconds: 60
+    notes:
+      - "Takes approximately 22 seconds for 36 test suites"
+
+  - step: 3
+    name: "Lint Validation"
+    description: "Check code style and quality"
+    commands:
+      - "golangci-lint run ./..."
+    timeout_seconds: 60
+    notes:
+      - "Currently shows 35 style issues (non-blocking)"
+
+  - step: 4
+    name: "Example Validation"
+    description: "Verify basic simulator functionality"
+    working_directory: "examples/ping"
+    commands:
+      - "go test -v"
+    timeout_seconds: 30
+
+optional_validation:
+  - name: "NoC Acceptance Tests"
+    description: "End-to-end Network-on-Chip tests"
+    working_directory: "noc/acceptance"
+    commands:
+      - "python3 acceptance_test.py"
+    timeout_seconds: 300
+    notes:
+      - "Takes approximately 3 minutes"
+
+  - name: "Memory Acceptance Tests"
+    description: "End-to-end memory system tests"
+    working_directory: "mem"
+    commands:
+      - "python3 acceptance_test.py"
+    timeout_seconds: 180
+    notes:
+      - "Takes approximately 2 minutes"
+
+web_component_validation:
+  - name: "AkitaRTM Build Check"
+    description: "Verify monitoring dashboard assets"
+    check: "monitoring/web/dist/ contains built assets"
+
+  - name: "Daisen Build Check"
+    description: "Verify visualization tool assets"
+    check: "daisen/static/dist/ contains built assets"
+
+  - name: "Daisen Server Check"
+    description: "Verify Daisen server binary"
+    working_directory: "daisen"
+    commands:
+      - "go build"
+      - "./daisen -help"
+
+troubleshooting:
+  path_issues:
+    problem: "executable file not found errors"
+    solution: "export PATH=$PATH:$(go env GOPATH)/bin"
+
+  mock_generation_failures:
+    problem: "go generate fails with Go version compatibility issues"
+    solutions:
+      - "go install go.uber.org/mock/mockgen@latest"
+      - "Ensure mockgen version is compatible with Go 1.25"
+      - "May need to rebuild mockgen with newer Go version"
+
+  web_build_failures:
+    problem: "npm build issues"
+    solutions:
+      - "cd monitoring/web && rm -rf node_modules && npm install && npm run build"
+      - "cd daisen/static && rm -rf node_modules && npm install && npm run build"
+
+  ginkgo_version_mismatch:
+    problem: "Ginkgo version mismatch warning"
+    note: "This warning is harmless and can be ignored"
+
+key_directories:
+  core_modules:
+    - "sim/": "Core simulation engine"
+    - "mem/": "Memory system components"
+    - "noc/": "Network-on-Chip components"
+    - "tracing/": "Simulation tracing infrastructure"
+    - "monitoring/": "Real-time monitoring dashboard"
+    - "pipelining/": "Pipeline simulation components"
+    - "analysis/": "Performance analysis tools"
+
+  visualization:
+    - "daisen/": "Main visualization tool"
+    - "monitoring/web/": "AkitaRTM dashboard frontend"
+
+  examples:
+    - "examples/": "Sample simulators and demos"
+
+configuration_files:
+  - "go.mod": "Go module dependencies"
+  - ".golangci.yml": "Linting configuration"
+  - "run_before_merge.sh": "Complete validation script"
+  - ".github/workflows/akita_test.yml": "CI pipeline"
