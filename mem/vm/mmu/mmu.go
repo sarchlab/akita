@@ -46,6 +46,18 @@ func (c *Comp) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
 
+// IsAutoPageAllocationEnabled returns whether auto page allocation is enabled.
+// This method is primarily for testing purposes.
+func (c *Comp) IsAutoPageAllocationEnabled() bool {
+	return c.autoPageAllocation
+}
+
+// GetPageTable returns the page table used by the MMU.
+// This method is primarily for testing purposes.
+func (c *Comp) GetPageTable() vm.PageTable {
+	return c.pageTable
+}
+
 type middleware struct {
 	*Comp
 }

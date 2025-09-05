@@ -367,6 +367,111 @@ var _ = Describe("MMU", func() {
 		})
 
 	})
+
+	Context("auto page allocation", func() {
+		BeforeEach(func() {
+			// Enable auto page allocation for these tests
+			mmu.autoPageAllocation = true
+			mmu.log2PageSize = 12 // 4KB pages
+		})
+
+		It("should create a new page when page not found and auto allocation is enabled", func() {
+			req := vm.TranslationReqBuilder{}.
+				WithDst(mmu.topPort.AsRemote()).
+				WithPID(1).
+				WithVAddr(0x1000).
+				WithDeviceID(2).
+				Build()
+			walking := transaction{req: req, cycleLeft: 0}
+			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
+
+			// Page not found initially
+			pageTable.EXPECT().
+				Find(vm.PID(1), uint64(0x1000)).
+				Return(vm.Page{}, false)
+			
+			// Page should be inserted
+			pageTable.EXPECT().
+				Insert(gomock.Any()).
+				Do(func(page vm.Page) {
+					Expect(page.PID).To(Equal(vm.PID(1)))
+					Expect(page.VAddr).To(Equal(uint64(0x1000)))
+					Expect(page.PageSize).To(Equal(uint64(4096)))
+					Expect(page.Valid).To(BeTrue())
+					Expect(page.DeviceID).To(Equal(uint64(2)))
+					Expect(page.Unified).To(BeTrue())
+					Expect(page.IsMigrating).To(BeFalse())
+					Expect(page.IsPinned).To(BeFalse())
+				})
+
+			topPort.EXPECT().CanSend().Return(true)
+			topPort.EXPECT().
+				Send(gomock.Any()).
+				Do(func(rsp *vm.TranslationRsp) {
+					Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
+					Expect(rsp.Page.VAddr).To(Equal(uint64(0x1000)))
+					Expect(rsp.Page.PageSize).To(Equal(uint64(4096)))
+				})
+
+			madeProgress := mmuMiddleware.walkPageTable()
+
+			Expect(madeProgress).To(BeTrue())
+			Expect(mmu.walkingTranslations).To(HaveLen(0))
+		})
+
+		It("should still panic when auto allocation is disabled and page not found", func() {
+			// Disable auto page allocation
+			mmu.autoPageAllocation = false
+			
+			req := vm.TranslationReqBuilder{}.
+				WithDst(mmu.topPort.AsRemote()).
+				WithPID(1).
+				WithVAddr(0x1000).
+				WithDeviceID(2).
+				Build()
+			walking := transaction{req: req, cycleLeft: 0}
+			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
+
+			// Page not found
+			pageTable.EXPECT().
+				Find(vm.PID(1), uint64(0x1000)).
+				Return(vm.Page{}, false)
+
+			Expect(func() {
+				mmuMiddleware.walkPageTable()
+			}).To(Panic())
+		})
+
+		It("should align virtual addresses to page boundaries", func() {
+			req := vm.TranslationReqBuilder{}.
+				WithDst(mmu.topPort.AsRemote()).
+				WithPID(1).
+				WithVAddr(0x1234). // Unaligned address
+				WithDeviceID(2).
+				Build()
+			walking := transaction{req: req, cycleLeft: 0}
+			mmu.walkingTranslations = append(mmu.walkingTranslations, walking)
+
+			// Page not found initially
+			pageTable.EXPECT().
+				Find(vm.PID(1), uint64(0x1234)).
+				Return(vm.Page{}, false)
+			
+			// Page should be inserted with aligned address
+			pageTable.EXPECT().
+				Insert(gomock.Any()).
+				Do(func(page vm.Page) {
+					Expect(page.VAddr).To(Equal(uint64(0x1000))) // Should be aligned to 4KB boundary
+				})
+
+			topPort.EXPECT().CanSend().Return(true)
+			topPort.EXPECT().Send(gomock.Any())
+
+			madeProgress := mmuMiddleware.walkPageTable()
+
+			Expect(madeProgress).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("MMU Integration", func() {
@@ -426,6 +531,45 @@ var _ = Describe("MMU Integration", func() {
 		agent.EXPECT().Deliver(gomock.Any()).
 			Do(func(rsp *vm.TranslationRsp) {
 				Expect(rsp.Page).To(Equal(page))
+				Expect(rsp.RespondTo).To(Equal(req.ID))
+			})
+
+		engine.Run()
+	})
+
+	It("should work with auto page allocation enabled", func() {
+		// Create MMU with auto page allocation enabled
+		builder := MakeBuilder().
+			WithEngine(engine).
+			WithAutoPageAllocation(true)
+		mmu = builder.Build("MMU")
+
+		// Reconnect with new MMU
+		agent.EXPECT().SetConnection(connection)
+		connection = directconnection.MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			Build("Conn")
+		connection.PlugIn(agent)
+		connection.PlugIn(mmu.topPort)
+
+		// Request translation for a page that doesn't exist
+		req := vm.TranslationReqBuilder{}.
+			WithSrc(agent.AsRemote()).
+			WithDst(mmu.topPort.AsRemote()).
+			WithPID(1).
+			WithVAddr(0x1000).
+			WithDeviceID(2).
+			Build()
+		mmu.topPort.Deliver(req)
+
+		agent.EXPECT().Deliver(gomock.Any()).
+			Do(func(rsp *vm.TranslationRsp) {
+				// Should receive a response with a newly created page
+				Expect(rsp.Page.PID).To(Equal(vm.PID(1)))
+				Expect(rsp.Page.VAddr).To(Equal(uint64(0x1000)))
+				Expect(rsp.Page.Valid).To(BeTrue())
+				Expect(rsp.Page.DeviceID).To(Equal(uint64(2)))
 				Expect(rsp.RespondTo).To(Equal(req.ID))
 			})
 
