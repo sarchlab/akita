@@ -176,7 +176,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
-	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
+	mshrEntry := m.mshr.GetEntry(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)
 	}
