@@ -16,6 +16,7 @@ type memMiddleware struct {
     sim        *simv5.Simulation
     storageRef string
     stor       *mem.Storage
+    conv       interface{} // mem.AddressConverter; kept as interface{} to avoid import cycles if needed
 }
 
 func (m *memMiddleware) Tick() bool {
@@ -154,7 +155,12 @@ func (m *memMiddleware) progressInflight() bool {
 }
 
 func (m *memMiddleware) toInternalAddr(addr uint64) uint64 {
-    // Address conversion strategy will be addressed separately; keep passthrough for now.
+    if m.conv == nil {
+        return addr
+    }
+    if ac, ok := m.conv.(mem.AddressConverter); ok {
+        return ac.ConvertExternalToInternal(addr)
+    }
     return addr
 }
 

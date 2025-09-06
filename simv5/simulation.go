@@ -7,6 +7,7 @@ import (
     "github.com/rs/xid"
     "github.com/sarchlab/akita/v4/datarecording"
     "github.com/sarchlab/akita/v4/monitoring"
+    "github.com/sarchlab/akita/v4/mem/mem"
     "github.com/sarchlab/akita/v4/sim"
     "github.com/sarchlab/akita/v4/tracing"
 )
@@ -26,6 +27,7 @@ type Simulation struct {
     portNameIndex map[string]int
 
     state *stateRegistry
+    conv  *converterRegistry
 }
 
 // NewSimulation wraps an engine into a Simulation with defaults.
@@ -36,6 +38,7 @@ func NewSimulation(engine sim.Engine) *Simulation {
         compNameIndex: make(map[string]int),
         portNameIndex: make(map[string]int),
         state:         newStateRegistry(),
+        conv:          newConverterRegistry(),
     }
     // Minimal default data recorder and tracer; monitoring can be added via builder.
     s.dataRecorder = datarecording.NewDataRecorder("akita_sim_" + s.id)
@@ -161,3 +164,61 @@ func (s *Simulation) GetState(id string) (interface{}, bool) { return s.state.ge
 
 // DeleteState removes a shared emulation state by ID.
 func (s *Simulation) DeleteState(id string) { s.state.delete(id) }
+
+// Address converter DI -------------------------------------------------------
+
+// AddressConverterFactory builds a mem.AddressConverter from primitive params.
+type AddressConverterFactory func(params map[string]uint64) (mem.AddressConverter, error)
+
+type converterRegistry struct {
+    mu    sync.RWMutex
+    items map[string]AddressConverterFactory
+}
+
+func newConverterRegistry() *converterRegistry {
+    return &converterRegistry{items: make(map[string]AddressConverterFactory)}
+}
+
+// RegisterAddressConverter registers a factory for a given kind.
+func (s *Simulation) RegisterAddressConverter(kind string, f AddressConverterFactory) error {
+    s.conv.mu.Lock()
+    defer s.conv.mu.Unlock()
+    if _, ok := s.conv.items[kind]; ok {
+        return fmt.Errorf("address converter kind already registered: %s", kind)
+    }
+    s.conv.items[kind] = f
+    return nil
+}
+
+// BuildAddressConverter resolves a converter by kind/params. Provides built-in
+// defaults for "identity" and "interleaving" if not registered.
+func (s *Simulation) BuildAddressConverter(kind string, params map[string]uint64) (mem.AddressConverter, error) {
+    if kind == "" || kind == "identity" {
+        return identityConverter{}, nil
+    }
+
+    s.conv.mu.RLock()
+    f, ok := s.conv.items[kind]
+    s.conv.mu.RUnlock()
+    if ok {
+        return f(params)
+    }
+
+    switch kind {
+    case "interleaving":
+        var c mem.InterleavingConverter
+        if v, ok := params["InterleavingSize"]; ok { c.InterleavingSize = v } else { return nil, fmt.Errorf("missing InterleavingSize") }
+        if v, ok := params["TotalNumOfElements"]; ok { c.TotalNumOfElements = int(v) } else { return nil, fmt.Errorf("missing TotalNumOfElements") }
+        if v, ok := params["CurrentElementIndex"]; ok { c.CurrentElementIndex = int(v) } else { return nil, fmt.Errorf("missing CurrentElementIndex") }
+        if v, ok := params["Offset"]; ok { c.Offset = v } else { c.Offset = 0 }
+        return c, nil
+    default:
+        return nil, fmt.Errorf("unknown address converter kind: %s", kind)
+    }
+}
+
+// identityConverter implements mem.AddressConverter as a no-op.
+type identityConverter struct{}
+
+func (identityConverter) ConvertExternalToInternal(external uint64) uint64 { return external }
+func (identityConverter) ConvertInternalToExternal(internal uint64) uint64 { return internal }

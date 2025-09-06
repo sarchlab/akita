@@ -48,6 +48,7 @@ func (b Builder) Build() *Simulation {
         compNameIndex: make(map[string]int),
         portNameIndex: make(map[string]int),
         state:         newStateRegistry(),
+        conv:          newConverterRegistry(),
     }
 
     s.id = xid.New().String()

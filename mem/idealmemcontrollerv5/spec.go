@@ -14,6 +14,9 @@ type Spec struct {
 
     // Storage
     StorageRef    string // ID in the EmuStateRegistry
+
+    // Address conversion strategy spec (primitive-only)
+    AddrConv AddressConvSpec
 }
 
 func (s Spec) validate() error {
@@ -39,5 +42,12 @@ func defaults() Spec {
         LatencyCycles: 100,
         Freq:          1 * sim.GHz,
         StorageRef:    "",
+        AddrConv:      AddressConvSpec{Kind: "identity", Params: map[string]uint64{}},
     }
+}
+
+// AddressConvSpec describes an address conversion strategy using primitives.
+type AddressConvSpec struct {
+    Kind   string
+    Params map[string]uint64
 }
