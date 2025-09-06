@@ -126,6 +126,13 @@ func (m *tlbMiddleware) handleDrain() bool {
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		m.state = "pause"
+		tracing.AddMilestone(
+			m.Comp.Name()+".drain",
+			tracing.MilestoneKindHardwareResource,
+			m.Comp.Name()+".MSHR",
+			m.Comp.Name(),
+			m.Comp,
+		)
 	}
 
 	return madeProgress
@@ -135,7 +142,6 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	if m.respondingMSHREntry == nil {
 		return false
 	}
-
 	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
 	req := mshrEntry.Requests[0]
@@ -151,6 +157,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		return false
 	}
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.topPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	mshrEntry.Requests = mshrEntry.Requests[1:]
 	if len(mshrEntry.Requests) == 0 {
 		m.respondingMSHREntry = nil
@@ -162,11 +176,10 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
-	mshrEntry := m.mshr.Query(req.PID, req.VAddr)
+	mshrEntry := m.mshr.GetEntry(req.PID, req.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, req)
 	}
-
 	setID := m.vAddrToSetID(req.VAddr)
 	set := m.sets[setID]
 	wayID, page, found := set.Lookup(req.PID, req.VAddr)
@@ -174,7 +187,6 @@ func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
 	if found && page.Valid {
 		return m.handleTranslationHit(req, setID, wayID, page)
 	}
-
 	return m.handleTranslationMiss(req)
 }
 
@@ -187,8 +199,15 @@ func (m *tlbMiddleware) handleTranslationHit(
 	if !ok {
 		return false
 	}
-
 	m.visit(setID, wayID)
+
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindData,
+		m.Comp.Name()+".Sets",
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	tracing.TraceReqReceive(req, m.Comp)
 	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
@@ -203,7 +222,15 @@ func (m *tlbMiddleware) handleTranslationMiss(
 	if m.mshr.IsFull() {
 		return false
 	}
-
+	
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindHardwareResource,
+		m.Comp.Name()+".MSHR",
+		m.Comp.Name(),
+		m.Comp,
+	)
+	
 	fetched := m.fetchBottom(req)
 	if fetched {
 		tracing.TraceReqReceive(req, m.Comp)
@@ -215,7 +242,6 @@ func (m *tlbMiddleware) handleTranslationMiss(
 
 		return true
 	}
-
 	return false
 }
 
@@ -235,7 +261,15 @@ func (m *tlbMiddleware) sendRspToTop(
 		Build()
 
 	err := m.topPort.Send(rsp)
-
+	if err == nil {
+		tracing.AddMilestone(
+			tracing.MsgIDAtReceiver(req, m.Comp),
+			tracing.MilestoneKindNetworkBusy,
+			m.topPort.Name(),
+			m.Comp.Name(),
+			m.Comp,
+		)
+	}
 	return err == nil
 }
 
@@ -266,6 +300,14 @@ func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 		return false
 	}
 
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.bottomPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
+
 	mshrEntry := m.mshr.Add(req.PID, req.VAddr)
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 	mshrEntry.reqToBottom = fetchBottom
@@ -280,13 +322,19 @@ func (m *tlbMiddleware) parseBottom() bool {
 	if m.respondingMSHREntry != nil {
 		return false
 	}
-
 	item := m.bottomPort.PeekIncoming()
 	if item == nil {
 		return false
 	}
 
 	rsp := item.(*vm.TranslationRsp)
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(rsp, m.Comp),
+		tracing.MilestoneKindData,
+		m.bottomPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 	page := rsp.Page
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
@@ -294,7 +342,6 @@ func (m *tlbMiddleware) parseBottom() bool {
 		m.bottomPort.RetrieveIncoming()
 		return true
 	}
-
 	setID := m.vAddrToSetID(page.VAddr)
 	set := m.sets[setID]
 	wayID, ok := m.sets[setID].Evict()
@@ -324,6 +371,13 @@ func (m *tlbMiddleware) performCtrlReq() bool {
 	}
 
 	item = m.controlPort.RetrieveIncoming()
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(item, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.controlPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	switch req := item.(type) {
 	case *FlushReq:
@@ -360,6 +414,13 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 	if err != nil {
 		return false
 	}
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.controlPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 
 	for _, vAddr := range req.VAddr {
 		setID := m.vAddrToSetID(vAddr)
@@ -369,7 +430,13 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 		if !found {
 			continue
 		}
-
+		tracing.AddMilestone(
+			tracing.MsgIDAtReceiver(req, m.Comp),
+			tracing.MilestoneKindDependency,
+			m.Comp.Name()+".Sets",
+			m.Comp.Name(),
+			m.Comp,
+		)
 		page.Valid = false
 		set.Update(wayID, page)
 	}
@@ -390,7 +457,13 @@ func (m *tlbMiddleware) handleTLBRestart(req *RestartReq) bool {
 	if err != nil {
 		return false
 	}
-
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.controlPort.Name(),
+		m.Comp.Name(),
+		m.Comp,
+	)
 	m.isPaused = false
 
 	for m.topPort.RetrieveIncoming() != nil {
