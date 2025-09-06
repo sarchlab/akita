@@ -4,17 +4,17 @@ import (
     "github.com/sarchlab/akita/v4/sim"
 )
 
-// Mode indicates the controller's high-level mode.
-type Mode int
+// mode indicates the controller's high-level mode.
+type mode int
 
 const (
-    ModeEnabled Mode = iota
-    ModePaused
-    ModeDraining
+    modeEnabled mode = iota
+    modePaused
+    modeDraining
 )
 
-// Txn captures an in-flight read/write in pure data.
-type Txn struct {
+// txn captures an in-flight read/write in pure data.
+type txn struct {
     IsRead    bool
     Addr      uint64
     Size      uint64   // for reads
@@ -25,14 +25,13 @@ type Txn struct {
     RspTo     string
 }
 
-// State is the mutable runtime data of the controller.
-type State struct {
-    Mode     Mode
-    Inflight []Txn
+// state is the mutable runtime data of the controller.
+type state struct {
+    Mode     mode
+    Inflight []txn
 
     // If a drain command is pending response when Inflight becomes empty,
     // drainPending is true. We intentionally do not store the original
     // ControlMsg pointer in State to keep State purely serializable.
     DrainPending bool
 }
-

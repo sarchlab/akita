@@ -18,7 +18,7 @@ type Spec struct {
     UnitSize      uint64 // Optional, 0 to use mem.NewStorage default unit size
 }
 
-func (s Spec) Validate() error {
+func (s Spec) validate() error {
     if s.Width <= 0 {
         return fmt.Errorf("width must be > 0")
     }
@@ -33,7 +33,7 @@ func (s Spec) Validate() error {
 }
 
 // Defaults returns a Spec with sane defaults.
-func Defaults() Spec {
+func defaults() Spec {
     return Spec{
         Width:         1,
         LatencyCycles: 100,

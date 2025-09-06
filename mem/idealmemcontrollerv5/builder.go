@@ -15,7 +15,7 @@ type Builder struct {
 
 // MakeBuilder returns a new Builder with default Spec.
 func MakeBuilder() Builder {
-    return Builder{spec: Defaults()}
+    return Builder{spec: defaults()}
 }
 
 func (b Builder) WithEngine(engine sim.Engine) Builder { b.engine = engine; return b }
@@ -33,7 +33,7 @@ func (b Builder) WithAddressConverter(ac mem.AddressConverter) Builder {
 
 // Build constructs the component. Ports are created but not connected.
 func (b Builder) Build(name string) *Comp {
-    _ = b.spec.Validate()
+    _ = b.spec.validate()
 
     c := &Comp{Spec: b.spec}
     c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.spec.Freq, c)
@@ -55,7 +55,7 @@ func (b Builder) Build(name string) *Comp {
     c.AddMiddleware(&memMiddleware{Comp: c})
 
     // Initial state
-    c.State = State{Mode: ModeEnabled}
+    c.state = state{Mode: modeEnabled}
 
     return c
 }

@@ -20,7 +20,7 @@ func (m *memMiddleware) Tick() bool {
 }
 
 func (m *memMiddleware) takeNewReqs() bool {
-    if m.State.Mode != ModeEnabled { // do not take new in PAUSE or DRAIN
+    if m.state.Mode != modeEnabled { // do not take new in PAUSE or DRAIN
         return false
     }
     made := false
@@ -32,7 +32,7 @@ func (m *memMiddleware) takeNewReqs() bool {
         }
         switch req := msg.(type) {
         case *mem.ReadReq:
-            m.State.Inflight = append(m.State.Inflight, Txn{
+            m.state.Inflight = append(m.state.Inflight, txn{
                 IsRead:    true,
                 Addr:      m.toInternalAddr(req.Address),
                 Size:      req.AccessByteSize,
@@ -49,7 +49,7 @@ func (m *memMiddleware) takeNewReqs() bool {
                 maskCopy = make([]bool, len(req.DirtyMask))
                 copy(maskCopy, req.DirtyMask)
             }
-            m.State.Inflight = append(m.State.Inflight, Txn{
+            m.state.Inflight = append(m.state.Inflight, txn{
                 IsRead:    false,
                 Addr:      m.toInternalAddr(req.Address),
                 Data:      dataCopy,
@@ -70,28 +70,28 @@ func (m *memMiddleware) takeNewReqs() bool {
 func (m *memMiddleware) progressInflight() bool {
     made := false
 
-    if m.State.Mode == ModePaused {
+    if m.state.Mode == modePaused {
         return false
     }
 
     top := m.GetPortByName("Top")
 
     // Countdown
-    for i := range m.State.Inflight {
-        if m.State.Inflight[i].Remaining > 0 {
-            m.State.Inflight[i].Remaining--
+    for i := range m.state.Inflight {
+        if m.state.Inflight[i].Remaining > 0 {
+            m.state.Inflight[i].Remaining--
             made = true
         }
     }
 
     // Respond any ready transactions; rebuild list keeping those not sent
-    if len(m.State.Inflight) == 0 {
+    if len(m.state.Inflight) == 0 {
         // If draining and empty after processing, ctrl middleware will respond.
         return made
     }
 
-    kept := m.State.Inflight[:0]
-    for _, t := range m.State.Inflight {
+    kept := m.state.Inflight[:0]
+    for _, t := range m.state.Inflight {
         if t.Remaining > 0 {
             kept = append(kept, t)
             continue
@@ -142,7 +142,7 @@ func (m *memMiddleware) progressInflight() bool {
         }
     }
     // Update inflight with remaining
-    if len(kept) != len(m.State.Inflight) { m.State.Inflight = kept }
+    if len(kept) != len(m.state.Inflight) { m.state.Inflight = kept }
 
     return made
 }

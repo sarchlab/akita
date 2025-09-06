@@ -25,7 +25,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 
     // Enable
     if ctrlMsg.Enable {
-        m.State.Mode = ModeEnabled
+        m.state.Mode = modeEnabled
         rsp := ctrlMsg.GenerateRsp()
         if err := ctrl.Send(rsp); err != nil { return false }
         ctrl.RetrieveIncoming()
@@ -34,15 +34,15 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 
     // Drain
     if ctrlMsg.Drain {
-        m.State.Mode = ModeDraining
+        m.state.Mode = modeDraining
         m.pendingDrainCmd = ctrlMsg
-        m.State.DrainPending = true
+        m.state.DrainPending = true
         ctrl.RetrieveIncoming()
         return true
     }
 
     // Pause (not enable and not drain)
-    m.State.Mode = ModePaused
+    m.state.Mode = modePaused
     rsp := ctrlMsg.GenerateRsp()
     if err := ctrl.Send(rsp); err != nil { return false }
     ctrl.RetrieveIncoming()
@@ -50,26 +50,26 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 }
 
 func (m *ctrlMiddleware) handleDrainState() bool {
-    if m.State.Mode != ModeDraining || !m.State.DrainPending {
+    if m.state.Mode != modeDraining || !m.state.DrainPending {
         return false
     }
-    if len(m.State.Inflight) != 0 {
+    if len(m.state.Inflight) != 0 {
         return false
     }
     // Now inflight is empty; respond to the pending drain
     if m.pendingDrainCmd == nil {
         // Could happen across snapshot if ControlMsg wasn't persisted.
         // Simply transition to paused.
-        m.State.Mode = ModePaused
-        m.State.DrainPending = false
+        m.state.Mode = modePaused
+        m.state.DrainPending = false
         return true
     }
     ctrl := m.tryGetPort("Control")
     if ctrl == nil { return false }
     rsp := m.pendingDrainCmd.GenerateRsp()
     if err := ctrl.Send(rsp); err != nil { return false }
-    m.State.Mode = ModePaused
-    m.State.DrainPending = false
+    m.state.Mode = modePaused
+    m.state.DrainPending = false
     m.pendingDrainCmd = nil
     return true
 }
