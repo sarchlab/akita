@@ -18,6 +18,8 @@ const (
 	MilestoneKindData             MilestoneKind = "data"
 	MilestoneKindDependency       MilestoneKind = "dependency"
 	MilestoneKindOther            MilestoneKind = "other"
+	MilestoneKindTranslation      MilestoneKind = "translation"
+	MilestoneKindSubTask          MilestoneKind = "subtask"
 )
 
 // Milestone represents a point in time where a task's blocking status is

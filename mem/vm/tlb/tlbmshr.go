@@ -22,7 +22,6 @@ func newMSHREntry() *mshrEntry {
 
 // mshr is an interface that controls MSHR entries
 type mshr interface {
-	Query(pid vm.PID, addr uint64) *mshrEntry
 	Add(pid vm.PID, addr uint64) *mshrEntry
 	Remove(pid vm.PID, addr uint64) *mshrEntry
 	AllEntries() []*mshrEntry
@@ -63,16 +62,6 @@ func (m *mshrImpl) Add(pid vm.PID, vAddr uint64) *mshrEntry {
 	m.entries = append(m.entries, entry)
 
 	return entry
-}
-
-func (m *mshrImpl) Query(pid vm.PID, vAddr uint64) *mshrEntry {
-	for _, e := range m.entries {
-		if e.pid == pid && e.vAddr == vAddr {
-			return e
-		}
-	}
-
-	return nil
 }
 
 func (m *mshrImpl) Remove(pid vm.PID, vAddr uint64) *mshrEntry {

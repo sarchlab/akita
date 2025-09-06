@@ -30,10 +30,18 @@ var _ = Describe("Address Translator", func() {
 			AsRemote().
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
+		topPort.EXPECT().
+			Name().
+			Return("TopPort").
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+		bottomPort.EXPECT().
+			Name().
+			Return("BottomPort").
 			AnyTimes()
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
@@ -44,6 +52,10 @@ var _ = Describe("Address Translator", func() {
 		translationPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("TranslationPort")).
+			AnyTimes()
+		translationPort.EXPECT().
+			Name().
+			Return("TranslationPort").
 			AnyTimes()
 		memoryPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		translationPortMapper = NewMockAddressToPortMapper(mockCtrl)
