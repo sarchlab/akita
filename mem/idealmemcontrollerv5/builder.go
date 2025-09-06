@@ -18,7 +18,7 @@ func MakeBuilder() Builder {
 }
 
 func (b Builder) WithEngine(engine sim.Engine) Builder { b.engine = engine; return b }
-func (b Builder) WithSimulation(s *simv5.Simulation) Builder { b.sim = s; b.engine = s.Engine; return b }
+func (b Builder) WithSimulation(s *simv5.Simulation) Builder { b.sim = s; b.engine = s.GetEngine(); return b }
 func (b Builder) WithSpec(spec Spec) Builder           { b.spec = spec; return b }
 func (b Builder) WithWidth(w int) Builder              { b.spec.Width = w; return b }
 func (b Builder) WithLatency(cycles int) Builder       { b.spec.LatencyCycles = cycles; return b }
