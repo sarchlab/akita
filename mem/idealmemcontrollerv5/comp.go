@@ -18,7 +18,6 @@ type Comp struct {
 
     Spec  Spec
     State State
-    IO IO
 
     // External dependencies
     Storage          *mem.Storage

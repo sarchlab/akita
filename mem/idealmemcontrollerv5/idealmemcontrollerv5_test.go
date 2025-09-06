@@ -24,27 +24,28 @@ var _ = Describe("IdealMemControllerV5", func() {
             WithEngine(engine).
             WithFreq(1000 * sim.MHz).
             WithLatency(5).
-            WithTopBufSize(4).
             Build("MemCtrlV5")
 
-        // Attach dummy conn to avoid nil deref on send
+        // Inject ports and attach dummy conn to avoid nil deref on send
+        top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")
+        ctrl.AddPort("Top", top)
         dc := &dummyConn{}
-        dc.PlugIn(ctrl.IO.Top)
+        dc.PlugIn(top)
 
         // Deliver a read req
         read := mem.ReadReqBuilder{}.
             WithSrc(sim.RemotePort("Agent.Port")).
-            WithDst(ctrl.IO.Top.AsRemote()).
+            WithDst(top.AsRemote()).
             WithAddress(0).
             WithByteSize(4).
             Build()
-        _ = ctrl.IO.Top.Deliver(read)
+        _ = top.Deliver(read)
 
         // Tick until response available
         for i := 0; i < 6; i++ { _ = ctrl.Tick() }
 
         // Retrieve outgoing response
-        msg := ctrl.IO.Top.RetrieveOutgoing()
+        msg := top.RetrieveOutgoing()
         Expect(msg).NotTo(BeNil())
         _, isDataReady := msg.(*mem.DataReadyRsp)
         Expect(isDataReady).To(BeTrue())
@@ -58,22 +59,24 @@ var _ = Describe("IdealMemControllerV5", func() {
             WithLatency(3).
             Build("MemCtrlV5")
 
+        top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")
+        ctrl.AddPort("Top", top)
         dc := &dummyConn{}
-        dc.PlugIn(ctrl.IO.Top)
+        dc.PlugIn(top)
 
         data := []byte{1,2,3,4}
         write := mem.WriteReqBuilder{}.
             WithSrc(sim.RemotePort("Agent.Port")).
-            WithDst(ctrl.IO.Top.AsRemote()).
+            WithDst(top.AsRemote()).
             WithAddress(0).
             WithData(data).
             Build()
-        _ = ctrl.IO.Top.Deliver(write)
+        _ = top.Deliver(write)
 
         for i := 0; i < 4; i++ { _ = ctrl.Tick() }
 
         // Verify response
-        msg := ctrl.IO.Top.RetrieveOutgoing()
+        msg := top.RetrieveOutgoing()
         Expect(msg).NotTo(BeNil())
         _, isWriteDone := msg.(*mem.WriteDoneRsp)
         Expect(isWriteDone).To(BeTrue())
@@ -89,40 +92,42 @@ var _ = Describe("IdealMemControllerV5", func() {
         ctrl := MakeBuilder().
             WithEngine(engine).
             WithLatency(2).
-            WithTopBufSize(4).
-            WithCtrlBufSize(2).
             Build("MemCtrlV5")
 
+        top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")
+        ctrl.AddPort("Top", top)
+        control := sim.NewPort(ctrl, 2, 2, "MemCtrlV5.Control")
+        ctrl.AddPort("Control", control)
         dc := &dummyConn{}
-        dc.PlugIn(ctrl.IO.Top)
-        dc.PlugIn(ctrl.IO.Control)
+        dc.PlugIn(top)
+        dc.PlugIn(control)
 
         // One inflight read
         read := mem.ReadReqBuilder{}.
             WithSrc(sim.RemotePort("Agent.Port")).
-            WithDst(ctrl.IO.Top.AsRemote()).
+            WithDst(top.AsRemote()).
             WithAddress(16).
             WithByteSize(4).
             Build()
-        _ = ctrl.IO.Top.Deliver(read)
+        _ = top.Deliver(read)
         _ = ctrl.Tick()
 
         // Send drain control
         ctrlMsg := mem.ControlMsgBuilder{}.
             WithSrc(sim.RemotePort("Agent.Ctrl")).
-            WithDst(ctrl.IO.Control.AsRemote()).
+            WithDst(control.AsRemote()).
             WithCtrlInfo(false, true, false, false, false).
             Build()
-        _ = ctrl.IO.Control.Deliver(ctrlMsg)
+        _ = control.Deliver(ctrlMsg)
 
         // Progress a few ticks: first complete read, then drain rsp
         for i := 0; i < 5; i++ { _ = ctrl.Tick() }
 
         // First, data ready should have been sent
-        _ = ctrl.IO.Top.RetrieveOutgoing()
+        _ = top.RetrieveOutgoing()
 
         // Then, control response
-        rsp := ctrl.IO.Control.RetrieveOutgoing()
+        rsp := control.RetrieveOutgoing()
         Expect(rsp).NotTo(BeNil())
         _, isGeneral := rsp.(*sim.GeneralRsp)
         Expect(isGeneral).To(BeTrue())

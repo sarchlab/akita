@@ -2,6 +2,7 @@ package idealmemcontrollerv5
 
 import (
     "github.com/sarchlab/akita/v4/mem/mem"
+    "github.com/sarchlab/akita/v4/sim"
 )
 
 // ctrlMiddleware handles control messages enable/pause/drain.
@@ -15,7 +16,9 @@ func (m *ctrlMiddleware) Tick() bool {
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
-    msg := m.IO.Control.PeekIncoming()
+    ctrl := m.tryGetPort("Control")
+    if ctrl == nil { return false }
+    msg := ctrl.PeekIncoming()
     if msg == nil { return false }
 
     ctrlMsg := msg.(*mem.ControlMsg)
@@ -24,8 +27,8 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
     if ctrlMsg.Enable {
         m.State.Mode = ModeEnabled
         rsp := ctrlMsg.GenerateRsp()
-        if err := m.IO.Control.Send(rsp); err != nil { return false }
-        m.IO.Control.RetrieveIncoming()
+        if err := ctrl.Send(rsp); err != nil { return false }
+        ctrl.RetrieveIncoming()
         return true
     }
 
@@ -34,15 +37,15 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
         m.State.Mode = ModeDraining
         m.pendingDrainCmd = ctrlMsg
         m.State.DrainPending = true
-        m.IO.Control.RetrieveIncoming()
+        ctrl.RetrieveIncoming()
         return true
     }
 
     // Pause (not enable and not drain)
     m.State.Mode = ModePaused
     rsp := ctrlMsg.GenerateRsp()
-    if err := m.IO.Control.Send(rsp); err != nil { return false }
-    m.IO.Control.RetrieveIncoming()
+    if err := ctrl.Send(rsp); err != nil { return false }
+    ctrl.RetrieveIncoming()
     return true
 }
 
@@ -61,10 +64,22 @@ func (m *ctrlMiddleware) handleDrainState() bool {
         m.State.DrainPending = false
         return true
     }
+    ctrl := m.tryGetPort("Control")
+    if ctrl == nil { return false }
     rsp := m.pendingDrainCmd.GenerateRsp()
-    if err := m.IO.Control.Send(rsp); err != nil { return false }
+    if err := ctrl.Send(rsp); err != nil { return false }
     m.State.Mode = ModePaused
     m.State.DrainPending = false
     m.pendingDrainCmd = nil
     return true
+}
+
+// tryGetPort safely tries to get a port by alias without panicking if missing.
+func (m *ctrlMiddleware) tryGetPort(name string) sim.Port {
+    var p sim.Port
+    func() {
+        defer func() { _ = recover() }()
+        p = m.GetPortByName(name)
+    }()
+    return p
 }

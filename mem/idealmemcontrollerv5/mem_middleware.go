@@ -24,8 +24,9 @@ func (m *memMiddleware) takeNewReqs() bool {
         return false
     }
     made := false
+    top := m.GetPortByName("Top")
     for i := 0; i < m.Spec.Width; i++ {
-        msg := m.IO.Top.RetrieveIncoming()
+        msg := top.RetrieveIncoming()
         if msg == nil {
             break
         }
@@ -73,6 +74,8 @@ func (m *memMiddleware) progressInflight() bool {
         return false
     }
 
+    top := m.GetPortByName("Top")
+
     // Countdown
     for i := range m.State.Inflight {
         if m.State.Inflight[i].Remaining > 0 {
@@ -99,12 +102,12 @@ func (m *memMiddleware) progressInflight() bool {
             data, err := m.Storage.Read(t.Addr, t.Size)
             if err != nil { log.Panic(err) }
             rsp := mem.DataReadyRspBuilder{}.
-                WithSrc(m.IO.Top.AsRemote()).
+                WithSrc(top.AsRemote()).
                 WithDst(t.Src).
                 WithRspTo(t.RspTo).
                 WithData(data).
                 Build()
-            if err2 := m.IO.Top.Send(rsp); err2 != nil {
+            if err2 := top.Send(rsp); err2 != nil {
                 // Cannot send now; keep it ready to retry next tick
                 // Keep Remaining at 0 to retry soon.
                 kept = append(kept, t)
@@ -126,11 +129,11 @@ func (m *memMiddleware) progressInflight() bool {
                 if err := m.Storage.Write(t.Addr, data); err != nil { log.Panic(err) }
             }
             rsp := mem.WriteDoneRspBuilder{}.
-                WithSrc(m.IO.Top.AsRemote()).
+                WithSrc(top.AsRemote()).
                 WithDst(t.Src).
                 WithRspTo(t.RspTo).
                 Build()
-            if err2 := m.IO.Top.Send(rsp); err2 != nil {
+            if err2 := top.Send(rsp); err2 != nil {
                 kept = append(kept, t)
                 continue
             }

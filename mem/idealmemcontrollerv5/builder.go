@@ -23,8 +23,6 @@ func (b Builder) WithSpec(spec Spec) Builder           { b.spec = spec; return b
 func (b Builder) WithWidth(w int) Builder              { b.spec.Width = w; return b }
 func (b Builder) WithLatency(cycles int) Builder       { b.spec.LatencyCycles = cycles; return b }
 func (b Builder) WithFreq(freq sim.Freq) Builder       { b.spec.Freq = freq; return b }
-func (b Builder) WithTopBufSize(n int) Builder         { b.spec.TopBufSize = n; return b }
-func (b Builder) WithCtrlBufSize(n int) Builder        { b.spec.CtrlBufSize = n; return b }
 func (b Builder) WithNewStorage(cap uint64) Builder    { b.storage = nil; b.spec.CapacityBytes = cap; return b }
 func (b Builder) WithStorage(storage *mem.Storage) Builder { b.storage = storage; return b }
 func (b Builder) WithUnitSize(unit uint64) Builder     { b.spec.UnitSize = unit; return b }
@@ -55,12 +53,6 @@ func (b Builder) Build(name string) *Comp {
     // Middlewares
     c.AddMiddleware(&ctrlMiddleware{Comp: c})
     c.AddMiddleware(&memMiddleware{Comp: c})
-
-    // Ports
-    c.IO.Top = sim.NewPort(c, b.spec.TopBufSize, b.spec.TopBufSize, name+".Top")
-    c.AddPort("Top", c.IO.Top)
-    c.IO.Control = sim.NewPort(c, b.spec.CtrlBufSize, b.spec.CtrlBufSize, name+".Control")
-    c.AddPort("Control", c.IO.Control)
 
     // Initial state
     c.State = State{Mode: ModeEnabled}
