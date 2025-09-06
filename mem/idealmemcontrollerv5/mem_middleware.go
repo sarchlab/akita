@@ -13,7 +13,7 @@ import (
 // memMiddleware handles data-path requests using tick-driven countdown.
 type memMiddleware struct {
     *Comp
-    emu        *simv5.EmuStateRegistry
+    sim        *simv5.Simulation
     storageRef string
     stor       *mem.Storage
 }
@@ -171,10 +171,10 @@ func (m *memMiddleware) Handle(e sim.Event) error {
 
 func (m *memMiddleware) storage() *mem.Storage {
     if m.stor != nil { return m.stor }
-    if m.emu == nil {
+    if m.sim == nil {
         log.Panic("emu registry not provided; cannot resolve storage")
     }
-    v, ok := m.emu.Get(m.storageRef)
+    v, ok := m.sim.GetState(m.storageRef)
     if !ok {
         log.Panicf("storage ref %q not found in emu registry", m.storageRef)
     }

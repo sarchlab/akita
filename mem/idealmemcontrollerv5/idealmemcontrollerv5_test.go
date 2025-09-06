@@ -24,7 +24,7 @@ var _ = Describe("IdealMemControllerV5", func() {
         simx := simv5.NewSimulation(engine)
         // Register storage emulation state
         store := mem.NewStorage(1 * mem.MB)
-        Expect(simx.Emu().Register("dram0", store)).To(Succeed())
+        Expect(simx.RegisterState("dram0", store)).To(Succeed())
 
         ctrl := MakeBuilder().
             WithSimulation(simx).
@@ -62,7 +62,7 @@ var _ = Describe("IdealMemControllerV5", func() {
         engine := sim.NewSerialEngine()
         simx := simv5.NewSimulation(engine)
         store := mem.NewStorage(1 * mem.MB)
-        Expect(simx.Emu().Register("dram0", store)).To(Succeed())
+        Expect(simx.RegisterState("dram0", store)).To(Succeed())
 
         ctrl := MakeBuilder().
             WithSimulation(simx).
@@ -103,7 +103,7 @@ var _ = Describe("IdealMemControllerV5", func() {
         engine := sim.NewSerialEngine()
         simx := simv5.NewSimulation(engine)
         store := mem.NewStorage(1 * mem.MB)
-        _ = simx.Emu().Register("dram0", store)
+        _ = simx.RegisterState("dram0", store)
 
         ctrl := MakeBuilder().
             WithSimulation(simx).

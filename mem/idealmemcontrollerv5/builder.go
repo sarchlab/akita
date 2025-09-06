@@ -34,10 +34,8 @@ func (b Builder) Build(name string) *Comp {
 
     // Middlewares
     c.AddMiddleware(&ctrlMiddleware{Comp: c})
-    // Pass emu registry and storage ref to middleware for resolution
-    var emu *simv5.EmuStateRegistry
-    if b.sim != nil { emu = b.sim.Emu() }
-    c.AddMiddleware(&memMiddleware{Comp: c, emu: emu, storageRef: b.spec.StorageRef})
+    // Pass the simulation and storage ref to middleware for resolution via StateRegistry
+    c.AddMiddleware(&memMiddleware{Comp: c, sim: b.sim, storageRef: b.spec.StorageRef})
 
     // Initial state
     c.state = state{Mode: modeEnabled}

@@ -47,7 +47,7 @@ func (b Builder) Build() *Simulation {
     s := &Simulation{
         compNameIndex: make(map[string]int),
         portNameIndex: make(map[string]int),
-        emu:           NewEmuStateRegistry(),
+        state:         newStateRegistry(),
     }
 
     s.id = xid.New().String()
@@ -73,4 +73,3 @@ func (b Builder) Build() *Simulation {
 
     return s
 }
-

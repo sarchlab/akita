@@ -25,7 +25,7 @@ type Simulation struct {
     ports         []sim.Port
     portNameIndex map[string]int
 
-    emu *EmuStateRegistry
+    state *stateRegistry
 }
 
 // NewSimulation wraps an engine into a Simulation with defaults.
@@ -35,7 +35,7 @@ func NewSimulation(engine sim.Engine) *Simulation {
         id:            xid.New().String(),
         compNameIndex: make(map[string]int),
         portNameIndex: make(map[string]int),
-        emu:           NewEmuStateRegistry(),
+        state:         newStateRegistry(),
     }
     // Minimal default data recorder and tracer; monitoring can be added via builder.
     s.dataRecorder = datarecording.NewDataRecorder("akita_sim_" + s.id)
@@ -104,22 +104,19 @@ func (s *Simulation) Terminate() {
     }
 }
 
-// Emu returns the emulation state registry.
-func (s *Simulation) Emu() *EmuStateRegistry { return s.emu }
-
-// EmuStateRegistry is a threadsafe registry for shared emulation states.
-type EmuStateRegistry struct {
+// stateRegistry is a threadsafe registry for shared emulation states.
+type stateRegistry struct {
     mu    sync.RWMutex
     items map[string]interface{}
 }
 
-// NewEmuStateRegistry creates an empty registry.
-func NewEmuStateRegistry() *EmuStateRegistry {
-    return &EmuStateRegistry{items: make(map[string]interface{})}
+// newStateRegistry creates an empty registry.
+func newStateRegistry() *stateRegistry {
+    return &stateRegistry{items: make(map[string]interface{})}
 }
 
-// Register associates an ID with a value. Returns error if ID already exists.
-func (r *EmuStateRegistry) Register(id string, v interface{}) error {
+// register associates an ID with a value. Returns error if ID already exists.
+func (r *stateRegistry) register(id string, v interface{}) error {
     r.mu.Lock()
     defer r.mu.Unlock()
     if _, exists := r.items[id]; exists {
@@ -129,24 +126,38 @@ func (r *EmuStateRegistry) Register(id string, v interface{}) error {
     return nil
 }
 
-// Put sets an ID with a value, overwriting any existing value.
-func (r *EmuStateRegistry) Put(id string, v interface{}) {
+// put sets an ID with a value, overwriting any existing value.
+func (r *stateRegistry) put(id string, v interface{}) {
     r.mu.Lock()
     r.items[id] = v
     r.mu.Unlock()
 }
 
-// Get returns the raw value and whether it exists.
-func (r *EmuStateRegistry) Get(id string) (interface{}, bool) {
+// get returns the raw value and whether it exists.
+func (r *stateRegistry) get(id string) (interface{}, bool) {
     r.mu.RLock()
     v, ok := r.items[id]
     r.mu.RUnlock()
     return v, ok
 }
 
-// Delete removes an item.
-func (r *EmuStateRegistry) Delete(id string) {
+// delete removes an item.
+func (r *stateRegistry) delete(id string) {
     r.mu.Lock()
     delete(r.items, id)
     r.mu.Unlock()
 }
+
+// RegisterState registers a shared emulation state by ID.
+func (s *Simulation) RegisterState(id string, v interface{}) error {
+    return s.state.register(id, v)
+}
+
+// PutState upserts a shared emulation state by ID.
+func (s *Simulation) PutState(id string, v interface{}) { s.state.put(id, v) }
+
+// GetState returns a shared emulation state by ID.
+func (s *Simulation) GetState(id string) (interface{}, bool) { return s.state.get(id) }
+
+// DeleteState removes a shared emulation state by ID.
+func (s *Simulation) DeleteState(id string) { s.state.delete(id) }
