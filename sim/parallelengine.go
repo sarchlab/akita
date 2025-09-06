@@ -27,6 +27,9 @@ type ParallelEngine struct {
 	queueChan          chan EventQueue
 	secondaryQueues    []EventQueue
 	secondaryQueueChan chan EventQueue
+
+	runUntilTimeLock sync.RWMutex
+	runUntilTime     VTimeInSec
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -56,6 +59,9 @@ func NewParallelEngine() *ParallelEngine {
 
 		e.secondaryQueues = append(e.secondaryQueues, secondaryQueue)
 	}
+
+	// Initialize runUntilTime to max value (no limit)
+	e.runUntilTime = VTimeInSec(^uint64(0) >> 1) // Max positive value
 
 	return e
 }
@@ -136,6 +142,21 @@ func (e *ParallelEngine) Run() error {
 		}
 
 		e.pauseLock.Lock()
+		
+		// Check if we should continue based on time limit
+		primaryTime := e.earliestTimeInQueueGroup(e.queues)
+		secondaryTime := e.earliestTimeInQueueGroup(e.secondaryQueues)
+		nextTime := primaryTime
+		if secondaryTime < primaryTime {
+			nextTime = secondaryTime
+		}
+		
+		runUntilTime := e.readRunUntilTime()
+		if nextTime >= runUntilTime {
+			e.pauseLock.Unlock()
+			return nil
+		}
+		
 		e.determineWhatToRun()
 		e.runRound()
 
@@ -304,4 +325,18 @@ func (e *ParallelEngine) Continue() {
 // Specifically, the run time of the current event.
 func (e *ParallelEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
+}
+
+// SetRunUntilTime sets a time limit for the simulation. The Run method
+// will return when this time is reached.
+func (e *ParallelEngine) SetRunUntilTime(until VTimeInSec) {
+	e.runUntilTimeLock.Lock()
+	defer e.runUntilTimeLock.Unlock()
+	e.runUntilTime = until
+}
+
+func (e *ParallelEngine) readRunUntilTime() VTimeInSec {
+	e.runUntilTimeLock.RLock()
+	defer e.runUntilTimeLock.RUnlock()
+	return e.runUntilTime
 }
