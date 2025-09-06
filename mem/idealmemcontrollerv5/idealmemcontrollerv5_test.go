@@ -26,11 +26,13 @@ var _ = Describe("IdealMemControllerV5", func() {
         store := mem.NewStorage(1 * mem.MB)
         Expect(simx.RegisterState("dram0", store)).To(Succeed())
 
+        spec := defaults()
+        spec.Freq = 1000 * sim.MHz
+        spec.LatencyCycles = 5
+        spec.StorageRef = "dram0"
         ctrl := MakeBuilder().
             WithSimulation(simx).
-            WithFreq(1000 * sim.MHz).
-            WithLatency(5).
-            WithStorageRef("dram0").
+            WithSpec(spec).
             Build("MemCtrlV5")
 
         // Inject ports and attach dummy conn to avoid nil deref on send
@@ -64,11 +66,13 @@ var _ = Describe("IdealMemControllerV5", func() {
         store := mem.NewStorage(1 * mem.MB)
         Expect(simx.RegisterState("dram0", store)).To(Succeed())
 
+        spec := defaults()
+        spec.Freq = 1 * sim.GHz
+        spec.LatencyCycles = 3
+        spec.StorageRef = "dram0"
         ctrl := MakeBuilder().
             WithSimulation(simx).
-            WithFreq(1 * sim.GHz).
-            WithLatency(3).
-            WithStorageRef("dram0").
+            WithSpec(spec).
             Build("MemCtrlV5")
 
         top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")
@@ -105,10 +109,12 @@ var _ = Describe("IdealMemControllerV5", func() {
         store := mem.NewStorage(1 * mem.MB)
         _ = simx.RegisterState("dram0", store)
 
+        spec := defaults()
+        spec.LatencyCycles = 2
+        spec.StorageRef = "dram0"
         ctrl := MakeBuilder().
             WithSimulation(simx).
-            WithLatency(2).
-            WithStorageRef("dram0").
+            WithSpec(spec).
             Build("MemCtrlV5")
 
         top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")

@@ -16,7 +16,7 @@ type memMiddleware struct {
     sim        *simv5.Simulation
     storageRef string
     stor       *mem.Storage
-    conv       interface{} // mem.AddressConverter; kept as interface{} to avoid import cycles if needed
+    conv       mem.AddressConverter
 }
 
 func (m *memMiddleware) Tick() bool {
@@ -155,13 +155,8 @@ func (m *memMiddleware) progressInflight() bool {
 }
 
 func (m *memMiddleware) toInternalAddr(addr uint64) uint64 {
-    if m.conv == nil {
-        return addr
-    }
-    if ac, ok := m.conv.(mem.AddressConverter); ok {
-        return ac.ConvertExternalToInternal(addr)
-    }
-    return addr
+    if m.conv == nil { return addr }
+    return m.conv.ConvertExternalToInternal(addr)
 }
 
 // Satisfy sim.Handler for tick events forwarded by TickingComponent.
