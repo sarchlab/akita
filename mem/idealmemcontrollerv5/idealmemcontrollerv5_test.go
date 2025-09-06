@@ -6,6 +6,7 @@ import (
 
     "github.com/sarchlab/akita/v4/mem/mem"
     "github.com/sarchlab/akita/v4/sim"
+    "github.com/sarchlab/akita/v4/simv5"
 )
 
 // dummyConn is a minimal Connection to avoid nil panics from Port.Send.
@@ -20,10 +21,16 @@ func (d *dummyConn) NotifySend()               {}
 var _ = Describe("IdealMemControllerV5", func() {
     It("processes a read request after latency cycles", func() {
         engine := sim.NewSerialEngine()
+        simx := simv5.NewSimulation(engine)
+        // Register storage emulation state
+        store := mem.NewStorage(1 * mem.MB)
+        Expect(simx.Emu().Register("dram0", store)).To(Succeed())
+
         ctrl := MakeBuilder().
-            WithEngine(engine).
+            WithSimulation(simx).
             WithFreq(1000 * sim.MHz).
             WithLatency(5).
+            WithStorageRef("dram0").
             Build("MemCtrlV5")
 
         // Inject ports and attach dummy conn to avoid nil deref on send
@@ -53,10 +60,15 @@ var _ = Describe("IdealMemControllerV5", func() {
 
     It("processes a write request and updates storage", func() {
         engine := sim.NewSerialEngine()
+        simx := simv5.NewSimulation(engine)
+        store := mem.NewStorage(1 * mem.MB)
+        Expect(simx.Emu().Register("dram0", store)).To(Succeed())
+
         ctrl := MakeBuilder().
-            WithEngine(engine).
+            WithSimulation(simx).
             WithFreq(1 * sim.GHz).
             WithLatency(3).
+            WithStorageRef("dram0").
             Build("MemCtrlV5")
 
         top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")
@@ -82,16 +94,21 @@ var _ = Describe("IdealMemControllerV5", func() {
         Expect(isWriteDone).To(BeTrue())
 
         // Verify storage content
-        stored, err := ctrl.Storage.Read(0, 4)
+        stored, err := store.Read(0, 4)
         Expect(err).To(BeNil())
         Expect(stored).To(Equal(data))
     })
 
     It("drains inflight then responds to control", func() {
         engine := sim.NewSerialEngine()
+        simx := simv5.NewSimulation(engine)
+        store := mem.NewStorage(1 * mem.MB)
+        _ = simx.Emu().Register("dram0", store)
+
         ctrl := MakeBuilder().
-            WithEngine(engine).
+            WithSimulation(simx).
             WithLatency(2).
+            WithStorageRef("dram0").
             Build("MemCtrlV5")
 
         top := sim.NewPort(ctrl, 4, 4, "MemCtrlV5.Top")

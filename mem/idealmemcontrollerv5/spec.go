@@ -2,7 +2,6 @@ package idealmemcontrollerv5
 
 import (
     "fmt"
-    "github.com/sarchlab/akita/v4/mem/mem"
     "github.com/sarchlab/akita/v4/sim"
 )
 
@@ -14,8 +13,7 @@ type Spec struct {
     Freq          sim.Freq
 
     // Storage
-    CapacityBytes uint64 // If Storage is nil, a new storage is created
-    UnitSize      uint64 // Optional, 0 to use mem.NewStorage default unit size
+    StorageRef    string // ID in the EmuStateRegistry
 }
 
 func (s Spec) validate() error {
@@ -28,7 +26,9 @@ func (s Spec) validate() error {
     if s.Freq <= 0 {
         return fmt.Errorf("freq must be > 0")
     }
-    // CapacityBytes can be 0 if external storage is provided by builder.
+    if s.StorageRef == "" {
+        return fmt.Errorf("storage ref must be provided")
+    }
     return nil
 }
 
@@ -38,7 +38,6 @@ func defaults() Spec {
         Width:         1,
         LatencyCycles: 100,
         Freq:          1 * sim.GHz,
-        CapacityBytes: 4 * mem.GB,
-        UnitSize:      0,
+        StorageRef:    "",
     }
 }

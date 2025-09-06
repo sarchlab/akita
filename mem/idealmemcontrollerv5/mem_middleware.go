@@ -6,11 +6,17 @@ import (
 
     "github.com/sarchlab/akita/v4/mem/mem"
     "github.com/sarchlab/akita/v4/sim"
+    "github.com/sarchlab/akita/v4/simv5"
     "github.com/sarchlab/akita/v4/tracing"
 )
 
 // memMiddleware handles data-path requests using tick-driven countdown.
-type memMiddleware struct { *Comp }
+type memMiddleware struct {
+    *Comp
+    emu        *simv5.EmuStateRegistry
+    storageRef string
+    stor       *mem.Storage
+}
 
 func (m *memMiddleware) Tick() bool {
     made := false
@@ -99,7 +105,7 @@ func (m *memMiddleware) progressInflight() bool {
 
         if t.IsRead {
             // Perform read now
-            data, err := m.Storage.Read(t.Addr, t.Size)
+            data, err := m.storage().Read(t.Addr, t.Size)
             if err != nil { log.Panic(err) }
             rsp := mem.DataReadyRspBuilder{}.
                 WithSrc(top.AsRemote()).
@@ -118,15 +124,15 @@ func (m *memMiddleware) progressInflight() bool {
         } else {
             // Write
             if t.DirtyMask == nil {
-                if err := m.Storage.Write(t.Addr, t.Data); err != nil { log.Panic(err) }
+                if err := m.storage().Write(t.Addr, t.Data); err != nil { log.Panic(err) }
             } else {
                 // Read-modify-write
-                data, err := m.Storage.Read(t.Addr, uint64(len(t.Data)))
+                data, err := m.storage().Read(t.Addr, uint64(len(t.Data)))
                 if err != nil { log.Panic(err) }
                 for i := 0; i < len(t.Data); i++ {
                     if t.DirtyMask[i] { data[i] = t.Data[i] }
                 }
-                if err := m.Storage.Write(t.Addr, data); err != nil { log.Panic(err) }
+                if err := m.storage().Write(t.Addr, data); err != nil { log.Panic(err) }
             }
             rsp := mem.WriteDoneRspBuilder{}.
                 WithSrc(top.AsRemote()).
@@ -148,8 +154,8 @@ func (m *memMiddleware) progressInflight() bool {
 }
 
 func (m *memMiddleware) toInternalAddr(addr uint64) uint64 {
-    if m.AddressConverter == nil { return addr }
-    return m.AddressConverter.ConvertExternalToInternal(addr)
+    // Address conversion strategy will be addressed separately; keep passthrough for now.
+    return addr
 }
 
 // Satisfy sim.Handler for tick events forwarded by TickingComponent.
@@ -161,4 +167,21 @@ func (m *memMiddleware) Handle(e sim.Event) error {
         // ignore
     }
     return nil
+}
+
+func (m *memMiddleware) storage() *mem.Storage {
+    if m.stor != nil { return m.stor }
+    if m.emu == nil {
+        log.Panic("emu registry not provided; cannot resolve storage")
+    }
+    v, ok := m.emu.Get(m.storageRef)
+    if !ok {
+        log.Panicf("storage ref %q not found in emu registry", m.storageRef)
+    }
+    s, ok := v.(*mem.Storage)
+    if !ok {
+        log.Panicf("storage ref %q has unexpected type", m.storageRef)
+    }
+    m.stor = s
+    return s
 }

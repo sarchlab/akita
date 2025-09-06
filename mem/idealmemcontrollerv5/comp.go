@@ -13,10 +13,6 @@ type Comp struct {
     Spec  Spec
     state state
 
-    // External dependencies
-    Storage          *mem.Storage
-    AddressConverter mem.AddressConverter
-
     // Non-serializable transient field to answer drain completion.
     pendingDrainCmd *mem.ControlMsg
 }
