@@ -75,83 +75,104 @@ func (m *memMiddleware) takeNewReqs() bool {
 }
 
 func (m *memMiddleware) progressInflight() bool {
-    made := false
-
     if m.state.Mode == modePaused {
         return false
     }
 
     top := m.GetPortByName("Top")
 
-    // Countdown
-    for i := range m.state.Inflight {
-        if m.state.Inflight[i].Remaining > 0 {
-            m.state.Inflight[i].Remaining--
-            made = true
-        }
-    }
+    made := m.countdownInflight()
 
-    // Respond any ready transactions; rebuild list keeping those not sent
     if len(m.state.Inflight) == 0 {
         // If draining and empty after processing, ctrl middleware will respond.
         return made
     }
 
+    kept, responded := m.respondReady(top)
+    if len(kept) != len(m.state.Inflight) {
+        m.state.Inflight = kept
+    }
+    return made || responded
+}
+
+// countdownInflight decrements Remaining for all in-flight transactions.
+func (m *memMiddleware) countdownInflight() bool {
+    progressed := false
+    for i := range m.state.Inflight {
+        if m.state.Inflight[i].Remaining > 0 {
+            m.state.Inflight[i].Remaining--
+            progressed = true
+        }
+    }
+    return progressed
+}
+
+// respondReady attempts to respond to ready transactions and returns the kept
+// transactions that still need processing next ticks, along with whether any
+// responses were sent.
+func (m *memMiddleware) respondReady(top sim.Port) ([]txn, bool) {
     kept := m.state.Inflight[:0]
+    responded := false
     for _, t := range m.state.Inflight {
         if t.Remaining > 0 {
             kept = append(kept, t)
             continue
         }
-
-        if t.IsRead {
-            // Perform read now
-            data, err := m.storage().Read(t.Addr, t.Size)
-            if err != nil { log.Panic(err) }
-            rsp := mem.DataReadyRspBuilder{}.
-                WithSrc(top.AsRemote()).
-                WithDst(t.Src).
-                WithRspTo(t.RspTo).
-                WithData(data).
-                Build()
-            if err2 := top.Send(rsp); err2 != nil {
-                // Cannot send now; keep it ready to retry next tick
-                // Keep Remaining at 0 to retry soon.
-                kept = append(kept, t)
-                continue
-            }
-            tracing.TraceReqComplete(rsp, m) // trace completion via rsp
-            made = true
-        } else {
-            // Write
-            if t.DirtyMask == nil {
-                if err := m.storage().Write(t.Addr, t.Data); err != nil { log.Panic(err) }
-            } else {
-                // Read-modify-write
-                data, err := m.storage().Read(t.Addr, uint64(len(t.Data)))
-                if err != nil { log.Panic(err) }
-                for i := 0; i < len(t.Data); i++ {
-                    if t.DirtyMask[i] { data[i] = t.Data[i] }
-                }
-                if err := m.storage().Write(t.Addr, data); err != nil { log.Panic(err) }
-            }
-            rsp := mem.WriteDoneRspBuilder{}.
-                WithSrc(top.AsRemote()).
-                WithDst(t.Src).
-                WithRspTo(t.RspTo).
-                Build()
-            if err2 := top.Send(rsp); err2 != nil {
-                kept = append(kept, t)
-                continue
-            }
-            tracing.TraceReqComplete(rsp, m)
-            made = true
+        if m.handleReadyTxn(top, t) {
+            responded = true
+            continue
         }
+        kept = append(kept, t)
     }
-    // Update inflight with remaining
-    if len(kept) != len(m.state.Inflight) { m.state.Inflight = kept }
+    return kept, responded
+}
 
-    return made
+// handleReadyTxn dispatches to read/write handlers and returns true if a
+// response was successfully sent, false if it should be retried next tick.
+func (m *memMiddleware) handleReadyTxn(top sim.Port, t txn) bool {
+    if t.IsRead {
+        return m.sendReadRsp(top, t)
+    }
+    return m.doWriteAndSendRsp(top, t)
+}
+
+func (m *memMiddleware) sendReadRsp(top sim.Port, t txn) bool {
+    data, err := m.storage().Read(t.Addr, t.Size)
+    if err != nil { log.Panic(err) }
+    rsp := mem.DataReadyRspBuilder{}.
+        WithSrc(top.AsRemote()).
+        WithDst(t.Src).
+        WithRspTo(t.RspTo).
+        WithData(data).
+        Build()
+    if err2 := top.Send(rsp); err2 != nil {
+        return false
+    }
+    tracing.TraceReqComplete(rsp, m)
+    return true
+}
+
+func (m *memMiddleware) doWriteAndSendRsp(top sim.Port, t txn) bool {
+    if t.DirtyMask == nil {
+        if err := m.storage().Write(t.Addr, t.Data); err != nil { log.Panic(err) }
+    } else {
+        data, err := m.storage().Read(t.Addr, uint64(len(t.Data)))
+        if err != nil { log.Panic(err) }
+        for i := 0; i < len(t.Data); i++ {
+            if t.DirtyMask[i] { data[i] = t.Data[i] }
+        }
+        if err := m.storage().Write(t.Addr, data); err != nil { log.Panic(err) }
+    }
+    rsp := mem.WriteDoneRspBuilder{}.
+        WithSrc(top.AsRemote()).
+        WithDst(t.Src).
+        WithRspTo(t.RspTo).
+        Build()
+    if err2 := top.Send(rsp); err2 != nil {
+        return false
+    }
+    tracing.TraceReqComplete(rsp, m)
+    return true
 }
 
 func (m *memMiddleware) toInternalAddr(addr uint64) uint64 {
