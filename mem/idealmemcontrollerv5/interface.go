@@ -4,7 +4,7 @@ package idealmemcontrollerv5
 // idealmemcontrollerv5 package to depend on these interfaces only, so tests
 // can mock them without importing external packages.
 //
-//go:generate mockgen -destination "mock_local_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/idealmemcontrollerv5 Storage,AddressConverter,StateAccessor
+//go:generate mockgen -destination "mock_local_test.go" -package $GOPACKAGE -write_package_comment=false -source interface.go
 
 // Storage models the minimal storage operations used by the controller.
 // It is implemented by mem.Storage.
@@ -25,4 +25,3 @@ type AddressConverter interface {
 type StateAccessor interface {
     GetState(id string) (interface{}, bool)
 }
-
