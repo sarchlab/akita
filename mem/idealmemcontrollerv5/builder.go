@@ -18,7 +18,6 @@ func MakeBuilder() Builder {
     return Builder{spec: defaults()}
 }
 
-func (b Builder) WithEngine(engine sim.Engine) Builder { b.engine = engine; return b }
 func (b Builder) WithSimulation(s *simv5.Simulation) Builder { b.sim = s; b.engine = s.GetEngine(); return b }
 func (b Builder) WithSpec(spec Spec) Builder           { b.spec = spec; return b }
 
@@ -26,11 +25,15 @@ func (b Builder) WithSpec(spec Spec) Builder           { b.spec = spec; return b
 func (b Builder) Build(name string) *Comp {
     _ = b.spec.validate()
 
+    if b.engine == nil {
+        panic("idealmemcontrollerv5.Builder: engine is nil; call WithSimulation")
+    }
+
     c := &Comp{Spec: b.spec}
     c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.spec.Freq, c)
 
     // Resolve address converter locally based on spec (no global registry)
-    var conv mem.AddressConverter
+    var conv AddressConverter
     switch b.spec.AddrConv.Kind {
     case "", "identity":
         conv = nil

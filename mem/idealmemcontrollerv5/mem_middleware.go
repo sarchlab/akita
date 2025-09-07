@@ -15,8 +15,8 @@ type memMiddleware struct {
     *Comp
     sim        *simv5.Simulation
     storageRef string
-    stor       *mem.Storage
-    conv       mem.AddressConverter
+    stor       Storage
+    conv       AddressConverter
 }
 
 func (m *memMiddleware) Tick() bool {
@@ -170,7 +170,7 @@ func (m *memMiddleware) Handle(e sim.Event) error {
     return nil
 }
 
-func (m *memMiddleware) storage() *mem.Storage {
+func (m *memMiddleware) storage() Storage {
     if m.stor != nil { return m.stor }
     if m.sim == nil {
         log.Panic("emu registry not provided; cannot resolve storage")
@@ -179,7 +179,7 @@ func (m *memMiddleware) storage() *mem.Storage {
     if !ok {
         log.Panicf("storage ref %q not found in emu registry", m.storageRef)
     }
-    s, ok := v.(*mem.Storage)
+    s, ok := v.(Storage)
     if !ok {
         log.Panicf("storage ref %q has unexpected type", m.storageRef)
     }
