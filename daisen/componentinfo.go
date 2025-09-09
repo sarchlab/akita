@@ -21,6 +21,20 @@ type ComponentInfo struct {
 	Data      []TimeValue `json:"data"`
 }
 
+type StackedTimeValue struct {
+	Time   float64            `json:"time"`
+	Values map[string]float64 `json:"values"` // key: milestone kind, value: count
+}
+
+type StackedComponentInfo struct {
+	Name      string             `json:"name"`
+	InfoType  string             `json:"info_type"`
+	StartTime float64            `json:"start_time"`
+	EndTime   float64            `json:"end_time"`
+	Data      []StackedTimeValue `json:"data"`
+	Kinds     []string           `json:"kinds"` // list of all milestone kinds
+}
+
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
 	componentNames := traceReader.ListComponents()
 
@@ -59,6 +73,14 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	case "ConcurrentTask":
 		compInfo = calculateConcurrentTask(
 			compInfo, compName, infoType, startTime, endTime, numDots)
+	case "ConcurrentTaskMilestones":
+		stackedInfo := calculateConcurrentTaskMilestones(
+			compName, infoType, startTime, endTime, int(numDots))
+		rsp, err := json.Marshal(stackedInfo)
+		dieOnErr(err)
+		_, err = w.Write(rsp)
+		dieOnErr(err)
+		return
 	case "BufferPressure":
 		compInfo = calculateBufferPressure(
 			compInfo, compName, infoType, startTime, endTime, numDots)
@@ -470,4 +492,103 @@ func isTaskOverlapsWithBin(
 	}
 
 	return true
+}
+
+func calculateConcurrentTaskMilestones(
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int,
+) *StackedComponentInfo {
+	info := &StackedComponentInfo{
+		Name:      compName,
+		InfoType:  infoType,
+		StartTime: startTime,
+		EndTime:   endTime,
+		Kinds:     []string{},
+	}
+
+	query := TaskQuery{
+		Where:            compName,
+		EnableTimeRange:  true,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		EnableParentTask: true,
+	}
+	tasks := traceReader.ListTasks(query)
+
+	// Collect all milestone kinds
+	kindSet := make(map[string]bool)
+	for _, task := range tasks {
+		for _, step := range task.Steps {
+			kindSet[step.Kind] = true
+		}
+	}
+	
+	for kind := range kindSet {
+		info.Kinds = append(info.Kinds, kind)
+	}
+	sort.Strings(info.Kinds)
+
+	totalDuration := endTime - startTime
+	binDuration := totalDuration / float64(numDots)
+
+	for i := 0; i < numDots; i++ {
+		binStartTime := float64(i)*binDuration + startTime
+		binEndTime := float64(i+1)*binDuration + startTime
+
+		// Count concurrent tasks by milestone kind
+		kindCounts := make(map[string]float64)
+		for _, kind := range info.Kinds {
+			kindCounts[kind] = 0
+		}
+
+		// For each task, check if it's running during this time bin
+		for _, task := range tasks {
+			// Check if task is running during this bin (concurrent task)
+			if float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime {
+				continue
+			}
+
+			// This task is running during this bin, now determine its milestone kind
+			// Find the most recent milestone before or at the bin start time
+			var currentKind string
+			var latestTime float64 = -1
+			
+			// Look through all milestones of this task
+			for _, step := range task.Steps {
+				stepTime := float64(step.Time)
+				// Find the most recent milestone that occurred before or during this bin
+				if stepTime <= binStartTime && stepTime > latestTime {
+					latestTime = stepTime
+					currentKind = step.Kind
+				}
+			}
+			
+			// If no milestone found before this bin, use the first milestone of the task
+			if currentKind == "" && len(task.Steps) > 0 {
+				// Sort steps by time and use the first one
+				firstStep := task.Steps[0]
+				for _, step := range task.Steps {
+					if float64(step.Time) < float64(firstStep.Time) {
+						firstStep = step
+					}
+				}
+				currentKind = firstStep.Kind
+			}
+			
+			// If we found a kind, count this concurrent task
+			if currentKind != "" {
+				kindCounts[currentKind] += 1
+			}
+		}
+
+		stv := StackedTimeValue{
+			Time:   binStartTime + 0.5*binDuration,
+			Values: kindCounts,
+		}
+
+		info.Data = append(info.Data, stv)
+	}
+
+	return info
 }

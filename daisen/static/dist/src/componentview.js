@@ -277,24 +277,39 @@ class ComponentView {
             console.error('Invalid parameters for fetching data');
             return;
         }
-        const params = new URLSearchParams();
-        params.set("info_type", "ConcurrentTask");
-        params.set("where", this._componentName);
+        // Fetch both regular concurrent tasks and milestone-based stacked data
+        const params1 = new URLSearchParams();
+        params1.set("info_type", "ConcurrentTask");
+        params1.set("where", this._componentName);
+        params1.set("start_time", this._startTime.toString());
+        params1.set("end_time", this._endTime.toString());
+        params1.set("num_dots", this._numDots.toString());
+        const params2 = new URLSearchParams();
+        params2.set("info_type", "ConcurrentTaskMilestones");
+        params2.set("where", this._componentName);
+        params2.set("start_time", this._startTime.toString());
+        params2.set("end_time", this._endTime.toString());
+        params2.set("num_dots", this._numDots.toString());
         console.log('Fetching data with componentName:', this._componentName);
-        params.set("start_time", this._startTime.toString());
-        params.set("end_time", this._endTime.toString());
         console.log('Fetching data time', this._startTime.toString(), this._endTime.toString());
-        params.set("num_dots", this._numDots.toString());
-        console.log("Drawing data for:", params.toString());
-        fetch(`/api/compinfo?${params.toString()}`)
-            .then((rsp) => rsp.json())
-            .then((rsp) => {
-            console.log('After Fetching data with componentName:', this._componentName);
-            this._primaryAxisData = rsp;
-            this._renderAxisData(svg, rsp);
+        // First fetch the regular data (this must work)
+        fetch(`/api/compinfo?${params1.toString()}`)
+            .then(rsp => rsp.json())
+            .then((regularData) => {
+            console.log('After Fetching regular data with componentName:', this._componentName);
+            this._primaryAxisData = regularData;
+            this._renderAxisData(svg, regularData);
+            // Then try to fetch stacked data as an enhancement
+            return fetch(`/api/compinfo?${params2.toString()}`);
+        })
+            .then(rsp => rsp.json())
+            .then((stackedData) => {
+            console.log('Successfully fetched stacked data');
+            this._renderStackedMilestones(svg, stackedData);
         })
             .catch((error) => {
-            console.log('Error fetching component', error);
+            console.log('Error fetching stacked data (this is optional):', error);
+            // The regular line chart should still be displayed even if stacked data fails
         });
     }
     _renderAxisData(svg, data) {
@@ -375,6 +390,162 @@ class ComponentView {
             .attr("d", line)
             .attr("fill", "none")
             .attr("stroke", color);
+    }
+    _renderStackedMilestones(svg, stackedData) {
+        if (!stackedData || !stackedData.data || !stackedData.kinds) {
+            console.log('No stacked milestone data available');
+            return;
+        }
+        const canvas = d3.select(svg);
+        // Remove existing stacked bars
+        canvas.selectAll(".stacked-milestones").remove();
+        const stackedGroup = canvas.append("g").attr("class", "stacked-milestones");
+        // Color scheme for different milestone kinds
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+        // Calculate bar width - make bars thinner so they don't interfere with the line
+        const barWidth = Math.min(8, (this._canvasWidth - this._marginLeft * 2) / stackedData.data.length * 0.3);
+        // Calculate the maximum total value for scaling
+        let maxTotal = 0;
+        stackedData.data.forEach((d) => {
+            let total = 0;
+            stackedData.kinds.forEach((kind) => {
+                total += d.values[kind] || 0;
+            });
+            if (total > maxTotal) {
+                maxTotal = total;
+            }
+        });
+        // Create separate scale for stacked bars - use secondary y-axis range (right side)
+        const stackedYScale = d3
+            .scaleLinear()
+            .domain([0, maxTotal])
+            .range([this._canvasHeight - this._xAxisHeight + 5, this._marginTop + 2 * (this._canvasHeight - this._xAxisHeight - this._marginTop) / 3 - 15]);
+        // Draw stacked bars for each time point
+        stackedData.data.forEach((timePoint, index) => {
+            const x = this._xScale(timePoint.time) - barWidth / 2;
+            let currentY = this._canvasHeight - this._xAxisHeight + 5; // Start from bottom
+            stackedData.kinds.forEach((kind, kindIndex) => {
+                const value = timePoint.values[kind] || 0;
+                if (value > 0) {
+                    const barHeight = Math.abs(stackedYScale(value) - stackedYScale(0));
+                    stackedGroup
+                        .append("rect")
+                        .attr("x", x)
+                        .attr("y", currentY - barHeight)
+                        .attr("width", barWidth)
+                        .attr("height", barHeight)
+                        .attr("fill", colorScale(kind))
+                        .attr("opacity", 0.6) // More transparent so line shows through
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 0.5)
+                        .on("mouseover", (event) => {
+                        // Show tooltip with milestone kind and count
+                        const tooltip = d3.select("body")
+                            .append("div")
+                            .attr("class", "milestone-stack-tooltip")
+                            .style("position", "absolute")
+                            .style("background", "rgba(0,0,0,0.8)")
+                            .style("color", "white")
+                            .style("padding", "5px 10px")
+                            .style("border-radius", "3px")
+                            .style("font-size", "12px")
+                            .style("pointer-events", "none")
+                            .style("z-index", "1000")
+                            .html(`<strong>${kind}</strong><br/>Count: ${value}<br/>Time: ${timePoint.time.toFixed(3)}s`);
+                        tooltip
+                            .style("left", (event.pageX + 10) + "px")
+                            .style("top", (event.pageY - 10) + "px");
+                    })
+                        .on("mouseout", () => {
+                        d3.selectAll(".milestone-stack-tooltip").remove();
+                    });
+                    currentY -= barHeight;
+                }
+            });
+        });
+        // Add second y-axis for stacked bars on the right
+        this._drawSecondaryYAxis(svg, stackedYScale, maxTotal);
+        // Add legend for milestone kinds
+        this._renderStackedLegend(svg, stackedData.kinds, colorScale);
+    }
+    _drawSecondaryYAxis(svg, yScale, maxValue) {
+        const canvas = d3.select(svg);
+        // Remove existing secondary y-axis
+        canvas.selectAll(".y-axis-right").remove();
+        const yAxisRight = d3.axisRight(yScale);
+        let yAxisRightGroup = canvas.append("g").attr("class", "y-axis-right");
+        yAxisRightGroup
+            .attr("transform", `translate(${this._canvasWidth - this._marginRight - 35}, ${this._graphPaddingTop})`)
+            .call(yAxisRight.ticks(5));
+        // Style the secondary axis
+        yAxisRightGroup.selectAll(".domain")
+            .attr("stroke", "#666")
+            .attr("opacity", 0.7);
+        yAxisRightGroup.selectAll(".tick line")
+            .attr("stroke", "#666")
+            .attr("opacity", 0.7);
+        yAxisRightGroup.selectAll(".tick text")
+            .attr("fill", "#666")
+            .attr("font-size", "10px");
+        // Add axis label
+        yAxisRightGroup
+            .append("text")
+            .attr("transform", "rotate(90)")
+            .attr("y", -50)
+            .attr("x", (this._canvasHeight - this._xAxisHeight) / 2)
+            .attr("text-anchor", "middle")
+            .attr("fill", "#666")
+            .attr("font-size", "12px")
+            .text("Milestone Count");
+    }
+    _renderStackedLegend(svg, kinds, colorScale) {
+        const canvas = d3.select(svg);
+        // Remove existing legend
+        canvas.selectAll(".stacked-legend").remove();
+        const legendGroup = canvas.append("g").attr("class", "stacked-legend");
+        const legendX = this._canvasWidth - 200;
+        const legendY = this._marginTop + 50;
+        const itemHeight = 18;
+        // Add legend background
+        legendGroup
+            .append("rect")
+            .attr("x", legendX - 10)
+            .attr("y", legendY - 15)
+            .attr("width", 140)
+            .attr("height", kinds.length * itemHeight + 20)
+            .attr("fill", "white")
+            .attr("stroke", "#ccc")
+            .attr("stroke-width", 1)
+            .attr("opacity", 0.9);
+        // Add legend title
+        legendGroup
+            .append("text")
+            .attr("x", legendX)
+            .attr("y", legendY)
+            .attr("font-size", "12px")
+            .attr("font-weight", "bold")
+            .text("Milestone Kinds");
+        // Add legend items
+        kinds.forEach((kind, index) => {
+            const itemY = legendY + 15 + index * itemHeight;
+            // Color square
+            legendGroup
+                .append("rect")
+                .attr("x", legendX)
+                .attr("y", itemY - 8)
+                .attr("width", 12)
+                .attr("height", 12)
+                .attr("fill", colorScale(kind))
+                .attr("opacity", 0.6);
+            // Text label
+            legendGroup
+                .append("text")
+                .attr("x", legendX + 18)
+                .attr("y", itemY)
+                .attr("font-size", "10px")
+                .attr("alignment-baseline", "middle")
+                .text(kind);
+        });
     }
 }
 export default ComponentView;

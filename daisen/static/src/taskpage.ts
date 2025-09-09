@@ -87,6 +87,8 @@ export class TaskPage implements ZoomHandler {
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
     this._componentView.setTimeAxis(this._startTime, this._endTime);
+    
+    this._initializeURLNavigation();
   }
 
   _handleMouseMove(e: MouseEvent) {
@@ -377,12 +379,49 @@ export class TaskPage implements ZoomHandler {
 
   _toggleDissectionMode() {
     this._dissectionMode = !this._dissectionMode;
-    this._updateLayout();
+    this._updateURLAndLayout();
   }
 
   _toggleComponentMilestoneMode() {
     if (!this._componentOnlyMode) return;
     this._componentMilestoneMode = !this._componentMilestoneMode;
+    this._updateLayout();
+  }
+
+  _initializeURLNavigation() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDissectMode = urlParams.get('dissect') === '1';
+    
+    if (isDissectMode) {
+      this._dissectionMode = true;
+      this._updateLayout();
+    }
+    
+    window.addEventListener('popstate', () => {
+      this._handleURLChange();
+    });
+  }
+
+  _handleURLChange() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldBeDissectMode = urlParams.get('dissect') === '1';
+    
+    if (shouldBeDissectMode !== this._dissectionMode) {
+      this._dissectionMode = shouldBeDissectMode;
+      this._updateLayout();
+    }
+  }
+
+  _updateURLAndLayout() {
+    const url = new URL(window.location.href);
+    if (this._dissectionMode) {
+      url.searchParams.set('dissect', '1');
+    } else {
+      url.searchParams.delete('dissect');
+    }
+    
+    window.history.pushState({}, '', url.toString());
+    
     this._updateLayout();
   }
 
@@ -396,12 +435,10 @@ export class TaskPage implements ZoomHandler {
       this._taskView.hideDissectionView();
       this._showComponentMilestoneView();
     } else {
-      // Normal mode: just hide both overlay views, don't touch any other layout
       this._taskView.hideDissectionView();
       this._hideComponentMilestoneView();
     }
     
-    // Update layouts only when not in any overlay mode
     this._taskView.updateLayout();
     if (!this._dissectionMode && !this._componentMilestoneMode) {
       this._componentView.updateLayout();
@@ -622,6 +659,20 @@ export class TaskPage implements ZoomHandler {
     const tooltip = this._tooltip;
     if (tooltip) {
       tooltip.classList.remove('showing');
+    }
+  }
+
+  _hideMilestoneKindsLegend() {
+    const legend = document.querySelector('.milestone-kinds-legend');
+    if (legend) {
+      (legend as HTMLElement).style.display = 'none';
+    }
+  }
+
+  _showMilestoneKindsLegend() {
+    const legend = document.querySelector('.milestone-kinds-legend');
+    if (legend) {
+      (legend as HTMLElement).style.display = 'block';
     }
   }
 
