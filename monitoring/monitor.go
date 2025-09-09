@@ -569,8 +569,6 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 	_, err := w.Write([]byte(backend))
 	dieOnErr(err)
 }
-<<<<<<< HEAD
-=======
 
 // --- VisTracer API handlers ---
 func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
@@ -629,4 +627,3 @@ func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(200)
 	w.Write([]byte(`{"file_size":123456}`))
 }
->>>>>>> 19da771 (add rotate_icon in default condition)
