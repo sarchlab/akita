@@ -26,6 +26,7 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing" //
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -42,6 +43,9 @@ type Monitor struct {
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
+
+	// tracer field for visualization tracing
+	tracer *tracing.DBTracer //
 }
 
 // NewMonitor creates a new Monitor
@@ -141,6 +145,12 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBars = newBars
 }
 
+// Register tracer instance to the monitor.
+func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
+	m.tracer = tr
+	fmt.Println("Tracing registered successfully.")
+}
+
 // StartServer starts the monitor as a web server with a custom port if wanted.
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
@@ -161,6 +171,10 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
+	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
+	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
+	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
+	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
 	r.PathPrefix("/").Handler(fServer)
 
 	actualPort := ":0"
@@ -568,4 +582,62 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 
 	_, err := w.Write([]byte(backend))
 	dieOnErr(err)
+}
+
+// --- VisTracer API handlers ---
+func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/start triggered")
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the EnableTracing() method of DBTracer
+	m.tracer.EnableTracing()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"started"}`))
+}
+
+func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/end triggered")
+
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+	m.tracer.StopTracingAtCurrentTime()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"ended"}`))
+}
+
+// 改完了
+func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
+	// Check if tracing is enabled based on *visTracing and the tracer state
+	fmt.Println("/api/trace/is_tracing triggered")
+
+	var isTracing bool
+	if m.tracer != nil {
+		isTracing = m.tracer.IsTracing() // Call the IsTracing flag of DBTracer Go 语言的导出规则：只有首字母大写的字段或方法才可以被包外访问
+		fmt.Println("isTracing:", isTracing)
+	} else {
+		fmt.Println("tracer is nil - returning false")
+		isTracing = false
+	}
+	response := map[string]bool{"isTracing": isTracing}
+
+	// Write the response as JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	json.NewEncoder(w).Encode(response)
+}
+
+func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
+	fmt.Println("/api/trace/file_size triggered")
+	w.WriteHeader(200)
+	w.Write([]byte(`{"file_size":123456}`))
 }
