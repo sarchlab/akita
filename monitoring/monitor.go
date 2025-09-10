@@ -26,6 +26,7 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing" //
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -42,6 +43,9 @@ type Monitor struct {
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
+
+	// tracer field for visualization tracing
+	tracer *tracing.DBTracer //
 }
 
 // NewMonitor creates a new Monitor
@@ -139,6 +143,12 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	}
 
 	m.progressBars = newBars
+}
+
+// Register tracer instance to the monitor.
+func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
+	m.tracer = tr
+	fmt.Println("Tracing registered successfully.")
 }
 
 // StartServer starts the monitor as a web server with a custom port if wanted.
