@@ -1,0 +1,12 @@
+#box{
+    background-color: transparent;
+    margin-top: 10px;
+    margin-right: 10px;
+    margin-left: 20px;
+    margin-bottom: 5px;
+}
+
+@import url('https://fonts.googleapis.com/css?family=Indie+Flower&display=swap');
+p {
+    font-family: 'Indie Flower', cursive;
+}

@@ -1,0 +1,381 @@
+@import url("https://fonts.googleapis.com/css?family=Asap&display=swap");
+
+html {
+  height: 100%;
+}
+
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#container {
+  width: 100%;
+  height: 100%;
+  /* overflow: hidden; */
+}
+
+.main-body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+#inner-container {
+  display: flex;
+}
+
+.pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color:#2c7bb6;
+  margin-top: 0px;
+  margin-bottom: 40px;
+  position: relative;
+  width: 100%;
+}
+
+.canvas-container {
+  position: relative;
+  width: 100%;
+}
+
+.page-info {
+  margin-left: 10px;
+}
+
+.burger-menu {
+  display: none;
+  position: fixed;
+  top: 12px;
+  right: 10px;
+  cursor: pointer;
+  z-index: 1000;
+  margin-top: 10px;
+}
+
+.burger-bar {
+  width: 25px;
+  height: 3px;
+  background-color: #a9a6a6;
+  margin: 4px 0;
+}
+
+.dropdown-canvas {
+  display: none;
+  position: absolute;
+  top: 50px;  
+  right: 10px; 
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  padding: 10px;
+  width: 400px; 
+  z-index: 1000;
+  flex-direction: column;
+}
+
+#dashboard-btn,
+#dashboard-filter-group,
+#primary-selector-group {
+  display: flex;
+  flex-direction: row;
+  margin-left: 20px;
+}
+
+#dashboard-filter-group,
+#primary-selector-group,
+#secondary-selector-group {
+  display: flex;
+  flex-direction: row;
+  flex: 2;
+  width: 400px;;
+}
+
+#secondary-selector-group {
+  margin-right: 10px;
+}
+
+#dashboard-filter-input {
+  width: 40%;
+  margin-left: -3px;
+  height: 38px !important;
+}
+
+#dashboard-btn { 
+  height: 38px !important; 
+  flex: 0.5;
+  width: 150px;
+  text-align: center;
+}
+
+.input-group-text,
+.custom-select,
+.form-control {
+  height: 38px;
+}
+
+.custom-select {
+  width: 50%;
+  margin-left: -3px;
+}
+
+.dropdown-canvas #dashboard-btn {
+  text-align: center;
+  margin-bottom: 10px;
+  margin-left: 16px; 
+  width: 30%;
+}
+
+.dropdown-canvas #dashboard-filter-group {
+  text-align: left;
+  margin-bottom: 10px;
+  margin-left: 16px; 
+  width: 80%;
+}
+
+.dropdown-canvas .custom-select,
+.dropdown-canvas .input-group {
+  width: 100%;
+  text-align: left;
+  margin-left: 16px; 
+}
+
+.dropdown-canvas #primary-selector-group {
+  width: 100%;
+  margin-left: 16px;
+  margin-bottom: 10px;
+}
+
+.dropdown-canvas .input-group-text {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.dropdown-canvas .custom-select {
+  width: 40%;
+}
+
+@media (max-width: 1365px) {
+  .burger-menu {
+    display: block;
+  }
+
+  .tool-bar {
+    display: flex;
+  }
+}
+
+.row {
+  align-items: flex-start;
+}
+
+.column {
+  display: inline-block;
+  overflow: hidden;
+  /* margin-right: 5px;
+    margin-left: -10px;
+    height: 720px; */
+}
+
+/*.side-column {
+  background: #eeeeee;
+  padding: 5px;
+  height: 100%;
+  user-select: none;
+}*/
+.side-column {
+  background-color: #eeeeee;             
+  padding: 16px;                       
+  height: 100%;
+  user-select: none;
+  border-radius: 12px;                 
+  border: 1px solid #ddd;            
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); 
+  margin: 12px;                        
+}
+
+
+
+.curr-task-info {
+  width: 100%;
+  min-height: 20px;
+  background: #d9d9d9;
+  display: none;
+  width: 330;
+  border-radius: 4px;
+  box-shadow: 0 1px 6px -6px #dddddd;
+  padding: 8px;
+}
+
+.curr-task-info.showing {
+  display: block;
+  /* font-family: 'Asap', sans-serif; */
+  font-size: 16px;
+}
+
+.curr-task-info dl {
+  margin-bottom: 0 !important;
+}
+
+.status-bar {
+  height: 20px;
+}
+
+.top-nav>h1 {
+  font-size: 30px;
+  font-family: "Lacquer", sans-serif;
+  text-align: left;
+  position: absolute;
+  left: 10px;
+  top: 10;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+.top-name>button {
+  text-align: center;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+
+#mouse-coordinate {
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  position: fixed;
+  pointer-events: none;
+}
+
+.navbar-brand {
+  margin-left: 10px;
+}
+
+.dashboard {
+  overflow-y: scroll;
+  margin-top: 5px;
+}
+
+.dashboard .widget {
+  border: 1px solid #999999;
+  border-radius: 4px;
+  padding: 8px;
+  padding-top: 4px;
+  overflow: hidden;
+  margin-top: 5px;
+  margin-left: 5px;
+  min-width: 150px;
+  min-height: 80px;
+}
+
+.dashboard .widget .title-bar {
+  height: 20px;
+  display: flex;
+  margin-bottom: 10px;
+  align-items: baseline;
+}
+
+/* .dashboard .widget .title-bar h6 {} */
+
+.dashboard .widget .title-bar .btn {
+  /* width: 20;
+  height: 20; */
+  margin-left: auto;
+  color: #999999;
+  width: 20px;
+  height: 20px;
+}
+
+.dashboard .widget .title-bar {
+  text-decoration: underline; 
+  cursor: pointer; 
+  transition: color 0.3s ease;
+}
+
+.dashboard .widget .title-bar h6:hover {
+  color: #007BFF;
+}
+
+.circle-primary {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 0.3em;
+  background: #d7191c;
+  margin-right: 4px;
+}
+
+.circle-secondary {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 0.3em;
+  background: #2c7bb6;
+  margin-right: 4px;
+}
+
+.dashboard .widget .y-axis-left text {
+  fill: #d7191c;
+}
+
+.dashboard .widget .y-axis-left line {
+  stroke: #d7191c;
+}
+
+.dashboard .widget .y-axis-left path {
+  stroke: #d7191c;
+}
+
+.dashboard .widget .y-axis-right text {
+  fill: #2c7bb6;
+}
+
+.dashboard .widget .y-axis-right line {
+  stroke: #2c7bb6;
+}
+
+.dashboard .widget .y-axis-right path {
+  stroke: #2c7bb6;
+}
+
+.location-label {
+  margin-top: 10px;
+  font-size: 30px;
+  font-weight: bold;
+}
+ 
+.code-block {
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 12px;
+  margin: 8px 0;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+  overflow-x: auto;
+}
+
+.inline-code {
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: "Fira Mono", "Consolas", "Monaco", monospace;
+  font-size: 0.95em;
+}
+
+/* Add this to your injected CSS */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
