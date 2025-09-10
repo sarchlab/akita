@@ -161,6 +161,10 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
+	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
+	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
+	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
+	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
 	r.PathPrefix("/").Handler(fServer)
 
 	actualPort := ":0"
