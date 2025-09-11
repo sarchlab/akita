@@ -167,6 +167,76 @@ GPU.CommandProcessor,9
     return html;
   }
 
+  // Method 3: Complete structure validation for HTML tables
+  _detectHtmlTable(responseText: string): { hasTable: boolean; tableCount: number; tables: string[] } {
+    const hasTableTag = /<table/i.test(responseText);
+    const hasRows = /<tr/i.test(responseText);
+    const hasCells = /<t[hd]/i.test(responseText);
+    const hasClosingTable = /<\/table>/i.test(responseText);
+    
+    if (!hasTableTag || !hasRows || !hasCells || !hasClosingTable) {
+      return { hasTable: false, tableCount: 0, tables: [] };
+    }
+    
+    const tableMatches = responseText.match(/<table[\s\S]*?<\/table>/gi);
+    if (!tableMatches) {
+      return { hasTable: false, tableCount: 0, tables: [] };
+    }
+    
+    return {
+      hasTable: true,
+      tableCount: tableMatches.length,
+      tables: tableMatches
+    };
+  }
+
+  // Convert HTML table to CSV data
+  _htmlTableToCSV(tableHtml: string): string[][] {
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = tableHtml;
+      const table = tempDiv.querySelector('table');
+      if (!table) return [];
+      
+      const csvData: string[][] = [];
+      
+      // Extract header from thead if it exists
+      const thead = table.querySelector('thead');
+      if (thead) {
+        const headerRow = thead.querySelector('tr');
+        if (headerRow) {
+          const headers: string[] = [];
+          headerRow.querySelectorAll('th, td').forEach(cell => {
+            headers.push(cell.textContent?.trim() || '');
+          });
+          if (headers.length > 0) csvData.push(headers);
+        }
+      }
+      
+      // Extract data from tbody or table
+      const tbody = table.querySelector('tbody') || table;
+      const rows = tbody.querySelectorAll('tr');
+      
+      rows.forEach(row => {
+        if (thead && thead.contains(row)) return;
+        
+        const rowData: string[] = [];
+        row.querySelectorAll('td, th').forEach(cell => {
+          rowData.push(cell.textContent?.trim() || '');
+        });
+        
+        if (rowData.length > 0 && !rowData.every(cell => cell === '...')) {
+          csvData.push(rowData);
+        }
+      });
+      
+      return csvData;
+    } catch (error) {
+      console.error('Error converting HTML table to CSV:', error);
+      return [];
+    }
+  }
+
   constructor() {
     this._fileIdCounter = 0;
     this._fileListRow = document.createElement("div");
@@ -608,24 +678,9 @@ GPU.CommandProcessor,9
           userBubble.style.wordBreak = "break-word";
           userDiv.appendChild(userBubble);
 
-          // Add URL underneath the user bubble
-          const urlDiv = document.createElement("div");
-          urlDiv.innerHTML = this._getCurrentFrontendURL();
-          urlDiv.className = 'chat-url';
-          urlDiv.style.fontSize = "10px";
-          urlDiv.style.color = "#999999";
-          urlDiv.style.marginTop = "2px";
-          urlDiv.style.textAlign = "right";
-          urlDiv.style.maxWidth = "90%";
-          urlDiv.style.wordBreak = "break-all";
-          urlDiv.style.cursor = "default";
-          urlDiv.style.textDecoration = "none";
-          urlDiv.addEventListener('click', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-              window.open(this._getCurrentFrontendURL(), '_blank');
-            }
-          });
-          userDiv.appendChild(urlDiv);
+          // Add URL preview underneath the user bubble
+          const urlPreviewDiv = renderMessageUrl(this._getCurrentFrontendURL());
+          userDiv.appendChild(urlPreviewDiv);
 
           // Add file previews underneath URL if files are attached
           if (m.files && m.files.length > 0) {
@@ -2051,24 +2106,9 @@ GPU.CommandProcessor,9
       userBubble.style.wordBreak = "break-word";
       userDiv.appendChild(userBubble);
 
-      // Add URL underneath the user bubble
-      const urlDiv = document.createElement("div");
-      urlDiv.innerHTML = this._getCurrentFrontendURL();
-      urlDiv.className = 'chat-url';
-      urlDiv.style.fontSize = "10px";
-      urlDiv.style.color = "#999999";
-      urlDiv.style.marginTop = "2px";
-      urlDiv.style.textAlign = "right";
-      urlDiv.style.maxWidth = "90%";
-      urlDiv.style.wordBreak = "break-all";
-      urlDiv.style.cursor = "default";
-      urlDiv.style.textDecoration = "none";
-      urlDiv.addEventListener('click', (e) => {
-        if (e.ctrlKey || e.metaKey) {
-          window.open(this._getCurrentFrontendURL(), '_blank');
-        }
-      });
-      userDiv.appendChild(urlDiv);
+      // Add URL preview underneath the user bubble
+      const urlPreviewDiv = renderMessageUrl(this._getCurrentFrontendURL());
+      userDiv.appendChild(urlPreviewDiv);
 
       // Add file previews underneath URL if files are attached
       if (this._uploadedFiles.length > 0) {
@@ -2390,11 +2430,32 @@ Kernel Execution,76.68,84.65,7.97`);
         const gptResponseContent = gptResponse.content;
         const gptResponseTotalTokens = gptResponse.totalTokens;
         console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");
+        
+        // Check for HTML table and save to localStorage if found
+        const tableDetection = this._detectHtmlTable(gptResponseContent);
+        let finalContent = gptResponseContent;
+        
+        if (tableDetection.hasTable) {
+          console.log("[Table Detection] Found HTML table(s) in response:", tableDetection);
+          const csvData = this._htmlTableToCSV(tableDetection.tables[0]);
+          
+          if (csvData.length > 0) {
+            localStorage.setItem("visualization_data", JSON.stringify(csvData));
+            console.log("[Table Processing] Saved table data to localStorage:", csvData);
+            
+            // Remove the specific text about inserting HTML into webpage
+            finalContent = finalContent.replace(/You can directly insert this HTML into your webpage to display the table\.\s*Let me know if you need any more help!/gi, '');
+            
+            const graphLink = '<a href="http://localhost:5173/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">View Data Visualization</a>';
+            finalContent += `<br><br>📊 I've detected a table in my response and saved the data for visualization. ${graphLink}`;
+          }
+        }
+        
         botDiv.innerHTML =
           `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
-            gptResponseTotalTokens === -1 ? "no tokens" : gptResponseTotalTokens.toLocaleString() + " tokens"
+            gptResponseTotalTokens === -1 ? "gptResponsekens" : gptResponseTotalTokens.toLocaleString() + " tokens"
           })</span> ` +
-          convertMarkdownToHTML(autoWrapMath(gptResponseContent));
+          convertMarkdownToHTML(autoWrapMath(finalContent));
 
         messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}] });
         this._chatMessages = messages; // Update the instance messages
@@ -2795,14 +2856,78 @@ function renderFileList() {
   console.log("[File Uploaded] Current Files:\n", this._uploadedFiles.map(f => ({ id: f.id, name: f.name, type: f.type, size: f.size })));
 }
 
+// Helper function to render message URL preview
+function renderMessageUrl(url: string) {
+  const urlPreviewContainer = document.createElement("div");
+  urlPreviewContainer.style.marginTop = "4px";
+  urlPreviewContainer.style.marginBottom = "2px";
+  urlPreviewContainer.style.maxWidth = "90%";
+  urlPreviewContainer.style.textAlign = "right";
+
+  const urlPreview = document.createElement("div");
+  urlPreview.className = 'chat-url'; // Add class for compatibility with existing URL handlers
+  urlPreview.style.display = "flex";
+  urlPreview.style.alignItems = "center";
+  urlPreview.style.justifyContent = "flex-end";
+  urlPreview.style.background = "rgba(240, 242, 245, 0.8)";
+  urlPreview.style.border = "1px solid rgba(204, 204, 204, 0.8)";
+  urlPreview.style.borderRadius = "4px";
+  urlPreview.style.padding = "4px 8px";
+  urlPreview.style.fontSize = "12px";
+  urlPreview.style.color = "#555";
+  urlPreview.style.cursor = "default";
+
+  // URL Icon
+  const iconSpan = document.createElement("span");
+  iconSpan.style.display = "flex";
+  iconSpan.style.alignItems = "center";
+  iconSpan.style.justifyContent = "center";
+  iconSpan.style.width = "16px";
+  iconSpan.style.height = "16px";
+  iconSpan.style.marginRight = "6px";
+  iconSpan.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.71"/>
+  </svg>`;
+  urlPreview.appendChild(iconSpan);
+
+  // URL text container
+  const urlInfoContainer = document.createElement("div");
+  urlInfoContainer.style.display = "flex";
+  urlInfoContainer.style.alignItems = "center";
+  urlInfoContainer.style.flex = "1";
+  urlInfoContainer.style.minWidth = "0";
+  
+  // URL text
+  const urlSpan = document.createElement("span");
+  urlSpan.textContent = url;
+  urlSpan.style.overflow = "hidden";
+  urlSpan.style.textOverflow = "ellipsis";
+  urlSpan.style.whiteSpace = "nowrap";
+  urlSpan.style.color = "#666";
+  urlInfoContainer.appendChild(urlSpan);
+
+  urlPreview.appendChild(urlInfoContainer);
+
+  // Add click handler for Ctrl+click
+  urlPreview.addEventListener('click', (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      window.open(url, '_blank');
+    }
+  });
+
+  urlPreviewContainer.appendChild(urlPreview);
+  return urlPreviewContainer;
+}
+
 // Helper function to render message file previews
 function renderMessageFiles(files: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[]) {
   if (!files || files.length === 0) {
     return null;
   }
-
+4
   const filePreviewContainer = document.createElement("div");
-  filePreviewContainer.style.marginTop = "4px";
+  filePreviewContainer.style.marginTop = "2px";
   filePreviewContainer.style.marginBottom = "2px";
   filePreviewContainer.style.maxWidth = "90%";
   filePreviewContainer.style.textAlign = "right";
