@@ -26,8 +26,9 @@ type Builder struct {
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 
-	addressMapperType     string
-	remotePorts           []sim.RemotePort
+	addressMapperType string
+	remotePorts       []sim.RemotePort
+	state             string
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -43,6 +44,7 @@ func MakeBuilder() Builder {
 		maxNumConcurrentTrans: 16,
 		dirLatency:            2,
 		bankLatency:           20,
+		state:                 "enable",
 	}
 }
 
@@ -168,6 +170,8 @@ func (b Builder) Build(name string) *Comp {
 	c.dirBuf = sim.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
 	c.bankBufs = make([]sim.Buffer, b.numBank)
 
+	c.state = b.state
+
 	for i := 0; i < b.numBank; i++ {
 		c.bankBufs[i] = sim.NewBuffer(
 			fmt.Sprintf("%s.Bank%d.Buffer", name, i),
@@ -196,6 +200,9 @@ func (b Builder) Build(name string) *Comp {
 
 	middleware := &middleware{Comp: c}
 	c.AddMiddleware(middleware)
+
+	ctrlMiddleware := &ctrlMiddleware{Comp: c}
+	c.AddMiddleware(ctrlMiddleware)
 
 	return c
 }

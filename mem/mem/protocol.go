@@ -533,3 +533,111 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 
 	return m
 }
+
+type ControlMsgRsp struct {
+	sim.MsgMeta
+
+	RspTo   string
+	Enable  bool
+	Drain   bool
+	Flush   bool
+	Pause   bool
+	Invalid bool
+}
+
+// Meta returns the meta data associated with the message.
+func (r *ControlMsgRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+// Clone returns cloned ControlMsgRsp with different ID
+func (r *ControlMsgRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.Enable = r.Enable
+	cloneMsg.Drain = r.Drain
+	cloneMsg.Flush = r.Flush
+	cloneMsg.Pause = r.Pause
+	cloneMsg.Invalid = r.Invalid
+	return &cloneMsg
+}
+
+// GetRspTo returns the ID of the request that the respond is responding to.
+func (r *ControlMsgRsp) GetRspTo() string {
+	return r.RspTo
+}
+
+// ControlMsgRspBuilder can build control messages.
+type ControlMsgRspBuilder struct {
+	src, dst sim.RemotePort
+	rspTo    string
+	enable   bool
+	drain    bool
+	flush    bool
+	pause    bool
+	invalid  bool
+}
+
+// WithSrc sets the source of the request to build.
+func (b ControlMsgRspBuilder) WithSrc(src sim.RemotePort) ControlMsgRspBuilder {
+	b.src = src
+	return b
+}
+
+// WithDst sets the destination of the request to build.
+func (b ControlMsgRspBuilder) WithDst(dst sim.RemotePort) ControlMsgRspBuilder {
+	b.dst = dst
+	return b
+}
+
+// WithRspTo sets ID of the request that the respond to build is replying to.
+func (b ControlMsgRspBuilder) WithRspTo(id string) ControlMsgRspBuilder {
+	b.rspTo = id
+	return b
+}
+
+// WithEnable sets the enable bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithEnable(enable bool) ControlMsgRspBuilder {
+	b.enable = enable
+	return b
+}
+
+// WithDrain sets the drain bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithDrain(drain bool) ControlMsgRspBuilder {
+	b.drain = drain
+	return b
+}
+
+// WithFlush sets the flush bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithFlush(flush bool) ControlMsgRspBuilder {
+	b.flush = flush
+	return b
+}
+
+// WithPause sets the pause bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithPause(pause bool) ControlMsgRspBuilder {
+	b.pause = pause
+	return b
+}
+
+// WithInvalid sets the invalid bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithInvalid(invalid bool) ControlMsgRspBuilder {
+	b.invalid = invalid
+	return b
+}
+
+// Build creates a new ControlMsgRsp
+func (b ControlMsgRspBuilder) Build() *ControlMsgRsp {
+	r := &ControlMsgRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.Enable = b.enable
+	r.Drain = b.drain
+	r.Flush = b.flush
+	r.Pause = b.pause
+	r.Invalid = b.invalid
+	r.TrafficClass = reflect.TypeOf(ControlMsgRsp{}).String()
+	return r
+}

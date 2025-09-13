@@ -32,6 +32,8 @@ type Comp struct {
 	responsePipeline    pipelining.Pipeline
 	responseBuffer      sim.Buffer
 
+	inflightFlushReq *FlushReq
+
 	isPaused bool
 }
 
