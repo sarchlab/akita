@@ -18,23 +18,18 @@ type tlbMiddleware struct {
 }
 
 func (m *tlbMiddleware) Tick() bool {
-	// madeProgress := m.performCtrlReq()
 	madeProgress := false
 
 	switch m.state {
 	case "drain":
 		madeProgress = m.handleDrain() || madeProgress
-
 	case "pause":
-		// No action
-
+		return false
 	case "flush":
 		madeProgress = m.handleFlush() || madeProgress
-
-	default: // When state is enable or in initial state
+	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
-
 	return madeProgress
 }
 
@@ -378,7 +373,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
-		return true
+		return madeProgress
 	}
 
 	for i := 0; i < m.numReqPerCycle; i++ {
@@ -391,7 +386,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 
 	madeProgress = m.processPipeline() || madeProgress
 
-	return true
+	return madeProgress
 }
 
 func (m *tlbMiddleware) processTLBFlush() bool {
