@@ -153,6 +153,8 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 		m.bottomPort.RetrieveIncoming()
 	}
 
+	m.controlPort.RetrieveIncoming()
+
 	return true
 }
 
