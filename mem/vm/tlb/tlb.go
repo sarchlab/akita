@@ -33,8 +33,6 @@ type Comp struct {
 	responseBuffer      sim.Buffer
 
 	inflightFlushReq *FlushReq
-
-	isPaused bool
 }
 
 // reset sets all the entries in the TLB to be invalid

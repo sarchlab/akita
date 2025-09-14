@@ -375,6 +375,12 @@ func (m *tlbMiddleware) handleFlush() bool {
 	}
 
 	madeProgress := false
+
+	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+		madeProgress = m.processTLBFlush() || madeProgress
+		return true
+	}
+
 	for i := 0; i < m.numReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -384,11 +390,6 @@ func (m *tlbMiddleware) handleFlush() bool {
 	}
 
 	madeProgress = m.processPipeline() || madeProgress
-
-	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
-		madeProgress = m.processTLBFlush() || madeProgress
-		return true
-	}
 
 	return true
 }

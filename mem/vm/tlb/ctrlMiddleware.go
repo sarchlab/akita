@@ -1,7 +1,9 @@
 package tlb
 
 import (
+	"fmt"
 	"log"
+	"reflect"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/tracing"
@@ -106,6 +108,7 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 func (m *ctrlMiddleware) handleTLBFlush(req *FlushReq) bool {
 	m.flushMsgMustBeValidinCurrentStage(req)
 	m.inflightFlushReq = req
+	m.controlPort.RetrieveIncoming()
 	m.state = "flush"
 
 	return true
@@ -122,6 +125,7 @@ func (m *ctrlMiddleware) flushMsgMustBeValidinCurrentStage(req *FlushReq) {
 	case "flush":
 		log.Panic("TLB is already flushing")
 	default:
+		fmt.Printf("state: %s, msg: %s\n", state, reflect.TypeOf(req))
 		log.Panic("Unknown TLB state")
 	}
 }
@@ -143,7 +147,8 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 		m.Comp.Name(),
 		m.Comp,
 	)
-	m.isPaused = false
+
+	m.state = "enable"
 
 	for m.topPort.RetrieveIncoming() != nil {
 		m.topPort.RetrieveIncoming()
@@ -156,8 +161,4 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 	m.controlPort.RetrieveIncoming()
 
 	return true
-}
-
-func (m *ctrlMiddleware) vAddrToSetID(vAddr uint64) (setID int) {
-	return int(vAddr / m.pageSize % uint64(m.numSets))
 }

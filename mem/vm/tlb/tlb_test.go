@@ -69,6 +69,7 @@ var _ = Describe("TLB", func() {
 		tlb.bottomPort = bottomPort
 		tlb.controlPort = controlPort
 		tlb.sets = []internal.Set{set}
+		tlb.state = "enable"
 
 		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
 		tlbCtrlMW = tlb.Middlewares()[0].(*ctrlMiddleware)
@@ -302,11 +303,14 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().PeekIncoming().Return(flushReq)
 			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
+			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
+			madeProgress = tlbMW.Tick() || madeProgress
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.isPaused).To(BeTrue())
 		})
 
 		It("should handle restart request", func() {
@@ -325,7 +329,6 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.isPaused).To(BeFalse())
 		})
 	})
 
