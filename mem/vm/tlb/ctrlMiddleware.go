@@ -43,7 +43,7 @@ func (m *ctrlMiddleware) handleControlMsg(
 	msg *mem.ControlMsg) bool {
 	m.ctrlMsgMustBeValidinCurrentStage(msg)
 
-	return m.performCtrlReq(msg)
+	return m.performCtrlReq()
 }
 
 func (m *ctrlMiddleware) ctrlMsgMustBeValidinCurrentStage(msg *mem.ControlMsg) {
@@ -75,10 +75,20 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValidinCurrentStage(msg *mem.ControlMsg) {
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlReq(req *mem.ControlMsg) bool {
+func (m *ctrlMiddleware) performCtrlReq() bool {
 	item := m.controlPort.PeekIncoming()
 	if item == nil {
 		return false
+	}
+
+	req := item.(*mem.ControlMsg)
+
+	if req.Enable {
+		m.state = "enable"
+	} else if req.Drain {
+		m.state = "drain"
+	} else if req.Pause {
+		m.state = "pause"
 	}
 
 	item = m.controlPort.RetrieveIncoming()
@@ -89,14 +99,6 @@ func (m *ctrlMiddleware) performCtrlReq(req *mem.ControlMsg) bool {
 		m.Comp.Name(),
 		m.Comp,
 	)
-
-	if req.Enable {
-		m.state = "enable"
-	} else if req.Drain {
-		m.state = "drain"
-	} else if req.Pause {
-		m.state = "pause"
-	}
 
 	return true
 }

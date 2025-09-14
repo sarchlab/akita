@@ -20,6 +20,7 @@ var _ = Describe("TLB", func() {
 		engine        *MockEngine
 		tlb           *Comp
 		tlbMW         *tlbMiddleware
+		tlbCtrlMW     *ctrlMiddleware
 		set           *MockSet
 		topPort       *MockPort
 		bottomPort    *MockPort
@@ -70,6 +71,7 @@ var _ = Describe("TLB", func() {
 		tlb.sets = []internal.Set{set}
 
 		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
+		tlbCtrlMW = tlb.Middlewares()[0].(*ctrlMiddleware)
 	})
 
 	AfterEach(func() {
@@ -272,7 +274,7 @@ var _ = Describe("TLB", func() {
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -301,7 +303,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeTrue())
@@ -320,7 +322,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeFalse())
@@ -340,7 +342,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pauseMsg)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.state).To(Equal("pause"))
@@ -358,7 +360,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pause)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.state).To(Equal("pause"))
@@ -374,7 +376,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(enable)
 
-			madeProgress = tlbMW.performCtrlReq()
+			madeProgress = tlbCtrlMW.performCtrlReq()
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.state).To(Equal("enable"))
 		})
@@ -391,7 +393,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(drainMsg)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.state).To(Equal("drain"))
