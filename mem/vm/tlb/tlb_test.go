@@ -303,7 +303,7 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
 
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeTrue())
@@ -322,7 +322,7 @@ var _ = Describe("TLB", func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlb.isPaused).To(BeFalse())
