@@ -50,25 +50,25 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValidinCurrentStage(msg *mem.ControlMsg) {
 	switch state := m.state; state {
 	case "enable":
 		if msg.Enable {
-			log.Panic("TLB is already enabled at %s", m.Name())
+			log.Panic("TLB is already enabled")
 		}
 	case "pause":
 		if msg.Pause {
-			log.Panic("TLB is already paused at %s", m.Name())
+			log.Panic("TLB is already paused")
 		}
 		if msg.Drain {
-			log.Panic("Cannot drain when TLB is paused at %s", m.Name())
+			log.Panic("Cannot drain when TLB is paused")
 		}
 	case "drain":
 		if msg.Drain {
-			log.Panic("TLB is already draining at %s", m.Name())
+			log.Panic("TLB is already draining")
 		}
 		if msg.Pause || msg.Enable {
-			log.Panic("Cannot pause/enable when TLB is draining at %s", m.Name())
+			log.Panic("Cannot pause/enable when TLB is draining")
 		}
 	case "flush":
 		if msg.Drain || msg.Enable || msg.Pause {
-			log.Panic("Cannot pause/enable/drain when TLB is flushing at %s", m.Name())
+			log.Panic("Cannot pause/enable/drain when TLB is flushing")
 		}
 	default:
 		log.Panic("Unknown TLB state: %s", state)
@@ -116,11 +116,11 @@ func (m *ctrlMiddleware) flushMsgMustBeValidinCurrentStage(req *FlushReq) {
 	case "enable":
 		// valid
 	case "pause":
-		log.Panic("Cannot flush when TLB is paused at %s", m.Name())
+		log.Panic("Cannot flush when TLB is paused")
 	case "drain":
-		log.Panic("Cannot flush when TLB is draining at %s", m.Name())
+		log.Panic("Cannot flush when TLB is draining")
 	case "flush":
-		log.Panic("TLB is already flushing at %s", m.Name())
+		log.Panic("TLB is already flushing")
 	default:
 		log.Panic("Unknown TLB state: %s", state)
 	}
