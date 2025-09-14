@@ -10,14 +10,14 @@ type ctrlMiddleware struct {
 	*Comp
 	inflightCtrlMsg *mem.ControlMsg
 
-	ctrlPort     sim.Port
-	transactions *[]*transaction
-	directory    cache.Directory
-	cache        *Comp
-	coalescer    *coalescer
-	bankStages   []*bankStage
+	ctrlPort sim.Port
+	// transactions *[]*transaction
+	directory cache.Directory
+	cache     *Comp
+	// coalescer    *coalescer
+	// bankStages   []*bankStage
 
-	currFlushReq *cache.FlushReq
+	// currFlushReq *cache.FlushReq
 }
 
 func (m *ctrlMiddleware) Tick() bool {
