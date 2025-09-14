@@ -12,7 +12,6 @@ import (
 type FlushReq struct {
 	sim.MsgMeta
 
-	Flush                   bool
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool

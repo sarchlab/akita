@@ -27,8 +27,6 @@ type Comp struct {
 	dirBuf   sim.Buffer
 	bankBufs []sim.Buffer
 
-	state string
-
 	coalesceStage    *coalescer
 	directoryStage   *directory
 	bankStages       []*bankStage
@@ -72,12 +70,6 @@ func (m *middleware) Tick() bool {
 
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
-	madeProgress = m.tickControlStage() || madeProgress
-
-	if m.state == "pause" {
-		return madeProgress
-	}
-
 	madeProgress = m.tickRespondStage() || madeProgress
 	madeProgress = m.tickParseBottomStage() || madeProgress
 	madeProgress = m.tickBankStage() || madeProgress
@@ -85,10 +77,6 @@ func (m *middleware) runPipeline() bool {
 	madeProgress = m.tickCoalesceState() || madeProgress
 
 	return madeProgress
-}
-
-func (m *middleware) tickControlStage() bool {
-	return m.controlStage.Tick()
 }
 
 func (m *middleware) tickRespondStage() bool {
