@@ -71,7 +71,7 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValidinCurrentStage(msg *mem.ControlMsg) {
 			log.Panic("Cannot pause/enable/drain when TLB is flushing")
 		}
 	default:
-		log.Panic("Unknown TLB state: %s", state)
+		log.Panic("Unknown TLB state")
 	}
 }
 
@@ -122,7 +122,7 @@ func (m *ctrlMiddleware) flushMsgMustBeValidinCurrentStage(req *FlushReq) {
 	case "flush":
 		log.Panic("TLB is already flushing")
 	default:
-		log.Panic("Unknown TLB state: %s", state)
+		log.Panic("Unknown TLB state")
 	}
 }
 
