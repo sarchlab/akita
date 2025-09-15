@@ -3,6 +3,7 @@ package switches
 
 import (
 	"fmt"
+	"hash/fnv"
 
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
@@ -173,7 +174,7 @@ func (m *middleware) route() (madeProgress bool) {
 			pipelineItem := item.(flitPipelineItem)
 			flit := pipelineItem.flit
 
-			vcID := m.assignVCID(flit)
+			vcID := m.assignVCID(flit, pc.numVC)
 			forwardChannel := forwardBuf[vcID]
 
 			if !forwardChannel.CanPush() {
@@ -275,8 +276,14 @@ func (m *middleware) assignFlitOutputBuf(
 	}
 }
 
-func (m *middleware) assignVCID(msg sim.Msg) int {
-	return 0
+func (m *middleware) assignVCID(flit *messaging.Flit, numVC int) int {
+	originMsg := flit.Msg
+	originID := originMsg.Meta().ID
+
+	hasher := fnv.New32a()
+	hasher.Write([]byte(originID))
+
+	return int(hasher.Sum32()) % numVC
 }
 
 // SwitchPortAdder can add a port to a switch.
