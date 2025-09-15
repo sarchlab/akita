@@ -107,7 +107,6 @@ class ComponentView {
 
     this._updateTimeScale();
     this._renderData();
-
     this._fetchAndRenderAxisData(svgElement);
   }
 
@@ -382,7 +381,7 @@ class ComponentView {
 
   _fetchAndRenderAxisData(svg: SVGElement) {
     if (!this._componentName || this._startTime >= this._endTime) {
-      console.error('Invalid parameters for fetching data');
+      // console.log('Invalid parameters for fetching data');
       return;
     }
     const params = new URLSearchParams();
