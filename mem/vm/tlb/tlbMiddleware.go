@@ -21,11 +21,11 @@ func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
 
 	switch m.state {
-	case "drain":
+	case tlbStateDrain:
 		madeProgress = m.handleDrain() || madeProgress
-	case "pause":
+	case tlbStatePause:
 		return false
-	case "flush":
+	case tlbStateFlush:
 		madeProgress = m.handleFlush() || madeProgress
 	default:
 		madeProgress = m.handleEnable() || madeProgress
@@ -120,7 +120,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
-		m.state = "pause"
+		m.state = tlbStatePause
 		tracing.AddMilestone(
 			m.Comp.Name()+".drain",
 			tracing.MilestoneKindHardwareResource,
@@ -431,7 +431,7 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	m.mshr.Reset()
 
 	m.inflightFlushReq = nil
-	m.state = "pause"
+	m.state = tlbStatePause
 
 	return true
 }

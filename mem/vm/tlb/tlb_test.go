@@ -69,7 +69,7 @@ var _ = Describe("TLB", func() {
 		tlb.bottomPort = bottomPort
 		tlb.controlPort = controlPort
 		tlb.sets = []internal.Set{set}
-		tlb.state = "enable"
+		tlb.state = tlbStateEnable
 
 		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
 		tlbCtrlMW = tlb.Middlewares()[0].(*ctrlMiddleware)
@@ -348,7 +348,7 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 		})
 
 		It("should handle enable ctrl msg after pause", func() {
@@ -366,7 +366,7 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 
 			enable := mem.ControlMsgBuilder{}.
 				WithSrc(sim.RemotePort("")).
@@ -381,7 +381,7 @@ var _ = Describe("TLB", func() {
 
 			madeProgress = tlbCtrlMW.performCtrlReq()
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("enable"))
+			Expect(tlb.state).To(Equal(tlbStateEnable))
 		})
 
 		It("should handle drain ctrl msg", func() {
@@ -399,14 +399,14 @@ var _ = Describe("TLB", func() {
 			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("drain"))
+			Expect(tlb.state).To(Equal(tlbStateDrain))
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			madeProgress = tlbMW.handleDrain()
 			Expect(madeProgress).To(BeFalse())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 		})
 	})
 })

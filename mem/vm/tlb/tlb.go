@@ -7,6 +7,13 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+const (
+	tlbStateEnable = "enable"
+	tlbStatePause  = "pause"
+	tlbStateDrain  = "drain"
+	tlbStateFlush  = "flush"
+)
+
 // Comp is a Translation Lookaside Buffer (TLB) that stores part of the page
 // table.
 type Comp struct {

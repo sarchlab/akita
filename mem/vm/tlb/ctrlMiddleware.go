@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"fmt"
 	"log"
 	"reflect"
 
@@ -43,32 +42,32 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 
 func (m *ctrlMiddleware) handleControlMsg(
 	msg *mem.ControlMsg) bool {
-	m.ctrlMsgMustBeValidinCurrentStage(msg)
+	m.ctrlMsgMustBeValidInCurrentStage(msg)
 
 	return m.performCtrlReq()
 }
 
-func (m *ctrlMiddleware) ctrlMsgMustBeValidinCurrentStage(msg *mem.ControlMsg) {
+func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(msg *mem.ControlMsg) {
 	switch state := m.state; state {
-	case "enable":
+	case tlbStateEnable:
 		if msg.Enable {
 			log.Panic("TLB is already enabled")
 		}
-	case "pause":
+	case tlbStatePause:
 		if msg.Pause {
 			log.Panic("TLB is already paused")
 		}
 		if msg.Drain {
 			log.Panic("Cannot drain when TLB is paused")
 		}
-	case "drain":
+	case tlbStateDrain:
 		if msg.Drain {
 			log.Panic("TLB is already draining")
 		}
 		if msg.Pause || msg.Enable {
 			log.Panic("Cannot pause/enable when TLB is draining")
 		}
-	case "flush":
+	case tlbStateFlush:
 		if msg.Drain || msg.Enable || msg.Pause {
 			log.Panic("Cannot pause/enable/drain when TLB is flushing")
 		}
@@ -86,11 +85,11 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	req := item.(*mem.ControlMsg)
 
 	if req.Enable {
-		m.state = "enable"
+		m.state = tlbStateEnable
 	} else if req.Drain {
-		m.state = "drain"
+		m.state = tlbStateDrain
 	} else if req.Pause {
-		m.state = "pause"
+		m.state = tlbStatePause
 	}
 
 	item = m.controlPort.RetrieveIncoming()
@@ -106,27 +105,26 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 }
 
 func (m *ctrlMiddleware) handleTLBFlush(req *FlushReq) bool {
-	m.flushMsgMustBeValidinCurrentStage(req)
+	m.flushMsgMustBeValidInCurrentStage(req)
 	m.inflightFlushReq = req
 	m.controlPort.RetrieveIncoming()
-	m.state = "flush"
+	m.state = tlbStateFlush
 
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidinCurrentStage(req *FlushReq) {
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
 	switch state := m.state; state {
-	case "enable":
+	case tlbStateEnable:
 		// valid
-	case "pause":
+	case tlbStatePause:
 		log.Panic("Cannot flush when TLB is paused")
-	case "drain":
+	case tlbStateDrain:
 		log.Panic("Cannot flush when TLB is draining")
-	case "flush":
+	case tlbStateFlush:
 		log.Panic("TLB is already flushing")
 	default:
-		fmt.Printf("state: %s, msg: %s\n", state, reflect.TypeOf(req))
-		log.Panic("Unknown TLB state")
+		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(req))
 	}
 }
 
@@ -148,7 +146,7 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 		m.Comp,
 	)
 
-	m.state = "enable"
+	m.state = tlbStateEnable
 
 	for m.topPort.RetrieveIncoming() != nil {
 		m.topPort.RetrieveIncoming()
