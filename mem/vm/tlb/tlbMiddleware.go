@@ -1,10 +1,6 @@
 package tlb
 
 import (
-	"log"
-	"reflect"
-
-	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/tracing"
 )
@@ -22,19 +18,18 @@ type tlbMiddleware struct {
 }
 
 func (m *tlbMiddleware) Tick() bool {
-	madeProgress := m.performCtrlReq()
+	madeProgress := false
 
 	switch m.state {
-	case "drain":
+	case tlbStateDrain:
 		madeProgress = m.handleDrain() || madeProgress
-
-	case "pause":
-		// No action
-
-	default: // When state is enable or in initial state
+	case tlbStatePause:
+		return false
+	case tlbStateFlush:
+		madeProgress = m.handleFlush() || madeProgress
+	default:
 		madeProgress = m.handleEnable() || madeProgress
 	}
-
 	return madeProgress
 }
 
@@ -125,7 +120,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress = m.processPipeline() || madeProgress
 
 	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
-		m.state = "pause"
+		m.state = tlbStatePause
 		tracing.AddMilestone(
 			m.Comp.Name()+".drain",
 			tracing.MilestoneKindHardwareResource,
@@ -222,7 +217,7 @@ func (m *tlbMiddleware) handleTranslationMiss(
 	if m.mshr.IsFull() {
 		return false
 	}
-	
+
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(req, m.Comp),
 		tracing.MilestoneKindHardwareResource,
@@ -230,7 +225,7 @@ func (m *tlbMiddleware) handleTranslationMiss(
 		m.Comp.Name(),
 		m.Comp,
 	)
-	
+
 	fetched := m.fetchBottom(req)
 	if fetched {
 		tracing.TraceReqReceive(req, m.Comp)
@@ -364,47 +359,39 @@ func (m *tlbMiddleware) parseBottom() bool {
 	return true
 }
 
-func (m *tlbMiddleware) performCtrlReq() bool {
-	item := m.controlPort.PeekIncoming()
-	if item == nil {
-		return false
-	}
-
-	item = m.controlPort.RetrieveIncoming()
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m.Comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
-	)
-
-	switch req := item.(type) {
-	case *FlushReq:
-		return m.handleTLBFlush(req)
-	case *RestartReq:
-		return m.handleTLBRestart(req)
-	case *mem.ControlMsg:
-		if req.Enable {
-			m.state = "enable"
-		} else if req.Drain {
-			m.state = "drain"
-		} else if req.Pause {
-			m.state = "pause"
-		}
-	default:
-		log.Panicf("cannot process request %s", reflect.TypeOf(req))
-	}
-
-	return true
-}
-
 func (m *tlbMiddleware) visit(setID, wayID int) {
 	set := m.sets[setID]
 	set.Visit(wayID)
 }
 
-func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
+func (m *tlbMiddleware) handleFlush() bool {
+	if m.inflightFlushReq == nil {
+		return false
+	}
+
+	madeProgress := false
+
+	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+		madeProgress = m.processTLBFlush() || madeProgress
+		return madeProgress
+	}
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.respondMSHREntry() || madeProgress
+	}
+
+	for i := 0; i < m.numReqPerCycle; i++ {
+		madeProgress = m.parseBottom() || madeProgress
+	}
+
+	madeProgress = m.processPipeline() || madeProgress
+
+	return madeProgress
+}
+
+func (m *tlbMiddleware) processTLBFlush() bool {
+	req := m.inflightFlushReq
+
 	rsp := FlushRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).
@@ -442,37 +429,9 @@ func (m *tlbMiddleware) handleTLBFlush(req *FlushReq) bool {
 	}
 
 	m.mshr.Reset()
-	m.isPaused = true
 
-	return true
-}
-
-func (m *tlbMiddleware) handleTLBRestart(req *RestartReq) bool {
-	rsp := RestartRspBuilder{}.
-		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
-
-	err := m.controlPort.Send(rsp)
-	if err != nil {
-		return false
-	}
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
-		tracing.MilestoneKindNetworkBusy,
-		m.controlPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
-	)
-	m.isPaused = false
-
-	for m.topPort.RetrieveIncoming() != nil {
-		m.topPort.RetrieveIncoming()
-	}
-
-	for m.bottomPort.RetrieveIncoming() != nil {
-		m.bottomPort.RetrieveIncoming()
-	}
+	m.inflightFlushReq = nil
+	m.state = tlbStatePause
 
 	return true
 }
