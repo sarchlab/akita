@@ -638,6 +638,7 @@ func buildOpenAIPayload(
 			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
 				firstText, _ := firstContent["text"].(string)
 				firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
+				fmt.Printf("Full firstContent['text']: \n%s\n", firstContent["text"])
 			}
 		}
 	}

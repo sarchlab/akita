@@ -1,0 +1,49 @@
+{
+    // Other fields like "model", "temperature", etc.
+    "messages": [
+        {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": "[Beforehand Prompt]"}
+            ]
+        },
+        // Chat history, including both user and assistant messages
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "[Extended User Message]"},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,iVBORw0K..."}},
+                // More images
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,iVBcAM5B..."}}
+            ]
+        }
+    ]
+}
+
+[Start Reference Akita Trace File]
+ID,ParentID,Kind,What,Location,StartTime,EndTime
+17365@GPU[1].DRAM[0],17365_req_out,req_in,*mem.WriteReq,GPU[1].DRAM[0],0.000014950,0.000015050
+17366@GPU[1].DRAM[0],17366_req_out,req_in,*mem.WriteReq,GPU[1].DRAM[0],0.000014951,0.000015051
+...
+[End Akita Trace File]
+
+[Start Code Files from GitHub Repository]
+[Reference File sarchlab/akita/main/mem/idealmemcontroller/builder.go]
+xxxxxx
+[End sarchlab/akita/main/mem/idealmemcontroller/builder.go]
+[Reference File sarchlab/akita/main/mem/idealmemcontroller/comp.go]
+xxxxxx
+[End sarchlab/akita/main/mem/idealmemcontroller/comp.go]
+[Reference File sarchlab/akita/main/mem/idealmemcontroller/doc.go]
+xxxxxx
+[End sarchlab/akita/main/mem/idealmemcontroller/doc.go]
+[End Code Files from GitHub Repository]
+
+[Start Uploaded Files]
+[Uploaded File "file1.go"]
+xxx
+[Uploaded File "file2.cpp"]
+xxx
+[End Uploaded Files]
+
+What can you learn from this?
