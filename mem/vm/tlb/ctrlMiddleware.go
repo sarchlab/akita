@@ -148,11 +148,11 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 
 	m.state = tlbStateEnable
 
-	for m.topPort.RetrieveIncoming() != nil {
+	for m.topPort.PeekIncoming() != nil {
 		m.topPort.RetrieveIncoming()
 	}
 
-	for m.bottomPort.RetrieveIncoming() != nil {
+	for m.bottomPort.PeekIncoming() != nil {
 		m.bottomPort.RetrieveIncoming()
 	}
 
