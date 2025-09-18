@@ -323,8 +323,8 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming().Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
+			topPort.EXPECT().PeekIncoming().Return(nil)
+			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
 			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
