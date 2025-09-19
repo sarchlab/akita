@@ -19,17 +19,32 @@ var builderTemplate string
 var compTemplate string
 
 var componentCmd = &cobra.Command{
-	Use:   "component",
-	Short: "Create and manage components.",
-	Long:  "`component --create [ComponentName]` creates a new component.",
-	Run: func(cmd *cobra.Command, args []string) {
-		componentName, _ := cmd.Flags().GetString("create")
-		if componentName != "" {
-			if !inGitRepo() {
-				log.Fatalf(
-					"Error: This command must be run inside a Git repository.",
-				)
-			}
+    Use:   "component",
+    Short: "Create and manage components.",
+    Long:  "`component --create [ComponentName]` creates a new component; `component --lint [path]` lints a component.",
+    Run: func(cmd *cobra.Command, args []string) {
+        // Handle --lint
+        doLint, _ := cmd.Flags().GetBool("lint")
+        if doLint {
+            folderPath := "."
+            if len(args) >= 1 {
+                folderPath = args[0]
+            }
+            hasErr := LintComponentFolder(folderPath)
+            if hasErr {
+                os.Exit(1)
+            }
+            os.Exit(0)
+        }
+
+        // Handle --create
+        componentName, _ := cmd.Flags().GetString("create")
+        if componentName != "" {
+            if !inGitRepo() {
+                log.Fatalf(
+                    "Error: This command must be run inside a Git repository.",
+                )
+            }
 
 			err := createComponentFolder(componentName)
 			if err != nil {
@@ -54,15 +69,16 @@ var componentCmd = &cobra.Command{
 			} else {
 				fmt.Println("Comp file generated successfully!")
 			}
-		} else {
-			fmt.Println("Action not valid.")
-		}
-	},
+        } else {
+            fmt.Println("Action not valid.")
+        }
+    },
 }
 
 func init() {
-	rootCmd.AddCommand(componentCmd)
-	componentCmd.Flags().String("create", "", "Create a new component")
+    rootCmd.AddCommand(componentCmd)
+    componentCmd.Flags().String("create", "", "Create a new component")
+    componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [path])")
 }
 
 // Check if current operation is in a Git repository

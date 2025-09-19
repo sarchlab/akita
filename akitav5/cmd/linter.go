@@ -10,122 +10,82 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
-var linterCmd = &cobra.Command{
-	Use:   "check",
-	Short: "Check component format.",
-	Long:  "`check [component folder path]` checks the component format.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Fprintln(os.Stderr, "Error: component folder path argument is required")
-			os.Exit(1)
-		}
-		folderPath := args[0]
+// LintComponentFolder runs the component lints against the given folder path.
+// It prints findings and returns true if any errors were found.
+func LintComponentFolder(folderPath string) bool {
+	hasError := false
 
-		hasError := false
-		errCompStruct := checkComponentFormat(folderPath)
-		if errCompStruct != nil {
-			fmt.Print(errCompStruct, "\n")
-			hasError = true
-		}
+	if errCompStruct := checkComponentFormat(folderPath); errCompStruct != nil {
+		fmt.Print(errCompStruct, "\n")
+		hasError = true
+	}
 
-		errBuilder := checkBuilderFileExistence(folderPath)
-		if errBuilder != nil {
-			fmt.Printf("<2> Builder error: %s\n", errBuilder)
+	if errBuilder := checkBuilderFileExistence(folderPath); errBuilder != nil {
+		fmt.Printf("<2> Builder error: %s\n", errBuilder)
+		hasError = true
+	} else {
+		node, errParseBuilder := ParseBuilderFile(folderPath)
+		if errParseBuilder != nil {
+			fmt.Printf("<2> Builder parse error: %s\n", errParseBuilder)
 			hasError = true
 		} else {
-			node, errParseBuilder := ParseBuilderFile(folderPath)
-			if errParseBuilder != nil {
-				fmt.Printf("<2> Builder parse error: %s\n", errParseBuilder)
+			if errBuilderStruct := checkBuilderStruct(node); errBuilderStruct != nil {
+				fmt.Printf("<2a> Builder structure error: %s\n", errBuilderStruct)
+				hasError = true
+			}
+
+			if errWithFunc := checkWithFunc(node); errWithFunc != nil {
+				fmt.Printf("<2b> Builder format error: %s\n", errWithFunc)
+				hasError = true
+			}
+
+			if errWithReturn := checkWithFuncReturn(node); errWithReturn != nil {
+				fmt.Printf("<2b> Builder return error: %s\n", errWithReturn)
+				hasError = true
+			}
+
+			if errBuilderParameter := checkBuilderParameters(node); errBuilderParameter != nil {
+				fmt.Printf("<2c> Builder parameter error: %s\n", errBuilderParameter)
+				hasError = true
+			}
+
+			if errBuilderFunc := checkBuildFunction(node); errBuilderFunc != nil {
+				fmt.Printf("<2d> Builder function error: %s\n", errBuilderFunc)
 				hasError = true
 			} else {
-				errBuilderStruct := checkBuilderStruct(node)
-				if errBuilderStruct != nil {
-					fmt.Printf("<2a> Builder structure error: %s\n",
-						errBuilderStruct)
+				if errParam := checkBuildFunctionParam(node); errParam != nil {
+					fmt.Printf("<2d> Builder function error: %s\n", errParam)
 					hasError = true
 				}
-
-				errWithFunc := checkWithFunc(node)
-				if errWithFunc != nil {
-					fmt.Printf("<2b> Builder format error: %s\n", errWithFunc)
+				if errReturn := checkBuildFunctionReturn(node); errReturn != nil {
+					fmt.Printf("<2d> Builder function error: %s\n", errReturn)
 					hasError = true
-				}
-
-				errWithReturn := checkWithFuncReturn(node)
-				if errWithReturn != nil {
-					fmt.Printf("<2b> Builder return error: %s\n", errWithReturn)
-					hasError = true
-				}
-
-				errBuilderParameter := checkBuilderParameters(node)
-				if errBuilderParameter != nil {
-					fmt.Printf("<2c> Builder parameter error: %s\n",
-						errBuilderParameter)
-					hasError = true
-				}
-
-				errBuilderFunc := checkBuildFunction(node)
-				if errBuilderFunc != nil {
-					fmt.Printf("<2d> Builder function error: %s\n",
-						errBuilderFunc)
-					hasError = true
-				} else {
-					errParam := checkBuildFunctionParam(node)
-					if errParam != nil {
-						fmt.Printf("<2d> Builder function error: %s\n",
-							errParam)
-						hasError = true
-					}
-					errReturn := checkBuildFunctionReturn(node)
-					if errReturn != nil {
-						fmt.Printf("<2d> Builder function error: %s\n",
-							errReturn)
-						hasError = true
-					}
 				}
 			}
 		}
+	}
 
-		manifest, errManifest := checkManifestFile(folderPath)
-		if errManifest != nil {
-			fmt.Printf("<3> Manifest error: %v\n", errManifest)
+	if manifest, errManifest := checkManifestFile(folderPath); errManifest != nil {
+		fmt.Printf("<3> Manifest error: %v\n", errManifest)
+		hasError = true
+	} else {
+		if errManifestName := checkManifestName(manifest); errManifestName != nil {
+			fmt.Printf("<3a> Manifest name error: %s\n", errManifestName)
 			hasError = true
-		} else {
-			errManifestName := checkManifestName(manifest)
-			if errManifestName != nil {
-				fmt.Printf("<3a> Manifest name error: %s\n",
-					errManifestName)
-				hasError = true
-			}
-			errManifestPort := checkManifestPort(manifest)
-			if errManifestPort != nil {
-				fmt.Printf("<3b> Manifest port error: %s\n",
-					errManifestPort)
-				hasError = true
-			}
-			errManifestParam := checkManifestParam(manifest)
-			if errManifestParam != nil {
-				fmt.Printf("<3b> Manifest parameter error: %s\n",
-					errManifestParam)
-				hasError = true
-			}
 		}
-
-		if hasError {
-			os.Exit(1)
-		} else {
-			os.Exit(0)
+		if errManifestPort := checkManifestPort(manifest); errManifestPort != nil {
+			fmt.Printf("<3b> Manifest port error: %s\n", errManifestPort)
+			hasError = true
 		}
+		if errManifestParam := checkManifestParam(manifest); errManifestParam != nil {
+			fmt.Printf("<3b> Manifest parameter error: %s\n", errManifestParam)
+			hasError = true
+		}
+	}
 
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(linterCmd)
+	return hasError
 }
 
 func checkComponentFormat(folderPath string) error {

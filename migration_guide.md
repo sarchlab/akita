@@ -80,3 +80,12 @@ V5 unifies how components are modeled and wired. Each component is a single stru
   - Control path: processes enable/pause/drain; replies only when safe (e.g., after drain completes).
 
 This pattern generalizes to other components: keep Spec primitive and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
+
+## CLI Changes (akitav5)
+
+- Command rename: `akita check [path]` is replaced by `akita component --lint [path]`.
+  - New usage examples:
+    - `akita component --lint .`
+    - `akita component --lint mem/idealmemcontrollerv5`
+  - Rationale: group component-related operations under a single `component` command (create, lint) and align with V5 workflows.
+  - Note: the old `check` subcommand is removed in akitav5; update scripts accordingly.
