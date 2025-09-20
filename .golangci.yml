@@ -35,6 +35,7 @@ linters:
     - noctx
     - noinlineerr
     - nolintlint
+    - nilerr
     - nonamedreturns
     - paralleltest
     - perfsprint
@@ -57,5 +58,4 @@ linters:
     - errorlint
     - usestdlibvars
     - predeclared
-
 
