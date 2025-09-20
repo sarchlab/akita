@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -72,6 +74,10 @@ func LintComponentFolder(folderPath string) bool {
 		}
 	}
 
+	if stateErrs := checkStatePurity(folderPath); len(stateErrs) > 0 {
+		errs = append(errs, stateErrs...)
+	}
+
 	if len(errs) == 0 {
 		fmt.Println("\tOK")
 		return false
@@ -80,6 +86,12 @@ func LintComponentFolder(folderPath string) bool {
 		fmt.Printf("\t%s\n", errMsg)
 	}
 	return true
+}
+
+var builtinTypes = map[string]struct{}{
+	"bool": {}, "byte": {}, "complex64": {}, "complex128": {}, "error": {}, "float32": {}, "float64": {},
+	"int": {}, "int8": {}, "int16": {}, "int32": {}, "int64": {}, "rune": {}, "string": {},
+	"uint": {}, "uint8": {}, "uint16": {}, "uint32": {}, "uint64": {}, "uintptr": {}, "any": {},
 }
 
 func checkComponentFormat(folderPath string) error {
@@ -465,4 +477,137 @@ func hasComponentMarker(dir string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func checkStatePurity(folderPath string) []string {
+	statePath := filepath.Join(folderPath, "state.go")
+	info, err := os.Stat(statePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return []string{fmt.Sprintf("Rule 2.1: failed to read state.go: %v", err)}
+	}
+	if info.IsDir() {
+		return []string{fmt.Sprintf("Rule 2.1: expected file state.go, found directory")}
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, statePath, nil, 0)
+	if err != nil {
+		return []string{fmt.Sprintf("Rule 2.1: failed to parse state.go: %v", err)}
+	}
+
+	typeDecls := map[string]ast.Expr{}
+	var stateStruct *ast.StructType
+
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			typeDecls[typeSpec.Name.Name] = typeSpec.Type
+			if typeSpec.Name.Name == "state" {
+				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+					stateStruct = structType
+				}
+			}
+		}
+	}
+
+	if stateStruct == nil {
+		return nil
+	}
+
+	var violations []string
+	for _, field := range stateStruct.Fields.List {
+		if field == nil {
+			continue
+		}
+		if violation := pureFieldViolation(field.Type, typeDecls, map[string]bool{}, fset); violation != "" {
+			if len(field.Names) == 0 {
+				violations = append(violations, fmt.Sprintf("Rule 2.1: state.%s %s", exprString(fset, field.Type), violation))
+				continue
+			}
+			for _, name := range field.Names {
+				violations = append(violations, fmt.Sprintf("Rule 2.1: state.%s %s", name.Name, violation))
+			}
+		}
+	}
+
+	return violations
+}
+
+func pureFieldViolation(expr ast.Expr, typeDecls map[string]ast.Expr, visiting map[string]bool, fset *token.FileSet) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		if _, ok := builtinTypes[t.Name]; ok {
+			return ""
+		}
+		if decl, ok := typeDecls[t.Name]; ok {
+			if visiting[t.Name] {
+				return ""
+			}
+			visiting[t.Name] = true
+			violation := pureFieldViolation(decl, typeDecls, visiting, fset)
+			delete(visiting, t.Name)
+			if violation != "" {
+				if _, ok := decl.(*ast.StructType); ok {
+					return fmt.Sprintf("contains non-pure data in %s: %s", t.Name, violation)
+				}
+				return violation
+			}
+			return ""
+		}
+		return fmt.Sprintf("uses external type %s", t.Name)
+	case *ast.StructType:
+		for _, field := range t.Fields.List {
+			violation := pureFieldViolation(field.Type, typeDecls, visiting, fset)
+			if violation != "" {
+				fieldName := "embedded"
+				if len(field.Names) > 0 {
+					fieldName = field.Names[0].Name
+				} else {
+					fieldName = exprString(fset, field.Type)
+				}
+				return fmt.Sprintf("field %s %s", fieldName, violation)
+			}
+		}
+		return ""
+	case *ast.ArrayType:
+		return pureFieldViolation(t.Elt, typeDecls, visiting, fset)
+	case *ast.ParenExpr:
+		return pureFieldViolation(t.X, typeDecls, visiting, fset)
+	case *ast.StarExpr:
+		return fmt.Sprintf("contains pointer type %s", exprString(fset, t))
+	case *ast.ChanType:
+		return "contains channel type"
+	case *ast.FuncType:
+		return "contains function type"
+	case *ast.MapType:
+		return "contains map type"
+	case *ast.InterfaceType:
+		return "contains interface type"
+	case *ast.SelectorExpr:
+		return ""
+	case *ast.IndexExpr:
+		return "contains generic type expression"
+	case *ast.IndexListExpr:
+		return "contains generic type expression"
+	default:
+		return fmt.Sprintf("uses unsupported type %T", t)
+	}
+}
+
+func exprString(fset *token.FileSet, expr ast.Expr) string {
+	var buf bytes.Buffer
+	if err := printer.Fprint(&buf, fset, expr); err != nil {
+		return ""
+	}
+	return buf.String()
 }

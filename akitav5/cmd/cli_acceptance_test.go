@@ -60,6 +60,24 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    1,
 			mustContain: []string{"Rule 1.3"},
 		},
+		{
+			name:        "rule 2.1 pointer violation",
+			args:        []string{"component-lint", "akitav5/tests/rule2_1_pointer"},
+			wantExit:    1,
+			mustContain: []string{"Rule 2.1", "pointer"},
+		},
+		{
+			name:        "rule 2.1 map violation",
+			args:        []string{"component-lint", "akitav5/tests/rule2_1_map"},
+			wantExit:    1,
+			mustContain: []string{"Rule 2.1", "map"},
+		},
+		{
+			name:        "rule 2.1 channel violation",
+			args:        []string{"component-lint", "akitav5/tests/rule2_1_channel"},
+			wantExit:    1,
+			mustContain: []string{"Rule 2.1", "channel"},
+		},
 	}
 
 	for _, tt := range tests {
