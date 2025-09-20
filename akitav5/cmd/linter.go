@@ -1,8 +1,8 @@
 package cmd
 
 import (
+	"bytes"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -16,6 +16,11 @@ import (
 // It prints findings and returns true if any errors were found.
 func LintComponentFolder(folderPath string) bool {
 	hasError := false
+
+	if errMarker := checkComponentMarker(folderPath); errMarker != nil {
+		fmt.Printf("<1.1> Component marker error: %s\n", errMarker)
+		hasError = true
+	}
 
 	if errCompStruct := checkComponentFormat(folderPath); errCompStruct != nil {
 		fmt.Print(errCompStruct, "\n")
@@ -67,25 +72,36 @@ func LintComponentFolder(folderPath string) bool {
 		}
 	}
 
-	if manifest, errManifest := checkManifestFile(folderPath); errManifest != nil {
-		fmt.Printf("<3> Manifest error: %v\n", errManifest)
-		hasError = true
-	} else {
-		if errManifestName := checkManifestName(manifest); errManifestName != nil {
-			fmt.Printf("<3a> Manifest name error: %s\n", errManifestName)
-			hasError = true
-		}
-		if errManifestPort := checkManifestPort(manifest); errManifestPort != nil {
-			fmt.Printf("<3b> Manifest port error: %s\n", errManifestPort)
-			hasError = true
-		}
-		if errManifestParam := checkManifestParam(manifest); errManifestParam != nil {
-			fmt.Printf("<3b> Manifest parameter error: %s\n", errManifestParam)
-			hasError = true
-		}
-	}
-
 	return hasError
+}
+
+func checkComponentMarker(folderPath string) error {
+	entries, err := os.ReadDir(folderPath)
+	if err != nil {
+		return fmt.Errorf("failed to read directory: %w", err)
+	}
+	markerCount := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(folderPath, name))
+		if err != nil {
+			return fmt.Errorf("failed to read %s: %w", name, err)
+		}
+		markerCount += bytes.Count(content, []byte("//akita:component"))
+	}
+	if markerCount == 0 {
+		return fmt.Errorf("missing //akita:component marker")
+	}
+	if markerCount > 1 {
+		return fmt.Errorf("multiple //akita:component markers found")
+	}
+	return nil
 }
 
 func checkComponentFormat(folderPath string) error {
@@ -446,53 +462,26 @@ func getBuildFunctionReturnErr(node *ast.File) error {
 	return nil
 }
 
-func checkManifestFile(folderPath string) (map[string]any, error) {
-	// Check manifest.json existence
-	jsonFilePath := filepath.Join(folderPath, "manifest.json")
-	if _, err := os.Stat(jsonFilePath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("manifest.json file does not exist")
-	}
-
-	// Read the json file
-	fileContent, err := os.ReadFile(jsonFilePath)
+func hasComponentMarker(dir string) bool {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest.json: %v", err)
+		return false
 	}
-
-	// Parse the json file
-	var manifest map[string]any
-	if err := json.Unmarshal(fileContent, &manifest); err != nil {
-		return nil, fmt.Errorf("failed to parse manifest.json: %v", err)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			continue
+		}
+		if bytes.Contains(content, []byte("//akita:component")) {
+			return true
+		}
 	}
-
-	return manifest, nil
-}
-
-func checkManifestName(manifest map[string]any) error {
-	// Must have `name` attribute with a non-empty string value
-	nameAtt, ok := manifest["name"].(string)
-	if !ok || nameAtt == "" {
-		return fmt.Errorf("manifest.json must contain a " +
-			"non-empty 'name' attribute")
-	}
-
-	return nil
-}
-
-func checkManifestPort(manifest map[string]any) error {
-	// Must have `ports`
-	if _, ok := manifest["ports"]; !ok {
-		return fmt.Errorf("manifest.json must contain `ports` attribute")
-	}
-
-	return nil
-}
-
-func checkManifestParam(manifest map[string]any) error {
-	// Must have `parameters`
-	if _, ok := manifest["parameters"]; !ok {
-		return fmt.Errorf("manifest.json must contain `parameters` attribute")
-	}
-
-	return nil
+	return false
 }

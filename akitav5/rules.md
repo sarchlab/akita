@@ -9,7 +9,7 @@ This document defines numbered rules for Akita V5-style components and what the 
   0.4 Ports, control operations, and backpressure are explicit.
 
 1. Component
-  1.1 One package per component: a package (directory) defines at most one component. Do not host multiple components in a single package.
+  1.1 One package per component: mark the root package with a `//akita:component` comment (no space after the slashes). A package (directory) defines at most one component.
   1.2 Must define a `type Comp struct { ... }` in `comp.go`. (Linter: yes)
   1.3 Must embed `*sim.TickingComponent` and `sim.MiddlewareHolder`.
   1.4 Must define `func (c *Comp) Tick() bool` that delegates to `MiddlewareHolder.Tick()`.
@@ -49,23 +49,17 @@ This document defines numbered rules for Akita V5-style components and what the 
   6.2 Ports May be created by the builder or by the caller and added via `AddPort(alias, port)`.
   6.3 Middlewares Must retrieve ports by alias via `GetPortByName(alias)` and Should tolerate missing optional ports gracefully (e.g., control absent).
 
-7. Manifest
-  7.1 Must include a `manifest.json` file at the component root. (Linter: yes)
-  7.2 `manifest.json` Must contain a non-empty `name` string. (Linter: yes)
-  7.3 `manifest.json` Must contain `ports`. (Linter: yes)
-  7.4 `manifest.json` Must contain `parameters`. (Linter: yes)
+7. Control Protocol (if implemented)
+  7.1 Enable: Must transition to enabled and immediately acknowledge.
+  7.2 Pause: Must transition to paused and immediately acknowledge.
+  7.3 Drain: Must transition to draining; Must acknowledge when all in-flight work completes, then enter paused.
 
-8. Control Protocol (if implemented)
-  8.1 Enable: Must transition to enabled and immediately acknowledge.
-  8.2 Pause: Must transition to paused and immediately acknowledge.
-  8.3 Drain: Must transition to draining; Must acknowledge when all in-flight work completes, then enter paused.
+8. Linter Coverage (current `akita component --lint`)
+  8.1 Enforced: 1.1, 1.2, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7.
+  8.2 Not yet enforced (documented for authorship and future checks): 1.3–1.6, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 7.1–7.3.
 
-9. Linter Coverage (current `akita component --lint`)
-  9.1 Enforced: 1.2, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 7.1, 7.2, 7.3, 7.4.
-  9.2 Not yet enforced (documented for authorship and future checks): 1.1, 1.3–1.6, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 8.1–8.3.
-
-10. Example Skeleton
-  10.1 `comp.go` example
+9. Example Skeleton
+  9.1 `comp.go` example
   
   ```go
   type Comp struct {
@@ -79,7 +73,7 @@ This document defines numbered rules for Akita V5-style components and what the 
   func (c *Comp) RestoreState(s any) error { /* set state */ return nil }
   ```
 
-  10.2 `builder.go` example
+  9.2 `builder.go` example
   
   ```go
   type Builder struct {
@@ -94,7 +88,8 @@ This document defines numbered rules for Akita V5-style components and what the 
   func (b Builder) Build(name string) *Comp { /* create comp, add middlewares */ }
   ```
 
-  10.3 Notes
+  9.3 Notes
   
+  - Place `//akita:component` once in the package (commonly in `doc.go`) so tooling can discover the component.
   - Ports are not auto-created by the framework; either the builder or the caller should create and register them on `Comp` with stable aliases.
   - When integrating with `simv5.Simulation`, prefer `WithSimulation(*simv5.Simulation)` and derive the engine from it to keep component and simulation in sync.

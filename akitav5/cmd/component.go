@@ -1,15 +1,15 @@
 package cmd
 
 import (
-    _ "embed"
-    "fmt"
-    "log"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "strings"
+	_ "embed"
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 
-    "github.com/spf13/cobra"
+	"github.com/spf13/cobra"
 )
 
 //go:embed builderTemplate.txt
@@ -19,30 +19,32 @@ var builderTemplate string
 var compTemplate string
 
 var componentCmd = &cobra.Command{
-    Use:   "component",
-    Short: "Create and manage components.",
-    Long:  "`component --create [ComponentName]` creates a new component; `component --lint [path]` lints a component.",
-    Run: func(cmd *cobra.Command, args []string) {
-        // Handle --lint
-        doLint, _ := cmd.Flags().GetBool("lint")
-        if doLint {
-            target := "."
-            if len(args) >= 1 {
-                target = args[0]
-            }
-            hasErr := lintTarget(target)
-            if hasErr { os.Exit(1) }
-            os.Exit(0)
-        }
+	Use:   "component",
+	Short: "Create and manage components.",
+	Long:  "`component --create [ComponentName]` creates a new component; `component --lint [path]` lints a component.",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Handle --lint
+		doLint, _ := cmd.Flags().GetBool("lint")
+		if doLint {
+			target := "."
+			if len(args) >= 1 {
+				target = args[0]
+			}
+			hasErr := lintTarget(target)
+			if hasErr {
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
 
-        // Handle --create
-        componentName, _ := cmd.Flags().GetString("create")
-        if componentName != "" {
-            if !inGitRepo() {
-                log.Fatalf(
-                    "Error: This command must be run inside a Git repository.",
-                )
-            }
+		// Handle --create
+		componentName, _ := cmd.Flags().GetString("create")
+		if componentName != "" {
+			if !inGitRepo() {
+				log.Fatalf(
+					"Error: This command must be run inside a Git repository.",
+				)
+			}
 
 			err := createComponentFolder(componentName)
 			if err != nil {
@@ -67,60 +69,74 @@ var componentCmd = &cobra.Command{
 			} else {
 				fmt.Println("Comp file generated successfully!")
 			}
-        } else {
-            fmt.Println("Action not valid.")
-        }
-    },
+		} else {
+			fmt.Println("Action not valid.")
+		}
+	},
 }
 
 func init() {
-    rootCmd.AddCommand(componentCmd)
-    componentCmd.Flags().String("create", "", "Create a new component")
-    componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [path])")
+	rootCmd.AddCommand(componentCmd)
+	componentCmd.Flags().String("create", "", "Create a new component")
+	componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [path])")
 }
 
 // lintTarget lints either a single folder or expands Go package patterns (./...).
 func lintTarget(target string) bool {
-    if strings.Contains(target, "...") {
-        // Expand using `go list` for reliability
-        dirs := goListDirs(target)
-        anyErr := false
-        for _, d := range dirs {
-            if isComponentDir(d) {
-                if LintComponentFolder(d) { anyErr = true }
-            }
-        }
-        return anyErr
-    }
-    // Single folder path
-    return LintComponentFolder(target)
+	if strings.Contains(target, "...") {
+		// Expand using `go list` for reliability
+		dirs := goListDirs(target)
+		anyErr := false
+		for _, d := range dirs {
+			if isComponentDir(d) {
+				if LintComponentFolder(d) {
+					anyErr = true
+				}
+			}
+		}
+		return anyErr
+	}
+	// Single folder path
+	return LintComponentFolder(target)
 }
 
 // isComponentDir returns true if the directory appears to define a component.
-// Heuristic: presence of manifest.json (Rule 7.1) or comp.go/builder.go files.
+// A directory is considered a component if it declares the //akita:component marker
+// or contains component scaffolding files. This allows linting legacy packages so
+// they surface the missing marker error.
 func isComponentDir(dir string) bool {
-    if _, err := os.Stat(filepath.Join(dir, "manifest.json")); err == nil {
-        return true
-    }
-    if _, err := os.Stat(filepath.Join(dir, "comp.go")); err == nil {
-        return true
-    }
-    if _, err := os.Stat(filepath.Join(dir, "builder.go")); err == nil {
-        return true
-    }
-    return false
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	if hasComponentMarker(dir) {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "comp.go")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "builder.go")); err == nil {
+		return true
+	}
+	return false
 }
 
 // goListDirs uses `go list -f {{.Dir}}` to expand a pattern like ./... to folders.
 func goListDirs(pattern string) []string {
-    cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pattern)
-    out, err := cmd.Output()
-    if err != nil { return []string{}} // fall back to empty
-    lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-    // Normalize empty output
-    dirs := make([]string, 0, len(lines))
-    for _, l := range lines { if l != "" { dirs = append(dirs, l) } }
-    return dirs
+	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pattern)
+	out, err := cmd.Output()
+	if err != nil {
+		return []string{} // fall back to empty
+	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	// Normalize empty output
+	dirs := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if l != "" {
+			dirs = append(dirs, l)
+		}
+	}
+	return dirs
 }
 
 // Check if current operation is in a Git repository
