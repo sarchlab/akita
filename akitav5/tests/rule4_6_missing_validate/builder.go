@@ -1,7 +1,7 @@
 //go:build ignore
 // +build ignore
 
-package rule2_1_nested
+package rule4_6_missing_validate
 
 import "github.com/sarchlab/akita/v4/simv5"
 
@@ -23,8 +23,6 @@ func (b Builder) WithSpec(spec Spec) Builder {
 }
 
 func (b Builder) Build(name string) *Comp {
-	if err := b.spec.validate(); err != nil {
-		panic(err)
-	}
+	// Missing validate() call.
 	return &Comp{}
 }
