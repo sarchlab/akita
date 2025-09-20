@@ -3,6 +3,7 @@ package cmd
 import (
 	_ "embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -96,39 +97,24 @@ func lintTarget(target string) bool {
 	if strings.Contains(target, "...") {
 		// Expand using `go list` for reliability
 		dirs := goListDirs(target)
+		if len(dirs) == 0 {
+			dirs = expandLocalPattern(target)
+		}
 		anyErr := false
+		seen := make(map[string]struct{})
 		for _, d := range dirs {
-			if isComponentDir(d) {
-				if LintComponentFolder(d) {
-					anyErr = true
-				}
+			if _, ok := seen[d]; ok {
+				continue
+			}
+			seen[d] = struct{}{}
+			if LintComponentFolder(d) {
+				anyErr = true
 			}
 		}
 		return anyErr
 	}
 	// Single folder path
 	return LintComponentFolder(target)
-}
-
-// isComponentDir returns true if the directory appears to define a component.
-// A directory is considered a component if it declares the //akita:component marker
-// or contains component scaffolding files. This allows linting legacy packages so
-// they surface the missing marker error.
-func isComponentDir(dir string) bool {
-	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
-		return false
-	}
-	if hasComponentMarker(dir) {
-		return true
-	}
-	if _, err := os.Stat(filepath.Join(dir, "comp.go")); err == nil {
-		return true
-	}
-	if _, err := os.Stat(filepath.Join(dir, "builder.go")); err == nil {
-		return true
-	}
-	return false
 }
 
 // goListDirs uses `go list -f {{.Dir}}` to expand a pattern like ./... to folders.
@@ -146,6 +132,46 @@ func goListDirs(pattern string) []string {
 			dirs = append(dirs, l)
 		}
 	}
+	return dirs
+}
+
+func expandLocalPattern(pattern string) []string {
+	base := strings.TrimSuffix(pattern, "...")
+	base = strings.TrimSuffix(base, string(os.PathSeparator))
+	if base == "" {
+		base = "."
+	}
+	base = filepath.Clean(base)
+
+	var dirs []string
+	filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if path != base {
+			name := d.Name()
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "vendor" {
+				return filepath.SkipDir
+			}
+		}
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return nil
+		}
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			if strings.HasSuffix(entry.Name(), ".go") {
+				dirs = append(dirs, path)
+				break
+			}
+		}
+		return nil
+	})
 	return dirs
 }
 

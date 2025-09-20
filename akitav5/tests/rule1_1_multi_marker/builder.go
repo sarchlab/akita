@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 package rule1_1_multi_marker
 
 type Builder struct {

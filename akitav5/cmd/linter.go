@@ -1,8 +1,7 @@
 package cmd
 
 import (
-	"bytes"
-	_ "embed"
+	"bufio"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -15,126 +14,101 @@ import (
 // LintComponentFolder runs the component lints against the given folder path.
 // It prints findings and returns true if any errors were found.
 func LintComponentFolder(folderPath string) bool {
-	hasError := false
+	displayPath := folderPath
+	if filepath.IsAbs(folderPath) {
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(wd, folderPath); err == nil {
+				displayPath = rel
+			}
+		}
+	}
+	fmt.Println(displayPath)
 
-	if errMarker := checkComponentMarker(folderPath); errMarker != nil {
-		fmt.Printf("<1.1> Component marker error: %s\n", errMarker)
-		hasError = true
+	hasMarker, markerErr := hasComponentMarker(folderPath)
+	if markerErr != nil {
+		fmt.Printf("\tmarker scan failed: %v\n", markerErr)
+		return true
+	}
+	if !hasMarker {
+		fmt.Println("\t-- not a component")
+		return false
 	}
 
+	var errs []string
+
 	if errCompStruct := checkComponentFormat(folderPath); errCompStruct != nil {
-		fmt.Print(errCompStruct, "\n")
-		hasError = true
+		errs = append(errs, fmt.Sprintf("Rule 1.3: %s", errCompStruct))
 	}
 
 	if errBuilder := checkBuilderFileExistence(folderPath); errBuilder != nil {
-		fmt.Printf("<2> Builder error: %s\n", errBuilder)
-		hasError = true
+		errs = append(errs, fmt.Sprintf("Rule 5.1: %s", errBuilder))
 	} else {
 		node, errParseBuilder := ParseBuilderFile(folderPath)
 		if errParseBuilder != nil {
-			fmt.Printf("<2> Builder parse error: %s\n", errParseBuilder)
-			hasError = true
+			errs = append(errs, fmt.Sprintf("Rule 5.1: %s", errParseBuilder))
 		} else {
 			if errBuilderStruct := checkBuilderStruct(node); errBuilderStruct != nil {
-				fmt.Printf("<2a> Builder structure error: %s\n", errBuilderStruct)
-				hasError = true
+				errs = append(errs, fmt.Sprintf("Rule 5.1: %s", errBuilderStruct))
 			}
-
-			if errWithFunc := checkWithFunc(node); errWithFunc != nil {
-				fmt.Printf("<2b> Builder format error: %s\n", errWithFunc)
-				hasError = true
-			}
-
-			if errWithReturn := checkWithFuncReturn(node); errWithReturn != nil {
-				fmt.Printf("<2b> Builder return error: %s\n", errWithReturn)
-				hasError = true
-			}
-
 			if errBuilderParameter := checkBuilderParameters(node); errBuilderParameter != nil {
-				fmt.Printf("<2c> Builder parameter error: %s\n", errBuilderParameter)
-				hasError = true
+				errs = append(errs, fmt.Sprintf("Rule 5.2: %s", errBuilderParameter))
 			}
-
+			if errWithFunc := checkWithFunc(node); errWithFunc != nil {
+				errs = append(errs, fmt.Sprintf("Rule 5.3: %s", errWithFunc))
+			}
+			if errWithReturn := checkWithFuncReturn(node); errWithReturn != nil {
+				errs = append(errs, fmt.Sprintf("Rule 5.4: %s", errWithReturn))
+			}
 			if errBuilderFunc := checkBuildFunction(node); errBuilderFunc != nil {
-				fmt.Printf("<2d> Builder function error: %s\n", errBuilderFunc)
-				hasError = true
+				errs = append(errs, fmt.Sprintf("Rule 5.5: %s", errBuilderFunc))
 			} else {
 				if errParam := checkBuildFunctionParam(node); errParam != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", errParam)
-					hasError = true
+					errs = append(errs, fmt.Sprintf("Rule 5.6: %s", errParam))
 				}
 				if errReturn := checkBuildFunctionReturn(node); errReturn != nil {
-					fmt.Printf("<2d> Builder function error: %s\n", errReturn)
-					hasError = true
+					errs = append(errs, fmt.Sprintf("Rule 5.7: %s", errReturn))
 				}
 			}
 		}
 	}
 
-	return hasError
-}
-
-func checkComponentMarker(folderPath string) error {
-	entries, err := os.ReadDir(folderPath)
-	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
+	if len(errs) == 0 {
+		fmt.Println("\tOK")
+		return false
 	}
-	markerCount := 0
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(folderPath, name))
-		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", name, err)
-		}
-		markerCount += bytes.Count(content, []byte("//akita:component"))
+	for _, errMsg := range errs {
+		fmt.Printf("\t%s\n", errMsg)
 	}
-	if markerCount == 0 {
-		return fmt.Errorf("missing //akita:component marker")
-	}
-	if markerCount > 1 {
-		return fmt.Errorf("multiple //akita:component markers found")
-	}
-	return nil
+	return true
 }
 
 func checkComponentFormat(folderPath string) error {
-	// check comp.go existence
 	compFilePath := filepath.Join(folderPath, "comp.go")
 	if _, err := os.Stat(compFilePath); os.IsNotExist(err) {
-		return fmt.Errorf("<1> Component error: comp.go file does not exist")
+		return fmt.Errorf("comp.go file does not exist")
 	}
 
-	// parse the comp file
 	fs := token.NewFileSet()
 	node, err := parser.ParseFile(fs, compFilePath, nil, 0)
 	if err != nil {
-		return fmt.Errorf("<1> Component error: failed to parse comp.go "+
-			"file %s: %v", compFilePath, err)
+		return fmt.Errorf("failed to parse comp.go file %s: %v", compFilePath, err)
 	}
 
-	for _, decl := range node.Decls { // iterate all declaration
-		genDecl, ok := decl.(*ast.GenDecl)    // check if decl is in GenDecl
-		if !ok || genDecl.Tok != token.TYPE { // check if decl is a type decl
+	for _, decl := range node.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
 			continue
 		}
-		for _, spec := range genDecl.Specs { // iterate specs in the type decl
-			typeSpec, ok := spec.(*ast.TypeSpec)    //check if spec is in Expr
-			if ok && typeSpec.Name.Name == "Comp" { // check struct name
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if ok && typeSpec.Name.Name == "Comp" {
 				if _, isStruct := typeSpec.Type.(*ast.StructType); isStruct {
 					return nil
 				}
 			}
 		}
 	}
-	return fmt.Errorf("<1a> Component structure error: " +
-		"no Comp struct in comp.go")
+	return fmt.Errorf("no Comp struct in comp.go")
 }
 
 func checkBuilderFileExistence(folderPath string) error {
@@ -462,10 +436,10 @@ func getBuildFunctionReturnErr(node *ast.File) error {
 	return nil
 }
 
-func hasComponentMarker(dir string) bool {
+func hasComponentMarker(dir string) (bool, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -477,11 +451,18 @@ func hasComponentMarker(dir string) bool {
 		}
 		content, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
-			continue
+			return false, err
 		}
-		if bytes.Contains(content, []byte("//akita:component")) {
-			return true
+		scanner := bufio.NewScanner(strings.NewReader(string(content)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if strings.HasPrefix(line, "//akita:component") {
+				return true, nil
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }
