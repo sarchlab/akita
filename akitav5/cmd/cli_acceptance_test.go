@@ -84,6 +84,36 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    1,
 			mustContain: []string{"Rule 2.1", "channel"},
 		},
+		{
+			name:        "rule 3.1 missing spec",
+			args:        []string{"component-lint", "akitav5/tests/rule3_1_missing_spec"},
+			wantExit:    1,
+			mustContain: []string{"Rule 3.1"},
+		},
+		{
+			name:        "rule 3.2 defaults missing",
+			args:        []string{"component-lint", "akitav5/tests/rule3_2_defaults_missing"},
+			wantExit:    1,
+			mustContain: []string{"Rule 3.2"},
+		},
+		{
+			name:        "rule 3.3 validate missing",
+			args:        []string{"component-lint", "akitav5/tests/rule3_3_validate_missing"},
+			wantExit:    1,
+			mustContain: []string{"Rule 3.3"},
+		},
+		{
+			name:        "rule 3.4 nested pointer violation",
+			args:        []string{"component-lint", "akitav5/tests/rule3_4_bad_nested"},
+			wantExit:    1,
+			mustContain: []string{"Rule 3.4"},
+		},
+		{
+			name:        "rule 3.4 nested pure data passes",
+			args:        []string{"component-lint", "akitav5/tests/rule3_4_good_nested"},
+			wantExit:    0,
+			mustContain: []string{"\tOK"},
+		},
 	}
 
 	for _, tt := range tests {

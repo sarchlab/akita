@@ -78,6 +78,10 @@ func LintComponentFolder(folderPath string) bool {
 		errs = append(errs, stateErrs...)
 	}
 
+	if specErrs := checkSpecRules(folderPath); len(specErrs) > 0 {
+		errs = append(errs, specErrs...)
+	}
+
 	if len(errs) == 0 {
 		fmt.Println("\tOK")
 		return false
@@ -616,4 +620,155 @@ func exprString(fset *token.FileSet, expr ast.Expr) string {
 		return ""
 	}
 	return buf.String()
+}
+
+func checkSpecRules(folderPath string) []string {
+	specPath := filepath.Join(folderPath, "spec.go")
+	info, err := os.Stat(specPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return []string{fmt.Sprintf("Rule 3.1: failed to read spec.go: %v", err)}
+	}
+	if info.IsDir() {
+		return []string{fmt.Sprintf("Rule 3.1: expected file spec.go, found directory")}
+	}
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, specPath, nil, 0)
+	if err != nil {
+		return []string{fmt.Sprintf("Rule 3.1: failed to parse spec.go: %v", err)}
+	}
+
+	typeDecls := map[string]ast.Expr{}
+	var specStruct *ast.StructType
+	suffixSpecTypes := map[string]ast.Expr{}
+
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			typeDecls[typeSpec.Name.Name] = typeSpec.Type
+			if strings.HasSuffix(typeSpec.Name.Name, "Spec") {
+				suffixSpecTypes[typeSpec.Name.Name] = typeSpec.Type
+			}
+			if typeSpec.Name.Name == "Spec" {
+				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
+					specStruct = structType
+				}
+			}
+		}
+	}
+
+	var violations []string
+	if specStruct == nil {
+		violations = append(violations, "Rule 3.1: spec.go must define type Spec struct")
+	} else {
+		for _, field := range specStruct.Fields.List {
+			if field == nil {
+				continue
+			}
+			if violation := pureFieldViolation(field.Type, typeDecls, map[string]bool{}, fset); violation != "" {
+				if len(field.Names) == 0 {
+					violations = append(violations, fmt.Sprintf("Rule 3.1: Spec.%s %s", exprString(fset, field.Type), violation))
+					continue
+				}
+				for _, name := range field.Names {
+					violations = append(violations, fmt.Sprintf("Rule 3.1: Spec.%s %s", name.Name, violation))
+				}
+			}
+		}
+	}
+
+	defaultsFound := false
+	validateFound := false
+
+	for _, decl := range file.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok || funcDecl.Name == nil {
+			continue
+		}
+		if funcDecl.Recv == nil {
+			if funcDecl.Name.Name == "defaults" {
+				if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
+					violations = append(violations, "Rule 3.2: defaults() must not take parameters")
+					continue
+				}
+				if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
+					violations = append(violations, "Rule 3.2: defaults() must return Spec")
+					continue
+				}
+				result := funcDecl.Type.Results.List[0].Type
+				if ident, ok := result.(*ast.Ident); !ok || ident.Name != "Spec" {
+					violations = append(violations, "Rule 3.2: defaults() must return Spec")
+					continue
+				}
+				defaultsFound = true
+			}
+			continue
+		}
+		recv := funcDecl.Recv.List[0].Type
+		var recvType *ast.Ident
+		switch r := recv.(type) {
+		case *ast.Ident:
+			recvType = r
+		case *ast.StarExpr:
+			if ident, ok := r.X.(*ast.Ident); ok {
+				recvType = ident
+			}
+		}
+		if recvType != nil && recvType.Name == "Spec" && funcDecl.Name.Name == "validate" {
+			if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
+				violations = append(violations, "Rule 3.3: validate() must not take parameters")
+				continue
+			}
+			if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
+				violations = append(violations, "Rule 3.3: validate() must return error")
+				continue
+			}
+			if ident, ok := funcDecl.Type.Results.List[0].Type.(*ast.Ident); !ok || ident.Name != "error" {
+				violations = append(violations, "Rule 3.3: validate() must return error")
+				continue
+			}
+			validateFound = true
+		}
+	}
+
+	if !defaultsFound {
+		violations = append(violations, "Rule 3.2: defaults() function not found")
+	}
+	if !validateFound {
+		violations = append(violations, "Rule 3.3: validate() method on Spec not found")
+	}
+
+	for name, expr := range suffixSpecTypes {
+		structType, ok := expr.(*ast.StructType)
+		if !ok {
+			violations = append(violations, fmt.Sprintf("Rule 3.4: %s must be a struct", name))
+			continue
+		}
+		for _, field := range structType.Fields.List {
+			if field == nil {
+				continue
+			}
+			if violation := pureFieldViolation(field.Type, typeDecls, map[string]bool{}, fset); violation != "" {
+				fieldName := "embedded"
+				if len(field.Names) > 0 {
+					fieldName = field.Names[0].Name
+				} else {
+					fieldName = exprString(fset, field.Type)
+				}
+				violations = append(violations, fmt.Sprintf("Rule 3.4: %s.%s %s", name, fieldName, violation))
+			}
+		}
+	}
+
+	return violations
 }
