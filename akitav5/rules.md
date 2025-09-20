@@ -1,20 +1,15 @@
 # Akita V5 Component Rules
 
-This document defines numbered rules for Akita V5-style components and what the `akita` CLI lints for. Rules are based on `mem/idealmemcontrollerv5` and PR #307.
-
-0. Goals
-  0.1 Components expose a consistent surface and layout.
-  0.2 Spec is immutable configuration; State is pure serializable data.
-  0.3 Execution is tick + middleware driven, not ad-hoc events.
-  0.4 Ports, control operations, and backpressure are explicit.
+This document defines numbered rules for Akita V5-style components and what the `akita` CLI lints for. 
 
 1. Component
-  1.1 One package per component: mark the root package with a `//akita:component` comment (no space after the slashes). A package (directory) defines at most one component.
-  1.2 Must define a `type Comp struct { ... }` in `comp.go`. (Linter: yes)
-  1.3 Must embed `*sim.TickingComponent` and `sim.MiddlewareHolder`.
-  1.4 Must define `func (c *Comp) Tick() bool` that delegates to `MiddlewareHolder.Tick()`.
-  1.5 Should provide `SnapshotState() any` that deep-copies State.
-  1.6 Should provide `RestoreState(any) error` that restores State.
+  1.1 A package (directory) defines at most one component.
+  1.2 A component package must include a `//akita:component` comment (no space after the slashes) to mark the root.
+  1.3 Must define a `type Comp struct { ... }` in `comp.go`.
+  1.4 Must embed `*sim.TickingComponent` and `sim.MiddlewareHolder`.
+  1.5 Must define `func (c *Comp) Tick() bool` that delegates to `MiddlewareHolder.Tick()`.
+  1.6 Should provide `SnapshotState() any` that deep-copies State.
+  1.7 Should provide `RestoreState(any) error` that restores State.
 
 2. State
   2.1 Must keep `state` pure-data: primitives, slices, structs; no simulation objects or message pointers.
@@ -49,14 +44,9 @@ This document defines numbered rules for Akita V5-style components and what the 
   6.2 Ports May be created by the builder or by the caller and added via `AddPort(alias, port)`.
   6.3 Middlewares Must retrieve ports by alias via `GetPortByName(alias)` and Should tolerate missing optional ports gracefully (e.g., control absent).
 
-7. Control Protocol (if implemented)
-  7.1 Enable: Must transition to enabled and immediately acknowledge.
-  7.2 Pause: Must transition to paused and immediately acknowledge.
-  7.3 Drain: Must transition to draining; Must acknowledge when all in-flight work completes, then enter paused.
-
 8. Linter Coverage (current `akita component --lint`)
-  8.1 Enforced: 1.1, 1.2, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7.
-  8.2 Not yet enforced (documented for authorship and future checks): 1.3–1.6, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 7.1–7.3.
+  8.1 Enforced: 1.2, 1.3, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7.
+  8.2 Not yet enforced (documented for authorship and future checks): 1.1, 1.4–1.7, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 7.1–7.3.
 
 9. Example Skeleton
   9.1 `comp.go` example
