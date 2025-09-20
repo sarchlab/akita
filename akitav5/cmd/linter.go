@@ -590,7 +590,13 @@ func pureFieldViolation(expr ast.Expr, typeDecls map[string]ast.Expr, visiting m
 	case *ast.FuncType:
 		return "contains function type"
 	case *ast.MapType:
-		return "contains map type"
+		if keyViolation := pureFieldViolation(t.Key, typeDecls, visiting, fset); keyViolation != "" {
+			return fmt.Sprintf("contains map key type violating purity: %s", keyViolation)
+		}
+		if valViolation := pureFieldViolation(t.Value, typeDecls, visiting, fset); valViolation != "" {
+			return fmt.Sprintf("contains map value type violating purity: %s", valViolation)
+		}
+		return ""
 	case *ast.InterfaceType:
 		return "contains interface type"
 	case *ast.SelectorExpr:

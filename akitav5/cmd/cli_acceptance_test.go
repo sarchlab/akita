@@ -67,10 +67,16 @@ func TestComponentLintSamples(t *testing.T) {
 			mustContain: []string{"Rule 2.1", "pointer"},
 		},
 		{
-			name:        "rule 2.1 map violation",
+			name:        "rule 2.1 map allowed",
 			args:        []string{"component-lint", "akitav5/tests/rule2_1_map"},
-			wantExit:    1,
-			mustContain: []string{"Rule 2.1", "map"},
+			wantExit:    0,
+			mustContain: []string{"\tOK"},
+		},
+		{
+			name:        "rule 2.1 nested pure data",
+			args:        []string{"component-lint", "akitav5/tests/rule2_1_nested"},
+			wantExit:    0,
+			mustContain: []string{"\tOK"},
 		},
 		{
 			name:        "rule 2.1 channel violation",
