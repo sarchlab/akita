@@ -9,11 +9,12 @@ This document defines numbered rules for Akita V5-style components and what the 
   0.4 Ports, control operations, and backpressure are explicit.
 
 1. Component
-  1.1 Must define a `type Comp struct { ... }` in `comp.go`. (Linter: yes)
-  1.2 Must embed `*sim.TickingComponent` and `sim.MiddlewareHolder`.
-  1.3 Must define `func (c *Comp) Tick() bool` that delegates to `MiddlewareHolder.Tick()`.
-  1.4 Should provide `SnapshotState() any` that deep-copies State.
-  1.5 Should provide `RestoreState(any) error` that restores State.
+  1.1 One package per component: a package (directory) defines at most one component. Do not host multiple components in a single package.
+  1.2 Must define a `type Comp struct { ... }` in `comp.go`. (Linter: yes)
+  1.3 Must embed `*sim.TickingComponent` and `sim.MiddlewareHolder`.
+  1.4 Must define `func (c *Comp) Tick() bool` that delegates to `MiddlewareHolder.Tick()`.
+  1.5 Should provide `SnapshotState() any` that deep-copies State.
+  1.6 Should provide `RestoreState(any) error` that restores State.
 
 2. State
   2.1 Must keep `state` pure-data: primitives, slices, structs; no simulation objects or message pointers.
@@ -59,9 +60,9 @@ This document defines numbered rules for Akita V5-style components and what the 
   8.2 Pause: Must transition to paused and immediately acknowledge.
   8.3 Drain: Must transition to draining; Must acknowledge when all in-flight work completes, then enter paused.
 
-9. Linter Coverage (current `akita check`)
-  9.1 Enforced: 1.1, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 7.1, 7.2, 7.3, 7.4.
-  9.2 Not yet enforced (documented for authorship and future checks): 1.2–1.5, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 8.1–8.3.
+9. Linter Coverage (current `akita component --lint`)
+  9.1 Enforced: 1.2, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 7.1, 7.2, 7.3, 7.4.
+  9.2 Not yet enforced (documented for authorship and future checks): 1.1, 1.3–1.6, 2.1–2.3, 3.1–3.4, 4.1–4.4, 5.8–5.9, 6.1–6.3, 8.1–8.3.
 
 10. Example Skeleton
   10.1 `comp.go` example

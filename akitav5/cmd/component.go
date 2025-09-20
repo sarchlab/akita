@@ -1,15 +1,15 @@
 package cmd
 
 import (
-	_ "embed"
-	"fmt"
-	"log"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
+    _ "embed"
+    "fmt"
+    "log"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "strings"
 
-	"github.com/spf13/cobra"
+    "github.com/spf13/cobra"
 )
 
 //go:embed builderTemplate.txt
@@ -26,14 +26,12 @@ var componentCmd = &cobra.Command{
         // Handle --lint
         doLint, _ := cmd.Flags().GetBool("lint")
         if doLint {
-            folderPath := "."
+            target := "."
             if len(args) >= 1 {
-                folderPath = args[0]
+                target = args[0]
             }
-            hasErr := LintComponentFolder(folderPath)
-            if hasErr {
-                os.Exit(1)
-            }
+            hasErr := lintTarget(target)
+            if hasErr { os.Exit(1) }
             os.Exit(0)
         }
 
@@ -79,6 +77,50 @@ func init() {
     rootCmd.AddCommand(componentCmd)
     componentCmd.Flags().String("create", "", "Create a new component")
     componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [path])")
+}
+
+// lintTarget lints either a single folder or expands Go package patterns (./...).
+func lintTarget(target string) bool {
+    if strings.Contains(target, "...") {
+        // Expand using `go list` for reliability
+        dirs := goListDirs(target)
+        anyErr := false
+        for _, d := range dirs {
+            if isComponentDir(d) {
+                if LintComponentFolder(d) { anyErr = true }
+            }
+        }
+        return anyErr
+    }
+    // Single folder path
+    return LintComponentFolder(target)
+}
+
+// isComponentDir returns true if the directory appears to define a component.
+// Heuristic: presence of manifest.json (Rule 7.1) or comp.go/builder.go files.
+func isComponentDir(dir string) bool {
+    if _, err := os.Stat(filepath.Join(dir, "manifest.json")); err == nil {
+        return true
+    }
+    if _, err := os.Stat(filepath.Join(dir, "comp.go")); err == nil {
+        return true
+    }
+    if _, err := os.Stat(filepath.Join(dir, "builder.go")); err == nil {
+        return true
+    }
+    return false
+}
+
+// goListDirs uses `go list -f {{.Dir}}` to expand a pattern like ./... to folders.
+func goListDirs(pattern string) []string {
+    cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pattern)
+    out, err := cmd.Output()
+    if err != nil { return []string{}} // fall back to empty
+    lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+    // Normalize empty output
+    dirs := make([]string, 0, len(lines))
+    for _, l := range lines { if l != "" { dirs = append(dirs, l) } }
+    return dirs
 }
 
 // Check if current operation is in a Git repository
