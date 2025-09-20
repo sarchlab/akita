@@ -30,6 +30,15 @@ var componentCmd = &cobra.Command{
 			if len(args) >= 1 {
 				target = args[0]
 			}
+			recursive, _ := cmd.Flags().GetBool("recursive")
+			if recursive && !strings.Contains(target, "...") {
+				clean := filepath.Clean(target)
+				if clean == "." {
+					target = "./..."
+				} else {
+					target = filepath.ToSlash(clean) + "/..."
+				}
+			}
 			hasErr := lintTarget(target)
 			if hasErr {
 				os.Exit(1)
@@ -78,7 +87,8 @@ var componentCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(componentCmd)
 	componentCmd.Flags().String("create", "", "Create a new component")
-	componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [path])")
+	componentCmd.Flags().Bool("lint", false, "Lint a component (usage: akita component --lint [-r] [path])")
+	componentCmd.Flags().BoolP("recursive", "r", false, "With --lint, lint components recursively from the target path")
 }
 
 // lintTarget lints either a single folder or expands Go package patterns (./...).
