@@ -10,6 +10,7 @@ import (
 )
 
 func repoRoot(tb testing.TB) string {
+	tb.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		tb.Fatal("failed to determine caller path")
@@ -33,28 +34,47 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 }
 
 func TestComponentLintSamples(t *testing.T) {
-	out, code := runCLI(t, "component-lint", "akitav5/tests/rule1_1_multi_marker")
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d, output: %s", code, out)
-	}
-	if !strings.Contains(out, "\tOK") {
-		t.Fatalf("expected OK output, got: %s", out)
+	t.Helper()
+
+	tests := []struct {
+		name        string
+		args        []string
+		wantExit    int
+		mustContain []string
+	}{
+		{
+			name:        "clean component passes",
+			args:        []string{"component-lint", "akitav5/tests/rule1_1_multi_marker"},
+			wantExit:    0,
+			mustContain: []string{"\tOK"},
+		},
+		{
+			name:        "directory without marker is skipped",
+			args:        []string{"component-lint", "akitav5/tests/rule1_2_missing_marker"},
+			wantExit:    0,
+			mustContain: []string{"-- not a component"},
+		},
+		{
+			name:        "violations reported",
+			args:        []string{"component-lint", "akitav5/tests/rule1_3_missing_comp"},
+			wantExit:    1,
+			mustContain: []string{"Rule 1.3"},
+		},
 	}
 
-	out, code = runCLI(t, "component-lint", "akitav5/tests/rule1_2_missing_marker")
-	if code != 0 {
-		t.Fatalf("expected exit 0, got %d, output: %s", code, out)
-	}
-	if !strings.Contains(out, "-- not a component") {
-		t.Fatalf("expected not-a-component message, got: %s", out)
-	}
-
-	out, code = runCLI(t, "component-lint", "akitav5/tests/rule1_3_missing_comp")
-	if code == 0 {
-		t.Fatalf("expected non-zero exit, output: %s", out)
-	}
-	if !strings.Contains(out, "Rule 1.3") {
-		t.Fatalf("expected Rule 1.3 violation, got: %s", out)
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			out, code := runCLI(t, tt.args...)
+			if code != tt.wantExit {
+				t.Fatalf("expected exit %d, got %d, output: %s", tt.wantExit, code, out)
+			}
+			for _, needle := range tt.mustContain {
+				if !strings.Contains(out, needle) {
+					t.Fatalf("expected output to contain %q, got: %s", needle, out)
+				}
+			}
+		})
 	}
 }
 
