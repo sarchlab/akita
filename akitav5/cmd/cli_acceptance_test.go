@@ -91,22 +91,22 @@ func TestComponentLintSamples(t *testing.T) {
 			mustContain: []string{"Rule 3.1"},
 		},
 		{
-			name:        "rule 3.2 defaults missing",
+			name:        "rule 3.3 defaults missing",
 			args:        []string{"component-lint", "akitav5/tests/rule3_2_defaults_missing"},
-			wantExit:    1,
-			mustContain: []string{"Rule 3.2"},
-		},
-		{
-			name:        "rule 3.3 validate missing",
-			args:        []string{"component-lint", "akitav5/tests/rule3_3_validate_missing"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.3"},
 		},
 		{
-			name:        "rule 3.4 nested pointer violation",
-			args:        []string{"component-lint", "akitav5/tests/rule3_4_bad_nested"},
+			name:        "rule 3.4 validate missing",
+			args:        []string{"component-lint", "akitav5/tests/rule3_3_validate_missing"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.4"},
+		},
+		{
+			name:        "rule 3.2 nested pointer violation",
+			args:        []string{"component-lint", "akitav5/tests/rule3_4_bad_nested"},
+			wantExit:    1,
+			mustContain: []string{"Rule 3.2"},
 		},
 		{
 			name:        "rule 3.4 nested pure data passes",
