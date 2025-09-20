@@ -3,15 +3,28 @@
 
 package rule3_4_bad_nested
 
+import "github.com/sarchlab/akita/v4/simv5"
+
 type Builder struct {
-	Engine any
-	Freq   int
+	simulation *simv5.Simulation
+	spec       Spec
 }
 
-func MakeBuilder() Builder { return Builder{} }
+func MakeBuilder() Builder { return Builder{spec: defaults()} }
 
-func (b Builder) WithEngine(e any) Builder { b.Engine = e; return b }
+func (b Builder) WithSimulation(sim *simv5.Simulation) Builder {
+	b.simulation = sim
+	return b
+}
 
-func (b Builder) WithFreq(f int) Builder { b.Freq = f; return b }
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	return b
+}
 
-func (b Builder) Build(name string) *Comp { return &Comp{} }
+func (b Builder) Build(name string) *Comp {
+	if err := b.spec.validate(); err != nil {
+		panic(err)
+	}
+	return &Comp{}
+}

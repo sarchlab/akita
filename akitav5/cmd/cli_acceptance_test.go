@@ -114,6 +114,24 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
+		{
+			name:        "rule 4.2 missing simulation setter",
+			args:        []string{"component-lint", "akitav5/tests/rule4_2_missing_sim"},
+			wantExit:    1,
+			mustContain: []string{"Rule 4.2"},
+		},
+		{
+			name:        "rule 4.3 missing spec setter",
+			args:        []string{"component-lint", "akitav5/tests/rule4_3_missing_spec"},
+			wantExit:    1,
+			mustContain: []string{"Rule 4.3"},
+		},
+		{
+			name:        "rule 4.6 missing validate call",
+			args:        []string{"component-lint", "akitav5/tests/rule4_6_missing_validate"},
+			wantExit:    1,
+			mustContain: []string{"Rule 4.6"},
+		},
 	}
 
 	for _, tt := range tests {
