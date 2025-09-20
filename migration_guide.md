@@ -83,9 +83,11 @@ This pattern generalizes to other components: keep Spec primitive and declarativ
 
 ## CLI Changes (akitav5)
 
-- Command rename: `akita check [path]` is replaced by `akita component --lint [path]`.
-  - New usage examples:
-    - `akita component --lint .`
-    - `akita component --lint mem/idealmemcontrollerv5`
-  - Rationale: group component-related operations under a single `component` command (create, lint) and align with V5 workflows.
-  - Note: the old `check` subcommand is removed in akitav5; update scripts accordingly.
+- Command rename: `akita check [path]` is replaced by `akita component-lint [path]`.
+  - Usage examples:
+    - `akita component-lint .`
+    - `akita component-lint -r mem/`
+  - Note: directories without `//akita:component` are reported as `-- not a component` and do not fail the run.
+- New scaffolding entry point: use `akita component-create <path>` instead of the previous `component --create` flag.
+  - Example: `akita component-create mem/newcontroller`
+  - The command requires running inside the Akita Git repository so that generated packages start with a valid module path.

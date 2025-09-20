@@ -9,12 +9,11 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
-	Use: "akita",
-	Short: "Akita CLI tool can perform common tasks related to developing " +
-		"simulators with Akita.",
-	Long: `Akita CLI tool can perform common tasks related to developing ` +
-		`simulators with Akita. Currently, it supports creating components ` +
-		`and builders.`,
+	Use:   "akita",
+	Short: "Akita CLI tool can perform common tasks related to developing simulators with Akita.",
+	Long: `Akita CLI tool can perform common tasks related to developing simulators with Akita. ` +
+		`The v5 CLI currently provides component scaffolding (component-create) and linting ` +
+		`(component-lint).`,
 }
 
 // Execute adds all child commands to the root command and sets flags
