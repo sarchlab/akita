@@ -626,12 +626,12 @@ func checkSpec(folder string) []lintIssue {
 			if funcDecl.Name.Name == "defaults" {
 				defaultsFound = true
 				if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
-					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "defaults() must not take parameters"))
+					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.2", "defaults() must not take parameters"))
 				}
 				if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
-					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "defaults() must return Spec"))
+					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.2", "defaults() must return Spec"))
 				} else if ident, ok := funcDecl.Type.Results.List[0].Type.(*ast.Ident); !ok || ident.Name != "Spec" {
-					issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.3", "defaults() must return Spec"))
+					issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.2", "defaults() must return Spec"))
 				}
 			}
 			continue
@@ -640,12 +640,12 @@ func checkSpec(folder string) []lintIssue {
 		if recvType == "Spec" && funcDecl.Name.Name == "validate" {
 			validateFound = true
 			if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
-				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.4", "validate() must not take parameters"))
+				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "validate() must not take parameters"))
 			}
 			if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
-				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.4", "validate() must return error"))
+				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "validate() must return error"))
 			} else if ident, ok := funcDecl.Type.Results.List[0].Type.(*ast.Ident); !ok || ident.Name != "error" {
-				issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.4", "validate() must return error"))
+				issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.3", "validate() must return error"))
 			}
 		}
 	}
@@ -655,9 +655,9 @@ func checkSpec(folder string) []lintIssue {
 	}
 	if !validateFound {
 		if specTypeSpec != nil {
-			issues = append(issues, newIssue(fset, specTypeSpec, path, "Rule 3.4", "(Spec) validate() method not found"))
+			issues = append(issues, newIssue(fset, specTypeSpec, path, "Rule 3.3", "(Spec) validate() method not found"))
 		} else {
-			issues = append(issues, issueAtPath(path, "Rule 3.4", "(Spec) validate() method not found"))
+			issues = append(issues, issueAtPath(path, "Rule 3.3", "(Spec) validate() method not found"))
 		}
 	}
 
