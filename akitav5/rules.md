@@ -21,6 +21,5 @@ This document defines numbered rules for Akita V5-style components and what the 
   4.1 Must define a `type Builder struct { ... }` in `builder.go`.
   4.2 Must include a field `simulation simv5.Simulation`, which is set by `WithSimulation(sim) Builder`.
   4.3 Must include a field `spec Spec`, which is set by `WithSpec(spec) Builder`.
-  4.4 All configuration setters must be named `With...`, assign to their corresponding field, and return `Builder`.
   4.5 Must define `func (b Builder) Build(name string) *Comp`.
   4.6 Must validate the spec in `Build()` before using the spec.

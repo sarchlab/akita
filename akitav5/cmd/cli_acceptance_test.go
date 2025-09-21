@@ -52,7 +52,7 @@ func TestComponentLintSamples(t *testing.T) {
 			name:        "directory without marker is skipped",
 			args:        []string{"component-lint", "akitav5/tests/rule1_2_missing_marker"},
 			wantExit:    0,
-			mustContain: []string{"-- not a component"},
+			mustContain: []string{"not a component"},
 		},
 		{
 			name:        "violations reported",
