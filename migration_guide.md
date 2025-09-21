@@ -80,3 +80,15 @@ V5 unifies how components are modeled and wired. Each component is a single stru
   - Control path: processes enable/pause/drain; replies only when safe (e.g., after drain completes).
 
 This pattern generalizes to other components: keep Spec primitive and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
+
+## CLI Changes (akitav5)
+
+- Command rename: `akita check [path]` is replaced by `akita component-lint [path]`.
+  - Usage examples:
+    - `akita component-lint .`
+    - `akita component-lint ./...`
+    - `akita component-lint -r mem/`
+  - Note: directories without `//akita:component` are reported as `not a component` and do not fail the run.
+- New scaffolding entry point: use `akita component-create <path>` instead of the previous `component --create` flag.
+  - Example: `akita component-create mem/newcontroller`
+  - The command requires running inside the Akita Git repository so that generated packages start with a valid module path.
