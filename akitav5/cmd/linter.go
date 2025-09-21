@@ -38,6 +38,12 @@ func newIssue(fset *token.FileSet, node ast.Node, fallbackPath, rule, msg string
 	if pos.Filename == "" {
 		pos.Filename = fallbackPath
 	}
+	if pos.Line == 0 {
+		pos.Line = 1
+	}
+	if pos.Column == 0 {
+		pos.Column = 1
+	}
 	return lintIssue{Rule: rule, Message: msg, Pos: pos}
 }
 
@@ -645,7 +651,7 @@ func checkSpec(folder string) []lintIssue {
 	}
 
 	if !defaultsFound {
-		issues = append(issues, issueAtPath(path, "Rule 3.3", "defaults() function not found"))
+		issues = append(issues, newIssue(fset, file.Name, path, "Rule 3.3", "defaults() function not found"))
 	}
 	if !validateFound {
 		if specTypeSpec != nil {
