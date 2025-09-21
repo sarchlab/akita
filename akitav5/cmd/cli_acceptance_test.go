@@ -33,15 +33,15 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 	return "", 1
 }
 
-func TestComponentLintSamples(t *testing.T) {
-	t.Helper()
+type componentLintTestCase struct {
+	name        string
+	args        []string
+	wantExit    int
+	mustContain []string
+}
 
-	tests := []struct {
-		name        string
-		args        []string
-		wantExit    int
-		mustContain []string
-	}{
+func getBasicComponentLintTestCases() []componentLintTestCase {
+	return []componentLintTestCase{
 		{
 			name:        "clean component passes",
 			args:        []string{"component-lint", "akitav5/tests/rule1_1_multi_marker"},
@@ -60,6 +60,11 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    1,
 			mustContain: []string{"Rule 1.3"},
 		},
+	}
+}
+
+func getRule2TestCases() []componentLintTestCase {
+	return []componentLintTestCase{
 		{
 			name:        "rule 2.1 pointer violation",
 			args:        []string{"component-lint", "akitav5/tests/rule2_1_pointer"},
@@ -84,6 +89,11 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    1,
 			mustContain: []string{"Rule 2.1", "channel"},
 		},
+	}
+}
+
+func getRule3TestCases() []componentLintTestCase {
+	return []componentLintTestCase{
 		{
 			name:        "rule 3.1 missing spec",
 			args:        []string{"component-lint", "akitav5/tests/rule3_1_missing_spec"},
@@ -114,6 +124,11 @@ func TestComponentLintSamples(t *testing.T) {
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
+	}
+}
+
+func getRule4TestCases() []componentLintTestCase {
+	return []componentLintTestCase{
 		{
 			name:        "rule 4.2 missing simulation setter",
 			args:        []string{"component-lint", "akitav5/tests/rule4_2_missing_sim"},
@@ -133,19 +148,38 @@ func TestComponentLintSamples(t *testing.T) {
 			mustContain: []string{"Rule 4.6"},
 		},
 	}
+}
 
+func getComponentLintTestCases() []componentLintTestCase {
+	var cases []componentLintTestCase
+	cases = append(cases, getBasicComponentLintTestCases()...)
+	cases = append(cases, getRule2TestCases()...)
+	cases = append(cases, getRule3TestCases()...)
+	cases = append(cases, getRule4TestCases()...)
+	return cases
+}
+
+func runComponentLintTest(t *testing.T, tc componentLintTestCase) {
+	t.Helper()
+	out, code := runCLI(t, tc.args...)
+	if code != tc.wantExit {
+		t.Fatalf("expected exit %d, got %d, output: %s", tc.wantExit, code, out)
+	}
+	for _, needle := range tc.mustContain {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected output to contain %q, got: %s", needle, out)
+		}
+	}
+}
+
+func TestComponentLintSamples(t *testing.T) {
+	t.Helper()
+
+	tests := getComponentLintTestCases()
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			out, code := runCLI(t, tt.args...)
-			if code != tt.wantExit {
-				t.Fatalf("expected exit %d, got %d, output: %s", tt.wantExit, code, out)
-			}
-			for _, needle := range tt.mustContain {
-				if !strings.Contains(out, needle) {
-					t.Fatalf("expected output to contain %q, got: %s", needle, out)
-				}
-			}
+			runComponentLintTest(t, tt)
 		})
 	}
 }
