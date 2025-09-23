@@ -318,14 +318,9 @@ class TaskView {
       background: #f9f9f9;
     `;
 
-    // Calculate task bar position and width on timeline
-    const containerWidth = this._canvas.parentElement.offsetWidth - 40; // minus padding
-    const timeRange = this._endTime - this._startTime;
-    const taskDuration = task.end_time - task.start_time;
-    
-    // Calculate position relative to timeline
-    const leftOffset = ((task.start_time - this._startTime) / timeRange) * containerWidth;
-    const barWidth = (taskDuration / timeRange) * containerWidth;
+    // Calculate task bar position and width using xScale
+    const leftOffset = this._xScale(task.start_time);
+    const barWidth = this._xScale(task.end_time) - this._xScale(task.start_time);
 
     const taskBar = document.createElement('div');
     taskBar.style.cssText = `
@@ -413,7 +408,6 @@ class TaskView {
       margin-top: 25px;
     `;
 
-    // 计算容器宽度，与task bars保持一致
     const containerWidth = this._canvas.parentElement.offsetWidth - 40; // minus padding
     const timeRange = this._endTime - this._startTime;
     
@@ -518,14 +512,13 @@ class TaskView {
       border: 1px solid #ddd;
       border-radius: 6px;
       background: #f9f9f9;
+      width: ${this._canvasWidth + 200}px;
+      overflow: visible;
     `;
 
-    const containerWidth = this._canvas.parentElement.offsetWidth - 40 - indentLevel - (level > 0 ? 10 : 0);
-    const timeRange = this._endTime - this._startTime;
     tasksToShow.forEach((subTask, index) => {
-      const taskDuration = subTask.end_time - subTask.start_time;
-      const leftOffset = ((subTask.start_time - this._startTime) / timeRange) * containerWidth;
-      const barWidth = (taskDuration / timeRange) * containerWidth;
+      const leftOffset = this._xScale(subTask.start_time);
+      const barWidth = this._xScale(subTask.end_time) - this._xScale(subTask.start_time);
 
       const taskBar = document.createElement('div');
       taskBar.style.cssText = `
