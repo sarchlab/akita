@@ -152,6 +152,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/continue", m.continueEngine)
 	r.HandleFunc("/api/now", m.now)
 	r.HandleFunc("/api/run", m.run)
+	r.HandleFunc("/api/step", m.step)
 	r.HandleFunc("/api/tick/{name}", m.tick)
 	r.HandleFunc("/api/list_components", m.listComponents)
 	r.HandleFunc("/api/component/{name}", m.listComponentDetails)
@@ -221,6 +222,54 @@ func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {
 			panic(err)
 		}
 	}()
+}
+
+func (m *Monitor) step(w http.ResponseWriter, r *http.Request) {
+	// Parse the request body to get step parameters
+	type stepRequest struct {
+		Amount float64 `json:"amount"`
+		Unit   string  `json:"unit"`
+	}
+
+	var req stepRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Error parsing request: %s", err)
+		return
+	}
+
+	// Convert to simulation time units
+	var stepTime sim.VTimeInSec
+	switch req.Unit {
+	case "ns":
+		stepTime = sim.VTimeInSec(req.Amount * 1e-9)
+	case "us":
+		stepTime = sim.VTimeInSec(req.Amount * 1e-6)
+	case "ms":
+		stepTime = sim.VTimeInSec(req.Amount * 1e-3)
+	case "s":
+		stepTime = sim.VTimeInSec(req.Amount)
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(w, "Invalid unit: %s. Allowed units are ns, us, ms, s", req.Unit)
+		return
+	}
+
+	// Set the run until time
+	currentTime := m.engine.CurrentTime()
+	runUntilTime := currentTime + stepTime
+	m.engine.SetRunUntilTime(runUntilTime)
+
+	// Start the engine in a goroutine
+	go func() {
+		err := m.engine.Run()
+		if err != nil {
+			log.Printf("Error during step execution: %v", err)
+		}
+	}()
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func (m *Monitor) listComponents(w http.ResponseWriter, _ *http.Request) {
