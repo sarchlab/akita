@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 )
 
 // PipelineItem is an item that can pass through a pipeline.

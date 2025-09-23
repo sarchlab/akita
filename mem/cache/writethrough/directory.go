@@ -1,11 +1,11 @@
 package writethrough
 
 import (
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type dirPipelineItem struct {
@@ -90,9 +90,9 @@ func (d *directory) processMSHRHit(
 	d.buf.Pop()
 
 	if trans.read != nil {
-		tracing.AddTaskStep(trans.id, d.cache, "read-mshr-hit")
+		tracing.AddTaskTag(trans.id, d.cache, "read-mshr-hit")
 	} else {
-		tracing.AddTaskStep(trans.id, d.cache, "write-mshr-hit")
+		tracing.AddTaskTag(trans.id, d.cache, "write-mshr-hit")
 	}
 
 	return true
@@ -118,7 +118,7 @@ func (d *directory) processReadHit(
 	bankBuf.Push(trans)
 
 	d.buf.Pop()
-	tracing.AddTaskStep(trans.id, d.cache, "read-hit")
+	tracing.AddTaskTag(trans.id, d.cache, "read-hit")
 
 	return true
 }
@@ -145,7 +145,7 @@ func (d *directory) processReadMiss(
 	}
 
 	d.buf.Pop()
-	tracing.AddTaskStep(trans.id, d.cache, "read-miss")
+	tracing.AddTaskTag(trans.id, d.cache, "read-miss")
 
 	return true
 }
@@ -173,7 +173,7 @@ func (d *directory) processWrite(
 	if block != nil && block.IsValid {
 		ok := d.processWriteHit(trans, block)
 		if ok {
-			tracing.AddTaskStep(trans.id, d.cache, "write-hit")
+			tracing.AddTaskTag(trans.id, d.cache, "write-hit")
 		}
 
 		return ok
@@ -185,7 +185,7 @@ func (d *directory) processWrite(
 
 	ok := d.fullLineWriteMiss(trans)
 	if ok {
-		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
+		tracing.AddTaskTag(trans.id, d.cache, "write-miss")
 	}
 
 	return ok
@@ -242,7 +242,7 @@ func (d *directory) partialWriteMiss(
 	}
 
 	d.buf.Pop()
-	tracing.AddTaskStep(trans.id, d.cache, "write-miss")
+	tracing.AddTaskTag(trans.id, d.cache, "write-miss")
 
 	return true
 }

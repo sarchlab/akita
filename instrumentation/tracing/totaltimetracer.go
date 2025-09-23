@@ -53,8 +53,8 @@ func (t *TotalTimeTracer) StartTask(task Task) {
 	t.lock.Unlock()
 }
 
-// StepTask does nothing
-func (t *TotalTimeTracer) StepTask(_ Task) {
+// TagTask does nothing
+func (t *TotalTimeTracer) TagTask(_ Task) {
 	// Do nothing
 }
 

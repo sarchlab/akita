@@ -92,7 +92,7 @@ type Task struct {
 	Location  string         `json:"location"`
 	StartTime sim.VTimeInSec `json:"start_time"`
 	EndTime   sim.VTimeInSec `json:"end_time"`
-	// Steps      []TaskStep     `json:"steps"`
+	// Tags      []TaskTag     `json:"tags"`
 	Detail     interface{} `json:"-"`
 	ParentTask *Task       `json:"-"`
 }

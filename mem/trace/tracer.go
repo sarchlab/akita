@@ -5,9 +5,9 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v4/datarecording"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // memoryTransactionEntry represents a memory transaction in the database
@@ -21,8 +21,8 @@ type memoryTransactionEntry struct {
 	ByteSize  uint64  `json:"byte_size" akita_data:"index"`
 }
 
-// memoryStepEntry represents a memory transaction step in the database
-type memoryStepEntry struct {
+// memoryTagEntry represents a memory transaction tag in the database
+type memoryTagEntry struct {
 	ID     string  `json:"id" akita_data:"unique"`
 	TaskID string  `json:"task_id" akita_data:"index"`
 	Time   float64 `json:"time" akita_data:"index"`
@@ -39,8 +39,8 @@ type tracer struct {
 // A dbTracer is a hook that can record the actions of a memory model into
 // a database using the data recorder.
 type dbTracer struct {
-	timeTeller         sim.TimeTeller
-	dataRecorder       datarecording.DataRecorder
+	timeTeller          sim.TimeTeller
+	dataRecorder        datarecording.DataRecorder
 	pendingTransactions map[string]*memoryTransactionEntry
 }
 
@@ -64,14 +64,14 @@ func (t *tracer) StartTask(task tracing.Task) {
 	)
 }
 
-// StepTask marks the memory transaction has completed a milestone
-func (t *tracer) StepTask(task tracing.Task) {
-	task.Steps[0].Time = t.timeTeller.CurrentTime()
+// TagTask marks that the memory transaction has been tagged
+func (t *tracer) TagTask(task tracing.Task) {
+	task.Tags[0].Time = t.timeTeller.CurrentTime()
 
-	t.logger.Printf("step, %.12f, %s, %s\n",
-		task.Steps[0].Time,
+	t.logger.Printf("tag, %.12f, %s, %s\n",
+		task.Tags[0].Time,
 		task.ID,
-		task.Steps[0].What)
+		task.Tags[0].What)
 }
 
 // AddMilestone adds a milestone to the task
@@ -104,9 +104,9 @@ func NewDBTracer(dataRecorder datarecording.DataRecorder, timeTeller sim.TimeTel
 		pendingTransactions: make(map[string]*memoryTransactionEntry),
 	}
 
-	// Create tables for memory transactions and steps
+	// Create tables for memory transactions and tags
 	t.dataRecorder.CreateTable("memory_transactions", memoryTransactionEntry{})
-	t.dataRecorder.CreateTable("memory_steps", memoryStepEntry{})
+	t.dataRecorder.CreateTable("memory_tags", memoryTagEntry{})
 
 	return t
 }
@@ -133,22 +133,22 @@ func (t *dbTracer) StartTask(task tracing.Task) {
 	t.pendingTransactions[task.ID] = entry
 }
 
-// StepTask marks the memory transaction has completed a milestone
-func (t *dbTracer) StepTask(task tracing.Task) {
-	if task.Steps == nil || len(task.Steps) == 0 {
+// TagTask marks that the memory transaction has been tagged
+func (t *dbTracer) TagTask(task tracing.Task) {
+	if task.Tags == nil || len(task.Tags) == 0 {
 		return
 	}
 
-	task.Steps[0].Time = t.timeTeller.CurrentTime()
+	task.Tags[0].Time = t.timeTeller.CurrentTime()
 
-	entry := memoryStepEntry{
-		ID:     task.ID + "_step_" + task.Steps[0].What,
+	entry := memoryTagEntry{
+		ID:     task.ID + "_tag_" + task.Tags[0].What,
 		TaskID: task.ID,
-		Time:   float64(task.Steps[0].Time),
-		What:   task.Steps[0].What,
+		Time:   float64(task.Tags[0].Time),
+		What:   task.Tags[0].What,
 	}
 
-	t.dataRecorder.InsertData("memory_steps", entry)
+	t.dataRecorder.InsertData("memory_tags", entry)
 }
 
 // AddMilestone adds a milestone to the task

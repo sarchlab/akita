@@ -45,7 +45,7 @@ func (t *BackTraceTracer) StartTask(task Task) {
 	t.tracingTasks[task.ID] = task
 }
 
-func (t *BackTraceTracer) StepTask(task Task) {
+func (t *BackTraceTracer) TagTask(task Task) {
 	// Do Nothing
 }
 

@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/datarecording"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 
@@ -169,7 +169,7 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 	suite.False(rows.Next(), "Expected only one row")
 }
 
-func (suite *TracerTestSuite) TestStepTask() {
+func (suite *TracerTestSuite) TestTagTask() {
 	// Create a mock access request
 	req := &MockAccessReq{
 		address:  0x2000,
@@ -177,13 +177,13 @@ func (suite *TracerTestSuite) TestStepTask() {
 		pid:      2,
 	}
 
-	// Create a task with a step
+	// Create a task with a tag
 	task := tracing.Task{
 		ID:       "test_task_2",
 		Location: "test_location",
 		What:     "write",
 		Detail:   req,
-		Steps: []tracing.TaskStep{
+		Tags: []tracing.TaskTag{
 			{What: "cache_hit"},
 		},
 	}
@@ -191,14 +191,14 @@ func (suite *TracerTestSuite) TestStepTask() {
 	// Set up mock expectations
 	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(150.0)).Times(1)
 
-	// Record the step
-	suite.tracer.StepTask(task)
+	// Record the tag
+	suite.tracer.TagTask(task)
 
 	// Flush data to ensure it's written
 	suite.dataRecorder.Flush()
 
-	// Verify the step was recorded
-	rows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_steps")
+	// Verify the tag was recorded
+	rows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_tags")
 	suite.Require().NoError(err)
 	defer rows.Close()
 
@@ -210,7 +210,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 	err = rows.Scan(&id, &taskID, &time, &what)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_2_step_cache_hit", id)
+	suite.Equal("test_task_2_tag_cache_hit", id)
 	suite.Equal("test_task_2", taskID)
 	suite.Equal(150.0, time)
 	suite.Equal("cache_hit", what)
@@ -233,7 +233,7 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 		Location: "memory_controller",
 		What:     "read",
 		Detail:   req,
-		Steps: []tracing.TaskStep{
+		Tags: []tracing.TaskTag{
 			{What: "cache_miss"},
 		},
 	}
@@ -247,15 +247,15 @@ func (suite *TracerTestSuite) runCompleteTrace(task tracing.Task) {
 	// Set up mock expectations in order
 	gomock.InOrder(
 		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(50.0)).Times(1),  // StartTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(75.0)).Times(1),  // StepTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(75.0)).Times(1),  // TagTask
 		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(100.0)).Times(1), // EndTask
 	)
 
 	// Start task at time 50
 	suite.tracer.StartTask(task)
 
-	// Record step at time 75
-	suite.tracer.StepTask(task)
+	// Record tag at time 75
+	suite.tracer.TagTask(task)
 
 	// End task at time 100
 	suite.tracer.EndTask(task)
@@ -288,21 +288,21 @@ func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
 }
 
 func (suite *TracerTestSuite) verifyCompleteStep(task tracing.Task) {
-	stepRows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_steps")
+	tagRows, err := suite.db.Query("SELECT ID, TaskID, Time, What FROM memory_tags")
 	suite.Require().NoError(err)
-	defer stepRows.Close()
+	defer tagRows.Close()
 
-	suite.Require().True(stepRows.Next())
-	var stepID, taskID, stepWhat string
-	var stepTime float64
+	suite.Require().True(tagRows.Next())
+	var tagID, taskID, tagWhat string
+	var tagTime float64
 
-	err = stepRows.Scan(&stepID, &taskID, &stepTime, &stepWhat)
+	err = tagRows.Scan(&tagID, &taskID, &tagTime, &tagWhat)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_3_step_cache_miss", stepID)
+	suite.Equal("test_task_3_tag_cache_miss", tagID)
 	suite.Equal("test_task_3", taskID)
-	suite.Equal(75.0, stepTime)
-	suite.Equal("cache_miss", stepWhat)
+	suite.Equal(75.0, tagTime)
+	suite.Equal("cache_miss", tagWhat)
 }
 
 func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
@@ -319,7 +319,7 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 
 	// Start the task (this will not create a pending transaction due to no AccessReq)
 	suite.tracer.StartTask(task)
-	
+
 	// End the task (this should not call CurrentTime since no pending transaction exists)
 	suite.tracer.EndTask(task)
 
@@ -367,7 +367,7 @@ func TestTracerTestSuite(t *testing.T) {
 func TestLoggerTracerStillWorks(t *testing.T) {
 	// Create a simple time teller that returns the current time
 	timeTeller := &fixedTimeTeller{time: 100.0}
-	
+
 	// Create logger-based tracer - use discard to avoid output during tests
 	logger := log.New(os.Stdout, "", 0)
 	tracer := NewTracer(logger, timeTeller)
@@ -385,8 +385,8 @@ func TestLoggerTracerStillWorks(t *testing.T) {
 		Location: "test_loc",
 		What:     "test_what",
 		Detail:   req,
-		Steps: []tracing.TaskStep{
-			{What: "test_step"},
+		Tags: []tracing.TaskTag{
+			{What: "test_tag"},
 		},
 	}
 
@@ -394,7 +394,7 @@ func TestLoggerTracerStillWorks(t *testing.T) {
 	tracer.StartTask(task)
 
 	timeTeller.time = 150.0
-	tracer.StepTask(task)
+	tracer.TagTask(task)
 
 	timeTeller.time = 200.0
 	tracer.EndTask(task)
