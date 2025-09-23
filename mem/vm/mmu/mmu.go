@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 )
 
 type transaction struct {

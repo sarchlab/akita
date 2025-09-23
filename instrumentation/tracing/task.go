@@ -2,8 +2,8 @@ package tracing
 
 import "github.com/sarchlab/akita/v4/sim"
 
-// A TaskStep represents a milestone in the processing of task
-type TaskStep struct {
+// A TaskTag represents a tag in the processing of task
+type TaskTag struct {
 	Time sim.VTimeInSec `json:"time"`
 	What string         `json:"what"`
 }
@@ -42,7 +42,7 @@ type Task struct {
 	Location   string         `json:"location"`
 	StartTime  sim.VTimeInSec `json:"start_time"`
 	EndTime    sim.VTimeInSec `json:"end_time"`
-	Steps      []TaskStep     `json:"steps"`
+	Tags       []TaskTag      `json:"tags"`
 	Milestones []Milestone    `json:"milestones"`
 	Detail     interface{}    `json:"-"`
 	ParentTask *Task          `json:"-"`

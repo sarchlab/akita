@@ -15,8 +15,8 @@ import (
 
 	"log"
 
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/mem/trace"
-	"github.com/sarchlab/akita/v4/tracing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")

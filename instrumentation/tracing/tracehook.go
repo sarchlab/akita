@@ -33,8 +33,8 @@ func (h *traceHook) Func(ctx sim.HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
 		h.t.StartTask(ctx.Item.(Task))
-	case HookPosTaskStep:
-		h.t.StepTask(ctx.Item.(Task))
+	case HookPosTaskTag:
+		h.t.TagTask(ctx.Item.(Task))
 	case HookPosMilestone:
 		h.t.AddMilestone(ctx.Item.(Milestone))
 	case HookPosTaskEnd:

@@ -86,8 +86,8 @@ func (t *DBTracer) startingTaskMustBeValid(task Task) {
 	}
 }
 
-// StepTask marks a step of a task.
-func (t *DBTracer) StepTask(_ Task) {
+// TagTask records tag events for a task.
+func (t *DBTracer) TagTask(_ Task) {
 	// Do nothing for now.
 }
 

@@ -84,8 +84,8 @@ func (t *BusyTimeTracer) StartTask(task Task) {
 	t.inflightTasks[task.ID] = elem
 }
 
-// StepTask does nothing
-func (t *BusyTimeTracer) StepTask(_ Task) {
+// TagTask does nothing
+func (t *BusyTimeTracer) TagTask(_ Task) {
 	// Do nothing
 }
 

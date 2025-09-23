@@ -62,8 +62,8 @@ func (t *AverageTimeTracer) StartTask(task Task) {
 	t.lock.Unlock()
 }
 
-// StepTask does nothing
-func (t *AverageTimeTracer) StepTask(_ Task) {
+// TagTask does nothing
+func (t *AverageTimeTracer) TagTask(_ Task) {
 	// Do nothing
 }
 

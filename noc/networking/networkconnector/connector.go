@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameter that associated with an end of a
