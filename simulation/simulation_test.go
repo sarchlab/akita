@@ -54,4 +54,26 @@ var _ = Describe("Simulation", func() {
 		Expect(comps).To(HaveLen(1))
 		Expect(comps[0]).To(Equal(comp))
 	})
+
+	Context("Builder with custom output file", func() {
+		var customSim *Simulation
+
+		AfterEach(func() {
+			if customSim != nil {
+				customSim.Terminate()
+				os.Remove("test_custom_output.sqlite3")
+				customSim = nil
+			}
+		})
+
+		It("should allow custom output file to be set", func() {
+			builder := MakeBuilder().
+				WithoutMonitoring().
+				WithOutputFileName("test_custom_output")
+			customSim = builder.Build()
+
+			Expect(customSim).ToNot(BeNil())
+			Expect(customSim.GetDataRecorder()).ToNot(BeNil())
+		})
+	})
 })

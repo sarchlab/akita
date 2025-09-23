@@ -27,6 +27,7 @@ func (p *topParser) Tick() bool {
 	trans := &transaction{
 		id: sim.GetIDGenerator().Generate(),
 	}
+
 	switch req := req.(type) {
 	case *mem.ReadReq:
 		trans.read = req

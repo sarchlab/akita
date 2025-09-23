@@ -2,12 +2,15 @@
 package vm
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim"
 )
 
 // A TranslationReq asks the receiver component to translate the request.
 type TranslationReq struct {
 	sim.MsgMeta
+
 	VAddr    uint64
 	PID      PID
 	DeviceID uint64
@@ -91,6 +94,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.VAddr = b.vAddr
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
+	r.TrafficClass = reflect.TypeOf(TranslationReq{}).String()
 
 	return r
 }
@@ -99,6 +103,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 // address.
 type TranslationRsp struct {
 	sim.MsgMeta
+
 	RespondTo string // The ID of the request it replies
 	Page      Page
 }
@@ -164,6 +169,7 @@ func (b TranslationRspBuilder) Build() *TranslationRsp {
 	r.Dst = b.dst
 	r.RespondTo = b.rspTo
 	r.Page = b.page
+	r.TrafficClass = reflect.TypeOf(TranslationReq{}).String()
 
 	return r
 }
@@ -212,6 +218,7 @@ func NewPageMigrationReqToDriver(
 	cmd := new(PageMigrationReqToDriver)
 	cmd.Src = src
 	cmd.Dst = dst
+	cmd.TrafficClass = reflect.TypeOf(PageMigrationReqToDriver{}).String()
 
 	return cmd
 }
@@ -252,6 +259,7 @@ func NewPageMigrationRspFromDriver(
 	cmd.Src = src
 	cmd.Dst = dst
 	cmd.OriginalReq = originalReq
+	cmd.TrafficClass = reflect.TypeOf(PageMigrationReqToDriver{}).String()
 
 	return cmd
 }

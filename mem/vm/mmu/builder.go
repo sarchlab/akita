@@ -14,6 +14,7 @@ type Builder struct {
 	migrationServiceProvider sim.RemotePort
 	maxNumReqInFlight        int
 	pageWalkingLatency       int
+	autoPageAllocation       bool
 }
 
 // MakeBuilder creates a new builder
@@ -70,6 +71,14 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 	return b
 }
 
+// WithAutoPageAllocation enables or disables automatic page allocation.
+// When enabled, the MMU will automatically create page table entries for
+// virtual addresses that don't exist, instead of panicking.
+func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
+	b.autoPageAllocation = enabled
+	return b
+}
+
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *Comp {
 	mmu := new(Comp)
@@ -91,15 +100,37 @@ func (b Builder) configureInternalStates(mmu *Comp) {
 	mmu.migrationQueueSize = 4096
 	mmu.maxRequestsInFlight = b.maxNumReqInFlight
 	mmu.latency = b.pageWalkingLatency
+	mmu.autoPageAllocation = b.autoPageAllocation
+	mmu.log2PageSize = b.log2PageSize
 	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
+	
+	if mmu.autoPageAllocation {
+		mmu.nextPhysicalPage = 0
+	}
 }
 
 func (b Builder) createPageTable(mmu *Comp) {
 	if b.pageTable != nil {
+		// Check if the provided page table is compatible with the MMU's page size
+		b.validatePageTablePageSize()
 		mmu.pageTable = b.pageTable
 	} else {
 		mmu.pageTable = vm.NewPageTable(b.log2PageSize)
 	}
+}
+
+// validatePageTablePageSize checks if the provided page table's page size
+// is consistent with the MMU's log2PageSize configuration.
+func (b Builder) validatePageTablePageSize() {
+	// If the page table implements pageTable interface with GetLog2PageSize, validate the page size
+	if pageTableInterface, ok := b.pageTable.(pageTable); ok {
+		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
+		if pageTableLog2PageSize != b.log2PageSize {
+			panic("page table page size does not match MMU page size")
+		}
+	}
+	// For page tables that don't implement the local pageTable interface, we cannot validate
+	// the page size so we assume the user has ensured compatibility
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {

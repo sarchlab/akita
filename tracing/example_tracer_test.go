@@ -17,6 +17,7 @@ func (t *SampleTimeTeller) CurrentTime() sim.VTimeInSec {
 
 type SampleDomain struct {
 	*sim.HookableBase
+
 	timeTeller sim.TimeTeller
 	taskIDs    []int
 	nextID     int

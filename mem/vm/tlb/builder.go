@@ -8,17 +8,19 @@ import (
 
 // A Builder can build TLBs
 type Builder struct {
-	engine         sim.Engine
-	freq           sim.Freq
-	numReqPerCycle int
-	numSets        int
-	numWays        int
-	pageSize       uint64
-	lowModule      sim.RemotePort
-	numMSHREntry   int
-	state          string
-	latency        int
-	addressMapper  mem.AddressToPortMapper
+	engine            sim.Engine
+	freq              sim.Freq
+	numReqPerCycle    int
+	numSets           int
+	numWays           int
+	log2PageSize      uint64
+	pageSize          uint64
+	numMSHREntry      int
+	state             string
+	latency           int
+	addressMapper     mem.AddressToPortMapper
+	addressMapperType string
+	remotePorts       []sim.RemotePort
 }
 
 // MakeBuilder returns a Builder
@@ -30,7 +32,7 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
-		state:          "enable",
+		state:          tlbStateEnable,
 		latency:        4,
 	}
 }
@@ -61,9 +63,32 @@ func (b Builder) WithNumWays(n int) Builder {
 	return b
 }
 
+// WithLog2PageSize sets the page size as a power of 2
+func (b Builder) WithLog2PageSize(n uint64) Builder {
+	b.log2PageSize = n
+	return b
+}
+
 // WithPageSize sets the page size that the TLB works with.
+//
+// Deprecated: Use `WithLog2PageSize` instead.
 func (b Builder) WithPageSize(n uint64) Builder {
-	b.pageSize = n
+	// Check if n is a power of 2 by counting the number of 1s in binary
+	if n == 0 || (n&(n-1)) != 0 {
+		panic("page size must be a power of 2")
+	}
+
+	log2 := 0
+	temp := n
+
+	for temp > 0 {
+		temp >>= 1
+		log2++
+	}
+
+	b.log2PageSize = uint64(log2 - 1) // Subtract 1 because we count one extra iteration
+	b.pageSize = 1 << b.log2PageSize
+
 	return b
 }
 
@@ -76,8 +101,12 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of tlb miss.
+//
+// Deprecated: Use `WithTranslationProviderMapper` instead.
 func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
-	b.lowModule = lowModule
+	b.addressMapper = &mem.SinglePortMapper{
+		Port: lowModule,
+	}
 	return b
 }
 
@@ -87,13 +116,41 @@ func (b Builder) WithNumMSHREntry(num int) Builder {
 	return b
 }
 
+// WithLatency sets the latency of the TLB lookup. The latency is counted in
+// both hit and miss cases.
 func (b Builder) WithLatency(cycles int) Builder {
 	b.latency = cycles
 	return b
 }
 
-func (b Builder) WithAddressMapper(mapper mem.AddressToPortMapper) Builder {
+// WithTranslationProviderMapper sets the mapper that can find the remote port
+// that can provide the translation service according to the virtual address.
+func (b Builder) WithTranslationProviderMapper(
+	mapper mem.AddressToPortMapper,
+) Builder {
 	b.addressMapper = mapper
+	return b
+}
+
+// WithTranslationProviderMapperType sets the type of the translation provider
+// mapper. The mapper can find the remote port that can provide the translation
+// service according to the virtual address. The type can be "single" or
+// "interleaved".
+func (b Builder) WithTranslationProviderMapperType(t string) Builder {
+	b.addressMapperType = t
+	return b
+}
+
+// WithTranslationProviders registers the remote ports that handle address
+// translation requests.
+//
+// Use together with `WithTranslationProviderMapperType` to control request
+// distribution:
+//   - "single": exactly one port must be provided.
+//   - "interleaved": the number of ports must be a power of two; requests are
+//     interleaved at page granularity (4 KiB by default).
+func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
+	b.remotePorts = ports
 	return b
 }
 
@@ -111,6 +168,7 @@ func (b Builder) Build(name string) *Comp {
 	tlb.mshr = newMSHR(b.numMSHREntry)
 
 	b.createPorts(name, tlb)
+	b.createTranslationProviderMapper(tlb)
 
 	tlb.reset()
 
@@ -130,6 +188,31 @@ func (b Builder) Build(name string) *Comp {
 	tlb.AddMiddleware(middleware)
 
 	return tlb
+}
+
+func (b Builder) createTranslationProviderMapper(c *Comp) {
+	if c.addressMapper != nil {
+		return
+	}
+
+	switch b.addressMapperType {
+	case "single":
+		if len(b.remotePorts) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		c.addressMapper = &mem.SinglePortMapper{
+			Port: b.remotePorts[0],
+		}
+	case "interleaved":
+		if len(b.remotePorts) == 0 {
+			panic("interleaved address mapper requires at least 1 port")
+		}
+		mapper := mem.NewInterleavedAddressPortMapper(1 << b.log2PageSize)
+		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+		c.addressMapper = mapper
+	default:
+		panic("invalid address mapper type: " + b.addressMapperType)
+	}
 }
 
 func (b Builder) createPorts(name string, c *Comp) {

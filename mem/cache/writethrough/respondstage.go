@@ -87,6 +87,7 @@ func (s *respondStage) removeTransaction(trans *transaction) {
 		if t == trans {
 			s.cache.transactions = append(s.cache.transactions[:i],
 				s.cache.transactions[i+1:]...)
+
 			return
 		}
 	}

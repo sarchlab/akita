@@ -1,6 +1,8 @@
 package datamover
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -16,6 +18,7 @@ const (
 // A DataMoveRequest asks DataMover to transfer data
 type DataMoveRequest struct {
 	sim.MsgMeta
+
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
@@ -136,6 +139,7 @@ func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
 	r.ByteSize = b.byteSize
 	r.SrcSide = b.srcSide
 	r.DstSide = b.dstSide
+	r.TrafficClass = reflect.TypeOf(DataMoveRequest{}).String()
 
 	return r
 }

@@ -1,6 +1,8 @@
 package mem
 
 import (
+	"reflect"
+
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
 )
@@ -138,6 +140,7 @@ func (b ReadReqBuilder) Build() *ReadReq {
 	r.Info = b.info
 	r.AccessByteSize = b.byteSize
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
 
 	return r
 }
@@ -265,6 +268,7 @@ func (b WriteReqBuilder) Build() *WriteReq {
 	r.TrafficBytes = len(r.Data) + accessReqByteOverhead
 	r.DirtyMask = b.dirtyMask
 	r.CanWaitForCoalesce = b.canWaitForCoalesce
+	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
 
 	return r
 }
@@ -336,6 +340,7 @@ func (b DataReadyRspBuilder) Build() *DataReadyRsp {
 	r.TrafficBytes = len(b.data) + accessRspByteOverhead
 	r.RespondTo = b.rspTo
 	r.Data = b.data
+	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
 
 	return r
 }
@@ -398,13 +403,17 @@ func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
 	r.Dst = b.dst
 	r.TrafficBytes = accessRspByteOverhead
 	r.RespondTo = b.rspTo
+	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
 
 	return r
 }
 
 // ControlMsg is the commonly used message type for controlling the components
-// on the memory hierarchy. It is also used for resonpding the original
-// requester with the Done field.
+// on the memory hierarchy. It is also used for responding the original
+// requester with the Done field. Drain is used to process all the requests in
+// the queue when drain happens the component will not accept any new requests
+// Enable enables the component work. If the enable = false, it will not process
+// any requests.
 type ControlMsg struct {
 	sim.MsgMeta
 
@@ -418,7 +427,7 @@ type ControlMsg struct {
 	Invalid            bool
 }
 
-// Meta returns the meta data assocated with the ControlMsg.
+// Meta returns the meta data associated with the ControlMsg.
 func (m *ControlMsg) Meta() *sim.MsgMeta {
 	return &m.MsgMeta
 }
@@ -429,6 +438,17 @@ func (m *ControlMsg) Clone() sim.Msg {
 	cloneMsg.ID = sim.GetIDGenerator().Generate()
 
 	return &cloneMsg
+}
+
+// GenerateRsp generates a GeneralRsp for ControlMsg.
+func (m *ControlMsg) GenerateRsp() sim.Rsp {
+	rsp := sim.GeneralRspBuilder{}.
+		WithSrc(m.Dst).
+		WithDst(m.Src).
+		WithOriginalReq(m).
+		Build()
+
+	return rsp
 }
 
 // A ControlMsgBuilder can build control messages.
@@ -484,6 +504,7 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	b.Flush = flush
 	b.Pause = pause
 	b.Invalid = invalid
+
 	return b
 }
 
@@ -495,6 +516,11 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Dst = b.dst
 	m.TrafficBytes = controlMsgByteOverhead
 
+	m.Enable = b.Enable
+	m.Drain = b.Drain
+	m.Flush = b.Flush
+	m.Invalid = b.Invalid
+
 	m.DiscardTransations = b.discardTransactions
 	m.Restart = b.restart
 	m.NotifyDone = b.notifyDone
@@ -503,6 +529,115 @@ func (b ControlMsgBuilder) Build() *ControlMsg {
 	m.Flush = b.Flush
 	m.Pause = b.Pause
 	m.Invalid = b.Invalid
+	m.TrafficClass = reflect.TypeOf(ControlMsg{}).String()
 
 	return m
+}
+
+type ControlMsgRsp struct {
+	sim.MsgMeta
+
+	RspTo   string
+	Enable  bool
+	Drain   bool
+	Flush   bool
+	Pause   bool
+	Invalid bool
+}
+
+// Meta returns the meta data associated with the message.
+func (r *ControlMsgRsp) Meta() *sim.MsgMeta {
+	return &r.MsgMeta
+}
+
+// Clone returns cloned ControlMsgRsp with different ID
+func (r *ControlMsgRsp) Clone() sim.Msg {
+	cloneMsg := *r
+	cloneMsg.ID = sim.GetIDGenerator().Generate()
+	cloneMsg.Enable = r.Enable
+	cloneMsg.Drain = r.Drain
+	cloneMsg.Flush = r.Flush
+	cloneMsg.Pause = r.Pause
+	cloneMsg.Invalid = r.Invalid
+	return &cloneMsg
+}
+
+// GetRspTo returns the ID of the request that the respond is responding to.
+func (r *ControlMsgRsp) GetRspTo() string {
+	return r.RspTo
+}
+
+// ControlMsgRspBuilder can build control messages.
+type ControlMsgRspBuilder struct {
+	src, dst sim.RemotePort
+	rspTo    string
+	enable   bool
+	drain    bool
+	flush    bool
+	pause    bool
+	invalid  bool
+}
+
+// WithSrc sets the source of the request to build.
+func (b ControlMsgRspBuilder) WithSrc(src sim.RemotePort) ControlMsgRspBuilder {
+	b.src = src
+	return b
+}
+
+// WithDst sets the destination of the request to build.
+func (b ControlMsgRspBuilder) WithDst(dst sim.RemotePort) ControlMsgRspBuilder {
+	b.dst = dst
+	return b
+}
+
+// WithRspTo sets ID of the request that the respond to build is replying to.
+func (b ControlMsgRspBuilder) WithRspTo(id string) ControlMsgRspBuilder {
+	b.rspTo = id
+	return b
+}
+
+// WithEnable sets the enable bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithEnable(enable bool) ControlMsgRspBuilder {
+	b.enable = enable
+	return b
+}
+
+// WithDrain sets the drain bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithDrain(drain bool) ControlMsgRspBuilder {
+	b.drain = drain
+	return b
+}
+
+// WithFlush sets the flush bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithFlush(flush bool) ControlMsgRspBuilder {
+	b.flush = flush
+	return b
+}
+
+// WithPause sets the pause bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithPause(pause bool) ControlMsgRspBuilder {
+	b.pause = pause
+	return b
+}
+
+// WithInvalid sets the invalid bit of the control messages to 1.
+func (b ControlMsgRspBuilder) WithInvalid(invalid bool) ControlMsgRspBuilder {
+	b.invalid = invalid
+	return b
+}
+
+// Build creates a new ControlMsgRsp
+func (b ControlMsgRspBuilder) Build() *ControlMsgRsp {
+	r := &ControlMsgRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.Enable = b.enable
+	r.Drain = b.drain
+	r.Flush = b.flush
+	r.Pause = b.pause
+	r.Invalid = b.invalid
+	r.TrafficClass = reflect.TypeOf(ControlMsgRsp{}).String()
+	return r
 }
