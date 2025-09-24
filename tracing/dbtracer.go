@@ -151,20 +151,6 @@ func sameMilestone(a, b Milestone) bool {
 	return a.Kind == b.Kind && a.What == b.What && a.Location == b.Location
 }
 
-func (t *DBTracer) insertMilestones(task Task) {
-	for _, milestone := range task.Milestones {
-		milestoneEntry := milestoneTableEntry{
-			ID:       milestone.ID,
-			TaskID:   milestone.TaskID,
-			Time:     float64(milestone.Time),
-			Kind:     string(milestone.Kind),
-			What:     milestone.What,
-			Location: milestone.Location,
-		}
-		t.backend.InsertData("trace_milestones", milestoneEntry)
-	}
-}
-
 // EndTask marks the end of a task.
 func (t *DBTracer) EndTask(task Task) {
 	t.mu.Lock()
