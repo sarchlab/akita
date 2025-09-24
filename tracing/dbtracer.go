@@ -254,7 +254,7 @@ func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 
 // EnableTracing manually enables tracing.
 func (t *DBTracer) EnableTracing() {
-	print("Enable tracing at current time...\n")
+	print("DBTracer: Enable tracing at current time...\n")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -271,7 +271,7 @@ func (t *DBTracer) EnableTracing() {
 
 // StopTracingAtCurrentTime stops tracing and finalizes tasks.
 func (t *DBTracer) StopTracingAtCurrentTime() {
-	print("Stopping tracing at current time...\n")
+	print("DBTracer: Stopping tracing at current time...\n")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -291,7 +291,7 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 
 	// Clear memory
 	t.tracingTasks = make(map[string]Task)
-	t.backend.Flush()
+	//删除t.backend.Flush()
 }
 
 // 提取公共方法

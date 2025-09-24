@@ -3,7 +3,7 @@ export default {
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:39081",
+        target: "http://localhost:46637",
         changeOrigin: true,
       },
     },
