@@ -336,6 +336,8 @@ class TaskView {
 
     // Add task steps red dots (only show when showSteps is true)
     if (showSteps && task.steps && task.steps.length > 0) {
+      const timeRange = this._endTime - this._startTime;
+      const containerWidth = this._canvas.parentElement.offsetWidth - 40;
       task.steps.forEach(step => {
         const stepOffset = ((step.time - this._startTime) / timeRange) * containerWidth;
         if (stepOffset >= 0 && stepOffset <= containerWidth) {

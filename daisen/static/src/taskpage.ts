@@ -306,7 +306,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     }
 
     if (!keepView) {
-      this._updateTimeAxisAccordingToTask(task);
+      this._updateTimeAxisAccordingtoTask(task);
       this._taskView.updateLayout();
       this._componentView.updateLayout();
     }
@@ -397,74 +397,6 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     // this._taskViewCanvas.style.height = 200
     // this._componentViewCanvas.style.height =
     //     this._leftColumn.offsetHeight - 200
-  }
-
-  _toggleDissectionMode() {
-    this._dissectionMode = !this._dissectionMode;
-    this._updateURLAndLayout();
-  }
-
-  _toggleComponentMilestoneMode() {
-    if (!this._componentOnlyMode) return;
-    this._componentMilestoneMode = !this._componentMilestoneMode;
-    this._updateLayout();
-  }
-
-  _initializeURLNavigation() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const isDissectMode = urlParams.get('dissect') === '1';
-    
-    if (isDissectMode) {
-      this._dissectionMode = true;
-      this._updateLayout();
-    }
-    
-    window.addEventListener('popstate', () => {
-      this._handleURLChange();
-    });
-  }
-
-  _handleURLChange() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const shouldBeDissectMode = urlParams.get('dissect') === '1';
-    
-    if (shouldBeDissectMode !== this._dissectionMode) {
-      this._dissectionMode = shouldBeDissectMode;
-      this._updateLayout();
-    }
-  }
-
-  _updateURLAndLayout() {
-    const url = new URL(window.location.href);
-    if (this._dissectionMode) {
-      url.searchParams.set('dissect', '1');
-    } else {
-      url.searchParams.delete('dissect');
-    }
-    
-    window.history.pushState({}, '', url.toString());
-    
-    this._updateLayout();
-  }
-
-  _updateLayout() {
-    if (this._dissectionMode) {
-      // In dissection mode: just show dissection view overlay, don't change any layout
-      this._taskView.showDissectionView();
-      this._hideComponentMilestoneView();
-    } else if (this._componentMilestoneMode && this._componentOnlyMode) {
-      // In component milestone mode: don't change any layout, just show milestone view overlay
-      this._taskView.hideDissectionView();
-      this._showComponentMilestoneView();
-    } else {
-      this._taskView.hideDissectionView();
-      this._hideComponentMilestoneView();
-    }
-    
-    this._taskView.updateLayout();
-    if (!this._dissectionMode && !this._componentMilestoneMode) {
-      this._componentView.updateLayout();
-    }
   }
 
   _toggleDissectionMode() {
