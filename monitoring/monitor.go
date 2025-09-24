@@ -633,7 +633,11 @@ func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	// Write the response as JSON
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {

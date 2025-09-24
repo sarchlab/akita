@@ -151,19 +151,6 @@ func sameMilestone(a, b Milestone) bool {
 	return a.Kind == b.Kind && a.What == b.What && a.Location == b.Location
 }
 
-func (t *DBTracer) insertTaskEntry(task Task) {
-	taskEntry := taskTableEntry{
-		ID:        task.ID,
-		ParentID:  task.ParentID,
-		Kind:      task.Kind,
-		What:      task.What,
-		Location:  task.Location,
-		StartTime: float64(task.StartTime),
-		EndTime:   float64(task.EndTime),
-	}
-	t.backend.InsertData("trace", taskEntry)
-}
-
 func (t *DBTracer) insertMilestones(task Task) {
 	for _, milestone := range task.Milestones {
 		milestoneEntry := milestoneTableEntry{
@@ -208,8 +195,8 @@ func (t *DBTracer) EndTask(task Task) {
 		StartTime: float64(originalTask.StartTime),
 		EndTime:   float64(originalTask.EndTime),
 	}
-	t.backend.InsertData(t.currentTableName, taskTable) //写入trace_i表(其实可以不用上面的function)
-	t.insertMilestones(originalTask)
+	t.backend.InsertData(t.currentTableName, taskTable) //写入trace_i表
+	//t.insertMilestones(originalTask)
 }
 
 // Terminate terminates the tracer.
@@ -229,7 +216,7 @@ func NewDBTracer(
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
 	dataRecorder.CreateTable("trace", traceIndexEntry{}) // 使用索引结构
-	dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
+	//dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
 	//dataRecorder.CreateTable("trace", taskTableEntry{}) 最新版
 
 	t := &DBTracer{
@@ -267,6 +254,10 @@ func (t *DBTracer) EnableTracing() {
 	t.sessionEndTime = 0
 	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
 	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
+
+	// 创建对应的milestone表 milestone_trace1
+	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+	t.backend.CreateTable(milestoneTableName, milestoneTableEntry{})
 }
 
 // StopTracingAtCurrentTime stops tracing and finalizes tasks.
@@ -289,9 +280,34 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 	// Write ongoing tasks
 	t.batchWriteOngoingTasks()
 
+	// Write milestones within session time range to milestone table
+	t.writeMilestonesInSession()
+
 	// Clear memory
 	t.tracingTasks = make(map[string]Task)
 	//删除t.backend.Flush()
+}
+
+// writeMilestonesInSession writes milestones within session time range to milestone table
+func (t *DBTracer) writeMilestonesInSession() {
+	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+
+	for _, task := range t.tracingTasks {
+		for _, milestone := range task.Milestones {
+			// 只写入时间在session范围内的milestone
+			if milestone.Time >= t.sessionStartTime && milestone.Time <= t.sessionEndTime {
+				milestoneEntry := milestoneTableEntry{
+					ID:       milestone.ID,
+					TaskID:   milestone.TaskID,
+					Time:     float64(milestone.Time),
+					Kind:     string(milestone.Kind),
+					What:     milestone.What,
+					Location: milestone.Location,
+				}
+				t.backend.InsertData(milestoneTableName, milestoneEntry)
+			}
+		}
+	}
 }
 
 // 提取公共方法
