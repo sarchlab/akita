@@ -4,16 +4,24 @@
     <title>Akita Monitoring Tool</title>
 </header>
 
-<script type="module" crossorigin src="/assets/index-DdbTLnCK.js"></script>
+<script type="module" crossorigin src="/assets/index-ytaOc5aL.js"></script>
 <link rel="stylesheet" crossorigin href="/assets/index-C4h1B3HF.css">
 
 <body>
 
     <nav id="navbar" class="navbar navbar-dark bg-dark">
-        <a class="navbar-brand" href="/">AkitaRTM</a>
+        <a class="navbar-brand" href="/">AkitaRTM 528 v433</a>
 
         <div class="btn-toolbar my-2 my-lg-0">
+            <!-- Button to control stop tracing. Shows 'Stop' at first. -->
+            <button id="trace-toggle-btn" class="btn btn-danger" type="button">
+                <img src="/assets/stop-button-CFff6Eqk.png" alt="Stop Icon" style="width: 24px; height: 24px; margin-right: 8px; background-color: transparent; border: none; filter: brightness(0) invert(1);">
+                Stop
+            </button>
+            
             <div class="btn-group me-3 ms-3" role="group">
+
+
                 <button class="btn btn-primary" type="button">
                     <span class="resource-type">CPU</span>
                     <span id="cpu-usage"></span>
@@ -70,5 +78,5 @@
         </div>
     </div>
 
-    <div id="progress-bar-group" class="progress-bar-group"></div>
+    <div id="progress-bar-group" class="progress-bar-group"></div>
 </body>
