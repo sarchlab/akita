@@ -683,8 +683,10 @@ GPU.CommandProcessor,9
           userDiv.appendChild(urlPreviewDiv);
 
           // Add file previews underneath URL if files are attached
-          if (m.files && m.files.length > 0) {
-            const filePreviewDiv = renderMessageFiles(m.files);
+          const uploadTraceCheckedCount = Object.values(this._uploadTraceChecks).filter(Boolean).length;
+          const uploadRepoCheckedCount = Object.values(this._attachRepoChecks).filter(Boolean).length;
+          if ((m.files && m.files.length > 0) || uploadTraceCheckedCount > 0 || uploadRepoCheckedCount > 0) {
+            const filePreviewDiv = renderMessageFiles(m.files, uploadTraceCheckedCount, uploadRepoCheckedCount);
             if (filePreviewDiv) {
               userDiv.appendChild(filePreviewDiv);
             }
@@ -2921,16 +2923,28 @@ function renderMessageUrl(url: string) {
 }
 
 // Helper function to render message file previews
-function renderMessageFiles(files: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[]) {
+function renderMessageFiles(files: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[], TraceChecksCount: number, RepoCheckCount: number) {
   if (!files || files.length === 0) {
     return null;
   }
-4
+
   const filePreviewContainer = document.createElement("div");
   filePreviewContainer.style.marginTop = "2px";
   filePreviewContainer.style.marginBottom = "2px";
   filePreviewContainer.style.maxWidth = "90%";
   filePreviewContainer.style.textAlign = "right";
+
+  console.log("TraceChecksCount: ", TraceChecksCount, "RepoCheckCount:", RepoCheckCount);
+
+  if (TraceChecksCount > 0) {
+    const traceDiv = generateMessageTraceOrCodeFiles(`Trace Files with ${TraceChecksCount} options`);
+    filePreviewContainer.appendChild(traceDiv);
+  }
+
+  if (RepoCheckCount > 0) {
+    const repoDiv = generateMessageTraceOrCodeFiles(`Repository Files with ${RepoCheckCount} options`);
+    filePreviewContainer.appendChild(repoDiv);
+  }
   
   files.forEach((file, index) => {
     const filePreview = document.createElement("div");
@@ -3009,7 +3023,60 @@ function renderMessageFiles(files: { id: number; name: string; content: string; 
     filePreviewContainer.appendChild(filePreview);
   });
 
+
+
   return filePreviewContainer;
+}
+
+function generateMessageTraceOrCodeFiles(title: string) {
+  // const uploadTraceCheckedCount = Object.values(uploadTraceChecks).filter(Boolean).length;
+  // const uploadRepoCheckedCount = Object.values(uploadRepoChecks).filter(Boolean).length;
+
+  
+  const filePreview = document.createElement("div");
+  filePreview.style.display = "flex";
+  filePreview.style.alignItems = "center";
+  filePreview.style.justifyContent = "flex-end";
+  filePreview.style.background = "rgba(240, 242, 245, 0.8)";
+  filePreview.style.border = "1px solid rgba(204, 204, 204, 0.8)";
+  filePreview.style.borderRadius = "4px";
+  filePreview.style.padding = "4px 8px";
+  filePreview.style.marginBottom = "2px";
+  filePreview.style.fontSize = "12px";
+  filePreview.style.color = "#555";
+
+  // Icon
+  const iconSpan = document.createElement("span");
+  iconSpan.style.display = "flex";
+  iconSpan.style.alignItems = "center";
+  iconSpan.style.justifyContent = "center";
+  iconSpan.style.width = "16px";
+  iconSpan.style.height = "16px";
+  iconSpan.style.marginRight = "6px";
+  iconSpan.innerHTML =
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 17H15M9 13H15M9 9H10M13 3H8.2C7.0799 3 6.51984 3 6.09202 3.21799C5.71569 3.40973 5.40973 3.71569 5.21799 4.09202C5 4.51984 5 5.0799 5 6.2V17.8C5 18.9201 5 19.4802 5.21799 19.908C5.40973 20.2843 5.71569 20.5903 6.09202 20.782C6.51984 21 7.0799 21 8.2 21H15.8C16.9201 21 17.4802 21 17.908 20.782C18.2843 20.5903 18.5903 20.2843 18.782 19.908C19 19.4802 19 18.9201 19 17.8V9M13 3L19 9M13 3V7.4C13 7.96005 13 8.24008 13.109 8.45399C13.2049 8.64215 13.3578 8.79513 13.546 8.89101C13.7599 9 14.0399 9 14.6 9H19"/>
+        </svg>`;
+  filePreview.appendChild(iconSpan);
+
+  // File name and size container
+  const fileInfoContainer = document.createElement("div");
+  fileInfoContainer.style.display = "flex";
+  fileInfoContainer.style.alignItems = "center";
+  fileInfoContainer.style.flex = "1";
+  fileInfoContainer.style.minWidth = "0";
+  
+  // File name
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = title;
+  nameSpan.style.overflow = "hidden";
+  nameSpan.style.textOverflow = "ellipsis";
+  nameSpan.style.whiteSpace = "nowrap";
+  nameSpan.style.marginRight = "6px";
+  fileInfoContainer.appendChild(nameSpan);
+
+  filePreview.appendChild(fileInfoContainer);
+  return filePreview;
 }
 
 function formatFileSize(size: number): string {
