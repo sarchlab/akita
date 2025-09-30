@@ -901,7 +901,7 @@ func collectMilestoneKinds(tasks []Task) []string {
 }
 
 func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
-	var data []StackedTimeValue
+	data := make([]StackedTimeValue, 0, numDots)
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
 

@@ -26,7 +26,6 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
   _componentOnlyMode: boolean;
   _componentName: string;
   _dissectionMode: boolean;
-  _componentMilestoneMode: boolean;
   _currTasks: Object;
   _startTime: number;
   _endTime: number;
@@ -55,7 +54,6 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._componentOnlyMode = false;
     this._componentName = "";
     this._dissectionMode = false;
-    this._componentMilestoneMode = false;
     this._widget = null;
 
     this._currTasks = {
@@ -81,7 +79,6 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     );
     this._taskView.setToggleCallback(() => {
       if (this._componentOnlyMode) {
-        this._toggleComponentMilestoneMode();
       } else {
         this._toggleDissectionMode();
       }
@@ -404,11 +401,6 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._updateURLAndLayout();
   }
 
-  _toggleComponentMilestoneMode() {
-    if (!this._componentOnlyMode) return;
-    this._componentMilestoneMode = !this._componentMilestoneMode;
-    this._updateLayout();
-  }
 
   _initializeURLNavigation() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -451,18 +443,12 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     if (this._dissectionMode) {
       // In dissection mode: just show dissection view overlay, don't change any layout
       this._taskView.showDissectionView();
-      this._hideComponentMilestoneView();
-    } else if (this._componentMilestoneMode && this._componentOnlyMode) {
-      // In component milestone mode: don't change any layout, just show milestone view overlay
-      this._taskView.hideDissectionView();
-      this._showComponentMilestoneView();
     } else {
       this._taskView.hideDissectionView();
-      this._hideComponentMilestoneView();
     }
     
     this._taskView.updateLayout();
-    if (!this._dissectionMode && !this._componentMilestoneMode) {
+    if (!this._dissectionMode) {
       this._componentView.updateLayout();
     }
   }
@@ -1095,228 +1081,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
   //     .replace(/\$([^$]+)\$/g, '<span class="math" data-display="inline">$1</span>');
   // }
 
-  _showComponentMilestoneView() {
-    this._createComponentMilestoneView();
-  }
 
-  _hideComponentMilestoneView() {
-    // Check body for milestone view since it's fixed positioned
-    const milestoneView = document.body.querySelector('.component-milestone-view');
-    if (milestoneView) {
-      milestoneView.remove();
-    }
-  }
-
-  async _createComponentMilestoneView() {
-    // Fetch all tasks for this component
-    const response = await fetch(
-      `/api/trace?where=${this._componentName}&starttime=${this._startTime}&endtime=${this._endTime}`
-    );
-    const componentTasks = await response.json();
-
-    // Remove existing view
-    this._hideComponentMilestoneView();
-
-    // Create milestone view container - same positioning as TaskView dissection view
-    const milestoneView = document.createElement('div');
-    milestoneView.className = 'component-milestone-view';
-    const leftColumnWidth = this._leftColumn.offsetWidth;
-    
-    milestoneView.style.cssText = `
-      position: fixed;
-      top: ${this._leftColumn.getBoundingClientRect().top + 200}px;
-      left: ${this._leftColumn.getBoundingClientRect().left}px;
-      width: ${leftColumnWidth}px;
-      height: ${this._leftColumn.offsetHeight - 200}px;
-      background: white;
-      padding: 20px;
-      overflow-y: auto;
-      border-top: 2px solid #ccc;
-      z-index: 1000;
-    `;
-
-    // Create title
-    const title = document.createElement('h2');
-    title.textContent = `Component Milestones: ${this._componentName}`;
-    title.style.cssText = `
-      font-size: 20px;
-      font-weight: bold;
-      margin-bottom: 20px;
-      color: #333;
-    `;
-    milestoneView.appendChild(title);
-
-    // Collect all milestones from all tasks
-    const allMilestones = [];
-    componentTasks.forEach(task => {
-      if (task.steps && task.steps.length > 0) {
-        task.steps.forEach(step => {
-          allMilestones.push({
-            ...step,
-            taskId: task.id,
-            taskKind: task.kind,
-            taskWhat: task.what
-          });
-        });
-      }
-    });
-
-    if (allMilestones.length === 0) {
-      const noMilestones = document.createElement('div');
-      noMilestones.textContent = 'No milestones found for this component.';
-      noMilestones.style.cssText = `
-        font-size: 16px;
-        color: #666;
-        text-align: center;
-        margin-top: 50px;
-      `;
-      milestoneView.appendChild(noMilestones);
-      this._leftColumn.appendChild(milestoneView);
-      return;
-    }
-
-    // Group milestones by kind for swimlanes
-    const milestonesByKind = {};
-    allMilestones.forEach(milestone => {
-      const kind = milestone.kind || 'unknown';
-      if (!milestonesByKind[kind]) {
-        milestonesByKind[kind] = [];
-      }
-      milestonesByKind[kind].push(milestone);
-    });
-
-    // Sort milestones within each kind by time
-    Object.keys(milestonesByKind).forEach(kind => {
-      milestonesByKind[kind].sort((a, b) => a.time - b.time);
-    });
-
-    // Create swimlane chart
-    const swimlaneContainer = document.createElement('div');
-    swimlaneContainer.style.cssText = `
-      position: relative;
-      width: 100%;
-      min-height: 400px;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      background: #f9f9f9;
-    `;
-
-    const containerWidth = this._leftColumnWidth - 80;
-    const timeRange = this._endTime - this._startTime;
-    const laneHeight = 60;
-    const kinds = Object.keys(milestonesByKind).sort();
-    const colors = ['#FF6B6B', '#FFD93D', '#52C41A', '#9B59B6', '#FF8C00', '#1E90FF', '#20B2AA'];
-
-    // Create each swimlane
-    kinds.forEach((kind, kindIndex) => {
-      const lane = document.createElement('div');
-      lane.style.cssText = `
-        position: relative;
-        height: ${laneHeight}px;
-        margin-bottom: 10px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-        background: ${colors[kindIndex % colors.length]}20;
-      `;
-
-      // Lane label
-      const label = document.createElement('div');
-      label.textContent = kind;
-      label.style.cssText = `
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        font-weight: bold;
-        font-size: 14px;
-        color: #333;
-        z-index: 10;
-        background: white;
-        padding: 2px 8px;
-        border-radius: 4px;
-        border: 1px solid #ddd;
-      `;
-      lane.appendChild(label);
-
-      // Add milestones for this kind
-      milestonesByKind[kind].forEach((milestone) => {
-        const milestoneX = 100 + ((milestone.time - this._startTime) / timeRange) * (containerWidth - 120);
-        
-        if (milestoneX >= 100 && milestoneX <= containerWidth) {
-          const milestoneMarker = document.createElement('div');
-          milestoneMarker.style.cssText = `
-            position: absolute;
-            left: ${milestoneX}px;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            width: 12px;
-            height: 12px;
-            background: ${colors[kindIndex % colors.length]};
-            border: 2px solid white;
-            border-radius: 50%;
-            cursor: pointer;
-            z-index: 5;
-          `;
-
-          // Add tooltip on hover
-          milestoneMarker.addEventListener('mouseenter', (e) => {
-            this._showComponentMilestoneTooltip(milestone, e);
-          });
-
-          milestoneMarker.addEventListener('mouseleave', () => {
-            this._hideComponentMilestoneTooltip();
-          });
-
-          lane.appendChild(milestoneMarker);
-        }
-      });
-
-      swimlaneContainer.appendChild(lane);
-    });
-
-    milestoneView.appendChild(swimlaneContainer);
-    // Add to body since we're using fixed positioning
-    document.body.appendChild(milestoneView);
-  }
-
-  _showComponentMilestoneTooltip(milestone, event) {
-    const tooltip = this._tooltip;
-    if (tooltip) {
-      tooltip.innerHTML = `
-        <div style="text-align: left; min-width: 250px;">
-          <h4>Milestone at ${this._smartString(milestone.time)}</h4>
-          <div style="margin-bottom: 8px;">
-            <span style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">Kind:</span> ${milestone.kind || 'N/A'}<br/>
-            <span style="background-color: #e3f2fd; padding: 2px 4px; border-radius: 3px;">What:</span> ${milestone.what || 'N/A'}<br/>
-            <span style="background-color: #f3e5f5; padding: 2px 4px; border-radius: 3px;">Task:</span> ${milestone.taskKind} - ${milestone.taskWhat}<br/>
-            <span style="background-color: #e8f5e8; padding: 2px 4px; border-radius: 3px;">Task ID:</span> ${milestone.taskId}
-          </div>
-        </div>
-      `;
-      tooltip.classList.add('showing');
-    }
-  }
-
-  _hideComponentMilestoneTooltip() {
-    const tooltip = this._tooltip;
-    if (tooltip) {
-      tooltip.classList.remove('showing');
-    }
-  }
-
-  _hideMilestoneKindsLegend() {
-    const legend = document.querySelector('.milestone-kinds-legend');
-    if (legend) {
-      (legend as HTMLElement).style.display = 'none';
-    }
-  }
-
-  _showMilestoneKindsLegend() {
-    const legend = document.querySelector('.milestone-kinds-legend');
-    if (legend) {
-      (legend as HTMLElement).style.display = 'block';
-    }
-  }
 
   _smartString(value: number): string {
     if (value < 0.001) {
