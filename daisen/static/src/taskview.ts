@@ -671,13 +671,21 @@ class TaskView {
       params.set('endtime', this._endTime.toString());
       
       const response = await fetch(`/api/trace?${params.toString()}`);
+      if (!response.ok) {
+        // Provide meaningful feedback about the error
+        console.error(`Error fetching subtasks for ${parentTaskId}: Server responded with status ${response.status} ${response.statusText}`);
+        // Optionally, you could trigger a UI update or callback here to inform the user
+        return [];
+      }
       const subTasks = await response.json();
       console.log(`TaskView: Received ${subTasks ? subTasks.length : 0} subtasks for parent ${parentTaskId}:`, subTasks);
       
       // Filter out any null/undefined results
       return (subTasks || []).filter(task => task && task.id);
     } catch (error) {
-      console.error('Error fetching subtasks for', parentTaskId, ':', error);
+      // Provide meaningful feedback about the network error
+      console.error(`Network error fetching subtasks for ${parentTaskId}:`, error);
+      // Optionally, you could trigger a UI update or callback here to inform the user
       return [];
     }
   }
