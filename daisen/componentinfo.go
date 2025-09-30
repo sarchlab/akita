@@ -892,7 +892,7 @@ func collectMilestoneKinds(tasks []Task) []string {
 		}
 	}
 
-	var kinds []string
+	kinds := make([]string, 0, len(kindSet))
 	for kind := range kindSet {
 		kinds = append(kinds, kind)
 	}
