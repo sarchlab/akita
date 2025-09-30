@@ -230,21 +230,24 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 	// Build a map for quick task lookup
 	taskMap := make(map[string]*Task)
-	taskIDs := make([]string, 0, len(tasks))
+	taskIDs := make([]interface{}, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
-		taskIDs = append(taskIDs, "'"+tasks[i].ID+"'")
+		taskIDs = append(taskIDs, tasks[i].ID)
 	}
 
-	// Query milestones for all tasks
+	// Query milestones for all tasks using parameterized query
+	placeholders := strings.Repeat("?,", len(taskIDs))
+	if len(placeholders) > 0 {
+		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
+	}
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, Kind, What, Location 
 		FROM trace_milestones 
 		WHERE TaskID IN (%s)
-		ORDER BY TaskID, Time`, 
-		strings.Join(taskIDs, ","))
+		ORDER BY TaskID, Time`, placeholders)
 
-	rows, err := r.Query(sqlStr)
+	rows, err := r.Query(sqlStr, taskIDs...)
 	if err != nil {
 		// If trace_milestones table doesn't exist, just return without error
 		return
