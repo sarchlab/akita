@@ -230,7 +230,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 	// Build a map for quick task lookup
 	taskMap := make(map[string]*Task)
-	var taskIDs []string
+	taskIDs := make([]string, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
 		taskIDs = append(taskIDs, "'"+tasks[i].ID+"'")

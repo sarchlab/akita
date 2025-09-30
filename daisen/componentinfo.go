@@ -83,7 +83,7 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
 		stackedInfo := calculateConcurrentTaskMilestones(
-			compName, infoType, startTime, endTime, int(numDots))
+			r.Context(), compName, infoType, startTime, endTime, int(numDots))
 		rsp, err := json.Marshal(stackedInfo)
 		dieOnErr(err)
 		_, err = w.Write(rsp)
@@ -873,7 +873,104 @@ func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
+	query := TaskQuery{
+		Where:            compName,
+		EnableTimeRange:  true,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		EnableParentTask: true,
+	}
+	return traceReader.ListTasks(ctx, query)
+}
+
+func collectMilestoneKinds(tasks []Task) []string {
+	kindSet := make(map[string]bool)
+	for _, task := range tasks {
+		for _, step := range task.Steps {
+			kindSet[step.Kind] = true
+		}
+	}
+
+	var kinds []string
+	for kind := range kindSet {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
+	var data []StackedTimeValue
+	totalDuration := endTime - startTime
+	binDuration := totalDuration / float64(numDots)
+
+	for i := 0; i < numDots; i++ {
+		binStartTime := float64(i)*binDuration + startTime
+		binEndTime := float64(i+1)*binDuration + startTime
+		kindCounts := countConcurrentTasksByKind(tasks, kinds, binStartTime, binEndTime)
+
+		stv := StackedTimeValue{
+			Time:   binStartTime + 0.5*binDuration,
+			Values: kindCounts,
+		}
+		data = append(data, stv)
+	}
+	return data
+}
+
+func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binEndTime float64) map[string]float64 {
+	kindCounts := make(map[string]float64)
+	for _, kind := range kinds {
+		kindCounts[kind] = 0
+	}
+
+	for _, task := range tasks {
+		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
+			continue
+		}
+
+		currentKind := findTaskMilestoneKind(task, binStartTime)
+		if currentKind != "" {
+			kindCounts[currentKind]++
+		}
+	}
+	return kindCounts
+}
+
+func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
+	return !(float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime)
+}
+
+func findTaskMilestoneKind(task Task, binStartTime float64) string {
+	var currentKind string
+	var latestTime float64 = -1
+
+	// Find the most recent milestone before or at the bin start time
+	for _, step := range task.Steps {
+		stepTime := float64(step.Time)
+		if stepTime <= binStartTime && stepTime > latestTime {
+			latestTime = stepTime
+			currentKind = step.Kind
+		}
+	}
+
+	// If no milestone found before this bin, use the first milestone of the task
+	if currentKind == "" && len(task.Steps) > 0 {
+		firstStep := task.Steps[0]
+		for _, step := range task.Steps {
+			if float64(step.Time) < float64(firstStep.Time) {
+				firstStep = step
+			}
+		}
+		currentKind = firstStep.Kind
+	}
+
+	return currentKind
+}
+
 func calculateConcurrentTaskMilestones(
+	ctx context.Context,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int,
@@ -886,88 +983,9 @@ func calculateConcurrentTaskMilestones(
 		Kinds:     []string{},
 	}
 
-	query := TaskQuery{
-		Where:            compName,
-		EnableTimeRange:  true,
-		StartTime:        startTime,
-		EndTime:          endTime,
-		EnableParentTask: true,
-	}
-	tasks := traceReader.ListTasks(context.Background(), query)
-
-	// Collect all milestone kinds
-	kindSet := make(map[string]bool)
-	for _, task := range tasks {
-		for _, step := range task.Steps {
-			kindSet[step.Kind] = true
-		}
-	}
-
-	for kind := range kindSet {
-		info.Kinds = append(info.Kinds, kind)
-	}
-	sort.Strings(info.Kinds)
-
-	totalDuration := endTime - startTime
-	binDuration := totalDuration / float64(numDots)
-
-	for i := 0; i < numDots; i++ {
-		binStartTime := float64(i)*binDuration + startTime
-		binEndTime := float64(i+1)*binDuration + startTime
-
-		// Count concurrent tasks by milestone kind
-		kindCounts := make(map[string]float64)
-		for _, kind := range info.Kinds {
-			kindCounts[kind] = 0
-		}
-
-		// For each task, check if it's running during this time bin
-		for _, task := range tasks {
-			// Check if task is running during this bin (concurrent task)
-			if float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime {
-				continue
-			}
-
-			// This task is running during this bin, now determine its milestone kind
-			// Find the most recent milestone before or at the bin start time
-			var currentKind string
-			var latestTime float64 = -1
-
-			// Look through all milestones of this task
-			for _, step := range task.Steps {
-				stepTime := float64(step.Time)
-				// Find the most recent milestone that occurred before or during this bin
-				if stepTime <= binStartTime && stepTime > latestTime {
-					latestTime = stepTime
-					currentKind = step.Kind
-				}
-			}
-
-			// If no milestone found before this bin, use the first milestone of the task
-			if currentKind == "" && len(task.Steps) > 0 {
-				// Sort steps by time and use the first one
-				firstStep := task.Steps[0]
-				for _, step := range task.Steps {
-					if float64(step.Time) < float64(firstStep.Time) {
-						firstStep = step
-					}
-				}
-				currentKind = firstStep.Kind
-			}
-
-			// If we found a kind, count this concurrent task
-			if currentKind != "" {
-				kindCounts[currentKind] += 1
-			}
-		}
-
-		stv := StackedTimeValue{
-			Time:   binStartTime + 0.5*binDuration,
-			Values: kindCounts,
-		}
-
-		info.Data = append(info.Data, stv)
-	}
+	tasks := fetchTasksForMilestones(ctx, compName, startTime, endTime)
+	info.Kinds = collectMilestoneKinds(tasks)
+	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
 
 	return info
 }
