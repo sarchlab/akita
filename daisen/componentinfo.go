@@ -893,7 +893,7 @@ func calculateConcurrentTaskMilestones(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	tasks := traceReader.ListTasks(query)
+	tasks := traceReader.ListTasks(context.Background(), query)
 
 	// Collect all milestone kinds
 	kindSet := make(map[string]bool)
