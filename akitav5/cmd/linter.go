@@ -48,7 +48,310 @@ func newIssue(fset *token.FileSet, node ast.Node, fallbackPath, rule, msg string
 }
 
 func issueAtPath(path, rule, msg string) lintIssue {
-	return lintIssue{Rule: rule, Message: msg, Pos: token.Position{Filename: path}}
+	return lintIssue{Rule: rule, Message: msg, Pos: token.Position{Filename: path, Line: 1, Column: 1}}
+}
+
+func parseGoFile(path string) (*token.FileSet, *ast.File, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	return fset, file, nil
+}
+
+func collectTypeDecls(file *ast.File) map[string]ast.Expr {
+	result := make(map[string]ast.Expr)
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			if typeSpec, ok := spec.(*ast.TypeSpec); ok {
+				result[typeSpec.Name.Name] = typeSpec.Type
+			}
+		}
+	}
+	return result
+}
+
+func findStructType(file *ast.File, name string) (*ast.TypeSpec, *ast.StructType) {
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok || typeSpec.Name.Name != name {
+				continue
+			}
+			structType, ok := typeSpec.Type.(*ast.StructType)
+			if ok {
+				return typeSpec, structType
+			}
+			return typeSpec, nil
+		}
+	}
+	return nil, nil
+}
+
+type builderContext struct {
+	path            string
+	fset            *token.FileSet
+	file            *ast.File
+	typeSpec        *ast.TypeSpec
+	structType      *ast.StructType
+	fieldTypes      map[string]ast.Expr
+	withDecls       map[string]*ast.FuncDecl
+	withAssignments map[string]map[string]bool
+}
+
+func newBuilderContext(folder string) (builderContext, []lintIssue) {
+	path := filepath.Join(folder, "builder.go")
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return builderContext{}, []lintIssue{issueAtPath(path, "Rule 4.1", "builder.go file does not exist")}
+		}
+		return builderContext{}, []lintIssue{issueAtPath(path, "Rule 4.1", err.Error())}
+	}
+	if info.IsDir() {
+		return builderContext{}, []lintIssue{issueAtPath(path, "Rule 4.1", "builder.go is a directory")}
+	}
+
+	fset, file, err := parseGoFile(path)
+	if err != nil {
+		return builderContext{}, []lintIssue{issueAtPath(path, "Rule 4.1", fmt.Sprintf("failed to parse builder.go: %v", err))}
+	}
+
+	typeSpec, structType := findStructType(file, "Builder")
+	if structType == nil {
+		return builderContext{}, []lintIssue{newIssue(fset, file.Name, path, "Rule 4.1", "`Builder` struct not found")}
+	}
+
+	fieldTypes := make(map[string]ast.Expr)
+	for _, field := range structType.Fields.List {
+		for _, name := range field.Names {
+			fieldTypes[name.Name] = field.Type
+		}
+	}
+
+	withDecls, assignments := collectWithInfo(file)
+
+	ctx := builderContext{
+		path:            path,
+		fset:            fset,
+		file:            file,
+		typeSpec:        typeSpec,
+		structType:      structType,
+		fieldTypes:      fieldTypes,
+		withDecls:       withDecls,
+		withAssignments: assignments,
+	}
+	return ctx, nil
+}
+
+func collectWithInfo(file *ast.File) (map[string]*ast.FuncDecl, map[string]map[string]bool) {
+	decls := make(map[string]*ast.FuncDecl)
+	assignments := make(map[string]map[string]bool)
+	for _, decl := range file.Decls {
+		funcDecl, ok := decl.(*ast.FuncDecl)
+		if !ok || funcDecl.Recv == nil || funcDecl.Name == nil {
+			continue
+		}
+		if receiverIdent(funcDecl.Recv.List[0].Type) != "Builder" {
+			continue
+		}
+		name := funcDecl.Name.Name
+		if !strings.HasPrefix(name, "With") {
+			continue
+		}
+		decls[name] = funcDecl
+		assignments[name] = assignedBuilderFields(funcDecl)
+	}
+	return decls, assignments
+}
+
+func receiverName(funcDecl *ast.FuncDecl) string {
+	if funcDecl.Recv == nil || len(funcDecl.Recv.List) != 1 {
+		return ""
+	}
+	recv := funcDecl.Recv.List[0]
+	if len(recv.Names) == 0 {
+		return ""
+	}
+	return recv.Names[0].Name
+}
+
+func assignedBuilderFields(funcDecl *ast.FuncDecl) map[string]bool {
+	result := make(map[string]bool)
+	receiver := receiverName(funcDecl)
+	if funcDecl.Body == nil || receiver == "" {
+		return result
+	}
+	ast.Inspect(funcDecl.Body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for _, lhs := range assign.Lhs {
+			if sel, ok := lhs.(*ast.SelectorExpr); ok {
+				if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == receiver {
+					result[sel.Sel.Name] = true
+				}
+			}
+		}
+		return true
+	})
+	return result
+}
+
+func ensureLegacyBuilderFields(ctx builderContext) []lintIssue {
+	required := []string{"Freq", "Engine"}
+	var missing []string
+	for _, name := range required {
+		if _, ok := ctx.fieldTypes[name]; !ok {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	sort.Strings(missing)
+	msg := fmt.Sprintf("`Builder` struct must include fields %s", strings.Join(missing, ", "))
+	return []lintIssue{newIssue(ctx.fset, ctx.typeSpec, ctx.path, "Rule 4.1", msg)}
+}
+
+func ensureWithSetters(ctx builderContext) []lintIssue {
+	configured := make(map[string]bool)
+	for name := range ctx.fieldTypes {
+		if name == "spec" || name == "simulation" {
+			continue
+		}
+		configured[name] = false
+	}
+
+	var issues []lintIssue
+	for name, decl := range ctx.withDecls {
+		if !returnsBuilderValue(decl) {
+			msg := fmt.Sprintf("`%s` must return Builder", name)
+			issues = append(issues, newIssue(ctx.fset, decl, ctx.path, "Rule 4.4", msg))
+		}
+		for field := range ctx.withAssignments[name] {
+			if _, ok := configured[field]; ok {
+				configured[field] = true
+			}
+		}
+	}
+
+	var missing []string
+	for field, ok := range configured {
+		if !ok {
+			missing = append(missing, field)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		msg := fmt.Sprintf("missing `With` setter for field(s): %s", strings.Join(missing, ", "))
+		issues = append(issues, newIssue(ctx.fset, ctx.structType, ctx.path, "Rule 4.4", msg))
+	}
+
+	return issues
+}
+
+func ensureSimulationRules(ctx builderContext) []lintIssue {
+	field, ok := ctx.fieldTypes["simulation"]
+	var issues []lintIssue
+	if !ok {
+		issues = append(issues, newIssue(ctx.fset, ctx.typeSpec, ctx.path, "Rule 4.2", "`Builder` struct must include `simulation` field"))
+	} else if !isPointerTo(field, "simv5", "Simulation") {
+		issues = append(issues, newIssue(ctx.fset, field, ctx.path, "Rule 4.2", "`simulation` field must be of type *simv5.Simulation"))
+	}
+
+	decl, ok := ctx.withDecls["WithSimulation"]
+	if !ok {
+		issues = append(issues, newIssue(ctx.fset, ctx.typeSpec, ctx.path, "Rule 4.2", "`WithSimulation` method not found"))
+		return issues
+	}
+
+	if !ctx.withAssignments["WithSimulation"]["simulation"] {
+		issues = append(issues, newIssue(ctx.fset, decl, ctx.path, "Rule 4.2", "`WithSimulation` must assign to the `simulation` field"))
+	}
+
+	if decl.Type.Params == nil || decl.Type.Params.NumFields() != 1 {
+		issues = append(issues, newIssue(ctx.fset, decl, ctx.path, "Rule 4.2", "`WithSimulation` must take exactly one simv5.Simulation argument"))
+	} else {
+		paramType := decl.Type.Params.List[0].Type
+		if !isSelector(paramType, "simv5", "Simulation") {
+			issues = append(issues, newIssue(ctx.fset, paramType, ctx.path, "Rule 4.2", "`WithSimulation` argument must be simv5.Simulation"))
+		}
+	}
+
+	return issues
+}
+
+func ensureSpecRules(ctx builderContext) []lintIssue {
+	field, ok := ctx.fieldTypes["spec"]
+	var issues []lintIssue
+	if !ok {
+		issues = append(issues, newIssue(ctx.fset, ctx.typeSpec, ctx.path, "Rule 4.3", "`Builder` struct must include `spec` field"))
+	} else if ident, ok := field.(*ast.Ident); !ok || ident.Name != "Spec" {
+		issues = append(issues, newIssue(ctx.fset, field, ctx.path, "Rule 4.3", "`spec` field must use Spec type"))
+	}
+
+	decl, ok := ctx.withDecls["WithSpec"]
+	if !ok {
+		issues = append(issues, newIssue(ctx.fset, ctx.typeSpec, ctx.path, "Rule 4.3", "`WithSpec` method not found"))
+		return issues
+	}
+
+	if !ctx.withAssignments["WithSpec"]["spec"] {
+		issues = append(issues, newIssue(ctx.fset, decl, ctx.path, "Rule 4.3", "`WithSpec` must assign to the `spec` field"))
+	}
+	if decl.Type.Params == nil || decl.Type.Params.NumFields() != 1 {
+		issues = append(issues, newIssue(ctx.fset, decl, ctx.path, "Rule 4.3", "`WithSpec` must take exactly one Spec argument"))
+	} else {
+		paramType := decl.Type.Params.List[0].Type
+		if ident, ok := paramType.(*ast.Ident); !ok || ident.Name != "Spec" {
+			issues = append(issues, newIssue(ctx.fset, paramType, ctx.path, "Rule 4.3", "`WithSpec` argument must be Spec"))
+		}
+	}
+
+	return issues
+}
+
+func ensureBuildMethod(ctx builderContext) []lintIssue {
+	buildDecl := findBuildFunc(ctx.file)
+	if buildDecl == nil {
+		return []lintIssue{newIssue(ctx.fset, ctx.file, ctx.path, "Rule 4.5", "`Build` method not found")}
+	}
+
+	var issues []lintIssue
+	if params := buildDecl.Type.Params; params == nil || params.NumFields() != 1 {
+		issues = append(issues, newIssue(ctx.fset, buildDecl, ctx.path, "Rule 4.5", "`Build` must take exactly one argument"))
+	} else {
+		paramType := params.List[0].Type
+		if ident, ok := paramType.(*ast.Ident); !ok || ident.Name != "string" {
+			issues = append(issues, newIssue(ctx.fset, paramType, ctx.path, "Rule 4.5", "`Build` argument must be of type string"))
+		}
+	}
+
+	if results := buildDecl.Type.Results; results == nil || results.NumFields() != 1 {
+		issues = append(issues, newIssue(ctx.fset, buildDecl, ctx.path, "Rule 4.5", "`Build` must return *Comp"))
+	} else {
+		resType := results.List[0].Type
+		if !isPointerTo(resType, "", "Comp") {
+			issues = append(issues, newIssue(ctx.fset, resType, ctx.path, "Rule 4.5", "`Build` must return *Comp"))
+		}
+	}
+
+	if !buildCallsSpecValidate(buildDecl) {
+		issues = append(issues, newIssue(ctx.fset, buildDecl, ctx.path, "Rule 4.6", "`Build` must validate the spec"))
+	}
+
+	return issues
 }
 
 // LintComponentFolder runs the component lints against the given folder path.
@@ -154,135 +457,17 @@ func checkComponent(folder string) []lintIssue {
 }
 
 func checkBuilder(folder string) []lintIssue {
-	path := filepath.Join(folder, "builder.go")
-	info, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []lintIssue{issueAtPath(path, "Rule 4.1", "builder.go file does not exist")}
-		}
-		return []lintIssue{issueAtPath(path, "Rule 4.1", err.Error())}
-	}
-	if info.IsDir() {
-		return []lintIssue{issueAtPath(path, "Rule 4.1", "builder.go is a directory")}
-	}
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return []lintIssue{issueAtPath(path, "Rule 4.1", fmt.Sprintf("failed to parse builder.go: %v", err))}
+	ctx, errs := newBuilderContext(folder)
+	if len(errs) > 0 {
+		return errs
 	}
 
 	var issues []lintIssue
-	var builderSpec *ast.TypeSpec
-	var builderStruct *ast.StructType
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok || typeSpec.Name.Name != "Builder" {
-				continue
-			}
-			if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-				builderSpec = typeSpec
-				builderStruct = structType
-			}
-		}
-	}
-
-	if builderStruct == nil {
-		return []lintIssue{newIssue(fset, file.Name, path, "Rule 4.1", "`Builder` struct not found")}
-	}
-
-	fieldNames := map[string]bool{}
-	fieldTypes := map[string]ast.Expr{}
-	for _, field := range builderStruct.Fields.List {
-		for _, name := range field.Names {
-			fieldNames[name.Name] = true
-			fieldTypes[name.Name] = field.Type
-		}
-	}
-	configured := map[string]bool{}
-	for name := range fieldNames {
-		if name == "spec" || name == "simulation" {
-			continue
-		}
-		configured[name] = false
-	}
-
-	withAssignments := map[string]map[string]bool{}
-	withDecls := map[string]*ast.FuncDecl{}
-
-	for _, decl := range file.Decls {
-		funcDecl, ok := decl.(*ast.FuncDecl)
-		if !ok || funcDecl.Recv == nil || funcDecl.Name == nil {
-			continue
-		}
-		recvType := receiverIdent(funcDecl.Recv.List[0].Type)
-		if recvType != "Builder" {
-			continue
-		}
-		if strings.HasPrefix(funcDecl.Name.Name, "With") {
-			assignments := assignedBuilderFields(funcDecl)
-			withAssignments[funcDecl.Name.Name] = assignments
-			withDecls[funcDecl.Name.Name] = funcDecl
-			for field := range assignments {
-				if _, ok := configured[field]; ok {
-					configured[field] = true
-				}
-			}
-			if !returnsBuilderValue(funcDecl) {
-				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 4.4", "`With` methods must return Builder"))
-			}
-		}
-	}
-
-	var unconfigured []string
-	for name, ok := range configured {
-		if !ok {
-			unconfigured = append(unconfigured, name)
-		}
-	}
-	if len(unconfigured) > 0 {
-		issues = append(issues, newIssue(fset, builderStruct, path, "Rule 4.4", fmt.Sprintf("missing `With` setter for field(s): %s", strings.Join(unconfigured, ", "))))
-	}
-
-	issues = append(issues, validateSimulationRequirements(fset, path, builderSpec, fieldTypes["simulation"], withDecls["WithSimulation"], withAssignments["WithSimulation"])...)
-	issues = append(issues, validateSpecRequirements(fset, path, builderSpec, fieldTypes["spec"], withDecls["WithSpec"], withAssignments["WithSpec"])...)
-
-	buildDecl := findBuildFunc(file)
-	if buildDecl == nil {
-		issues = append(issues, newIssue(fset, file, path, "Rule 4.5", "`Build` method not found"))
-		return issues
-	}
-
-	if params := buildDecl.Type.Params; params == nil || params.NumFields() != 1 {
-		issues = append(issues, newIssue(fset, buildDecl, path, "Rule 4.5", "`Build` must take exactly one argument"))
-	} else {
-		param := params.List[0]
-		if ident, ok := param.Type.(*ast.Ident); !ok || ident.Name != "string" {
-			issues = append(issues, newIssue(fset, param, path, "Rule 4.5", "`Build` argument must be of type string"))
-		}
-	}
-
-	if results := buildDecl.Type.Results; results == nil || results.NumFields() != 1 {
-		issues = append(issues, newIssue(fset, buildDecl, path, "Rule 4.5", "`Build` must return *Comp"))
-	} else {
-		resType := results.List[0].Type
-		star, ok := resType.(*ast.StarExpr)
-		if !ok {
-			issues = append(issues, newIssue(fset, resType, path, "Rule 4.5", "`Build` must return pointer to Comp"))
-		} else if ident, ok := star.X.(*ast.Ident); !ok || ident.Name != "Comp" {
-			issues = append(issues, newIssue(fset, resType, path, "Rule 4.5", "`Build` must return *Comp"))
-		}
-	}
-
-	if !buildCallsSpecValidate(buildDecl) {
-		issues = append(issues, newIssue(fset, buildDecl, path, "Rule 4.6", "`Build` must validate the spec"))
-	}
-
+	issues = append(issues, ensureLegacyBuilderFields(ctx)...)
+	issues = append(issues, ensureWithSetters(ctx)...)
+	issues = append(issues, ensureSimulationRules(ctx)...)
+	issues = append(issues, ensureSpecRules(ctx)...)
+	issues = append(issues, ensureBuildMethod(ctx)...)
 	return issues
 }
 
@@ -401,6 +586,35 @@ func returnsBuilderValue(funcDecl *ast.FuncDecl) bool {
 	return true
 }
 
+func isSelector(expr ast.Expr, pkg, name string) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	if name != "" && sel.Sel.Name != name {
+		return false
+	}
+	ident, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	if pkg != "" && ident.Name != pkg {
+		return false
+	}
+	return true
+}
+
+func isPointerTo(expr ast.Expr, pkg, name string) bool {
+	star, ok := expr.(*ast.StarExpr)
+	if !ok {
+		return false
+	}
+	if ident, ok := star.X.(*ast.Ident); ok {
+		return pkg == "" && ident.Name == name
+	}
+	return isSelector(star.X, pkg, name)
+}
+
 func findBuildFunc(file *ast.File) *ast.FuncDecl {
 	for _, decl := range file.Decls {
 		funcDecl, ok := decl.(*ast.FuncDecl)
@@ -422,78 +636,73 @@ func buildCallsSpecValidate(funcDecl *ast.FuncDecl) bool {
 	if funcDecl.Body == nil {
 		return false
 	}
+	receiver := receiverName(funcDecl)
+	aliases := collectSpecAliases(funcDecl.Body, receiver)
+	return specValidateCallExists(funcDecl.Body, receiver, aliases)
+}
 
-	receiverName := ""
-	if funcDecl.Recv != nil && len(funcDecl.Recv.List) == 1 {
-		if len(funcDecl.Recv.List[0].Names) == 1 {
-			receiverName = funcDecl.Recv.List[0].Names[0].Name
-		}
+func collectSpecAliases(body *ast.BlockStmt, receiver string) map[string]bool {
+	aliases := make(map[string]bool)
+	if receiver == "" {
+		return aliases
 	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		assign, ok := n.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for i, lhs := range assign.Lhs {
+			ident, ok := lhs.(*ast.Ident)
+			if !ok || i >= len(assign.Rhs) {
+				continue
+			}
+			if refersToSpec(assign.Rhs[i], receiver, aliases) {
+				aliases[ident.Name] = true
+			}
+		}
+		return true
+	})
+	return aliases
+}
 
-	aliases := map[string]bool{}
+func specValidateCallExists(body *ast.BlockStmt, receiver string, aliases map[string]bool) bool {
 	found := false
-
-	ast.Inspect(funcDecl.Body, func(n ast.Node) bool {
+	ast.Inspect(body, func(n ast.Node) bool {
 		if found {
 			return false
 		}
-
-		if assign, ok := n.(*ast.AssignStmt); ok {
-			for i, lhs := range assign.Lhs {
-				ident, ok := lhs.(*ast.Ident)
-				if !ok {
-					continue
-				}
-				if i >= len(assign.Rhs) {
-					continue
-				}
-				rhs := assign.Rhs[i]
-				switch val := rhs.(type) {
-				case *ast.SelectorExpr:
-					if recv, ok := val.X.(*ast.Ident); ok && recv.Name == receiverName && val.Sel.Name == "spec" {
-						aliases[ident.Name] = true
-					}
-				case *ast.Ident:
-					if aliases[val.Name] {
-						aliases[ident.Name] = true
-					}
-				}
-			}
-			return true
-		}
-
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
 			return true
 		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		if sel.Sel == nil {
+		if !ok || sel.Sel == nil {
 			return true
 		}
 		if sel.Sel.Name != "validate" && sel.Sel.Name != "Validate" {
 			return true
 		}
-
-		switch recv := sel.X.(type) {
-		case *ast.SelectorExpr:
-			if ident, ok := recv.X.(*ast.Ident); ok && ident.Name == receiverName && recv.Sel.Name == "spec" {
-				found = true
-				return false
-			}
-		case *ast.Ident:
-			if aliases[recv.Name] {
-				found = true
-				return false
-			}
+		if refersToSpec(sel.X, receiver, aliases) {
+			found = true
+			return false
 		}
-
 		return true
 	})
-
 	return found
+}
+
+func refersToSpec(expr ast.Expr, receiver string, aliases map[string]bool) bool {
+	sel, ok := expr.(*ast.SelectorExpr)
+	if ok {
+		if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == receiver && sel.Sel.Name == "spec" {
+			return true
+		}
+		if ident, ok := sel.X.(*ast.Ident); ok && aliases[ident.Name] {
+			return true
+		}
+	}
+	ident, ok := expr.(*ast.Ident)
+	return ok && aliases[ident.Name]
 }
 
 func checkState(folder string) []lintIssue {
@@ -509,53 +718,18 @@ func checkState(folder string) []lintIssue {
 		return []lintIssue{issueAtPath(path, "Rule 2.1", "state.go is a directory")}
 	}
 
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	fset, file, err := parseGoFile(path)
 	if err != nil {
 		return []lintIssue{issueAtPath(path, "Rule 2.1", fmt.Sprintf("failed to parse state.go: %v", err))}
 	}
 
-	typeDecls := map[string]ast.Expr{}
-	var stateStruct *ast.StructType
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			typeDecls[typeSpec.Name.Name] = typeSpec.Type
-			if typeSpec.Name.Name == "state" {
-				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-					stateStruct = structType
-				}
-			}
-		}
-	}
-	var issues []lintIssue
+	typeDecls := collectTypeDecls(file)
+	_, stateStruct := findStructType(file, "state")
 	if stateStruct == nil {
-		issues = append(issues, newIssue(fset, file, path, "Rule 2.1", "`state` struct not found"))
-		return issues
+		return []lintIssue{newIssue(fset, file, path, "Rule 2.1", "`state` struct not found")}
 	}
-	for _, field := range stateStruct.Fields.List {
-		fieldName := ""
-		if len(field.Names) > 0 {
-			fieldName = field.Names[0].Name
-		}
-		violations := collectTypeIssues(field.Type, typeDecls, map[string]bool{})
-		for _, v := range violations {
-			name := fieldName
-			if name == "" {
-				name = exprString(fset, field.Type)
-			}
-			msg := fmt.Sprintf("state.%s %s", name, v.Message)
-			issues = append(issues, newIssue(fset, v.Node, path, "Rule 2.1", msg))
-		}
-	}
-	return issues
+
+	return collectStructIssues(stateStruct, "state.", "Rule 2.1", fset, path, typeDecls)
 }
 
 func checkSpec(folder string) []lintIssue {
@@ -571,101 +745,37 @@ func checkSpec(folder string) []lintIssue {
 		return []lintIssue{issueAtPath(path, "Rule 3.1", "spec.go is a directory")}
 	}
 
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, 0)
+	fset, file, err := parseGoFile(path)
 	if err != nil {
 		return []lintIssue{issueAtPath(path, "Rule 3.1", fmt.Sprintf("failed to parse spec.go: %v", err))}
 	}
 
-	typeDecls := map[string]ast.Expr{}
-	suffixSpecs := map[string]*ast.StructType{}
-	var specStruct *ast.StructType
-	var specTypeSpec *ast.TypeSpec
-
-	for _, decl := range file.Decls {
-		genDecl, ok := decl.(*ast.GenDecl)
-		if !ok || genDecl.Tok != token.TYPE {
-			continue
-		}
-		for _, spec := range genDecl.Specs {
-			typeSpec, ok := spec.(*ast.TypeSpec)
-			if !ok {
-				continue
-			}
-			typeDecls[typeSpec.Name.Name] = typeSpec.Type
-			if strings.HasSuffix(typeSpec.Name.Name, "Spec") {
-				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-					suffixSpecs[typeSpec.Name.Name] = structType
-				}
-			}
-			if typeSpec.Name.Name == "Spec" {
-				specTypeSpec = typeSpec
-				if structType, ok := typeSpec.Type.(*ast.StructType); ok {
-					specStruct = structType
-				}
-			}
-		}
-	}
+	typeDecls := collectTypeDecls(file)
+	specType, specStruct := findStructType(file, "Spec")
 
 	var issues []lintIssue
 	if specStruct == nil {
-		issues = append(issues, issueAtPath(path, "Rule 3.1", "`Spec` struct not found"))
+		issues = append(issues, newIssue(fset, file, path, "Rule 3.1", "`Spec` struct not found"))
 	} else {
-		issues = append(issues, collectStructIssues(specStruct, "Spec.", "Rule 3.2", fset, path, typeDecls)...)
+		issues = append(issues, collectStructIssues(specStruct, "Spec.", "Rule 3.4", fset, path, typeDecls)...)
 	}
 
-	defaultsFound := false
-	validateFound := false
+	_, defaultsIssues := analyzeDefaultsFunc(file, fset, path)
+	issues = append(issues, defaultsIssues...)
+	_, validateIssues := analyzeValidateMethod(file, specType, fset, path)
+	issues = append(issues, validateIssues...)
 
-	for _, decl := range file.Decls {
-		funcDecl, ok := decl.(*ast.FuncDecl)
-		if !ok || funcDecl.Name == nil {
+	for name, expr := range typeDecls {
+		if name == "Spec" || !strings.HasSuffix(name, "Spec") {
 			continue
 		}
-		if funcDecl.Recv == nil {
-			if funcDecl.Name.Name == "defaults" {
-				defaultsFound = true
-				if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
-					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.2", "defaults() must not take parameters"))
-				}
-				if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
-					issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.2", "defaults() must return Spec"))
-				} else if ident, ok := funcDecl.Type.Results.List[0].Type.(*ast.Ident); !ok || ident.Name != "Spec" {
-					issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.2", "defaults() must return Spec"))
-				}
-			}
+		structType, ok := expr.(*ast.StructType)
+		if !ok {
+			msg := fmt.Sprintf("%s must be a struct", name)
+			issues = append(issues, newIssue(fset, file, path, "Rule 3.4", msg))
 			continue
 		}
-		recvType := receiverIdent(funcDecl.Recv.List[0].Type)
-		if recvType == "Spec" && funcDecl.Name.Name == "validate" {
-			validateFound = true
-			if funcDecl.Type.Params != nil && funcDecl.Type.Params.NumFields() != 0 {
-				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "validate() must not take parameters"))
-			}
-			if funcDecl.Type.Results == nil || funcDecl.Type.Results.NumFields() != 1 {
-				issues = append(issues, newIssue(fset, funcDecl, path, "Rule 3.3", "validate() must return error"))
-			} else if ident, ok := funcDecl.Type.Results.List[0].Type.(*ast.Ident); !ok || ident.Name != "error" {
-				issues = append(issues, newIssue(fset, funcDecl.Type.Results.List[0].Type, path, "Rule 3.3", "validate() must return error"))
-			}
-		}
-	}
-
-	if !defaultsFound {
-		issues = append(issues, newIssue(fset, file.Name, path, "Rule 3.3", "defaults() function not found"))
-	}
-	if !validateFound {
-		if specTypeSpec != nil {
-			issues = append(issues, newIssue(fset, specTypeSpec, path, "Rule 3.3", "(Spec) validate() method not found"))
-		} else {
-			issues = append(issues, issueAtPath(path, "Rule 3.3", "(Spec) validate() method not found"))
-		}
-	}
-
-	for name, structType := range suffixSpecs {
-		if name == "Spec" {
-			continue
-		}
-		issues = append(issues, collectStructIssues(structType, name+".", "Rule 3.2", fset, path, typeDecls)...)
+		issues = append(issues, collectStructIssues(structType, name+".", "Rule 3.4", fset, path, typeDecls)...)
 	}
 
 	return issues

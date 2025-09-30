@@ -13,6 +13,7 @@ import (
 // memMiddleware handles data-path requests using tick-driven countdown.
 type memMiddleware struct {
     *Comp
+
     sim        *simv5.Simulation
     storageRef string
     stor       Storage

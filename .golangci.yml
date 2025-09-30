@@ -8,7 +8,6 @@ linters:
     - depguard
     - dupl
     - dupword
-    - embeddedstructfieldcheck
     - err113
     - exhaustive
     - exhaustruct
@@ -58,4 +57,3 @@ linters:
     - errorlint
     - usestdlibvars
     - predeclared
-
