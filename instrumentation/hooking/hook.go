@@ -8,15 +8,28 @@ type HookPos struct {
 // HookCtx is the context that holds all the information about the site that a
 // hook is triggered.
 type HookCtx struct {
+	// Domain is the hookable object that is raising this hook.
 	Domain Hookable
-	Pos    *HookPos
-	Item   interface{}
-	Detail interface{}
+
+	// Pos identifies the lifecycle stage or location the hook is firing from.
+	Pos *HookPos
+
+	// Item carries the primary subject associated with the hook (event, task,
+	// msg).
+	Item any
+
+	// Detail holds optional auxiliary data; hook sites may leave it nil.
+	Detail any
 }
 
 // Hookable defines an object that accept Hooks.
 type Hookable interface {
 	// AcceptHook registers a hook.
+	//
+	// Hooks must be registered during single-threaded configuration, before the
+	// hookable domain starts running. Once a hook is attached it is expected to
+	// remain for the lifetime of the domain; implementations do not support
+	// removal, so disable work inside the hook if it should stop reacting.
 	AcceptHook(hook Hook)
 
 	// NumHooks returns the number of hooks registered.
@@ -66,6 +79,12 @@ func (h *HookableBase) Hooks() []Hook {
 }
 
 // AcceptHook register a hook.
+//
+// Hook registration is expected to happen during component setup while only a
+// single goroutine interacts with the hook list. After the domain enters the
+// simulation, concurrent mutation of the slice is undefined behaviour, so store
+// any desired disable logic inside the hook implementation instead of removing
+// it later.
 func (h *HookableBase) AcceptHook(hook Hook) {
 	h.mustNotHaveDuplicatedHook(hook)
 	h.hookList = append(h.hookList, hook)
