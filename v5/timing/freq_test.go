@@ -78,7 +78,7 @@ func TestRegisterFrequencyMultipleDomains(t *testing.T) {
 func TestSecondsCyclesConversions(t *testing.T) {
 	planner := NewFrequencyPlanner()
 
-	if _, err := planner.SecondsToCycles(1); !errors.Is(err, ErrNoFrequencyDomains) {
+	if _, err := planner.secondsToCycles(1); !errors.Is(err, ErrNoFrequencyDomains) {
 		t.Fatalf("expected ErrNoFrequencyDomains, got %v", err)
 	}
 
@@ -89,7 +89,7 @@ func TestSecondsCyclesConversions(t *testing.T) {
 		t.Fatalf("register frequency: %v", err)
 	}
 
-	cycles, err := planner.SecondsToCycles(VTimeInSec(1e-9))
+	cycles, err := planner.secondsToCycles(VTimeInSec(1e-9))
 	if err != nil {
 		t.Fatalf("SecondsToCycles returned error: %v", err)
 	}
@@ -97,11 +97,12 @@ func TestSecondsCyclesConversions(t *testing.T) {
 		t.Fatalf("SecondsToCycles mismatch: got %d, want %d", got, want)
 	}
 
-	if secs := planner.CyclesToSeconds(VTimeInCycle(10)); secs != VTimeInSec(2e-9) {
+	if secs := planner.cyclesToSeconds(VTimeInCycle(10)); secs != VTimeInSec(2e-9) {
 		t.Fatalf("CyclesToSeconds mismatch: got %g, want %g", secs, VTimeInSec(2e-9))
 	}
 
-	if _, err := planner.SecondsToCycles(VTimeInSec(1.5e-10)); !errors.Is(err, ErrTickPrecisionLoss) {
+	if _, err := planner.secondsToCycles(VTimeInSec(1.5e-10)); !errors.Is(err, ErrTickPrecisionLoss) {
+
 		t.Fatalf("expected ErrTickPrecisionLoss, got %v", err)
 	}
 }

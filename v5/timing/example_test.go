@@ -37,7 +37,7 @@ func (c *ExampleComponent) Handle(event any) error {
 				Reply: "pong!",
 				To:    e.From,
 			},
-			Time:    c.engine.CurrentTime() + 1.0,
+			Time:    c.engine.CurrentTime() + timing.VTimeInCycle(1),
 			Handler: c,
 		})
 	case *PongEvent:
@@ -61,7 +61,7 @@ func Example_eventUsage() {
 	// 3. Schedule events using ScheduledEvent
 	//    engine.Schedule(timing.ScheduledEvent{
 	//        Event:       &PingEvent{Message: "hello", From: "Alice"},
-	//        Time:        10.0,
+	//        Time:        timing.VTimeInCycle(10),
 	//        Handler:     myHandler,
 	//        IsSecondary: false,
 	//    })

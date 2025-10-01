@@ -17,6 +17,11 @@ const (
 	GHz = FreqInHz(1000 * MHz)
 )
 
+// VTimeInSec expresses time in seconds inside the timing helpers. It should
+// only be used for reporting purposes. Internally, the simulator should use
+// VTimeInCycle to avoid floating-point precision issues.
+type VTimeInSec float64
+
 // VTimeInCycle is the canonical time quantum used by the simulator. All
 // timestamps are expressed as multiples of cycles to keep ordering deterministic
 // across domains.
@@ -38,7 +43,9 @@ var (
 
 	// ErrTickPrecisionLoss indicates that a conversion from seconds to cycles
 	// would require precision beyond the selected cycle resolution.
-	ErrTickPrecisionLoss = errors.New("timing: duration is not aligned with cycle resolution")
+	ErrTickPrecisionLoss = errors.New(
+		"timing: duration is not aligned with cycle resolution",
+	)
 
 	// ErrTickOverflow indicates that the computed number of cycles exceeds the
 	// representable range of VTimeInCycle (uint64).
@@ -52,13 +59,6 @@ type FrequencyPlanner struct {
 	domains map[FreqInHz]*FreqDomain
 }
 
-// FreqDomain represents a registered clock domain. It exposes helpers to align
-// global cycle counts with the domain's own cycle boundaries.
-type FreqDomain struct {
-	freq    FreqInHz
-	planner *FrequencyPlanner
-}
-
 // NewFrequencyPlanner builds an empty planner ready to accept clock domains.
 func NewFrequencyPlanner() *FrequencyPlanner {
 	return &FrequencyPlanner{
@@ -66,7 +66,10 @@ func NewFrequencyPlanner() *FrequencyPlanner {
 	}
 }
 
-func (p *FrequencyPlanner) RegisterFrequency(freq FreqInHz) (*FreqDomain, error) {
+// RegisterFrequency adds a clock domain and returns its descriptor.
+func (p *FrequencyPlanner) RegisterFrequency(
+	freq FreqInHz,
+) (*FreqDomain, error) {
 	if freq == 0 {
 		return nil, ErrZeroFrequency
 	}
@@ -92,21 +95,53 @@ func (p *FrequencyPlanner) RegisterFrequency(freq FreqInHz) (*FreqDomain, error)
 	p.domains[freq] = domain
 	return domain, nil
 }
-
-func (p *FrequencyPlanner) CycleStride(freq FreqInHz) (VTimeInCycle, bool) {
-	if _, ok := p.domains[freq]; !ok {
-		return 0, false
-	}
+func (p *FrequencyPlanner) cyclesToSeconds(cycles VTimeInCycle) VTimeInSec {
 	if p.global == 0 {
-		return 0, false
+		return 0
 	}
-	if p.global%freq != 0 {
-		return 0, false
-	}
-	return VTimeInCycle(p.global / freq), true
+
+	return VTimeInSec(float64(cycles) / float64(p.global))
 }
 
-// FrequencyHz returns the frequency associated with the domain.
+func (p *FrequencyPlanner) secondsToCycles(sec VTimeInSec) (VTimeInCycle, error) {
+	if p.global == 0 {
+		return 0, ErrNoFrequencyDomains
+	}
+	if sec < 0 {
+		return 0, fmt.Errorf(
+			"timing: negative durations are not supported: %.12g",
+			sec,
+		)
+	}
+
+	scaled := float64(sec) * float64(p.global)
+	rounded := math.Round(scaled)
+	tickDuration := 1.0 / float64(p.global)
+	if math.Abs(scaled-rounded) > cycleAlignmentTolerance(scaled) {
+		return 0, fmt.Errorf(
+			"%w: duration %.12g s exceeds cycle %.12g s",
+			ErrTickPrecisionLoss,
+			sec,
+			tickDuration,
+		)
+	}
+
+	if rounded < 0 || rounded > float64(math.MaxUint64) {
+		return 0, ErrTickOverflow
+	}
+
+	return VTimeInCycle(rounded), nil
+}
+
+const maxCycleValue = VTimeInCycle(math.MaxUint64)
+
+// FreqDomain represents a registered clock domain.
+type FreqDomain struct {
+	freq    FreqInHz
+	planner *FrequencyPlanner
+}
+
+// FrequencyHz returns the raw frequency associated with the domain.
 func (d *FreqDomain) FrequencyHz() FreqInHz {
 	if d == nil {
 		return 0
@@ -114,8 +149,7 @@ func (d *FreqDomain) FrequencyHz() FreqInHz {
 	return d.freq
 }
 
-// Stride returns the number of global cycles contained in a single cycle of
-// this domain.
+// Stride returns the number of global cycles contained in one domain cycle.
 func (d *FreqDomain) Stride() VTimeInCycle {
 	return d.stride()
 }
@@ -148,7 +182,6 @@ func (d *FreqDomain) NextTick(now VTimeInCycle) VTimeInCycle {
 	if !ok {
 		return maxCycleValue
 	}
-
 	if tick == now {
 		next, ok := addCycles(now, stride)
 		if !ok {
@@ -167,7 +200,6 @@ func (d *FreqDomain) NTicksLater(now, ticks VTimeInCycle) VTimeInCycle {
 	if stride == 0 {
 		return 0
 	}
-
 	if ticks == 0 {
 		return d.ThisTick(now)
 	}
@@ -176,12 +208,10 @@ func (d *FreqDomain) NTicksLater(now, ticks VTimeInCycle) VTimeInCycle {
 	if !ok {
 		return maxCycleValue
 	}
-
 	future, ok := addCycles(now, offset)
 	if !ok {
 		return maxCycleValue
 	}
-
 	tick, ok := roundUpToStride(future, stride)
 	if !ok {
 		return maxCycleValue
@@ -190,47 +220,16 @@ func (d *FreqDomain) NTicksLater(now, ticks VTimeInCycle) VTimeInCycle {
 	return tick
 }
 
-func (p *FrequencyPlanner) CyclesToSeconds(cycles VTimeInCycle) VTimeInSec {
-	if p.global == 0 {
-		return 0
-	}
-
-	return VTimeInSec(float64(cycles) / float64(p.global))
-}
-
-func (p *FrequencyPlanner) SecondsToCycles(sec VTimeInSec) (VTimeInCycle, error) {
-	if p.global == 0 {
-		return 0, ErrNoFrequencyDomains
-	}
-	if sec < 0 {
-		return 0, fmt.Errorf("timing: negative durations are not supported: %.12g", sec)
-	}
-
-	scaled := float64(sec) * float64(p.global)
-	rounded := math.Round(scaled)
-	tickDuration := 1.0 / float64(p.global)
-	if math.Abs(scaled-rounded) > cycleAlignmentTolerance(scaled) {
-		return 0, fmt.Errorf("%w: duration %.12g s exceeds cycle %.12g s", ErrTickPrecisionLoss, sec, tickDuration)
-	}
-
-	if rounded < 0 || rounded > float64(math.MaxUint64) {
-		return 0, ErrTickOverflow
-	}
-
-	return VTimeInCycle(rounded), nil
-}
-
-const maxCycleValue = VTimeInCycle(math.MaxUint64)
-
 func (d *FreqDomain) stride() VTimeInCycle {
 	if d == nil || d.planner == nil {
 		return 0
 	}
-	stride, ok := d.planner.CycleStride(d.freq)
-	if !ok {
+	global := d.planner.global
+	freq := d.freq
+	if global == 0 || freq == 0 || global%freq != 0 {
 		return 0
 	}
-	return stride
+	return VTimeInCycle(global / freq)
 }
 
 func roundUpToStride(value, stride VTimeInCycle) (VTimeInCycle, bool) {
