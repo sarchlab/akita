@@ -18,14 +18,10 @@ type ParallelEngine struct {
 	nowLock sync.RWMutex
 	now     VTimeInCycle
 
-	runningSecondaryEvents bool
-
 	waitGroup sync.WaitGroup
 
-	queues             []eventQueue
-	queueChan          chan eventQueue
-	secondaryQueues    []eventQueue
-	secondaryQueueChan chan eventQueue
+	queues    []eventQueue
+	queueChan chan eventQueue
 }
 
 // NewParallelEngine creates a ParallelEngine.
@@ -33,22 +29,17 @@ func NewParallelEngine() *ParallelEngine {
 	numQueues := runtime.GOMAXPROCS(0)
 
 	engine := &ParallelEngine{
-		HookableBase:       hooking.NewHookableBase(),
-		queues:             make([]eventQueue, 0, numQueues),
-		queueChan:          make(chan eventQueue, numQueues),
-		secondaryQueues:    make([]eventQueue, 0, numQueues),
-		secondaryQueueChan: make(chan eventQueue, numQueues),
+		HookableBase: hooking.NewHookableBase(),
+		queues:       make([]eventQueue, 0, numQueues),
+		queueChan:    make(chan eventQueue, numQueues),
 	}
 
 	for i := 0; i < numQueues; i++ {
 		queue := newScheduledEventQueue()
-		secondary := newScheduledEventQueue()
 
 		engine.queueChan <- queue
-		engine.secondaryQueueChan <- secondary
 
 		engine.queues = append(engine.queues, queue)
-		engine.secondaryQueues = append(engine.secondaryQueues, secondary)
 	}
 
 	return engine
@@ -78,13 +69,6 @@ func (e *ParallelEngine) Schedule(evt ScheduledEvent) {
 	}
 
 	eventCopy := evt
-	if evt.IsSecondary {
-		queue := <-e.secondaryQueueChan
-		queue.Push(&eventCopy)
-		e.secondaryQueueChan <- queue
-		return
-	}
-
 	queue := <-e.queueChan
 	queue.Push(&eventCopy)
 	e.queueChan <- queue
@@ -105,17 +89,7 @@ func (e *ParallelEngine) Run() error {
 }
 
 func (e *ParallelEngine) determineWhatToRun() {
-	primaryTime := e.earliestTimeInQueueGroup(e.queues)
-	secondaryTime := e.earliestTimeInQueueGroup(e.secondaryQueues)
-
-	if primaryTime <= secondaryTime {
-		e.runningSecondaryEvents = false
-		e.writeNow(primaryTime)
-		return
-	}
-
-	e.runningSecondaryEvents = true
-	e.writeNow(secondaryTime)
+	e.writeNow(e.earliestTimeInQueueGroup(e.queues))
 }
 
 func (e *ParallelEngine) earliestTimeInQueueGroup(queues []eventQueue) VTimeInCycle {
@@ -134,16 +108,8 @@ func (e *ParallelEngine) earliestTimeInQueueGroup(queues []eventQueue) VTimeInCy
 }
 
 func (e *ParallelEngine) runRound() {
-	queues := e.queues
-	queueChan := e.queueChan
-
-	if e.runningSecondaryEvents {
-		queues = e.secondaryQueues
-		queueChan = e.secondaryQueueChan
-	}
-
-	e.emptyQueueChan(queues, queueChan)
-	e.runEventsUntilConflict(queues, queueChan)
+	e.emptyQueueChan(e.queues, e.queueChan)
+	e.runEventsUntilConflict(e.queues, e.queueChan)
 	e.waitGroup.Wait()
 }
 
@@ -154,7 +120,7 @@ func (e *ParallelEngine) emptyQueueChan(queues []eventQueue, ch chan eventQueue)
 }
 
 func (e *ParallelEngine) hasMoreEvents() bool {
-	return e.hasMoreInGroup(e.queues) || e.hasMoreInGroup(e.secondaryQueues)
+	return e.hasMoreInGroup(e.queues)
 }
 
 func (e *ParallelEngine) hasMoreInGroup(queues []eventQueue) bool {

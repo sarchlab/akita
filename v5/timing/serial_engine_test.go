@@ -83,7 +83,7 @@ func TestSerialEngineSchedulesEventsInOrder(t *testing.T) {
 	recorder.assertOrder(t, []string{"B:evt2", "A:evt3", "A:evt1", "A:evt4"})
 }
 
-func TestSerialEngineProcessesSecondaryAfterPrimary(t *testing.T) {
+func TestSerialEngineProcessesConcurrentEvents(t *testing.T) {
 	engine := NewSerialEngine()
 
 	recorder := &callRecorder{t: t}
@@ -96,7 +96,7 @@ func TestSerialEngineProcessesSecondaryAfterPrimary(t *testing.T) {
 	handlerPrimary2.engine = engine
 	handlerSecondary.engine = engine
 
-	engine.Schedule(ScheduledEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary, IsSecondary: true})
+	engine.Schedule(ScheduledEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary})
 	engine.Schedule(ScheduledEvent{Event: "primary1", Time: VTimeInCycle(2), Handler: handlerPrimary1})
 	engine.Schedule(ScheduledEvent{Event: "primary2", Time: VTimeInCycle(2), Handler: handlerPrimary2})
 
@@ -104,7 +104,8 @@ func TestSerialEngineProcessesSecondaryAfterPrimary(t *testing.T) {
 
 	calls := recorder.snapshot()
 	require.Equal(t, 3, len(calls))
-	primaryCalls := append([]string(nil), calls[:2]...)
-	require.ElementsMatch(t, []string{"P1:primary1", "P2:primary2"}, primaryCalls)
-	require.Equal(t, "S:secondary", calls[2])
+	require.ElementsMatch(t,
+		[]string{"P1:primary1", "P2:primary2", "S:secondary"},
+		calls,
+	)
 }

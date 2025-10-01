@@ -15,8 +15,7 @@ type SerialEngine struct {
 	timeLock sync.RWMutex
 	now      VTimeInCycle
 
-	queue          eventQueue
-	secondaryQueue eventQueue
+	queue eventQueue
 
 	isPaused     bool
 	isPausedLock sync.Mutex
@@ -28,9 +27,8 @@ type SerialEngine struct {
 // NewSerialEngine creates a SerialEngine.
 func NewSerialEngine() *SerialEngine {
 	return &SerialEngine{
-		HookableBase:   hooking.NewHookableBase(),
-		queue:          newScheduledEventQueue(),
-		secondaryQueue: newScheduledEventQueue(),
+		HookableBase: hooking.NewHookableBase(),
+		queue:        newScheduledEventQueue(),
 	}
 }
 
@@ -45,11 +43,6 @@ func (e *SerialEngine) Schedule(evt ScheduledEvent) {
 	}
 
 	eventCopy := evt
-	if evt.IsSecondary {
-		e.secondaryQueue.Push(&eventCopy)
-		return
-	}
-
 	e.queue.Push(&eventCopy)
 }
 
@@ -109,28 +102,11 @@ func (e *SerialEngine) Run() error {
 }
 
 func (e *SerialEngine) noMoreEvent() bool {
-	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
+	return e.queue.Len() == 0
 }
 
 func (e *SerialEngine) nextEvent() *ScheduledEvent {
-	if e.queue.Len() == 0 {
-		return e.secondaryQueue.Pop()
-	}
-
-	if e.secondaryQueue.Len() == 0 {
-		return e.queue.Pop()
-	}
-
-	primary := e.queue.Peek()
-	secondary := e.secondaryQueue.Peek()
-
-	if primary.Time <= secondary.Time {
-		e.queue.Pop()
-		return primary
-	}
-
-	e.secondaryQueue.Pop()
-	return secondary
+	return e.queue.Pop()
 }
 
 // Pause prevents the engine from dispatching more events until Continue is called.

@@ -30,7 +30,7 @@ func TestParallelEngineSchedulesEventsInOrder(t *testing.T) {
 	recorder.assertOrder(t, []string{"B:evt2", "A:evt3", "A:evt1", "A:evt4"})
 }
 
-func TestParallelEngineProcessesSecondaryAfterPrimary(t *testing.T) {
+func TestParallelEngineProcessesConcurrentEvents(t *testing.T) {
 	engine := NewParallelEngine()
 
 	recorder := &callRecorder{t: t}
@@ -43,7 +43,7 @@ func TestParallelEngineProcessesSecondaryAfterPrimary(t *testing.T) {
 	handlerPrimary2.engine = engine
 	handlerSecondary.engine = engine
 
-	engine.Schedule(ScheduledEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary, IsSecondary: true})
+	engine.Schedule(ScheduledEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary})
 	engine.Schedule(ScheduledEvent{Event: "primary1", Time: VTimeInCycle(2), Handler: handlerPrimary1})
 	engine.Schedule(ScheduledEvent{Event: "primary2", Time: VTimeInCycle(2), Handler: handlerPrimary2})
 
@@ -51,8 +51,8 @@ func TestParallelEngineProcessesSecondaryAfterPrimary(t *testing.T) {
 
 	calls := recorder.snapshot()
 	require.Equal(t, 3, len(calls))
-	// Primaries may run in either order, but must precede the secondary event.
-	primaryCalls := append([]string(nil), calls[:2]...)
-	require.ElementsMatch(t, []string{"P1:primary1", "P2:primary2"}, primaryCalls)
-	require.Equal(t, "S:secondary", calls[2])
+	require.ElementsMatch(t,
+		[]string{"P1:primary1", "P2:primary2", "S:secondary"},
+		calls,
+	)
 }

@@ -40,9 +40,4 @@ type ScheduledEvent struct {
 
 	// Handler is the component that will process this event.
 	Handler Handler
-
-	// IsSecondary indicates if this event should be processed after
-	// all primary events at the same time. Secondary events are useful
-	// for cleanup or state synchronization tasks.
-	IsSecondary bool
 }
