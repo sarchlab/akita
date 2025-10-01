@@ -11,7 +11,6 @@ package simulation
 import (
 	reflect "reflect"
 
-	hooking "github.com/sarchlab/akita/v4/instrumentation/hooking"
 	sim "github.com/sarchlab/akita/v4/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -41,7 +40,7 @@ func (m *MockPort) EXPECT() *MockPortMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockPort) AcceptHook(hook hooking.Hook) {
+func (m *MockPort) AcceptHook(hook sim.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -109,10 +108,10 @@ func (mr *MockPortMockRecorder) Deliver(msg any) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockPort) Hooks() []hooking.Hook {
+func (m *MockPort) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]hooking.Hook)
+	ret0, _ := ret[0].([]sim.Hook)
 	return ret0
 }
 
@@ -120,18 +119,6 @@ func (m *MockPort) Hooks() []hooking.Hook {
 func (mr *MockPortMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockPort)(nil).Hooks))
-}
-
-// InvokeHook mocks base method.
-func (m *MockPort) InvokeHook(ctx hooking.HookCtx) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InvokeHook", ctx)
-}
-
-// InvokeHook indicates an expected call of InvokeHook.
-func (mr *MockPortMockRecorder) InvokeHook(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeHook", reflect.TypeOf((*MockPort)(nil).InvokeHook), ctx)
 }
 
 // Name mocks base method.
@@ -281,7 +268,7 @@ func (m *MockComponent) EXPECT() *MockComponentMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockComponent) AcceptHook(hook hooking.Hook) {
+func (m *MockComponent) AcceptHook(hook sim.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -333,10 +320,10 @@ func (mr *MockComponentMockRecorder) Handle(e any) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockComponent) Hooks() []hooking.Hook {
+func (m *MockComponent) Hooks() []sim.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]hooking.Hook)
+	ret0, _ := ret[0].([]sim.Hook)
 	return ret0
 }
 
@@ -344,18 +331,6 @@ func (m *MockComponent) Hooks() []hooking.Hook {
 func (mr *MockComponentMockRecorder) Hooks() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Hooks", reflect.TypeOf((*MockComponent)(nil).Hooks))
-}
-
-// InvokeHook mocks base method.
-func (m *MockComponent) InvokeHook(ctx hooking.HookCtx) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "InvokeHook", ctx)
-}
-
-// InvokeHook indicates an expected call of InvokeHook.
-func (mr *MockComponentMockRecorder) InvokeHook(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeHook", reflect.TypeOf((*MockComponent)(nil).InvokeHook), ctx)
 }
 
 // Name mocks base method.
