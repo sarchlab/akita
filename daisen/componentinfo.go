@@ -29,6 +29,20 @@ type ComponentInfo struct {
 	Data      []TimeValue `json:"data"`
 }
 
+type StackedTimeValue struct {
+	Time   float64            `json:"time"`
+	Values map[string]float64 `json:"values"` // key: milestone kind, value: count
+}
+
+type StackedComponentInfo struct {
+	Name      string             `json:"name"`
+	InfoType  string             `json:"info_type"`
+	StartTime float64            `json:"start_time"`
+	EndTime   float64            `json:"end_time"`
+	Data      []StackedTimeValue `json:"data"`
+	Kinds     []string           `json:"kinds"` // list of all milestone kinds
+}
+
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
 	componentNames := traceReader.ListComponents(r.Context())
 
@@ -67,6 +81,14 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	case "ConcurrentTask":
 		compInfo = calculateConcurrentTask(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
+	case "ConcurrentTaskMilestones":
+		stackedInfo := calculateConcurrentTaskMilestones(
+			r.Context(), compName, infoType, startTime, endTime, int(numDots))
+		rsp, err := json.Marshal(stackedInfo)
+		dieOnErr(err)
+		_, err = w.Write(rsp)
+		dieOnErr(err)
+		return
 	case "BufferPressure":
 		compInfo = calculateBufferPressure(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
@@ -849,4 +871,121 @@ func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
+}
+
+func fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
+	query := TaskQuery{
+		Where:            compName,
+		EnableTimeRange:  true,
+		StartTime:        startTime,
+		EndTime:          endTime,
+		EnableParentTask: true,
+	}
+	return traceReader.ListTasks(ctx, query)
+}
+
+func collectMilestoneKinds(tasks []Task) []string {
+	kindSet := make(map[string]bool)
+	for _, task := range tasks {
+		for _, step := range task.Steps {
+			kindSet[step.Kind] = true
+		}
+	}
+
+	kinds := make([]string, 0, len(kindSet))
+	for kind := range kindSet {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+func generateStackedTimeData(tasks []Task, kinds []string, startTime, endTime float64, numDots int) []StackedTimeValue {
+	data := make([]StackedTimeValue, 0, numDots)
+	totalDuration := endTime - startTime
+	binDuration := totalDuration / float64(numDots)
+
+	for i := 0; i < numDots; i++ {
+		binStartTime := float64(i)*binDuration + startTime
+		binEndTime := float64(i+1)*binDuration + startTime
+		kindCounts := countConcurrentTasksByKind(tasks, kinds, binStartTime, binEndTime)
+
+		stv := StackedTimeValue{
+			Time:   binStartTime + 0.5*binDuration,
+			Values: kindCounts,
+		}
+		data = append(data, stv)
+	}
+	return data
+}
+
+func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binEndTime float64) map[string]float64 {
+	kindCounts := make(map[string]float64)
+	for _, kind := range kinds {
+		kindCounts[kind] = 0
+	}
+
+	for _, task := range tasks {
+		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
+			continue
+		}
+
+		currentKind := findTaskMilestoneKind(task, binStartTime)
+		if currentKind != "" {
+			kindCounts[currentKind]++
+		}
+	}
+	return kindCounts
+}
+
+func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
+	return !(float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime)
+}
+
+func findTaskMilestoneKind(task Task, binStartTime float64) string {
+	var currentKind string
+	var latestTime float64 = -1
+
+	// Find the most recent milestone before or at the bin start time
+	for _, step := range task.Steps {
+		stepTime := float64(step.Time)
+		if stepTime <= binStartTime && stepTime > latestTime {
+			latestTime = stepTime
+			currentKind = step.Kind
+		}
+	}
+
+	// If no milestone found before this bin, use the first milestone of the task
+	if currentKind == "" && len(task.Steps) > 0 {
+		firstStep := task.Steps[0]
+		for _, step := range task.Steps {
+			if float64(step.Time) < float64(firstStep.Time) {
+				firstStep = step
+			}
+		}
+		currentKind = firstStep.Kind
+	}
+
+	return currentKind
+}
+
+func calculateConcurrentTaskMilestones(
+	ctx context.Context,
+	compName, infoType string,
+	startTime, endTime float64,
+	numDots int,
+) *StackedComponentInfo {
+	info := &StackedComponentInfo{
+		Name:      compName,
+		InfoType:  infoType,
+		StartTime: startTime,
+		EndTime:   endTime,
+		Kinds:     []string{},
+	}
+
+	tasks := fetchTasksForMilestones(ctx, compName, startTime, endTime)
+	info.Kinds = collectMilestoneKinds(tasks)
+	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
+
+	return info
 }

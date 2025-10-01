@@ -81,6 +81,82 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 
 This pattern generalizes to other components: keep Spec primitive and declarative, keep State pure and serializable, inject Ports, and implement behavior as pipelines of middlewares with minimal, explicit dependencies.
 
+## Queueing V5: Elimination of Interface Patterns
+
+The `queueingv5` package provides buffer and pipeline implementations that follow V5 design principles by eliminating the interface/implementation pattern used in the original `sim.Buffer` and `pipelining.Pipeline` interfaces.
+
+### Key Changes from V4 to V5
+
+**V4 Pattern (Interface + Implementation):**
+```go
+// V4: Interface abstraction with hidden implementation
+var buffer sim.Buffer = sim.NewBuffer("name", 10)
+var pipeline pipelining.Pipeline = pipelining.MakeBuilder().Build("name")
+```
+
+**V5 Pattern (Direct Struct Usage):**
+```go
+// V5: Direct struct usage, no interfaces
+buffer := queueingv5.NewBuffer("name", 10)
+pipeline := queueingv5.NewPipelineBuilder().Build("name")
+```
+
+### Migration Benefits
+
+1. **Compile-time Type Safety**: Direct struct usage provides better type checking and eliminates interface overhead.
+
+2. **Performance**: Reduced indirection and allocation overhead compared to interface-based implementations.
+
+3. **Simplified APIs**: Cleaner method calls without interface abstraction layers.
+
+4. **Maintained Functionality**: All essential features preserved including:
+   - Hook support for simulation tracing
+   - FIFO queue behavior with capacity management
+   - Multi-stage pipeline processing with configurable timing
+   - Integration with existing `sim.HookableBase` and tracing systems
+
+### Usage Examples
+
+**Buffer Migration:**
+```go
+// V4
+buffer := sim.NewBuffer("MyBuffer", 100)
+
+// V5
+buffer := queueingv5.NewBuffer("MyBuffer", 100)
+```
+
+**Pipeline Migration:**
+```go
+// V4
+pipeline := pipelining.MakeBuilder().
+    WithNumStage(5).
+    WithCyclePerStage(2).
+    WithPostPipelineBuffer(postBuf).
+    Build("MyPipeline")
+
+// V5
+pipeline := queueingv5.NewPipelineBuilder().
+    WithNumStage(5).
+    WithCyclePerStage(2).
+    WithPostPipelineBuffer(postBuf).
+    Build("MyPipeline")
+```
+
+### V5 Component Integration
+
+When building V5 components, use `queueingv5` structs directly in your component State:
+
+```go
+type MyComponentState struct {
+    InputBuffer  *queueingv5.Buffer
+    Pipeline     *queueingv5.Pipeline
+    OutputBuffer *queueingv5.Buffer
+}
+```
+
+This aligns with V5 principles of keeping State as pure data structures that can be easily serialized and restored.
+
 ## CLI Changes (akitav5)
 
 - Command rename: `akita check [path]` is replaced by `akita component-lint [path]`.

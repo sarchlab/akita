@@ -25,6 +25,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
   _legendCanvas: HTMLElement;
   _componentOnlyMode: boolean;
   _componentName: string;
+  _dissectionMode: boolean;
   _currTasks: Object;
   _startTime: number;
   _endTime: number;
@@ -52,6 +53,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._legendCanvas = null;
     this._componentOnlyMode = false;
     this._componentName = "";
+    this._dissectionMode = false;
     this._widget = null;
 
     this._currTasks = {
@@ -75,6 +77,12 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
       new TaskRenderer(this, this._taskColorCoder),
       new XAxisDrawer()
     );
+    this._taskView.setToggleCallback(() => {
+      if (this._componentOnlyMode) {
+      } else {
+        this._toggleDissectionMode();
+      }
+    });
     this._componentView = new ComponentView(
       this._yIndexAssigner,
       new TaskRenderer(this, this._taskColorCoder),
@@ -84,6 +92,8 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._componentView.setComponentName(this._componentName);
     this._componentView.setPrimaryAxis('ReqInCount');
     this._componentView.setTimeAxis(this._startTime, this._endTime);
+    
+    this._initializeURLNavigation();
   }
 
   protected _setTraceComponentNames() {
@@ -166,6 +176,7 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._taskView.setCanvas(this._taskViewCanvas, this._tooltip);
     this._componentView.setCanvas(this._componentViewCanvas, this._tooltip);
     this._legend.setCanvas(this._legendCanvas);
+    this._updateLayout();
   }
 
   _layoutRightColumn() {
@@ -290,6 +301,12 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     if (parentTask != null && parentTask.length > 0) {
       parentTask = parentTask[0];
     }
+
+    if (!keepView) {
+      this._updateTimeAxisAccordingtoTask(task);
+      this._taskView.updateLayout();
+      this._componentView.updateLayout();
+    }
     if (parentTask != null) {
       this._componentView.setComponentName(parentTask.location);
     } else {
@@ -377,6 +394,63 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     // this._taskViewCanvas.style.height = 200
     // this._componentViewCanvas.style.height =
     //     this._leftColumn.offsetHeight - 200
+  }
+
+  _toggleDissectionMode() {
+    this._dissectionMode = !this._dissectionMode;
+    this._updateURLAndLayout();
+  }
+
+
+  _initializeURLNavigation() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDissectMode = urlParams.get('dissect') === '1';
+    
+    if (isDissectMode) {
+      this._dissectionMode = true;
+      this._updateLayout();
+    }
+    
+    window.addEventListener('popstate', () => {
+      this._handleURLChange();
+    });
+  }
+
+  _handleURLChange() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldBeDissectMode = urlParams.get('dissect') === '1';
+    
+    if (shouldBeDissectMode !== this._dissectionMode) {
+      this._dissectionMode = shouldBeDissectMode;
+      this._updateLayout();
+    }
+  }
+
+  _updateURLAndLayout() {
+    const url = new URL(window.location.href);
+    if (this._dissectionMode) {
+      url.searchParams.set('dissect', '1');
+    } else {
+      url.searchParams.delete('dissect');
+    }
+    
+    window.history.pushState({}, '', url.toString());
+    
+    this._updateLayout();
+  }
+
+  _updateLayout() {
+    if (this._dissectionMode) {
+      // In dissection mode: just show dissection view overlay, don't change any layout
+      this._taskView.showDissectionView();
+    } else {
+      this._taskView.hideDissectionView();
+    }
+    
+    this._taskView.updateLayout();
+    if (!this._dissectionMode) {
+      this._componentView.updateLayout();
+    }
   }
 
   _updateTimeAxisAccordingtoTask(task: Task) {
@@ -1006,6 +1080,18 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
   //     .replace(/\$\$([^$]+)\$\$/g, '<span class="math" data-display="block">$1</span>')
   //     .replace(/\$([^$]+)\$/g, '<span class="math" data-display="inline">$1</span>');
   // }
+
+
+
+  _smartString(value: number): string {
+    if (value < 0.001) {
+      return (value * 1000000).toFixed(2) + 'μs';
+    } else if (value < 1) {
+      return (value * 1000).toFixed(2) + 'ms';
+    } else {
+      return value.toFixed(2) + 's';
+    }
+  }
 }
 
 export default TaskPage;
