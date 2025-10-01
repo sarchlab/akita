@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type flitPipelineItem struct {

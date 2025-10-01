@@ -8,7 +8,7 @@ import (
     "github.com/sarchlab/akita/v4/datarecording"
     "github.com/sarchlab/akita/v4/monitoring"
     "github.com/sarchlab/akita/v4/sim"
-    "github.com/sarchlab/akita/v4/instrumentation/tracing/tracers"
+    "github.com/sarchlab/akita/v4/tracing"
 )
 
 // Simulation mirrors the mature Simulation in the simulation package and adds
@@ -18,7 +18,7 @@ type Simulation struct {
     engine       sim.Engine
     dataRecorder datarecording.DataRecorder
     monitor      *monitoring.Monitor
-    visTracer    *tracers.DBTracer
+    visTracer    *tracing.DBTracer
 
     components    []sim.Component
     compNameIndex map[string]int
@@ -39,7 +39,7 @@ func NewSimulation(engine sim.Engine) *Simulation {
     }
     // Minimal default data recorder and tracer; monitoring can be added via builder.
     s.dataRecorder = datarecording.NewDataRecorder("akita_sim_" + s.id)
-    s.visTracer = tracers.NewDBTracer(s.engine, s.dataRecorder)
+    s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
     return s
 }
 
@@ -56,7 +56,7 @@ func (s *Simulation) GetDataRecorder() datarecording.DataRecorder { return s.dat
 func (s *Simulation) GetMonitor() *monitoring.Monitor { return s.monitor }
 
 // GetVisTracer returns the tracer used in the simulation.
-func (s *Simulation) GetVisTracer() *tracers.DBTracer { return s.visTracer }
+func (s *Simulation) GetVisTracer() *tracing.DBTracer { return s.visTracer }
 
 // Components returns all the components registered in the simulation.
 func (s *Simulation) Components() []sim.Component { return s.components }

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v4/datarecording"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/stretchr/testify/suite"

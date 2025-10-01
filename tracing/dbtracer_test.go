@@ -1,4 +1,4 @@
-package tracers
+package tracing
 
 import (
 	"os"
@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/sarchlab/akita/v4/datarecording"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -48,26 +47,26 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should only record the first milestone when multiple milestones occur at the same time", func() {
 			timeTeller.SetCurrentTime(100.0)
 
-			milestone1 := tracing.Milestone{
+			milestone1 := Milestone{
 				ID:       "milestone1",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindHardwareResource,
+				Kind:     MilestoneKindHardwareResource,
 				What:     "resource_acquired",
 				Location: "test_location",
 			}
 
-			milestone2 := tracing.Milestone{
+			milestone2 := Milestone{
 				ID:       "milestone2",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindNetworkTransfer,
+				Kind:     MilestoneKindNetworkTransfer,
 				What:     "data_sent",
 				Location: "test_location",
 			}
 
-			milestone3 := tracing.Milestone{
+			milestone3 := Milestone{
 				ID:       "milestone3",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindQueue,
+				Kind:     MilestoneKindQueue,
 				What:     "queued",
 				Location: "test_location",
 			}
@@ -85,18 +84,18 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should allow milestones for different tasks at the same time", func() {
 			timeTeller.SetCurrentTime(100.0)
 
-			milestone1 := tracing.Milestone{
+			milestone1 := Milestone{
 				ID:       "milestone1",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindHardwareResource,
+				Kind:     MilestoneKindHardwareResource,
 				What:     "resource_acquired",
 				Location: "test_location",
 			}
 
-			milestone2 := tracing.Milestone{
+			milestone2 := Milestone{
 				ID:       "milestone2",
 				TaskID:   "task2", // Different task
-				Kind:     tracing.MilestoneKindNetworkTransfer,
+				Kind:     MilestoneKindNetworkTransfer,
 				What:     "data_sent",
 				Location: "test_location",
 			}
@@ -115,10 +114,10 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should allow milestones for same task at different times", func() {
 			timeTeller.SetCurrentTime(100.0)
 
-			milestone1 := tracing.Milestone{
+			milestone1 := Milestone{
 				ID:       "milestone1",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindHardwareResource,
+				Kind:     MilestoneKindHardwareResource,
 				What:     "resource_acquired",
 				Location: "test_location",
 			}
@@ -127,10 +126,10 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 			timeTeller.SetCurrentTime(200.0)
 
-			milestone2 := tracing.Milestone{
+			milestone2 := Milestone{
 				ID:       "milestone2",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindNetworkTransfer,
+				Kind:     MilestoneKindNetworkTransfer,
 				What:     "data_sent",
 				Location: "test_location",
 			}
@@ -146,10 +145,10 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		It("should still prevent identical milestones from being recorded twice", func() {
 			timeTeller.SetCurrentTime(100.0)
 
-			milestone := tracing.Milestone{
+			milestone := Milestone{
 				ID:       "milestone1",
 				TaskID:   "task1",
-				Kind:     tracing.MilestoneKindHardwareResource,
+				Kind:     MilestoneKindHardwareResource,
 				What:     "resource_acquired",
 				Location: "test_location",
 			}

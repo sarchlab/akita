@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 
 	"github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v4/mem/dram/internal/cmdq"

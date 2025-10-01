@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v4/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // Protocol defines the category of the memory controller.

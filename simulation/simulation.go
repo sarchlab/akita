@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v4/datarecording"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing/tracers"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A Simulation provides the service requires to define a simulation.
@@ -13,7 +13,7 @@ type Simulation struct {
 	engine       sim.Engine
 	dataRecorder datarecording.DataRecorder
 	monitor      *monitoring.Monitor
-	visTracer    *tracers.DBTracer
+	visTracer    *tracing.DBTracer
 
 	components    []sim.Component
 	compNameIndex map[string]int
@@ -43,7 +43,7 @@ func (s *Simulation) GetMonitor() *monitoring.Monitor {
 }
 
 // GetVisTracer returns the tracer used in the simulation.
-func (s *Simulation) GetVisTracer() *tracers.DBTracer {
+func (s *Simulation) GetVisTracer() *tracing.DBTracer {
 	return s.visTracer
 }
 

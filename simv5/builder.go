@@ -5,7 +5,7 @@ import (
     "github.com/sarchlab/akita/v4/datarecording"
     "github.com/sarchlab/akita/v4/monitoring"
     "github.com/sarchlab/akita/v4/sim"
-    "github.com/sarchlab/akita/v4/instrumentation/tracing/tracers"
+    "github.com/sarchlab/akita/v4/tracing"
 )
 
 // Builder can be used to build a v5 simulation. It mirrors simulation.Builder
@@ -69,7 +69,7 @@ func (b Builder) Build() *Simulation {
         s.monitor.StartServer()
     }
 
-    s.visTracer = tracers.NewDBTracer(s.engine, s.dataRecorder)
+    s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
 
     return s
 }

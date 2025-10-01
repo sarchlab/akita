@@ -4,21 +4,20 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/instrumentation/hooking"
-
 	"github.com/sarchlab/akita/v4/sim"
 )
 
 // NamedHookable represent something both have a name and can be hooked
 type NamedHookable interface {
 	sim.Named
-	hooking.Hookable
+	sim.Hookable
+	InvokeHook(sim.HookCtx)
 }
 
 // A list of hook poses for the hooks to apply to
 var (
 	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
-	HookPosTaskTag   = &sim.HookPos{Name: "HookPosTaskTag"}
+	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
 	HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
 	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
 )
@@ -108,8 +107,8 @@ func StartTaskWithSpecificLocation(
 	domain.InvokeHook(ctx)
 }
 
-// AddTaskTag records a descriptive tag while processing a task.
-func AddTaskTag(
+// AddTaskStep marks that a milestone has been reached when processing a task.
+func AddTaskStep(
 	id string,
 	domain NamedHookable,
 	what string,
@@ -118,17 +117,17 @@ func AddTaskTag(
 		return
 	}
 
-	tag := TaskTag{
+	step := TaskStep{
 		What: what,
 	}
 	task := Task{
-		ID:   id,
-		Tags: []TaskTag{tag},
+		ID:    id,
+		Steps: []TaskStep{step},
 	}
 	ctx := sim.HookCtx{
 		Domain: domain,
 		Item:   task,
-		Pos:    HookPosTaskTag,
+		Pos:    HookPosTaskStep,
 	}
 	domain.InvokeHook(ctx)
 }

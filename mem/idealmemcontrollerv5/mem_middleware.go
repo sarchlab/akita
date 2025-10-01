@@ -7,7 +7,7 @@ import (
     "github.com/sarchlab/akita/v4/mem/mem"
     "github.com/sarchlab/akita/v4/sim"
     "github.com/sarchlab/akita/v4/simv5"
-    "github.com/sarchlab/akita/v4/instrumentation/tracing"
+    "github.com/sarchlab/akita/v4/tracing"
 )
 
 // memMiddleware handles data-path requests using tick-driven countdown.

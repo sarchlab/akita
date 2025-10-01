@@ -1,7 +1,7 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/vm"
 )
 

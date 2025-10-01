@@ -1,4 +1,4 @@
-package tracers
+package tracing
 
 import (
 	"testing"
@@ -8,9 +8,9 @@ import (
 )
 
 //go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim TimeTeller
-//go:generate mockgen -destination "mock_tracers_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/instrumentation/tracing/tracers TaskPrinter
+//go:generate mockgen -destination "mock_tracing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/tracing NamedHookable,TaskPrinter
 
-func TestTracers(t *testing.T) {
+func TestTracing(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Tracers Suite")
+	RunSpecs(t, "Tracing Suite")
 }

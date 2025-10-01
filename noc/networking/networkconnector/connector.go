@@ -3,7 +3,7 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"

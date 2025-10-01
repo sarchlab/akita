@@ -1,28 +1,26 @@
-package tracers
+package tracing
 
 import (
 	"fmt"
 	"sync"
-
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 )
 
 // TaskPrinter can print tasks with a format.
 type TaskPrinter interface {
-	Print(task tracing.Task)
+	Print(task Task)
 }
 
 type defaultTaskPrinter struct {
 }
 
-func (p *defaultTaskPrinter) Print(task tracing.Task) {
+func (p *defaultTaskPrinter) Print(task Task) {
 	fmt.Printf("%s-%s@%s\n", task.Kind, task.What, task.Location)
 }
 
 // BackTraceTracer can record tasks incomplete tasks
 type BackTraceTracer struct {
 	printer      TaskPrinter
-	tracingTasks map[string]tracing.Task
+	tracingTasks map[string]Task
 	lock         sync.Mutex
 }
 
@@ -30,7 +28,7 @@ type BackTraceTracer struct {
 func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	t := &BackTraceTracer{
 		printer:      printer,
-		tracingTasks: make(map[string]tracing.Task),
+		tracingTasks: make(map[string]Task),
 	}
 
 	if t.printer == nil {
@@ -40,30 +38,30 @@ func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	return t
 }
 
-func (t *BackTraceTracer) StartTask(task tracing.Task) {
+func (t *BackTraceTracer) StartTask(task Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.tracingTasks[task.ID] = task
 }
 
-func (t *BackTraceTracer) TagTask(task tracing.Task) {
+func (t *BackTraceTracer) StepTask(task Task) {
 	// Do Nothing
 }
 
 // AddMilestone does nothing
-func (t *BackTraceTracer) AddMilestone(_ tracing.Milestone) {
+func (t *BackTraceTracer) AddMilestone(_ Milestone) {
 	// Do nothing
 }
 
-func (t *BackTraceTracer) EndTask(task tracing.Task) {
+func (t *BackTraceTracer) EndTask(task Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	delete(t.tracingTasks, task.ID)
 }
 
-func (t *BackTraceTracer) DumpBackTrace(task tracing.Task) {
+func (t *BackTraceTracer) DumpBackTrace(task Task) {
 	t.printer.Print(task)
 
 	if task.ParentID == "" {

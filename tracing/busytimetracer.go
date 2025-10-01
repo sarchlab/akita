@@ -1,9 +1,8 @@
-package tracers
+package tracing
 
 import (
 	"container/list"
 
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -17,7 +16,7 @@ type taskTimeStartEnd struct {
 // overlapped time.
 type BusyTimeTracer struct {
 	timeTeller    sim.TimeTeller
-	filter        tracing.TaskFilter
+	filter        TaskFilter
 	inflightTasks map[string]*list.Element
 	taskTimes     *list.List
 	busyTime      sim.VTimeInSec
@@ -26,7 +25,7 @@ type BusyTimeTracer struct {
 // NewBusyTimeTracer creates a new BusyTimeTracer
 func NewBusyTimeTracer(
 	timeTeller sim.TimeTeller,
-	filter tracing.TaskFilter,
+	filter TaskFilter,
 ) *BusyTimeTracer {
 	t := &BusyTimeTracer{
 		timeTeller:    timeTeller,
@@ -72,7 +71,7 @@ func (t *BusyTimeTracer) extendTaskTime(
 }
 
 // StartTask records the task start time
-func (t *BusyTimeTracer) StartTask(task tracing.Task) {
+func (t *BusyTimeTracer) StartTask(task Task) {
 	task.StartTime = t.timeTeller.CurrentTime()
 
 	if t.filter != nil && !t.filter(task) {
@@ -85,18 +84,18 @@ func (t *BusyTimeTracer) StartTask(task tracing.Task) {
 	t.inflightTasks[task.ID] = elem
 }
 
-// TagTask does nothing
-func (t *BusyTimeTracer) TagTask(_ tracing.Task) {
+// StepTask does nothing
+func (t *BusyTimeTracer) StepTask(_ Task) {
 	// Do nothing
 }
 
 // AddMilestone does nothing
-func (t *BusyTimeTracer) AddMilestone(_ tracing.Milestone) {
+func (t *BusyTimeTracer) AddMilestone(_ Milestone) {
 	// Do nothing
 }
 
 // EndTask records the end of the task
-func (t *BusyTimeTracer) EndTask(task tracing.Task) {
+func (t *BusyTimeTracer) EndTask(task Task) {
 	task.EndTime = t.timeTeller.CurrentTime()
 
 	originalTask, ok := t.inflightTasks[task.ID]

@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // A deviceNode represents a switch associated with the device and
