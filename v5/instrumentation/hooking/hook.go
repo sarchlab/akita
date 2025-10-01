@@ -42,12 +42,6 @@ type Hookable interface {
 	InvokeHook(ctx HookCtx)
 }
 
-// HookPosBeforeEvent is a hook position that triggers before handling an event.
-var HookPosBeforeEvent = &HookPos{Name: "BeforeEvent"}
-
-// HookPosAfterEvent is a hook position that triggers after handling an event.
-var HookPosAfterEvent = &HookPos{Name: "AfterEvent"}
-
 // Hook is a short piece of program that can be invoked by a hookable object.
 type Hook interface {
 	// Func determines what to do if hook is invoked.

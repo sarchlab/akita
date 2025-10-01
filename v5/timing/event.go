@@ -1,5 +1,6 @@
 package timing
 
+import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
 // Handler processes events of various types.
 // Events are plain data structs (no interface required).
 // Handlers use type switching to handle different event types:
@@ -29,6 +30,12 @@ type EventScheduler interface {
 	TimeTeller
 	Schedule(event ScheduledEvent)
 }
+
+// Hook positions emitted by timing engines.
+var (
+	HookPosBeforeEvent = &hooking.HookPos{Name: "TimingBeforeEvent"}
+	HookPosAfterEvent  = &hooking.HookPos{Name: "TimingAfterEvent"}
+)
 
 // ScheduledEvent is the engine-facing wrapper for user-defined events.
 // It holds the metadata needed by the scheduler while keeping the payload as
