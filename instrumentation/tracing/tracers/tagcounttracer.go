@@ -1,24 +1,26 @@
-package tracing
+package tracers
 
 import (
 	"sync"
+
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 )
 
 // TagCountTracer can collect how often a certain tag is triggered.
 type TagCountTracer struct {
-	filter           TaskFilter
+	filter           tracing.TaskFilter
 	lock             sync.Mutex
-	inflightTasks    map[string]Task
+	inflightTasks    map[string]tracing.Task
 	tagNames         []string
 	tagCount         map[string]uint64
 	taskWithTagCount map[string]uint64
 }
 
 // NewTagCountTracer creates a new TagCountTracer.
-func NewTagCountTracer(filter TaskFilter) *TagCountTracer {
+func NewTagCountTracer(filter tracing.TaskFilter) *TagCountTracer {
 	t := &TagCountTracer{
 		filter:           filter,
-		inflightTasks:    make(map[string]Task),
+		inflightTasks:    make(map[string]tracing.Task),
 		tagCount:         make(map[string]uint64),
 		taskWithTagCount: make(map[string]uint64),
 	}
@@ -44,7 +46,7 @@ func (t *TagCountTracer) GetTaskCount(tagName string) uint64 {
 }
 
 // StartTask records the task start time
-func (t *TagCountTracer) StartTask(task Task) {
+func (t *TagCountTracer) StartTask(task tracing.Task) {
 	if !t.filter(task) {
 		return
 	}
@@ -55,7 +57,7 @@ func (t *TagCountTracer) StartTask(task Task) {
 }
 
 // TagTask counts the provided tag occurrence.
-func (t *TagCountTracer) TagTask(task Task) {
+func (t *TagCountTracer) TagTask(task tracing.Task) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -63,7 +65,7 @@ func (t *TagCountTracer) TagTask(task Task) {
 	t.countTask(task)
 }
 
-func (t *TagCountTracer) countTag(task Task) {
+func (t *TagCountTracer) countTag(task tracing.Task) {
 	tag := task.Tags[0]
 
 	_, ok := t.tagCount[tag.What]
@@ -74,7 +76,7 @@ func (t *TagCountTracer) countTag(task Task) {
 	t.tagCount[tag.What]++
 }
 
-func (t *TagCountTracer) countTask(task Task) {
+func (t *TagCountTracer) countTask(task tracing.Task) {
 	tag := task.Tags[0]
 
 	originalTask, ok := t.inflightTasks[task.ID]
@@ -89,7 +91,7 @@ func (t *TagCountTracer) countTask(task Task) {
 	originalTask.Tags = append(originalTask.Tags, tag)
 }
 
-func taskContainsTag(task Task, tag TaskTag) bool {
+func taskContainsTag(task tracing.Task, tag tracing.TaskTag) bool {
 	for _, t := range task.Tags {
 		if t.What == tag.What {
 			return true
@@ -100,12 +102,12 @@ func taskContainsTag(task Task, tag TaskTag) bool {
 }
 
 // TagCountTracer does nothing
-func (t *TagCountTracer) AddMilestone(_ Milestone) {
+func (t *TagCountTracer) AddMilestone(_ tracing.Milestone) {
 	// Do nothing
 }
 
 // EndTask records the end of the task
-func (t *TagCountTracer) EndTask(task Task) {
+func (t *TagCountTracer) EndTask(task tracing.Task) {
 	t.lock.Lock()
 
 	_, ok := t.inflightTasks[task.ID]

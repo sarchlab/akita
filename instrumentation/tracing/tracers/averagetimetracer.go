@@ -1,8 +1,9 @@
-package tracing
+package tracers
 
 import (
 	"sync"
 
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -11,22 +12,22 @@ import (
 // the two task processing time together.
 type AverageTimeTracer struct {
 	timeTeller    sim.TimeTeller
-	filter        TaskFilter
+	filter        tracing.TaskFilter
 	lock          sync.Mutex
 	averageTime   sim.VTimeInSec
-	inflightTasks map[string]Task
+	inflightTasks map[string]tracing.Task
 	taskCount     uint64
 }
 
 // NewAverageTimeTracer creates a new AverageTimeTracer
 func NewAverageTimeTracer(
 	timeTeller sim.TimeTeller,
-	filter TaskFilter,
+	filter tracing.TaskFilter,
 ) *AverageTimeTracer {
 	t := &AverageTimeTracer{
 		timeTeller:    timeTeller,
 		filter:        filter,
-		inflightTasks: make(map[string]Task),
+		inflightTasks: make(map[string]tracing.Task),
 	}
 
 	return t
@@ -50,7 +51,7 @@ func (t *AverageTimeTracer) TotalCount() uint64 {
 }
 
 // StartTask records the task start time
-func (t *AverageTimeTracer) StartTask(task Task) {
+func (t *AverageTimeTracer) StartTask(task tracing.Task) {
 	task.StartTime = t.timeTeller.CurrentTime()
 
 	if !t.filter(task) {
@@ -63,17 +64,17 @@ func (t *AverageTimeTracer) StartTask(task Task) {
 }
 
 // TagTask does nothing
-func (t *AverageTimeTracer) TagTask(_ Task) {
+func (t *AverageTimeTracer) TagTask(_ tracing.Task) {
 	// Do nothing
 }
 
 // AddMilestone does nothing
-func (t *AverageTimeTracer) AddMilestone(_ Milestone) {
+func (t *AverageTimeTracer) AddMilestone(_ tracing.Milestone) {
 	// Do nothing
 }
 
 // EndTask records the end of the task
-func (t *AverageTimeTracer) EndTask(task Task) {
+func (t *AverageTimeTracer) EndTask(task tracing.Task) {
 	task.EndTime = t.timeTeller.CurrentTime()
 
 	t.lock.Lock()

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v4/instrumentation/tracing"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing/tracers"
 	"github.com/sarchlab/akita/v4/sim"
 )
 
@@ -63,9 +64,9 @@ func ExampleTracer() {
 		return t.Kind == "sampleTaskKind"
 	}
 
-	totalTimeTracer := tracing.NewTotalTimeTracer(timeTeller, filter)
-	busyTimeTracer := tracing.NewBusyTimeTracer(timeTeller, filter)
-	avgTimeTracer := tracing.NewAverageTimeTracer(timeTeller, filter)
+	totalTimeTracer := tracers.NewTotalTimeTracer(timeTeller, filter)
+	busyTimeTracer := tracers.NewBusyTimeTracer(timeTeller, filter)
+	avgTimeTracer := tracers.NewAverageTimeTracer(timeTeller, filter)
 	tracing.CollectTrace(domain, totalTimeTracer)
 	tracing.CollectTrace(domain, busyTimeTracer)
 	tracing.CollectTrace(domain, avgTimeTracer)

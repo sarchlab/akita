@@ -1,8 +1,9 @@
-package tracing
+package tracers
 
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/sim"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,88 +32,88 @@ var _ = Describe("BusyTimeTracer", func() {
 
 	It("should track busy time, one task", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.EndTask(Task{ID: "1"})
+		t.EndTask(tracing.Task{ID: "1"})
 
 		Expect(t.BusyTime()).To(Equal(sim.VTimeInSec(1.0)))
 	})
 
 	It("should track busy time, two tasks", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.EndTask(Task{ID: "1"})
+		t.EndTask(tracing.Task{ID: "1"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3))
-		t.StartTask(Task{ID: "2"})
+		t.StartTask(tracing.Task{ID: "2"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(4))
-		t.EndTask(Task{ID: "2"})
+		t.EndTask(tracing.Task{ID: "2"})
 
 		Expect(t.BusyTime()).To(Equal(sim.VTimeInSec(2.0)))
 	})
 
 	It("should track busy time, two tasks adjacent", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.EndTask(Task{ID: "1"})
+		t.EndTask(tracing.Task{ID: "1"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.StartTask(Task{ID: "2"})
+		t.StartTask(tracing.Task{ID: "2"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3))
-		t.EndTask(Task{ID: "2"})
+		t.EndTask(tracing.Task{ID: "2"})
 
 		Expect(t.BusyTime()).To(Equal(sim.VTimeInSec(2.0)))
 	})
 
 	It("should track busy time, two tasks overlap", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.5))
-		t.StartTask(Task{ID: "2"})
+		t.StartTask(tracing.Task{ID: "2"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.EndTask(Task{ID: "1"})
+		t.EndTask(tracing.Task{ID: "1"})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.5))
-		t.EndTask(Task{ID: "2"})
+		t.EndTask(tracing.Task{ID: "2"})
 
 		Expect(t.BusyTime()).To(Equal(sim.VTimeInSec(1.5)))
 	})
 
 	It("should track busy time, four tasks", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1))
-		t.StartTask(Task{ID: "2"})
+		t.StartTask(tracing.Task{ID: "2"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.2))
-		t.EndTask(Task{ID: "2"})
+		t.EndTask(tracing.Task{ID: "2"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.9))
-		t.StartTask(Task{ID: "3"})
+		t.StartTask(tracing.Task{ID: "3"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2))
-		t.EndTask(Task{ID: "1"})
+		t.EndTask(tracing.Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1))
-		t.EndTask(Task{ID: "3"})
+		t.EndTask(tracing.Task{ID: "3"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.1))
-		t.StartTask(Task{ID: "4"})
+		t.StartTask(tracing.Task{ID: "4"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(3.2))
-		t.EndTask(Task{ID: "4"})
+		t.EndTask(tracing.Task{ID: "4"})
 
 		Expect(t.BusyTime()).To(BeNumerically("~", 1.2))
 	})
 
 	It("should be able to terminate all the tasks", func() {
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1))
-		t.StartTask(Task{ID: "1"})
+		t.StartTask(tracing.Task{ID: "1"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1))
-		t.StartTask(Task{ID: "2"})
+		t.StartTask(tracing.Task{ID: "2"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.9))
-		t.StartTask(Task{ID: "3"})
+		t.StartTask(tracing.Task{ID: "3"})
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1))
-		t.EndTask(Task{ID: "3"})
+		t.EndTask(tracing.Task{ID: "3"})
 
 		t.TerminateAllTasks(3.5)
 
@@ -129,13 +130,13 @@ var _ = Describe("BusyTimeTracer", func() {
 
 				timeTeller.EXPECT().CurrentTime().
 					Return(sim.VTimeInSec(i * 2))
-				t.StartTask(Task{
+				t.StartTask(tracing.Task{
 					ID: taskID,
 				})
 
 				timeTeller.EXPECT().CurrentTime().
 					Return(sim.VTimeInSec(i*2 + 1))
-				t.EndTask((Task{
+				t.EndTask((tracing.Task{
 					ID:      taskID,
 					EndTime: sim.VTimeInSec(i*2 + 1),
 				}))

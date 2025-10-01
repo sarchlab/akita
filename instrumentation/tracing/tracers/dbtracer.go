@@ -1,9 +1,10 @@
-package tracing
+package tracers
 
 import (
 	"sync"
 
 	"github.com/sarchlab/akita/v4/datarecording"
+	"github.com/sarchlab/akita/v4/instrumentation/tracing"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/tebeka/atexit"
 )
@@ -37,11 +38,11 @@ type DBTracer struct {
 
 	startTime, endTime sim.VTimeInSec
 
-	tracingTasks map[string]Task
+	tracingTasks map[string]tracing.Task
 }
 
 // StartTask marks the start of a task.
-func (t *DBTracer) StartTask(task Task) {
+func (t *DBTracer) StartTask(task tracing.Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -68,7 +69,7 @@ func (t *DBTracer) StartTask(task Task) {
 	t.tracingTasks[task.ID] = existingTask
 }
 
-func (t *DBTracer) startingTaskMustBeValid(task Task) {
+func (t *DBTracer) startingTaskMustBeValid(task tracing.Task) {
 	if task.ID == "" {
 		panic("task ID must be set")
 	}
@@ -87,12 +88,12 @@ func (t *DBTracer) startingTaskMustBeValid(task Task) {
 }
 
 // TagTask records tag events for a task.
-func (t *DBTracer) TagTask(_ Task) {
+func (t *DBTracer) TagTask(_ tracing.Task) {
 	// Do nothing for now.
 }
 
 // AddMilestone adds a milestone.
-func (t *DBTracer) AddMilestone(milestone Milestone) {
+func (t *DBTracer) AddMilestone(milestone tracing.Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -100,11 +101,11 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 
 	task, found := t.tracingTasks[milestone.TaskID]
 	if !found {
-		task = Task{
+		task = tracing.Task{
 			ID: milestone.TaskID,
 		}
 
-		task.Milestones = []Milestone{milestone}
+		task.Milestones = []tracing.Milestone{milestone}
 		t.tracingTasks[milestone.TaskID] = task
 
 		return
@@ -124,11 +125,11 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.tracingTasks[milestone.TaskID] = task
 }
 
-func sameMilestone(a, b Milestone) bool {
+func sameMilestone(a, b tracing.Milestone) bool {
 	return a.Kind == b.Kind && a.What == b.What && a.Location == b.Location
 }
 
-func (t *DBTracer) insertTaskEntry(task Task) {
+func (t *DBTracer) insertTaskEntry(task tracing.Task) {
 	taskEntry := taskTableEntry{
 		ID:        task.ID,
 		ParentID:  task.ParentID,
@@ -141,7 +142,7 @@ func (t *DBTracer) insertTaskEntry(task Task) {
 	t.backend.InsertData("trace", taskEntry)
 }
 
-func (t *DBTracer) insertMilestones(task Task) {
+func (t *DBTracer) insertMilestones(task tracing.Task) {
 	for _, milestone := range task.Milestones {
 		milestoneEntry := milestoneTableEntry{
 			ID:       milestone.ID,
@@ -156,7 +157,7 @@ func (t *DBTracer) insertMilestones(task Task) {
 }
 
 // EndTask marks the end of a task.
-func (t *DBTracer) EndTask(task Task) {
+func (t *DBTracer) EndTask(task tracing.Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -211,7 +212,7 @@ func NewDBTracer(
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
-		tracingTasks: make(map[string]Task),
+		tracingTasks: make(map[string]tracing.Task),
 	}
 
 	atexit.Register(func() {
