@@ -7,9 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// scheduler captures the subset of engine behaviour recordingHandler relies on.
+type scheduler interface {
+	Schedule(ScheduledEvent)
+	CurrentTime() VTimeInCycle
+}
+
 type recordingHandler struct {
 	name     string
-	engine   EventScheduler
+	engine   scheduler
 	recorder *callRecorder
 	schedule map[string][]ScheduledEvent
 }

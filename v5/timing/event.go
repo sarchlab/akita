@@ -1,6 +1,7 @@
 package timing
 
 import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
+
 // Handler processes events of various types.
 // Events are plain data structs (no interface required).
 // Handlers use type switching to handle different event types:
@@ -18,17 +19,6 @@ import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
 //	}
 type Handler interface {
 	Handle(event any) error
-}
-
-// TimeTeller exposes the current simulation cycle.
-type TimeTeller interface {
-	CurrentTime() VTimeInCycle
-}
-
-// EventScheduler schedules events in the simulation timeline.
-type EventScheduler interface {
-	TimeTeller
-	Schedule(event ScheduledEvent)
 }
 
 // Hook positions emitted by timing engines.

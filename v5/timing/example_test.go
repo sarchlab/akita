@@ -6,6 +6,12 @@ import (
 	"github.com/sarchlab/akita/v4/v5/timing"
 )
 
+// exampleScheduler captures the scheduling API the example component depends on.
+type exampleScheduler interface {
+	Schedule(timing.ScheduledEvent)
+	CurrentTime() timing.VTimeInCycle
+}
+
 // Example custom event types - pure data structs with no behavior.
 
 // PingEvent represents a ping request.
@@ -23,7 +29,7 @@ type PongEvent struct {
 // ExampleComponent demonstrates how to create a component that handles events.
 type ExampleComponent struct {
 	name   string
-	engine timing.EventScheduler
+	engine exampleScheduler
 }
 
 // Handle processes events using type switching - the Go-idiomatic way.
@@ -48,29 +54,45 @@ func (c *ExampleComponent) Handle(event any) error {
 	return nil
 }
 
-// ExampleEvent demonstrates the basic usage pattern for events and handlers.
+// Example_eventUsage demonstrates how to register events and advance a serial engine.
 func Example_eventUsage() {
-	// This example shows how users define events as pure data structs
-	// and use type switching in handlers.
+	engine := timing.NewSerialEngine()
+	component := &ExampleComponent{name: "mailbox", engine: engine}
 
-	// 1. Define events as plain structs (shown above: PingEvent, PongEvent)
+	engine.Schedule(timing.ScheduledEvent{
+		Event:   &PingEvent{Message: "hello", From: "client"},
+		Time:    timing.VTimeInCycle(5),
+		Handler: component,
+	})
 
-	// 2. Create a handler that processes events via type switching
-	//    (shown above: ExampleComponent.Handle)
+	if err := engine.Run(); err != nil {
+		fmt.Println("unexpected error:", err)
+		return
+	}
 
-	// 3. Schedule events using ScheduledEvent
-	//    engine.Schedule(timing.ScheduledEvent{
-	//        Event:       &PingEvent{Message: "hello", From: "Alice"},
-	//        Time:        timing.VTimeInCycle(10),
-	//        Handler:     myHandler,
-	//        IsSecondary: false,
-	//    })
-
-	fmt.Println("Events are pure data structs")
-	fmt.Println("Handlers use type switching to process different event types")
-	fmt.Println("Engine wraps events internally with timing/routing metadata")
+	fmt.Printf("current time: %d cycles\n", engine.CurrentTime())
 	// Output:
-	// Events are pure data structs
-	// Handlers use type switching to process different event types
-	// Engine wraps events internally with timing/routing metadata
+	// [mailbox] Received ping from client: hello
+	// [mailbox] Received pong to client: pong!
+	// current time: 6 cycles
+}
+
+// ExampleFreqDomain_ticks illustrates how clock domains align to the global cycle.
+func ExampleFreqDomain_ticks() {
+	planner := timing.NewFrequencyPlanner()
+	cpuDomain, _ := planner.RegisterFrequency(2 * timing.GHz)
+	memDomain, _ := planner.RegisterFrequency(1 * timing.GHz)
+
+	fmt.Printf("cpu stride: %d\n", cpuDomain.Stride())
+	fmt.Printf("memory stride: %d\n", memDomain.Stride())
+	fmt.Printf("memory this tick at 3 cycles: %d\n", memDomain.ThisTick(timing.VTimeInCycle(3)))
+	fmt.Printf("memory next tick after 4 cycles: %d\n", memDomain.NextTick(timing.VTimeInCycle(4)))
+	fmt.Printf("memory two ticks later from 3 cycles: %d\n",
+		memDomain.NTicksLater(timing.VTimeInCycle(3), timing.VTimeInCycle(2)))
+	// Output:
+	// cpu stride: 1
+	// memory stride: 2
+	// memory this tick at 3 cycles: 4
+	// memory next tick after 4 cycles: 6
+	// memory two ticks later from 3 cycles: 8
 }

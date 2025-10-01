@@ -10,7 +10,7 @@ import (
 
 // SerialEngine processes scheduled events sequentially in time order.
 type SerialEngine struct {
-    *hooking.HookableBase
+	*hooking.HookableBase
 
 	timeLock sync.RWMutex
 	now      VTimeInCycle
@@ -89,20 +89,20 @@ func (e *SerialEngine) Run() error {
 
 		e.writeNow(evt.Time)
 
-        hookCtx := hooking.HookCtx{
-            Domain: e,
-            Pos:    HookPosBeforeEvent,
-            Item:   evt,
-        }
-        e.InvokeHook(hookCtx)
+		hookCtx := hooking.HookCtx{
+			Domain: e,
+			Pos:    HookPosBeforeEvent,
+			Item:   evt,
+		}
+		e.InvokeHook(hookCtx)
 
 		handler := evt.Handler
 		if handler != nil {
 			_ = handler.Handle(evt.Event)
 		}
 
-        hookCtx.Pos = HookPosAfterEvent
-        e.InvokeHook(hookCtx)
+		hookCtx.Pos = HookPosAfterEvent
+		e.InvokeHook(hookCtx)
 
 		e.pauseLock.Unlock()
 	}
@@ -163,5 +163,3 @@ func (e *SerialEngine) Continue() {
 func (e *SerialEngine) CurrentTime() VTimeInCycle {
 	return e.readNow()
 }
-
-var _ EventScheduler = (*SerialEngine)(nil)

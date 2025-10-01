@@ -11,7 +11,7 @@ import (
 
 // ParallelEngine executes events at the same simulation time in parallel.
 type ParallelEngine struct {
-    *hooking.HookableBase
+	*hooking.HookableBase
 
 	pauseLock sync.Mutex
 
@@ -204,20 +204,20 @@ func (e *ParallelEngine) tempWorkerRun(evt *ScheduledEvent) {
 		panic("timing: running event in the past")
 	}
 
-    hookCtx := hooking.HookCtx{
-        Domain: e,
-        Pos:    HookPosBeforeEvent,
-        Item:   evt,
-    }
-    e.InvokeHook(hookCtx)
+	hookCtx := hooking.HookCtx{
+		Domain: e,
+		Pos:    HookPosBeforeEvent,
+		Item:   evt,
+	}
+	e.InvokeHook(hookCtx)
 
 	handler := evt.Handler
 	if handler != nil {
 		_ = handler.Handle(evt.Event)
 	}
 
-    hookCtx.Pos = HookPosAfterEvent
-    e.InvokeHook(hookCtx)
+	hookCtx.Pos = HookPosAfterEvent
+	e.InvokeHook(hookCtx)
 }
 
 // Pause prevents the engine from progressing to future times.
@@ -235,4 +235,10 @@ func (e *ParallelEngine) CurrentTime() VTimeInCycle {
 	return e.readNow()
 }
 
-var _ EventScheduler = (*ParallelEngine)(nil)
+// Ensure ParallelEngine exposes the scheduling API components depend on.
+type parallelScheduler interface {
+	Schedule(ScheduledEvent)
+	CurrentTime() VTimeInCycle
+}
+
+var _ parallelScheduler = (*ParallelEngine)(nil)
