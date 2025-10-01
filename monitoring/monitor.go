@@ -23,7 +23,6 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/gorilla/mux"
-	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/shirou/gopsutil/process"
@@ -37,7 +36,6 @@ type Monitor struct {
 	components   []sim.Component
 	buffers      []sim.Buffer
 	portNumber   int
-	perfAnalyzer *analysis.PerfAnalyzer
 	httpServer   *http.Server
 
 	progressBarsLock sync.Mutex
@@ -69,11 +67,6 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 // RegisterEngine registers the engine that is used in the simulation.
 func (m *Monitor) RegisterEngine(e sim.Engine) {
 	m.engine = e
-}
-
-// RegisterPerfAnalyzer sets the performance analyzer to be used in the monitor.
-func (m *Monitor) RegisterPerfAnalyzer(pa *analysis.PerfAnalyzer) {
-	m.perfAnalyzer = pa
 }
 
 // RegisterComponent register a component to be monitored.
@@ -557,15 +550,10 @@ func dieOnErr(err error) {
 }
 
 func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
-	name := mux.Vars(r)["name"]
+	_ = mux.Vars(r)["name"]
 
-	// component := m.findComponentOr404(w, name)
-	// if component == nil {
-	// 	return
-	// }
-
-	backend := m.perfAnalyzer.GetCurrentTraffic(name)
-
-	_, err := w.Write([]byte(backend))
+	// Traffic reporting functionality removed along with analysis package
+	w.WriteHeader(http.StatusNotImplemented)
+	_, err := w.Write([]byte("Traffic reporting not available"))
 	dieOnErr(err)
 }
