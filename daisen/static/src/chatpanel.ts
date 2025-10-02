@@ -2113,8 +2113,10 @@ GPU.CommandProcessor,9
       userDiv.appendChild(urlPreviewDiv);
 
       // Add file previews underneath URL if files are attached
-      if (this._uploadedFiles.length > 0) {
-        const filePreviewDiv = renderMessageFiles(this._uploadedFiles);
+      const uploadTraceCheckedCount = Object.values(this._uploadTraceChecks).filter(Boolean).length;
+      const uploadRepoCheckedCount = Object.values(this._attachRepoChecks).filter(Boolean).length;
+      if ((this._uploadedFiles && this._uploadedFiles.length > 0) || uploadTraceCheckedCount > 0 || uploadRepoCheckedCount > 0) {
+        const filePreviewDiv = renderMessageFiles(this._uploadedFiles, uploadTraceCheckedCount, uploadRepoCheckedCount);
         if (filePreviewDiv) {
           userDiv.appendChild(filePreviewDiv);
         }
@@ -2924,9 +2926,10 @@ function renderMessageUrl(url: string) {
 
 // Helper function to render message file previews
 function renderMessageFiles(files: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[], TraceChecksCount: number, RepoCheckCount: number) {
-  if (!files || files.length === 0) {
+  if ((!files || files.length === 0) && TraceChecksCount === 0 && RepoCheckCount === 0) {
     return null;
   }
+  // console.log("TraceChecksCount: ", TraceChecksCount, "RepoCheckCount:", RepoCheckCount);
 
   const filePreviewContainer = document.createElement("div");
   filePreviewContainer.style.marginTop = "2px";
@@ -2937,12 +2940,12 @@ function renderMessageFiles(files: { id: number; name: string; content: string; 
   console.log("TraceChecksCount: ", TraceChecksCount, "RepoCheckCount:", RepoCheckCount);
 
   if (TraceChecksCount > 0) {
-    const traceDiv = generateMessageTraceOrCodeFiles(`Trace Files with ${TraceChecksCount} options`);
+    const traceDiv = generateMessageTraceOrCodeFiles(`Daisen Trace with ${TraceChecksCount} options`);
     filePreviewContainer.appendChild(traceDiv);
   }
 
   if (RepoCheckCount > 0) {
-    const repoDiv = generateMessageTraceOrCodeFiles(`Repository Files with ${RepoCheckCount} options`);
+    const repoDiv = generateMessageTraceOrCodeFiles(`Repository Code with ${RepoCheckCount} options`);
     filePreviewContainer.appendChild(repoDiv);
   }
   
