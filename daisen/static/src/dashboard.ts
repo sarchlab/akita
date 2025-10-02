@@ -529,7 +529,7 @@ class Dashboard extends ChatPanel {
     if (this._currFilter === "") {
       this._filteredNames = this._componentNames;
     } else {
-      const re = new RegExp(this._currFilter);
+      const re = new RegExp(this._currFilter, "i");
       this._filteredNames = this._componentNames.filter(
         (v) => v.search(re) >= 0
       );
