@@ -54,8 +54,8 @@ func (c *ExampleComponent) Handle(event any) error {
 	return nil
 }
 
-// Example_eventUsage demonstrates how to register events and advance a serial engine.
-func Example_eventUsage() {
+// Example_serialEngine_basic shows how to schedule events without any clock-domain logic.
+func Example_serialEngine_basic() {
 	engine := timing.NewSerialEngine()
 	component := &ExampleComponent{name: "mailbox", engine: engine}
 
@@ -77,11 +77,11 @@ func Example_eventUsage() {
 	// current time: 6 cycles
 }
 
-// ExampleFreqDomain_ticks illustrates how clock domains align to the global cycle.
-func ExampleFreqDomain_ticks() {
-	planner := timing.NewFrequencyPlanner()
-	cpuDomain, _ := planner.RegisterFrequency(2 * timing.GHz)
-	memDomain, _ := planner.RegisterFrequency(1 * timing.GHz)
+// Example_frequencyRegistry_twoDomains illustrates how separate domains align to the global cycle.
+func Example_frequencyRegistry_twoDomains() {
+	registry := timing.NewFrequencyRegistry()
+	cpuDomain, _ := registry.RegisterFrequency(2 * timing.GHz)
+	memDomain, _ := registry.RegisterFrequency(1 * timing.GHz)
 
 	fmt.Printf("cpu stride: %d\n", cpuDomain.Stride())
 	fmt.Printf("memory stride: %d\n", memDomain.Stride())

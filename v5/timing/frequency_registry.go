@@ -52,59 +52,59 @@ var (
 	ErrTickOverflow = errors.New("timing: cycle value overflow")
 )
 
-// FrequencyPlanner coordinates multiple clock domains by deriving a single
+// FrequencyRegistry coordinates multiple clock domains by deriving a single
 // cycle resolution that preserves deterministic ordering.
-type FrequencyPlanner struct {
+type FrequencyRegistry struct {
 	global  FreqInHz
 	domains map[FreqInHz]*FreqDomain
 }
 
-// NewFrequencyPlanner builds an empty planner ready to accept clock domains.
-func NewFrequencyPlanner() *FrequencyPlanner {
-	return &FrequencyPlanner{
+// NewFrequencyRegistry builds an empty registry ready to accept clock domains.
+func NewFrequencyRegistry() *FrequencyRegistry {
+	return &FrequencyRegistry{
 		domains: make(map[FreqInHz]*FreqDomain),
 	}
 }
 
 // RegisterFrequency adds a clock domain and returns its descriptor.
-func (p *FrequencyPlanner) RegisterFrequency(
+func (r *FrequencyRegistry) RegisterFrequency(
 	freq FreqInHz,
 ) (*FreqDomain, error) {
 	if freq == 0 {
 		return nil, ErrZeroFrequency
 	}
 
-	if domain, exists := p.domains[freq]; exists {
+	if domain, exists := r.domains[freq]; exists {
 		return domain, nil
 	}
 
-	if p.global == 0 {
-		p.global = freq
+	if r.global == 0 {
+		r.global = freq
 	} else {
-		newGlobal, err := lcmFreq(p.global, freq)
+		newGlobal, err := lcmFreq(r.global, freq)
 		if err != nil {
 			return nil, err
 		}
-		p.global = newGlobal
+		r.global = newGlobal
 	}
 
 	domain := &FreqDomain{
-		freq:    freq,
-		planner: p,
+		freq:     freq,
+		registry: r,
 	}
-	p.domains[freq] = domain
+	r.domains[freq] = domain
 	return domain, nil
 }
-func (p *FrequencyPlanner) cyclesToSeconds(cycles VTimeInCycle) VTimeInSec {
-	if p.global == 0 {
+func (r *FrequencyRegistry) cyclesToSeconds(cycles VTimeInCycle) VTimeInSec {
+	if r.global == 0 {
 		return 0
 	}
 
-	return VTimeInSec(float64(cycles) / float64(p.global))
+	return VTimeInSec(float64(cycles) / float64(r.global))
 }
 
-func (p *FrequencyPlanner) secondsToCycles(sec VTimeInSec) (VTimeInCycle, error) {
-	if p.global == 0 {
+func (r *FrequencyRegistry) secondsToCycles(sec VTimeInSec) (VTimeInCycle, error) {
+	if r.global == 0 {
 		return 0, ErrNoFrequencyDomains
 	}
 	if sec < 0 {
@@ -114,9 +114,9 @@ func (p *FrequencyPlanner) secondsToCycles(sec VTimeInSec) (VTimeInCycle, error)
 		)
 	}
 
-	scaled := float64(sec) * float64(p.global)
+	scaled := float64(sec) * float64(r.global)
 	rounded := math.Round(scaled)
-	tickDuration := 1.0 / float64(p.global)
+	tickDuration := 1.0 / float64(r.global)
 	if math.Abs(scaled-rounded) > cycleAlignmentTolerance(scaled) {
 		return 0, fmt.Errorf(
 			"%w: duration %.12g s exceeds cycle %.12g s",
@@ -137,8 +137,8 @@ const maxCycleValue = VTimeInCycle(math.MaxUint64)
 
 // FreqDomain represents a registered clock domain.
 type FreqDomain struct {
-	freq    FreqInHz
-	planner *FrequencyPlanner
+	freq     FreqInHz
+	registry *FrequencyRegistry
 }
 
 // FrequencyHz returns the raw frequency associated with the domain.
@@ -221,10 +221,10 @@ func (d *FreqDomain) NTicksLater(now, ticks VTimeInCycle) VTimeInCycle {
 }
 
 func (d *FreqDomain) stride() VTimeInCycle {
-	if d == nil || d.planner == nil {
+	if d == nil || d.registry == nil {
 		return 0
 	}
-	global := d.planner.global
+	global := d.registry.global
 	freq := d.freq
 	if global == 0 || freq == 0 || global%freq != 0 {
 		return 0

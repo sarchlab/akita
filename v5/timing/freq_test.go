@@ -7,9 +7,9 @@ import (
 )
 
 func TestRegisterFrequencySingleDomain(t *testing.T) {
-	planner := NewFrequencyPlanner()
+	registry := NewFrequencyRegistry()
 
-	domain, err := planner.RegisterFrequency(GHz)
+	domain, err := registry.RegisterFrequency(GHz)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -26,7 +26,7 @@ func TestRegisterFrequencySingleDomain(t *testing.T) {
 	}
 
 	// Re-registering the same frequency should return the same domain instance.
-	domain2, err := planner.RegisterFrequency(GHz)
+	domain2, err := registry.RegisterFrequency(GHz)
 	if err != nil {
 		t.Fatalf("unexpected error on re-register: %v", err)
 	}
@@ -36,15 +36,15 @@ func TestRegisterFrequencySingleDomain(t *testing.T) {
 }
 
 func TestRegisterFrequencyMultipleDomains(t *testing.T) {
-	planner := NewFrequencyPlanner()
+	registry := NewFrequencyRegistry()
 
-	slowDomain, err := planner.RegisterFrequency(GHz)
+	slowDomain, err := registry.RegisterFrequency(GHz)
 	if err != nil {
 		t.Fatalf("unexpected error registering slow domain: %v", err)
 	}
 
 	fastFreq := FreqInHz(2500) * MHz // 2.5 GHz
-	fastDomain, err := planner.RegisterFrequency(fastFreq)
+	fastDomain, err := registry.RegisterFrequency(fastFreq)
 	if err != nil {
 		t.Fatalf("unexpected error registering fast domain: %v", err)
 	}
@@ -76,20 +76,20 @@ func TestRegisterFrequencyMultipleDomains(t *testing.T) {
 }
 
 func TestSecondsCyclesConversions(t *testing.T) {
-	planner := NewFrequencyPlanner()
+	registry := NewFrequencyRegistry()
 
-	if _, err := planner.secondsToCycles(1); !errors.Is(err, ErrNoFrequencyDomains) {
+	if _, err := registry.secondsToCycles(1); !errors.Is(err, ErrNoFrequencyDomains) {
 		t.Fatalf("expected ErrNoFrequencyDomains, got %v", err)
 	}
 
-	if _, err := planner.RegisterFrequency(GHz); err != nil {
+	if _, err := registry.RegisterFrequency(GHz); err != nil {
 		t.Fatalf("register frequency: %v", err)
 	}
-	if _, err := planner.RegisterFrequency(FreqInHz(2500) * MHz); err != nil {
+	if _, err := registry.RegisterFrequency(FreqInHz(2500) * MHz); err != nil {
 		t.Fatalf("register frequency: %v", err)
 	}
 
-	cycles, err := planner.secondsToCycles(VTimeInSec(1e-9))
+	cycles, err := registry.secondsToCycles(VTimeInSec(1e-9))
 	if err != nil {
 		t.Fatalf("SecondsToCycles returned error: %v", err)
 	}
@@ -97,11 +97,11 @@ func TestSecondsCyclesConversions(t *testing.T) {
 		t.Fatalf("SecondsToCycles mismatch: got %d, want %d", got, want)
 	}
 
-	if secs := planner.cyclesToSeconds(VTimeInCycle(10)); secs != VTimeInSec(2e-9) {
+	if secs := registry.cyclesToSeconds(VTimeInCycle(10)); secs != VTimeInSec(2e-9) {
 		t.Fatalf("CyclesToSeconds mismatch: got %g, want %g", secs, VTimeInSec(2e-9))
 	}
 
-	if _, err := planner.secondsToCycles(VTimeInSec(1.5e-10)); !errors.Is(err, ErrTickPrecisionLoss) {
+	if _, err := registry.secondsToCycles(VTimeInSec(1.5e-10)); !errors.Is(err, ErrTickPrecisionLoss) {
 
 		t.Fatalf("expected ErrTickPrecisionLoss, got %v", err)
 	}
