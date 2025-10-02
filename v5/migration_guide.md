@@ -4,7 +4,26 @@
 
 V5 unifies how components are modeled and wired. Each component is a single struct composed of four orthogonal parts: Spec, State, Ports, and Middlewares. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
 
-### Core Principles
+### Time management
+
+V5 rethinks time management to improve determinism and make scheduling rules explicit.
+
+- **Integer cycle timeline**: V4 engines stored timestamps and frequencies as `float64`, which could introduce rounding differences across platforms. V5 represents simulation time exclusively with `timing.VTimeInCycle` (`uint64`) while still exposing `timing.VTimeInSec` for reporting. Any custom arithmetic that previously used floating-point seconds should convert through the helper methods added to the registry.
+
+- **Single event queue**: Timing engines no longer keep a secondary queue. In V4, calling `SimEngine.Schedule` with `IsSecondary=true` deferred work that should only become visible in the next cycle. In V5 the secondary path is gone; engines now execute all events in a single, time-ordered queue. Use explicit scheduling (for example `FreqDomain.NextTick`) when work must land on a later cycle.
+
+- **Frequency registry**: Create a global clock coordination object with `timing.NewFrequencyRegistry()`. Register every domain (`RegisterFrequency`) and keep the returned `*timing.FreqDomain` as the canonical clock descriptor. The registry tracks the least-common multiple of registered domains and exposes `secondsToCycles`/`cyclesToSeconds` to bridge between the integer timeline and human-readable seconds.
+
+- **Domain-driven scheduling**: Components should compute their next execution cycle via `FreqDomain` helpers (`ThisTick`, `NextTick`, `NTicksLater`) before scheduling responses. Do not assume the simulation advances exactly one cycle per event; always request the appropriate tick for the domain.
+
+#### Migrating from V4
+
+1. Remove any reliance on `ScheduledEvent{..., IsSecondary: true}`; schedule follow-up work explicitly using the appropriate domain helper (e.g., `domain.NextTick(engine.CurrentTime())`).
+2. Replace float-based time math with `timing.VTimeInCycle`. When converting from seconds, register the relevant domain with a `FrequencyRegistry` and call `registry.secondsToCycles`, or use `FreqDomain.NTicksLater` instead of multiplying by floating-point frequencies.
+3. Instantiate a `timing.FrequencyRegistry` (instead of the old planner) and keep returned `*timing.FreqDomain` handles in your components. All existing `FreqDomain` methods remain, only the owner type and constructor names change.
+4. Update utility wrappers or static factories that previously returned `EventScheduler` interfaces to reference local interfaces capturing just `Schedule`/`CurrentTime`. V5 no longer exports `Timing.EventScheduler`/`TimeTeller`; define them where needed in your package.
+
+### Component Redesign 
 
 1. Spec (immutable configuration)
    - Describes behavior and dependencies using only primitives (bool, number, string) and primitive maps/slices.
@@ -154,17 +173,3 @@ type MyComponentState struct {
     OutputBuffer *queueingv5.Buffer
 }
 ```
-
-This aligns with V5 principles of keeping State as pure data structures that can be easily serialized and restored.
-
-## CLI Changes (akitav5)
-
-- Command rename: `akita check [path]` is replaced by `akita component-lint [path]`.
-  - Usage examples:
-    - `akita component-lint .`
-    - `akita component-lint ./...`
-    - `akita component-lint -r mem/`
-  - Note: directories without `//akita:component` are reported as `not a component` and do not fail the run.
-- New scaffolding entry point: use `akita component-create <path>` instead of the previous `component --create` flag.
-  - Example: `akita component-create mem/newcontroller`
-  - The command requires running inside the Akita Git repository so that generated packages start with a valid module path.
