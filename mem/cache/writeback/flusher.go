@@ -4,8 +4,8 @@ import (
 	"log"
 	"reflect"
 
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/cache"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type flusher struct {

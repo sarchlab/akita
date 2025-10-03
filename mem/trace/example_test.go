@@ -6,10 +6,10 @@ import (
 	"sort"
 
 	"github.com/sarchlab/akita/v4/datarecording"
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/trace"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // SimpleTimeTeller implements sim.TimeTeller for example
@@ -93,9 +93,9 @@ func Example() {
 	// Output:
 	// Starting memory trace example...
 	// Started memory read at time 100.0 ns
-	// Cache miss tag recorded at time 150.0 ns
+	// Cache miss recorded at time 150.0 ns
 	// Completed memory read at time 200.0 ns
-	// Tables created: [exec_info memory_tags memory_transactions]
+	// Tables created: [exec_info memory_steps memory_transactions]
 	// Memory trace example completed successfully!
 	// Database saved to: memory_trace_example.sqlite3
 }
@@ -124,11 +124,11 @@ func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 	memTracer.StartTask(task)
 	fmt.Printf("Started memory read at time %.1f ns\n", float64(timeTeller.CurrentTime()))
 
-	// Add a tag (cache miss)
+	// Add a step (cache miss)
 	timeTeller.AdvanceTime(50)
-	task.Tags = []tracing.TaskTag{{What: "cache_miss"}}
-	memTracer.TagTask(task)
-	fmt.Printf("Cache miss tag recorded at time %.1f ns\n", float64(timeTeller.CurrentTime()))
+	task.Steps = []tracing.TaskStep{{What: "cache_miss"}}
+	memTracer.StepTask(task)
+	fmt.Printf("Cache miss recorded at time %.1f ns\n", float64(timeTeller.CurrentTime()))
 
 	// End the task at time 200ns
 	timeTeller.AdvanceTime(50)

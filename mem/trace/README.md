@@ -7,7 +7,7 @@ This package provides both logger-based and database-based memory tracing capabi
 The memory tracer captures detailed information about memory system operations, including:
 - Memory transaction start/end times
 - Memory addresses and access sizes
-- Transaction tags and milestones
+- Transaction steps and milestones
 - Location information (cache levels, memory controllers, etc.)
 
 ## Database Schema
@@ -21,11 +21,11 @@ The memory tracer captures detailed information about memory system operations, 
 - `Address` (indexed): Memory address being accessed
 - `ByteSize` (indexed): Size of the memory access in bytes
 
-### memory_tags Table
-- `ID` (unique): Unique tag identifier
+### memory_steps Table
+- `ID` (unique): Unique step identifier
 - `TaskID` (indexed): Reference to the parent transaction ID
-- `Time` (indexed): When the tag occurred
-- `What` (indexed): Type of tag (e.g., "cache_miss", "cache_hit")
+- `Time` (indexed): When the step occurred
+- `What` (indexed): Type of step (e.g., "cache_miss", "cache_hit")
 
 ## Usage
 
@@ -81,7 +81,7 @@ After simulation, you can analyze the SQLite database using standard SQL:
 
 ```sql
 -- Find all cache misses
-SELECT * FROM memory_tags WHERE What = 'cache_miss';
+SELECT * FROM memory_steps WHERE What = 'cache_miss';
 
 -- Analyze memory access patterns by address range
 SELECT Address, COUNT(*) as AccessCount 

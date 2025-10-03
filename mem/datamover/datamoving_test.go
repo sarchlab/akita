@@ -16,7 +16,7 @@ import (
 // 	fmt.Printf("Start task %+v\n", task)
 // }
 
-// func (l *dataMoverLogger) TagTask(task tracing.Task) {
+// func (l *dataMoverLogger) StepTask(task tracing.Task) {
 // 	// Do nothing.
 // }
 
