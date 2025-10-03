@@ -3,7 +3,7 @@
 
 package rule3_3_validate_missing
 
-import "github.com/sarchlab/akita/v4/simv5"
+import simv5 "github.com/sarchlab/akita/v4/v5/sim"
 
 type Builder struct {
 	simulation *simv5.Simulation

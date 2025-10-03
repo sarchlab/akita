@@ -1,6 +1,6 @@
 package tracingv5
 
-import "github.com/sarchlab/akita/v4/instrumentation/hooking"
+import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
 
 // Hook positions for request lifecycle events
 var (
