@@ -3,12 +3,12 @@ package writeback
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/mem/vm"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type dirPipelineItem struct {
@@ -120,7 +120,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 
 	ds.buf.Pop()
 
-	tracing.AddTaskTag(
+	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(trans.read, ds.cache),
 		ds.cache,
 		"read-mshr-hit",
@@ -137,7 +137,7 @@ func (ds *directoryStage) handleReadHit(
 		return false
 	}
 
-	tracing.AddTaskTag(
+	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(trans.read, ds.cache),
 		ds.cache,
 		"read-hit",
@@ -182,7 +182,7 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 	if ds.needEviction(victim) {
 		ok := ds.evict(trans, victim)
 		if ok {
-			tracing.AddTaskTag(
+			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(trans.read, ds.cache),
 				ds.cache,
 				"read-miss",
@@ -194,7 +194,7 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 
 	ok := ds.fetch(trans, victim)
 	if ok {
-		tracing.AddTaskTag(
+		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.read, ds.cache),
 			ds.cache,
 			"read-miss",
@@ -211,7 +211,7 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 	mshrEntry := ds.cache.mshr.Query(write.PID, cachelineID)
 	if mshrEntry != nil {
 		ok := ds.doWriteMSHRHit(trans, mshrEntry)
-		tracing.AddTaskTag(
+		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
 			ds.cache,
 			"write-mshr-hit",
@@ -224,7 +224,7 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 	if block != nil {
 		ok := ds.doWriteHit(trans, block)
 		if ok {
-			tracing.AddTaskTag(
+			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(trans.write, ds.cache),
 				ds.cache,
 				"write-hit",
@@ -236,7 +236,7 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 
 	ok := ds.doWriteMiss(trans)
 	if ok {
-		tracing.AddTaskTag(
+		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
 			ds.cache,
 			"write-miss",
@@ -517,7 +517,7 @@ func (ds *directoryStage) fetch(
 	block.IsValid = true
 	ds.cache.directory.Visit(block)
 
-	tracing.AddTaskTag(
+	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, ds.cache),
 		ds.cache,
 		fmt.Sprintf("add-mshr-entry-0x%x-0x%x", mshrEntry.Address, block.Tag),

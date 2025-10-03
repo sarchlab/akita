@@ -1,8 +1,8 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/vm"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type pipelineTLBReq struct {
@@ -205,7 +205,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	)
 
 	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskTag(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
 	tracing.TraceReqComplete(req, m.Comp)
 
 	return true
@@ -229,7 +229,7 @@ func (m *tlbMiddleware) handleTranslationMiss(
 	fetched := m.fetchBottom(req)
 	if fetched {
 		tracing.TraceReqReceive(req, m.Comp)
-		tracing.AddTaskTag(
+		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(req, m.Comp),
 			m.Comp,
 			"miss",
@@ -275,7 +275,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry.Requests = append(mshrEntry.Requests, req)
 
 	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskTag(
+	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
 
 	return true

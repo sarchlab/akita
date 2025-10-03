@@ -1,11 +1,11 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/sarchlab/akita/v4/mem/cache"
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type dirPipelineItem struct {
@@ -89,9 +89,9 @@ func (d *directory) processMSHRHit(
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
 
 	if trans.read != nil {
-		tracing.AddTaskTag(trans.id, d.cache, "read-mshr-hit")
+		tracing.AddTaskStep(trans.id, d.cache, "read-mshr-hit")
 	} else {
-		tracing.AddTaskTag(trans.id, d.cache, "write-mshr-hit")
+		tracing.AddTaskStep(trans.id, d.cache, "write-mshr-hit")
 	}
 
 	d.buf.Pop()
@@ -119,7 +119,7 @@ func (d *directory) processReadHit(
 	bankBuf.Push(trans)
 
 	d.buf.Pop()
-	tracing.AddTaskTag(trans.id, d.cache, "read-hit")
+	tracing.AddTaskStep(trans.id, d.cache, "read-hit")
 
 	return true
 }
@@ -144,7 +144,7 @@ func (d *directory) processReadMiss(trans *transaction) bool {
 	}
 
 	d.buf.Pop()
-	tracing.AddTaskTag(trans.id, d.cache, "read-miss")
+	tracing.AddTaskStep(trans.id, d.cache, "read-miss")
 
 	return true
 }
@@ -176,7 +176,7 @@ func (d *directory) processWrite(trans *transaction) bool {
 
 func (d *directory) writeMiss(trans *transaction) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskTag(trans.id, d.cache, "write-miss")
+		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
 		d.buf.Pop()
 
 		return true
@@ -243,7 +243,7 @@ func (d *directory) processWriteHit(
 	trans.block = block
 	bankBuf.Push(trans)
 
-	tracing.AddTaskTag(trans.id, d.cache, "write-hit")
+	tracing.AddTaskStep(trans.id, d.cache, "write-hit")
 	d.buf.Pop()
 
 	return true
