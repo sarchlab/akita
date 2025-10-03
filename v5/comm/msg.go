@@ -11,12 +11,12 @@ import (
 
 var (
 	idGenMu sync.RWMutex
-	idGen   idgen.Generator = idgen.New()
+	idGen   *idgen.Generator = idgen.New()
 )
 
 // SetIDGenerator overrides the generator used to assign new message IDs. The
 // provided generator must be safe for concurrent use.
-func SetIDGenerator(g idgen.Generator) {
+func SetIDGenerator(g *idgen.Generator) {
 	if g == nil {
 		panic("id generator cannot be nil")
 	}
