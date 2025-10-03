@@ -9,7 +9,7 @@ import (
 
 // scheduler captures the subset of engine behaviour recordingHandler relies on.
 type scheduler interface {
-	Schedule(ScheduledEvent)
+	Schedule(FutureEvent)
 	CurrentTime() VTimeInCycle
 }
 
@@ -17,7 +17,7 @@ type recordingHandler struct {
 	name     string
 	engine   scheduler
 	recorder *callRecorder
-	schedule map[string][]ScheduledEvent
+	schedule map[string][]FutureEvent
 }
 
 func (h *recordingHandler) Handle(event any) error {
@@ -65,7 +65,7 @@ func TestSerialEngineSchedulesEventsInOrder(t *testing.T) {
 	recorder := &callRecorder{t: t}
 
 	handlerA := &recordingHandler{name: "A", recorder: recorder}
-	handlerB := &recordingHandler{name: "B", recorder: recorder, schedule: map[string][]ScheduledEvent{
+	handlerB := &recordingHandler{name: "B", recorder: recorder, schedule: map[string][]FutureEvent{
 		"evt2": {
 			{Event: "evt3", Time: VTimeInCycle(3), Handler: handlerA},
 			{Event: "evt4", Time: VTimeInCycle(5), Handler: handlerA},
@@ -75,8 +75,8 @@ func TestSerialEngineSchedulesEventsInOrder(t *testing.T) {
 	handlerA.engine = engine
 	handlerB.engine = engine
 
-	engine.Schedule(ScheduledEvent{Event: "evt1", Time: VTimeInCycle(4), Handler: handlerA})
-	engine.Schedule(ScheduledEvent{Event: "evt2", Time: VTimeInCycle(2), Handler: handlerB})
+	engine.Schedule(FutureEvent{Event: "evt1", Time: VTimeInCycle(4), Handler: handlerA})
+	engine.Schedule(FutureEvent{Event: "evt2", Time: VTimeInCycle(2), Handler: handlerB})
 
 	require.NoError(t, engine.Run())
 
@@ -96,9 +96,9 @@ func TestSerialEngineProcessesConcurrentEvents(t *testing.T) {
 	handlerPrimary2.engine = engine
 	handlerSecondary.engine = engine
 
-	engine.Schedule(ScheduledEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary})
-	engine.Schedule(ScheduledEvent{Event: "primary1", Time: VTimeInCycle(2), Handler: handlerPrimary1})
-	engine.Schedule(ScheduledEvent{Event: "primary2", Time: VTimeInCycle(2), Handler: handlerPrimary2})
+	engine.Schedule(FutureEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary})
+	engine.Schedule(FutureEvent{Event: "primary1", Time: VTimeInCycle(2), Handler: handlerPrimary1})
+	engine.Schedule(FutureEvent{Event: "primary2", Time: VTimeInCycle(2), Handler: handlerPrimary2})
 
 	require.NoError(t, engine.Run())
 

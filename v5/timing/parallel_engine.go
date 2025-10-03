@@ -35,7 +35,7 @@ func NewParallelEngine() *ParallelEngine {
 	}
 
 	for i := 0; i < numQueues; i++ {
-		queue := newScheduledEventQueue()
+		queue := newFutureEventQueue()
 
 		engine.queueChan <- queue
 
@@ -59,7 +59,7 @@ func (e *ParallelEngine) writeNow(t VTimeInCycle) {
 }
 
 // Schedule registers an event to be processed by the engine.
-func (e *ParallelEngine) Schedule(evt ScheduledEvent) {
+func (e *ParallelEngine) Schedule(evt FutureEvent) {
 	now := e.readNow()
 	if evt.Time < now {
 		panic(fmt.Sprintf(
@@ -157,12 +157,12 @@ func (e *ParallelEngine) runEventsUntilConflict(queues []eventQueue, ch chan eve
 	}
 }
 
-func (e *ParallelEngine) runEventWithTempWorker(evt *ScheduledEvent) {
+func (e *ParallelEngine) runEventWithTempWorker(evt *FutureEvent) {
 	e.waitGroup.Add(1)
 	go e.tempWorkerRun(evt)
 }
 
-func (e *ParallelEngine) tempWorkerRun(evt *ScheduledEvent) {
+func (e *ParallelEngine) tempWorkerRun(evt *FutureEvent) {
 	defer e.waitGroup.Done()
 
 	now := e.readNow()
@@ -203,7 +203,7 @@ func (e *ParallelEngine) CurrentTime() VTimeInCycle {
 
 // Ensure ParallelEngine exposes the scheduling API components depend on.
 type parallelScheduler interface {
-	Schedule(ScheduledEvent)
+	Schedule(FutureEvent)
 	CurrentTime() VTimeInCycle
 }
 

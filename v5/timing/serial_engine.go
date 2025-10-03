@@ -28,12 +28,12 @@ type SerialEngine struct {
 func NewSerialEngine() *SerialEngine {
 	return &SerialEngine{
 		HookableBase: hooking.NewHookableBase(),
-		queue:        newScheduledEventQueue(),
+		queue:        newFutureEventQueue(),
 	}
 }
 
 // Schedule registers an event to be handled in the future.
-func (e *SerialEngine) Schedule(evt ScheduledEvent) {
+func (e *SerialEngine) Schedule(evt FutureEvent) {
 	now := e.readNow()
 	if evt.Time < now {
 		panic(fmt.Sprintf(
@@ -105,7 +105,7 @@ func (e *SerialEngine) noMoreEvent() bool {
 	return e.queue.Len() == 0
 }
 
-func (e *SerialEngine) nextEvent() *ScheduledEvent {
+func (e *SerialEngine) nextEvent() *FutureEvent {
 	return e.queue.Pop()
 }
 

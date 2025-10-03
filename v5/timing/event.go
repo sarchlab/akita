@@ -27,10 +27,10 @@ var (
 	HookPosAfterEvent  = &hooking.HookPos{Name: "TimingAfterEvent"}
 )
 
-// ScheduledEvent is the engine-facing wrapper for user-defined events.
+// FutureEvent is the engine-facing wrapper for user-defined events.
 // It holds the metadata needed by the scheduler while keeping the payload as
 // plain data. Users typically pass pointers so large structs are not copied.
-type ScheduledEvent struct {
+type FutureEvent struct {
 	// Event is the data payload to be delivered to the handler.
 	// Can be any type - typically a pointer to a struct defined by the user.
 	Event any

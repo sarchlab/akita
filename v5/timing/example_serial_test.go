@@ -8,7 +8,7 @@ import (
 
 // exampleScheduler captures the scheduling API the example component depends on.
 type exampleScheduler interface {
-	Schedule(timing.ScheduledEvent)
+	Schedule(timing.FutureEvent)
 	CurrentTime() timing.VTimeInCycle
 }
 
@@ -38,7 +38,7 @@ func (c *ExampleComponent) Handle(event any) error {
 	case *PingEvent:
 		fmt.Printf("[%s] Received ping from %s: %s\n", c.name, e.From, e.Message)
 		// Schedule a response
-		c.engine.Schedule(timing.ScheduledEvent{
+		c.engine.Schedule(timing.FutureEvent{
 			Event: &PongEvent{
 				Reply: "pong!",
 				To:    e.From,
@@ -59,7 +59,7 @@ func Example_serialEngine_basic() {
 	engine := timing.NewSerialEngine()
 	component := &ExampleComponent{name: "mailbox", engine: engine}
 
-	engine.Schedule(timing.ScheduledEvent{
+	engine.Schedule(timing.FutureEvent{
 		Event:   &PingEvent{Message: "hello", From: "client"},
 		Time:    timing.VTimeInCycle(5),
 		Handler: component,

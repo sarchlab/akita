@@ -6,46 +6,46 @@ import (
 )
 
 type eventQueue interface {
-	Push(*ScheduledEvent)
-	Pop() *ScheduledEvent
+	Push(*FutureEvent)
+	Pop() *FutureEvent
 	Len() int
-	Peek() *ScheduledEvent
+	Peek() *FutureEvent
 }
 
-type scheduledEventQueue struct {
+type futureEventQueue struct {
 	sync.Mutex
-	events scheduledEventHeap
+	events futureEventHeap
 }
 
-func newScheduledEventQueue() *scheduledEventQueue {
-	q := &scheduledEventQueue{}
-	q.events = make([]*ScheduledEvent, 0)
+func newFutureEventQueue() *futureEventQueue {
+	q := &futureEventQueue{}
+	q.events = make([]*FutureEvent, 0)
 	heap.Init(&q.events)
 	return q
 }
 
-func (q *scheduledEventQueue) Push(evt *ScheduledEvent) {
+func (q *futureEventQueue) Push(evt *FutureEvent) {
 	q.Lock()
 	heap.Push(&q.events, evt)
 	q.Unlock()
 }
 
-func (q *scheduledEventQueue) Pop() *ScheduledEvent {
+func (q *futureEventQueue) Pop() *FutureEvent {
 	q.Lock()
 	defer q.Unlock()
 	if q.events.Len() == 0 {
 		return nil
 	}
-	return heap.Pop(&q.events).(*ScheduledEvent)
+	return heap.Pop(&q.events).(*FutureEvent)
 }
 
-func (q *scheduledEventQueue) Len() int {
+func (q *futureEventQueue) Len() int {
 	q.Lock()
 	defer q.Unlock()
 	return q.events.Len()
 }
 
-func (q *scheduledEventQueue) Peek() *ScheduledEvent {
+func (q *futureEventQueue) Peek() *FutureEvent {
 	q.Lock()
 	defer q.Unlock()
 	if q.events.Len() == 0 {
@@ -54,24 +54,24 @@ func (q *scheduledEventQueue) Peek() *ScheduledEvent {
 	return q.events[0]
 }
 
-type scheduledEventHeap []*ScheduledEvent
+type futureEventHeap []*FutureEvent
 
-func (h scheduledEventHeap) Len() int { return len(h) }
+func (h futureEventHeap) Len() int { return len(h) }
 
-func (h scheduledEventHeap) Less(i, j int) bool {
+func (h futureEventHeap) Less(i, j int) bool {
 	return h[i].Time < h[j].Time
 }
 
-func (h scheduledEventHeap) Swap(i, j int) {
+func (h futureEventHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *scheduledEventHeap) Push(x any) {
-	evt := x.(*ScheduledEvent)
+func (h *futureEventHeap) Push(x any) {
+	evt := x.(*FutureEvent)
 	*h = append(*h, evt)
 }
 
-func (h *scheduledEventHeap) Pop() any {
+func (h *futureEventHeap) Pop() any {
 	old := *h
 	n := len(old)
 	evt := old[n-1]
