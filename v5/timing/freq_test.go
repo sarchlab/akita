@@ -102,7 +102,6 @@ func TestSecondsCyclesConversions(t *testing.T) {
 	}
 
 	if _, err := registry.secondsToCycles(VTimeInSec(1.5e-10)); !errors.Is(err, ErrTickPrecisionLoss) {
-
 		t.Fatalf("expected ErrTickPrecisionLoss, got %v", err)
 	}
 }

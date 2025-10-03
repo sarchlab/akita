@@ -44,19 +44,19 @@ func getBasicComponentLintTestCases() []componentLintTestCase {
 	return []componentLintTestCase{
 		{
 			name:        "clean component passes",
-			args:        []string{"component-lint", "akitav5/tests/rule1_1_multi_marker"},
+			args:        []string{"component-lint", "v5/akita/tests/rule1_1_multi_marker"},
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
 		{
 			name:        "directory without marker is skipped",
-			args:        []string{"component-lint", "akitav5/tests/rule1_2_missing_marker"},
+			args:        []string{"component-lint", "v5/akita/tests/rule1_2_missing_marker"},
 			wantExit:    0,
 			mustContain: []string{"not a component"},
 		},
 		{
 			name:        "violations reported",
-			args:        []string{"component-lint", "akitav5/tests/rule1_3_missing_comp"},
+			args:        []string{"component-lint", "v5/akita/tests/rule1_3_missing_comp"},
 			wantExit:    1,
 			mustContain: []string{"Rule 1.3"},
 		},
@@ -67,25 +67,25 @@ func getRule2TestCases() []componentLintTestCase {
 	return []componentLintTestCase{
 		{
 			name:        "rule 2.1 pointer violation",
-			args:        []string{"component-lint", "akitav5/tests/rule2_1_pointer"},
+			args:        []string{"component-lint", "v5/akita/tests/rule2_1_pointer"},
 			wantExit:    1,
 			mustContain: []string{"Rule 2.1", "pointer"},
 		},
 		{
 			name:        "rule 2.1 map allowed",
-			args:        []string{"component-lint", "akitav5/tests/rule2_1_map"},
+			args:        []string{"component-lint", "v5/akita/tests/rule2_1_map"},
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
 		{
 			name:        "rule 2.1 nested pure data",
-			args:        []string{"component-lint", "akitav5/tests/rule2_1_nested"},
+			args:        []string{"component-lint", "v5/akita/tests/rule2_1_nested"},
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
 		{
 			name:        "rule 2.1 channel violation",
-			args:        []string{"component-lint", "akitav5/tests/rule2_1_channel"},
+			args:        []string{"component-lint", "v5/akita/tests/rule2_1_channel"},
 			wantExit:    1,
 			mustContain: []string{"Rule 2.1", "channel"},
 		},
@@ -96,31 +96,31 @@ func getRule3TestCases() []componentLintTestCase {
 	return []componentLintTestCase{
 		{
 			name:        "rule 3.1 missing spec",
-			args:        []string{"component-lint", "akitav5/tests/rule3_1_missing_spec"},
+			args:        []string{"component-lint", "v5/akita/tests/rule3_1_missing_spec"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.1"},
 		},
 		{
 			name:        "rule 3.3 defaults missing",
-			args:        []string{"component-lint", "akitav5/tests/rule3_3_defaults_missing"},
+			args:        []string{"component-lint", "v5/akita/tests/rule3_3_defaults_missing"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.3"},
 		},
 		{
 			name:        "rule 3.4 validate missing",
-			args:        []string{"component-lint", "akitav5/tests/rule3_4_validate_missing"},
+			args:        []string{"component-lint", "v5/akita/tests/rule3_4_validate_missing"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.4"},
 		},
 		{
 			name:        "rule 3.2 nested pointer violation",
-			args:        []string{"component-lint", "akitav5/tests/rule3_2_bad_nested"},
+			args:        []string{"component-lint", "v5/akita/tests/rule3_2_bad_nested"},
 			wantExit:    1,
 			mustContain: []string{"Rule 3.2"},
 		},
 		{
 			name:        "rule 3.2 nested pure data passes",
-			args:        []string{"component-lint", "akitav5/tests/rule3_2_good_nested"},
+			args:        []string{"component-lint", "v5/akita/tests/rule3_2_good_nested"},
 			wantExit:    0,
 			mustContain: []string{"\tOK"},
 		},
@@ -131,19 +131,19 @@ func getRule4TestCases() []componentLintTestCase {
 	return []componentLintTestCase{
 		{
 			name:        "rule 4.2 missing simulation setter",
-			args:        []string{"component-lint", "akitav5/tests/rule4_2_missing_sim"},
+			args:        []string{"component-lint", "v5/akita/tests/rule4_2_missing_sim"},
 			wantExit:    1,
 			mustContain: []string{"Rule 4.2"},
 		},
 		{
 			name:        "rule 4.3 missing spec setter",
-			args:        []string{"component-lint", "akitav5/tests/rule4_3_missing_spec"},
+			args:        []string{"component-lint", "v5/akita/tests/rule4_3_missing_spec"},
 			wantExit:    1,
 			mustContain: []string{"Rule 4.3"},
 		},
 		{
 			name:        "rule 4.6 missing validate call",
-			args:        []string{"component-lint", "akitav5/tests/rule4_6_missing_validate"},
+			args:        []string{"component-lint", "v5/akita/tests/rule4_6_missing_validate"},
 			wantExit:    1,
 			mustContain: []string{"Rule 4.6"},
 		},
@@ -189,7 +189,7 @@ func TestComponentLintRecursive(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("expected recursive lint to fail due to violations, output: %s", out)
 	}
-	if !strings.Contains(out, "akitav5/tests/rule1_3_missing_comp") {
+	if !strings.Contains(out, "v5/akita/tests/rule1_3_missing_comp") {
 		t.Fatalf("expected recursive output to include rule1_3_missing_comp, got: %s", out)
 	}
 }

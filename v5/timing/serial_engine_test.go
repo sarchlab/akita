@@ -46,6 +46,7 @@ func (r *callRecorder) record(entry string) {
 }
 
 func (r *callRecorder) assertOrder(t *testing.T, expected []string) {
+	t.Helper()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	require.Equal(t, expected, r.calls)

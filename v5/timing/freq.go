@@ -10,10 +10,10 @@ import (
 type FreqInHz uint64
 
 const (
-	Hz  = FreqInHz(1)
-	kHz = FreqInHz(1000 * Hz)
-	MHz = FreqInHz(1000 * kHz)
-	GHz = FreqInHz(1000 * MHz)
+	Hz  FreqInHz = 1
+	kHz          = 1000 * Hz
+	MHz          = 1000 * kHz
+	GHz          = 1000 * MHz
 )
 
 // VTimeInSec expresses time in seconds inside the timing helpers. It should
