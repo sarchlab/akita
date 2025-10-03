@@ -15,12 +15,12 @@ func repoRoot(tb testing.TB) string {
 	if !ok {
 		tb.Fatal("failed to determine caller path")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+    return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
 }
 
 func runCLI(t *testing.T, args ...string) (string, int) {
 	t.Helper()
-	cmd := exec.Command("go", append([]string{"run", "./akitav5"}, args...)...)
+    cmd := exec.Command("go", append([]string{"run", "./v5/akita"}, args...)...)
 	cmd.Dir = repoRoot(t)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -185,7 +185,7 @@ func TestComponentLintSamples(t *testing.T) {
 }
 
 func TestComponentLintRecursive(t *testing.T) {
-	out, code := runCLI(t, "component-lint", "-r", "akitav5/tests")
+	out, code := runCLI(t, "component-lint", "-r", "v5/akita/tests")
 	if code == 0 {
 		t.Fatalf("expected recursive lint to fail due to violations, output: %s", out)
 	}
