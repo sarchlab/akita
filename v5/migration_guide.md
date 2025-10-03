@@ -65,9 +65,15 @@ V5 rethinks time management to improve determinism and make scheduling rules exp
 
 ### Determinism and Introspection
 
-- Determinism: avoid non‑deterministic IDs or iteration order; snapshot ID generators; canonicalize map iteration by sorting.
+- Determinism: avoid non-deterministic IDs or iteration order; snapshot ID generators; canonicalize map iteration by sorting.
 - Introspection: provide methods to inspect effective Spec (with defaults) and to dump State for debugging.
 - Tracing/metrics: attach as middlewares or hooks; avoid embedding tracing in business logic.
+
+### Identifier Generation (IDs)
+
+- V4 exposed a process-wide singleton (`sim.GetIDGenerator`). V5 replaces this with a lightweight constructor in `v5/idgen`. Each simulation or subsystem should call `idgen.New()` to obtain its own sequential, concurrency-safe generator.
+- IDs are now numeric (`uint64`). Convert to strings only at presentation time (e.g., `strconv.FormatUint(uint64(id), 10)`) to avoid repeated allocations in performance-critical paths.
+- Components that need deterministic IDs should snapshot the generator state alongside other simulation state; injecting a freshly constructed generator on restore ensures replayable sequences.
 
 ### Testing and Mocks
 
