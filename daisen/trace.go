@@ -92,16 +92,16 @@ type TaskStep struct {
 }
 
 type Task struct {
-	ID         string         `json:"id"`
-	ParentID   string         `json:"parent_id"`
-	Kind       string         `json:"kind"`
-	What       string         `json:"what"`
-	Location   string         `json:"location"`
-	StartTime  sim.VTimeInSec `json:"start_time"`
-	EndTime    sim.VTimeInSec `json:"end_time"`
+	ID        string         `json:"id"`
+	ParentID  string         `json:"parent_id"`
+	Kind      string         `json:"kind"`
+	What      string         `json:"what"`
+	Location  string         `json:"location"`
+	StartTime sim.VTimeInSec `json:"start_time"`
+	EndTime   sim.VTimeInSec `json:"end_time"`
 	Steps      []TaskStep     `json:"steps"`
-	Detail     interface{}    `json:"-"`
-	ParentTask *Task          `json:"-"`
+	Detail     interface{} `json:"-"`
+	ParentTask *Task       `json:"-"`
 }
 
 // TraceReader can parse a trace file.
@@ -265,9 +265,9 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time: sim.VTimeInSec(time),
-				What: what,
-				Kind: kind,
+				Time:     sim.VTimeInSec(time),
+				What:     what,
+				Kind:     kind,
 			}
 			task.Steps = append(task.Steps, step)
 		}

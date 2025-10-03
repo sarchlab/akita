@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 type tile struct {
@@ -103,6 +104,14 @@ func (c *Connector) WithMonitor(monitor *monitoring.Monitor) *Connector {
 	return c
 }
 
+// WithPerfAnalyzer sets that buffer analyzer that can be used to record the
+// buffer level in the mesh.
+func (c *Connector) WithPerfAnalyzer(
+	analyzer *analysis.PerfAnalyzer,
+) *Connector {
+	c.connector = c.connector.WithPerfAnalyzer(analyzer)
+	return c
+}
 
 // CreateNetwork starts the process of creating a network. It also resets the
 // connector if the connector has been used to create another network.

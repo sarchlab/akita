@@ -3,7 +3,7 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v4/noc/networking/routing"
@@ -11,6 +11,7 @@ import (
 	"github.com/sarchlab/akita/v4/noc/networking/switching/switches"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/sim/directconnection"
+	"github.com/sarchlab/akita/v4/tracing"
 )
 
 // LinkEndSwitchParameter defines the parameter that associated with an end of a
@@ -61,13 +62,14 @@ type SwitchToSwitchLinkParameter struct {
 // Connector can build complex network topologies.
 type Connector struct {
 	name         string
-	engine      sim.Engine
-	monitor     *monitoring.Monitor
-	defaultFreq sim.Freq
-	flitSize    int
-	router      Router
-	visTracer   tracing.Tracer
-	nocTracer   tracing.Tracer
+	engine       sim.Engine
+	monitor      *monitoring.Monitor
+	defaultFreq  sim.Freq
+	flitSize     int
+	router       Router
+	visTracer    tracing.Tracer
+	nocTracer    tracing.Tracer
+	perfAnalyzer *analysis.PerfAnalyzer
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -130,6 +132,15 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 	return c
 }
 
+// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels
+// in the network.
+func (c Connector) WithPerfAnalyzer(
+	a *analysis.PerfAnalyzer,
+) Connector {
+	c.perfAnalyzer = a
+	return c
+}
+
 // GetFlitSize returns the flit size used by the network.
 func (c *Connector) GetFlitSize() int {
 	return c.flitSize
@@ -175,6 +186,10 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 
 	if c.visTracer != nil {
 		tracing.CollectTrace(sw, c.visTracer)
+	}
+
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterComponent(sw)
 	}
 
 	node := &switchNode{
@@ -358,6 +373,11 @@ func (c *Connector) connectPorts(
 
 	if c.nocTracer != nil {
 		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
+	}
+
+	if c.perfAnalyzer != nil {
+		c.perfAnalyzer.RegisterPort(left)
+		c.perfAnalyzer.RegisterPort(right)
 	}
 
 	return conn
