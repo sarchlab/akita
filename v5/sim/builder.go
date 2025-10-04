@@ -49,7 +49,7 @@ func (b Builder) Build() *Simulation {
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
 		state:         newStateRegistry(),
-		msgIDGen:      idgen.New(),
+		idGenerator:   idgen.New(),
 	}
 
 	s.id = xid.New().String()
@@ -72,8 +72,6 @@ func (b Builder) Build() *Simulation {
 	}
 
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
-
-	s.ConfigureMessageIDs()
 
 	return s
 }

@@ -21,7 +21,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 V5 rethinks time management to improve determinism and make scheduling rules explicit.
 
 - **Events as interfaces**: V4 relied on the `sim.Event` interface (`Time()`, `Handler()`, `IsSecondary()`) backed by `EventBase` and floating-point times. V5 keeps the interface approach but simplifies it to `timing.Event` with only `Time() timing.VTimeInCycle` and `Handler() timing.Handler`. Implement these methods directly on your event structs so scheduling metadata lives alongside the payload. Secondary flags and embedded IDs are still gone—explicitly schedule follow-up work on later cycles when needed.
-- **Messages with explicit metadata**: All messages now satisfy the `comm.Msg` interface by exposing `Meta() *comm.MsgMetaData`. Embed `comm.MsgMeta` in your structs and call `comm.EnsureMeta` before sending so IDs and traffic classes stay consistent without an extra envelope type.
+- **Messages with explicit metadata**: Implement the `comm.Msg` interface directly on your message structs by providing getters such as `ID()`, `Src()`, and `TrafficClass()`. Construct the message with the full metadata up front—obtain unique identifiers from your simulation's `idgen.Generator` (e.g., via `simv5.Simulation.MessageIDGenerator()`).
 
 - **Integer cycle timeline**: V4 engines stored timestamps and frequencies as `float64`, which could introduce rounding differences across platforms. V5 represents simulation time exclusively with `timing.VTimeInCycle` (`uint64`) while still exposing `timing.VTimeInSec` for reporting. Any custom arithmetic that previously used floating-point seconds should convert through the helper methods added to the registry.
 

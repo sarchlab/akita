@@ -9,7 +9,6 @@ import (
 	"github.com/sarchlab/akita/v4/monitoring"
 	"github.com/sarchlab/akita/v4/sim"
 	"github.com/sarchlab/akita/v4/tracing"
-	comm "github.com/sarchlab/akita/v4/v5/comm"
 	"github.com/sarchlab/akita/v4/v5/idgen"
 )
 
@@ -27,8 +26,8 @@ type Simulation struct {
 	ports         []sim.Port
 	portNameIndex map[string]int
 
-	state    *stateRegistry
-	msgIDGen *idgen.Generator
+	state       *stateRegistry
+	idGenerator *idgen.Generator
 }
 
 // NewSimulation wraps an engine into a Simulation with defaults.
@@ -39,12 +38,11 @@ func NewSimulation(engine sim.Engine) *Simulation {
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
 		state:         newStateRegistry(),
-		msgIDGen:      idgen.New(),
+		idGenerator:   idgen.New(),
 	}
-	// Minimal default data recorder and tracer; monitoring can be added via builder.
+
 	s.dataRecorder = datarecording.NewDataRecorder("akita_sim_" + s.id)
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
-	s.ConfigureMessageIDs()
 	return s
 }
 
@@ -69,15 +67,7 @@ func (s *Simulation) Components() []sim.Component { return s.components }
 // MessageIDGenerator returns the generator that produces message IDs for this
 // simulation. The generator is concurrency-safe and deterministic when the
 // simulation is replayed with the same event ordering.
-func (s *Simulation) MessageIDGenerator() *idgen.Generator { return s.msgIDGen }
-
-// ConfigureMessageIDs installs the simulation's message ID generator into the
-// comm package so shared utilities (e.g., comm.EnsureMeta) allocate IDs from
-// this simulation. Call this if the simulation clones or restores state and
-// needs to rebind the generator.
-func (s *Simulation) ConfigureMessageIDs() {
-	comm.SetIDGenerator(s.msgIDGen)
-}
+func (s *Simulation) MessageIDGenerator() *idgen.Generator { return s.idGenerator }
 
 // RegisterComponent registers a component with the simulation.
 func (s *Simulation) RegisterComponent(c sim.Component) {

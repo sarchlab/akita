@@ -1,101 +1,83 @@
 // Package comm defines communication primitives for Akita V5.
 package comm
 
-import (
-	"reflect"
-	"strconv"
-	"sync"
-
-	"github.com/sarchlab/akita/v4/v5/idgen"
-)
-
-var (
-	idGenMu sync.RWMutex
-	idGen   *idgen.Generator = idgen.New()
-)
-
-// SetIDGenerator overrides the generator used to assign new message IDs. The
-// provided generator must be safe for concurrent use.
-func SetIDGenerator(g *idgen.Generator) {
-	if g == nil {
-		panic("id generator cannot be nil")
-	}
-
-	idGenMu.Lock()
-	idGen = g
-	idGenMu.Unlock()
-}
-
-func nextID() string {
-	idGenMu.RLock()
-	g := idGen
-	idGenMu.RUnlock()
-
-	return strconv.FormatUint(uint64(g.Generate()), 10)
-}
-
-// PortAddr identifies a port in the simulation topology.
-type PortAddr string
-
-// MsgMetaData carries the envelope information shared by all messages.
-type MsgMetaData struct {
-	ID           string
-	Src          PortAddr
-	Dst          PortAddr
-	TrafficClass string
-	TrafficBytes int
-}
+// RemotePort identifies a port in the simulation topology.
+type RemotePort string
 
 // Msg describes the metadata contract shared by all messages in the
-// communication layer. Concrete message structs should embed MsgMeta (or
-// otherwise provide the Meta method) and keep their payload fields alongside
-// it.
+// communication layer. Implementations expose their identifying fields via
+// simple getters.
 type Msg interface {
-	Meta() *MsgMetaData
+	ID() string
+	Src() RemotePort
+	Dst() RemotePort
+	TrafficClass() string
+	TrafficBytes() int
 }
 
-// MsgMeta provides a reusable metadata implementation that can be embedded in
-// message structs to satisfy the Msg interface.
-type MsgMeta struct {
-	Metadata MsgMetaData
+// Rsp is a specialized message that indicates the completion of a request.
+type Rsp interface {
+	Msg
+	RspTo() string
 }
 
-// NewMsgMeta constructs metadata for a message, leaving responsibility for
-// populating derived fields (ID, TrafficClass) to EnsureMeta.
-func NewMsgMeta(meta MsgMetaData) MsgMeta {
-	return MsgMeta{Metadata: meta}
+// GeneralRsp is a concrete response message that carries only metadata. All
+// fields are exported so the struct can be serialized via standard encoders
+// (e.g., JSON, gob) without additional boilerplate.
+type GeneralRsp struct {
+	MsgID          string     `json:"id"`
+	SrcPort        RemotePort `json:"src"`
+	DstPort        RemotePort `json:"dst"`
+	TrafficClassID string     `json:"traffic_class,omitempty"`
+	Bytes          int        `json:"traffic_bytes,omitempty"`
+	RespondTo      string     `json:"rsp_to"`
+	OK             bool       `json:"ok"`
 }
 
-// Meta exposes the underlying metadata struct.
-func (m *MsgMeta) Meta() *MsgMetaData { return &m.Metadata }
-
-// EnsureMeta fills in derived metadata fields such as ID and TrafficClass. Call
-// this before handing the message to shared infrastructure so identifiers and
-// traffic categories are consistent across the system.
-func EnsureMeta(msg Msg) {
-	meta := msg.Meta()
-	if meta == nil {
-		panic("comm: Msg.Meta() returned nil metadata")
-	}
-
-	if meta.ID == "" {
-		meta.ID = nextID()
-	}
-
-	if meta.TrafficClass == "" {
-		meta.TrafficClass = typeName(msg)
-	}
-}
-
-func typeName(v any) string {
-	if v == nil {
+// ID implements Msg.
+func (r *GeneralRsp) ID() string {
+	if r == nil {
 		return ""
 	}
+	return r.MsgID
+}
 
-	t := reflect.TypeOf(v)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
+// Src implements Msg.
+func (r *GeneralRsp) Src() RemotePort {
+	if r == nil {
+		return ""
 	}
+	return r.SrcPort
+}
 
-	return t.String()
+// Dst implements Msg.
+func (r *GeneralRsp) Dst() RemotePort {
+	if r == nil {
+		return ""
+	}
+	return r.DstPort
+}
+
+// TrafficClass implements Msg.
+func (r *GeneralRsp) TrafficClass() string {
+	if r == nil {
+		return ""
+	}
+	return r.TrafficClassID
+}
+
+// TrafficBytes implements Msg.
+func (r *GeneralRsp) TrafficBytes() int {
+	if r == nil {
+		return 0
+	}
+	return r.Bytes
+}
+
+// RspTo implements Rsp.
+func (r *GeneralRsp) RspTo() string {
+	if r == nil {
+		return ""
+	}
+	return r.RespondTo
 }
