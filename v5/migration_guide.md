@@ -1,5 +1,17 @@
 # Migration Guide
 
+## Philosophy
+
+Akita v5 will be the biggest refactor of the Akita simulator engine since the beginning of the project. The goal is to reconsider every design decisions made while developing from v1 to v4 version of Akita. Here are the most important goals. 
+
+1. Simplicity is the first priority. We want the simulator to be easy to understand and intuitive. 
+2. Consistent API. We want the APIs to stay stable in the next a few years with backward compatibility support.
+3. Write for generative AI. We should provide sufficient documentation and examples so that vibe-coders can easily use Akita. 
+4. Use a Go's coding style rather than some the Java style. Go prefers to define interfaces at use time. Therefore, we will remove some interface definition. For example, we will not provide a general `Engine` interface. Instead, we directly expose a `SerialEngine` struct and a `ParallelEngine` struct. Users can use them directly without going through an interface.
+5. Support easy configuration from JSON or YAML files. 
+6. Support for serialization, which requires better state management. 
+
+
 ## Defining Components in V5: Philosophy and Patterns
 
 V5 unifies how components are modeled and wired. Each component is a single struct composed of four orthogonal parts: Spec, State, Ports, and Middlewares. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
@@ -8,7 +20,8 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 
 V5 rethinks time management to improve determinism and make scheduling rules explicit.
 
-- **Events as plain structs**: V4 relied on the `sim.Event` interface (`Time()`, `Handler()`, `IsSecondary()`) backed by `EventBase` and floating-point times. V5 replaces that with `timing.FutureEvent`, a simple struct containing `Event any`, `Time timing.VTimeInCycle`, and `Handler timing.Handler`. User events stay as plain data; handlers use type switches to interpret them. Secondary flags and embedded IDs are gone—if you scheduled custom `EventBase` types, migrate them to plain struct payloads wrapped in `timing.FutureEvent`.
+- **Events as interfaces**: V4 relied on the `sim.Event` interface (`Time()`, `Handler()`, `IsSecondary()`) backed by `EventBase` and floating-point times. V5 keeps the interface approach but simplifies it to `timing.Event` with only `Time() timing.VTimeInCycle` and `Handler() timing.Handler`. Implement these methods directly on your event structs so scheduling metadata lives alongside the payload. Secondary flags and embedded IDs are still gone—explicitly schedule follow-up work on later cycles when needed.
+- **Messages with explicit metadata**: All messages now satisfy the `comm.Msg` interface by exposing `Meta() *comm.MsgMetaData`. Embed `comm.MsgMeta` in your structs and call `comm.EnsureMeta` before sending so IDs and traffic classes stay consistent without an extra envelope type.
 
 - **Integer cycle timeline**: V4 engines stored timestamps and frequencies as `float64`, which could introduce rounding differences across platforms. V5 represents simulation time exclusively with `timing.VTimeInCycle` (`uint64`) while still exposing `timing.VTimeInSec` for reporting. Any custom arithmetic that previously used floating-point seconds should convert through the helper methods added to the registry.
 

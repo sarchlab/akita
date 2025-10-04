@@ -17,10 +17,11 @@ func (c *frequencyAwareComponent) Handle(event any) error {
 	case *PingEvent:
 		fmt.Printf("[%s] tick %d ping from %s: %s\n", c.name, c.engine.CurrentTime(), e.From, e.Message)
 		nextTick := c.domain.NextTick(c.engine.CurrentTime())
-		c.engine.Schedule(timing.FutureEvent{
-			Event:   &PongEvent{Reply: "pong!", To: e.From},
-			Time:    nextTick,
-			Handler: c,
+		c.engine.Schedule(&PongEvent{
+			Cycle:  nextTick,
+			Target: c,
+			Reply:  "pong!",
+			To:     e.From,
 		})
 	case *PongEvent:
 		fmt.Printf("[%s] tick %d pong to %s: %s\n", c.name, c.engine.CurrentTime(), e.To, e.Reply)
@@ -39,10 +40,11 @@ func Example_frequencyRegistry_twoDomains() {
 	engine := timing.NewSerialEngine()
 	component := &frequencyAwareComponent{name: "mailbox", engine: engine, domain: memDomain}
 
-	engine.Schedule(timing.FutureEvent{
-		Event:   &PingEvent{Message: "hello", From: "client"},
-		Time:    memDomain.ThisTick(0),
-		Handler: component,
+	engine.Schedule(&PingEvent{
+		Cycle:   memDomain.ThisTick(0),
+		Target:  component,
+		Message: "hello",
+		From:    "client",
 	})
 
 	if err := engine.Run(); err != nil {

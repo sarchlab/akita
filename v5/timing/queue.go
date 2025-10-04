@@ -5,47 +5,40 @@ import (
 	"sync"
 )
 
-type eventQueue interface {
-	Push(*FutureEvent)
-	Pop() *FutureEvent
-	Len() int
-	Peek() *FutureEvent
-}
-
-type futureEventQueue struct {
+type eventQueue struct {
 	sync.Mutex
-	events futureEventHeap
+	events eventHeap
 }
 
-func newFutureEventQueue() *futureEventQueue {
-	q := &futureEventQueue{}
-	q.events = make([]*FutureEvent, 0)
+func newEventQueue() *eventQueue {
+	q := &eventQueue{}
+	q.events = make([]Event, 0)
 	heap.Init(&q.events)
 	return q
 }
 
-func (q *futureEventQueue) Push(evt *FutureEvent) {
+func (q *eventQueue) Push(evt Event) {
 	q.Lock()
 	heap.Push(&q.events, evt)
 	q.Unlock()
 }
 
-func (q *futureEventQueue) Pop() *FutureEvent {
+func (q *eventQueue) Pop() Event {
 	q.Lock()
 	defer q.Unlock()
 	if q.events.Len() == 0 {
 		return nil
 	}
-	return heap.Pop(&q.events).(*FutureEvent)
+	return heap.Pop(&q.events).(Event)
 }
 
-func (q *futureEventQueue) Len() int {
+func (q *eventQueue) Len() int {
 	q.Lock()
 	defer q.Unlock()
 	return q.events.Len()
 }
 
-func (q *futureEventQueue) Peek() *FutureEvent {
+func (q *eventQueue) Peek() Event {
 	q.Lock()
 	defer q.Unlock()
 	if q.events.Len() == 0 {
@@ -54,24 +47,24 @@ func (q *futureEventQueue) Peek() *FutureEvent {
 	return q.events[0]
 }
 
-type futureEventHeap []*FutureEvent
+type eventHeap []Event
 
-func (h futureEventHeap) Len() int { return len(h) }
+func (h eventHeap) Len() int { return len(h) }
 
-func (h futureEventHeap) Less(i, j int) bool {
-	return h[i].Time < h[j].Time
+func (h eventHeap) Less(i, j int) bool {
+	return h[i].Time() < h[j].Time()
 }
 
-func (h futureEventHeap) Swap(i, j int) {
+func (h eventHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *futureEventHeap) Push(x any) {
-	evt := x.(*FutureEvent)
+func (h *eventHeap) Push(x any) {
+	evt := x.(Event)
 	*h = append(*h, evt)
 }
 
-func (h *futureEventHeap) Pop() any {
+func (h *eventHeap) Pop() any {
 	old := *h
 	n := len(old)
 	evt := old[n-1]

@@ -15,7 +15,7 @@ type SerialEngine struct {
 	timeLock sync.RWMutex
 	now      VTimeInCycle
 
-	queue eventQueue
+	queue *eventQueue
 
 	isPaused     bool
 	isPausedLock sync.Mutex
@@ -28,22 +28,21 @@ type SerialEngine struct {
 func NewSerialEngine() *SerialEngine {
 	return &SerialEngine{
 		HookableBase: hooking.NewHookableBase(),
-		queue:        newFutureEventQueue(),
+		queue:        newEventQueue(),
 	}
 }
 
 // Schedule registers an event to be handled in the future.
-func (e *SerialEngine) Schedule(evt FutureEvent) {
+func (e *SerialEngine) Schedule(evt Event) {
 	now := e.readNow()
-	if evt.Time < now {
+	if evt.Time() < now {
 		panic(fmt.Sprintf(
 			"timing: cannot schedule event in the past, evt %s @ %d, now %d",
-			reflect.TypeOf(evt.Event), evt.Time, now,
+			reflect.TypeOf(evt), evt.Time(), now,
 		))
 	}
 
-	eventCopy := evt
-	e.queue.Push(&eventCopy)
+	e.queue.Push(evt)
 }
 
 func (e *SerialEngine) readNow() VTimeInCycle {
@@ -73,14 +72,14 @@ func (e *SerialEngine) Run() error {
 
 		evt := e.nextEvent()
 		now := e.readNow()
-		if evt.Time < now {
+		if evt.Time() < now {
 			panic(fmt.Sprintf(
 				"timing: cannot run event in the past, evt %s @ %d, now %d",
-				reflect.TypeOf(evt.Event), evt.Time, now,
+				reflect.TypeOf(evt), evt.Time(), now,
 			))
 		}
 
-		e.writeNow(evt.Time)
+		e.writeNow(evt.Time())
 
 		hookCtx := hooking.HookCtx{
 			Domain: e,
@@ -89,9 +88,9 @@ func (e *SerialEngine) Run() error {
 		}
 		e.InvokeHook(hookCtx)
 
-		handler := evt.Handler
+		handler := evt.Handler()
 		if handler != nil {
-			_ = handler.Handle(evt.Event)
+			_ = handler.Handle(evt)
 		}
 
 		hookCtx.Pos = HookPosAfterEvent
@@ -105,7 +104,7 @@ func (e *SerialEngine) noMoreEvent() bool {
 	return e.queue.Len() == 0
 }
 
-func (e *SerialEngine) nextEvent() *FutureEvent {
+func (e *SerialEngine) nextEvent() Event {
 	return e.queue.Pop()
 }
 

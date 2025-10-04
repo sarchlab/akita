@@ -2,21 +2,8 @@ package timing
 
 import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
 
-// Handler processes events of various types.
-// Events are plain data structs (no interface required).
-// Handlers use type switching to handle different event types:
-//
-//	func (h *MyHandler) Handle(event any) error {
-//	    switch e := event.(type) {
-//	    case *MyEvent:
-//	        // handle MyEvent
-//	    case *AnotherEvent:
-//	        // handle AnotherEvent
-//	    default:
-//	        return fmt.Errorf("unknown event type: %T", event)
-//	    }
-//	    return nil
-//	}
+// Handler processes events of various types. Event payloads typically use type
+// assertions within Handle implementations.
 type Handler interface {
 	Handle(event any) error
 }
@@ -27,17 +14,10 @@ var (
 	HookPosAfterEvent  = &hooking.HookPos{Name: "TimingAfterEvent"}
 )
 
-// FutureEvent is the engine-facing wrapper for user-defined events.
-// It holds the metadata needed by the scheduler while keeping the payload as
-// plain data. Users typically pass pointers so large structs are not copied.
-type FutureEvent struct {
-	// Event is the data payload to be delivered to the handler.
-	// Can be any type - typically a pointer to a struct defined by the user.
-	Event any
-
-	// Time is the cycle when the event should be processed.
-	Time VTimeInCycle
-
-	// Handler is the component that will process this event.
-	Handler Handler
+// Event models a scheduled occurrence within the timing engines. Concrete event
+// implementations provide their execution time and the handler that should
+// receive the event value.
+type Event interface {
+	Time() VTimeInCycle
+	Handler() Handler
 }

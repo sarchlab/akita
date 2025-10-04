@@ -1,6 +1,7 @@
 package timing
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -9,19 +10,38 @@ import (
 
 // scheduler captures the subset of engine behaviour recordingHandler relies on.
 type scheduler interface {
-	Schedule(FutureEvent)
+	Schedule(Event)
 	CurrentTime() VTimeInCycle
 }
+
+type scheduledStringEvent struct {
+	cycle  VTimeInCycle
+	target Handler
+	label  string
+}
+
+func newStringEvent(label string, time VTimeInCycle, handler Handler) Event {
+	return &scheduledStringEvent{cycle: time, target: handler, label: label}
+}
+
+func (e *scheduledStringEvent) Time() VTimeInCycle { return e.cycle }
+
+func (e *scheduledStringEvent) Handler() Handler { return e.target }
 
 type recordingHandler struct {
 	name     string
 	engine   scheduler
 	recorder *callRecorder
-	schedule map[string][]FutureEvent
+	schedule map[string][]Event
 }
 
 func (h *recordingHandler) Handle(event any) error {
-	label, _ := event.(string)
+	evt, ok := event.(*scheduledStringEvent)
+	if !ok {
+		return fmt.Errorf("unexpected event type: %T", event)
+	}
+
+	label := evt.label
 	h.recorder.record(h.name + ":" + label)
 
 	if events, ok := h.schedule[label]; ok {
@@ -66,18 +86,18 @@ func TestSerialEngineSchedulesEventsInOrder(t *testing.T) {
 	recorder := &callRecorder{t: t}
 
 	handlerA := &recordingHandler{name: "A", recorder: recorder}
-	handlerB := &recordingHandler{name: "B", recorder: recorder, schedule: map[string][]FutureEvent{
+	handlerB := &recordingHandler{name: "B", recorder: recorder, schedule: map[string][]Event{
 		"evt2": {
-			{Event: "evt3", Time: VTimeInCycle(3), Handler: handlerA},
-			{Event: "evt4", Time: VTimeInCycle(5), Handler: handlerA},
+			newStringEvent("evt3", VTimeInCycle(3), handlerA),
+			newStringEvent("evt4", VTimeInCycle(5), handlerA),
 		},
 	}}
 
 	handlerA.engine = engine
 	handlerB.engine = engine
 
-	engine.Schedule(FutureEvent{Event: "evt1", Time: VTimeInCycle(4), Handler: handlerA})
-	engine.Schedule(FutureEvent{Event: "evt2", Time: VTimeInCycle(2), Handler: handlerB})
+	engine.Schedule(newStringEvent("evt1", VTimeInCycle(4), handlerA))
+	engine.Schedule(newStringEvent("evt2", VTimeInCycle(2), handlerB))
 
 	require.NoError(t, engine.Run())
 
@@ -97,9 +117,9 @@ func TestSerialEngineProcessesConcurrentEvents(t *testing.T) {
 	handlerPrimary2.engine = engine
 	handlerSecondary.engine = engine
 
-	engine.Schedule(FutureEvent{Event: "secondary", Time: VTimeInCycle(2), Handler: handlerSecondary})
-	engine.Schedule(FutureEvent{Event: "primary1", Time: VTimeInCycle(2), Handler: handlerPrimary1})
-	engine.Schedule(FutureEvent{Event: "primary2", Time: VTimeInCycle(2), Handler: handlerPrimary2})
+	engine.Schedule(newStringEvent("secondary", VTimeInCycle(2), handlerSecondary))
+	engine.Schedule(newStringEvent("primary1", VTimeInCycle(2), handlerPrimary1))
+	engine.Schedule(newStringEvent("primary2", VTimeInCycle(2), handlerPrimary2))
 
 	require.NoError(t, engine.Run())
 

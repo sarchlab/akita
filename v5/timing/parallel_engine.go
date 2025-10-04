@@ -20,8 +20,8 @@ type ParallelEngine struct {
 
 	waitGroup sync.WaitGroup
 
-	queues    []eventQueue
-	queueChan chan eventQueue
+	queues    []*eventQueue
+	queueChan chan *eventQueue
 }
 
 // NewParallelEngine creates a ParallelEngine.
@@ -30,16 +30,16 @@ func NewParallelEngine() *ParallelEngine {
 
 	engine := &ParallelEngine{
 		HookableBase: hooking.NewHookableBase(),
-		queues:       make([]eventQueue, 0, numQueues),
-		queueChan:    make(chan eventQueue, numQueues),
+		queues:       make([]*eventQueue, 0, numQueues),
+		queueChan:    make(chan *eventQueue, numQueues),
 	}
 
 	for i := 0; i < numQueues; i++ {
-		queue := newFutureEventQueue()
+		q := newEventQueue()
 
-		engine.queueChan <- queue
+		engine.queueChan <- q
 
-		engine.queues = append(engine.queues, queue)
+		engine.queues = append(engine.queues, q)
 	}
 
 	return engine
@@ -59,18 +59,17 @@ func (e *ParallelEngine) writeNow(t VTimeInCycle) {
 }
 
 // Schedule registers an event to be processed by the engine.
-func (e *ParallelEngine) Schedule(evt FutureEvent) {
+func (e *ParallelEngine) Schedule(evt Event) {
 	now := e.readNow()
-	if evt.Time < now {
+	if evt.Time() < now {
 		panic(fmt.Sprintf(
 			"timing: cannot schedule event in the past, evt %s @ %d, now %d",
-			reflect.TypeOf(evt.Event), evt.Time, now,
+			reflect.TypeOf(evt), evt.Time(), now,
 		))
 	}
 
-	eventCopy := evt
 	queue := <-e.queueChan
-	queue.Push(&eventCopy)
+	queue.Push(evt)
 	e.queueChan <- queue
 }
 
@@ -92,14 +91,14 @@ func (e *ParallelEngine) determineWhatToRun() {
 	e.writeNow(e.earliestTimeInQueueGroup(e.queues))
 }
 
-func (e *ParallelEngine) earliestTimeInQueueGroup(queues []eventQueue) VTimeInCycle {
+func (e *ParallelEngine) earliestTimeInQueueGroup(queues []*eventQueue) VTimeInCycle {
 	earliest := maxCycleValue
 
 	for _, q := range queues {
 		if q.Len() == 0 {
 			continue
 		}
-		if t := q.Peek().Time; t < earliest {
+		if t := q.Peek().Time(); t < earliest {
 			earliest = t
 		}
 	}
@@ -113,7 +112,7 @@ func (e *ParallelEngine) runRound() {
 	e.waitGroup.Wait()
 }
 
-func (e *ParallelEngine) emptyQueueChan(queues []eventQueue, ch chan eventQueue) {
+func (e *ParallelEngine) emptyQueueChan(queues []*eventQueue, ch chan *eventQueue) {
 	for range queues {
 		<-ch
 	}
@@ -123,7 +122,7 @@ func (e *ParallelEngine) hasMoreEvents() bool {
 	return e.hasMoreInGroup(e.queues)
 }
 
-func (e *ParallelEngine) hasMoreInGroup(queues []eventQueue) bool {
+func (e *ParallelEngine) hasMoreInGroup(queues []*eventQueue) bool {
 	for _, q := range queues {
 		if q.Len() > 0 {
 			return true
@@ -132,20 +131,20 @@ func (e *ParallelEngine) hasMoreInGroup(queues []eventQueue) bool {
 	return false
 }
 
-func (e *ParallelEngine) runEventsUntilConflict(queues []eventQueue, ch chan eventQueue) {
+func (e *ParallelEngine) runEventsUntilConflict(queues []*eventQueue, ch chan *eventQueue) {
 	now := e.readNow()
 
 	for _, queue := range queues {
 		for queue.Len() > 0 {
 			evt := queue.Peek()
 			switch {
-			case evt.Time == now:
+			case evt.Time() == now:
 				queue.Pop()
 				e.runEventWithTempWorker(evt)
-			case evt.Time < now:
+			case evt.Time() < now:
 				panic(fmt.Sprintf(
 					"timing: cannot run event in the past, evt %s @ %d, now %d",
-					reflect.TypeOf(evt.Event), evt.Time, now,
+					reflect.TypeOf(evt), evt.Time(), now,
 				))
 			default:
 				// future event, leave in queue
@@ -157,16 +156,16 @@ func (e *ParallelEngine) runEventsUntilConflict(queues []eventQueue, ch chan eve
 	}
 }
 
-func (e *ParallelEngine) runEventWithTempWorker(evt *FutureEvent) {
+func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
 	e.waitGroup.Add(1)
 	go e.tempWorkerRun(evt)
 }
 
-func (e *ParallelEngine) tempWorkerRun(evt *FutureEvent) {
+func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	defer e.waitGroup.Done()
 
 	now := e.readNow()
-	if evt.Time < now {
+	if evt.Time() < now {
 		panic("timing: running event in the past")
 	}
 
@@ -177,9 +176,9 @@ func (e *ParallelEngine) tempWorkerRun(evt *FutureEvent) {
 	}
 	e.InvokeHook(hookCtx)
 
-	handler := evt.Handler
+	handler := evt.Handler()
 	if handler != nil {
-		_ = handler.Handle(evt.Event)
+		_ = handler.Handle(evt)
 	}
 
 	hookCtx.Pos = HookPosAfterEvent
@@ -203,7 +202,7 @@ func (e *ParallelEngine) CurrentTime() VTimeInCycle {
 
 // Ensure ParallelEngine exposes the scheduling API components depend on.
 type parallelScheduler interface {
-	Schedule(FutureEvent)
+	Schedule(Event)
 	CurrentTime() VTimeInCycle
 }
 

@@ -37,8 +37,8 @@ func nextID() string {
 // PortAddr identifies a port in the simulation topology.
 type PortAddr string
 
-// Metadata carries the envelope information shared by all messages.
-type Metadata struct {
+// MsgMetaData carries the envelope information shared by all messages.
+type MsgMetaData struct {
 	ID           string
 	Src          PortAddr
 	Dst          PortAddr
@@ -46,47 +46,44 @@ type Metadata struct {
 	TrafficBytes int
 }
 
-// Message is a pure-data message envelope used across the simulator.
-type Message struct {
-	Metadata Metadata
+// Msg describes the metadata contract shared by all messages in the
+// communication layer. Concrete message structs should embed MsgMeta (or
+// otherwise provide the Meta method) and keep their payload fields alongside
+// it.
+type Msg interface {
+	Meta() *MsgMetaData
 }
 
-// NewMessage constructs a new Message. If meta.ID is empty a fresh ID is
-// generated.
-func NewMessage(meta Metadata) Message {
+// MsgMeta provides a reusable metadata implementation that can be embedded in
+// message structs to satisfy the Msg interface.
+type MsgMeta struct {
+	Metadata MsgMetaData
+}
+
+// NewMsgMeta constructs metadata for a message, leaving responsibility for
+// populating derived fields (ID, TrafficClass) to EnsureMeta.
+func NewMsgMeta(meta MsgMetaData) MsgMeta {
+	return MsgMeta{Metadata: meta}
+}
+
+// Meta exposes the underlying metadata struct.
+func (m *MsgMeta) Meta() *MsgMetaData { return &m.Metadata }
+
+// EnsureMeta fills in derived metadata fields such as ID and TrafficClass. Call
+// this before handing the message to shared infrastructure so identifiers and
+// traffic categories are consistent across the system.
+func EnsureMeta(msg Msg) {
+	meta := msg.Meta()
+	if meta == nil {
+		panic("comm: Msg.Meta() returned nil metadata")
+	}
+
 	if meta.ID == "" {
 		meta.ID = nextID()
 	}
 
-	return Message{Metadata: meta}
-}
-
-// Clone returns a copy of the message with a freshly generated ID.
-func (m Message) Clone() Message {
-	clone := m
-	clone.Metadata = CloneMetadata(m.Metadata)
-
-	return clone
-}
-
-// CloneMetadata returns a copy of the metadata with a freshly generated ID.
-func CloneMetadata(meta Metadata) Metadata {
-	clone := meta
-	clone.ID = nextID()
-
-	return clone
-}
-
-// MetadataFor returns Metadata populated for the provided request/response
-// type. The TrafficClass is filled with the concrete type name of sample
-// while the ID is freshly generated.
-func MetadataFor(sample any, src, dst PortAddr, trafficBytes int) Metadata {
-	return Metadata{
-		ID:           nextID(),
-		Src:          src,
-		Dst:          dst,
-		TrafficClass: typeName(sample),
-		TrafficBytes: trafficBytes,
+	if meta.TrafficClass == "" {
+		meta.TrafficClass = typeName(msg)
 	}
 }
 

@@ -72,7 +72,7 @@ func (s *Simulation) Components() []sim.Component { return s.components }
 func (s *Simulation) MessageIDGenerator() *idgen.Generator { return s.msgIDGen }
 
 // ConfigureMessageIDs installs the simulation's message ID generator into the
-// comm package so shared utilities (e.g., comm.MetadataFor) allocate IDs from
+// comm package so shared utilities (e.g., comm.EnsureMeta) allocate IDs from
 // this simulation. Call this if the simulation clones or restores state and
 // needs to rebind the generator.
 func (s *Simulation) ConfigureMessageIDs() {
