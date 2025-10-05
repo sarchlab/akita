@@ -5,7 +5,7 @@ import "github.com/sarchlab/akita/v4/v5/instrumentation/hooking"
 // Handler processes events of various types. Event payloads typically use type
 // assertions within Handle implementations.
 type Handler interface {
-	Handle(event any) error
+	Handle(event Event)
 }
 
 // Hook positions emitted by timing engines.

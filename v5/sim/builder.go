@@ -1,4 +1,4 @@
-package simv5
+package sim
 
 import (
 	"github.com/rs/xid"
