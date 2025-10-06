@@ -143,7 +143,7 @@ func (ds *directoryStage) handleReadHit(
 		"read-hit",
 	)
 
-	// log.Printf("%.10f, %s, dir read hit， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, dir read hit�?%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address,
@@ -169,7 +169,7 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 		return false
 	}
 
-	// log.Printf("%.10f, %s, dir read miss， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, dir read miss�?%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.read.ID,
 	// 	trans.read.Address,
@@ -308,7 +308,7 @@ func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
 		return false
 	}
 
-	// log.Printf("%.10f, %s, write partial line ，"+
+	// log.Printf("%.10f, %s, write partial line �?+
 	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.write.ID,
@@ -412,7 +412,7 @@ func (ds *directoryStage) evict(
 
 	ds.cache.evictingList[trans.victim.Tag] = true
 
-	// log.Printf("%.10f, %s, directory evict ， %s, %04X, %04X, (%d, %d), %v\n",
+	// log.Printf("%.10f, %s, directory evict �?%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, ds.cache.Name(),
 	// 	trans.accessReq().Meta().ID,
 	// 	trans.accessReq().GetAddress(), trans.victim.Tag,
