@@ -319,7 +319,7 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 
 	// Start the task (this will not create a pending transaction due to no AccessReq)
 	suite.tracer.StartTask(task)
-	
+
 	// End the task (this should not call CurrentTime since no pending transaction exists)
 	suite.tracer.EndTask(task)
 
@@ -367,7 +367,7 @@ func TestTracerTestSuite(t *testing.T) {
 func TestLoggerTracerStillWorks(t *testing.T) {
 	// Create a simple time teller that returns the current time
 	timeTeller := &fixedTimeTeller{time: 100.0}
-	
+
 	// Create logger-based tracer - use discard to avoid output during tests
 	logger := log.New(os.Stdout, "", 0)
 	tracer := NewTracer(logger, timeTeller)

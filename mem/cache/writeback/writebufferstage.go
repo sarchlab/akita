@@ -100,7 +100,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 
 	wb.cache.writeBufferBuffer.Pop()
 
-	// log.Printf("%.10f, %s, wb data fetched locally，" +
+	// log.Printf("%.10f, %s, wb data fetched locally�? +
 	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, wb.cache.Name(),
 	// 	trans.accessReq().Meta().ID,
@@ -167,7 +167,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	wb.pendingEvictions = append(wb.pendingEvictions, trans)
 	wb.cache.writeBufferBuffer.Pop()
 
-	// log.Printf("%.10f, %s, wb evict and write，" +
+	// log.Printf("%.10f, %s, wb evict and write�? +
 	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, wb.cache.Name(),
 	// 	trans.accessReq().Meta().ID,
@@ -188,7 +188,7 @@ func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
 		return true
 	}
 
-	// log.Printf("%.10f, %s, wb fetch and evict， " +
+	// log.Printf("%.10f, %s, wb fetch and evict�?" +
 	// "%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, wb.cache.Name(),
 	// 	trans.write.ID,
@@ -250,7 +250,7 @@ func (wb *writeBufferStage) write() bool {
 	tracing.TraceReqInitiate(write, wb.cache,
 		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
 
-	// log.Printf("%.10f, %s, wb write to bottom， "+
+	// log.Printf("%.10f, %s, wb write to bottom�?"+
 	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, wb.cache.Name(),
 	// 	trans.accessReq().Meta().ID,
@@ -381,7 +381,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 			wb.cache.bottomPort.RetrieveIncoming()
 			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache)
 
-			// log.Printf("%.10f, %s, wb write to bottom，
+			// log.Printf("%.10f, %s, wb write to bottom�?
 			//  %s, %04X, %04X, (%d, %d), %v\n",
 			//  now, wb.cache.Name(),
 			//  e.accessReq().Meta().ID,

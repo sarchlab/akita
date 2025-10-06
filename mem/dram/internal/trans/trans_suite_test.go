@@ -7,9 +7,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -source commandcreator.go -destination mock_commandcreator_test.go -self_package github.com/sarchlab/akita/v4/mem/dram/internal/trans -package $GOPACKAGE
-//go:generate mockgen -destination "mock_cmdq_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/cmdq CommandQueue
-//go:generate mockgen -destination "mock_addressmapping_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping Mapper
+//go:generate go run go.uber.org/mock/mockgen -source commandcreator.go -destination mock_commandcreator_test.go -self_package github.com/sarchlab/akita/v4/mem/dram/internal/trans -package $GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_cmdq_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/cmdq CommandQueue
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_addressmapping_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping Mapper
 
 func TestTrans(t *testing.T) {
 	RegisterFailHandler(Fail)
