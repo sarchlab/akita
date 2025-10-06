@@ -13,7 +13,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 18.x
+          node-version: 18.20.7
 
       - name: Install dependencies
         working-directory: ./monitoring/web
@@ -33,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v1
         with:
-          node-version: 18.x
+          node-version: 18.20.7
 
       - name: Install dependencies
         working-directory: ./daisen/static
@@ -53,7 +53,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: Build
         run: go build ./...
@@ -69,7 +69,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: Clean Go cache
         run: |
@@ -77,7 +77,7 @@ jobs:
           go clean -cache
 
       - name: Install Mockgen
-        run: go install go.uber.org/mock/mockgen@latest
+        run: go install go.uber.org/mock/mockgen@v0.6.0
 
       - name: Run Mockgen
         run: go generate ./...
@@ -99,7 +99,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: CLI Acceptance Tests
         run: go test ./akitav5/cmd -count=1
@@ -116,13 +116,13 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
 
       - name: Install Mockgen
-        run: go install go.uber.org/mock/mockgen@latest
+        run: go install go.uber.org/mock/mockgen@v0.6.0
 
       - name: Run Mockgen
         run: go generate ./...
@@ -142,12 +142,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.10.15"
 
       - name: Run Acceptance Test
         working-directory: ./noc/acceptance
@@ -165,12 +165,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.25"
+          go-version: "1.24.7"
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: "3.10.15"
 
       - name: Run Acceptance Test
         working-directory: ./mem/
