@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Daisen is the visualization tool for simulators built with Akita.",
   "private": true,
+  "engines": {
+    "node": "18.20.7",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
