@@ -273,7 +273,7 @@ func getBuilderFields(node *ast.File) (map[string]bool, map[string]bool) {
 
 func getConfigurableFields(builderFields map[string]bool,
 	configurableFields map[string]bool, funcDecl *ast.FuncDecl) {
-	receiverName := getRecieverName(funcDecl)
+	receiverName := getReceiverName(funcDecl)
 
 	// find assignment receiver.<field> = ...
 	ast.Inspect(funcDecl.Body, func(n ast.Node) bool { // iterate statements
@@ -299,7 +299,7 @@ func getConfigurableFields(builderFields map[string]bool,
 	})
 }
 
-func getRecieverName(funcDecl *ast.FuncDecl) string {
+func getReceiverName(funcDecl *ast.FuncDecl) string {
 	// record receiver name
 	receiverName := ""
 	if funcDecl.Recv != nil && len(funcDecl.Recv.List) == 1 {

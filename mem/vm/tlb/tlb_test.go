@@ -20,6 +20,7 @@ var _ = Describe("TLB", func() {
 		engine        *MockEngine
 		tlb           *Comp
 		tlbMW         *tlbMiddleware
+		tlbCtrlMW     *ctrlMiddleware
 		set           *MockSet
 		topPort       *MockPort
 		bottomPort    *MockPort
@@ -36,15 +37,27 @@ var _ = Describe("TLB", func() {
 			AsRemote().
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
+		topPort.EXPECT().
+			Name().
+			Return("TopPort").
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
+		bottomPort.EXPECT().
+			Name().
+			Return("BottomPort").
+			AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("ControlPort")).
+			AnyTimes()
+		controlPort.EXPECT().
+			Name().
+			Return("ControlPort").
 			AnyTimes()
 		addressMapper = NewMockAddressToPortMapper(mockCtrl)
 
@@ -56,8 +69,10 @@ var _ = Describe("TLB", func() {
 		tlb.bottomPort = bottomPort
 		tlb.controlPort = controlPort
 		tlb.sets = []internal.Set{set}
+		tlb.state = tlbStateEnable
 
 		tlbMW = tlb.Middlewares()[1].(*tlbMiddleware)
+		tlbCtrlMW = tlb.Middlewares()[0].(*ctrlMiddleware)
 	})
 
 	AfterEach(func() {
@@ -260,7 +275,7 @@ var _ = Describe("TLB", func() {
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -288,11 +303,14 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().PeekIncoming().Return(flushReq)
 			controlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			controlPort.EXPECT().Send(gomock.Any())
+			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
+			madeProgress = tlbMW.Tick() || madeProgress
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.isPaused).To(BeTrue())
 		})
 
 		It("should handle restart request", func() {
@@ -305,13 +323,12 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().Send(gomock.Any())
-			topPort.EXPECT().RetrieveIncoming().Return(nil)
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
+			topPort.EXPECT().PeekIncoming().Return(nil)
+			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.isPaused).To(BeFalse())
 		})
 	})
 
@@ -328,10 +345,10 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pauseMsg)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 		})
 
 		It("should handle enable ctrl msg after pause", func() {
@@ -346,10 +363,10 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pause)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 
 			enable := mem.ControlMsgBuilder{}.
 				WithSrc(sim.RemotePort("")).
@@ -362,9 +379,9 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(enable)
 
-			madeProgress = tlbMW.performCtrlReq()
+			madeProgress = tlbCtrlMW.performCtrlReq()
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("enable"))
+			Expect(tlb.state).To(Equal(tlbStateEnable))
 		})
 
 		It("should handle drain ctrl msg", func() {
@@ -379,17 +396,17 @@ var _ = Describe("TLB", func() {
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(drainMsg)
 
-			madeProgress := tlbMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.performCtrlReq()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(tlb.state).To(Equal("drain"))
+			Expect(tlb.state).To(Equal(tlbStateDrain))
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			madeProgress = tlbMW.handleDrain()
 			Expect(madeProgress).To(BeFalse())
-			Expect(tlb.state).To(Equal("pause"))
+			Expect(tlb.state).To(Equal(tlbStatePause))
 		})
 	})
 })

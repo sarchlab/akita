@@ -7,6 +7,13 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
+const (
+	tlbStateEnable = "enable"
+	tlbStatePause  = "pause"
+	tlbStateDrain  = "drain"
+	tlbStateFlush  = "flush"
+)
+
 // Comp is a Translation Lookaside Buffer (TLB) that stores part of the page
 // table.
 type Comp struct {
@@ -32,7 +39,7 @@ type Comp struct {
 	responsePipeline    pipelining.Pipeline
 	responseBuffer      sim.Buffer
 
-	isPaused bool
+	inflightFlushReq *FlushReq
 }
 
 // reset sets all the entries in the TLB to be invalid

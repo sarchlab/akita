@@ -32,7 +32,7 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
-		state:          "enable",
+		state:          tlbStateEnable,
 		latency:        4,
 	}
 }

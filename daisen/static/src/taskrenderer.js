@@ -210,6 +210,7 @@ class TaskRenderer {
                 .lower();
         }
 
+
         const taskBars = taskBarGroup
             .selectAll('rect')
             .data(tasks, (d) => d.id);
@@ -290,7 +291,106 @@ class TaskRenderer {
 
         taskBars.exit().remove();
 
+
+        // Only render milestones for the main task (current selected task)
+        tasks.forEach(task => {
+            console.log("Task debug:", {
+                id: task.id,
+                steps: task.steps,
+                isMainTask: task.isMainTask,
+                hasSteps: task.steps && task.steps.length > 0
+            });
+            
+            if (task.isMainTask && task.steps && task.steps.length > 0) {
+                console.log("Rendering milestones for task:", task.id, "count:", task.steps.length);
+                
+                // Group milestones by time
+                const milestoneGroups = this._groupMilestonesByTime(task.steps);
+                console.log("Milestone groups:", milestoneGroups);
+                
+                const milestones = taskBarGroup
+                    .selectAll(`.milestone-${this._taskIdTag(task)}`)
+                    .data(milestoneGroups, d => `${task.id}-${d.time}`);
+
+                const milestonesEnter = milestones
+                    .enter()
+                    .append('circle')
+                    .attr('class', `milestone-${this._taskIdTag(task)}`)
+                    .attr('r', d => d.steps.length > 1 ? 3 : 2) // Larger circle for multiple milestones
+                    .attr('fill', 'red')
+                    .attr('stroke', d => d.steps.length > 1 ? '#fff' : 'none') // White border for multiple
+                    .attr('stroke-width', d => d.steps.length > 1 ? 1 : 0)
+                    .attr('cy', (d) => this._getYValue(task) + this._getHeightValue(task) / 2);
+
+                milestonesEnter
+                    .on("mouseover", (event, d) => {
+                        this._showMilestoneGroupTooltip(d, event);
+                    })
+                    .on("mouseout", () => {
+                        this._hideTooltip();
+                    });
+
+                milestonesEnter.merge(milestones)
+                    .transition(t)
+                    .attr('cx', d => {
+                        console.log("Milestone position calculation:", {
+                            time: d.time,
+                            xPos: this._xScale(d.time),
+                            count: d.steps.length
+                        });
+                        return this._xScale(d.time);
+                    })
+                    .attr('r', d => d.steps.length > 1 ? 3 : 2)
+                    .attr('stroke', d => d.steps.length > 1 ? '#fff' : 'none')
+                    .attr('stroke-width', d => d.steps.length > 1 ? 1 : 0);
+
+                milestones.exit().remove();
+            }
+        });
         return this
+    }
+
+    _groupMilestonesByTime(steps) {
+        const groups = {};
+        steps.forEach(step => {
+            const timeKey = step.time.toString();
+            if (!groups[timeKey]) {
+                groups[timeKey] = {
+                    time: step.time,
+                    steps: []
+                };
+            }
+            groups[timeKey].steps.push(step);
+        });
+        return Object.values(groups);
+    }
+
+    _showMilestoneGroupTooltip(milestoneGroup, event) {
+        const steps = milestoneGroup.steps;
+        
+        let content = `<div style="text-align: left; min-width: 310px;">
+            <h4>Milestone${steps.length > 1 ? 's' : ''} at ${smartString(milestoneGroup.time)}</h4>`;
+            
+        steps.forEach((step, index) => {
+            content += `<div style="margin-bottom: 8px;">
+                <strong>Milestone${steps.length > 1 ? ` ${index + 1}` : ''}:</strong><br/>
+                <span style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">Kind:</span> ${step.kind || 'N/A'}<br/>
+                <span style="background-color: #e3f2fd; padding: 2px 4px; border-radius: 3px;">What:</span> ${step.what || 'N/A'}
+            </div>`;
+        });
+        
+        content += `</div>`;
+        this._tooltip.innerHTML = content;
+
+        this._tooltip.classList.add('showing');
+        
+        const tooltipWidth = this._tooltip.offsetWidth;
+        const tooltipHeight = this._tooltip.offsetHeight;
+        const x = event.pageX - tooltipWidth / 2;
+        const y = event.pageY - tooltipHeight - 10;
+        
+        this._tooltip.style.left = `${x}px`;
+        this._tooltip.style.top = `${y}px`;
     }
 
     _showTooltip(task) {
@@ -337,6 +437,38 @@ class TaskRenderer {
 
     _hideTooltip() {
         this._tooltip.classList.remove('showing');
+    }
+
+    _showMilestoneTooltip(step, event) {
+        const tableLeftCol = 3;
+        const tableRightCol = 12 - tableLeftCol;
+
+        this._tooltip.innerHTML = `
+        <div class="container">
+            <div class="row">
+                <h4>Milestone</h4>
+            </div>
+            <dl class="row">
+                <dt class="col-sm-${tableLeftCol}">Time</dt>
+                <dd class="col-sm-${tableRightCol}">${smartString(step.time)}</dd>
+
+                <dt class="col-sm-${tableLeftCol}">Kind</dt>
+                <dd class="col-sm-${tableRightCol}">${step.kind || 'N/A'}</dd>
+
+                <dt class="col-sm-${tableLeftCol}">What</dt>
+                <dd class="col-sm-${tableRightCol}">${step.what || 'N/A'}</dd>
+            </dl>
+        </div>`;
+
+        this._tooltip.classList.add('showing');
+        
+        const tooltipWidth = this._tooltip.offsetWidth;
+        const tooltipHeight = this._tooltip.offsetHeight;
+        const x = event.pageX - tooltipWidth / 2;
+        const y = event.pageY - tooltipHeight - 10;
+        
+        this._tooltip.style.left = `${x}px`;
+        this._tooltip.style.top = `${y}px`;
     }
 }
 

@@ -385,6 +385,7 @@ class ComponentView {
       console.error('Invalid parameters for fetching data');
       return;
     }
+    
     const params = new URLSearchParams();
     params.set("info_type", "ConcurrentTask");
     params.set("where", this._componentName);
@@ -512,6 +513,7 @@ class ComponentView {
       .attr("fill", "none")
       .attr("stroke", color);
   }
+
 }
 
 export default ComponentView;
