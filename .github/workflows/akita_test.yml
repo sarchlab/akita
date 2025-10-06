@@ -102,7 +102,7 @@ jobs:
           go-version: "1.24.7"
 
       - name: CLI Acceptance Tests
-        run: go test ./akitav5/cmd -count=1
+        run: go test ./v5/akita/cmd -count=1
 
   akita_unit_test:
     name: Akita Unit Test

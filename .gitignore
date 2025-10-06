@@ -30,4 +30,5 @@ __debug_bin*
 mock_*_test.go
 
 *.sqlite3
-.historyakitav5-lint
+.history/
+akitav5-lint
