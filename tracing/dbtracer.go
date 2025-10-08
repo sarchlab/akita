@@ -1,6 +1,7 @@
 package tracing
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/sarchlab/akita/v4/datarecording"
@@ -9,7 +10,7 @@ import (
 )
 
 type taskTableEntry struct {
-	ID        string  `json:"id" akita_data:"unique"`
+	ID        string  `json:"id" akita_data:"index"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
@@ -27,6 +28,13 @@ type milestoneTableEntry struct {
 	Location string  `json:"location" akita_data:"index"`
 }
 
+// traceIndexEntry is the index structure for trace table, containing only session information
+type traceIndexEntry struct {
+	TableName    string  `json:"table_name" akita_data:"unique"`
+	SessionStart float64 `json:"session_start" akita_data:"index"`
+	SessionEnd   float64 `json:"session_end" akita_data:"index"`
+}
+
 // DBTracer is a tracer that can store tasks into a database.
 // DBTracers can connect with different backends so that the tasks can be stored
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
@@ -37,13 +45,33 @@ type DBTracer struct {
 
 	startTime, endTime sim.VTimeInSec
 
-	tracingTasks map[string]Task
+	tracingTasks  map[string]Task
+	isTracingFlag bool // Optional: internal flag for manual control
+
+	traceCount       int
+	currentTableName string
+	sessionStartTime sim.VTimeInSec
+	sessionEndTime   sim.VTimeInSec
+
+	batchBuffer []taskTableEntry // Pre-allocated buffer
+}
+
+// to check later
+func (t *DBTracer) IsTracing() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.isTracingFlag
 }
 
 // StartTask marks the start of a task.
 func (t *DBTracer) StartTask(task Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Only record tasks when tracing is enabled
+	if !t.isTracingFlag {
+		return
+	}
 
 	t.startingTaskMustBeValid(task)
 
@@ -96,6 +124,11 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	// Only record milestones when tracing is enabled
+	if !t.isTracingFlag {
+		return
+	}
+
 	milestone.Time = t.timeTeller.CurrentTime()
 
 	task, found := t.tracingTasks[milestone.TaskID]
@@ -128,33 +161,6 @@ func sameMilestone(a, b Milestone) bool {
 	return a.Kind == b.Kind && a.What == b.What && a.Location == b.Location
 }
 
-func (t *DBTracer) insertTaskEntry(task Task) {
-	taskEntry := taskTableEntry{
-		ID:        task.ID,
-		ParentID:  task.ParentID,
-		Kind:      task.Kind,
-		What:      task.What,
-		Location:  task.Location,
-		StartTime: float64(task.StartTime),
-		EndTime:   float64(task.EndTime),
-	}
-	t.backend.InsertData("trace", taskEntry)
-}
-
-func (t *DBTracer) insertMilestones(task Task) {
-	for _, milestone := range task.Milestones {
-		milestoneEntry := milestoneTableEntry{
-			ID:       milestone.ID,
-			TaskID:   milestone.TaskID,
-			Time:     float64(milestone.Time),
-			Kind:     string(milestone.Kind),
-			What:     milestone.What,
-			Location: milestone.Location,
-		}
-		t.backend.InsertData("trace_milestones", milestoneEntry)
-	}
-}
-
 // EndTask marks the end of a task.
 func (t *DBTracer) EndTask(task Task) {
 	t.mu.Lock()
@@ -175,28 +181,37 @@ func (t *DBTracer) EndTask(task Task) {
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
 
-	t.insertTaskEntry(originalTask)
-	t.insertMilestones(originalTask)
+	// Only write data when tracing is enabled
+	if !t.isTracingFlag || t.currentTableName == "" {
+		return
+	}
+
+	// Write task to the corresponding task table
+	taskTable := taskTableEntry{
+		ID:        originalTask.ID,
+		ParentID:  originalTask.ParentID,
+		Kind:      originalTask.Kind,
+		What:      originalTask.What,
+		Location:  originalTask.Location,
+		StartTime: float64(originalTask.StartTime),
+		EndTime:   float64(originalTask.EndTime),
+	}
+	t.backend.InsertData(t.currentTableName, taskTable) // Write to trace_i table
+	//t.insertMilestones(originalTask)
 }
 
 // Terminate terminates the tracer.
 func (t *DBTracer) Terminate() {
-	for _, task := range t.tracingTasks {
-		task.EndTime = t.timeTeller.CurrentTime()
-		taskTable := taskTableEntry{
-			ID:        task.ID,
-			ParentID:  task.ParentID,
-			Kind:      task.Kind,
-			What:      task.What,
-			Location:  task.Location,
-			StartTime: float64(task.StartTime),
-			EndTime:   float64(task.EndTime),
-		}
-		t.backend.InsertData("trace", taskTable)
+	// If tracing is still enabled, stop it first to write the final session index
+	if t.IsTracing() {
+		t.StopTracingAtCurrentTime()
+		return
 	}
 
-	t.tracingTasks = nil
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
+	t.tracingTasks = nil
 	t.backend.Flush()
 }
 
@@ -205,13 +220,13 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable("trace", taskTableEntry{})
-	dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
+	dataRecorder.CreateTable("trace", traceIndexEntry{}) // Use index structure
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
 		tracingTasks: make(map[string]Task),
+		batchBuffer:  make([]taskTableEntry, 0, 1000),
 	}
 
 	atexit.Register(func() {
@@ -225,4 +240,110 @@ func NewDBTracer(
 func (t *DBTracer) SetTimeRange(startTime, endTime sim.VTimeInSec) {
 	t.startTime = startTime
 	t.endTime = endTime
+}
+
+// EnableTracing manually enables tracing.
+func (t *DBTracer) EnableTracing() {
+	print("DBTracer: Enable tracing at current time...\n")
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	// Clear previous memory
+	t.tracingTasks = make(map[string]Task)
+
+	t.isTracingFlag = true
+	t.traceCount++
+	t.sessionStartTime = t.timeTeller.CurrentTime()
+	t.sessionEndTime = 0
+	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
+	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
+
+	// Create corresponding milestone table (e.g., milestone_trace1)
+	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+	t.backend.CreateTable(milestoneTableName, milestoneTableEntry{})
+}
+
+// StopTracingAtCurrentTime stops tracing and finalizes tasks.
+func (t *DBTracer) StopTracingAtCurrentTime() {
+	print("DBTracer: Stopping tracing at current time...\n")
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.sessionEndTime = t.timeTeller.CurrentTime()
+
+	// Write session index
+	traceIndex := traceIndexEntry{
+		TableName:    t.currentTableName,
+		SessionStart: float64(t.sessionStartTime),
+		SessionEnd:   float64(t.sessionEndTime),
+	}
+	t.backend.InsertData("trace", traceIndex)
+
+	// Write ongoing tasks (must be done before setting isTracingFlag=false)
+	t.batchWriteOngoingTasks()
+
+	// Write milestones within session time range to milestone table
+	t.writeMilestonesInSession()
+
+	// Set flag to false only at the end to ensure data is written
+	t.isTracingFlag = false
+
+	// Clear memory
+	t.tracingTasks = make(map[string]Task)
+
+	// Flush to ensure all data is written to database immediately
+	t.backend.Flush()
+}
+
+// writeMilestonesInSession writes milestones within session time range to milestone table
+func (t *DBTracer) writeMilestonesInSession() {
+	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+
+	for _, task := range t.tracingTasks {
+		for _, milestone := range task.Milestones {
+			// Only write milestones within session time range
+			if milestone.Time >= t.sessionStartTime && milestone.Time <= t.sessionEndTime {
+				milestoneEntry := milestoneTableEntry{
+					ID:       milestone.ID,
+					TaskID:   milestone.TaskID,
+					Time:     float64(milestone.Time),
+					Kind:     string(milestone.Kind),
+					What:     milestone.What,
+					Location: milestone.Location,
+				}
+				t.backend.InsertData(milestoneTableName, milestoneEntry)
+			}
+		}
+	}
+}
+
+// writeTaskToDB is a common method to write a task to the database
+func (t *DBTracer) writeTaskToDB(task Task) {
+	taskTable := taskTableEntry{
+		ID:        task.ID,
+		ParentID:  task.ParentID,
+		Kind:      task.Kind,
+		What:      task.What,
+		Location:  task.Location,
+		StartTime: float64(task.StartTime),
+		EndTime:   float64(task.EndTime),
+	}
+	t.backend.InsertData(t.currentTableName, taskTable)
+}
+
+// batchWriteOngoingTasks efficiently writes all ongoing tasks in batches
+func (t *DBTracer) batchWriteOngoingTasks() {
+	if !t.isTracingFlag || t.currentTableName == "" {
+		return
+	}
+
+	// Write directly, no additional buffer needed
+	for _, task := range t.tracingTasks {
+		if task.StartTime <= t.sessionEndTime {
+			// Create temporary task and set end time
+			tempTask := task
+			tempTask.EndTime = t.sessionEndTime
+			t.writeTaskToDB(tempTask)
+		}
+	}
 }

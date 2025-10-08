@@ -260,3 +260,27 @@ body {
   font-size: 0.8em;
   border-radius: 5px;
 }
+
+/* Rotating icon animation for trace button */
+.rotating-icon {
+  animation: rotate 2s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Prevent image flickering during transitions */
+#trace-toggle-btn img {
+  transition: opacity 0.1s ease-in-out;
+}
+
+#trace-toggle-btn img.loading {
+  opacity: 0.5;
+}
