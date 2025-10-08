@@ -28,7 +28,7 @@ type milestoneTableEntry struct {
 	Location string  `json:"location" akita_data:"index"`
 }
 
-// traceIndexEntry 是trace表的索引结构，只包含session信息
+// traceIndexEntry is the index structure for trace table, containing only session information
 type traceIndexEntry struct {
 	TableName    string  `json:"table_name" akita_data:"unique"`
 	SessionStart float64 `json:"session_start" akita_data:"index"`
@@ -53,7 +53,7 @@ type DBTracer struct {
 	sessionStartTime sim.VTimeInSec
 	sessionEndTime   sim.VTimeInSec
 
-	batchBuffer []taskTableEntry // 预分配缓冲区
+	batchBuffer []taskTableEntry // Pre-allocated buffer
 }
 
 // to check later
@@ -67,6 +67,11 @@ func (t *DBTracer) IsTracing() bool {
 func (t *DBTracer) StartTask(task Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Only record tasks when tracing is enabled
+	if !t.isTracingFlag {
+		return
+	}
 
 	t.startingTaskMustBeValid(task)
 
@@ -118,6 +123,11 @@ func (t *DBTracer) StepTask(_ Task) {
 func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+
+	// Only record milestones when tracing is enabled
+	if !t.isTracingFlag {
+		return
+	}
 
 	milestone.Time = t.timeTeller.CurrentTime()
 
@@ -171,7 +181,12 @@ func (t *DBTracer) EndTask(task Task) {
 	originalTask.EndTime = task.EndTime
 	delete(t.tracingTasks, task.ID)
 
-	// 将任务写入对应的task表
+	// Only write data when tracing is enabled
+	if !t.isTracingFlag || t.currentTableName == "" {
+		return
+	}
+
+	// Write task to the corresponding task table
 	taskTable := taskTableEntry{
 		ID:        originalTask.ID,
 		ParentID:  originalTask.ParentID,
@@ -181,16 +196,20 @@ func (t *DBTracer) EndTask(task Task) {
 		StartTime: float64(originalTask.StartTime),
 		EndTime:   float64(originalTask.EndTime),
 	}
-	t.backend.InsertData(t.currentTableName, taskTable) //写入trace_i表
+	t.backend.InsertData(t.currentTableName, taskTable) // Write to trace_i table
 	//t.insertMilestones(originalTask)
 }
 
 // Terminate terminates the tracer.
 func (t *DBTracer) Terminate() {
+	// If tracing is still enabled, stop it first to write the final session index
+	if t.IsTracing() {
+		t.StopTracingAtCurrentTime()
+		return
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-
-	// do not write anything
 
 	t.tracingTasks = nil
 	t.backend.Flush()
@@ -201,9 +220,7 @@ func NewDBTracer(
 	timeTeller sim.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
-	dataRecorder.CreateTable("trace", traceIndexEntry{}) // 使用索引结构
-	//dataRecorder.CreateTable("trace_milestones", milestoneTableEntry{})
-	//dataRecorder.CreateTable("trace", taskTableEntry{}) 最新版
+	dataRecorder.CreateTable("trace", traceIndexEntry{}) // Use index structure
 
 	t := &DBTracer{
 		timeTeller:   timeTeller,
@@ -231,7 +248,7 @@ func (t *DBTracer) EnableTracing() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// 清除之前的内存
+	// Clear previous memory
 	t.tracingTasks = make(map[string]Task)
 
 	t.isTracingFlag = true
@@ -241,7 +258,7 @@ func (t *DBTracer) EnableTracing() {
 	t.currentTableName = fmt.Sprintf("trace%d", t.traceCount)
 	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
 
-	// 创建对应的milestone表 milestone_trace1
+	// Create corresponding milestone table (e.g., milestone_trace1)
 	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
 	t.backend.CreateTable(milestoneTableName, milestoneTableEntry{})
 }
@@ -252,7 +269,6 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	t.isTracingFlag = false
 	t.sessionEndTime = t.timeTeller.CurrentTime()
 
 	// Write session index
@@ -263,15 +279,20 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 	}
 	t.backend.InsertData("trace", traceIndex)
 
-	// Write ongoing tasks
+	// Write ongoing tasks (must be done before setting isTracingFlag=false)
 	t.batchWriteOngoingTasks()
 
 	// Write milestones within session time range to milestone table
 	t.writeMilestonesInSession()
 
+	// Set flag to false only at the end to ensure data is written
+	t.isTracingFlag = false
+
 	// Clear memory
 	t.tracingTasks = make(map[string]Task)
-	//删除t.backend.Flush()
+
+	// Flush to ensure all data is written to database immediately
+	t.backend.Flush()
 }
 
 // writeMilestonesInSession writes milestones within session time range to milestone table
@@ -280,7 +301,7 @@ func (t *DBTracer) writeMilestonesInSession() {
 
 	for _, task := range t.tracingTasks {
 		for _, milestone := range task.Milestones {
-			// 只写入时间在session范围内的milestone
+			// Only write milestones within session time range
 			if milestone.Time >= t.sessionStartTime && milestone.Time <= t.sessionEndTime {
 				milestoneEntry := milestoneTableEntry{
 					ID:       milestone.ID,
@@ -296,7 +317,7 @@ func (t *DBTracer) writeMilestonesInSession() {
 	}
 }
 
-// 提取公共方法
+// writeTaskToDB is a common method to write a task to the database
 func (t *DBTracer) writeTaskToDB(task Task) {
 	taskTable := taskTableEntry{
 		ID:        task.ID,
@@ -316,10 +337,10 @@ func (t *DBTracer) batchWriteOngoingTasks() {
 		return
 	}
 
-	// 直接写入，不需要额外的缓冲区
+	// Write directly, no additional buffer needed
 	for _, task := range t.tracingTasks {
 		if task.StartTime <= t.sessionEndTime {
-			// 创建临时任务，设置结束时间
+			// Create temporary task and set end time
 			tempTask := task
 			tempTask.EndTime = t.sessionEndTime
 			t.writeTaskToDB(tempTask)
