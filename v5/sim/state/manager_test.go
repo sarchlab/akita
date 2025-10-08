@@ -87,3 +87,46 @@ func TestManagerCommitAllAndDiscard(t *testing.T) {
 		t.Fatalf("commit all did not apply staged update, got %v", got)
 	}
 }
+
+func TestStageReturnsSharedValueWithinRound(t *testing.T) {
+	m := NewManager()
+
+	type buffer struct {
+		Items []int
+	}
+
+	if err := m.Register("buf", &buffer{Items: []int{1}}); err != nil {
+		t.Fatalf("register buf: %v", err)
+	}
+
+	stagedAAny, err := m.Stage("buf")
+	if err != nil {
+		t.Fatalf("stage buf first time: %v", err)
+	}
+	stagedA := stagedAAny.(*buffer)
+	stagedA.Items = append(stagedA.Items, 2)
+
+	stagedBAny, err := m.Stage("buf")
+	if err != nil {
+		t.Fatalf("stage buf second time: %v", err)
+	}
+	stagedB := stagedBAny.(*buffer)
+
+	if stagedA != stagedB {
+		t.Fatalf("expected staged value to be shared, got %p and %p", stagedA, stagedB)
+	}
+
+	if err := m.Commit("buf"); err != nil {
+		t.Fatalf("commit buf: %v", err)
+	}
+
+	loadedAny, err := m.Load("buf")
+	if err != nil {
+		t.Fatalf("load buf: %v", err)
+	}
+	loaded := loadedAny.(*buffer)
+
+	if got := loaded.Items; len(got) != 2 || got[1] != 2 {
+		t.Fatalf("shared staged value not applied, got %v", got)
+	}
+}

@@ -71,7 +71,8 @@ func (m *Manager) Load(key string) (any, error) {
 
 // Stage returns a mutable copy of the active value for the provided key. The
 // same staged value is returned on subsequent calls within the same staging
-// window.
+// window so that multiple callers coordinating within a round all edit the
+// identical staged state.
 func (m *Manager) Stage(key string) (any, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
