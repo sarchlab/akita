@@ -2454,7 +2454,6 @@ Kernel Execution,76.68,84.65,7.97`);
             finalContent += `<br><br>📊 I've detected a table in my response and saved the data for visualization. ${graphLink}`;
           }
         }
-        
         botDiv.innerHTML =
           `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
             gptResponseTotalTokens === -1 ? "gptResponsekens" : gptResponseTotalTokens.toLocaleString() + " tokens"
@@ -2760,6 +2759,9 @@ function convertMarkdownToHTML(text: string): string {
   text = text.replace(/(<br>\s*)+(<table)/g, "$2");
   // Remove leading <br> at the very start
   text = text.replace(/^(<br>\s*)+/, "");
+  // Remove all <br>'s
+  text = text.replace(/<br>/g, "");
+  console.log("Final converted HTML:", text);
   return text;
 }
 
@@ -3087,3 +3089,9 @@ function formatFileSize(size: number): string {
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+// function countBRDebug(cp: string | number, str: string): number {
+//   const n_br = (str.match(/<br>/g) || []).length;
+//   console.log(`At checkpoint ${cp}: ${n_br} <br>'s detected`);
+//   return n_br;
+// }
