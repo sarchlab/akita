@@ -19,7 +19,7 @@ cd mgpusim
 #### (2) Build a Benchmark (e.g., `fir`)
 ```bash
 cd amd/samples/fir
-go build    # Make sure Go is installed and available in PATH
+go build    # Make sure Go 1.25.0 is installed and available in PATH
 ./fir --trace-vis --timing    # Default problem size; can modify with "-length <value>"
 ```
 
@@ -46,10 +46,15 @@ git checkout ml-for-perf-analysis
 ```
 
 #### (3) Prepare the `.env` Credential File
-Copy and paste the **attached** `.env` file (for internal use only) into:
+Copy and paste the **attached** `.env` file (for internal use only) to:
 ```
 akita/daisen/.env
 ```
+If you are already inside the `akita/` directory, you can directly create or edit it with:
+```bash
+vi daisen/.env
+```
+
 
 #### (4) Install npm Packages
 ```bash
