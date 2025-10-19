@@ -59,6 +59,10 @@ func (m *middleware) Tick() bool {
 
 	if !m.isFlushing {
 		madeProgress = m.runPipeline()
+	} else {
+		for i := 0; i < m.numReqPerCycle; i++ {
+			madeProgress = m.parseTranslation() || madeProgress
+		}
 	}
 
 	madeProgress = m.handleCtrlRequest() || madeProgress
