@@ -166,6 +166,7 @@ func (b Builder) Build(name string) *Comp {
 	tlb.pageSize = b.pageSize
 	tlb.addressMapper = b.addressMapper
 	tlb.mshr = newMSHR(b.numMSHREntry)
+	tlb.state = b.state
 
 	b.createPorts(name, tlb)
 	b.createTranslationProviderMapper(tlb)
