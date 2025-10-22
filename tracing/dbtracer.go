@@ -9,8 +9,11 @@ import (
 	"github.com/tebeka/atexit"
 )
 
+// taskTableEntry is the table structure containing task information
+// multiple tasktable can be created along with click events for tracing
+// (trace1, trace2, ...)
 type taskTableEntry struct {
-	ID        string  `json:"id" akita_data:"index"`
+	ID        string  `json:"id" akita_data:"unique"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
@@ -19,8 +22,11 @@ type taskTableEntry struct {
 	EndTime   float64 `json:"end_time" akita_data:"index"`
 }
 
+// milestoneTableEntry is the table structure containing milestone information
+// multiple milestonetable can be created along with click events for tracing
+// (trace1_milestone, trace2_milestone, ...)
 type milestoneTableEntry struct {
-	ID       string  `json:"id" akita_data:"unique"`
+	ID       string  `json:"id" akita_data:"unique"` // unique
 	TaskID   string  `json:"task_id" akita_data:"index"`
 	Time     float64 `json:"time" akita_data:"index"`
 	Kind     string  `json:"kind" akita_data:"index"`
@@ -28,7 +34,9 @@ type milestoneTableEntry struct {
 	Location string  `json:"location" akita_data:"index"`
 }
 
-// traceIndexEntry is the index structure for trace table, containing only session information
+// traceIndexEntry is the index structure for tracingsession information
+// only one traceIndexEntry will be created to store all tracing session time.
+// (trace)
 type traceIndexEntry struct {
 	TableName    string  `json:"table_name" akita_data:"unique"`
 	SessionStart float64 `json:"session_start" akita_data:"index"`
@@ -259,7 +267,7 @@ func (t *DBTracer) EnableTracing() {
 	t.backend.CreateTable(t.currentTableName, taskTableEntry{})
 
 	// Create corresponding milestone table (e.g., milestone_trace1)
-	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+	milestoneTableName := fmt.Sprintf("%s_milestone", t.currentTableName)
 	t.backend.CreateTable(milestoneTableName, milestoneTableEntry{})
 }
 
@@ -297,7 +305,7 @@ func (t *DBTracer) StopTracingAtCurrentTime() {
 
 // writeMilestonesInSession writes milestones within session time range to milestone table
 func (t *DBTracer) writeMilestonesInSession() {
-	milestoneTableName := fmt.Sprintf("milestone_%s", t.currentTableName)
+	milestoneTableName := fmt.Sprintf("%s_milestone", t.currentTableName)
 
 	for _, task := range t.tracingTasks {
 		for _, milestone := range task.Milestones {
