@@ -44,7 +44,8 @@ type Monitor struct {
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
 
-	tracer *tracing.DBTracer
+	// tracer field for visualization tracing
+	tracer *tracing.DBTracer //
 }
 
 // NewMonitor creates a new Monitor

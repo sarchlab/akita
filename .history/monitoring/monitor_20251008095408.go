@@ -26,7 +26,7 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
-	"github.com/sarchlab/akita/v4/tracing"
+	"github.com/sarchlab/akita/v4/tracing" //
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -44,7 +44,8 @@ type Monitor struct {
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
 
-	tracer *tracing.DBTracer
+	// tracer field for visualization tracing
+	tracer *tracing.DBTracer //
 }
 
 // NewMonitor creates a new Monitor
