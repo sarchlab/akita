@@ -30,9 +30,36 @@ func (c *stubComponent) NotifyRecv(sim.Port) {}
 func (c *stubComponent) NotifyPortFree(sim.Port) {}
 
 func TestReadSeesCommittedWriteWhenCompletingSameCycle(t *testing.T) {
-	require := require.New(t)
+	env := newTestEnv(t)
+	env.fillWithPendingWrites()
 
-	engine := sim.NewSerialEngine()
+	writeData := []byte{0xaa, 0xbb, 0xcc, 0xdd}
+	readReqID := env.enqueueWriteThenRead(writeData)
+
+	env.advanceUntilSlotsFree()
+	env.requireNotYetCommitted(writeData)
+
+	env.advanceCycles(env.mem.Latency)
+	env.drainConnection()
+
+	env.requireCommitted(writeData)
+	env.requireReadReturned(writeData, readReqID)
+}
+
+type testEnv struct {
+	*require.Assertions
+	engine      sim.Engine
+	mem         *Comp
+	conn        *directconnection.Comp
+	agentPorts  []sim.Port
+	writeReq    *mem.WriteReq
+	readReq     *mem.ReadReq
+	pendingData []byte
+}
+
+func newTestEnv(t *testing.T) *testEnv {
+    t.Helper()
+    engine := sim.NewSerialEngine()
 
 	memComp := MakeBuilder().
 		WithEngine(engine).
@@ -58,106 +85,123 @@ func TestReadSeesCommittedWriteWhenCompletingSameCycle(t *testing.T) {
 		conn.PlugIn(memComp.Port(i))
 	}
 
-	send := func(port sim.Port, msg sim.Msg) {
-		require.Nil(port.Send(msg))
-		for conn.Tick() {
-		}
+	return &testEnv{
+		Assertions: require.New(t),
+		engine:     engine,
+		mem:        memComp,
+		conn:       conn,
+		agentPorts: agentPorts,
+	}
+}
+
+func (e *testEnv) fillWithPendingWrites() {
+	filler := func(port sim.Port, dst sim.RemotePort, addr uint64, data []byte) {
+		req := mem.WriteReqBuilder{}.
+			WithSrc(port.AsRemote()).
+			WithDst(dst).
+			WithAddress(addr).
+			WithData(data).
+			Build()
+		e.send(port, req)
 	}
 
-	// Occupy both slots with filler writes so that later requests must wait.
-	filler0 := mem.WriteReqBuilder{}.
-		WithSrc(agentPorts[0].AsRemote()).
-		WithDst(memComp.Port(0).AsRemote()).
-		WithAddress(0x100).
-		WithData([]byte{1, 2, 3, 4}).
-		Build()
-	filler1 := mem.WriteReqBuilder{}.
-		WithSrc(agentPorts[1].AsRemote()).
-		WithDst(memComp.Port(1).AsRemote()).
-		WithAddress(0x200).
-		WithData([]byte{5, 6, 7, 8}).
-		Build()
-	send(agentPorts[0], filler0)
-	send(agentPorts[1], filler1)
+	filler(e.agentPorts[0], e.mem.Port(0).AsRemote(), 0x100, []byte{1, 2, 3, 4})
+	filler(e.agentPorts[1], e.mem.Port(1).AsRemote(), 0x200, []byte{5, 6, 7, 8})
 
-	require.True(memComp.Tick())
-	for conn.Tick() {
-	}
+	e.True(e.mem.Tick())
+	e.drainConnection()
 
-	require.Len(memComp.activeRequests, 2)
-	require.Len(memComp.waitingRequests, 0)
+	e.Len(e.mem.activeRequests, 2)
+	e.Len(e.mem.waitingRequests, 0)
+}
 
-	// Enqueue the write (older) and read (newer) requests that target the same address.
-	writeData := []byte{0xaa, 0xbb, 0xcc, 0xdd}
-	writeReq := mem.WriteReqBuilder{}.
-		WithSrc(agentPorts[0].AsRemote()).
-		WithDst(memComp.Port(0).AsRemote()).
+func (e *testEnv) enqueueWriteThenRead(writeData []byte) string {
+	write := mem.WriteReqBuilder{}.
+		WithSrc(e.agentPorts[0].AsRemote()).
+		WithDst(e.mem.Port(0).AsRemote()).
 		WithAddress(0x0).
 		WithData(writeData).
 		Build()
-	readReq := mem.ReadReqBuilder{}.
-		WithSrc(agentPorts[1].AsRemote()).
-		WithDst(memComp.Port(1).AsRemote()).
+	read := mem.ReadReqBuilder{}.
+		WithSrc(e.agentPorts[1].AsRemote()).
+		WithDst(e.mem.Port(1).AsRemote()).
 		WithAddress(0x0).
 		WithByteSize(uint64(len(writeData))).
 		Build()
 
-	send(agentPorts[0], writeReq)
-	send(agentPorts[1], readReq)
+	e.send(e.agentPorts[0], write)
+	e.send(e.agentPorts[1], read)
 
-	require.True(memComp.Tick())
-	for conn.Tick() {
+	e.True(e.mem.Tick())
+	e.drainConnection()
+
+	e.Len(e.mem.activeRequests, 2)
+	e.Len(e.mem.waitingRequests, 2)
+
+	e.readReq = read
+	e.writeReq = write
+	e.pendingData = writeData
+
+	return read.ID
+}
+
+func (e *testEnv) send(port sim.Port, msg sim.Msg) {
+    e.Nil(port.Send(msg))
+    e.drainConnection()
+}
+
+func (e *testEnv) advanceUntilSlotsFree() {
+	for i := 0; i < e.mem.Latency-1; i++ {
+		e.mem.Tick()
+		e.drainConnection()
 	}
 
-	require.Len(memComp.activeRequests, 2)
-	require.Len(memComp.waitingRequests, 2)
+	e.Len(e.mem.waitingRequests, 0)
+	e.Len(e.mem.activeRequests, 2)
+}
 
-	// Advance cycles so the filler requests finish and free both slots together.
-	for i := 0; i < memComp.Latency-1; i++ {
-		memComp.Tick()
-		for conn.Tick() {
-		}
+func (e *testEnv) requireNotYetCommitted(writeData []byte) {
+	dataBefore, err := e.mem.Storage.Read(0x0, uint64(len(writeData)))
+	e.NoError(err)
+	e.NotEqual(writeData, dataBefore)
+}
+
+func (e *testEnv) advanceCycles(cycles int) {
+	for i := 0; i < cycles; i++ {
+		e.mem.Tick()
+		e.drainConnection()
 	}
+}
 
-	require.Len(memComp.waitingRequests, 0)
-	require.Len(memComp.activeRequests, 2)
-
-	// Ensure the write has not committed yet.
-	dataBefore, err := memComp.Storage.Read(0x0, uint64(len(writeData)))
-	require.NoError(err)
-	require.NotEqual(writeData, dataBefore)
-
-	// Let the queued write and read finish together.
-	for i := 0; i < memComp.Latency; i++ {
-		memComp.Tick()
-		for conn.Tick() {
-		}
+func (e *testEnv) drainConnection() {
+	for e.conn.Tick() {
 	}
+}
 
-	// Drain any remaining connection activity.
-	for conn.Tick() {
-	}
+func (e *testEnv) requireCommitted(writeData []byte) {
+	dataAfter, err := e.mem.Storage.Read(0x0, uint64(len(writeData)))
+	e.NoError(err)
+	e.Equal(writeData, dataAfter)
+}
 
-	// Verify the write is now visible in storage.
-	dataAfter, err := memComp.Storage.Read(0x0, uint64(len(writeData)))
-	require.NoError(err)
-	require.Equal(writeData, dataAfter)
-
+func (e *testEnv) requireReadReturned(expected []byte, readReqID string) {
 	var readRsp *mem.DataReadyRsp
 	for {
-		item := agentPorts[1].RetrieveIncoming()
+		item := e.agentPorts[1].RetrieveIncoming()
 		if item == nil {
 			break
 		}
 
-		switch rsp := item.(type) {
-		case *mem.DataReadyRsp:
-			if rsp.GetRspTo() == readReq.ID {
-				readRsp = rsp
-			}
+		rsp, ok := item.(*mem.DataReadyRsp)
+		if !ok {
+			continue
+		}
+
+		if rsp.GetRspTo() == readReqID {
+			readRsp = rsp
 		}
 	}
 
-	require.NotNil(readRsp, "read response not received")
-	require.Equal(writeData, readRsp.Data)
+	e.NotNil(readRsp, "read response not received")
+	e.Equal(expected, readRsp.Data)
 }

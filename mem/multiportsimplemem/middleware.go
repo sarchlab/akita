@@ -25,7 +25,6 @@ type pendingResponse struct {
 	port      sim.Port
 	msg       sim.Msg
 	original  mem.AccessReq
-	committed bool
 }
 
 type middleware struct {
