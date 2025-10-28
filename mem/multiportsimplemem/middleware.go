@@ -22,9 +22,9 @@ type activeRequest struct {
 }
 
 type pendingResponse struct {
-	port      sim.Port
-	msg       sim.Msg
-	original  mem.AccessReq
+	port     sim.Port
+	msg      sim.Msg
+	original mem.AccessReq
 }
 
 type middleware struct {
@@ -70,7 +70,7 @@ func (m *middleware) advanceActiveRequests() bool {
 		return false
 	}
 
-	completed := make([]*activeRequest, 0)
+	completed := make([]*activeRequest, 0, len(m.activeRequests))
 
 	for _, req := range m.activeRequests {
 		req.remainingCycles--
@@ -91,6 +91,8 @@ func (m *middleware) advanceActiveRequests() bool {
 	}
 	m.activeRequests = remaining
 
+	// Maintain completion order by dispatch cycle, breaking ties using the
+	// original arrival order so same-cycle dispatches still respect FCFS.
 	sort.Slice(completed, func(i, j int) bool {
 		if completed[i].serviceIndex == completed[j].serviceIndex {
 			return completed[i].arrivalOrder < completed[j].arrivalOrder
@@ -243,15 +245,15 @@ func (m *middleware) dispatchWaitingRequests() bool {
 		m.waitingRequests = append(m.waitingRequests[:index],
 			m.waitingRequests[index+1:]...)
 
+		cycles := m.Latency
+		if cycles <= 0 {
+			cycles = 0
+		}
+
 		active := &activeRequest{
-			pendingRequest: pending,
-			remainingCycles: func() int {
-				if m.Latency <= 0 {
-					return 0
-				}
-				return m.Latency
-			}(),
-			serviceIndex: m.nextServiceIndex,
+			pendingRequest:  pending,
+			remainingCycles: cycles,
+			serviceIndex:    m.nextServiceIndex,
 		}
 		m.nextServiceIndex++
 

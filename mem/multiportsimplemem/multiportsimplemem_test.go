@@ -58,8 +58,8 @@ type testEnv struct {
 }
 
 func newTestEnv(t *testing.T) *testEnv {
-    t.Helper()
-    engine := sim.NewSerialEngine()
+	t.Helper()
+	engine := sim.NewSerialEngine()
 
 	memComp := MakeBuilder().
 		WithEngine(engine).
@@ -146,8 +146,8 @@ func (e *testEnv) enqueueWriteThenRead(writeData []byte) string {
 }
 
 func (e *testEnv) send(port sim.Port, msg sim.Msg) {
-    e.Nil(port.Send(msg))
-    e.drainConnection()
+	e.Nil(port.Send(msg))
+	e.drainConnection()
 }
 
 func (e *testEnv) advanceUntilSlotsFree() {
