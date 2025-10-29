@@ -38,6 +38,7 @@ type Monitor struct {
 	components   []sim.Component
 	buffers      []sim.Buffer
 	portNumber   int
+	userSetPort  bool
 	perfAnalyzer *analysis.PerfAnalyzer
 	httpServer   *http.Server
 
@@ -49,7 +50,9 @@ type Monitor struct {
 
 // NewMonitor creates a new Monitor
 func NewMonitor() *Monitor {
-	return &Monitor{}
+	return &Monitor{
+		portNumber: 32776,
+	}
 }
 
 // WithPortNumber sets the port number of the monitor.
@@ -65,6 +68,7 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 	}
 
 	m.portNumber = portNumber
+	m.userSetPort = true
 
 	return m
 }
@@ -176,13 +180,27 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
 	r.PathPrefix("/").Handler(fServer)
 
-	actualPort := ":0"
-	if m.portNumber > 1000 {
-		actualPort = ":" + strconv.Itoa(m.portNumber)
-	}
+	var listener net.Listener
+	var err error
 
-	listener, err := net.Listen("tcp", actualPort)
-	dieOnErr(err)
+	if m.userSetPort {
+		actualPort := ":" + strconv.Itoa(m.portNumber)
+		listener, err = net.Listen("tcp", actualPort)
+		dieOnErr(err)
+	} else {
+		startPort := 32776
+		maxAttempts := 100
+		for i := 0; i < maxAttempts; i++ {
+			tryPort := startPort + i
+			listener, err = net.Listen("tcp", ":"+strconv.Itoa(tryPort))
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			dieOnErr(fmt.Errorf("failed to find available port after %d attempts: %w", maxAttempts, err))
+		}
+	}
 
 	fmt.Fprintf(
 		os.Stderr,

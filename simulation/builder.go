@@ -12,6 +12,7 @@ import (
 type Builder struct {
 	parallelEngine bool
 	monitorOn      bool
+	monitorPort    int
 	outputFileName string
 }
 
@@ -41,8 +42,22 @@ func (b Builder) WithOutputFileName(filename string) Builder {
 	return b
 }
 
+// WithMonitorPort sets the port number for the monitoring server.
+func (b Builder) WithMonitorPort(port int) Builder {
+	b.monitorPort = port
+	return b
+}
+
+func (b Builder) parametersMustBeValid() {
+	if !b.monitorOn && b.monitorPort != 0 {
+		panic("monitor port cannot be set when monitoring is disabled")
+	}
+}
+
 // Build builds the simulation.
 func (b Builder) Build() *Simulation {
+	b.parametersMustBeValid()
+
 	s := &Simulation{
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
@@ -65,6 +80,9 @@ func (b Builder) Build() *Simulation {
 
 	if b.monitorOn {
 		s.monitor = monitoring.NewMonitor()
+		if b.monitorPort > 0 {
+			s.monitor.WithPortNumber(b.monitorPort)
+		}
 		s.monitor.RegisterEngine(s.engine)
 		s.monitor.RegisterVisTracer(s.visTracer)
 		s.monitor.StartServer()
