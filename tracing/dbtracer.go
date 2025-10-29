@@ -9,6 +9,12 @@ import (
 	"github.com/tebeka/atexit"
 )
 
+type runningTask struct {
+	Task
+
+	toRecord bool
+}
+
 // taskTableEntry is the table structure containing task information
 // multiple tasktable can be created along with click events for tracing
 // (trace1, trace2, ...)
@@ -51,24 +57,17 @@ type DBTracer struct {
 	timeTeller sim.TimeTeller
 	backend    datarecording.DataRecorder
 
-	startTime, endTime sim.VTimeInSec
-
-	tracingTasks  map[string]Task
-	isTracingFlag bool // Optional: internal flag for manual control
-
-	traceCount       int
-	currentTableName string
-	sessionStartTime sim.VTimeInSec
-	sessionEndTime   sim.VTimeInSec
-
-	batchBuffer []taskTableEntry // Pre-allocated buffer
+	tracingTasks     map[string]runningTask
+	isTracing        bool
+	tracingStartTime sim.VTimeInSec
 }
 
-// to check later
+// IsTracing reports whether the tracer is currently tracing.
 func (t *DBTracer) IsTracing() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.isTracingFlag
+
+	return t.isTracing
 }
 
 // StartTask marks the start of a task.
@@ -76,32 +75,27 @@ func (t *DBTracer) StartTask(task Task) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Only record tasks when tracing is enabled
-	if !t.isTracingFlag {
-		return
-	}
-
 	t.startingTaskMustBeValid(task)
 
-	task.StartTime = t.timeTeller.CurrentTime()
-	if t.endTime > 0 && task.StartTime > t.endTime {
-		return
-	}
-
-	existingTask, found := t.tracingTasks[task.ID]
+	// A task may first be mentioned by a milestone
+	rt, found := t.tracingTasks[task.ID]
 	if !found {
-		t.tracingTasks[task.ID] = task
-
-		return
+		rt = runningTask{
+			Task: task,
+		}
 	}
 
-	existingTask.ParentID = task.ParentID
-	existingTask.Kind = task.Kind
-	existingTask.What = task.What
-	existingTask.Location = task.Location
-	existingTask.StartTime = task.StartTime
+	rt.ParentID = task.ParentID
+	rt.Kind = task.Kind
+	rt.What = task.What
+	rt.Location = task.Location
+	rt.StartTime = t.timeTeller.CurrentTime()
 
-	t.tracingTasks[task.ID] = existingTask
+	if t.isTracing {
+		rt.toRecord = true
+	}
+
+	t.tracingTasks[task.ID] = rt
 }
 
 func (t *DBTracer) startingTaskMustBeValid(task Task) {
@@ -132,18 +126,12 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Only record milestones when tracing is enabled
-	if !t.isTracingFlag {
-		return
-	}
-
 	milestone.Time = t.timeTeller.CurrentTime()
 
 	task, found := t.tracingTasks[milestone.TaskID]
 	if !found {
-		task = Task{
-			ID: milestone.TaskID,
-		}
+		task = runningTask{}
+		task.ID = milestone.TaskID
 
 		task.Milestones = []Milestone{milestone}
 		t.tracingTasks[milestone.TaskID] = task
@@ -155,6 +143,7 @@ func (t *DBTracer) AddMilestone(milestone Milestone) {
 		if sameMilestone(existingMilestone, milestone) {
 			return
 		}
+
 		// Only record the first milestone if multiple milestones occur at the same time
 		if existingMilestone.Time == milestone.Time {
 			return
@@ -234,7 +223,6 @@ func NewDBTracer(
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
 		tracingTasks: make(map[string]Task),
-		batchBuffer:  make([]taskTableEntry, 0, 1000),
 	}
 
 	atexit.Register(func() {
