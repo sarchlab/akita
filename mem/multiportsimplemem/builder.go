@@ -119,10 +119,10 @@ func (b Builder) Build(name string) *Comp {
 
 	c.topPorts = make([]sim.Port, 0, b.numPorts)
 	for i := 0; i < b.numPorts; i++ {
-		portName := fmt.Sprintf("%s.Top%d", name, i)
+		portName := fmt.Sprintf("%s.Top[%d]", name, i)
 		port := sim.NewPort(c, b.portBufferSize, b.portBufferSize, portName)
 		port.AcceptHook(&portArrivalHook{comp: c})
-		c.AddPort(fmt.Sprintf("Top%d", i), port)
+		c.AddPort(fmt.Sprintf("Top[%d]", i), port)
 		c.topPorts = append(c.topPorts, port)
 	}
 
