@@ -136,33 +136,7 @@ func (b Builder) WithAddressConverter(
 
 // Build creates a SimpleBankedMemory component.
 func (b Builder) Build(name string) *Comp {
-	if b.engine == nil {
-		panic("simplebankedmemory.Builder: engine is nil; call WithEngine")
-	}
-
-	if b.numBanks <= 0 {
-		panic("simplebankedmemory.Builder: numBanks must be > 0")
-	}
-
-	if b.bankPipelineWidth <= 0 {
-		panic("simplebankedmemory.Builder: bankPipelineWidth must be > 0")
-	}
-
-	if b.bankPipelineDepth <= 0 {
-		panic("simplebankedmemory.Builder: bankPipelineDepth must be > 0")
-	}
-
-	if b.stageLatency <= 0 {
-		panic("simplebankedmemory.Builder: stageLatency must be > 0")
-	}
-
-	if b.topPortBufferSize <= 0 {
-		panic("simplebankedmemory.Builder: topPortBufferSize must be > 0")
-	}
-
-	if b.postPipelineBufSize <= 0 {
-		panic("simplebankedmemory.Builder: postPipelineBufSize must be > 0")
-	}
+	b.configurationMustBeValid()
 
 	var storage *mem.Storage
 	if b.storage != nil {
@@ -206,6 +180,36 @@ func (b Builder) Build(name string) *Comp {
 	c.AddMiddleware(&middleware{Comp: c})
 
 	return c
+}
+
+func (b Builder) configurationMustBeValid() {
+	if b.engine == nil {
+		panic("simplebankedmemory.Builder: engine is nil; call WithEngine")
+	}
+
+	if b.numBanks <= 0 {
+		panic("simplebankedmemory.Builder: numBanks must be > 0")
+	}
+
+	if b.bankPipelineWidth <= 0 {
+		panic("simplebankedmemory.Builder: bankPipelineWidth must be > 0")
+	}
+
+	if b.bankPipelineDepth <= 0 {
+		panic("simplebankedmemory.Builder: bankPipelineDepth must be > 0")
+	}
+
+	if b.stageLatency <= 0 {
+		panic("simplebankedmemory.Builder: stageLatency must be > 0")
+	}
+
+	if b.topPortBufferSize <= 0 {
+		panic("simplebankedmemory.Builder: topPortBufferSize must be > 0")
+	}
+
+	if b.postPipelineBufSize <= 0 {
+		panic("simplebankedmemory.Builder: postPipelineBufSize must be > 0")
+	}
 }
 
 func (b Builder) determineBankSelector() bankSelector {
