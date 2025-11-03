@@ -10,7 +10,6 @@ import (
 )
 
 type bank struct {
-	pending         sim.Buffer
 	pipeline        pipelining.Pipeline
 	postPipelineBuf sim.Buffer
 }
@@ -22,7 +21,7 @@ type bankPipelineItem struct {
 }
 
 func (i *bankPipelineItem) TaskID() string {
-	return i.req.Meta().ID
+	return i.req.Meta().ID + "_pl"
 }
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
@@ -36,7 +35,7 @@ type Comp struct {
 	AddressConverter mem.AddressConverter
 
 	banks        []bank
-	bankSelector BankSelector
+	bankSelector bankSelector
 }
 
 // Tick updates the component state cycle by cycle.
@@ -49,15 +48,14 @@ type middleware struct {
 }
 
 func (m *middleware) Tick() (madeProgress bool) {
-	madeProgress = m.acceptIncoming() || madeProgress
 	madeProgress = m.finalizeBanks() || madeProgress
 	madeProgress = m.tickPipelines() || madeProgress
-	madeProgress = m.feedPipelines() || madeProgress
+	madeProgress = m.dispatchFromTopPort() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) acceptIncoming() bool {
+func (m *middleware) dispatchFromTopPort() bool {
 	madeProgress := false
 
 	for {
@@ -75,13 +73,14 @@ func (m *middleware) acceptIncoming() bool {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		bankID := m.bankSelector(req, len(m.banks))
+		addr := req.GetAddress()
+		bankID := m.bankSelector.Select(addr, len(m.banks))
 		if bankID < 0 || bankID >= len(m.banks) {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}
 
 		b := &m.banks[bankID]
-		if !b.pending.CanPush() {
+		if !b.pipeline.CanAccept() {
 			break
 		}
 
@@ -89,7 +88,7 @@ func (m *middleware) acceptIncoming() bool {
 		tracing.TraceReqReceive(req, m.Comp)
 
 		item := &bankPipelineItem{req: req}
-		b.pending.Push(item)
+		b.pipeline.Accept(item)
 		madeProgress = true
 	}
 
@@ -235,33 +234,8 @@ func (m *middleware) tickPipelines() bool {
 	madeProgress := false
 
 	for i := range m.banks {
-		madeProgress = m.banks[i].pipeline.Tick() || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) feedPipelines() bool {
-	madeProgress := false
-
-	for i := range m.banks {
-		b := &m.banks[i]
-
-		for {
-			if !b.pipeline.CanAccept() {
-				break
-			}
-
-			itemIfc := b.pending.Peek()
-			if itemIfc == nil {
-				break
-			}
-
-			item := itemIfc.(*bankPipelineItem)
-			b.pipeline.Accept(item)
-			b.pending.Pop()
-			madeProgress = true
-		}
+		p := m.banks[i].pipeline
+		madeProgress = p.Tick() || madeProgress
 	}
 
 	return madeProgress

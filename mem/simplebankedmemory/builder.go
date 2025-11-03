@@ -2,14 +2,12 @@ package simplebankedmemory
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/sarchlab/akita/v4/mem/mem"
 	"github.com/sarchlab/akita/v4/pipelining"
 	"github.com/sarchlab/akita/v4/sim"
 )
-
-// BankSelector decides which bank should serve a request.
-type BankSelector func(req mem.AccessReq, numBanks int) int
 
 // Builder constructs SimpleBankedMemory components.
 type Builder struct {
@@ -17,15 +15,15 @@ type Builder struct {
 	freq   sim.Freq
 
 	numBanks            int
-	bankQueueSize       int
 	bankPipelineWidth   int
 	bankPipelineDepth   int
 	stageLatency        int
 	topPortBufferSize   int
 	postPipelineBufSize int
 
-	bankSelector BankSelector
-	bankSize     uint64
+	bankSelectorType   string
+	log2InterleaveSize uint64
+	customBankSelector bankSelector
 
 	capacity         uint64
 	storage          *mem.Storage
@@ -37,13 +35,13 @@ func MakeBuilder() Builder {
 	return Builder{
 		freq:                1 * sim.GHz,
 		numBanks:            4,
-		bankQueueSize:       32,
 		bankPipelineWidth:   1,
 		bankPipelineDepth:   1,
 		stageLatency:        10,
 		topPortBufferSize:   16,
 		postPipelineBufSize: 32,
-		bankSize:            64,
+		bankSelectorType:    "interleaved",
+		log2InterleaveSize:  6,
 		capacity:            4 * mem.GB,
 	}
 }
@@ -63,12 +61,6 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 // WithNumBanks sets the number of banks.
 func (b Builder) WithNumBanks(numBanks int) Builder {
 	b.numBanks = numBanks
-	return b
-}
-
-// WithBankQueueSize sets the queued request capacity per bank.
-func (b Builder) WithBankQueueSize(size int) Builder {
-	b.bankQueueSize = size
 	return b
 }
 
@@ -102,15 +94,23 @@ func (b Builder) WithPostPipelineBufferSize(size int) Builder {
 	return b
 }
 
-// WithBankSelector overrides the default bank selector.
-func (b Builder) WithBankSelector(selector BankSelector) Builder {
-	b.bankSelector = selector
+// WithBankSelectorType selects the bank selector implementation by name.
+// Supported selectors:
+//   - "interleaved": addresses are interleaved across banks using log2InterleaveSize.
+func (b Builder) WithBankSelectorType(selectorType string) Builder {
+	b.bankSelectorType = selectorType
 	return b
 }
 
-// WithBankSize sets the bank size used by the default selector.
-func (b Builder) WithBankSize(bankSize uint64) Builder {
-	b.bankSize = bankSize
+// WithLog2InterleaveSize sets the log2 interleave size used by the default selector.
+func (b Builder) WithLog2InterleaveSize(log2Size uint64) Builder {
+	b.log2InterleaveSize = log2Size
+	return b
+}
+
+// WithBankSelector overrides the bank selector with a custom implementation.
+func (b Builder) WithBankSelector(selector bankSelector) Builder {
+	b.customBankSelector = selector
 	return b
 }
 
@@ -144,10 +144,6 @@ func (b Builder) Build(name string) *Comp {
 		panic("simplebankedmemory.Builder: numBanks must be > 0")
 	}
 
-	if b.bankQueueSize <= 0 {
-		panic("simplebankedmemory.Builder: bankQueueSize must be > 0")
-	}
-
 	if b.bankPipelineWidth <= 0 {
 		panic("simplebankedmemory.Builder: bankPipelineWidth must be > 0")
 	}
@@ -168,10 +164,6 @@ func (b Builder) Build(name string) *Comp {
 		panic("simplebankedmemory.Builder: postPipelineBufSize must be > 0")
 	}
 
-	if b.bankSelector == nil {
-		b.bankSelector = makeDefaultBankSelector(b.bankSize)
-	}
-
 	var storage *mem.Storage
 	if b.storage != nil {
 		storage = b.storage
@@ -182,7 +174,7 @@ func (b Builder) Build(name string) *Comp {
 	c := &Comp{
 		Storage:          storage,
 		AddressConverter: b.addressConverter,
-		bankSelector:     b.bankSelector,
+		bankSelector:     b.determineBankSelector(),
 	}
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
@@ -193,11 +185,6 @@ func (b Builder) Build(name string) *Comp {
 	c.banks = make([]bank, b.numBanks)
 
 	for i := range c.banks {
-		pending := sim.NewBuffer(
-			fmt.Sprintf("%s.Bank[%d].Pending", name, i),
-			b.bankQueueSize,
-		)
-
 		postPipelineBuf := sim.NewBuffer(
 			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
 			b.postPipelineBufSize,
@@ -211,7 +198,6 @@ func (b Builder) Build(name string) *Comp {
 			Build(fmt.Sprintf("%s.Bank[%d].Pipeline", name, i))
 
 		c.banks[i] = bank{
-			pending:         pending,
 			pipeline:        pipeline,
 			postPipelineBuf: postPipelineBuf,
 		}
@@ -222,17 +208,18 @@ func (b Builder) Build(name string) *Comp {
 	return c
 }
 
-func makeDefaultBankSelector(bankSize uint64) BankSelector {
-	if bankSize == 0 {
-		bankSize = 1
+func (b Builder) determineBankSelector() bankSelector {
+	if b.customBankSelector != nil {
+		return b.customBankSelector
 	}
 
-	return func(req mem.AccessReq, numBanks int) int {
-		if numBanks == 0 {
-			return 0
+	selectorType := strings.ToLower(b.bankSelectorType)
+	switch selectorType {
+	case "", "interleaved":
+		return interleavedBankSelector{
+			Log2InterleaveSize: b.log2InterleaveSize,
 		}
-
-		addr := req.GetAddress()
-		return int((addr / bankSize) % uint64(numBanks))
+	default:
+		panic(fmt.Sprintf("simplebankedmemory.Builder: unsupported bank selector %q", b.bankSelectorType))
 	}
 }

@@ -126,7 +126,6 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			WithNumBanks(2).
-			WithBankQueueSize(4).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
 			WithPostPipelineBufferSize(4).
@@ -163,8 +162,6 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(agent.received).To(HaveLen(1))
 		rsp := agent.received[0].(*mem.DataReadyRsp)
 		Expect(rsp.Data).To(Equal(data))
-		Expect(memComp.banks[0].pending.Size() + memComp.banks[1].pending.Size()).
-			To(Equal(0))
 	})
 
 	It("should commit write before serving subsequent read", func() {
