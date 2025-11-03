@@ -128,7 +128,6 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithNumBanks(2).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
-			WithPostPipelineBufferSize(4).
 			Build("Mem")
 
 		agent = newTestAgent("Agent")

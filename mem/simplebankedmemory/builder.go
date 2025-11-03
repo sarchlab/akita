@@ -39,7 +39,7 @@ func MakeBuilder() Builder {
 		bankPipelineDepth:   1,
 		stageLatency:        10,
 		topPortBufferSize:   16,
-		postPipelineBufSize: 32,
+		postPipelineBufSize: 1,
 		bankSelectorType:    "interleaved",
 		log2InterleaveSize:  6,
 		capacity:            4 * mem.GB,
@@ -85,12 +85,6 @@ func (b Builder) WithStageLatency(latency int) Builder {
 // WithTopPortBufferSize sets the buffer size of the top port.
 func (b Builder) WithTopPortBufferSize(size int) Builder {
 	b.topPortBufferSize = size
-	return b
-}
-
-// WithPostPipelineBufferSize sets the post pipeline buffer capacity per bank.
-func (b Builder) WithPostPipelineBufferSize(size int) Builder {
-	b.postPipelineBufSize = size
 	return b
 }
 
