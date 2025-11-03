@@ -45,6 +45,14 @@ Requests traverse the following stages:
   numBanks × pipelineWidth × (1 / stageLatency) × frequency
   ```
 
+- **Tuning tips:**
+  - When each bank uses a single pipeline stage, the observed end-to-end
+    latency is roughly one cycle plus the configured per-stage latency. Add
+    additional stage latency to model longer service times.
+  - To keep sequential traffic saturated, configure the number of banks
+    greater than the pipeline latency. This ensures a stream of requests can
+    occupy different banks while earlier ones are still in flight.
+
 - **Storage semantics:** Reads are consistent with writes that finish earlier
   in the same cycle. Writes apply at completion; reads that finish later in
   the cycle observe the updated data.
