@@ -88,6 +88,12 @@ func (b Builder) WithTopPortBufferSize(size int) Builder {
 	return b
 }
 
+// WithPostPipelineBufferSize sets the post-pipeline buffer capacity per bank.
+func (b Builder) WithPostPipelineBufferSize(size int) Builder {
+	b.postPipelineBufSize = size
+	return b
+}
+
 // WithBankSelectorType selects the bank selector implementation by name.
 // Supported selectors:
 //   - "interleaved": addresses are interleaved across banks using log2InterleaveSize.

@@ -112,6 +112,43 @@ func (a *testAgent) send(msg sim.Msg) {
 	Expect(sendErr).To(BeNil())
 }
 
+type bandwidthAgent struct {
+	*sim.ComponentBase
+
+	port      sim.Port
+	completed int
+}
+
+func newBandwidthAgent(name string) *bandwidthAgent {
+	a := &bandwidthAgent{
+		ComponentBase: sim.NewComponentBase(name),
+	}
+
+	a.port = sim.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
+	a.AddPort("Port", a.port)
+
+	return a
+}
+
+func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
+	for {
+		msg := port.RetrieveIncoming()
+		if msg == nil {
+			break
+		}
+
+		if _, ok := msg.(sim.Rsp); ok {
+			a.completed++
+		}
+	}
+}
+
+func (a *bandwidthAgent) NotifyPortFree(sim.Port) {}
+
+func (a *bandwidthAgent) Handle(sim.Event) error {
+	return nil
+}
+
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
 		engine  sim.Engine
@@ -207,3 +244,65 @@ var _ = Describe("SimpleBankedMemory", func() {
 		Expect(committed).To(Equal(newData))
 	})
 })
+
+func Example() {
+	const (
+		numRequests = 100000
+		readSize    = 64
+	)
+
+	engine := sim.NewSerialEngine()
+	freq := 1 * sim.GHz
+
+	memComp := MakeBuilder().
+		WithEngine(engine).
+		WithFreq(freq).
+		WithNumBanks(4).
+		WithStageLatency(2).
+		WithTopPortBufferSize(32).
+		WithPostPipelineBufferSize(32).
+		Build("Mem")
+
+	agent := newBandwidthAgent("Agent")
+	conn := newLoopbackConnection("Conn")
+	conn.PlugIn(memComp.topPort)
+	conn.PlugIn(agent.port)
+
+	srcRemote := agent.port.AsRemote()
+	dstRemote := memComp.topPort.AsRemote()
+
+	requestsSent := 0
+	var pendingReq *mem.ReadReq
+	cycles := 0
+
+	for agent.completed < numRequests {
+		if pendingReq == nil && requestsSent < numRequests {
+			addr := uint64(requestsSent * readSize)
+			pendingReq = mem.ReadReqBuilder{}.
+				WithSrc(srcRemote).
+				WithDst(dstRemote).
+				WithAddress(addr).
+				WithByteSize(readSize).
+				Build()
+		}
+
+		if pendingReq != nil {
+			if err := agent.port.Send(pendingReq); err == nil {
+				requestsSent++
+				pendingReq = nil
+				conn.transfer()
+			}
+		}
+
+		memComp.Tick()
+		conn.transfer()
+		cycles++
+	}
+
+	totalBytes := uint64(numRequests * readSize)
+	seconds := float64(cycles) / float64(freq)
+	bandwidthGBS := (float64(totalBytes) / seconds) / 1e9
+
+	fmt.Printf("Achieved bandwidth: %.2f GB/s\n", bandwidthGBS)
+	// Output: Achieved bandwidth: 64.00 GB/s
+}
