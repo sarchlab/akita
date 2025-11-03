@@ -74,6 +74,10 @@ func (m *middleware) dispatchFromTopPort() bool {
 		}
 
 		addr := req.GetAddress()
+		if m.AddressConverter != nil {
+			addr = m.AddressConverter.ConvertExternalToInternal(addr)
+		}
+
 		bankID := m.bankSelector.Select(addr, len(m.banks))
 		if bankID < 0 || bankID >= len(m.banks) {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)

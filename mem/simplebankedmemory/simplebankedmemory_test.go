@@ -149,6 +149,11 @@ func (a *bandwidthAgent) Handle(sim.Event) error {
 	return nil
 }
 
+type zeroConverter struct{}
+
+func (zeroConverter) ConvertExternalToInternal(uint64) uint64   { return 0 }
+func (zeroConverter) ConvertInternalToExternal(v uint64) uint64 { return v }
+
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
 		engine  sim.Engine
@@ -242,6 +247,49 @@ var _ = Describe("SimpleBankedMemory", func() {
 		committed, err := memComp.Storage.Read(addr, uint64(len(newData)))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(committed).To(Equal(newData))
+	})
+
+	It("should use converted address for bank selection", func() {
+		memComp = MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			WithNumBanks(2).
+			WithStageLatency(2).
+			WithTopPortBufferSize(4).
+			WithAddressConverter(zeroConverter{}).
+			Build("MemConv")
+
+		agent = newTestAgent("AgentConv")
+		conn = newLoopbackConnection("ConnConv")
+		conn.PlugIn(memComp.topPort)
+		conn.PlugIn(agent.port)
+
+		write := mem.WriteReqBuilder{}.
+			WithSrc(agent.port.AsRemote()).
+			WithDst(memComp.topPort.AsRemote()).
+			WithAddress(0x0).
+			WithData([]byte{1, 2, 3, 4}).
+			Build()
+
+		read := mem.ReadReqBuilder{}.
+			WithSrc(agent.port.AsRemote()).
+			WithDst(memComp.topPort.AsRemote()).
+			WithAddress(0x100). // Maps to same internal address as write
+			WithByteSize(4).
+			Build()
+
+		agent.send(write)
+		agent.send(read)
+
+		for i := 0; i < 12; i++ {
+			memComp.Tick()
+		}
+
+		Expect(agent.received).To(HaveLen(2))
+
+		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
+		Expect(ok).To(BeTrue())
+		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
 
