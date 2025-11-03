@@ -115,8 +115,9 @@ func (a *testAgent) send(msg sim.Msg) {
 type bandwidthAgent struct {
 	*sim.ComponentBase
 
-	port      sim.Port
-	completed int
+	port         sim.Port
+	completed    int
+	completedIDs []string
 }
 
 func newBandwidthAgent(name string) *bandwidthAgent {
@@ -137,8 +138,10 @@ func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
 			break
 		}
 
-		if _, ok := msg.(sim.Rsp); ok {
+		if rsp, ok := msg.(sim.Rsp); ok {
+			id := rsp.GetRspTo()
 			a.completed++
+			a.completedIDs = append(a.completedIDs, id)
 		}
 	}
 }
@@ -153,6 +156,60 @@ type zeroConverter struct{}
 
 func (zeroConverter) ConvertExternalToInternal(uint64) uint64   { return 0 }
 func (zeroConverter) ConvertInternalToExternal(v uint64) uint64 { return v }
+
+const (
+	numRequests = 100000
+	readSize    = 64
+)
+
+func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq) {
+	engine := sim.NewSerialEngine()
+	freq := 1 * sim.GHz
+
+	memComp := MakeBuilder().
+		WithEngine(engine).
+		WithFreq(freq).
+		WithNumBanks(16).
+		WithStageLatency(6).
+		WithTopPortBufferSize(32).
+		WithPostPipelineBufferSize(32).
+		Build("Mem")
+
+	agent := newBandwidthAgent("Agent")
+	conn := newLoopbackConnection("Conn")
+	conn.PlugIn(memComp.topPort)
+	conn.PlugIn(agent.port)
+
+	return memComp, agent, conn, freq
+}
+
+func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
+	addr := uint64(index * readSize)
+	return mem.ReadReqBuilder{}.
+		WithSrc(src).
+		WithDst(dst).
+		WithAddress(addr).
+		WithByteSize(readSize).
+		Build()
+}
+
+func collectLatency(
+	agent *bandwidthAgent,
+	startCycles map[string]int,
+	currentCycle int,
+	processed *int,
+) float64 {
+	var latency float64
+
+	for *processed < agent.completed {
+		id := agent.completedIDs[*processed]
+		latency += float64(currentCycle - startCycles[id])
+		delete(startCycles, id)
+		(*processed)++
+	}
+
+	return latency
+}
 
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
@@ -294,48 +351,25 @@ var _ = Describe("SimpleBankedMemory", func() {
 })
 
 func Example() {
-	const (
-		numRequests = 100000
-		readSize    = 64
-	)
-
-	engine := sim.NewSerialEngine()
-	freq := 1 * sim.GHz
-
-	memComp := MakeBuilder().
-		WithEngine(engine).
-		WithFreq(freq).
-		WithNumBanks(4).
-		WithStageLatency(2).
-		WithTopPortBufferSize(32).
-		WithPostPipelineBufferSize(32).
-		Build("Mem")
-
-	agent := newBandwidthAgent("Agent")
-	conn := newLoopbackConnection("Conn")
-	conn.PlugIn(memComp.topPort)
-	conn.PlugIn(agent.port)
-
+	memComp, agent, conn, freq := setupExampleSystem()
 	srcRemote := agent.port.AsRemote()
 	dstRemote := memComp.topPort.AsRemote()
 
-	requestsSent := 0
+	startCycles := make(map[string]int)
 	var pendingReq *mem.ReadReq
+	requestsSent := 0
 	cycles := 0
+	processed := 0
+	var latencySum float64
 
 	for agent.completed < numRequests {
 		if pendingReq == nil && requestsSent < numRequests {
-			addr := uint64(requestsSent * readSize)
-			pendingReq = mem.ReadReqBuilder{}.
-				WithSrc(srcRemote).
-				WithDst(dstRemote).
-				WithAddress(addr).
-				WithByteSize(readSize).
-				Build()
+			pendingReq = makeReadReq(srcRemote, dstRemote, requestsSent)
 		}
 
 		if pendingReq != nil {
 			if err := agent.port.Send(pendingReq); err == nil {
+				startCycles[pendingReq.ID] = cycles
 				requestsSent++
 				pendingReq = nil
 				conn.transfer()
@@ -344,13 +378,19 @@ func Example() {
 
 		memComp.Tick()
 		conn.transfer()
+
+		latencySum += collectLatency(agent, startCycles, cycles, &processed)
 		cycles++
 	}
 
+	avgLatencyCycles := latencySum / float64(numRequests)
 	totalBytes := uint64(numRequests * readSize)
 	seconds := float64(cycles) / float64(freq)
 	bandwidthGBS := (float64(totalBytes) / seconds) / 1e9
 
 	fmt.Printf("Achieved bandwidth: %.2f GB/s\n", bandwidthGBS)
-	// Output: Achieved bandwidth: 64.00 GB/s
+	fmt.Printf("Average latency: %.2f cycles\n", avgLatencyCycles)
+	// Output:
+	// Achieved bandwidth: 64.00 GB/s
+	// Average latency: 7.00 cycles
 }
