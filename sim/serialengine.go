@@ -20,6 +20,9 @@ type SerialEngine struct {
 	pauseLock    sync.Mutex
 
 	singleRunLock sync.Mutex
+
+	runUntilTimeLock sync.RWMutex
+	runUntilTime     VTimeInSec
 }
 
 // NewSerialEngine creates a SerialEngine
@@ -29,6 +32,9 @@ func NewSerialEngine() *SerialEngine {
 	e.queue = NewEventQueue()
 	e.secondaryQueue = NewEventQueue()
 	//e.queue = NewInsertionQueue()
+
+	// Initialize runUntilTime to max value (no limit)
+	e.runUntilTime = VTimeInSec(^uint64(0) >> 1) // Max positive value
 
 	return e
 }
@@ -83,6 +89,19 @@ func (e *SerialEngine) Run() error {
 				"cannot run event in the past, evt %s @ %.10f, now %.10f",
 				reflect.TypeOf(evt), evt.Time(), now,
 			)
+		}
+
+		// Check if we've reached the time limit
+		runUntilTime := e.readRunUntilTime()
+		if evt.Time() >= runUntilTime {
+			// Put the event back in the queue and return
+			if evt.IsSecondary() {
+				e.secondaryQueue.Push(evt)
+			} else {
+				e.queue.Push(evt)
+			}
+			e.pauseLock.Unlock()
+			return nil
 		}
 
 		e.writeNow(evt.Time())
@@ -160,4 +179,18 @@ func (e *SerialEngine) Continue() {
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
+}
+
+// SetRunUntilTime sets a time limit for the simulation. The Run method
+// will return when this time is reached.
+func (e *SerialEngine) SetRunUntilTime(until VTimeInSec) {
+	e.runUntilTimeLock.Lock()
+	defer e.runUntilTimeLock.Unlock()
+	e.runUntilTime = until
+}
+
+func (e *SerialEngine) readRunUntilTime() VTimeInSec {
+	e.runUntilTimeLock.RLock()
+	defer e.runUntilTimeLock.RUnlock()
+	return e.runUntilTime
 }
