@@ -45,7 +45,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 	Context("AddMilestone with same timestamp", func() {
 		It("should only record the first milestone when multiple milestones occur at the same time", func() {
-			tracer.EnableTracing()
+			tracer.StartTracing()
 			timeTeller.SetCurrentTime(100.0)
 
 			milestone1 := Milestone{
@@ -83,7 +83,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		})
 
 		It("should allow milestones for different tasks at the same time", func() {
-			tracer.EnableTracing()
+			tracer.StartTracing()
 			timeTeller.SetCurrentTime(100.0)
 
 			milestone1 := Milestone{
@@ -114,7 +114,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		})
 
 		It("should allow milestones for same task at different times", func() {
-			tracer.EnableTracing()
+			tracer.StartTracing()
 			timeTeller.SetCurrentTime(100.0)
 
 			milestone1 := Milestone{
@@ -146,7 +146,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		})
 
 		It("should still prevent identical milestones from being recorded twice", func() {
-			tracer.EnableTracing()
+			tracer.StartTracing()
 			timeTeller.SetCurrentTime(100.0)
 
 			milestone := Milestone{

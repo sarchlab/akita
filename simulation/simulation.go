@@ -67,6 +67,10 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 		s.monitor.RegisterComponent(c)
 	}
 
+	if hookable, ok := c.(tracing.NamedHookable); ok {
+		tracing.CollectTrace(hookable, s.visTracer)
+	}
+
 	for _, p := range c.Ports() {
 		s.registerPort(p)
 	}
@@ -95,9 +99,13 @@ func (s *Simulation) GetPortByName(name string) sim.Port {
 
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
-	s.dataRecorder.Close()
-
 	if s.monitor != nil {
 		s.monitor.StopServer()
 	}
+
+	if s.visTracer != nil {
+		s.visTracer.Terminate()
+	}
+
+	s.dataRecorder.Close()
 }
