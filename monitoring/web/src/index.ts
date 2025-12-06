@@ -6,7 +6,6 @@ import './style.css'
 import '@fortawesome/fontawesome-free/js/fontawesome'
 import '@fortawesome/fontawesome-free/js/solid'
 import '@fortawesome/fontawesome-free/js/regular'
-// import '@fortawesome/fontawesome-free/js/brands'
 
 import './component_tree'
 import { UIManager } from './ui_manager'
@@ -16,6 +15,7 @@ import { ProgressBarManager } from './progress_bar'
 import { HangAnalyzer } from './hang_analyzer'
 import { Monitor } from './monitor'
 import { ResourceMonitor } from './resource'
+import { setupTraceButton } from './tracing'
 
 class App {
     uiManager: UIManager
@@ -47,6 +47,23 @@ class App {
         });
 
         listComponents(this.monitor)
+
+        const traceBtn = document.getElementById("trace-toggle-btn") as HTMLButtonElement | null;
+        
+        // Preload images to prevent flickering
+        const preloadImages = () => {
+            const rotateImg = new Image();
+            rotateImg.src = "rotate_icon.png";
+            const stopImg = new Image();
+            stopImg.src = "stop-button.png";
+        };
+        preloadImages();
+
+        if (traceBtn) {
+            setupTraceButton(traceBtn);
+        } else {
+            console.warn("Trace toggle button not found.");
+        }
     }
 }
 
