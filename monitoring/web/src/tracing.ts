@@ -20,40 +20,40 @@ export function setupTraceButton(traceBtn: HTMLButtonElement) {
     };
 
     const updateTraceBtn = (tracing: boolean) => {
-        const img = traceBtn.querySelector("img") as HTMLImageElement | null;
+        // Find the rotating icon button and img in the sibling button within the same btn-group
+        const btnGroup = traceBtn.parentElement;
+        const iconBtn = btnGroup?.querySelector("button:has(img)") as HTMLButtonElement | null;
+        const img = btnGroup?.querySelector("img") as HTMLImageElement | null;
         const textNode = getTextNode();
 
-        if (img) {
-            img.classList.add("loading");
-        }
-
         if (tracing) {
+            // Tracing is running: green icon button, red stop button
             traceBtn.classList.add("btn-danger");
             traceBtn.classList.remove("btn-success");
+            if (iconBtn) {
+                iconBtn.classList.add("btn-success");
+                iconBtn.classList.remove("btn-danger");
+            }
             if (img) {
-                img.src = "rotate_icon.png";
-                img.alt = "Rotate Icon";
-                img.className = "rotating-icon";
+                img.classList.add("rotating-icon");
             }
             if (textNode) {
-                textNode.textContent = " Stop";
+                textNode.textContent = "Stop Tracing";
             }
         } else {
+            // Tracing is stopped: red icon button, green start button
             traceBtn.classList.add("btn-success");
             traceBtn.classList.remove("btn-danger");
+            if (iconBtn) {
+                iconBtn.classList.add("btn-danger");
+                iconBtn.classList.remove("btn-success");
+            }
             if (img) {
-                img.src = "rotate_icon.png";
-                img.alt = "Stop Icon";
-                img.className = "";
+                img.classList.remove("rotating-icon");
             }
             if (textNode) {
-                textNode.textContent = " Start";
+                textNode.textContent = "Start Tracing";
             }
-        }
-
-        if (img) {
-            img.onload = () => img.classList.remove("loading");
-            img.onerror = () => img.classList.remove("loading");
         }
     };
 
