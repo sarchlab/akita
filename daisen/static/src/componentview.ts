@@ -5,6 +5,7 @@ import XAxisDrawer from "./xaxisdrawer";
 import { ScaleLinear } from "d3";
 import { Task, Dim } from "./task";
 import { Widget, TimeValue } from "./widget";
+import { applySegmentShadingToSVG } from "./segmentshading";
 
 type DataObject = {
   info_type: string;
@@ -512,6 +513,27 @@ class ComponentView {
       .attr("d", line)
       .attr("fill", "none")
       .attr("stroke", color);
+
+    // Apply segment shading after rendering data curve
+    this._applySegmentShading(svg);
+  }
+
+  private _applySegmentShading(svg: SVGElement) {
+    if (!this._xScale || this._startTime >= this._endTime) {
+      return;
+    }
+
+    const svgSelection = d3.select(svg) as d3.Selection<SVGSVGElement, unknown, null, undefined>;
+
+    applySegmentShadingToSVG(
+      svgSelection,
+      this._xScale,
+      this._startTime,
+      this._endTime,
+      this._canvasHeight - this._xAxisHeight,
+      this._marginTop,
+      "componentview-segment-shading"
+    );
   }
 
 }

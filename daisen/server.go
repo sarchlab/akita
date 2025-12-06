@@ -58,6 +58,7 @@ func startAPIServer() {
 	http.HandleFunc("/api/trace", httpTrace)
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
+	http.HandleFunc("/api/segments", httpSegments)
 
 	http.HandleFunc("/api/gpt", httpGPTProxy)
 	http.HandleFunc("/api/githubisavailable", httpGithubIsAvailableProxy)

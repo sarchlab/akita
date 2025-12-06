@@ -2,6 +2,7 @@ import * as d3 from "d3";
 import Dashboard from "./dashboard";
 import TaskPage from "./taskpage";
 import { ZoomHandler, MouseEventHandler } from "./mouseeventhandler";
+import { applySegmentShadingToSVG } from "./segmentshading";
 
 export class TimeValue {
   time: number;
@@ -177,6 +178,9 @@ export class Widget implements ZoomHandler {
         true
       );
     }
+
+    // Re-apply segment shading with new time range
+    this._applySegmentShading();
   }
 
   permanentTimeShift(startTime: number, endTime: number) {
@@ -237,6 +241,33 @@ export class Widget implements ZoomHandler {
     this._renderXAxis(svg);
     this._fetchAndRenderAxisData(svg, true);
     this._fetchAndRenderAxisData(svg, false);
+
+    // Apply segment shading for non-traced periods
+    this._applySegmentShading();
+  }
+
+  private _applySegmentShading() {
+    if (!this._svg || !this._xScale || this._startTime >= this._endTime) {
+      return;
+    }
+
+    const svgSelection = d3.select(this._svg) as d3.Selection<SVGSVGElement, unknown, null, undefined>;
+
+    // Account for the y-axis offset in the widget
+    const xScaleWithOffset = d3
+      .scaleLinear()
+      .domain([this._startTime, this._endTime])
+      .range([this._yAxisWidth, this._yAxisWidth + this._graphContentWidth]);
+
+    applySegmentShadingToSVG(
+      svgSelection,
+      xScaleWithOffset,
+      this._startTime,
+      this._endTime,
+      this._graphContentHeight + this._graphPaddingTop,
+      this._graphPaddingTop,
+      "widget-segment-shading"
+    );
   }
 
   setXScale(xScale: d3.ScaleLinear<number, number>) {
