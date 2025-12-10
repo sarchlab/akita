@@ -1,4 +1,5 @@
 import DashboardPage from "./dashboardpage";
+import OverviewPage from "./overviewpage";
 import { TaskPage } from "./taskpage";
 import { MouseEventHandler } from "./mouseeventhandler";
 
@@ -8,6 +9,7 @@ interface View {
 
 class App {
   _view: string;
+  _overviewPage: OverviewPage;
   _dashboardPage: DashboardPage;
   _taskPage: TaskPage;
   _currentView: View;
@@ -15,6 +17,7 @@ class App {
   constructor() {
     this._view = "landing_page";
 
+    this._overviewPage = new OverviewPage();
     this._dashboardPage = new DashboardPage();
     this._taskPage = new TaskPage();
 
@@ -40,7 +43,13 @@ class App {
   route() {
     const path = window.location.pathname;
 
-    if (path === "/" || path === "/dashboard") {
+    if (path === "/") {
+      this.switchLayout(this._overviewPage);
+      this._overviewPage.render();
+      return;
+    }
+
+    if (path === "/dashboard") {
       this.switchLayout(this._dashboardPage);
       this._dashboardPage.render();
       return;
@@ -72,6 +81,10 @@ class App {
         })
         .then(rsp => {
           this._taskPage.showTask(rsp[0]);
+          if (params.get("dissect") === "1") {
+            this._taskPage._dissectionMode = true;
+            this._taskPage._updateLayout();
+          }
         });
       return;
     } else {
@@ -80,13 +93,17 @@ class App {
         .then(rsp => {
           if (!params.has("starttime") || !params.has("endtime")) {
             this._taskPage.showTask(rsp[0]);
-            return;
+          } else {
+            const startTime = parseFloat(params.get("starttime"));
+            const endTime = parseFloat(params.get("endtime"));
+            this._taskPage.setTimeRange(startTime, endTime, false);
+            this._taskPage.showTask(rsp[0], true);
           }
-
-          const startTime = parseFloat(params.get("starttime"));
-          const endTime = parseFloat(params.get("endtime"));
-          this._taskPage.setTimeRange(startTime, endTime, false);
-          this._taskPage.showTask(rsp[0], true);
+          
+          if (params.get("dissect") === "1") {
+            this._taskPage._dissectionMode = true;
+            this._taskPage._updateLayout();
+          }
         });
       return;
     }

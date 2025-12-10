@@ -226,13 +226,19 @@ class TaskRenderer {
 
         taskBarsEnter
             .on("mouseover", (_, d) => {
-                this._showTooltip(d)
-                this._detailPage.highlight(d)
+                // Only show hover tooltip if no task is locked
+                if (!this._detailPage.isTaskLocked) {
+                    this._showTooltip(d)
+                    this._detailPage.highlight(d)
+                }
                 console.log(d)
             })
             .on("mouseout", d => {
-                this._hideTooltip()
-                this._detailPage.highlight(null)
+                // Only hide tooltip if no task is locked
+                if (!this._detailPage.isTaskLocked) {
+                    this._hideTooltip()
+                    this._detailPage.highlight(null)
+                }
             });
 
         let dragging = false;
@@ -259,6 +265,13 @@ class TaskRenderer {
                 }
             })
             .on('click', (event, d) => {
+                event.preventDefault();
+                if (dragMoved) {
+                    return
+                }
+                this._detailPage.handleTaskClick(d);
+            })
+            .on('dblclick', (event, d) => {
                 event.preventDefault();
                 if (dragMoved) {
                     return
@@ -307,6 +320,63 @@ class TaskRenderer {
                 // Group milestones by time
                 const milestoneGroups = this._groupMilestonesByTime(task.steps);
                 console.log("Milestone groups:", milestoneGroups);
+
+                // Sort milestone groups by time for connecting lines
+                const sortedMilestoneGroups = milestoneGroups.sort((a, b) => a.time - b.time);
+
+                // Detect collisions and mark overlapping milestones
+                const minPixelDistance = 10; // Minimum pixel distance between circles
+                sortedMilestoneGroups.forEach((group, index) => {
+                    group.xOffset = 0; // Default: no x offset
+                    group.isOverlapping = false; // Default: not overlapping
+
+                    if (index > 0) {
+                        const prevGroup = sortedMilestoneGroups[index - 1];
+                        const prevX = this._xScale(prevGroup.time);
+                        const currX = this._xScale(group.time);
+                        const pixelDistance = Math.abs(currX - prevX);
+
+                        // If circles are too close, mark as overlapping and apply offset
+                        if (pixelDistance < minPixelDistance) {
+                            group.isOverlapping = true;
+                            prevGroup.isOverlapping = true;
+                            // Offset by 1-2 pixels to slightly separate them
+                            group.xOffset = 2;
+                        }
+                    }
+                });
+                
+                // Render connecting wavy lines between milestones
+                if (sortedMilestoneGroups.length > 1) {
+                    const taskY = this._getYValue(task) + this._getHeightValue(task) / 2;
+                    
+                    // Remove old wavy lines
+                    taskBarGroup.selectAll(`.milestone-line-${this._taskIdTag(task)}`).remove();
+                    
+                    for (let i = 0; i < sortedMilestoneGroups.length - 1; i++) {
+                        const currentMilestone = sortedMilestoneGroups[i];
+                        const nextMilestone = sortedMilestoneGroups[i + 1];
+                        
+                        const x1 = this._xScale(currentMilestone.time);
+                        const x2 = this._xScale(nextMilestone.time);
+                        const distance = x2 - x1;
+                        
+                        // Only draw line if milestones are far enough apart
+                        if (distance > 10) {
+                            const pathData = this._createWavyPath(x1, x2, taskY, distance);
+                            
+                            taskBarGroup
+                                .append('path')
+                                .attr('class', `milestone-line-${this._taskIdTag(task)}`)
+                                .attr('d', pathData)
+                                .attr('stroke', 'red')
+                                .attr('stroke-width', 1.5)
+                                .attr('fill', 'none')
+                                .attr('opacity', 0.7)
+                                .style('pointer-events', 'none'); // Don't interfere with mouse events
+                        }
+                    }
+                }
                 
                 const milestones = taskBarGroup
                     .selectAll(`.milestone-${this._taskIdTag(task)}`)
@@ -316,10 +386,28 @@ class TaskRenderer {
                     .enter()
                     .append('circle')
                     .attr('class', `milestone-${this._taskIdTag(task)}`)
-                    .attr('r', d => d.steps.length > 1 ? 3 : 2) // Larger circle for multiple milestones
+                    .attr('r', d => {
+                        // Increase radius for overlapping milestones
+                        if (d.isOverlapping) {
+                            return d.steps.length > 1 ? 5 : 4;
+                        }
+                        return d.steps.length > 1 ? 3 : 2;
+                    })
                     .attr('fill', 'red')
-                    .attr('stroke', d => d.steps.length > 1 ? '#fff' : 'none') // White border for multiple
-                    .attr('stroke-width', d => d.steps.length > 1 ? 1 : 0)
+                    .attr('stroke', d => {
+                        // Add white stroke for overlapping milestones
+                        if (d.isOverlapping) {
+                            return '#fff';
+                        }
+                        return d.steps.length > 1 ? '#fff' : 'none';
+                    })
+                    .attr('stroke-width', d => {
+                        // Thicker stroke for overlapping milestones
+                        if (d.isOverlapping) {
+                            return 2;
+                        }
+                        return d.steps.length > 1 ? 1 : 0;
+                    })
                     .attr('cy', (d) => this._getYValue(task) + this._getHeightValue(task) / 2);
 
                 milestonesEnter
@@ -333,16 +421,39 @@ class TaskRenderer {
                 milestonesEnter.merge(milestones)
                     .transition(t)
                     .attr('cx', d => {
+                        const baseX = this._xScale(d.time);
+                        const offsetX = baseX + (d.xOffset || 0);
                         console.log("Milestone position calculation:", {
                             time: d.time,
-                            xPos: this._xScale(d.time),
-                            count: d.steps.length
+                            xPos: baseX,
+                            xOffset: d.xOffset || 0,
+                            finalX: offsetX,
+                            count: d.steps.length,
+                            isOverlapping: d.isOverlapping || false
                         });
-                        return this._xScale(d.time);
+                        return offsetX;
                     })
-                    .attr('r', d => d.steps.length > 1 ? 3 : 2)
-                    .attr('stroke', d => d.steps.length > 1 ? '#fff' : 'none')
-                    .attr('stroke-width', d => d.steps.length > 1 ? 1 : 0);
+                    .attr('r', d => {
+                        // Increase radius for overlapping milestones
+                        if (d.isOverlapping) {
+                            return d.steps.length > 1 ? 5 : 4;
+                        }
+                        return d.steps.length > 1 ? 3 : 2;
+                    })
+                    .attr('stroke', d => {
+                        // Add white stroke for overlapping milestones
+                        if (d.isOverlapping) {
+                            return '#fff';
+                        }
+                        return d.steps.length > 1 ? '#fff' : 'none';
+                    })
+                    .attr('stroke-width', d => {
+                        // Thicker stroke for overlapping milestones
+                        if (d.isOverlapping) {
+                            return 2;
+                        }
+                        return d.steps.length > 1 ? 1 : 0;
+                    });
 
                 milestones.exit().remove();
             }
@@ -469,6 +580,42 @@ class TaskRenderer {
         
         this._tooltip.style.left = `${x}px`;
         this._tooltip.style.top = `${y}px`;
+    }
+
+    /**
+     * Creates a wavy path between two points
+     * @param {number} x1 - Start x coordinate
+     * @param {number} x2 - End x coordinate  
+     * @param {number} y - Y coordinate (same for both points)
+     * @param {number} distance - Distance between points
+     * @returns {string} SVG path data string
+     */
+    _createWavyPath(x1, x2, y, distance) {
+        // Calculate wave parameters based on distance
+        const waveLength = Math.min(distance / 6, 12);
+        const amplitude = 4;
+        const numWaves = Math.max(2, Math.floor(distance / waveLength));
+        
+        let pathData = `M ${x1} ${y}`;
+        
+        // Create smooth wavy line using quadratic curves
+        for (let i = 0; i < numWaves; i++) {
+            const waveProgress = i / numWaves;
+            const nextWaveProgress = (i + 1) / numWaves;
+            
+            const currentX = x1 + (waveProgress * distance);
+            const nextX = x1 + (nextWaveProgress * distance);
+            const midX = (currentX + nextX) / 2;
+            
+            // Alternate wave direction for each wave
+            const waveDirection = (i % 2 === 0) ? 1 : -1;
+            const controlY = y + (amplitude * waveDirection);
+            
+            // Add quadratic curve to create wave
+            pathData += ` Q ${midX} ${controlY} ${nextX} ${y}`;
+        }
+        
+        return pathData;
     }
 }
 

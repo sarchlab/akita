@@ -28,6 +28,13 @@ class TaskView {
   private _taskGroupGap: number;
   private _toggleButton: HTMLElement;
   private _onToggleCallback: (() => void) | null;
+  private _lockedMilestoneKind: string | null = null;
+  private _lockedMilestoneTimeWindow: {startTime: number, endTime: number} | null = null;
+  private _lockedTask: Task | null = null;
+
+  get isTaskLocked(): boolean {
+    return this._lockedTask !== null;
+  }
   private _dissectionView: HTMLElement;
   private _isDissectionMode: boolean;
 
@@ -119,10 +126,18 @@ class TaskView {
     this._taskRenderer.setCanvas(canvas, tooltip);
     this._xAxisDrawer.setCanvas(canvas);
 
-    d3.select(this._canvas)
+    const svg = d3.select(this._canvas)
       .select("svg")
       .attr("width", this._canvasWidth)
       .attr("height", this._canvasHeight);
+
+    // Add click event to SVG background to clear locks
+    svg.on('click', (event: MouseEvent) => {
+      // Only clear if clicking directly on SVG (not on child elements)
+      if (event.target === svg.node()) {
+        this._clearAllLocks();
+      }
+    });
 
     this.updateLayout();
     this._doRender();
@@ -338,25 +353,40 @@ class TaskView {
     if (showSteps && task.steps && task.steps.length > 0) {
       const timeRange = this._endTime - this._startTime;
       const containerWidth = this._canvas.parentElement.offsetWidth - 40;
-      task.steps.forEach(step => {
-        const stepOffset = ((step.time - this._startTime) / timeRange) * containerWidth;
+      
+      // Use same grouping logic as TaskRenderer for consistency
+      const milestoneGroups = this._groupMilestonesByTime(task.steps);
+      
+      milestoneGroups.forEach(group => {
+        const stepOffset = ((group.time - this._startTime) / timeRange) * containerWidth;
         if (stepOffset >= 0 && stepOffset <= containerWidth) {
           const stepDot = document.createElement('div');
+          
+          // Use same styling as TaskRenderer - larger circle for multiple milestones
+          const dotSize = group.steps.length > 1 ? 6 : 4;
+          const hasBorder = group.steps.length > 1;
+          
           stepDot.style.cssText = `
             position: absolute;
-            left: ${stepOffset - 3}px;
-            top: 16px;
-            width: 6px;
-            height: 6px;
+            left: ${stepOffset - dotSize/2}px;
+            top: ${18 - dotSize/2}px;
+            width: ${dotSize}px;
+            height: ${dotSize}px;
             background: #ff0000;
             border-radius: 50%;
-            border: 1px solid #ffffff;
+            border: ${hasBorder ? '1px solid #ffffff' : 'none'};
             cursor: pointer;
           `;
           
-          // Add tooltip for milestone dot
+          // Add tooltip for milestone group (consistent with TaskRenderer)
           stepDot.addEventListener('mouseenter', (e) => {
-            this._showMilestoneInfo(step, 1);
+            if (group.steps.length > 1) {
+              // Show group info for multiple milestones
+              this._showMilestoneGroupInfo(group.steps, group.time);
+            } else {
+              // Show single milestone info
+              this._showMilestoneInfo(group.steps[0], 1);
+            }
           });
           
           stepDot.addEventListener('mouseleave', () => {
@@ -971,7 +1001,7 @@ class TaskView {
       .style("text-anchor", "middle")
       .style("font-size", "12px")
       .style("fill", "#666")
-      .text("Stacked Milestones");
+      .text("Blocking Reasons");
   }
 
 
@@ -1042,17 +1072,72 @@ class TaskView {
             .attr("class", "stacked-milestone-bar")
             .style("cursor", "pointer");
           
-          // Add hover events for tooltip
+          // Add hover and click events for tooltip
           rect
-            .on("mouseenter", (event) => {
-              this._showStackedBarTooltip(kind, value, binStartTime, binEndTime, timePoint.time);
-              // Highlight the segment
-              rect.attr("opacity", 0.6);
+            .on("mouseenter", async (event) => {
+              // Only show hover effect if not locked or locked to different item
+              if (!this._lockedMilestoneKind || 
+                  (this._lockedMilestoneKind !== kind || 
+                   !this._lockedMilestoneTimeWindow ||
+                   this._lockedMilestoneTimeWindow.startTime !== binStartTime ||
+                   this._lockedMilestoneTimeWindow.endTime !== binEndTime)) {
+                console.log(`TaskView: Mouse entered stacked bar - kind: ${kind}, value: ${value}, timeWindow: ${binStartTime}-${binEndTime}`);
+                this._showStackedBarTooltip(kind, value, binStartTime, binEndTime, timePoint.time);
+                // Highlight the segment
+                rect.attr("opacity", 0.6);
+                // Highlight corresponding tasks that have milestones in this time window
+                try {
+                  await this._highlightTasksWithMilestonesInTimeWindow(binStartTime, binEndTime, kind);
+                } catch (error) {
+                  console.error('TaskView: Error in highlighting:', error);
+                }
+              }
             })
             .on("mouseleave", () => {
-              this._hideStackedBarTooltip();
-              // Restore normal opacity
-              rect.attr("opacity", 0.8);
+              // Only hide if not locked
+              if (!this._lockedMilestoneKind) {
+                this._hideStackedBarTooltip();
+                // Restore normal opacity
+                rect.attr("opacity", 0.8);
+                // Clear task highlighting
+                this._clearTaskHighlighting();
+              }
+            })
+            .on("click", async (event) => {
+              event.stopPropagation();
+              console.log(`TaskView: Clicked stacked bar - kind: ${kind}, value: ${value}, timeWindow: ${binStartTime}-${binEndTime}`);
+              
+              // Check if clicking the same item that's already locked
+              if (this._lockedMilestoneKind === kind && 
+                  this._lockedMilestoneTimeWindow &&
+                  this._lockedMilestoneTimeWindow.startTime === binStartTime &&
+                  this._lockedMilestoneTimeWindow.endTime === binEndTime) {
+                // Unlock
+                this._lockedMilestoneKind = null;
+                this._lockedMilestoneTimeWindow = null;
+                this._hideStackedBarTooltip();
+                rect.attr("opacity", 0.8);
+                this._clearTaskHighlighting();
+                console.log('TaskView: Unlocked milestone highlighting');
+              } else {
+                // Lock to this item
+                this._lockedMilestoneKind = kind;
+                this._lockedMilestoneTimeWindow = {startTime: binStartTime, endTime: binEndTime};
+                
+                // Clear any existing highlighting first
+                this._clearTaskHighlighting();
+                d3.selectAll('.stacked-bar rect').attr("opacity", 0.8);
+                
+                // Show locked state
+                this._showStackedBarTooltip(kind, value, binStartTime, binEndTime, timePoint.time);
+                rect.attr("opacity", 0.6);
+                try {
+                  await this._highlightTasksWithMilestonesInTimeWindow(binStartTime, binEndTime, kind);
+                } catch (error) {
+                  console.error('TaskView: Error in highlighting:', error);
+                }
+                console.log(`TaskView: Locked milestone highlighting for ${kind}`);
+              }
             });
           
           stackBase -= segmentHeight;
@@ -1061,21 +1146,115 @@ class TaskView {
     });
   }
 
+  handleTaskClick(task: Task) {
+    console.log(`TaskView: Clicked task ${task.id}`);
+    
+    // Check if clicking the same task that's already locked
+    if (this._lockedTask && this._lockedTask.id === task.id) {
+      // Unlock
+      this._lockedTask = null;
+      this._hideTaskTooltip();
+      console.log('TaskView: Unlocked task tooltip');
+    } else {
+      // Lock to this task
+      this._lockedTask = task;
+      this._showTaskTooltip(task);
+      console.log(`TaskView: Locked task tooltip for ${task.id}`);
+    }
+  }
+
+  private _showTaskTooltip(task: Task) {
+    console.log(`TaskView: Showing task tooltip for ${task.id}`);
+    const tooltip = document.querySelector('.curr-task-info');
+    if (tooltip) {
+      const tableLeftCol = 3;
+      const tableRightcol = 12 - tableLeftCol;
+
+      tooltip.innerHTML = `
+<div class="container">
+    <div class="row">
+        <h4> ${task.kind} - ${task.what} </h4>
+    </div>
+    <dl class="row">
+        <dt class="col-sm-${tableLeftCol}">ID</dt>
+        <dd class="col-sm-${tableRightcol}">${task.id}</dd>
+
+        <dt class="col-sm-${tableLeftCol}">Kind</dt>
+        <dd class="col-sm-${tableRightcol}">${task.kind}</dd>
+
+        <dt class="col-sm-${tableLeftCol}">What</dt>
+        <dd class="col-sm-${tableRightcol}">${task.what}</dd>
+
+        <dt class="col-sm-${tableLeftCol}">Where</dt>
+        <dd class="col-sm-${tableRightcol}">${task.location}</dd>
+
+        <dt class="col-sm-${tableLeftCol}">Start</dt>
+        <dd class="col-sm-${tableRightcol}">
+            ${this._smartString(task['start_time'])}
+        </dd>
+
+        <dt class="col-sm-${tableLeftCol}">End</dt>
+        <dd class="col-sm-${tableRightcol}">
+            ${this._smartString(task['end_time'])}
+        </dd>
+
+        <dt class="col-sm-${tableLeftCol}">Duration</dt>
+        <dd class="col-sm-${tableRightcol}">
+            ${this._smartString(task['end_time'] - task['start_time'])}
+        </dd>
+    </dl>
+</div>`;
+      tooltip.classList.add('showing');
+      // Also highlight the task when showing tooltip
+      this.highlight(task);
+      console.log('TaskView: Task tooltip set and showing class added');
+    } else {
+      console.error('TaskView: Could not find .curr-task-info element');
+    }
+  }
+
+  private _hideTaskTooltip() {
+    const tooltip = document.querySelector('.curr-task-info');
+    if (tooltip) {
+      tooltip.classList.remove('showing');
+    }
+    // Also clear task highlighting when hiding tooltip
+    this.highlight(null);
+  }
+
+  private _clearAllLocks() {
+    // Clear milestone lock
+    if (this._lockedMilestoneKind) {
+      this._lockedMilestoneKind = null;
+      this._lockedMilestoneTimeWindow = null;
+      this._hideStackedBarTooltip();
+      d3.selectAll('.stacked-milestone-bar').attr("opacity", 0.8);
+      this._clearTaskHighlighting();
+    }
+    
+    // Clear task lock
+    if (this._lockedTask) {
+      this._lockedTask = null;
+      this._hideTaskTooltip();
+    }
+    
+    console.log('TaskView: Cleared all locks');
+  }
+
   private _showStackedBarTooltip(kind: string, count: number, startTime: number, endTime: number, centerTime: number) {
     // Show milestone info in right column tooltip
     const tooltip = document.querySelector('.curr-task-info');
     if (tooltip) {
       tooltip.innerHTML = `
         <div style="text-align: left; min-width: 250px;">
-          <h4>Stacked Milestone Bar</h4>
+          <h4>Blocking Reasons Analysis</h4>
           <div style="margin-bottom: 8px;">
-            <span style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">Kind:</span> ${kind}<br/>
+            <span style="background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px;">Blocking Reason:</span> ${kind}<br/>
             <span style="background-color: #e3f2fd; padding: 2px 4px; border-radius: 3px;">Count:</span> ${count} concurrent task${count > 1 ? 's' : ''}<br/>
-            <span style="background-color: #f3e5f5; padding: 2px 4px; border-radius: 3px;">Time Range:</span> ${this._smartString(startTime)} - ${this._smartString(endTime)}<br/>
-            <span style="background-color: #e8f5e8; padding: 2px 4px; border-radius: 3px;">Center Time:</span> ${this._smartString(centerTime)}
+            <span style="background-color: #f3e5f5; padding: 2px 4px; border-radius: 3px;">Time Point:</span> ${this._smartString(centerTime)}
           </div>
           <div style="font-size: 12px; color: #666; margin-top: 8px;">
-            This shows ${count} concurrent tasks that have reached the "${kind}" milestone during this time period.
+            This shows ${count} concurrent tasks that are blocked by "${kind}" at this time point.
           </div>
         </div>
       `;
@@ -1118,7 +1297,6 @@ class TaskView {
     });
     
     // Create d3 color scale that uses the mapping
-    console.log('TaskView: Kind to color mapping:', kindToColorMap);
     return (kind: string) => kindToColorMap[kind] || '#666666'; // fallback color
   }
 
@@ -1157,54 +1335,175 @@ class TaskView {
     
     // Add title
     const title = document.createElement('div');
-    title.textContent = 'Milestone Kinds';
+    title.textContent = 'Blocking Reasons Flow';
     title.style.cssText = `
       font-size: 14px;
       font-weight: bold;
-      margin-bottom: 10px;
+      margin-bottom: 15px;
       color: #343a40;
       border-bottom: 1px solid #dee2e6;
       padding-bottom: 5px;
     `;
     legendContainer.appendChild(title);
     
-    // Add legend items using sorted kinds to match color mapping
-    const sortedKinds = [...kinds].sort();
-    sortedKinds.forEach((kind, index) => {
-      const item = document.createElement('div');
-      item.style.cssText = `
-        display: flex;
-        align-items: center;
-        margin-bottom: 6px;
-        font-size: 12px;
-      `;
+    // Define component milestone flows based on our analysis
+    const componentFlows = this._getComponentMilestoneFlows(kinds);
+    
+    // Render each component flow
+    componentFlows.forEach((componentFlow, componentIndex) => {
+      if (componentFlow.kinds.length === 0) return;
       
-      // Color square
-      const colorBox = document.createElement('div');
-      colorBox.style.cssText = `
-        width: 12px;
-        height: 12px;
-        background-color: ${colorScale(kind)};
-        border: 1px solid #dee2e6;
-        margin-right: 8px;
-        border-radius: 2px;
-      `;
-      
-      // Text label
-      const label = document.createElement('span');
-      label.textContent = kind;
-      label.style.cssText = `
+      // Component title
+      const componentTitle = document.createElement('div');
+      componentTitle.textContent = componentFlow.component;
+      componentTitle.style.cssText = `
+        font-size: 13px;
+        font-weight: bold;
+        margin-bottom: 8px;
+        margin-top: ${componentIndex > 0 ? '15px' : '0px'};
         color: #495057;
-        font-weight: 500;
+        background: #e9ecef;
+        padding: 4px 8px;
+        border-radius: 4px;
       `;
+      legendContainer.appendChild(componentTitle);
       
-      item.appendChild(colorBox);
-      item.appendChild(label);
-      legendContainer.appendChild(item);
+      // Render kinds vertically with arrows between them
+      componentFlow.kinds.forEach((kind, index) => {
+        // Item container for each milestone kind
+        const item = document.createElement('div');
+        item.style.cssText = `
+          display: flex;
+          align-items: center;
+          margin-bottom: 6px;
+          font-size: 12px;
+        `;
+        
+        // Color square
+        const colorBox = document.createElement('div');
+        colorBox.style.cssText = `
+          width: 12px;
+          height: 12px;
+          background-color: ${colorScale(kind)};
+          border: 1px solid #dee2e6;
+          margin-right: 8px;
+          border-radius: 2px;
+        `;
+        
+        // Text label
+        const label = document.createElement('span');
+        label.textContent = kind;
+        label.style.cssText = `
+          color: #495057;
+          font-weight: 500;
+        `;
+        
+        item.appendChild(colorBox);
+        item.appendChild(label);
+        legendContainer.appendChild(item);
+        
+        // Add arrow if not the last item
+        if (index < componentFlow.kinds.length - 1) {
+          const arrow = document.createElement('div');
+          arrow.textContent = '↓';
+          arrow.style.cssText = `
+            text-align: center;
+            margin: 2px 0;
+            color: #6c757d;
+            font-weight: bold;
+            font-size: 14px;
+          `;
+          legendContainer.appendChild(arrow);
+        }
+      });
     });
     
     // Add to right column at the bottom
     rightColumn.appendChild(legendContainer);
+  }
+  
+  private _getComponentMilestoneFlows(kinds: string[]): Array<{component: string, kinds: string[]}> {
+    // Define milestone flows for each component based on our analysis
+    // AddressTranslator: network_busy → translation → data → subtask → network_busy
+    const addressTranslatorFlow = ['network_busy', 'translation', 'data', 'subtask', 'network_busy'];
+    // ROB: network_transfer → queue → hardware_resource → network_busy → data → dependency → network_busy
+    const robFlow = ['network_transfer', 'queue', 'hardware_resource', 'network_busy', 'data', 'dependency', 'network_busy'];
+    
+    const componentFlows = [];
+    
+    // Get current task's component name to determine which flow to show
+    const currentComponentName = this._task?.location || '';
+    
+    // Check if current component is AddressTranslator
+    if (currentComponentName.toLowerCase().includes('addresstranslator')) {
+      // Always use _sortKindsByFlow to ensure correct order
+      const sortedKinds = this._sortKindsByFlow(kinds, addressTranslatorFlow);
+      componentFlows.push({
+        component: 'AddressTranslator',
+        kinds: sortedKinds
+      });
+    }
+    // Check if current component is ROB
+    else if (currentComponentName.toLowerCase().includes('rob') || currentComponentName.toLowerCase().includes('reorder')) {
+      // Always use _sortKindsByFlow to ensure correct order
+      const sortedKinds = this._sortKindsByFlow(kinds, robFlow);
+      componentFlows.push({
+        component: 'ROB (Reorder Buffer)',
+        kinds: sortedKinds
+      });
+    }
+    // For other components, try to match patterns or show all kinds
+    else {
+      // Check which component patterns have more matches
+      const addressTranslatorKinds = addressTranslatorFlow.filter(kind => kinds.includes(kind));
+      const robKinds = robFlow.filter(kind => kinds.includes(kind));
+      
+      if (addressTranslatorKinds.length > robKinds.length && addressTranslatorKinds.length > 0) {
+        componentFlows.push({
+          component: 'AddressTranslator Pattern',
+          kinds: addressTranslatorKinds
+        });
+      } else if (robKinds.length > 0) {
+        componentFlows.push({
+          component: 'ROB Pattern',
+          kinds: robKinds
+        });
+      } else {
+        // Show all kinds in alphabetical order as fallback
+        componentFlows.push({
+          component: currentComponentName || 'Component',
+          kinds: [...kinds].sort()
+        });
+      }
+    }
+    
+    return componentFlows;
+  }
+  
+  private _sortKindsByFlow(kinds: string[], preferredFlow: string[]): string[] {
+    // Sort kinds according to the preferred flow order
+    const sortedKinds: string[] = [];
+    
+    // Add kinds in flow order if they exist, but only unique ones
+    const addedKinds = new Set<string>();
+    preferredFlow.forEach(flowKind => {
+      // Find matching kind (case insensitive)
+      const matchingKind = kinds.find(k => k.toLowerCase() === flowKind.toLowerCase());
+      if (matchingKind && !addedKinds.has(matchingKind)) {
+        sortedKinds.push(matchingKind);
+        addedKinds.add(matchingKind);
+      }
+    });
+    
+    // Add any remaining kinds alphabetically
+    kinds.forEach(kind => {
+      if (!addedKinds.has(kind)) {
+        sortedKinds.push(kind);
+        addedKinds.add(kind);
+      }
+    });
+    
+    return sortedKinds;
   }
 
   private _smartString(value: number): string {
@@ -1215,6 +1514,181 @@ class TaskView {
       return (value * 1000).toFixed(2) + 'ms';
     } else {
       return value.toFixed(2) + 's';
+    }
+  }
+
+  private async _highlightTasksWithMilestonesInTimeWindow(startTime: number, endTime: number, kind: string) {
+    console.log(`🎯 TaskView: _highlightTasksWithMilestonesInTimeWindow called with startTime=${startTime}, endTime=${endTime}, kind=${kind}`);
+
+    // Clear any existing highlighting first
+    this._clearTaskHighlighting();
+
+    // Calculate bin midpoint to match backend logic (componentinfo.go:928)
+    const instantTime = startTime + (endTime - startTime) / 2;
+
+    // Use the SAME logic as the stacked bar calculation in Go code:
+    // 1. Find tasks that are running in this time window (task time overlaps with [startTime, endTime])
+    // 2. For each running task, find their current milestone kind at instantTime (bin midpoint)
+    // 3. Highlight only those tasks whose current milestone kind matches the hovered kind
+
+    try {
+      const componentName = this._task?.location;
+      if (!componentName) {
+        console.log('TaskView: No component name available for highlighting');
+        return;
+      }
+
+      const params = new URLSearchParams();
+      params.set('where', componentName);
+      params.set('starttime', startTime.toString());
+      params.set('endtime', endTime.toString());
+
+      const response = await fetch(`/api/trace?${params.toString()}`);
+      if (!response.ok) {
+        console.error('TaskView: Failed to fetch tasks for highlighting');
+        return;
+      }
+
+      const allComponentTasks = await response.json();
+      console.log(`TaskView: Found ${allComponentTasks.length} tasks in component ${componentName}`);
+      
+      const tasksToHighlight: any[] = [];
+      
+      allComponentTasks.forEach((task: any) => {
+        // 1. Check if task is running in this time window (same logic as Go isTaskRunningInBin)
+        const isRunning = !(task.end_time < startTime || task.start_time > endTime);
+        
+        if (!isRunning) {
+          return;
+        }
+        
+        // 2. Find task's current blocking reasons (same logic as Go findTaskCurrentBlockingReasons)
+        let currentBlockingReasons: string[] = [];
+
+        if (task.steps && task.steps.length > 0) {
+          // Find all future milestones after instantTime (bin midpoint)
+          const futureSteps: any[] = [];
+          task.steps.forEach((step: any) => {
+            if (step.time > instantTime) {
+              futureSteps.push(step);
+            }
+          });
+          
+          if (futureSteps.length > 0) {
+            // Find the earliest future milestone time point
+            let minTime = futureSteps[0].time;
+            futureSteps.forEach((step: any) => {
+              if (step.time < minTime) {
+                minTime = step.time;
+              }
+            });
+            
+            // Collect all milestone kinds at this earliest time point
+            futureSteps.forEach((step: any) => {
+              if (step.time === minTime) {
+                currentBlockingReasons.push(step.kind);
+              }
+            });
+          }
+        }
+        
+        // 3. Check if any current blocking reason matches the hovered kind
+        if (currentBlockingReasons.includes(kind)) {
+          tasksToHighlight.push(task);
+          console.log(`TaskView: Task ${task.id} is running and has blocking reasons: ${currentBlockingReasons.join(', ')}`);
+        }
+      });
+
+    // Highlight the matching tasks by modifying their visual appearance in COMPONENT view
+    const componentCanvas = document.getElementById("component-view");
+    if (!componentCanvas) {
+      console.log('TaskView: Component view canvas not found for highlighting');
+      return;
+    }
+    
+    const componentSvg = d3.select(componentCanvas).select('svg');
+    const taskBarGroup = componentSvg.select('.task-bar');
+    
+    console.log('TaskView: Task bar group found:', !taskBarGroup.empty());
+    console.log('TaskView: Total rects in task bar group:', taskBarGroup.selectAll('rect').size());
+    
+    // Debug: List all rendered task IDs
+    const renderedTaskIds: string[] = [];
+    taskBarGroup.selectAll('rect').each(function(d: any) {
+      if (d && d.id) {
+        renderedTaskIds.push(d.id);
+      }
+    });
+    console.log('TaskView: Rendered task IDs (first 10):', renderedTaskIds.slice(0, 10));
+    
+    // Debug: Check which highlighted tasks are actually rendered
+    const highlightableTaskIds = tasksToHighlight.map(t => t.id);
+    const intersection = renderedTaskIds.filter(id => highlightableTaskIds.includes(id));
+    console.log(`TaskView: ${intersection.length} of ${highlightableTaskIds.length} highlighted tasks are actually rendered`);
+    console.log('TaskView: Intersecting task IDs:', intersection);
+    
+    if (!taskBarGroup.empty()) {
+      // First, dim all task bars (like TaskRenderer.hightlight does)
+      taskBarGroup
+        .selectAll('rect')
+        .attr('opacity', 0.4)
+        .attr('stroke-opacity', 0.2);
+      
+      // Then highlight the matching tasks that are actually rendered in taskview
+      let highlightedCount = 0;
+      tasksToHighlight.forEach(task => {
+        // Convert task ID to the format used by TaskRenderer
+        const taskIdTag = this._taskIdTag(task.id);
+        const taskRect = taskBarGroup.select(`#task-${taskIdTag}`);
+        
+        if (!taskRect.empty()) {
+          taskRect
+            .attr('opacity', 1.0)
+            .attr('stroke-opacity', 0.8)
+            .classed('highlighted-task', true);
+          highlightedCount++;
+          console.log(`TaskView: Successfully highlighted task ${taskIdTag}`);
+        }
+      });
+      
+      console.log(`TaskView: Highlighted ${highlightedCount} tasks out of ${tasksToHighlight.length} matching tasks`);
+    } else {
+      console.log('TaskView: Task bar group not found in SVG');
+    }
+
+    console.log(`TaskView: Found ${tasksToHighlight.length} tasks with ${kind} milestones in time window ${startTime}-${endTime}`);
+    
+    } catch (error) {
+      console.error('TaskView: Error in highlighting tasks:', error);
+    }
+  }
+
+  private _taskIdTag(taskId: string): string {
+    // Same logic as TaskRenderer._taskIdTag method
+    return taskId
+      .replace(/@/g, "-")
+      .replace(/\./g, '-')
+      .replace(/\[/g, '-')
+      .replace(/\]/g, '-')
+      .replace(/_/g, '-');
+  }
+
+  private _clearTaskHighlighting() {
+    // Remove highlighting from all tasks in COMPONENT view (restore to normal opacity like TaskRenderer does)
+    const componentCanvas = document.getElementById("component-view");
+    if (!componentCanvas) {
+      return;
+    }
+    
+    const componentSvg = d3.select(componentCanvas).select('svg');
+    const taskBarGroup = componentSvg.select('.task-bar');
+    
+    if (!taskBarGroup.empty()) {
+      // Restore all task rectangles to normal opacity (like TaskRenderer.hightlight(null))
+      taskBarGroup.selectAll('rect')
+        .attr('opacity', 1.0)
+        .attr('stroke-opacity', 0.2)
+        .classed('highlighted-task', false);
     }
   }
 
@@ -1365,19 +1839,12 @@ class TaskView {
       const milestoneGroups = this._groupMilestonesByTime(sortedSteps);
       console.log(`Milestone groups:`, milestoneGroups);
       
-      // Entire milestone bar from parent task start (with small offset) to last milestone group
-      let barStartTime;
-      if (this._parentTask) {
-        // Start slightly before parent task (5% of parent task duration earlier)
-        const parentDuration = this._parentTask.end_time - this._parentTask.start_time;
-        barStartTime = this._parentTask.start_time - 0.05 * parentDuration;
-      } else {
-        barStartTime = this._startTime; // fallback to timeline start if no parent task
-      }
+      // Milestone bar should start from the first milestone, not before it
+      const firstGroupTime = milestoneGroups[0].time;
       const lastGroupTime = milestoneGroups[milestoneGroups.length - 1].time;
-      
+
       // Calculate milestone bar start position and total width
-      const milestoneBarStartX = ((barStartTime - this._startTime) / timeRange) * containerWidth;
+      const milestoneBarStartX = ((firstGroupTime - this._startTime) / timeRange) * containerWidth;
       const milestoneBarEndX = ((lastGroupTime - this._startTime) / timeRange) * containerWidth;
       const milestoneBarWidth = milestoneBarEndX - milestoneBarStartX;
       
@@ -1396,30 +1863,26 @@ class TaskView {
       `;
       container.appendChild(milestoneBackground);
       
-      // Create segment for each milestone group - 1st color block corresponds to 1st red dot
-      for (let i = 0; i < milestoneGroups.length; i++) {
+      // Create segment for each milestone group - color blocks between milestones
+      // Skip i=0 since there should be no color block before the first milestone
+      for (let i = 1; i < milestoneGroups.length; i++) {
         let segmentStartTime, segmentEndTime;
-        
-        if (i === 0) {
-          // First segment: from bar start time (slightly before parent task) to first milestone group time
-          segmentStartTime = barStartTime; // slightly before parent task start
-          segmentEndTime = milestoneGroups[0].time;
-        } else {
-          // Subsequent segments: from previous milestone group to current milestone group
-          segmentStartTime = milestoneGroups[i - 1].time;
-          segmentEndTime = milestoneGroups[i].time;
-        }
+
+        // Segments: from previous milestone group to current milestone group
+        segmentStartTime = milestoneGroups[i - 1].time;
+        segmentEndTime = milestoneGroups[i].time;
         
         const segmentStartX = ((segmentStartTime - this._startTime) / timeRange) * containerWidth;
         const segmentEndX = ((segmentEndTime - this._startTime) / timeRange) * containerWidth;
         const segmentWidth = segmentEndX - segmentStartX;
         
         if (segmentWidth > 0) {
-          console.log(`Creating milestone segment ${i + 1}: start=${segmentStartX}, end=${segmentEndX}, width=${segmentWidth}`);
+          console.log(`Creating milestone segment ${i}: start=${segmentStartX}, end=${segmentEndX}, width=${segmentWidth}`);
           const segment = document.createElement('div');
-          
+
           // Use corresponding milestone color, enhance gradient contrast
-          const gradientColor = milestoneColors[i % milestoneColors.length];
+          // Use (i-1) since we skipped i=0, so the first color block uses milestoneColors[0]
+          const gradientColor = milestoneColors[(i - 1) % milestoneColors.length];
           const darkerColor = this._getDarkerColor(gradientColor);
           
           segment.style.cssText = `

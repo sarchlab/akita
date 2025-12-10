@@ -925,14 +925,16 @@ func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binE
 		kindCounts[kind] = 0
 	}
 
+	instantTime := binStartTime + (binEndTime-binStartTime)/2 // 计算中点时间
+
 	for _, task := range tasks {
 		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
 			continue
 		}
 
-		currentKind := findTaskMilestoneKind(task, binStartTime)
-		if currentKind != "" {
-			kindCounts[currentKind]++
+		blockingReasons := findTaskCurrentBlockingReasons(task, instantTime)
+		for _, reason := range blockingReasons {
+			kindCounts[reason]++
 		}
 	}
 	return kindCounts
@@ -942,31 +944,39 @@ func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
 	return !(float64(task.EndTime) < binStartTime || float64(task.StartTime) > binEndTime)
 }
 
-func findTaskMilestoneKind(task Task, binStartTime float64) string {
-	var currentKind string
-	var latestTime float64 = -1
-
-	// Find the most recent milestone before or at the bin start time
+func findTaskCurrentBlockingReasons(task Task, binStartTime float64) []string {
+	var blockingReasons []string
+	
+	
+	// Find all future milestones after binStartTime
+	var futureSteps []TaskStep
 	for _, step := range task.Steps {
-		stepTime := float64(step.Time)
-		if stepTime <= binStartTime && stepTime > latestTime {
-			latestTime = stepTime
-			currentKind = step.Kind
+		if float64(step.Time) > binStartTime {
+			futureSteps = append(futureSteps, step)
 		}
 	}
-
-	// If no milestone found before this bin, use the first milestone of the task
-	if currentKind == "" && len(task.Steps) > 0 {
-		firstStep := task.Steps[0]
-		for _, step := range task.Steps {
-			if float64(step.Time) < float64(firstStep.Time) {
-				firstStep = step
-			}
-		}
-		currentKind = firstStep.Kind
+	
+	if len(futureSteps) == 0 {
+		return []string{} // No future milestones, task is not blocked by anything
 	}
-
-	return currentKind
+	
+	// Find the earliest future milestone time point
+	minTime := float64(futureSteps[0].Time)
+	for _, step := range futureSteps {
+		if float64(step.Time) < minTime {
+			minTime = float64(step.Time)
+		}
+	}
+	
+	// Collect all milestone kinds at this earliest time point
+	for _, step := range futureSteps {
+		if float64(step.Time) == minTime {
+			blockingReasons = append(blockingReasons, step.Kind)
+		}
+	}
+	
+	
+	return blockingReasons
 }
 
 func calculateConcurrentTaskMilestones(

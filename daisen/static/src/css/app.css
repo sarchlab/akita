@@ -1,4 +1,5 @@
 @import url("https://fonts.googleapis.com/css?family=Asap&display=swap");
+@import "./overview.css";
 
 html {
   height: 100%;
@@ -198,7 +199,8 @@ body {
   border-radius: 12px;                 
   border: 1px solid #ddd;            
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06); 
-  margin: 12px;                        
+  margin: 12px;
+  overflow-y: auto;
 }
 
 
@@ -206,12 +208,14 @@ body {
 .curr-task-info {
   width: 100%;
   min-height: 20px;
+  max-height: 400px;
   background: #d9d9d9;
   display: none;
   width: 330;
   border-radius: 4px;
   box-shadow: 0 1px 6px -6px #dddddd;
   padding: 8px;
+  overflow-y: auto;
 }
 
 .curr-task-info.showing {

@@ -274,6 +274,14 @@ export class TaskPage extends ChatPanel implements ZoomHandler {
     this._componentView.highlight(task);
   }
 
+  handleTaskClick(task: Task) {
+    this._taskView.handleTaskClick(task);
+  }
+
+  get isTaskLocked(): boolean {
+    return this._taskView.isTaskLocked;
+  }
+
   async showTask(task: Task, keepView = false) {
     this._switchToTaskMode();
 

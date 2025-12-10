@@ -28,59 +28,104 @@ class Legend {
   render() {
     const colors = Object.entries(this._colorCoder.colorMap);
 
-    const svg = d3
-      .select(this._canvas)
-      .select("svg")
-      .attr("height", colors.length * this._lineHeight + this._marginTop);
+    // Remove existing legend
+    const existingLegend = this._canvas.querySelector('.task-color-legend');
+    if (existingLegend) {
+      existingLegend.remove();
+    }
 
-    const colorGroups = svg.selectAll("g").data(colors, color => {
-      return color[0];
-    });
+    // Hide the SVG instead of clearing it
+    const svg = this._canvas.querySelector('svg');
+    if (svg) {
+      svg.style.display = 'none';
+    }
 
-    const colorEnter = colorGroups
-      .enter()
-      .append("g")
-      .on("mouseover", (_, d) => {
+    if (colors.length === 0) {
+      return;
+    }
+
+    // Create legend container with island style (same margin/padding as milestone legend)
+    const legendContainer = document.createElement('div');
+    legendContainer.className = 'task-color-legend';
+    legendContainer.style.cssText = `
+      margin-top: 20px;
+      padding: 15px;
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 6px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    // Add title
+    const title = document.createElement('div');
+    title.textContent = 'Task Types';
+    title.style.cssText = `
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      color: #343a40;
+      border-bottom: 1px solid #dee2e6;
+      padding-bottom: 5px;
+    `;
+    legendContainer.appendChild(title);
+
+    // Add each task type
+    colors.forEach(([kindWhat, color]) => {
+      // Item container
+      const item = document.createElement('div');
+      item.style.cssText = `
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 12px;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 3px;
+        transition: background-color 0.2s ease;
+      `;
+      
+      // Add hover effects
+      item.addEventListener('mouseenter', () => {
+        item.style.backgroundColor = '#e9ecef';
         this._taskPage.highlight((t: Task) => {
-          const kindWhat = `${t.kind}-${t.what}`;
-          return kindWhat === d[0];
+          const taskKindWhat = `${t.kind}-${t.what}`;
+          return taskKindWhat === kindWhat;
         });
-      })
-      .on("mouseout", () => {
+      });
+      
+      item.addEventListener('mouseleave', () => {
+        item.style.backgroundColor = 'transparent';
         this._taskPage.highlight(null);
       });
 
-    colorEnter
-      .append("rect")
-      .attr("y", -(18 - this._blockHeight) / 2)
-      .attr("width", 30)
-      .attr("height", 10)
-      .attr("stroke", "black");
+      // Color square
+      const colorBox = document.createElement('div');
+      colorBox.style.cssText = `
+        width: 14px;
+        height: 14px;
+        background-color: ${this._colorCoder.lookupWithText(kindWhat)};
+        border: 1px solid #dee2e6;
+        margin-right: 10px;
+        border-radius: 2px;
+        flex-shrink: 0;
+      `;
 
-    colorEnter
-      .append("text")
-      .attr("x", 40)
-      .attr("alignment-baseline", "middle")
-      .text(d => d[0]);
+      // Text label
+      const label = document.createElement('span');
+      label.textContent = kindWhat;
+      label.style.cssText = `
+        color: #495057;
+        font-weight: 500;
+        line-height: 1.2;
+      `;
 
-    const mergedGroups = colorEnter
-      .merge(
-        <d3.Selection<SVGGElement, [string, any], d3.BaseType, unknown>>(
-          colorGroups
-        )
-      )
-      .transition()
-      .attr(
-        "transform",
-        (c: [string, string], i: number) =>
-          `translate(5, ${i * this._lineHeight + this._marginTop})`
-      )
-      .selectAll("rect")
-      .attr("fill", (c: [string, string]) => {
-        return this._colorCoder.lookupWithText(c[0]);
-      });
+      item.appendChild(colorBox);
+      item.appendChild(label);
+      legendContainer.appendChild(item);
+    });
 
-    colorGroups.exit().remove();
+    // Append to canvas
+    this._canvas.appendChild(legendContainer);
   }
 }
 
