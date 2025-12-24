@@ -533,3 +533,138 @@ func (t *sqliteWriter) Close() error {
 
 	return nil
 }
+
+// RecorderConfig holds configuration for creating a DataRecorder
+type RecorderConfig struct {
+	// Type specifies the backend: "sqlite", "clickhouse"
+	Type string
+
+	// Path is used for SQLite (database file path)
+	Path string
+
+	// ConnStr is used for ClickHouse (connection string)
+	// ClickHouse format: "clickhouse://host:port/database?username=user&password=pass"
+	// Example: "clickhouse://localhost:9000/akita_sim?username=default&password=secret"
+	ConnStr string
+
+	// Host, Database, Username, Password - alternative to ConnStr for easier configuration
+	Host     string
+	Port     int
+	Database string
+	Username string
+	Password string
+
+	// BatchSize controls how many entries to buffer before flushing (default: 100000)
+	// For ClickHouse with 300M records, consider 500000-1000000
+	BatchSize int
+}
+
+// NewDataRecorderWithConfig creates a DataRecorder based on the provided configuration.
+// This is the recommended way to create recorders for production use.
+func NewDataRecorderWithConfig(config RecorderConfig) DataRecorder {
+	// Set default batch size if not specified
+	if config.BatchSize == 0 {
+		config.BatchSize = 100000
+	}
+
+	switch strings.ToLower(config.Type) {
+	case "sqlite", "":
+		// Default to SQLite for backward compatibility
+		if config.Path == "" {
+			return NewDataRecorder("")
+		}
+		return NewDataRecorder(config.Path)
+
+	case "clickhouse":
+		// Use FAST implementation (no reflection!)
+		if config.Host == "" && config.ConnStr != "" {
+			// Parse connection string
+			host, port, database, username, password := parseClickHouseConnStr(config.ConnStr)
+			return NewFastClickHouseRecorder(host, port, database, username, password, config.BatchSize)
+		}
+
+		// Use individual parameters
+		if config.Host == "" {
+			panic("ClickHouse host is required")
+		}
+
+		port := config.Port
+		if port == 0 {
+			port = 9000
+		}
+
+		username := config.Username
+		if username == "" {
+			username = "default"
+		}
+
+		database := config.Database
+		if database == "" {
+			database = "default"
+		}
+
+		return NewFastClickHouseRecorder(config.Host, port, database, username, config.Password, config.BatchSize)
+
+	default:
+		panic(fmt.Sprintf("unknown recorder type: %s (valid: sqlite, clickhouse)", config.Type))
+	}
+}
+
+// parseClickHouseConnStr parses a ClickHouse connection string
+// Format: clickhouse://host:port/database?username=user&password=pass
+func parseClickHouseConnStr(connStr string) (host string, port int, database string, username string, password string) {
+	// Default values
+	port = 9000
+	username = "default"
+	database = "default"
+
+	// Remove protocol prefix
+	connStr = strings.TrimPrefix(connStr, "clickhouse://")
+	connStr = strings.TrimPrefix(connStr, "tcp://")
+
+	// Split by ? to separate host/db from parameters
+	parts := strings.SplitN(connStr, "?", 2)
+	hostPart := parts[0]
+
+	// Parse host:port/database
+	if strings.Contains(hostPart, "/") {
+		hostPort := strings.Split(hostPart, "/")
+		if len(hostPort) >= 2 {
+			database = hostPort[1]
+		}
+		hostPart = hostPort[0]
+	}
+
+	// Parse host:port
+	if strings.Contains(hostPart, ":") {
+		hostPortParts := strings.Split(hostPart, ":")
+		host = hostPortParts[0]
+		if len(hostPortParts) >= 2 {
+			fmt.Sscanf(hostPortParts[1], "%d", &port)
+		}
+	} else {
+		host = hostPart
+	}
+
+	// Parse parameters
+	if len(parts) >= 2 {
+		params := strings.Split(parts[1], "&")
+		for _, param := range params {
+			kv := strings.SplitN(param, "=", 2)
+			if len(kv) == 2 {
+				key := kv[0]
+				value := kv[1]
+				switch key {
+				case "username", "user":
+					username = value
+				case "password", "pass":
+					password = value
+				case "database", "db":
+					database = value
+				}
+			}
+		}
+	}
+
+	return
+}
