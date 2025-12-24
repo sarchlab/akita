@@ -1,6 +1,7 @@
 module github.com/sarchlab/akita/v4
 
 require (
+	github.com/ClickHouse/clickhouse-go/v2 v2.42.0
 	github.com/google/pprof v0.0.0-20250820193118-f64d9cf942d6
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
@@ -19,7 +20,6 @@ require (
 
 require (
 	github.com/ClickHouse/ch-go v0.69.0 // indirect
-	github.com/ClickHouse/clickhouse-go/v2 v2.42.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
