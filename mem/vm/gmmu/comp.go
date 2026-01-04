@@ -210,15 +210,6 @@ func (gmmu *GMMU) doPageWalkHit(
 	return true
 }
 
-func (gmmu *GMMU) toRemove(index int) bool {
-	for _, removeIndex := range gmmu.toRemoveFromPTW {
-		if removeIndex == index {
-			return true
-		}
-	}
-	return false
-}
-
 func (gmmu *GMMU) fetchFromBottom() bool {
 	if !gmmu.topPort.CanSend() {
 		return false
