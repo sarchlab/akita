@@ -39,10 +39,6 @@ type GMMU struct {
 
 	toRemoveFromPTW        []int
 	PageAccessedByDeviceID map[uint64][]uint64
-
-	isRecording  bool
-	gpuIDList    []uint64
-	isPrediction bool
 }
 
 // Tick defines how the gmmu update state each cycle

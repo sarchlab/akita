@@ -12,7 +12,7 @@
 // 	RunSpecs(t, "Gmmu Suite")
 // }
 
-package gmmu_test
+package gmmu
 
 import (
 	"testing"

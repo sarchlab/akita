@@ -15,9 +15,6 @@ type Builder struct {
 	pageWalkingLatency int
 	deviceID           uint64
 	lowModule          sim.Port
-	isRecording        bool
-	gpuIDList          []uint64
-	isPrediction       bool
 }
 
 // MakeBuilder creates a new builder
@@ -26,14 +23,7 @@ func MakeBuilder() Builder {
 		freq:              1 * sim.GHz,
 		log2PageSize:      12,
 		maxNumReqInFlight: 16,
-		isRecording:       false,
-		isPrediction:      true,
 	}
-}
-
-func (b Builder) WithIsPrediction(isPrediction bool) Builder {
-	b.isPrediction = isPrediction
-	return b
 }
 
 // WithEngine sets the engine to be used with the GMMU
@@ -85,26 +75,12 @@ func (b Builder) WithLowModule(p sim.Port) Builder {
 	return b
 }
 
-// WithRecording sets whether the GMMU is recording
-func (b Builder) WithRecording(isRecording bool) Builder {
-	b.isRecording = isRecording
-
-	return b
-}
-
-func (b Builder) WithGPUIDList(gpuIDList []uint64) Builder {
-	b.gpuIDList = gpuIDList
-	return b
-}
-
 func (b Builder) configureInternalStates(gmmu *GMMU) {
 	gmmu.maxRequestsInFlight = b.maxNumReqInFlight
 	gmmu.latency = b.pageWalkingLatency
 	gmmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
 	gmmu.deviceID = b.deviceID
 	gmmu.LowModule = b.lowModule
-	gmmu.isPrediction = b.isPrediction
-	gmmu.gpuIDList = b.gpuIDList
 	gmmu.log2PageSize = b.log2PageSize
 }
 
