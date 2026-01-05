@@ -85,6 +85,11 @@ func (gmmu *GMMU) startWalking(req *vm.TranslationReq) {
 
 func (gmmu *GMMU) walkPageTable() bool {
 	madeProgress := false
+
+	if len(gmmu.walkingTranslations) == 0 {
+		return false
+	}
+
 	for i := 0; i < len(gmmu.walkingTranslations); i++ {
 		if gmmu.walkingTranslations[i].cycleLeft > 0 {
 			gmmu.walkingTranslations[i].cycleLeft--
@@ -162,22 +167,6 @@ func (gmmu *GMMU) finalizePageWalk(
 	return gmmu.doPageWalkHit(walkingIndex)
 }
 
-func (gmmu *GMMU) pageNeedMigrate(walking transaction) bool {
-	if walking.req.DeviceID == walking.page.DeviceID {
-		return false
-	}
-
-	if !walking.page.Unified {
-		return false
-	}
-
-	if walking.page.IsPinned {
-		return false
-	}
-
-	return true
-}
-
 func (gmmu *GMMU) doPageWalkHit(
 	walkingIndex int,
 ) bool {
@@ -196,10 +185,6 @@ func (gmmu *GMMU) doPageWalkHit(
 	gmmu.topPort.Send(rsp)
 
 	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
-
-	if !gmmu.sendToGMMU(walking) {
-		return false
-	}
 
 	tracing.TraceReqComplete(walking.req, gmmu)
 
@@ -254,29 +239,4 @@ func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
 
 func (gmmu *GMMU) GetDeviceID() uint64 {
 	return gmmu.deviceID
-}
-
-func (gmmu *GMMU) sendToGMMU(walking transaction) bool {
-	if !gmmu.topPort.CanSend() {
-		return false
-	}
-
-	vAddr := walking.req.VAddr
-	page, found := gmmu.pageTable.Find(walking.req.PID, vAddr)
-
-	if !found {
-		log.Panicf("Page not found in GMMU page table. PID: %d, VAddr: %#x",
-			walking.req.PID, vAddr)
-	}
-
-	req := walking.req
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(gmmu.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithPage(page).
-		Build()
-
-	gmmu.topPort.Send(rsp)
-
-	return true
 }
