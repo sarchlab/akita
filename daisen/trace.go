@@ -39,6 +39,18 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse pagination parameters
+	limit, _ := strconv.Atoi(r.FormValue("limit"))
+	offset, _ := strconv.Atoi(r.FormValue("offset"))
+
+	// Apply default and max limits
+	if limit <= 0 {
+		limit = 1000 // default limit
+	}
+	if limit > 10000 {
+		limit = 10000 // max limit
+	}
+
 	query := TaskQuery{
 		ID:               r.FormValue("id"),
 		ParentID:         r.FormValue("parentid"),
@@ -48,14 +60,24 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		EndTime:          endTime,
 		EnableTimeRange:  useTimeRange,
 		EnableParentTask: false,
+		Limit:            limit,
+		Offset:           offset,
 	}
 
-	tasks := traceReader.ListTasks(r.Context(), query)
+	tasks, totalCount := traceReader.ListTasksPaginated(r.Context(), query)
 
-	rsp, err := json.Marshal(tasks)
+	rsp := PaginatedTaskResponse{
+		Data:       tasks,
+		TotalCount: totalCount,
+		Offset:     offset,
+		Limit:      limit,
+		HasMore:    offset+len(tasks) < totalCount,
+	}
+
+	rspBytes, err := json.Marshal(rsp)
 	dieOnErr(err)
 
-	_, err = w.Write(rsp)
+	_, err = w.Write(rspBytes)
 	dieOnErr(err)
 }
 
@@ -82,6 +104,21 @@ type TaskQuery struct {
 
 	// EnableParentTask will also query the parent task of the selected tasks.
 	EnableParentTask bool
+
+	// Limit is the maximum number of results to return (default: 1000, max: 10000)
+	Limit int
+
+	// Offset is the number of results to skip (for pagination)
+	Offset int
+}
+
+// PaginatedTaskResponse wraps task results with pagination metadata
+type PaginatedTaskResponse struct {
+	Data       []Task `json:"data"`
+	TotalCount int    `json:"total_count"`
+	Offset     int    `json:"offset"`
+	Limit      int    `json:"limit"`
+	HasMore    bool   `json:"has_more"`
 }
 
 // A Task is a task
@@ -109,8 +146,12 @@ type TraceReader interface {
 	// ListComponents returns all the locations used in the trace.
 	ListComponents(ctx context.Context) []string
 
-	// ListTasks queries tasks .
+	// ListTasks queries tasks.
 	ListTasks(ctx context.Context, query TaskQuery) []Task
+
+	// ListTasksPaginated queries tasks with pagination support.
+	// Returns the tasks and the total count of matching tasks.
+	ListTasksPaginated(ctx context.Context, query TaskQuery) ([]Task, int)
 }
 
 // SQLiteTraceReader is a reader that reads trace data from a SQLite database.
@@ -220,6 +261,43 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	r.loadMilestonesForTasks(tasks)
 
 	return tasks
+}
+
+// ListTasksPaginated returns a list of tasks with pagination support.
+// It returns both the paginated tasks and the total count of matching tasks.
+func (r *SQLiteTraceReader) ListTasksPaginated(
+	ctx context.Context,
+	query TaskQuery,
+) ([]Task, int) {
+	// Get total count first
+	countSQL := r.prepareTaskCountStr(query)
+	var totalCount int
+	err := r.QueryRowContext(ctx, countSQL).Scan(&totalCount)
+	if err != nil {
+		panic(err)
+	}
+
+	// Get paginated tasks
+	sqlStr := r.prepareTaskQueryStrPaginated(query)
+
+	rows, err := r.QueryContext(ctx, sqlStr)
+	if err != nil {
+		panic(err)
+	}
+
+	defer rows.Close()
+
+	tasks := []Task{}
+
+	for rows.Next() {
+		task := r.scanTaskFromRow(rows, query.EnableParentTask)
+		tasks = append(tasks, task)
+	}
+
+	// Always load milestones for tasks
+	r.loadMilestonesForTasks(tasks)
+
+	return tasks, totalCount
 }
 
 // loadMilestonesForTasks loads milestones for the given tasks from the database
@@ -418,6 +496,40 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 			"AND t.EndTime > %.15f AND t.StartTime < %.15f",
 			query.StartTime,
 			query.EndTime)
+	}
+
+	return sqlStr
+}
+
+// prepareTaskCountStr creates a SQL query to count matching tasks
+func (r *SQLiteTraceReader) prepareTaskCountStr(query TaskQuery) string {
+	sqlStr := `SELECT COUNT(*) FROM trace t`
+
+	if query.EnableParentTask {
+		sqlStr += `
+			LEFT JOIN trace pt
+			ON t.ParentID = pt.ID
+		`
+	}
+
+	sqlStr = r.addQueryConditionsToQueryStr(sqlStr, query)
+
+	return sqlStr
+}
+
+// prepareTaskQueryStrPaginated creates a SQL query with ORDER BY, LIMIT, and OFFSET
+func (r *SQLiteTraceReader) prepareTaskQueryStrPaginated(query TaskQuery) string {
+	sqlStr := r.prepareTaskQueryStr(query)
+
+	// Add ORDER BY for consistent pagination results
+	sqlStr += ` ORDER BY t.StartTime ASC, t.ID ASC`
+
+	// Add LIMIT and OFFSET
+	if query.Limit > 0 {
+		sqlStr += fmt.Sprintf(" LIMIT %d", query.Limit)
+	}
+	if query.Offset > 0 {
+		sqlStr += fmt.Sprintf(" OFFSET %d", query.Offset)
 	}
 
 	return sqlStr

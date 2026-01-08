@@ -43,14 +43,73 @@ type StackedComponentInfo struct {
 	Kinds     []string           `json:"kinds"` // list of all milestone kinds
 }
 
+// PaginatedComponentNamesResponse wraps component names with pagination metadata
+type PaginatedComponentNamesResponse struct {
+	Data       []string `json:"data"`
+	TotalCount int      `json:"total_count"`
+	Offset     int      `json:"offset"`
+	Limit      int      `json:"limit"`
+	HasMore    bool     `json:"has_more"`
+}
+
 func httpComponentNames(w http.ResponseWriter, r *http.Request) {
+	// Parse pagination parameters
+	limit, _ := strconv.Atoi(r.FormValue("limit"))
+	offset, _ := strconv.Atoi(r.FormValue("offset"))
+	filter := r.FormValue("filter")
+
+	// Apply default limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+
 	componentNames := traceReader.ListComponents(r.Context())
 
-	rsp, err := json.Marshal(componentNames)
+	// Apply filter if provided
+	if filter != "" {
+		componentNames = filterComponentNames(componentNames, filter)
+	}
+
+	total := len(componentNames)
+
+	// Apply pagination
+	start := offset
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+
+	rsp := PaginatedComponentNamesResponse{
+		Data:       componentNames[start:end],
+		TotalCount: total,
+		Offset:     offset,
+		Limit:      limit,
+		HasMore:    end < total,
+	}
+
+	rspBytes, err := json.Marshal(rsp)
 	dieOnErr(err)
 
-	_, err = w.Write(rsp)
+	_, err = w.Write(rspBytes)
 	dieOnErr(err)
+}
+
+// filterComponentNames filters component names by a substring match
+func filterComponentNames(names []string, filter string) []string {
+	filter = strings.ToLower(filter)
+	filtered := make([]string, 0)
+	for _, name := range names {
+		if strings.Contains(strings.ToLower(name), filter) {
+			filtered = append(filtered, name)
+		}
+	}
+	return filtered
 }
 
 func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
