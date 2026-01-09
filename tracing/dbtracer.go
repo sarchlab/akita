@@ -25,25 +25,29 @@ type runningTask struct {
 
 // taskTableEntry is the table structure for storing task information.
 // All tasks are stored in a single "trace" table.
+// The Location field uses the "location" tag which stores location strings
+// in a separate lookup table, reducing storage size and enabling fast
+// component name queries.
 type taskTableEntry struct {
 	ID        string  `json:"id" akita_data:"unique"`
 	ParentID  string  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
-	Location  string  `json:"location" akita_data:"index"`
+	Location  string  `json:"location" akita_data:"location"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
 	EndTime   float64 `json:"end_time" akita_data:"index"`
 }
 
 // milestoneTableEntry is the table structure for storing milestone information.
 // All milestones are stored in a single "milestone" table.
+// The Location field uses the "location" tag for consistent storage with tasks.
 type milestoneTableEntry struct {
 	ID       string  `json:"id" akita_data:"unique"`
 	TaskID   string  `json:"task_id" akita_data:"index"`
 	Time     float64 `json:"time" akita_data:"index"`
 	Kind     string  `json:"kind" akita_data:"index"`
 	What     string  `json:"what" akita_data:"index"`
-	Location string  `json:"location" akita_data:"index"`
+	Location string  `json:"location" akita_data:"location"`
 }
 
 // segmentTableEntry is the table structure for storing tracing segment information.

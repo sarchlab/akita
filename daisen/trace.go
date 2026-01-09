@@ -159,6 +159,14 @@ type SQLiteTraceReader struct {
 	*sql.DB
 
 	filename string
+
+	// locationCache maps location IDs to location strings.
+	// This is loaded from the "location" table which stores unique location
+	// strings with integer IDs for efficient storage.
+	locationCache map[int]string
+
+	// locationReverseCache maps location strings to their IDs for query filtering.
+	locationReverseCache map[string]int
 }
 
 // NewSQLiteTraceReader creates a new SQLiteTraceReader.
@@ -178,6 +186,51 @@ func (r *SQLiteTraceReader) Init() {
 	}
 
 	r.DB = db
+	r.loadLocationCache()
+}
+
+// loadLocationCache loads the location ID to string mapping from the location table.
+func (r *SQLiteTraceReader) loadLocationCache() {
+	r.locationCache = make(map[int]string)
+	r.locationReverseCache = make(map[string]int)
+
+	rows, err := r.Query("SELECT ID, Locale FROM location")
+	if err != nil {
+		// Location table doesn't exist (old database format), fall back to legacy mode
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int
+		var locale string
+		if err := rows.Scan(&id, &locale); err != nil {
+			panic(err)
+		}
+		r.locationCache[id] = locale
+		r.locationReverseCache[locale] = id
+	}
+}
+
+// resolveLocation converts a location ID to its string representation.
+// For legacy databases without the location table, it returns the input as-is.
+func (r *SQLiteTraceReader) resolveLocation(locationIDStr string) string {
+	if len(r.locationCache) == 0 {
+		// Legacy mode: Location is stored as string directly
+		return locationIDStr
+	}
+
+	id, err := strconv.Atoi(locationIDStr)
+	if err != nil {
+		// If it's not a number, it might be a legacy string location
+		return locationIDStr
+	}
+
+	if loc, ok := r.locationCache[id]; ok {
+		return loc
+	}
+
+	return locationIDStr
 }
 
 func naturalLess(a, b string) bool {
@@ -204,37 +257,45 @@ func naturalLess(a, b string) bool {
 }
 
 // ListComponents returns a list of components in the trace.
+// If the location table exists (new format), it reads directly from there.
+// Otherwise, it falls back to SELECT DISTINCT on the trace table (legacy format).
 func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 	var components []string
 
-	rows, err := r.QueryContext(ctx, "SELECT DISTINCT Location FROM trace")
-	if err != nil {
-		panic(err)
-	}
-
-	defer func() {
-		err := rows.Close()
-		if err != nil {
-			panic(err)
+	// If we have a location cache, use it directly (much faster)
+	if len(r.locationCache) > 0 {
+		for _, loc := range r.locationCache {
+			components = append(components, loc)
 		}
-	}()
-
-	for rows.Next() {
-		var component string
-
-		err := rows.Scan(&component)
+	} else {
+		// Legacy mode: query distinct locations from trace table
+		rows, err := r.QueryContext(ctx, "SELECT DISTINCT Location FROM trace")
 		if err != nil {
 			panic(err)
 		}
 
-		components = append(components, component)
+		defer func() {
+			err := rows.Close()
+			if err != nil {
+				panic(err)
+			}
+		}()
+
+		for rows.Next() {
+			var component string
+
+			err := rows.Scan(&component)
+			if err != nil {
+				panic(err)
+			}
+
+			components = append(components, component)
+		}
 	}
 
 	sort.Slice(components, func(i, j int) bool {
 		return naturalLess(components[i], components[j])
 	})
-
-	// fmt.Printf("%v\n", components)
 
 	return components
 }
@@ -370,6 +431,7 @@ func (r *SQLiteTraceReader) scanTaskFromRow(
 
 func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+	var locationRaw string
 
 	var ptStartTime, ptEndTime sql.NullFloat64
 
@@ -378,7 +440,7 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		&t.ParentID,
 		&t.Kind,
 		&t.What,
-		&t.Location,
+		&locationRaw,
 		&t.StartTime,
 		&t.EndTime,
 		&ptID,
@@ -393,30 +455,35 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
+	t.Location = r.resolveLocation(locationRaw)
+
 	if ptID.Valid {
 		t.ParentTask.ID = ptID.String
 		t.ParentTask.ParentID = ptParentID.String
 		t.ParentTask.Kind = ptKind.String
 		t.ParentTask.What = ptWhat.String
-		t.ParentTask.Location = ptLocation.String
+		t.ParentTask.Location = r.resolveLocation(ptLocation.String)
 		t.ParentTask.StartTime = sim.VTimeInSec(ptStartTime.Float64)
 		t.ParentTask.EndTime = sim.VTimeInSec(ptEndTime.Float64)
 	}
 }
 
 func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
+	var locationRaw string
 	err := rows.Scan(
 		&t.ID,
 		&t.ParentID,
 		&t.Kind,
 		&t.What,
-		&t.Location,
+		&locationRaw,
 		&t.StartTime,
 		&t.EndTime,
 	)
 	if err != nil {
 		panic(err)
 	}
+
+	t.Location = r.resolveLocation(locationRaw)
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
@@ -459,7 +526,7 @@ func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {
 	return sqlStr
 }
 
-func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
+func (r *SQLiteTraceReader) addQueryConditionsToQueryStr(
 	sqlStr string,
 	query TaskQuery,
 ) string {
@@ -486,9 +553,24 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	}
 
 	if query.Where != "" {
-		sqlStr += `
+		// If using location table (new format), look up the location ID
+		if len(r.locationReverseCache) > 0 {
+			if locID, ok := r.locationReverseCache[query.Where]; ok {
+				sqlStr += fmt.Sprintf(`
+			AND t.Location = %d
+		`, locID)
+			} else {
+				// Location not found, add impossible condition to return empty results
+				sqlStr += `
+			AND 1=0
+		`
+			}
+		} else {
+			// Legacy mode: query by string directly
+			sqlStr += `
 			AND t.Location = '` + query.Where + `'
 		`
+		}
 	}
 
 	if query.EnableTimeRange {

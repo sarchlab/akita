@@ -583,7 +583,7 @@ func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]
 	if len(locations) == 0 {
 		return ""
 	}
-	sqlStr := buildTraceSQL(locations, startTime, endTime)
+	sqlStr := buildTraceSQL(traceReader, locations, startTime, endTime)
 	return formatTraceRows(traceReader, sqlStr)
 }
 
@@ -597,12 +597,32 @@ func extractLocations(selectedComponentNameList []interface{}) []string {
 	return locations
 }
 
-func buildTraceSQL(locations []string, startTime, endTime float64) string {
-	quoted := make([]string, 0, len(locations))
-	for _, loc := range locations {
-		quoted = append(quoted, "'"+loc+"'")
+func buildTraceSQL(reader *SQLiteTraceReader, locations []string, startTime, endTime float64) string {
+	var whereClause string
+
+	// If using new format with location table, convert strings to IDs
+	if len(reader.locationReverseCache) > 0 {
+		ids := make([]string, 0, len(locations))
+		for _, loc := range locations {
+			if id, ok := reader.locationReverseCache[loc]; ok {
+				ids = append(ids, strconv.Itoa(id))
+			}
+		}
+		if len(ids) == 0 {
+			// No valid locations found, return impossible condition
+			whereClause = "1=0"
+		} else {
+			whereClause = "Location IN (" + strings.Join(ids, ",") + ")"
+		}
+	} else {
+		// Legacy format: use string comparison
+		quoted := make([]string, 0, len(locations))
+		for _, loc := range locations {
+			quoted = append(quoted, "'"+loc+"'")
+		}
+		whereClause = "Location IN (" + strings.Join(quoted, ",") + ")"
 	}
-	whereClause := "Location IN (" + strings.Join(quoted, ",") + ")"
+
 	timeClause := fmt.Sprintf("StartTime >= %.15f AND EndTime <= %.15f", startTime, endTime)
 	return `
 SELECT *
@@ -625,6 +645,15 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 		return ""
 	}
 
+	// Find the Location column index for ID resolution
+	locationColIdx := -1
+	for i, col := range columns {
+		if col == "Location" {
+			locationColIdx = i
+			break
+		}
+	}
+
 	header := "[Reference Akita Trace File]\n" + strings.Join(columns, ",") + "\n"
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
@@ -637,7 +666,14 @@ func formatTraceRows(traceReader *SQLiteTraceReader, sqlStr string) string {
 			continue
 		}
 		rowStrs := make([]string, 0, len(values))
-		for _, val := range values {
+		for i, val := range values {
+			// Resolve location ID to string if using new format
+			if i == locationColIdx && len(traceReader.locationCache) > 0 {
+				locStr := traceReader.resolveLocation(fmt.Sprintf("%v", val))
+				rowStrs = append(rowStrs, locStr)
+				continue
+			}
+
 			switch v := val.(type) {
 			case nil:
 				rowStrs = append(rowStrs, "")
