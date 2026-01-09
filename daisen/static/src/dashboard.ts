@@ -452,16 +452,17 @@ class Dashboard extends ChatPanel {
   }
 
   render() {
-    Promise.all([fetch("/api/trace?kind=Simulation"), fetch("/api/compnames")])
+    Promise.all([fetch("/api/trace?kind=Simulation"), fetch("/api/compnames?limit=10000")])
       .then(([simulation, compNames]) => {
         return Promise.all([simulation.json(), compNames.json()]);
       })
-      .then(([simulation, compNames]) => {
+      .then(([simulation, compNamesResponse]) => {
         console.log("simulation[0]:", simulation[0]);
-        console.log("compNames:", compNames);
+        console.log("compNames:", compNamesResponse);
         simulation = simulation[0];
 
-        // compNames.sort();
+        // Extract data array from paginated response
+        const compNames = compNamesResponse.data || compNamesResponse;
 
         this._componentNames = compNames;
         this._filteredNames = compNames;
