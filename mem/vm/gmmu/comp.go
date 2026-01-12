@@ -24,10 +24,13 @@ type GMMU struct {
 	topPort    sim.Port
 	bottomPort sim.Port
 
+	// LowModule is the port used to communicate with the lower-level memory module.
 	LowModule sim.Port
 
 	log2PageSize uint64
 
+	// MigrationServiceProvider is the port used for page migration requests and
+	// responses between the GMMU and the migration service.
 	MigrationServiceProvider sim.Port
 
 	pageTable           vm.PageTable
@@ -37,7 +40,10 @@ type GMMU struct {
 	walkingTranslations []transaction
 	remoteMemReqs       map[uint64]transaction
 
-	toRemoveFromPTW        []int
+	toRemoveFromPTW []int
+
+	// PageAccessedByDeviceID records, for each device ID, the pages that have
+	// been accessed.
 	PageAccessedByDeviceID map[uint64][]uint64
 }
 
@@ -98,7 +104,13 @@ func (gmmu *GMMU) walkPageTable() bool {
 		}
 		req := gmmu.walkingTranslations[i].req
 
-		page, _ := gmmu.pageTable.Find(req.PID, req.VAddr)
+		page, found := gmmu.pageTable.Find(req.PID, req.VAddr)
+		if !found {
+			log.Panicf(
+				"gmmu: page not found for PID %d VAddr 0x%x",
+				req.PID, req.VAddr,
+			)
+		}
 
 		if page.DeviceID == gmmu.deviceID {
 			madeProgress = gmmu.finalizePageWalk(i) || madeProgress
@@ -160,7 +172,10 @@ func (gmmu *GMMU) finalizePageWalk(
 	walkingIndex int,
 ) bool {
 	req := gmmu.walkingTranslations[walkingIndex].req
-	page, _ := gmmu.pageTable.Find(req.PID, req.VAddr)
+	page, found := gmmu.pageTable.Find(req.PID, req.VAddr)
+	if !found {
+		return false
+	}
 
 	gmmu.walkingTranslations[walkingIndex].page = page
 
@@ -210,7 +225,6 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(rsp))
 	}
 
-	return true
 }
 
 func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {

@@ -32,13 +32,13 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 	return b
 }
 
-// WithFreq sets the frequency that the GMMU to work at
+// WithFreq sets the frequency at which the GMMU works.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
 	b.freq = freq
 	return b
 }
 
-// WithLog2PageSize sets the page size that the gmmu support.
+// WithLog2PageSize sets the page size that the GMMU supports.
 func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
 	b.log2PageSize = log2PageSize
 	return b
@@ -106,7 +106,6 @@ func (b Builder) Build(name string) *GMMU {
 	gmmu.TickingComponent = *sim.NewTickingComponent(
 		name, b.engine, b.freq, gmmu)
 
-	// gmmu.gpuIDList = b.gpuIDList
 
 	b.createPorts(name, gmmu)
 	b.createPageTable(gmmu)

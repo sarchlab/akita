@@ -20,7 +20,7 @@ var _ = Describe("Builder", func() {
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
 		gmmu               *GMMU
-		// mmuMiddleware *middleware
+
 	)
 
 	BeforeEach(func() {
