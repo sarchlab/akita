@@ -214,7 +214,7 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 }
 
 func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
-	reqTransaction := gmmu.remoteMemReqs[uint64(response.Page.VAddr)]
+	reqTransaction := gmmu.remoteMemReqs[response.Page.VAddr]
 
 	if reqTransaction.req == nil {
 		log.Panicf("Cannot find matching request for response %+v", response)
@@ -233,6 +233,6 @@ func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
 
 	gmmu.topPort.Send(rsp)
 
-	delete(gmmu.remoteMemReqs, uint64(response.Page.VAddr))
+	delete(gmmu.remoteMemReqs, response.Page.VAddr)
 	return true
 }
