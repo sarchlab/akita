@@ -58,7 +58,7 @@ var _ = Describe("Builder", func() {
 		gmmu.topPort = topPort
 		gmmu.bottomPort = bottomPort
 		gmmu.pageTable = pageTable
-		gmmu.LowModule = lowerComponentPort
+		gmmu.LowModule = lowerComponentPort.AsRemote()
 	})
 
 	AfterEach(func() {
@@ -205,7 +205,7 @@ var _ = Describe("Builder", func() {
 			}
 
 			rsp := vm.TranslationRspBuilder{}.
-				WithSrc(gmmu.LowModule.AsRemote()).
+				WithSrc(gmmu.LowModule).
 				WithDst(gmmu.bottomPort.AsRemote()).
 				WithRspTo(req.ID).
 				WithPage(page).

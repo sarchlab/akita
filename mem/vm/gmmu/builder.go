@@ -14,7 +14,7 @@ type Builder struct {
 	maxNumReqInFlight  int
 	pageWalkingLatency int
 	deviceID           uint64
-	lowModule          sim.Port
+	lowModule          sim.RemotePort
 }
 
 // MakeBuilder creates a new builder
@@ -70,7 +70,7 @@ func (b Builder) WithDeviceID(deviceID uint64) Builder {
 }
 
 // WithLowModule sets the low module of the GMMU
-func (b Builder) WithLowModule(p sim.Port) Builder {
+func (b Builder) WithLowModule(p sim.RemotePort) Builder {
 	b.lowModule = p
 	return b
 }

@@ -25,13 +25,13 @@ type GMMU struct {
 	bottomPort sim.Port
 
 	// LowModule is the port used to communicate with the lower-level memory module.
-	LowModule sim.Port
+	LowModule sim.RemotePort
 
 	log2PageSize uint64
 
 	// MigrationServiceProvider is the port used for page migration requests and
 	// responses between the GMMU and the migration service.
-	MigrationServiceProvider sim.Port
+	MigrationServiceProvider sim.RemotePort
 
 	pageTable           vm.PageTable
 	latency             int
@@ -155,7 +155,7 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 
 	req := vm.TranslationReqBuilder{}.
 		WithSrc(gmmu.bottomPort.AsRemote()).
-		WithDst(gmmu.LowModule.AsRemote()).
+		WithDst(gmmu.LowModule).
 		WithPID(walking.PID).
 		WithVAddr(walking.VAddr).
 		WithDeviceID(walking.DeviceID).
