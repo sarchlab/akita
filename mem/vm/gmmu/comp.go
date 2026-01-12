@@ -223,8 +223,8 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 		return gmmu.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(rsp))
+		return false
 	}
-
 }
 
 func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
