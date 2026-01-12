@@ -133,6 +133,10 @@ func (gmmu *GMMU) removeCompletedTranslations() {
 }
 
 func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
+	if !gmmu.bottomPort.CanSend() {
+		return false
+	}
+
 	walking := gmmu.walkingTranslations[walkingIndex].req
 
 	gmmu.remoteMemReqs[walking.VAddr] = gmmu.walkingTranslations[walkingIndex]
@@ -145,11 +149,7 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 		WithDeviceID(walking.DeviceID).
 		Build()
 
-	err := gmmu.bottomPort.Send(req)
-
-	if err != nil {
-		return false
-	}
+	gmmu.bottomPort.Send(req)
 
 	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
 
@@ -235,8 +235,4 @@ func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
 
 	delete(gmmu.remoteMemReqs, uint64(response.Page.VAddr))
 	return true
-}
-
-func (gmmu *GMMU) GetDeviceID() uint64 {
-	return gmmu.deviceID
 }

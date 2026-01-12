@@ -58,6 +58,7 @@ var _ = Describe("Builder", func() {
 		gmmu.topPort = topPort
 		gmmu.bottomPort = bottomPort
 		gmmu.pageTable = pageTable
+		gmmu.LowModule = lowerComponentPort
 	})
 
 	AfterEach(func() {
@@ -146,5 +147,118 @@ var _ = Describe("Builder", func() {
 			Expect(translationRsp.Page.PID).To(Equal(req.PID))
 		})
 
+		It("should send request remotely", func() {
+			req := vm.TranslationReqBuilder{}.
+				WithDst(gmmu.topPort.AsRemote()).
+				WithSrc(upperComponentPort.AsRemote()).
+				WithPID(1).
+				WithVAddr(0x10000001).
+				WithDeviceID(0).
+				Build()
+
+			page := vm.Page{
+				PID:      vm.PID(1),
+				VAddr:    0x10000001,
+				DeviceID: 1,
+			}
+
+			topPort.EXPECT().
+				RetrieveIncoming().
+				Return(req)
+
+			topPort.EXPECT().
+				RetrieveIncoming().
+				Return(nil).
+				AnyTimes()
+
+			pageTable.EXPECT().
+				Find(vm.PID(1), uint64(0x10000001)).
+				Return(page, true).AnyTimes()
+
+			bottomPort.EXPECT().
+				CanSend().
+				Return(true).
+				AnyTimes()
+
+			bottomPort.EXPECT().
+				Send(gomock.Any()).
+				Return(nil)
+
+			gmmu.parseFromTop()
+			gmmu.walkPageTable()
+			gmmu.walkPageTable()
+		})
+
+		It("should return response from remote page table", func() {
+			req := vm.TranslationReqBuilder{}.
+				WithDst(gmmu.topPort.AsRemote()).
+				WithSrc(upperComponentPort.AsRemote()).
+				WithPID(1).
+				WithVAddr(0x10000001).
+				WithDeviceID(0).
+				Build()
+
+			page := vm.Page{
+				PID:      vm.PID(1),
+				VAddr:    0x10000001,
+				DeviceID: 1,
+			}
+
+			rsp := vm.TranslationRspBuilder{}.
+				WithSrc(gmmu.LowModule.AsRemote()).
+				WithDst(gmmu.bottomPort.AsRemote()).
+				WithRspTo(req.ID).
+				WithPage(page).
+				Build()
+
+			topPort.EXPECT().
+				RetrieveIncoming().
+				Return(req)
+
+			topPort.EXPECT().
+				RetrieveIncoming().
+				Return(nil).
+				AnyTimes()
+
+			topPort.EXPECT().
+				CanSend().
+				Return(true).
+				AnyTimes()
+
+			pageTable.EXPECT().
+				Find(vm.PID(1), uint64(0x10000001)).
+				Return(page, true).AnyTimes()
+
+			bottomPort.EXPECT().
+				CanSend().
+				Return(true).
+				AnyTimes()
+
+			bottomPort.EXPECT().
+				Send(gomock.Any()).
+				Return(nil)
+
+			bottomPort.EXPECT().
+				RetrieveIncoming().
+				Return(rsp)
+
+			var sentRsp sim.Msg
+			topPort.EXPECT().
+				Send(gomock.Any()).
+				Do(func(msg sim.Msg) {
+					sentRsp = msg
+				}).
+				Return(nil)
+
+			gmmu.parseFromTop()
+			gmmu.walkPageTable()
+			gmmu.walkPageTable()
+			gmmu.fetchFromBottom()
+
+			Expect(sentRsp).NotTo(BeNil())
+			translationRsp := sentRsp.(*vm.TranslationRsp)
+			Expect(translationRsp.Page).To(Equal(page))
+			Expect(translationRsp.Page.PID).To(Equal(req.PID))
+		})
 	})
 })
