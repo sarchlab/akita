@@ -422,3 +422,69 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 
 	return sqlStr
 }
+
+// Segment represents a time segment where traces were collected
+type Segment struct {
+	StartTime float64 `json:"start_time"`
+	EndTime   float64 `json:"end_time"`
+}
+
+// SegmentsResponse contains the segments data and whether the feature is enabled
+type SegmentsResponse struct {
+	Enabled  bool      `json:"enabled"`
+	Segments []Segment `json:"segments"`
+}
+
+// HasSegmentsTable checks if the daisen$segments table exists in the database
+func (r *SQLiteTraceReader) HasSegmentsTable(ctx context.Context) bool {
+	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='daisen$segments'`
+	rows, err := r.QueryContext(ctx, query)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	return rows.Next()
+}
+
+// ListSegments returns all segments from the daisen$segments table
+func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
+	response := SegmentsResponse{
+		Enabled:  false,
+		Segments: []Segment{},
+	}
+
+	if !r.HasSegmentsTable(ctx) {
+		return response
+	}
+
+	response.Enabled = true
+
+	query := `SELECT StartTime, EndTime FROM "daisen$segments" ORDER BY StartTime`
+	rows, err := r.QueryContext(ctx, query)
+	if err != nil {
+		return response
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var segment Segment
+		err := rows.Scan(&segment.StartTime, &segment.EndTime)
+		if err != nil {
+			continue
+		}
+		response.Segments = append(response.Segments, segment)
+	}
+
+	return response
+}
+
+func httpSegments(w http.ResponseWriter, r *http.Request) {
+	segments := traceReader.ListSegments(r.Context())
+
+	rsp, err := json.Marshal(segments)
+	dieOnErr(err)
+
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}

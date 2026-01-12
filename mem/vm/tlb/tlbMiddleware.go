@@ -371,7 +371,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 
 	madeProgress := false
 
-	if m.mshr.IsEmpty() && m.bottomPort.PeekIncoming() == nil {
+	if m.mshr.IsEmpty() && m.respondingMSHREntry == nil && m.bottomPort.PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
 		return madeProgress
 	}

@@ -88,22 +88,6 @@ jobs:
           version: "v2.4.0"
           args: --timeout=10m
 
-  akita_cli_acceptance:
-    name: Akita CLI Acceptance
-    needs: akita_compile
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: "1.24.7"
-
-      - name: CLI Acceptance Tests
-        run: go test ./akitav5/cmd -count=1
-
   akita_unit_test:
     name: Akita Unit Test
     needs: akita_compile

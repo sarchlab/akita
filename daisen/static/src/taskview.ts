@@ -3,6 +3,7 @@ import TaskYIndexAssigner from "./taskyindexassigner";
 import TaskRenderer from "./taskrenderer";
 import XAxisDrawer from "./xaxisdrawer";
 import { Task, TaskMilestone, TaskStep } from "./task";
+import { applySegmentShadingToSVG } from "./segmentshading";
 
 class TaskView {
   private _yIndexAssigner: TaskYIndexAssigner;
@@ -1624,6 +1625,30 @@ class TaskView {
         }
       })
       .render(tasks);
+
+    // Apply segment shading for non-traced periods
+    this._applySegmentShading();
+  }
+
+  private _applySegmentShading() {
+    if (!this._canvas || !this._xScale || this._startTime >= this._endTime) {
+      return;
+    }
+
+    const svg = d3.select(this._canvas).select<SVGSVGElement>("svg");
+    if (svg.empty()) {
+      return;
+    }
+
+    applySegmentShadingToSVG(
+      svg as any,
+      this._xScale,
+      this._startTime,
+      this._endTime,
+      this._canvasHeight - this._marginBottom,
+      this._marginTop,
+      "taskview-segment-shading"
+    );
   }
 }
 
