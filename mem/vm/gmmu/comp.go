@@ -38,7 +38,7 @@ type GMMU struct {
 	maxRequestsInFlight int
 
 	walkingTranslations []transaction
-	remoteMemReqs       map[uint64]transaction
+	remoteMemReqs       map[string]transaction
 
 	toRemoveFromPTW []int
 
@@ -151,8 +151,6 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 
 	walking := gmmu.walkingTranslations[walkingIndex].req
 
-	gmmu.remoteMemReqs[walking.VAddr] = gmmu.walkingTranslations[walkingIndex]
-
 	req := vm.TranslationReqBuilder{}.
 		WithSrc(gmmu.bottomPort.AsRemote()).
 		WithDst(gmmu.LowModule).
@@ -160,6 +158,8 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 		WithVAddr(walking.VAddr).
 		WithDeviceID(walking.DeviceID).
 		Build()
+
+	gmmu.remoteMemReqs[req.ID] = gmmu.walkingTranslations[walkingIndex]
 
 	gmmu.bottomPort.Send(req)
 
@@ -228,7 +228,7 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 }
 
 func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
-	reqTransaction := gmmu.remoteMemReqs[response.Page.VAddr]
+	reqTransaction := gmmu.remoteMemReqs[response.RespondTo]
 
 	if reqTransaction.req == nil {
 		log.Panicf("Cannot find matching request for response %+v", response)
@@ -247,6 +247,6 @@ func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
 
 	gmmu.topPort.Send(rsp)
 
-	delete(gmmu.remoteMemReqs, response.Page.VAddr)
+	delete(gmmu.remoteMemReqs, response.RespondTo)
 	return true
 }

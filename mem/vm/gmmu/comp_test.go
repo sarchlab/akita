@@ -204,13 +204,6 @@ var _ = Describe("Builder", func() {
 				DeviceID: 1,
 			}
 
-			rsp := vm.TranslationRspBuilder{}.
-				WithSrc(gmmu.LowModule).
-				WithDst(gmmu.bottomPort.AsRemote()).
-				WithRspTo(req.ID).
-				WithPage(page).
-				Build()
-
 			topPort.EXPECT().
 				RetrieveIncoming().
 				Return(req)
@@ -234,13 +227,25 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
+			var sentReqToBottom *vm.TranslationReq
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
+				Do(func(msg sim.Msg) {
+					sentReqToBottom = msg.(*vm.TranslationReq)
+				}).
 				Return(nil)
 
 			bottomPort.EXPECT().
 				RetrieveIncoming().
-				Return(rsp)
+				DoAndReturn(func() sim.Msg {
+					rsp := vm.TranslationRspBuilder{}.
+						WithSrc(gmmu.LowModule).
+						WithDst(gmmu.bottomPort.AsRemote()).
+						WithRspTo(sentReqToBottom.ID).
+						WithPage(page).
+						Build()
+					return rsp
+				})
 
 			var sentRsp sim.Msg
 			topPort.EXPECT().

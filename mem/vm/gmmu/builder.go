@@ -98,7 +98,7 @@ func (b Builder) createPorts(name string, gmmu *GMMU) {
 	gmmu.bottomPort = sim.NewPort(gmmu, 4096, 4096, name+".BottomPort")
 	gmmu.AddPort("Bottom", gmmu.bottomPort)
 
-	gmmu.remoteMemReqs = make(map[uint64]transaction)
+	gmmu.remoteMemReqs = make(map[string]transaction)
 }
 
 func (b Builder) Build(name string) *GMMU {
