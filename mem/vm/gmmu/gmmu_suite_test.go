@@ -1,4 +1,3 @@
-
 package gmmu
 
 import (
@@ -12,6 +11,3 @@ func TestGMMU(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "GMMU Suite")
 }
-
-var _ = Describe("GMMU component", func() {
-})

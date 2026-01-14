@@ -106,7 +106,6 @@ func (b Builder) Build(name string) *GMMU {
 	gmmu.TickingComponent = *sim.NewTickingComponent(
 		name, b.engine, b.freq, gmmu)
 
-
 	b.createPorts(name, gmmu)
 	b.createPageTable(gmmu)
 	b.configureInternalStates(gmmu)
