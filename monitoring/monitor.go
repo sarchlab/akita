@@ -26,6 +26,7 @@ import (
 	"github.com/sarchlab/akita/v4/analysis"
 	"github.com/sarchlab/akita/v4/monitoring/web"
 	"github.com/sarchlab/akita/v4/sim"
+	"github.com/sarchlab/akita/v4/tracing"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
 )
@@ -37,16 +38,21 @@ type Monitor struct {
 	components   []sim.Component
 	buffers      []sim.Buffer
 	portNumber   int
+	userSetPort  bool
 	perfAnalyzer *analysis.PerfAnalyzer
 	httpServer   *http.Server
 
 	progressBarsLock sync.Mutex
 	progressBars     []*ProgressBar
+
+	tracer *tracing.DBTracer
 }
 
 // NewMonitor creates a new Monitor
 func NewMonitor() *Monitor {
-	return &Monitor{}
+	return &Monitor{
+		portNumber: 32776,
+	}
 }
 
 // WithPortNumber sets the port number of the monitor.
@@ -62,6 +68,7 @@ func (m *Monitor) WithPortNumber(portNumber int) *Monitor {
 	}
 
 	m.portNumber = portNumber
+	m.userSetPort = true
 
 	return m
 }
@@ -141,6 +148,11 @@ func (m *Monitor) CompleteProgressBar(pb *ProgressBar) {
 	m.progressBars = newBars
 }
 
+// Register tracer instance to the monitor.
+func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
+	m.tracer = tr
+}
+
 // StartServer starts the monitor as a web server with a custom port if wanted.
 func (m *Monitor) StartServer() {
 	r := mux.NewRouter()
@@ -161,15 +173,33 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/resource", m.listResources)
 	r.HandleFunc("/api/profile", m.collectProfile)
 	r.HandleFunc("/api/traffic/{name}", m.reportTraffic)
+	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
+	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
+	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
+	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
 	r.PathPrefix("/").Handler(fServer)
 
-	actualPort := ":0"
-	if m.portNumber > 1000 {
-		actualPort = ":" + strconv.Itoa(m.portNumber)
-	}
+	var listener net.Listener
+	var err error
 
-	listener, err := net.Listen("tcp", actualPort)
-	dieOnErr(err)
+	if m.userSetPort {
+		actualPort := ":" + strconv.Itoa(m.portNumber)
+		listener, err = net.Listen("tcp", actualPort)
+		dieOnErr(err)
+	} else {
+		startPort := 32776
+		maxAttempts := 100
+		for i := 0; i < maxAttempts; i++ {
+			tryPort := startPort + i
+			listener, err = net.Listen("tcp", ":"+strconv.Itoa(tryPort))
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			dieOnErr(fmt.Errorf("failed to find available port after %d attempts: %w", maxAttempts, err))
+		}
+	}
 
 	fmt.Fprintf(
 		os.Stderr,
@@ -568,4 +598,54 @@ func (m *Monitor) reportTraffic(w http.ResponseWriter, r *http.Request) {
 
 	_, err := w.Write([]byte(backend))
 	dieOnErr(err)
+}
+
+func (m *Monitor) apiTraceStart(w http.ResponseWriter, _ *http.Request) {
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+
+	// Call the StartTracing() method of DBTracer
+	m.tracer.StartTracing()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"started"}`))
+}
+
+func (m *Monitor) apiTraceEnd(w http.ResponseWriter, _ *http.Request) {
+	if m.tracer == nil {
+		fmt.Println("Error: tracer is nil")
+		http.Error(w, "tracer is nil", http.StatusInternalServerError)
+		return
+	}
+	m.tracer.StopTracing()
+
+	w.WriteHeader(200)
+	w.Write([]byte(`{"status":"ended"}`))
+}
+
+func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
+	var isTracing bool
+	if m.tracer != nil {
+		isTracing = m.tracer.IsTracing()
+	} else {
+		isTracing = false
+	}
+	response := map[string]bool{"isTracing": isTracing}
+
+	// Write the response as JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(200)
+	w.Write([]byte(`{"file_size":123456}`))
 }

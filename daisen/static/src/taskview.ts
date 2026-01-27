@@ -3,6 +3,7 @@ import TaskYIndexAssigner from "./taskyindexassigner";
 import TaskRenderer from "./taskrenderer";
 import XAxisDrawer from "./xaxisdrawer";
 import { Task, TaskMilestone, TaskStep } from "./task";
+import { applySegmentShadingToSVG } from "./segmentshading";
 
 class TaskView {
   private _yIndexAssigner: TaskYIndexAssigner;
@@ -153,6 +154,14 @@ class TaskView {
       .attr("height", this._canvasHeight.toString());
     this._updateTimeScale();
     this._drawDivider();
+
+    // Update all dissection sections during zoom
+    if (this._isDissectionMode) {
+      this._recreateParentTaskSection();
+      this._recreateCurrentTaskSection();
+      this._recreateSubTasksSection();
+      this._recreateDissectionMilestoneSection();
+    }
   }
 
   private _drawDivider() {
@@ -267,7 +276,7 @@ class TaskView {
     this._dissectionView.className = 'task-dissection-view';
     // Get left column width, don't block right column
     const leftColumnWidth = this._canvas.parentElement.offsetWidth;
-    
+
     const leftColumn = this._canvas.parentElement;
     this._dissectionView.style.cssText = `
       position: fixed;
@@ -278,6 +287,7 @@ class TaskView {
       background: white;
       padding: 20px;
       overflow-y: auto;
+      overflow-x: auto;
       border-top: 2px solid #ccc;
       z-index: 1000;
     `;
@@ -308,6 +318,7 @@ class TaskView {
     const section = document.createElement('div');
     section.style.cssText = `
       margin-bottom: 20px;
+      overflow: visible;
     `;
 
     if (title) {
@@ -328,9 +339,12 @@ class TaskView {
       position: relative;
       height: 40px;
       margin-bottom: 8px;
+      margin-left: -20px;
+      margin-right: -20px;
       border: 1px solid #ddd;
       border-radius: 6px;
       background: #f9f9f9;
+      width: ${this._canvasWidth}px;
     `;
 
     // Calculate task bar position and width using xScale
@@ -418,6 +432,9 @@ class TaskView {
     const section = document.createElement('div');
     section.style.cssText = `
       margin-bottom: 20px;
+      overflow: visible;
+      padding-top: 35px;
+      padding-bottom: 35px;
     `;
 
     const titleDiv = document.createElement('div');
@@ -425,11 +442,20 @@ class TaskView {
     titleDiv.style.cssText = `
       font-size: 18px;
       font-weight: bold;
-      margin-bottom: 10px;
       color: #333;
     `;
 
-    // Create timeline container
+    // Create wrapper for milestone section
+    const scrollWrapper = document.createElement('div');
+    scrollWrapper.style.cssText = `
+      padding-top: 35px;
+      margin-left: -20px;
+      margin-right: -20px;
+      width: ${this._canvasWidth}px;
+      overflow: visible;
+    `;
+
+    // Create timeline container - overflow visible allows labels to extend
     const milestoneContainer = document.createElement('div');
     milestoneContainer.style.cssText = `
       position: relative;
@@ -437,17 +463,19 @@ class TaskView {
       border-top: 2px solid #666;
       border-bottom: 2px solid #666;
       background: #f0f0f0;
-      margin-top: 25px;
+      overflow: visible;
     `;
 
-    const containerWidth = this._canvas.parentElement.offsetWidth - 40; // minus padding
+    // Use same width as canvas for alignment
+    const containerWidth = this._canvasWidth;
     const timeRange = this._endTime - this._startTime;
-    
+
     // Create original milestone visualization
     this._createOriginalMilestoneVisualization(milestoneContainer, containerWidth, timeRange);
 
+    scrollWrapper.appendChild(milestoneContainer);
     section.appendChild(titleDiv);
-    section.appendChild(milestoneContainer);
+    section.appendChild(scrollWrapper);
 
     return section;
   }
@@ -456,6 +484,7 @@ class TaskView {
     const section = document.createElement('div');
     section.style.cssText = `
       margin-bottom: 20px;
+      overflow: visible;
     `;
 
     const titleDiv = document.createElement('div');
@@ -539,12 +568,14 @@ class TaskView {
     const timeAxisContainer = document.createElement('div');
     timeAxisContainer.style.cssText = `
       position: relative;
-      height: 30px;
+      height: 36px;
       margin-bottom: 15px;
+      margin-left: -20px;
+      margin-right: -20px;
       border: 1px solid #ddd;
       border-radius: 6px;
       background: #f9f9f9;
-      width: ${this._canvasWidth + 200}px;
+      width: ${this._canvasWidth}px;
       overflow: visible;
     `;
 
@@ -556,9 +587,9 @@ class TaskView {
       taskBar.style.cssText = `
         position: absolute;
         left: ${Math.max(0, leftOffset)}px;
-        top: 3px;
+        top: 0px;
         width: ${Math.max(10, barWidth)}px;
-        height: 24px;
+        height: 36px;
         background: ${levelColors[level % levelColors.length]};
         border: 1px solid #999;
         border-radius: 3px;
@@ -598,12 +629,13 @@ class TaskView {
         background: #007bff;
         color: white;
         border: none;
-        padding: 6px 12px;
+        padding: 4px 8px;
         border-radius: 4px;
         font-size: 12px;
         cursor: pointer;
-        margin-bottom: 10px;
-        display: block;
+        margin-left: 10px;
+        display: inline-block;
+        vertical-align: middle;
       `;
 
       const childrenContainer = document.createElement('div');
@@ -678,7 +710,7 @@ class TaskView {
         }
       });
 
-      levelContainer.appendChild(expandButton);
+      levelTitle.appendChild(expandButton);
       levelContainer.appendChild(childrenContainer);
     }
 
@@ -1837,18 +1869,16 @@ class TaskView {
       
       // Group milestones by time point, same logic as red dots
       const milestoneGroups = this._groupMilestonesByTime(sortedSteps);
-      console.log(`Milestone groups:`, milestoneGroups);
-      
+
       // Milestone bar should start from the first milestone, not before it
       const firstGroupTime = milestoneGroups[0].time;
       const lastGroupTime = milestoneGroups[milestoneGroups.length - 1].time;
 
-      // Calculate milestone bar start position and total width
-      const milestoneBarStartX = ((firstGroupTime - this._startTime) / timeRange) * containerWidth;
-      const milestoneBarEndX = ((lastGroupTime - this._startTime) / timeRange) * containerWidth;
-      const milestoneBarWidth = milestoneBarEndX - milestoneBarStartX;
-      
-      console.log(`Milestone bar: start=${milestoneBarStartX}, end=${milestoneBarEndX}, width=${milestoneBarWidth}`);
+      // Calculate milestone bar start position and total width using xScale
+      // Background bar should end before the last milestone divider line
+      const milestoneBarStartX = this._xScale(firstGroupTime);
+      const milestoneBarEndX = this._xScale(lastGroupTime);
+      const milestoneBarWidth = milestoneBarEndX - milestoneBarStartX - 2; // -2 to end before last divider line (2px width)
       
       // Create milestone bar background with parent task color
       const parentTaskColor = this._getParentTaskColor();
@@ -1860,66 +1890,61 @@ class TaskView {
         width: ${Math.max(10, milestoneBarWidth)}px;
         height: 100%;
         background: ${parentTaskColor};
+        z-index: 1;
+        pointer-events: none;
       `;
       container.appendChild(milestoneBackground);
       
-      // Create segment for each milestone group - color blocks between milestones
-      // Skip i=0 since there should be no color block before the first milestone
-      for (let i = 1; i < milestoneGroups.length; i++) {
-        let segmentStartTime, segmentEndTime;
+      // Create color blocks between milestones
+      // Structure: milestone[0] -> colorBlock[0] (shows milestone[1]) -> milestone[1] -> ... -> milestone[n-1] (no block after last)
 
-        // Segments: from previous milestone group to current milestone group
-        segmentStartTime = milestoneGroups[i - 1].time;
-        segmentEndTime = milestoneGroups[i].time;
-        
-        const segmentStartX = ((segmentStartTime - this._startTime) / timeRange) * containerWidth;
-        const segmentEndX = ((segmentEndTime - this._startTime) / timeRange) * containerWidth;
-        const segmentWidth = segmentEndX - segmentStartX;
-        
-        if (segmentWidth > 0) {
-          console.log(`Creating milestone segment ${i}: start=${segmentStartX}, end=${segmentEndX}, width=${segmentWidth}`);
-          const segment = document.createElement('div');
+      // Create color blocks from first milestone to second-to-last milestone
+      // Each block shows the info of the milestone at its END
+      for (let i = 0; i < milestoneGroups.length - 1; i++) {
+        const blockStartTime = milestoneGroups[i].time;
+        const blockEndTime = milestoneGroups[i + 1].time;
+        const blockStartX = this._xScale(blockStartTime);
+        const blockEndX = this._xScale(blockEndTime);
+        const blockWidth = blockEndX - blockStartX;
 
-          // Use corresponding milestone color, enhance gradient contrast
-          // Use (i-1) since we skipped i=0, so the first color block uses milestoneColors[0]
-          const gradientColor = milestoneColors[(i - 1) % milestoneColors.length];
+        if (blockWidth > 0) {
+          const colorBlock = document.createElement('div');
+          const gradientColor = milestoneColors[i % milestoneColors.length];
           const darkerColor = this._getDarkerColor(gradientColor);
-          
-          segment.style.cssText = `
+
+          colorBlock.style.cssText = `
             position: absolute;
-            left: ${segmentStartX}px;
+            left: ${blockStartX}px;
             top: 0;
-            width: ${segmentWidth}px;
+            width: ${blockWidth}px;
             height: 100%;
             background: linear-gradient(to right, ${gradientColor}40, ${darkerColor});
             cursor: pointer;
             transition: opacity 0.2s ease;
+            z-index: 5;
           `;
-          
-          // Add click effect for each segment to show milestone info
-          const currentGroup = milestoneGroups[i];
-          segment.addEventListener('click', (e) => {
-            // Show all milestone info for current group
-            this._showMilestoneGroupInfo(currentGroup.steps, currentGroup.time);
+
+          // Click shows the milestone at the END of this block (i+1)
+          const targetMilestone = milestoneGroups[i + 1];
+          colorBlock.addEventListener('click', () => {
+            this._showMilestoneGroupInfo(targetMilestone.steps, targetMilestone.time);
           });
-          
-          // Add hover effect to indicate clickable
-          segment.addEventListener('mouseenter', () => {
-            segment.style.opacity = '0.8';
-            segment.style.cursor = 'pointer';
+
+          colorBlock.addEventListener('mouseenter', () => {
+            colorBlock.style.opacity = '0.8';
           });
-          
-          segment.addEventListener('mouseleave', () => {
-            segment.style.opacity = '1';
+
+          colorBlock.addEventListener('mouseleave', () => {
+            colorBlock.style.opacity = '1';
           });
-          
-          container.appendChild(segment);
+
+          container.appendChild(colorBlock);
         }
       }
       
       // Add milestone divider lines based on groups
       milestoneGroups.forEach((group, index) => {
-        const milestoneX = ((group.time - this._startTime) / timeRange) * containerWidth;
+        const milestoneX = this._xScale(group.time);
         const dividerLine = document.createElement('div');
         dividerLine.style.cssText = `
           position: absolute;
@@ -1931,24 +1956,24 @@ class TaskView {
           z-index: 10;
         `;
         container.appendChild(dividerLine);
-        
+
+        // Add label for ALL milestones (1-indexed)
+        this._createMilestoneLabel(container, index + 1, milestoneX);
+
         // Add red flag on the last milestone divider line
         if (index === milestoneGroups.length - 1) {
-          console.log(`Adding red flag at position: x=${milestoneX + 8}, index=${index}, total=${milestoneGroups.length}`);
           const flag = document.createElement('div');
           flag.innerHTML = '🚩';
           flag.style.cssText = `
             position: absolute;
-            left: ${milestoneX + 8}px;
-            top: -25px;
+            left: ${milestoneX + 2}px;
+            top: -22px;
             font-size: 20px;
             z-index: 15;
             line-height: 1;
             pointer-events: none;
-            transform: translateX(-50%);
           `;
           container.appendChild(flag);
-          console.log('Red flag added to milestone container');
         }
       });
     }
@@ -1993,11 +2018,222 @@ class TaskView {
     container.appendChild(legend);
   }
 
+  private _createMilestoneLabel(
+    container: HTMLElement,
+    index: number,
+    xPixels: number
+  ): HTMLElement {
+    const labelContainer = document.createElement('div');
+    labelContainer.className = 'milestone-label';
+    labelContainer.style.cssText = `
+      position: absolute;
+      margin-top: 20px;
+      left: ${xPixels - 5}px;
+      top: 2px;
+      width: 80px;
+      height: 
+      text-align: center;
+      font-size: 12px;
+      font-weight: bold;
+      color: #333;
+      pointer-events: none;
+      z-index: 20;
+    `;
+
+    const arrow = document.createElement('div');
+    arrow.textContent = '↑';
+    arrow.style.cssText = `
+      font-size: 16px;
+      line-height: 1;
+      margin-bottom: 2px;
+    `;
+
+    const text = document.createElement('div');
+    text.textContent = `Milestone ${index}`;
+    text.style.cssText = `
+      font-size: 11px;
+      white-space: nowrap;
+    `;
+
+    labelContainer.appendChild(arrow);
+    labelContainer.appendChild(text);
+    container.appendChild(labelContainer);
+
+    return labelContainer;
+  }
+
+  private _recreateDissectionMilestoneSection() {
+    if (!this._dissectionView || !this._isDissectionMode) {
+      return;
+    }
+
+    // Find milestone section
+    const sections = this._dissectionView.children;
+    let milestoneSection: HTMLElement = null;
+
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Milestones Achieving') {
+        milestoneSection = section;
+        break;
+      }
+    }
+
+    if (!milestoneSection) {
+      return;
+    }
+
+    // Ensure section allows overflow for labels/flag
+    milestoneSection.style.overflow = 'visible';
+    milestoneSection.style.paddingTop = '35px';
+
+    // Remove all children except title
+    const children = Array.from(milestoneSection.children);
+    children.forEach((child, index) => {
+      if (index > 0) { // Keep first child (title)
+        child.remove();
+      }
+    });
+
+    // Recreate with updated xScale positions
+    const containerWidth = this._canvasWidth;
+    const timeRange = this._endTime - this._startTime;
+
+    // Create wrapper for milestone section
+    const scrollWrapper = document.createElement('div');
+    scrollWrapper.style.cssText = `
+      padding-top: 35px;
+      padding-bottom: 35px;
+      margin-left: -20px;
+      margin-right: -20px;
+      width: ${this._canvasWidth}px;
+      overflow: visible;
+    `;
+
+    // Create timeline container - overflow visible allows labels to extend
+    const milestoneContainer = document.createElement('div');
+    milestoneContainer.style.cssText = `
+      position: relative;
+      height: 30px;
+      border-top: 2px solid #666;
+      border-bottom: 2px solid #666;
+      background: #f0f0f0;
+      overflow: visible;
+    `;
+
+    this._createOriginalMilestoneVisualization(milestoneContainer, containerWidth, timeRange);
+    scrollWrapper.appendChild(milestoneContainer);
+    milestoneSection.appendChild(scrollWrapper);
+  }
+
+  private _recreateParentTaskSection() {
+    if (!this._dissectionView || !this._isDissectionMode || !this._parentTask) {
+      return;
+    }
+
+    // Find and remove old Parent Task section
+    const sections = this._dissectionView.children;
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Parent Task') {
+        section.remove();
+        break;
+      }
+    }
+
+    // Recreate with updated xScale positions
+    const parentSection = this._createTaskSection('Parent Task', this._parentTask, '#a5dee5', false);
+
+    // Insert at beginning (Parent Task is always first)
+    const firstChild = this._dissectionView.children[0];
+    this._dissectionView.insertBefore(parentSection, firstChild);
+  }
+
+  private _recreateCurrentTaskSection() {
+    if (!this._dissectionView || !this._isDissectionMode) {
+      return;
+    }
+
+    // Find and remove old Current Task section
+    const sections = this._dissectionView.children;
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Current Task') {
+        section.remove();
+        break;
+      }
+    }
+
+    // Recreate with updated xScale positions
+    const currentSection = this._createTaskSection('Current Task', this._task, '#e0f9b5', false);
+
+    // Insert after Parent Task (if exists) or at beginning
+    let insertPosition = 0;
+    for (let i = 0; i < this._dissectionView.children.length; i++) {
+      const section = this._dissectionView.children[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Parent Task') {
+        insertPosition = i + 1;
+        break;
+      }
+    }
+
+    if (insertPosition < this._dissectionView.children.length) {
+      this._dissectionView.insertBefore(currentSection, this._dissectionView.children[insertPosition]);
+    } else {
+      this._dissectionView.appendChild(currentSection);
+    }
+  }
+
+  private _recreateSubTasksSection() {
+    if (!this._dissectionView || !this._isDissectionMode) {
+      return;
+    }
+
+    // Find and remove old Sub Tasks section
+    const sections = this._dissectionView.children;
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Sub Tasks') {
+        section.remove();
+        break;
+      }
+    }
+
+    // Recreate with updated xScale positions
+    const subTasksSection = this._createSubTasksSection();
+
+    // Insert before Milestones Achieving section (or at end if not found)
+    let insertBeforeMilestones: Element | null = null;
+    for (let i = 0; i < this._dissectionView.children.length; i++) {
+      const section = this._dissectionView.children[i] as HTMLElement;
+      const title = section.querySelector('div');
+      if (title && title.textContent === 'Milestones Achieving') {
+        insertBeforeMilestones = this._dissectionView.children[i];
+        break;
+      }
+    }
+
+    this._dissectionView.insertBefore(subTasksSection, insertBeforeMilestones);
+  }
+
   setTimeAxis(startTime: number, endTime: number) {
     this._startTime = startTime;
     this._endTime = endTime;
     this._xAxisDrawer.setTimeRange(startTime, endTime);
     this._updateTimeScale();
+
+    // Update all dissection sections during zoom
+    if (this._isDissectionMode) {
+      this._recreateParentTaskSection();
+      this._recreateCurrentTaskSection();
+      this._recreateSubTasksSection();
+      this._recreateDissectionMilestoneSection();
+    }
   }
 
   private _updateTimeScale() {
@@ -2087,6 +2323,30 @@ class TaskView {
         }
       })
       .render(tasks);
+
+    // Apply segment shading for non-traced periods
+    this._applySegmentShading();
+  }
+
+  private _applySegmentShading() {
+    if (!this._canvas || !this._xScale || this._startTime >= this._endTime) {
+      return;
+    }
+
+    const svg = d3.select(this._canvas).select<SVGSVGElement>("svg");
+    if (svg.empty()) {
+      return;
+    }
+
+    applySegmentShadingToSVG(
+      svg as any,
+      this._xScale,
+      this._startTime,
+      this._endTime,
+      this._canvasHeight - this._marginBottom,
+      this._marginTop,
+      "taskview-segment-shading"
+    );
   }
 }
 

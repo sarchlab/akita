@@ -58,6 +58,7 @@ func startAPIServer() {
 	http.HandleFunc("/api/trace", httpTrace)
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
+	http.HandleFunc("/api/segments", httpSegments)
 	http.HandleFunc("/api/milestones", httpMilestones)
 	http.HandleFunc("/api/component_milestones", httpComponentMilestones)
 	http.HandleFunc("/api/exec_info", httpExecInfo)

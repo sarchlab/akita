@@ -386,13 +386,7 @@ class TaskRenderer {
                     .enter()
                     .append('circle')
                     .attr('class', `milestone-${this._taskIdTag(task)}`)
-                    .attr('r', d => {
-                        // Increase radius for overlapping milestones
-                        if (d.isOverlapping) {
-                            return d.steps.length > 1 ? 5 : 4;
-                        }
-                        return d.steps.length > 1 ? 3 : 2;
-                    })
+                    .attr('r', 3)
                     .attr('fill', 'red')
                     .attr('stroke', d => {
                         // Add white stroke for overlapping milestones
@@ -433,13 +427,8 @@ class TaskRenderer {
                         });
                         return offsetX;
                     })
-                    .attr('r', d => {
-                        // Increase radius for overlapping milestones
-                        if (d.isOverlapping) {
-                            return d.steps.length > 1 ? 5 : 4;
-                        }
-                        return d.steps.length > 1 ? 3 : 2;
-                    })
+                    .attr('cy', (d) => this._getYValue(task) + this._getHeightValue(task) / 2)
+                    .attr('r', 3)
                     .attr('stroke', d => {
                         // Add white stroke for overlapping milestones
                         if (d.isOverlapping) {

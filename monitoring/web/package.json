@@ -3,6 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "18.20.7",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -11,7 +15,7 @@
   "devDependencies": {
     "sass": "^1.62.1",
     "typescript": "^5.0.2",
-    "vite": "^6.3.6"
+    "vite": "^6.4.1"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^6.4.0",

@@ -10,9 +10,11 @@ import (
 
 // Builder can be used to build a simulation.
 type Builder struct {
-	parallelEngine bool
-	monitorOn      bool
-	outputFileName string
+	parallelEngine     bool
+	monitorOn          bool
+	monitorPort        int
+	outputFileName     string
+	visTracingOnStart  bool
 }
 
 // MakeBuilder creates a new builder.
@@ -41,33 +43,79 @@ func (b Builder) WithOutputFileName(filename string) Builder {
 	return b
 }
 
+// WithMonitorPort sets the port number for the monitoring server.
+func (b Builder) WithMonitorPort(port int) Builder {
+	b.monitorPort = port
+	return b
+}
+
+// WithVisTracingOnStart enables visual tracing from the start of the simulation.
+func (b Builder) WithVisTracingOnStart() Builder {
+	b.visTracingOnStart = true
+	return b
+}
+
+func (b Builder) parametersMustBeValid() {
+	if !b.monitorOn && b.monitorPort != 0 {
+		panic("monitor port cannot be set when monitoring is disabled")
+	}
+}
+
 // Build builds the simulation.
 func (b Builder) Build() *Simulation {
-	s := &Simulation{
+	b.parametersMustBeValid()
+
+	s := b.createSimulation()
+
+	b.createDataRecorder(s)
+	b.createEngine(s)
+	b.createVisTracer(s)
+	b.createMonitor(s)
+
+	return s
+}
+
+func (b Builder) createSimulation() *Simulation {
+	return &Simulation{
+		id:            xid.New().String(),
 		compNameIndex: make(map[string]int),
 		portNameIndex: make(map[string]int),
 	}
+}
 
-	s.id = xid.New().String()
-	
+func (b Builder) createDataRecorder(s *Simulation) {
 	outputPath := b.outputFileName
 	if outputPath == "" {
 		outputPath = "akita_sim_" + s.id
 	}
 	s.dataRecorder = datarecording.NewDataRecorder(outputPath)
+}
 
+func (b Builder) createEngine(s *Simulation) {
 	s.engine = sim.NewSerialEngine()
 	if b.parallelEngine {
 		s.engine = sim.NewParallelEngine()
 	}
+}
 
-	if b.monitorOn {
-		s.monitor = monitoring.NewMonitor()
-		s.monitor.RegisterEngine(s.engine)
-		s.monitor.StartServer()
-	}
-
+func (b Builder) createVisTracer(s *Simulation) {
 	s.visTracer = tracing.NewDBTracer(s.engine, s.dataRecorder)
 
-	return s
+	if b.visTracingOnStart {
+		s.visTracer.StartTracing()
+	}
+}
+
+func (b Builder) createMonitor(s *Simulation) {
+	if !b.monitorOn {
+		return
+	}
+
+	s.monitor = monitoring.NewMonitor()
+	if b.monitorPort > 0 {
+		s.monitor.WithPortNumber(b.monitorPort)
+	}
+	s.monitor.RegisterEngine(s.engine)
+	s.monitor.RegisterVisTracer(s.visTracer)
+	s.monitor.StartServer()
 }

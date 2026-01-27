@@ -19,7 +19,7 @@ import (
 func httpTrace(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("httpTrace called with URL: %s\n", r.URL.String())
 	fmt.Printf("Form values - starttime: '%s', endtime: '%s'\n", r.FormValue("starttime"), r.FormValue("endtime"))
-	
+
 	useTimeRange := true
 	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
 		useTimeRange = false
@@ -45,7 +45,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid endtime parameter: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		
+
 		fmt.Printf("Parsed time range: %f to %f\n", startTime, endTime)
 	}
 
@@ -60,11 +60,11 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		EnableParentTask: false,
 	}
 
-	fmt.Printf("Query: ID='%s', ParentID='%s', Kind='%s', Where='%s', TimeRange=%v\n", 
+	fmt.Printf("Query: ID='%s', ParentID='%s', Kind='%s', Where='%s', TimeRange=%v\n",
 		query.ID, query.ParentID, query.Kind, query.Where, query.EnableTimeRange)
 
 	tasks := traceReader.ListTasks(r.Context(), query)
-	
+
 	fmt.Printf("Found %d tasks\n", len(tasks))
 	if len(tasks) > 0 {
 		fmt.Printf("First task: ID=%s, Kind=%s, Steps=%d\n", tasks[0].ID, tasks[0].Kind, len(tasks[0].Steps))
@@ -76,7 +76,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to marshal tasks: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	fmt.Printf("Response JSON length: %d bytes\n", len(rsp))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -86,7 +86,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to write response: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	
+
 	fmt.Printf("httpTrace completed successfully\n")
 }
 
@@ -123,16 +123,16 @@ type TaskStep struct {
 }
 
 type Task struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parent_id"`
-	Kind      string         `json:"kind"`
-	What      string         `json:"what"`
-	Location  string         `json:"location"`
-	StartTime sim.VTimeInSec `json:"start_time"`
-	EndTime   sim.VTimeInSec `json:"end_time"`
+	ID         string         `json:"id"`
+	ParentID   string         `json:"parent_id"`
+	Kind       string         `json:"kind"`
+	What       string         `json:"what"`
+	Location   string         `json:"location"`
+	StartTime  sim.VTimeInSec `json:"start_time"`
+	EndTime    sim.VTimeInSec `json:"end_time"`
 	Steps      []TaskStep     `json:"steps"`
-	Detail     interface{} `json:"-"`
-	ParentTask *Task       `json:"-"`
+	Detail     interface{}    `json:"-"`
+	ParentTask *Task          `json:"-"`
 }
 
 // TraceReader can parse a trace file.
@@ -296,9 +296,9 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time:     sim.VTimeInSec(time),
-				What:     what,
-				Kind:     kind,
+				Time: sim.VTimeInSec(time),
+				What: what,
+				Kind: kind,
 			}
 			task.Steps = append(task.Steps, step)
 		}
@@ -454,6 +454,72 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 	return sqlStr
 }
 
+// Segment represents a time segment where traces were collected
+type Segment struct {
+	StartTime float64 `json:"start_time"`
+	EndTime   float64 `json:"end_time"`
+}
+
+// SegmentsResponse contains the segments data and whether the feature is enabled
+type SegmentsResponse struct {
+	Enabled  bool      `json:"enabled"`
+	Segments []Segment `json:"segments"`
+}
+
+// HasSegmentsTable checks if the daisen$segments table exists in the database
+func (r *SQLiteTraceReader) HasSegmentsTable(ctx context.Context) bool {
+	query := `SELECT name FROM sqlite_master WHERE type='table' AND name='daisen$segments'`
+	rows, err := r.QueryContext(ctx, query)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+
+	return rows.Next()
+}
+
+// ListSegments returns all segments from the daisen$segments table
+func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
+	response := SegmentsResponse{
+		Enabled:  false,
+		Segments: []Segment{},
+	}
+
+	if !r.HasSegmentsTable(ctx) {
+		return response
+	}
+
+	response.Enabled = true
+
+	query := `SELECT StartTime, EndTime FROM "daisen$segments" ORDER BY StartTime`
+	rows, err := r.QueryContext(ctx, query)
+	if err != nil {
+		return response
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var segment Segment
+		err := rows.Scan(&segment.StartTime, &segment.EndTime)
+		if err != nil {
+			continue
+		}
+		response.Segments = append(response.Segments, segment)
+	}
+
+	return response
+}
+
+func httpSegments(w http.ResponseWriter, r *http.Request) {
+	segments := traceReader.ListSegments(r.Context())
+
+	rsp, err := json.Marshal(segments)
+	dieOnErr(err)
+
+	_, err = w.Write(rsp)
+	dieOnErr(err)
+}
+
 // MilestoneData represents milestone count data for a time window
 type MilestoneData struct {
 	Time           float64 `json:"time"`
@@ -465,40 +531,39 @@ func httpMilestones(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.FormValue("start_time")
 	endTimeStr := r.FormValue("end_time")
 	numWindowsStr := r.FormValue("num_windows")
-	
-	
+
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start_time and end_time parameters required", http.StatusBadRequest)
 		return
 	}
-	
+
 	startTime, err := strconv.ParseFloat(startTimeStr, 64)
 	if err != nil {
 		http.Error(w, "Invalid start_time parameter", http.StatusBadRequest)
 		return
 	}
-	
+
 	endTime, err := strconv.ParseFloat(endTimeStr, 64)
 	if err != nil {
 		http.Error(w, "Invalid end_time parameter", http.StatusBadRequest)
 		return
 	}
-	
+
 	numWindows := 10 // default
 	if numWindowsStr != "" {
 		if parsed, err := strconv.Atoi(numWindowsStr); err == nil && parsed > 0 {
 			numWindows = parsed
 		}
 	}
-	
+
 	milestoneData := traceReader.QueryMilestonesByTimeWindows(r.Context(), startTime, endTime, numWindows)
-	
+
 	rsp, err := json.Marshal(milestoneData)
 	if err != nil {
 		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(rsp)
 	if err != nil {
@@ -511,14 +576,14 @@ func httpMilestones(w http.ResponseWriter, r *http.Request) {
 func (r *SQLiteTraceReader) QueryMilestonesByTimeWindows(ctx context.Context, startTime, endTime float64, numWindows int) []MilestoneData {
 	duration := endTime - startTime
 	windowDuration := duration / float64(numWindows)
-	
+
 	milestoneData := make([]MilestoneData, 0, numWindows)
-	
+
 	for i := 0; i < numWindows; i++ {
 		windowStart := startTime + (float64(i) * windowDuration)
 		windowEnd := startTime + (float64(i+1) * windowDuration)
 		relativeTime := float64(i) * windowDuration
-		
+
 		// Query milestone count for this time window
 		// For the last window, include the end boundary (<=) to avoid missing milestones at endTime
 		var sqlStr string
@@ -537,19 +602,19 @@ func (r *SQLiteTraceReader) QueryMilestonesByTimeWindows(ctx context.Context, st
 				WHERE Time >= ? AND Time < ?
 			`
 		}
-		
+
 		var count int
 		err := r.QueryRowContext(ctx, sqlStr, windowStart, windowEnd).Scan(&count)
 		if err != nil {
 			count = 0
 		}
-		
+
 		milestoneData = append(milestoneData, MilestoneData{
 			Time:           relativeTime,
 			MilestoneCount: count,
 		})
 	}
-	
+
 	return milestoneData
 }
 
@@ -564,13 +629,13 @@ type ExecInfo struct {
 // httpExecInfo handles the API endpoint for querying execution information
 func httpExecInfo(w http.ResponseWriter, r *http.Request) {
 	execInfo := traceReader.QueryExecInfo(r.Context())
-	
+
 	rsp, err := json.Marshal(execInfo)
 	if err != nil {
 		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(rsp)
 	if err != nil {
@@ -582,21 +647,21 @@ func httpExecInfo(w http.ResponseWriter, r *http.Request) {
 // QueryExecInfo queries execution information from the exec_info table
 func (r *SQLiteTraceReader) QueryExecInfo(ctx context.Context) *ExecInfo {
 	execInfo := &ExecInfo{}
-	
+
 	rows, err := r.QueryContext(ctx, "SELECT Property, Value FROM exec_info")
 	if err != nil {
 		// If exec_info table doesn't exist, return empty exec info
 		return execInfo
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var property, value string
 		err := rows.Scan(&property, &value)
 		if err != nil {
 			continue
 		}
-		
+
 		switch property {
 		case "Start Time":
 			execInfo.StartTime = value
@@ -608,7 +673,7 @@ func (r *SQLiteTraceReader) QueryExecInfo(ctx context.Context) *ExecInfo {
 			execInfo.WorkingDirectory = value
 		}
 	}
-	
+
 	return execInfo
 }
 
@@ -622,32 +687,32 @@ type ComponentMilestoneData struct {
 func httpComponentMilestones(w http.ResponseWriter, r *http.Request) {
 	startTimeStr := r.FormValue("start_time")
 	endTimeStr := r.FormValue("end_time")
-	
+
 	if startTimeStr == "" || endTimeStr == "" {
 		http.Error(w, "start_time and end_time parameters required", http.StatusBadRequest)
 		return
 	}
-	
+
 	startTime, err := strconv.ParseFloat(startTimeStr, 64)
 	if err != nil {
 		http.Error(w, "Invalid start_time parameter", http.StatusBadRequest)
 		return
 	}
-	
+
 	endTime, err := strconv.ParseFloat(endTimeStr, 64)
 	if err != nil {
 		http.Error(w, "Invalid end_time parameter", http.StatusBadRequest)
 		return
 	}
-	
+
 	componentMilestoneData := traceReader.QueryMilestonesByComponent(r.Context(), startTime, endTime)
-	
+
 	rsp, err := json.Marshal(componentMilestoneData)
 	if err != nil {
 		http.Error(w, "Failed to marshal response", http.StatusInternalServerError)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(rsp)
 	if err != nil {
@@ -665,30 +730,30 @@ func (r *SQLiteTraceReader) QueryMilestonesByComponent(ctx context.Context, star
 		GROUP BY Location
 		ORDER BY milestone_count DESC
 	`
-	
+
 	rows, err := r.QueryContext(ctx, sqlStr, startTime, endTime)
 	if err != nil {
 		// If trace_milestones table doesn't exist, return empty data
 		return []ComponentMilestoneData{}
 	}
 	defer rows.Close()
-	
+
 	var componentData []ComponentMilestoneData
-	
+
 	for rows.Next() {
 		var location string
 		var count int
-		
+
 		err := rows.Scan(&location, &count)
 		if err != nil {
 			continue
 		}
-		
+
 		componentData = append(componentData, ComponentMilestoneData{
 			Component:      location,
 			MilestoneCount: count,
 		})
 	}
-	
+
 	return componentData
 }
