@@ -925,7 +925,7 @@ func countConcurrentTasksByKind(tasks []Task, kinds []string, binStartTime, binE
 		kindCounts[kind] = 0
 	}
 
-	instantTime := binStartTime + (binEndTime-binStartTime)/2 // 计算中点时间
+	instantTime := binStartTime + (binEndTime-binStartTime)/2
 
 	for _, task := range tasks {
 		if !isTaskRunningInBin(task, binStartTime, binEndTime) {
@@ -946,8 +946,7 @@ func isTaskRunningInBin(task Task, binStartTime, binEndTime float64) bool {
 
 func findTaskCurrentBlockingReasons(task Task, binStartTime float64) []string {
 	var blockingReasons []string
-	
-	
+
 	// Find all future milestones after binStartTime
 	var futureSteps []TaskStep
 	for _, step := range task.Steps {
@@ -955,11 +954,11 @@ func findTaskCurrentBlockingReasons(task Task, binStartTime float64) []string {
 			futureSteps = append(futureSteps, step)
 		}
 	}
-	
+
 	if len(futureSteps) == 0 {
 		return []string{} // No future milestones, task is not blocked by anything
 	}
-	
+
 	// Find the earliest future milestone time point
 	minTime := float64(futureSteps[0].Time)
 	for _, step := range futureSteps {
@@ -967,15 +966,14 @@ func findTaskCurrentBlockingReasons(task Task, binStartTime float64) []string {
 			minTime = float64(step.Time)
 		}
 	}
-	
+
 	// Collect all milestone kinds at this earliest time point
 	for _, step := range futureSteps {
 		if float64(step.Time) == minTime {
 			blockingReasons = append(blockingReasons, step.Kind)
 		}
 	}
-	
-	
+
 	return blockingReasons
 }
 
