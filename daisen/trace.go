@@ -16,37 +16,38 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-func httpTrace(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("httpTrace called with URL: %s\n", r.URL.String())
-	fmt.Printf("Form values - starttime: '%s', endtime: '%s'\n", r.FormValue("starttime"), r.FormValue("endtime"))
+func parseTimeRange(r *http.Request) (startTime, endTime float64, useTimeRange bool, err error) {
+	fmt.Printf("Form values - starttime: '%s', endtime: '%s'\n",
+		r.FormValue("starttime"), r.FormValue("endtime"))
 
-	useTimeRange := true
 	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
-		useTimeRange = false
 		fmt.Printf("Time range disabled - missing parameters\n")
+		return 0, 0, false, nil
 	}
 
-	var err error
+	startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
+	if err != nil {
+		fmt.Printf("Error parsing starttime: %v\n", err)
+		return 0, 0, false, err
+	}
 
-	startTime := 0.0
-	endTime := 0.0
+	endTime, err = strconv.ParseFloat(r.FormValue("endtime"), 64)
+	if err != nil {
+		fmt.Printf("Error parsing endtime: %v\n", err)
+		return 0, 0, false, err
+	}
 
-	if useTimeRange {
-		startTime, err = strconv.ParseFloat(r.FormValue("starttime"), 64)
-		if err != nil {
-			fmt.Printf("Error parsing starttime: %v\n", err)
-			http.Error(w, "Invalid starttime parameter: "+err.Error(), http.StatusBadRequest)
-			return
-		}
+	fmt.Printf("Parsed time range: %f to %f\n", startTime, endTime)
+	return startTime, endTime, true, nil
+}
 
-		endTime, err = strconv.ParseFloat(r.FormValue("endtime"), 64)
-		if err != nil {
-			fmt.Printf("Error parsing endtime: %v\n", err)
-			http.Error(w, "Invalid endtime parameter: "+err.Error(), http.StatusBadRequest)
-			return
-		}
+func httpTrace(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("httpTrace called with URL: %s\n", r.URL.String())
 
-		fmt.Printf("Parsed time range: %f to %f\n", startTime, endTime)
+	startTime, endTime, useTimeRange, err := parseTimeRange(r)
+	if err != nil {
+		http.Error(w, "Invalid time parameter: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	query := TaskQuery{
@@ -67,7 +68,8 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Found %d tasks\n", len(tasks))
 	if len(tasks) > 0 {
-		fmt.Printf("First task: ID=%s, Kind=%s, Steps=%d\n", tasks[0].ID, tasks[0].Kind, len(tasks[0].Steps))
+		fmt.Printf("First task: ID=%s, Kind=%s, Steps=%d\n",
+			tasks[0].ID, tasks[0].Kind, len(tasks[0].Steps))
 	}
 
 	rsp, err := json.Marshal(tasks)
@@ -573,7 +575,9 @@ func httpMilestones(w http.ResponseWriter, r *http.Request) {
 }
 
 // QueryMilestonesByTimeWindows queries milestone counts grouped by time windows
-func (r *SQLiteTraceReader) QueryMilestonesByTimeWindows(ctx context.Context, startTime, endTime float64, numWindows int) []MilestoneData {
+func (r *SQLiteTraceReader) QueryMilestonesByTimeWindows(
+	ctx context.Context, startTime, endTime float64, numWindows int,
+) []MilestoneData {
 	duration := endTime - startTime
 	windowDuration := duration / float64(numWindows)
 
@@ -722,7 +726,9 @@ func httpComponentMilestones(w http.ResponseWriter, r *http.Request) {
 }
 
 // QueryMilestonesByComponent queries milestone counts grouped by component location
-func (r *SQLiteTraceReader) QueryMilestonesByComponent(ctx context.Context, startTime, endTime float64) []ComponentMilestoneData {
+func (r *SQLiteTraceReader) QueryMilestonesByComponent(
+	ctx context.Context, startTime, endTime float64,
+) []ComponentMilestoneData {
 	sqlStr := `
 		SELECT Location, COUNT(*) as milestone_count
 		FROM trace_milestones 
