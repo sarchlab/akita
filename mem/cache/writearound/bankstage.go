@@ -102,6 +102,13 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	s.removeTransaction(trans)
 	s.postPipelineBuf.Pop()
 
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"read-hit",
+		s.cache.Name(),
+		s.cache,
+	)
 	tracing.EndTask(trans.id, s.cache)
 
 	return true
@@ -135,6 +142,13 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 
 	s.postPipelineBuf.Pop()
 
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"write-hit",
+		s.cache.Name(),
+		s.cache,
+	)
 	tracing.EndTask(trans.id, s.cache)
 
 	return true

@@ -47,8 +47,22 @@ func (s *mshrStage) processOneReq() bool {
 
 		if trans.read != nil {
 			s.respondRead(trans.read, mshrEntry.Data)
+			tracing.AddMilestone(
+				trans.id,
+				tracing.MilestoneKindHardwareResource,
+				"data-ready",
+				s.cache.Name(),
+				s.cache,
+			)
 		} else {
 			s.respondWrite(trans.write)
+			tracing.AddMilestone(
+				trans.id,
+				tracing.MilestoneKindHardwareResource,
+				"write-done",
+				s.cache.Name(),
+				s.cache,
+			)
 		}
 
 		mshrEntry.Requests = mshrEntry.Requests[1:]

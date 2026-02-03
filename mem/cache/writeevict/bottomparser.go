@@ -42,6 +42,13 @@ func (p *bottomParser) processDoneRsp(done *mem.WriteDoneRsp) bool {
 	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.writeToBottom, p.cache)
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"write-done",
+		p.cache.Name(),
+		p.cache,
+	)
 	tracing.EndTask(trans.id, p.cache)
 
 	return true
@@ -80,6 +87,13 @@ func (p *bottomParser) processDataReady(
 	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.readToBottom, p.cache)
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"data-ready",
+		p.cache.Name(),
+		p.cache,
+	)
 
 	return true
 }

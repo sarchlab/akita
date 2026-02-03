@@ -257,6 +257,13 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	s.cache.topPort.Send(dataReady)
 
 	tracing.TraceReqComplete(read, s.cache)
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"read-hit",
+		s.cache.Name(),
+		s.cache,
+	)
 
 	// log.Printf("%.10f, %s, bank read hit finalize，"+
 	// " %s, %04X, %04X, (%d, %d), %v\n",
@@ -300,6 +307,13 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	s.cache.topPort.Send(done)
 
 	tracing.TraceReqComplete(write, s.cache)
+	tracing.AddMilestone(
+		trans.id,
+		tracing.MilestoneKindHardwareResource,
+		"write-hit",
+		s.cache.Name(),
+		s.cache,
+	)
 
 	// log.Printf("%.10f, %s, bank write hit finalize， "+
 	// "%s, %04X, %04X, (%d, %d), %v\n",
