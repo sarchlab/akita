@@ -11,9 +11,10 @@ import (
 type TranslationReq struct {
 	sim.MsgMeta
 
-	VAddr    uint64
-	PID      PID
-	DeviceID uint64
+	VAddr        uint64
+	PID          PID
+	DeviceID     uint64
+	TransLatency uint64
 }
 
 // Meta returns the meta data associated with the message.
@@ -43,10 +44,16 @@ func (r *TranslationReq) GenerateRsp(page Page) sim.Rsp {
 
 // TranslationReqBuilder can build translation requests
 type TranslationReqBuilder struct {
-	src, dst sim.RemotePort
-	vAddr    uint64
-	pid      PID
-	deviceID uint64
+	src, dst     sim.RemotePort
+	vAddr        uint64
+	pid          PID
+	deviceID     uint64
+	transLatency uint64
+}
+
+func (b TranslationReqBuilder) WithTransLatency(latency uint64) TranslationReqBuilder {
+	b.transLatency = latency
+	return b
 }
 
 // WithSrc sets the source of the request to build.
@@ -95,6 +102,7 @@ func (b TranslationReqBuilder) Build() *TranslationReq {
 	r.PID = b.pid
 	r.DeviceID = b.deviceID
 	r.TrafficClass = reflect.TypeOf(TranslationReq{}).String()
+	r.TransLatency = b.transLatency
 
 	return r
 }
