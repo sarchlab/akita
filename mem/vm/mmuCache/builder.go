@@ -146,6 +146,7 @@ func (b Builder) Build(name string) *Comp {
 	b.createPorts(name, mmuCache)
 
 	mmuCache.reset()
+	mmuCache.state = mmuCacheStateEnable
 
 	return mmuCache
 }
