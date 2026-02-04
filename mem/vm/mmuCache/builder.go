@@ -152,12 +152,9 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, mmuCache *Comp) {
-	// mmuCache.topPort = sim.NewLimitNumMsgPort(mmuCache, b.numReqPerCycle,
 	mmuCache.topPort = sim.NewPort(mmuCache, 4800, 4800,
 		name+".TopPort")
 	mmuCache.AddPort("Top", mmuCache.topPort)
-
-	// mmuCache.bottomPort = sim.NewLimitNumMsgPort(mmuCache, b.numReqPerCycle,
 	mmuCache.bottomPort = sim.NewPort(mmuCache, 4800, 4800,
 		name+".BottomPort")
 	mmuCache.AddPort("Bottom", mmuCache.bottomPort)
