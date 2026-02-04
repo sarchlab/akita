@@ -227,7 +227,7 @@ func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool 
 
 		_, found := subTable.Lookup(pid, seg)
 		if found {
-			subTable.Evict()
+			continue
 		}
 
 		subTable.Update(wayID, pid, seg)
