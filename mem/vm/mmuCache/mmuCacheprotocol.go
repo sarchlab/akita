@@ -7,8 +7,8 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-// A FlushReq asks the TLB to invalidate certain entries. It will also not block
-// all incoming and outgoing ports
+// A FlushReq asks the TLB to invalidate certain entries. It will not block any
+// incoming or outgoing ports.
 type FlushReq struct {
 	sim.MsgMeta
 
