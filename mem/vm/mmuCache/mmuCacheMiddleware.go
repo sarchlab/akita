@@ -40,14 +40,7 @@ func (cache *mmuCacheMiddleware) Tick() bool {
 }
 
 func (cache *mmuCacheMiddleware) handleDrain() bool {
-	madeProgress := false
-	for i := 0; i < cache.numReqPerCycle; i++ {
-		madeProgress = cache.lookup() || madeProgress
-	}
-
-	for i := 0; i < cache.numReqPerCycle; i++ {
-		madeProgress = cache.handleBottomPort() || madeProgress
-	}
+	madeProgress := cache.processRequests()
 
 	if cache.bottomPort.PeekIncoming() == nil && cache.topPort.PeekIncoming() == nil {
 		cache.state = mmuCacheStatePause
@@ -68,61 +61,46 @@ func (cache *mmuCacheMiddleware) handleFlush() bool {
 		return false
 	}
 
-	madeProgress := false
-
 	if cache.topPort.PeekIncoming() == nil && cache.bottomPort.PeekIncoming() == nil {
-		madeProgress = cache.processmmuCacheFlush() || madeProgress
-		return madeProgress
+		return cache.processmmuCacheFlush()
 	}
 
-	for i := 0; i < cache.numReqPerCycle; i++ {
-		madeProgress = cache.lookup() || madeProgress
-	}
-
-	for i := 0; i < cache.numReqPerCycle; i++ {
-		madeProgress = cache.handleBottomPort() || madeProgress
-	}
-
-	return madeProgress
+	return cache.processRequests()
 }
 
-// Tick defines how MMUCache update states at each cycle
+// handleEnable processes requests when cache is in enabled state.
 func (cache *mmuCacheMiddleware) handleEnable() bool {
-	madeProgress := false
+	return cache.processRequests()
+}
 
+// processRequests handles both incoming lookup requests and bottom port responses.
+func (cache *mmuCacheMiddleware) processRequests() bool {
+	madeProgress := false
 	for i := 0; i < cache.numReqPerCycle; i++ {
 		madeProgress = cache.lookup() || madeProgress
 	}
-
 	for i := 0; i < cache.numReqPerCycle; i++ {
 		madeProgress = cache.handleBottomPort() || madeProgress
 	}
-
 	return madeProgress
 }
 
 func (cache *mmuCacheMiddleware) lookup() bool {
-	if cache.bottomPort.CanSend() == false {
+	if !cache.bottomPort.CanSend() {
 		return false
 	}
 
 	msg := cache.topPort.PeekIncoming()
-
 	if msg == nil {
 		return false
 	}
 
-	req := msg.(*vm.TranslationReq)
-
-	if req == nil {
+	req, ok := msg.(*vm.TranslationReq)
+	if !ok || req == nil {
 		return false
 	}
 
-	madeProgress := false
-
-	madeProgress = cache.walkCacheLevels(req) || madeProgress
-
-	return madeProgress
+	return cache.walkCacheLevels(req)
 }
 
 func (cache *mmuCacheMiddleware) walkCacheLevels(req *vm.TranslationReq) bool {
@@ -164,7 +142,7 @@ func (cache *mmuCacheMiddleware) lookupLevel(level int, req *vm.TranslationReq) 
 func (cache *mmuCacheMiddleware) sendReqToBottom(
 	req *vm.TranslationReq,
 	latency uint64) bool {
-	if cache.bottomPort.CanSend() == false {
+	if !cache.bottomPort.CanSend() {
 		return false
 	}
 
@@ -228,19 +206,21 @@ func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 	return true
 }
 
-func (cache *mmuCacheMiddleware) segToSetID(seg uint64) (setID int) {
+// segToSetID maps a segment to a cache set ID using modulo hashing.
+func (cache *mmuCacheMiddleware) segToSetID(seg uint64) int {
 	return int(seg % uint64(cache.numBlocks))
 }
 
+// updateCacheLevels updates all cache levels with the translation response.
 func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
 	page := rsp.Page
 	vAddr := page.VAddr
 	pid := page.PID
 
 	vpn := vAddr >> cache.log2PageSize
-	levelwidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
+	levelWidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
 	for level := cache.numLevels - 1; level >= 0; level-- {
-		seg := (vpn >> (uint64(level) * levelwidth)) & ((1 << levelwidth) - 1)
+		seg := (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 
 		subTable := cache.table[level]
 		wayID := cache.segToSetID(seg)
