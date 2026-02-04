@@ -37,7 +37,6 @@ func (cache *mmuCacheMiddleware) Tick() bool {
 		madeProgress = cache.handleEnable() || madeProgress
 	}
 	return madeProgress
-
 }
 
 func (cache *mmuCacheMiddleware) handleDrain() bool {
@@ -165,7 +164,6 @@ func (cache *mmuCacheMiddleware) lookupLevel(level int, req *vm.TranslationReq) 
 func (cache *mmuCacheMiddleware) sendReqToBottom(
 	req *vm.TranslationReq,
 	latency uint64) bool {
-
 	if cache.bottomPort.CanSend() == false {
 		return false
 	}
@@ -189,26 +187,6 @@ func (cache *mmuCacheMiddleware) sendReqToBottom(
 	return true
 }
 
-func (cache *mmuCacheMiddleware) sendRspToTop(
-	req *vm.TranslationReq,
-	page vm.Page,
-) bool {
-
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(cache.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
-
-	err := cache.topPort.Send(rsp)
-	if err != nil {
-		return false
-	}
-
-	return true
-}
-
 func (cache *mmuCacheMiddleware) handleBottomPort() bool {
 	madeProgress := false
 
@@ -227,7 +205,6 @@ func (cache *mmuCacheMiddleware) handleBottomPort() bool {
 }
 
 func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
-
 	if !cache.topPort.CanSend() {
 		return false
 	}
