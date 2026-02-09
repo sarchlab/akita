@@ -8,10 +8,6 @@ import (
 	"github.com/sarchlab/akita/v4/tracing"
 )
 
-// type subPage struct {
-// 	subPage internal.Set
-// }
-
 const (
 	mmuCacheStateEnable = "enable"
 	mmuCacheStatePause  = "pause"
@@ -62,7 +58,7 @@ func (cache *mmuCacheMiddleware) handleFlush() bool {
 	}
 
 	if cache.topPort.PeekIncoming() == nil && cache.bottomPort.PeekIncoming() == nil {
-		return cache.processmmuCacheFlush()
+		return cache.processMMUCacheFlush()
 	}
 
 	return cache.processRequests()
@@ -192,7 +188,7 @@ func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 	rspToTop := vm.TranslationRspBuilder{}.
 		WithSrc(cache.topPort.AsRemote()).
 		WithDst(cache.UpModule.AsRemote()).
-		WithRspTo(rsp.ID).
+		WithRspTo(rsp.RespondTo).
 		WithPage(rsp.Page).
 		Build()
 
@@ -236,7 +232,7 @@ func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool 
 	return true
 }
 
-func (cache *mmuCacheMiddleware) processmmuCacheFlush() bool {
+func (cache *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	req := cache.inflightFlushReq
 
 	rsp := FlushRspBuilder{}.

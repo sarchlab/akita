@@ -1,4 +1,4 @@
-// Package internal provides the definition required for defining TLB.
+// Package internal provides the definition required for defining mmuCache.
 package internal
 
 import (
@@ -16,7 +16,7 @@ type Set interface {
 	Visit(wayID int)
 }
 
-// NewSet creates a new TLB set.
+// NewSet creates a new mmuCache set.
 func NewSet(numWays int) Set {
 	s := &setImpl{}
 	s.blocks = make([]*block, numWays)
@@ -84,7 +84,6 @@ func (s *setImpl) Evict() (wayID int, ok bool) {
 		return 0, false
 	}
 
-	// wayID = s.visitTree.DeleteMin().(*block).wayID
 	leastVisited := s.visitList[0]
 	wayID = leastVisited.wayID
 	s.visitList = s.visitList[1:]
@@ -97,6 +96,7 @@ func (s *setImpl) Visit(wayID int) {
 	for i, b := range s.visitList {
 		if b.wayID == wayID {
 			s.visitList = append(s.visitList[:i], s.visitList[i+1:]...)
+			break
 		}
 	}
 

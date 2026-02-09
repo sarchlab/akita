@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-// A Builder can build TLBs
+// A Builder can build mmuCache
 type Builder struct {
 	engine          sim.Engine
 	freq            sim.Freq
@@ -42,7 +42,7 @@ func MakeBuilder() Builder {
 		log2PageSize:            12,
 		isPrediction:            false,
 		bloomFilterSize:         64,
-		maxInflightTransactions: 17,
+		maxInflightTransactions: 16,
 		inflightTransactions:    0,
 		translationRequests:     make(map[uint64]map[vm.PID]*vm.TranslationReq),
 		segLength:               16,
@@ -75,13 +75,13 @@ func (b Builder) WithMSHREntryDepth(depth int) Builder {
 	return b
 }
 
-// WithEngine sets the engine that the TLBs to use
+// WithEngine sets the engine that the mmuCache to use
 func (b Builder) WithEngine(engine sim.Engine) Builder {
 	b.engine = engine
 	return b
 }
 
-// WithFreq sets the freq the TLBs use
+// WithFreq sets the freq the mmuCache use
 func (b Builder) WithFreq(freq sim.Freq) Builder {
 	b.freq = freq
 	return b
@@ -93,21 +93,21 @@ func (b Builder) WithNumBlocks(n int) Builder {
 	return b
 }
 
-// WithPageSize sets the page size that the TLB works with.
+// WithPageSize sets the page size that the mmuCache works with.
 func (b Builder) WithPageSize(n uint64) Builder {
 	b.pageSize = n
 	return b
 }
 
 // WithNumReqPerCycle sets the number of requests per cycle can be processed by
-// a TLB
+// a mmuCache
 func (b Builder) WithNumReqPerCycle(n int) Builder {
 	b.numReqPerCycle = n
 	return b
 }
 
 // WithLowModule sets the port that can provide the address translation in case
-// of tlb miss.
+// of mmuCache miss.
 func (b Builder) WithLowModule(lowModule sim.Port) Builder {
 	b.lowModule = lowModule
 	return b
@@ -129,14 +129,19 @@ func (b Builder) WithBloomFilterSize(size int) Builder {
 	return b
 }
 
-// Build creates a new TLB
+// Build creates a new mmuCache
 func (b Builder) Build(name string) *Comp {
+	if b.numBlocks <= 0 {
+		panic("mmuCache.Builder: numBlocks must be > 0")
+	}
+
 	mmuCache := &Comp{}
 	mmuCache.TickingComponent =
 		sim.NewTickingComponent(name, b.engine, b.freq, mmuCache)
 
 	mmuCache.numReqPerCycle = b.numReqPerCycle
 	mmuCache.pageSize = b.pageSize
+	mmuCache.numBlocks = b.numBlocks
 	mmuCache.LowModule = b.lowModule
 	mmuCache.numLevels = b.numLevels
 	mmuCache.latencyPerLevel = b.latencyPerLevel
@@ -144,6 +149,9 @@ func (b Builder) Build(name string) *Comp {
 	mmuCache.log2PageSize = b.log2PageSize
 
 	b.createPorts(name, mmuCache)
+
+	mmuCache.AddMiddleware(&ctrlMiddleware{})
+	mmuCache.AddMiddleware(&mmuCacheMiddleware{})
 
 	mmuCache.reset()
 	mmuCache.state = mmuCacheStateEnable

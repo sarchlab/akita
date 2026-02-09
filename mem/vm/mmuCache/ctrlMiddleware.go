@@ -30,9 +30,9 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	case *mem.ControlMsg:
 		madeProgress = m.handleControlMsg(msg) || madeProgress
 	case *FlushReq:
-		madeProgress = m.handlemmuCacheFlush(msg) || madeProgress
+		madeProgress = m.handleMMUCacheFlush(msg) || madeProgress
 	case *RestartReq:
-		madeProgress = m.handlemmuCacheRestart(msg) || madeProgress
+		madeProgress = m.handleMMUCacheRestart(msg) || madeProgress
 	default:
 		panic("Unhandled message")
 	}
@@ -104,7 +104,7 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handlemmuCacheFlush(req *FlushReq) bool {
+func (m *ctrlMiddleware) handleMMUCacheFlush(req *FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(req)
 	m.inflightFlushReq = req
 	m.controlPort.RetrieveIncoming()
@@ -128,7 +128,7 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
 	}
 }
 
-func (m *ctrlMiddleware) handlemmuCacheRestart(req *RestartReq) bool {
+func (m *ctrlMiddleware) handleMMUCacheRestart(req *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
 		WithDst(req.Src).

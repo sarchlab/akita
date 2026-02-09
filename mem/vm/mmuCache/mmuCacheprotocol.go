@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v4/sim"
 )
 
-// A FlushReq asks the TLB to invalidate certain entries. It will not block any
+// A FlushReq asks the mmuCache to invalidate certain entries. It will not block any
 // incoming or outgoing ports.
 type FlushReq struct {
 	sim.MsgMeta
@@ -60,7 +60,7 @@ func (b FlushReqBuilder) WithPID(pid vm.PID) FlushReqBuilder {
 	return b
 }
 
-// Build creates a new TLBFlushReq
+// Build creates a new mmuCacheFlushReq
 func (b FlushReqBuilder) Build() *FlushReq {
 	r := &FlushReq{}
 	r.ID = sim.GetIDGenerator().Generate()
@@ -108,7 +108,7 @@ func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new TLBFlushRsps.
+// Build creates a new mmuCacheFlushRsps.
 func (b FlushRspBuilder) Build() *FlushRsp {
 	r := &FlushRsp{}
 	r.ID = sim.GetIDGenerator().Generate()
@@ -119,7 +119,7 @@ func (b FlushRspBuilder) Build() *FlushRsp {
 	return r
 }
 
-// A RestartReq is a request to TLB to start accepting requests and resume
+// A RestartReq is a request to mmuCache to start accepting requests and resume
 // operations
 type RestartReq struct {
 	sim.MsgMeta
@@ -138,7 +138,7 @@ func (r *RestartReq) Clone() sim.Msg {
 	return &cloneMsg
 }
 
-// RestartReqBuilder can build TLB restart requests.
+// RestartReqBuilder can build mmuCache restart requests.
 type RestartReqBuilder struct {
 	src, dst sim.RemotePort
 }
@@ -155,7 +155,7 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new TLBRestartReq.
+// Build creates a new mmuCacheRestartReq.
 func (b RestartReqBuilder) Build() *RestartReq {
 	r := &RestartReq{}
 	r.ID = sim.GetIDGenerator().Generate()
@@ -201,7 +201,7 @@ func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new TLBRestartRsp
+// Build creates a new mmuCacheRestartRsp
 func (b RestartRspBuilder) Build() *RestartRsp {
 	r := &RestartRsp{}
 	r.ID = sim.GetIDGenerator().Generate()

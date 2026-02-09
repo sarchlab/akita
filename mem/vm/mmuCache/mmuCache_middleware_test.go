@@ -153,7 +153,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)
 
-		madeProgress := mw.processmmuCacheFlush()
+		madeProgress := mw.processMMUCacheFlush()
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(cache.state).To(Equal(mmuCacheStatePause))

@@ -82,7 +82,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomPort.EXPECT().RetrieveIncoming()
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
 
-		madeProgress := ctrl.handlemmuCacheRestart(req)
+		madeProgress := ctrl.handleMMUCacheRestart(req)
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(cache.state).To(Equal(mmuCacheStateEnable))
@@ -96,7 +96,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		controlPort.EXPECT().RetrieveIncoming()
 
-		madeProgress := ctrl.handlemmuCacheFlush(req)
+		madeProgress := ctrl.handleMMUCacheFlush(req)
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(cache.inflightFlushReq).To(Equal(req))
