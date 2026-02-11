@@ -1,6 +1,6 @@
 package directconnection
 
-//go:generate mockgen -destination "mock_sim_test.go" -self_package=github.com/sarchlab/akita/v4/sim/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port,Engine,Event,Connection,Component,Handler,Ticker,Buffer
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_sim_test.go" -self_package=github.com/sarchlab/akita/v4/sim/directconnection -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port,Engine,Event,Connection,Component,Handler,Ticker,Buffer
 
 import (
 	"testing"

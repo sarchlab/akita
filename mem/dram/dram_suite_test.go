@@ -13,12 +13,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port
-//go:generate mockgen -destination "mock_trans_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/trans SubTransactionQueue,SubTransSplitter
-//go:generate mockgen -destination "mock_addressmapping_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping Mapper
-//go:generate mockgen -destination "mock_cmdq_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/cmdq CommandQueue
-//go:generate mockgen -destination "mock_org_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/org Channel
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressConverter
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/sim Port
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_trans_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/trans SubTransactionQueue,SubTransSplitter
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_addressmapping_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/addressmapping Mapper
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_cmdq_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/cmdq CommandQueue
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_org_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/dram/internal/org Channel
+//go:generate go run go.uber.org/mock/mockgen -destination "mock_mem_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v4/mem/mem AddressConverter
 
 func TestDram(t *testing.T) {
 	RegisterFailHandler(Fail)
