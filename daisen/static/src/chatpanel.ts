@@ -2151,7 +2151,7 @@ GPU.CommandProcessor,9
           const csvData = await this._fetchGraphTestCSV();
           const tableHTML = this._csvToHTMLTable(csvData);
           localStorage.setItem("visualization_data", JSON.stringify(csvData));
-          const graphLink = '<a href="http://localhost:5173/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/datavisualization.html</a>';
+          const graphLink = '<a href="http://localhost:3001/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:3001/datavisualization.html</a>';
           const responseContent =
             `Got it! I've processed the trace file and summarized the event counts for each unique component class. Here's the table:<br>${tableHTML}` +
             `I've also generated a graph visualization of the distribution, which you can access here: ${graphLink}.<br>` +
@@ -2236,7 +2236,7 @@ GPU.CommandProcessor,9
         messagesDiv.appendChild(botDiv);
         
 
-        const subLink = '<a href="http://localhost:5173/task?id=d240btg3fvio1hp2d3eg" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/task?id=d240btg3fvio1hp2d3eg</a>';
+        const subLink = '<a href="http://localhost:3001/task?id=d240btg3fvio1hp2d3eg" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:3001/task?id=d240btg3fvio1hp2d3eg</a>';
         const responseContent =
             `In MGPUSim, the host-to-GPU memory transfer is recorded as **"MemCopyH2D"**. ` +
             `From this simulation, the duration of MemCopyH2D is **76.68 µs** (0 → 76.68 µs), ` +
@@ -2380,24 +2380,26 @@ Kernel Execution,76.68,84.65,7.97`);
       botDiv.style.margin = "4px 0";
       messagesDiv.appendChild(botDiv);
 
-      let dotCount = 1;
-      const maxDots = 3;
-      let spinnerIndex = 0;
-      const spinnerChars = ["|", "/", "-", "\\"];
-      // const thinkingDots = botDiv.querySelector("#thinking-dots");
+      // Create an SVG semicircle spinner and rotate it via a JS timer so we can stop it easily.
       const thinkingSpinner = botDiv.querySelector("#thinking-spinner");
-      const dotsInterval = setInterval(() => {
-        dotCount = (dotCount % maxDots) + 1;
-        spinnerIndex = (spinnerIndex + 1) % spinnerChars.length;
-        // if (thinkingDots) {
-        //     const dots = ".".repeat(dotCount) + "&nbsp;".repeat(maxDots - dotCount);
-        //     thinkingDots.innerHTML = dots;
-        // }
-
-        if (thinkingSpinner) {
-            thinkingSpinner.textContent = spinnerChars[spinnerIndex];
-        }
-      }, 500);
+      // Configurable spinner speed
+      const THINKING_SPINNER_INTERVAL_MS = 50; // tick interval
+      const THINKING_SPINNER_STEP_DEG = 8; // degrees per tick
+      let dotsInterval: number | undefined = undefined;
+      if (thinkingSpinner) {
+        thinkingSpinner.innerHTML = `
+          <svg id="daisen-thinking-svg" width="16" height="16" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; transform-origin: 50% 50%;">
+            <g>
+              <circle cx="12" cy="12" r="8" stroke="#0E6DFD" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="25 60"/>
+            </g>
+          </svg>`;
+        const spinnerSvg = thinkingSpinner.querySelector('#daisen-thinking-svg') as HTMLElement | null;
+        let angle = 0;
+        dotsInterval = window.setInterval(() => {
+          angle = (angle + THINKING_SPINNER_STEP_DEG) % 360;
+          if (spinnerSvg) spinnerSvg.style.transform = `rotate(${angle}deg)`;
+        }, THINKING_SPINNER_INTERVAL_MS);
+      }
 
       // Call GPT and update the message
       const selectedGitHubRoutineKeys = Object.keys(this._attachRepoChecks).filter(k => this._attachRepoChecks[k]);
@@ -2431,34 +2433,194 @@ Kernel Execution,76.68,84.65,7.97`);
       console.log("GPTRequest:", gptRequest);
       
       sendPostGPT(gptRequest).then((gptResponse) => {
-        const gptResponseContent = gptResponse.content;
+        const rawResponse = gptResponse.content || "";
         const gptResponseTotalTokens = gptResponse.totalTokens;
         console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");
-        
-        // Check for HTML table and save to localStorage if found
+
+        // Parse Chain-of-Thought section: [Start Thinking]... [End Thinking]<final answer>
+        let gptResponseThinking = "";
+        let gptResponseContent = rawResponse;
+        const thinkingRegex = /\[Start Thinking\]([\s\S]*?)\[End Thinking\]\s*([\s\S]*)/i;
+        const thinkingMatch = rawResponse.match(thinkingRegex);
+        if (thinkingMatch) {
+          gptResponseThinking = thinkingMatch[1].trim();
+          gptResponseContent = (thinkingMatch[2] || "").trim();
+        }
+
+        // Check for HTML table and save to localStorage if found (preserve original behavior)
         const tableDetection = this._detectHtmlTable(gptResponseContent);
         let finalContent = gptResponseContent;
-        
+
         if (tableDetection.hasTable) {
           console.log("[Table Detection] Found HTML table(s) in response:", tableDetection);
           const csvData = this._htmlTableToCSV(tableDetection.tables[0]);
-          
+
           if (csvData.length > 0) {
             localStorage.setItem("visualization_data", JSON.stringify(csvData));
             console.log("[Table Processing] Saved table data to localStorage:", csvData);
-            
+
             // Remove the specific text about inserting HTML into webpage
             finalContent = finalContent.replace(/You can directly insert this HTML into your webpage to display the table\.\s*Let me know if you need any more help!/gi, '');
-            
-            const graphLink = '<a href="http://localhost:5173/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">View Data Visualization</a>';
+
+            const graphLink = '<a href="http://localhost:3001/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">View Data Visualization</a>';
             finalContent += `<br><br>📊 I've detected a table in my response and saved the data for visualization. ${graphLink}`;
           }
         }
-        botDiv.innerHTML =
-          `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
+
+        // Prepare container for Chain-of-Thought display
+        let thinkingContentDiv: HTMLDivElement | null = null;
+
+        // Function that builds the final bot UI (header, toggle, final answer)
+        const buildFinalUI = () => {
+          // Clear the botDiv and render header + toggle + final answer
+          botDiv.innerHTML = "";
+
+          const header = document.createElement("div");
+          header.innerHTML = `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
             gptResponseTotalTokens === -1 ? "gptResponsekens" : gptResponseTotalTokens.toLocaleString() + " tokens"
-          })</span> ` +
-          convertMarkdownToHTML(autoWrapMath(finalContent));
+          })</span>`;
+          botDiv.appendChild(header);
+
+          // Toggle row (triangle + label)
+          const toggleRow = document.createElement("div");
+          toggleRow.style.marginTop = "6px";
+          toggleRow.style.display = "flex";
+          toggleRow.style.alignItems = "center";
+          toggleRow.style.gap = "8px";
+
+          const triangleBtn = document.createElement("button");
+          triangleBtn.type = "button";
+          triangleBtn.style.border = "none";
+          triangleBtn.style.background = "transparent";
+          triangleBtn.style.cursor = "pointer";
+          triangleBtn.style.padding = "0";
+          triangleBtn.style.width = "20px";
+          triangleBtn.style.height = "20px";
+          triangleBtn.style.display = "flex";
+          triangleBtn.style.alignItems = "center";
+          triangleBtn.style.justifyContent = "center";
+          // SVG triangle (path provided) — original path faces down; rotate to point right by default
+          triangleBtn.innerHTML = `
+            <svg class="daisen-triangle-svg" width="14" height="14" viewBox="0 0 32 32" style="transform: rotate(-90deg); transition: transform 160ms ease;">
+              <path d="M31.92,5.021l-14.584,22.5c-0.089,0.138-0.241,0.223-0.406,0.229c-0.004,0-0.009,0-0.014,0
+		c-0.16,0-0.312-0.076-0.404-0.205L0.096,5.044C-0.015,4.893-0.031,4.69,0.054,4.523C0.139,4.354,0.312,4.25,0.5,4.25h31
+		c0.183,0,0.352,0.1,0.438,0.261C32.026,4.67,32.019,4.867,31.92,5.021z" fill="#555"/>
+            </svg>`;
+
+          const toggleLabel = document.createElement("span");
+          toggleLabel.textContent = "Chain-of-thought Thinking";
+          toggleLabel.style.color = "#555";
+          toggleLabel.style.fontSize = "16px";
+
+          toggleRow.appendChild(triangleBtn);
+          toggleRow.appendChild(toggleLabel);
+          botDiv.appendChild(toggleRow);
+
+          // Final answer container
+          const finalDiv = document.createElement("div");
+          finalDiv.style.marginTop = "8px";
+          finalDiv.innerHTML = convertMarkdownToHTML(autoWrapMath(finalContent));
+
+          // If we created a thinkingContentDiv, insert it just before the final answer and hide it initially
+          if (thinkingContentDiv) {
+            thinkingContentDiv.style.display = "none";
+            botDiv.appendChild(thinkingContentDiv);
+          }
+
+          botDiv.appendChild(finalDiv);
+
+          // Toggle behavior to show/hide the chain-of-thought block
+          triangleBtn.onclick = () => {
+            if (!thinkingContentDiv) return;
+            const svgEl = triangleBtn.querySelector('.daisen-triangle-svg') as HTMLElement | null;
+            if (thinkingContentDiv.style.display === "none") {
+              thinkingContentDiv.style.display = "block";
+              if (svgEl) svgEl.style.transform = 'rotate(0deg)';
+              messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } else {
+              thinkingContentDiv.style.display = "none";
+              if (svgEl) svgEl.style.transform = 'rotate(-90deg)';
+            }
+          };
+        };
+
+        if (gptResponseThinking) {
+          thinkingContentDiv = document.createElement("div");
+          thinkingContentDiv.style.background = "#f0f0f0";
+          thinkingContentDiv.style.color = "#444";
+          thinkingContentDiv.style.padding = "8px";
+          thinkingContentDiv.style.borderRadius = "6px";
+          thinkingContentDiv.style.marginTop = "8px";
+          thinkingContentDiv.style.whiteSpace = "pre-wrap";
+          thinkingContentDiv.style.fontFamily = "monospace";
+          thinkingContentDiv.style.fontSize = "13px";
+          thinkingContentDiv.style.maxWidth = "640px";
+          thinkingContentDiv.style.overflow = "hidden";
+          thinkingContentDiv.textContent = "";
+          botDiv.appendChild(thinkingContentDiv);
+
+          // Convert any HTML in the thinking text to plain text so newlines render correctly
+          const tmpDivForText = document.createElement("div");
+          tmpDivForText.innerHTML = gptResponseThinking;
+          const thinkingPlain = (tmpDivForText.innerText || tmpDivForText.textContent || gptResponseThinking).trim();
+
+          // Insert CRLF CRLF after each period so pre-wrap will render visible paragraph breaks
+          const thinkingTextWithNewlines = thinkingPlain.replace(/\.(?=\s|$)/g, ".\r\n\r\n");
+
+          // Tokenize but preserve newline sequences as tokens so we can append them directly
+          const tokens = thinkingTextWithNewlines.match(/(?:\r\n|\n){1,}|[^\s]+/g) || [];
+
+          // Configurable parameters for easy tuning (change these values to adjust speed):
+          const THINKING_ANIMATION_PER_SENTENCE_MS = 500; // ms per sentence (increase to slow down)
+          const THINKING_ANIMATION_MIN_MS_PER_WORD = 20; // safety lower bound per word
+          // Set to a number (ms per word) to force a fixed speed, or null to auto-compute
+          const THINKING_ANIMATION_OVERRIDE_MS_PER_WORD: number | null = 120;
+
+          let idx = 0;
+          const sentenceCount = Math.max(1, (thinkingPlain.match(/[.!?]+/g) || []).length);
+          const targetDurationMs = Math.min(5000, Math.max(1000, sentenceCount * THINKING_ANIMATION_PER_SENTENCE_MS));
+          const computedSpeedMs = Math.max(THINKING_ANIMATION_MIN_MS_PER_WORD, Math.floor(targetDurationMs / Math.max(tokens.length, 1)));
+          const speedMs = THINKING_ANIMATION_OVERRIDE_MS_PER_WORD !== null ? THINKING_ANIMATION_OVERRIDE_MS_PER_WORD : computedSpeedMs;
+
+          const thinkingInterval = setInterval(() => {
+            if (!thinkingContentDiv) { clearInterval(thinkingInterval); return; }
+            if (idx >= tokens.length) {
+              clearInterval(thinkingInterval);
+              // Hide thinking content shortly after complete
+              setTimeout(() => {
+                if (thinkingContentDiv) thinkingContentDiv.style.display = "none";
+              }, 200);
+              // Stop the spinner animation
+              try { clearInterval(dotsInterval); } catch (e) {}
+              // Build the final UI now that thinking animation finished
+              try { buildFinalUI(); } catch (e) { console.error(e); }
+              return;
+            }
+            const token = tokens[idx++];
+            // If token is newline sequence, append it directly (normalize CRLF -> LF)
+            if (/^(?:\r\n|\n)+$/.test(token)) {
+              if (idx < tokens.length - 1) {
+                thinkingContentDiv.textContent += token.replace(/\r\n/g, "\n");
+              } else {
+                thinkingContentDiv.textContent += token.replace(/\r\n/g, "");
+              }
+            } else {
+              // regular word token
+              if (thinkingContentDiv.textContent && !thinkingContentDiv.textContent.endsWith("\n")) {
+                thinkingContentDiv.textContent += (thinkingContentDiv.textContent.length > 0 ? " " : "") + token;
+              } else {
+                thinkingContentDiv.textContent += token;
+              }
+            }
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          }, speedMs);
+        } else {
+          // If there's no thinking text, stop spinner immediately and build final UI
+          try { clearInterval(dotsInterval); } catch (e) {}
+          try { buildFinalUI(); } catch (e) { console.error(e); }
+        }
+
+        // Final UI is rendered by buildFinalUI() after the thinking animation completes.
 
         messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}] });
         this._chatMessages = messages; // Update the instance messages
