@@ -5,9 +5,16 @@ import html2canvas from "html2canvas";
 
 type ChatContent = UnitContent[];
 
+const MODE_MAP: { [key: string]: string } = {
+  "ss+q": "Mode 1: Screenshot and Question",
+  "ss+q+bp": "Mode 2: Screenshot, Question and Background Prompt",
+  "ss+q+bp+auto": "Mode 3: Screenshot, Question, Background Prompt and Auto-attachments",
+  "ss+q+bp+auto+cot": "Mode 4: Screenshot, Question, Background Prompt, Auto-attachments and Chain-of-thought (default)",
+};
+
 
 export class ChatPanel {
-  _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] }[] = [];
+  _chatMessages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[]; thinkingContent?: string; daisenBotMode?: string; daisenBotModeLabel?: string }[] = [];
   _uploadedFiles: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] = [];
   _fileUploadBtn: HTMLButtonElement;
   _imageUploadBtn: HTMLButtonElement;
@@ -31,12 +38,13 @@ export class ChatPanel {
   _tracePeriodUnitSwitch: boolean = true; // true for us, false for seconds
   _graphTestButtonClicked: boolean = false; // Flag to track if graphTest button was clicked
   _subpageTestButtonClicked: boolean = false; // Flag to track if subpageTest button was clicked
+  _selectedMode: string = "ss+q+bp+auto+cot";
 
   // Chat history management
   _chatHistory: { 
     id: string; 
     title: string; 
-    messages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[] }[];
+    messages: { role: "user" | "assistant" | "system"; content: ChatContent; files?: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string }[]; thinkingContent?: string; daisenBotMode?: string; daisenBotModeLabel?: string }[];
     timestamp: number;
   }[] = [];
   _currentChatId: string = "";
@@ -390,7 +398,7 @@ GPU.CommandProcessor,9
 
   _showChatPanel() {
     // let messages: { role: "user" | "assistant" | "system"; content: string }[] = [
-    //   { role: "system", content: "You are Daisen Bot."}
+    //   { role: "system", content: "You are DaisenBot."}
     // ];
     let messages = this._chatMessages;
     this._injectChatPanelCSS();
@@ -696,15 +704,109 @@ GPU.CommandProcessor,9
         } else if (m.role === "assistant") {
           const botDiv = document.createElement("div");
           const firstContent = m.content[0];
-          if (firstContent.type === "text") {
-            botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(firstContent.text));
-          } else if (firstContent.type === "image_url") {
-            botDiv.innerHTML = "<b>Daisen Bot:</b> " + "Something went wrong, I can't display history right now.";
+
+          // Build header with hover title showing mode (first 6 chars of mode label)
+          const header = document.createElement("div");
+          const botLabel = document.createElement("b");
+          botLabel.textContent = "DaisenBot:";
+          // Determine mode prefix for hover display
+          const modeLabelFull = (m as any).daisenBotModeLabel || (m as any).daisenBotMode || "";
+          const modePrefix = modeLabelFull ? modeLabelFull.substring(0, 6) : "";
+          if (modePrefix) {
+            botLabel.title = `DaisenBot (${modePrefix})`;
           }
+          header.appendChild(botLabel);
+
+          // Add token/metadata span if needed
+          header.innerHTML = header.innerHTML + " ";
+
+          botDiv.appendChild(header);
+
+          // Render main content
+          if (firstContent.type === "text") {
+            const finalDiv = document.createElement("div");
+            finalDiv.style.marginTop = "4px";
+            finalDiv.innerHTML = convertMarkdownToHTML(autoWrapMath(firstContent.text));
+            // If thinkingContent exists (restored history), prepare hidden thinking block
+            if ((m as any).thinkingContent) {
+              const thinkingContentDiv = document.createElement("div");
+              thinkingContentDiv.style.background = "#f0f0f0";
+              thinkingContentDiv.style.color = "#444";
+              thinkingContentDiv.style.padding = "8px";
+              thinkingContentDiv.style.borderRadius = "6px";
+              thinkingContentDiv.style.marginTop = "8px";
+              thinkingContentDiv.style.whiteSpace = "pre-wrap";
+              thinkingContentDiv.style.fontFamily = "monospace";
+              thinkingContentDiv.style.fontSize = "13px";
+              thinkingContentDiv.style.maxWidth = "640px";
+              thinkingContentDiv.style.overflow = "hidden";
+
+              // Convert any HTML in the stored thinking text to plain text
+              const tmp = document.createElement('div');
+              tmp.innerHTML = (m as any).thinkingContent || '';
+              const plain = (tmp.innerText || tmp.textContent || '').trim();
+              thinkingContentDiv.textContent = plain;
+              thinkingContentDiv.style.display = "none"; // collapsed by default for history
+
+              // Add toggle row similar to live messages
+              const thinkingToggleRow = document.createElement("div");
+              thinkingToggleRow.style.marginTop = "6px";
+              thinkingToggleRow.style.display = "flex";
+              thinkingToggleRow.style.alignItems = "center";
+              thinkingToggleRow.style.gap = "8px";
+
+              const triangleBtn = document.createElement("button");
+              triangleBtn.type = "button";
+              triangleBtn.style.border = "none";
+              triangleBtn.style.background = "transparent";
+              triangleBtn.style.cursor = "pointer";
+              triangleBtn.style.padding = "0";
+              triangleBtn.style.width = "20px";
+              triangleBtn.style.height = "20px";
+              triangleBtn.style.display = "flex";
+              triangleBtn.style.alignItems = "center";
+              triangleBtn.style.justifyContent = "center";
+              triangleBtn.innerHTML = `
+                <svg class="daisen-triangle-svg" width="14" height="14" viewBox="0 0 32 32" style="transform: rotate(-90deg); transition: transform 160ms ease;">
+                  <path d="M31.92,5.021l-14.584,22.5c-0.089,0.138-0.241,0.223-0.406,0.229c-0.004,0-0.009,0-0.014,0
+		c-0.16,0-0.312-0.076-0.404-0.205L0.096,5.044C-0.015,4.893-0.031,4.69,0.054,4.523C0.139,4.354,0.312,4.25,0.5,4.25h31
+		c0.183,0,0.352,0.1,0.438,0.261C32.026,4.67,32.019,4.867,31.92,5.021z" fill="#555"/>
+                </svg>`;
+
+              const toggleLabel = document.createElement("span");
+              toggleLabel.textContent = "Chain-of-thought Thinking";
+              toggleLabel.style.color = "#555";
+              toggleLabel.style.fontSize = "16px";
+
+              thinkingToggleRow.appendChild(triangleBtn);
+              thinkingToggleRow.appendChild(toggleLabel);
+
+              // Toggle behavior
+              triangleBtn.onclick = () => {
+                const svgEl = triangleBtn.querySelector('.daisen-triangle-svg') as HTMLElement | null;
+                if (thinkingContentDiv.style.display === "none") {
+                  thinkingContentDiv.style.display = "block";
+                  if (svgEl) svgEl.style.transform = 'rotate(0deg)';
+                } else {
+                  thinkingContentDiv.style.display = "none";
+                  if (svgEl) svgEl.style.transform = 'rotate(-90deg)';
+                }
+              };
+
+              botDiv.appendChild(thinkingToggleRow);
+              botDiv.appendChild(thinkingContentDiv);
+            }
+
+            botDiv.appendChild(finalDiv);
+          } else if (firstContent.type === "image_url") {
+            const imgDiv = document.createElement("div");
+            imgDiv.textContent = "Something went wrong, I can't display history right now.";
+            botDiv.appendChild(imgDiv);
+          }
+
           botDiv.style.textAlign = "left";
           botDiv.style.margin = "4px 0";
           messagesDiv.appendChild(botDiv);
-          
         }
       });
     // apply KaTeX rendering for math
@@ -724,7 +826,13 @@ GPU.CommandProcessor,9
     const hasMessages = messages.some(m => m.role === "user" || m.role === "assistant");
     if (!hasMessages) {
       const welcomeDiv = document.createElement("div");
-      welcomeDiv.innerHTML = "<b>Daisen Bot:</b> Hello! What can I help you with today?";
+      const wbLabel = document.createElement("b");
+      wbLabel.textContent = "DaisenBot:";
+      const wl = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
+      const wp = wl ? wl.substring(0,6) : "";
+      if (wp) wbLabel.title = `DaisenBot (${wp})`;
+      welcomeDiv.appendChild(wbLabel);
+      welcomeDiv.appendChild(document.createTextNode(" Hello! What can I help you with today?"));
       welcomeDiv.style.textAlign = "left";
       welcomeDiv.style.marginBottom = "8px";
       messagesDiv.appendChild(welcomeDiv);
@@ -739,6 +847,120 @@ GPU.CommandProcessor,9
 
     // Make it accessible to renderFileList
     this._fileListRow = fileListRow;
+
+    // Mode selector row (occupies a whole line, placed between attachment area and buttons)
+    
+    // Default mode
+    this._selectedMode = this._selectedMode || "ss+q+bp+auto+cot";
+
+    const modeRow = document.createElement("div");
+    modeRow.style.width = "100%";
+    modeRow.style.margin = "6px 0";
+    modeRow.style.display = "inline-flex";
+    modeRow.style.alignItems = "center";
+    modeRow.style.gap = "8px";
+
+    // Label matching "DaisenBot:" font/style but 16px size
+    const modeLabel = document.createElement("div");
+    modeLabel.innerHTML = '<b>DaisenBot Mode:</b>';
+    modeLabel.style.fontSize = "16px";
+    modeLabel.style.lineHeight = "1";
+    modeLabel.style.display = "inline-block";
+    modeRow.appendChild(modeLabel);
+
+    const modeSelector = document.createElement("select");
+    modeSelector.id = "modeSelector";
+    modeSelector.style.width = "40%";
+    modeSelector.style.padding = "8px";
+    modeSelector.style.borderRadius = "6px";
+    modeSelector.style.border = "1px solid #ccc";
+    modeSelector.style.fontSize = "14px";
+    modeSelector.style.overflow = "hidden";
+    modeSelector.style.textOverflow = "ellipsis";
+    modeSelector.style.whiteSpace = "nowrap";
+
+    const truncateDisplay = (full: string) => {
+      if (!full) return "";
+      if (full.length <= 24) return full;
+      return full.substring(0, 24) + "...";
+    };
+
+    for (const key of Object.keys(MODE_MAP)) {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.setAttribute('data-full', MODE_MAP[key]);
+      opt.title = MODE_MAP[key];
+      // show truncated text in collapsed state
+      opt.textContent = truncateDisplay(MODE_MAP[key]);
+      if (key === this._selectedMode) opt.selected = true;
+      modeSelector.appendChild(opt);
+    }
+
+    // When user focuses / opens the select, show full texts so the dropdown shows full candidates
+    const expandOptionsToFull = () => {
+      for (let i = 0; i < modeSelector.options.length; i++) {
+        const o = modeSelector.options[i];
+        const full = o.getAttribute('data-full') || o.textContent || '';
+        o.textContent = full;
+      }
+    };
+    // When blurred/closed, revert options to truncated preview
+    const collapseOptionsToTruncated = () => {
+      for (let i = 0; i < modeSelector.options.length; i++) {
+        const o = modeSelector.options[i];
+        const full = o.getAttribute('data-full') || o.textContent || '';
+        o.textContent = truncateDisplay(full);
+      }
+    };
+
+    // expand on mousedown (before dropdown opens) and focus
+    modeSelector.addEventListener('mousedown', () => {
+      expandOptionsToFull();
+    });
+    modeSelector.addEventListener('focus', () => {
+      expandOptionsToFull();
+    });
+    // collapse back on blur
+    modeSelector.addEventListener('blur', () => {
+      // small timeout to allow the change event to propagate first
+      setTimeout(() => collapseOptionsToTruncated(), 100);
+    });
+
+    // ensure collapsed view initially
+    collapseOptionsToTruncated();
+
+    modeRow.appendChild(modeSelector);
+    chatContent.appendChild(modeRow);
+
+    // Function to update attachment buttons state (will be called after buttons are created)
+    const updateAttachmentButtonsState = () => {
+      const disable = typeof this._selectedMode === 'string' && this._selectedMode.includes('auto');
+      const maybeDisable = (btn: HTMLButtonElement | undefined) => {
+        if (!btn) return;
+        btn.disabled = disable;
+        btn.style.cursor = disable ? 'not-allowed' : 'pointer';
+        btn.style.opacity = disable ? '0.6' : '1';
+      };
+      // These variables exist later in this scope; check and apply
+      // @ts-ignore
+      maybeDisable(fileUploadBtn);
+      // @ts-ignore
+      maybeDisable(imageUploadBtn);
+      // @ts-ignore
+      maybeDisable(screenshotUploadBtn);
+      // @ts-ignore
+      maybeDisable(uploadTraceBtn);
+      // @ts-ignore
+      maybeDisable(attachRepoBtn);
+    };
+
+    modeSelector.addEventListener('change', (e) => {
+      const sel = (e.target as HTMLSelectElement).value;
+      this._selectedMode = sel;
+      updateAttachmentButtonsState();
+      // placeholder for additional side effects when mode changes
+      // e.g., toggle visibility of features elsewhere
+    });
 
     // Action buttons row (above input)
     const actionRow = document.createElement("div");
@@ -791,6 +1013,7 @@ GPU.CommandProcessor,9
     fileUploadBtn.style.alignItems = "center";
     fileUploadBtn.style.justifyContent = "center";
     fileUploadBtn.style.cursor = "pointer";
+    fileUploadBtn.style.color = "#222";
     fileUploadBtn.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
         <path d="m 14.3352 17.5003 v -1.8349 h -1.835 c -0.3671 0 -0.6648 -0.298 -0.665 -0.6651 c 0 -0.3672 0.2978 -0.665 0.665 -0.665 h 1.835 v -1.835 c 0 -0.3672 0.2978 -0.665 0.665 -0.665 c 0.3672 0.0002 0.6651 0.2979 0.6651 0.665 v 1.835 h 1.8349 l 0.1338 0.0137 c 0.303 0.062 0.5313 0.33 0.5313 0.6513 c -0.0002 0.3212 -0.2284 0.5894 -0.5313 0.6514 l -0.1338 0.0137 h -1.8349 v 1.8349 c -0.0002 0.367 -0.298 0.6649 -0.6651 0.6651 c -0.3671 0 -0.6648 -0.298 -0.665 -0.6651 z m 1.666 -9.167 v -1 c 0 -0.711 0.0001 -1.2044 -0.0312 -1.5879 c -0.0231 -0.282 -0.0609 -0.4715 -0.1123 -0.6152 l -0.0557 -0.1299 c -0.1539 -0.3021 -0.3883 -0.5551 -0.6758 -0.7314 l -0.1269 -0.0703 c -0.158 -0.0804 -0.3696 -0.1373 -0.7451 -0.168 c -0.3835 -0.0313 -0.877 -0.0322 -1.5879 -0.0322 h -3.502 c 0.0001 0.048 -0.0048 0.0967 -0.0156 0.1455 l -0.5322 -0.1182 h -0.001 l 0.5332 0.1182 l -0.4561 2.0557 c -0.1052 0.4736 -0.1851 0.8633 -0.3535 1.1934 l -0.0771 0.1377 c -0.1388 0.222 -0.3147 0.4178 -0.5186 0.5801 l -0.2129 0.1514 c -0.2687 0.1679 -0.5789 0.2582 -0.9453 0.3438 l -0.3857 0.0869 l -2.0557 0.4561 l -0.1182 -0.5332 v 0.001 l 0.1182 0.5322 c -0.0488 0.0108 -0.0975 0.0157 -0.1455 0.0156 v 3.5019 c 0 0.7109 0.0009 1.2044 0.0322 1.5879 c 0.0307 0.3756 0.0875 0.5871 0.168 0.7451 l 0.0703 0.127 c 0.1763 0.2874 0.4293 0.5218 0.7314 0.6758 l 0.1299 0.0556 c 0.1438 0.0515 0.3333 0.0893 0.6152 0.1123 c 0.3835 0.0314 0.8769 0.0313 1.5879 0.0313 h 0.9512 c 0.3672 0 0.6649 0.2979 0.665 0.665 c 0 0.3673 -0.2978 0.6651 -0.665 0.6651 h -0.9512 c -0.6891 0 -1.246 0.0006 -1.6963 -0.0362 c -0.4005 -0.0327 -0.7614 -0.097 -1.0976 -0.2412 l -0.1426 -0.0674 c -0.5211 -0.2655 -0.9576 -0.6692 -1.2617 -1.165 l -0.1221 -0.2178 c -0.192 -0.3767 -0.2712 -0.7832 -0.3086 -1.2412 c -0.0368 -0.4502 -0.0361 -1.0073 -0.0361 -1.6963 v -3.666 c 0 -1.5596 0.921 -3.1377 2.0938 -4.2939 c 1.1711 -1.1547 2.7465 -2.0389 4.2383 -2.0371 v -0.001 h 3.6661 c 0.689 0 1.246 -0.0006 1.6962 0.0361 c 0.4581 0.0374 0.8645 0.1166 1.2413 0.3086 l 0.2177 0.1221 c 0.4959 0.3041 0.8996 0.7406 1.1651 1.2617 l 0.0664 0.1426 c 0.1443 0.3363 0.2094 0.697 0.2422 1.0977 c 0.0368 0.4502 0.0361 1.0072 0.0361 1.6963 v 1 c 0 0.3673 -0.2978 0.665 -0.665 0.665 c -0.3672 -0.0002 -0.6651 -0.2979 -0.6651 -0.665 z m -8.2412 -4.0713 c -0.6983 0.277 -1.4238 0.76 -2.0644 1.3916 c -0.6534 0.6443 -1.1579 1.3829 -1.4414 2.1084 l 1.6572 -0.3682 l 0.3955 -0.0899 c 0.3187 -0.0757 0.4299 -0.1145 0.5186 -0.1699 l 0.0898 -0.0635 c 0.0861 -0.0685 0.1601 -0.1514 0.2188 -0.2451 l 0.0518 -0.1035 c 0.0503 -0.1242 0.1018 -0.3326 0.208 -0.8106 l 0.3662 -1.6494 z" />
@@ -867,6 +1090,7 @@ GPU.CommandProcessor,9
     imageUploadBtn.style.alignItems = "center";
     imageUploadBtn.style.justifyContent = "center";
     imageUploadBtn.style.cursor = "pointer";
+    imageUploadBtn.style.color = "#222";
     imageUploadBtn.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 64 64" fill="currentColor">
         <path d="M25 20.775c0-2.325-1.9-4.225-4.225-4.225-2.325 0-4.225 1.9-4.225 4.225 0 2.325 1.9 4.225 4.225 4.225S25 23.1 25 20.775zm14.025 21.55H42.5V38.85c0-2.575 1.55-4.775 3.75-5.775l-.575-2v-.15l-3.8-11.525-13.325 17.175-3.575-6.05L10.825 44.8h20.85 2.35c1.125-1.5 2.95-2.475 5-2.475zM61.5 11.95c0-5.2-4.25-9.45-9.45-9.45H11.95c-5.2 0-9.45 4.25-9.45 9.45v40.125c0 5.175 4.25 9.425 9.45 9.425h28.3s0 0 0 0c.975 0 1.775-.8 1.775-1.775s-.8-1.775-1.775-1.775c0 0 0 0 0 0H11.95c-3.25 0-5.9-2.65-5.9-5.9V11.95c0-3.25 2.65-5.9 5.9-5.9h40.125c3.25 0 5.9 2.65 5.9 5.9V40.1c0 .025 0 .025 0 .05 0 .975.8 1.775 1.775 1.775s1.775-.8 1.775-1.775c0 0 0 0 0-.025h.025V11.95H61.5zM50 59.4509v-5.5047h-5.505c-1.1013 0-1.9944-.894-1.995-1.9953 0-1.1016.8934-1.995 1.995-1.995H50v-5.505c0-1.1016.8934-1.995 1.995-1.995 1.1016.0006 1.9953.8937 1.9953 1.995v5.505h5.5047l.4014.0411c.909.186 1.5939.99 1.5939 1.9539-.0006.9636-.6852 1.7682-1.5939 1.9542l-.4014.0411h-5.5047v5.5047c-.0006 1.101-.894 1.9947-1.9953 1.9953-1.1013 0-1.9944-.894-1.995-1.9953z" />
@@ -907,6 +1131,7 @@ GPU.CommandProcessor,9
     screenshotUploadBtn.style.alignItems = "center";
     screenshotUploadBtn.style.justifyContent = "center";
     screenshotUploadBtn.style.cursor = "pointer";
+    screenshotUploadBtn.style.color = "#222";
     screenshotUploadBtn.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 21 21" fill="currentColor">
         <path d="M4 19h3v-2H5v-2H3v3a1 1 0 001 1zM19 4a1 1 0 00-1-1h-3v2h2v2h2V4zM5 5h2V3H4A1 1 0 003 4v3h2V5zM3 9h2v4H3zm14 0h2v3h-2zM9 3h4v2H9zm0 14h3v2H9z M15.9469 18.9611v-1.7557h-1.7558c-.3512 0-.6361-.2851-.6363-.6364 0-.3513.2849-.6363.6363-.6363H15.9469v-1.7558c0-.3513.2849-.6363.6363-.6363.3513.0002.6364.285.6364.6363v1.7558h1.7557l.128.0131c.2899.0593.5084.3157.5084.6232-.0002.3073-.2185.5639-.5084.6233l-.128.0131h-1.7557v1.7557c-.0002.3512-.2851.6362-.6364.6364-.3512 0-.6361-.2851-.6363-.6364z" />
@@ -996,7 +1221,8 @@ GPU.CommandProcessor,9
 
     actionRow.appendChild(screenshotUploadBtn);
     this._screenshotUploadBtn = screenshotUploadBtn;
-
+    // Update attachment buttons state based on current mode
+    try { updateAttachmentButtonsState(); } catch (e) {}
     chatContent.appendChild(actionRow);
 
 
@@ -1018,6 +1244,7 @@ GPU.CommandProcessor,9
     uploadTraceBtn.style.justifyContent = "center";
     uploadTraceBtn.style.cursor = "pointer";
     uploadTraceBtn.style.marginLeft = "4px";
+    uploadTraceBtn.style.color = "#222";
     uploadTraceBtn.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 20 20" fill="currentColor">
         <path d="m 15.3352 18.5003 v -1.8349 h -1.835 c -0.3671 0 -0.6648 -0.298 -0.665 -0.6651 c 0 -0.3672 0.2978 -0.665 0.665 -0.665 h 1.835 v -1.835 c 0 -0.3672 0.2978 -0.665 0.665 -0.665 c 0.3672 0.0002 0.6651 0.2979 0.6651 0.665 v 1.835 h 1.8349 l 0.1338 0.0137 c 0.303 0.062 0.5313 0.33 0.5313 0.6513 c -0.0002 0.3212 -0.2284 0.5894 -0.5313 0.6514 l -0.1338 0.0137 h -1.8349 v 1.8349 c -0.0002 0.367 -0.298 0.6649 -0.6651 0.6651 c -0.3671 0 -0.6648 -0.298 -0.665 -0.6651 z M 9.9455 1.0605 C 5.1695 1.0564 1.569 2.4872 1.569 4.3787 l 0 11.3369 c 0 1.8915 3.6004 3.3183 8.3765 3.3183 c 0.4553 0 0.9106 -0.0121 1.3519 -0.0404 c 0.3113 -0.0202 0.5482 -0.2547 0.5296 -0.5296 c -0.0232 -0.2708 -0.2927 -0.4728 -0.6085 -0.4607 c -0.4181 0.0242 -0.8456 0.0404 -1.2729 0.0404 c -4.2649 0 -7.2383 -1.2287 -7.2383 -2.3281 l 0 -2.0612 c 1.4263 0.974 4.0745 1.6006 7.2383 1.6006 c 0.2881 0 0.5807 -0.0041 0.8641 -0.0162 c 0.316 -0.0121 0.5575 -0.2425 0.5436 -0.5174 c -0.0139 -0.2749 -0.2787 -0.485 -0.5947 -0.4729 c -0.2694 0.0121 -0.5436 0.0162 -0.813 0.0162 c -4.2649 0 -7.2383 -1.2287 -7.2383 -2.3281 l 0 -2.0572 c 1.4263 0.974 4.0745 1.6005 7.2383 1.6005 c 4.776 0 8.3766 -1.4267 8.3766 -3.3182 l 0 -3.7831 c 0 -1.8915 -3.6007 -3.3182 -8.3766 -3.3182 z m 0 0.9862 c 4.2649 0 7.243 1.2286 7.243 2.332 c 0 1.1034 -2.9734 2.3281 -7.2384 2.3281 c -4.2649 0 -7.243 -1.2287 -7.243 -2.3281 c 0 -1.0993 2.9734 -2.332 7.2383 -2.332 z M 2.7072 6.0964 c 1.4263 0.974 4.0745 1.6006 7.2383 1.6006 c 3.1639 0 5.8121 -0.6265 7.2384 -1.6006 l 0 2.0612 c 0.0046 1.1034 -2.9688 2.3281 -7.2384 2.3281 c -4.2649 0 -7.2383 -1.2287 -7.2383 -2.3281 l 0 -2.0612 Z"/>
@@ -1695,6 +1922,7 @@ GPU.CommandProcessor,9
 
 
     actionRow.appendChild(uploadTraceBtn);
+    try { updateAttachmentButtonsState(); } catch (e) {}
 
     // Attach Repository Code button
     const attachRepoBtn = document.createElement("button");
@@ -1709,6 +1937,7 @@ GPU.CommandProcessor,9
     attachRepoBtn.style.alignItems = "center";
     attachRepoBtn.style.justifyContent = "center";
     attachRepoBtn.style.cursor = "pointer";
+    attachRepoBtn.style.color = "#222";
     attachRepoBtn.style.marginLeft = "4px";
     attachRepoBtn.innerHTML = `
       <svg width="24" height="24" viewBox="0 -1 20 20" fill="currentColor">
@@ -1876,6 +2105,7 @@ GPU.CommandProcessor,9
     }
 
     actionRow.appendChild(attachRepoBtn);
+    try { updateAttachmentButtonsState(); } catch (e) {}
 
     // Graphtest button
     const graphTestBtn = document.createElement("button");
@@ -2141,7 +2371,15 @@ GPU.CommandProcessor,9
         
         // Show "loading" message while fetching CSV
         const botDiv = document.createElement("div");
-        botDiv.innerHTML = `<b>Daisen Bot:</b> Loading graph data...`;
+        const header = document.createElement("div");
+        const botLabel = document.createElement("b");
+        botLabel.textContent = "DaisenBot:";
+        const modeLabelFull = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
+        const modePrefix = modeLabelFull ? modeLabelFull.substring(0,6) : "";
+        if (modePrefix) botLabel.title = `DaisenBot (${modePrefix})`;
+        header.appendChild(botLabel);
+        header.appendChild(document.createTextNode(" Loading graph data..."));
+        botDiv.appendChild(header);
         botDiv.style.textAlign = "left";
         botDiv.style.margin = "4px 0";
         messagesDiv.appendChild(botDiv);
@@ -2158,15 +2396,30 @@ GPU.CommandProcessor,9
             `Would you like me to also provide a Python script so you can reproduce this analysis on your own?`;
 
           // Update bot response with table
-          botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
+          botDiv.innerHTML = "";
+          const header2 = document.createElement("div");
+          const b2 = document.createElement("b");
+          b2.textContent = "DaisenBot:";
+          if (modePrefix) b2.title = `DaisenBot (${modePrefix})`;
+          header2.appendChild(b2);
+          header2.appendChild(document.createTextNode(" "));
+          header2.appendChild(document.createElement("span")).innerHTML = convertMarkdownToHTML(autoWrapMath(responseContent));
+          botDiv.appendChild(header2);
           
           // Add bot message to chat history
-          messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }] });
+          messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }], thinkingContent: undefined, daisenBotMode: this._selectedMode, daisenBotModeLabel: (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode });
         } catch (error) {
           // Handle error case
           const errorMessage = `Error loading graph data: ${error.message}`;
-          botDiv.innerHTML = `<b>Daisen Bot:</b> ${errorMessage}`;
-          messages.push({ role: "assistant", content: [{ type: "text", text: errorMessage }] });
+          botDiv.innerHTML = "";
+          const errHeader = document.createElement("div");
+          const eb = document.createElement("b");
+          eb.textContent = "DaisenBot:";
+          if (modePrefix) eb.title = `DaisenBot (${modePrefix})`;
+          errHeader.appendChild(eb);
+          errHeader.appendChild(document.createTextNode(" "+errorMessage));
+          botDiv.appendChild(errHeader);
+          messages.push({ role: "assistant", content: [{ type: "text", text: errorMessage }], thinkingContent: undefined, daisenBotMode: this._selectedMode, daisenBotModeLabel: (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode });
         }
         
         this._chatMessages = messages;
@@ -2229,7 +2482,14 @@ GPU.CommandProcessor,9
         
         // Show "loading" message while fetching CSV
         const botDiv = document.createElement("div");
-        botDiv.innerHTML = `<b>Daisen Bot:</b> Loading ...`;
+        const header = document.createElement("div");
+        const botLabel = document.createElement("b"); botLabel.textContent = "DaisenBot:";
+        const modeLabelFull = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
+        const modePrefix = modeLabelFull ? modeLabelFull.substring(0,6) : "";
+        if (modePrefix) botLabel.title = `DaisenBot (${modePrefix})`;
+        header.appendChild(botLabel);
+        header.appendChild(document.createTextNode(" Loading ..."));
+        botDiv.appendChild(header);
 
         botDiv.style.textAlign = "left";
         botDiv.style.margin = "4px 0";
@@ -2246,10 +2506,18 @@ GPU.CommandProcessor,9
             `Would you like me to also generate a breakdown chart for better visualization?`;
 
         // Update bot response with table
-        // botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
-        botDiv.innerHTML =
-          `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(1,923 tokens)</span> ` +
-          convertMarkdownToHTML(autoWrapMath(responseContent));
+        // botDiv.innerHTML = `<b>DaisenBot:</b> ${responseContent}`;
+        botDiv.innerHTML = "";
+        const botHeaderTmp = document.createElement("div");
+        const btmp = document.createElement("b"); btmp.textContent = "DaisenBot:";
+        if (modePrefix) btmp.title = `DaisenBot (${modePrefix})`;
+        botHeaderTmp.appendChild(btmp);
+        const tokenSpanTmp = document.createElement("span"); tokenSpanTmp.style.color = "#aaa"; tokenSpanTmp.style.fontSize = "0.95em";
+        tokenSpanTmp.textContent = `(1,923 tokens)`;
+        botHeaderTmp.appendChild(document.createTextNode(" "));
+        botHeaderTmp.appendChild(tokenSpanTmp);
+        botHeaderTmp.appendChild(document.createElement("div")).innerHTML = convertMarkdownToHTML(autoWrapMath(responseContent));
+        botDiv.appendChild(botHeaderTmp);
 
         const userDivSecond = document.createElement("div");
         userDivSecond.style.display = "flex";
@@ -2281,20 +2549,32 @@ Kernel Execution,76.68,84.65,7.97`);
           `This visualization will help you see how much longer the memory transfer takes compared to the kernel. ` +
           `Here's the detailed timing table:<br>${tableHTML}`
         const botDivSecond = document.createElement("div");
-        botDivSecond.innerHTML = `<b>Daisen Bot:</b> Loading ...`;
-
+        const headerS = document.createElement("div");
+        const bS = document.createElement("b"); bS.textContent = "DaisenBot:";
+        if (modePrefix) bS.title = `DaisenBot (${modePrefix})`;
+        headerS.appendChild(bS);
+        headerS.appendChild(document.createTextNode(" Loading ..."));
+        botDivSecond.appendChild(headerS);
         botDivSecond.style.textAlign = "left";
         botDivSecond.style.margin = "4px 0";
         messagesDiv.appendChild(botDivSecond);
 
-        botDivSecond.innerHTML =
-          `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(2,341 tokens)</span> ` +
-          convertMarkdownToHTML(autoWrapMath(responseContentSecond));
+        botDivSecond.innerHTML = "";
+        const botHeaderTmp2 = document.createElement("div");
+        const btmp2 = document.createElement("b"); btmp2.textContent = "DaisenBot:";
+        if (modePrefix) btmp2.title = `DaisenBot (${modePrefix})`;
+        botHeaderTmp2.appendChild(btmp2);
+        const tokenSpanTmp2 = document.createElement("span"); tokenSpanTmp2.style.color = "#aaa"; tokenSpanTmp2.style.fontSize = "0.95em";
+        tokenSpanTmp2.textContent = `(2,341 tokens)`;
+        botHeaderTmp2.appendChild(document.createTextNode(" "));
+        botHeaderTmp2.appendChild(tokenSpanTmp2);
+        botHeaderTmp2.appendChild(document.createElement("div")).innerHTML = convertMarkdownToHTML(autoWrapMath(responseContentSecond));
+        botDivSecond.appendChild(botHeaderTmp2);
         
         // Add bot message to chat history
-        messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }] });
+        messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }], thinkingContent: undefined, daisenBotMode: this._selectedMode, daisenBotModeLabel: (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode });
         messages.push({ role: "user", content: [{ type: "text", text: userMsgSecond }] });
-        messages.push({ role: "assistant", content: [{ type: "text", text: responseContentSecond }] });
+        messages.push({ role: "assistant", content: [{ type: "text", text: responseContentSecond }], thinkingContent: undefined, daisenBotMode: this._selectedMode, daisenBotModeLabel: (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode });
 
 
         
@@ -2375,7 +2655,18 @@ Kernel Execution,76.68,84.65,7.97`);
       input.style.height = "38px"; // Reset to one line
       // Show "thinking message"
       const botDiv = document.createElement("div");
-      botDiv.innerHTML = `<b>Daisen Bot:</b> Thinking...&nbsp;&nbsp;<span id="thinking-spinner">|</span>`;
+      // Build header with hover title showing mode prefix
+      const header = document.createElement("div");
+      const botLabel = document.createElement("b");
+      botLabel.textContent = "DaisenBot:";
+      const modeLabelFull = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
+      const modePrefix = modeLabelFull ? modeLabelFull.substring(0, 6) : "";
+      if (modePrefix) botLabel.title = `DaisenBot (${modePrefix})`;
+      header.appendChild(botLabel);
+      const thinkingSpan = document.createElement("span");
+      thinkingSpan.innerHTML = " Thinking...&nbsp;&nbsp;<span id=\"thinking-spinner\">|</span>";
+      header.appendChild(thinkingSpan);
+      botDiv.appendChild(header);
       botDiv.style.textAlign = "left";
       botDiv.style.margin = "4px 0";
       messagesDiv.appendChild(botDiv);
@@ -2476,45 +2767,56 @@ Kernel Execution,76.68,84.65,7.97`);
           botDiv.innerHTML = "";
 
           const header = document.createElement("div");
-          header.innerHTML = `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
-            gptResponseTotalTokens === -1 ? "gptResponsekens" : gptResponseTotalTokens.toLocaleString() + " tokens"
-          })</span>`;
+          const botLabel = document.createElement("b");
+          botLabel.textContent = "DaisenBot:";
+          const modeLabelFull = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
+          const modePrefix = modeLabelFull ? modeLabelFull.substring(0, 6) : "";
+          if (modePrefix) botLabel.title = `DaisenBot (${modePrefix})`;
+          header.appendChild(botLabel);
+          const tokenSpan = document.createElement("span");
+          tokenSpan.style.color = "#aaa";
+          tokenSpan.style.fontSize = "0.95em";
+          tokenSpan.textContent = `(${gptResponseTotalTokens === -1 ? "gptResponsekens" : gptResponseTotalTokens.toLocaleString() + " tokens"})`;
+          header.appendChild(document.createTextNode(" "));
+          header.appendChild(tokenSpan);
           botDiv.appendChild(header);
 
-          // Toggle row (triangle + label)
-          const toggleRow = document.createElement("div");
-          toggleRow.style.marginTop = "6px";
-          toggleRow.style.display = "flex";
-          toggleRow.style.alignItems = "center";
-          toggleRow.style.gap = "8px";
+          // Toggle row (triangle + label) — only render when mode includes 'cot'
+          let triangleBtn: HTMLButtonElement | null = null;
+          if (typeof this._selectedMode === 'string' && this._selectedMode.includes('cot')) {
+            const thinkingToggleRow = document.createElement("div");
+            thinkingToggleRow.style.marginTop = "6px";
+            thinkingToggleRow.style.display = "flex";
+            thinkingToggleRow.style.alignItems = "center";
+            thinkingToggleRow.style.gap = "8px";
 
-          const triangleBtn = document.createElement("button");
-          triangleBtn.type = "button";
-          triangleBtn.style.border = "none";
-          triangleBtn.style.background = "transparent";
-          triangleBtn.style.cursor = "pointer";
-          triangleBtn.style.padding = "0";
-          triangleBtn.style.width = "20px";
-          triangleBtn.style.height = "20px";
-          triangleBtn.style.display = "flex";
-          triangleBtn.style.alignItems = "center";
-          triangleBtn.style.justifyContent = "center";
-          // SVG triangle (path provided) — original path faces down; rotate to point right by default
-          triangleBtn.innerHTML = `
-            <svg class="daisen-triangle-svg" width="14" height="14" viewBox="0 0 32 32" style="transform: rotate(-90deg); transition: transform 160ms ease;">
-              <path d="M31.92,5.021l-14.584,22.5c-0.089,0.138-0.241,0.223-0.406,0.229c-0.004,0-0.009,0-0.014,0
+            triangleBtn = document.createElement("button");
+            triangleBtn.type = "button";
+            triangleBtn.style.border = "none";
+            triangleBtn.style.background = "transparent";
+            triangleBtn.style.cursor = "pointer";
+            triangleBtn.style.padding = "0";
+            triangleBtn.style.width = "20px";
+            triangleBtn.style.height = "20px";
+            triangleBtn.style.display = "flex";
+            triangleBtn.style.alignItems = "center";
+            triangleBtn.style.justifyContent = "center";
+            triangleBtn.innerHTML = `
+              <svg class="daisen-triangle-svg" width="14" height="14" viewBox="0 0 32 32" style="transform: rotate(-90deg); transition: transform 160ms ease;">
+                <path d="M31.92,5.021l-14.584,22.5c-0.089,0.138-0.241,0.223-0.406,0.229c-0.004,0-0.009,0-0.014,0
 		c-0.16,0-0.312-0.076-0.404-0.205L0.096,5.044C-0.015,4.893-0.031,4.69,0.054,4.523C0.139,4.354,0.312,4.25,0.5,4.25h31
 		c0.183,0,0.352,0.1,0.438,0.261C32.026,4.67,32.019,4.867,31.92,5.021z" fill="#555"/>
-            </svg>`;
+              </svg>`;
 
-          const toggleLabel = document.createElement("span");
-          toggleLabel.textContent = "Chain-of-thought Thinking";
-          toggleLabel.style.color = "#555";
-          toggleLabel.style.fontSize = "16px";
+            const toggleLabel = document.createElement("span");
+            toggleLabel.textContent = "Chain-of-thought Thinking";
+            toggleLabel.style.color = "#555";
+            toggleLabel.style.fontSize = "16px";
 
-          toggleRow.appendChild(triangleBtn);
-          toggleRow.appendChild(toggleLabel);
-          botDiv.appendChild(toggleRow);
+            thinkingToggleRow.appendChild(triangleBtn);
+            thinkingToggleRow.appendChild(toggleLabel);
+            botDiv.appendChild(thinkingToggleRow);
+          }
 
           // Final answer container
           const finalDiv = document.createElement("div");
@@ -2530,21 +2832,23 @@ Kernel Execution,76.68,84.65,7.97`);
           botDiv.appendChild(finalDiv);
 
           // Toggle behavior to show/hide the chain-of-thought block
-          triangleBtn.onclick = () => {
-            if (!thinkingContentDiv) return;
-            const svgEl = triangleBtn.querySelector('.daisen-triangle-svg') as HTMLElement | null;
-            if (thinkingContentDiv.style.display === "none") {
-              thinkingContentDiv.style.display = "block";
-              if (svgEl) svgEl.style.transform = 'rotate(0deg)';
-              messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            } else {
-              thinkingContentDiv.style.display = "none";
-              if (svgEl) svgEl.style.transform = 'rotate(-90deg)';
-            }
-          };
+          if (triangleBtn) {
+            triangleBtn.onclick = () => {
+              if (!thinkingContentDiv) return;
+              const svgEl = triangleBtn!.querySelector('.daisen-triangle-svg') as HTMLElement | null;
+              if (thinkingContentDiv.style.display === "none") {
+                thinkingContentDiv.style.display = "block";
+                if (svgEl) svgEl.style.transform = 'rotate(0deg)';
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+              } else {
+                thinkingContentDiv.style.display = "none";
+                if (svgEl) svgEl.style.transform = 'rotate(-90deg)';
+              }
+            };
+          }
         };
 
-        if (gptResponseThinking) {
+        if (gptResponseThinking && typeof this._selectedMode === 'string' && this._selectedMode.includes('cot')) {
           thinkingContentDiv = document.createElement("div");
           thinkingContentDiv.style.background = "#f0f0f0";
           thinkingContentDiv.style.color = "#444";
@@ -2622,7 +2926,7 @@ Kernel Execution,76.68,84.65,7.97`);
 
         // Final UI is rendered by buildFinalUI() after the thinking animation completes.
 
-        messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}] });
+        messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}], thinkingContent: gptResponseThinking || undefined, daisenBotMode: this._selectedMode, daisenBotModeLabel: (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode });
         this._chatMessages = messages; // Update the instance messages
         this._saveChatToHistory(); // Save the updated chat
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
