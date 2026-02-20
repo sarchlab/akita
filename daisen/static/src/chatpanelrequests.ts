@@ -31,8 +31,8 @@ export interface GPTRequest {
   selectedGitHubRoutineKeys: string[];
 }
 
-export async function sendPostGPT(request: GPTRequest): Promise<GPTResponse> {
-  const response = await fetch("/api/gpt", {
+export async function sendPostGPT(request: GPTRequest, api: string): Promise<GPTResponse> {
+  const response = await fetch(api, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request)

@@ -666,7 +666,20 @@ func buildOpenAIPayloadFrontend(
 		"model":       model,
 		"messages":    messages,
 		"temperature": 0.7,
-		"logprobs":    true,
+		"logprobs":    false,
+	}
+	return json.Marshal(payload)
+}
+
+func buildOpenAIPayloadFrontendNoBackground(
+	model string,
+	messages []map[string]interface{},
+) ([]byte, error) {
+	payload := map[string]interface{}{
+		"model":       model,
+		"messages":    messages,
+		"temperature": 0.7,
+		"logprobs":    false,
 	}
 	return json.Marshal(payload)
 }
@@ -798,7 +811,7 @@ func httpGPTProxyFrontend(w http.ResponseWriter, r *http.Request) {
 		if ferr != nil {
 			log.Printf("httpGPTProxy - failed to open tmp.txt for writing: %v", ferr)
 		} else {
-			_, _ = f.WriteString("----- Frontend Request -----\n")
+			_, _ = f.WriteString("----- Frontend Request [httpGPTProxyFrontend] -----\n")
 			_, _ = f.Write(b)
 			_, _ = f.WriteString("\n\n")
 			f.Close()
@@ -851,6 +864,206 @@ func httpGPTProxyFrontend(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
+func httpGPTProxyFrontendNoBackground(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or OpenAI-related variable missing] "+
+				"Please create or update file "+
+				"\"akita/daisen/.env\" and write these contents (example):\n"+
+				"```\n"+
+				"OPENAI_URL=\"https://api.openai.com/v1/chat/completions\"\n"+
+				"OPENAI_MODEL=\"gpt-4o\"\n"+
+				"OPENAI_API_KEY=\"Bearer sk-proj-XXXXXXXXXXXX\"\n"+
+				"GITHUB_PERSONAL_ACCESS_TOKEN=\"Bearer ghp_XXXXXXXXXXXX\"\n"+
+				"```\n",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+	var req struct {
+		Messages                  []map[string]interface{} `json:"messages"`
+		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
+		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Log full received request structure from frontend (pretty-printed JSON)
+	if b, err := json.MarshalIndent(req, "", "  "); err == nil {
+		// also persist to tmp.txt
+		f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if ferr != nil {
+			log.Printf("httpGPTProxyFrontendNoBackground - failed to open tmp.txt for writing: %v", ferr)
+		} else {
+			_, _ = f.WriteString("----- Frontend Request [httpGPTProxyFrontendNoBackground] -----\n")
+			_, _ = f.Write(b)
+			_, _ = f.WriteString("\n\n")
+			f.Close()
+		}
+		log.Printf("httpGPTProxyFrontendNoBackground - received frontend request:\n%s\n", string(b))
+	} else {
+		log.Printf("httpGPTProxyFrontendNoBackground - failed to marshal received req for logging: %v", err)
+	}
+
+	payloadBytes, err := buildOpenAIPayloadFrontendNoBackground(
+		openaiModel, req.Messages)
+	if err != nil {
+		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
+	if err != nil {
+		http.Error(
+			w,
+			"Failed to contact OpenAI: "+err.Error(),
+			http.StatusBadGateway,
+		)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	// Log full response structure returned from OpenAI (pretty-printed JSON when possible)
+	var prettyResp bytes.Buffer
+	var respStr string
+	if err := json.Indent(&prettyResp, body, "", "  "); err == nil {
+		respStr = prettyResp.String()
+		log.Printf("httpGPTProxyFrontendNoBackground - OpenAI response (status %d):\n%s\n", resp.StatusCode, respStr)
+	} else {
+		respStr = string(body)
+		log.Printf("httpGPTProxyFrontendNoBackground - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
+	}
+	// also persist response to tmp.txt
+	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr != nil {
+		log.Printf("httpGPTProxyFrontendNoBackground - failed to open tmp.txt for writing: %v", ferr)
+	} else {
+		_, _ = f.WriteString("----- OpenAI Response (status " + strconv.Itoa(resp.StatusCode) + ") -----\n")
+		_, _ = f.WriteString(respStr + "\n\n")
+		f.Close()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
+// httpGPTProxyFrontendGetAutoAttachment handles /api/gptautoattachment.
+// It appends the ATTACHMENT_REQUEST_PROMPT (with component name candidates)
+// to the last user message and forwards the request to OpenAI, returning
+// the OpenAI response unchanged to the caller.
+func httpGPTProxyFrontendGetAutoAttachment(w http.ResponseWriter, r *http.Request) {
+	_ = godotenv.Load(".env")
+	openaiApiKey := os.Getenv("OPENAI_API_KEY")
+	openaiURL := os.Getenv("OPENAI_URL")
+	openaiModel := os.Getenv("OPENAI_MODEL")
+	if openaiApiKey == "" || openaiURL == "" || openaiModel == "" {
+		http.Error(
+			w,
+			"[Error: \".env\" not found or OpenAI-related variable missing] Please create or update file \"akita/daisen/.env\" with OPENAI_URL, OPENAI_MODEL and OPENAI_API_KEY",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	// Log full received request structure from frontend (pretty-printed JSON)
+	if b, err := json.MarshalIndent(req, "", "  "); err == nil {
+		// also persist to tmp.txt
+		f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if ferr != nil {
+			log.Printf("httpGPTProxyFrontendGetAutoAttachment - failed to open tmp.txt for writing: %v", ferr)
+		} else {
+			_, _ = f.WriteString("----- Frontend Request [httpGPTProxyFrontendGetAutoAttachment] -----\n")
+			_, _ = f.Write(b)
+			_, _ = f.WriteString("\n\n")
+			f.Close()
+		}
+		log.Printf("httpGPTProxyFrontendGetAutoAttachment - received frontend request:\n%s\n", string(b))
+	} else {
+		log.Printf("httpGPTProxyFrontendGetAutoAttachment - failed to marshal received req for logging: %v", err)
+	}
+
+	var req struct {
+		Messages                  []map[string]interface{} `json:"messages"`
+		TraceInfo                 map[string]interface{}   `json:"traceInfo"`
+		SelectedGitHubRoutineKeys []string                 `json:"selectedGitHubRoutineKeys"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch component names from traceReader (same source as /api/compnames)
+	compNames := traceReader.ListComponents(r.Context())
+	compNamesJSON, _ := json.Marshal(compNames)
+
+	// Load attachment prompt template from file (fallback to empty if error)
+	promptTemplateBytes, err := os.ReadFile("autoattachmentprompt.txt")
+	var promptTemplate string
+	if err != nil {
+		// fallback to a short default prompt if file missing
+		promptTemplate = "The candidate component names are: {0}"
+	} else {
+		promptTemplate = string(promptTemplateBytes)
+	}
+
+	// Replace placeholder {0} with JSON array of component names
+	promptText := strings.ReplaceAll(promptTemplate, "{0}", string(compNamesJSON))
+
+	// Append the prompt text to the last user message (if exists)
+	if len(req.Messages) > 0 {
+		last := req.Messages[len(req.Messages)-1]
+		if contentArr, ok := last["content"].([]interface{}); ok && len(contentArr) > 0 {
+			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
+				if text, _ := firstContent["text"].(string); ok {
+					firstContent["text"] = text + "\n\n" + promptText
+				}
+			}
+		}
+	} else {
+		// no messages: create one
+		sysMsg := map[string]interface{}{
+			"role":    "user",
+			"content": []interface{}{map[string]interface{}{"type": "text", "text": promptText}},
+		}
+		req.Messages = append(req.Messages, sysMsg)
+	}
+
+	// Prepare payload using existing helper (it will add system prompt etc.)
+	payloadBytes, err := buildOpenAIPayloadFrontend(r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys)
+	if err != nil {
+		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send to OpenAI
+	resp, err := sendOpenAIRequest(r.Context(), openaiApiKey, openaiURL, payloadBytes)
+	if err != nil {
+		http.Error(w, "Failed to contact OpenAI: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	// Log response to tmp.txt similarly
+	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr == nil {
+		_, _ = f.WriteString("----- httpGPTProxyFrontendGetAutoAttachment Got OpenAI Response (gptautoattachment, status " + strconv.Itoa(resp.StatusCode) + ") -----\n")
+		_, _ = f.WriteString(string(body) + "\n\n")
+		f.Close()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+}
+
 func httpGPTProxyAuto(w http.ResponseWriter, r *http.Request) {
 	_ = godotenv.Load(".env")
 	openaiApiKey := os.Getenv("OPENAI_API_KEY")
@@ -887,16 +1100,16 @@ func httpGPTProxyAuto(w http.ResponseWriter, r *http.Request) {
 		// also persist to tmp.txt
 		f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if ferr != nil {
-			log.Printf("httpGPTProxy - failed to open tmp.txt for writing: %v", ferr)
+			log.Printf("httpGPTProxyAuto - failed to open tmp.txt for writing: %v", ferr)
 		} else {
-			_, _ = f.WriteString("----- Frontend Request -----\n")
+			_, _ = f.WriteString("----- Frontend Request [httpGPTProxyAuto] -----\n")
 			_, _ = f.Write(b)
 			_, _ = f.WriteString("\n\n")
 			f.Close()
 		}
-		log.Printf("httpGPTProxy - received frontend request:\n%s\n", string(b))
+		log.Printf("httpGPTProxyAuto - received frontend request:\n%s\n", string(b))
 	} else {
-		log.Printf("httpGPTProxy - failed to marshal received req for logging: %v", err)
+		log.Printf("httpGPTProxyAuto - failed to marshal received req for logging: %v", err)
 	}
 
 	payloadBytes, err := buildOpenAIPayloadAuto(
@@ -923,16 +1136,16 @@ func httpGPTProxyAuto(w http.ResponseWriter, r *http.Request) {
 	var respStr string
 	if err := json.Indent(&prettyResp, body, "", "  "); err == nil {
 		respStr = prettyResp.String()
-		log.Printf("httpGPTProxy - OpenAI response (status %d):\n%s\n", resp.StatusCode, respStr)
+		log.Printf("httpGPTProxyAuto - OpenAI response (status %d):\n%s\n", resp.StatusCode, respStr)
 	} else {
 		respStr = string(body)
-		log.Printf("httpGPTProxy - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
+		log.Printf("httpGPTProxyAuto - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
 	}
 	// also persist response to tmp.txt
 	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr != nil {
-		log.Printf("httpGPTProxy - failed to open tmp.txt for writing: %v", ferr)
+		log.Printf("httpGPTProxyAuto - failed to open tmp.txt for writing: %v", ferr)
 	} else {
-		_, _ = f.WriteString("----- OpenAI Response (status " + strconv.Itoa(resp.StatusCode) + ") -----\n")
+		_, _ = f.WriteString("----- httpGPTProxyAuto Got OpenAI Response (status " + strconv.Itoa(resp.StatusCode) + ") -----\n")
 		_, _ = f.WriteString(respStr + "\n\n")
 		f.Close()
 	}

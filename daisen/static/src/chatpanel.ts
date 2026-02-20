@@ -7,9 +7,9 @@ type ChatContent = UnitContent[];
 
 const MODE_MAP: { [key: string]: string } = {
   "ss+q": "Mode 1: Screenshot and Question",
-  "ss+q+bp": "Mode 2: Screenshot, Question and Background Prompt",
-  "ss+q+bp+auto": "Mode 3: Screenshot, Question, Background Prompt and Auto-attachments",
-  "ss+q+bp+auto+cot": "Mode 4: Screenshot, Question, Background Prompt, Auto-attachments and Chain-of-thought (default)",
+  "ss+q+bp+cot": "Mode 2: Screenshot, Question and Background Prompt",
+  "ss+q+bp+auto+cot": "Mode 3: Screenshot, Question, Background Prompt and Auto-attachments",
+  // "ss+q+bp+auto+cot": "Mode 4: Screenshot, Question, Background Prompt, Auto-attachments and Chain-of-thought (default)",
 };
 
 
@@ -774,7 +774,7 @@ GPU.CommandProcessor,9
                 </svg>`;
 
               const toggleLabel = document.createElement("span");
-              toggleLabel.textContent = "Chain-of-thought Thinking";
+              toggleLabel.textContent = "Thinking";
               toggleLabel.style.color = "#555";
               toggleLabel.style.fontSize = "16px";
 
@@ -987,6 +987,7 @@ GPU.CommandProcessor,9
       // Read file
       const reader = new FileReader();
       reader.onload = (e) => {
+        console.log("PNG DataURL in 'auto' case:", e.target?.result);
         const sizeStr = formatFileSize(file.size);
         this._uploadedFiles.push({
           id: ++this._fileIdCounter,
@@ -2215,7 +2216,7 @@ GPU.CommandProcessor,9
     inputContainer.style.alignItems = "flex-end";
 
     const input = document.createElement("textarea");
-    input.placeholder = "Ask anything (↑↓ for history, CTRL for links)";
+    input.placeholder = "Ask anything (↑↓ for history)"; // CTRL for links
     input.rows = 1;
     input.style.flex = "1";
     input.style.padding = "6px";
@@ -2722,8 +2723,140 @@ Kernel Execution,76.68,84.65,7.97`);
         selectedGitHubRoutineKeys: selectedGitHubRoutineKeys
       };
       console.log("GPTRequest:", gptRequest);
-      
-      sendPostGPT(gptRequest).then((gptResponse) => {
+
+      const isAuto = typeof this._selectedMode === 'string' && this._selectedMode.includes('auto');
+      // If auto mode, first call /api/gptautoattachment with a screenshot attached
+      if (isAuto) {
+          try {
+            // Update the header text to indicate auto-attachment decision
+            if (thinkingSpan) {
+              thinkingSpan.innerHTML = " Deciding on Auto-attachments...&nbsp;&nbsp;<span id=\"thinking-spinner\">|</span>";
+            }
+
+            // (Re)start spinner animation for the updated spinner element
+            try { if (typeof dotsInterval !== 'undefined') clearInterval(dotsInterval); } catch (e) {}
+            const thinkingSpinnerElem = botDiv.querySelector("#thinking-spinner");
+            if (thinkingSpinnerElem) {
+              thinkingSpinnerElem.innerHTML = `
+                <svg id="daisen-thinking-svg" width="16" height="16" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; transform-origin: 50% 50%;">
+                  <g>
+                    <circle cx="12" cy="12" r="8" stroke="#0E6DFD" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="25 60"/>
+                  </g>
+                </svg>`;
+              const spinnerSvgElem = thinkingSpinnerElem.querySelector('#daisen-thinking-svg') as HTMLElement | null;
+              let angleAuto = 0;
+              dotsInterval = window.setInterval(() => {
+                angleAuto = (angleAuto + THINKING_SPINNER_STEP_DEG) % 360;
+                if (spinnerSvgElem) spinnerSvgElem.style.transform = `rotate(${angleAuto}deg)`;
+              }, THINKING_SPINNER_INTERVAL_MS);
+            }
+
+          // Capture screenshot (no animation, do not add to this._uploadedFiles)
+          const innerContainerForAuto = document.body;
+          const canvasAuto = await html2canvas(innerContainerForAuto);
+          const scale = 0.4;
+          const smallCanvasAuto = document.createElement("canvas");
+          smallCanvasAuto.width = canvasAuto.width * scale;
+          smallCanvasAuto.height = canvasAuto.height * scale;
+          const ctxAuto = smallCanvasAuto.getContext("2d");
+          if (ctxAuto) ctxAuto.drawImage(canvasAuto, 0, 0, smallCanvasAuto.width, smallCanvasAuto.height);
+          const dataUrl = smallCanvasAuto.toDataURL("image/png");
+
+          // Display a screenshot block in the chat (temporary, not in attachment area)
+          try {
+            const tempFile: { id: number; name: string; content: string; type: "file" | "image" | "image-screenshot"; size: string } = { id: 0, name: `Screenshot (auto)`, content: dataUrl, type: "image-screenshot", size: "auto" };
+            const preview = renderMessageFiles([tempFile], 0, 0);
+            if (preview) {
+              // append under the last userDiv (which we previously appended)
+              try { userDiv.appendChild(preview); } catch (e) { messagesDiv.appendChild(preview); }
+            }
+          } catch (e) { console.error("Failed to render temp screenshot preview:", e); }
+
+          // Build auto request messages: replace last user message with text + image_url
+          const gptAutoMessages = [...messages];
+          const autoContentForAPI: any = [ { type: "text", text: fullMsg }, { type: "image_url", image_url: { url: dataUrl } } ];
+          gptAutoMessages[gptAutoMessages.length - 1] = { role: "user", content: autoContentForAPI };
+
+          const traceInfoDefault = {
+              selected: 0,
+              startTime: this._traceSelectedStartTime,
+              endTime: this._traceSelectedEndTime,
+              selectedComponentNameList: [],
+          };
+
+          const selectedGitHubRoutineKeysDefault = [];
+
+          const gptAutoAttachmentRequest: GPTRequest = {
+            messages: gptAutoMessages,
+            traceInfo: traceInfoDefault,
+            selectedGitHubRoutineKeys: selectedGitHubRoutineKeysDefault
+          };
+
+          console.log("gptAutoAttachmentRequest:", gptAutoAttachmentRequest);
+
+          const autoResp = await sendPostGPT(gptAutoAttachmentRequest, "/api/gptautoattachment");
+          try {
+            const rawAuto = autoResp.content || "";
+            console.log("/api/gptautoattachment response:", rawAuto);
+
+            // the rawAuto content will be in the format like below:
+            // [START OF TRACE]
+            // trace: true
+            // selectedComponentNameList: ["GPU[1].DRAM[1]", "GPU[1].L2Cache[1]"]
+            // startTime: 0.0006122977946845777
+            // endTime: 0.0006172977946845777
+            // [END OF TRACE]
+            // [START OF CODE]
+            // code: true
+            // selectedGitHubRoutineKeys: ["GPU.DRAM", "GPU.L2Cache"]
+            // [END OF CODE]
+            // [END OF ATTACHMENT]
+
+            const [traceInfoAutoAttachment, selectedGitHubRoutineKeysAutoAttachment] = parseAutoAttachmentResponse(rawAuto, traceInfoDefault, selectedGitHubRoutineKeysDefault);
+            console.log("Parsed auto-attachment info - traceInfo:", traceInfoAutoAttachment, "selectedGitHubRoutineKeys:", selectedGitHubRoutineKeysAutoAttachment);
+            // Add file previews in the auto-attachment case
+            const uploadTraceCheckedCountAutoAttachment = traceInfoAutoAttachment.selected;
+            const uploadRepoCheckedCountAutoAttachment = selectedGitHubRoutineKeysAutoAttachment.length;
+            if (uploadTraceCheckedCountAutoAttachment > 0 || uploadRepoCheckedCountAutoAttachment > 0) {
+              const filePreviewDiv = renderMessageFiles(this._uploadedFiles, uploadTraceCheckedCountAutoAttachment, uploadRepoCheckedCountAutoAttachment);
+              if (filePreviewDiv) {
+                userDiv.appendChild(filePreviewDiv);
+              }
+            }
+            // Add attachments to gptRequest
+            gptRequest.messages[gptRequest.messages.length - 1] = { role: "user", content: autoContentForAPI };
+            gptRequest.traceInfo = traceInfoAutoAttachment;
+            gptRequest.selectedGitHubRoutineKeys = selectedGitHubRoutineKeysAutoAttachment;
+
+            // After receiving auto response, update header back to Thinking... and keep spinner running
+            if (thinkingSpan) {
+              thinkingSpan.innerHTML = " Thinking...&nbsp;&nbsp;<span id=\"thinking-spinner\">|</span>";
+            }
+            try { if (typeof dotsInterval !== 'undefined') clearInterval(dotsInterval); } catch (e) {}
+            const thinkingSpinnerElem2 = botDiv.querySelector("#thinking-spinner");
+            if (thinkingSpinnerElem2) {
+              thinkingSpinnerElem2.innerHTML = `
+                <svg id="daisen-thinking-svg" width="16" height="16" viewBox="0 0 24 24" style="display:inline-block; vertical-align:middle; transform-origin: 50% 50%;">
+                  <g>
+                    <circle cx="12" cy="12" r="8" stroke="#0E6DFD" stroke-width="3" fill="none" stroke-linecap="round" stroke-dasharray="25 60"/>
+                  </g>
+                </svg>`;
+              const spinnerSvgElem2 = thinkingSpinnerElem2.querySelector('#daisen-thinking-svg') as HTMLElement | null;
+              let angleAuto2 = 0;
+              dotsInterval = window.setInterval(() => {
+                angleAuto2 = (angleAuto2 + THINKING_SPINNER_STEP_DEG) % 360;
+                if (spinnerSvgElem2) spinnerSvgElem2.style.transform = `rotate(${angleAuto2}deg)`;
+              }, THINKING_SPINNER_INTERVAL_MS);
+            }
+          } catch (e) { console.error(e); }
+        } catch (e) {
+          console.error("Auto-attachment call failed:", e);
+        }
+      }
+
+      // Continue to call the main GPT API as before
+      const hasBackground = typeof this._selectedMode === 'string' && this._selectedMode.includes('bp'); 
+      sendPostGPT(gptRequest, hasBackground ? "/api/gpt" : "/api/gptnobg").then((gptResponse) => {
         const rawResponse = gptResponse.content || "";
         const gptResponseTotalTokens = gptResponse.totalTokens;
         console.log("[Received from GPT - Cost] Total tokens used:", gptResponseTotalTokens !== -1 ? gptResponseTotalTokens : "unknown");
@@ -2809,7 +2942,7 @@ Kernel Execution,76.68,84.65,7.97`);
               </svg>`;
 
             const toggleLabel = document.createElement("span");
-            toggleLabel.textContent = "Chain-of-thought Thinking";
+            toggleLabel.textContent = "Thinking";
             toggleLabel.style.color = "#555";
             toggleLabel.style.fontSize = "16px";
 
@@ -2875,10 +3008,10 @@ Kernel Execution,76.68,84.65,7.97`);
           const tokens = thinkingTextWithNewlines.match(/(?:\r\n|\n){1,}|[^\s]+/g) || [];
 
           // Configurable parameters for easy tuning (change these values to adjust speed):
-          const THINKING_ANIMATION_PER_SENTENCE_MS = 500; // ms per sentence (increase to slow down)
-          const THINKING_ANIMATION_MIN_MS_PER_WORD = 20; // safety lower bound per word
+          const THINKING_ANIMATION_PER_SENTENCE_MS = 250; // ms per sentence (increase to slow down)
+          const THINKING_ANIMATION_MIN_MS_PER_WORD = 10; // safety lower bound per word
           // Set to a number (ms per word) to force a fixed speed, or null to auto-compute
-          const THINKING_ANIMATION_OVERRIDE_MS_PER_WORD: number | null = 120;
+          const THINKING_ANIMATION_OVERRIDE_MS_PER_WORD: number | null = 60;
 
           let idx = 0;
           const sentenceCount = Math.max(1, (thinkingPlain.match(/[.!?]+/g) || []).length);
@@ -3173,43 +3306,43 @@ function convertMarkdownToHTML(text: string): string {
 
   // Headings: ###, ##, #
   text = text.replace(/^### (.+)$/gm, (match, p1) => {
-    console.log("Matched h3:", match);
+    // console.log("Matched h3:", match);
     return `<h5>${p1}</h5>`;
   });
   text = text.replace(/^## (.+)$/gm, (match, p1) => {
-    console.log("Matched h2:", match);
+    // console.log("Matched h2:", match);
     return `<h4>${p1}</h4>`;
   });
   text = text.replace(/^# (.+)$/gm, (match, p1) => {
-    console.log("Matched h1:", match);
+    // console.log("Matched h1:", match);
     return `<h3>${p1}</h3>`;
   });
   // Horizontal rule: ---
   text = text.replace(/^-{3,}$/gm, (match) => {
-    console.log("Matched hr:", match);
+    // console.log("Matched hr:", match);
     return '<hr>';
   });
   // Bold: **text**
   text = text.replace(/\*\*(.+?)\*\*/g, (match, p1) => {
-    console.log("Matched bold:", match);
+    // console.log("Matched bold:", match);
     return `<b>${p1}</b>`;
   });
 
   // Italic: *text*
   text = text.replace(/\*(.+?)\*/g, (match, p1) => {
-    console.log("Matched italic:", match);
+    // console.log("Matched italic:", match);
     return `<i>${p1}</i>`;
   });
   // Math: \[ ... \] (block)
   text = text.replace(/\\\[(.+?)\\\]/gs, (match, p1) => {
-    console.log("Matched block math:", match);
+    // console.log("Matched block math:", match);
     // Remove any stray \[ or \] inside p1
     const clean = p1.replace(/\\\[|\\\]/g, '').trim();
     return `<span class="math" data-display="block">${clean}</span>`;
   });
   // Math: \( ... \) (inline)
   text = text.replace(/\\\((.+?)\\\)/gs, (match, p1) => {
-    console.log("Matched inline math:", match);
+    // console.log("Matched inline math:", match);
     return `<span class="math" data-display="inline">${p1}</span>`;
   });
   // Line breaks
@@ -3237,6 +3370,96 @@ function autoWrapMath(text: string): string {
     /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
     '\\[$1\\]'
   );
+}
+
+function parseAutoAttachmentResponse(rawAuto: string, traceInfoDefault: any, selectedGitHubRoutineKeysDefault: string[]): [any, string[]] {
+  console.log("Parsing auto-attachment response:", rawAuto);
+  try {
+    const traceRegex = /\[START OF TRACE\]([\s\S]*?)\[END OF TRACE\]/i;
+    const codeRegex = /\[START OF CODE\]([\s\S]*?)\[END OF CODE\]/i;
+    const traceMatch = rawAuto.match(traceRegex);
+    const codeMatch = rawAuto.match(codeRegex);
+
+    let traceInfo = traceInfoDefault;
+    let selectedGitHubRoutineKeys: string[] = Array.isArray(selectedGitHubRoutineKeysDefault) ? [...selectedGitHubRoutineKeysDefault] : [];
+
+    const parseStringArray = (s: string): string[] => {
+      if (!s) return [];
+      // Try JSON.parse (clean common noise)
+      const tryJson = (txt: string) => {
+        try {
+          const cleaned = txt.replace(/\r\n/g, " ").replace(/\n/g, " ").replace(/,\s*]/g, "]").trim();
+          const parsed = JSON.parse(cleaned);
+          if (Array.isArray(parsed)) return parsed.map((x: any) => String(x));
+        } catch (e) {}
+        return null;
+      };
+      let out = tryJson(s);
+      if (out) return out;
+
+      // Try replacing single quotes with double quotes
+      out = tryJson(s.replace(/'/g, '"'));
+      if (out) return out;
+
+      // Fallback: extract quoted tokens
+      const items: string[] = [];
+      const re = /["']([^"']+)["']/g;
+      let m;
+      // eslint-disable-next-line no-cond-assign
+      while ((m = re.exec(s)) !== null) {
+        items.push(m[1]);
+      }
+      if (items.length) return items;
+
+      // Final fallback: strip brackets and split by comma
+      const stripped = s.replace(/^\s*\[|\]\s*$/g, "");
+      return stripped.split(",").map(x => x.trim().replace(/^["']|["']$/g, "")).filter(x => x.length > 0);
+    };
+
+    if (traceMatch && traceMatch[1]) {
+      const traceBody = traceMatch[1];
+      const traceFlagMatch = traceBody.match(/trace\s*[:=]\s*(true|false)/i);
+      const traceFlag = traceFlagMatch ? traceFlagMatch[1].toLowerCase() === "true" : false;
+
+      if (traceFlag) {
+        const selCompMatch = traceBody.match(/selectedComponentNameList\s*[:=]\s*(\[[\s\S]*?\])/i);
+        const selectedComponentNameList = selCompMatch && selCompMatch[1] ? parseStringArray(selCompMatch[1]) : [];
+
+        const startMatch = traceBody.match(/startTime\s*[:=]\s*([0-9eE+\-\.]+)/i);
+        const endMatch = traceBody.match(/endTime\s*[:=]\s*([0-9eE+\-\.]+)/i);
+        const startTime = startMatch ? parseFloat(startMatch[1]) : (traceInfoDefault && traceInfoDefault.startTime ? traceInfoDefault.startTime : 0);
+        const endTime = endMatch ? parseFloat(endMatch[1]) : (traceInfoDefault && traceInfoDefault.endTime ? traceInfoDefault.endTime : 0);
+
+        traceInfo = {
+          selected: selectedComponentNameList.length > 0 ? 1 : 0,
+          startTime,
+          endTime,
+          selectedComponentNameList,
+        };
+      } else {
+        traceInfo = traceInfoDefault;
+      }
+    }
+
+    if (codeMatch && codeMatch[1]) {
+      const codeBody = codeMatch[1];
+      const codeFlagMatch = codeBody.match(/code\s*[:=]\s*(true|false)/i);
+      const codeFlag = codeFlagMatch ? codeFlagMatch[1].toLowerCase() === "true" : false;
+      if (codeFlag) {
+        const selKeysMatch = codeBody.match(/selectedGitHubRoutineKeys\s*[:=]\s*(\[[\s\S]*?\])/i);
+        const parsed = selKeysMatch && selKeysMatch[1] ? parseStringArray(selKeysMatch[1]) : [];
+        if (parsed.length > 0) selectedGitHubRoutineKeys = parsed;
+        else selectedGitHubRoutineKeys = selectedGitHubRoutineKeysDefault;
+      } else {
+        selectedGitHubRoutineKeys = selectedGitHubRoutineKeysDefault;
+      }
+    }
+    console.log("Parsed trace info:", traceInfo, "Parsed selected GitHub routine keys:", selectedGitHubRoutineKeys);
+    return [traceInfo, selectedGitHubRoutineKeys];
+  } catch (err) {
+    console.error("Failed to parse auto attachment response:", err, rawAuto);
+    return [traceInfoDefault, selectedGitHubRoutineKeysDefault];
+  }
 }
 
 function renderFileList() {
@@ -3408,12 +3631,12 @@ function renderMessageFiles(files: { id: number; name: string; content: string; 
   console.log("TraceChecksCount: ", TraceChecksCount, "RepoCheckCount:", RepoCheckCount);
 
   if (TraceChecksCount > 0) {
-    const traceDiv = generateMessageTraceOrCodeFiles(`Daisen Trace with ${TraceChecksCount} options`);
+    const traceDiv = generateMessageTraceOrCodeFiles(`Daisen Trace with ${TraceChecksCount} option(s)`);
     filePreviewContainer.appendChild(traceDiv);
   }
 
   if (RepoCheckCount > 0) {
-    const repoDiv = generateMessageTraceOrCodeFiles(`Repository Code with ${RepoCheckCount} options`);
+    const repoDiv = generateMessageTraceOrCodeFiles(`Repository Code with ${RepoCheckCount} option(s)`);
     filePreviewContainer.appendChild(repoDiv);
   }
   
