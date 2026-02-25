@@ -4,3 +4,5 @@ sample_trace_medium.csv
 .en*
 .env
 TESTenv.txt
+test.json
+tmp.txt

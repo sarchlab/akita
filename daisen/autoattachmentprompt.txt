@@ -1,0 +1,74 @@
+ATTACHMENT_REQUEST_PROMPT = """
+
+[Auto-attachment Request Prompt]
+At the first step, ignore the requirements of the question and you do not need to provide [Start Thinking] [End Thinking] tag for the response. To answer the question, I may need to attach files. Please ask me which files you need me to attach.
+
+There are two types of attachments: trace and code.
+
+Your response MUST strictly follow the format below, including the flags [START OF ATTACHMENT] and [END OF ATTACHMENT]:
+
+
+[START OF ATTACHMENT]
+[START OF TRACE]
+trace: true
+selectedComponentNameList: ["GPU[1].L2Cache[1]"]
+startTime: 0.000841560610955829
+endTime: 0.0008597617837937866
+[END OF TRACE]
+[START OF CODE]
+code: true
+selectedGitHubRoutineKeys: ["GPU.DRAM", "GPU.L2Cache"]
+[END OF CODE]
+[END OF ATTACHMENT]
+
+If trace or code is not needed, please set the corresponding flag to false and ignore the other fields. For example:
+
+[START OF ATTACHMENT]
+[START OF TRACE]
+trace: false
+[END OF TRACE]
+[START OF CODE]
+code: true
+selectedGitHubRoutineKeys: ["GPU.DRAM", "GPU.L2Cache"]
+[END OF CODE]
+[END OF ATTACHMENT]
+
+####
+
+1) Trace
+The trace attachment will contain the raw trace from the GPU simulator. The trace will be in plain text format like:
+
+ID,ParentID,Kind,What,Location,StartTime,EndTime
+...
+56081_req_out,56068@GPU[1].DMA,req_out,*mem.WriteReq,GPU[1].DMA,0.000014948,0.000015055
+56082@GPU[1].DRAM[2],56082_req_out,req_in,*mem.WriteReq,GPU[1].DRAM[2],0.000014955,0.000015055
+56082_req_out,56068@GPU[1].DMA,req_out,*mem.WriteReq,GPU[1].DMA,0.000014948,0.000015056
+56083@GPU[1].DRAM[3],56083_req_out,req_in,*mem.WriteReq,GPU[1].DRAM[3],0.000014956,0.000015056
+56083_req_out,56068@GPU[1].DMA,req_out,*mem.WriteReq,GPU[1].DMA,0.000014948,0.000015057
+56084@GPU[1].DRAM[3],56084_req_out,req_in,*mem.WriteReq,GPU[1].DRAM[3],0.000014957,0.000015057
+...
+
+The "selectedComponentNameList" field will be used to filter the "Location" column in the trace. Only the trace entries whose "Location" contains any of the selected component names will be included in the attachment.
+
+The "startTime" and "endTime" fields (in seconds) will be used to filter the trace entries by time. Only the trace entries whose "StartTime" is greater than or equal to "startTime" and "EndTime" is less than or equal to "endTime" will be included in the attachment.
+
+Note: No more than 4 elements can be included in the "selectedComponentNameList" field. Try to keep the selected components as specific as possible to reduce the size of the trace.
+
+Note: the selected time range MUST not exceed 5 us due to API limitations.
+
+The candidate component names for the "selectedComponentNameList" field is as follows:
+
+{0}
+
+####
+
+2) Code
+The code attachment will contain the source code of the GPU simulator. The code will be in plain text format.
+
+The "selectedGitHubRoutineKeys" field will be used to filter the code by routine.
+
+The candidate routine keys for the "selectedGitHubRoutineKeys" field is as follows:
+
+["Driver", "GPU.CommandProcessor", "GPU.CommandProcessor.Dispatcher", "GPU.DMA", "GPU.DRAM", "GPU.L2Cache", "GPU.L2TLB", "GPU.SA.CU", "GPU.SA.CU.Branch", "GPU.SA.CU.Scalar", "GPU.SA.CU.Special", "GPU.SA.CU.VALU", "GPU.SA.CU.VMem", "GPU.SA.CU.WFPool", "GPU.SA.L1IAddrTrans", "GPU.SA.L1ICache", "GPU.SA.L1ICache.Local", "GPU.SA.L1IROB", "GPU.SA.L1ITLB", "GPU.SA.L1SAddrTrans", "GPU.SA.L1SCache", "GPU.SA.L1SCache.Local", "GPU.SA.L1SROB", "GPU.SA.L1STLB", "GPU.SA.L1VAddrTrans", "GPU.SA.L1VCache", "GPU.SA.L1VCache.Local", "GPU.SA.L1VROB", "GPU.SA.L1VTLB", "MMU"]
+
+"""

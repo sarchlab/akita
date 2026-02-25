@@ -59,7 +59,10 @@ func startAPIServer() {
 	http.HandleFunc("/api/compnames", httpComponentNames)
 	http.HandleFunc("/api/compinfo", httpComponentInfo)
 
-	http.HandleFunc("/api/gpt", httpGPTProxy)
+	http.HandleFunc("/api/gpt", httpGPTProxyFrontend)
+	http.HandleFunc("/api/gptnobg", httpGPTProxyFrontendNoBackground)
+	http.HandleFunc("/api/gptautoattachment", httpGPTProxyFrontendGetAutoAttachment)
+	http.HandleFunc("/api/gptauto", httpGPTProxyAuto)
 	http.HandleFunc("/api/githubisavailable", httpGithubIsAvailableProxy)
 	http.HandleFunc("/api/checkenv", httpCheckEnvFile)
 	http.HandleFunc("/api/updateenv", httpUpdateEnvFile)
