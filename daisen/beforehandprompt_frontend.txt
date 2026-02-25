@@ -33,7 +33,7 @@ Reference Data (if present in user message):
 
 Your Task:
 - Do NOT reveal your internal chain-of-thought. Instead, produce a user-facing reasoning explanation of your approach.
-- If you do not see "ignore the requirements of the question", always respond in this exact format:
+- If you do not see "[Auto-attachment Request Prompt]", always respond in this exact format:
 [Start Thinking]
 <your reasoning explanation>
 [End Thinking]

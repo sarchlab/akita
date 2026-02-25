@@ -1,7 +1,7 @@
-ATTACHMENT_REQUEST_PROMPT = """
-
 [Auto-attachment Request Prompt]
-At the first step, ignore the requirements of the question and you do not need to provide [Start Thinking] [End Thinking] tag for the response. To answer the question, I may need to attach files. Please ask me which files you need me to attach.
+At the first step, ignore the requirements of the question below and you do not need to provide [Start Thinking] [End Thinking] tag for the response (In this request response, only the attachment info is needed).
+
+To answer the question, I may need to attach files. Please answer me which files you need me to attach.
 
 There are two types of attachments: trace and code.
 
@@ -71,4 +71,9 @@ The candidate routine keys for the "selectedGitHubRoutineKeys" field is as follo
 
 ["Driver", "GPU.CommandProcessor", "GPU.CommandProcessor.Dispatcher", "GPU.DMA", "GPU.DRAM", "GPU.L2Cache", "GPU.L2TLB", "GPU.SA.CU", "GPU.SA.CU.Branch", "GPU.SA.CU.Scalar", "GPU.SA.CU.Special", "GPU.SA.CU.VALU", "GPU.SA.CU.VMem", "GPU.SA.CU.WFPool", "GPU.SA.L1IAddrTrans", "GPU.SA.L1ICache", "GPU.SA.L1ICache.Local", "GPU.SA.L1IROB", "GPU.SA.L1ITLB", "GPU.SA.L1SAddrTrans", "GPU.SA.L1SCache", "GPU.SA.L1SCache.Local", "GPU.SA.L1SROB", "GPU.SA.L1STLB", "GPU.SA.L1VAddrTrans", "GPU.SA.L1VCache", "GPU.SA.L1VCache.Local", "GPU.SA.L1VROB", "GPU.SA.L1VTLB", "MMU"]
 
-"""
+Note: IGNORE the requirement parts below about [Start Thinking] and [End Thinking]. And your response MUST strictly follow the format introduced.
+
+Orignial Before-hand Prompt:
+
+
+ 

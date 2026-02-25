@@ -2794,26 +2794,46 @@ Kernel Execution,76.68,84.65,7.97`);
 
           console.log("gptAutoAttachmentRequest:", gptAutoAttachmentRequest);
 
-          const autoResp = await sendPostGPT(gptAutoAttachmentRequest, "/api/gptautoattachment");
+          // Attempt the auto-attachment request up to 3 times until parsing succeeds (status === 0).
+          let autoResp: any = null;
+          let autoAttachmentStatus: number | null = null;
+          let traceInfoAutoAttachment: any = traceInfoDefault;
+          let selectedGitHubRoutineKeysAutoAttachment: any[] = selectedGitHubRoutineKeysDefault;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              console.log(`Calling /api/gptautoattachment, attempt ${attempt + 1}...`);
+              autoResp = await sendPostGPT(gptAutoAttachmentRequest, "/api/gptautoattachment");
+              const rawAuto = autoResp.content || "";
+              console.log("/api/gptautoattachment response:", rawAuto);
+
+              // the rawAuto content will be in the format like below:
+              // [START OF TRACE]
+              // trace: true
+              // selectedComponentNameList: ["GPU[1].DRAM[1]", "GPU[1].L2Cache[1]"]
+              // startTime: 0.0006122977946845777
+              // endTime: 0.0006172977946845777
+              // [END OF TRACE]
+              // [START OF CODE]
+              // code: true
+              // selectedGitHubRoutineKeys: ["GPU.DRAM", "GPU.L2Cache"]
+              // [END OF CODE]
+              // [END OF ATTACHMENT]
+
+              const parsed = parseAutoAttachmentResponse(rawAuto, traceInfoDefault, selectedGitHubRoutineKeysDefault);
+              autoAttachmentStatus = parsed[0];
+              console.log(`Calling /api/gptautoattachment, attempt ${attempt + 1}'s status:`, autoAttachmentStatus);
+              traceInfoAutoAttachment = parsed[1];
+              selectedGitHubRoutineKeysAutoAttachment = parsed[2];
+              console.log("Parsed auto-attachment info - traceInfo:", traceInfoAutoAttachment, "selectedGitHubRoutineKeys:", selectedGitHubRoutineKeysAutoAttachment);
+              if (autoAttachmentStatus === 0) {
+                break;
+              }
+              console.warn(`auto-attachment parse returned status=${autoAttachmentStatus}, retrying (${attempt + 1}/3)`);
+            } catch (e) {
+              console.warn("Failed to call/parse /api/gptautoattachment, retrying", e);
+            }
+          }
           try {
-            const rawAuto = autoResp.content || "";
-            console.log("/api/gptautoattachment response:", rawAuto);
-
-            // the rawAuto content will be in the format like below:
-            // [START OF TRACE]
-            // trace: true
-            // selectedComponentNameList: ["GPU[1].DRAM[1]", "GPU[1].L2Cache[1]"]
-            // startTime: 0.0006122977946845777
-            // endTime: 0.0006172977946845777
-            // [END OF TRACE]
-            // [START OF CODE]
-            // code: true
-            // selectedGitHubRoutineKeys: ["GPU.DRAM", "GPU.L2Cache"]
-            // [END OF CODE]
-            // [END OF ATTACHMENT]
-
-            const [traceInfoAutoAttachment, selectedGitHubRoutineKeysAutoAttachment] = parseAutoAttachmentResponse(rawAuto, traceInfoDefault, selectedGitHubRoutineKeysDefault);
-            console.log("Parsed auto-attachment info - traceInfo:", traceInfoAutoAttachment, "selectedGitHubRoutineKeys:", selectedGitHubRoutineKeysAutoAttachment);
             // Add file previews in the auto-attachment case
             const uploadTraceCheckedCountAutoAttachment = traceInfoAutoAttachment.selected;
             const uploadRepoCheckedCountAutoAttachment = selectedGitHubRoutineKeysAutoAttachment.length;
@@ -3358,8 +3378,12 @@ function convertMarkdownToHTML(text: string): string {
   text = text.replace(/(<br>\s*)+(<table)/g, "$2");
   // Remove leading <br> at the very start
   text = text.replace(/^(<br>\s*)+/, "");
-  // Remove all <br>'s
-  text = text.replace(/<br>/g, "");
+  // Ensure bullet markers like "- " start on their own paragraph by inserting
+  // a blank line before them. Do this after other cleanup so the <br> tags
+  // are preserved. Avoid removing all <br> tags which would strip formatting.
+  text = text.replace(/(^|<br>)\s*-\s/g, "$1<br>- ");
+  // Collapse any consecutive <br> into a single <br> to avoid continuous breaks
+  text = text.replace(/(<br>\s*){2,}/g, "<br>");
   console.log("Final converted HTML:", text);
   return text;
 }
@@ -3372,8 +3396,9 @@ function autoWrapMath(text: string): string {
   );
 }
 
-function parseAutoAttachmentResponse(rawAuto: string, traceInfoDefault: any, selectedGitHubRoutineKeysDefault: string[]): [any, string[]] {
+function parseAutoAttachmentResponse(rawAuto: string, traceInfoDefault: any, selectedGitHubRoutineKeysDefault: string[]): [number, any, string[]] {
   console.log("Parsing auto-attachment response:", rawAuto);
+  var autoAttachmentStatus = 0; // Default to success
   try {
     const traceRegex = /\[START OF TRACE\]([\s\S]*?)\[END OF TRACE\]/i;
     const codeRegex = /\[START OF CODE\]([\s\S]*?)\[END OF CODE\]/i;
@@ -3439,6 +3464,8 @@ function parseAutoAttachmentResponse(rawAuto: string, traceInfoDefault: any, sel
       } else {
         traceInfo = traceInfoDefault;
       }
+    } else {
+      autoAttachmentStatus = 1;
     }
 
     if (codeMatch && codeMatch[1]) {
@@ -3453,12 +3480,14 @@ function parseAutoAttachmentResponse(rawAuto: string, traceInfoDefault: any, sel
       } else {
         selectedGitHubRoutineKeys = selectedGitHubRoutineKeysDefault;
       }
+    } else {
+      autoAttachmentStatus = 1;
     }
     console.log("Parsed trace info:", traceInfo, "Parsed selected GitHub routine keys:", selectedGitHubRoutineKeys);
-    return [traceInfo, selectedGitHubRoutineKeys];
+    return [autoAttachmentStatus, traceInfo, selectedGitHubRoutineKeys];
   } catch (err) {
     console.error("Failed to parse auto attachment response:", err, rawAuto);
-    return [traceInfoDefault, selectedGitHubRoutineKeysDefault];
+    return [1, traceInfoDefault, selectedGitHubRoutineKeysDefault];
   }
 }
 

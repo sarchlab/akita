@@ -671,6 +671,73 @@ func buildOpenAIPayloadFrontend(
 	return json.Marshal(payload)
 }
 
+func buildOpenAIPayloadFrontendGetAutoAttachment(
+	ctx context.Context,
+	model string,
+	messages []map[string]interface{},
+	traceInfo map[string]interface{},
+	selectedGitHubRoutineKeys []string,
+	autoAttachmentPromptText string,
+) ([]byte, error) {
+	// combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
+	// routineFile := "componentgithubroutine.json"
+	// urlList, err := getRoutineURLList(routineFile, selectedGitHubRoutineKeys)
+	// if err != nil {
+	// 	log.Println("Failed to get routine URL list:", err)
+	// 	return nil, err
+	// }
+	// combinedRepoHeader := buildCombinedRepoHeader(ctx, urlList)
+
+	// if len(messages) > 0 {
+	// 	if contentArr, ok := messages[len(messages)-1]["content"].([]interface{}); ok && len(contentArr) > 0 {
+	// 		if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
+	// 			firstText, _ := firstContent["text"].(string)
+	// 			firstContent["text"] = combinedTraceHeader + combinedRepoHeader + firstText
+	// 			fmt.Printf("Full firstContent['text']: \n%s\n", firstContent["text"])
+	// 		}
+	// 	}
+	// }
+
+	if len(messages) > 0 {
+		loadedTextBytes, err := os.ReadFile("beforehandprompt_frontend.txt")
+		if err != nil {
+			log.Println("Failed to read beforehandprompt_frontend.txt:", err)
+			return nil, err
+		}
+		loadedText := string(loadedTextBytes)
+		systemMsg := map[string]interface{}{
+			"role": "system",
+			"content": []interface{}{
+				map[string]interface{}{
+					"type": "text",
+					"text": autoAttachmentPromptText + "\n\n" + loadedText,
+				},
+			},
+		}
+		// messages = append([]map[string]interface{}{systemMsg}, messages...)
+		// Insert the system message before the last message (messages[:-1], systemMsg, messages[-1]).
+		if len(messages) == 0 {
+			messages = append([]map[string]interface{}{systemMsg}, messages...)
+		} else {
+			var newMsgs []map[string]interface{}
+			if len(messages) > 1 {
+				newMsgs = append(newMsgs, messages[:len(messages)-1]...)
+			}
+			newMsgs = append(newMsgs, systemMsg)
+			newMsgs = append(newMsgs, messages[len(messages)-1])
+			messages = newMsgs
+		}
+	}
+
+	payload := map[string]interface{}{
+		"model":       model,
+		"messages":    messages,
+		"temperature": 0.7,
+		"logprobs":    false,
+	}
+	return json.Marshal(payload)
+}
+
 func buildOpenAIPayloadFrontendNoBackground(
 	model string,
 	messages []map[string]interface{},
@@ -816,7 +883,7 @@ func httpGPTProxyFrontend(w http.ResponseWriter, r *http.Request) {
 			_, _ = f.WriteString("\n\n")
 			f.Close()
 		}
-		log.Printf("httpGPTProxy - received frontend request:\n%s\n", string(b))
+		// log.Printf("httpGPTProxy - received frontend request:\n%s\n", string(b))
 	} else {
 		log.Printf("httpGPTProxy - failed to marshal received req for logging: %v", err)
 	}
@@ -848,7 +915,7 @@ func httpGPTProxyFrontend(w http.ResponseWriter, r *http.Request) {
 		log.Printf("httpGPTProxy - OpenAI response (status %d):\n%s\n", resp.StatusCode, respStr)
 	} else {
 		respStr = string(body)
-		log.Printf("httpGPTProxy - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
+		// log.Printf("httpGPTProxy - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
 	}
 	// also persist response to tmp.txt
 	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr != nil {
@@ -907,7 +974,7 @@ func httpGPTProxyFrontendNoBackground(w http.ResponseWriter, r *http.Request) {
 			_, _ = f.WriteString("\n\n")
 			f.Close()
 		}
-		log.Printf("httpGPTProxyFrontendNoBackground - received frontend request:\n%s\n", string(b))
+		// log.Printf("httpGPTProxyFrontendNoBackground - received frontend request:\n%s\n", string(b))
 	} else {
 		log.Printf("httpGPTProxyFrontendNoBackground - failed to marshal received req for logging: %v", err)
 	}
@@ -939,7 +1006,7 @@ func httpGPTProxyFrontendNoBackground(w http.ResponseWriter, r *http.Request) {
 		log.Printf("httpGPTProxyFrontendNoBackground - OpenAI response (status %d):\n%s\n", resp.StatusCode, respStr)
 	} else {
 		respStr = string(body)
-		log.Printf("httpGPTProxyFrontendNoBackground - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
+		// log.Printf("httpGPTProxyFrontendNoBackground - OpenAI response (status %d, raw):\n%s\n", resp.StatusCode, respStr)
 	}
 	// also persist response to tmp.txt
 	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr != nil {
@@ -985,7 +1052,7 @@ func httpGPTProxyFrontendGetAutoAttachment(w http.ResponseWriter, r *http.Reques
 			_, _ = f.WriteString("\n\n")
 			f.Close()
 		}
-		log.Printf("httpGPTProxyFrontendGetAutoAttachment - received frontend request:\n%s\n", string(b))
+		// log.Printf("httpGPTProxyFrontendGetAutoAttachment - received frontend request:\n%s\n", string(b))
 	} else {
 		log.Printf("httpGPTProxyFrontendGetAutoAttachment - failed to marshal received req for logging: %v", err)
 	}
@@ -1015,29 +1082,35 @@ func httpGPTProxyFrontendGetAutoAttachment(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Replace placeholder {0} with JSON array of component names
-	promptText := strings.ReplaceAll(promptTemplate, "{0}", string(compNamesJSON))
+	autoAttachmentPromptText := strings.ReplaceAll(promptTemplate, "{0}", string(compNamesJSON))
 
 	// Append the prompt text to the last user message (if exists)
-	if len(req.Messages) > 0 {
-		last := req.Messages[len(req.Messages)-1]
-		if contentArr, ok := last["content"].([]interface{}); ok && len(contentArr) > 0 {
-			if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
-				if text, _ := firstContent["text"].(string); ok {
-					firstContent["text"] = text + "\n\n" + promptText
-				}
-			}
-		}
+	// if len(req.Messages) > 0 {
+	// 	last := req.Messages[len(req.Messages)-1]
+	// 	if contentArr, ok := last["content"].([]interface{}); ok && len(contentArr) > 0 {
+	// 		if firstContent, ok := contentArr[0].(map[string]interface{}); ok {
+	// 			if text, _ := firstContent["text"].(string); ok {
+	// 				firstContent["text"] = promptText + "\n\n" + text
+	// 			}
+	// 		}
+	// 	}
+	// } else {
+	// 	// no messages: create one
+	// 	sysMsg := map[string]interface{}{
+	// 		"role":    "user",
+	// 		"content": []interface{}{map[string]interface{}{"type": "text", "text": promptText}},
+	// 	}
+	// 	req.Messages = append(req.Messages, sysMsg)
+	// }
+	// log req.Messages after modification
+	if b, err := json.MarshalIndent(req.Messages, "", "  "); err == nil {
+		log.Printf("httpGPTProxyFrontendGetAutoAttachment - modified messages with prompt:\n%s\n", string(b))
 	} else {
-		// no messages: create one
-		sysMsg := map[string]interface{}{
-			"role":    "user",
-			"content": []interface{}{map[string]interface{}{"type": "text", "text": promptText}},
-		}
-		req.Messages = append(req.Messages, sysMsg)
+		log.Printf("httpGPTProxyFrontendGetAutoAttachment - failed to marshal modified messages for logging: %v", err)
 	}
 
 	// Prepare payload using existing helper (it will add system prompt etc.)
-	payloadBytes, err := buildOpenAIPayloadFrontend(r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys)
+	payloadBytes, err := buildOpenAIPayloadFrontendGetAutoAttachment(r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys, autoAttachmentPromptText)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -1051,6 +1124,20 @@ func httpGPTProxyFrontendGetAutoAttachment(w http.ResponseWriter, r *http.Reques
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+
+	// Log req to tmp_autoattachments.txt similarly
+	if f, ferr := os.OpenFile("tmp_autoattachments.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr == nil {
+		_, _ = f.WriteString("----- req httpGPTProxyFrontendGetAutoAttachment Got OpenAI Response -----\n")
+		_, _ = f.WriteString(string(payloadBytes) + "\n\n")
+		f.Close()
+	}
+
+	// Log response to tmp_autoattachments.txt similarly
+	if f, ferr := os.OpenFile("tmp_autoattachments.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr == nil {
+		_, _ = f.WriteString("----- resp httpGPTProxyFrontendGetAutoAttachment Got OpenAI Response (gptautoattachment, status " + strconv.Itoa(resp.StatusCode) + ") -----\n")
+		_, _ = f.WriteString(string(body) + "\n\n")
+		f.Close()
+	}
 
 	// Log response to tmp.txt similarly
 	if f, ferr := os.OpenFile("tmp.txt", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); ferr == nil {
@@ -1107,7 +1194,7 @@ func httpGPTProxyAuto(w http.ResponseWriter, r *http.Request) {
 			_, _ = f.WriteString("\n\n")
 			f.Close()
 		}
-		log.Printf("httpGPTProxyAuto - received frontend request:\n%s\n", string(b))
+		// log.Printf("httpGPTProxyAuto - received frontend request:\n%s\n", string(b))
 	} else {
 		log.Printf("httpGPTProxyAuto - failed to marshal received req for logging: %v", err)
 	}
