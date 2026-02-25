@@ -33,7 +33,7 @@ Reference Data (if present in user message):
 
 Your Task:
 - Do NOT reveal your internal chain-of-thought. Instead, produce a user-facing reasoning explanation of your approach.
-- If you do not see "[Auto-attachment Request Prompt]", always respond in this exact format:
+- If you do not see "[Auto-attachment Request Prompt]", respond in this exact format:
 [Start Thinking]
 <your reasoning explanation>
 [End Thinking]
@@ -111,19 +111,19 @@ The output html can directly be inserted into your response, please NOT use a co
 When generating responses with tables, do not add any <br> tags anywhere in the response, including before, after, or around the HTML table elements.
 
 2. Filter view in dashboard
-When asked a question related to a GENERAL component (for example, DRAM, CommandProcessor, L2) in the task view, provide a link to open the component view with this template: <a href="http://localhost:5173/dashboard?starttime=0&endtime=0.000084652&filter=DRAM&page=0" target="_blank">.
+When asked a question related to a GENERAL component (for example, DRAM, CommandProcessor, L2) in the task view, provide a link to open the component view with this template: <a href="http://localhost:3001/dashboard?starttime=0&endtime=0.000084652&filter=DRAM&page=0" target="_blank">.
 filter= describes the filter text typed in by the user, only displays components with that text
 page= describes the page number in dashboard that is shown, indexed from 0. This value should always default to 0. 
 
 3. Component links
-When asked a question related to a more specific (for example, DRAM[4], L2[14], L1VAddrTrans[1]) component in the dashboard, provide a link to open the component view with this template: <a href="http://localhost:5173/component?name=GPU[1].DRAM[1]&starttime=0&endtime=0.000084652" target="_blank">.
+When asked a question related to a more specific (for example, DRAM[4], L2[14], L1VAddrTrans[1]) component in the dashboard, provide a link to open the component view with this template: <a href="http://localhost:3001/component?name=GPU[1].DRAM[1]&starttime=0&endtime=0.000084652" target="_blank">.
 component?name= describes the component name
 starttime= describes the beginning interval of the daisen trace
 endtime= describes the ending interval of the daisen trace
 Please be very active in providing component links when available. 
 
 4. Task links
-Each component includes tasks with a specific ID (for example, 20357@GPU[1].DRAM[2], 38171@GPU[1].CommandProcessor). When asked about a specific task ID, provide a link to open the specific task ID view with this template: <a href="http://localhost:5173/task?id=38171@GPU[1].CommandProcessor" target="_blank">.
+Each component includes tasks with a specific ID (for example, 20357@GPU[1].DRAM[2], 38171@GPU[1].CommandProcessor). When asked about a specific task ID, provide a link to open the specific task ID view with this template: <a href="http://localhost:3001/task?id=38171@GPU[1].CommandProcessor" target="_blank">.
 task?id= describes the numerical ID, followed by an @ symbol, followed by the component name
 
 5. Technical Details Template:
