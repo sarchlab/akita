@@ -296,7 +296,8 @@ GPU.CommandProcessor,9
       if (firstUserMessage) {
         if (firstUserMessage.content[0].type === "text") {
           const words = firstUserMessage.content[0].text.split(" ").slice(0, 6);
-          this._chatHistory[chatIndex].title = words.join(" ") + (words.length === 6 ? "..." : "");
+          const modeLabel = firstUserMessage.daisenBotModeLabel ? `[${firstUserMessage.daisenBotModeLabel.substring(0, 6)}] ` : "";
+          this._chatHistory[chatIndex].title = modeLabel + words.join(" ") + (words.length === 6 ? "..." : "");
         } else {
           this._chatHistory[chatIndex].title = "Unknown Title";
         }
@@ -708,12 +709,15 @@ GPU.CommandProcessor,9
           // Build header with hover title showing mode (first 6 chars of mode label)
           const header = document.createElement("div");
           const botLabel = document.createElement("b");
-          botLabel.textContent = "DaisenBot:";
+          // botLabel.textContent = "DaisenBot:";
           // Determine mode prefix for hover display
           const modeLabelFull = (m as any).daisenBotModeLabel || (m as any).daisenBotMode || "";
           const modePrefix = modeLabelFull ? modeLabelFull.substring(0, 6) : "";
           if (modePrefix) {
             botLabel.title = `DaisenBot (${modePrefix})`;
+            botLabel.textContent = `DaisenBot (${modePrefix}):`;
+          } else {
+            botLabel.textContent = "DaisenBot:";
           }
           header.appendChild(botLabel);
 
@@ -830,7 +834,9 @@ GPU.CommandProcessor,9
       wbLabel.textContent = "DaisenBot:";
       const wl = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
       const wp = wl ? wl.substring(0,6) : "";
-      if (wp) wbLabel.title = `DaisenBot (${wp})`;
+      if (wp) {
+        wbLabel.title = `DaisenBot (${wp})`;
+      }
       welcomeDiv.appendChild(wbLabel);
       welcomeDiv.appendChild(document.createTextNode(" Hello! What can I help you with today?"));
       welcomeDiv.style.textAlign = "left";
@@ -2374,10 +2380,15 @@ GPU.CommandProcessor,9
         const botDiv = document.createElement("div");
         const header = document.createElement("div");
         const botLabel = document.createElement("b");
-        botLabel.textContent = "DaisenBot:";
+        
         const modeLabelFull = (MODE_MAP && MODE_MAP[this._selectedMode]) ? MODE_MAP[this._selectedMode] : this._selectedMode || "";
         const modePrefix = modeLabelFull ? modeLabelFull.substring(0,6) : "";
-        if (modePrefix) botLabel.title = `DaisenBot (${modePrefix})`;
+        if (modePrefix) {
+          botLabel.title = `DaisenBot (${modePrefix})`;
+          botLabel.textContent = `DaisenBot (${modePrefix}):`;
+        } else {
+          botLabel.textContent = "DaisenBot:";
+        }
         header.appendChild(botLabel);
         header.appendChild(document.createTextNode(" Loading graph data..."));
         botDiv.appendChild(header);
