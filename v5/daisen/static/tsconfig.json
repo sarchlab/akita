@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+        "outDir": "./dist",
+        "allowJs": true,
+        // "target": "es2017",
+        "target": "es2018", // <-- upgrade to at least es2018
+        "module": "nodenext", // <-- add this
+        "moduleResolution": "nodenext", // <-- add this
+        "esModuleInterop": true, // <-- add this
+        "allowSyntheticDefaultImports": true // <-- add this
+    },
+    "include": [
+        "./src/**/*",
+        "vite.config.js"
+    ]
+}

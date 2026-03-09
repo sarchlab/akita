@@ -1,0 +1,61 @@
+version: "2"
+
+linters:
+  default: all
+  disable:
+    - copyloopvar
+    - cyclop
+    - depguard
+    - dupl
+    - dupword
+    - embeddedstructfieldcheck
+    - err113
+    - exhaustive
+    - exhaustruct
+    - forbidigo
+    - forcetypeassert
+    - funcorder
+    - ginkgolinter
+    - gochecknoglobals
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - godot
+    - godox
+    - gosec
+    - iface
+    - inamedparam
+    - interfacebloat
+    - intrange
+    - ireturn
+    - maintidx
+    - mnd
+    - nestif
+    - nlreturn
+    - noctx
+    - noinlineerr
+    - nolintlint
+    - nilerr
+    - nonamedreturns
+    - paralleltest
+    - perfsprint
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - tagalign
+    - tagliatelle
+    - testifylint
+    - testpackage
+    - unparam
+    - varnamelen
+    - wastedassign
+    - wrapcheck
+    - wsl
+    - wsl_v5
+    - errcheck
+    - errorlint
+    - usestdlibvars
+    - predeclared
+
