@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/sarchlab/akita/v4/sim"
 )

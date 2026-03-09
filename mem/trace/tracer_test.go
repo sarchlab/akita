@@ -14,7 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	// Need SQLite driver for tests
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/go-sqlite"
 )
 
 type TracerTestSuite struct {
