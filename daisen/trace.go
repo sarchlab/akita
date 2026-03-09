@@ -131,7 +131,7 @@ func NewSQLiteTraceReader(filename string) *SQLiteTraceReader {
 
 // Init establishes a connection to the database.
 func (r *SQLiteTraceReader) Init() {
-	db, err := sql.Open("sqlite3", r.filename)
+	db, err := sql.Open("sqlite", r.filename)
 	if err != nil {
 		panic(err)
 	}

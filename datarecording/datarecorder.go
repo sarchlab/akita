@@ -112,7 +112,7 @@ func (t *sqliteWriter) Init() {
 		panic(fmt.Errorf("file %s already exists", filename))
 	}
 
-	db, err := sql.Open("sqlite3", filename)
+	db, err := sql.Open("sqlite", filename)
 	if err != nil {
 		panic(err)
 	}

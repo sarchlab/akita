@@ -38,7 +38,7 @@ func (suite *TracerTestSuite) SetupTest() {
 	suite.tempFileName = tempFile.Name()
 	tempFile.Close()
 
-	db, err := sql.Open("sqlite3", suite.tempFileName)
+	db, err := sql.Open("sqlite", suite.tempFileName)
 	suite.Require().NoError(err)
 
 	suite.db = db

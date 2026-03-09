@@ -178,7 +178,7 @@ func (p *SQLiteBackend) createDatabase(dbFilename string) {
 		}
 	}
 
-	p.DB, err = sql.Open("sqlite3", dbFilename)
+	p.DB, err = sql.Open("sqlite", dbFilename)
 	if err != nil {
 		panic(err)
 	}

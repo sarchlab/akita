@@ -58,7 +58,7 @@ type sqliteReader struct {
 // NewReader creates a new DataReader
 func NewReader(dbFilename string) DataReader {
 	// Open the database
-	db, err := sql.Open("sqlite3", dbFilename)
+	db, err := sql.Open("sqlite", dbFilename)
 	if err != nil {
 		panic(err)
 	}
