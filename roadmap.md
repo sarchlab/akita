@@ -17,21 +17,52 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 ## Milestones
 
-### M1: Setup v5 scaffold and CI migration [PLANNED]
-**Budget:** 3 cycles
+### M1: Setup v5 scaffold and CI migration ✅ COMPLETE
+**Budget:** 3 cycles | **Actual:** 3 cycles (Ares 2, Apollo 1)
 
-- Copy all v4 code from the akita public repo into a `v5/` folder in akita-dev
-- Set up the go module for v5 (`github.com/sarchlab/akita/v5`)
-- Migrate GitHub Actions CI to use self-hosted runners (`runs-on: self-hosted`) instead of `ubuntu-latest` and `Github-Large-Runners`
-- Get CI passing with v5 code compiling
+- ✅ Copied all v4 code from the akita public repo into `v5/` folder
+- ✅ Set up go module for v5 (`github.com/sarchlab/akita/v5`)
+- ✅ Migrated GitHub Actions CI to self-hosted runners
+- ✅ `go build ./...` passes
+- Branch: `ares/m1-v5-scaffold`
 
-### M2: Refactor port creation API [PLANNED]
-**Budget:** 4 cycles
+### M2: Refactor port creation API [ACTIVE]
+**Budget:** 6 cycles
 
-- Identify all builders that create ports internally
-- Change the API so ports are passed in from outside (via `WithXxxPort(port sim.Port)` builder methods)
-- Update all usages (examples, tests) to reflect the new pattern
-- Ensure all tests pass
+The core refactoring: change all builders so that ports are passed in from the outside rather than created internally.
+
+**Scope:**
+- 21 non-test files contain `sim.NewPort()` calls inside builders/constructors
+- Key packages: sim, mem/cache (writeback, writethrough, writeevict, writearound), mem/vm (tlb, mmu, gmmu, mmuCache, addresstranslator), mem/idealmemcontroller, mem/dram, mem/simplebankedmemory, mem/datamover, noc, examples (ping, tickingping)
+- All callers (tests, acceptance tests) must be updated to create ports externally and pass them in
+- `go build ./...` and `go test ./...` must pass after refactoring
+
+**Pattern:**
+```go
+// v4 (old): ports created inside builder
+func (b Builder) Build(name string) *Comp {
+    c := &Comp{}
+    c.topPort = sim.NewPort(c, bufSize, bufSize, name+".TopPort")
+    c.AddPort("Top", c.topPort)
+    return c
+}
+
+// v5 (new): ports passed in from outside
+func (b Builder) WithTopPort(port sim.Port) Builder {
+    b.topPort = port
+    return b
+}
+func (b Builder) Build(name string) *Comp {
+    c := &Comp{}
+    c.topPort = b.topPort
+    c.AddPort("Top", c.topPort)
+    return c
+}
+
+// Caller:
+topPort := sim.NewPort(comp, bufSize, bufSize, "MyComp.TopPort")
+comp := MakeBuilder().WithTopPort(topPort).Build("MyComp")
+```
 
 ### M3: Write migration.md and create PR [PLANNED]
 **Budget:** 2 cycles
@@ -44,7 +75,9 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 ## Lessons Learned
 
-*(none yet — project just started)*
+- M1 went smoothly in 3 cycles. Worker skills were appropriate.
+- Leo (high-tier) was effective for the code migration task.
+- Max (mid-tier) was appropriate for CI setup.
 
 ---
 
@@ -52,4 +85,8 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 | Cycle | Manager | What Happened |
 |-------|---------|---------------|
-| 1 | Athena | Initial research and roadmap creation. Dispatching Ares for M1. |
+| 1 | Athena | Initial research and roadmap creation. Dispatched Ares for M1. |
+| 2 | Ares | Leo copied v4→v5, Max added CI. Both complete. |
+| 3 | Ares | Verified and claimed M1 complete. |
+| 4 | Apollo | Verified M1. All checks pass. |
+| 5 | Athena | Evaluated M1 completion. Preparing M2 (port refactoring). |
