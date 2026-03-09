@@ -116,11 +116,12 @@ func (a *Agent) sendDataOut() bool {
 }
 
 // NewAgent creates a new agent.
-func NewAgent(name string, engine sim.Engine) *Agent {
+func NewAgent(name string, engine sim.Engine, toOut sim.Port) *Agent {
 	a := new(Agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, 1*sim.GHz, a)
 
-	a.ToOut = sim.NewPort(a, 4, 4, name+".ToOut")
+	a.ToOut = toOut
+	a.ToOut.SetComponent(a)
 
 	return a
 }

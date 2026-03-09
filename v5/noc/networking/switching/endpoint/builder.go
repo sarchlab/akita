@@ -2,7 +2,6 @@ package endpoint
 
 import (
 	"container/list"
-	"fmt"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -18,6 +17,7 @@ type Builder struct {
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
 	devicePorts              []sim.Port
+	networkPort              sim.Port
 }
 
 // MakeBuilder creates a new EndPointBuilder with default
@@ -85,6 +85,12 @@ func (b Builder) WithDevicePorts(ports []sim.Port) Builder {
 	return b
 }
 
+// WithNetworkPort sets the network port of the End Point.
+func (b Builder) WithNetworkPort(port sim.Port) Builder {
+	b.networkPort = port
+	return b
+}
+
 // Build creates a new End Point.
 func (b Builder) Build(name string) *Comp {
 	b.engineMustBeGiven()
@@ -104,9 +110,8 @@ func (b Builder) Build(name string) *Comp {
 
 	ep.encodingOverhead = b.encodingOverhead
 
-	ep.NetworkPort = sim.NewPort(
-		ep, b.networkPortBufferSize, b.networkPortBufferSize,
-		fmt.Sprintf("%s.NetworkPort", ep.Name()))
+	ep.NetworkPort = b.networkPort
+	ep.NetworkPort.SetComponent(ep)
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp)

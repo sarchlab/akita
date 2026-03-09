@@ -3,7 +3,8 @@ package ping
 import "github.com/sarchlab/akita/v5/sim"
 
 type Builder struct {
-	Engine sim.Engine
+	Engine  sim.Engine
+	outPort sim.Port
 }
 
 func MakeBuilder() Builder {
@@ -15,10 +16,16 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 	return b
 }
 
+func (b Builder) WithOutPort(port sim.Port) Builder {
+	b.outPort = port
+	return b
+}
+
 func (b Builder) Build(name string) *Comp {
 	pingAgent := &Comp{}
 	pingAgent.ComponentBase = sim.NewComponentBase(name)
-	pingAgent.OutPort = sim.NewPort(pingAgent, 4, 4, name+".OutPort")
+	pingAgent.OutPort = b.outPort
+	pingAgent.OutPort.SetComponent(pingAgent)
 	pingAgent.Engine = b.Engine
 
 	return pingAgent

@@ -64,6 +64,11 @@ func (p *Port) Component() sim.Component {
 	return p.comp
 }
 
+// SetComponent sets the owner component of the port.
+func (p *Port) SetComponent(comp sim.Component) {
+	p.comp = comp
+}
+
 // Name returns the name of the port.
 func (p *Port) Name() string {
 	return p.name

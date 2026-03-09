@@ -39,6 +39,7 @@ var _ = Describe("DRAM Integration", func() {
 		engine = sim.NewSerialEngine()
 		memCtrl = MakeBuilder().
 			WithEngine(engine).
+			WithTopPort(sim.NewPort(nil, 1024, 1024, "MemCtrl.TopPort")).
 			Build("MemCtrl")
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()

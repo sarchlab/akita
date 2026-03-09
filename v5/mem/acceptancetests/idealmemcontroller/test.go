@@ -47,6 +47,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
+		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 
 	dram := idealmemcontroller.MakeBuilder().

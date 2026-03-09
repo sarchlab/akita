@@ -49,6 +49,7 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[0].AgentPorts).
+		WithNetworkPort(sim.NewPort(nil, 4, 4, "EP1.NetworkPort")).
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
@@ -56,6 +57,7 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[1].AgentPorts).
+		WithNetworkPort(sim.NewPort(nil, 4, 4, "EP2.NetworkPort")).
 		Build("EP2")
 
 	ep1.DefaultSwitchDst = ep2.NetworkPort.AsRemote()

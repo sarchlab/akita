@@ -44,11 +44,13 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
+		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 
 	memCtrl := dram.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
+		WithTopPort(sim.NewPort(nil, 1024, 1024, "Mem.TopPort")).
 		Build("Mem")
 
 	agent.LowModule = memCtrl.GetPortByName("Top")

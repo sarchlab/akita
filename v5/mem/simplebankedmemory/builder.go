@@ -28,6 +28,7 @@ type Builder struct {
 	capacity         uint64
 	storage          *mem.Storage
 	addressConverter mem.AddressConverter
+	topPort          sim.Port
 }
 
 // MakeBuilder creates a builder with reasonable defaults.
@@ -134,6 +135,12 @@ func (b Builder) WithAddressConverter(
 	return b
 }
 
+// WithTopPort sets the top port of the memory component.
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
 // Build creates a SimpleBankedMemory component.
 func (b Builder) Build(name string) *Comp {
 	b.configurationMustBeValid()
@@ -153,7 +160,8 @@ func (b Builder) Build(name string) *Comp {
 
 	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
 
-	c.topPort = sim.NewPort(c, b.topPortBufferSize, b.topPortBufferSize, name+".TopPort")
+	c.topPort = b.topPort
+	c.topPort.SetComponent(c)
 	c.AddPort("Top", c.topPort)
 
 	c.banks = make([]bank, b.numBanks)

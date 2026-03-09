@@ -38,7 +38,9 @@ var _ = Describe("MemController", func() {
 		channel = NewMockChannel(mockCtrl)
 		storage = mem.NewStorage(4 * mem.GB)
 
-		memCtrl = MakeBuilder().Build("MemCtrl")
+		memCtrl = MakeBuilder().
+			WithTopPort(sim.NewPort(nil, 1024, 1024, "MemCtrl.TopPort")).
+			Build("MemCtrl")
 		memCtrl.topPort = topPort
 		memCtrl.subTransactionQueue = subTransactionQueue
 		memCtrl.subTransSplitter = subTransSplitter

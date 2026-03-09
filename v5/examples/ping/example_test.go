@@ -8,9 +8,15 @@ import (
 func Example_pingWithEvents() {
 	engine := sim.NewSerialEngine()
 	// agentA := NewPingAgent("AgentA", engine)
-	agentA := MakeBuilder().WithEngine(engine).Build("AgentA")
+	agentA := MakeBuilder().
+		WithEngine(engine).
+		WithOutPort(sim.NewPort(nil, 4, 4, "AgentA.OutPort")).
+		Build("AgentA")
 	// agentB := NewPingAgent("AgentB", engine)
-	agentB := MakeBuilder().WithEngine(engine).Build("AgentB")
+	agentB := MakeBuilder().
+		WithEngine(engine).
+		WithOutPort(sim.NewPort(nil, 4, 4, "AgentB.OutPort")).
+		Build("AgentB")
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).

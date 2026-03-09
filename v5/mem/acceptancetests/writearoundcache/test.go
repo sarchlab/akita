@@ -72,6 +72,7 @@ func buildEnvironment() {
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
+		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 
 	addressToPortMapper := new(mem.SinglePortMapper)

@@ -14,6 +14,7 @@ type Builder struct {
 	readLeft          int
 	useVirtualAddress bool
 	lowModule         sim.Port
+	memPort           sim.Port
 }
 
 func MakeBuilder() *Builder {
@@ -66,6 +67,11 @@ func (b *Builder) WithLowModule(port sim.Port) *Builder {
 	return b
 }
 
+func (b *Builder) WithMemPort(port sim.Port) *Builder {
+	b.memPort = port
+	return b
+}
+
 func (b *Builder) Build(name string) *MemAccessAgent {
 	agent := NewMemAccessAgent(b.engine)
 
@@ -76,7 +82,8 @@ func (b *Builder) Build(name string) *MemAccessAgent {
 
 	agent.UseVirtualAddress = b.useVirtualAddress
 
-	agent.memPort = sim.NewPort(agent, 1, 1, name+".Mem")
+	agent.memPort = b.memPort
+	agent.memPort.SetComponent(agent)
 	agent.AddPort("Mem", agent.memPort)
 
 	if b.lowModule != nil {

@@ -35,6 +35,7 @@ type Port interface {
 
 	SetConnection(conn Connection)
 	Component() Component
+	SetComponent(comp Component)
 
 	// For connection
 	Deliver(msg Msg) *SendError
@@ -85,6 +86,11 @@ func (p *defaultPort) SetConnection(conn Connection) {
 // Component returns the owner component of the port.
 func (p *defaultPort) Component() Component {
 	return p.comp
+}
+
+// SetComponent sets the owner component of the port.
+func (p *defaultPort) SetComponent(comp Component) {
+	p.comp = comp
 }
 
 // Name returns the name of the port.

@@ -110,10 +110,11 @@ type agent struct {
 	OutPort sim.Port
 }
 
-func newAgent(engine sim.Engine, freq sim.Freq, name string) *agent {
+func newAgent(engine sim.Engine, freq sim.Freq, name string, outPort sim.Port) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
-	a.OutPort = sim.NewPort(a, 4, 4, name+".OutPort")
+	a.OutPort = outPort
+	a.OutPort.SetComponent(a)
 
 	return a
 }
@@ -154,7 +155,8 @@ var _ = Describe("Direct Connection Integration", func() {
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
-			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i))
+			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i),
+				sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent[%d].OutPort", i)))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
 		}
@@ -209,7 +211,8 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {
-		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i))
+		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i),
+			sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent%d.OutPort", i)))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)
 	}

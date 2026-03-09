@@ -67,6 +67,7 @@ type Builder struct {
 	tXS        int
 
 	tracers []tracing.Tracer
+	topPort sim.Port
 }
 
 // MakeBuilder creates a builder with default configuration.
@@ -249,6 +250,12 @@ func (b Builder) WithNumRow(n int) Builder {
 // WithNumCol sets the number of columns in each DRAM array.
 func (b Builder) WithNumCol(n int) Builder {
 	b.numCol = n
+	return b
+}
+
+// WithTopPort sets the top port of the memory controller.
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
 	return b
 }
 
@@ -441,7 +448,8 @@ func (b Builder) Build(name string) *Comp {
 		m.storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	m.topPort = sim.NewPort(m, 1024, 1024, name+".TopPort")
+	m.topPort = b.topPort
+	m.topPort.SetComponent(m)
 	m.AddPort("Top", m.topPort)
 
 	middleware := &middleware{Comp: m}

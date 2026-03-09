@@ -173,6 +173,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 		WithStageLatency(6).
 		WithTopPortBufferSize(32).
 		WithPostPipelineBufferSize(32).
+		WithTopPort(sim.NewPort(nil, 32, 32, "Mem.TopPort")).
 		Build("Mem")
 
 	agent := newBandwidthAgent("Agent")
@@ -227,6 +228,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithNumBanks(2).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
+			WithTopPort(sim.NewPort(nil, 4, 4, "Mem.TopPort")).
 			Build("Mem")
 
 		agent = newTestAgent("Agent")
@@ -314,6 +316,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
 			WithAddressConverter(zeroConverter{}).
+			WithTopPort(sim.NewPort(nil, 4, 4, "MemConv.TopPort")).
 			Build("MemConv")
 
 		agent = newTestAgent("AgentConv")

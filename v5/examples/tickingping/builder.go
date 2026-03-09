@@ -3,8 +3,9 @@ package tickingping
 import "github.com/sarchlab/akita/v5/sim"
 
 type Builder struct {
-	engine sim.Engine
-	freq   sim.Freq
+	engine  sim.Engine
+	freq    sim.Freq
+	outPort sim.Port
 }
 
 func MakeBuilder() Builder {
@@ -21,6 +22,11 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 	return b
 }
 
+func (b Builder) WithOutPort(port sim.Port) Builder {
+	b.outPort = port
+	return b
+}
+
 func (b Builder) Build(name string) *Comp {
 	tickingPingAgent := &Comp{}
 
@@ -30,8 +36,8 @@ func (b Builder) Build(name string) *Comp {
 	middleware := &middleware{Comp: tickingPingAgent}
 	tickingPingAgent.AddMiddleware(middleware)
 
-	tickingPingAgent.OutPort = sim.NewPort(
-		tickingPingAgent, 4, 4, tickingPingAgent.Name()+".OutPort")
+	tickingPingAgent.OutPort = b.outPort
+	tickingPingAgent.OutPort.SetComponent(tickingPingAgent)
 
 	return tickingPingAgent
 }

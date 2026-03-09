@@ -74,6 +74,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithReadLeft(*numAccessFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithLowModule(at.GetPortByName("Top")).
+		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 

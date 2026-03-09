@@ -264,6 +264,7 @@ func (c *Connector) createEndPointWithName(
 		WithDevicePorts(ports).
 		WithNumInputChannels(param.DeviceEndParam.NumInputChannel).
 		WithNumOutputChannels(param.DeviceEndParam.NumOutputChannel).
+		WithNetworkPort(sim.NewPort(nil, 4, 4, fullName+".NetworkPort")).
 		Build(fullName)
 
 	if c.monitor != nil {

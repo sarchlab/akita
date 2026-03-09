@@ -10,10 +10,12 @@ func Example() {
 	agentA := MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.Hz).
+		WithOutPort(sim.NewPort(nil, 4, 4, "AgentA.OutPort")).
 		Build("AgentA")
 	agentB := MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.Hz).
+		WithOutPort(sim.NewPort(nil, 4, 4, "AgentB.OutPort")).
 		Build("AgentB")
 	conn := directconnection.
 		MakeBuilder().
