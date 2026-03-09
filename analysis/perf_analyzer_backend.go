@@ -8,7 +8,7 @@ import (
 	"os"
 
 	// Need to use SQLite connections.
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/go-sqlite"
 
 	"github.com/tebeka/atexit"
 )

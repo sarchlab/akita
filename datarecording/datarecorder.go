@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	// Need to use SQLite connections.
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/glebarez/go-sqlite"
 	"github.com/rs/xid"
 	"github.com/tebeka/atexit"
 )
