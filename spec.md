@@ -1,13 +1,13 @@
-# Project Specification
+# Project Spec
 
-## What do you want to build?
+## What to Build
 
-This is a fork or the GitHub.com/sarchlab/akita repo. Use multiple remotes to connect with both repos.
+Let's create a v5 folder that will serve as the implementation of v5. Copy all the code from v4 into v5 and we start to edit from there. 
 
-The goal of this project is to improve the DRAM modeling. 
+The first task is to create change how ports are created. Previously, ports are created as part of the builder. Now, I want all the ports to be passed in from outside. 
 
-Work in the dev repo and only submit a PR to upstream when the job is completed.
+BTW, all the GitHub CI runners do not work anymore, please migration to use the runners from the Marin group.
 
-## How do you consider the project is success?
+## Success Criteria
 
-Check Ramulator and DRAMSim. We should support most of the DRAM types they support. Validate against them.
+Create a plan for how to refactor the APIs. Write a migration.md in v5 directory. Create a PR in akita-dev repo and claim success. Do not merge it. I will review it.
