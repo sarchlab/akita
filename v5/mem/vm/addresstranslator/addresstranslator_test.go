@@ -60,18 +60,23 @@ var _ = Describe("Address Translator", func() {
 		memoryPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		translationPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
+		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		translationPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+		ctrlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
+
 		builder := MakeBuilder().
 			WithLog2PageSize(12).
 			WithFreq(1).
 			WithMemoryProviderMapper(memoryPortMapper).
-			WithTranslationProviderMapper(translationPortMapper)
+			WithTranslationProviderMapper(translationPortMapper).
+			WithTopPort(topPort).
+			WithBottomPort(bottomPort).
+			WithTranslationPort(translationPort).
+			WithCtrlPort(ctrlPort)
 
 		t = builder.Build("AddressTranslator")
 		t.log2PageSize = 12
-		t.topPort = topPort
-		t.bottomPort = bottomPort
-		t.translationPort = translationPort
-		t.ctrlPort = ctrlPort
 
 		tMiddleware = t.Middlewares()[0].(*middleware)
 	})

@@ -22,15 +22,15 @@ func NewAgent(
 	engine sim.Engine,
 	freq sim.Freq,
 	name string,
-	numPorts int,
+	ports []sim.Port,
 	test *Test,
 ) *Agent {
 	a := &Agent{}
 	a.test = test
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
 
-	for i := 0; i < numPorts; i++ {
-		p := sim.NewPort(a, 1, 1, fmt.Sprintf("%s.Port%d", name, i))
+	for _, p := range ports {
+		p.SetComponent(a)
 		a.AgentPorts = append(a.AgentPorts, p)
 	}
 

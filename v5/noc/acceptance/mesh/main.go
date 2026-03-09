@@ -44,7 +44,10 @@ func main() {
 	for x := 0; x < meshWidth; x++ {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
-			agent := acceptance.NewAgent(engine, freq, name, 1, test)
+			ports := []sim.Port{
+				sim.NewPort(nil, 1, 1, name+".Port0"),
+			}
+			agent := acceptance.NewAgent(engine, freq, name, ports, test)
 			agent.TickLater()
 
 			monitor.RegisterComponent(agent)

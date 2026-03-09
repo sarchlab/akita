@@ -47,8 +47,12 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 	var agents []*acceptance.Agent
 
 	for i := 0; i < numDevicePerSwitch*2+1; i++ {
-		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), numPortPerDevice, test)
+		name := fmt.Sprintf("Agent%d", i)
+		ports := make([]sim.Port, numPortPerDevice)
+		for j := 0; j < numPortPerDevice; j++ {
+			ports[j] = sim.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
+		}
+		agent := acceptance.NewAgent(engine, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 		test.RegisterAgent(agent)

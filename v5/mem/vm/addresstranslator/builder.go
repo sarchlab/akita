@@ -7,9 +7,12 @@ import (
 
 // A Builder can create address translators
 type Builder struct {
-	engine   sim.Engine
-	freq     sim.Freq
-	ctrlPort sim.Port
+	engine          sim.Engine
+	freq            sim.Freq
+	topPort         sim.Port
+	bottomPort      sim.Port
+	translationPort sim.Port
+	ctrlPort        sim.Port
 
 	numReqPerCycle int
 	log2PageSize   uint64
@@ -61,6 +64,24 @@ func (b Builder) WithLog2PageSize(n uint64) Builder {
 // WithDeviceID sets the GPU ID that the address translator belongs to
 func (b Builder) WithDeviceID(n uint64) Builder {
 	b.deviceID = n
+	return b
+}
+
+// WithTopPort sets the top port of the address translator
+func (b Builder) WithTopPort(p sim.Port) Builder {
+	b.topPort = p
+	return b
+}
+
+// WithBottomPort sets the bottom port of the address translator
+func (b Builder) WithBottomPort(p sim.Port) Builder {
+	b.bottomPort = p
+	return b
+}
+
+// WithTranslationPort sets the translation port of the address translator
+func (b Builder) WithTranslationPort(p sim.Port) Builder {
+	b.translationPort = p
 	return b
 }
 
@@ -227,18 +248,19 @@ func (b Builder) setupTranslationPortMapper(t *Comp) {
 }
 
 func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".TopPort")
+	t.topPort = b.topPort
+	t.topPort.SetComponent(t)
 	t.AddPort("Top", t.topPort)
 
-	t.bottomPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".BottomPort")
+	t.bottomPort = b.bottomPort
+	t.bottomPort.SetComponent(t)
 	t.AddPort("Bottom", t.bottomPort)
 
-	t.translationPort = sim.NewPort(t, b.numReqPerCycle, b.numReqPerCycle,
-		name+".TranslationPort")
+	t.translationPort = b.translationPort
+	t.translationPort.SetComponent(t)
 	t.AddPort("Translation", t.translationPort)
 
-	t.ctrlPort = sim.NewPort(t, 1, 1, name+".CtrlPort")
+	t.ctrlPort = b.ctrlPort
+	t.ctrlPort.SetComponent(t)
 	t.AddPort("Control", t.ctrlPort)
 }

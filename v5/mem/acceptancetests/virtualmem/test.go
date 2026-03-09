@@ -64,6 +64,10 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithNumReqPerCycle(4).
 		WithMemoryProviderMapper(atMemoryMapper).
 		WithTranslationProviderMapper(atTranslationMapper).
+		WithTopPort(sim.NewPort(nil, 4, 4, "AT.TopPort")).
+		WithBottomPort(sim.NewPort(nil, 4, 4, "AT.BottomPort")).
+		WithTranslationPort(sim.NewPort(nil, 4, 4, "AT.TranslationPort")).
+		WithCtrlPort(sim.NewPort(nil, 1, 1, "AT.CtrlPort")).
 		Build("AT")
 	s.RegisterComponent(at)
 

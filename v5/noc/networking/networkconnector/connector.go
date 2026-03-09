@@ -59,6 +59,13 @@ type SwitchToSwitchLinkParameter struct {
 	LinkParam     LinkParameter
 }
 
+// PortFactory is a function that creates a new port.
+type PortFactory func(
+	comp sim.Component,
+	incomingBufCap, outgoingBufCap int,
+	name string,
+) sim.Port
+
 // Connector can build complex network topologies.
 type Connector struct {
 	name         string
@@ -70,6 +77,7 @@ type Connector struct {
 	visTracer    tracing.Tracer
 	nocTracer    tracing.Tracer
 	perfAnalyzer *analysis.PerfAnalyzer
+	portFactory  PortFactory
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -82,6 +90,7 @@ func MakeConnector() Connector {
 		defaultFreq: 1 * sim.GHz,
 		flitSize:    64,
 		router:      new(FloydWarshallRouter),
+		portFactory: sim.NewPort,
 	}
 }
 
@@ -138,6 +147,12 @@ func (c Connector) WithPerfAnalyzer(
 	a *analysis.PerfAnalyzer,
 ) Connector {
 	c.perfAnalyzer = a
+	return c
+}
+
+// WithPortFactory sets the factory function used to create ports.
+func (c Connector) WithPortFactory(f PortFactory) Connector {
+	c.portFactory = f
 	return c
 }
 
@@ -264,7 +279,7 @@ func (c *Connector) createEndPointWithName(
 		WithDevicePorts(ports).
 		WithNumInputChannels(param.DeviceEndParam.NumInputChannel).
 		WithNumOutputChannels(param.DeviceEndParam.NumOutputChannel).
-		WithNetworkPort(sim.NewPort(nil, 4, 4, fullName+".NetworkPort")).
+		WithNetworkPort(c.portFactory(nil, 4, 4, fullName+".NetworkPort")).
 		Build(fullName)
 
 	if c.monitor != nil {
@@ -275,7 +290,7 @@ func (c *Connector) createEndPointWithName(
 		tracing.CollectTrace(endPoint, c.visTracer)
 	}
 
-	epPort := sim.NewPort(endPoint,
+	epPort := c.portFactory(endPoint,
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
@@ -307,7 +322,7 @@ func (c *Connector) connectEndPointWithSwitch(
 	sw := swNode.sw
 	epPort := endPoint.NetworkPort
 
-	swPort := sim.NewPort(sw,
+	swPort := c.portFactory(sw,
 		param.SwitchEndParam.IncomingBufSize,
 		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
@@ -399,7 +414,7 @@ func (c *Connector) ConnectSwitches(
 			leftSwitch.Name(), len(leftNode.remotes))
 	}
 
-	leftPort = sim.NewPort(leftSwitch,
+	leftPort = c.portFactory(leftSwitch,
 		param.LeftEndParam.IncomingBufSize,
 		param.LeftEndParam.OutgoingBufSize,
 		leftPortName)
@@ -413,7 +428,7 @@ func (c *Connector) ConnectSwitches(
 			rightSwitch.Name(), len(rightNode.remotes))
 	}
 
-	rightPort = sim.NewPort(rightSwitch,
+	rightPort = c.portFactory(rightSwitch,
 		param.RightEndParam.IncomingBufSize,
 		param.RightEndParam.OutgoingBufSize,
 		rightPortName)

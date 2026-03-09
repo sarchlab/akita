@@ -89,8 +89,11 @@ func createAgents(
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
-		agent := acceptance.NewAgent(
-			engine, freq, fmt.Sprintf("Agent%d", i), 1, test)
+		name := fmt.Sprintf("Agent%d", i)
+		ports := []sim.Port{
+			sim.NewPort(nil, 1, 1, name+".Port0"),
+		}
+		agent := acceptance.NewAgent(engine, freq, name, ports, test)
 		agent.TickLater()
 		agents = append(agents, agent)
 	}
