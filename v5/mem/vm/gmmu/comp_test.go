@@ -52,7 +52,9 @@ var _ = Describe("Builder", func() {
 		builder := MakeBuilder().
 			WithEngine(engine).
 			WithDeviceID(0).
-			WithPageWalkingLatency(1)
+			WithPageWalkingLatency(1).
+			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4096, 4096, "MMU.BottomPort"))
 
 		gmmu = builder.Build("MMU")
 		gmmu.topPort = topPort

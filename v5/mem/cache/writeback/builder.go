@@ -34,6 +34,10 @@ type Builder struct {
 	bankLatency int
 
 	addressMapperType string
+
+	topPort     sim.Port
+	bottomPort  sim.Port
+	controlPort sim.Port
 }
 
 // MakeBuilder creates a new builder with default configurations.
@@ -153,6 +157,24 @@ func (b Builder) WithAddressMapperType(t string) Builder {
 	return b
 }
 
+// WithTopPort sets the top port for the cache
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port for the cache
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
+// WithControlPort sets the control port for the cache
+func (b Builder) WithControlPort(port sim.Port) Builder {
+	b.controlPort = port
+	return b
+}
+
 func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 	if b.addressMapperType == "single" {
 		if len(ports) != 1 {
@@ -226,19 +248,16 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewPort(cache,
-		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
-		cache.Name()+".ToTop")
+	cache.topPort = b.topPort
+	cache.topPort.SetComponent(cache)
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewPort(cache,
-		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
-		cache.Name()+".BottomPort")
+	cache.bottomPort = b.bottomPort
+	cache.bottomPort.SetComponent(cache)
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewPort(cache,
-		cache.numReqPerCycle*2, cache.numReqPerCycle*2,
-		cache.Name()+".ControlPort")
+	cache.controlPort = b.controlPort
+	cache.controlPort.SetComponent(cache)
 	cache.AddPort("Control", cache.controlPort)
 }
 

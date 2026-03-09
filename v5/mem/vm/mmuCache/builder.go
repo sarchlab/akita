@@ -26,6 +26,10 @@ type Builder struct {
 	maxInflightTransactions int
 	inflightTransactions    int
 	translationRequests     map[uint64]map[vm.PID]*vm.TranslationReq
+
+	topPort     sim.Port
+	bottomPort  sim.Port
+	controlPort sim.Port
 }
 
 // MakeBuilder returns a Builder
@@ -129,6 +133,24 @@ func (b Builder) WithBloomFilterSize(size int) Builder {
 	return b
 }
 
+// WithTopPort sets the top port for the mmuCache
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port for the mmuCache
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
+// WithControlPort sets the control port for the mmuCache
+func (b Builder) WithControlPort(port sim.Port) Builder {
+	b.controlPort = port
+	return b
+}
+
 // Build creates a new mmuCache
 func (b Builder) Build(name string) *Comp {
 	if b.numBlocks <= 0 {
@@ -160,14 +182,14 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b Builder) createPorts(name string, mmuCache *Comp) {
-	mmuCache.topPort = sim.NewPort(mmuCache, 4800, 4800,
-		name+".TopPort")
+	mmuCache.topPort = b.topPort
+	mmuCache.topPort.SetComponent(mmuCache)
 	mmuCache.AddPort("Top", mmuCache.topPort)
-	mmuCache.bottomPort = sim.NewPort(mmuCache, 4800, 4800,
-		name+".BottomPort")
+	mmuCache.bottomPort = b.bottomPort
+	mmuCache.bottomPort.SetComponent(mmuCache)
 	mmuCache.AddPort("Bottom", mmuCache.bottomPort)
 
-	mmuCache.controlPort = sim.NewPort(mmuCache, 1, 1,
-		name+".ControlPort")
+	mmuCache.controlPort = b.controlPort
+	mmuCache.controlPort.SetComponent(mmuCache)
 	mmuCache.AddPort("Control", mmuCache.controlPort)
 }

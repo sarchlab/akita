@@ -15,6 +15,8 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 	mmu := MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
 	middleware := &middleware{Comp: mmu}
@@ -73,6 +75,8 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
 		WithLog2PageSize(12). // 4KB pages
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
 	middleware := &middleware{Comp: mmu}
@@ -110,6 +114,8 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 	// Create MMU with auto page allocation disabled (default)
 	mmu := MakeBuilder().
 		WithEngine(engine).
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
 	if mmu.autoPageAllocation {
@@ -125,6 +131,8 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 	mmu := MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
 	if !mmu.autoPageAllocation {

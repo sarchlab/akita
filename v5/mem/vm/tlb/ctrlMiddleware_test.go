@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb/internal"
+	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
@@ -32,6 +33,9 @@ var _ = Describe("TLB", func() {
 			WithEngine(engine).
 			WithTranslationProviderMapperType("single").
 			WithTranslationProviders("RemotePort").
+			WithTopPort(sim.NewPort(nil, 4, 4, "TLB.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4, 4, "TLB.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
 			Build("TLB")
 		comp.topPort = topPort
 		comp.bottomPort = bottomPort

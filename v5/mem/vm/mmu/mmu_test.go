@@ -37,7 +37,10 @@ var _ = Describe("MMU", func() {
 			Return(sim.RemotePort("MigrationPort")).
 			AnyTimes()
 
-		builder := MakeBuilder().WithEngine(engine)
+		builder := MakeBuilder().
+			WithEngine(engine).
+			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.ToTop")).
+			WithMigrationPort(sim.NewPort(nil, 1, 1, "MMU.MigrationPort"))
 		mmu = builder.Build("MMU")
 		mmu.topPort = topPort
 		mmu.migrationPort = migrationPort
@@ -382,7 +385,10 @@ var _ = Describe("MMU Integration", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = sim.NewSerialEngine()
 
-		builder := MakeBuilder().WithEngine(engine)
+		builder := MakeBuilder().
+			WithEngine(engine).
+			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.ToTop")).
+			WithMigrationPort(sim.NewPort(nil, 1, 1, "MMU.MigrationPort"))
 		mmu = builder.Build("MMU")
 
 		agent = NewMockPort(mockCtrl)

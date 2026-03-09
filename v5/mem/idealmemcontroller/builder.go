@@ -15,6 +15,8 @@ type Builder struct {
 	topBufSize       int
 	storage          *mem.Storage
 	addressConverter mem.AddressConverter
+	topPort          sim.Port
+	ctrlPort         sim.Port
 }
 
 // MakeBuilder returns a new Builder
@@ -85,6 +87,18 @@ func (b Builder) WithAddressConverter(
 	return b
 }
 
+// WithTopPort sets the top port of the memory controller
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithCtrlPort sets the control port of the memory controller
+func (b Builder) WithCtrlPort(port sim.Port) Builder {
+	b.ctrlPort = port
+	return b
+}
+
 // Build builds a new Comp
 func (b Builder) Build(
 	name string,
@@ -110,9 +124,11 @@ func (b Builder) Build(
 	funcMiddleware := &memMiddleware{Comp: c}
 	c.AddMiddleware(funcMiddleware)
 
-	c.topPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".TopPort")
+	c.topPort = b.topPort
+	c.topPort.SetComponent(c)
 	c.AddPort("Top", c.topPort)
-	c.ctrlPort = sim.NewPort(c, b.topBufSize, b.topBufSize, name+".CtrlPort")
+	c.ctrlPort = b.ctrlPort
+	c.ctrlPort.SetComponent(c)
 	c.AddPort("Control", c.ctrlPort)
 
 	return c

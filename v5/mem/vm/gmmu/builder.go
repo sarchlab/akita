@@ -15,6 +15,8 @@ type Builder struct {
 	pageWalkingLatency int
 	deviceID           uint64
 	lowModule          sim.RemotePort
+	topPort            sim.Port
+	bottomPort         sim.Port
 }
 
 // MakeBuilder creates a new builder
@@ -75,6 +77,18 @@ func (b Builder) WithLowModule(p sim.RemotePort) Builder {
 	return b
 }
 
+// WithTopPort sets the top port of the GMMU
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port of the GMMU
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
 func (b Builder) configureInternalStates(gmmu *GMMU) {
 	gmmu.maxRequestsInFlight = b.maxNumReqInFlight
 	gmmu.latency = b.pageWalkingLatency
@@ -93,9 +107,11 @@ func (b Builder) createPageTable(gmmu *GMMU) {
 }
 
 func (b Builder) createPorts(name string, gmmu *GMMU) {
-	gmmu.topPort = sim.NewPort(gmmu, 4096, 4096, name+".TopPort")
+	gmmu.topPort = b.topPort
+	gmmu.topPort.SetComponent(gmmu)
 	gmmu.AddPort("Top", gmmu.topPort)
-	gmmu.bottomPort = sim.NewPort(gmmu, 4096, 4096, name+".BottomPort")
+	gmmu.bottomPort = b.bottomPort
+	gmmu.bottomPort.SetComponent(gmmu)
 	gmmu.AddPort("Bottom", gmmu.bottomPort)
 
 	gmmu.remoteMemReqs = make(map[string]transaction)

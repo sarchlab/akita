@@ -54,6 +54,8 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		WithLatency(100).
+		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
 	agent.LowModule = dram.GetPortByName("Top")
 

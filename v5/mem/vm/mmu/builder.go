@@ -15,6 +15,8 @@ type Builder struct {
 	maxNumReqInFlight        int
 	pageWalkingLatency       int
 	autoPageAllocation       bool
+	topPort                  sim.Port
+	migrationPort            sim.Port
 }
 
 // MakeBuilder creates a new builder
@@ -79,6 +81,18 @@ func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
 	return b
 }
 
+// WithTopPort sets the top port of the MMU
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithMigrationPort sets the migration port of the MMU
+func (b Builder) WithMigrationPort(port sim.Port) Builder {
+	b.migrationPort = port
+	return b
+}
+
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *Comp {
 	mmu := new(Comp)
@@ -134,8 +148,10 @@ func (b Builder) validatePageTablePageSize() {
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
-	mmu.topPort = sim.NewPort(mmu, 4096, 4096, name+".ToTop")
+	mmu.topPort = b.topPort
+	mmu.topPort.SetComponent(mmu)
 	mmu.AddPort("Top", mmu.topPort)
-	mmu.migrationPort = sim.NewPort(mmu, 1, 1, name+".MigrationPort")
+	mmu.migrationPort = b.migrationPort
+	mmu.migrationPort.SetComponent(mmu)
 	mmu.AddPort("Migration", mmu.migrationPort)
 }

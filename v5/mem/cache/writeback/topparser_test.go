@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -25,7 +26,10 @@ var _ = Describe("TopParser", func() {
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		builder := MakeBuilder().
-			WithAddressToPortMapper(addressToPortMapper)
+			WithAddressToPortMapper(addressToPortMapper).
+			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
+			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
 		cache = builder.Build("Cache")
 
 		parser = &topParser{

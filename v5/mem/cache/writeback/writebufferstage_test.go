@@ -39,7 +39,10 @@ var _ = Describe("Write Buffer Stage", func() {
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
 		builder := MakeBuilder().
-			WithAddressToPortMapper(addressToPortMapper)
+			WithAddressToPortMapper(addressToPortMapper).
+			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
+			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
 		cacheModule = builder.Build("Cache")
 		cacheModule.bottomPort = bottomPort
 		cacheModule.directory = directory

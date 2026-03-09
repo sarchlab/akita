@@ -93,6 +93,8 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		WithLatency(100).
+		WithTopPort(sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
+		WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 		Build("MemCtrl")
 	s.RegisterComponent(memCtrl)
 
@@ -103,6 +105,9 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithNumReqPerCycle(2).
 		WithAddressMapperType("single").
 		WithRemotePorts(memCtrl.GetPortByName("Top").AsRemote()).
+		WithTopPort(sim.NewPort(nil, 4, 4, "L2Cache.ToTop")).
+		WithBottomPort(sim.NewPort(nil, 4, 4, "L2Cache.BottomPort")).
+		WithControlPort(sim.NewPort(nil, 4, 4, "L2Cache.ControlPort")).
 		Build("L2Cache")
 	s.RegisterComponent(L2Cache)
 
@@ -112,6 +117,9 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithWayAssociativity(2).
 		WithAddressMapperType("single").
 		WithRemotePorts(L2Cache.GetPortByName("Top").AsRemote()).
+		WithTopPort(sim.NewPort(nil, 4, 4, "L1Cache.TopPort")).
+		WithBottomPort(sim.NewPort(nil, 4, 4, "L1Cache.BottomPort")).
+		WithControlPort(sim.NewPort(nil, 4, 4, "L1Cache.ControlPort")).
 		Build("L1Cache")
 	s.RegisterComponent(L1Cache)
 
@@ -130,6 +138,8 @@ func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithMaxNumReqInFlight(16).
 		WithPageWalkingLatency(10).
 		WithPageTable(pageTable).
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "IoMMU.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "IoMMU.MigrationPort")).
 		Build("IoMMU")
 	s.RegisterComponent(IoMMU)
 
@@ -145,6 +155,9 @@ func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
 		WithTranslationProviderMapper(L2TLBMapper).
+		WithTopPort(sim.NewPort(nil, 4, 4, "L2TLB.TopPort")).
+		WithBottomPort(sim.NewPort(nil, 4, 4, "L2TLB.BottomPort")).
+		WithControlPort(sim.NewPort(nil, 1, 1, "L2TLB.ControlPort")).
 		Build("L2TLB")
 	s.RegisterComponent(L2TLB)
 
@@ -160,6 +173,9 @@ func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(2).
 		WithTranslationProviderMapper(TLBMapper).
+		WithTopPort(sim.NewPort(nil, 2, 2, "TLB.TopPort")).
+		WithBottomPort(sim.NewPort(nil, 2, 2, "TLB.BottomPort")).
+		WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
 		Build("TLB")
 	s.RegisterComponent(TLB)
 

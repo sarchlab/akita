@@ -64,6 +64,9 @@ var _ = Describe("TLB", func() {
 		tlb = MakeBuilder().
 			WithEngine(engine).
 			WithTranslationProviderMapper(addressMapper).
+			WithTopPort(sim.NewPort(nil, 4, 4, "TLB.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4, 4, "TLB.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
 			Build("TLB")
 		tlb.topPort = topPort
 		tlb.bottomPort = bottomPort
@@ -454,6 +457,9 @@ var _ = Describe("TLB Integration", func() {
 			WithEngine(engine).
 			WithTranslationProviderMapper(addressMapper).
 			WithLowModule(lowModule.AsRemote()).
+			WithTopPort(sim.NewPort(nil, 4, 4, "TLB.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4, 4, "TLB.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
 			Build("TLB")
 
 		agent.EXPECT().SetConnection(connection)

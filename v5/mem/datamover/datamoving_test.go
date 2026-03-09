@@ -49,12 +49,16 @@ var _ = Describe("DataMover", func() {
 			WithFreq(1 * sim.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
+			WithTopPort(sim.NewPort(nil, 16, 16, "InsideMem.TopPort")).
+			WithCtrlPort(sim.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
 			Build("InsideMem")
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			WithCacheLineSize(64).
 			WithNewStorage(1 * mem.MB).
+			WithTopPort(sim.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
+			WithCtrlPort(sim.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).
 			Build("OutsideMem")
 		dataMover = MakeBuilder().
 			WithEngine(engine).
@@ -67,6 +71,9 @@ var _ = Describe("DataMover", func() {
 			}).
 			WithInsideByteGranularity(64).
 			WithOutsideByteGranularity(256).
+			WithCtrlPort(sim.NewPort(nil, 40960000, 40960000, "DataMover.CtrlPort")).
+			WithInsidePort(sim.NewPort(nil, 64, 64, "DataMover.SrcPort")).
+			WithOutsidePort(sim.NewPort(nil, 64, 64, "DataMover.DstPort")).
 			Build("DataMover")
 
 		// logger = new(dataMoverLogger)

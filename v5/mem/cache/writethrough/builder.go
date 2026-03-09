@@ -27,6 +27,9 @@ type Builder struct {
 	visTracer             tracing.Tracer
 	addressMapperType     string
 	remotePorts           []sim.RemotePort
+	topPort               sim.Port
+	bottomPort            sim.Port
+	controlPort           sim.Port
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -139,6 +142,24 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 	return b
 }
 
+// WithTopPort sets the top port for the cache
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port for the cache
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
+// WithControlPort sets the control port for the cache
+func (b Builder) WithControlPort(port sim.Port) Builder {
+	b.controlPort = port
+	return b
+}
+
 // Build returns a new cache unit
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
@@ -172,25 +193,16 @@ func (b Builder) setTickingComponent(c *Comp, name string) {
 }
 
 func (b Builder) createPorts(c *Comp, name string) {
-	c.topPort = sim.NewPort(
-		c, b.numReqPerCycle,
-		b.numReqPerCycle,
-		name+".TopPort",
-	)
+	c.topPort = b.topPort
+	c.topPort.SetComponent(c)
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = sim.NewPort(
-		c, b.numReqPerCycle,
-		b.numReqPerCycle,
-		name+".BottomPort",
-	)
+	c.bottomPort = b.bottomPort
+	c.bottomPort.SetComponent(c)
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = sim.NewPort(
-		c, b.numReqPerCycle,
-		b.numReqPerCycle,
-		name+".ControlPort",
-	)
+	c.controlPort = b.controlPort
+	c.controlPort.SetComponent(c)
 	c.AddPort("Control", c.controlPort)
 }
 

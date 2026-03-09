@@ -32,6 +32,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		cache = MakeBuilder().
 			WithEngine(engine).
+			WithTopPort(sim.NewPort(nil, 4800, 4800, "MMUCache.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4800, 4800, "MMUCache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 1, 1, "MMUCache.ControlPort")).
 			Build("MMUCache")
 		cache.topPort = topPort
 		cache.bottomPort = bottomPort

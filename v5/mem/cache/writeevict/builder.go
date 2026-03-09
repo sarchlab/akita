@@ -29,6 +29,9 @@ type Builder struct {
 
 	addressMapperType string
 	remotePorts       []sim.RemotePort
+	topPort           sim.Port
+	bottomPort        sim.Port
+	controlPort       sim.Port
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -145,6 +148,24 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 	return b
 }
 
+// WithTopPort sets the top port for the cache
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port for the cache
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
+// WithControlPort sets the control port for the cache
+func (b Builder) WithControlPort(port sim.Port) Builder {
+	b.controlPort = port
+	return b
+}
+
 // Build returns a new cache unit
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
@@ -196,16 +217,16 @@ func (b Builder) Build(name string) *Comp {
 }
 
 func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
-		cache.Name()+".TopPort")
+	cache.topPort = b.topPort
+	cache.topPort.SetComponent(cache)
 	cache.AddPort("Top", cache.topPort)
 
-	cache.bottomPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
-		cache.Name()+".BottomPort")
+	cache.bottomPort = b.bottomPort
+	cache.bottomPort.SetComponent(cache)
 	cache.AddPort("Bottom", cache.bottomPort)
 
-	cache.controlPort = sim.NewPort(cache, b.numReqPerCycle, b.numReqPerCycle,
-		cache.Name()+".ControlPort")
+	cache.controlPort = b.controlPort
+	cache.controlPort.SetComponent(cache)
 	cache.AddPort("Control", cache.controlPort)
 }
 

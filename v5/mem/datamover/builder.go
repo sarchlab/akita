@@ -13,6 +13,9 @@ type Builder struct {
 	outsidePortMapper      mem.AddressToPortMapper
 	insideByteGranularity  uint64
 	outsideByteGranularity uint64
+	ctrlPort               sim.Port
+	insidePort             sim.Port
+	outsidePort            sim.Port
 }
 
 // MakeBuilder creates a new Builder
@@ -70,6 +73,24 @@ func (sdmBuilder Builder) WithOutsideByteGranularity(
 	return sdmBuilder
 }
 
+// WithCtrlPort sets the control port of StreamingDataMover
+func (sdmBuilder Builder) WithCtrlPort(port sim.Port) Builder {
+	sdmBuilder.ctrlPort = port
+	return sdmBuilder
+}
+
+// WithInsidePort sets the inside port of StreamingDataMover
+func (sdmBuilder Builder) WithInsidePort(port sim.Port) Builder {
+	sdmBuilder.insidePort = port
+	return sdmBuilder
+}
+
+// WithOutsidePort sets the outside port of StreamingDataMover
+func (sdmBuilder Builder) WithOutsidePort(port sim.Port) Builder {
+	sdmBuilder.outsidePort = port
+	return sdmBuilder
+}
+
 // Build a new StreamingDataMover
 func (sdmBuilder Builder) Build(name string) *Comp {
 	sdm := &Comp{}
@@ -82,9 +103,12 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 	sdm.TickingComponent = sim.NewTickingComponent(
 		name, sdmBuilder.engine, 1*sim.GHz, sdm)
 
-	sdm.ctrlPort = sim.NewPort(sdm, 40960000, 40960000, name+".CtrlPort")
-	sdm.insidePort = sim.NewPort(sdm, 64, 64, name+".SrcPort")
-	sdm.outsidePort = sim.NewPort(sdm, 64, 64, name+".DstPort")
+	sdm.ctrlPort = sdmBuilder.ctrlPort
+	sdm.ctrlPort.SetComponent(sdm)
+	sdm.insidePort = sdmBuilder.insidePort
+	sdm.insidePort.SetComponent(sdm)
+	sdm.outsidePort = sdmBuilder.outsidePort
+	sdm.outsidePort.SetComponent(sdm)
 
 	return sdm
 }

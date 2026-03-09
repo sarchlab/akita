@@ -38,6 +38,8 @@ var _ = Describe("Cache", func() {
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
+			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 			Build("DRAM")
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
@@ -45,6 +47,9 @@ var _ = Describe("Cache", func() {
 		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
+			WithTopPort(sim.NewPort(nil, 4, 4, "Cache.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4, 4, "Cache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 4, 4, "Cache.ControlPort")).
 			Build("Cache")
 
 		connection.PlugIn(dram.GetPortByName("Top"))

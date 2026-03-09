@@ -16,7 +16,9 @@ func TestPageSizeValidation(t *testing.T) {
 	builder := MakeBuilder().
 		WithEngine(engine).
 		WithPageTable(pageTable).
-		WithLog2PageSize(12) // 4KB pages
+		WithLog2PageSize(12). // 4KB pages
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "MatchingPageSizes.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "MatchingPageSizes.MigrationPort"))
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
@@ -29,7 +31,9 @@ func TestPageSizeValidation(t *testing.T) {
 	builder2 := MakeBuilder().
 		WithEngine(engine).
 		WithPageTable(pageTable2).
-		WithLog2PageSize(16) // 64KB pages
+		WithLog2PageSize(16). // 64KB pages
+		WithTopPort(sim.NewPort(nil, 4096, 4096, "MismatchedPageSizes.ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, "MismatchedPageSizes.MigrationPort"))
 
 	// This should panic
 	defer func() {

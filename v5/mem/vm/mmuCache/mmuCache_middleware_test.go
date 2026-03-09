@@ -42,6 +42,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			WithNumLevels(2).
 			WithNumBlocks(4).
 			WithLatencyPerLevel(100).
+			WithTopPort(sim.NewPort(nil, 4800, 4800, "MMUCache.TopPort")).
+			WithBottomPort(sim.NewPort(nil, 4800, 4800, "MMUCache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 1, 1, "MMUCache.ControlPort")).
 			Build("MMUCache")
 		cache.numBlocks = 4
 		cache.reset()

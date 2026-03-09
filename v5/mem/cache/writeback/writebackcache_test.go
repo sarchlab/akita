@@ -78,7 +78,10 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithEngine(engine).
 			WithByteSize(1024 * 4 * 64).
 			WithNumReqPerCycle(4).
-			WithAddressToPortMapper(addressToPortMapper)
+			WithAddressToPortMapper(addressToPortMapper).
+			WithTopPort(sim.NewPort(nil, 8, 8, "Cache.ToTop")).
+			WithBottomPort(sim.NewPort(nil, 8, 8, "Cache.BottomPort")).
+			WithControlPort(sim.NewPort(nil, 8, 8, "Cache.ControlPort"))
 		cacheModule = builder.Build("Cache")
 		cacheModule.directory = directory
 		cacheModule.storage = storage
@@ -88,6 +91,8 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithNewStorage(4 * mem.GB).
 			WithFreq(1 * sim.GHz).
 			WithLatency(200).
+			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 			Build("DRAM")
 
 		addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()

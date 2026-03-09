@@ -21,6 +21,9 @@ type Builder struct {
 	addressMapper     mem.AddressToPortMapper
 	addressMapperType string
 	remotePorts       []sim.RemotePort
+	topPort           sim.Port
+	bottomPort        sim.Port
+	controlPort       sim.Port
 }
 
 // MakeBuilder returns a Builder
@@ -154,6 +157,24 @@ func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
 	return b
 }
 
+// WithTopPort sets the top port for the TLB
+func (b Builder) WithTopPort(port sim.Port) Builder {
+	b.topPort = port
+	return b
+}
+
+// WithBottomPort sets the bottom port for the TLB
+func (b Builder) WithBottomPort(port sim.Port) Builder {
+	b.bottomPort = port
+	return b
+}
+
+// WithControlPort sets the control port for the TLB
+func (b Builder) WithControlPort(port sim.Port) Builder {
+	b.controlPort = port
+	return b
+}
+
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
 	tlb := &Comp{}
@@ -217,17 +238,15 @@ func (b Builder) createTranslationProviderMapper(c *Comp) {
 }
 
 func (b Builder) createPorts(name string, c *Comp) {
-	c.topPort = sim.NewPort(c,
-		b.numReqPerCycle, b.numReqPerCycle,
-		name+".TopPort")
+	c.topPort = b.topPort
+	c.topPort.SetComponent(c)
 	c.AddPort("Top", c.topPort)
 
-	c.bottomPort = sim.NewPort(c,
-		b.numReqPerCycle, b.numReqPerCycle,
-		name+".BottomPort")
+	c.bottomPort = b.bottomPort
+	c.bottomPort.SetComponent(c)
 	c.AddPort("Bottom", c.bottomPort)
 
-	c.controlPort = sim.NewPort(c, 1, 1,
-		name+".ControlPort")
+	c.controlPort = b.controlPort
+	c.controlPort.SetComponent(c)
 	c.AddPort("Control", c.controlPort)
 }

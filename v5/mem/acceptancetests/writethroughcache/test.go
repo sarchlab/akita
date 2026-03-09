@@ -84,7 +84,10 @@ func buildEnvironment() {
 		WithWayAssociativity(8).
 		WithTotalByteSize(4 * mem.KB).
 		WithNumBanks(1).
-		WithBankLatency(20)
+		WithBankLatency(20).
+		WithTopPort(sim.NewPort(nil, 4, 4, "Cache.TopPort")).
+		WithBottomPort(sim.NewPort(nil, 4, 4, "Cache.BottomPort")).
+		WithControlPort(sim.NewPort(nil, 4, 4, "Cache.ControlPort"))
 	writeevictCache := builder.Build("Cache")
 
 	if *traceWithStdoutFlag {
@@ -101,6 +104,8 @@ func buildEnvironment() {
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
+		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
 	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
