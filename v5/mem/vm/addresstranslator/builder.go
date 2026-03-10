@@ -2,6 +2,7 @@ package addresstranslator
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -174,17 +175,25 @@ func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
 
 // Build returns a new AddressTranslator
 func (b Builder) Build(name string) *Comp {
-	t := &Comp{}
-	t.TickingComponent = sim.NewTickingComponent(
-		name, b.engine, b.freq, t)
+	spec := Spec{
+		Log2PageSize:   b.log2PageSize,
+		DeviceID:       b.deviceID,
+		NumReqPerCycle: b.numReqPerCycle,
+	}
+
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	t := &Comp{
+		Component: modelComp,
+	}
 
 	b.createPorts(name, t)
 	b.setupMemoryPortMapper(t)
 	b.setupTranslationPortMapper(t)
-
-	t.numReqPerCycle = b.numReqPerCycle
-	t.log2PageSize = b.log2PageSize
-	t.deviceID = b.deviceID
 
 	middleware := &middleware{Comp: t}
 	t.AddMiddleware(middleware)

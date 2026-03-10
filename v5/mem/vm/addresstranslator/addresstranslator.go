@@ -6,9 +6,21 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the AddressTranslator.
+type Spec struct {
+	Log2PageSize   uint64 `json:"log2_page_size"`
+	DeviceID       uint64 `json:"device_id"`
+	NumReqPerCycle int    `json:"num_req_per_cycle"`
+}
+
+// State contains mutable runtime data for the AddressTranslator.
+// Runtime data with pointers/interfaces stays on the Comp struct.
+type State struct{}
 
 type transaction struct {
 	incomingReqs    []*sim.Msg
@@ -25,17 +37,13 @@ type reqToBottom struct {
 // Comp is an AddressTranslator that forwards the read/write requests with
 // the address translated from virtual to physical.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort         sim.Port
 	bottomPort      sim.Port
 	translationPort sim.Port
 	ctrlPort        sim.Port
 
-	log2PageSize          uint64
-	deviceID              uint64
-	numReqPerCycle        int
 	memoryPortMapper      mem.AddressToPortMapper
 	translationPortMapper mem.AddressToPortMapper
 
@@ -43,10 +51,6 @@ type Comp struct {
 
 	transactions        []*transaction
 	inflightReqToBottom []reqToBottom
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
@@ -60,7 +64,7 @@ func (m *middleware) Tick() bool {
 	if !m.isFlushing {
 		madeProgress = m.runPipeline()
 	} else {
-		for i := 0; i < m.numReqPerCycle; i++ {
+		for i := 0; i < m.GetSpec().NumReqPerCycle; i++ {
 			madeProgress = m.parseTranslation() || madeProgress
 		}
 	}
@@ -73,15 +77,17 @@ func (m *middleware) Tick() bool {
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respond() || madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseTranslation() || madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.translate() || madeProgress
 	}
 
@@ -103,7 +109,7 @@ func (m *middleware) translate() bool {
 		WithDst(m.translationPortMapper.Find(vAddr)).
 		WithPID(payload.GetPID()).
 		WithVAddr(vPageID).
-		WithDeviceID(m.deviceID).
+		WithDeviceID(m.GetSpec().DeviceID).
 		Build()
 
 	err := m.translationPort.Send(transReq)
@@ -294,7 +300,7 @@ func (m *middleware) createTranslatedReadReq(
 	page vm.Page,
 ) *sim.Msg {
 	readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-	offset := readPayload.Address % (1 << m.log2PageSize)
+	offset := readPayload.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.ReadReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
@@ -315,7 +321,7 @@ func (m *middleware) createTranslatedWriteReq(
 	page vm.Page,
 ) *sim.Msg {
 	writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-	offset := writePayload.Address % (1 << m.log2PageSize)
+	offset := writePayload.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.WriteReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
@@ -333,7 +339,7 @@ func (m *middleware) createTranslatedWriteReq(
 }
 
 func (m *middleware) addrToPageID(addr uint64) uint64 {
-	return (addr >> m.log2PageSize) << m.log2PageSize
+	return (addr >> m.GetSpec().Log2PageSize) << m.GetSpec().Log2PageSize
 }
 
 func (m *middleware) findTranslationByReqID(id string) *transaction {
