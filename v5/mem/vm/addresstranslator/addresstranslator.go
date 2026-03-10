@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"io"
 	"log"
 	"reflect"
 
@@ -124,11 +125,15 @@ func (c *Comp) GetState() State {
 			})
 	}
 
+	c.Component.SetState(state)
+
 	return state
 }
 
 // SetState restores runtime mutable data from a serializable State.
 func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
+
 	c.isFlushing = state.IsFlushing
 
 	c.transactions = nil
@@ -180,6 +185,23 @@ func (c *Comp) SetState(state State) {
 			},
 		})
 	}
+}
+
+// SaveState syncs runtime data to state, then delegates to Component.SaveState.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState loads state from the reader, then restores runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+
+	c.SetState(c.Component.GetState())
+
+	return nil
 }
 
 type middleware struct {
