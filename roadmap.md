@@ -10,34 +10,54 @@ Evolve Akita V5: redefine component model, implement save/load, make messages pl
 ### M2: Refactor `idealmemcontroller` to use modeling package ✅ — Budget: 6, Used: 4
 ### M3: Implement simulation Save/Load with acceptance test ✅ — Budget: 8, Used: 6
 ### M4: Fix CI lint failures ✅ — Budget: 3, Used: 2
+### M5: Redesign Messages as Plain Structs ✅ — Budget: 8, Used: 6
 
-## Current Milestone
+Replaced `sim.Msg` interface with concrete `Msg` struct. Eliminated `sim.Rsp`, `sim.Request` interfaces and per-type `Meta()`/`Clone()` boilerplate. Added `Payload any` field, `MsgPayload[T]`/`TryMsgPayload[T]` helpers. All 31 message types converted to payload structs. PR #14 merged, verified by Apollo.
 
-### M5: Redesign Messages as Plain Structs — Budget: 8
-**Goal:** Replace the `sim.Msg` interface with a concrete `Msg` struct. Eliminate `sim.Rsp`, `sim.Request` interfaces and all per-type `Meta()`/`Clone()` boilerplate. Introduce `Payload any` field for domain-specific data and generic helpers `MsgPayload[T]`/`TryMsgPayload[T]`.
+## Current Phase: M6 — Port All First-Party Components
 
-**Design:** Based on Iris's analysis (issue #24). Key changes:
-- `sim.Msg` becomes a concrete struct with embedded `MsgMeta`, `RspTo string`, `Payload any`
-- Port interface changes from `Send(Msg)` to `Send(*Msg)`, etc.
-- All 31 message types become payload structs (e.g., `ReadReqPayload`, `WriteReqPayload`)
-- Type dispatch changes from `switch msg.(type)` to `switch msg.Payload.(type)`
-- `msg.Meta().X` becomes `msg.X` (direct embed access)
-- `msg.(sim.Rsp).GetRspTo()` becomes `msg.RspTo`
-- Scope: ~49 production files + ~30 test/mock files
+### Overall Strategy
+Port all 15 remaining components to `modeling.Component[S,T]` pattern. Reference implementation: `mem/idealmemcontroller`. Broken into sub-milestones by complexity.
 
-**Status:** Starting implementation
+### M6.1: Port simple components (tickingping, datamover, gmmu) — NEXT
+**Goal:** Port 3 simple components to `modeling.Component[S,T]`:
+1. `examples/tickingping` — Already has middleware pattern, ~237 LoC, simplest possible port
+2. `mem/datamover` — ~639 LoC, needs middleware refactor, 3 ports
+3. `mem/vm/gmmu` — ~388 LoC, needs middleware refactor + fix value embed
 
-## Upcoming Milestones
+These establish the porting template for more complex components.
 
-### M6: Port all first-party components to modeling package
-**Goal:** Port all remaining 15 components to `modeling.Component[S,T]`:
-- Batch 1 (easy): examples/tickingping, examples/ping
-- Batch 2 (simple): datamover, simplebankedmemory, gmmu
-- Batch 3 (medium): mmu, addresstranslator, noc/endpoint, noc/switches
-- Batch 4 (complex): tlb, mmuCache, writearound, writeevict, writethrough, writeback
-- Plus DRAM and test agents
-**Budget:** TBD (40-56 cycles estimated, will break into sub-milestones)
-**Status:** Pending M5 completion
+### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache)
+**Goal:** Port 3 VM components using patterns from M6.1
+- `mem/vm/mmu` — Migration state machine, 587 LoC
+- `mem/vm/addresstranslator` — 4 ports, interface-typed transactions, 729 LoC
+- `mem/vm/mmuCache` — Internal set serialization, 874 LoC
+
+### M6.3: Port TLB + simplebankedmemory
+**Goal:** Port TLB (1234 LoC) and simplebankedmemory (510 LoC)
+- Both depend on `queueing.Pipeline`/`Buffer` — may need serialization strategy
+- TLB has custom MSHR + internal sets
+
+### M6.4: Port NOC components (endpoint, switches)
+- `noc/networking/switching/endpoint` — 497 LoC, dynamic ports
+- `noc/networking/switching/switches` — 429 LoC, routing table
+
+### M6.5: Port cache components (writearound, writeevict, writethrough, writeback)
+- Prerequisite: serializable `cache.Directory` and `cache.MSHR`
+- Most complex batch, ~7200 LoC total
+- Port writearound first as template
+
+### M6.6: Port DRAM
+- `mem/dram` — 2154 LoC, complex internal subsystems
+
+### M6.7: Special cases
+- `examples/ping` — Event-driven (not ticking), needs architectural decision
+- Test agents — Low priority
+
+## Open Human Issues
+- #16: Fix CI ✅ (done in M4, monitoring)
+- #17: Port all first-party components → M6 (in progress)
+- #18: Message should be plain struct → M5 ✅ (done)
 
 ## Lessons Learned
 - M1-M3 completed in 15 implementation cycles (budgeted 20). Planning and verification added ~3-4 cycles overhead but improved quality.
@@ -47,4 +67,5 @@ Evolve Akita V5: redefine component model, implement save/load, make messages pl
 - Breaking work across parallel workers (Kai, Nova, Leo) speeds implementation significantly.
 - M4 completed efficiently in 2 cycles (budgeted 3) — lint fixes are mechanical once identified.
 - Research cycles (Diana, Iris) before M5/M6 prevented committing to poorly scoped milestones.
-- Message redesign is foundational — must complete before component porting (M6) to avoid double work.
+- Message redesign is foundational — completed before component porting (M6) to avoid double work.
+- M5 completed in 6 implementation cycles (budgeted 8). Multi-worker parallel approach was highly effective for mechanical refactoring.
