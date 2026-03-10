@@ -8,18 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-type sampleMsg struct {
-	meta sim.MsgMeta
-}
-
-func (m *sampleMsg) Meta() *sim.MsgMeta {
-	return &m.meta
-}
-
-func (m *sampleMsg) Clone() sim.Msg {
-	return m
-}
-
 var _ = Describe("Port Analyzer", func() {
 	var (
 		mockCtrl *gomock.Controller
@@ -69,8 +57,8 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic", func() {
-		msg := &sampleMsg{
-			meta: sim.MsgMeta{
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
@@ -113,8 +101,8 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log traffic if only a middle period has value", func() {
-		msg := &sampleMsg{
-			meta: sim.MsgMeta{
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
@@ -157,15 +145,15 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log incoming and outgoing traffic", func() {
-		outMsg := &sampleMsg{
-			meta: sim.MsgMeta{
+		outMsg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
-		inMsg := &sampleMsg{
-			meta: sim.MsgMeta{
+		inMsg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port.AsRemote(),
 				Src:          incommingPort.AsRemote(),
@@ -234,8 +222,8 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when there is a gap period", func() {
-		msg := &sampleMsg{
-			meta: sim.MsgMeta{
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
@@ -278,8 +266,8 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when simulation ends", func() {
-		msg := &sampleMsg{
-			meta: sim.MsgMeta{
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
