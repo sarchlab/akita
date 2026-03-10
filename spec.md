@@ -2,28 +2,20 @@
 
 ## What to Build
 
-1. **Create a new `v5/queueing/` package** and move the following into it:
-   - `Buffer` interface and `bufferImpl` (currently in `v5/sim/buffer.go`)
-   - `Pipeline` interface and `pipelineImpl` (currently in `v5/pipelining/`)
-   - All associated types, builders, hook positions, and tests
+We need to redefine the component. 
 
-2. **Update all references** across the codebase to import from `github.com/sarchlab/akita/v5/queueing` instead of `sim.Buffer` or the `pipelining` package.
+Check /v5/migration.md, under section "Defining Components in V5: Philosophy and Patterns".
 
-3. **Merge CI actions**: Combine the `akita_compile`, `lint`, and `akita_unit_test` jobs in `.github/workflows/akita_test.yml` into a single CI job.
+We need to redefine a component as a combination of spec, state, ports, and middlewares. Spec and state are easily serializable. Ports and middlewares are containers of dependencies. 
 
-## Constraints
+Create a new modeling package. Define a `Component` struct there. In v5, a concrete struct is no longer a struct, but an instance of a component. The package only provides the specs, state, middlewares, and builder.  
 
-- The old `v5/pipelining/` package should be removed after migration.
-- `sim.Buffer` and `sim.NewBuffer` should be removed from `v5/sim/` and placed in `v5/queueing/`.
-- Backward compatibility aliases in `v5/sim/` are acceptable if needed, but the canonical location must be `v5/queueing/`.
-- All existing tests must continue to pass after the refactoring.
-- The merged CI job should perform compile, lint, and unit test in sequence.
+Builders should avoid `with` functions for basic parameters. Instead, builders should have a `withSpec` method to take a spec struct.
+
+We need to consider the serialization requirement. In the simulation package, the simulation struct should have a save and load function, which takes a file name. They can save and load the current state of a simulation.
 
 ## Success Criteria
 
-- `v5/queueing/` package exists with Buffer and Pipeline types.
-- No remaining imports of `v5/pipelining` anywhere in the codebase.
-- `sim.Buffer` references are updated to `queueing.Buffer` (or aliased).
-- CI workflow has a single merged job for compile+lint+test instead of three separate jobs.
-- All CI checks pass (compile, lint, unit tests, acceptance tests).
+Design simple, straightforward, intuitive APIs. 
 
+Create an acceptance test for the save/load process. You can use the memory acceptance tests as a starting point.
