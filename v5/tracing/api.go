@@ -178,24 +178,24 @@ func EndTask(
 
 // MsgIDAtReceiver generates a standard ID for the message task at the
 // message receiver.
-func MsgIDAtReceiver(msg *sim.GenericMsg, domain NamedHookable) string {
-	return fmt.Sprintf("%s@%s", msg.ID, domain.Name())
+func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) string {
+	return fmt.Sprintf("%s@%s", msg.Meta().ID, domain.Name())
 }
 
 // TraceReqInitiate generates a new task. The new task has Type="req_out",
 // What=[the type name of the message]. This function is to be called by the
 // sender of the message.
 func TraceReqInitiate(
-	msg *sim.GenericMsg,
+	msg sim.Msg,
 	domain NamedHookable,
 	taskParentID string,
 ) {
 	StartTask(
-		msg.ID+"_req_out",
+		msg.Meta().ID+"_req_out",
 		taskParentID,
 		domain,
 		"req_out",
-		reflect.TypeOf(msg.Payload).String(),
+		reflect.TypeOf(msg).Elem().Name(),
 		msg,
 	)
 }
@@ -203,22 +203,22 @@ func TraceReqInitiate(
 // TraceReqReceive generates a new task for the message handling. The kind of
 // the task is always "req_in".
 func TraceReqReceive(
-	msg *sim.GenericMsg,
+	msg sim.Msg,
 	domain NamedHookable,
 ) {
 	StartTask(
 		MsgIDAtReceiver(msg, domain),
-		msg.ID+"_req_out",
+		msg.Meta().ID+"_req_out",
 		domain,
 		"req_in",
-		reflect.TypeOf(msg.Payload).String(),
+		reflect.TypeOf(msg).Elem().Name(),
 		msg,
 	)
 }
 
 // TraceReqComplete terminates the message handling task.
 func TraceReqComplete(
-	msg *sim.GenericMsg,
+	msg sim.Msg,
 	domain NamedHookable,
 ) {
 	EndTask(MsgIDAtReceiver(msg, domain), domain)
@@ -227,8 +227,8 @@ func TraceReqComplete(
 // TraceReqFinalize terminates the message task. This function should be called
 // when the sender receives the response.
 func TraceReqFinalize(
-	msg *sim.GenericMsg,
+	msg sim.Msg,
 	domain NamedHookable,
 ) {
-	EndTask(msg.ID+"_req_out", domain)
+	EndTask(msg.Meta().ID+"_req_out", domain)
 }
