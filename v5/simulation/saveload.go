@@ -55,19 +55,38 @@ func (s *Simulation) Save(path string) error {
 		return fmt.Errorf("cannot save: %w", err)
 	}
 
-	// Create directory structure.
-	compDir := filepath.Join(path, "components")
-	storageDir := filepath.Join(path, "storage")
+	if err := s.createCheckpointDirs(path); err != nil {
+		return err
+	}
 
-	if err := os.MkdirAll(compDir, 0o755); err != nil {
+	if err := s.saveMetadata(path); err != nil {
+		return err
+	}
+
+	if err := s.saveComponentStates(filepath.Join(path, "components")); err != nil {
+		return err
+	}
+
+	if err := s.saveStorages(filepath.Join(path, "storage")); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Simulation) createCheckpointDirs(path string) error {
+	if err := os.MkdirAll(filepath.Join(path, "components"), 0o755); err != nil {
 		return fmt.Errorf("create component dir: %w", err)
 	}
 
-	if err := os.MkdirAll(storageDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(path, "storage"), 0o755); err != nil {
 		return fmt.Errorf("create storage dir: %w", err)
 	}
 
-	// Save metadata.
+	return nil
+}
+
+func (s *Simulation) saveMetadata(path string) error {
 	meta := checkpointMetadata{
 		EngineTime:      s.engine.CurrentTime(),
 		IDGeneratorNext: sim.GetIDGeneratorNextID(),
@@ -82,48 +101,60 @@ func (s *Simulation) Save(path string) error {
 		return fmt.Errorf("write metadata: %w", err)
 	}
 
-	// Save component states.
+	return nil
+}
+
+func (s *Simulation) saveComponentStates(compDir string) error {
 	for _, comp := range s.components {
-		if saver, ok := comp.(StateSaver); ok {
-			filePath := filepath.Join(compDir, comp.Name()+".json")
-
-			f, err := os.Create(filePath)
-			if err != nil {
-				return fmt.Errorf("create component file %s: %w", comp.Name(), err)
-			}
-
-			if err := saver.SaveState(f); err != nil {
-				f.Close()
-				return fmt.Errorf("save state for %s: %w", comp.Name(), err)
-			}
-
-			f.Close()
+		saver, ok := comp.(StateSaver)
+		if !ok {
+			continue
 		}
+
+		filePath := filepath.Join(compDir, comp.Name()+".json")
+
+		f, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("create component file %s: %w", comp.Name(), err)
+		}
+
+		if err := saver.SaveState(f); err != nil {
+			f.Close()
+			return fmt.Errorf("save state for %s: %w", comp.Name(), err)
+		}
+
+		f.Close()
 	}
 
-	// Save storage.
+	return nil
+}
+
+func (s *Simulation) saveStorages(storageDir string) error {
 	for _, comp := range s.components {
-		if owner, ok := comp.(StorageOwner); ok {
-			storage := owner.GetStorage()
-			if storage == nil {
-				continue
-			}
-
-			name := owner.StorageName()
-			filePath := filepath.Join(storageDir, name+".bin")
-
-			f, err := os.Create(filePath)
-			if err != nil {
-				return fmt.Errorf("create storage file %s: %w", name, err)
-			}
-
-			if err := storage.Save(f); err != nil {
-				f.Close()
-				return fmt.Errorf("save storage %s: %w", name, err)
-			}
-
-			f.Close()
+		owner, ok := comp.(StorageOwner)
+		if !ok {
+			continue
 		}
+
+		storage := owner.GetStorage()
+		if storage == nil {
+			continue
+		}
+
+		name := owner.StorageName()
+		filePath := filepath.Join(storageDir, name+".bin")
+
+		f, err := os.Create(filePath)
+		if err != nil {
+			return fmt.Errorf("create storage file %s: %w", name, err)
+		}
+
+		if err := storage.Save(f); err != nil {
+			f.Close()
+			return fmt.Errorf("save storage %s: %w", name, err)
+		}
+
+		f.Close()
 	}
 
 	return nil
@@ -135,7 +166,24 @@ func (s *Simulation) Save(path string) error {
 // from build code) before calling Load. After loading, TickResetter components
 // will have their tick schedulers reset and a new tick scheduled.
 func (s *Simulation) Load(path string) error {
-	// Read metadata.
+	if err := s.loadMetadata(path); err != nil {
+		return err
+	}
+
+	if err := s.loadComponentStates(filepath.Join(path, "components")); err != nil {
+		return err
+	}
+
+	if err := s.loadStorages(filepath.Join(path, "storage")); err != nil {
+		return err
+	}
+
+	s.resetTickSchedulers()
+
+	return nil
+}
+
+func (s *Simulation) loadMetadata(path string) error {
 	metaData, err := os.ReadFile(filepath.Join(path, "metadata.json"))
 	if err != nil {
 		return fmt.Errorf("read metadata: %w", err)
@@ -146,78 +194,89 @@ func (s *Simulation) Load(path string) error {
 		return fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
-	// Restore engine time.
 	se, ok := s.engine.(*sim.SerialEngine)
 	if !ok {
 		return fmt.Errorf("Load requires SerialEngine")
 	}
 
 	se.SetCurrentTime(meta.EngineTime)
-
-	// Restore ID generator.
 	sim.SetIDGeneratorNextID(meta.IDGeneratorNext)
 
-	// Load component states.
+	return nil
+}
+
+func (s *Simulation) loadComponentStates(compDir string) error {
 	for _, comp := range s.components {
-		if loader, ok := comp.(StateLoader); ok {
-			filePath := filepath.Join(path, "components", comp.Name()+".json")
-
-			f, err := os.Open(filePath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue // Component may not have been saved.
-				}
-				return fmt.Errorf("open component file %s: %w", comp.Name(), err)
-			}
-
-			if err := loader.LoadState(f); err != nil {
-				f.Close()
-				return fmt.Errorf("load state for %s: %w", comp.Name(), err)
-			}
-
-			f.Close()
+		loader, ok := comp.(StateLoader)
+		if !ok {
+			continue
 		}
-	}
 
-	// Load storage.
-	for _, comp := range s.components {
-		if owner, ok := comp.(StorageOwner); ok {
-			storage := owner.GetStorage()
-			if storage == nil {
+		filePath := filepath.Join(compDir, comp.Name()+".json")
+
+		f, err := os.Open(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
 				continue
 			}
-
-			name := owner.StorageName()
-			filePath := filepath.Join(path, "storage", name+".bin")
-
-			f, err := os.Open(filePath)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return fmt.Errorf("open storage file %s: %w", name, err)
-			}
-
-			if err := storage.Load(f); err != nil {
-				f.Close()
-				return fmt.Errorf("load storage %s: %w", name, err)
-			}
-
-			f.Close()
+			return fmt.Errorf("open component file %s: %w", comp.Name(), err)
 		}
+
+		if err := loader.LoadState(f); err != nil {
+			f.Close()
+			return fmt.Errorf("load state for %s: %w", comp.Name(), err)
+		}
+
+		f.Close()
 	}
 
-	// Reset tick schedulers so future TickLater calls can schedule events.
-	// We only reset the scheduler guard — we do NOT auto-schedule ticks.
-	// Components will be ticked naturally when ports receive messages or
-	// when the caller explicitly calls TickLater on specific components.
+	return nil
+}
+
+func (s *Simulation) loadStorages(storageDir string) error {
+	for _, comp := range s.components {
+		owner, ok := comp.(StorageOwner)
+		if !ok {
+			continue
+		}
+
+		storage := owner.GetStorage()
+		if storage == nil {
+			continue
+		}
+
+		name := owner.StorageName()
+		filePath := filepath.Join(storageDir, name+".bin")
+
+		f, err := os.Open(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return fmt.Errorf("open storage file %s: %w", name, err)
+		}
+
+		if err := storage.Load(f); err != nil {
+			f.Close()
+			return fmt.Errorf("load storage %s: %w", name, err)
+		}
+
+		f.Close()
+	}
+
+	return nil
+}
+
+// resetTickSchedulers resets tick schedulers so future TickLater calls can
+// schedule events. We only reset the scheduler guard — we do NOT auto-schedule
+// ticks. Components will be ticked naturally when ports receive messages or
+// when the caller explicitly calls TickLater on specific components.
+func (s *Simulation) resetTickSchedulers() {
 	for _, comp := range s.components {
 		if resetter, ok := comp.(TickResetter); ok {
 			resetter.ResetTick()
 		}
 	}
-
-	return nil
 }
 
 // verifyQuiescence checks that all registered ports have empty buffers.
