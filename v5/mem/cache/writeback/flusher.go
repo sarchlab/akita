@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -12,7 +13,7 @@ type flusher struct {
 	cache *Comp
 
 	blockToEvict    []*cache.Block
-	processingFlush *cache.FlushReq
+	processingFlush *sim.Msg // payload: *cache.FlushReqPayload
 }
 
 func (f *flusher) Tick() bool {
@@ -97,37 +98,34 @@ func (f *flusher) extractFromPort() bool {
 		return false
 	}
 
-	switch req := item.(type) {
-	case *cache.FlushReq:
-		return f.startProcessingFlush(req)
-	case *cache.RestartReq:
-		return f.handleCacheRestart(req)
+	switch item.Payload.(type) {
+	case *cache.FlushReqPayload:
+		return f.startProcessingFlush(item)
+	case *cache.RestartReqPayload:
+		return f.handleCacheRestart(item)
 	default:
-		log.Panicf("Cannot process request of %s", reflect.TypeOf(req))
+		log.Panicf("Cannot process request of %s", reflect.TypeOf(item.Payload))
 	}
 
 	return true
 }
 
-func (f *flusher) startProcessingFlush(
-	req *cache.FlushReq,
-) bool {
-	f.processingFlush = req
-	if req.DiscardInflight {
+func (f *flusher) startProcessingFlush(msg *sim.Msg) bool {
+	flushPayload := sim.MsgPayload[cache.FlushReqPayload](msg)
+	f.processingFlush = msg
+	if flushPayload.DiscardInflight {
 		f.cache.discardInflightTransactions()
 	}
 
 	f.cache.state = cacheStatePreFlushing
 	f.cache.controlPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, f.cache)
+	tracing.TraceReqReceive(msg, f.cache)
 
 	return true
 }
 
-func (f *flusher) handleCacheRestart(
-	req *cache.RestartReq,
-) bool {
+func (f *flusher) handleCacheRestart(msg *sim.Msg) bool {
 	if !f.cache.controlPort.CanSend() {
 		return false
 	}
@@ -139,8 +137,8 @@ func (f *flusher) handleCacheRestart(
 
 	rsp := cache.RestartRspBuilder{}.
 		WithSrc(f.cache.controlPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(msg.Src).
+		WithRspTo(msg.ID).
 		Build()
 	f.cache.controlPort.Send(rsp)
 
@@ -172,7 +170,8 @@ func (f *flusher) finalizeFlushing() bool {
 	f.cache.mshr.Reset()
 	f.cache.directory.Reset()
 
-	if f.processingFlush.PauseAfterFlushing {
+	flushPayload := sim.MsgPayload[cache.FlushReqPayload](f.processingFlush)
+	if flushPayload.PauseAfterFlushing {
 		f.cache.state = cacheStatePaused
 	} else {
 		f.cache.state = cacheStateRunning

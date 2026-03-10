@@ -15,8 +15,8 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	req := p.cache.topPort.PeekIncoming()
-	if req == nil {
+	msg := p.cache.topPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
@@ -28,18 +28,18 @@ func (p *topParser) Tick() bool {
 		id: sim.GetIDGenerator().Generate(),
 	}
 
-	switch req := req.(type) {
-	case *mem.ReadReq:
-		trans.read = req
-	case *mem.WriteReq:
-		trans.write = req
+	switch msg.Payload.(type) {
+	case *mem.ReadReqPayload:
+		trans.read = msg
+	case *mem.WriteReqPayload:
+		trans.write = msg
 	}
 
 	p.cache.dirStageBuffer.Push(trans)
 
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)
 
-	tracing.TraceReqReceive(req, p.cache)
+	tracing.TraceReqReceive(msg, p.cache)
 
 	p.cache.topPort.RetrieveIncoming()
 
