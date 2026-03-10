@@ -2,11 +2,9 @@ package sim
 
 import "fmt"
 
-// Msg is a piece of information transferred between components.
-type Msg struct {
-	MsgMeta
-	RspTo   string
-	Payload any
+// Msg is the interface for all messages transferred between components.
+type Msg interface {
+	Meta() *MsgMeta
 }
 
 // MsgMeta contains routing and identification metadata.
@@ -15,13 +13,23 @@ type MsgMeta struct {
 	Src, Dst     RemotePort
 	TrafficClass string
 	TrafficBytes int
+	RspTo        string
 }
 
+// Meta returns the message metadata.
+func (m *MsgMeta) Meta() *MsgMeta { return m }
+
 // IsRsp returns true if this message is a response to another message.
-func (m *Msg) IsRsp() bool { return m.RspTo != "" }
+func (m *MsgMeta) IsRsp() bool { return m.RspTo != "" }
+
+// GenericMsg is a piece of information transferred between components.
+type GenericMsg struct {
+	MsgMeta
+	Payload any
+}
 
 // Clone returns a copy of the message with a new ID.
-func (m *Msg) Clone() *Msg {
+func (m *GenericMsg) Clone() *GenericMsg {
 	clone := *m
 	clone.ID = GetIDGenerator().Generate()
 	return &clone
@@ -29,7 +37,7 @@ func (m *Msg) Clone() *Msg {
 
 // MsgPayload extracts the payload as a specific type, panicking if the type
 // does not match.
-func MsgPayload[T any](msg *Msg) *T {
+func MsgPayload[T any](msg *GenericMsg) *T {
 	p, ok := msg.Payload.(*T)
 	if !ok {
 		panic(fmt.Sprintf("msg payload: want %T, got %T", (*T)(nil), msg.Payload))
@@ -39,7 +47,7 @@ func MsgPayload[T any](msg *Msg) *T {
 
 // TryMsgPayload extracts the payload as a specific type, returning false if the
 // type does not match.
-func TryMsgPayload[T any](msg *Msg) (*T, bool) {
+func TryMsgPayload[T any](msg *GenericMsg) (*T, bool) {
 	p, ok := msg.Payload.(*T)
 	return p, ok
 }

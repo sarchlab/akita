@@ -93,7 +93,7 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 }
 
 // Deliver mocks base method.
-func (m *MockPort) Deliver(msg *Msg) *SendError {
+func (m *MockPort) Deliver(msg Msg) *SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deliver", msg)
 	ret0, _ := ret[0].(*SendError)
@@ -189,10 +189,10 @@ func (mr *MockPortMockRecorder) NumOutgoing() *gomock.Call {
 }
 
 // PeekIncoming mocks base method.
-func (m *MockPort) PeekIncoming() *Msg {
+func (m *MockPort) PeekIncoming() Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekIncoming")
-	ret0, _ := ret[0].(*Msg)
+	ret0, _ := ret[0].(Msg)
 	return ret0
 }
 
@@ -203,10 +203,10 @@ func (mr *MockPortMockRecorder) PeekIncoming() *gomock.Call {
 }
 
 // PeekOutgoing mocks base method.
-func (m *MockPort) PeekOutgoing() *Msg {
+func (m *MockPort) PeekOutgoing() Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekOutgoing")
-	ret0, _ := ret[0].(*Msg)
+	ret0, _ := ret[0].(Msg)
 	return ret0
 }
 
@@ -217,10 +217,10 @@ func (mr *MockPortMockRecorder) PeekOutgoing() *gomock.Call {
 }
 
 // RetrieveIncoming mocks base method.
-func (m *MockPort) RetrieveIncoming() *Msg {
+func (m *MockPort) RetrieveIncoming() Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveIncoming")
-	ret0, _ := ret[0].(*Msg)
+	ret0, _ := ret[0].(Msg)
 	return ret0
 }
 
@@ -231,10 +231,10 @@ func (mr *MockPortMockRecorder) RetrieveIncoming() *gomock.Call {
 }
 
 // RetrieveOutgoing mocks base method.
-func (m *MockPort) RetrieveOutgoing() *Msg {
+func (m *MockPort) RetrieveOutgoing() Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveOutgoing")
-	ret0, _ := ret[0].(*Msg)
+	ret0, _ := ret[0].(Msg)
 	return ret0
 }
 
@@ -245,7 +245,7 @@ func (mr *MockPortMockRecorder) RetrieveOutgoing() *gomock.Call {
 }
 
 // Send mocks base method.
-func (m *MockPort) Send(msg *Msg) *SendError {
+func (m *MockPort) Send(msg Msg) *SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", msg)
 	ret0, _ := ret[0].(*SendError)

@@ -11,8 +11,8 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-func newTestMsg() *sim.Msg {
-	return &sim.Msg{
+func newTestMsg() *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: sim.GetIDGenerator().Generate(),
 		},
@@ -92,8 +92,8 @@ var _ = Describe("DirectConnection", func() {
 type agent struct {
 	*sim.TickingComponent
 
-	msgsOut []*sim.Msg
-	msgsIn  []*sim.Msg
+	msgsOut []*sim.GenericMsg
+	msgsIn  []sim.Msg
 
 	OutPort sim.Port
 }

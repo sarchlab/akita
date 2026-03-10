@@ -72,7 +72,7 @@ func (w *Wire) NotifySend() {
 
 // Peek returns the message that is currently in the outgoing buffer of the
 // other port.
-func (w *Wire) Peek(port *Port) *sim.Msg {
+func (w *Wire) Peek(port *Port) sim.Msg {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -89,7 +89,7 @@ func (w *Wire) Peek(port *Port) *sim.Msg {
 
 // Retrieve returns and removes the message that is currently in the outgoing
 // buffer of the other port.
-func (w *Wire) Retrieve(port *Port) *sim.Msg {
+func (w *Wire) Retrieve(port *Port) sim.Msg {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -138,9 +138,9 @@ func (w *Wire) theOtherPort(port *Port) *Port {
 
 func srcAndDstMustBeValid(
 	expSrc, expDst sim.RemotePort,
-	msg *sim.Msg,
+	msg sim.Msg,
 ) {
-	if msg.Src != expSrc || msg.Dst != expDst {
+	if msg.Meta().Src != expSrc || msg.Meta().Dst != expDst {
 		panic("message src and dst is not valid for the wire")
 	}
 }

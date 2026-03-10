@@ -116,7 +116,7 @@ func (m *middleware) forwardMany(
 			break
 		}
 
-		dst := head.Dst
+		dst := head.Meta().Dst
 		dstPort := m.ports.getPortByName(dst)
 
 		err := dstPort.Deliver(head)
