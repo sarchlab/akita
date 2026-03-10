@@ -42,7 +42,12 @@ func (p Protocol) isHBM() bool {
 type Spec struct{}
 
 // State contains mutable runtime data for the DRAM memory controller.
-type State struct{}
+type State struct {
+	Transactions  []transactionState  `json:"transactions"`
+	SubTransQueue subTransQueueState  `json:"sub_trans_queue"`
+	CommandQueues commandQueueState   `json:"command_queues"`
+	BankStates    bankStatesFlat      `json:"bank_states"`
+}
 
 // Comp is a MemController handles read and write requests.
 type Comp struct {

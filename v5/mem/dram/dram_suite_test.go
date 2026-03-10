@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
@@ -23,6 +24,12 @@ import (
 func TestDram(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Dram Suite")
+}
+
+func TestValidateState(t *testing.T) {
+	if err := modeling.ValidateState(State{}); err != nil {
+		t.Fatalf("State failed validation: %v", err)
+	}
 }
 
 var _ = Describe("DRAM Integration", func() {
