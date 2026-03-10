@@ -35,6 +35,12 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 - PR #1 opened from `ares/m1-v5-scaffold` → `main` (not merged, awaiting human review)
 - `go build ./...` and `go vet ./...` both pass clean
 
+### M4: Fix CI — add tool setup steps to workflow ⬜ IN PROGRESS
+- CI is failing because the self-hosted runner doesn't have `go`, `npm`, or `python3` in PATH
+- Need to add `actions/setup-go`, `actions/setup-node`, `actions/setup-python` actions to all jobs
+- Reference the original akita repo's CI for the correct patterns
+- Estimated: 2 cycles
+
 ---
 
 ## Lessons Learned
