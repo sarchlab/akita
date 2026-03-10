@@ -118,6 +118,156 @@ func cleanupSim(s *simulation.Simulation) {
 	os.Remove(path)
 }
 
+func runEngine(t *testing.T, s *simulation.Simulation, phase string) {
+	t.Helper()
+
+	err := s.GetEngine().(*sim.SerialEngine).Run()
+	if err != nil {
+		t.Fatalf("%s run failed: %v", phase, err)
+	}
+}
+
+// runPhaseA runs the first batch of writes and saves a checkpoint.
+func runPhaseA(
+	t *testing.T,
+) (*simulation.Simulation, *memaccessagent.MemAccessAgent, string) {
+	t.Helper()
+
+	rngA := rand.New(rand.NewSource(seed))
+	sA, agentA, _ := buildSimulation(t, 50, 0, rngA)
+	agentA.TickLater()
+
+	runEngine(t, sA, "Phase A")
+
+	t.Logf("Phase A done: WriteLeft=%d ReadLeft=%d keys=%d engineTime=%v idNext=%d",
+		agentA.WriteLeft, agentA.ReadLeft, len(agentA.KnownMemValue),
+		sA.GetEngine().CurrentTime(), sim.GetIDGeneratorNextID())
+
+	checkpointDir := t.TempDir()
+
+	err := sA.Save(checkpointDir)
+	if err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	return sA, agentA, checkpointDir
+}
+
+// runPhaseB continues the original simulation after the checkpoint.
+func runPhaseB(
+	t *testing.T,
+	sA *simulation.Simulation,
+	agentA *memaccessagent.MemAccessAgent,
+) agentResult {
+	t.Helper()
+
+	rngB := rand.New(rand.NewSource(seed + 1))
+	agentA.Rand = rngB
+	agentA.WriteLeft = 50
+	agentA.ReadLeft = 100
+	agentA.TickLater()
+
+	runEngine(t, sA, "Phase B")
+
+	result := captureResult(agentA)
+	t.Logf("Phase B done: WriteLeft=%d ReadLeft=%d keys=%d",
+		result.WriteLeft, result.ReadLeft, len(result.KnownMemValue))
+
+	sA.Terminate()
+	cleanupSim(sA)
+
+	if result.WriteLeft != 0 || result.ReadLeft != 0 {
+		t.Fatalf("Original sim didn't complete: W=%d R=%d",
+			result.WriteLeft, result.ReadLeft)
+	}
+
+	return result
+}
+
+// runPhaseC builds a new simulation, loads the checkpoint, and runs the
+// same continuation to verify determinism.
+func runPhaseC(
+	t *testing.T,
+	checkpointDir string,
+) agentResult {
+	t.Helper()
+
+	sim.ResetIDGenerator()
+	sim.UseSequentialIDGenerator()
+
+	rngC := rand.New(rand.NewSource(seed + 1))
+	sC, agentC, _ := buildSimulation(t, 50, 0, rngC)
+	defer func() {
+		sC.Terminate()
+		cleanupSim(sC)
+	}()
+
+	err := sC.Load(checkpointDir)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	t.Logf("Phase C loaded: WriteLeft=%d ReadLeft=%d keys=%d idNext=%d engineTime=%v",
+		agentC.WriteLeft, agentC.ReadLeft, len(agentC.KnownMemValue),
+		sim.GetIDGeneratorNextID(), sC.GetEngine().CurrentTime())
+
+	agentC.WriteLeft = 50
+	agentC.ReadLeft = 100
+	agentC.TickLater()
+
+	runEngine(t, sC, "Phase C")
+
+	result := captureResult(agentC)
+	t.Logf("Phase C done: WriteLeft=%d ReadLeft=%d keys=%d",
+		result.WriteLeft, result.ReadLeft, len(result.KnownMemValue))
+
+	if result.WriteLeft != 0 || result.ReadLeft != 0 {
+		t.Fatalf("Loaded sim didn't complete: W=%d R=%d",
+			result.WriteLeft, result.ReadLeft)
+	}
+
+	return result
+}
+
+func reportDiff(t *testing.T, orig, loaded agentResult) {
+	t.Helper()
+
+	if orig.WriteLeft != loaded.WriteLeft {
+		t.Errorf("WriteLeft: orig=%d loaded=%d",
+			orig.WriteLeft, loaded.WriteLeft)
+	}
+
+	if orig.ReadLeft != loaded.ReadLeft {
+		t.Errorf("ReadLeft: orig=%d loaded=%d",
+			orig.ReadLeft, loaded.ReadLeft)
+	}
+
+	if len(orig.KnownMemValue) != len(loaded.KnownMemValue) {
+		t.Errorf("KnownMemValue keys: orig=%d loaded=%d",
+			len(orig.KnownMemValue), len(loaded.KnownMemValue))
+	}
+
+	diffCount := 0
+
+	for k, vo := range orig.KnownMemValue {
+		vl, ok := loaded.KnownMemValue[k]
+		if !ok {
+			t.Errorf("Key 0x%X in original but not in loaded", k)
+			diffCount++
+		} else if len(vo) != len(vl) {
+			t.Errorf("Key 0x%X: orig len=%d loaded len=%d", k, len(vo), len(vl))
+			diffCount++
+		}
+
+		if diffCount > 10 {
+			t.Error("... (truncated)")
+			break
+		}
+	}
+
+	t.Fatal("Results do not match between original and loaded simulation")
+}
+
 // TestSaveLoadDeterminism verifies that saving and loading produces
 // deterministic results.
 //
@@ -129,125 +279,12 @@ func TestSaveLoadDeterminism(t *testing.T) {
 	sim.ResetIDGenerator()
 	sim.UseSequentialIDGenerator()
 
-	rngA := rand.New(rand.NewSource(seed))
-
-	// === Phase A: first batch → save ===
-	sA, agentA, _ := buildSimulation(t, 50, 0, rngA)
-	agentA.TickLater()
-
-	err := sA.GetEngine().(*sim.SerialEngine).Run()
-	if err != nil {
-		t.Fatalf("Phase A run failed: %v", err)
-	}
-
-	t.Logf("Phase A done: WriteLeft=%d ReadLeft=%d keys=%d engineTime=%v idNext=%d",
-		agentA.WriteLeft, agentA.ReadLeft, len(agentA.KnownMemValue),
-		sA.GetEngine().CurrentTime(), sim.GetIDGeneratorNextID())
-
-	checkpointDir := t.TempDir()
-	err = sA.Save(checkpointDir)
-	if err != nil {
-		t.Fatalf("Save failed: %v", err)
-	}
-
-	// === Phase B: continue original simulation ===
-	rngB := rand.New(rand.NewSource(seed + 1))
-	agentA.Rand = rngB
-	agentA.WriteLeft = 50
-	agentA.ReadLeft = 100
-	agentA.TickLater()
-
-	err = sA.GetEngine().(*sim.SerialEngine).Run()
-	if err != nil {
-		t.Fatalf("Phase B run failed: %v", err)
-	}
-
-	resultOriginal := captureResult(agentA)
-	t.Logf("Phase B done: WriteLeft=%d ReadLeft=%d keys=%d",
-		resultOriginal.WriteLeft, resultOriginal.ReadLeft,
-		len(resultOriginal.KnownMemValue))
-	sA.Terminate()
-	cleanupSim(sA)
-
-	if resultOriginal.WriteLeft != 0 || resultOriginal.ReadLeft != 0 {
-		t.Fatalf("Original sim didn't complete: W=%d R=%d",
-			resultOriginal.WriteLeft, resultOriginal.ReadLeft)
-	}
-
-	// === Phase C: new simulation, load checkpoint, same continuation ===
-	sim.ResetIDGenerator()
-	sim.UseSequentialIDGenerator()
-
-	// Build with dummy params — Load will overwrite state.
-	rngC := rand.New(rand.NewSource(seed + 1))
-	sC, agentC, _ := buildSimulation(t, 50, 0, rngC)
-	defer func() {
-		sC.Terminate()
-		cleanupSim(sC)
-	}()
-
-	err = sC.Load(checkpointDir)
-	if err != nil {
-		t.Fatalf("Load failed: %v", err)
-	}
-
-	t.Logf("Phase C loaded: WriteLeft=%d ReadLeft=%d keys=%d idNext=%d engineTime=%v",
-		agentC.WriteLeft, agentC.ReadLeft, len(agentC.KnownMemValue),
-		sim.GetIDGeneratorNextID(), sC.GetEngine().CurrentTime())
-
-	// Set same continuation work + rand seed.
-	agentC.WriteLeft = 50
-	agentC.ReadLeft = 100
-	// Load already reset tick schedulers. Start the agent ticking.
-	agentC.TickLater()
-
-	err = sC.GetEngine().(*sim.SerialEngine).Run()
-	if err != nil {
-		t.Fatalf("Phase C run failed: %v", err)
-	}
-
-	resultLoaded := captureResult(agentC)
-	t.Logf("Phase C done: WriteLeft=%d ReadLeft=%d keys=%d",
-		resultLoaded.WriteLeft, resultLoaded.ReadLeft,
-		len(resultLoaded.KnownMemValue))
-
-	if resultLoaded.WriteLeft != 0 || resultLoaded.ReadLeft != 0 {
-		t.Fatalf("Loaded sim didn't complete: W=%d R=%d",
-			resultLoaded.WriteLeft, resultLoaded.ReadLeft)
-	}
+	sA, agentA, checkpointDir := runPhaseA(t)
+	resultOriginal := runPhaseB(t, sA, agentA)
+	resultLoaded := runPhaseC(t, checkpointDir)
 
 	if !resultsEqual(resultOriginal, resultLoaded) {
-		if resultOriginal.WriteLeft != resultLoaded.WriteLeft {
-			t.Errorf("WriteLeft: orig=%d loaded=%d",
-				resultOriginal.WriteLeft, resultLoaded.WriteLeft)
-		}
-		if resultOriginal.ReadLeft != resultLoaded.ReadLeft {
-			t.Errorf("ReadLeft: orig=%d loaded=%d",
-				resultOriginal.ReadLeft, resultLoaded.ReadLeft)
-		}
-		if len(resultOriginal.KnownMemValue) != len(resultLoaded.KnownMemValue) {
-			t.Errorf("KnownMemValue keys: orig=%d loaded=%d",
-				len(resultOriginal.KnownMemValue),
-				len(resultLoaded.KnownMemValue))
-		}
-
-		diffCount := 0
-		for k, vo := range resultOriginal.KnownMemValue {
-			vl, ok := resultLoaded.KnownMemValue[k]
-			if !ok {
-				t.Errorf("Key 0x%X in original but not in loaded", k)
-				diffCount++
-			} else if len(vo) != len(vl) {
-				t.Errorf("Key 0x%X: orig len=%d loaded len=%d", k, len(vo), len(vl))
-				diffCount++
-			}
-			if diffCount > 10 {
-				t.Error("... (truncated)")
-				break
-			}
-		}
-
-		t.Fatal("Results do not match between original and loaded simulation")
+		reportDiff(t, resultOriginal, resultLoaded)
 	}
 
 	t.Log("Deterministic save/load test passed!")
