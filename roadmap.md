@@ -32,35 +32,45 @@ Populated State for DRAM with full pointer-graph flattening (527-line state.go).
 #### M7.4: Cache State Population (writearound, writeevict, writethrough) ✅ — Budget: 6, Used: 2
 Shared Directory/MSHR serialization helpers in v5/mem/cache/state_helpers.go. State population for 3 near-identical cache variants. PR #22 merged.
 
-## Upcoming Milestones
+#### M7.5: Writeback Cache State Population — DEFERRED
+Analysis complete (Diana's report). ~565 lines estimated. **Deferred pending Msg redesign decision** — building this with MsgRef would require rewriting after the redesign.
 
-### M7.5: Writeback Cache State Population — NEXT
-Most complex cache. Additional state beyond M7.4:
-- 17-field transaction (vs 11 for others): includes victim, fetchPID, fetchAddress, fetchedData, fetchReadReq, evicting* fields, evictionWriteReq, mshrEntry, flush
-- Write buffer stage (pendingEvictions, inflightFetch, inflightEviction)
-- MSHR stage state
-- Evicting list map
-- Cache state enum (running/preFlushing/flushing/paused)
-- Flusher stage state
+## Current Decision Point: Msg Redesign (Human Issue #93)
 
-Can reuse Directory/MSHR serialization from M7.4.
-Estimated: ~600-800 lines.
+Human proposed making `Msg` an interface with `Src()`, `Dst()`, `Serialize()`, `Deserialize()` methods, with each package implementing concrete serializable message types. This would:
+- Eliminate the `Payload any` field and the MsgRef/Payload-loss bug
+- Each package owns its message types (mem.ReadReq, vm.TranslationReq, etc.)
+- Make state serialization natural (store concrete types, no MsgRef conversion)
+- But reverses M5's Msg-as-struct decision and touches ~120+ files
 
-### M8: Msg/MsgRef Redesign (pending human feedback on #93)
-Human raised issue #93: "Can we merge Msg and MsgRef?"
-- 6+ duplicate msgRef types across packages (identical fields)
-- Vera found critical bug: msgRef doesn't save Payload → nil after restore → panics
-- Need to either merge, deduplicate, or redesign
-- Waiting for human direction before planning
+**Status**: Discussing with human. Research workers analyzing concrete design + risks.
 
-### Known Bug: Payload Loss in msgRef (affects all components)
-All msgRefFromMsg/msgFromRef functions drop the Payload field. After save/load, inflight messages have nil Payload. This is a systemic bug across ALL 13 state.go files. Fix is blocked pending Msg/MsgRef redesign decision (M8).
+### M8: Msg-as-Interface Redesign — PLANNING
+Pending design finalization. Key open questions:
+- Exact interface definition (Serialize/Deserialize on interface vs external)
+- FlitPayload inner Msg serialization
+- Info interface{} field on ReadReq/WriteReq
+- Migration strategy (incremental vs big-bang)
+
+After M8, M7.5 (writeback state) can be completed with the new message types.
+
+### M9: Complete Remaining State Population — AFTER M8
+- Writeback cache state (was M7.5)
+- Update M7.1-M7.4 state.go files to use concrete message types instead of MsgRef
+- Fix Payload loss bug (should be automatically resolved by concrete types)
+
+### M10: Comp Wrapper Elimination — AFTER M9
+Human issue #61: eliminate the `Comp` wrapper struct. With fully serializable State and concrete message types, reassess whether Comp is still needed.
+
+## Known Bugs
+- Payload loss in ALL msgRef implementations → nil Payload after save/load → panics (will be fixed by M8)
+- 6 identical msgRef definitions across packages (will be eliminated by M8)
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 14/15; remaining: writeback)
+4. **Port All Components** — 16 tick-driven components structurally ported (State populated for 14/15; remaining: writeback)
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
@@ -73,4 +83,5 @@ All msgRefFromMsg/msgFromRef functions drop the Payload field. After save/load, 
 - The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
 - queueing snapshot functions (Approach A) proved pragmatic — standalone functions avoiding interface changes + no mock updates.
 - M7.1–M7.4 each completed well under budget — consistent track record. Total: 12 cycles used vs 24 budgeted.
-- Total project: ~41 implementation cycles across 77 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs like the Payload loss).
+- Total project: ~41 implementation cycles across 78 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs like the Payload loss).
+- **NEW**: When a core design issue surfaces (like the Payload problem), it's better to address it before building more on the broken foundation. M7.5 deferred to avoid rework.
