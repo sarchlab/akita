@@ -1,5 +1,66 @@
 # Migration Guide
 
+## Port Creation API Change
+
+In V4, ports were created internally by component builders. In V5, ports are created externally and passed into builders via `WithXxxPort()` methods. This makes wiring explicit and allows ports to be shared or configured before a component is built.
+
+**Before (V4):**
+```go
+// V4: Builder creates ports internally — caller has no control over port creation.
+cache := cachebuilder.New().
+    WithEngine(engine).
+    WithFreq(1 * sim.GHz).
+    Build("Cache")
+```
+
+**After (V5):**
+```go
+// V5: Ports are created externally and injected into the builder.
+topPort := sim.NewPort(nil, 4, 4, "Cache.TopPort")
+bottomPort := sim.NewPort(nil, 4, 4, "Cache.BottomPort")
+controlPort := sim.NewPort(nil, 4, 4, "Cache.ControlPort")
+
+cache := cachebuilder.New().
+    WithEngine(engine).
+    WithFreq(1 * sim.GHz).
+    WithTopPort(topPort).
+    WithBottomPort(bottomPort).
+    WithControlPort(controlPort).
+    Build("Cache")
+```
+
+This pattern applies to all V5 components. Each builder exposes `WithXxxPort(port sim.Port)` methods for every port the component needs.
+
+## SetComponent
+
+The `Port` interface in V5 now includes a `SetComponent(comp Component)` method. This allows creating a port before the owning component is built, then associating the port with the component afterward.
+
+```go
+// Create port before the component exists.
+outPort := sim.NewPort(nil, 4, 4, "Agent.OutPort")
+
+// Build the component, injecting the port.
+agent := pingbuilder.New().
+    WithOutPort(outPort).
+    Build("Agent")
+
+// The builder calls SetComponent internally, but you can also call it manually:
+outPort.SetComponent(agent)
+```
+
+This decouples port creation from component construction, which is essential for the V5 wiring model where topology is assembled separately from component internals.
+
+## CI Migration
+
+The CI pipeline now uses **self-hosted runners** instead of GitHub-hosted runners. All jobs in the workflow at `.github/workflows/akita_test.yml` specify `runs-on: self-hosted`.
+
+Key points:
+- All workflow jobs (compile, lint, unit test, acceptance tests) run on self-hosted infrastructure.
+- The workflow triggers on both `push` and `pull_request` events.
+- Mock generation (`go generate ./...`) and builds operate from the `v5/` directory.
+
+No changes to test commands are needed — only the runner target has changed.
+
 ## Defining Components in V5: Philosophy and Patterns
 
 V5 unifies how components are modeled and wired. Each component is a single struct composed of four orthogonal parts: Spec, State, Ports, and Middlewares. The goals are: declarative configuration, local and serializable runtime state, explicit wiring, testability, and deterministic snapshot/restore.
