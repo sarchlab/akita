@@ -47,6 +47,58 @@ func TestSaveStateWritesJSON(t *testing.T) {
 	}
 }
 
+func verifySpec(t *testing.T, got, want TestSpec) {
+	t.Helper()
+
+	if got.Frequency != want.Frequency {
+		t.Errorf("spec.Frequency = %v, want %v", got.Frequency, want.Frequency)
+	}
+
+	if got.BufferLen != want.BufferLen {
+		t.Errorf("spec.BufferLen = %v, want %v", got.BufferLen, want.BufferLen)
+	}
+
+	if got.Name != want.Name {
+		t.Errorf("spec.Name = %q, want %q", got.Name, want.Name)
+	}
+
+	if got.Enabled != want.Enabled {
+		t.Errorf("spec.Enabled = %v, want %v", got.Enabled, want.Enabled)
+	}
+}
+
+func verifyState(t *testing.T, got, want TestState) {
+	t.Helper()
+
+	if got.Counter != want.Counter {
+		t.Errorf("state.Counter = %d, want %d", got.Counter, want.Counter)
+	}
+
+	if got.LastStatus != want.LastStatus {
+		t.Errorf("state.LastStatus = %q, want %q", got.LastStatus, want.LastStatus)
+	}
+
+	if len(got.Values) != len(want.Values) {
+		t.Fatalf("state.Values len = %d, want %d", len(got.Values), len(want.Values))
+	}
+
+	for i, v := range got.Values {
+		if v != want.Values[i] {
+			t.Errorf("state.Values[%d] = %d, want %d", i, v, want.Values[i])
+		}
+	}
+
+	if len(got.Tags) != len(want.Tags) {
+		t.Fatalf("state.Tags len = %d, want %d", len(got.Tags), len(want.Tags))
+	}
+
+	for i, v := range got.Tags {
+		if v != want.Tags[i] {
+			t.Errorf("state.Tags[%d] = %q, want %q", i, v, want.Tags[i])
+		}
+	}
+}
+
 func TestSaveLoadRoundTrip(t *testing.T) {
 	spec := TestSpec{Frequency: 3.0, BufferLen: 16, Name: "round-trip", Enabled: false}
 	state := TestState{Counter: 42, Values: []int{10, 20, 30}, LastStatus: "idle", Tags: []string{"a", "b"}}
@@ -69,53 +121,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 		t.Fatalf("LoadState() error: %v", err)
 	}
 
-	// Verify spec was restored.
-	gotSpec := comp2.GetSpec()
-	if gotSpec.Frequency != spec.Frequency {
-		t.Errorf("spec.Frequency = %v, want %v", gotSpec.Frequency, spec.Frequency)
-	}
-
-	if gotSpec.BufferLen != spec.BufferLen {
-		t.Errorf("spec.BufferLen = %v, want %v", gotSpec.BufferLen, spec.BufferLen)
-	}
-
-	if gotSpec.Name != spec.Name {
-		t.Errorf("spec.Name = %q, want %q", gotSpec.Name, spec.Name)
-	}
-
-	if gotSpec.Enabled != spec.Enabled {
-		t.Errorf("spec.Enabled = %v, want %v", gotSpec.Enabled, spec.Enabled)
-	}
-
-	// Verify state was restored.
-	gotState := comp2.GetState()
-	if gotState.Counter != state.Counter {
-		t.Errorf("state.Counter = %d, want %d", gotState.Counter, state.Counter)
-	}
-
-	if gotState.LastStatus != state.LastStatus {
-		t.Errorf("state.LastStatus = %q, want %q", gotState.LastStatus, state.LastStatus)
-	}
-
-	if len(gotState.Values) != len(state.Values) {
-		t.Fatalf("state.Values len = %d, want %d", len(gotState.Values), len(state.Values))
-	}
-
-	for i, v := range gotState.Values {
-		if v != state.Values[i] {
-			t.Errorf("state.Values[%d] = %d, want %d", i, v, state.Values[i])
-		}
-	}
-
-	if len(gotState.Tags) != len(state.Tags) {
-		t.Fatalf("state.Tags len = %d, want %d", len(gotState.Tags), len(state.Tags))
-	}
-
-	for i, v := range gotState.Tags {
-		if v != state.Tags[i] {
-			t.Errorf("state.Tags[%d] = %q, want %q", i, v, state.Tags[i])
-		}
-	}
+	verifySpec(t, comp2.GetSpec(), spec)
+	verifyState(t, comp2.GetState(), state)
 }
 
 func TestLoadStateWithZeroState(t *testing.T) {

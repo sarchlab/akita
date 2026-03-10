@@ -113,6 +113,26 @@ func TestStorageSaveLoadCustomUnitSize(t *testing.T) {
 	}
 }
 
+func readBinaryHeader(
+	t *testing.T, r io.Reader,
+) (capacity, unitSize, count uint64) {
+	t.Helper()
+
+	if err := binary.Read(r, binary.LittleEndian, &capacity); err != nil {
+		t.Fatalf("read capacity: %v", err)
+	}
+
+	if err := binary.Read(r, binary.LittleEndian, &unitSize); err != nil {
+		t.Fatalf("read unitSize: %v", err)
+	}
+
+	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
+		t.Fatalf("read count: %v", err)
+	}
+
+	return capacity, unitSize, count
+}
+
 func TestStorageSaveBinaryFormat(t *testing.T) {
 	s := NewStorageWithUnitSize(1*KB, 64)
 
@@ -132,26 +152,14 @@ func TestStorageSaveBinaryFormat(t *testing.T) {
 
 	r := bytes.NewReader(buf.Bytes())
 
-	var capacity, unitSize, count uint64
-
-	if err := binary.Read(r, binary.LittleEndian, &capacity); err != nil {
-		t.Fatalf("read capacity: %v", err)
-	}
+	capacity, unitSize, count := readBinaryHeader(t, r)
 
 	if capacity != 1*KB {
 		t.Errorf("capacity = %d, want %d", capacity, 1*KB)
 	}
 
-	if err := binary.Read(r, binary.LittleEndian, &unitSize); err != nil {
-		t.Fatalf("read unitSize: %v", err)
-	}
-
 	if unitSize != 64 {
 		t.Errorf("unitSize = %d, want 64", unitSize)
-	}
-
-	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
-		t.Fatalf("read count: %v", err)
 	}
 
 	if count != 1 {
