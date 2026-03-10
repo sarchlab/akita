@@ -2,7 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -194,9 +194,9 @@ func (b Builder) Build(name string) *Comp {
 
 	tlb.reset()
 
-	buf := sim.NewBuffer(name+".ResponsePipelineBuf", 16)
+	buf := queueing.NewBuffer(name+".ResponsePipelineBuf", 16)
 	tlb.responseBuffer = buf
-	tlb.responsePipeline = pipelining.MakeBuilder().
+	tlb.responsePipeline = queueing.MakeBuilder().
 		WithNumStage(b.latency).
 		WithCyclePerStage(1).
 		WithPipelineWidth(tlb.numReqPerCycle).

@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -47,7 +48,7 @@ var _ = Describe("DirectoryStage", func() {
 		cacheModule.directory = directory
 		cacheModule.numReqPerCycle = 4
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.dirToBankBuffers = []sim.Buffer{bankBuf}
+		cacheModule.dirToBankBuffers = []queueing.Buffer{bankBuf}
 		cacheModule.addressToPortMapper = addressToPortMapper
 
 		pipeline = NewMockPipeline(mockCtrl)

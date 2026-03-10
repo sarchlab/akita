@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -276,11 +276,11 @@ func (b *Builder) createInternalStages(cache *Comp) {
 }
 
 func (b *Builder) buildDirectoryStage(cache *Comp) {
-	buf := sim.NewBuffer(
+	buf := queueing.NewBuffer(
 		cache.Name()+".DirectoryStageBuffer",
 		b.numReqPerCycle,
 	)
-	pipeline := pipelining.
+	pipeline := queueing.
 		MakeBuilder().
 		WithCyclePerStage(1).
 		WithNumStage(b.dirLatency).
@@ -306,7 +306,7 @@ func (b *Builder) buildBankStages(cache *Comp) {
 		name:     fmt.Sprintf("%s.Bank.PostPipelineBuffer", cache.Name()),
 		capacity: laneWidth,
 	}
-	pipeline := pipelining.
+	pipeline := queueing.
 		MakeBuilder().
 		WithCyclePerStage(1).
 		WithNumStage(b.bankLatency).
@@ -323,25 +323,25 @@ func (b *Builder) buildBankStages(cache *Comp) {
 }
 
 func (b *Builder) createInternalBuffers(cache *Comp) {
-	cache.dirStageBuffer = sim.NewBuffer(
+	cache.dirStageBuffer = queueing.NewBuffer(
 		cache.Name()+".DirStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.dirToBankBuffers = make([]sim.Buffer, 1)
-	cache.dirToBankBuffers[0] = sim.NewBuffer(
+	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
+	cache.dirToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".DirToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferToBankBuffers = make([]sim.Buffer, 1)
-	cache.writeBufferToBankBuffers[0] = sim.NewBuffer(
+	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
+	cache.writeBufferToBankBuffers[0] = queueing.NewBuffer(
 		cache.Name()+".WriteBufferToBankBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.mshrStageBuffer = sim.NewBuffer(
+	cache.mshrStageBuffer = queueing.NewBuffer(
 		cache.Name()+".MSHRStageBuffer",
 		cache.numReqPerCycle,
 	)
-	cache.writeBufferBuffer = sim.NewBuffer(
+	cache.writeBufferBuffer = queueing.NewBuffer(
 		cache.Name()+".WriteBufferBuffer",
 		cache.numReqPerCycle,
 	)

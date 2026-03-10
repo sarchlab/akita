@@ -25,6 +25,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sarchlab/akita/v5/analysis"
 	"github.com/sarchlab/akita/v5/monitoring/web"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/shirou/gopsutil/process"
@@ -36,7 +37,7 @@ import (
 type Monitor struct {
 	engine       sim.Engine
 	components   []sim.Component
-	buffers      []sim.Buffer
+	buffers      []queueing.Buffer
 	portNumber   int
 	userSetPort  bool
 	perfAnalyzer *analysis.PerfAnalyzer
@@ -104,13 +105,13 @@ func (m *Monitor) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieledRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Buffer)
+			).Elem().Interface().(queueing.Buffer)
 			m.buffers = append(m.buffers, fieledRef)
 		}
 	}
@@ -403,15 +404,15 @@ func (*Monitor) buffersParseParams(
 	return sortMethod, limitNumber, offsetNumber, nil
 }
 
-func bufferPercent(b sim.Buffer) float64 {
+func bufferPercent(b queueing.Buffer) float64 {
 	return float64(b.Size()) / float64(b.Capacity())
 }
 
 func (m *Monitor) sortAndSelectBuffers(
 	sortMethod string,
 	limit, offset int,
-) []sim.Buffer {
-	sortedBuffers := make([]sim.Buffer, len(m.buffers))
+) []queueing.Buffer {
+	sortedBuffers := make([]queueing.Buffer, len(m.buffers))
 	copy(sortedBuffers, m.buffers)
 
 	if sortMethod == "level" {
@@ -449,7 +450,7 @@ func (m *Monitor) sortAndSelectBuffers(
 	}
 
 	if offset >= len(sortedBuffers) {
-		return []sim.Buffer{}
+		return []queueing.Buffer{}
 	}
 
 	if offset+limit > len(sortedBuffers) {

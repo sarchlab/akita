@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -14,7 +15,7 @@ type Flit struct {
 	SeqID        int
 	NumFlitInMsg int
 	Msg          sim.Msg
-	OutputBuf    sim.Buffer // The buffer to route to within a switch
+	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
 // Meta returns the meta data associated with the Flit.

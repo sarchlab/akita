@@ -3,6 +3,7 @@ package writeevict
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/queueing"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -25,8 +26,8 @@ type Comp struct {
 	wayAssociativity    int
 	addressToPortMapper mem.AddressToPortMapper
 
-	dirBuf   sim.Buffer
-	bankBufs []sim.Buffer
+	dirBuf   queueing.Buffer
+	bankBufs []queueing.Buffer
 
 	coalesceStage    *coalescer
 	directoryStage   *directory

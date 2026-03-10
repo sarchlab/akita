@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -85,7 +86,7 @@ func (s *controlStage) flushPort(port sim.Port) {
 	}
 }
 
-func (s *controlStage) flushBuffer(buffer sim.Buffer) {
+func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 	for buffer.Pop() != nil {
 	}
 }

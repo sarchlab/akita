@@ -3,8 +3,7 @@ package writethrough
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/pipelining"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -18,8 +17,8 @@ func (i dirPipelineItem) TaskID() string {
 
 type directory struct {
 	cache    *Comp
-	pipeline pipelining.Pipeline
-	buf      sim.Buffer
+	pipeline queueing.Pipeline
+	buf      queueing.Buffer
 }
 
 func (d *directory) Tick() (madeProgress bool) {
@@ -363,7 +362,7 @@ func (d *directory) fetchFromBottom(
 	return true
 }
 
-func (d *directory) getBankBuf(block *cache.Block) sim.Buffer {
+func (d *directory) getBankBuf(block *cache.Block) queueing.Buffer {
 	numWaysPerSet := d.cache.directory.WayAssociativity()
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)

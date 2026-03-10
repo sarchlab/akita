@@ -3,6 +3,7 @@ package monitoring
 import (
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,7 +20,7 @@ type sampleStruct struct {
 type sampleComponent struct {
 	*sim.ComponentBase
 
-	buffer sim.Buffer
+	buffer queueing.Buffer
 }
 
 func (c *sampleComponent) Handle(_ sim.Event) error {
@@ -37,7 +38,7 @@ func (c *sampleComponent) NotifyPortFree(_ sim.Port) {
 func newSampleComponent() *sampleComponent {
 	c := &sampleComponent{
 		ComponentBase: sim.NewComponentBase("Comp"),
-		buffer:        sim.NewBuffer("Comp.Buf", 10),
+		buffer:        queueing.NewBuffer("Comp.Buf", 10),
 	}
 
 	c.AddPort("Port1", sim.NewPort(c, 2, 2, "Comp.Port1"))

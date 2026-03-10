@@ -1,5 +1,4 @@
-// Package pipelining provides a pipeline definition.
-package pipelining
+package queueing
 
 import (
 	"reflect"
@@ -37,7 +36,7 @@ type Pipeline interface {
 func NewPipeline(
 	name string,
 	numStage, cyclePerStage int,
-	postPipelineBuf sim.Buffer,
+	postPipelineBuf Buffer,
 ) Pipeline {
 	sim.NameMustBeValid(name)
 
@@ -65,7 +64,7 @@ type pipelineImpl struct {
 	width           int
 	numStage        int
 	cyclePerStage   int
-	postPipelineBuf sim.Buffer
+	postPipelineBuf Buffer
 	stages          [][]pipelineStageInfo
 }
 

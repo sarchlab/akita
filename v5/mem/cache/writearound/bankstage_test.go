@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -28,7 +29,7 @@ var _ = Describe("Bankstage", func() {
 		postPipelineBuf = NewMockBuffer(mockCtrl)
 		c = &Comp{
 			bankLatency:   10,
-			bankBufs:      []sim.Buffer{inBuf},
+			bankBufs:      []queueing.Buffer{inBuf},
 			storage:       storage,
 			log2BlockSize: 6,
 		}
