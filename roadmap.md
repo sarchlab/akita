@@ -14,33 +14,31 @@ Evolve Akita V5: redefine component model, implement save/load, make messages pl
 
 Replaced `sim.Msg` interface with concrete `Msg` struct. Eliminated `sim.Rsp`, `sim.Request` interfaces and per-type `Meta()`/`Clone()` boilerplate. Added `Payload any` field, `MsgPayload[T]`/`TryMsgPayload[T]` helpers. All 31 message types converted to payload structs. PR #14 merged, verified by Apollo.
 
+### M6.1: Port simple components (tickingping, datamover, gmmu) ✅ — Budget: 4, Used: 2
+
+Ported 3 simple components to `modeling.Component[S,T]` pattern. All tests pass, ValidateSpec/ValidateState pass, PR #15 merged. Established the porting template.
+
 ## Current Phase: M6 — Port All First-Party Components
 
 ### Overall Strategy
-Port all 15 remaining components to `modeling.Component[S,T]` pattern. Reference implementation: `mem/idealmemcontroller`. Broken into sub-milestones by complexity.
+Port remaining ~12 components to `modeling.Component[S,T]` pattern. Reference implementations: `mem/idealmemcontroller`, plus the 3 just ported in M6.1.
 
-### M6.1: Port simple components (tickingping, datamover, gmmu) — NEXT
-**Goal:** Port 3 simple components to `modeling.Component[S,T]`:
-1. `examples/tickingping` — Already has middleware pattern, ~237 LoC, simplest possible port
-2. `mem/datamover` — ~639 LoC, needs middleware refactor, 3 ports
-3. `mem/vm/gmmu` — ~388 LoC, needs middleware refactor + fix value embed
-
-These establish the porting template for more complex components.
-
-### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache)
+### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) — NEXT
 **Goal:** Port 3 VM components using patterns from M6.1
-- `mem/vm/mmu` — Migration state machine, 587 LoC
-- `mem/vm/addresstranslator` — 4 ports, interface-typed transactions, 729 LoC
-- `mem/vm/mmuCache` — Internal set serialization, 874 LoC
+- `mem/vm/mmu` — VALUE embed (fix needed), migration state machine, 592 LoC. Already has MiddlewareHolder.
+- `mem/vm/addresstranslator` — 4 ports, interface-typed transactions, 728 LoC. Already has MiddlewareHolder.
+- `mem/vm/mmuCache` — Internal sets, 944 LoC. Already has MiddlewareHolder + existing middlewares (ctrlMiddleware, mmuCacheMiddleware).
+
+All 3 already use MiddlewareHolder pattern, so porting is: replace `*sim.TickingComponent + sim.MiddlewareHolder` → `*modeling.Component[Spec, State]`, create Spec/State, update builders.
 
 ### M6.3: Port TLB + simplebankedmemory
-**Goal:** Port TLB (1234 LoC) and simplebankedmemory (510 LoC)
+**Goal:** Port TLB (1308 LoC) and simplebankedmemory (515 LoC)
 - Both depend on `queueing.Pipeline`/`Buffer` — may need serialization strategy
 - TLB has custom MSHR + internal sets
 
 ### M6.4: Port NOC components (endpoint, switches)
-- `noc/networking/switching/endpoint` — 497 LoC, dynamic ports
-- `noc/networking/switching/switches` — 429 LoC, routing table
+- `noc/networking/switching/endpoint` — 479 LoC, dynamic ports
+- `noc/networking/switching/switches` — 422 LoC, routing table
 
 ### M6.5: Port cache components (writearound, writeevict, writethrough, writeback)
 - Prerequisite: serializable `cache.Directory` and `cache.MSHR`
@@ -48,11 +46,12 @@ These establish the porting template for more complex components.
 - Port writearound first as template
 
 ### M6.6: Port DRAM
-- `mem/dram` — 2154 LoC, complex internal subsystems
+- `mem/dram` — 2152 LoC, complex internal subsystems
 
 ### M6.7: Special cases
 - `examples/ping` — Event-driven (not ticking), needs architectural decision
-- Test agents — Low priority
+- Test agents (`noc/standalone/agent`, `noc/acceptance/agent`, `mem/acceptancetests/memaccessagent`) — Low priority
+- `sim/directconnection` — Connection, not standard component. May or may not need porting.
 
 ## Open Human Issues
 - #16: Fix CI ✅ (done in M4, monitoring)
@@ -69,3 +68,5 @@ These establish the porting template for more complex components.
 - Research cycles (Diana, Iris) before M5/M6 prevented committing to poorly scoped milestones.
 - Message redesign is foundational — completed before component porting (M6) to avoid double work.
 - M5 completed in 6 implementation cycles (budgeted 8). Multi-worker parallel approach was highly effective for mechanical refactoring.
+- M6.1 completed very efficiently in 2 implementation cycles (budgeted 4). Parallel 3-worker approach with clear instructions works well for mechanical porting.
+- Components that already have MiddlewareHolder are easier to port — the middleware pattern is already there.
