@@ -40,7 +40,7 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID: sim.GetIDGenerator().Generate(),
 			},

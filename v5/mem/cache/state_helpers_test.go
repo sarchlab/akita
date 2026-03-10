@@ -9,7 +9,7 @@ import (
 )
 
 func TestMsgRefRoundTrip(t *testing.T) {
-	msg := &sim.Msg{
+	msg := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           "msg-1",
 			Src:          "src-port",
@@ -143,12 +143,12 @@ func setupMSHRWithEntry(
 	trans1 := "transaction-1"
 	entry.Requests = []interface{}{trans0, trans1}
 
-	entry.ReadReq = &sim.Msg{
+	entry.ReadReq = &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: "read-1", Src: "cache", Dst: "mem",
 		},
 	}
-	entry.DataReady = &sim.Msg{
+	entry.DataReady = &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: "data-1", Src: "mem", Dst: "cache",
 		},

@@ -275,7 +275,7 @@ var _ = Describe("Flusher", func() {
 			directory.EXPECT().Reset()
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					Expect(msg.RspTo).To(Equal(req.ID))
 				})
 

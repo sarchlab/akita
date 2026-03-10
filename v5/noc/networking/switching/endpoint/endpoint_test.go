@@ -55,7 +55,7 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:           sim.GetIDGenerator().Generate(),
 				Src:          devicePort.AsRemote(),
@@ -72,7 +72,7 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.Msg) {
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.GenericMsg) {
 			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
 			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
@@ -85,7 +85,7 @@ var _ = Describe("End Point", func() {
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.Msg) {
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.GenericMsg) {
 			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
 			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
@@ -104,7 +104,7 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Dst: devicePort.AsRemote(),

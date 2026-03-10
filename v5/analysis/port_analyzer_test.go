@@ -57,7 +57,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
@@ -101,7 +101,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log traffic if only a middle period has value", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Dst:          port.AsRemote(),
@@ -145,14 +145,14 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log incoming and outgoing traffic", func() {
-		outMsg := &sim.Msg{
+		outMsg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
-		inMsg := &sim.Msg{
+		inMsg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port.AsRemote(),
@@ -222,7 +222,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when there is a gap period", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
@@ -266,7 +266,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when simulation ends", func() {
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),

@@ -74,7 +74,7 @@ type testAgent struct {
 	*sim.ComponentBase
 
 	port     sim.Port
-	received []*sim.Msg
+	received []*sim.GenericMsg
 }
 
 func newTestAgent(name string) *testAgent {
@@ -107,7 +107,7 @@ func (a *testAgent) Handle(sim.Event) error {
 	return nil
 }
 
-func (a *testAgent) send(msg *sim.Msg) {
+func (a *testAgent) send(msg *sim.GenericMsg) {
 	sendErr := a.port.Send(msg)
 	Expect(sendErr).To(BeNil())
 }
@@ -183,7 +183,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst sim.RemotePort, index int) *sim.Msg {
+func makeReadReq(src, dst sim.RemotePort, index int) *sim.GenericMsg {
 	addr := uint64(index * readSize)
 	return mem.ReadReqBuilder{}.
 		WithSrc(src).
@@ -358,7 +358,7 @@ func Example() {
 	dstRemote := memComp.topPort.AsRemote()
 
 	startCycles := make(map[string]int)
-	var pendingReq *sim.Msg
+	var pendingReq *sim.GenericMsg
 	requestsSent := 0
 	cycles := 0
 	processed := 0

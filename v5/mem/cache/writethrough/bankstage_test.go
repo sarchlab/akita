@@ -83,7 +83,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("read hit", func() {
 		var (
-			preCRead1, preCRead2, postCRead    *sim.Msg
+			preCRead1, preCRead2, postCRead    *sim.GenericMsg
 			preCTrans1, preCTrans2, postCTrans *transaction
 			block                              *cache.Block
 		)
@@ -153,7 +153,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write", func() {
 		var (
-			write *sim.Msg
+			write *sim.GenericMsg
 			trans *transaction
 			block *cache.Block
 		)

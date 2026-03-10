@@ -71,7 +71,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			WithPage(vm.Page{}).
 			Build()
 
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *sim.Msg) {
+		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *sim.GenericMsg) {
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)

@@ -137,7 +137,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 				Expect(msg.RspTo).To(Equal(read.ID))
@@ -172,7 +172,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(write)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
@@ -216,14 +216,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 				Expect(msg.RspTo).To(Equal(read1.ID))
 			})
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 				Expect(msg.RspTo).To(Equal(read2.ID))
@@ -273,19 +273,19 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 				Expect(msg.RspTo).To(Equal(read1.ID))
 			})
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{9, 9, 9, 9}))
 				Expect(msg.RspTo).To(Equal(read2.ID))
@@ -317,7 +317,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Build()
 		cacheModule.topPort.Deliver(read)
 
-		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.Msg) {
+		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 			Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(msg.RspTo).To(Equal(read.ID))
@@ -358,11 +358,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4, 9, 9, 9, 9}))
 				Expect(msg.RspTo).To(Equal(read.ID))
@@ -401,11 +401,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
-		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.Msg) {
+		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 			Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(msg.RspTo).To(Equal(read.ID))
@@ -449,7 +449,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Build()
 		cacheModule.topPort.Deliver(read)
 
-		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.Msg) {
+		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 			Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(msg.RspTo).To(Equal(read.ID))
@@ -493,11 +493,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		agentPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
-		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.Msg) {
+		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 			Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4, 9, 9, 9, 9}))
 			Expect(msg.RspTo).To(Equal(read.ID))
@@ -540,11 +540,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		agentPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
-		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.Msg) {
+		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 			Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 			Expect(msg.RspTo).To(Equal(read.ID))
@@ -579,7 +579,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		agentPort.EXPECT().Deliver(gomock.Any()).AnyTimes()
 
 		controlAgentPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(flush.ID))
 			})
 

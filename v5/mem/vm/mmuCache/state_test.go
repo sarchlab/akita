@@ -94,7 +94,7 @@ func TestGetStateAndSetState(t *testing.T) {
 	c.table[0].Visit(0)
 	c.table[1].Update(1, vm.PID(2), 0x200)
 	c.table[1].Visit(1)
-	c.inflightFlushReq = &sim.Msg{
+	c.inflightFlushReq = &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: "flush-123", Src: sim.RemotePort("ctrl.port"),
 		},

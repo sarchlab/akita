@@ -32,7 +32,7 @@ type PingState struct {
 }
 
 type pingTransaction struct {
-	req       *sim.Msg
+	req       *sim.GenericMsg
 	cycleLeft int
 }
 
@@ -108,7 +108,7 @@ func (m *pingMiddleware) sendRsp() bool {
 	}
 
 	reqPayload := trans.req.Payload.(*PingReqPayload)
-	rsp := &sim.Msg{
+	rsp := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
@@ -132,7 +132,7 @@ func (m *pingMiddleware) sendPing() bool {
 		return false
 	}
 
-	req := &sim.Msg{
+	req := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),

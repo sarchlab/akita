@@ -49,8 +49,8 @@ var _ = Describe("Coalescer", func() {
 
 	Context("read", func() {
 		var (
-			read1 *sim.Msg
-			read2 *sim.Msg
+			read1 *sim.GenericMsg
+			read2 *sim.GenericMsg
 		)
 
 		BeforeEach(func() {

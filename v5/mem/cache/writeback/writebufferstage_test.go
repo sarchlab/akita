@@ -226,7 +226,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("fetch, local miss", func() {
 		var (
-			read  *sim.Msg
+			read  *sim.GenericMsg
 			trans *transaction
 		)
 
@@ -268,7 +268,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				Return(sim.RemotePort("DramPort")).
 				AnyTimes()
 
-			var fetchReq *sim.Msg
+			var fetchReq *sim.GenericMsg
 
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x1000)).
@@ -276,7 +276,7 @@ var _ = Describe("Write Buffer Stage", func() {
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					fetchReq = msg
 					reqPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
 					Expect(msg.Src).To(Equal(cacheModule.bottomPort.AsRemote()))
@@ -463,7 +463,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("when sending write requests", func() {
 		var (
-			write *sim.Msg
+			write *sim.GenericMsg
 			trans *transaction
 		)
 
@@ -536,11 +536,11 @@ var _ = Describe("Write Buffer Stage", func() {
 				Find(uint64(0x1000)).
 				Return(dramPort.AsRemote())
 
-			var writeReq *sim.Msg
+			var writeReq *sim.GenericMsg
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					writeReq = msg
 					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
 					Expect(msg.Src).
@@ -564,8 +564,8 @@ var _ = Describe("Write Buffer Stage", func() {
 	Context("when received write-done rsp", func() {
 		var (
 			eviction  *transaction
-			write     *sim.Msg
-			writeDone *sim.Msg
+			write     *sim.GenericMsg
+			writeDone *sim.GenericMsg
 		)
 
 		BeforeEach(func() {
@@ -605,11 +605,11 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("when received data-ready rsp", func() {
 		var (
-			read      *sim.Msg
+			read      *sim.GenericMsg
 			fetch     *transaction
 			block     *cache.Block
 			mshrEntry *cache.MSHREntry
-			dataReady *sim.Msg
+			dataReady *sim.GenericMsg
 			data      []byte
 		)
 

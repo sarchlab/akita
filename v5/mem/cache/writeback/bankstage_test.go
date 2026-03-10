@@ -154,7 +154,7 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a read hit transaction", func() {
 		var (
-			read  *sim.Msg
+			read  *sim.GenericMsg
 			block *cache.Block
 			trans *transaction
 		)
@@ -196,7 +196,7 @@ var _ = Describe("Bank Stage", func() {
 		It("should read and send response", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 					Expect(msg.RspTo).To(Equal(read.ID))
 					Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
@@ -215,7 +215,7 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a write-hit transaction", func() {
 		var (
-			write *sim.Msg
+			write *sim.GenericMsg
 			block *cache.Block
 			trans *transaction
 		)
@@ -256,7 +256,7 @@ var _ = Describe("Bank Stage", func() {
 		It("should write and send response", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					Expect(msg.RspTo).To(Equal(write.ID))
 				})
 

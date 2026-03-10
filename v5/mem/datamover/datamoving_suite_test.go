@@ -77,18 +77,18 @@ func setupTransactionState(comp *Comp) {
 		SrcAddress: 0, DstAddress: 4096,
 		ByteSize: 4096, SrcSide: "inside", DstSide: "outside",
 	}
-	req := &sim.Msg{
+	req := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{ID: "test-req-1", Src: "src-port", Dst: "dst-port"},
 		Payload: payload,
 	}
 	comp.currentTransaction = &dataMoverTransaction{
 		req: req, reqPayload: payload,
 		nextReadAddr: 128, nextWriteAddr: 4352,
-		pendingRead: make(map[string]*sim.Msg),
-		pendingWrite: make(map[string]*sim.Msg),
+		pendingRead: make(map[string]*sim.GenericMsg),
+		pendingWrite: make(map[string]*sim.GenericMsg),
 	}
 
-	readReq := &sim.Msg{
+	readReq := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{ID: "read-1", Src: "dm.inside", Dst: "mem.top"},
 		Payload: &mem.ReadReqPayload{Address: 64, AccessByteSize: 64},
 	}

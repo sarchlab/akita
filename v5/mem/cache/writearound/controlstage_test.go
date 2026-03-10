@@ -105,7 +105,7 @@ var _ = Describe("Control Stage", func() {
 			PauseAfterFlushing().
 			Build()
 		s.currFlushReq = flushReq
-		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.Msg) {
+		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.GenericMsg) {
 			Expect(msg.RspTo).To(Equal(flushReq.ID))
 		})
 

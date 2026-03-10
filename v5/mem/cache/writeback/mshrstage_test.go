@@ -111,7 +111,7 @@ var _ = Describe("MSHR Stage", func() {
 		inBuf.EXPECT().Pop().Return(mshrEntry)
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -151,7 +151,7 @@ var _ = Describe("MSHR Stage", func() {
 		ms.processingMSHREntry = mshrEntry
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
