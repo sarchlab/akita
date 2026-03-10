@@ -13,7 +13,8 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
-	if m.state == "drain" {
+	state := m.Component.GetState()
+	if state.CurrentState == "drain" {
 		madeProgress = m.handleDrainState() || madeProgress
 	}
 
@@ -21,7 +22,8 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleDrainState() bool {
-	if len(m.inflightBuffer) != 0 {
+	state := m.Component.GetState()
+	if len(state.InflightTransactions) != 0 {
 		return false
 	}
 
@@ -32,7 +34,9 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	m.state = "pause"
+	state.CurrentState = "pause"
+	m.Component.SetState(state)
+
 	return true
 }
 
@@ -55,7 +59,10 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 
 func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 	if ctrlMsg.Enable {
-		m.state = "enable"
+		state := m.Component.GetState()
+		state.CurrentState = "enable"
+		m.Component.SetState(state)
+
 		rsp := ctrlMsg.GenerateRsp()
 
 		err := m.ctrlPort.Send(rsp)
@@ -72,7 +79,10 @@ func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 
 func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && !ctrlMsg.Drain {
-		m.state = "pause"
+		state := m.Component.GetState()
+		state.CurrentState = "pause"
+		m.Component.SetState(state)
+
 		rsp := ctrlMsg.GenerateRsp()
 
 		err := m.ctrlPort.Send(rsp)
@@ -89,7 +99,10 @@ func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 
 func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && ctrlMsg.Drain {
-		m.state = "drain"
+		state := m.Component.GetState()
+		state.CurrentState = "drain"
+		m.Component.SetState(state)
+
 		m.currentCmd = ctrlMsg
 		m.ctrlPort.RetrieveIncoming()
 		return true

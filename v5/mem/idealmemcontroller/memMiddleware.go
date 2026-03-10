@@ -1,11 +1,11 @@
 package idealmemcontroller
 
 import (
+	"fmt"
 	"log"
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -13,193 +13,187 @@ type memMiddleware struct {
 	*Comp
 }
 
-func (m *memMiddleware) Handle(e sim.Event) error {
-	switch e := e.(type) {
-	case *readRespondEvent:
-		return m.handleReadRespondEvent(e)
-	case *writeRespondEvent:
-		return m.handleWriteRespondEvent(e)
-	case sim.TickEvent:
-		return m.TickingComponent.Handle(e)
-	default:
-		log.Panicf("cannot handle event of %s", reflect.TypeOf(e))
-	}
-
-	return nil
-}
-
 func (m *memMiddleware) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.takeNewReqs() || madeProgress
-	madeProgress = m.execute() || madeProgress
+	madeProgress = m.processCountdowns() || madeProgress
 
 	return madeProgress
 }
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-	if m.state != "enable" {
+	state := m.Component.GetState()
+	if state.CurrentState != "enable" {
 		return false
 	}
 
-	for i := 0; i < m.width; i++ {
+	spec := m.Component.GetSpec()
+
+	for i := 0; i < spec.Width; i++ {
 		msg := m.topPort.RetrieveIncoming()
 		if msg == nil {
 			break
 		}
 
-		m.inflightBuffer = append(m.inflightBuffer, msg)
+		tracing.TraceReqReceive(msg, m)
+
+		tx := m.msgToInflightTransaction(msg)
+		state.InflightTransactions = append(state.InflightTransactions, tx)
 		madeProgress = true
 	}
 
+	m.Component.SetState(state)
+
 	return madeProgress
 }
 
-func (m *memMiddleware) execute() bool {
-	madeProgress := false
+func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
+	spec := m.Component.GetSpec()
 
-	switch state := m.state; state {
-	case "enable", "drain":
-		madeProgress = m.handleInflightMemReqs()
-	case "pause":
-		madeProgress = false
+	switch req := msg.(type) {
+	case *mem.ReadReq:
+		return inflightTransaction{
+			CycleLeft:      spec.Latency,
+			Address:        req.Address,
+			AccessByteSize: req.AccessByteSize,
+			ReqID:          req.ID,
+			IsRead:         true,
+			Src:            req.Src,
+		}
+	case *mem.WriteReq:
+		return inflightTransaction{
+			CycleLeft:      spec.Latency,
+			Address:        req.Address,
+			AccessByteSize: uint64(len(req.Data)),
+			ReqID:          req.ID,
+			IsRead:         false,
+			Data:           req.Data,
+			DirtyMask:      req.DirtyMask,
+			Src:            req.Src,
+		}
+	default:
+		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
+		return inflightTransaction{}
 	}
-
-	return madeProgress
 }
 
-// updateMemCtrl updates ideal memory controller state.
-func (m *memMiddleware) handleInflightMemReqs() bool {
-	madeProgress := false
-	for i := 0; i < m.width; i++ {
-		madeProgress = m.handleMemReqs() || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (m *memMiddleware) handleMemReqs() bool {
-	if len(m.inflightBuffer) == 0 {
+func (m *memMiddleware) processCountdowns() bool {
+	state := m.Component.GetState()
+	if state.CurrentState == "pause" {
 		return false
 	}
 
-	msg := m.inflightBuffer[0]
-	m.inflightBuffer = m.inflightBuffer[1:]
+	madeProgress := false
+	remaining := make([]inflightTransaction, 0, len(state.InflightTransactions))
 
-	tracing.TraceReqReceive(msg, m)
+	for i := range state.InflightTransactions {
+		tx := &state.InflightTransactions[i]
 
-	switch msg := msg.(type) {
-	case *mem.ReadReq:
-		m.handleReadReq(msg)
-		return true
-	case *mem.WriteReq:
-		m.handleWriteReq(msg)
-		return true
-	default:
-		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
+		if tx.CycleLeft > 0 {
+			tx.CycleLeft--
+			madeProgress = true
+		}
+
+		if tx.CycleLeft == 0 {
+			sent := m.sendResponse(tx)
+			if sent {
+				madeProgress = true
+				continue // remove from list
+			}
+		}
+
+		remaining = append(remaining, *tx)
 	}
-	return false
+
+	state.InflightTransactions = remaining
+	m.Component.SetState(state)
+
+	return madeProgress
 }
 
-func (m *memMiddleware) handleReadReq(req *mem.ReadReq) {
-	now := m.CurrentTime()
-	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
-	respondEvent := newReadRespondEvent(timeToSchedule, m, req)
-	m.Engine.Schedule(respondEvent)
+func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
+	if tx.IsRead {
+		return m.sendReadResponse(tx)
+	}
+
+	return m.sendWriteResponse(tx)
 }
 
-func (m *memMiddleware) handleWriteReq(req *mem.WriteReq) {
-	now := m.CurrentTime()
-	timeToSchedule := m.Freq.NCyclesLater(m.Latency, now)
-	respondEvent := newWriteRespondEvent(timeToSchedule, m, req)
-	m.Engine.Schedule(respondEvent)
-}
-
-func (m *memMiddleware) CurrentTime() sim.VTimeInSec {
-	return m.Engine.CurrentTime()
-}
-
-func (m *memMiddleware) handleReadRespondEvent(e *readRespondEvent) error {
-	now := e.Time()
-	req := e.req
-
-	addr := req.Address
+func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
+	addr := tx.Address
 	if m.addressConverter != nil {
 		addr = m.addressConverter.ConvertExternalToInternal(addr)
 	}
 
-	data, err := m.Storage.Read(addr, req.AccessByteSize)
+	data, err := m.Storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	rsp := mem.DataReadyRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(tx.Src).
+		WithRspTo(tx.ReqID).
 		WithData(data).
 		Build()
 
 	networkErr := m.topPort.Send(rsp)
-
 	if networkErr != nil {
-		retry := newReadRespondEvent(m.Freq.NextTick(now), m, req)
-		m.Engine.Schedule(retry)
-		return nil
+		return false
 	}
 
-	tracing.TraceReqComplete(req, m)
-	m.TickLater()
+	m.traceReqComplete(tx.ReqID)
 
-	return nil
+	return true
 }
 
-func (m *memMiddleware) handleWriteRespondEvent(e *writeRespondEvent) error {
-	now := e.Time()
-	req := e.req
-
+func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := mem.WriteDoneRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(tx.Src).
+		WithRspTo(tx.ReqID).
 		Build()
 
 	networkErr := m.topPort.Send(rsp)
 	if networkErr != nil {
-		retry := newWriteRespondEvent(m.Freq.NextTick(now), m, req)
-		m.Engine.Schedule(retry)
-		return nil
+		return false
 	}
 
-	addr := req.Address
-
+	addr := tx.Address
 	if m.addressConverter != nil {
 		addr = m.addressConverter.ConvertExternalToInternal(addr)
 	}
 
-	if req.DirtyMask == nil {
-		err := m.Storage.Write(addr, req.Data)
+	if tx.DirtyMask == nil {
+		err := m.Storage.Write(addr, tx.Data)
 		if err != nil {
 			log.Panic(err)
 		}
 	} else {
-		data, err := m.Storage.Read(addr, uint64(len(req.Data)))
+		data, err := m.Storage.Read(addr, uint64(len(tx.Data)))
 		if err != nil {
 			panic(err)
 		}
-		for i := 0; i < len(req.Data); i++ {
-			if req.DirtyMask[i] {
-				data[i] = req.Data[i]
+
+		for i := 0; i < len(tx.Data); i++ {
+			if tx.DirtyMask[i] {
+				data[i] = tx.Data[i]
 			}
 		}
+
 		err = m.Storage.Write(addr, data)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	tracing.TraceReqComplete(req, m)
-	m.TickLater()
+	m.traceReqComplete(tx.ReqID)
 
-	return nil
+	return true
+}
+
+func (m *memMiddleware) traceReqComplete(reqID string) {
+	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
+	tracing.EndTask(taskID, m)
 }

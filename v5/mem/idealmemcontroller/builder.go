@@ -2,9 +2,11 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// Builder builds ideal memory controller components.
 type Builder struct {
 	width            int
 	latency          int
@@ -103,15 +105,27 @@ func (b Builder) WithCtrlPort(port sim.Port) Builder {
 func (b Builder) Build(
 	name string,
 ) *Comp {
-	c := &Comp{
-		Latency: b.latency,
-		width:   b.width,
-		state:   "enable",
+	spec := Spec{
+		Width:         b.width,
+		Latency:       b.latency,
+		CacheLineSize: b.cacheLineSize,
 	}
 
-	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
-	c.Latency = b.latency
-	c.addressConverter = b.addressConverter
+	initialState := State{
+		CurrentState: "enable",
+	}
+
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+	modelComp.SetState(initialState)
+
+	c := &Comp{
+		Component:        modelComp,
+		addressConverter: b.addressConverter,
+	}
 
 	if b.storage == nil {
 		c.Storage = mem.NewStorage(b.capacity)
