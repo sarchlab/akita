@@ -1,8 +1,6 @@
 package mem
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -11,38 +9,42 @@ var accessReqByteOverhead = 12
 var accessRspByteOverhead = 4
 var controlMsgByteOverhead = 4
 
-// AccessReqPayload abstracts read and write request payloads that are sent to
-// the cache modules or memory controllers.
-type AccessReqPayload interface {
+// AccessReq abstracts read and write requests sent to cache modules or memory
+// controllers.
+type AccessReq interface {
+	sim.Msg
 	GetAddress() uint64
 	GetByteSize() uint64
 	GetPID() vm.PID
 }
 
-// AccessRspPayload abstracts response payloads in the memory system.
-type AccessRspPayload interface{}
+// AccessRsp abstracts response messages in the memory system.
+type AccessRsp interface {
+	sim.Msg
+}
 
-// ReadReqPayload is the payload for a read request sent to a memory controller.
-type ReadReqPayload struct {
+// ReadReq is a read request sent to a memory controller.
+type ReadReq struct {
+	sim.MsgMeta
 	Address            uint64
 	AccessByteSize     uint64
 	PID                vm.PID
 	CanWaitForCoalesce bool
-	Info               interface{}
+	Info               interface{} `json:"-"`
 }
 
-// GetByteSize returns the number of byte that the request is accessing.
-func (r *ReadReqPayload) GetByteSize() uint64 {
+// GetByteSize returns the number of bytes that the request is accessing.
+func (r *ReadReq) GetByteSize() uint64 {
 	return r.AccessByteSize
 }
 
 // GetAddress returns the address that the request is accessing.
-func (r *ReadReqPayload) GetAddress() uint64 {
+func (r *ReadReq) GetAddress() uint64 {
 	return r.Address
 }
 
 // GetPID returns the process ID that the request is working on.
-func (r *ReadReqPayload) GetPID() vm.PID {
+func (r *ReadReq) GetPID() vm.PID {
 	return r.PID
 }
 
@@ -97,50 +99,46 @@ func (b ReadReqBuilder) CanWaitForCoalesce() ReadReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with ReadReqPayload.
-func (b ReadReqBuilder) Build() *sim.GenericMsg {
-	payload := &ReadReqPayload{
+// Build creates a new ReadReq.
+func (b ReadReqBuilder) Build() *ReadReq {
+	r := &ReadReq{
 		Address:            b.address,
 		AccessByteSize:     b.byteSize,
 		PID:                b.pid,
 		CanWaitForCoalesce: b.canWaitForCoalesce,
 		Info:               b.info,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficBytes: accessReqByteOverhead,
-			TrafficClass: reflect.TypeOf(ReadReqPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficBytes = accessReqByteOverhead
+	r.TrafficClass = "mem.ReadReq"
+	return r
 }
 
-// WriteReqPayload is the payload for a write request sent to a memory
-// controller.
-type WriteReqPayload struct {
+// WriteReq is a write request sent to a memory controller.
+type WriteReq struct {
+	sim.MsgMeta
 	Address            uint64
 	Data               []byte
 	DirtyMask          []bool
 	PID                vm.PID
 	CanWaitForCoalesce bool
-	Info               interface{}
+	Info               interface{} `json:"-"`
 }
 
-// GetByteSize returns the number of byte that the request is writing.
-func (r *WriteReqPayload) GetByteSize() uint64 {
+// GetByteSize returns the number of bytes that the request is writing.
+func (r *WriteReq) GetByteSize() uint64 {
 	return uint64(len(r.Data))
 }
 
 // GetAddress returns the address that the request is accessing.
-func (r *WriteReqPayload) GetAddress() uint64 {
+func (r *WriteReq) GetAddress() uint64 {
 	return r.Address
 }
 
 // GetPID returns the PID of the read address.
-func (r *WriteReqPayload) GetPID() vm.PID {
+func (r *WriteReq) GetPID() vm.PID {
 	return r.PID
 }
 
@@ -203,9 +201,9 @@ func (b WriteReqBuilder) CanWaitForCoalesce() WriteReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with WriteReqPayload.
-func (b WriteReqBuilder) Build() *sim.GenericMsg {
-	payload := &WriteReqPayload{
+// Build creates a new WriteReq.
+func (b WriteReqBuilder) Build() *WriteReq {
+	r := &WriteReq{
 		Address:            b.address,
 		Data:               b.data,
 		DirtyMask:          b.dirtyMask,
@@ -213,21 +211,17 @@ func (b WriteReqBuilder) Build() *sim.GenericMsg {
 		CanWaitForCoalesce: b.canWaitForCoalesce,
 		Info:               b.info,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficBytes: len(b.data) + accessReqByteOverhead,
-			TrafficClass: reflect.TypeOf(WriteReqPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficBytes = len(b.data) + accessReqByteOverhead
+	r.TrafficClass = "mem.WriteReq"
+	return r
 }
 
-// DataReadyRspPayload is the payload for a response carrying data loaded from
-// memory.
-type DataReadyRspPayload struct {
+// DataReadyRsp is a response carrying data loaded from memory.
+type DataReadyRsp struct {
+	sim.MsgMeta
 	Data []byte
 }
 
@@ -262,27 +256,24 @@ func (b DataReadyRspBuilder) WithData(data []byte) DataReadyRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with DataReadyRspPayload.
-func (b DataReadyRspBuilder) Build() *sim.GenericMsg {
-	payload := &DataReadyRspPayload{
+// Build creates a new DataReadyRsp.
+func (b DataReadyRspBuilder) Build() *DataReadyRsp {
+	r := &DataReadyRsp{
 		Data: b.data,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			RspTo:        b.rspTo,
-			TrafficBytes: len(b.data) + accessRspByteOverhead,
-			TrafficClass: reflect.TypeOf(ReadReqPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.TrafficBytes = len(b.data) + accessRspByteOverhead
+	r.TrafficClass = "mem.DataReadyRsp"
+	return r
 }
 
-// WriteDoneRspPayload is the payload for a response indicating a write
-// request is completed.
-type WriteDoneRspPayload struct{}
+// WriteDoneRsp is a response indicating a write request is completed.
+type WriteDoneRsp struct {
+	sim.MsgMeta
+}
 
 // WriteDoneRspBuilder can build write-done responds.
 type WriteDoneRspBuilder struct {
@@ -308,24 +299,22 @@ func (b WriteDoneRspBuilder) WithRspTo(id string) WriteDoneRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with WriteDoneRspPayload.
-func (b WriteDoneRspBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			RspTo:        b.rspTo,
-			TrafficBytes: accessRspByteOverhead,
-			TrafficClass: reflect.TypeOf(WriteReqPayload{}).String(),
-		},
-		Payload: &WriteDoneRspPayload{},
-	}
+// Build creates a new WriteDoneRsp.
+func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
+	r := &WriteDoneRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.TrafficBytes = accessRspByteOverhead
+	r.TrafficClass = "mem.WriteDoneRsp"
+	return r
 }
 
-// ControlMsgPayload is the payload for control messages used for managing
-// components on the memory hierarchy.
-type ControlMsgPayload struct {
+// ControlMsg is a control message used for managing components on the memory
+// hierarchy.
+type ControlMsg struct {
+	sim.MsgMeta
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
@@ -393,9 +382,9 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with ControlMsgPayload.
-func (b ControlMsgBuilder) Build() *sim.GenericMsg {
-	payload := &ControlMsgPayload{
+// Build creates a new ControlMsg.
+func (b ControlMsgBuilder) Build() *ControlMsg {
+	r := &ControlMsg{
 		DiscardTransations: b.discardTransactions,
 		Restart:            b.restart,
 		NotifyDone:         b.notifyDone,
@@ -405,20 +394,17 @@ func (b ControlMsgBuilder) Build() *sim.GenericMsg {
 		Pause:              b.Pause,
 		Invalid:            b.Invalid,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficBytes: controlMsgByteOverhead,
-			TrafficClass: reflect.TypeOf(ControlMsgPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficBytes = controlMsgByteOverhead
+	r.TrafficClass = "mem.ControlMsg"
+	return r
 }
 
-// ControlMsgRspPayload is the payload for control message responses.
-type ControlMsgRspPayload struct {
+// ControlMsgRsp is a response to a control message.
+type ControlMsgRsp struct {
+	sim.MsgMeta
 	Enable  bool
 	Drain   bool
 	Flush   bool
@@ -485,23 +471,19 @@ func (b ControlMsgRspBuilder) WithInvalid(invalid bool) ControlMsgRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with ControlMsgRspPayload.
-func (b ControlMsgRspBuilder) Build() *sim.GenericMsg {
-	payload := &ControlMsgRspPayload{
+// Build creates a new ControlMsgRsp.
+func (b ControlMsgRspBuilder) Build() *ControlMsgRsp {
+	r := &ControlMsgRsp{
 		Enable:  b.enable,
 		Drain:   b.drain,
 		Flush:   b.flush,
 		Pause:   b.pause,
 		Invalid: b.invalid,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			RspTo:        b.rspTo,
-			TrafficClass: reflect.TypeOf(ControlMsgRspPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.TrafficClass = "mem.ControlMsgRsp"
+	return r
 }
