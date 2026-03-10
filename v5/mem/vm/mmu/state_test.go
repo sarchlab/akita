@@ -14,7 +14,7 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func TestSyncToStateAndBack(t *testing.T) {
+func TestGetStateAndSetState(t *testing.T) {
 	engine := sim.NewSerialEngine()
 
 	mmu := MakeBuilder().
@@ -73,11 +73,8 @@ func TestSyncToStateAndBack(t *testing.T) {
 	mmu.PageAccessedByDeviceID[0x1000] = []uint64{1, 2}
 	mmu.PageAccessedByDeviceID[0x3000] = []uint64{3}
 
-	// Sync to state
-	mmu.SyncToState()
-
-	// Verify state was populated
-	state := mmu.Component.GetState()
+	// GetState should build state from runtime fields
+	state := mmu.GetState()
 	if len(state.WalkingTranslations) != 1 {
 		t.Fatalf("expected 1 walking translation, got %d", len(state.WalkingTranslations))
 	}
@@ -103,7 +100,7 @@ func TestSyncToStateAndBack(t *testing.T) {
 		t.Errorf("expected 2 device page access entries, got %d", len(state.PageAccessedByDeviceID))
 	}
 
-	// Now create a new MMU and restore from state
+	// Now create a new MMU and restore from state using SetState
 	mmu2 := MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
@@ -112,8 +109,7 @@ func TestSyncToStateAndBack(t *testing.T) {
 		WithMigrationServiceProvider(sim.RemotePort("MigrationService")).
 		Build("TestMMU2")
 
-	mmu2.Component.SetState(state)
-	mmu2.SyncFromState()
+	mmu2.SetState(state)
 
 	// Verify restored runtime fields
 	if len(mmu2.walkingTranslations) != 1 {

@@ -1,6 +1,7 @@
 package mmu
 
 import (
+	"io"
 	"log"
 	"reflect"
 
@@ -575,8 +576,8 @@ func stateToTrans(ts transactionState) transaction {
 	return t
 }
 
-// SyncToState converts runtime fields to the serializable State and stores it.
-func (c *Comp) SyncToState() {
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
 	state := State{
 		IsDoingMigration:         c.isDoingMigration,
 		CurrentOnDemandMigration: transToState(c.currentOnDemandMigration),
@@ -609,11 +610,13 @@ func (c *Comp) SyncToState() {
 	}
 
 	c.Component.SetState(state)
+
+	return state
 }
 
-// SyncFromState restores runtime fields from the serializable State.
-func (c *Comp) SyncFromState() {
-	state := c.Component.GetState()
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
 
 	c.isDoingMigration = state.IsDoingMigration
 	c.currentOnDemandMigration = stateToTrans(state.CurrentOnDemandMigration)
@@ -642,4 +645,21 @@ func (c *Comp) SyncFromState() {
 		copy(ids, dpa.DeviceIDs)
 		c.PageAccessedByDeviceID[dpa.PageVAddr] = ids
 	}
+}
+
+// SaveState syncs runtime data to state, then delegates to Component.SaveState.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState loads state from the reader, then restores runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+
+	c.SetState(c.Component.GetState())
+
+	return nil
 }

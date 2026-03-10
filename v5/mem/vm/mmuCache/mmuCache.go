@@ -1,6 +1,8 @@
 package mmuCache
 
 import (
+	"io"
+
 	"github.com/sarchlab/akita/v5/mem/vm/mmuCache/internal"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
@@ -50,8 +52,8 @@ func (c *Comp) reset() {
 	}
 }
 
-// SyncToState exports the runtime mutable data into the State struct.
-func (c *Comp) SyncToState() {
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
 	s := State{
 		CurrentState: c.state,
 		Table:        make([]internal.SetState, len(c.table)),
@@ -67,31 +69,50 @@ func (c *Comp) SyncToState() {
 		s.InflightFlushReqActive = true
 	}
 
-	c.SetState(s)
+	c.Component.SetState(s)
+
+	return s
 }
 
-// SyncFromState restores the runtime mutable data from the State struct.
-func (c *Comp) SyncFromState() {
-	s := c.GetState()
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
 
-	c.state = s.CurrentState
+	c.state = state.CurrentState
 
 	spec := c.GetSpec()
-	c.table = make([]internal.Set, len(s.Table))
-	for i, ss := range s.Table {
+	c.table = make([]internal.Set, len(state.Table))
+	for i, ss := range state.Table {
 		set := internal.NewSet(spec.NumBlocks)
 		set.ImportState(ss)
 		c.table[i] = set
 	}
 
-	if s.InflightFlushReqActive {
+	if state.InflightFlushReqActive {
 		c.inflightFlushReq = &sim.Msg{
 			MsgMeta: sim.MsgMeta{
-				ID:  s.InflightFlushReqID,
-				Src: s.InflightFlushReqSrc,
+				ID:  state.InflightFlushReqID,
+				Src: state.InflightFlushReqSrc,
 			},
 		}
 	} else {
 		c.inflightFlushReq = nil
 	}
+}
+
+// SaveState syncs runtime data to state, then delegates to Component.SaveState.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState loads state from the reader, then restores runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+
+	c.SetState(c.Component.GetState())
+
+	return nil
 }

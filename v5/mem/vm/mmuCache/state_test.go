@@ -15,7 +15,7 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func TestSyncToStateAndBack(t *testing.T) {
+func TestGetStateAndSetState(t *testing.T) {
 	spec := Spec{
 		NumBlocks:       2,
 		NumLevels:       2,
@@ -54,10 +54,7 @@ func TestSyncToStateAndBack(t *testing.T) {
 		},
 	}
 
-	// Sync to state
-	c.SyncToState()
-
-	// Verify state
+	// GetState should build state from runtime fields
 	s := c.GetState()
 	if s.CurrentState != mmuCacheStateEnable {
 		t.Errorf("CurrentState = %q, want %q", s.CurrentState, mmuCacheStateEnable)
@@ -75,14 +72,13 @@ func TestSyncToStateAndBack(t *testing.T) {
 		t.Errorf("InflightFlushReqSrc = %q, want %q", s.InflightFlushReqSrc, "ctrl.port")
 	}
 
-	// Now restore from state
+	// Now restore from state using SetState
 	c2 := &Comp{
 		Component: modeling.NewBuilder[Spec, State]().
 			WithSpec(spec).
 			Build("TestMMUCache2"),
 	}
 	c2.SetState(s)
-	c2.SyncFromState()
 
 	// Verify restored data
 	if c2.state != mmuCacheStateEnable {
@@ -116,7 +112,7 @@ func TestSyncToStateAndBack(t *testing.T) {
 	}
 }
 
-func TestSyncToStateNoInflightFlush(t *testing.T) {
+func TestGetStateNoInflightFlush(t *testing.T) {
 	spec := Spec{
 		NumBlocks:       1,
 		NumLevels:       1,
@@ -141,7 +137,6 @@ func TestSyncToStateNoInflightFlush(t *testing.T) {
 		c.table[i] = internal.NewSet(spec.NumBlocks)
 	}
 
-	c.SyncToState()
 	s := c.GetState()
 
 	if s.InflightFlushReqActive {
@@ -158,7 +153,6 @@ func TestSyncToStateNoInflightFlush(t *testing.T) {
 			Build("TestNoFlush2"),
 	}
 	c2.SetState(s)
-	c2.SyncFromState()
 
 	if c2.inflightFlushReq != nil {
 		t.Error("restored inflightFlushReq should be nil")
