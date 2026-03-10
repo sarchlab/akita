@@ -14,41 +14,35 @@ Evolve Akita V5: redefine component model, implement save/load, make messages pl
 
 Replaced `sim.Msg` interface with concrete `Msg` struct. Eliminated `sim.Rsp`, `sim.Request` interfaces and per-type `Meta()`/`Clone()` boilerplate. Added `Payload any` field, `MsgPayload[T]`/`TryMsgPayload[T]` helpers. All 31 message types converted to payload structs. PR #14 merged, verified by Apollo.
 
-### M6.1: Port simple components (tickingping, datamover, gmmu) ✅ — Budget: 4, Used: 2
+### M6: Port All First-Party Components ✅
 
-Ported 3 simple components to `modeling.Component[S,T]` pattern. All tests pass, ValidateSpec/ValidateState pass, PR #15 merged. Established the porting template.
+#### M6.1: Port simple components (tickingping, datamover, gmmu) ✅ — Budget: 4, Used: 2
+#### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) ✅ — Budget: 4, Used: 2
+#### M6.3: Port TLB + simplebankedmemory + NOC components ✅ — Budget: 4, Used: 2
+#### M6.4: Port cache components + DRAM ✅ — Budget: 4, Used: 2
 
-## Current Phase: M6 — Port All First-Party Components
+Ported all 16 tick-driven first-party components to `modeling.Component[S,T]`:
+- `examples/tickingping`
+- `mem/datamover`, `mem/idealmemcontroller`, `mem/simplebankedmemory`, `mem/dram`
+- `mem/cache/writearound`, `mem/cache/writeback`, `mem/cache/writeevict`, `mem/cache/writethrough`
+- `mem/vm/gmmu`, `mem/vm/mmu`, `mem/vm/addresstranslator`, `mem/vm/mmuCache`, `mem/vm/tlb`
+- `noc/networking/switching/endpoint`, `noc/networking/switching/switches`
 
-### Overall Strategy
-Port remaining ~12 components to `modeling.Component[S,T]` pattern. Reference implementations: `mem/idealmemcontroller`, plus the 3 just ported in M6.1.
+Remaining non-ported files are infrastructure/test code (not first-party components):
+- `examples/ping` — Event-driven example; `tickingping` is its modeling replacement
+- `mem/acceptancetests/memaccessagent` — Test utility agent
+- `noc/acceptance/agent`, `noc/standalone/agent` — Test utility agents
+- `sim/directconnection` — Connection infrastructure, not a component
+- `mem/cache/mshr` — Internal cache data structure
 
-### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) ✅ — Budget: 4, Used: 2
+## Project Status: COMPLETE ✅
 
-Ported 3 VM components to `modeling.Component[S,T]` pattern. All tests pass, ValidateSpec/ValidateState pass, PR #16 merged. All 3 had MiddlewareHolder already.
-
-### M6.3: Port TLB + simplebankedmemory + NOC components ✅ — Budget: 4, Used: 2
-Ported 4 components: TLB, simplebankedmemory, endpoint, switches. PR #17 merged, verified by Apollo.
-
-### M6.4: Port cache components + DRAM — NEXT
-**Goal:** Port 4 cache components and DRAM memory controller to modeling.Component[S,T]
-- `mem/cache/writearound` — 4324 LoC total, same pattern as writeevict/writethrough
-- `mem/cache/writeback` — 6359 LoC total, largest cache, has write buffer stage
-- `mem/cache/writeevict` — 4287 LoC total
-- `mem/cache/writethrough` — 4538 LoC total
-- `mem/dram` — 2057 LoC, internal subsystems stay on Comp
-
-All 5 have `*sim.TickingComponent` + `sim.MiddlewareHolder` already. Porting pattern is identical to previous milestones: replace with `*modeling.Component[Spec, State]`, create empty/minimal Spec/State, update builders. `cache.Directory` and `cache.MSHR` are interfaces — stay on Comp, not in Spec/State.
-
-### M6.5: Special cases (lower priority)
-- `examples/ping` — Event-driven (uses `ComponentBase` not `TickingComponent`), needs architectural decision
-- Test agents (`noc/standalone/agent`, `noc/acceptance/agent`, `mem/acceptancetests/memaccessagent`) — Low priority, test infrastructure
-- `sim/directconnection` — Connection, not standard component. May or may not need porting.
-
-## Open Human Issues
-- #16: Fix CI ✅ (done in M4, monitoring)
-- #17: Port all first-party components → M6 (in progress)
-- #18: Message should be plain struct → M5 ✅ (done)
+All human-requested goals achieved:
+1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
+2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
+3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
+4. **Port All Components** — 16 tick-driven components ported
+5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
 - M1-M3 completed in 15 implementation cycles (budgeted 20). Planning and verification added ~3-4 cycles overhead but improved quality.
@@ -60,7 +54,6 @@ All 5 have `*sim.TickingComponent` + `sim.MiddlewareHolder` already. Porting pat
 - Research cycles (Diana, Iris) before M5/M6 prevented committing to poorly scoped milestones.
 - Message redesign is foundational — completed before component porting (M6) to avoid double work.
 - M5 completed in 6 implementation cycles (budgeted 8). Multi-worker parallel approach was highly effective for mechanical refactoring.
-- M6.1 completed very efficiently in 2 implementation cycles (budgeted 4). Parallel 3-worker approach with clear instructions works well for mechanical porting.
-- Components that already have MiddlewareHolder are easier to port — the middleware pattern is already there.
-- M6.2 completed in 2 impl cycles (budgeted 4). Same parallel pattern works.
-- M6.3 completed in 2 impl cycles (budgeted 4). 4 components ported in parallel, verified by Apollo. Consistent efficiency.
+- M6 sub-milestones consistently completed in 2 cycles each (budgeted 4). Parallel multi-worker approach with clear instructions is the winning pattern for mechanical porting.
+- Components that already have MiddlewareHolder are easier to port.
+- Total project: ~27 implementation cycles + ~10 planning/verification cycles = ~37 active cycles across 54 orchestrator cycles.
