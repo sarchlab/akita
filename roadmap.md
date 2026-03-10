@@ -23,32 +23,28 @@ Ported 3 simple components to `modeling.Component[S,T]` pattern. All tests pass,
 ### Overall Strategy
 Port remaining ~12 components to `modeling.Component[S,T]` pattern. Reference implementations: `mem/idealmemcontroller`, plus the 3 just ported in M6.1.
 
-### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) — NEXT
-**Goal:** Port 3 VM components using patterns from M6.1
-- `mem/vm/mmu` — VALUE embed (fix needed), migration state machine, 592 LoC. Already has MiddlewareHolder.
-- `mem/vm/addresstranslator` — 4 ports, interface-typed transactions, 728 LoC. Already has MiddlewareHolder.
-- `mem/vm/mmuCache` — Internal sets, 944 LoC. Already has MiddlewareHolder + existing middlewares (ctrlMiddleware, mmuCacheMiddleware).
+### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) ✅ — Budget: 4, Used: 2
 
-All 3 already use MiddlewareHolder pattern, so porting is: replace `*sim.TickingComponent + sim.MiddlewareHolder` → `*modeling.Component[Spec, State]`, create Spec/State, update builders.
+Ported 3 VM components to `modeling.Component[S,T]` pattern. All tests pass, ValidateSpec/ValidateState pass, PR #16 merged. All 3 had MiddlewareHolder already.
 
-### M6.3: Port TLB + simplebankedmemory
-**Goal:** Port TLB (1308 LoC) and simplebankedmemory (515 LoC)
-- Both depend on `queueing.Pipeline`/`Buffer` — may need serialization strategy
-- TLB has custom MSHR + internal sets
+### M6.3: Port TLB + simplebankedmemory + NOC components — NEXT
+**Goal:** Port 4 components: TLB, simplebankedmemory, endpoint, switches
+- `mem/vm/tlb` — 2380 LoC, custom MSHR + internal sets. Already has MiddlewareHolder.
+- `mem/simplebankedmemory` — 926 LoC. Already has MiddlewareHolder.
+- `noc/networking/switching/endpoint` — dynamic ports. Already has MiddlewareHolder.
+- `noc/networking/switching/switches` — routing table. Already has MiddlewareHolder.
 
-### M6.4: Port NOC components (endpoint, switches)
-- `noc/networking/switching/endpoint` — 479 LoC, dynamic ports
-- `noc/networking/switching/switches` — 422 LoC, routing table
+All use MiddlewareHolder pattern; same mechanical porting as M6.1/M6.2.
 
-### M6.5: Port cache components (writearound, writeevict, writethrough, writeback)
+### M6.4: Port cache components (writearound, writeevict, writethrough, writeback)
+- Most complex batch, ~19500 LoC total (incl. tests)
 - Prerequisite: serializable `cache.Directory` and `cache.MSHR`
-- Most complex batch, ~7200 LoC total
 - Port writearound first as template
 
-### M6.6: Port DRAM
-- `mem/dram` — 2152 LoC, complex internal subsystems
+### M6.5: Port DRAM
+- `mem/dram` — 2057 LoC, complex internal subsystems
 
-### M6.7: Special cases
+### M6.6: Special cases
 - `examples/ping` — Event-driven (not ticking), needs architectural decision
 - Test agents (`noc/standalone/agent`, `noc/acceptance/agent`, `mem/acceptancetests/memaccessagent`) — Low priority
 - `sim/directconnection` — Connection, not standard component. May or may not need porting.
