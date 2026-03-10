@@ -35,46 +35,8 @@ jobs:
         working-directory: ./v5/daisen/static
         run: npm run build
 
-  akita_compile:
+  akita_build_lint_test:
     runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.7
-      - name: Install mockgen
-        run: go install go.uber.org/mock/mockgen@v0.6.0
-      - name: Generate mocks
-        run: cd v5 && go generate ./...
-      - name: Build
-        run: cd v5 && go build ./...
-
-  lint:
-    runs-on: self-hosted
-    needs: [akita_compile]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.24.7
-      - name: Clean Go caches
-        run: go clean -modcache && go clean -cache
-      - name: Install mockgen
-        run: go install go.uber.org/mock/mockgen@v0.6.0
-      - name: Generate mocks
-        run: cd v5 && go generate ./...
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.4.0
-          working-directory: v5
-          args: --timeout=10m
-
-  akita_unit_test:
-    runs-on: self-hosted
-    needs: [akita_compile]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
@@ -87,12 +49,20 @@ jobs:
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
       - name: Generate mocks
         run: cd v5 && go generate ./...
+      - name: Build
+        run: cd v5 && go build ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
+          working-directory: v5
+          args: --timeout=10m
       - name: Run tests
         run: cd v5 && ginkgo -r
 
   noc_acceptance_test:
     runs-on: self-hosted
-    needs: [akita_unit_test]
+    needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
@@ -113,7 +83,7 @@ jobs:
 
   mem_acceptance_test:
     runs-on: self-hosted
-    needs: [akita_unit_test]
+    needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
