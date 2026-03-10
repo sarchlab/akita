@@ -1,6 +1,9 @@
 package idealmemcontroller
 
-import "github.com/sarchlab/akita/v5/mem/mem"
+import (
+	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
+)
 
 type ctrlMiddleware struct {
 	*Comp
@@ -27,12 +30,11 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	// Create a minimal ControlMsg to use as OriginalReq for GenerateRsp
-	stubMsg := &mem.ControlMsg{}
-	stubMsg.ID = state.CurrentCmdID
-	stubMsg.Src = state.CurrentCmdSrc
-	stubMsg.Dst = m.ctrlPort.AsRemote()
-	rsp := stubMsg.GenerateRsp()
+	rsp := mem.ControlMsgRspBuilder{}.
+		WithSrc(m.ctrlPort.AsRemote()).
+		WithDst(state.CurrentCmdSrc).
+		WithRspTo(state.CurrentCmdID).
+		Build()
 
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
@@ -51,24 +53,32 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 		return false
 	}
 
-	ctrlMsg := msg.(*mem.ControlMsg)
+	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
 
-	m.ctrlMsgMustBeValid(ctrlMsg)
+	m.ctrlMsgMustBeValid(ctrlPayload)
 
-	madeProgress = m.handleEnable(ctrlMsg) || madeProgress
-	madeProgress = m.handlePause(ctrlMsg) || madeProgress
-	madeProgress = m.handleDrain(ctrlMsg) || madeProgress
+	madeProgress = m.handleEnable(msg, ctrlPayload) || madeProgress
+	madeProgress = m.handlePause(msg, ctrlPayload) || madeProgress
+	madeProgress = m.handleDrain(msg, ctrlPayload) || madeProgress
 
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
-	if ctrlMsg.Enable {
+func (m *ctrlMiddleware) handleEnable(
+	msg *sim.Msg,
+	ctrlPayload *mem.ControlMsgPayload,
+) bool {
+	if ctrlPayload.Enable {
 		state := m.Component.GetState()
 		state.CurrentState = "enable"
 		m.Component.SetState(state)
 
-		rsp := ctrlMsg.GenerateRsp()
+		rsp := mem.ControlMsgRspBuilder{}.
+			WithSrc(m.ctrlPort.AsRemote()).
+			WithDst(msg.Src).
+			WithRspTo(msg.ID).
+			WithEnable(true).
+			Build()
 
 		err := m.ctrlPort.Send(rsp)
 		if err != nil {
@@ -82,13 +92,21 @@ func (m *ctrlMiddleware) handleEnable(ctrlMsg *mem.ControlMsg) bool {
 	return false
 }
 
-func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
-	if !ctrlMsg.Enable && !ctrlMsg.Drain {
+func (m *ctrlMiddleware) handlePause(
+	msg *sim.Msg,
+	ctrlPayload *mem.ControlMsgPayload,
+) bool {
+	if !ctrlPayload.Enable && !ctrlPayload.Drain {
 		state := m.Component.GetState()
 		state.CurrentState = "pause"
 		m.Component.SetState(state)
 
-		rsp := ctrlMsg.GenerateRsp()
+		rsp := mem.ControlMsgRspBuilder{}.
+			WithSrc(m.ctrlPort.AsRemote()).
+			WithDst(msg.Src).
+			WithRspTo(msg.ID).
+			WithPause(true).
+			Build()
 
 		err := m.ctrlPort.Send(rsp)
 		if err != nil {
@@ -102,12 +120,15 @@ func (m *ctrlMiddleware) handlePause(ctrlMsg *mem.ControlMsg) bool {
 	return false
 }
 
-func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
-	if !ctrlMsg.Enable && ctrlMsg.Drain {
+func (m *ctrlMiddleware) handleDrain(
+	msg *sim.Msg,
+	ctrlPayload *mem.ControlMsgPayload,
+) bool {
+	if !ctrlPayload.Enable && ctrlPayload.Drain {
 		state := m.Component.GetState()
 		state.CurrentState = "drain"
-		state.CurrentCmdID = ctrlMsg.ID
-		state.CurrentCmdSrc = ctrlMsg.Src
+		state.CurrentCmdID = msg.ID
+		state.CurrentCmdSrc = msg.Src
 		m.Component.SetState(state)
 
 		m.ctrlPort.RetrieveIncoming()
@@ -117,32 +138,32 @@ func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
 	return false
 }
 
-func (m *ctrlMiddleware) ctrlMsgMustBeValid(ctrlMsg *mem.ControlMsg) {
-	if ctrlMsg.Enable {
-		if ctrlMsg.Drain {
+func (m *ctrlMiddleware) ctrlMsgMustBeValid(ctrlPayload *mem.ControlMsgPayload) {
+	if ctrlPayload.Enable {
+		if ctrlPayload.Drain {
 			panic("Enable and Drain should not be set at the same time")
 		}
 
-		if ctrlMsg.Invalid {
+		if ctrlPayload.Invalid {
 			panic("Enable and Invalid should not be set at the same time")
 		}
 
-		if ctrlMsg.Flush {
+		if ctrlPayload.Flush {
 			panic("Enable and Flush should not be set at the same time")
 		}
 	}
 
-	if !ctrlMsg.Enable {
-		m.drainSignalMustNotInvalidate(ctrlMsg)
+	if !ctrlPayload.Enable {
+		m.drainSignalMustNotInvalidate(ctrlPayload)
 	}
 }
 
-func (m *ctrlMiddleware) drainSignalMustNotInvalidate(ctrlMsg *mem.ControlMsg) {
-	if ctrlMsg.Drain && ctrlMsg.Invalid {
+func (m *ctrlMiddleware) drainSignalMustNotInvalidate(ctrlPayload *mem.ControlMsgPayload) {
+	if ctrlPayload.Drain && ctrlPayload.Invalid {
 		panic("Drain and Invalid should not be set at the same time")
 	}
 
-	if ctrlMsg.Drain && ctrlMsg.Flush {
+	if ctrlPayload.Drain && ctrlPayload.Flush {
 		panic("Drain and Flush should not be set at the same time")
 	}
 }
