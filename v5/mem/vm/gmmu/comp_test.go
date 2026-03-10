@@ -52,6 +52,7 @@ var _ = Describe("Builder", func() {
 			WithEngine(engine).
 			WithDeviceID(0).
 			WithPageWalkingLatency(1).
+			WithLowModule(lowerComponentPort.AsRemote()).
 			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.TopPort")).
 			WithBottomPort(sim.NewPort(nil, 4096, 4096, "MMU.BottomPort"))
 
@@ -59,7 +60,6 @@ var _ = Describe("Builder", func() {
 		gmmuComp.topPort = topPort
 		gmmuComp.bottomPort = bottomPort
 		gmmuComp.pageTable = pageTable
-		gmmuComp.LowModule = lowerComponentPort.AsRemote()
 	})
 
 	AfterEach(func() {
@@ -70,10 +70,10 @@ var _ = Describe("Builder", func() {
 		It("should build GMMU correctly", func() {
 			Expect(gmmuComp.Engine).To(Equal(engine))
 			Expect(gmmuComp.Freq).To(Equal(1 * sim.GHz))
-			Expect(gmmuComp.maxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.GetSpec().MaxRequestsInFlight).To(Equal(16))
 			Expect(gmmuComp.pageTable).To(Equal(pageTable))
 			Expect(gmmuComp.topPort).To(Equal(topPort))
-			Expect(gmmuComp.deviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.GetSpec().DeviceID).To(Equal(uint64(0)))
 		})
 	})
 
@@ -241,7 +241,7 @@ var _ = Describe("Builder", func() {
 				RetrieveIncoming().
 				DoAndReturn(func() *sim.Msg {
 					rsp := vm.TranslationRspBuilder{}.
-						WithSrc(gmmuComp.LowModule).
+						WithSrc(gmmuComp.GetSpec().LowModule).
 						WithDst(gmmuComp.bottomPort.AsRemote()).
 						WithRspTo(sentReqToBottom.ID).
 						WithPage(page).

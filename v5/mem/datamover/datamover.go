@@ -5,9 +5,22 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the data mover.
+type Spec struct {
+	BufferSize             uint64 `json:"buffer_size"`
+	InsideByteGranularity  uint64 `json:"inside_byte_granularity"`
+	OutsideByteGranularity uint64 `json:"outside_byte_granularity"`
+}
+
+// State contains mutable runtime data for the data mover.
+// For now this is minimal — the runtime transaction state with *sim.Msg
+// pointers stays on Comp as non-serializable runtime fields.
+type State struct{}
 
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
@@ -45,17 +58,16 @@ func addressMustBeAligned(addr, granularity uint64) {
 // Comp helps moving data from designated source and destination
 // following the given move direction
 type Comp struct {
-	*sim.TickingComponent
+	*modeling.Component[Spec, State]
 
 	ctrlPort    sim.Port
 	insidePort  sim.Port
 	outsidePort sim.Port
 
-	insidePortMapper       mem.AddressToPortMapper
-	outsidePortMapper      mem.AddressToPortMapper
-	insideByteGranularity  uint64
-	outsideByteGranularity uint64
+	insidePortMapper  mem.AddressToPortMapper
+	outsidePortMapper mem.AddressToPortMapper
 
+	// Runtime-only fields (not serialized)
 	srcPort            sim.Port
 	dstPort            sim.Port
 	srcPortMapper      mem.AddressToPortMapper
@@ -63,32 +75,37 @@ type Comp struct {
 	srcByteGranularity uint64
 	dstByteGranularity uint64
 	currentTransaction *dataMoverTransaction
-	bufferSize         uint64
 	buffer             *buffer
 }
 
+// dataMoverMiddleware wraps the Comp and implements the Tick() logic
+// as a middleware.
+type dataMoverMiddleware struct {
+	*Comp
+}
+
 // Tick ticks
-func (c *Comp) Tick() bool {
+func (m *dataMoverMiddleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = c.finishTransaction() || madeProgress
-	madeProgress = c.processWriteDoneFromDst() || madeProgress
-	madeProgress = c.writeToDst() || madeProgress
-	madeProgress = c.processDataReadyFromSrc() || madeProgress
-	madeProgress = c.readFromSrc() || madeProgress
-	madeProgress = c.parseFromCP() || madeProgress
+	madeProgress = m.finishTransaction() || madeProgress
+	madeProgress = m.processWriteDoneFromDst() || madeProgress
+	madeProgress = m.writeToDst() || madeProgress
+	madeProgress = m.processDataReadyFromSrc() || madeProgress
+	madeProgress = m.readFromSrc() || madeProgress
+	madeProgress = m.parseFromCP() || madeProgress
 
 	return madeProgress
 }
 
 // parseFromCP retrieves Msg from ctrlPort
-func (c *Comp) parseFromCP() bool {
-	req := c.ctrlPort.RetrieveIncoming()
+func (m *dataMoverMiddleware) parseFromCP() bool {
+	req := m.ctrlPort.RetrieveIncoming()
 	if req == nil {
 		return false
 	}
 
-	if c.currentTransaction != nil {
+	if m.currentTransaction != nil {
 		return false
 	}
 
@@ -98,30 +115,31 @@ func (c *Comp) parseFromCP() bool {
 	}
 
 	trans := newDataMoverTransaction(req)
-	c.currentTransaction = trans
+	m.currentTransaction = trans
 
-	c.setSrcSide(trans.reqPayload)
-	c.setDstSide(trans.reqPayload)
+	m.setSrcSide(trans.reqPayload)
+	m.setDstSide(trans.reqPayload)
 
-	c.buffer = &buffer{
-		granularity: c.srcByteGranularity,
+	m.buffer = &buffer{
+		granularity: m.srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(req, c)
+	tracing.TraceReqReceive(req, m)
 
 	return true
 }
 
 // readFromSrc reads data from source
-func (c *Comp) readFromSrc() bool {
-	if c.currentTransaction == nil {
+func (m *dataMoverMiddleware) readFromSrc() bool {
+	if m.currentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
-	addr := alignAddress(trans.nextReadAddr, c.srcByteGranularity)
+	trans := m.currentTransaction
+	addr := alignAddress(trans.nextReadAddr, m.srcByteGranularity)
 
-	bufEndAddr := c.buffer.offset + c.bufferSize
+	spec := m.Component.GetSpec()
+	bufEndAddr := m.buffer.offset + spec.BufferSize
 	if addr >= bufEndAddr {
 		return false
 	}
@@ -133,32 +151,32 @@ func (c *Comp) readFromSrc() bool {
 
 	req := mem.ReadReqBuilder{}.
 		WithAddress(addr).
-		WithSrc(c.srcPort.AsRemote()).
-		WithDst(c.srcPortMapper.Find(addr)).
-		WithByteSize(c.srcByteGranularity).
+		WithSrc(m.srcPort.AsRemote()).
+		WithDst(m.srcPortMapper.Find(addr)).
+		WithByteSize(m.srcByteGranularity).
 		WithPID(0).
 		Build()
 
-	err := c.srcPort.Send(req)
+	err := m.srcPort.Send(req)
 	if err != nil {
 		return false
 	}
 
-	trans.nextReadAddr += c.srcByteGranularity
+	trans.nextReadAddr += m.srcByteGranularity
 	trans.pendingRead[req.ID] = req
 
-	tracing.TraceReqInitiate(req, c, tracing.MsgIDAtReceiver(trans.req, c))
+	tracing.TraceReqInitiate(req, m, tracing.MsgIDAtReceiver(trans.req, m))
 
 	return true
 }
 
 // processDataReadyFromSrc processes data ready from source
-func (c *Comp) processDataReadyFromSrc() bool {
-	if c.currentTransaction == nil {
+func (m *dataMoverMiddleware) processDataReadyFromSrc() bool {
+	if m.currentTransaction == nil {
 		return false
 	}
 
-	rsp := c.srcPort.PeekIncoming()
+	rsp := m.srcPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
@@ -169,67 +187,67 @@ func (c *Comp) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingRead[rsp.RspTo]
+	originalReq, ok := m.currentTransaction.pendingRead[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
 			rsp.RspTo)
 	}
 
 	originalReqPayload := sim.MsgPayload[mem.ReadReqPayload](originalReq)
-	offset := originalReqPayload.Address - c.currentTransaction.reqPayload.SrcAddress
-	c.buffer.addData(offset, readRspPayload.Data)
+	offset := originalReqPayload.Address - m.currentTransaction.reqPayload.SrcAddress
+	m.buffer.addData(offset, readRspPayload.Data)
 
-	delete(c.currentTransaction.pendingRead, rsp.RspTo)
-	c.srcPort.RetrieveIncoming()
-	tracing.TraceReqFinalize(originalReq, c)
+	delete(m.currentTransaction.pendingRead, rsp.RspTo)
+	m.srcPort.RetrieveIncoming()
+	tracing.TraceReqFinalize(originalReq, m)
 
 	return true
 }
 
 // writeToDst sends data to destination
-func (c *Comp) writeToDst() bool {
-	if c.currentTransaction == nil {
+func (m *dataMoverMiddleware) writeToDst() bool {
+	if m.currentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
+	trans := m.currentTransaction
 	offset := trans.nextWriteAddr - trans.reqPayload.DstAddress
-	data, ok := c.buffer.extractData(offset, c.dstByteGranularity)
+	data, ok := m.buffer.extractData(offset, m.dstByteGranularity)
 
 	if !ok {
 		return false
 	}
 
 	req := mem.WriteReqBuilder{}.
-		WithAddress(c.currentTransaction.nextWriteAddr).
+		WithAddress(m.currentTransaction.nextWriteAddr).
 		WithData(data).
-		WithSrc(c.dstPort.AsRemote()).
-		WithDst(c.dstPortMapper.Find(c.currentTransaction.nextWriteAddr)).
+		WithSrc(m.dstPort.AsRemote()).
+		WithDst(m.dstPortMapper.Find(m.currentTransaction.nextWriteAddr)).
 		WithPID(0).
 		Build()
 
-	err := c.dstPort.Send(req)
+	err := m.dstPort.Send(req)
 	if err != nil {
 		return false
 	}
 
-	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
-	c.currentTransaction.pendingWrite[req.ID] = req
-	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.reqPayload.DstAddress)
+	m.currentTransaction.nextWriteAddr += m.dstByteGranularity
+	m.currentTransaction.pendingWrite[req.ID] = req
+	m.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.reqPayload.DstAddress)
 
-	tracing.TraceReqInitiate(req, c,
-		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
+	tracing.TraceReqInitiate(req, m,
+		tracing.MsgIDAtReceiver(m.currentTransaction.req, m))
 
 	return true
 }
 
 // processWriteDoneFromDst processes write done from destination
-func (c *Comp) processWriteDoneFromDst() bool {
-	if c.currentTransaction == nil {
+func (m *dataMoverMiddleware) processWriteDoneFromDst() bool {
+	if m.currentTransaction == nil {
 		return false
 	}
 
-	rsp := c.dstPort.PeekIncoming()
+	rsp := m.dstPort.PeekIncoming()
 	if rsp == nil {
 		return false
 	}
@@ -239,27 +257,27 @@ func (c *Comp) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingWrite[rsp.RspTo]
+	originalReq, ok := m.currentTransaction.pendingWrite[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
 			rsp.RspTo)
 	}
 
-	delete(c.currentTransaction.pendingWrite, rsp.RspTo)
-	c.dstPort.RetrieveIncoming()
+	delete(m.currentTransaction.pendingWrite, rsp.RspTo)
+	m.dstPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(originalReq, c)
+	tracing.TraceReqFinalize(originalReq, m)
 
 	return false
 }
 
 // finishTransaction finishes the current transaction
-func (c *Comp) finishTransaction() bool {
-	if c.currentTransaction == nil {
+func (m *dataMoverMiddleware) finishTransaction() bool {
+	if m.currentTransaction == nil {
 		return false
 	}
 
-	trans := c.currentTransaction
+	trans := m.currentTransaction
 
 	if trans.nextWriteAddr < trans.reqPayload.DstAddress+trans.reqPayload.ByteSize {
 		return false
@@ -274,52 +292,54 @@ func (c *Comp) finishTransaction() bool {
 		RspTo: trans.req.ID,
 	}
 
-	err := c.ctrlPort.Send(rsp)
+	err := m.ctrlPort.Send(rsp)
 	if err != nil {
 		return false
 	}
 
-	c.currentTransaction = nil
-	c.buffer = &buffer{
-		offset:      alignAddress(trans.reqPayload.SrcAddress, c.srcByteGranularity),
-		granularity: c.srcByteGranularity,
+	m.currentTransaction = nil
+	m.buffer = &buffer{
+		offset:      alignAddress(trans.reqPayload.SrcAddress, m.srcByteGranularity),
+		granularity: m.srcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(rsp, c)
+	tracing.TraceReqComplete(rsp, m)
 
 	return true
 }
 
-func (c *Comp) setSrcSide(moveReq *DataMoveRequestPayload) {
+func (m *dataMoverMiddleware) setSrcSide(moveReq *DataMoveRequestPayload) {
+	spec := m.Component.GetSpec()
 	switch moveReq.SrcSide {
 	case "inside":
-		c.srcPort = c.insidePort
-		c.srcPortMapper = c.insidePortMapper
-		c.srcByteGranularity = c.insideByteGranularity
+		m.srcPort = m.insidePort
+		m.srcPortMapper = m.insidePortMapper
+		m.srcByteGranularity = spec.InsideByteGranularity
 	case "outside":
-		c.srcPort = c.outsidePort
-		c.srcPortMapper = c.outsidePortMapper
-		c.srcByteGranularity = c.outsideByteGranularity
+		m.srcPort = m.outsidePort
+		m.srcPortMapper = m.outsidePortMapper
+		m.srcByteGranularity = spec.OutsideByteGranularity
 	default:
 		log.Panicf("can't process source port of type %s", moveReq.SrcSide)
 	}
 
-	addressMustBeAligned(moveReq.SrcAddress, c.srcByteGranularity)
+	addressMustBeAligned(moveReq.SrcAddress, m.srcByteGranularity)
 }
 
-func (c *Comp) setDstSide(moveReq *DataMoveRequestPayload) {
+func (m *dataMoverMiddleware) setDstSide(moveReq *DataMoveRequestPayload) {
+	spec := m.Component.GetSpec()
 	switch moveReq.DstSide {
 	case "inside":
-		c.dstPort = c.insidePort
-		c.dstPortMapper = c.insidePortMapper
-		c.dstByteGranularity = c.insideByteGranularity
+		m.dstPort = m.insidePort
+		m.dstPortMapper = m.insidePortMapper
+		m.dstByteGranularity = spec.InsideByteGranularity
 	case "outside":
-		c.dstPort = c.outsidePort
-		c.dstPortMapper = c.outsidePortMapper
-		c.dstByteGranularity = c.outsideByteGranularity
+		m.dstPort = m.outsidePort
+		m.dstPortMapper = m.outsidePortMapper
+		m.dstByteGranularity = spec.OutsideByteGranularity
 	default:
 		log.Panicf("can't process destination port of type %s", moveReq.DstSide)
 	}
 
-	addressMustBeAligned(moveReq.DstAddress, c.dstByteGranularity)
+	addressMustBeAligned(moveReq.DstAddress, m.dstByteGranularity)
 }

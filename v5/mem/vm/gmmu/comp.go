@@ -5,9 +5,23 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the GMMU.
+type Spec struct {
+	DeviceID            uint64         `json:"device_id"`
+	Log2PageSize        uint64         `json:"log2_page_size"`
+	Latency             int            `json:"latency"`
+	MaxRequestsInFlight int            `json:"max_requests_in_flight"`
+	LowModule           sim.RemotePort `json:"low_module"`
+}
+
+// State contains mutable runtime data for the GMMU.
+// Runtime data with pointers/interfaces stays on the GMMU struct.
+type State struct{}
 
 type transaction struct {
 	req        *sim.Msg // payload: *vm.TranslationReqPayload
@@ -16,27 +30,18 @@ type transaction struct {
 	cycleLeft  int
 }
 
-// gmmu is the default gmmu implementation. It is also an akita Component.
+// GMMU is the default gmmu implementation. It is also an akita Component.
 type GMMU struct {
-	sim.TickingComponent
-
-	deviceID uint64
+	*modeling.Component[Spec, State]
 
 	topPort    sim.Port
 	bottomPort sim.Port
-
-	// LowModule is the port used to communicate with the lower-level memory module.
-	LowModule sim.RemotePort
-
-	log2PageSize uint64
 
 	// MigrationServiceProvider is the port used for page migration requests and
 	// responses between the GMMU and the migration service.
 	MigrationServiceProvider sim.RemotePort
 
-	pageTable           vm.PageTable
-	latency             int
-	maxRequestsInFlight int
+	pageTable vm.PageTable
 
 	walkingTranslations []transaction
 	remoteMemReqs       map[string]transaction
@@ -48,19 +53,25 @@ type GMMU struct {
 	PageAccessedByDeviceID map[uint64][]uint64
 }
 
-// Tick defines how the gmmu update state each cycle
-func (gmmu *GMMU) Tick() bool {
+// gmmuMiddleware provides the Tick method for the GMMU.
+type gmmuMiddleware struct {
+	*GMMU
+}
+
+// Tick defines how the gmmu updates state each cycle.
+func (m *gmmuMiddleware) Tick() bool {
 	madeProgress := false
 
-	madeProgress = gmmu.walkPageTable() || madeProgress
-	madeProgress = gmmu.parseFromTop() || madeProgress
-	madeProgress = gmmu.fetchFromBottom() || madeProgress
+	madeProgress = m.walkPageTable() || madeProgress
+	madeProgress = m.parseFromTop() || madeProgress
+	madeProgress = m.fetchFromBottom() || madeProgress
 
 	return madeProgress
 }
 
 func (gmmu *GMMU) parseFromTop() bool {
-	if len(gmmu.walkingTranslations) >= gmmu.maxRequestsInFlight {
+	spec := gmmu.GetSpec()
+	if len(gmmu.walkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -82,11 +93,12 @@ func (gmmu *GMMU) parseFromTop() bool {
 }
 
 func (gmmu *GMMU) startWalking(req *sim.Msg) {
+	spec := gmmu.GetSpec()
 	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
 		req:        req,
 		reqPayload: payload,
-		cycleLeft:  gmmu.latency,
+		cycleLeft:  spec.Latency,
 	}
 
 	gmmu.walkingTranslations = append(gmmu.walkingTranslations, translationInPipeline)
@@ -98,6 +110,8 @@ func (gmmu *GMMU) walkPageTable() bool {
 	if len(gmmu.walkingTranslations) == 0 {
 		return false
 	}
+
+	spec := gmmu.GetSpec()
 
 	for i := 0; i < len(gmmu.walkingTranslations); i++ {
 		if gmmu.walkingTranslations[i].cycleLeft > 0 {
@@ -115,7 +129,7 @@ func (gmmu *GMMU) walkPageTable() bool {
 			)
 		}
 
-		if page.DeviceID == gmmu.deviceID {
+		if page.DeviceID == spec.DeviceID {
 			madeProgress = gmmu.finalizePageWalk(i) || madeProgress
 		} else {
 			madeProgress = gmmu.processRemoteMemReq(i) || madeProgress
@@ -152,11 +166,12 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 		return false
 	}
 
+	spec := gmmu.GetSpec()
 	walking := gmmu.walkingTranslations[walkingIndex]
 
 	req := vm.TranslationReqBuilder{}.
 		WithSrc(gmmu.bottomPort.AsRemote()).
-		WithDst(gmmu.LowModule).
+		WithDst(spec.LowModule).
 		WithPID(walking.reqPayload.PID).
 		WithVAddr(walking.reqPayload.VAddr).
 		WithDeviceID(walking.reqPayload.DeviceID).

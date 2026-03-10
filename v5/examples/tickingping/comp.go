@@ -3,6 +3,7 @@ package tickingping
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -16,26 +17,32 @@ type PingRspPayload struct {
 	SeqID int
 }
 
-type pingTransaction struct {
-	req       *sim.Msg
-	cycleLeft int
+// Spec contains immutable configuration for the tickingping component.
+type Spec struct{}
+
+// pingTransactionState tracks an in-progress ping request with a countdown.
+type pingTransactionState struct {
+	SeqID     int            `json:"seq_id"`
+	CycleLeft int            `json:"cycle_left"`
+	ReqID     string         `json:"req_id"`
+	ReqSrc    sim.RemotePort `json:"req_src"`
 }
 
+// State contains mutable runtime data for the tickingping component.
+type State struct {
+	StartTimes          []float64              `json:"start_times"`
+	NextSeqID           int                    `json:"next_seq_id"`
+	NumPingNeedToSend   int                    `json:"num_ping_need_to_send"`
+	PingDst             sim.RemotePort         `json:"ping_dst"`
+	CurrentTransactions []pingTransactionState `json:"current_transactions"`
+}
+
+// Comp is a ticking ping component that sends ping requests and responds to
+// them.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	OutPort sim.Port
-
-	currentTransactions []*pingTransaction
-	startTime           []sim.VTimeInSec
-	numPingNeedToSend   int
-	nextSeqID           int
-	pingDst             sim.RemotePort
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
@@ -71,63 +78,74 @@ func (m *middleware) processInput() bool {
 	return true
 }
 
-func (m *middleware) processingPingReq(
-	msg *sim.Msg,
-) {
-	trans := &pingTransaction{
-		req:       msg,
-		cycleLeft: 2,
+func (m *middleware) processingPingReq(msg *sim.Msg) {
+	state := m.Component.GetState()
+
+	payload := sim.MsgPayload[PingReqPayload](msg)
+	trans := pingTransactionState{
+		SeqID:     payload.SeqID,
+		CycleLeft: 2,
+		ReqID:     msg.ID,
+		ReqSrc:    msg.Src,
 	}
-	m.currentTransactions = append(m.currentTransactions, trans)
+	state.CurrentTransactions = append(state.CurrentTransactions, trans)
+
+	m.Component.SetState(state)
 	m.OutPort.RetrieveIncoming()
 }
 
-func (m *middleware) processingPingRsp(
-	msg *sim.Msg,
-) {
+func (m *middleware) processingPingRsp(msg *sim.Msg) {
+	state := m.Component.GetState()
+
 	payload := sim.MsgPayload[PingRspPayload](msg)
 	seqID := payload.SeqID
-	startTime := m.startTime[seqID]
+	startTime := state.StartTimes[seqID]
 	currentTime := m.CurrentTime()
-	duration := currentTime - startTime
+	duration := currentTime - sim.VTimeInSec(startTime)
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
 	m.OutPort.RetrieveIncoming()
 }
 
 func (m *middleware) countDown() bool {
+	state := m.Component.GetState()
 	madeProgress := false
 
-	for _, trans := range m.currentTransactions {
-		if trans.cycleLeft > 0 {
-			trans.cycleLeft--
+	for i := range state.CurrentTransactions {
+		if state.CurrentTransactions[i].CycleLeft > 0 {
+			state.CurrentTransactions[i].CycleLeft--
 			madeProgress = true
 		}
+	}
+
+	if madeProgress {
+		m.Component.SetState(state)
 	}
 
 	return madeProgress
 }
 
 func (m *middleware) sendRsp() bool {
-	if len(m.currentTransactions) == 0 {
+	state := m.Component.GetState()
+
+	if len(state.CurrentTransactions) == 0 {
 		return false
 	}
 
-	trans := m.currentTransactions[0]
-	if trans.cycleLeft > 0 {
+	trans := state.CurrentTransactions[0]
+	if trans.CycleLeft > 0 {
 		return false
 	}
 
-	reqPayload := sim.MsgPayload[PingReqPayload](trans.req)
 	rsp := &sim.Msg{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.OutPort.AsRemote(),
-			Dst: trans.req.Src,
+			Dst: trans.ReqSrc,
 		},
-		RspTo: trans.req.ID,
+		RspTo: trans.ReqID,
 		Payload: &PingRspPayload{
-			SeqID: reqPayload.SeqID,
+			SeqID: trans.SeqID,
 		},
 	}
 
@@ -136,13 +154,16 @@ func (m *middleware) sendRsp() bool {
 		return false
 	}
 
-	m.currentTransactions = m.currentTransactions[1:]
+	state.CurrentTransactions = state.CurrentTransactions[1:]
+	m.Component.SetState(state)
 
 	return true
 }
 
 func (m *middleware) sendPing() bool {
-	if m.numPingNeedToSend == 0 {
+	state := m.Component.GetState()
+
+	if state.NumPingNeedToSend == 0 {
 		return false
 	}
 
@@ -150,10 +171,10 @@ func (m *middleware) sendPing() bool {
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.OutPort.AsRemote(),
-			Dst: m.pingDst,
+			Dst: state.PingDst,
 		},
 		Payload: &PingReqPayload{
-			SeqID: m.nextSeqID,
+			SeqID: state.NextSeqID,
 		},
 	}
 
@@ -162,9 +183,10 @@ func (m *middleware) sendPing() bool {
 		return false
 	}
 
-	m.startTime = append(m.startTime, m.CurrentTime())
-	m.numPingNeedToSend--
-	m.nextSeqID++
+	state.StartTimes = append(state.StartTimes, float64(m.CurrentTime()))
+	state.NumPingNeedToSend--
+	state.NextSeqID++
+	m.Component.SetState(state)
 
 	return true
 }

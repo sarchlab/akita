@@ -2,6 +2,7 @@ package gmmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -89,13 +90,34 @@ func (b Builder) WithBottomPort(port sim.Port) Builder {
 	return b
 }
 
-func (b Builder) configureInternalStates(gmmu *GMMU) {
-	gmmu.maxRequestsInFlight = b.maxNumReqInFlight
-	gmmu.latency = b.pageWalkingLatency
-	gmmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
-	gmmu.deviceID = b.deviceID
-	gmmu.LowModule = b.lowModule
-	gmmu.log2PageSize = b.log2PageSize
+func (b Builder) Build(name string) *GMMU {
+	spec := Spec{
+		DeviceID:            b.deviceID,
+		Log2PageSize:        b.log2PageSize,
+		Latency:             b.pageWalkingLatency,
+		MaxRequestsInFlight: b.maxNumReqInFlight,
+		LowModule:           b.lowModule,
+	}
+
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	gmmu := &GMMU{
+		Component:              modelComp,
+		PageAccessedByDeviceID: make(map[uint64][]uint64),
+		remoteMemReqs:          make(map[string]transaction),
+	}
+
+	b.createPageTable(gmmu)
+	b.createPorts(name, gmmu)
+
+	middleware := &gmmuMiddleware{GMMU: gmmu}
+	gmmu.AddMiddleware(middleware)
+
+	return gmmu
 }
 
 func (b Builder) createPageTable(gmmu *GMMU) {
@@ -113,18 +135,4 @@ func (b Builder) createPorts(name string, gmmu *GMMU) {
 	gmmu.bottomPort = b.bottomPort
 	gmmu.bottomPort.SetComponent(gmmu)
 	gmmu.AddPort("Bottom", gmmu.bottomPort)
-
-	gmmu.remoteMemReqs = make(map[string]transaction)
-}
-
-func (b Builder) Build(name string) *GMMU {
-	gmmu := new(GMMU)
-	gmmu.TickingComponent = *sim.NewTickingComponent(
-		name, b.engine, b.freq, gmmu)
-
-	b.createPorts(name, gmmu)
-	b.createPageTable(gmmu)
-	b.configureInternalStates(gmmu)
-
-	return gmmu
 }

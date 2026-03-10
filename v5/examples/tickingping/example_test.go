@@ -26,8 +26,10 @@ func Example() {
 	conn.PlugIn(agentA.OutPort)
 	conn.PlugIn(agentB.OutPort)
 
-	agentA.pingDst = agentB.OutPort.AsRemote()
-	agentA.numPingNeedToSend = 2
+	state := agentA.GetState()
+	state.PingDst = agentB.OutPort.AsRemote()
+	state.NumPingNeedToSend = 2
+	agentA.SetState(state)
 
 	agentA.TickLater()
 

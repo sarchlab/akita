@@ -2,25 +2,28 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	engine                 sim.Engine
-	bufferSize             uint64
-	insidePortMapper       mem.AddressToPortMapper
-	outsidePortMapper      mem.AddressToPortMapper
-	insideByteGranularity  uint64
-	outsideByteGranularity uint64
-	ctrlPort               sim.Port
-	insidePort             sim.Port
-	outsidePort            sim.Port
+	engine            sim.Engine
+	freq              sim.Freq
+	insidePortMapper  mem.AddressToPortMapper
+	outsidePortMapper mem.AddressToPortMapper
+	ctrlPort          sim.Port
+	insidePort        sim.Port
+	outsidePort       sim.Port
+	spec              *Spec
 }
 
 // MakeBuilder creates a new Builder
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{
+		freq: 1 * sim.GHz,
+		spec: &Spec{},
+	}
 }
 
 // WithEngine sets StreamingDataMover's engine
@@ -31,11 +34,17 @@ func (sdmBuilder Builder) WithEngine(
 	return sdmBuilder
 }
 
+// WithFreq sets the frequency of StreamingDataMover
+func (sdmBuilder Builder) WithFreq(freq sim.Freq) Builder {
+	sdmBuilder.freq = freq
+	return sdmBuilder
+}
+
 // WithBufferSize sets the buffer size of StreamingDataMover
 func (sdmBuilder Builder) WithBufferSize(
 	inputBufferSize uint64,
 ) Builder {
-	sdmBuilder.bufferSize = inputBufferSize
+	sdmBuilder.spec.BufferSize = inputBufferSize
 	return sdmBuilder
 }
 
@@ -60,7 +69,7 @@ func (sdmBuilder Builder) WithOutsidePortMapper(
 func (sdmBuilder Builder) WithInsideByteGranularity(
 	inputInsideByteGranularity uint64,
 ) Builder {
-	sdmBuilder.insideByteGranularity = inputInsideByteGranularity
+	sdmBuilder.spec.InsideByteGranularity = inputInsideByteGranularity
 	return sdmBuilder
 }
 
@@ -69,7 +78,7 @@ func (sdmBuilder Builder) WithInsideByteGranularity(
 func (sdmBuilder Builder) WithOutsideByteGranularity(
 	inputOutsideByteGranularity uint64,
 ) Builder {
-	sdmBuilder.outsideByteGranularity = inputOutsideByteGranularity
+	sdmBuilder.spec.OutsideByteGranularity = inputOutsideByteGranularity
 	return sdmBuilder
 }
 
@@ -93,22 +102,36 @@ func (sdmBuilder Builder) WithOutsidePort(port sim.Port) Builder {
 
 // Build a new StreamingDataMover
 func (sdmBuilder Builder) Build(name string) *Comp {
-	sdm := &Comp{}
-	sdm.bufferSize = sdmBuilder.bufferSize
-	sdm.insidePortMapper = sdmBuilder.insidePortMapper
-	sdm.outsidePortMapper = sdmBuilder.outsidePortMapper
-	sdm.insideByteGranularity = sdmBuilder.insideByteGranularity
-	sdm.outsideByteGranularity = sdmBuilder.outsideByteGranularity
+	spec := *sdmBuilder.spec
+	initialState := State{}
 
-	sdm.TickingComponent = sim.NewTickingComponent(
-		name, sdmBuilder.engine, 1*sim.GHz, sdm)
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(sdmBuilder.engine).
+		WithFreq(sdmBuilder.freq).
+		WithSpec(spec).
+		Build(name)
+	modelComp.SetState(initialState)
+
+	sdm := &Comp{
+		Component:         modelComp,
+		insidePortMapper:  sdmBuilder.insidePortMapper,
+		outsidePortMapper: sdmBuilder.outsidePortMapper,
+	}
+
+	middleware := &dataMoverMiddleware{Comp: sdm}
+	sdm.AddMiddleware(middleware)
 
 	sdm.ctrlPort = sdmBuilder.ctrlPort
 	sdm.ctrlPort.SetComponent(sdm)
+	sdm.AddPort("Control", sdm.ctrlPort)
+
 	sdm.insidePort = sdmBuilder.insidePort
 	sdm.insidePort.SetComponent(sdm)
+	sdm.AddPort("Inside", sdm.insidePort)
+
 	sdm.outsidePort = sdmBuilder.outsidePort
 	sdm.outsidePort.SetComponent(sdm)
+	sdm.AddPort("Outside", sdm.outsidePort)
 
 	return sdm
 }
