@@ -3,15 +3,21 @@ package writeevict
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// Spec contains immutable configuration for the write-evict cache.
+type Spec struct{}
+
+// State contains mutable runtime data for the write-evict cache.
+type State struct{}
+
 // Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -41,10 +47,6 @@ type Comp struct {
 	postCoalesceTransactions []*transaction
 
 	isPaused bool
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 // SetAddressToPortMapper sets the finder that tells which remote port can serve

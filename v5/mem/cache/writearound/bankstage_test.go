@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -33,8 +34,11 @@ var _ = Describe("Bankstage", func() {
 			storage:       storage,
 			log2BlockSize: 6,
 		}
-		c.TickingComponent = sim.NewTickingComponent(
-			"Cache", nil, 1, c)
+		c.Component = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{}).
+			Build("Cache")
 		s = &bankStage{
 			cache:           c,
 			bankID:          0,

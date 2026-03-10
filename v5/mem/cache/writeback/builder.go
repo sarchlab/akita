@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
@@ -195,9 +196,13 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *Comp {
-	cache := new(Comp)
-	cache.TickingComponent = sim.NewTickingComponent(
-		name, b.engine, b.freq, cache)
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(Spec{}).
+		Build(name)
+
+	cache := &Comp{Component: modelComp}
 
 	b.configureCache(cache)
 	b.createPorts(cache)

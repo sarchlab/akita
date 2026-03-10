@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cache2 "github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -57,8 +58,11 @@ var _ = Describe("Control Stage", func() {
 			mshr:          mshr,
 			coalesceStage: c,
 		}
-		cache.TickingComponent = sim.NewTickingComponent(
-			"Cache", nil, 1, cache)
+		cache.Component = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{}).
+			Build("Cache")
 
 		s = &controlStage{
 			ctrlPort:     ctrlPort,

@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -37,10 +38,15 @@ func (p Protocol) isHBM() bool {
 	return p == HBM || p == HBM2
 }
 
+// Spec contains immutable configuration for the DRAM memory controller.
+type Spec struct{}
+
+// State contains mutable runtime data for the DRAM memory controller.
+type State struct{}
+
 // Comp is a MemController handles read and write requests.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort sim.Port
 
@@ -53,10 +59,6 @@ type Comp struct {
 	channel             org.Channel
 
 	inflightTransactions []*signal.Transaction
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {

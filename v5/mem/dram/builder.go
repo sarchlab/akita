@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
@@ -402,11 +403,17 @@ func (b Builder) WithRFCb(cycle int) Builder {
 
 // Build builds a new MemController.
 func (b Builder) Build(name string) *Comp {
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(Spec{}).
+		Build(name)
+
 	m := &Comp{
+		Component:     modelComp,
 		addrConverter: b.addrConverter,
 		storage:       b.storage,
 	}
-	m.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, m)
 
 	b.attachTracers(m)
 	b.buildChannel(name, m)

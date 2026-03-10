@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
@@ -170,12 +171,17 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
 
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(Spec{}).
+		Build(name)
+
 	c := &Comp{
+		Component:      modelComp,
 		log2BlockSize:  b.log2BlockSize,
 		numReqPerCycle: b.numReqPerCycle,
 	}
-	c.TickingComponent = sim.NewTickingComponent(
-		name, b.engine, b.freq, c)
 
 	b.createPorts(c)
 
