@@ -193,6 +193,25 @@ func (p *Port) NotifyAvailable() {
 	panic("port's NotifyAvailable should never be called")
 }
 
+// NumIncoming returns the number of messages in the incoming buffer.
+// The wiring port has no local incoming buffer (reads come from the
+// connection), so this always returns 0.
+func (p *Port) NumIncoming() int {
+	return 0
+}
+
+// NumOutgoing returns the number of messages in the outgoing buffer.
+func (p *Port) NumOutgoing() int {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if p.msgToSend != nil {
+		return 1
+	}
+
+	return 0
+}
+
 // NewPort creates a new port with the simplified wiring implementation.
 func NewPort(comp sim.Component, name string, timeTeller sim.TimeTeller) *Port {
 	p := new(Port)

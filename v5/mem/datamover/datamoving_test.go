@@ -47,7 +47,11 @@ var _ = Describe("DataMover", func() {
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
-			WithCacheLineSize(64).
+			WithSpec(idealmemcontroller.Spec{
+				Latency:       100,
+				Width:         1,
+				CacheLineSize: 64,
+			}).
 			WithNewStorage(1 * mem.MB).
 			WithTopPort(sim.NewPort(nil, 16, 16, "InsideMem.TopPort")).
 			WithCtrlPort(sim.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
@@ -55,7 +59,11 @@ var _ = Describe("DataMover", func() {
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
-			WithCacheLineSize(64).
+			WithSpec(idealmemcontroller.Spec{
+				Latency:       100,
+				Width:         1,
+				CacheLineSize: 64,
+			}).
 			WithNewStorage(1 * mem.MB).
 			WithTopPort(sim.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
 			WithCtrlPort(sim.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).

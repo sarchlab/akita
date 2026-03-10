@@ -192,4 +192,28 @@ var _ = Describe("DefaultPort", func() {
 
 			Expect(msgRet).To(BeIdenticalTo(msg))
 		})
+
+	It("should return 0 for NumIncoming when buffer is empty", func() {
+		Expect(port.NumIncoming()).To(Equal(0))
+	})
+
+	It("should return 0 for NumOutgoing when buffer is empty", func() {
+		Expect(port.NumOutgoing()).To(Equal(0))
+	})
+
+	It("should return correct NumIncoming after delivering messages", func() {
+		msg := &sampleMsg{}
+		comp.EXPECT().NotifyRecv(port)
+		port.Deliver(msg)
+
+		Expect(port.NumIncoming()).To(Equal(1))
+	})
+
+	It("should return correct NumOutgoing after pushing messages", func() {
+		msg := &sampleMsg{}
+		port.outgoingBuf.Push(msg)
+		port.outgoingBuf.Push(msg)
+
+		Expect(port.NumOutgoing()).To(Equal(2))
+	})
 })

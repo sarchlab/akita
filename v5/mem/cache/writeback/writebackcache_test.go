@@ -90,7 +90,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
 			WithFreq(1 * sim.GHz).
-			WithLatency(200).
+			WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 200, CacheLineSize: 64}).
 			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
 			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 			Build("DRAM")

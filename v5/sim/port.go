@@ -48,6 +48,10 @@ type Port interface {
 	Send(msg Msg) *SendError
 	RetrieveIncoming() Msg
 	PeekIncoming() Msg
+
+	// Buffer counts
+	NumIncoming() int
+	NumOutgoing() int
 }
 
 // DefaultPort implements the port interface.
@@ -251,6 +255,22 @@ func (p *defaultPort) PeekOutgoing() Msg {
 	msg := item.(Msg)
 
 	return msg
+}
+
+// NumIncoming returns the number of messages in the incoming buffer.
+func (p *defaultPort) NumIncoming() int {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	return p.incomingBuf.Size()
+}
+
+// NumOutgoing returns the number of messages in the outgoing buffer.
+func (p *defaultPort) NumOutgoing() int {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	return p.outgoingBuf.Size()
 }
 
 // NotifyAvailable is called by the connection to notify the port that the

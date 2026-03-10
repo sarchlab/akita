@@ -5,9 +5,9 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gmeasure"
 	gomock "go.uber.org/mock/gomock"
-	// . "github.com/onsi/gomega"
 )
 
 var _ = Describe("SerialEngine", func() {
@@ -92,6 +92,11 @@ var _ = Describe("SerialEngine", func() {
 		engine.Schedule(evt3)
 
 		_ = engine.Run()
+	})
+
+	It("should set current time", func() {
+		engine.SetCurrentTime(VTimeInSec(42.5))
+		Expect(engine.CurrentTime()).To(Equal(VTimeInSec(42.5)))
 	})
 
 	It("measure triggering speed", func() {

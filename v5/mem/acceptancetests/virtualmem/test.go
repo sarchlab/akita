@@ -96,7 +96,7 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 	memCtrl := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
-		WithLatency(100).
+		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
 		WithTopPort(sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
 		WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 		Build("MemCtrl")

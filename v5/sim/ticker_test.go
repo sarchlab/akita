@@ -76,3 +76,50 @@ var _ = Describe("Ticking Component", func() {
 	})
 
 })
+
+var _ = Describe("TickScheduler Reset", func() {
+	var (
+		mockCtrl  *gomock.Controller
+		engine    *MockEngine
+		scheduler *TickScheduler
+		handler   *MockHandler
+	)
+
+	BeforeEach(func() {
+		mockCtrl = gomock.NewController(GinkgoT())
+		engine = NewMockEngine(mockCtrl)
+		handler = NewMockHandler(mockCtrl)
+		scheduler = NewTickScheduler(handler, engine, 1)
+	})
+
+	AfterEach(func() {
+		mockCtrl.Finish()
+	})
+
+	It("should reset nextTickTime to -1", func() {
+		// Simulate a scheduled tick so nextTickTime advances
+		engine.EXPECT().CurrentTime().Return(VTimeInSec(10))
+		engine.EXPECT().Schedule(gomock.Any())
+		scheduler.TickLater()
+		Expect(scheduler.nextTickTime).To(Equal(VTimeInSec(11)))
+
+		// After reset, nextTickTime should be -1
+		scheduler.Reset()
+		Expect(scheduler.nextTickTime).To(Equal(VTimeInSec(-1)))
+	})
+
+	It("should allow TickLater to schedule again after reset", func() {
+		// First TickLater
+		engine.EXPECT().CurrentTime().Return(VTimeInSec(10))
+		engine.EXPECT().Schedule(gomock.Any())
+		scheduler.TickLater()
+
+		// Reset
+		scheduler.Reset()
+
+		// TickLater should work again even at an earlier time
+		engine.EXPECT().CurrentTime().Return(VTimeInSec(5))
+		engine.EXPECT().Schedule(gomock.Any())
+		scheduler.TickLater()
+	})
+})
