@@ -35,13 +35,16 @@ Remaining non-ported files are infrastructure/test code (not first-party compone
 - `sim/directconnection` — Connection infrastructure, not a component
 - `mem/cache/mshr` — Internal cache data structure
 
-## Project Status: COMPLETE ✅
+## Upcoming Milestones
 
-All human-requested goals achieved:
+### M7: Move Mutable Runtime Data into State Structs — PLANNING
+Human raised issue #61: nearly all "ported" components have empty `State` structs. Their mutable data (sets, MSHR, pipelines, buffers) lives on the `Comp` wrapper struct, not in `State`. This defeats the purpose of the Spec/State separation and makes components non-serializable. Need investigation first to determine scope and approach.
+
+## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components ported
+4. **Port All Components** — 16 tick-driven components structurally ported (but State structs mostly empty)
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
