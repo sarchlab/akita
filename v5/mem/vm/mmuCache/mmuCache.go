@@ -17,9 +17,15 @@ type Spec struct {
 }
 
 // State contains mutable runtime data for the mmuCache.
-// Runtime data with pointers/interfaces stays on the Comp struct.
-type State struct{}
+type State struct {
+	CurrentState           string               `json:"current_state"`
+	Table                  []internal.SetState   `json:"table"`
+	InflightFlushReqID     string               `json:"inflight_flush_req_id"`
+	InflightFlushReqSrc    sim.RemotePort       `json:"inflight_flush_req_src"`
+	InflightFlushReqActive bool                 `json:"inflight_flush_req_active"`
+}
 
+// Comp is the mmuCache component.
 type Comp struct {
 	*modeling.Component[Spec, State]
 
@@ -41,5 +47,51 @@ func (c *Comp) reset() {
 	c.table = make([]internal.Set, spec.NumLevels)
 	for i := 0; i < spec.NumLevels; i++ {
 		c.table[i] = internal.NewSet(spec.NumBlocks)
+	}
+}
+
+// SyncToState exports the runtime mutable data into the State struct.
+func (c *Comp) SyncToState() {
+	s := State{
+		CurrentState: c.state,
+		Table:        make([]internal.SetState, len(c.table)),
+	}
+
+	for i, set := range c.table {
+		s.Table[i] = set.ExportState()
+	}
+
+	if c.inflightFlushReq != nil {
+		s.InflightFlushReqID = c.inflightFlushReq.ID
+		s.InflightFlushReqSrc = c.inflightFlushReq.Src
+		s.InflightFlushReqActive = true
+	}
+
+	c.SetState(s)
+}
+
+// SyncFromState restores the runtime mutable data from the State struct.
+func (c *Comp) SyncFromState() {
+	s := c.GetState()
+
+	c.state = s.CurrentState
+
+	spec := c.GetSpec()
+	c.table = make([]internal.Set, len(s.Table))
+	for i, ss := range s.Table {
+		set := internal.NewSet(spec.NumBlocks)
+		set.ImportState(ss)
+		c.table[i] = set
+	}
+
+	if s.InflightFlushReqActive {
+		c.inflightFlushReq = &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  s.InflightFlushReqID,
+				Src: s.InflightFlushReqSrc,
+			},
+		}
+	} else {
+		c.inflightFlushReq = nil
 	}
 }
