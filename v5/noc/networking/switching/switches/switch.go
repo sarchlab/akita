@@ -4,6 +4,7 @@ package switches
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
@@ -11,6 +12,12 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the switch.
+type Spec struct{}
+
+// State contains mutable runtime data for the switch.
+type State struct{}
 
 type flitPipelineItem struct {
 	taskID string
@@ -56,8 +63,7 @@ type portComplex struct {
 
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	ports                []sim.Port
 	portToComplexMapping map[sim.RemotePort]portComplex
@@ -75,10 +81,6 @@ func (c *Comp) addPort(complex portComplex) {
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routingTable
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
