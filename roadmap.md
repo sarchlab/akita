@@ -27,26 +27,22 @@ Port remaining ~12 components to `modeling.Component[S,T]` pattern. Reference im
 
 Ported 3 VM components to `modeling.Component[S,T]` pattern. All tests pass, ValidateSpec/ValidateState pass, PR #16 merged. All 3 had MiddlewareHolder already.
 
-### M6.3: Port TLB + simplebankedmemory + NOC components — NEXT
-**Goal:** Port 4 components: TLB, simplebankedmemory, endpoint, switches
-- `mem/vm/tlb` — 2380 LoC, custom MSHR + internal sets. Already has MiddlewareHolder.
-- `mem/simplebankedmemory` — 926 LoC. Already has MiddlewareHolder.
-- `noc/networking/switching/endpoint` — dynamic ports. Already has MiddlewareHolder.
-- `noc/networking/switching/switches` — routing table. Already has MiddlewareHolder.
+### M6.3: Port TLB + simplebankedmemory + NOC components ✅ — Budget: 4, Used: 2
+Ported 4 components: TLB, simplebankedmemory, endpoint, switches. PR #17 merged, verified by Apollo.
 
-All use MiddlewareHolder pattern; same mechanical porting as M6.1/M6.2.
+### M6.4: Port cache components + DRAM — NEXT
+**Goal:** Port 4 cache components and DRAM memory controller to modeling.Component[S,T]
+- `mem/cache/writearound` — 4324 LoC total, same pattern as writeevict/writethrough
+- `mem/cache/writeback` — 6359 LoC total, largest cache, has write buffer stage
+- `mem/cache/writeevict` — 4287 LoC total
+- `mem/cache/writethrough` — 4538 LoC total
+- `mem/dram` — 2057 LoC, internal subsystems stay on Comp
 
-### M6.4: Port cache components (writearound, writeevict, writethrough, writeback)
-- Most complex batch, ~19500 LoC total (incl. tests)
-- Prerequisite: serializable `cache.Directory` and `cache.MSHR`
-- Port writearound first as template
+All 5 have `*sim.TickingComponent` + `sim.MiddlewareHolder` already. Porting pattern is identical to previous milestones: replace with `*modeling.Component[Spec, State]`, create empty/minimal Spec/State, update builders. `cache.Directory` and `cache.MSHR` are interfaces — stay on Comp, not in Spec/State.
 
-### M6.5: Port DRAM
-- `mem/dram` — 2057 LoC, complex internal subsystems
-
-### M6.6: Special cases
-- `examples/ping` — Event-driven (not ticking), needs architectural decision
-- Test agents (`noc/standalone/agent`, `noc/acceptance/agent`, `mem/acceptancetests/memaccessagent`) — Low priority
+### M6.5: Special cases (lower priority)
+- `examples/ping` — Event-driven (uses `ComponentBase` not `TickingComponent`), needs architectural decision
+- Test agents (`noc/standalone/agent`, `noc/acceptance/agent`, `mem/acceptancetests/memaccessagent`) — Low priority, test infrastructure
 - `sim/directconnection` — Connection, not standard component. May or may not need porting.
 
 ## Open Human Issues
@@ -66,3 +62,5 @@ All use MiddlewareHolder pattern; same mechanical porting as M6.1/M6.2.
 - M5 completed in 6 implementation cycles (budgeted 8). Multi-worker parallel approach was highly effective for mechanical refactoring.
 - M6.1 completed very efficiently in 2 implementation cycles (budgeted 4). Parallel 3-worker approach with clear instructions works well for mechanical porting.
 - Components that already have MiddlewareHolder are easier to port — the middleware pattern is already there.
+- M6.2 completed in 2 impl cycles (budgeted 4). Same parallel pattern works.
+- M6.3 completed in 2 impl cycles (budgeted 4). 4 components ported in parallel, verified by Apollo. Consistent efficiency.
