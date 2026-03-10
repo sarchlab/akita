@@ -37,3 +37,17 @@ func (c *Component[S, T]) SetState(state T) {
 func (c *Component[S, T]) Tick() bool {
 	return c.MiddlewareHolder.Tick()
 }
+
+// ResetTick resets the TickScheduler so that future TickLater calls can
+// schedule new events. This is used after loading state from a checkpoint.
+func (c *Component[S, T]) ResetTick() {
+	c.TickScheduler.Reset()
+}
+
+// ResetAndRestartTick resets the TickScheduler and schedules a new tick.
+// This is used after loading state from a checkpoint when the component
+// needs to immediately resume ticking.
+func (c *Component[S, T]) ResetAndRestartTick() {
+	c.TickScheduler.Reset()
+	c.TickLater()
+}

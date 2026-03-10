@@ -46,3 +46,13 @@ type Comp struct {
 	Storage          *mem.Storage
 	addressConverter mem.AddressConverter
 }
+
+// GetStorage returns the underlying storage.
+func (c *Comp) GetStorage() *mem.Storage {
+	return c.Storage
+}
+
+// StorageName returns the name used to identify this component's storage.
+func (c *Comp) StorageName() string {
+	return c.GetSpec().StorageRef
+}

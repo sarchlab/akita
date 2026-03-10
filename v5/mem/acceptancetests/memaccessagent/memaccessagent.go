@@ -30,6 +30,10 @@ type MemAccessAgent struct {
 
 	memPort           sim.Port
 	UseVirtualAddress bool
+
+	// Rand is the random source used by the agent. If nil, the global
+	// math/rand functions are used (non-deterministic in Go 1.22+).
+	Rand *rand.Rand
 }
 
 func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
@@ -123,6 +127,27 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 	return false
 }
 
+func (a *MemAccessAgent) float64() float64 {
+	if a.Rand != nil {
+		return a.Rand.Float64()
+	}
+	return rand.Float64()
+}
+
+func (a *MemAccessAgent) uint64() uint64 {
+	if a.Rand != nil {
+		return a.Rand.Uint64()
+	}
+	return rand.Uint64()
+}
+
+func (a *MemAccessAgent) uint32r() uint32 {
+	if a.Rand != nil {
+		return a.Rand.Uint32()
+	}
+	return rand.Uint32()
+}
+
 func (a *MemAccessAgent) shouldRead() bool {
 	if len(a.KnownMemValue) == 0 {
 		return false
@@ -136,7 +161,7 @@ func (a *MemAccessAgent) shouldRead() bool {
 		return true
 	}
 
-	dice := rand.Float64()
+	dice := a.float64()
 
 	return dice > 0.5
 }
@@ -175,7 +200,7 @@ func (a *MemAccessAgent) randomReadAddress() uint64 {
 	var addr uint64
 
 	for {
-		addr = rand.Uint64() % (a.MaxAddress / 4) * 4
+		addr = a.uint64() % (a.MaxAddress / 4) * 4
 
 		if _, written := a.KnownMemValue[addr]; written {
 			return addr
@@ -215,9 +240,9 @@ func uint32ToBytes(data uint32) []byte {
 }
 
 func (a *MemAccessAgent) doWrite() bool {
-	address := rand.Uint64() % (a.MaxAddress / 4) * 4
+	address := a.uint64() % (a.MaxAddress / 4) * 4
 
-	data := rand.Uint32()
+	data := a.uint32r()
 
 	if a.isAddressInPendingReq(address) {
 		return false
