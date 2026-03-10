@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -169,7 +170,7 @@ func (b Builder) Build(name string) *Comp {
 		numReqPerCycle: b.numReqPerCycle,
 	}
 
-	b.setTickingComponent(c, name)
+	b.setModelingComponent(c, name)
 	b.createPorts(c, name)
 	b.createBuffers(c, name)
 	b.configureCacheStructures(c)
@@ -188,8 +189,12 @@ func (b Builder) Build(name string) *Comp {
 	return c
 }
 
-func (b Builder) setTickingComponent(c *Comp, name string) {
-	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
+func (b Builder) setModelingComponent(c *Comp, name string) {
+	c.Component = modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(Spec{}).
+		Build(name)
 }
 
 func (b Builder) createPorts(c *Comp, name string) {
