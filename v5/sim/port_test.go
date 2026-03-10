@@ -6,24 +6,12 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-type sampleMsg struct {
-	MsgMeta
-}
-
-func NewSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	return m
-}
-
-func (m *sampleMsg) Meta() *MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() Msg {
-	cloneMsg := *m
-	cloneMsg.ID = GetIDGenerator().Generate()
-
-	return &cloneMsg
+func newTestMsg() *Msg {
+	return &Msg{
+		MsgMeta: MsgMeta{
+			ID: GetIDGenerator().Generate(),
+		},
+	}
 }
 
 var _ = Describe("DefaultPort", func() {
@@ -59,20 +47,20 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should be panic if port is not msg src", func() {
-		msg := NewSampleMsg()
+		msg := newTestMsg()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg dst is not set", func() {
-		msg := NewSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port.AsRemote()
 
 		Expect(func() { port.Send(msg) }).To(Panic())
 	})
 
 	It("should be panic if msg src is the same as dst", func() {
-		msg := NewSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port.AsRemote()
 		msg.Dst = port.AsRemote()
 
@@ -81,7 +69,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should send successfully", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		msg.Src = port.AsRemote()
 		msg.Dst = dst.AsRemote()
 		conn.EXPECT().NotifySend()
@@ -94,7 +82,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should propagate error when outgoing buff is full", func() {
 		dst := NewPort(comp, 4, 4, "DstPort")
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		msg.Src = port.AsRemote()
 		msg.Dst = dst.AsRemote()
 
@@ -109,7 +97,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should deliver when successful", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 
 		comp.EXPECT().NotifyRecv(port)
 
@@ -119,7 +107,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should fail to deliver when incoming buffer is full", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		port.incomingBuf = newPortBuffer(4)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
@@ -138,7 +126,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from incoming buffer", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		port.incomingBuf.Push(msg)
 
 		msgRet := port.PeekIncoming()
@@ -153,7 +141,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should allow component to peek message from outgoing buffer", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		port.outgoingBuf.Push(msg)
 
 		msgRet := port.PeekOutgoing()
@@ -169,7 +157,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from incoming buffer",
 		func() {
-			msg := &sampleMsg{}
+			msg := newTestMsg()
 			port.incomingBuf.Push(msg)
 
 			msgRet := port.RetrieveIncoming()
@@ -185,7 +173,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should allow component to retrieve message from outgoing buffer",
 		func() {
-			msg := &sampleMsg{}
+			msg := newTestMsg()
 			port.outgoingBuf.Push(msg)
 
 			msgRet := port.RetrieveOutgoing()
@@ -202,7 +190,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should return correct NumIncoming after delivering messages", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		comp.EXPECT().NotifyRecv(port)
 		port.Deliver(msg)
 
@@ -210,7 +198,7 @@ var _ = Describe("DefaultPort", func() {
 	})
 
 	It("should return correct NumOutgoing after pushing messages", func() {
-		msg := &sampleMsg{}
+		msg := newTestMsg()
 		port.outgoingBuf.Push(msg)
 		port.outgoingBuf.Push(msg)
 
