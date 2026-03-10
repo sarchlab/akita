@@ -26,39 +26,41 @@ Populated State for: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint
 #### M7.2: Components with queueing deps ✅ — Budget: 6, Used: 4
 Added queueing snapshot functions (SnapshotPipeline/RestorePipeline/SnapshotBuffer/RestoreBuffer). Populated State for: simplebankedmemory, switches, TLB. PR #20 merged.
 
-### M7.3: DRAM State Population ✅ — Budget: 6, Used: 2
-Populated State for DRAM with full pointer-graph flattening (527-line state.go). Created internal accessor files. PR #21 merged.
+#### M7.3: DRAM State Population ✅ — Budget: 6, Used: 2
+Populated State for DRAM with full pointer-graph flattening (527-line state.go). PR #21 merged.
+
+#### M7.4: Cache State Population (writearound, writeevict, writethrough) ✅ — Budget: 6, Used: 2
+Shared Directory/MSHR serialization helpers in v5/mem/cache/state_helpers.go. State population for 3 near-identical cache variants. PR #22 merged.
 
 ## Upcoming Milestones
 
-### M7.4: Cache State Population (writearound, writeevict, writethrough) — NEXT
-Three near-identical cache variants (~90% shared code). Must serialize:
-- cache.Directory (Sets with Blocks + LRU ordering)
-- cache.MSHR (entries with *sim.Msg decomposition, *Block references, []interface{} Requests)
-- Transactions (11 fields each, 5 need pointer decomposition)
-- Pipeline/buffer contents (wrap transactions)
-- Component-level state (transactions, postCoalesceTransactions, isPaused)
-
-Approach: Create shared Directory/MSHR serialization helpers in v5/mem/cache/ package, then each cache gets its own state.go.
-
-Estimated: ~400-500 lines shared + ~200 per variant.
-
-### M7.5: Writeback Cache State Population
+### M7.5: Writeback Cache State Population — NEXT
 Most complex cache. Additional state beyond M7.4:
-- 17-field transaction (vs 11 for others)
+- 17-field transaction (vs 11 for others): includes victim, fetchPID, fetchAddress, fetchedData, fetchReadReq, evicting* fields, evictionWriteReq, mshrEntry, flush
 - Write buffer stage (pendingEvictions, inflightFetch, inflightEviction)
 - MSHR stage state
 - Evicting list map
 - Cache state enum (running/preFlushing/flushing/paused)
+- Flusher stage state
 
 Can reuse Directory/MSHR serialization from M7.4.
 Estimated: ~600-800 lines.
+
+### M8: Msg/MsgRef Redesign (pending human feedback on #93)
+Human raised issue #93: "Can we merge Msg and MsgRef?"
+- 6+ duplicate msgRef types across packages (identical fields)
+- Vera found critical bug: msgRef doesn't save Payload → nil after restore → panics
+- Need to either merge, deduplicate, or redesign
+- Waiting for human direction before planning
+
+### Known Bug: Payload Loss in msgRef (affects all components)
+All msgRefFromMsg/msgFromRef functions drop the Payload field. After save/load, inflight messages have nil Payload. This is a systemic bug across ALL 13 state.go files. Fix is blocked pending Msg/MsgRef redesign decision (M8).
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 10/15; remaining: 4 cache variants + idealmemcontroller already done)
+4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 14/15; remaining: writeback)
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
@@ -70,6 +72,5 @@ Estimated: ~600-800 lines.
 - Research for M7 revealed that the queueing/cache serialization problem is deeper than expected — need phased approach.
 - The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
 - queueing snapshot functions (Approach A) proved pragmatic — standalone functions avoiding interface changes + no mock updates.
-- M7.1 and M7.2 each completed in 4 cycles (budgeted 6) — consistent track record of finishing under budget.
-- M7.3 completed in 2 cycles (budgeted 6) — the DRAM pattern is well-understood now, single-worker approach worked well.
-- Total project: ~37 implementation cycles across 73 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs).
+- M7.1–M7.4 each completed well under budget — consistent track record. Total: 12 cycles used vs 24 budgeted.
+- Total project: ~41 implementation cycles across 77 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs like the Payload loss).
