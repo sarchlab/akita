@@ -2,16 +2,10 @@
 
 ## What to Build
 
-Let's create a v5 folder that will serve as the implementation of v5. Copy all the code from v4 into v5 and we start to edit from there. 
+Move pipeline and buffer to a new queueing package
 
-The first task is to create change how ports are created. Previously, ports are created as part of the builder. Now, I want all the ports to be passed in from outside. 
-
-BTW, all the GitHub CI runners do not work anymore, please migration to use the runners from the Marin group.
+Also, merge compiler, lint and unit test CI actions.
 
 ## Success Criteria
 
-Create a plan for how to refactor the APIs. Write a migration.md in v5 directory. Create a PR in akita-dev repo. Merge the PR after CI passes and claim completion.
 
-## CI Must Pass
-
-The GitHub Actions CI must pass on the PR branch. The self-hosted runners need proper tool setup (go, node, python) since they are not pre-installed on the Marin runners.
