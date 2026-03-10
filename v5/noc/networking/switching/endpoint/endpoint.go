@@ -12,7 +12,7 @@ import (
 )
 
 type msgToAssemble struct {
-	msg             sim.Msg
+	msg             *sim.Msg
 	numFlitRequired int
 	numFlitArrived  int
 }
@@ -31,12 +31,12 @@ type Comp struct {
 	numOutputChannels int
 	flitByteSize      int
 	encodingOverhead  float64
-	msgOutBuf         []sim.Msg
-	flitsToSend       []*messaging.Flit
+	msgOutBuf         []*sim.Msg
+	flitsToSend       []*sim.Msg
 
 	assemblingMsgTable map[string]*list.Element
 	assemblingMsgs     *list.List
-	assembledMsgs      []sim.Msg
+	assembledMsgs      []*sim.Msg
 }
 
 // PlugIn connects a port to the endpoint.
@@ -90,8 +90,8 @@ func (m *middleware) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flit sim.Msg) string {
-	return fmt.Sprintf("%s_e2e", flit.Meta().ID)
+func (m *middleware) flitTaskID(flitMsg *sim.Msg) string {
+	return fmt.Sprintf("%s_e2e", flitMsg.ID)
 }
 
 func (m *middleware) sendFlitOut() bool {
@@ -107,10 +107,6 @@ func (m *middleware) sendFlitOut() bool {
 
 		if err == nil {
 			m.flitsToSend = m.flitsToSend[1:]
-
-			// fmt.Printf("%.10f, %s, ep send flit, %s, %d\n",
-			// 	c.Engine.CurrentTime(), c.Name(),
-			// 	flit.Meta().ID, len(c.flitsToSend))
 
 			if len(m.flitsToSend) == 0 {
 				for _, p := range m.DevicePorts {
@@ -137,9 +133,6 @@ func (m *middleware) prepareMsg() bool {
 		msg := port.RetrieveOutgoing()
 		m.msgOutBuf = append(m.msgOutBuf, msg)
 
-		// fmt.Printf("%.10f, %s, ep send msg, msg-%s\n",
-		// 	now, c.Name(), msg.Meta().ID)
-
 		madeProgress = true
 	}
 
@@ -159,10 +152,6 @@ func (m *middleware) prepareFlits() bool {
 		flits := m.msgToFlits(msg)
 		m.flitsToSend = append(m.flitsToSend, flits...)
 
-		// fmt.Printf("%.10f, %s, ep create flit, msg-%s, %d, %d\n",
-		// 	c.Engine.CurrentTime(), c.Name(), msg.Meta().ID, len(flits),
-		// 	len(c.flitsToSend))
-
 		for _, flit := range flits {
 			m.logFlitE2ETask(flit, false)
 		}
@@ -180,17 +169,17 @@ func (m *middleware) recv() bool {
 			return madeProgress
 		}
 
-		flit := received.(*messaging.Flit)
-		msg := flit.Msg
+		flitPayload := sim.MsgPayload[messaging.FlitPayload](received)
+		msg := flitPayload.Msg
 
-		assemblingElem := m.assemblingMsgTable[msg.Meta().ID]
+		assemblingElem := m.assemblingMsgTable[msg.ID]
 		if assemblingElem == nil {
 			assemblingElem = m.assemblingMsgs.PushBack(&msgToAssemble{
 				msg:             msg,
-				numFlitRequired: flit.NumFlitInMsg,
+				numFlitRequired: flitPayload.NumFlitInMsg,
 				numFlitArrived:  0,
 			})
-			m.assemblingMsgTable[msg.Meta().ID] = assemblingElem
+			m.assemblingMsgTable[msg.ID] = assemblingElem
 		}
 
 		assembling := assemblingElem.Value.(*msgToAssemble)
@@ -198,9 +187,7 @@ func (m *middleware) recv() bool {
 
 		m.NetworkPort.RetrieveIncoming()
 
-		// fmt.Printf("%.10f, %s, ep received flit %s\n",
-		// 	now, c.Name(), flit.ID)
-		m.logFlitE2ETask(flit, true)
+		m.logFlitE2ETask(received, true)
 
 		madeProgress = true
 	}
@@ -224,12 +211,9 @@ func (m *middleware) assemble() bool {
 
 		m.assembledMsgs = append(m.assembledMsgs, assemblingMsg.msg)
 		m.assemblingMsgs.Remove(e)
-		delete(m.assemblingMsgTable, assemblingMsg.msg.Meta().ID)
+		delete(m.assemblingMsgTable, assemblingMsg.msg.ID)
 
 		e = next
-
-		// fmt.Printf("%.10f, %s, assembled, msg-%s\n",
-		// 	c.Engine.CurrentTime(), c.Name(), assemblingMsg.msg.Meta().ID)
 
 		madeProgress = true
 	}
@@ -242,7 +226,7 @@ func (m *middleware) tryDeliver() bool {
 
 	for len(m.assembledMsgs) > 0 {
 		msg := m.assembledMsgs[0]
-		dst := msg.Meta().Dst
+		dst := msg.Dst
 
 		var dstPort sim.Port
 
@@ -262,8 +246,6 @@ func (m *middleware) tryDeliver() bool {
 			return madeProgress
 		}
 
-		// fmt.Printf("%.10f, %s, delivered, %s\n",
-		// 	now, c.Name(), msg.Meta().ID)
 		m.logMsgE2ETask(msg, true)
 
 		m.assembledMsgs = m.assembledMsgs[1:]
@@ -274,73 +256,73 @@ func (m *middleware) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *middleware) logFlitE2ETask(flit *messaging.Flit, isEnd bool) {
+func (m *middleware) logFlitE2ETask(flitMsg *sim.Msg, isEnd bool) {
 	if m.Comp.NumHooks() == 0 {
 		return
 	}
 
-	msg := flit.Msg
+	flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+	msg := flitPayload.Msg
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit), m.Comp)
+		tracing.EndTask(m.flitTaskID(flitMsg), m.Comp)
 		return
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit), m.msgTaskID(msg.Meta().ID),
-		m.Comp, "flit_e2e", "flit_e2e", m.Comp.Name()+".FlitBuf", flit,
+		m.flitTaskID(flitMsg), m.msgTaskID(msg.ID),
+		m.Comp, "flit_e2e", "flit_e2e", m.Comp.Name()+".FlitBuf", flitMsg,
 	)
 }
 
-func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
+func (m *middleware) logMsgE2ETask(msg *sim.Msg, isEnd bool) {
 	if m.Comp.NumHooks() == 0 {
 		return
 	}
 
-	rsp, isRsp := msg.(sim.Rsp)
-	if isRsp {
-		m.logMsgRsp(isEnd, rsp)
+	if msg.IsRsp() {
+		m.logMsgRsp(isEnd, msg)
 		return
 	}
 
 	m.logMsgReq(isEnd, msg)
 }
 
-func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
+func (m *middleware) logMsgReq(isEnd bool, msg *sim.Msg) {
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(msg.Meta().ID), m.Comp)
+		tracing.EndTask(m.msgTaskID(msg.ID), m.Comp)
 	} else {
 		tracing.StartTask(
-			m.msgTaskID(msg.Meta().ID),
-			msg.Meta().ID+"_req_out",
+			m.msgTaskID(msg.ID),
+			msg.ID+"_req_out",
 			m.Comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }
 
-func (m *middleware) logMsgRsp(isEnd bool, rsp sim.Rsp) {
+func (m *middleware) logMsgRsp(isEnd bool, msg *sim.Msg) {
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(rsp.Meta().ID), m.Comp)
+		tracing.EndTask(m.msgTaskID(msg.ID), m.Comp)
 	} else {
 		tracing.StartTask(
-			m.msgTaskID(rsp.Meta().ID),
-			rsp.GetRspTo()+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", rsp,
+			m.msgTaskID(msg.ID),
+			msg.RspTo+"_req_out",
+			m.Comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }
 
-func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
+func (m *middleware) msgToFlits(msg *sim.Msg) []*sim.Msg {
 	numFlit := 1
 
-	if msg.Meta().TrafficBytes > 0 {
-		trafficByte := msg.Meta().TrafficBytes
+	if msg.TrafficBytes > 0 {
+		trafficByte := msg.TrafficBytes
 		trafficByte += int(math.Ceil(
 			float64(trafficByte) * m.encodingOverhead))
 		numFlit = (trafficByte-1)/m.flitByteSize + 1
 	}
 
-	flits := make([]*messaging.Flit, numFlit)
+	flits := make([]*sim.Msg, numFlit)
 	for i := 0; i < numFlit; i++ {
 		flits[i] = messaging.FlitBuilder{}.
 			WithSrc(m.NetworkPort.AsRemote()).

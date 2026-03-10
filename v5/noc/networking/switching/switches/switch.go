@@ -14,7 +14,7 @@ import (
 
 type flitPipelineItem struct {
 	taskID string
-	flit   *messaging.Flit
+	flit   *sim.Msg // payload: *messaging.FlitPayload
 }
 
 func (f flitPipelineItem) TaskID() string {
@@ -98,12 +98,12 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
+func (m *middleware) flitParentTaskID(flitMsg *sim.Msg) string {
+	return flitMsg.ID + "_e2e"
 }
 
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.Comp.Name()
+func (m *middleware) flitTaskID(flitMsg *sim.Msg) string {
+	return flitMsg.ID + "_" + m.Comp.Name()
 }
 
 func (m *middleware) startProcessing() (madeProgress bool) {
@@ -120,23 +120,20 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			flit := item.(*messaging.Flit)
 			pipelineItem := flitPipelineItem{
-				taskID: m.flitTaskID(flit),
-				flit:   flit,
+				taskID: m.flitTaskID(item),
+				flit:   item,
 			}
 			pc.pipeline.Accept(pipelineItem)
 			port.RetrieveIncoming()
 
 			madeProgress = true
 
-			// fmt.Printf("%.10f, %s, switch recv flit, %s\n",
-			// 	now, c.Name(), flit.ID)
 			tracing.StartTask(
-				m.flitTaskID(flit),
-				m.flitParentTaskID(flit),
+				m.flitTaskID(item),
+				m.flitParentTaskID(item),
 				m.Comp, "flit", "flit_inside_sw",
-				flit,
+				item,
 			)
 		}
 	}
@@ -170,13 +167,11 @@ func (m *middleware) route() (madeProgress bool) {
 			}
 
 			pipelineItem := item.(flitPipelineItem)
-			flit := pipelineItem.flit
-			m.assignFlitOutputBuf(flit)
+			flitMsg := pipelineItem.flit
+			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+			m.assignFlitOutputBuf(flitMsg, flitPayload)
 			routeBuf.Pop()
-			forwardBuf.Push(flit)
-
-			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
-			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
+			forwardBuf.Push(flitMsg)
 
 			madeProgress = true
 		}
@@ -195,16 +190,14 @@ func (m *middleware) forward() (madeProgress bool) {
 				break
 			}
 
-			flit := item.(*messaging.Flit)
-			if !flit.OutputBuf.CanPush() {
+			flitMsg := item.(*sim.Msg)
+			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+			if !flitPayload.OutputBuf.CanPush() {
 				break
 			}
 
-			flit.OutputBuf.Push(flit)
+			flitPayload.OutputBuf.Push(flitMsg)
 			buf.Pop()
-
-			// fmt.Printf("%.10f, %s, switch forward flit, %s\n",
-			// 	now, c.Name(), item.(*messaging.Flit).ID)
 
 			madeProgress = true
 		}
@@ -224,20 +217,17 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				break
 			}
 
-			flit := item.(*messaging.Flit)
-			flit.Meta().Src = pc.localPort.AsRemote()
-			flit.Meta().Dst = pc.remotePort
+			flitMsg := item.(*sim.Msg)
+			flitMsg.Src = pc.localPort.AsRemote()
+			flitMsg.Dst = pc.remotePort
 
-			err := pc.localPort.Send(flit)
+			err := pc.localPort.Send(flitMsg)
 			if err == nil {
 				madeProgress = true
 
 				sendOutBuf.Pop()
 
-				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
-				// 	now, c.Name(), flit.ID)
-
-				tracing.EndTask(m.flitTaskID(flit), m.Comp)
+				tracing.EndTask(m.flitTaskID(flitMsg), m.Comp)
 			}
 		}
 	}
@@ -245,19 +235,22 @@ func (m *middleware) sendOut() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
-	outPort := m.routingTable.FindPort(f.Msg.Meta().Dst)
+func (m *middleware) assignFlitOutputBuf(
+	flitMsg *sim.Msg,
+	flitPayload *messaging.FlitPayload,
+) {
+	outPort := m.routingTable.FindPort(flitPayload.Msg.Dst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
-			m.Comp.Name(), f.Msg.Meta().Dst))
+			m.Comp.Name(), flitPayload.Msg.Dst))
 	}
 
 	pc := m.portToComplexMapping[outPort]
 
-	f.OutputBuf = pc.sendOutBuffer
-	if f.OutputBuf == nil {
+	flitPayload.OutputBuf = pc.sendOutBuffer
+	if flitPayload.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
-			m.Comp.Name(), f.Msg.Meta().Dst))
+			m.Comp.Name(), flitPayload.Msg.Dst))
 	}
 }
 

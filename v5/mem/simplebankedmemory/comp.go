@@ -15,13 +15,13 @@ type bank struct {
 }
 
 type bankPipelineItem struct {
-	req       mem.AccessReq
+	msg       *sim.Msg
 	committed bool
 	readData  []byte
 }
 
 func (i *bankPipelineItem) TaskID() string {
-	return i.req.Meta().ID + "_pl"
+	return i.msg.ID + "_pl"
 }
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
@@ -64,16 +64,16 @@ func (m *middleware) dispatchFromTopPort() bool {
 			break
 		}
 
-		req, ok := msg.(mem.AccessReq)
+		payload, ok := msg.Payload.(mem.AccessReqPayload)
 		if !ok {
-			log.Panicf("simplebankedmemory: unsupported message type %T", msg)
+			log.Panicf("simplebankedmemory: unsupported message type %T", msg.Payload)
 		}
 
 		if len(m.banks) == 0 {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		addr := req.GetAddress()
+		addr := payload.GetAddress()
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
@@ -89,9 +89,9 @@ func (m *middleware) dispatchFromTopPort() bool {
 		}
 
 		m.topPort.RetrieveIncoming()
-		tracing.TraceReqReceive(req, m.Comp)
+		tracing.TraceReqReceive(msg, m.Comp)
 
-		item := &bankPipelineItem{req: req}
+		item := &bankPipelineItem{msg: msg}
 		b.pipeline.Accept(item)
 		madeProgress = true
 	}
@@ -124,13 +124,14 @@ func (m *middleware) finalizeSingle(b *bank) bool {
 
 	item := itemIfc.(*bankPipelineItem)
 
-	switch req := item.req.(type) {
-	case *mem.ReadReq:
-		return m.finalizeRead(b, item, req)
-	case *mem.WriteReq:
-		return m.finalizeWrite(b, item, req)
+	switch item.msg.Payload.(type) {
+	case *mem.ReadReqPayload:
+		return m.finalizeRead(b, item)
+	case *mem.WriteReqPayload:
+		return m.finalizeWrite(b, item)
 	default:
-		log.Panicf("simplebankedmemory: unsupported request type %T", req)
+		log.Panicf("simplebankedmemory: unsupported request type %T",
+			item.msg.Payload)
 	}
 
 	return false
@@ -139,15 +140,17 @@ func (m *middleware) finalizeSingle(b *bank) bool {
 func (m *middleware) finalizeRead(
 	b *bank,
 	item *bankPipelineItem,
-	req *mem.ReadReq,
 ) bool {
+	msg := item.msg
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
+
 	if !item.committed {
-		addr := req.Address
+		addr := readPayload.Address
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
 
-		data, err := m.Storage.Read(addr, req.AccessByteSize)
+		data, err := m.Storage.Read(addr, readPayload.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -162,8 +165,8 @@ func (m *middleware) finalizeRead(
 
 	rsp := mem.DataReadyRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(msg.Src).
+		WithRspTo(msg.ID).
 		WithData(item.readData).
 		Build()
 
@@ -171,7 +174,7 @@ func (m *middleware) finalizeRead(
 		return false
 	}
 
-	tracing.TraceReqComplete(req, m.Comp)
+	tracing.TraceReqComplete(msg, m.Comp)
 
 	b.postPipelineBuf.Pop()
 
@@ -181,27 +184,29 @@ func (m *middleware) finalizeRead(
 func (m *middleware) finalizeWrite(
 	b *bank,
 	item *bankPipelineItem,
-	req *mem.WriteReq,
 ) bool {
+	msg := item.msg
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
+
 	if !item.committed {
-		addr := req.Address
+		addr := writePayload.Address
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
 
-		if req.DirtyMask == nil {
-			if err := m.Storage.Write(addr, req.Data); err != nil {
+		if writePayload.DirtyMask == nil {
+			if err := m.Storage.Write(addr, writePayload.Data); err != nil {
 				log.Panic(err)
 			}
 		} else {
-			data, err := m.Storage.Read(addr, uint64(len(req.Data)))
+			data, err := m.Storage.Read(addr, uint64(len(writePayload.Data)))
 			if err != nil {
 				log.Panic(err)
 			}
 
-			for i := range req.Data {
-				if req.DirtyMask[i] {
-					data[i] = req.Data[i]
+			for i := range writePayload.Data {
+				if writePayload.DirtyMask[i] {
+					data[i] = writePayload.Data[i]
 				}
 			}
 
@@ -219,15 +224,15 @@ func (m *middleware) finalizeWrite(
 
 	rsp := mem.WriteDoneRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(msg.Src).
+		WithRspTo(msg.ID).
 		Build()
 
 	if err := m.topPort.Send(rsp); err != nil {
 		return false
 	}
 
-	tracing.TraceReqComplete(req, m.Comp)
+	tracing.TraceReqComplete(msg, m.Comp)
 
 	b.postPipelineBuf.Pop()
 

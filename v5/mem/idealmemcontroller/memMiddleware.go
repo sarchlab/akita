@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -50,30 +51,31 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
 	spec := m.Component.GetSpec()
+	simMsg := msg.(*sim.Msg)
 
-	switch req := msg.(type) {
-	case *mem.ReadReq:
+	switch payload := simMsg.Payload.(type) {
+	case *mem.ReadReqPayload:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
-			Address:        req.Address,
-			AccessByteSize: req.AccessByteSize,
-			ReqID:          req.ID,
+			Address:        payload.Address,
+			AccessByteSize: payload.AccessByteSize,
+			ReqID:          simMsg.ID,
 			IsRead:         true,
-			Src:            req.Src,
+			Src:            simMsg.Src,
 		}
-	case *mem.WriteReq:
+	case *mem.WriteReqPayload:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
-			Address:        req.Address,
-			AccessByteSize: uint64(len(req.Data)),
-			ReqID:          req.ID,
+			Address:        payload.Address,
+			AccessByteSize: uint64(len(payload.Data)),
+			ReqID:          simMsg.ID,
 			IsRead:         false,
-			Data:           req.Data,
-			DirtyMask:      req.DirtyMask,
-			Src:            req.Src,
+			Data:           payload.Data,
+			DirtyMask:      payload.DirtyMask,
+			Src:            simMsg.Src,
 		}
 	default:
-		log.Panicf("cannot handle request of type %s", reflect.TypeOf(msg))
+		log.Panicf("cannot handle request of type %s", reflect.TypeOf(simMsg.Payload))
 		return inflightTransaction{}
 	}
 }

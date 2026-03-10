@@ -8,18 +8,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-type SampleMsg struct {
-	sim.MsgMeta
-}
-
-func (m *SampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *SampleMsg) Clone() sim.Msg {
-	return m
-}
-
 var _ = Describe("XBar", func() {
 	var (
 		mockCtrl         *gomock.Controller
@@ -52,27 +40,31 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := SampleMsg{}
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID: sim.GetIDGenerator().Generate(),
+			},
+		}
 		flit1 := messaging.FlitBuilder{}.
-			WithMsg(&msg).
+			WithMsg(msg).
 			Build()
-		flit1.OutputBuf = buf1Remote
+		sim.MsgPayload[messaging.FlitPayload](flit1).OutputBuf = buf1Remote
 		flit2 := messaging.FlitBuilder{}.
-			WithMsg(&msg).
+			WithMsg(msg).
 			Build()
-		flit2.OutputBuf = buf1Remote
+		sim.MsgPayload[messaging.FlitPayload](flit2).OutputBuf = buf1Remote
 		flit3 := messaging.FlitBuilder{}.
-			WithMsg(&msg).
+			WithMsg(msg).
 			Build()
-		flit3.OutputBuf = buf3Remote
+		sim.MsgPayload[messaging.FlitPayload](flit3).OutputBuf = buf3Remote
 		flit4 := messaging.FlitBuilder{}.
-			WithMsg(&msg).
+			WithMsg(msg).
 			Build()
-		flit4.OutputBuf = buf4Remote
+		sim.MsgPayload[messaging.FlitPayload](flit4).OutputBuf = buf4Remote
 		flit5 := messaging.FlitBuilder{}.
-			WithMsg(&msg).
+			WithMsg(msg).
 			Build()
-		flit5.OutputBuf = buf1Remote
+		sim.MsgPayload[messaging.FlitPayload](flit5).OutputBuf = buf1Remote
 
 		buf1.EXPECT().Peek().Return(flit1)
 		buf2.EXPECT().Peek().Return(flit2)

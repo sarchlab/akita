@@ -43,8 +43,8 @@ func (s *respondStage) respondReadTrans(
 		WithRspTo(read.ID).
 		WithData(trans.data).
 		Build()
-	err := s.cache.topPort.Send(dr)
 
+	err := s.cache.topPort.Send(dr)
 	if err != nil {
 		return false
 	}
@@ -69,8 +69,8 @@ func (s *respondStage) respondWriteTrans(
 		WithDst(write.Src).
 		WithRspTo(write.ID).
 		Build()
-	err := s.cache.topPort.Send(done)
 
+	err := s.cache.topPort.Send(done)
 	if err != nil {
 		return false
 	}

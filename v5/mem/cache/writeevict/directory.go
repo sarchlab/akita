@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -62,9 +63,9 @@ func (d *directory) Tick() (madeProgress bool) {
 }
 
 func (d *directory) processRead(trans *transaction) bool {
-	read := trans.read
-	addr := read.Address
-	pid := read.PID
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+	addr := readPayload.Address
+	pid := readPayload.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -123,11 +124,9 @@ func (d *directory) processReadHit(
 	return true
 }
 
-func (d *directory) processReadMiss(
-	trans *transaction,
-) bool {
-	read := trans.read
-	addr := read.Address
+func (d *directory) processReadMiss(trans *transaction) bool {
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+	addr := readPayload.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -151,9 +150,9 @@ func (d *directory) processReadMiss(
 }
 
 func (d *directory) processWrite(trans *transaction) bool {
-	write := trans.write
-	addr := write.Address
-	pid := write.PID
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
+	pid := writePayload.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -187,16 +186,16 @@ func (d *directory) writeMiss(trans *transaction) bool {
 }
 
 func (d *directory) writeBottom(trans *transaction) bool {
-	write := trans.write
-	addr := write.Address
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 
 	writeToBottom := mem.WriteReqBuilder{}.
 		WithSrc(d.cache.bottomPort.AsRemote()).
 		WithDst(d.cache.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
-		WithPID(write.PID).
-		WithData(write.Data).
-		WithDirtyMask(write.DirtyMask).
+		WithPID(writePayload.PID).
+		WithData(writePayload.Data).
+		WithDirtyMask(writePayload.DirtyMask).
 		Build()
 
 	err := d.cache.bottomPort.Send(writeToBottom)

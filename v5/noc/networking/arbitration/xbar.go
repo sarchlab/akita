@@ -3,6 +3,7 @@ package arbitration
 import (
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // NewXBarArbiter creates a new XBar arbiter.
@@ -33,13 +34,14 @@ func (a *xbarArbiter) Arbitrate() []queueing.Buffer {
 			continue
 		}
 
-		flit := item.(*messaging.Flit)
-		if _, ok := occupiedOutputPort[flit.OutputBuf]; ok {
+		flitMsg := item.(*sim.Msg)
+		flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+		if _, ok := occupiedOutputPort[flitPayload.OutputBuf]; ok {
 			continue
 		}
 
 		selectedPort = append(selectedPort, buf)
-		occupiedOutputPort[flit.OutputBuf] = true
+		occupiedOutputPort[flitPayload.OutputBuf] = true
 	}
 
 	a.nextPortID = (a.nextPortID + 1) % len(a.buffers)

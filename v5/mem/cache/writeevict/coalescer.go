@@ -19,89 +19,79 @@ func (c *coalescer) Reset() {
 }
 
 func (c *coalescer) Tick() bool {
-	req := c.cache.topPort.PeekIncoming()
-	if req == nil {
+	msg := c.cache.topPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
-	return c.processReq(req.(mem.AccessReq))
+	return c.processReq(msg)
 }
 
-func (c *coalescer) processReq(
-	req mem.AccessReq,
-) bool {
+func (c *coalescer) processReq(msg *sim.Msg) bool {
 	if len(c.cache.transactions) >= c.cache.maxNumConcurrentTrans {
 		return false
 	}
 
-	if c.isReqLastInWave(req) {
-		if len(c.toCoalesce) == 0 || c.canReqCoalesce(req) {
-			return c.processReqLastInWaveCoalescable(req)
+	if c.isReqLastInWave(msg) {
+		if len(c.toCoalesce) == 0 || c.canReqCoalesce(msg) {
+			return c.processReqLastInWaveCoalescable(msg)
 		}
 
-		return c.processReqLastInWaveNoncoalescable(req)
+		return c.processReqLastInWaveNoncoalescable(msg)
 	}
 
-	if len(c.toCoalesce) == 0 || c.canReqCoalesce(req) {
-		return c.processReqCoalescable(req)
+	if len(c.toCoalesce) == 0 || c.canReqCoalesce(msg) {
+		return c.processReqCoalescable(msg)
 	}
 
-	return c.processReqNoncoalescable(req)
+	return c.processReqNoncoalescable(msg)
 }
 
-func (c *coalescer) processReqCoalescable(
-	req mem.AccessReq,
-) bool {
-	trans := c.createTransaction(req)
+func (c *coalescer) processReqCoalescable(msg *sim.Msg) bool {
+	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, c.cache)
+	tracing.TraceReqReceive(msg, c.cache)
 
 	return true
 }
 
-func (c *coalescer) processReqNoncoalescable(
-	req mem.AccessReq,
-) bool {
+func (c *coalescer) processReqNoncoalescable(msg *sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
 
 	c.coalesceAndSend()
 
-	trans := c.createTransaction(req)
+	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, c.cache)
+	tracing.TraceReqReceive(msg, c.cache)
 
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveCoalescable(
-	req mem.AccessReq,
-) bool {
+func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
 
-	trans := c.createTransaction(req)
+	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, c.cache)
+	tracing.TraceReqReceive(msg, c.cache)
 
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveNoncoalescable(
-	req mem.AccessReq,
-) bool {
+func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -112,51 +102,53 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(
 		return true
 	}
 
-	trans := c.createTransaction(req)
+	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(req, c.cache)
+	tracing.TraceReqReceive(msg, c.cache)
 
 	return true
 }
 
-func (c *coalescer) createTransaction(req mem.AccessReq) *transaction {
-	switch req := req.(type) {
-	case *mem.ReadReq:
+func (c *coalescer) createTransaction(msg *sim.Msg) *transaction {
+	switch msg.Payload.(type) {
+	case *mem.ReadReqPayload:
 		t := &transaction{
-			read: req,
+			read: msg,
 		}
 
 		return t
-	case *mem.WriteReq:
+	case *mem.WriteReqPayload:
 		t := &transaction{
-			write: req,
+			write: msg,
 		}
 
 		return t
 	default:
-		log.Panicf("cannot process request of type %s\n", reflect.TypeOf(req))
+		log.Panicf("cannot process request of type %s\n",
+			reflect.TypeOf(msg.Payload))
 		return nil
 	}
 }
 
-func (c *coalescer) isReqLastInWave(req mem.AccessReq) bool {
-	switch req := req.(type) {
-	case *mem.ReadReq:
-		return !req.CanWaitForCoalesce
-	case *mem.WriteReq:
-		return !req.CanWaitForCoalesce
+func (c *coalescer) isReqLastInWave(msg *sim.Msg) bool {
+	switch payload := msg.Payload.(type) {
+	case *mem.ReadReqPayload:
+		return !payload.CanWaitForCoalesce
+	case *mem.WriteReqPayload:
+		return !payload.CanWaitForCoalesce
 	default:
 		panic("unknown type")
 	}
 }
 
-func (c *coalescer) canReqCoalesce(req mem.AccessReq) bool {
+func (c *coalescer) canReqCoalesce(msg *sim.Msg) bool {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
-	return req.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
+	payload := msg.Payload.(mem.AccessReqPayload)
+	return payload.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
 }
 
 func (c *coalescer) coalesceAndSend() bool {
@@ -204,28 +196,30 @@ func (c *coalescer) coalesceRead() *transaction {
 func (c *coalescer) coalesceWrite() *transaction {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	write := mem.WriteReqBuilder{}.
+	coalescedWrite := mem.WriteReqBuilder{}.
 		WithAddress(cachelineID).
 		WithPID(c.toCoalesce[0].PID()).
 		WithData(make([]byte, blockSize)).
 		WithDirtyMask(make([]bool, blockSize)).
 		Build()
 
-	for _, t := range c.toCoalesce {
-		w := t.write
-		offset := int(w.Address - cachelineID)
+	coalescedPayload := sim.MsgPayload[mem.WriteReqPayload](coalescedWrite)
 
-		for i := 0; i < len(w.Data); i++ {
-			if w.DirtyMask == nil || w.DirtyMask[i] {
-				write.Data[i+offset] = w.Data[i]
-				write.DirtyMask[i+offset] = true
+	for _, t := range c.toCoalesce {
+		wPayload := sim.MsgPayload[mem.WriteReqPayload](t.write)
+		offset := int(wPayload.Address - cachelineID)
+
+		for i := 0; i < len(wPayload.Data); i++ {
+			if wPayload.DirtyMask == nil || wPayload.DirtyMask[i] {
+				coalescedPayload.Data[i+offset] = wPayload.Data[i]
+				coalescedPayload.DirtyMask[i+offset] = true
 			}
 		}
 	}
 
 	return &transaction{
 		id:                      sim.GetIDGenerator().Generate(),
-		write:                   write,
+		write:                   coalescedWrite,
 		preCoalesceTransactions: c.toCoalesce,
 	}
 }

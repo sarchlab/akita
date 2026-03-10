@@ -6,29 +6,12 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// sampleMsg is a simple message type for testing
-type sampleMsg struct {
-	sim.MsgMeta
-
-	sendTime sim.VTimeInSec
-}
-
-func newSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	m.ID = sim.GetIDGenerator().Generate()
-
-	return m
-}
-
-func (m *sampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() sim.Msg {
-	cloneMsg := *m
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
+func newTestMsg() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID: sim.GetIDGenerator().Generate(),
+		},
+	}
 }
 
 // testComponent is a simple component for testing
@@ -113,7 +96,7 @@ var _ = Describe("Wire and Port", func() {
 	})
 
 	It("should not allow sending when src is not the port", func() {
-		msg := newSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port2.AsRemote()
 		msg.Dst = port1.AsRemote()
 
@@ -122,14 +105,14 @@ var _ = Describe("Wire and Port", func() {
 	})
 
 	It("should not allow sending when port is busy", func() {
-		msg1 := newSampleMsg()
+		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
 		msg1.Dst = port2.AsRemote()
 
 		err := port1.Send(msg1)
 		Expect(err).To(BeNil())
 
-		msg2 := newSampleMsg()
+		msg2 := newTestMsg()
 		msg2.Src = port1.AsRemote()
 		msg2.Dst = port2.AsRemote()
 
@@ -138,7 +121,7 @@ var _ = Describe("Wire and Port", func() {
 	})
 
 	It("should notify components when messages are available", func() {
-		msg := newSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
@@ -151,7 +134,7 @@ var _ = Describe("Wire and Port", func() {
 	})
 
 	It("should allow peeking and retrieving messages across cycles", func() {
-		msg := newSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
@@ -177,7 +160,7 @@ var _ = Describe("Wire and Port", func() {
 	})
 
 	It("should not allow same-cycle access", func() {
-		msg := newSampleMsg()
+		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 

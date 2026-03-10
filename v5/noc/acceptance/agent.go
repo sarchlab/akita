@@ -12,7 +12,7 @@ type Agent struct {
 
 	test       *Test
 	AgentPorts []sim.Port
-	MsgsToSend []sim.Msg
+	MsgsToSend []*sim.Msg
 	sendBytes  uint64
 	recvBytes  uint64
 }
@@ -52,14 +52,14 @@ func (a *Agent) send() bool {
 	}
 
 	msg := a.MsgsToSend[0]
-	src := msg.Meta().Src
+	src := msg.Src
 
 	srcPort := a.findPortByName(src)
 
 	err := srcPort.Send(msg)
 	if err == nil {
 		a.MsgsToSend = a.MsgsToSend[1:]
-		a.sendBytes += uint64(msg.Meta().TrafficBytes)
+		a.sendBytes += uint64(msg.TrafficBytes)
 
 		return true
 	}
@@ -92,10 +92,7 @@ func (a *Agent) recv() bool {
 
 		if msg != nil {
 			a.test.receiveMsg(msg, port)
-			a.recvBytes += uint64(msg.Meta().TrafficBytes)
-
-			// fmt.Printf("%.10f, %s, agent received, msg-%s\n",
-			// now, a.Name(), msg.Meta().ID)
+			a.recvBytes += uint64(msg.TrafficBytes)
 
 			madeProgress = true
 		}

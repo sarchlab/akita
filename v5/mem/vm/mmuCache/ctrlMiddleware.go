@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -26,12 +27,12 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return false
 	}
 
-	switch msg := msg.(type) {
-	case *mem.ControlMsg:
-		madeProgress = m.handleControlMsg(msg) || madeProgress
-	case *FlushReq:
-		madeProgress = m.handleMMUCacheFlush(msg) || madeProgress
-	case *RestartReq:
+	switch payload := msg.Payload.(type) {
+	case *mem.ControlMsgPayload:
+		madeProgress = m.handleControlMsg(msg, payload) || madeProgress
+	case *FlushReqPayload:
+		madeProgress = m.handleMMUCacheFlush(msg, payload) || madeProgress
+	case *RestartReqPayload:
 		madeProgress = m.handleMMUCacheRestart(msg) || madeProgress
 	default:
 		panic("Unhandled message")
@@ -41,34 +42,34 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 }
 
 func (m *ctrlMiddleware) handleControlMsg(
-	msg *mem.ControlMsg) bool {
-	m.ctrlMsgMustBeValidInCurrentStage(msg)
+	msg *sim.Msg, payload *mem.ControlMsgPayload) bool {
+	m.ctrlMsgMustBeValidInCurrentStage(payload)
 
 	return m.performCtrlReq()
 }
 
-func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(msg *mem.ControlMsg) {
+func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(payload *mem.ControlMsgPayload) {
 	switch state := m.state; state {
 	case mmuCacheStateEnable:
-		if msg.Enable {
+		if payload.Enable {
 			log.Panic("mmuCache is already enabled")
 		}
 	case mmuCacheStatePause:
-		if msg.Pause {
+		if payload.Pause {
 			log.Panic("mmuCache is already paused")
 		}
-		if msg.Drain {
+		if payload.Drain {
 			log.Panic("Cannot drain when mmuCache is paused")
 		}
 	case mmuCacheStateDrain:
-		if msg.Drain {
+		if payload.Drain {
 			log.Panic("mmuCache is already draining")
 		}
-		if msg.Pause || msg.Enable {
+		if payload.Pause || payload.Enable {
 			log.Panic("Cannot pause/enable when mmuCache is draining")
 		}
 	case mmuCacheStateFlush:
-		if msg.Drain || msg.Enable || msg.Pause {
+		if payload.Drain || payload.Enable || payload.Pause {
 			log.Panic("Cannot pause/enable/drain when mmuCache is flushing")
 		}
 	default:
@@ -82,13 +83,13 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 		return false
 	}
 
-	req := item.(*mem.ControlMsg)
+	payload := sim.MsgPayload[mem.ControlMsgPayload](item)
 
-	if req.Enable {
+	if payload.Enable {
 		m.state = mmuCacheStateEnable
-	} else if req.Drain {
+	} else if payload.Drain {
 		m.state = mmuCacheStateDrain
-	} else if req.Pause {
+	} else if payload.Pause {
 		m.state = mmuCacheStatePause
 	}
 
@@ -104,16 +105,16 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleMMUCacheFlush(req *FlushReq) bool {
-	m.flushMsgMustBeValidInCurrentStage(req)
-	m.inflightFlushReq = req
+func (m *ctrlMiddleware) handleMMUCacheFlush(msg *sim.Msg, payload *FlushReqPayload) bool {
+	m.flushMsgMustBeValidInCurrentStage(msg)
+	m.inflightFlushReq = msg
 	m.controlPort.RetrieveIncoming()
 	m.state = mmuCacheStateFlush
 
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.Msg) {
 	switch state := m.state; state {
 	case mmuCacheStateEnable:
 		// valid
@@ -124,14 +125,14 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
 	case mmuCacheStateFlush:
 		log.Panic("mmuCache is already flushing")
 	default:
-		log.Panicf("Unknown mmuCache state: %s, msg: %s", state, reflect.TypeOf(req))
+		log.Panicf("Unknown mmuCache state: %s, msg: %s", state, reflect.TypeOf(msg.Payload))
 	}
 }
 
-func (m *ctrlMiddleware) handleMMUCacheRestart(req *RestartReq) bool {
+func (m *ctrlMiddleware) handleMMUCacheRestart(msg *sim.Msg) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
+		WithDst(msg.Src).
 		Build()
 
 	err := m.controlPort.Send(rsp)
@@ -139,7 +140,7 @@ func (m *ctrlMiddleware) handleMMUCacheRestart(req *RestartReq) bool {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m.Comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort.Name(),
 		m.Comp.Name(),

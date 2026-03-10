@@ -107,7 +107,7 @@ var _ = Describe("DataMover", func() {
 		outsideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.Any())
 
 		req := MakeDataMoveRequestBuilder().
 			WithSrc(srcPort.AsRemote()).
@@ -134,7 +134,7 @@ var _ = Describe("DataMover", func() {
 		insideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.Any())
 
 		req := MakeDataMoveRequestBuilder().
 			WithSrc(srcPort.AsRemote()).
@@ -161,7 +161,7 @@ var _ = Describe("DataMover", func() {
 		insideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.Any())
 
 		req := MakeDataMoveRequestBuilder().
 			WithSrc(srcPort.AsRemote()).
@@ -188,7 +188,7 @@ var _ = Describe("DataMover", func() {
 		outsideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.Any())
 
 		req := MakeDataMoveRequestBuilder().
 			WithSrc(srcPort.AsRemote()).
@@ -230,7 +230,7 @@ var _ = Describe("DataMover", func() {
 		insideMem.Storage.Write(0, data)
 
 		srcPort.EXPECT().
-			Deliver(gomock.AssignableToTypeOf(&sim.GeneralRsp{}))
+			Deliver(gomock.Any())
 
 		req := MakeDataMoveRequestBuilder().
 			WithSrc(srcPort.AsRemote()).

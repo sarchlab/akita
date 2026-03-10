@@ -77,8 +77,9 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Do(func(msg *sim.Msg) {
+				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
 
 		engine.Run()
@@ -103,12 +104,14 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read2)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Do(func(msg *sim.Msg) {
+				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
-				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			Do(func(msg *sim.Msg) {
+				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 
 		engine.Run()
@@ -124,8 +127,9 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(read1)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+			Do(func(msg *sim.Msg) {
+				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
 		engine.Run()
 		t1 := engine.CurrentTime()
@@ -138,8 +142,9 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(read2)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(dr *mem.DataReadyRsp) {
-				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
+			Do(func(msg *sim.Msg) {
+				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 		engine.Run()
 		t2 := engine.CurrentTime()
@@ -156,8 +161,8 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(done *mem.WriteDoneRsp) {
-				Expect(done.RespondTo).To(Equal(write.ID))
+			Do(func(msg *sim.Msg) {
+				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
 		engine.Run()
@@ -185,8 +190,8 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(done *mem.WriteDoneRsp) {
-				Expect(done.RespondTo).To(Equal(write.ID))
+			Do(func(msg *sim.Msg) {
+				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 		engine.Run()
 

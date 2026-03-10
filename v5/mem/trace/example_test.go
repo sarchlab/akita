@@ -25,26 +25,11 @@ func (t *SimpleTimeTeller) AdvanceTime(duration sim.VTimeInSec) {
 	t.currentTime += duration
 }
 
-// ExampleReadReq implements mem.AccessReq for example
+// ExampleReadReq implements mem.AccessReqPayload for example
 type ExampleReadReq struct {
-	sim.MsgMeta
-
 	address  uint64
 	byteSize uint64
 	pid      vm.PID
-}
-
-func (r *ExampleReadReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-func (r *ExampleReadReq) Clone() sim.Msg {
-	return &ExampleReadReq{
-		MsgMeta:  r.MsgMeta,
-		address:  r.address,
-		byteSize: r.byteSize,
-		pid:      r.pid,
-	}
 }
 
 func (r *ExampleReadReq) GetAddress() uint64 {

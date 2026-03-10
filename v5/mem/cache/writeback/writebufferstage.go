@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -100,15 +101,6 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 
 	wb.cache.writeBufferBuffer.Pop()
 
-	// log.Printf("%.10f, %s, wb data fetched locally，" +
-	// " %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, wb.cache.Name(),
-	// 	trans.accessReq().Meta().ID,
-	// 	trans.accessReq().GetAddress(), trans.block.Tag,
-	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.fetchedData,
-	// )
-
 	return true
 }
 
@@ -167,15 +159,6 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	wb.pendingEvictions = append(wb.pendingEvictions, trans)
 	wb.cache.writeBufferBuffer.Pop()
 
-	// log.Printf("%.10f, %s, wb evict and write，" +
-	// " %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, wb.cache.Name(),
-	// 	trans.accessReq().Meta().ID,
-	// 	trans.accessReq().GetAddress(), trans.block.Tag,
-	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.evictingData,
-	// )
-
 	return true
 }
 
@@ -187,15 +170,6 @@ func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
 		trans.action = writeBufferFetch
 		return true
 	}
-
-	// log.Printf("%.10f, %s, wb fetch and evict， " +
-	// "%s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, wb.cache.Name(),
-	// 	trans.write.ID,
-	// 	trans.write.Address, trans.block.Tag,
-	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.evictingData,
-	// )
 
 	return false
 }
@@ -250,15 +224,6 @@ func (wb *writeBufferStage) write() bool {
 	tracing.TraceReqInitiate(write, wb.cache,
 		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
 
-	// log.Printf("%.10f, %s, wb write to bottom， "+
-	// " %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, wb.cache.Name(),
-	// 	trans.accessReq().Meta().ID,
-	// 	trans.evictingAddr, trans.evictingAddr,
-	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.evictingData,findInflightFetchByFetchReadReqID
-	// )
-
 	return true
 }
 
@@ -268,10 +233,10 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 		return false
 	}
 
-	switch msg := msg.(type) {
-	case *mem.DataReadyRsp:
+	switch msg.Payload.(type) {
+	case *mem.DataReadyRspPayload:
 		return wb.processDataReadyRsp(msg)
-	case *mem.WriteDoneRsp:
+	case *mem.WriteDoneRspPayload:
 		return wb.processWriteDoneRsp(msg)
 	default:
 		panic("unknown msg type")
@@ -279,9 +244,9 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	dataReady *mem.DataReadyRsp,
+	msg *sim.Msg,
 ) bool {
-	trans := wb.findInflightFetchByFetchReadReqID(dataReady.RespondTo)
+	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
 		trans.block,
 		wb.cache.directory.WayAssociativity(),
@@ -293,9 +258,10 @@ func (wb *writeBufferStage) processDataReadyRsp(
 		return false
 	}
 
-	trans.fetchedData = dataReady.Data
+	drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+	trans.fetchedData = drPayload.Data
 	trans.action = bankWriteFetched
-	trans.mshrEntry.Data = dataReady.Data
+	trans.mshrEntry.Data = drPayload.Data
 	wb.combineData(trans.mshrEntry)
 
 	wb.cache.mshr.Remove(trans.mshrEntry.PID, trans.mshrEntry.Address)
@@ -306,15 +272,6 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache)
-
-	// log.Printf("%.10f, %s, wb data fetched from bottom, "+
-	//" %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, wb.cache.Name(),
-	// 	trans.accessReq().Meta().ID,
-	// 	trans.accessReq().GetAddress(), trans.block.Tag,
-	// 	trans.block.SetID, trans.block.WayID,
-	// 	trans.fetchedData,
-	// )
 
 	return true
 }
@@ -328,13 +285,13 @@ func (wb *writeBufferStage) combineData(mshrEntry *cache.MSHREntry) {
 		}
 
 		mshrEntry.Block.IsDirty = true
-		write := trans.write
-		_, offset := getCacheLineID(write.Address, wb.cache.log2BlockSize)
+		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+		_, offset := getCacheLineID(writePayload.Address, wb.cache.log2BlockSize)
 
-		for i := 0; i < len(write.Data); i++ {
-			if write.DirtyMask == nil || write.DirtyMask[i] {
+		for i := 0; i < len(writePayload.Data); i++ {
+			if writePayload.DirtyMask == nil || writePayload.DirtyMask[i] {
 				index := offset + uint64(i)
-				mshrEntry.Data[index] = write.Data[i]
+				mshrEntry.Data[index] = writePayload.Data[i]
 				mshrEntry.Block.DirtyMask[index] = true
 			}
 		}
@@ -369,26 +326,17 @@ func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	writeDone *mem.WriteDoneRsp,
+	msg *sim.Msg,
 ) bool {
 	for i := len(wb.inflightEviction) - 1; i >= 0; i-- {
 		e := wb.inflightEviction[i]
-		if e.evictionWriteReq.ID == writeDone.RespondTo {
+		if e.evictionWriteReq.ID == msg.RspTo {
 			wb.inflightEviction = append(
 				wb.inflightEviction[:i],
 				wb.inflightEviction[i+1:]...,
 			)
 			wb.cache.bottomPort.RetrieveIncoming()
 			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache)
-
-			// log.Printf("%.10f, %s, wb write to bottom，
-			//  %s, %04X, %04X, (%d, %d), %v\n",
-			//  now, wb.cache.Name(),
-			//  e.accessReq().Meta().ID,
-			//  e.evictingAddr, e.evictingAddr,
-			//  e.block.SetID, e.block.WayID,
-			//  e.evictingData,
-			// )
 
 			return true
 		}

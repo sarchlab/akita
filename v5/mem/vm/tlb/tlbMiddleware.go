@@ -2,15 +2,16 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type pipelineTLBReq struct {
-	req *vm.TranslationReq
+	msg *sim.Msg // payload: *vm.TranslationReqPayload
 }
 
 func (r *pipelineTLBReq) TaskID() string {
-	return r.req.ID
+	return r.msg.ID
 }
 
 type tlbMiddleware struct {
@@ -45,7 +46,6 @@ func (m *tlbMiddleware) processPipeline() bool {
 	return madeProgress
 }
 
-// get req from port buffer and insert into pipeline
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
 
@@ -54,13 +54,13 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		req := m.topPort.RetrieveIncoming()
-		if req == nil {
+		msg := m.topPort.RetrieveIncoming()
+		if msg == nil {
 			break
 		}
 
 		m.responsePipeline.Accept(&pipelineTLBReq{
-			req: req.(*vm.TranslationReq),
+			msg: msg,
 		})
 
 		madeProgress = true
@@ -79,9 +79,9 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 			break
 		}
 
-		req := item.(*pipelineTLBReq).req
+		msg := item.(*pipelineTLBReq).msg
 
-		ok := m.lookup(req)
+		ok := m.lookup(msg)
 		if ok {
 			m.responseBuffer.Pop()
 
@@ -139,11 +139,11 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	}
 	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
-	req := mshrEntry.Requests[0]
+	reqMsg := mshrEntry.Requests[0]
 	rspToTop := vm.TranslationRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(reqMsg.Src).
+		WithRspTo(reqMsg.ID).
 		WithPage(page).
 		Build()
 
@@ -153,7 +153,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(reqMsg, m.Comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.topPort.Name(),
 		m.Comp.Name(),
@@ -165,72 +165,71 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		m.respondingMSHREntry = nil
 	}
 
-	tracing.TraceReqComplete(req, m.Comp)
+	tracing.TraceReqComplete(reqMsg, m.Comp)
 
 	return true
 }
 
-func (m *tlbMiddleware) lookup(req *vm.TranslationReq) bool {
-	mshrEntry := m.mshr.GetEntry(req.PID, req.VAddr)
+func (m *tlbMiddleware) lookup(msg *sim.Msg) bool {
+	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
+	mshrEntry := m.mshr.GetEntry(payload.PID, payload.VAddr)
 	if mshrEntry != nil {
-		return m.processTLBMSHRHit(mshrEntry, req)
+		return m.processTLBMSHRHit(mshrEntry, msg)
 	}
-	setID := m.vAddrToSetID(req.VAddr)
+	setID := m.vAddrToSetID(payload.VAddr)
 	set := m.sets[setID]
-	wayID, page, found := set.Lookup(req.PID, req.VAddr)
+	wayID, page, found := set.Lookup(payload.PID, payload.VAddr)
 
 	if found && page.Valid {
-		return m.handleTranslationHit(req, setID, wayID, page)
+		return m.handleTranslationHit(msg, setID, wayID, page)
 	}
-	return m.handleTranslationMiss(req)
+	return m.handleTranslationMiss(msg)
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	req *vm.TranslationReq,
+	msg *sim.Msg,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
-	ok := m.sendRspToTop(req, page)
+	ok := m.sendRspToTop(msg, page)
 	if !ok {
 		return false
 	}
 	m.visit(setID, wayID)
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m.Comp),
 		tracing.MilestoneKindData,
 		m.Comp.Name()+".Sets",
 		m.Comp.Name(),
 		m.Comp,
 	)
 
-	tracing.TraceReqReceive(req, m.Comp)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "hit")
-	tracing.TraceReqComplete(req, m.Comp)
+	tracing.TraceReqReceive(msg, m.Comp)
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(msg, m.Comp), m.Comp, "hit")
+	tracing.TraceReqComplete(msg, m.Comp)
 
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(
-	req *vm.TranslationReq,
-) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg *sim.Msg) bool {
 	if m.mshr.IsFull() {
 		return false
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m.Comp),
 		tracing.MilestoneKindHardwareResource,
 		m.Comp.Name()+".MSHR",
 		m.Comp.Name(),
 		m.Comp,
 	)
 
-	fetched := m.fetchBottom(req)
+	fetched := m.fetchBottom(msg)
 	if fetched {
-		tracing.TraceReqReceive(req, m.Comp)
+		tracing.TraceReqReceive(msg, m.Comp)
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(req, m.Comp),
+			tracing.MsgIDAtReceiver(msg, m.Comp),
 			m.Comp,
 			"miss",
 		)
@@ -245,20 +244,20 @@ func (m *tlbMiddleware) vAddrToSetID(vAddr uint64) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	req *vm.TranslationReq,
+	msg *sim.Msg,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
+		WithDst(msg.Src).
+		WithRspTo(msg.ID).
 		WithPage(page).
 		Build()
 
 	err := m.topPort.Send(rsp)
 	if err == nil {
 		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(req, m.Comp),
+			tracing.MsgIDAtReceiver(msg, m.Comp),
 			tracing.MilestoneKindNetworkBusy,
 			m.topPort.Name(),
 			m.Comp.Name(),
@@ -270,24 +269,25 @@ func (m *tlbMiddleware) sendRspToTop(
 
 func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
-	req *vm.TranslationReq,
+	msg *sim.Msg,
 ) bool {
-	mshrEntry.Requests = append(mshrEntry.Requests, req)
+	mshrEntry.Requests = append(mshrEntry.Requests, msg)
 
-	tracing.TraceReqReceive(req, m.Comp)
+	tracing.TraceReqReceive(msg, m.Comp)
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(req, m.Comp), m.Comp, "mshr-hit")
+		tracing.MsgIDAtReceiver(msg, m.Comp), m.Comp, "mshr-hit")
 
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
+func (m *tlbMiddleware) fetchBottom(msg *sim.Msg) bool {
+	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressMapper.Find(req.VAddr)).
-		WithPID(req.PID).
-		WithVAddr(req.VAddr).
-		WithDeviceID(req.DeviceID).
+		WithDst(m.addressMapper.Find(payload.VAddr)).
+		WithPID(payload.PID).
+		WithVAddr(payload.VAddr).
+		WithDeviceID(payload.DeviceID).
 		Build()
 
 	err := m.bottomPort.Send(fetchBottom)
@@ -296,19 +296,19 @@ func (m *tlbMiddleware) fetchBottom(req *vm.TranslationReq) bool {
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m.Comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.bottomPort.Name(),
 		m.Comp.Name(),
 		m.Comp,
 	)
 
-	mshrEntry := m.mshr.Add(req.PID, req.VAddr)
-	mshrEntry.Requests = append(mshrEntry.Requests, req)
+	mshrEntry := m.mshr.Add(payload.PID, payload.VAddr)
+	mshrEntry.Requests = append(mshrEntry.Requests, msg)
 	mshrEntry.reqToBottom = fetchBottom
 
 	tracing.TraceReqInitiate(fetchBottom, m.Comp,
-		tracing.MsgIDAtReceiver(req, m.Comp))
+		tracing.MsgIDAtReceiver(msg, m.Comp))
 
 	return true
 }
@@ -322,17 +322,17 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
-	rsp := item.(*vm.TranslationRsp)
+	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](item)
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(rsp, m.Comp),
+		tracing.MsgIDAtReceiver(item, m.Comp),
 		tracing.MilestoneKindData,
 		m.bottomPort.Name(),
 		m.Comp.Name(),
 		m.Comp,
 	)
-	page := rsp.Page
+	page := rspPayload.Page
 
-	mshrEntryPresent := m.mshr.IsEntryPresent(rsp.Page.PID, rsp.Page.VAddr)
+	mshrEntryPresent := m.mshr.IsEntryPresent(page.PID, page.VAddr)
 	if !mshrEntryPresent {
 		m.bottomPort.RetrieveIncoming()
 		return true
@@ -348,11 +348,11 @@ func (m *tlbMiddleware) parseBottom() bool {
 	set.Update(wayID, page)
 	set.Visit(wayID)
 
-	mshrEntry := m.mshr.GetEntry(rsp.Page.PID, rsp.Page.VAddr)
+	mshrEntry := m.mshr.GetEntry(page.PID, page.VAddr)
 	m.respondingMSHREntry = mshrEntry
 	mshrEntry.page = page
 
-	m.mshr.Remove(rsp.Page.PID, rsp.Page.VAddr)
+	m.mshr.Remove(page.PID, page.VAddr)
 	m.bottomPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(mshrEntry.reqToBottom, m.Comp)
 
@@ -391,6 +391,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 
 func (m *tlbMiddleware) processTLBFlush() bool {
 	req := m.inflightFlushReq
+	flushPayload := sim.MsgPayload[FlushReqPayload](req)
 
 	rsp := FlushRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
@@ -409,10 +410,10 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 		m.Comp,
 	)
 
-	for _, vAddr := range req.VAddr {
+	for _, vAddr := range flushPayload.VAddr {
 		setID := m.vAddrToSetID(vAddr)
 		set := m.sets[setID]
-		wayID, page, found := set.Lookup(req.PID, vAddr)
+		wayID, page, found := set.Lookup(flushPayload.PID, vAddr)
 
 		if !found {
 			continue

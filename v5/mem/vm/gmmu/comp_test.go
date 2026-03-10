@@ -19,8 +19,7 @@ var _ = Describe("Builder", func() {
 		topPort            *MockPort
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
-		gmmu               *GMMU
-
+		gmmuComp           *GMMU
 	)
 
 	BeforeEach(func() {
@@ -56,11 +55,11 @@ var _ = Describe("Builder", func() {
 			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.TopPort")).
 			WithBottomPort(sim.NewPort(nil, 4096, 4096, "MMU.BottomPort"))
 
-		gmmu = builder.Build("MMU")
-		gmmu.topPort = topPort
-		gmmu.bottomPort = bottomPort
-		gmmu.pageTable = pageTable
-		gmmu.LowModule = lowerComponentPort.AsRemote()
+		gmmuComp = builder.Build("MMU")
+		gmmuComp.topPort = topPort
+		gmmuComp.bottomPort = bottomPort
+		gmmuComp.pageTable = pageTable
+		gmmuComp.LowModule = lowerComponentPort.AsRemote()
 	})
 
 	AfterEach(func() {
@@ -69,19 +68,19 @@ var _ = Describe("Builder", func() {
 
 	Context("GMMU Builder", func() {
 		It("should build GMMU correctly", func() {
-			Expect(gmmu.Engine).To(Equal(engine))
-			Expect(gmmu.Freq).To(Equal(1 * sim.GHz))
-			Expect(gmmu.maxRequestsInFlight).To(Equal(16))
-			Expect(gmmu.pageTable).To(Equal(pageTable))
-			Expect(gmmu.topPort).To(Equal(topPort))
-			Expect(gmmu.deviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.Engine).To(Equal(engine))
+			Expect(gmmuComp.Freq).To(Equal(1 * sim.GHz))
+			Expect(gmmuComp.maxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.pageTable).To(Equal(pageTable))
+			Expect(gmmuComp.topPort).To(Equal(topPort))
+			Expect(gmmuComp.deviceID).To(Equal(uint64(0)))
 		})
 	})
 
 	Context("GMMU parse from top", func() {
 		It("should process translation request", func() {
 			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmu.topPort.AsRemote()).
+				WithDst(gmmuComp.topPort.AsRemote()).
 				WithPID(1).
 				WithVAddr(0x00000001).
 				WithDeviceID(0).
@@ -94,14 +93,14 @@ var _ = Describe("Builder", func() {
 			topPort.EXPECT().CanSend().
 				Return(false)
 
-			gmmu.Tick()
+			gmmuComp.Tick()
 
-			Expect(len(gmmu.walkingTranslations)).To(Equal(1))
+			Expect(len(gmmuComp.walkingTranslations)).To(Equal(1))
 		})
 
 		It("should walk page table", func() {
 			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmu.topPort.AsRemote()).
+				WithDst(gmmuComp.topPort.AsRemote()).
 				WithSrc(upperComponentPort.AsRemote()).
 				WithPID(1).
 				WithVAddr(0x10000001).
@@ -131,27 +130,28 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentRsp sim.Msg
+			var sentRsp *sim.Msg
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg *sim.Msg) {
 					sentRsp = msg
 				}).
 				Return(nil)
 
-			gmmu.parseFromTop()
-			gmmu.walkPageTable()
-			gmmu.walkPageTable()
+			gmmuComp.parseFromTop()
+			gmmuComp.walkPageTable()
+			gmmuComp.walkPageTable()
 
 			Expect(sentRsp).NotTo(BeNil())
-			translationRsp := sentRsp.(*vm.TranslationRsp)
+			translationRsp := sim.MsgPayload[vm.TranslationRspPayload](sentRsp)
+			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
 			Expect(translationRsp.Page).To(Equal(page))
-			Expect(translationRsp.Page.PID).To(Equal(req.PID))
+			Expect(translationRsp.Page.PID).To(Equal(reqPayload.PID))
 		})
 
 		It("should send request remotely", func() {
 			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmu.topPort.AsRemote()).
+				WithDst(gmmuComp.topPort.AsRemote()).
 				WithSrc(upperComponentPort.AsRemote()).
 				WithPID(1).
 				WithVAddr(0x10000001).
@@ -186,14 +186,14 @@ var _ = Describe("Builder", func() {
 				Send(gomock.Any()).
 				Return(nil)
 
-			gmmu.parseFromTop()
-			gmmu.walkPageTable()
-			gmmu.walkPageTable()
+			gmmuComp.parseFromTop()
+			gmmuComp.walkPageTable()
+			gmmuComp.walkPageTable()
 		})
 
 		It("should return response from remote page table", func() {
 			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmu.topPort.AsRemote()).
+				WithDst(gmmuComp.topPort.AsRemote()).
 				WithSrc(upperComponentPort.AsRemote()).
 				WithPID(1).
 				WithVAddr(0x10000001).
@@ -229,43 +229,44 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentReqToBottom *vm.TranslationReq
+			var sentReqToBottom *sim.Msg
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
-					sentReqToBottom = msg.(*vm.TranslationReq)
+				Do(func(msg *sim.Msg) {
+					sentReqToBottom = msg
 				}).
 				Return(nil)
 
 			bottomPort.EXPECT().
 				RetrieveIncoming().
-				DoAndReturn(func() sim.Msg {
+				DoAndReturn(func() *sim.Msg {
 					rsp := vm.TranslationRspBuilder{}.
-						WithSrc(gmmu.LowModule).
-						WithDst(gmmu.bottomPort.AsRemote()).
+						WithSrc(gmmuComp.LowModule).
+						WithDst(gmmuComp.bottomPort.AsRemote()).
 						WithRspTo(sentReqToBottom.ID).
 						WithPage(page).
 						Build()
 					return rsp
 				})
 
-			var sentRsp sim.Msg
+			var sentRsp *sim.Msg
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg *sim.Msg) {
 					sentRsp = msg
 				}).
 				Return(nil)
 
-			gmmu.parseFromTop()
-			gmmu.walkPageTable()
-			gmmu.walkPageTable()
-			gmmu.fetchFromBottom()
+			gmmuComp.parseFromTop()
+			gmmuComp.walkPageTable()
+			gmmuComp.walkPageTable()
+			gmmuComp.fetchFromBottom()
 
 			Expect(sentRsp).NotTo(BeNil())
-			translationRsp := sentRsp.(*vm.TranslationRsp)
+			translationRsp := sim.MsgPayload[vm.TranslationRspPayload](sentRsp)
+			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
 			Expect(translationRsp.Page).To(Equal(page))
-			Expect(translationRsp.Page.PID).To(Equal(req.PID))
+			Expect(translationRsp.Page.PID).To(Equal(reqPayload.PID))
 		})
 	})
 })

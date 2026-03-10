@@ -121,7 +121,7 @@ type bankPipelineElem struct {
 }
 
 func (e bankPipelineElem) TaskID() string {
-	return e.trans.req().Meta().ID + "_write_back_bank_pipeline"
+	return e.trans.req().ID + "_write_back_bank_pipeline"
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
@@ -232,12 +232,13 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	}
 
 	read := trans.read
-	addr := read.Address
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
+	addr := readPayload.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
 	block := trans.block
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress+offset, read.AccessByteSize)
+		block.CacheAddress+offset, readPayload.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -276,11 +277,12 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	}
 
 	write := trans.write
-	addr := write.Address
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](write)
+	addr := writePayload.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
 	block := trans.block
 
-	dirtyMask := s.writeData(block, write, offset)
+	dirtyMask := s.writeData(block, writePayload, offset)
 
 	block.IsValid = true
 	block.IsLocked = false
@@ -294,12 +296,12 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 
 	done := mem.WriteDoneRspBuilder{}.
 		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(write.Src).
-		WithRspTo(write.ID).
+		WithDst(trans.write.Src).
+		WithRspTo(trans.write.ID).
 		Build()
 	s.cache.topPort.Send(done)
 
-	tracing.TraceReqComplete(write, s.cache)
+	tracing.TraceReqComplete(trans.write, s.cache)
 
 	// log.Printf("%.10f, %s, bank write hit finalize， "+
 	// "%s, %04X, %04X, (%d, %d), %v\n",
@@ -315,7 +317,7 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 
 func (s *bankStage) writeData(
 	block *cache.Block,
-	write *mem.WriteReq,
+	write *mem.WriteReqPayload,
 	offset uint64,
 ) []bool {
 	data, err := s.cache.storage.Read(

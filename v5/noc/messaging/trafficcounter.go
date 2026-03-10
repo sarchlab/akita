@@ -13,6 +13,6 @@ func (c *TrafficCounter) Func(ctx *sim.HookCtx) {
 		return
 	}
 
-	req := ctx.Item.(sim.Msg)
-	c.TotalData += uint64(req.Meta().TrafficBytes)
+	req := ctx.Item.(*sim.Msg)
+	c.TotalData += uint64(req.TrafficBytes)
 }

@@ -7,33 +7,21 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-type trafficMsg struct {
-	sim.MsgMeta
-}
-
-func (m *trafficMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *trafficMsg) Clone() sim.Msg {
-	cloneMsg := *m
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
+// TrafficMsgPayload is the payload for a traffic message used in acceptance tests.
+type TrafficMsgPayload struct{}
 
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []sim.Msg
-	receivedMsgs      []sim.Msg
-	receivedMsgsTable map[sim.Msg]bool
+	msgs              []*sim.Msg
+	receivedMsgs      []*sim.Msg
+	receivedMsgsTable map[string]bool
 }
 
 // NewTest creates a new test.
 func NewTest() *Test {
 	t := &Test{}
-	t.receivedMsgsTable = make(map[sim.Msg]bool)
+	t.receivedMsgsTable = make(map[string]bool)
 
 	return t
 }
@@ -61,47 +49,47 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &trafficMsg{}
-		msg.Meta().ID = sim.GetIDGenerator().Generate()
-		msg.Src = srcPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
-		msg.TrafficBytes = rand.Intn(4096)
-		// msg.TrafficBytes = 512
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				Src:          srcPort.AsRemote(),
+				Dst:          dstPort.AsRemote(),
+				TrafficBytes: rand.Intn(4096),
+			},
+			Payload: &TrafficMsgPayload{},
+		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
 }
 
-func (t *Test) registerMsg(msg sim.Msg) {
+func (t *Test) registerMsg(msg *sim.Msg) {
 	t.msgs = append(t.msgs, msg)
 }
 
 // receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg sim.Msg, recvPort sim.Port) {
+func (t *Test) receiveMsg(msg *sim.Msg, recvPort sim.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
-
-	// log.Printf("Msg %s: sent at %.10f, recved at %.10f",
-	// 	msg.Meta().ID, msg.Meta().SendTime, msg.Meta().RecvTime)
 
 	t.receivedMsgs = append(t.receivedMsgs, msg)
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(
-	msg sim.Msg,
+	msg *sim.Msg,
 	recvPort sim.Port,
 ) {
-	if msg.Meta().Dst != recvPort.AsRemote() {
+	if msg.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
 }
 
-func (t *Test) msgMustNotBeReceivedBefore(msg sim.Msg) {
-	if _, found := t.receivedMsgsTable[msg]; found {
+func (t *Test) msgMustNotBeReceivedBefore(msg *sim.Msg) {
+	if _, found := t.receivedMsgsTable[msg.ID]; found {
 		panic("msg is double delivered")
 	}
 
-	t.receivedMsgsTable[msg] = true
+	t.receivedMsgsTable[msg.ID] = true
 }
 
 // MustHaveReceivedAllMsgs asserts that all the messages sent are received.
@@ -111,8 +99,8 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 	}
 
 	for _, sentMsg := range t.msgs {
-		if _, found := t.receivedMsgsTable[sentMsg]; !found {
-			log.Printf("msg %s expected, but not received\n", sentMsg.Meta().ID)
+		if _, found := t.receivedMsgsTable[sentMsg.ID]; !found {
+			log.Printf("msg %s expected, but not received\n", sentMsg.ID)
 		}
 	}
 

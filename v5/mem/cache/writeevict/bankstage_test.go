@@ -6,9 +6,8 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
-	gomock "go.uber.org/mock/gomock"
-
 	"github.com/sarchlab/akita/v5/sim"
+	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bankstage", func() {
@@ -80,7 +79,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("read hit", func() {
 		var (
-			preCRead1, preCRead2, postCRead    *mem.ReadReq
+			preCRead1, preCRead2, postCRead    *sim.Msg
 			preCTrans1, preCTrans2, postCTrans *transaction
 			block                              *cache.Block
 		)
@@ -150,7 +149,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
+			write *sim.Msg
 			trans *transaction
 			block *cache.Block
 		)

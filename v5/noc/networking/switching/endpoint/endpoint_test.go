@@ -8,18 +8,6 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-type sampleMsg struct {
-	sim.MsgMeta
-}
-
-func (m *sampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() sim.Msg {
-	return m
-}
-
 var _ = Describe("End Point", func() {
 	var (
 		mockCtrl          *gomock.Controller
@@ -67,9 +55,13 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &sampleMsg{}
-		msg.Src = devicePort.AsRemote()
-		msg.TrafficBytes = 33
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				Src:          devicePort.AsRemote(),
+				TrafficBytes: 33,
+			},
+		}
 
 		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
 
@@ -80,24 +72,26 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.SeqID).To(Equal(0))
-			Expect(flit.NumFlitInMsg).To(Equal(2))
-			Expect(flit.Msg).To(BeIdenticalTo(msg))
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.Msg) {
+			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
+			Expect(flitPayload.SeqID).To(Equal(0))
+			Expect(flitPayload.NumFlitInMsg).To(Equal(2))
+			Expect(flitPayload.Msg).To(BeIdenticalTo(msg))
 		})
 		devicePort.EXPECT().NotifyAvailable()
 
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flit *messaging.Flit) {
-			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flit.SeqID).To(Equal(1))
-			Expect(flit.NumFlitInMsg).To(Equal(2))
-			Expect(flit.Msg).To(BeIdenticalTo(msg))
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.Msg) {
+			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
+			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
+			Expect(flitPayload.SeqID).To(Equal(1))
+			Expect(flitPayload.NumFlitInMsg).To(Equal(2))
+			Expect(flitPayload.Msg).To(BeIdenticalTo(msg))
 		})
 
 		madeProgress = endPoint.Tick()
@@ -110,8 +104,12 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &sampleMsg{}
-		msg.Dst = devicePort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Dst: devicePort.AsRemote(),
+			},
+		}
 
 		flit0 := messaging.FlitBuilder{}.
 			WithSeqID(0).

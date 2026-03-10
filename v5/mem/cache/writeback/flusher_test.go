@@ -275,8 +275,8 @@ var _ = Describe("Flusher", func() {
 			directory.EXPECT().Reset()
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
-				Do(func(rsp *cache.FlushRsp) {
-					Expect(rsp.RspTo).To(Equal(req.ID))
+				Do(func(msg *sim.Msg) {
+					Expect(msg.RspTo).To(Equal(req.ID))
 				})
 
 			ret := f.Tick()

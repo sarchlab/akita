@@ -208,7 +208,8 @@ var _ = Describe("MemController", func() {
 			memCtrl.inflightTransactions = append(memCtrl.inflightTransactions,
 				trans)
 
-			topPort.EXPECT().Send(gomock.Any()).Do(func(dr *mem.DataReadyRsp) {
+			topPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.Msg) {
+				dr := msg.Payload.(*mem.DataReadyRspPayload)
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			}).Return(nil)
 

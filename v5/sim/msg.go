@@ -1,15 +1,15 @@
 package sim
 
-import "reflect"
+import "fmt"
 
-// A Msg is a piece of information that is transferred between components.
-type Msg interface {
-	Meta() *MsgMeta
-	Clone() Msg
-	// GenerateRsp() Rsp
+// Msg is a piece of information transferred between components.
+type Msg struct {
+	MsgMeta
+	RspTo   string
+	Payload any
 }
 
-// MsgMeta contains the meta data that is attached to every message.
+// MsgMeta contains routing and identification metadata.
 type MsgMeta struct {
 	ID           string
 	Src, Dst     RemotePort
@@ -17,89 +17,29 @@ type MsgMeta struct {
 	TrafficBytes int
 }
 
-// Rsp is a special message that is used to indicate the completion of a
-// request.
-type Rsp interface {
-	Msg
-	GetRspTo() string
+// IsRsp returns true if this message is a response to another message.
+func (m *Msg) IsRsp() bool { return m.RspTo != "" }
+
+// Clone returns a copy of the message with a new ID.
+func (m *Msg) Clone() *Msg {
+	clone := *m
+	clone.ID = GetIDGenerator().Generate()
+	return &clone
 }
 
-type Request interface {
-	Msg
-	GenerateRsp() Rsp
-}
-
-// GeneralRsp is a general response message that is used to indicate the
-// completion of a request.
-type GeneralRsp struct {
-	MsgMeta
-
-	OriginalReq Msg
-}
-
-// Meta returns the meta data of the message.
-func (r *GeneralRsp) Meta() *MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned GeneralRsp with different ID
-func (r *GeneralRsp) Clone() Msg {
-	cloneMsg := *r
-	cloneMsg.ID = GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GetRspTo returns the ID of the original request.
-func (r *GeneralRsp) GetRspTo() string {
-	return r.OriginalReq.Meta().ID
-}
-
-// GeneralRspBuilder can build general response messages.
-type GeneralRspBuilder struct {
-	Src, Dst     RemotePort
-	TrafficBytes int
-	OriginalReq  Msg
-}
-
-// WithSrc sets the source of the general response message.
-func (c GeneralRspBuilder) WithSrc(src RemotePort) GeneralRspBuilder {
-	c.Src = src
-	return c
-}
-
-// WithDst sets the destination of the general response message.
-func (c GeneralRspBuilder) WithDst(dst RemotePort) GeneralRspBuilder {
-	c.Dst = dst
-	return c
-}
-
-// WithTrafficBytes sets the traffic bytes of the general response message.
-func (c GeneralRspBuilder) WithTrafficBytes(
-	trafficBytes int,
-) GeneralRspBuilder {
-	c.TrafficBytes = trafficBytes
-	return c
-}
-
-// WithOriginalReq sets the original request of the general response message.
-func (c GeneralRspBuilder) WithOriginalReq(originalReq Msg) GeneralRspBuilder {
-	c.OriginalReq = originalReq
-	return c
-}
-
-// Build creates a new general response message.
-func (c GeneralRspBuilder) Build() *GeneralRsp {
-	rsp := &GeneralRsp{
-		MsgMeta: MsgMeta{
-			Src:          c.Src,
-			Dst:          c.Dst,
-			TrafficClass: reflect.TypeOf(GeneralRsp{}).String(),
-			TrafficBytes: c.TrafficBytes,
-			ID:           GetIDGenerator().Generate(),
-		},
-		OriginalReq: c.OriginalReq,
+// MsgPayload extracts the payload as a specific type, panicking if the type
+// does not match.
+func MsgPayload[T any](msg *Msg) *T {
+	p, ok := msg.Payload.(*T)
+	if !ok {
+		panic(fmt.Sprintf("msg payload: want %T, got %T", (*T)(nil), msg.Payload))
 	}
+	return p
+}
 
-	return rsp
+// TryMsgPayload extracts the payload as a specific type, returning false if the
+// type does not match.
+func TryMsgPayload[T any](msg *Msg) (*T, bool) {
+	p, ok := msg.Payload.(*T)
+	return p, ok
 }

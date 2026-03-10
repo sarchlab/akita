@@ -70,9 +70,9 @@ func (w *Wire) NotifySend() {
 	w.port2.comp.NotifyRecv(w.port2)
 }
 
-// peek returns the message that is currently in the outgoing buffer of the
+// Peek returns the message that is currently in the outgoing buffer of the
 // other port.
-func (w *Wire) Peek(port *Port) sim.Msg {
+func (w *Wire) Peek(port *Port) *sim.Msg {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -87,9 +87,9 @@ func (w *Wire) Peek(port *Port) sim.Msg {
 	panic("port not connected to this wire")
 }
 
-// retrieve returns and removes the message that is currently in the outgoing
+// Retrieve returns and removes the message that is currently in the outgoing
 // buffer of the other port.
-func (w *Wire) Retrieve(port *Port) sim.Msg {
+func (w *Wire) Retrieve(port *Port) *sim.Msg {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -104,6 +104,7 @@ func (w *Wire) Retrieve(port *Port) sim.Msg {
 	return msg
 }
 
+// ConnectWithWire creates a wire connecting two ports.
 func ConnectWithWire(port1 *Port, port2 *Port) *Wire {
 	w := new(Wire)
 
@@ -137,9 +138,9 @@ func (w *Wire) theOtherPort(port *Port) *Port {
 
 func srcAndDstMustBeValid(
 	expSrc, expDst sim.RemotePort,
-	msg sim.Msg,
+	msg *sim.Msg,
 ) {
-	if msg.Meta().Src != expSrc || msg.Meta().Dst != expDst {
+	if msg.Src != expSrc || msg.Dst != expDst {
 		panic("message src and dst is not valid for the wire")
 	}
 }

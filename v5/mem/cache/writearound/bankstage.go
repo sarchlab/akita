@@ -1,7 +1,9 @@
 package writearound
 
 import (
+	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -83,9 +85,10 @@ func (s *bankStage) finalizeTrans() bool {
 
 func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	block := trans.block
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress, trans.read.AccessByteSize)
+		block.CacheAddress, readPayload.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -93,8 +96,9 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	block.ReadCount--
 
 	for _, t := range trans.preCoalesceTransactions {
-		offset := t.read.Address - block.Tag
-		t.data = data[offset : offset+t.read.AccessByteSize]
+		tReadPayload := sim.MsgPayload[mem.ReadReqPayload](t.read)
+		offset := tReadPayload.Address - block.Tag
+		t.data = data[offset : offset+tReadPayload.AccessByteSize]
 		t.done = true
 	}
 
@@ -107,7 +111,7 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 }
 
 func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
-	write := trans.write
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
 	block := trans.block
 	blockSize := 1 << s.cache.log2BlockSize
 
@@ -116,11 +120,11 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 		panic(err)
 	}
 
-	offset := write.Address - block.Tag
+	offset := writePayload.Address - block.Tag
 
-	for i := 0; i < len(write.Data); i++ {
-		if write.DirtyMask[i] {
-			data[offset+uint64(i)] = write.Data[i]
+	for i := 0; i < len(writePayload.Data); i++ {
+		if writePayload.DirtyMask[i] {
+			data[offset+uint64(i)] = writePayload.Data[i]
 		}
 	}
 
@@ -129,7 +133,7 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 		panic(err)
 	}
 
-	block.DirtyMask = write.DirtyMask
+	block.DirtyMask = writePayload.DirtyMask
 	block.IsLocked = false
 
 	s.postPipelineBuf.Pop()

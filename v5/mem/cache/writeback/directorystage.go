@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -93,16 +94,16 @@ func (ds *directoryStage) Reset() {
 }
 
 func (ds *directoryStage) doRead(trans *transaction) bool {
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
 	cachelineID, _ := getCacheLineID(
-		trans.read.Address, ds.cache.log2BlockSize)
+		readPayload.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(trans.read.PID, cachelineID)
+	mshrEntry := ds.cache.mshr.Query(readPayload.PID, cachelineID)
 	if mshrEntry != nil {
 		return ds.handleReadMSHRHit(trans, mshrEntry)
 	}
 
-	block := ds.cache.directory.Lookup(
-		trans.read.PID, cachelineID)
+	block := ds.cache.directory.Lookup(readPayload.PID, cachelineID)
 	if block != nil {
 		return ds.handleReadHit(trans, block)
 	}
@@ -142,22 +143,12 @@ func (ds *directoryStage) handleReadHit(
 		"read-hit",
 	)
 
-	// log.Printf("%.10f, %s, dir read hit， %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, ds.cache.Name(),
-	// 	trans.read.ID,
-	// 	trans.read.Address,
-	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)
-	// 	<<ds.cache.log2BlockSize,
-	// 	block.SetID, block.WayID,
-	// 	nil,
-	// )
-
 	return ds.readFromBank(trans, block)
 }
 
 func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
-	req := trans.read
-	cacheLineID, _ := getCacheLineID(req.Address, ds.cache.log2BlockSize)
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+	cacheLineID, _ := getCacheLineID(readPayload.Address, ds.cache.log2BlockSize)
 
 	if ds.cache.mshr.IsFull() {
 		return false
@@ -167,16 +158,6 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
-
-	// log.Printf("%.10f, %s, dir read miss， %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, ds.cache.Name(),
-	// 	trans.read.ID,
-	// 	trans.read.Address,
-	// 	(trans.read.GetAddress()>>ds.cache.log2BlockSize)<<
-	// 	ds.cache.log2BlockSize,
-	// 	victim.SetID, victim.WayID,
-	// 	nil,
-	// )
 
 	if ds.needEviction(victim) {
 		ok := ds.evict(trans, victim)
@@ -204,10 +185,10 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) doWrite(trans *transaction) bool {
-	write := trans.write
-	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(write.PID, cachelineID)
+	mshrEntry := ds.cache.mshr.Query(writePayload.PID, cachelineID)
 	if mshrEntry != nil {
 		ok := ds.doWriteMSHRHit(trans, mshrEntry)
 		tracing.AddTaskStep(
@@ -219,7 +200,7 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 		return ok
 	}
 
-	block := ds.cache.directory.Lookup(trans.write.PID, cachelineID)
+	block := ds.cache.directory.Lookup(writePayload.PID, cachelineID)
 	if block != nil {
 		ok := ds.doWriteHit(trans, block)
 		if ok {
@@ -269,9 +250,7 @@ func (ds *directoryStage) doWriteHit(
 }
 
 func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
-	write := trans.write
-
-	if ds.isWritingFullLine(write) {
+	if ds.isWritingFullLine(trans.write) {
 		return ds.writeFullLineMiss(trans)
 	}
 
@@ -279,8 +258,8 @@ func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
-	write := trans.write
-	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
 
 	victim := ds.cache.directory.FindVictim(cachelineID)
 	if victim.IsLocked || victim.ReadCount > 0 {
@@ -295,8 +274,8 @@ func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
-	write := trans.write
-	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
 
 	if ds.cache.mshr.IsFull() {
 		return false
@@ -306,15 +285,6 @@ func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
-
-	// log.Printf("%.10f, %s, write partial line ，"+
-	// " %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, ds.cache.Name(),
-	// 	trans.write.ID,
-	// 	trans.write.Address, cachelineID,
-	// 	victim.SetID, victim.WayID,
-	// 	write.Data,
-	// )
 
 	if ds.needEviction(victim) {
 		return ds.evict(trans, victim)
@@ -359,14 +329,15 @@ func (ds *directoryStage) writeToBank(
 		return false
 	}
 
-	addr := trans.write.Address
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 	cachelineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
 	ds.cache.directory.Visit(block)
 	block.IsLocked = true
 	block.Tag = cachelineID
 	block.IsValid = true
-	block.PID = trans.write.PID
+	block.PID = writePayload.PID
 	trans.block = block
 	trans.action = bankWriteHit
 
@@ -394,11 +365,13 @@ func (ds *directoryStage) evict(
 	)
 
 	if trans.read != nil {
-		addr = trans.read.Address
-		pid = trans.read.PID
+		readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+		addr = readPayload.Address
+		pid = readPayload.PID
 	} else {
-		addr = trans.write.Address
-		pid = trans.write.PID
+		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+		addr = writePayload.Address
+		pid = writePayload.PID
 	}
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
@@ -410,14 +383,6 @@ func (ds *directoryStage) evict(
 	bankBuf.Push(trans)
 
 	ds.cache.evictingList[trans.victim.Tag] = true
-
-	// log.Printf("%.10f, %s, directory evict ， %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, ds.cache.Name(),
-	// 	trans.accessReq().Meta().ID,
-	// 	trans.accessReq().GetAddress(), trans.victim.Tag,
-	// 	victim.SetID, victim.WayID,
-	// 	nil,
-	// )
 
 	return true
 }
@@ -484,17 +449,19 @@ func (ds *directoryStage) fetch(
 	var (
 		addr uint64
 		pid  vm.PID
-		req  mem.AccessReq
+		req  *sim.Msg
 	)
 
 	if trans.read != nil {
 		req = trans.read
-		addr = trans.read.Address
-		pid = trans.read.PID
+		readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+		addr = readPayload.Address
+		pid = readPayload.PID
 	} else {
 		req = trans.write
-		addr = trans.write.Address
-		pid = trans.write.PID
+		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+		addr = writePayload.Address
+		pid = writePayload.PID
 	}
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
@@ -535,13 +502,15 @@ func (ds *directoryStage) fetch(
 	return true
 }
 
-func (ds *directoryStage) isWritingFullLine(write *mem.WriteReq) bool {
-	if len(write.Data) != (1 << ds.cache.log2BlockSize) {
+func (ds *directoryStage) isWritingFullLine(writeMsg *sim.Msg) bool {
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
+
+	if len(writePayload.Data) != (1 << ds.cache.log2BlockSize) {
 		return false
 	}
 
-	if write.DirtyMask != nil {
-		for _, dirty := range write.DirtyMask {
+	if writePayload.DirtyMask != nil {
+		for _, dirty := range writePayload.DirtyMask {
 			if !dirty {
 				return false
 			}

@@ -71,13 +71,14 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		topPort.EXPECT().PeekIncoming().Return(req)
 		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
-		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent *vm.TranslationReq) {
-			Expect(sent.TransLatency).To(Equal(uint64(200)))
+		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent *sim.Msg) {
+			sentPayload := sim.MsgPayload[vm.TranslationReqPayload](sent)
+			Expect(sentPayload.TransLatency).To(Equal(uint64(200)))
 			Expect(sent.Dst).To(Equal(sim.RemotePort("LowModule")))
 			Expect(sent.Src).To(Equal(sim.RemotePort("BottomPort")))
-			Expect(sent.PID).To(Equal(vm.PID(1)))
-			Expect(sent.VAddr).To(Equal(uint64(0x2000)))
-			Expect(sent.DeviceID).To(Equal(uint64(3)))
+			Expect(sentPayload.PID).To(Equal(vm.PID(1)))
+			Expect(sentPayload.VAddr).To(Equal(uint64(0x2000)))
+			Expect(sentPayload.DeviceID).To(Equal(uint64(3)))
 		}).Return(nil)
 		topPort.EXPECT().RetrieveIncoming().Return(req)
 
@@ -92,15 +93,17 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			WithVAddr(0x3000).
 			WithDeviceID(2).
 			Build()
+		reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
 
-		seg := segForLevel(cache, 1, req.VAddr)
+		seg := segForLevel(cache, 1, reqPayload.VAddr)
 		wayID := setIDForSeg(cache, seg)
-		cache.table[1].Update(wayID, req.PID, seg)
+		cache.table[1].Update(wayID, reqPayload.PID, seg)
 
 		topPort.EXPECT().PeekIncoming().Return(req)
 		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
-		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent *vm.TranslationReq) {
-			Expect(sent.TransLatency).To(Equal(uint64(100)))
+		bottomPort.EXPECT().Send(gomock.Any()).Do(func(sent *sim.Msg) {
+			sentPayload := sim.MsgPayload[vm.TranslationReqPayload](sent)
+			Expect(sentPayload.TransLatency).To(Equal(uint64(100)))
 		}).Return(nil)
 		topPort.EXPECT().RetrieveIncoming().Return(req)
 
@@ -122,10 +125,11 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Build()
 
 		topPort.EXPECT().CanSend().Return(true)
-		topPort.EXPECT().Send(gomock.Any()).Do(func(sent *vm.TranslationRsp) {
+		topPort.EXPECT().Send(gomock.Any()).Do(func(sent *sim.Msg) {
 			Expect(sent.Dst).To(Equal(sim.RemotePort("UpModule")))
 			Expect(sent.Src).To(Equal(sim.RemotePort("TopPort")))
-			Expect(sent.Page).To(Equal(page))
+			sentPayload := sim.MsgPayload[vm.TranslationRspPayload](sent)
+			Expect(sentPayload.Page).To(Equal(page))
 		}).Return(nil)
 		bottomPort.EXPECT().RetrieveIncoming()
 
@@ -151,7 +155,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			Build()
 		cache.state = mmuCacheStateFlush
 
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *FlushRsp) {
+		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *sim.Msg) {
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)

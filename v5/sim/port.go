@@ -38,16 +38,16 @@ type Port interface {
 	SetComponent(comp Component)
 
 	// For connection
-	Deliver(msg Msg) *SendError
+	Deliver(msg *Msg) *SendError
 	NotifyAvailable()
-	RetrieveOutgoing() Msg
-	PeekOutgoing() Msg
+	RetrieveOutgoing() *Msg
+	PeekOutgoing() *Msg
 
 	// For component
 	CanSend() bool
-	Send(msg Msg) *SendError
-	RetrieveIncoming() Msg
-	PeekIncoming() Msg
+	Send(msg *Msg) *SendError
+	RetrieveIncoming() *Msg
+	PeekIncoming() *Msg
 
 	// Buffer counts
 	NumIncoming() int
@@ -113,7 +113,7 @@ func (p *defaultPort) CanSend() bool {
 }
 
 // Send is used to send a message out from a component
-func (p *defaultPort) Send(msg Msg) *SendError {
+func (p *defaultPort) Send(msg *Msg) *SendError {
 	p.lock.Lock()
 
 	p.msgMustBeValid(msg)
@@ -142,7 +142,7 @@ func (p *defaultPort) Send(msg Msg) *SendError {
 }
 
 // Deliver is used to deliver a message to a component
-func (p *defaultPort) Deliver(msg Msg) *SendError {
+func (p *defaultPort) Deliver(msg *Msg) *SendError {
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
@@ -171,11 +171,11 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 
 // RetrieveIncoming is used by the component to take a message from the incoming
 // buffer
-func (p *defaultPort) RetrieveIncoming() Msg {
+func (p *defaultPort) RetrieveIncoming() *Msg {
 	p.lock.Lock()
 
-	item := p.incomingBuf.Pop()
-	if item == nil {
+	msg := p.incomingBuf.Pop()
+	if msg == nil {
 		p.lock.Unlock()
 		return nil
 	}
@@ -186,7 +186,6 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 
 	p.lock.Unlock()
 
-	msg := item.(Msg)
 	hookCtx := HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRetrieveIncoming,
@@ -199,11 +198,11 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 
 // RetrieveOutgoing is used by the component to take a message from the outgoing
 // buffer
-func (p *defaultPort) RetrieveOutgoing() Msg {
+func (p *defaultPort) RetrieveOutgoing() *Msg {
 	p.lock.Lock()
 
-	item := p.outgoingBuf.Pop()
-	if item == nil {
+	msg := p.outgoingBuf.Pop()
+	if msg == nil {
 		p.lock.Unlock()
 		return nil
 	}
@@ -214,7 +213,6 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 
 	p.lock.Unlock()
 
-	msg := item.(Msg)
 	hookCtx := HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRetrieveOutgoing,
@@ -227,34 +225,20 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 
 // PeekIncoming returns the first message in the incoming buffer without
 // removing it.
-func (p *defaultPort) PeekIncoming() Msg {
+func (p *defaultPort) PeekIncoming() *Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	item := p.incomingBuf.Peek()
-	if item == nil {
-		return nil
-	}
-
-	msg := item.(Msg)
-
-	return msg
+	return p.incomingBuf.Peek()
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
 // removing it.
-func (p *defaultPort) PeekOutgoing() Msg {
+func (p *defaultPort) PeekOutgoing() *Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	item := p.outgoingBuf.Peek()
-	if item == nil {
-		return nil
-	}
-
-	msg := item.(Msg)
-
-	return msg
+	return p.outgoingBuf.Peek()
 }
 
 // NumIncoming returns the number of messages in the incoming buffer.
@@ -296,14 +280,14 @@ func NewPort(
 	return p
 }
 
-func (p *defaultPort) msgMustBeValid(msg Msg) {
+func (p *defaultPort) msgMustBeValid(msg *Msg) {
 	portMustBeMsgSrc(p, msg)
-	dstMustNotBeEmpty(msg.Meta().Dst)
+	dstMustNotBeEmpty(msg.Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
-func portMustBeMsgSrc(port Port, msg Msg) {
-	if port.Name() != string(msg.Meta().Src) {
+func portMustBeMsgSrc(port Port, msg *Msg) {
+	if port.Name() != string(msg.Src) {
 		panic("sending port is not msg src")
 	}
 }
@@ -314,8 +298,8 @@ func dstMustNotBeEmpty(port RemotePort) {
 	}
 }
 
-func srcDstMustNotBeTheSame(msg Msg) {
-	if msg.Meta().Src == msg.Meta().Dst {
+func srcDstMustNotBeTheSame(msg *Msg) {
+	if msg.Src == msg.Dst {
 		panic("sending back to src")
 	}
 }

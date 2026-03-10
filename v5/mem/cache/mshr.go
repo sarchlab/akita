@@ -3,7 +3,6 @@ package cache
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -14,8 +13,8 @@ type MSHREntry struct {
 	Address   uint64
 	Requests  []interface{}
 	Block     *Block
-	ReadReq   *mem.ReadReq
-	DataReady *mem.DataReadyRsp
+	ReadReq   *sim.Msg
+	DataReady *sim.Msg
 	Data      []byte
 }
 

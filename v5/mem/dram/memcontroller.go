@@ -83,10 +83,10 @@ func (m *middleware) parseTop() (madeProgress bool) {
 
 	trans := &signal.Transaction{}
 
-	switch msg := msg.(type) {
-	case *mem.ReadReq:
+	switch msg.Payload.(type) {
+	case *mem.ReadReqPayload:
 		trans.Read = msg
-	case *mem.WriteReq:
+	case *mem.WriteReqPayload:
 		trans.Write = msg
 	}
 
@@ -114,9 +114,6 @@ func (m *middleware) parseTop() (madeProgress bool) {
 			nil,
 		)
 	}
-
-	// fmt.Printf("%.10f, %s, start transaction, %s, %x\n",
-	// 	now, c.Name(), msg.Meta().ID, trans.InternalAddress)
 
 	return true
 }
@@ -180,7 +177,8 @@ func (m *middleware) finalizeWriteTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	err := m.storage.Write(t.InternalAddress, t.Write.Data)
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](t.Write)
+	err := m.storage.Write(t.InternalAddress, writePayload.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -197,8 +195,6 @@ func (m *middleware) finalizeWriteTrans(
 			m.inflightTransactions[:i],
 			m.inflightTransactions[i+1:]...)
 
-		// fmt.Printf("%.10f, %s, finish transaction %s, %x\n",
-		// 	now, c.Name(), t.Write.ID, t.InternalAddress)
 		return true
 	}
 
@@ -209,7 +205,8 @@ func (m *middleware) finalizeReadTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	data, err := m.storage.Read(t.InternalAddress, t.Read.AccessByteSize)
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](t.Read)
+	data, err := m.storage.Read(t.InternalAddress, readPayload.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -227,8 +224,6 @@ func (m *middleware) finalizeReadTrans(
 			m.inflightTransactions[:i],
 			m.inflightTransactions[i+1:]...)
 
-		// fmt.Printf("%.10f, %s, finish transaction %s, %x\n",
-		// 	now, c.Name(), t.Read.ID, t.InternalAddress)
 		return true
 	}
 

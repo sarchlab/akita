@@ -32,7 +32,7 @@ type PortAnalyzer struct {
 func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	now := h.CurrentTime()
 
-	msg, ok := ctx.Item.(sim.Msg)
+	msg, ok := ctx.Item.(*sim.Msg)
 	if !ok {
 		return
 	}
@@ -48,9 +48,9 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 		h.remoteToTrafficMap = make(map[sim.RemotePort]portAnalyzerEntry)
 	}
 
-	remotePortName := msg.Meta().Dst
+	remotePortName := msg.Dst
 	if h.isIncoming(msg) {
-		remotePortName = msg.Meta().Src
+		remotePortName = msg.Src
 	}
 
 	entry, ok := h.remoteToTrafficMap[remotePortName]
@@ -63,10 +63,10 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	entry = h.remoteToTrafficMap[remotePortName]
 
 	if h.isIncoming(msg) {
-		entry.InTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.InTrafficByte += int64(msg.TrafficBytes)
 		entry.InTrafficMsg++
 	} else {
-		entry.OutTrafficByte += int64(msg.Meta().TrafficBytes)
+		entry.OutTrafficByte += int64(msg.TrafficBytes)
 		entry.OutTrafficMsg++
 	}
 
@@ -75,8 +75,8 @@ func (h *PortAnalyzer) Func(ctx sim.HookCtx) {
 	h.lastTime = now
 }
 
-func (h *PortAnalyzer) isIncoming(msg sim.Msg) bool {
-	return msg.Meta().Dst == h.port.AsRemote()
+func (h *PortAnalyzer) isIncoming(msg *sim.Msg) bool {
+	return msg.Dst == h.port.AsRemote()
 }
 
 func (h *PortAnalyzer) summarize() {

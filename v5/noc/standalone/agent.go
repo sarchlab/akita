@@ -7,40 +7,29 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// TrafficMsg is a type of msg that only used in standalone network test.
-// It has a byte size, but we do not care about the information it carries.
-type TrafficMsg struct {
-	sim.MsgMeta
-}
-
-// Meta returns the meta data of the message.
-func (m *TrafficMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-// Clone returns cloned TrafficMsg
-func (m *TrafficMsg) Clone() sim.Msg {
-	cloneMsg := NewTrafficMsg(m.Src, m.Dst, m.TrafficBytes)
-
-	return cloneMsg
-}
+// TrafficMsgPayload is the payload for a traffic message used in standalone
+// network tests.
+type TrafficMsgPayload struct{}
 
 // NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
-	msg := new(TrafficMsg)
-	msg.Src = src
-	msg.Dst = dst
-	msg.TrafficBytes = byteSize
-	msg.TrafficClass = reflect.TypeOf(TrafficMsg{}).String()
-
-	return msg
+func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          src,
+			Dst:          dst,
+			TrafficBytes: byteSize,
+			TrafficClass: reflect.TypeOf(TrafficMsgPayload{}).String(),
+		},
+		Payload: &TrafficMsgPayload{},
+	}
 }
 
 // StartSendEvent is an event that triggers an agent to send a message.
 type StartSendEvent struct {
 	*sim.EventBase
 
-	Msg *TrafficMsg
+	Msg *sim.Msg
 }
 
 // NewStartSendEvent creates a new StartSendEvent.
@@ -63,7 +52,7 @@ type Agent struct {
 
 	ToOut sim.Port
 
-	Buffer []*TrafficMsg
+	Buffer []*sim.Msg
 }
 
 // NotifyRecv notifies that a port has received a message.

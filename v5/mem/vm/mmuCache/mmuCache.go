@@ -26,7 +26,7 @@ type Comp struct {
 
 	table []internal.Set
 
-	inflightFlushReq *FlushReq
+	inflightFlushReq *sim.Msg // payload: *FlushReqPayload
 }
 
 func (c *Comp) reset() {

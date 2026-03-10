@@ -11,24 +11,12 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-type sampleMsg struct {
-	sim.MsgMeta
-}
-
-func NewSampleMsg() *sampleMsg {
-	m := &sampleMsg{}
-	return m
-}
-
-func (m *sampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() sim.Msg {
-	cloneMsg := *m
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
+func newTestMsg() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID: sim.GetIDGenerator().Generate(),
+		},
+	}
 }
 
 var _ = Describe("DirectConnection", func() {
@@ -72,11 +60,11 @@ var _ = Describe("DirectConnection", func() {
 
 		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10))
 
-		msg1 := NewSampleMsg()
+		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
 		msg1.Dst = port2.AsRemote()
 
-		msg2 := NewSampleMsg()
+		msg2 := newTestMsg()
 		msg2.Src = port2.AsRemote()
 		msg2.Dst = port1.AsRemote()
 
@@ -104,8 +92,8 @@ var _ = Describe("DirectConnection", func() {
 type agent struct {
 	*sim.TickingComponent
 
-	msgsOut []sim.Msg
-	msgsIn  []sim.Msg
+	msgsOut []*sim.Msg
+	msgsIn  []*sim.Msg
 
 	OutPort sim.Port
 }
@@ -169,7 +157,7 @@ var _ = Describe("Direct Connection Integration", func() {
 	It("should deliver all messages", func() {
 		for _, agent := range agents {
 			for i := 0; i < numMsgsPerAgent; i++ {
-				msg := NewSampleMsg()
+				msg := newTestMsg()
 				msg.Src = agent.OutPort.AsRemote()
 				msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				for msg.Dst == msg.Src {
@@ -219,7 +207,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 
 	for _, agent := range agents {
 		for i := 0; i < numMsgsPerAgent; i++ {
-			msg := NewSampleMsg()
+			msg := newTestMsg()
 			msg.Src = agent.OutPort.AsRemote()
 			msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 

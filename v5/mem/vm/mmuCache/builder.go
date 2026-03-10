@@ -1,7 +1,6 @@
 package mmuCache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -25,7 +24,6 @@ type Builder struct {
 
 	maxInflightTransactions int
 	inflightTransactions    int
-	translationRequests     map[uint64]map[vm.PID]*vm.TranslationReq
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -48,7 +46,6 @@ func MakeBuilder() Builder {
 		bloomFilterSize:         64,
 		maxInflightTransactions: 16,
 		inflightTransactions:    0,
-		translationRequests:     make(map[uint64]map[vm.PID]*vm.TranslationReq),
 		segLength:               16,
 	}
 }

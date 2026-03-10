@@ -17,7 +17,7 @@ type controlStage struct {
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
-	currFlushReq *cache.FlushReq
+	currFlushReq *sim.Msg // payload: *cache.FlushReqPayload
 }
 
 func (s *controlStage) Tick() bool {
@@ -75,7 +75,8 @@ func (s *controlStage) hardResetCache() {
 	s.cache.transactions = nil
 	s.cache.postCoalesceTransactions = nil
 
-	if s.currFlushReq.PauseAfterFlushing {
+	flushPayload := sim.MsgPayload[cache.FlushReqPayload](s.currFlushReq)
+	if flushPayload.PauseAfterFlushing {
 		s.cache.isPaused = true
 	}
 }
@@ -92,38 +93,36 @@ func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 }
 
 func (s *controlStage) processNewRequest() bool {
-	req := s.ctrlPort.PeekIncoming()
-	if req == nil {
+	msg := s.ctrlPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
-	switch req := req.(type) {
-	case *cache.FlushReq:
-		return s.startCacheFlush(req)
-	case *cache.RestartReq:
-		return s.doCacheRestart(req)
+	switch msg.Payload.(type) {
+	case *cache.FlushReqPayload:
+		return s.startCacheFlush(msg)
+	case *cache.RestartReqPayload:
+		return s.doCacheRestart(msg)
 	default:
 		log.Panicf("cannot handle request of type %s ",
-			reflect.TypeOf(req))
+			reflect.TypeOf(msg.Payload))
 	}
 
 	panic("never")
 }
 
-func (s *controlStage) startCacheFlush(
-	req *cache.FlushReq,
-) bool {
+func (s *controlStage) startCacheFlush(msg *sim.Msg) bool {
 	if s.currFlushReq != nil {
 		return false
 	}
 
-	s.currFlushReq = req
+	s.currFlushReq = msg
 	s.ctrlPort.RetrieveIncoming()
 
 	return true
 }
 
-func (s *controlStage) doCacheRestart(req *cache.RestartReq) bool {
+func (s *controlStage) doCacheRestart(msg *sim.Msg) bool {
 	s.cache.isPaused = false
 
 	s.ctrlPort.RetrieveIncoming()
@@ -138,7 +137,7 @@ func (s *controlStage) doCacheRestart(req *cache.RestartReq) bool {
 
 	rsp := cache.RestartRspBuilder{}.
 		WithSrc(s.ctrlPort.AsRemote()).
-		WithDst(req.Src).
+		WithDst(msg.Src).
 		Build()
 
 	err := s.ctrlPort.Send(rsp)
@@ -150,5 +149,6 @@ func (s *controlStage) doCacheRestart(req *cache.RestartReq) bool {
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	return !s.currFlushReq.DiscardInflight && len(s.cache.transactions) != 0
+	flushPayload := sim.MsgPayload[cache.FlushReqPayload](s.currFlushReq)
+	return !flushPayload.DiscardInflight && len(s.cache.transactions) != 0
 }

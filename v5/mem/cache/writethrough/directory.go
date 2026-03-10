@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -61,9 +62,9 @@ func (d *directory) Tick() (madeProgress bool) {
 }
 
 func (d *directory) processRead(trans *transaction) bool {
-	read := trans.read
-	addr := read.Address
-	pid := read.PID
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+	addr := readPayload.Address
+	pid := readPayload.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -122,11 +123,9 @@ func (d *directory) processReadHit(
 	return true
 }
 
-func (d *directory) processReadMiss(
-	trans *transaction,
-) bool {
-	read := trans.read
-	addr := read.Address
+func (d *directory) processReadMiss(trans *transaction) bool {
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
+	addr := readPayload.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -149,12 +148,10 @@ func (d *directory) processReadMiss(
 	return true
 }
 
-func (d *directory) processWrite(
-	trans *transaction,
-) bool {
-	write := trans.write
-	addr := write.Address
-	pid := write.PID
+func (d *directory) processWrite(trans *transaction) bool {
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
+	pid := writePayload.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -178,7 +175,7 @@ func (d *directory) processWrite(
 		return ok
 	}
 
-	if d.isPartialWrite(write) {
+	if d.isPartialWrite(trans.write) {
 		return d.partialWriteMiss(trans)
 	}
 
@@ -190,13 +187,15 @@ func (d *directory) processWrite(
 	return ok
 }
 
-func (d *directory) isPartialWrite(write *mem.WriteReq) bool {
-	if len(write.Data) < (1 << d.cache.log2BlockSize) {
+func (d *directory) isPartialWrite(writeMsg *sim.Msg) bool {
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
+
+	if len(writePayload.Data) < (1 << d.cache.log2BlockSize) {
 		return true
 	}
 
-	if write.DirtyMask != nil {
-		for _, byteDirty := range write.DirtyMask {
+	if writePayload.DirtyMask != nil {
+		for _, byteDirty := range writePayload.DirtyMask {
 			if !byteDirty {
 				return true
 			}
@@ -206,11 +205,9 @@ func (d *directory) isPartialWrite(write *mem.WriteReq) bool {
 	return false
 }
 
-func (d *directory) partialWriteMiss(
-	trans *transaction,
-) bool {
-	write := trans.write
-	addr := write.Address
+func (d *directory) partialWriteMiss(trans *transaction) bool {
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	trans.fetchAndWrite = true
@@ -246,11 +243,9 @@ func (d *directory) partialWriteMiss(
 	return true
 }
 
-func (d *directory) fullLineWriteMiss(
-	trans *transaction,
-) bool {
-	write := trans.write
-	addr := write.Address
+func (d *directory) fullLineWriteMiss(trans *transaction) bool {
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block := d.cache.directory.FindVictim(cacheLineID)
@@ -259,16 +254,16 @@ func (d *directory) fullLineWriteMiss(
 }
 
 func (d *directory) writeBottom(trans *transaction) bool {
-	write := trans.write
-	addr := write.Address
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 
 	writeToBottom := mem.WriteReqBuilder{}.
 		WithSrc(d.cache.bottomPort.AsRemote()).
 		WithDst(d.cache.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
-		WithPID(write.PID).
-		WithData(write.Data).
-		WithDirtyMask(write.DirtyMask).
+		WithPID(writePayload.PID).
+		WithData(writePayload.Data).
+		WithDirtyMask(writePayload.DirtyMask).
 		Build()
 
 	err := d.cache.bottomPort.Send(writeToBottom)
@@ -303,8 +298,8 @@ func (d *directory) processWriteHit(
 		}
 	}
 
-	write := trans.write
-	addr := write.Address
+	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+	addr := writePayload.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block.IsLocked = true
