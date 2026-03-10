@@ -46,8 +46,6 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			WithBottomPort(sim.NewPort(nil, 4800, 4800, "MMUCache.BottomPort")).
 			WithControlPort(sim.NewPort(nil, 1, 1, "MMUCache.ControlPort")).
 			Build("MMUCache")
-		cache.numBlocks = 4
-		cache.reset()
 		cache.topPort = topPort
 		cache.bottomPort = bottomPort
 		cache.controlPort = controlPort
@@ -135,8 +133,9 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.handleRsp(rsp)
 
+		spec := cache.GetSpec()
 		Expect(madeProgress).To(BeTrue())
-		for level := 0; level < cache.numLevels; level++ {
+		for level := 0; level < spec.NumLevels; level++ {
 			seg := segForLevel(cache, level, page.VAddr)
 			_, found := cache.table[level].Lookup(page.PID, seg)
 			Expect(found).To(BeTrue())
@@ -171,11 +170,13 @@ var _ = Describe("MMUCacheMiddleware", func() {
 })
 
 func segForLevel(cache *Comp, level int, vAddr uint64) uint64 {
-	vpn := vAddr >> cache.log2PageSize
-	levelWidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
+	spec := cache.GetSpec()
+	vpn := vAddr >> spec.Log2PageSize
+	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
 	return (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 }
 
 func setIDForSeg(cache *Comp, seg uint64) int {
-	return int(seg % uint64(cache.numBlocks))
+	spec := cache.GetSpec()
+	return int(seg % uint64(spec.NumBlocks))
 }

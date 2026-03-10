@@ -73,10 +73,11 @@ func (cache *mmuCacheMiddleware) handleEnable() bool {
 // processRequests handles both incoming lookup requests and bottom port responses.
 func (cache *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	for i := 0; i < cache.numReqPerCycle; i++ {
+	spec := cache.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = cache.lookup() || madeProgress
 	}
-	for i := 0; i < cache.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = cache.handleBottomPort() || madeProgress
 	}
 	return madeProgress
@@ -103,14 +104,15 @@ func (cache *mmuCacheMiddleware) lookup() bool {
 func (cache *mmuCacheMiddleware) walkCacheLevels(
 	msg *sim.Msg, payload *vm.TranslationReqPayload,
 ) bool {
-	totalLatency := cache.latencyPerLevel * uint64(cache.numLevels)
+	spec := cache.GetSpec()
+	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
-	for level := cache.numLevels - 1; level >= 0; level-- {
+	for level := spec.NumLevels - 1; level >= 0; level-- {
 		found := cache.lookupLevel(level, payload)
 		if !found {
 			break
 		}
-		totalLatency -= cache.latencyPerLevel
+		totalLatency -= spec.LatencyPerLevel
 	}
 
 	ok := cache.sendReqToBottom(payload, totalLatency)
@@ -123,11 +125,12 @@ func (cache *mmuCacheMiddleware) walkCacheLevels(
 func (cache *mmuCacheMiddleware) lookupLevel(
 	level int, payload *vm.TranslationReqPayload,
 ) bool {
+	spec := cache.GetSpec()
 	vAddr := payload.VAddr
 	pid := payload.PID
 
-	vpn := vAddr >> cache.log2PageSize
-	levelWidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
+	vpn := vAddr >> spec.Log2PageSize
+	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
 	seg := (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 
 	subTable := cache.table[level]
@@ -210,18 +213,20 @@ func (cache *mmuCacheMiddleware) handleRsp(rsp *sim.Msg) bool {
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
 func (cache *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	return int(seg % uint64(cache.numBlocks))
+	spec := cache.GetSpec()
+	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
 func (cache *mmuCacheMiddleware) updateCacheLevels(rspPayload *vm.TranslationRspPayload) bool {
+	spec := cache.GetSpec()
 	page := rspPayload.Page
 	vAddr := page.VAddr
 	pid := page.PID
 
-	vpn := vAddr >> cache.log2PageSize
-	levelWidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
-	for level := cache.numLevels - 1; level >= 0; level-- {
+	vpn := vAddr >> spec.Log2PageSize
+	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
+	for level := spec.NumLevels - 1; level >= 0; level-- {
 		seg := (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 
 		subTable := cache.table[level]
