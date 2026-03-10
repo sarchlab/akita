@@ -78,7 +78,7 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("read", func() {
 		var (
-			read  *mem.ReadReq
+			read  *sim.Msg
 			trans *transaction
 		)
 
@@ -346,8 +346,9 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
-			trans *transaction
+			write        *sim.Msg
+			writePayload *mem.WriteReqPayload
+			trans        *transaction
 		)
 
 		BeforeEach(func() {
@@ -355,7 +356,7 @@ var _ = Describe("DirectoryStage", func() {
 				WithAddress(0x100).
 				WithPID(1).
 				Build()
-			write.PID = 1
+			writePayload = sim.MsgPayload[mem.WriteReqPayload](write)
 			trans = &transaction{
 				write: write,
 			}
@@ -460,7 +461,7 @@ var _ = Describe("DirectoryStage", func() {
 					IsDirty: false,
 				}
 
-				write.Data = []byte{
+				writePayload.Data = []byte{
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
 					1, 2, 3, 4, 5, 6, 7, 8,
@@ -535,7 +536,7 @@ var _ = Describe("DirectoryStage", func() {
 					Return(nil)
 				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
 				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				write.Data = make([]byte, 64)
+				writePayload.Data = make([]byte, 64)
 			})
 
 			It("should stall if evictor buffer is full", func() {
@@ -579,7 +580,7 @@ var _ = Describe("DirectoryStage", func() {
 					IsDirty:      true,
 				}
 
-				write.Data = make([]byte, 4)
+				writePayload.Data = make([]byte, 4)
 				directory.EXPECT().
 					Lookup(vm.PID(1), uint64(0x100)).
 					Return(nil)
