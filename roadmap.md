@@ -17,67 +17,39 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 ## Milestones
 
-### M1: Setup v5 scaffold and CI migration ✅ COMPLETE
-**Budget:** 3 cycles | **Actual:** 3 cycles (Ares 2, Apollo 1)
+### M1: Setup v5 scaffold and CI migration ✅ COMPLETE (3 cycles)
+- Copied v4 code into `v5/` folder
+- Updated module path to `github.com/sarchlab/akita/v5`
+- Migrated CI to self-hosted runners
+- `go build ./...` passes
 
-- ✅ Copied all v4 code from the akita public repo into `v5/` folder
-- ✅ Set up go module for v5 (`github.com/sarchlab/akita/v5`)
-- ✅ Migrated GitHub Actions CI to self-hosted runners
-- ✅ `go build ./...` passes
+### M2: Refactor port creation API ✅ COMPLETE (5 cycles)
+- Added `SetComponent(comp Component)` to Port interface
+- Refactored all 21 non-test builder files: ports passed in via `WithXxxPort()` methods
+- Updated all callers (tests, acceptance tests)
+- `go build ./...`, `go vet ./...`, `go test ./...` all pass (38 packages)
 - Branch: `ares/m1-v5-scaffold`
 
-### M2: Refactor port creation API [ACTIVE]
-**Budget:** 6 cycles
+### M3: Write migration.md and create PR ✅ COMPLETE (2 cycles)
+- `v5/migration.md` exists with comprehensive content (port API, SetComponent, CI migration, V5 philosophy, queueingv5, CLI changes)
+- PR #1 opened from `ares/m1-v5-scaffold` → `main` (not merged, awaiting human review)
+- `go build ./...` and `go vet ./...` both pass clean
 
-The core refactoring: change all builders so that ports are passed in from the outside rather than created internally.
-
-**Scope:**
-- 21 non-test files contain `sim.NewPort()` calls inside builders/constructors
-- Key packages: sim, mem/cache (writeback, writethrough, writeevict, writearound), mem/vm (tlb, mmu, gmmu, mmuCache, addresstranslator), mem/idealmemcontroller, mem/dram, mem/simplebankedmemory, mem/datamover, noc, examples (ping, tickingping)
-- All callers (tests, acceptance tests) must be updated to create ports externally and pass them in
-- `go build ./...` and `go test ./...` must pass after refactoring
-
-**Pattern:**
-```go
-// v4 (old): ports created inside builder
-func (b Builder) Build(name string) *Comp {
-    c := &Comp{}
-    c.topPort = sim.NewPort(c, bufSize, bufSize, name+".TopPort")
-    c.AddPort("Top", c.topPort)
-    return c
-}
-
-// v5 (new): ports passed in from outside
-func (b Builder) WithTopPort(port sim.Port) Builder {
-    b.topPort = port
-    return b
-}
-func (b Builder) Build(name string) *Comp {
-    c := &Comp{}
-    c.topPort = b.topPort
-    c.AddPort("Top", c.topPort)
-    return c
-}
-
-// Caller:
-topPort := sim.NewPort(comp, bufSize, bufSize, "MyComp.TopPort")
-comp := MakeBuilder().WithTopPort(topPort).Build("MyComp")
-```
-
-### M3: Write migration.md and create PR [PLANNED]
-**Budget:** 2 cycles
-
-- Write clear `v5/migration.md` documenting the API change with before/after examples
-- Open PR in akita-dev with all changes
-- PR description summarizes what changed and why
+### M4: Fix CI — add tool setup steps to workflow ✅ COMPLETE (2 cycles)
+- Added `actions/setup-go`, `actions/setup-node` to all CI jobs
+- Used system `python3` instead of `actions/setup-python` (Fedora arm64 runner)
+- Fixed mock generation, funlen lint, and type errors in acceptance tests
+- All 7 CI jobs pass green (run 22881461969)
 
 ---
 
 ## Lessons Learned
 
-- M1 went smoothly in 3 cycles. Worker skills were appropriate.
-- Leo (high-tier) was effective for the code migration task.
-- Max (mid-tier) was appropriate for CI setup.
+- M2 budget was 4 cycles but took 5. Large refactoring across 21+ files benefits from more generous budgets.
+- Splitting work across multiple workers (simple/medium/complex builders) worked well for parallel-like execution.
+- `go vet` issues (unkeyed fields in dram) caught late — should run vet earlier in the process.
+- Self-hosted runners (Fedora arm64) don't support `actions/setup-python` — use system `python3` instead.
+- CI should be validated early after any infrastructure change, not left as an afterthought.
 
 ---
 
@@ -85,8 +57,22 @@ comp := MakeBuilder().WithTopPort(topPort).Build("MyComp")
 
 | Cycle | Manager | What Happened |
 |-------|---------|---------------|
-| 1 | Athena | Initial research and roadmap creation. Dispatched Ares for M1. |
-| 2 | Ares | Leo copied v4→v5, Max added CI. Both complete. |
-| 3 | Ares | Verified and claimed M1 complete. |
-| 4 | Apollo | Verified M1. All checks pass. |
-| 5 | Athena | Evaluated M1 completion. Preparing M2 (port refactoring). |
+| 1 | Athena | Initial research and roadmap creation |
+| 2-4 | Ares/Apollo | M1 completed and verified |
+| 5 | Athena | M2 defined, issue #4 created |
+| 6-8 | Ares | M2 port refactoring (3 worker cycles) |
+| 9 | Apollo | M2 verified — PASS |
+| 10 | Athena | M2 complete, M3 defined |
+| 11-12 | Ares | M3 completed (migration.md + PR) |
+| 13 | Apollo | M3 verified — PASS |
+| 14 | Athena | All milestones complete, project done |
+| 15-18 | Ares | M4 CI fix (tool setup, mock gen, lint, python) |
+| 19 | Athena | M4 verified complete, project done |
+| 20 | Athena | Human requested PR merge (issue #14). Resolved merge conflict. Defining M5. |
+
+### M5: Merge PR and claim completion [ACTIVE]
+**Budget:** 2 cycles
+- Resolve merge conflicts (done — roadmap.md conflict resolved)
+- Wait for CI to pass green
+- Merge PR #1 into main
+- Claim project completion

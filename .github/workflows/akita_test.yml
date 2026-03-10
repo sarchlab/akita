@@ -1,0 +1,133 @@
+name: Akita Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  akitartm_compile:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: 18.20.7
+      - name: npm install
+        working-directory: ./v5/monitoring/web
+        run: npm install
+      - name: npm run build
+        working-directory: ./v5/monitoring/web
+        run: npm run build
+
+  daisen_compile:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v1
+        with:
+          node-version: 18.20.7
+      - name: npm install
+        working-directory: ./v5/daisen/static
+        run: npm install
+      - name: npm run build
+        working-directory: ./v5/daisen/static
+        run: npm run build
+
+  akita_compile:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.7
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: cd v5 && go generate ./...
+      - name: Build
+        run: cd v5 && go build ./...
+
+  lint:
+    runs-on: self-hosted
+    needs: [akita_compile]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.7
+      - name: Clean Go caches
+        run: go clean -modcache && go clean -cache
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: cd v5 && go generate ./...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
+          working-directory: v5
+          args: --timeout=10m
+
+  akita_unit_test:
+    runs-on: self-hosted
+    needs: [akita_compile]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.7
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Install ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
+      - name: Generate mocks
+        run: cd v5 && go generate ./...
+      - name: Run tests
+        run: cd v5 && ginkgo -r
+
+  noc_acceptance_test:
+    runs-on: self-hosted
+    needs: [akita_unit_test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.7
+      - name: Ensure Python3
+        run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: cd v5 && go generate ./...
+      - name: Build
+        run: cd v5 && go build ./...
+      - name: Run acceptance test
+        working-directory: ./v5/noc/acceptance
+        run: python3 acceptance_test.py
+
+  mem_acceptance_test:
+    runs-on: self-hosted
+    needs: [akita_unit_test]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: 1.24.7
+      - name: Ensure Python3
+        run: python3 --version || (sudo dnf install -y python3 || sudo apt-get install -y python3)
+      - name: Install mockgen
+        run: go install go.uber.org/mock/mockgen@v0.6.0
+      - name: Generate mocks
+        run: cd v5 && go generate ./...
+      - name: Build
+        run: cd v5 && go build ./...
+      - name: Run acceptance test
+        working-directory: ./v5/mem/
+        run: python3 acceptance_test.py
