@@ -93,11 +93,12 @@ func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 }
 
 func (s *controlStage) processNewRequest() bool {
-	msg := s.ctrlPort.PeekIncoming()
-	if msg == nil {
+	msgI := s.ctrlPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *cache.FlushReqPayload:
 		return s.startCacheFlush(msg)

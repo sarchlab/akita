@@ -93,11 +93,12 @@ func (f *flusher) processFlush() bool {
 }
 
 func (f *flusher) extractFromPort() bool {
-	item := f.cache.controlPort.PeekIncoming()
-	if item == nil {
+	itemI := f.cache.controlPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	switch item.Payload.(type) {
 	case *cache.FlushReqPayload:
 		return f.startProcessingFlush(item)

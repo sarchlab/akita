@@ -13,11 +13,12 @@ type bottomParser struct {
 }
 
 func (p *bottomParser) Tick() bool {
-	item := p.cache.bottomPort.PeekIncoming()
-	if item == nil {
+	itemI := p.cache.bottomPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	switch item.Payload.(type) {
 	case *mem.WriteDoneRspPayload:
 		return p.processDoneRsp(item)

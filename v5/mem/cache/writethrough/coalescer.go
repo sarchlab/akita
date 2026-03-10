@@ -19,11 +19,12 @@ func (c *coalescer) Reset() {
 }
 
 func (c *coalescer) Tick() bool {
-	msg := c.cache.topPort.PeekIncoming()
-	if msg == nil {
+	msgI := c.cache.topPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	return c.processReq(msg)
 }
 

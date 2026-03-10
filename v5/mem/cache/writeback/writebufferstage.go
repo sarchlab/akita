@@ -228,11 +228,12 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msg := wb.cache.bottomPort.PeekIncoming()
-	if msg == nil {
+	msgI := wb.cache.bottomPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *mem.DataReadyRspPayload:
 		return wb.processDataReadyRsp(msg)

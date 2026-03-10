@@ -83,11 +83,12 @@ func (m *middleware) Tick() (madeProgress bool) {
 }
 
 func (m *middleware) parseTop() (madeProgress bool) {
-	msg := m.topPort.PeekIncoming()
-	if msg == nil {
+	msgI := m.topPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	trans := &signal.Transaction{}
 
 	switch msg.Payload.(type) {

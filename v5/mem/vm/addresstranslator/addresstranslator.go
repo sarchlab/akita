@@ -552,11 +552,12 @@ func (m *middleware) removeReqToBottomByID(id string) {
 }
 
 func (m *middleware) handleCtrlRequest() bool {
-	msg := m.ctrlPort.PeekIncoming()
-	if msg == nil {
+	msgI := m.ctrlPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
 
 	if ctrlPayload.DiscardTransations {
