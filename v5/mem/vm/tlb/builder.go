@@ -2,6 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -177,17 +178,25 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
-	tlb := &Comp{}
-	tlb.TickingComponent =
-		sim.NewTickingComponent(name, b.engine, b.freq, tlb)
+	spec := Spec{
+		NumSets:        b.numSets,
+		NumWays:        b.numWays,
+		PageSize:       b.pageSize,
+		NumReqPerCycle: b.numReqPerCycle,
+	}
 
-	tlb.numSets = b.numSets
-	tlb.numWays = b.numWays
-	tlb.numReqPerCycle = b.numReqPerCycle
-	tlb.pageSize = b.pageSize
-	tlb.addressMapper = b.addressMapper
-	tlb.mshr = newMSHR(b.numMSHREntry)
-	tlb.state = b.state
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	tlb := &Comp{
+		Component:     modelComp,
+		addressMapper: b.addressMapper,
+		mshr:          newMSHR(b.numMSHREntry),
+		state:         b.state,
+	}
 
 	b.createPorts(name, tlb)
 	b.createTranslationProviderMapper(tlb)
@@ -199,7 +208,7 @@ func (b Builder) Build(name string) *Comp {
 	tlb.responsePipeline = queueing.MakeBuilder().
 		WithNumStage(b.latency).
 		WithCyclePerStage(1).
-		WithPipelineWidth(tlb.numReqPerCycle).
+		WithPipelineWidth(b.numReqPerCycle).
 		WithPostPipelineBuffer(buf).
 		Build(name + ".ResponsePipeline")
 

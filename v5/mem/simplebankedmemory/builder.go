@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -152,13 +153,20 @@ func (b Builder) Build(name string) *Comp {
 		storage = mem.NewStorage(b.capacity)
 	}
 
+	spec := Spec{}
+
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
 	c := &Comp{
+		Component:        modelComp,
 		Storage:          storage,
 		AddressConverter: b.addressConverter,
 		bankSelector:     b.determineBankSelector(),
 	}
-
-	c.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, c)
 
 	c.topPort = b.topPort
 	c.topPort.SetComponent(c)

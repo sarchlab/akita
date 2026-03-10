@@ -1,6 +1,7 @@
 package switches
 
 import (
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/sim"
@@ -49,8 +50,14 @@ func (b Builder) Build(name string) *Comp {
 	b.routingTableMustBeGiven()
 	b.arbiterMustBeGiven()
 
-	s := &Comp{}
-	s.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, s)
+	spec := Spec{}
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	s := &Comp{Component: modelComp}
 	s.routingTable = b.routingTable
 	s.arbiter = b.arbiter
 	s.portToComplexMapping = make(map[sim.RemotePort]portComplex)

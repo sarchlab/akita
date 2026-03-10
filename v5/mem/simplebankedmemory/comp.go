@@ -4,10 +4,17 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the simple banked memory.
+type Spec struct{}
+
+// State contains mutable runtime data for the simple banked memory.
+type State struct{}
 
 type bank struct {
 	pipeline        queueing.Pipeline
@@ -26,8 +33,7 @@ func (i *bankPipelineItem) TaskID() string {
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort sim.Port
 
@@ -36,11 +42,6 @@ type Comp struct {
 
 	banks        []bank
 	bankSelector bankSelector
-}
-
-// Tick updates the component state cycle by cycle.
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
