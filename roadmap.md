@@ -47,37 +47,54 @@ Per human direction (#93), `sim.Msg` becomes an interface. Design by Iris (works
 - State files store concrete types directly (no MsgRef)
 - `Info interface{}` tagged `json:"-"` for now (isolated problem, separate fix later)
 
-### M8.1: Foundation — Msg interface + GenericMsg rename + Port/Connection updates — CURRENT
-**Scope:** sim package only (+ directconnection, wiring, tracing, analysis). ~20 files.
-1. Rename current `Msg` struct → `GenericMsg` in sim package
-2. Add `Msg` interface (`Meta() *MsgMeta`)
-3. Move `RspTo` from `GenericMsg` into `MsgMeta`; add `MsgMeta.Meta()` and `MsgMeta.IsRsp()`
-4. Update `Port` interface: `*Msg` → `Msg` (interface) for all 6 message methods
-5. Update `portBuffer`: `[]*Msg` → `[]Msg`
-6. Update `defaultPort`, `directconnection`, `wiring/port`, `wiring/wire`
-7. Update `tracing/api.go`, `analysis/port_analyzer.go`
-8. Update all `msgMustBeValid` helpers
-9. `GenericMsg` satisfies `Msg` via embedding → all existing code still compiles
+### M8.1: Foundation — Msg interface + GenericMsg rename + Port/Connection updates ✅ — Budget: 8, Used: 3
+Renamed `Msg` → `GenericMsg`, added `Msg` interface with `Meta() *MsgMeta`, updated Port/Buffer/Connection/tracing/analysis. PR #23 merged.
 
-### M8.2: Convert Protocol Packages — AFTER M8.1
-Convert 30 payload types to concrete message types:
-- `mem/mem/protocol.go` (6 types), `mem/cache/protocol.go` (4), `mem/vm/protocol.go` (4)
-- `mem/vm/tlb/tlbprotocol.go` (4), `mem/vm/mmuCache/mmuCacheprotocol.go` (4)
-- `mem/datamover/protocol.go` (1), `noc/messaging/flit.go` (1)
-- `examples/ping` (2), `examples/tickingping` (2), `noc/acceptance` (1), `noc/standalone` (1)
-- Remove `GenericMsg`, `MsgPayload[T]`, `TryMsgPayload[T]`
+### M8.2: Convert all payloads to concrete message types + remove GenericMsg — CURRENT
+**Scope:** Convert all 30 payload types to concrete message structs embedding `sim.MsgMeta`, update all ~40 component files and ~50 test files, remove `GenericMsg`/`MsgPayload[T]`/`TryMsgPayload[T]`. Also remove all `msgRef` definitions and simplify state serialization.
 
-### M8.3: Update All Components — AFTER M8.2
-Update all component files to use concrete types:
-- Replace `msg.Payload.(type)` switches with `msg.(type)` switches
-- Replace `MsgPayload[T](msg)` with direct field access on concrete type
-- Update all transaction structs to hold concrete types
-- ~40+ component files
+Per human direction (#101): simplicity is the top priority. GenericMsg must go. Each package defines concrete, serializable message types. No runtime type casting, no `Payload any`.
 
-### M8.4: Update State Files — AFTER M8.3
-- Remove `MsgRef`, `MsgRefFromMsg`, `MsgFromRef`, `state_helpers.go`
-- Update all state.go files to store concrete types directly
-- Complete writeback cache state (was M7.5)
+**Conversion pattern for each payload type:**
+```go
+// BEFORE: ReadReqPayload + builder returns *sim.GenericMsg
+type ReadReqPayload struct { Address uint64; ... }
+func (b ReadReqBuilder) Build() *sim.GenericMsg { ... }
+
+// AFTER: ReadReq embedding MsgMeta, builder returns *ReadReq
+type ReadReq struct { sim.MsgMeta; Address uint64; ... }
+func (b ReadReqBuilder) Build() *ReadReq { ... }
+```
+
+**Component update pattern:**
+```go
+// BEFORE
+msg := port.RetrieveIncoming().(*sim.GenericMsg)
+payload := sim.MsgPayload[mem.ReadReqPayload](msg)
+payload.Address
+
+// AFTER
+msg := port.RetrieveIncoming()
+switch req := msg.(type) {
+case *mem.ReadReq:
+    req.Address
+}
+```
+
+**Protocol files (6):** mem/mem/protocol.go, mem/cache/protocol.go, mem/vm/protocol.go, mem/vm/tlb/tlbprotocol.go, mem/vm/mmuCache/mmuCacheprotocol.go, mem/datamover/protocol.go
+**Other msg files (4):** noc/messaging/flit.go, examples/ping, examples/tickingping, noc/acceptance+standalone
+**Component files (~32):** all consumers of MsgPayload or *GenericMsg
+**Test/mock files (~50):** corresponding test updates
+**Cleanup:** remove GenericMsg, MsgPayload[T], TryMsgPayload[T] from sim/msg.go; remove all msgRef types; simplify state.go files
+
+**Interfaces to update:**
+- `AccessReqPayload` / `AccessRspPayload` in mem/mem/protocol.go → replace with `AccessReq` / `AccessRsp` interfaces on the new concrete types
+- `tracing/api.go` functions taking `*sim.GenericMsg` → update to take `sim.Msg` (handle tracing differently)
+
+### M8.3: State cleanup + writeback cache state — AFTER M8.2
+- Remove all `MsgRef`/`msgRef` and related functions
+- Update all state.go files to store concrete message types directly
+- Complete writeback cache state population (was M7.5)
 
 ### M9: Comp Wrapper Elimination — AFTER M8
 Human issue #61.
@@ -94,6 +111,8 @@ Human issue #61.
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
+- **M8.1 completed in 3 cycles (budgeted 8).** Multi-worker approach continues to work well for mechanical changes.
+- **Human feedback in #101 reinforces simplicity-first**: GenericMsg must go, fewer concepts = better API. Merged M8.2-M8.4 scope into a single aggressive milestone.
 - M1-M3 completed in 15 implementation cycles (budgeted 20).
 - Apollo's verification caught 4 real issues in M2 — always verify.
 - Iris's/Diana's detailed analysis before milestones prevents scope misestimation.
