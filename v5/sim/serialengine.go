@@ -161,3 +161,8 @@ func (e *SerialEngine) Continue() {
 func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
 }
+
+// SetCurrentTime sets the current time of the engine.
+func (e *SerialEngine) SetCurrentTime(t VTimeInSec) {
+	e.writeNow(t)
+}

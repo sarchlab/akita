@@ -89,6 +89,26 @@ func (g *sequentialIDGenerator) Generate() string {
 	return id
 }
 
+// GetIDGeneratorNextID returns the current nextID from the sequential ID
+// generator. It panics if the ID generator is not a sequentialIDGenerator.
+func GetIDGeneratorNextID() uint64 {
+	gen := idGenerator.(*sequentialIDGenerator)
+	return atomic.LoadUint64(&gen.nextID)
+}
+
+// SetIDGeneratorNextID sets the nextID on the sequential ID generator.
+// It panics if the ID generator is not a sequentialIDGenerator.
+func SetIDGeneratorNextID(id uint64) {
+	gen := idGenerator.(*sequentialIDGenerator)
+	atomic.StoreUint64(&gen.nextID, id)
+}
+
+// ResetIDGenerator resets the ID generator so a new one can be created.
+func ResetIDGenerator() {
+	idGeneratorInstantiated = false
+	idGenerator = nil
+}
+
 type parallelIDGenerator struct {
 }
 

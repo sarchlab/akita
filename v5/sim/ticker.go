@@ -113,6 +113,12 @@ func (t *TickScheduler) TickLater() {
 	t.lock.Unlock()
 }
 
+// Reset resets the TickScheduler so that TickLater can schedule new events
+// after a restore.
+func (t *TickScheduler) Reset() {
+	t.nextTickTime = -1
+}
+
 func (t *TickScheduler) CurrentTime() VTimeInSec {
 	return t.Engine.CurrentTime()
 }
