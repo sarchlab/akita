@@ -1,6 +1,7 @@
 package mmuCache
 
 import (
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -154,23 +155,32 @@ func (b Builder) Build(name string) *Comp {
 		panic("mmuCache.Builder: numBlocks must be > 0")
 	}
 
-	mmuCache := &Comp{}
-	mmuCache.TickingComponent =
-		sim.NewTickingComponent(name, b.engine, b.freq, mmuCache)
+	spec := Spec{
+		NumBlocks:       b.numBlocks,
+		NumLevels:       b.numLevels,
+		PageSize:        b.pageSize,
+		Log2PageSize:    b.log2PageSize,
+		NumReqPerCycle:  b.numReqPerCycle,
+		LatencyPerLevel: b.latencyPerLevel,
+	}
 
-	mmuCache.numReqPerCycle = b.numReqPerCycle
-	mmuCache.pageSize = b.pageSize
-	mmuCache.numBlocks = b.numBlocks
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	mmuCache := &Comp{
+		Component: modelComp,
+	}
+
 	mmuCache.LowModule = b.lowModule
-	mmuCache.numLevels = b.numLevels
-	mmuCache.latencyPerLevel = b.latencyPerLevel
 	mmuCache.UpModule = b.upModule
-	mmuCache.log2PageSize = b.log2PageSize
 
 	b.createPorts(name, mmuCache)
 
-	mmuCache.AddMiddleware(&ctrlMiddleware{})
-	mmuCache.AddMiddleware(&mmuCacheMiddleware{})
+	mmuCache.AddMiddleware(&ctrlMiddleware{Comp: mmuCache})
+	mmuCache.AddMiddleware(&mmuCacheMiddleware{Comp: mmuCache})
 
 	mmuCache.reset()
 	mmuCache.state = mmuCacheStateEnable

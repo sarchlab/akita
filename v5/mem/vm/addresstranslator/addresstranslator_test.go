@@ -76,7 +76,6 @@ var _ = Describe("Address Translator", func() {
 			WithCtrlPort(ctrlPort)
 
 		t = builder.Build("AddressTranslator")
-		t.log2PageSize = 12
 
 		tMiddleware = t.Middlewares()[0].(*middleware)
 	})

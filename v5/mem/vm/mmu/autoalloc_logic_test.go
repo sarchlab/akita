@@ -118,7 +118,7 @@ func TestAutoPageAllocationDisabled(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	if mmu.autoPageAllocation {
+	if mmu.GetSpec().AutoPageAllocation {
 		t.Error("Auto page allocation should be disabled by default")
 	}
 }
@@ -135,7 +135,7 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	if !mmu.autoPageAllocation {
+	if !mmu.GetSpec().AutoPageAllocation {
 		t.Error("Auto page allocation should be enabled when set")
 	}
 

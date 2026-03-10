@@ -40,13 +40,12 @@ var _ = Describe("MMU", func() {
 		builder := MakeBuilder().
 			WithEngine(engine).
 			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.ToTop")).
-			WithMigrationPort(sim.NewPort(nil, 1, 1, "MMU.MigrationPort"))
+			WithMigrationPort(sim.NewPort(nil, 1, 1, "MMU.MigrationPort")).
+			WithMigrationServiceProvider(sim.RemotePort("MigrationServiceProvider"))
 		mmuComp = builder.Build("MMU")
 		mmuComp.topPort = topPort
 		mmuComp.migrationPort = migrationPort
 		mmuComp.pageTable = pageTable
-		mmuComp.MigrationServiceProvider =
-			sim.RemotePort("MigrationServiceProvider")
 
 		mmuMiddleware = mmuComp.Middlewares()[0].(*middleware)
 	})

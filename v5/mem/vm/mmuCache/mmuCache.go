@@ -2,12 +2,26 @@ package mmuCache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm/mmuCache/internal"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// Spec contains immutable configuration for the mmuCache.
+type Spec struct {
+	NumBlocks       int    `json:"num_blocks"`
+	NumLevels       int    `json:"num_levels"`
+	PageSize        uint64 `json:"page_size"`
+	Log2PageSize    uint64 `json:"log2_page_size"`
+	NumReqPerCycle  int    `json:"num_req_per_cycle"`
+	LatencyPerLevel uint64 `json:"latency_per_level"`
+}
+
+// State contains mutable runtime data for the mmuCache.
+// Runtime data with pointers/interfaces stays on the Comp struct.
+type State struct{}
+
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -17,25 +31,15 @@ type Comp struct {
 	LowModule sim.Port
 	state     string
 
-	numBlocks       int
-	numLevels       int
-	pageSize        uint64
-	log2PageSize    uint64
-	numReqPerCycle  int
-	latencyPerLevel uint64
-
 	table []internal.Set
 
 	inflightFlushReq *sim.Msg // payload: *FlushReqPayload
 }
 
 func (c *Comp) reset() {
-	c.table = make([]internal.Set, c.numLevels)
-	for i := 0; i < c.numLevels; i++ {
-		c.table[i] = internal.NewSet(c.numBlocks)
+	spec := c.GetSpec()
+	c.table = make([]internal.Set, spec.NumLevels)
+	for i := 0; i < spec.NumLevels; i++ {
+		c.table[i] = internal.NewSet(spec.NumBlocks)
 	}
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
