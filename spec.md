@@ -10,7 +10,7 @@ BTW, all the GitHub CI runners do not work anymore, please migration to use the 
 
 ## Success Criteria
 
-Create a plan for how to refactor the APIs. Write a migration.md in v5 directory. Create a PR in akita-dev repo and claim success. Do not merge it. I will review it.
+Create a plan for how to refactor the APIs. Write a migration.md in v5 directory. Create a PR in akita-dev repo. Merge the PR after CI passes and claim completion.
 
 ## CI Must Pass
 

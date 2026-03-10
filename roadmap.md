@@ -68,3 +68,11 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 | 14 | Athena | All milestones complete, project done |
 | 15-18 | Ares | M4 CI fix (tool setup, mock gen, lint, python) |
 | 19 | Athena | M4 verified complete, project done |
+| 20 | Athena | Human requested PR merge (issue #14). Resolved merge conflict. Defining M5. |
+
+### M5: Merge PR and claim completion [ACTIVE]
+**Budget:** 2 cycles
+- Resolve merge conflicts (done — roadmap.md conflict resolved)
+- Wait for CI to pass green
+- Merge PR #1 into main
+- Claim project completion
