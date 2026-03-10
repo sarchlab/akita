@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -26,12 +27,12 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 		return false
 	}
 
-	switch msg := msg.(type) {
-	case *mem.ControlMsg:
+	switch msg.Payload.(type) {
+	case *mem.ControlMsgPayload:
 		madeProgress = m.handleControlMsg(msg) || madeProgress
-	case *FlushReq:
+	case *FlushReqPayload:
 		madeProgress = m.handleTLBFlush(msg) || madeProgress
-	case *RestartReq:
+	case *RestartReqPayload:
 		madeProgress = m.handleTLBRestart(msg) || madeProgress
 	default:
 		panic("Unhandled message")
@@ -40,35 +41,37 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) handleControlMsg(
-	msg *mem.ControlMsg) bool {
-	m.ctrlMsgMustBeValidInCurrentStage(msg)
+func (m *ctrlMiddleware) handleControlMsg(msg *sim.Msg) bool {
+	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
+	m.ctrlMsgMustBeValidInCurrentStage(ctrlPayload)
 
 	return m.performCtrlReq()
 }
 
-func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(msg *mem.ControlMsg) {
+func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
+	ctrlPayload *mem.ControlMsgPayload,
+) {
 	switch state := m.state; state {
 	case tlbStateEnable:
-		if msg.Enable {
+		if ctrlPayload.Enable {
 			log.Panic("TLB is already enabled")
 		}
 	case tlbStatePause:
-		if msg.Pause {
+		if ctrlPayload.Pause {
 			log.Panic("TLB is already paused")
 		}
-		if msg.Drain {
+		if ctrlPayload.Drain {
 			log.Panic("Cannot drain when TLB is paused")
 		}
 	case tlbStateDrain:
-		if msg.Drain {
+		if ctrlPayload.Drain {
 			log.Panic("TLB is already draining")
 		}
-		if msg.Pause || msg.Enable {
+		if ctrlPayload.Pause || ctrlPayload.Enable {
 			log.Panic("Cannot pause/enable when TLB is draining")
 		}
 	case tlbStateFlush:
-		if msg.Drain || msg.Enable || msg.Pause {
+		if ctrlPayload.Drain || ctrlPayload.Enable || ctrlPayload.Pause {
 			log.Panic("Cannot pause/enable/drain when TLB is flushing")
 		}
 	default:
@@ -82,17 +85,17 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 		return false
 	}
 
-	req := item.(*mem.ControlMsg)
+	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](item)
 
-	if req.Enable {
+	if ctrlPayload.Enable {
 		m.state = tlbStateEnable
-	} else if req.Drain {
+	} else if ctrlPayload.Drain {
 		m.state = tlbStateDrain
-	} else if req.Pause {
+	} else if ctrlPayload.Pause {
 		m.state = tlbStatePause
 	}
 
-	item = m.controlPort.RetrieveIncoming()
+	m.controlPort.RetrieveIncoming()
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.Comp),
 		tracing.MilestoneKindNetworkBusy,
@@ -104,16 +107,16 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(req *FlushReq) bool {
-	m.flushMsgMustBeValidInCurrentStage(req)
-	m.inflightFlushReq = req
+func (m *ctrlMiddleware) handleTLBFlush(msg *sim.Msg) bool {
+	m.flushMsgMustBeValidInCurrentStage(msg)
+	m.inflightFlushReq = msg
 	m.controlPort.RetrieveIncoming()
 	m.state = tlbStateFlush
 
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.Msg) {
 	switch state := m.state; state {
 	case tlbStateEnable:
 		// valid
@@ -124,14 +127,14 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(req *FlushReq) {
 	case tlbStateFlush:
 		log.Panic("TLB is already flushing")
 	default:
-		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(req))
+		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(msg.Payload))
 	}
 }
 
-func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
+func (m *ctrlMiddleware) handleTLBRestart(msg *sim.Msg) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
+		WithDst(msg.Src).
 		Build()
 
 	err := m.controlPort.Send(rsp)
@@ -139,7 +142,7 @@ func (m *ctrlMiddleware) handleTLBRestart(req *RestartReq) bool {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m.Comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort.Name(),
 		m.Comp.Name(),

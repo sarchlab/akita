@@ -39,7 +39,7 @@ type Comp struct {
 	responsePipeline    queueing.Pipeline
 	responseBuffer      queueing.Buffer
 
-	inflightFlushReq *FlushReq
+	inflightFlushReq *sim.Msg // payload: *FlushReqPayload
 }
 
 // reset sets all the entries in the TLB to be invalid
