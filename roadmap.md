@@ -17,34 +17,34 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 ## Milestones
 
-### M1: Setup v5 scaffold and CI migration [PLANNED]
-**Budget:** 3 cycles
+### M1: Setup v5 scaffold and CI migration ✅ COMPLETE (3 cycles)
+- Copied v4 code into `v5/` folder
+- Updated module path to `github.com/sarchlab/akita/v5`
+- Migrated CI to self-hosted runners
+- `go build ./...` passes
 
-- Copy all v4 code from the akita public repo into a `v5/` folder in akita-dev
-- Set up the go module for v5 (`github.com/sarchlab/akita/v5`)
-- Migrate GitHub Actions CI to use self-hosted runners (`runs-on: self-hosted`) instead of `ubuntu-latest` and `Github-Large-Runners`
-- Get CI passing with v5 code compiling
+### M2: Refactor port creation API ✅ COMPLETE (5 cycles)
+- Added `SetComponent(comp Component)` to Port interface
+- Refactored all 21 non-test builder files: ports passed in via `WithXxxPort()` methods
+- Updated all callers (tests, acceptance tests)
+- `go build ./...`, `go vet ./...`, `go test ./...` all pass (38 packages)
+- Branch: `ares/m1-v5-scaffold`
 
-### M2: Refactor port creation API [PLANNED]
-**Budget:** 4 cycles
-
-- Identify all builders that create ports internally
-- Change the API so ports are passed in from outside (via `WithXxxPort(port sim.Port)` builder methods)
-- Update all usages (examples, tests) to reflect the new pattern
-- Ensure all tests pass
-
-### M3: Write migration.md and create PR [PLANNED]
+### M3: Write migration.md and create PR 🔄 ACTIVE
 **Budget:** 2 cycles
 
-- Write clear `v5/migration.md` documenting the API change with before/after examples
-- Open PR in akita-dev with all changes
-- PR description summarizes what changed and why
+- Ensure `v5/migration.md` exists (spec requires this exact name)
+- Review/finalize migration documentation content
+- Open PR from `ares/m1-v5-scaffold` → `main`
+- DO NOT merge — human will review
 
 ---
 
 ## Lessons Learned
 
-*(none yet — project just started)*
+- M2 budget was 4 cycles but took 5. Large refactoring across 21+ files benefits from more generous budgets.
+- Splitting work across multiple workers (simple/medium/complex builders) worked well for parallel-like execution.
+- `go vet` issues (unkeyed fields in dram) caught late — should run vet earlier in the process.
 
 ---
 
@@ -52,4 +52,9 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 
 | Cycle | Manager | What Happened |
 |-------|---------|---------------|
-| 1 | Athena | Initial research and roadmap creation. Dispatching Ares for M1. |
+| 1 | Athena | Initial research and roadmap creation |
+| 2-4 | Ares/Apollo | M1 completed and verified |
+| 5 | Athena | M2 defined, issue #4 created |
+| 6-8 | Ares | M2 port refactoring (3 worker cycles) |
+| 9 | Apollo | M2 verified — PASS |
+| 10 | Athena | M2 complete, M3 defined |
