@@ -2,6 +2,7 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -95,32 +96,37 @@ func (b Builder) WithMigrationPort(port sim.Port) Builder {
 
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *Comp {
-	mmu := new(Comp)
-	mmu.TickingComponent = *sim.NewTickingComponent(
-		name, b.engine, b.freq, mmu)
+	spec := Spec{
+		Latency:                  b.pageWalkingLatency,
+		MaxRequestsInFlight:      b.maxNumReqInFlight,
+		MigrationQueueSize:       4096,
+		AutoPageAllocation:       b.autoPageAllocation,
+		Log2PageSize:             b.log2PageSize,
+		MigrationServiceProvider: b.migrationServiceProvider,
+	}
+
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	mmu := &Comp{
+		Component:              modelComp,
+		PageAccessedByDeviceID: make(map[uint64][]uint64),
+	}
+
+	if spec.AutoPageAllocation {
+		mmu.nextPhysicalPage = 0
+	}
 
 	b.createPorts(name, mmu)
 	b.createPageTable(mmu)
-	b.configureInternalStates(mmu)
 
-	middleware := &middleware{Comp: mmu}
-	mmu.AddMiddleware(middleware)
+	mw := &middleware{Comp: mmu}
+	mmu.AddMiddleware(mw)
 
 	return mmu
-}
-
-func (b Builder) configureInternalStates(mmu *Comp) {
-	mmu.MigrationServiceProvider = b.migrationServiceProvider
-	mmu.migrationQueueSize = 4096
-	mmu.maxRequestsInFlight = b.maxNumReqInFlight
-	mmu.latency = b.pageWalkingLatency
-	mmu.autoPageAllocation = b.autoPageAllocation
-	mmu.log2PageSize = b.log2PageSize
-	mmu.PageAccessedByDeviceID = make(map[uint64][]uint64)
-	
-	if mmu.autoPageAllocation {
-		mmu.nextPhysicalPage = 0
-	}
 }
 
 func (b Builder) createPageTable(mmu *Comp) {

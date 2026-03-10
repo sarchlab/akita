@@ -5,9 +5,24 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the MMU.
+type Spec struct {
+	Latency                  int            `json:"latency"`
+	MaxRequestsInFlight      int            `json:"max_requests_in_flight"`
+	MigrationQueueSize       int            `json:"migration_queue_size"`
+	AutoPageAllocation       bool           `json:"auto_page_allocation"`
+	Log2PageSize             uint64         `json:"log2_page_size"`
+	MigrationServiceProvider sim.RemotePort `json:"migration_service_provider"`
+}
+
+// State contains mutable runtime data for the MMU.
+// Runtime data with pointers/interfaces stays on the Comp struct.
+type State struct{}
 
 type transaction struct {
 	req        *sim.Msg // payload: *vm.TranslationReqPayload
@@ -19,23 +34,15 @@ type transaction struct {
 
 // Comp is the default mmu implementation. It is also an akita Component.
 type Comp struct {
-	sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort       sim.Port
 	migrationPort sim.Port
 
-	MigrationServiceProvider sim.RemotePort
-
-	pageTable           vm.PageTable
-	latency             int
-	maxRequestsInFlight int
-	autoPageAllocation  bool
-	log2PageSize        uint64
+	pageTable vm.PageTable
 
 	walkingTranslations      []transaction
 	migrationQueue           []transaction
-	migrationQueueSize       int
 	currentOnDemandMigration transaction
 	isDoingMigration         bool
 
@@ -44,10 +51,6 @@ type Comp struct {
 
 	// Physical page allocation tracking for auto page allocation
 	nextPhysicalPage uint64
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
@@ -97,11 +100,12 @@ func (m *middleware) walkPageTable() bool {
 func (m *middleware) finalizePageWalk(
 	walkingIndex int,
 ) bool {
+	spec := m.GetSpec()
 	payload := m.walkingTranslations[walkingIndex].reqPayload
 	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
 
 	if !found {
-		if m.autoPageAllocation {
+		if spec.AutoPageAllocation {
 			page = m.createDefaultPage(payload.PID, payload.VAddr, payload.DeviceID)
 			m.pageTable.Insert(page)
 		} else {
@@ -123,7 +127,8 @@ func (m *middleware) finalizePageWalk(
 }
 
 func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
-	if len(m.migrationQueue) >= m.migrationQueueSize {
+	spec := m.GetSpec()
+	if len(m.migrationQueue) >= spec.MigrationQueueSize {
 		return false
 	}
 
@@ -302,7 +307,8 @@ func (m *middleware) processMigrationReturn() bool {
 }
 
 func (m *middleware) parseFromTop() bool {
-	if len(m.walkingTranslations) >= m.maxRequestsInFlight {
+	spec := m.GetSpec()
+	if len(m.walkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -324,11 +330,12 @@ func (m *middleware) parseFromTop() bool {
 }
 
 func (m *middleware) startWalking(req *sim.Msg) {
+	spec := m.GetSpec()
 	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
 		req:        req,
 		reqPayload: payload,
-		cycleLeft:  m.latency,
+		cycleLeft:  spec.Latency,
 	}
 
 	m.walkingTranslations = append(m.walkingTranslations, translationInPipeline)
@@ -361,8 +368,9 @@ func unique(intSlice []uint64) []uint64 {
 }
 
 func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64) vm.Page {
-	alignedVAddr := (vAddr >> m.log2PageSize) << m.log2PageSize
-	pageSize := uint64(1) << m.log2PageSize
+	spec := m.GetSpec()
+	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
+	pageSize := uint64(1) << spec.Log2PageSize
 	pAddr := m.allocatePhysicalPage()
 
 	return vm.Page{
@@ -379,10 +387,11 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 }
 
 func (m *middleware) allocatePhysicalPage() uint64 {
-	pageSize := uint64(1) << m.log2PageSize
+	spec := m.GetSpec()
+	pageSize := uint64(1) << spec.Log2PageSize
 
 	for {
-		candidatePage := (m.nextPhysicalPage >> m.log2PageSize) << m.log2PageSize
+		candidatePage := (m.nextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
 
 		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
 			m.nextPhysicalPage = candidatePage + pageSize
@@ -397,6 +406,7 @@ func (m *middleware) createMigrationRequest(
 	trans transaction,
 	page vm.Page,
 ) *sim.Msg {
+	spec := m.GetSpec()
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
 	migrationInfo.GPUReqToVAddrMap[trans.reqPayload.DeviceID] =
@@ -407,7 +417,7 @@ func (m *middleware) createMigrationRequest(
 		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
-		m.migrationPort.AsRemote(), m.MigrationServiceProvider)
+		m.migrationPort.AsRemote(), spec.MigrationServiceProvider)
 	migrationPayload := sim.MsgPayload[vm.PageMigrationReqToDriverPayload](migrationReq)
 	migrationPayload.PID = page.PID
 	migrationPayload.PageSize = page.PageSize
