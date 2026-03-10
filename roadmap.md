@@ -11,7 +11,8 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 - v5 folder exists with v4 code as starting point
 - Port creation API refactored: ports passed in from outside, not created in builders
 - `migration.md` written in the v5 directory explaining the refactored API
-- PR created in akita-dev repo (not merged)
+- PR created and merged in akita-dev repo
+- CI passes green on all jobs
 
 ---
 
@@ -69,10 +70,23 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 | 15-18 | Ares | M4 CI fix (tool setup, mock gen, lint, python) |
 | 19 | Athena | M4 verified complete, project done |
 | 20 | Athena | Human requested PR merge (issue #14). Resolved merge conflict. Defining M5. |
+| 21-23 | Ares/Apollo | M5 completed — PR merged, verified |
+| 24 | Athena | Final review — project complete |
 
-### M5: Merge PR and claim completion [ACTIVE]
-**Budget:** 2 cycles
-- Resolve merge conflicts (done — roadmap.md conflict resolved)
-- Wait for CI to pass green
-- Merge PR #1 into main
-- Claim project completion
+### M5: Merge PR and claim completion ✅ COMPLETE (2 cycles)
+- Resolved merge conflicts (roadmap.md)
+- CI passed green (all 14 checks)
+- PR #1 merged into main (commit f096838)
+- Project complete
+
+---
+
+## Final Status: ✅ PROJECT COMPLETE
+
+All success criteria met:
+- v5/ folder created with v4 code, module path updated to v5
+- Port creation API fully refactored (21 builders, SetComponent pattern)
+- migration.md written with comprehensive documentation
+- PR #1 merged after CI passed (all 7 jobs × 2 runs = 14 checks green)
+- CI migrated to self-hosted Marin runners
+- Total cycles used: 24
