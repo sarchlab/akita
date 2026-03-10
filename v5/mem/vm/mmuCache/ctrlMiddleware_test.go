@@ -71,7 +71,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			WithPage(vm.Page{}).
 			Build()
 
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *RestartRsp) {
+		controlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *sim.Msg) {
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)
@@ -96,10 +96,11 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		req := FlushReqBuilder{}.
 			WithSrc(sim.RemotePort("Requester")).
 			Build()
+		reqPayload := sim.MsgPayload[FlushReqPayload](req)
 
 		controlPort.EXPECT().RetrieveIncoming()
 
-		madeProgress := ctrl.handleMMUCacheFlush(req)
+		madeProgress := ctrl.handleMMUCacheFlush(req, reqPayload)
 
 		Expect(madeProgress).To(BeTrue())
 		Expect(cache.inflightFlushReq).To(Equal(req))
