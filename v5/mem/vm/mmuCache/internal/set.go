@@ -8,12 +8,30 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 )
 
+// BlockState is a serializable snapshot of a single cache block.
+type BlockState struct {
+	PID       uint64 `json:"pid"`
+	Seg       uint64 `json:"seg"`
+	WayID     int    `json:"way_id"`
+	LastVisit uint64 `json:"last_visit"`
+}
+
+// SetState is a serializable snapshot of a Set.
+type SetState struct {
+	Blocks      []BlockState   `json:"blocks"`
+	SegWayIDMap map[string]int `json:"seg_way_id_map"`
+	VisitOrder  []int          `json:"visit_order"`
+	VisitCount  uint64         `json:"visit_count"`
+}
+
 // A Set holds a certain number of pages.
 type Set interface {
 	Lookup(pid vm.PID, seg uint64) (wayID int, found bool)
 	Update(wayID int, pid vm.PID, seg uint64)
 	Evict() (wayID int, ok bool)
 	Visit(wayID int)
+	ExportState() SetState
+	ImportState(state SetState)
 }
 
 // NewSet creates a new mmuCache set.
@@ -114,4 +132,59 @@ func (s *setImpl) Visit(wayID int) {
 
 func (s *setImpl) hasNothingToEvict() bool {
 	return len(s.visitList) == 0
+}
+
+// ExportState returns a serializable snapshot of the set.
+func (s *setImpl) ExportState() SetState {
+	ss := SetState{
+		Blocks:      make([]BlockState, len(s.blocks)),
+		SegWayIDMap: make(map[string]int, len(s.segWayIDMap)),
+		VisitOrder:  make([]int, len(s.visitList)),
+		VisitCount:  s.visitCount,
+	}
+
+	for i, b := range s.blocks {
+		ss.Blocks[i] = BlockState{
+			PID:       uint64(b.PID),
+			Seg:       b.seg,
+			WayID:     b.wayID,
+			LastVisit: b.lastVisit,
+		}
+	}
+
+	for k, v := range s.segWayIDMap {
+		ss.SegWayIDMap[k] = v
+	}
+
+	for i, b := range s.visitList {
+		ss.VisitOrder[i] = b.wayID
+	}
+
+	return ss
+}
+
+// ImportState restores the set from a serializable snapshot.
+func (s *setImpl) ImportState(ss SetState) {
+	s.blocks = make([]*block, len(ss.Blocks))
+	for i, bs := range ss.Blocks {
+		s.blocks[i] = &block{
+			PID:       vm.PID(bs.PID),
+			seg:       bs.Seg,
+			wayID:     bs.WayID,
+			lastVisit: bs.LastVisit,
+		}
+	}
+
+	s.segWayIDMap = make(map[string]int, len(ss.SegWayIDMap))
+	for k, v := range ss.SegWayIDMap {
+		s.segWayIDMap[k] = v
+	}
+
+	s.visitCount = ss.VisitCount
+
+	// Rebuild visitList from VisitOrder, which stores wayIDs in LRU order.
+	s.visitList = make([]*block, len(ss.VisitOrder))
+	for i, wayID := range ss.VisitOrder {
+		s.visitList[i] = s.blocks[wayID]
+	}
 }

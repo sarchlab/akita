@@ -1,8 +1,6 @@
 package endpoint
 
 import (
-	"container/list"
-
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -112,9 +110,6 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	ep := &Comp{Component: modelComp}
-
-	ep.assemblingMsgs = list.New()
-	ep.assemblingMsgTable = make(map[string]*list.Element)
 
 	ep.NetworkPort = b.networkPort
 	ep.NetworkPort.SetComponent(ep)

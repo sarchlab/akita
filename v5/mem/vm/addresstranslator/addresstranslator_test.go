@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -390,6 +391,79 @@ var _ = Describe("Address Translator", func() {
 
 			Expect(madeProgress).To(BeFalse())
 			Expect(t.inflightReqToBottom).To(HaveLen(2))
+		})
+	})
+
+	Context("state serialization", func() {
+		It("should pass ValidateState", func() {
+			err := modeling.ValidateState(State{})
+			Expect(err).To(Succeed())
+		})
+
+		It("should round-trip GetState/SetState", func() {
+			reqFromTop := mem.ReadReqBuilder{}.
+				WithAddress(0x10040).
+				WithByteSize(4).
+				Build()
+			reqToBot := mem.ReadReqBuilder{}.
+				WithAddress(0x20040).
+				WithByteSize(4).
+				Build()
+
+			transReq := vm.TranslationReqBuilder{}.
+				WithPID(1).
+				WithVAddr(0x100).
+				WithDeviceID(1).
+				Build()
+
+			t.isFlushing = true
+			t.transactions = []*transaction{
+				{
+					incomingReqs:    []*sim.Msg{reqFromTop},
+					translationReq:  transReq,
+					translationDone: true,
+				},
+			}
+			t.inflightReqToBottom = []reqToBottom{
+				{reqFromTop: reqFromTop, reqToBottom: reqToBot},
+			}
+
+			state := t.GetState()
+
+			Expect(state.IsFlushing).To(BeTrue())
+			Expect(state.Transactions).To(HaveLen(1))
+			Expect(state.Transactions[0].TranslationReqID).
+				To(Equal(transReq.ID))
+			Expect(state.Transactions[0].TranslationDone).To(BeTrue())
+			Expect(state.Transactions[0].IncomingReqs).To(HaveLen(1))
+			Expect(state.Transactions[0].IncomingReqs[0].ID).
+				To(Equal(reqFromTop.ID))
+			Expect(state.InflightReqToBottom).To(HaveLen(1))
+			Expect(state.InflightReqToBottom[0].ReqFromTopID).
+				To(Equal(reqFromTop.ID))
+			Expect(state.InflightReqToBottom[0].ReqToBottomID).
+				To(Equal(reqToBot.ID))
+
+			// Clear and restore
+			t.isFlushing = false
+			t.transactions = nil
+			t.inflightReqToBottom = nil
+
+			t.SetState(state)
+
+			Expect(t.isFlushing).To(BeTrue())
+			Expect(t.transactions).To(HaveLen(1))
+			Expect(t.transactions[0].translationReq.ID).
+				To(Equal(transReq.ID))
+			Expect(t.transactions[0].translationDone).To(BeTrue())
+			Expect(t.transactions[0].incomingReqs).To(HaveLen(1))
+			Expect(t.transactions[0].incomingReqs[0].ID).
+				To(Equal(reqFromTop.ID))
+			Expect(t.inflightReqToBottom).To(HaveLen(1))
+			Expect(t.inflightReqToBottom[0].reqFromTop.ID).
+				To(Equal(reqFromTop.ID))
+			Expect(t.inflightReqToBottom[0].reqToBottom.ID).
+				To(Equal(reqToBot.ID))
 		})
 	})
 

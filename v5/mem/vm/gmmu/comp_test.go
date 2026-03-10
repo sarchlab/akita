@@ -95,7 +95,8 @@ var _ = Describe("Builder", func() {
 
 			gmmuComp.Tick()
 
-			Expect(len(gmmuComp.walkingTranslations)).To(Equal(1))
+			state := gmmuComp.GetState()
+			Expect(len(state.WalkingTranslations)).To(Equal(1))
 		})
 
 		It("should walk page table", func() {

@@ -2,8 +2,8 @@
 package endpoint
 
 import (
-	"container/list"
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/sarchlab/akita/v5/modeling"
@@ -20,8 +20,46 @@ type Spec struct {
 	EncodingOverhead  float64 `json:"encoding_overhead"`
 }
 
+// msgRef is a serializable representation of a *sim.Msg.
+type msgRef struct {
+	ID           string         `json:"id"`
+	Src          sim.RemotePort `json:"src"`
+	Dst          sim.RemotePort `json:"dst"`
+	RspTo        string         `json:"rsp_to"`
+	TrafficClass string         `json:"traffic_class"`
+	TrafficBytes int            `json:"traffic_bytes"`
+}
+
+// flitState is a serializable representation of a flit *sim.Msg.
+type flitState struct {
+	ID            string         `json:"id"`
+	Src           sim.RemotePort `json:"src"`
+	Dst           sim.RemotePort `json:"dst"`
+	SeqID         int            `json:"seq_id"`
+	NumFlitInMsg  int            `json:"num_flit_in_msg"`
+	OriginalMsgID string         `json:"original_msg_id"`
+}
+
+// assemblingMsgState is a serializable representation of a message being
+// assembled from flits.
+type assemblingMsgState struct {
+	MsgID           string         `json:"msg_id"`
+	Src             sim.RemotePort `json:"src"`
+	Dst             sim.RemotePort `json:"dst"`
+	RspTo           string         `json:"rsp_to"`
+	TrafficClass    string         `json:"traffic_class"`
+	TrafficBytes    int            `json:"traffic_bytes"`
+	NumFlitRequired int            `json:"num_flit_required"`
+	NumFlitArrived  int            `json:"num_flit_arrived"`
+}
+
 // State contains mutable runtime data for the endpoint.
-type State struct{}
+type State struct {
+	MsgOutBuf      []msgRef             `json:"msg_out_buf"`
+	FlitsToSend    []flitState          `json:"flits_to_send"`
+	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
+	AssembledMsgs  []msgRef             `json:"assembled_msgs"`
+}
 
 type msgToAssemble struct {
 	msg             *sim.Msg
@@ -41,9 +79,8 @@ type Comp struct {
 	msgOutBuf   []*sim.Msg
 	flitsToSend []*sim.Msg
 
-	assemblingMsgTable map[string]*list.Element
-	assemblingMsgs     *list.List
-	assembledMsgs      []*sim.Msg
+	assemblingMsgs []*msgToAssemble
+	assembledMsgs  []*sim.Msg
 }
 
 // PlugIn connects a port to the endpoint.
@@ -66,6 +103,166 @@ func (c *Comp) NotifySend() {
 // Unplug removes the association of a port and an endpoint.
 func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
+}
+
+// snapshotState converts runtime mutable data into a serializable State.
+func (c *Comp) snapshotState() State {
+	s := State{}
+
+	s.MsgOutBuf = make([]msgRef, len(c.msgOutBuf))
+	for i, msg := range c.msgOutBuf {
+		s.MsgOutBuf[i] = msgRefFromMsg(msg)
+	}
+
+	s.FlitsToSend = make([]flitState, len(c.flitsToSend))
+	for i, flit := range c.flitsToSend {
+		s.FlitsToSend[i] = flitStateFromMsg(flit)
+	}
+
+	s.AssemblingMsgs = make([]assemblingMsgState, len(c.assemblingMsgs))
+	for i, a := range c.assemblingMsgs {
+		s.AssemblingMsgs[i] = assemblingMsgState{
+			MsgID:           a.msg.ID,
+			Src:             a.msg.Src,
+			Dst:             a.msg.Dst,
+			RspTo:           a.msg.RspTo,
+			TrafficClass:    a.msg.TrafficClass,
+			TrafficBytes:    a.msg.TrafficBytes,
+			NumFlitRequired: a.numFlitRequired,
+			NumFlitArrived:  a.numFlitArrived,
+		}
+	}
+
+	s.AssembledMsgs = make([]msgRef, len(c.assembledMsgs))
+	for i, msg := range c.assembledMsgs {
+		s.AssembledMsgs[i] = msgRefFromMsg(msg)
+	}
+
+	return s
+}
+
+// restoreFromState restores runtime mutable data from a serializable State.
+func (c *Comp) restoreFromState(s State) {
+	c.msgOutBuf = make([]*sim.Msg, len(s.MsgOutBuf))
+	for i, ref := range s.MsgOutBuf {
+		c.msgOutBuf[i] = msgFromRef(ref)
+	}
+
+	c.flitsToSend = make([]*sim.Msg, len(s.FlitsToSend))
+	for i, fs := range s.FlitsToSend {
+		originalMsg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID: fs.OriginalMsgID,
+			},
+		}
+		c.flitsToSend[i] = &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  fs.ID,
+				Src: fs.Src,
+				Dst: fs.Dst,
+			},
+			Payload: &messaging.FlitPayload{
+				SeqID:        fs.SeqID,
+				NumFlitInMsg: fs.NumFlitInMsg,
+				Msg:          originalMsg,
+			},
+		}
+	}
+
+	c.assemblingMsgs = make([]*msgToAssemble, len(s.AssemblingMsgs))
+	for i, as := range s.AssemblingMsgs {
+		c.assemblingMsgs[i] = &msgToAssemble{
+			msg: &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:           as.MsgID,
+					Src:          as.Src,
+					Dst:          as.Dst,
+					TrafficClass: as.TrafficClass,
+					TrafficBytes: as.TrafficBytes,
+				},
+				RspTo: as.RspTo,
+			},
+			numFlitRequired: as.NumFlitRequired,
+			numFlitArrived:  as.NumFlitArrived,
+		}
+	}
+
+	c.assembledMsgs = make([]*sim.Msg, len(s.AssembledMsgs))
+	for i, ref := range s.AssembledMsgs {
+		c.assembledMsgs[i] = msgFromRef(ref)
+	}
+}
+
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
+	state := c.snapshotState()
+	c.Component.SetState(state)
+	return state
+}
+
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
+	c.restoreFromState(state)
+}
+
+// SaveState marshals the component's spec and state as JSON, ensuring the
+// runtime fields are synced into State first.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState reads JSON from r and restores both the base state and the
+// runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+	c.SetState(c.Component.GetState())
+	return nil
+}
+
+// SyncState copies mutable runtime data into the State struct.
+// Deprecated: Use GetState() instead.
+func (c *Comp) SyncState() {
+	c.GetState()
+}
+
+func msgRefFromMsg(msg *sim.Msg) msgRef {
+	return msgRef{
+		ID:           msg.ID,
+		Src:          msg.Src,
+		Dst:          msg.Dst,
+		RspTo:        msg.RspTo,
+		TrafficClass: msg.TrafficClass,
+		TrafficBytes: msg.TrafficBytes,
+	}
+}
+
+func msgFromRef(ref msgRef) *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           ref.ID,
+			Src:          ref.Src,
+			Dst:          ref.Dst,
+			TrafficClass: ref.TrafficClass,
+			TrafficBytes: ref.TrafficBytes,
+		},
+		RspTo: ref.RspTo,
+	}
+}
+
+func flitStateFromMsg(flit *sim.Msg) flitState {
+	payload := sim.MsgPayload[messaging.FlitPayload](flit)
+	return flitState{
+		ID:            flit.ID,
+		Src:           flit.Src,
+		Dst:           flit.Dst,
+		SeqID:         payload.SeqID,
+		NumFlitInMsg:  payload.NumFlitInMsg,
+		OriginalMsgID: payload.Msg.ID,
+	}
 }
 
 type middleware struct {
@@ -175,17 +372,23 @@ func (m *middleware) recv() bool {
 		flitPayload := sim.MsgPayload[messaging.FlitPayload](received)
 		msg := flitPayload.Msg
 
-		assemblingElem := m.assemblingMsgTable[msg.ID]
-		if assemblingElem == nil {
-			assemblingElem = m.assemblingMsgs.PushBack(&msgToAssemble{
+		var assembling *msgToAssemble
+		for _, a := range m.assemblingMsgs {
+			if a.msg.ID == msg.ID {
+				assembling = a
+				break
+			}
+		}
+
+		if assembling == nil {
+			assembling = &msgToAssemble{
 				msg:             msg,
 				numFlitRequired: flitPayload.NumFlitInMsg,
 				numFlitArrived:  0,
-			})
-			m.assemblingMsgTable[msg.ID] = assemblingElem
+			}
+			m.assemblingMsgs = append(m.assemblingMsgs, assembling)
 		}
 
-		assembling := assemblingElem.Value.(*msgToAssemble)
 		assembling.numFlitArrived++
 
 		m.NetworkPort.RetrieveIncoming()
@@ -201,25 +404,18 @@ func (m *middleware) recv() bool {
 func (m *middleware) assemble() bool {
 	madeProgress := false
 
-	e := m.assemblingMsgs.Front()
-	for e != nil {
-		assemblingMsg := e.Value.(*msgToAssemble)
-
-		next := e.Next()
-
-		if assemblingMsg.numFlitArrived < assemblingMsg.numFlitRequired {
-			e = next
+	remaining := m.assemblingMsgs[:0]
+	for _, assembling := range m.assemblingMsgs {
+		if assembling.numFlitArrived < assembling.numFlitRequired {
+			remaining = append(remaining, assembling)
 			continue
 		}
 
-		m.assembledMsgs = append(m.assembledMsgs, assemblingMsg.msg)
-		m.assemblingMsgs.Remove(e)
-		delete(m.assemblingMsgTable, assemblingMsg.msg.ID)
-
-		e = next
-
+		m.assembledMsgs = append(m.assembledMsgs, assembling.msg)
 		madeProgress = true
 	}
+
+	m.assemblingMsgs = remaining
 
 	return madeProgress
 }

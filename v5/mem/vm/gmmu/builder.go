@@ -106,10 +106,13 @@ func (b Builder) Build(name string) *GMMU {
 		Build(name)
 
 	gmmu := &GMMU{
-		Component:              modelComp,
-		PageAccessedByDeviceID: make(map[uint64][]uint64),
-		remoteMemReqs:          make(map[string]transaction),
+		Component: modelComp,
 	}
+
+	initialState := State{
+		RemoteMemReqs: make(map[string]transactionState),
+	}
+	modelComp.SetState(initialState)
 
 	b.createPageTable(gmmu)
 	b.createPorts(name, gmmu)

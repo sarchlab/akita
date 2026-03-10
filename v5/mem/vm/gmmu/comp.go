@@ -19,15 +19,43 @@ type Spec struct {
 	LowModule           sim.RemotePort `json:"low_module"`
 }
 
-// State contains mutable runtime data for the GMMU.
-// Runtime data with pointers/interfaces stays on the GMMU struct.
-type State struct{}
+// pageState captures vm.Page fields in a serializable form.
+type pageState struct {
+	PID         uint64 `json:"pid"`
+	VAddr       uint64 `json:"vaddr"`
+	PAddr       uint64 `json:"paddr"`
+	PageSize    uint64 `json:"page_size"`
+	Valid       bool   `json:"valid"`
+	DeviceID    uint64 `json:"device_id"`
+	Unified     bool   `json:"unified"`
+	IsMigrating bool   `json:"is_migrating"`
+	IsPinned    bool   `json:"is_pinned"`
+}
 
-type transaction struct {
-	req        *sim.Msg // payload: *vm.TranslationReqPayload
-	reqPayload *vm.TranslationReqPayload
-	page       vm.Page
-	cycleLeft  int
+// transactionState is the serializable form of a runtime transaction.
+type transactionState struct {
+	ReqID     string         `json:"req_id"`
+	ReqSrc    sim.RemotePort `json:"req_src"`
+	ReqDst    sim.RemotePort `json:"req_dst"`
+	PID       uint64         `json:"pid"`
+	VAddr     uint64         `json:"vaddr"`
+	DeviceID  uint64         `json:"device_id"`
+	Page      pageState      `json:"page"`
+	CycleLeft int            `json:"cycle_left"`
+}
+
+// devicePageAccess records pages accessed by a single device.
+type devicePageAccess struct {
+	DeviceID   uint64   `json:"device_id"`
+	PageVAddrs []uint64 `json:"page_vaddrs"`
+}
+
+// State contains mutable runtime data for the GMMU.
+type State struct {
+	WalkingTranslations    []transactionState         `json:"walking_translations"`
+	RemoteMemReqs          map[string]transactionState `json:"remote_mem_reqs"`
+	ToRemoveFromPTW        []int                      `json:"to_remove_from_ptw"`
+	PageAccessedByDeviceID []devicePageAccess          `json:"page_accessed_by_device_id"`
 }
 
 // GMMU is the default gmmu implementation. It is also an akita Component.
@@ -42,15 +70,6 @@ type GMMU struct {
 	MigrationServiceProvider sim.RemotePort
 
 	pageTable vm.PageTable
-
-	walkingTranslations []transaction
-	remoteMemReqs       map[string]transaction
-
-	toRemoveFromPTW []int
-
-	// PageAccessedByDeviceID records, for each device ID, the pages that have
-	// been accessed.
-	PageAccessedByDeviceID map[uint64][]uint64
 }
 
 // gmmuMiddleware provides the Tick method for the GMMU.
@@ -71,7 +90,9 @@ func (m *gmmuMiddleware) Tick() bool {
 
 func (gmmu *GMMU) parseFromTop() bool {
 	spec := gmmu.GetSpec()
-	if len(gmmu.walkingTranslations) >= spec.MaxRequestsInFlight {
+	state := gmmu.GetState()
+
+	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -94,132 +115,154 @@ func (gmmu *GMMU) parseFromTop() bool {
 
 func (gmmu *GMMU) startWalking(req *sim.Msg) {
 	spec := gmmu.GetSpec()
+	state := gmmu.GetState()
+
 	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
-	translationInPipeline := transaction{
-		req:        req,
-		reqPayload: payload,
-		cycleLeft:  spec.Latency,
+
+	ts := transactionState{
+		ReqID:     req.ID,
+		ReqSrc:    req.Src,
+		ReqDst:    req.Dst,
+		PID:       uint64(payload.PID),
+		VAddr:     payload.VAddr,
+		DeviceID:  payload.DeviceID,
+		CycleLeft: spec.Latency,
 	}
 
-	gmmu.walkingTranslations = append(gmmu.walkingTranslations, translationInPipeline)
+	state.WalkingTranslations = append(state.WalkingTranslations, ts)
+	gmmu.SetState(state)
 }
 
 func (gmmu *GMMU) walkPageTable() bool {
-	madeProgress := false
+	state := gmmu.GetState()
 
-	if len(gmmu.walkingTranslations) == 0 {
+	if len(state.WalkingTranslations) == 0 {
 		return false
 	}
 
+	madeProgress := false
 	spec := gmmu.GetSpec()
 
-	for i := 0; i < len(gmmu.walkingTranslations); i++ {
-		if gmmu.walkingTranslations[i].cycleLeft > 0 {
-			gmmu.walkingTranslations[i].cycleLeft--
+	for i := 0; i < len(state.WalkingTranslations); i++ {
+		if state.WalkingTranslations[i].CycleLeft > 0 {
+			state.WalkingTranslations[i].CycleLeft--
 			madeProgress = true
 			continue
 		}
-		payload := gmmu.walkingTranslations[i].reqPayload
 
-		page, found := gmmu.pageTable.Find(payload.PID, payload.VAddr)
+		ts := state.WalkingTranslations[i]
+
+		page, found := gmmu.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 		if !found {
 			log.Panicf(
 				"gmmu: page not found for PID %d VAddr 0x%x",
-				payload.PID, payload.VAddr,
+				ts.PID, ts.VAddr,
 			)
 		}
 
 		if page.DeviceID == spec.DeviceID {
-			madeProgress = gmmu.finalizePageWalk(i) || madeProgress
+			madeProgress = gmmu.finalizePageWalk(&state, i) || madeProgress
 		} else {
-			madeProgress = gmmu.processRemoteMemReq(i) || madeProgress
+			madeProgress = gmmu.processRemoteMemReq(&state, i) || madeProgress
 		}
 	}
 
-	gmmu.removeCompletedTranslations()
+	gmmu.removeCompletedTranslations(&state)
+	gmmu.SetState(state)
 
 	return madeProgress
 }
 
-func (gmmu *GMMU) removeCompletedTranslations() {
-	if len(gmmu.toRemoveFromPTW) == 0 {
+func (gmmu *GMMU) removeCompletedTranslations(state *State) {
+	if len(state.ToRemoveFromPTW) == 0 {
 		return
 	}
 
-	toRemoveSet := make(map[int]bool, len(gmmu.toRemoveFromPTW))
-	for _, idx := range gmmu.toRemoveFromPTW {
+	toRemoveSet := make(map[int]bool, len(state.ToRemoveFromPTW))
+	for _, idx := range state.ToRemoveFromPTW {
 		toRemoveSet[idx] = true
 	}
 
-	tmp := gmmu.walkingTranslations[:0]
-	for i := 0; i < len(gmmu.walkingTranslations); i++ {
+	tmp := state.WalkingTranslations[:0]
+	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if !toRemoveSet[i] {
-			tmp = append(tmp, gmmu.walkingTranslations[i])
+			tmp = append(tmp, state.WalkingTranslations[i])
 		}
 	}
-	gmmu.walkingTranslations = tmp
-	gmmu.toRemoveFromPTW = nil
+	state.WalkingTranslations = tmp
+	state.ToRemoveFromPTW = nil
 }
 
-func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
+func (gmmu *GMMU) processRemoteMemReq(state *State, walkingIndex int) bool {
 	if !gmmu.bottomPort.CanSend() {
 		return false
 	}
 
 	spec := gmmu.GetSpec()
-	walking := gmmu.walkingTranslations[walkingIndex]
+	walking := state.WalkingTranslations[walkingIndex]
 
 	req := vm.TranslationReqBuilder{}.
 		WithSrc(gmmu.bottomPort.AsRemote()).
 		WithDst(spec.LowModule).
-		WithPID(walking.reqPayload.PID).
-		WithVAddr(walking.reqPayload.VAddr).
-		WithDeviceID(walking.reqPayload.DeviceID).
+		WithPID(vm.PID(walking.PID)).
+		WithVAddr(walking.VAddr).
+		WithDeviceID(walking.DeviceID).
 		Build()
 
-	gmmu.remoteMemReqs[req.ID] = gmmu.walkingTranslations[walkingIndex]
+	state.RemoteMemReqs[req.ID] = walking
 
 	gmmu.bottomPort.Send(req)
 
-	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
+	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	return true
 }
 
 func (gmmu *GMMU) finalizePageWalk(
+	state *State,
 	walkingIndex int,
 ) bool {
-	payload := gmmu.walkingTranslations[walkingIndex].reqPayload
-	page, found := gmmu.pageTable.Find(payload.PID, payload.VAddr)
+	ts := state.WalkingTranslations[walkingIndex]
+	page, found := gmmu.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 	if !found {
 		return false
 	}
 
-	gmmu.walkingTranslations[walkingIndex].page = page
+	state.WalkingTranslations[walkingIndex].Page = pageStateFromPage(page)
 
-	return gmmu.doPageWalkHit(walkingIndex)
+	return gmmu.doPageWalkHit(state, walkingIndex)
 }
 
 func (gmmu *GMMU) doPageWalkHit(
+	state *State,
 	walkingIndex int,
 ) bool {
 	if !gmmu.topPort.CanSend() {
 		return false
 	}
-	walking := gmmu.walkingTranslations[walkingIndex]
+	walking := state.WalkingTranslations[walkingIndex]
 
 	rsp := vm.TranslationRspBuilder{}.
 		WithSrc(gmmu.topPort.AsRemote()).
-		WithDst(walking.req.Src).
-		WithRspTo(walking.req.ID).
-		WithPage(walking.page).
+		WithDst(walking.ReqSrc).
+		WithRspTo(walking.ReqID).
+		WithPage(pageFromPageState(walking.Page)).
 		Build()
 
 	gmmu.topPort.Send(rsp)
 
-	gmmu.toRemoveFromPTW = append(gmmu.toRemoveFromPTW, walkingIndex)
+	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
-	tracing.TraceReqComplete(walking.req, gmmu)
+	tracing.TraceReqComplete(
+		&sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  walking.ReqID,
+				Src: walking.ReqSrc,
+				Dst: walking.ReqDst,
+			},
+		},
+		gmmu,
+	)
 
 	return true
 }
@@ -246,10 +289,12 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 }
 
 func (gmmu *GMMU) handleTranslationRsp(response *sim.Msg) bool {
-	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](response)
-	reqTransaction := gmmu.remoteMemReqs[response.RspTo]
+	state := gmmu.GetState()
 
-	if reqTransaction.req == nil {
+	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](response)
+	reqTransaction, exists := state.RemoteMemReqs[response.RspTo]
+
+	if !exists || reqTransaction.ReqID == "" {
 		log.Panicf("Cannot find matching request for response %+v", response)
 	}
 
@@ -259,13 +304,45 @@ func (gmmu *GMMU) handleTranslationRsp(response *sim.Msg) bool {
 
 	rsp := vm.TranslationRspBuilder{}.
 		WithSrc(gmmu.topPort.AsRemote()).
-		WithDst(reqTransaction.req.Src).
+		WithDst(reqTransaction.ReqSrc).
 		WithRspTo(response.ID).
 		WithPage(rspPayload.Page).
 		Build()
 
 	gmmu.topPort.Send(rsp)
 
-	delete(gmmu.remoteMemReqs, response.RspTo)
+	delete(state.RemoteMemReqs, response.RspTo)
+	gmmu.SetState(state)
+
 	return true
+}
+
+// pageStateFromPage converts a vm.Page to a serializable pageState.
+func pageStateFromPage(p vm.Page) pageState {
+	return pageState{
+		PID:         uint64(p.PID),
+		VAddr:       p.VAddr,
+		PAddr:       p.PAddr,
+		PageSize:    p.PageSize,
+		Valid:       p.Valid,
+		DeviceID:    p.DeviceID,
+		Unified:     p.Unified,
+		IsMigrating: p.IsMigrating,
+		IsPinned:    p.IsPinned,
+	}
+}
+
+// pageFromPageState converts a pageState back to a vm.Page.
+func pageFromPageState(ps pageState) vm.Page {
+	return vm.Page{
+		PID:         vm.PID(ps.PID),
+		VAddr:       ps.VAddr,
+		PAddr:       ps.PAddr,
+		PageSize:    ps.PageSize,
+		Valid:       ps.Valid,
+		DeviceID:    ps.DeviceID,
+		Unified:     ps.Unified,
+		IsMigrating: ps.IsMigrating,
+		IsPinned:    ps.IsPinned,
+	}
 }

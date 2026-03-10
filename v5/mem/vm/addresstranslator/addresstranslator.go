@@ -1,6 +1,7 @@
 package addresstranslator
 
 import (
+	"io"
 	"log"
 	"reflect"
 
@@ -18,9 +19,39 @@ type Spec struct {
 	NumReqPerCycle int    `json:"num_req_per_cycle"`
 }
 
+// incomingReqState is a serializable representation of an incoming *sim.Msg.
+type incomingReqState struct {
+	ID    string         `json:"id"`
+	Src   sim.RemotePort `json:"src"`
+	Dst   sim.RemotePort `json:"dst"`
+	RspTo string         `json:"rsp_to"`
+}
+
+// transactionState is a serializable representation of a runtime transaction.
+type transactionState struct {
+	IncomingReqs      []incomingReqState `json:"incoming_reqs"`
+	TranslationReqID  string             `json:"translation_req_id"`
+	TranslationReqSrc sim.RemotePort     `json:"translation_req_src"`
+	TranslationReqDst sim.RemotePort     `json:"translation_req_dst"`
+	TranslationDone   bool               `json:"translation_done"`
+}
+
+// reqToBottomState is a serializable representation of a runtime reqToBottom.
+type reqToBottomState struct {
+	ReqFromTopID  string         `json:"req_from_top_id"`
+	ReqFromTopSrc sim.RemotePort `json:"req_from_top_src"`
+	ReqFromTopDst sim.RemotePort `json:"req_from_top_dst"`
+	ReqToBottomID  string         `json:"req_to_bottom_id"`
+	ReqToBottomSrc sim.RemotePort `json:"req_to_bottom_src"`
+	ReqToBottomDst sim.RemotePort `json:"req_to_bottom_dst"`
+}
+
 // State contains mutable runtime data for the AddressTranslator.
-// Runtime data with pointers/interfaces stays on the Comp struct.
-type State struct{}
+type State struct {
+	IsFlushing          bool               `json:"is_flushing"`
+	Transactions        []transactionState `json:"transactions"`
+	InflightReqToBottom []reqToBottomState `json:"inflight_req_to_bottom"`
+}
 
 type transaction struct {
 	incomingReqs    []*sim.Msg
@@ -51,6 +82,126 @@ type Comp struct {
 
 	transactions        []*transaction
 	inflightReqToBottom []reqToBottom
+}
+
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
+	state := State{
+		IsFlushing: c.isFlushing,
+	}
+
+	for _, t := range c.transactions {
+		ts := transactionState{
+			TranslationDone: t.translationDone,
+		}
+
+		for _, req := range t.incomingReqs {
+			ts.IncomingReqs = append(ts.IncomingReqs, incomingReqState{
+				ID:    req.ID,
+				Src:   req.Src,
+				Dst:   req.Dst,
+				RspTo: req.RspTo,
+			})
+		}
+
+		if t.translationReq != nil {
+			ts.TranslationReqID = t.translationReq.ID
+			ts.TranslationReqSrc = t.translationReq.Src
+			ts.TranslationReqDst = t.translationReq.Dst
+		}
+
+		state.Transactions = append(state.Transactions, ts)
+	}
+
+	for _, r := range c.inflightReqToBottom {
+		state.InflightReqToBottom = append(state.InflightReqToBottom,
+			reqToBottomState{
+				ReqFromTopID:   r.reqFromTop.ID,
+				ReqFromTopSrc:  r.reqFromTop.Src,
+				ReqFromTopDst:  r.reqFromTop.Dst,
+				ReqToBottomID:  r.reqToBottom.ID,
+				ReqToBottomSrc: r.reqToBottom.Src,
+				ReqToBottomDst: r.reqToBottom.Dst,
+			})
+	}
+
+	c.Component.SetState(state)
+
+	return state
+}
+
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
+
+	c.isFlushing = state.IsFlushing
+
+	c.transactions = nil
+	for _, ts := range state.Transactions {
+		t := &transaction{
+			translationDone: ts.TranslationDone,
+		}
+
+		for _, reqState := range ts.IncomingReqs {
+			t.incomingReqs = append(t.incomingReqs, &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  reqState.ID,
+					Src: reqState.Src,
+					Dst: reqState.Dst,
+				},
+				RspTo: reqState.RspTo,
+			})
+		}
+
+		if ts.TranslationReqID != "" {
+			t.translationReq = &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  ts.TranslationReqID,
+					Src: ts.TranslationReqSrc,
+					Dst: ts.TranslationReqDst,
+				},
+			}
+		}
+
+		c.transactions = append(c.transactions, t)
+	}
+
+	c.inflightReqToBottom = nil
+	for _, rs := range state.InflightReqToBottom {
+		c.inflightReqToBottom = append(c.inflightReqToBottom, reqToBottom{
+			reqFromTop: &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  rs.ReqFromTopID,
+					Src: rs.ReqFromTopSrc,
+					Dst: rs.ReqFromTopDst,
+				},
+			},
+			reqToBottom: &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  rs.ReqToBottomID,
+					Src: rs.ReqToBottomSrc,
+					Dst: rs.ReqToBottomDst,
+				},
+			},
+		})
+	}
+}
+
+// SaveState syncs runtime data to state, then delegates to Component.SaveState.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState loads state from the reader, then restores runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+
+	c.SetState(c.Component.GetState())
+
+	return nil
 }
 
 type middleware struct {
