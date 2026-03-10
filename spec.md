@@ -2,20 +2,39 @@
 
 ## What to Build
 
-We need to redefine the component. 
+We are evolving the Akita V5 simulation framework. The work has several major threads:
 
-Check /v5/migration.md, under section "Defining Components in V5: Philosophy and Patterns".
+### 1. Component Model (DONE)
 
-We need to redefine a component as a combination of spec, state, ports, and middlewares. Spec and state are easily serializable. Ports and middlewares are containers of dependencies. 
+Redefine a component as a combination of **Spec, State, Ports, and Middlewares** (see `/v5/migration.md`). A `modeling` package provides `Component[S,T]` — a generic component parameterized by Spec and State types. Builders use `WithSpec()` instead of individual `With*` parameter methods.
 
-Create a new modeling package. Define a `Component` struct there. In v5, a concrete struct is no longer a struct, but an instance of a component. The package only provides the specs, state, middlewares, and builder.  
+### 2. Simulation Save/Load (DONE)
 
-Builders should avoid `with` functions for basic parameters. Instead, builders should have a `withSpec` method to take a spec struct.
+The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
 
-We need to consider the serialization requirement. In the simulation package, the simulation struct should have a save and load function, which takes a file name. They can save and load the current state of a simulation.
+### 3. Messages as Plain Structs (NEW)
+
+The `Msg` interface in `sim/msg.go` should be replaced with a plain struct. Design a new message interface/struct that eliminates the need for every message type to implement `Meta()`, `Clone()`, etc. methods manually. Messages should be simple, serializable data. Also design the new interface for messages.
+
+### 4. Port All First-Party Components (NEW)
+
+All first-party components (caches, TLB, MMU, DRAM, datamover, banked memory, NOC components, examples, etc.) must be ported to use the `modeling` package's `Component[S,T]` pattern with Spec/State/Middlewares. Currently only `idealmemcontroller` has been ported.
+
+### 5. CI Must Pass (NEW)
+
+All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
 
 ## Success Criteria
 
-Design simple, straightforward, intuitive APIs. 
+- Simple, straightforward, intuitive APIs
+- All CI checks pass on main branch
+- Acceptance test for save/load process passes
+- All first-party components use the modeling package pattern
+- Messages are plain structs, not interfaces
 
-Create an acceptance test for the save/load process. You can use the memory acceptance tests as a starting point.
+## Constraints
+
+- Follow the patterns described in `/v5/migration.md`
+- Keep State pure and serializable (no pointers, live handles, functions, channels)
+- Keep Spec primitive and JSON-friendly
+- Use tick-driven patterns; prefer countdowns over scheduled events

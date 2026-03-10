@@ -2,38 +2,42 @@
 
 ## Project Goal
 
-Redefine the component model in Akita V5 following the Spec/State/Ports/Middlewares pattern described in `migration.md`. Create a `modeling` package, refactor builders to use `WithSpec`, implement simulation save/load (serialization), and create an acceptance test for save/load.
+Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model.
 
-## Milestones
+## Completed Milestones
 
-### M1: Create `modeling` package with Component struct ✅ — Budget: 6 cycles, Used: 5
-**Status:** Complete (PR #10 merged to main)
+### M1: Create `modeling` package with Component struct ✅ — Budget: 6, Used: 5
+### M2: Refactor `idealmemcontroller` to use modeling package ✅ — Budget: 6, Used: 4
+### M3: Implement simulation Save/Load with acceptance test ✅ — Budget: 8, Used: 6
 
-### M2: Refactor `idealmemcontroller` to use the modeling package ✅ — Budget: 6 cycles, Used: 4
-**Status:** Complete (PR #11 merged to main via PR #12)
+## Upcoming Milestones
 
-### M3: Implement simulation Save/Load with acceptance test ✅ — Budget: 8 cycles, Used: 6
-**Status:** Complete (PR #12 merged to main)
+### M4: Fix CI lint failures
+**Goal:** Fix all golangci-lint errors so CI passes on main. Current failures are funlen and gocognit violations in files added during M3 (saveload.go, saveload_test.go, storage_saveload_test.go, modeling/saveload_test.go).
+**Budget:** 3 cycles
+**Status:** Not started
 
-Implemented `Simulation.Save(filename)` and `Simulation.Load(filename)` with quiescent-only checkpointing. Includes acceptance test `TestSaveLoadDeterminism` that saves mid-simulation, loads, and verifies deterministic continuation.
+### M5: Redesign Messages as Plain Structs
+**Goal:** Replace the `Msg` interface with a plain struct. Design a new message type that doesn't require every message to implement `Meta()`, `Clone()` etc. Update all first-party message types and their callers. This is a foundational change that should happen BEFORE porting components (M6), since the ported components will use the new message type.
+**Budget:** 8 cycles (design + implementation across many packages)
+**Status:** Not started
 
-Key deliverables:
-- `v5/modeling/saveload.go` — SaveState/LoadState on Component[S,T]
-- `v5/mem/mem/storage_saveload.go` — Save/Load on Storage
-- `v5/sim/ticker.go` — ResetTickScheduler method
-- `v5/sim/idgenerator.go` — Get/SetNextID
-- `v5/simulation/saveload.go` — Simulation.Save/Load orchestration
-- `v5/sim/port.go` — Port buffer access methods
-- `v5/mem/acceptancetests/saveload/` — Acceptance test
-
-## Project Complete ✅
-
-All milestones achieved. Total cycles used: 18 (across all phases including planning, implementation, and verification).
+### M6: Port all first-party components to modeling package
+**Goal:** Port all remaining components to `modeling.Component[S,T]`:
+- mem/cache/* (writethrough, writeback, writeevict, writearound)
+- mem/simplebankedmemory
+- mem/dram
+- mem/datamover
+- mem/vm/* (tlb, mmuCache, gmmu, mmu, addresstranslator)
+- noc/networking/switching/* (switches, endpoint)
+- noc/standalone/agent
+- examples/ping, examples/tickingping
+**Budget:** 12-16 cycles (many components, but pattern is established)
+**Status:** Not started
 
 ## Lessons Learned
-- M1 and M2 went faster than budgeted (5 and 4 cycles vs 6 each). Good velocity.
-- Apollo's verification caught 4 real issues in M2 — the verify step adds ~2-3 cycles but prevents bad code from landing.
-- Iris's detailed analysis before M3 planning was very valuable — prevents scope misestimation.
-- Breaking down the problem (quiescent-only first, non-quiescent later) keeps milestones achievable.
-- Parallel worker assignment (Kai for sim/, Nova for modeling+mem/, Leo for integration) significantly speeds up implementation.
-- Budget: 20 total budgeted cycles for M1-M3, used 15 implementation cycles. Planning and verification add overhead (~3-4 cycles) but improve quality.
+- M1-M3 completed in 15 implementation cycles (budgeted 20). Planning and verification added ~3-4 cycles overhead but improved quality.
+- Apollo's verification caught 4 real issues in M2 — always verify.
+- Iris's detailed analysis before M3 was valuable — prevents scope misestimation.
+- CI lint rules (funlen, gocognit) must be respected — fix immediately, don't accumulate tech debt.
+- Breaking work across parallel workers (Kai, Nova, Leo) speeds implementation significantly.
