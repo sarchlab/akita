@@ -3,6 +3,8 @@ package tlb
 import (
 	"testing"
 
+	"github.com/sarchlab/akita/v5/modeling"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -13,4 +15,10 @@ import (
 func TestTlb(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Tlb Suite")
+}
+
+func TestValidateState(t *testing.T) {
+	if err := modeling.ValidateState(State{}); err != nil {
+		t.Fatalf("State failed validation: %v", err)
+	}
 }
