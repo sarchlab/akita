@@ -1,12 +1,15 @@
 package signal
 
-import "github.com/sarchlab/akita/v5/mem/mem"
+import (
+	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
+)
 
 // Transaction is the state associated with the processing of a read or write
 // request.
 type Transaction struct {
-	Read  *mem.ReadReq
-	Write *mem.WriteReq
+	Read  *sim.Msg // payload: *mem.ReadReqPayload
+	Write *sim.Msg // payload: *mem.WriteReqPayload
 
 	InternalAddress uint64
 	SubTransactions []*SubTransaction
@@ -15,19 +18,19 @@ type Transaction struct {
 // GlobalAddress returns the address that the transaction is accessing.
 func (t *Transaction) GlobalAddress() uint64 {
 	if t.Read != nil {
-		return t.Read.Address
+		return sim.MsgPayload[mem.ReadReqPayload](t.Read).Address
 	}
 
-	return t.Write.Address
+	return sim.MsgPayload[mem.WriteReqPayload](t.Write).Address
 }
 
 // AccessByteSize returns the number of bytes that the transaction is accessing.
 func (t *Transaction) AccessByteSize() uint64 {
 	if t.Read != nil {
-		return t.Read.AccessByteSize
+		return sim.MsgPayload[mem.ReadReqPayload](t.Read).AccessByteSize
 	}
 
-	return uint64(len(t.Write.Data))
+	return uint64(len(sim.MsgPayload[mem.WriteReqPayload](t.Write).Data))
 }
 
 // IsRead returns true if the transaction is a read transaction.

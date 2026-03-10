@@ -6,7 +6,7 @@ import "github.com/sarchlab/akita/v5/sim"
 type TransferEvent struct {
 	*sim.EventBase
 
-	msg sim.Msg
+	msg *sim.Msg
 	vc  int
 }
 
@@ -14,7 +14,7 @@ type TransferEvent struct {
 func NewTransferEvent(
 	time sim.VTimeInSec,
 	handler sim.Handler,
-	msg sim.Msg,
+	msg *sim.Msg,
 	vc int,
 ) *TransferEvent {
 	evt := new(TransferEvent)

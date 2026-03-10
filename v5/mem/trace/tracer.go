@@ -48,7 +48,7 @@ type dbTracer struct {
 func (t *tracer) StartTask(task tracing.Task) {
 	task.StartTime = t.timeTeller.CurrentTime()
 
-	req, ok := task.Detail.(mem.AccessReq)
+	req, ok := task.Detail.(mem.AccessReqPayload)
 	if !ok {
 		return
 	}
@@ -115,7 +115,7 @@ func NewDBTracer(dataRecorder datarecording.DataRecorder, timeTeller sim.TimeTel
 func (t *dbTracer) StartTask(task tracing.Task) {
 	task.StartTime = t.timeTeller.CurrentTime()
 
-	req, ok := task.Detail.(mem.AccessReq)
+	req, ok := task.Detail.(mem.AccessReqPayload)
 	if !ok {
 		return
 	}
