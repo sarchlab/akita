@@ -6,7 +6,7 @@ import "log"
 // It does not support hooks or naming.
 type portBuffer struct {
 	capacity int
-	elements []*Msg
+	elements []Msg
 }
 
 func newPortBuffer(capacity int) *portBuffer {
@@ -17,14 +17,14 @@ func (b *portBuffer) CanPush() bool {
 	return len(b.elements) < b.capacity
 }
 
-func (b *portBuffer) Push(e *Msg) {
+func (b *portBuffer) Push(e Msg) {
 	if len(b.elements) >= b.capacity {
 		log.Panic("buffer overflow")
 	}
 	b.elements = append(b.elements, e)
 }
 
-func (b *portBuffer) Pop() *Msg {
+func (b *portBuffer) Pop() Msg {
 	if len(b.elements) == 0 {
 		return nil
 	}
@@ -33,7 +33,7 @@ func (b *portBuffer) Pop() *Msg {
 	return e
 }
 
-func (b *portBuffer) Peek() *Msg {
+func (b *portBuffer) Peek() Msg {
 	if len(b.elements) == 0 {
 		return nil
 	}

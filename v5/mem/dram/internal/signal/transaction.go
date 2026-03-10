@@ -8,8 +8,8 @@ import (
 // Transaction is the state associated with the processing of a read or write
 // request.
 type Transaction struct {
-	Read  *sim.Msg // payload: *mem.ReadReqPayload
-	Write *sim.Msg // payload: *mem.WriteReqPayload
+	Read  *sim.GenericMsg // payload: *mem.ReadReqPayload
+	Write *sim.GenericMsg // payload: *mem.WriteReqPayload
 
 	InternalAddress uint64
 	SubTransactions []*SubTransaction

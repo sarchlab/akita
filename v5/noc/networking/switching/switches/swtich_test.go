@@ -90,7 +90,7 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -123,7 +123,7 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -161,7 +161,7 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -194,7 +194,7 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -220,7 +220,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -252,7 +252,7 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -282,7 +282,7 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),
@@ -311,7 +311,7 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  sim.GetIDGenerator().Generate(),
 				Src: dstPort.AsRemote(),

@@ -15,8 +15,8 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	msg := p.cache.topPort.PeekIncoming()
-	if msg == nil {
+	msgI := p.cache.topPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
@@ -24,6 +24,7 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	trans := &transaction{
 		id: sim.GetIDGenerator().Generate(),
 	}

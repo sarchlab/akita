@@ -81,14 +81,14 @@ var _ = Describe("DRAM Integration", func() {
 
 		ret1 := srcPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 				_, ok := msg.Payload.(*mem.WriteDoneRspPayload)
 				Expect(ok).To(BeTrue())
 			})
 		srcPort.EXPECT().
 			Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(read.ID))
 				dr := msg.Payload.(*mem.DataReadyRspPayload)
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))

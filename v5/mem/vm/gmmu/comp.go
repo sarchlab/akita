@@ -96,11 +96,12 @@ func (gmmu *GMMU) parseFromTop() bool {
 		return false
 	}
 
-	req := gmmu.topPort.RetrieveIncoming()
-	if req == nil {
+	reqI := gmmu.topPort.RetrieveIncoming()
+	if reqI == nil {
 		return false
 	}
 
+	req := reqI.(*sim.GenericMsg)
 	tracing.TraceReqReceive(req, gmmu)
 
 	switch req.Payload.(type) {
@@ -113,7 +114,7 @@ func (gmmu *GMMU) parseFromTop() bool {
 	return true
 }
 
-func (gmmu *GMMU) startWalking(req *sim.Msg) {
+func (gmmu *GMMU) startWalking(req *sim.GenericMsg) {
 	spec := gmmu.GetSpec()
 	state := gmmu.GetState()
 
@@ -254,7 +255,7 @@ func (gmmu *GMMU) doPageWalkHit(
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(
-		&sim.Msg{
+		&sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  walking.ReqID,
 				Src: walking.ReqSrc,
@@ -272,11 +273,12 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 		return false
 	}
 
-	rsp := gmmu.bottomPort.RetrieveIncoming()
-	if rsp == nil {
+	rspI := gmmu.bottomPort.RetrieveIncoming()
+	if rspI == nil {
 		return false
 	}
 
+	rsp := rspI.(*sim.GenericMsg)
 	tracing.TraceReqReceive(rsp, gmmu)
 
 	switch rsp.Payload.(type) {
@@ -288,7 +290,7 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 	}
 }
 
-func (gmmu *GMMU) handleTranslationRsp(response *sim.Msg) bool {
+func (gmmu *GMMU) handleTranslationRsp(response *sim.GenericMsg) bool {
 	state := gmmu.GetState()
 
 	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](response)

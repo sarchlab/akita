@@ -187,7 +187,7 @@ func (d *directory) processWrite(trans *transaction) bool {
 	return ok
 }
 
-func (d *directory) isPartialWrite(writeMsg *sim.Msg) bool {
+func (d *directory) isPartialWrite(writeMsg *sim.GenericMsg) bool {
 	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
 
 	if len(writePayload.Data) < (1 << d.cache.log2BlockSize) {

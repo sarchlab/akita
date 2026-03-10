@@ -78,7 +78,7 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("read", func() {
 		var (
-			read  *sim.Msg
+			read  *sim.GenericMsg
 			trans *transaction
 		)
 
@@ -346,7 +346,7 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("write", func() {
 		var (
-			write        *sim.Msg
+			write        *sim.GenericMsg
 			writePayload *mem.WriteReqPayload
 			trans        *transaction
 		)

@@ -17,7 +17,7 @@ import (
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
-// msgRef is a serializable representation of a *sim.Msg.
+// msgRef is a serializable representation of a *sim.GenericMsg.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -58,7 +58,7 @@ type State struct {
 
 type flitPipelineItem struct {
 	taskID string
-	flit   *sim.Msg // payload: *messaging.FlitPayload
+	flit   *sim.GenericMsg // payload: *messaging.FlitPayload
 }
 
 func (f flitPipelineItem) TaskID() string {
@@ -120,7 +120,7 @@ func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routingTable
 }
 
-func msgRefFromMsg(msg *sim.Msg) msgRef {
+func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
 	return msgRef{
 		ID:           msg.ID,
 		Src:          msg.Src,
@@ -131,16 +131,16 @@ func msgRefFromMsg(msg *sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.Msg {
-	return &sim.Msg{
+func msgFromRef(ref msgRef) *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           ref.ID,
 			Src:          ref.Src,
 			Dst:          ref.Dst,
+			RspTo:        ref.RspTo,
 			TrafficClass: ref.TrafficClass,
 			TrafficBytes: ref.TrafficBytes,
 		},
-		RspTo: ref.RspTo,
 	}
 }
 
@@ -193,19 +193,19 @@ func (c *Comp) snapshotState() State {
 			pcs.RouteBuffer[i] = flitPipelineItemStateFromItem(item)
 		}
 
-		// Snapshot forwardBuffer (holds *sim.Msg)
+		// Snapshot forwardBuffer (holds *sim.GenericMsg)
 		fwdElems := queueing.SnapshotBuffer(pc.forwardBuffer)
 		pcs.ForwardBuffer = make([]msgRef, len(fwdElems))
 		for i, elem := range fwdElems {
-			msg := elem.(*sim.Msg)
+			msg := elem.(*sim.GenericMsg)
 			pcs.ForwardBuffer[i] = msgRefFromMsg(msg)
 		}
 
-		// Snapshot sendOutBuffer (holds *sim.Msg)
+		// Snapshot sendOutBuffer (holds *sim.GenericMsg)
 		sendElems := queueing.SnapshotBuffer(pc.sendOutBuffer)
 		pcs.SendOutBuffer = make([]msgRef, len(sendElems))
 		for i, elem := range sendElems {
-			msg := elem.(*sim.Msg)
+			msg := elem.(*sim.GenericMsg)
 			pcs.SendOutBuffer[i] = msgRefFromMsg(msg)
 		}
 
@@ -318,11 +318,11 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flitMsg *sim.Msg) string {
+func (m *middleware) flitParentTaskID(flitMsg *sim.GenericMsg) string {
 	return flitMsg.ID + "_e2e"
 }
 
-func (m *middleware) flitTaskID(flitMsg *sim.Msg) string {
+func (m *middleware) flitTaskID(flitMsg *sim.GenericMsg) string {
 	return flitMsg.ID + "_" + m.Comp.Name()
 }
 
@@ -331,8 +331,8 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 		pc := m.portToComplexMapping[port.AsRemote()]
 
 		for i := 0; i < pc.numInputChannel; i++ {
-			item := port.PeekIncoming()
-			if item == nil {
+			itemI := port.PeekIncoming()
+			if itemI == nil {
 				break
 			}
 
@@ -340,6 +340,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 				break
 			}
 
+			item := itemI.(*sim.GenericMsg)
 			pipelineItem := flitPipelineItem{
 				taskID: m.flitTaskID(item),
 				flit:   item,
@@ -410,7 +411,7 @@ func (m *middleware) forward() (madeProgress bool) {
 				break
 			}
 
-			flitMsg := item.(*sim.Msg)
+			flitMsg := item.(*sim.GenericMsg)
 			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
 			if !flitPayload.OutputBuf.CanPush() {
 				break
@@ -437,7 +438,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				break
 			}
 
-			flitMsg := item.(*sim.Msg)
+			flitMsg := item.(*sim.GenericMsg)
 			flitMsg.Src = pc.localPort.AsRemote()
 			flitMsg.Dst = pc.remotePort
 
@@ -456,7 +457,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 }
 
 func (m *middleware) assignFlitOutputBuf(
-	flitMsg *sim.Msg,
+	flitMsg *sim.GenericMsg,
 	flitPayload *messaging.FlitPayload,
 ) {
 	outPort := m.routingTable.FindPort(flitPayload.Msg.Dst)

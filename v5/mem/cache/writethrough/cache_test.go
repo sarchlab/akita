@@ -74,7 +74,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -101,12 +101,12 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read2)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -124,7 +124,7 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(read1)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -139,7 +139,7 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(read2)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
 				Expect(drPayload.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -158,7 +158,7 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 
@@ -187,7 +187,7 @@ var _ = Describe("Cache", func() {
 			Build()
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg *sim.Msg) {
+			Do(func(msg *sim.GenericMsg) {
 				Expect(msg.RspTo).To(Equal(write.ID))
 			})
 		engine.Run()

@@ -17,7 +17,7 @@ type controlStage struct {
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
-	currFlushReq *sim.Msg // payload: *cache.FlushReqPayload
+	currFlushReq *sim.GenericMsg // payload: *cache.FlushReqPayload
 }
 
 func (s *controlStage) Tick() bool {
@@ -93,11 +93,12 @@ func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
 }
 
 func (s *controlStage) processNewRequest() bool {
-	msg := s.ctrlPort.PeekIncoming()
-	if msg == nil {
+	msgI := s.ctrlPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *cache.FlushReqPayload:
 		return s.startCacheFlush(msg)
@@ -111,7 +112,7 @@ func (s *controlStage) processNewRequest() bool {
 	panic("never")
 }
 
-func (s *controlStage) startCacheFlush(msg *sim.Msg) bool {
+func (s *controlStage) startCacheFlush(msg *sim.GenericMsg) bool {
 	if s.currFlushReq != nil {
 		return false
 	}
@@ -122,7 +123,7 @@ func (s *controlStage) startCacheFlush(msg *sim.Msg) bool {
 	return true
 }
 
-func (s *controlStage) doCacheRestart(msg *sim.Msg) bool {
+func (s *controlStage) doCacheRestart(msg *sim.GenericMsg) bool {
 	s.cache.isPaused = false
 
 	s.ctrlPort.RetrieveIncoming()

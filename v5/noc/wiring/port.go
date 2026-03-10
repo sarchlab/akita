@@ -12,8 +12,8 @@ import (
 type RetrievableConnection interface {
 	sim.Connection
 
-	Retrieve(dst *Port) *sim.Msg
-	Peek(dst *Port) *sim.Msg
+	Retrieve(dst *Port) sim.Msg
+	Peek(dst *Port) sim.Msg
 }
 
 // A Port provided by the wiring package provides only a single slot in the
@@ -27,7 +27,7 @@ type Port struct {
 	conn       RetrievableConnection
 	timeTeller sim.TimeTeller
 
-	msgToSend *sim.Msg
+	msgToSend sim.Msg
 	sendTime  sim.VTimeInSec
 }
 
@@ -83,7 +83,7 @@ func (p *Port) CanSend() bool {
 }
 
 // Send is used to send a message out from a component
-func (p *Port) Send(msg *sim.Msg) *sim.SendError {
+func (p *Port) Send(msg sim.Msg) *sim.SendError {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -108,18 +108,18 @@ func (p *Port) Send(msg *sim.Msg) *sim.SendError {
 	return nil
 }
 
-func (p *Port) msgMustBeValid(msg *sim.Msg) {
-	if msg.Src == "" || msg.Dst == "" {
+func (p *Port) msgMustBeValid(msg sim.Msg) {
+	if msg.Meta().Src == "" || msg.Meta().Dst == "" {
 		panic("message src and dst must be set")
 	}
 
-	if msg.Src != p.AsRemote() {
+	if msg.Meta().Src != p.AsRemote() {
 		panic("message src must be the port")
 	}
 }
 
 // Deliver is used to deliver a message to a component
-func (p *Port) Deliver(msg *sim.Msg) *sim.SendError {
+func (p *Port) Deliver(msg sim.Msg) *sim.SendError {
 	// This port does not accept connection-delivered incoming messages.
 	// Use PeekIncoming and PeekOutgoing instead.
 	return sim.NewSendError()
@@ -127,13 +127,13 @@ func (p *Port) Deliver(msg *sim.Msg) *sim.SendError {
 
 // RetrieveIncoming is used by the component to take a message from the incoming
 // buffer
-func (p *Port) RetrieveIncoming() *sim.Msg {
+func (p *Port) RetrieveIncoming() sim.Msg {
 	return p.conn.Retrieve(p)
 }
 
 // RetrieveOutgoing is used by the component to take a message from the outgoing
 // buffer
-func (p *Port) RetrieveOutgoing() *sim.Msg {
+func (p *Port) RetrieveOutgoing() sim.Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -165,13 +165,13 @@ func (p *Port) RetrieveOutgoing() *sim.Msg {
 
 // PeekIncoming returns the first message in the incoming buffer without
 // removing it.
-func (p *Port) PeekIncoming() *sim.Msg {
+func (p *Port) PeekIncoming() sim.Msg {
 	return p.conn.Peek(p)
 }
 
 // PeekOutgoing returns the first message in the outgoing buffer without
 // removing it.
-func (p *Port) PeekOutgoing() *sim.Msg {
+func (p *Port) PeekOutgoing() sim.Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

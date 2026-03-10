@@ -48,11 +48,12 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
-	msg := m.ctrlPort.PeekIncoming()
-	if msg == nil {
+	msgI := m.ctrlPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
 
 	m.ctrlMsgMustBeValid(ctrlPayload)
@@ -65,7 +66,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleEnable(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	ctrlPayload *mem.ControlMsgPayload,
 ) bool {
 	if ctrlPayload.Enable {
@@ -93,7 +94,7 @@ func (m *ctrlMiddleware) handleEnable(
 }
 
 func (m *ctrlMiddleware) handlePause(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	ctrlPayload *mem.ControlMsgPayload,
 ) bool {
 	if !ctrlPayload.Enable && !ctrlPayload.Drain {
@@ -121,7 +122,7 @@ func (m *ctrlMiddleware) handlePause(
 }
 
 func (m *ctrlMiddleware) handleDrain(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	ctrlPayload *mem.ControlMsgPayload,
 ) bool {
 	if !ctrlPayload.Enable && ctrlPayload.Drain {

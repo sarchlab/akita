@@ -13,7 +13,7 @@ type flusher struct {
 	cache *Comp
 
 	blockToEvict    []*cache.Block
-	processingFlush *sim.Msg // payload: *cache.FlushReqPayload
+	processingFlush *sim.GenericMsg // payload: *cache.FlushReqPayload
 }
 
 func (f *flusher) Tick() bool {
@@ -93,11 +93,12 @@ func (f *flusher) processFlush() bool {
 }
 
 func (f *flusher) extractFromPort() bool {
-	item := f.cache.controlPort.PeekIncoming()
-	if item == nil {
+	itemI := f.cache.controlPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	switch item.Payload.(type) {
 	case *cache.FlushReqPayload:
 		return f.startProcessingFlush(item)
@@ -110,7 +111,7 @@ func (f *flusher) extractFromPort() bool {
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg *sim.Msg) bool {
+func (f *flusher) startProcessingFlush(msg *sim.GenericMsg) bool {
 	flushPayload := sim.MsgPayload[cache.FlushReqPayload](msg)
 	f.processingFlush = msg
 	if flushPayload.DiscardInflight {
@@ -125,7 +126,7 @@ func (f *flusher) startProcessingFlush(msg *sim.Msg) bool {
 	return true
 }
 
-func (f *flusher) handleCacheRestart(msg *sim.Msg) bool {
+func (f *flusher) handleCacheRestart(msg *sim.GenericMsg) bool {
 	if !f.cache.controlPort.CanSend() {
 		return false
 	}

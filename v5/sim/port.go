@@ -38,16 +38,16 @@ type Port interface {
 	SetComponent(comp Component)
 
 	// For connection
-	Deliver(msg *Msg) *SendError
+	Deliver(msg Msg) *SendError
 	NotifyAvailable()
-	RetrieveOutgoing() *Msg
-	PeekOutgoing() *Msg
+	RetrieveOutgoing() Msg
+	PeekOutgoing() Msg
 
 	// For component
 	CanSend() bool
-	Send(msg *Msg) *SendError
-	RetrieveIncoming() *Msg
-	PeekIncoming() *Msg
+	Send(msg Msg) *SendError
+	RetrieveIncoming() Msg
+	PeekIncoming() Msg
 
 	// Buffer counts
 	NumIncoming() int
@@ -113,7 +113,7 @@ func (p *defaultPort) CanSend() bool {
 }
 
 // Send is used to send a message out from a component
-func (p *defaultPort) Send(msg *Msg) *SendError {
+func (p *defaultPort) Send(msg Msg) *SendError {
 	p.lock.Lock()
 
 	p.msgMustBeValid(msg)
@@ -142,7 +142,7 @@ func (p *defaultPort) Send(msg *Msg) *SendError {
 }
 
 // Deliver is used to deliver a message to a component
-func (p *defaultPort) Deliver(msg *Msg) *SendError {
+func (p *defaultPort) Deliver(msg Msg) *SendError {
 	p.lock.Lock()
 
 	if !p.incomingBuf.CanPush() {
@@ -171,7 +171,7 @@ func (p *defaultPort) Deliver(msg *Msg) *SendError {
 
 // RetrieveIncoming is used by the component to take a message from the incoming
 // buffer
-func (p *defaultPort) RetrieveIncoming() *Msg {
+func (p *defaultPort) RetrieveIncoming() Msg {
 	p.lock.Lock()
 
 	msg := p.incomingBuf.Pop()
@@ -198,7 +198,7 @@ func (p *defaultPort) RetrieveIncoming() *Msg {
 
 // RetrieveOutgoing is used by the component to take a message from the outgoing
 // buffer
-func (p *defaultPort) RetrieveOutgoing() *Msg {
+func (p *defaultPort) RetrieveOutgoing() Msg {
 	p.lock.Lock()
 
 	msg := p.outgoingBuf.Pop()
@@ -225,7 +225,7 @@ func (p *defaultPort) RetrieveOutgoing() *Msg {
 
 // PeekIncoming returns the first message in the incoming buffer without
 // removing it.
-func (p *defaultPort) PeekIncoming() *Msg {
+func (p *defaultPort) PeekIncoming() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -234,7 +234,7 @@ func (p *defaultPort) PeekIncoming() *Msg {
 
 // PeekOutgoing returns the first message in the outgoing buffer without
 // removing it.
-func (p *defaultPort) PeekOutgoing() *Msg {
+func (p *defaultPort) PeekOutgoing() Msg {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -280,14 +280,14 @@ func NewPort(
 	return p
 }
 
-func (p *defaultPort) msgMustBeValid(msg *Msg) {
+func (p *defaultPort) msgMustBeValid(msg Msg) {
 	portMustBeMsgSrc(p, msg)
-	dstMustNotBeEmpty(msg.Dst)
+	dstMustNotBeEmpty(msg.Meta().Dst)
 	srcDstMustNotBeTheSame(msg)
 }
 
-func portMustBeMsgSrc(port Port, msg *Msg) {
-	if port.Name() != string(msg.Src) {
+func portMustBeMsgSrc(port Port, msg Msg) {
+	if port.Name() != string(msg.Meta().Src) {
 		panic("sending port is not msg src")
 	}
 }
@@ -298,8 +298,8 @@ func dstMustNotBeEmpty(port RemotePort) {
 	}
 }
 
-func srcDstMustNotBeTheSame(msg *Msg) {
-	if msg.Src == msg.Dst {
+func srcDstMustNotBeTheSame(msg Msg) {
+	if msg.Meta().Src == msg.Meta().Dst {
 		panic("sending back to src")
 	}
 }

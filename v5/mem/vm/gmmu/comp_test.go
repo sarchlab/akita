@@ -131,10 +131,10 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentRsp *sim.Msg
+			var sentRsp *sim.GenericMsg
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					sentRsp = msg
 				}).
 				Return(nil)
@@ -230,17 +230,17 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentReqToBottom *sim.Msg
+			var sentReqToBottom *sim.GenericMsg
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					sentReqToBottom = msg
 				}).
 				Return(nil)
 
 			bottomPort.EXPECT().
 				RetrieveIncoming().
-				DoAndReturn(func() *sim.Msg {
+				DoAndReturn(func() *sim.GenericMsg {
 					rsp := vm.TranslationRspBuilder{}.
 						WithSrc(gmmuComp.GetSpec().LowModule).
 						WithDst(gmmuComp.bottomPort.AsRemote()).
@@ -250,10 +250,10 @@ var _ = Describe("Builder", func() {
 					return rsp
 				})
 
-			var sentRsp *sim.Msg
+			var sentRsp *sim.GenericMsg
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					sentRsp = msg
 				}).
 				Return(nil)

@@ -94,7 +94,7 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 }
 
 // Deliver mocks base method.
-func (m *MockPort) Deliver(msg *sim.Msg) *sim.SendError {
+func (m *MockPort) Deliver(msg sim.Msg) *sim.SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deliver", msg)
 	ret0, _ := ret[0].(*sim.SendError)
@@ -190,10 +190,10 @@ func (mr *MockPortMockRecorder) NumOutgoing() *gomock.Call {
 }
 
 // PeekIncoming mocks base method.
-func (m *MockPort) PeekIncoming() *sim.Msg {
+func (m *MockPort) PeekIncoming() sim.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekIncoming")
-	ret0, _ := ret[0].(*sim.Msg)
+	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
@@ -204,10 +204,10 @@ func (mr *MockPortMockRecorder) PeekIncoming() *gomock.Call {
 }
 
 // PeekOutgoing mocks base method.
-func (m *MockPort) PeekOutgoing() *sim.Msg {
+func (m *MockPort) PeekOutgoing() sim.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekOutgoing")
-	ret0, _ := ret[0].(*sim.Msg)
+	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
@@ -218,10 +218,10 @@ func (mr *MockPortMockRecorder) PeekOutgoing() *gomock.Call {
 }
 
 // RetrieveIncoming mocks base method.
-func (m *MockPort) RetrieveIncoming() *sim.Msg {
+func (m *MockPort) RetrieveIncoming() sim.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveIncoming")
-	ret0, _ := ret[0].(*sim.Msg)
+	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
@@ -232,10 +232,10 @@ func (mr *MockPortMockRecorder) RetrieveIncoming() *gomock.Call {
 }
 
 // RetrieveOutgoing mocks base method.
-func (m *MockPort) RetrieveOutgoing() *sim.Msg {
+func (m *MockPort) RetrieveOutgoing() sim.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveOutgoing")
-	ret0, _ := ret[0].(*sim.Msg)
+	ret0, _ := ret[0].(sim.Msg)
 	return ret0
 }
 
@@ -246,7 +246,7 @@ func (mr *MockPortMockRecorder) RetrieveOutgoing() *gomock.Call {
 }
 
 // Send mocks base method.
-func (m *MockPort) Send(msg *sim.Msg) *sim.SendError {
+func (m *MockPort) Send(msg sim.Msg) *sim.SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", msg)
 	ret0, _ := ret[0].(*sim.SendError)

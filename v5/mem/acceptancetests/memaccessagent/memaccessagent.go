@@ -25,8 +25,8 @@ type MemAccessAgent struct {
 	WriteLeft       int
 	ReadLeft        int
 	KnownMemValue   map[uint64][]uint32
-	PendingReadReq  map[string]*sim.Msg // payload: *mem.ReadReqPayload
-	PendingWriteReq map[string]*sim.Msg // payload: *mem.WriteReqPayload
+	PendingReadReq  map[string]*sim.GenericMsg // payload: *mem.ReadReqPayload
+	PendingWriteReq map[string]*sim.GenericMsg // payload: *mem.WriteReqPayload
 
 	memPort           sim.Port
 	UseVirtualAddress bool
@@ -36,7 +36,7 @@ type MemAccessAgent struct {
 	Rand *rand.Rand
 }
 
-func (a *MemAccessAgent) checkReadResult(read *sim.Msg,
+func (a *MemAccessAgent) checkReadResult(read *sim.GenericMsg,
 	dataReady *mem.DataReadyRspPayload,
 ) {
 	readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
@@ -93,11 +93,12 @@ func (a *MemAccessAgent) Tick() bool {
 }
 
 func (a *MemAccessAgent) processMsgRsp() bool {
-	msg := a.memPort.RetrieveIncoming()
-	if msg == nil {
+	msgI := a.memPort.RetrieveIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch payload := msg.Payload.(type) {
 	case *mem.WriteDoneRspPayload:
 		_ = payload
@@ -300,8 +301,8 @@ func NewMemAccessAgent(engine sim.Engine) *MemAccessAgent {
 	agent.ReadLeft = 10000
 	agent.WriteLeft = 10000
 	agent.KnownMemValue = make(map[uint64][]uint32)
-	agent.PendingWriteReq = make(map[string]*sim.Msg)
-	agent.PendingReadReq = make(map[string]*sim.Msg)
+	agent.PendingWriteReq = make(map[string]*sim.GenericMsg)
+	agent.PendingReadReq = make(map[string]*sim.GenericMsg)
 
 	return agent
 }

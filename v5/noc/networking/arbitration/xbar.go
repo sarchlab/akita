@@ -34,7 +34,7 @@ func (a *xbarArbiter) Arbitrate() []queueing.Buffer {
 			continue
 		}
 
-		flitMsg := item.(*sim.Msg)
+		flitMsg := item.(*sim.GenericMsg)
 		flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
 		if _, ok := occupiedOutputPort[flitPayload.OutputBuf]; ok {
 			continue

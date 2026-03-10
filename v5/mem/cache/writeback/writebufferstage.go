@@ -228,11 +228,12 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msg := wb.cache.bottomPort.PeekIncoming()
-	if msg == nil {
+	msgI := wb.cache.bottomPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *mem.DataReadyRspPayload:
 		return wb.processDataReadyRsp(msg)
@@ -244,7 +245,7 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 ) bool {
 	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
@@ -326,7 +327,7 @@ func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 ) bool {
 	for i := len(wb.inflightEviction) - 1; i >= 0; i-- {
 		e := wb.inflightEviction[i]

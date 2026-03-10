@@ -55,14 +55,14 @@ func (b FlushReqBuilder) PauseAfterFlushing() FlushReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with FlushReqPayload.
-func (b FlushReqBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with FlushReqPayload.
+func (b FlushReqBuilder) Build() *sim.GenericMsg {
 	payload := &FlushReqPayload{
 		InvalidateAllCachelines: b.invalidateAllCacheLines,
 		DiscardInflight:         b.discardInflight,
 		PauseAfterFlushing:      b.pauseAfterFlushing,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -101,16 +101,16 @@ func (b FlushRspBuilder) WithRspTo(id string) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with FlushRspPayload.
-func (b FlushRspBuilder) Build() *sim.Msg {
-	return &sim.Msg{
+// Build creates a new *sim.GenericMsg with FlushRspPayload.
+func (b FlushRspBuilder) Build() *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: &FlushRspPayload{},
 	}
 }
@@ -136,9 +136,9 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with RestartReqPayload.
-func (b RestartReqBuilder) Build() *sim.Msg {
-	return &sim.Msg{
+// Build creates a new *sim.GenericMsg with RestartReqPayload.
+func (b RestartReqBuilder) Build() *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -177,16 +177,16 @@ func (b RestartRspBuilder) WithRspTo(id string) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with RestartRspPayload.
-func (b RestartRspBuilder) Build() *sim.Msg {
-	return &sim.Msg{
+// Build creates a new *sim.GenericMsg with RestartRspPayload.
+func (b RestartRspBuilder) Build() *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: &RestartRspPayload{},
 	}
 }

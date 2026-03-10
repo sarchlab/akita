@@ -19,15 +19,16 @@ func (c *coalescer) Reset() {
 }
 
 func (c *coalescer) Tick() bool {
-	msg := c.cache.topPort.PeekIncoming()
-	if msg == nil {
+	msgI := c.cache.topPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	return c.processReq(msg)
 }
 
-func (c *coalescer) processReq(msg *sim.Msg) bool {
+func (c *coalescer) processReq(msg *sim.GenericMsg) bool {
 	if len(c.cache.transactions) >= c.cache.maxNumConcurrentTrans {
 		return false
 	}
@@ -47,7 +48,7 @@ func (c *coalescer) processReq(msg *sim.Msg) bool {
 	return c.processReqNoncoalescable(msg)
 }
 
-func (c *coalescer) processReqCoalescable(msg *sim.Msg) bool {
+func (c *coalescer) processReqCoalescable(msg *sim.GenericMsg) bool {
 	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
@@ -58,7 +59,7 @@ func (c *coalescer) processReqCoalescable(msg *sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) processReqNoncoalescable(msg *sim.Msg) bool {
+func (c *coalescer) processReqNoncoalescable(msg *sim.GenericMsg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -75,7 +76,7 @@ func (c *coalescer) processReqNoncoalescable(msg *sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.Msg) bool {
+func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.GenericMsg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -91,7 +92,7 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.Msg) bool {
+func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.GenericMsg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -113,7 +114,7 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) createTransaction(msg *sim.Msg) *transaction {
+func (c *coalescer) createTransaction(msg *sim.GenericMsg) *transaction {
 	switch msg.Payload.(type) {
 	case *mem.ReadReqPayload:
 		t := &transaction{
@@ -134,7 +135,7 @@ func (c *coalescer) createTransaction(msg *sim.Msg) *transaction {
 	}
 }
 
-func (c *coalescer) isReqLastInWave(msg *sim.Msg) bool {
+func (c *coalescer) isReqLastInWave(msg *sim.GenericMsg) bool {
 	switch payload := msg.Payload.(type) {
 	case *mem.ReadReqPayload:
 		return !payload.CanWaitForCoalesce
@@ -145,7 +146,7 @@ func (c *coalescer) isReqLastInWave(msg *sim.Msg) bool {
 	}
 }
 
-func (c *coalescer) canReqCoalesce(msg *sim.Msg) bool {
+func (c *coalescer) canReqCoalesce(msg *sim.GenericMsg) bool {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	payload := msg.Payload.(mem.AccessReqPayload)
 	return payload.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize

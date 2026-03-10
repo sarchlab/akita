@@ -19,7 +19,7 @@ type Spec struct {
 	NumReqPerCycle int    `json:"num_req_per_cycle"`
 }
 
-// incomingReqState is a serializable representation of an incoming *sim.Msg.
+// incomingReqState is a serializable representation of an incoming *sim.GenericMsg.
 type incomingReqState struct {
 	ID    string         `json:"id"`
 	Src   sim.RemotePort `json:"src"`
@@ -54,15 +54,15 @@ type State struct {
 }
 
 type transaction struct {
-	incomingReqs    []*sim.Msg
-	translationReq  *sim.Msg // payload: *vm.TranslationReqPayload
-	translationRsp  *sim.Msg // payload: *vm.TranslationRspPayload
+	incomingReqs    []*sim.GenericMsg
+	translationReq  *sim.GenericMsg // payload: *vm.TranslationReqPayload
+	translationRsp  *sim.GenericMsg // payload: *vm.TranslationRspPayload
 	translationDone bool
 }
 
 type reqToBottom struct {
-	reqFromTop  *sim.Msg
-	reqToBottom *sim.Msg
+	reqFromTop  *sim.GenericMsg
+	reqToBottom *sim.GenericMsg
 }
 
 // Comp is an AddressTranslator that forwards the read/write requests with
@@ -143,18 +143,18 @@ func (c *Comp) SetState(state State) {
 		}
 
 		for _, reqState := range ts.IncomingReqs {
-			t.incomingReqs = append(t.incomingReqs, &sim.Msg{
+			t.incomingReqs = append(t.incomingReqs, &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
-					ID:  reqState.ID,
-					Src: reqState.Src,
-					Dst: reqState.Dst,
+					ID:    reqState.ID,
+					Src:   reqState.Src,
+					Dst:   reqState.Dst,
+					RspTo: reqState.RspTo,
 				},
-				RspTo: reqState.RspTo,
 			})
 		}
 
 		if ts.TranslationReqID != "" {
-			t.translationReq = &sim.Msg{
+			t.translationReq = &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  ts.TranslationReqID,
 					Src: ts.TranslationReqSrc,
@@ -169,14 +169,14 @@ func (c *Comp) SetState(state State) {
 	c.inflightReqToBottom = nil
 	for _, rs := range state.InflightReqToBottom {
 		c.inflightReqToBottom = append(c.inflightReqToBottom, reqToBottom{
-			reqFromTop: &sim.Msg{
+			reqFromTop: &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  rs.ReqFromTopID,
 					Src: rs.ReqFromTopSrc,
 					Dst: rs.ReqFromTopDst,
 				},
 			},
-			reqToBottom: &sim.Msg{
+			reqToBottom: &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  rs.ReqToBottomID,
 					Src: rs.ReqToBottomSrc,
@@ -246,11 +246,12 @@ func (m *middleware) runPipeline() bool {
 }
 
 func (m *middleware) translate() bool {
-	item := m.topPort.PeekIncoming()
-	if item == nil {
+	itemI := m.topPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	payload := item.Payload.(mem.AccessReqPayload)
 	vAddr := payload.GetAddress()
 	vPageID := m.addrToPageID(vAddr)
@@ -269,7 +270,7 @@ func (m *middleware) translate() bool {
 	}
 
 	trans := &transaction{
-		incomingReqs:   []*sim.Msg{item},
+		incomingReqs:   []*sim.GenericMsg{item},
 		translationReq: transReq,
 	}
 	m.transactions = append(m.transactions, trans)
@@ -287,11 +288,12 @@ func (m *middleware) translate() bool {
 }
 
 func (m *middleware) parseTranslation() bool {
-	rsp := m.translationPort.PeekIncoming()
-	if rsp == nil {
+	rspI := m.translationPort.PeekIncoming()
+	if rspI == nil {
 		return false
 	}
 
+	rsp := rspI.(*sim.GenericMsg)
 	trans := m.findTranslationByReqID(rsp.RspTo)
 
 	if trans == nil {
@@ -350,15 +352,16 @@ func (m *middleware) parseTranslation() bool {
 
 //nolint:funlen,gocyclo
 func (m *middleware) respond() bool {
-	rsp := m.bottomPort.PeekIncoming()
-	if rsp == nil {
+	rspI := m.bottomPort.PeekIncoming()
+	if rspI == nil {
 		return false
 	}
 
+	rsp := rspI.(*sim.GenericMsg)
 	var (
-		reqFromTop       *sim.Msg
+		reqFromTop       *sim.GenericMsg
 		reqToBottomCombo reqToBottom
-		rspToTop         *sim.Msg
+		rspToTop         *sim.GenericMsg
 	)
 
 	reqInBottom := false
@@ -432,9 +435,9 @@ func (m *middleware) respond() bool {
 }
 
 func (m *middleware) createTranslatedReq(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	page vm.Page,
-) *sim.Msg {
+) *sim.GenericMsg {
 	switch msg.Payload.(type) {
 	case *mem.ReadReqPayload:
 		return m.createTranslatedReadReq(msg, page)
@@ -447,9 +450,9 @@ func (m *middleware) createTranslatedReq(
 }
 
 func (m *middleware) createTranslatedReadReq(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	page vm.Page,
-) *sim.Msg {
+) *sim.GenericMsg {
 	readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
 	offset := readPayload.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
@@ -468,9 +471,9 @@ func (m *middleware) createTranslatedReadReq(
 }
 
 func (m *middleware) createTranslatedWriteReq(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	page vm.Page,
-) *sim.Msg {
+) *sim.GenericMsg {
 	writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
 	offset := writePayload.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
@@ -549,11 +552,12 @@ func (m *middleware) removeReqToBottomByID(id string) {
 }
 
 func (m *middleware) handleCtrlRequest() bool {
-	msg := m.ctrlPort.PeekIncoming()
-	if msg == nil {
+	msgI := m.ctrlPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
 
 	if ctrlPayload.DiscardTransations {
@@ -565,7 +569,7 @@ func (m *middleware) handleCtrlRequest() bool {
 	panic("never")
 }
 
-func (m *middleware) handleFlushReq(msg *sim.Msg) bool {
+func (m *middleware) handleFlushReq(msg *sim.GenericMsg) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(m.ctrlPort.AsRemote()).
 		WithDst(msg.Src).
@@ -586,7 +590,7 @@ func (m *middleware) handleFlushReq(msg *sim.Msg) bool {
 	return true
 }
 
-func (m *middleware) handleRestartReq(msg *sim.Msg) bool {
+func (m *middleware) handleRestartReq(msg *sim.GenericMsg) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(m.ctrlPort.AsRemote()).
 		WithDst(msg.Src).

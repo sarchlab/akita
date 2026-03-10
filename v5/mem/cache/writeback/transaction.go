@@ -27,20 +27,20 @@ type transaction struct {
 	action
 
 	id                string
-	read              *sim.Msg // payload: *mem.ReadReqPayload
-	write             *sim.Msg // payload: *mem.WriteReqPayload
-	flush             *sim.Msg // payload: *cache.FlushReqPayload
+	read              *sim.GenericMsg // payload: *mem.ReadReqPayload
+	write             *sim.GenericMsg // payload: *mem.WriteReqPayload
+	flush             *sim.GenericMsg // payload: *cache.FlushReqPayload
 	block             *cache.Block
 	victim            *cache.Block
 	fetchPID          vm.PID
 	fetchAddress      uint64
 	fetchedData       []byte
-	fetchReadReq      *sim.Msg // payload: *mem.ReadReqPayload
+	fetchReadReq      *sim.GenericMsg // payload: *mem.ReadReqPayload
 	evictingPID       vm.PID
 	evictingAddr      uint64
 	evictingData      []byte
 	evictingDirtyMask []bool
-	evictionWriteReq  *sim.Msg // payload: *mem.WriteReqPayload
+	evictionWriteReq  *sim.GenericMsg // payload: *mem.WriteReqPayload
 	mshrEntry         *cache.MSHREntry
 }
 
@@ -56,7 +56,7 @@ func (t transaction) accessReq() mem.AccessReqPayload {
 	return nil
 }
 
-func (t transaction) req() *sim.Msg {
+func (t transaction) req() *sim.GenericMsg {
 	if t.read != nil {
 		return t.read
 	}

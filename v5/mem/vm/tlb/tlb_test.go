@@ -108,7 +108,7 @@ var _ = Describe("TLB", func() {
 		var (
 			wayID int
 			page  vm.Page
-			req   *sim.Msg
+			req   *sim.GenericMsg
 		)
 
 		BeforeEach(func() {
@@ -144,7 +144,7 @@ var _ = Describe("TLB", func() {
 		var (
 			wayID int
 			page  vm.Page
-			req   *sim.Msg
+			req   *sim.GenericMsg
 		)
 
 		BeforeEach(func() {
@@ -174,7 +174,7 @@ var _ = Describe("TLB", func() {
 
 		It("should fetch from bottom and add entry to MSHR", func() {
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.Msg) {
+				Do(func(msg *sim.GenericMsg) {
 					sentPayload := sim.MsgPayload[vm.TranslationReqPayload](msg)
 					Expect(sentPayload.VAddr).To(Equal(uint64(0x100)))
 					Expect(sentPayload.PID).To(Equal(vm.PID(1)))
@@ -193,10 +193,10 @@ var _ = Describe("TLB", func() {
 	Context("parse bottom", func() {
 		var (
 			wayID       int
-			req         *sim.Msg
-			fetchBottom *sim.Msg
+			req         *sim.GenericMsg
+			fetchBottom *sim.GenericMsg
 			page        vm.Page
-			rsp         *sim.Msg
+			rsp         *sim.GenericMsg
 		)
 
 		BeforeEach(func() {
@@ -478,7 +478,7 @@ var _ = Describe("TLB Integration", func() {
 			Valid: true,
 		}
 		lowModule.EXPECT().Deliver(gomock.Any()).
-			Do(func(req *sim.Msg) {
+			Do(func(req *sim.GenericMsg) {
 				rsp := vm.TranslationRspBuilder{}.
 					WithSrc(lowModule.AsRemote()).
 					WithDst(req.Src).
@@ -508,7 +508,7 @@ var _ = Describe("TLB Integration", func() {
 		tlbComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *sim.Msg) {
+			Do(func(rsp *sim.GenericMsg) {
 				rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
 				fmt.Println("Deliver() called with Page:", rspPayload.Page)
 				Expect(rspPayload.Page).To(Equal(page))
@@ -529,7 +529,7 @@ var _ = Describe("TLB Integration", func() {
 		tlbComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *sim.Msg) {
+			Do(func(rsp *sim.GenericMsg) {
 				rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
 				Expect(rspPayload.Page).To(Equal(page))
 			})
@@ -541,7 +541,7 @@ var _ = Describe("TLB Integration", func() {
 		tlbComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *sim.Msg) {
+			Do(func(rsp *sim.GenericMsg) {
 				rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
 				Expect(rspPayload.Page).To(Equal(page))
 			})

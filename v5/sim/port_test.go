@@ -6,8 +6,8 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-func newTestMsg() *Msg {
-	return &Msg{
+func newTestMsg() *GenericMsg {
+	return &GenericMsg{
 		MsgMeta: MsgMeta{
 			ID: GetIDGenerator().Generate(),
 		},

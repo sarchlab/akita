@@ -19,14 +19,14 @@ type wireTestComponent struct {
 	*sim.TickingComponent
 
 	port         *Port
-	msgsToSend   []*sim.Msg
-	msgsReceived []*sim.Msg
+	msgsToSend   []*sim.GenericMsg
+	msgsReceived []sim.Msg
 }
 
 func newWireTestComponent(engine sim.Engine, name string) *wireTestComponent {
 	c := &wireTestComponent{
-		msgsToSend:   make([]*sim.Msg, 0),
-		msgsReceived: make([]*sim.Msg, 0),
+		msgsToSend:   make([]*sim.GenericMsg, 0),
+		msgsReceived: make([]sim.Msg, 0),
 	}
 
 	c.TickingComponent =
@@ -41,13 +41,13 @@ func (c *wireTestComponent) Tick() bool {
 	madeProgress := false
 
 	// Try to receive messages
-	msg := c.port.RetrieveIncoming()
-	if msg != nil {
-		c.msgsReceived = append(c.msgsReceived, msg)
+	rawMsg := c.port.RetrieveIncoming()
+	if rawMsg != nil {
+		c.msgsReceived = append(c.msgsReceived, rawMsg)
 		madeProgress = true
 
 		now := c.CurrentTime()
-		payload := msg.Payload.(*samplePayload)
+		payload := rawMsg.(*sim.GenericMsg).Payload.(*samplePayload)
 		Expect(payload.sendTime).To(Equal(now - 1))
 	}
 
@@ -94,7 +94,7 @@ var _ = Describe("Wire Integration", func() {
 	It("should deliver messages one cycle after they are sent", func() {
 		// Create 10 messages to send
 		for i := 0; i < 10; i++ {
-			msg := &sim.Msg{
+			msg := &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp1.port.AsRemote(),
@@ -117,7 +117,7 @@ var _ = Describe("Wire Integration", func() {
 	It("should handle bidirectional message passing", func() {
 		// Create messages in both directions
 		for i := 0; i < 5; i++ {
-			msg1 := &sim.Msg{
+			msg1 := &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp1.port.AsRemote(),
@@ -127,7 +127,7 @@ var _ = Describe("Wire Integration", func() {
 			}
 			comp1.msgsToSend = append(comp1.msgsToSend, msg1)
 
-			msg2 := &sim.Msg{
+			msg2 := &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp2.port.AsRemote(),

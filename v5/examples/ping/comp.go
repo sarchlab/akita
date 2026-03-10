@@ -26,7 +26,7 @@ type StartPingEvent struct {
 type RspPingEvent struct {
 	*sim.EventBase
 
-	pingMsg *sim.Msg
+	pingMsg *sim.GenericMsg
 }
 
 type Comp struct {
@@ -56,7 +56,7 @@ func (c *Comp) Handle(e sim.Event) error {
 }
 
 func (c *Comp) StartPing(evt StartPingEvent) {
-	pingMsg := &sim.Msg{
+	pingMsg := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: c.OutPort.AsRemote(),
@@ -77,13 +77,13 @@ func (c *Comp) StartPing(evt StartPingEvent) {
 func (c *Comp) RspPing(evt RspPingEvent) {
 	msg := evt.pingMsg
 	payload := sim.MsgPayload[PingReqPayload](msg)
-	rsp := &sim.Msg{
+	rsp := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
-			Src: c.OutPort.AsRemote(),
-			Dst: msg.Src,
+			ID:    sim.GetIDGenerator().Generate(),
+			Src:   c.OutPort.AsRemote(),
+			Dst:   msg.Src,
+			RspTo: msg.ID,
 		},
-		RspTo: msg.ID,
 		Payload: &PingRspPayload{
 			SeqID: payload.SeqID,
 		},
@@ -96,7 +96,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	msg := port.RetrieveIncoming()
+	msg := port.RetrieveIncoming().(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *PingReqPayload:
 		c.processPingMsg(msg)
@@ -107,7 +107,7 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 	}
 }
 
-func (c *Comp) processPingMsg(msg *sim.Msg) {
+func (c *Comp) processPingMsg(msg *sim.GenericMsg) {
 	rspEvent := RspPingEvent{
 		EventBase: sim.NewEventBase(c.Engine.CurrentTime()+2, c),
 		pingMsg:   msg,
@@ -115,7 +115,7 @@ func (c *Comp) processPingMsg(msg *sim.Msg) {
 	c.Engine.Schedule(rspEvent)
 }
 
-func (c *Comp) processPingRsp(msg *sim.Msg) {
+func (c *Comp) processPingRsp(msg *sim.GenericMsg) {
 	payload := sim.MsgPayload[PingRspPayload](msg)
 	seqID := payload.SeqID
 	startTime := c.startTime[seqID]

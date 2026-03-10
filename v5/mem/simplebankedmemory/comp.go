@@ -14,7 +14,7 @@ import (
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct{}
 
-// msgRef is a serializable representation of a *sim.Msg.
+// msgRef is a serializable representation of a *sim.GenericMsg.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -56,7 +56,7 @@ type bank struct {
 }
 
 type bankPipelineItem struct {
-	msg       *sim.Msg
+	msg       *sim.GenericMsg
 	committed bool
 	readData  []byte
 }
@@ -78,7 +78,7 @@ type Comp struct {
 	bankSelector bankSelector
 }
 
-func msgRefFromMsg(m *sim.Msg) msgRef {
+func msgRefFromMsg(m *sim.GenericMsg) msgRef {
 	return msgRef{
 		ID:           m.ID,
 		Src:          m.Src,
@@ -89,16 +89,16 @@ func msgRefFromMsg(m *sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(r msgRef) *sim.Msg {
-	return &sim.Msg{
+func msgFromRef(r msgRef) *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           r.ID,
 			Src:          r.Src,
 			Dst:          r.Dst,
+			RspTo:        r.RspTo,
 			TrafficClass: r.TrafficClass,
 			TrafficBytes: r.TrafficBytes,
 		},
-		RspTo: r.RspTo,
 	}
 }
 
@@ -227,11 +227,12 @@ func (m *middleware) dispatchFromTopPort() bool {
 	madeProgress := false
 
 	for {
-		msg := m.topPort.PeekIncoming()
-		if msg == nil {
+		msgI := m.topPort.PeekIncoming()
+		if msgI == nil {
 			break
 		}
 
+		msg := msgI.(*sim.GenericMsg)
 		payload, ok := msg.Payload.(mem.AccessReqPayload)
 		if !ok {
 			log.Panicf("simplebankedmemory: unsupported message type %T", msg.Payload)

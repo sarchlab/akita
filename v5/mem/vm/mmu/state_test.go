@@ -24,7 +24,7 @@ func buildTestMMU(engine sim.Engine, name string) *Comp {
 		Build(name)
 }
 
-func populateMMURuntimeState(mmu *Comp, req *sim.Msg, payload *vm.TranslationReqPayload) {
+func populateMMURuntimeState(mmu *Comp, req *sim.GenericMsg, payload *vm.TranslationReqPayload) {
 	mmu.walkingTranslations = []transaction{
 		{
 			req: req, reqPayload: payload,
@@ -135,7 +135,7 @@ func TestGetStateAndSetState(t *testing.T) {
 }
 
 func TestTransactionStateWithMigration(t *testing.T) {
-	migrationReq := &sim.Msg{
+	migrationReq := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  "mig-123",
 			Src: sim.RemotePort("MMU.MigrationPort"),

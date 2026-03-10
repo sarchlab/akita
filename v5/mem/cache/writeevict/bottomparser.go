@@ -13,11 +13,12 @@ type bottomParser struct {
 }
 
 func (p *bottomParser) Tick() bool {
-	item := p.cache.bottomPort.PeekIncoming()
-	if item == nil {
+	itemI := p.cache.bottomPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	switch item.Payload.(type) {
 	case *mem.WriteDoneRspPayload:
 		return p.processDoneRsp(item)
@@ -28,7 +29,7 @@ func (p *bottomParser) Tick() bool {
 	}
 }
 
-func (p *bottomParser) processDoneRsp(msg *sim.Msg) bool {
+func (p *bottomParser) processDoneRsp(msg *sim.GenericMsg) bool {
 	trans := p.findTransactionByWriteToBottomID(msg.RspTo)
 	if trans == nil || trans.fetchAndWrite {
 		p.cache.bottomPort.RetrieveIncoming()
@@ -48,7 +49,7 @@ func (p *bottomParser) processDoneRsp(msg *sim.Msg) bool {
 	return true
 }
 
-func (p *bottomParser) processDataReady(msg *sim.Msg) bool {
+func (p *bottomParser) processDataReady(msg *sim.GenericMsg) bool {
 	trans := p.findTransactionByReadToBottomID(msg.RspTo)
 	if trans == nil {
 		p.cache.bottomPort.RetrieveIncoming()

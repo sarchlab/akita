@@ -449,7 +449,7 @@ func (ds *directoryStage) fetch(
 	var (
 		addr uint64
 		pid  vm.PID
-		req  *sim.Msg
+		req  *sim.GenericMsg
 	)
 
 	if trans.read != nil {
@@ -502,7 +502,7 @@ func (ds *directoryStage) fetch(
 	return true
 }
 
-func (ds *directoryStage) isWritingFullLine(writeMsg *sim.Msg) bool {
+func (ds *directoryStage) isWritingFullLine(writeMsg *sim.GenericMsg) bool {
 	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
 
 	if len(writePayload.Data) != (1 << ds.cache.log2BlockSize) {

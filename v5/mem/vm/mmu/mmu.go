@@ -59,7 +59,7 @@ type devicePageAccess struct {
 }
 
 // State contains mutable runtime data for the MMU.
-// Runtime structs with *sim.Msg remain on Comp for runtime use;
+// Runtime structs with *sim.GenericMsg remain on Comp for runtime use;
 // State holds parallel serializable versions for checkpoint/restore.
 type State struct {
 	WalkingTranslations      []transactionState `json:"walking_translations"`
@@ -72,11 +72,11 @@ type State struct {
 }
 
 type transaction struct {
-	req        *sim.Msg // payload: *vm.TranslationReqPayload
+	req        *sim.GenericMsg // payload: *vm.TranslationReqPayload
 	reqPayload *vm.TranslationReqPayload
 	page       vm.Page
 	cycleLeft  int
-	migration  *sim.Msg // payload: *vm.PageMigrationReqToDriverPayload
+	migration  *sim.GenericMsg // payload: *vm.PageMigrationReqToDriverPayload
 }
 
 // Comp is the default mmu implementation. It is also an akita Component.
@@ -359,11 +359,12 @@ func (m *middleware) parseFromTop() bool {
 		return false
 	}
 
-	req := m.topPort.RetrieveIncoming()
-	if req == nil {
+	reqI := m.topPort.RetrieveIncoming()
+	if reqI == nil {
 		return false
 	}
 
+	req := reqI.(*sim.GenericMsg)
 	tracing.TraceReqReceive(req, m.Comp)
 
 	switch req.Payload.(type) {
@@ -376,7 +377,7 @@ func (m *middleware) parseFromTop() bool {
 	return true
 }
 
-func (m *middleware) startWalking(req *sim.Msg) {
+func (m *middleware) startWalking(req *sim.GenericMsg) {
 	spec := m.GetSpec()
 	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
@@ -452,7 +453,7 @@ func (m *middleware) allocatePhysicalPage() uint64 {
 func (m *middleware) createMigrationRequest(
 	trans transaction,
 	page vm.Page,
-) *sim.Msg {
+) *sim.GenericMsg {
 	spec := m.GetSpec()
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
@@ -538,7 +539,7 @@ func transToState(t transaction) transactionState {
 }
 
 // stateToTrans converts a serializable transactionState back to a runtime
-// transaction. The *sim.Msg is reconstructed with enough data to send responses.
+// transaction. The *sim.GenericMsg is reconstructed with enough data to send responses.
 func stateToTrans(ts transactionState) transaction {
 	payload := &vm.TranslationReqPayload{
 		PID:          vm.PID(ts.PID),
@@ -547,7 +548,7 @@ func stateToTrans(ts transactionState) transaction {
 		TransLatency: ts.TransLatency,
 	}
 
-	req := &sim.Msg{
+	req := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  ts.ReqID,
 			Src: ts.ReqSrc,
@@ -564,7 +565,7 @@ func stateToTrans(ts transactionState) transaction {
 	}
 
 	if ts.HasMigration {
-		t.migration = &sim.Msg{
+		t.migration = &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  ts.MigrationReqID,
 				Src: ts.MigrationReqSrc,

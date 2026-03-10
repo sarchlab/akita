@@ -2,7 +2,6 @@ package sim
 
 import (
 	"log"
-	"reflect"
 )
 
 // PortMsgLogger is a hook for logging messages as they go across a Port
@@ -25,16 +24,16 @@ func NewPortMsgLogger(
 
 // Func writes the message information into the logger
 func (h *PortMsgLogger) Func(ctx HookCtx) {
-	msg, ok := ctx.Item.(*Msg)
+	msg, ok := ctx.Item.(Msg)
 	if !ok {
 		return
 	}
 
-	h.Logger.Printf("%.10f,%s,%s,%s,%s,%s,%s\n",
+	h.Logger.Printf("%.10f,%s,%s,%s,%s,%s\n",
 		h.CurrentTime(),
 		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,
-		msg.Src,
-		msg.Dst,
-		reflect.TypeOf(msg.Payload), msg.ID)
+		msg.Meta().Src,
+		msg.Meta().Dst,
+		msg.Meta().ID)
 }
