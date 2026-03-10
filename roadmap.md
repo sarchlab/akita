@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model.
+Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model with fully serializable State.
 
 ## Completed Milestones
 
@@ -12,51 +12,53 @@ Evolve Akita V5: redefine component model, implement save/load, make messages pl
 ### M4: Fix CI lint failures ✅ — Budget: 3, Used: 2
 ### M5: Redesign Messages as Plain Structs ✅ — Budget: 8, Used: 6
 
-Replaced `sim.Msg` interface with concrete `Msg` struct. Eliminated `sim.Rsp`, `sim.Request` interfaces and per-type `Meta()`/`Clone()` boilerplate. Added `Payload any` field, `MsgPayload[T]`/`TryMsgPayload[T]` helpers. All 31 message types converted to payload structs. PR #14 merged, verified by Apollo.
+Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types converted to payload structs. PR #14 merged.
 
 ### M6: Port All First-Party Components ✅
 
-#### M6.1: Port simple components (tickingping, datamover, gmmu) ✅ — Budget: 4, Used: 2
-#### M6.2: Port medium VM components (mmu, addresstranslator, mmuCache) ✅ — Budget: 4, Used: 2
-#### M6.3: Port TLB + simplebankedmemory + NOC components ✅ — Budget: 4, Used: 2
-#### M6.4: Port cache components + DRAM ✅ — Budget: 4, Used: 2
-
-Ported all 16 tick-driven first-party components to `modeling.Component[S,T]`:
-- `examples/tickingping`
-- `mem/datamover`, `mem/idealmemcontroller`, `mem/simplebankedmemory`, `mem/dram`
-- `mem/cache/writearound`, `mem/cache/writeback`, `mem/cache/writeevict`, `mem/cache/writethrough`
-- `mem/vm/gmmu`, `mem/vm/mmu`, `mem/vm/addresstranslator`, `mem/vm/mmuCache`, `mem/vm/tlb`
-- `noc/networking/switching/endpoint`, `noc/networking/switching/switches`
-
-Remaining non-ported files are infrastructure/test code (not first-party components):
-- `examples/ping` — Event-driven example; `tickingping` is its modeling replacement
-- `mem/acceptancetests/memaccessagent` — Test utility agent
-- `noc/acceptance/agent`, `noc/standalone/agent` — Test utility agents
-- `sim/directconnection` — Connection infrastructure, not a component
-- `mem/cache/mshr` — Internal cache data structure
+#### M6.1–M6.4: Ported all 16 tick-driven components structurally ✅ — Budget: 16, Used: 8
 
 ## Upcoming Milestones
 
-### M7: Move Mutable Runtime Data into State Structs — PLANNING
-Human raised issue #61: nearly all "ported" components have empty `State` structs. Their mutable data (sets, MSHR, pipelines, buffers) lives on the `Comp` wrapper struct, not in `State`. This defeats the purpose of the Spec/State separation and makes components non-serializable. Need investigation first to determine scope and approach.
+### M7: Move Mutable Runtime Data into State Structs — IN PROGRESS
+
+**Problem**: 13/15 ported components have empty `State struct{}`. Mutable data lives on Comp wrapper, not in State. Components aren't truly serializable.
+
+**Research findings** (from Diana/Iris analysis):
+- Category 1 (~30 fields): Plain primitives, easy to move to State/Spec
+- Category 2: queueing.Buffer/Pipeline (interface-based, NOT serializable), cache.Directory/MSHR (pointer-heavy), transaction slices with `*sim.Msg`
+- Category 3: sim.Port, mappers, page tables — runtime handles, stay on Comp (reconstructed, not serialized)
+- Universal blocker: `*sim.Msg` in all transaction types — must decompose into ID+Src+payload fields (per idealmemcontroller pattern)
+- `queueingv5` package does NOT exist yet — migration.md describes intended future design
+
+**Approach**: Phase the work by component complexity:
+
+#### M7.1: Simple components (no queueing/cache deps) — Budget: 6
+Move mutable data into State for:
+- mem/vm/mmuCache, mem/vm/mmu, mem/vm/gmmu, mem/vm/addresstranslator
+- mem/datamover, noc/networking/switching/endpoint
+
+Key patterns: decompose `*sim.Msg` into plain fields, make internal Set types serializable, replace container/list with plain slices, move immutable config from Comp to Spec.
+
+#### M7.2: Components with queueing deps — Budget: TBD
+TLB, simplebankedmemory, switches, DRAM — need serializable queueing implementation first.
+
+#### M7.3: Cache components — Budget: TBD
+writearound, writeback, writeevict, writethrough — most complex, need serializable Directory + MSHR + stage state.
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported (but State structs mostly empty)
+4. **Port All Components** — 16 tick-driven components structurally ported (State structs mostly empty)
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
-- M1-M3 completed in 15 implementation cycles (budgeted 20). Planning and verification added ~3-4 cycles overhead but improved quality.
+- M1-M3 completed in 15 implementation cycles (budgeted 20).
 - Apollo's verification caught 4 real issues in M2 — always verify.
-- Iris's detailed analysis before M3 was valuable — prevents scope misestimation.
-- CI lint rules (funlen, gocognit) must be respected — fix immediately, don't accumulate tech debt.
-- Breaking work across parallel workers (Kai, Nova, Leo) speeds implementation significantly.
-- M4 completed efficiently in 2 cycles (budgeted 3) — lint fixes are mechanical once identified.
-- Research cycles (Diana, Iris) before M5/M6 prevented committing to poorly scoped milestones.
-- Message redesign is foundational — completed before component porting (M6) to avoid double work.
-- M5 completed in 6 implementation cycles (budgeted 8). Multi-worker parallel approach was highly effective for mechanical refactoring.
-- M6 sub-milestones consistently completed in 2 cycles each (budgeted 4). Parallel multi-worker approach with clear instructions is the winning pattern for mechanical porting.
-- Components that already have MiddlewareHolder are easier to port.
-- Total project: ~27 implementation cycles + ~10 planning/verification cycles = ~37 active cycles across 54 orchestrator cycles.
+- Iris's/Diana's detailed analysis before milestones prevents scope misestimation.
+- Multi-worker parallel approach is the winning pattern for mechanical refactoring.
+- M6 sub-milestones consistently completed in 2 cycles each (budgeted 4).
+- Total project so far: ~27 implementation cycles + ~10 planning/verification cycles = ~37 active across 56 orchestrator cycles.
+- Research for M7 revealed that the queueing/cache serialization problem is deeper than expected — need phased approach.
+- The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
