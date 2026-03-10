@@ -12,9 +12,13 @@ Redefine a component as a combination of **Spec, State, Ports, and Middlewares**
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
 
-### 3. Messages as Plain Structs (DONE)
+### 3. Messages as Concrete Types (IN PROGRESS — redesign)
 
-`sim.Msg` is now a concrete struct with `MsgMeta` (ID, Src, Dst, TrafficClass, TrafficBytes) plus a `Payload any` field. All 31 message types are payload structs. Helper functions `MsgPayload[T]()` and `TryMsgPayload[T]()` provide typed access.
+**Current state:** `sim.Msg` is a concrete struct with `MsgMeta` + `Payload any`. The `Payload any` field makes messages non-serializable and requires runtime type assertions (`MsgPayload[T]()`).
+
+**Target state (per human direction in #93):** `sim.Msg` becomes an **interface** with a single `Meta() *MsgMeta` method. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) that embed `sim.MsgMeta`. Messages are naturally serializable — no `Payload any`, no `MsgRef`, no runtime casting. Components type-switch on the concrete type: `case *mem.ReadReq:` instead of `MsgPayload[T]()`.
+
+**Design:** See `workspace/iris/msg_as_interface_design.md` for full spec. Key: minimal interface (`Meta() *MsgMeta`), shared `MsgMeta` base struct with pointer receiver, builders return concrete types.
 
 ### 4. Port All First-Party Components (DONE — structurally ported, but State needs work)
 
@@ -40,7 +44,7 @@ The goal is to move all mutable runtime data into `State` so components are trul
 - All CI checks pass on main branch
 - Acceptance test for save/load process passes
 - All first-party components use the modeling package pattern
-- Messages are plain structs, not interfaces
+- Messages are concrete, serializable types behind a `sim.Msg` interface
 - All first-party components have meaningful, serializable State structs (no empty State with data hidden on Comp)
 
 ## Constraints

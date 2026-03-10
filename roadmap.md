@@ -35,32 +35,52 @@ Shared Directory/MSHR serialization helpers in v5/mem/cache/state_helpers.go. St
 #### M7.5: Writeback Cache State Population — DEFERRED
 Analysis complete (Diana's report). ~565 lines estimated. **Deferred pending Msg redesign decision** — building this with MsgRef would require rewriting after the redesign.
 
-## Current Decision Point: Msg Redesign (Human Issue #93)
+## M8: Msg-as-Interface Redesign — IN PROGRESS
 
-Human proposed making `Msg` an interface with `Src()`, `Dst()`, `Serialize()`, `Deserialize()` methods, with each package implementing concrete serializable message types. This would:
-- Eliminate the `Payload any` field and the MsgRef/Payload-loss bug
-- Each package owns its message types (mem.ReadReq, vm.TranslationReq, etc.)
-- Make state serialization natural (store concrete types, no MsgRef conversion)
-- But reverses M5's Msg-as-struct decision and touches ~120+ files
+Per human direction (#93), `sim.Msg` becomes an interface. Design by Iris (workspace/iris/msg_as_interface_design.md), risk analysis by Diana (workspace/diana/msg-as-interface-redteam.md).
 
-**Status**: Discussing with human. Research workers analyzing concrete design + risks.
+**Design decisions:**
+- `sim.Msg` interface with single `Meta() *MsgMeta` method
+- `MsgMeta` base struct embeds all routing fields, gains `Meta()` pointer method (auto-satisfies interface when embedded)
+- 30 payload types → 30 concrete message structs (e.g., `mem.ReadReq` embeds `sim.MsgMeta`)
+- Builders return concrete types; Ports accept `sim.Msg` interface
+- State files store concrete types directly (no MsgRef)
+- `Info interface{}` tagged `json:"-"` for now (isolated problem, separate fix later)
 
-### M8: Msg-as-Interface Redesign — PLANNING
-Pending design finalization. Key open questions:
-- Exact interface definition (Serialize/Deserialize on interface vs external)
-- FlitPayload inner Msg serialization
-- Info interface{} field on ReadReq/WriteReq
-- Migration strategy (incremental vs big-bang)
+### M8.1: Foundation — Msg interface + GenericMsg rename + Port/Connection updates — CURRENT
+**Scope:** sim package only (+ directconnection, wiring, tracing, analysis). ~20 files.
+1. Rename current `Msg` struct → `GenericMsg` in sim package
+2. Add `Msg` interface (`Meta() *MsgMeta`)
+3. Move `RspTo` from `GenericMsg` into `MsgMeta`; add `MsgMeta.Meta()` and `MsgMeta.IsRsp()`
+4. Update `Port` interface: `*Msg` → `Msg` (interface) for all 6 message methods
+5. Update `portBuffer`: `[]*Msg` → `[]Msg`
+6. Update `defaultPort`, `directconnection`, `wiring/port`, `wiring/wire`
+7. Update `tracing/api.go`, `analysis/port_analyzer.go`
+8. Update all `msgMustBeValid` helpers
+9. `GenericMsg` satisfies `Msg` via embedding → all existing code still compiles
 
-After M8, M7.5 (writeback state) can be completed with the new message types.
+### M8.2: Convert Protocol Packages — AFTER M8.1
+Convert 30 payload types to concrete message types:
+- `mem/mem/protocol.go` (6 types), `mem/cache/protocol.go` (4), `mem/vm/protocol.go` (4)
+- `mem/vm/tlb/tlbprotocol.go` (4), `mem/vm/mmuCache/mmuCacheprotocol.go` (4)
+- `mem/datamover/protocol.go` (1), `noc/messaging/flit.go` (1)
+- `examples/ping` (2), `examples/tickingping` (2), `noc/acceptance` (1), `noc/standalone` (1)
+- Remove `GenericMsg`, `MsgPayload[T]`, `TryMsgPayload[T]`
 
-### M9: Complete Remaining State Population — AFTER M8
-- Writeback cache state (was M7.5)
-- Update M7.1-M7.4 state.go files to use concrete message types instead of MsgRef
-- Fix Payload loss bug (should be automatically resolved by concrete types)
+### M8.3: Update All Components — AFTER M8.2
+Update all component files to use concrete types:
+- Replace `msg.Payload.(type)` switches with `msg.(type)` switches
+- Replace `MsgPayload[T](msg)` with direct field access on concrete type
+- Update all transaction structs to hold concrete types
+- ~40+ component files
 
-### M10: Comp Wrapper Elimination — AFTER M9
-Human issue #61: eliminate the `Comp` wrapper struct. With fully serializable State and concrete message types, reassess whether Comp is still needed.
+### M8.4: Update State Files — AFTER M8.3
+- Remove `MsgRef`, `MsgRefFromMsg`, `MsgFromRef`, `state_helpers.go`
+- Update all state.go files to store concrete types directly
+- Complete writeback cache state (was M7.5)
+
+### M9: Comp Wrapper Elimination — AFTER M8
+Human issue #61.
 
 ## Known Bugs
 - Payload loss in ALL msgRef implementations → nil Payload after save/load → panics (will be fixed by M8)
