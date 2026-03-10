@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -17,20 +18,18 @@ func (p *bottomParser) Tick() bool {
 		return false
 	}
 
-	switch rsp := item.(type) {
-	case *mem.WriteDoneRsp:
-		return p.processDoneRsp(rsp)
-	case *mem.DataReadyRsp:
-		return p.processDataReady(rsp)
+	switch item.Payload.(type) {
+	case *mem.WriteDoneRspPayload:
+		return p.processDoneRsp(item)
+	case *mem.DataReadyRspPayload:
+		return p.processDataReady(item)
 	default:
 		panic("cannot process response")
 	}
 }
 
-func (p *bottomParser) processDoneRsp(
-	done *mem.WriteDoneRsp,
-) bool {
-	trans := p.findTransactionByWriteToBottomID(done.GetRspTo())
+func (p *bottomParser) processDoneRsp(msg *sim.Msg) bool {
+	trans := p.findTransactionByWriteToBottomID(msg.RspTo)
 	if trans == nil || trans.fetchAndWrite {
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
@@ -49,16 +48,15 @@ func (p *bottomParser) processDoneRsp(
 	return true
 }
 
-func (p *bottomParser) processDataReady(
-	dr *mem.DataReadyRsp,
-) bool {
-	trans := p.findTransactionByReadToBottomID(dr.GetRspTo())
+func (p *bottomParser) processDataReady(msg *sim.Msg) bool {
+	trans := p.findTransactionByReadToBottomID(msg.RspTo)
 	if trans == nil {
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 
-	pid := trans.readToBottom.PID
+	readToBottomPayload := sim.MsgPayload[mem.ReadReqPayload](trans.readToBottom)
+	pid := readToBottomPayload.PID
 	bankBuf := p.getBankBuf(trans.block)
 
 	if !bankBuf.CanPush() {
@@ -67,7 +65,8 @@ func (p *bottomParser) processDataReady(
 
 	addr := trans.Address()
 	cachelineID := (addr >> p.cache.log2BlockSize) << p.cache.log2BlockSize
-	data := dr.Data
+	drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+	data := drPayload.Data
 	dirtyMask := make([]bool, 1<<p.cache.log2BlockSize)
 	mshrEntry := p.cache.mshr.Query(pid, cachelineID)
 	p.mergeMSHRData(mshrEntry, data, dirtyMask)
@@ -78,7 +77,6 @@ func (p *bottomParser) processDataReady(
 	trans.data = data
 	trans.writeFetchedDirtyMask = dirtyMask
 	bankBuf.Push(trans)
-
 	p.removeTransaction(trans)
 	p.cache.bottomPort.RetrieveIncoming()
 
@@ -99,12 +97,12 @@ func (p *bottomParser) mergeMSHRData(
 			continue
 		}
 
-		write := trans.write
-		offset := write.Address - mshrEntry.Block.Tag
+		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+		offset := writePayload.Address - mshrEntry.Block.Tag
 
-		for i := 0; i < len(write.Data); i++ {
-			if write.DirtyMask[i] {
-				data[offset+uint64(i)] = write.Data[i]
+		for i := 0; i < len(writePayload.Data); i++ {
+			if writePayload.DirtyMask[i] {
+				data[offset+uint64(i)] = writePayload.Data[i]
 				dirtyMask[offset+uint64(i)] = true
 			}
 		}
@@ -119,9 +117,9 @@ func (p *bottomParser) finalizeMSHRTrans(
 		trans := t.(*transaction)
 		if trans.read != nil {
 			for _, preCTrans := range trans.preCoalesceTransactions {
-				read := preCTrans.read
-				offset := read.Address - mshrEntry.Block.Tag
-				preCTrans.data = data[offset : offset+read.AccessByteSize]
+				readPayload := sim.MsgPayload[mem.ReadReqPayload](preCTrans.read)
+				offset := readPayload.Address - mshrEntry.Block.Tag
+				preCTrans.data = data[offset : offset+readPayload.AccessByteSize]
 				preCTrans.done = true
 			}
 		} else {
