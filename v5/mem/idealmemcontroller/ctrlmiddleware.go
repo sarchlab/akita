@@ -27,7 +27,12 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	rsp := m.currentCmd.GenerateRsp()
+	// Create a minimal ControlMsg to use as OriginalReq for GenerateRsp
+	stubMsg := &mem.ControlMsg{}
+	stubMsg.ID = state.CurrentCmdID
+	stubMsg.Src = state.CurrentCmdSrc
+	stubMsg.Dst = m.ctrlPort.AsRemote()
+	rsp := stubMsg.GenerateRsp()
 
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
@@ -101,9 +106,10 @@ func (m *ctrlMiddleware) handleDrain(ctrlMsg *mem.ControlMsg) bool {
 	if !ctrlMsg.Enable && ctrlMsg.Drain {
 		state := m.Component.GetState()
 		state.CurrentState = "drain"
+		state.CurrentCmdID = ctrlMsg.ID
+		state.CurrentCmdSrc = ctrlMsg.Src
 		m.Component.SetState(state)
 
-		m.currentCmd = ctrlMsg
 		m.ctrlPort.RetrieveIncoming()
 		return true
 	}
