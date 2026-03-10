@@ -35,11 +35,11 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 - PR #1 opened from `ares/m1-v5-scaffold` → `main` (not merged, awaiting human review)
 - `go build ./...` and `go vet ./...` both pass clean
 
-### M4: Fix CI — add tool setup steps to workflow ⬜ IN PROGRESS
-- CI is failing because the self-hosted runner doesn't have `go`, `npm`, or `python3` in PATH
-- Need to add `actions/setup-go`, `actions/setup-node`, `actions/setup-python` actions to all jobs
-- Reference the original akita repo's CI for the correct patterns
-- Estimated: 2 cycles
+### M4: Fix CI — add tool setup steps to workflow ✅ COMPLETE (2 cycles)
+- Added `actions/setup-go`, `actions/setup-node` to all CI jobs
+- Used system `python3` instead of `actions/setup-python` (Fedora arm64 runner)
+- Fixed mock generation, funlen lint, and type errors in acceptance tests
+- All 7 CI jobs pass green (run 22881461969)
 
 ---
 
@@ -48,6 +48,8 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 - M2 budget was 4 cycles but took 5. Large refactoring across 21+ files benefits from more generous budgets.
 - Splitting work across multiple workers (simple/medium/complex builders) worked well for parallel-like execution.
 - `go vet` issues (unkeyed fields in dram) caught late — should run vet earlier in the process.
+- Self-hosted runners (Fedora arm64) don't support `actions/setup-python` — use system `python3` instead.
+- CI should be validated early after any infrastructure change, not left as an afterthought.
 
 ---
 
@@ -64,3 +66,5 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 | 11-12 | Ares | M3 completed (migration.md + PR) |
 | 13 | Apollo | M3 verified — PASS |
 | 14 | Athena | All milestones complete, project done |
+| 15-18 | Ares | M4 CI fix (tool setup, mock gen, lint, python) |
+| 19 | Athena | M4 verified complete, project done |
