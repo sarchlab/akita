@@ -1,6 +1,7 @@
 package datamover
 
 import (
+	"io"
 	"log"
 	"reflect"
 
@@ -327,6 +328,36 @@ func (c *Comp) restoreFromState(s State) {
 	}
 
 	c.currentTransaction = trans
+}
+
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
+	state := c.snapshotState()
+	c.Component.SetState(state)
+	return state
+}
+
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
+	c.restoreFromState(state)
+}
+
+// SaveState marshals the component's spec and state as JSON, ensuring the
+// runtime fields are synced into State first.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState reads JSON from r and restores both the base state and the
+// runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+	c.SetState(c.Component.GetState())
+	return nil
 }
 
 // dataMoverMiddleware wraps the Comp and implements the Tick() logic

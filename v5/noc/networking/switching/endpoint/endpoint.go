@@ -3,6 +3,7 @@ package endpoint
 
 import (
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/sarchlab/akita/v5/modeling"
@@ -104,8 +105,8 @@ func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
-// SyncState copies mutable runtime data into the State struct.
-func (c *Comp) SyncState() {
+// snapshotState converts runtime mutable data into a serializable State.
+func (c *Comp) snapshotState() State {
 	s := State{}
 
 	s.MsgOutBuf = make([]msgRef, len(c.msgOutBuf))
@@ -137,7 +138,95 @@ func (c *Comp) SyncState() {
 		s.AssembledMsgs[i] = msgRefFromMsg(msg)
 	}
 
-	c.SetState(s)
+	return s
+}
+
+// restoreFromState restores runtime mutable data from a serializable State.
+func (c *Comp) restoreFromState(s State) {
+	c.msgOutBuf = make([]*sim.Msg, len(s.MsgOutBuf))
+	for i, ref := range s.MsgOutBuf {
+		c.msgOutBuf[i] = msgFromRef(ref)
+	}
+
+	c.flitsToSend = make([]*sim.Msg, len(s.FlitsToSend))
+	for i, fs := range s.FlitsToSend {
+		originalMsg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID: fs.OriginalMsgID,
+			},
+		}
+		c.flitsToSend[i] = &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  fs.ID,
+				Src: fs.Src,
+				Dst: fs.Dst,
+			},
+			Payload: &messaging.FlitPayload{
+				SeqID:        fs.SeqID,
+				NumFlitInMsg: fs.NumFlitInMsg,
+				Msg:          originalMsg,
+			},
+		}
+	}
+
+	c.assemblingMsgs = make([]*msgToAssemble, len(s.AssemblingMsgs))
+	for i, as := range s.AssemblingMsgs {
+		c.assemblingMsgs[i] = &msgToAssemble{
+			msg: &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:           as.MsgID,
+					Src:          as.Src,
+					Dst:          as.Dst,
+					TrafficClass: as.TrafficClass,
+					TrafficBytes: as.TrafficBytes,
+				},
+				RspTo: as.RspTo,
+			},
+			numFlitRequired: as.NumFlitRequired,
+			numFlitArrived:  as.NumFlitArrived,
+		}
+	}
+
+	c.assembledMsgs = make([]*sim.Msg, len(s.AssembledMsgs))
+	for i, ref := range s.AssembledMsgs {
+		c.assembledMsgs[i] = msgFromRef(ref)
+	}
+}
+
+// GetState converts runtime mutable data into a serializable State.
+func (c *Comp) GetState() State {
+	state := c.snapshotState()
+	c.Component.SetState(state)
+	return state
+}
+
+// SetState restores runtime mutable data from a serializable State.
+func (c *Comp) SetState(state State) {
+	c.Component.SetState(state)
+	c.restoreFromState(state)
+}
+
+// SaveState marshals the component's spec and state as JSON, ensuring the
+// runtime fields are synced into State first.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.GetState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState reads JSON from r and restores both the base state and the
+// runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+	c.SetState(c.Component.GetState())
+	return nil
+}
+
+// SyncState copies mutable runtime data into the State struct.
+// Deprecated: Use GetState() instead.
+func (c *Comp) SyncState() {
+	c.GetState()
 }
 
 func msgRefFromMsg(msg *sim.Msg) msgRef {
@@ -148,6 +237,19 @@ func msgRefFromMsg(msg *sim.Msg) msgRef {
 		RspTo:        msg.RspTo,
 		TrafficClass: msg.TrafficClass,
 		TrafficBytes: msg.TrafficBytes,
+	}
+}
+
+func msgFromRef(ref msgRef) *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           ref.ID,
+			Src:          ref.Src,
+			Dst:          ref.Dst,
+			TrafficClass: ref.TrafficClass,
+			TrafficBytes: ref.TrafficBytes,
+		},
+		RspTo: ref.RspTo,
 	}
 }
 
