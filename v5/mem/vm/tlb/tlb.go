@@ -3,7 +3,7 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb/internal"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -36,8 +36,8 @@ type Comp struct {
 
 	mshr                mshr
 	respondingMSHREntry *mshrEntry
-	responsePipeline    pipelining.Pipeline
-	responseBuffer      sim.Buffer
+	responsePipeline    queueing.Pipeline
+	responseBuffer      queueing.Buffer
 
 	inflightFlushReq *FlushReq
 }

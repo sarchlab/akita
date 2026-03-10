@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -49,7 +50,7 @@ var _ = Describe("Write Buffer Stage", func() {
 		cacheModule.mshr = mshr
 		cacheModule.addressToPortMapper = addressToPortMapper
 		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.writeBufferToBankBuffers = []sim.Buffer{bankBuffer}
+		cacheModule.writeBufferToBankBuffers = []queueing.Buffer{bankBuffer}
 
 		wbStage = &writeBufferStage{
 			cache:               cacheModule,

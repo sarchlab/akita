@@ -3,6 +3,7 @@ package analysis
 import (
 	"math"
 
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/tebeka/atexit"
 )
@@ -12,7 +13,7 @@ type BufferAnalyzer struct {
 	PerfLogger
 	sim.TimeTeller
 
-	buf       sim.Buffer
+	buf       queueing.Buffer
 	usePeriod bool
 	period    sim.VTimeInSec
 
@@ -24,7 +25,7 @@ type BufferAnalyzer struct {
 // Func is a function that records buffer level change.
 func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 	now := b.CurrentTime()
-	buf := ctx.Domain.(sim.Buffer)
+	buf := ctx.Domain.(queueing.Buffer)
 	currLevel := buf.Size()
 
 	if b.usePeriod {
@@ -127,7 +128,7 @@ type BufferAnalyzerBuilder struct {
 	timeTeller sim.TimeTeller
 	usePeriod  bool
 	period     sim.VTimeInSec
-	buffer     sim.Buffer
+	buffer     queueing.Buffer
 }
 
 // MakeBufferAnalyzerBuilder creates a BufferAnalyzerBuilder.
@@ -168,7 +169,7 @@ func (b BufferAnalyzerBuilder) WithPeriod(
 
 // WithBuffer sets the buffer to use.
 func (b BufferAnalyzerBuilder) WithBuffer(
-	buffer sim.Buffer,
+	buffer queueing.Buffer,
 ) BufferAnalyzerBuilder {
 	b.buffer = buffer
 	return b

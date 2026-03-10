@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -15,7 +15,7 @@ type bankStage struct {
 	cache  *Comp
 	bankID int
 
-	pipeline           pipelining.Pipeline
+	pipeline           queueing.Pipeline
 	pipelineWidth      int
 	postPipelineBuf    *bufferImpl
 	inflightTransCount int
@@ -50,7 +50,7 @@ func (b *bufferImpl) Push(e interface{}) {
 	if b.NumHooks() > 0 {
 		b.InvokeHook(sim.HookCtx{
 			Domain: b,
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 			Item:   e,
 			Detail: nil,
 		})
@@ -68,7 +68,7 @@ func (b *bufferImpl) Pop() interface{} {
 	if b.NumHooks() > 0 {
 		b.InvokeHook(sim.HookCtx{
 			Domain: b,
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 			Item:   e,
 			Detail: nil,
 		})
@@ -109,7 +109,7 @@ func (b *bufferImpl) Remove(i int) {
 	if b.NumHooks() > 0 {
 		b.InvokeHook(sim.HookCtx{
 			Domain: b,
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 			Item:   element,
 			Detail: nil,
 		})

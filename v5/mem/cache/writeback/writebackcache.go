@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/queueing"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -26,11 +27,11 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	dirStageBuffer           sim.Buffer
-	dirToBankBuffers         []sim.Buffer
-	writeBufferToBankBuffers []sim.Buffer
-	mshrStageBuffer          sim.Buffer
-	writeBufferBuffer        sim.Buffer
+	dirStageBuffer           queueing.Buffer
+	dirToBankBuffers         []queueing.Buffer
+	writeBufferToBankBuffers []queueing.Buffer
+	mshrStageBuffer          queueing.Buffer
+	writeBufferBuffer        queueing.Buffer
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage

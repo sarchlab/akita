@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -31,17 +31,17 @@ type portComplex struct {
 
 	// Data arrived at the local port needs to be processed in a pipeline. There
 	// is a processing pipeline for each local port.
-	pipeline pipelining.Pipeline
+	pipeline queueing.Pipeline
 
 	// The flits here are buffered after the pipeline and are waiting to be
 	// assigned with an output buffer.
-	routeBuffer sim.Buffer
+	routeBuffer queueing.Buffer
 
 	// The flits here are buffered to wait to be forwarded to the output buffer.
-	forwardBuffer sim.Buffer
+	forwardBuffer queueing.Buffer
 
 	// The flits here are waiting to be sent to the next hop.
-	sendOutBuffer sim.Buffer
+	sendOutBuffer queueing.Buffer
 
 	// NumInputChannel is the number of flits that can stream into the
 	// switch from the port. The RouteBuffer and the ForwardBuffer should
@@ -318,10 +318,10 @@ func (a SwitchPortAdder) AddPort() {
 	complexID := len(a.sw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
-	sendOutBuf := sim.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
-	forwardBuf := sim.NewBuffer(complexName+"ForwardBuf", a.numInputChannel)
-	routeBuf := sim.NewBuffer(complexName+"RouteBuf", a.numInputChannel)
-	pipeline := pipelining.MakeBuilder().
+	sendOutBuf := queueing.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
+	forwardBuf := queueing.NewBuffer(complexName+"ForwardBuf", a.numInputChannel)
+	routeBuf := queueing.NewBuffer(complexName+"RouteBuf", a.numInputChannel)
+	pipeline := queueing.MakeBuilder().
 		WithNumStage(a.latency).
 		WithCyclePerStage(1).
 		WithPipelineWidth(a.numInputChannel).

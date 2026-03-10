@@ -1,8 +1,7 @@
 package writeevict
 
 import (
-	"github.com/sarchlab/akita/v5/pipelining"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -19,8 +18,8 @@ type bankStage struct {
 	bankID         int
 	numReqPerCycle int
 
-	pipeline        pipelining.Pipeline
-	postPipelineBuf sim.Buffer
+	pipeline        queueing.Pipeline
+	postPipelineBuf queueing.Buffer
 }
 
 func (s *bankStage) Reset() {

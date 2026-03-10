@@ -1,4 +1,4 @@
-package pipelining
+package queueing
 
 import (
 	. "github.com/onsi/ginkgo/v2"

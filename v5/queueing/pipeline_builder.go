@@ -1,4 +1,4 @@
-package pipelining
+package queueing
 
 import "github.com/sarchlab/akita/v5/sim"
 
@@ -7,7 +7,7 @@ type Builder struct {
 	width           int
 	numStage        int
 	cyclePerStage   int
-	postPipelineBuf sim.Buffer
+	postPipelineBuf Buffer
 }
 
 // MakeBuilder creates a default builder
@@ -41,7 +41,7 @@ func (b Builder) WithCyclePerStage(n int) Builder {
 
 // WithPostPipelineBuffer sets the buffer that the elements can be pushed to
 // after passing through the pipeline.
-func (b Builder) WithPostPipelineBuffer(buf sim.Buffer) Builder {
+func (b Builder) WithPostPipelineBuffer(buf Buffer) Builder {
 	b.postPipelineBuf = buf
 	return b
 }

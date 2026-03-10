@@ -1,17 +1,21 @@
-package sim
+package queueing
 
-import "log"
+import (
+	"log"
+
+	"github.com/sarchlab/akita/v5/sim"
+)
 
 // HookPosBufPush marks when an element is pushed into the buffer.
-var HookPosBufPush = &HookPos{Name: "Buffer Push"}
+var HookPosBufPush = &sim.HookPos{Name: "Buffer Push"}
 
 // HookPosBufPop marks when an element is popped from the buffer.
-var HookPosBufPop = &HookPos{Name: "Buf Pop"}
+var HookPosBufPop = &sim.HookPos{Name: "Buf Pop"}
 
 // A Buffer is a fifo queue for anything
 type Buffer interface {
-	Named
-	Hookable
+	sim.Named
+	sim.Hookable
 
 	CanPush() bool
 	Push(e interface{})
@@ -26,7 +30,7 @@ type Buffer interface {
 
 // NewBuffer creates a default buffer object.
 func NewBuffer(name string, capacity int) Buffer {
-	NameMustBeValid(name)
+	sim.NameMustBeValid(name)
 
 	return &bufferImpl{
 		name:     name,
@@ -35,7 +39,7 @@ func NewBuffer(name string, capacity int) Buffer {
 }
 
 type bufferImpl struct {
-	HookableBase
+	sim.HookableBase
 
 	name     string
 	capacity int
@@ -59,7 +63,7 @@ func (b *bufferImpl) Push(e interface{}) {
 	b.elements = append(b.elements, e)
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(HookCtx{
+		b.InvokeHook(sim.HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPush,
 			Item:   e,
@@ -77,7 +81,7 @@ func (b *bufferImpl) Pop() interface{} {
 	b.elements = b.elements[1:]
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(HookCtx{
+		b.InvokeHook(sim.HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPop,
 			Item:   e,

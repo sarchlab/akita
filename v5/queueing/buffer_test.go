@@ -1,4 +1,4 @@
-package sim
+package queueing
 
 import (
 	. "github.com/onsi/ginkgo/v2"

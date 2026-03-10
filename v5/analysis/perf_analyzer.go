@@ -8,6 +8,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -65,20 +66,20 @@ func (b *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*sim.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(sim.Buffer)
+			).Elem().Interface().(queueing.Buffer)
 
 			b.RegisterBuffer(fieldRef)
 		}
 	}
 }
 
-func (b *PerfAnalyzer) RegisterBuffer(buf sim.Buffer) {
+func (b *PerfAnalyzer) RegisterBuffer(buf queueing.Buffer) {
 	bufferAnalyzerBuilder := MakeBufferAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).

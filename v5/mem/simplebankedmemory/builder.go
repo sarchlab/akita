@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -167,12 +167,12 @@ func (b Builder) Build(name string) *Comp {
 	c.banks = make([]bank, b.numBanks)
 
 	for i := range c.banks {
-		postPipelineBuf := sim.NewBuffer(
+		postPipelineBuf := queueing.NewBuffer(
 			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
 			b.postPipelineBufSize,
 		)
 
-		pipeline := pipelining.MakeBuilder().
+		pipeline := queueing.MakeBuilder().
 			WithPipelineWidth(b.bankPipelineWidth).
 			WithNumStage(b.bankPipelineDepth).
 			WithCyclePerStage(b.stageLatency).

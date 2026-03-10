@@ -5,6 +5,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	// . "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -45,7 +46,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		bufferAnalyzer.Func(sim.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(1.1)).AnyTimes()
@@ -63,7 +64,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		bufferAnalyzer.Func(sim.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 	})
 
@@ -76,7 +77,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		bufferAnalyzer.Func(sim.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 
 		timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(2.1)).AnyTimes()
@@ -104,7 +105,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		bufferAnalyzer.Func(sim.HookCtx{
 			Domain: buffer,
 			Item:   gomock.Nil(),
-			Pos:    sim.HookPosBufPush,
+			Pos:    queueing.HookPosBufPush,
 		})
 	})
 })

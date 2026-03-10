@@ -59,8 +59,8 @@ type defaultPort struct {
 	comp Component
 	conn Connection
 
-	incomingBuf Buffer
-	outgoingBuf Buffer
+	incomingBuf *portBuffer
+	outgoingBuf *portBuffer
 }
 
 // AsRemote returns the remote port name.
@@ -269,8 +269,8 @@ func NewPort(
 ) Port {
 	p := new(defaultPort)
 	p.comp = comp
-	p.incomingBuf = NewBuffer(name+".IncomingBuf", incomingBufCap)
-	p.outgoingBuf = NewBuffer(name+".OutgoingBuf", outgoingBufCap)
+	p.incomingBuf = newPortBuffer(incomingBufCap)
+	p.outgoingBuf = newPortBuffer(outgoingBufCap)
 	p.name = name
 
 	return p

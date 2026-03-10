@@ -120,7 +120,7 @@ var _ = Describe("DefaultPort", func() {
 
 	It("should fail to deliver when incoming buffer is full", func() {
 		msg := &sampleMsg{}
-		port.incomingBuf = NewBuffer("Buf", 4)
+		port.incomingBuf = newPortBuffer(4)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)
 		port.incomingBuf.Push(msg)

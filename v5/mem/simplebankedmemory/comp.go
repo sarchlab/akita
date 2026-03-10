@@ -4,14 +4,14 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/pipelining"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type bank struct {
-	pipeline        pipelining.Pipeline
-	postPipelineBuf sim.Buffer
+	pipeline        queueing.Pipeline
+	postPipelineBuf queueing.Buffer
 }
 
 type bankPipelineItem struct {

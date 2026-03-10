@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -30,7 +31,7 @@ var _ = Describe("Bottom Parser", func() {
 			bottomPort:       bottomPort,
 			mshr:             mshr,
 			wayAssociativity: 4,
-			bankBufs:         []sim.Buffer{bankBuf},
+			bankBufs:         []queueing.Buffer{bankBuf},
 		}
 		c.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, c)
