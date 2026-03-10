@@ -18,40 +18,43 @@ Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types co
 
 #### M6.1–M6.4: Ported all 16 tick-driven components structurally ✅ — Budget: 16, Used: 8
 
-## Upcoming Milestones
-
 ### M7: Move Mutable Runtime Data into State Structs — IN PROGRESS
 
-**Problem**: 13/15 ported components have empty `State struct{}`. Mutable data lives on Comp wrapper, not in State. Components aren't truly serializable.
+#### M7.1: Simple components ✅ — Budget: 6, Used: 2
+Populated State for 6 components: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint. All validated by Apollo. PR #19 merged.
 
-**Research findings** (from Diana/Iris analysis):
-- Category 1 (~30 fields): Plain primitives, easy to move to State/Spec
-- Category 2: queueing.Buffer/Pipeline (interface-based, NOT serializable), cache.Directory/MSHR (pointer-heavy), transaction slices with `*sim.Msg`
-- Category 3: sim.Port, mappers, page tables — runtime handles, stay on Comp (reconstructed, not serialized)
-- Universal blocker: `*sim.Msg` in all transaction types — must decompose into ID+Src+payload fields (per idealmemcontroller pattern)
-- `queueingv5` package does NOT exist yet — migration.md describes intended future design
+## Upcoming Milestones
 
-**Approach**: Phase the work by component complexity:
+### M7 continued: 8 components still have empty State structs
 
-#### M7.1: Simple components (no queueing/cache deps) — Budget: 6
-Move mutable data into State for:
-- mem/vm/mmuCache, mem/vm/mmu, mem/vm/gmmu, mem/vm/addresstranslator
-- mem/datamover, noc/networking/switching/endpoint
+Remaining components:
+1. **simplebankedmemory** — queueing.Pipeline/Buffer per bank
+2. **switches** — queueing.Pipeline/Buffer per port complex, routing table, arbiter
+3. **TLB** — queueing.Pipeline/Buffer, mshr, sets, *sim.Msg
+4. **DRAM** — deep internal packages (cmdq, trans, org, signal)
+5. **writearound** — cache.Directory, cache.MSHR, queueing.Buffer, stage structs, transactions
+6. **writeback** — most complex cache variant
+7. **writeevict** — similar to writearound
+8. **writethrough** — similar to writearound
 
-Key patterns: decompose `*sim.Msg` into plain fields, make internal Set types serializable, replace container/list with plain slices, move immutable config from Comp to Spec.
+**Key blocker**: `queueing.Pipeline` and `queueing.Buffer` are interfaces. Their internals (stage contents, cycle counters, buffer elements) are not accessible for serialization. Need either:
+- Add snapshot/restore methods to existing queueing interfaces
+- Create `queueingv5` package with concrete serializable types (per migration.md vision)
+- Manual extraction approach per component
 
-#### M7.2: Components with queueing deps — Budget: TBD
-TLB, simplebankedmemory, switches, DRAM — need serializable queueing implementation first.
+#### M7.2: TBD — Planning in progress (cycle 62)
+Diana and Iris analyzing approaches. Expected scope: queueing serialization + simpler components.
 
-#### M7.3: Cache components — Budget: TBD
-writearound, writeback, writeevict, writethrough — most complex, need serializable Directory + MSHR + stage state.
+#### M7.3: TBD — Cache components
+Most complex group, deferred until queueing approach proven.
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported (State structs mostly empty)
+4. **Port All Components** — 16 tick-driven components structurally ported
 5. **CI Passes** — All checks green on main
+6. **M7.1 State Population** — 6 simple components have serializable State
 
 ## Lessons Learned
 - M1-M3 completed in 15 implementation cycles (budgeted 20).
@@ -59,6 +62,7 @@ writearound, writeback, writeevict, writethrough — most complex, need serializ
 - Iris's/Diana's detailed analysis before milestones prevents scope misestimation.
 - Multi-worker parallel approach is the winning pattern for mechanical refactoring.
 - M6 sub-milestones consistently completed in 2 cycles each (budgeted 4).
-- Total project so far: ~27 implementation cycles + ~10 planning/verification cycles = ~37 active across 56 orchestrator cycles.
+- M7.1 completed in 2 cycles (budgeted 6) — team is efficient at this pattern now.
+- Total project so far: ~29 implementation cycles + ~12 planning/verification cycles across 62 orchestrator cycles.
 - Research for M7 revealed that the queueing/cache serialization problem is deeper than expected — need phased approach.
-- The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
+- The `*sim.Msg` pointer problem is universal — the idealmemcontroller decomposition pattern is proven.
