@@ -8,9 +8,11 @@ import (
 
 // Spec contains immutable configuration for the ideal memory controller.
 type Spec struct {
-	Width         int `json:"width"`
-	Latency       int `json:"latency"`
-	CacheLineSize int `json:"cache_line_size"`
+	Width         int    `json:"width"`
+	Latency       int    `json:"latency"`
+	CacheLineSize int    `json:"cache_line_size"`
+	StorageRef    string `json:"storage_ref"`
+	AddrConvKind  string `json:"addr_conv_kind"`
 }
 
 // inflightTransaction tracks an in-progress memory request with a countdown.
@@ -29,6 +31,8 @@ type inflightTransaction struct {
 type State struct {
 	InflightTransactions []inflightTransaction `json:"inflight_transactions"`
 	CurrentState         string                `json:"current_state"`
+	CurrentCmdID         string                `json:"current_cmd_id"`
+	CurrentCmdSrc        sim.RemotePort        `json:"current_cmd_src"`
 }
 
 // Comp is an ideal memory controller that can perform read and write.
@@ -41,5 +45,4 @@ type Comp struct {
 	ctrlPort         sim.Port
 	Storage          *mem.Storage
 	addressConverter mem.AddressConverter
-	currentCmd       *mem.ControlMsg
 }
