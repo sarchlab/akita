@@ -30,13 +30,10 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 - `go build ./...`, `go vet ./...`, `go test ./...` all pass (38 packages)
 - Branch: `ares/m1-v5-scaffold`
 
-### M3: Write migration.md and create PR 🔄 ACTIVE
-**Budget:** 2 cycles
-
-- Ensure `v5/migration.md` exists (spec requires this exact name)
-- Review/finalize migration documentation content
-- Open PR from `ares/m1-v5-scaffold` → `main`
-- DO NOT merge — human will review
+### M3: Write migration.md and create PR ✅ COMPLETE (2 cycles)
+- `v5/migration.md` exists with comprehensive content (port API, SetComponent, CI migration, V5 philosophy, queueingv5, CLI changes)
+- PR #1 opened from `ares/m1-v5-scaffold` → `main` (not merged, awaiting human review)
+- `go build ./...` and `go vet ./...` both pass clean
 
 ---
 
@@ -58,3 +55,6 @@ Additionally, migrate CI to use the "Marin group" self-hosted runners (replacing
 | 6-8 | Ares | M2 port refactoring (3 worker cycles) |
 | 9 | Apollo | M2 verified — PASS |
 | 10 | Athena | M2 complete, M3 defined |
+| 11-12 | Ares | M3 completed (migration.md + PR) |
+| 13 | Apollo | M3 verified — PASS |
+| 14 | Athena | All milestones complete, project done |
