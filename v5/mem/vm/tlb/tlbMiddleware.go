@@ -48,8 +48,9 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
+	spec := m.GetSpec()
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if !m.responsePipeline.CanAccept() {
 			break
 		}
@@ -71,8 +72,9 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
+	spec := m.GetSpec()
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		item := m.responseBuffer.Peek()
 
 		if item == nil {
@@ -94,11 +96,12 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
@@ -109,11 +112,12 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
@@ -171,12 +175,13 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(msg *sim.Msg) bool {
+	spec := m.GetSpec()
 	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
 	mshrEntry := m.mshr.GetEntry(payload.PID, payload.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, msg)
 	}
-	setID := m.vAddrToSetID(payload.VAddr)
+	setID := m.vAddrToSetID(payload.VAddr, spec)
 	set := m.sets[setID]
 	wayID, page, found := set.Lookup(payload.PID, payload.VAddr)
 
@@ -239,8 +244,8 @@ func (m *tlbMiddleware) handleTranslationMiss(msg *sim.Msg) bool {
 	return false
 }
 
-func (m *tlbMiddleware) vAddrToSetID(vAddr uint64) (setID int) {
-	return int(vAddr / m.pageSize % uint64(m.numSets))
+func (m *tlbMiddleware) vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
+	return int(vAddr / spec.PageSize % uint64(spec.NumSets))
 }
 
 func (m *tlbMiddleware) sendRspToTop(
@@ -322,6 +327,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
+	spec := m.GetSpec()
 	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](item)
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.Comp),
@@ -337,7 +343,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 		m.bottomPort.RetrieveIncoming()
 		return true
 	}
-	setID := m.vAddrToSetID(page.VAddr)
+	setID := m.vAddrToSetID(page.VAddr, spec)
 	set := m.sets[setID]
 	wayID, ok := m.sets[setID].Evict()
 
@@ -370,17 +376,18 @@ func (m *tlbMiddleware) handleFlush() bool {
 	}
 
 	madeProgress := false
+	spec := m.GetSpec()
 
 	if m.mshr.IsEmpty() && m.respondingMSHREntry == nil && m.bottomPort.PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
 		return madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottom() || madeProgress
 	}
 
@@ -390,6 +397,7 @@ func (m *tlbMiddleware) handleFlush() bool {
 }
 
 func (m *tlbMiddleware) processTLBFlush() bool {
+	spec := m.GetSpec()
 	req := m.inflightFlushReq
 	flushPayload := sim.MsgPayload[FlushReqPayload](req)
 
@@ -411,7 +419,7 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	)
 
 	for _, vAddr := range flushPayload.VAddr {
-		setID := m.vAddrToSetID(vAddr)
+		setID := m.vAddrToSetID(vAddr, spec)
 		set := m.sets[setID]
 		wayID, page, found := set.Lookup(flushPayload.PID, vAddr)
 
