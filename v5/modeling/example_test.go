@@ -57,10 +57,12 @@ func (m *pingMiddleware) Tick() bool {
 }
 
 func (m *pingMiddleware) processInput() bool {
-	msg := m.outPort.PeekIncoming()
-	if msg == nil {
+	rawMsg := m.outPort.PeekIncoming()
+	if rawMsg == nil {
 		return false
 	}
+
+	msg := rawMsg.(*sim.GenericMsg)
 
 	switch payload := msg.Payload.(type) {
 	case *PingReqPayload:

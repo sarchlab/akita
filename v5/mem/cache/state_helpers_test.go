@@ -16,8 +16,8 @@ func TestMsgRefRoundTrip(t *testing.T) {
 			Dst:          "dst-port",
 			TrafficClass: "data",
 			TrafficBytes: 64,
+			RspTo:        "rsp-1",
 		},
-		RspTo: "rsp-1",
 	}
 
 	ref := MsgRefFromMsg(msg)

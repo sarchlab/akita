@@ -74,7 +74,7 @@ type testAgent struct {
 	*sim.ComponentBase
 
 	port     sim.Port
-	received []*sim.GenericMsg
+	received []sim.Msg
 }
 
 func newTestAgent(name string) *testAgent {
@@ -138,9 +138,9 @@ func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
 			break
 		}
 
-		if msg.IsRsp() {
+		if msg.Meta().IsRsp() {
 			a.completed++
-			a.completedIDs = append(a.completedIDs, msg.RspTo)
+			a.completedIDs = append(a.completedIDs, msg.Meta().RspTo)
 		}
 	}
 }
@@ -259,7 +259,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp := agent.received[0].Payload.(*mem.DataReadyRspPayload)
+		rsp := agent.received[0].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
 		Expect(rsp.Data).To(Equal(data))
 	})
 
@@ -295,10 +295,10 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		_, isWriteDone := agent.received[0].Payload.(*mem.WriteDoneRspPayload)
+		_, isWriteDone := agent.received[0].(*sim.GenericMsg).Payload.(*mem.WriteDoneRspPayload)
 		Expect(isWriteDone).To(BeTrue())
 
-		readRsp, ok := agent.received[1].Payload.(*mem.DataReadyRspPayload)
+		readRsp, ok := agent.received[1].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
@@ -346,7 +346,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		readRsp, ok := agent.received[1].Payload.(*mem.DataReadyRspPayload)
+		readRsp, ok := agent.received[1].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})

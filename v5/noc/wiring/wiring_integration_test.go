@@ -20,13 +20,13 @@ type wireTestComponent struct {
 
 	port         *Port
 	msgsToSend   []*sim.GenericMsg
-	msgsReceived []*sim.GenericMsg
+	msgsReceived []sim.Msg
 }
 
 func newWireTestComponent(engine sim.Engine, name string) *wireTestComponent {
 	c := &wireTestComponent{
 		msgsToSend:   make([]*sim.GenericMsg, 0),
-		msgsReceived: make([]*sim.GenericMsg, 0),
+		msgsReceived: make([]sim.Msg, 0),
 	}
 
 	c.TickingComponent =
@@ -41,13 +41,13 @@ func (c *wireTestComponent) Tick() bool {
 	madeProgress := false
 
 	// Try to receive messages
-	msg := c.port.RetrieveIncoming()
-	if msg != nil {
-		c.msgsReceived = append(c.msgsReceived, msg)
+	rawMsg := c.port.RetrieveIncoming()
+	if rawMsg != nil {
+		c.msgsReceived = append(c.msgsReceived, rawMsg)
 		madeProgress = true
 
 		now := c.CurrentTime()
-		payload := msg.Payload.(*samplePayload)
+		payload := rawMsg.(*sim.GenericMsg).Payload.(*samplePayload)
 		Expect(payload.sendTime).To(Equal(now - 1))
 	}
 
