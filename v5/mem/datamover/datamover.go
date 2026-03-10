@@ -17,10 +17,64 @@ type Spec struct {
 	OutsideByteGranularity uint64 `json:"outside_byte_granularity"`
 }
 
+// dataChunk wraps a single []byte slot. This avoids [][]byte which fails
+// ValidateState. Valid distinguishes a nil slot from an empty one.
+type dataChunk struct {
+	Data  []byte `json:"data"`
+	Valid bool   `json:"valid"`
+}
+
+// bufferState is the serializable representation of a buffer.
+type bufferState struct {
+	Offset      uint64      `json:"offset"`
+	Granularity uint64      `json:"granularity"`
+	Chunks      []dataChunk `json:"chunks"`
+}
+
+// pendingReadState captures the serializable fields of a pending read request.
+type pendingReadState struct {
+	ID      string         `json:"id"`
+	Src     sim.RemotePort `json:"src"`
+	Dst     sim.RemotePort `json:"dst"`
+	Address uint64         `json:"address"`
+}
+
+// pendingWriteState captures the serializable fields of a pending write request.
+type pendingWriteState struct {
+	ID      string         `json:"id"`
+	Src     sim.RemotePort `json:"src"`
+	Dst     sim.RemotePort `json:"dst"`
+	Address uint64         `json:"address"`
+	Data    []byte         `json:"data"`
+}
+
+// dataMoverTransactionState is the serializable representation of a
+// dataMoverTransaction.
+type dataMoverTransactionState struct {
+	ReqID         string                       `json:"req_id"`
+	ReqSrc        sim.RemotePort               `json:"req_src"`
+	ReqDst        sim.RemotePort               `json:"req_dst"`
+	SrcAddress    uint64                       `json:"src_address"`
+	DstAddress    uint64                       `json:"dst_address"`
+	ByteSize      uint64                       `json:"byte_size"`
+	SrcSide       string                       `json:"src_side"`
+	DstSide       string                       `json:"dst_side"`
+	NextReadAddr  uint64                       `json:"next_read_addr"`
+	NextWriteAddr uint64                       `json:"next_write_addr"`
+	PendingRead   map[string]pendingReadState  `json:"pending_read"`
+	PendingWrite  map[string]pendingWriteState `json:"pending_write"`
+	Active        bool                         `json:"active"`
+}
+
 // State contains mutable runtime data for the data mover.
-// For now this is minimal — the runtime transaction state with *sim.Msg
-// pointers stays on Comp as non-serializable runtime fields.
-type State struct{}
+type State struct {
+	CurrentTransaction dataMoverTransactionState `json:"current_transaction"`
+	Buffer             bufferState               `json:"buffer"`
+	SrcByteGranularity uint64                    `json:"src_byte_granularity"`
+	DstByteGranularity uint64                    `json:"dst_byte_granularity"`
+	SrcSide            string                    `json:"src_side"`
+	DstSide            string                    `json:"dst_side"`
+}
 
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
@@ -76,6 +130,203 @@ type Comp struct {
 	dstByteGranularity uint64
 	currentTransaction *dataMoverTransaction
 	buffer             *buffer
+}
+
+// snapshotState converts the Comp's runtime state into a serializable State.
+func (c *Comp) snapshotState() State {
+	s := State{
+		SrcByteGranularity: c.srcByteGranularity,
+		DstByteGranularity: c.dstByteGranularity,
+	}
+
+	// Determine src/dst side strings from port identity.
+	if c.srcPort == c.insidePort {
+		s.SrcSide = "inside"
+	} else if c.srcPort == c.outsidePort {
+		s.SrcSide = "outside"
+	}
+
+	if c.dstPort == c.insidePort {
+		s.DstSide = "inside"
+	} else if c.dstPort == c.outsidePort {
+		s.DstSide = "outside"
+	}
+
+	// Snapshot buffer.
+	if c.buffer != nil {
+		s.Buffer = bufferState{
+			Offset:      c.buffer.offset,
+			Granularity: c.buffer.granularity,
+		}
+		for _, chunk := range c.buffer.data {
+			if chunk == nil {
+				s.Buffer.Chunks = append(s.Buffer.Chunks, dataChunk{
+					Valid: false,
+				})
+			} else {
+				dataCopy := make([]byte, len(chunk))
+				copy(dataCopy, chunk)
+				s.Buffer.Chunks = append(s.Buffer.Chunks, dataChunk{
+					Data:  dataCopy,
+					Valid: true,
+				})
+			}
+		}
+	}
+
+	// Snapshot current transaction.
+	if c.currentTransaction != nil {
+		trans := c.currentTransaction
+		ts := dataMoverTransactionState{
+			Active:        true,
+			ReqID:         trans.req.ID,
+			ReqSrc:        trans.req.Src,
+			ReqDst:        trans.req.Dst,
+			SrcAddress:    trans.reqPayload.SrcAddress,
+			DstAddress:    trans.reqPayload.DstAddress,
+			ByteSize:      trans.reqPayload.ByteSize,
+			SrcSide:       string(trans.reqPayload.SrcSide),
+			DstSide:       string(trans.reqPayload.DstSide),
+			NextReadAddr:  trans.nextReadAddr,
+			NextWriteAddr: trans.nextWriteAddr,
+			PendingRead:   make(map[string]pendingReadState, len(trans.pendingRead)),
+			PendingWrite:  make(map[string]pendingWriteState, len(trans.pendingWrite)),
+		}
+
+		for id, msg := range trans.pendingRead {
+			payload := sim.MsgPayload[mem.ReadReqPayload](msg)
+			ts.PendingRead[id] = pendingReadState{
+				ID:      msg.ID,
+				Src:     msg.Src,
+				Dst:     msg.Dst,
+				Address: payload.Address,
+			}
+		}
+
+		for id, msg := range trans.pendingWrite {
+			payload := sim.MsgPayload[mem.WriteReqPayload](msg)
+			dataCopy := make([]byte, len(payload.Data))
+			copy(dataCopy, payload.Data)
+			ts.PendingWrite[id] = pendingWriteState{
+				ID:      msg.ID,
+				Src:     msg.Src,
+				Dst:     msg.Dst,
+				Address: payload.Address,
+				Data:    dataCopy,
+			}
+		}
+
+		s.CurrentTransaction = ts
+	}
+
+	return s
+}
+
+// restoreFromState restores the Comp's runtime state from a serializable State.
+func (c *Comp) restoreFromState(s State) {
+	c.srcByteGranularity = s.SrcByteGranularity
+	c.dstByteGranularity = s.DstByteGranularity
+
+	// Restore port assignments from side strings.
+	switch s.SrcSide {
+	case "inside":
+		c.srcPort = c.insidePort
+		c.srcPortMapper = c.insidePortMapper
+	case "outside":
+		c.srcPort = c.outsidePort
+		c.srcPortMapper = c.outsidePortMapper
+	}
+
+	switch s.DstSide {
+	case "inside":
+		c.dstPort = c.insidePort
+		c.dstPortMapper = c.insidePortMapper
+	case "outside":
+		c.dstPort = c.outsidePort
+		c.dstPortMapper = c.outsidePortMapper
+	}
+
+	// Restore buffer.
+	buf := &buffer{
+		offset:      s.Buffer.Offset,
+		granularity: s.Buffer.Granularity,
+	}
+	for _, chunk := range s.Buffer.Chunks {
+		if !chunk.Valid {
+			buf.data = append(buf.data, nil)
+		} else {
+			dataCopy := make([]byte, len(chunk.Data))
+			copy(dataCopy, chunk.Data)
+			buf.data = append(buf.data, dataCopy)
+		}
+	}
+	c.buffer = buf
+
+	// Restore current transaction.
+	if !s.CurrentTransaction.Active {
+		c.currentTransaction = nil
+		return
+	}
+
+	ts := s.CurrentTransaction
+	payload := &DataMoveRequestPayload{
+		SrcAddress: ts.SrcAddress,
+		DstAddress: ts.DstAddress,
+		ByteSize:   ts.ByteSize,
+		SrcSide:    DateMovePort(ts.SrcSide),
+		DstSide:    DateMovePort(ts.DstSide),
+	}
+	req := &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:  ts.ReqID,
+			Src: ts.ReqSrc,
+			Dst: ts.ReqDst,
+		},
+		Payload: payload,
+	}
+
+	trans := &dataMoverTransaction{
+		req:           req,
+		reqPayload:    payload,
+		nextReadAddr:  ts.NextReadAddr,
+		nextWriteAddr: ts.NextWriteAddr,
+		pendingRead:   make(map[string]*sim.Msg, len(ts.PendingRead)),
+		pendingWrite:  make(map[string]*sim.Msg, len(ts.PendingWrite)),
+	}
+
+	for id, ps := range ts.PendingRead {
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  ps.ID,
+				Src: ps.Src,
+				Dst: ps.Dst,
+			},
+			Payload: &mem.ReadReqPayload{
+				Address:        ps.Address,
+				AccessByteSize: c.srcByteGranularity,
+			},
+		}
+		trans.pendingRead[id] = msg
+	}
+
+	for id, ps := range ts.PendingWrite {
+		dataCopy := make([]byte, len(ps.Data))
+		copy(dataCopy, ps.Data)
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  ps.ID,
+				Src: ps.Src,
+				Dst: ps.Dst,
+			},
+			Payload: &mem.WriteReqPayload{
+				Address: ps.Address,
+				Data:    dataCopy,
+			},
+		}
+		trans.pendingWrite[id] = msg
+	}
+
+	c.currentTransaction = trans
 }
 
 // dataMoverMiddleware wraps the Comp and implements the Tick() logic
