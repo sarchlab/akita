@@ -41,18 +41,6 @@ func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
 	return pc
 }
 
-type sampleMsg struct {
-	sim.MsgMeta
-}
-
-func (m *sampleMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-func (m *sampleMsg) Clone() sim.Msg {
-	return m
-}
-
 var _ = Describe("Switch", func() {
 	var (
 		mockCtrl                   *gomock.Controller
@@ -102,9 +90,13 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithDst(port1.AsRemote()).
 			WithMsg(msg).
@@ -131,9 +123,13 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithDst(port1.AsRemote()).
 			WithMsg(msg).
@@ -165,9 +161,13 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -185,7 +185,8 @@ var _ = Describe("Switch", func() {
 		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(flit.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
+		flitPayload := sim.MsgPayload[messaging.FlitPayload](flit)
+		Expect(flitPayload.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
 	})
 
 	It("should not route if forward buffer is full", func() {
@@ -193,9 +194,13 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -215,13 +220,17 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		flit.OutputBuf = sendOutBuffer2
+		sim.MsgPayload[messaging.FlitPayload](flit).OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
 			Arbitrate().
@@ -243,13 +252,17 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		flit.OutputBuf = sendOutBuffer2
+		sim.MsgPayload[messaging.FlitPayload](flit).OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
 			Arbitrate().
@@ -269,9 +282,13 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
@@ -294,9 +311,13 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sampleMsg{}
-		msg.Src = dstPort.AsRemote()
-		msg.Dst = dstPort.AsRemote()
+		msg := &sim.Msg{
+			MsgMeta: sim.MsgMeta{
+				ID:  sim.GetIDGenerator().Generate(),
+				Src: dstPort.AsRemote(),
+				Dst: dstPort.AsRemote(),
+			},
+		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()

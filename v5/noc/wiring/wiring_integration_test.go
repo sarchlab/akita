@@ -9,19 +9,24 @@ import (
 	"github.com/sarchlab/akita/v5/simulation"
 )
 
+// samplePayload is a simple payload type for testing
+type samplePayload struct {
+	sendTime sim.VTimeInSec
+}
+
 // wireTestComponent is a component that can send and receive messages
 type wireTestComponent struct {
 	*sim.TickingComponent
 
 	port         *Port
-	msgsToSend   []*sampleMsg
-	msgsReceived []*sampleMsg
+	msgsToSend   []*sim.Msg
+	msgsReceived []*sim.Msg
 }
 
 func newWireTestComponent(engine sim.Engine, name string) *wireTestComponent {
 	c := &wireTestComponent{
-		msgsToSend:   make([]*sampleMsg, 0),
-		msgsReceived: make([]*sampleMsg, 0),
+		msgsToSend:   make([]*sim.Msg, 0),
+		msgsReceived: make([]*sim.Msg, 0),
 	}
 
 	c.TickingComponent =
@@ -38,17 +43,18 @@ func (c *wireTestComponent) Tick() bool {
 	// Try to receive messages
 	msg := c.port.RetrieveIncoming()
 	if msg != nil {
-		c.msgsReceived = append(c.msgsReceived, msg.(*sampleMsg))
+		c.msgsReceived = append(c.msgsReceived, msg)
 		madeProgress = true
 
 		now := c.CurrentTime()
-		Expect(msg.(*sampleMsg).sendTime).To(Equal(now - 1))
+		payload := msg.Payload.(*samplePayload)
+		Expect(payload.sendTime).To(Equal(now - 1))
 	}
 
 	// Try to send messages
 	if len(c.msgsToSend) > 0 {
 		msg := c.msgsToSend[0]
-		msg.sendTime = c.CurrentTime()
+		msg.Payload.(*samplePayload).sendTime = c.CurrentTime()
 
 		err := c.port.Send(c.msgsToSend[0])
 		if err == nil {
@@ -88,9 +94,14 @@ var _ = Describe("Wire Integration", func() {
 	It("should deliver messages one cycle after they are sent", func() {
 		// Create 10 messages to send
 		for i := 0; i < 10; i++ {
-			msg := newSampleMsg()
-			msg.Src = comp1.port.AsRemote()
-			msg.Dst = comp2.port.AsRemote()
+			msg := &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  sim.GetIDGenerator().Generate(),
+					Src: comp1.port.AsRemote(),
+					Dst: comp2.port.AsRemote(),
+				},
+				Payload: &samplePayload{},
+			}
 			comp1.msgsToSend = append(comp1.msgsToSend, msg)
 		}
 
@@ -106,14 +117,24 @@ var _ = Describe("Wire Integration", func() {
 	It("should handle bidirectional message passing", func() {
 		// Create messages in both directions
 		for i := 0; i < 5; i++ {
-			msg1 := newSampleMsg()
-			msg1.Src = comp1.port.AsRemote()
-			msg1.Dst = comp2.port.AsRemote()
+			msg1 := &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  sim.GetIDGenerator().Generate(),
+					Src: comp1.port.AsRemote(),
+					Dst: comp2.port.AsRemote(),
+				},
+				Payload: &samplePayload{},
+			}
 			comp1.msgsToSend = append(comp1.msgsToSend, msg1)
 
-			msg2 := newSampleMsg()
-			msg2.Src = comp2.port.AsRemote()
-			msg2.Dst = comp1.port.AsRemote()
+			msg2 := &sim.Msg{
+				MsgMeta: sim.MsgMeta{
+					ID:  sim.GetIDGenerator().Generate(),
+					Src: comp2.port.AsRemote(),
+					Dst: comp1.port.AsRemote(),
+				},
+				Payload: &samplePayload{},
+			}
 			comp2.msgsToSend = append(comp2.msgsToSend, msg2)
 		}
 
