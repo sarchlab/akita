@@ -110,7 +110,7 @@ func buildEnvironment() {
 	agent.TickLater()
 }
 
-func setupTracing(comp sim.Component) {
+func setupTracing(comp tracing.NamedHookable) {
 	if *traceWithStdoutFlag {
 		logger := log.New(os.Stdout, "", 0)
 		tracer := trace.NewTracer(logger, engine)
