@@ -97,8 +97,8 @@ func (b ReadReqBuilder) CanWaitForCoalesce() ReadReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with ReadReqPayload.
-func (b ReadReqBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with ReadReqPayload.
+func (b ReadReqBuilder) Build() *sim.GenericMsg {
 	payload := &ReadReqPayload{
 		Address:            b.address,
 		AccessByteSize:     b.byteSize,
@@ -106,7 +106,7 @@ func (b ReadReqBuilder) Build() *sim.Msg {
 		CanWaitForCoalesce: b.canWaitForCoalesce,
 		Info:               b.info,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -203,8 +203,8 @@ func (b WriteReqBuilder) CanWaitForCoalesce() WriteReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with WriteReqPayload.
-func (b WriteReqBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with WriteReqPayload.
+func (b WriteReqBuilder) Build() *sim.GenericMsg {
 	payload := &WriteReqPayload{
 		Address:            b.address,
 		Data:               b.data,
@@ -213,7 +213,7 @@ func (b WriteReqBuilder) Build() *sim.Msg {
 		CanWaitForCoalesce: b.canWaitForCoalesce,
 		Info:               b.info,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -262,20 +262,20 @@ func (b DataReadyRspBuilder) WithData(data []byte) DataReadyRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with DataReadyRspPayload.
-func (b DataReadyRspBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with DataReadyRspPayload.
+func (b DataReadyRspBuilder) Build() *sim.GenericMsg {
 	payload := &DataReadyRspPayload{
 		Data: b.data,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficBytes: len(b.data) + accessRspByteOverhead,
 			TrafficClass: reflect.TypeOf(ReadReqPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: payload,
 	}
 }
@@ -308,17 +308,17 @@ func (b WriteDoneRspBuilder) WithRspTo(id string) WriteDoneRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with WriteDoneRspPayload.
-func (b WriteDoneRspBuilder) Build() *sim.Msg {
-	return &sim.Msg{
+// Build creates a new *sim.GenericMsg with WriteDoneRspPayload.
+func (b WriteDoneRspBuilder) Build() *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficBytes: accessRspByteOverhead,
 			TrafficClass: reflect.TypeOf(WriteReqPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: &WriteDoneRspPayload{},
 	}
 }
@@ -393,8 +393,8 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	return b
 }
 
-// Build creates a new *sim.Msg with ControlMsgPayload.
-func (b ControlMsgBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with ControlMsgPayload.
+func (b ControlMsgBuilder) Build() *sim.GenericMsg {
 	payload := &ControlMsgPayload{
 		DiscardTransations: b.discardTransactions,
 		Restart:            b.restart,
@@ -405,7 +405,7 @@ func (b ControlMsgBuilder) Build() *sim.Msg {
 		Pause:              b.Pause,
 		Invalid:            b.Invalid,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -485,8 +485,8 @@ func (b ControlMsgRspBuilder) WithInvalid(invalid bool) ControlMsgRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with ControlMsgRspPayload.
-func (b ControlMsgRspBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with ControlMsgRspPayload.
+func (b ControlMsgRspBuilder) Build() *sim.GenericMsg {
 	payload := &ControlMsgRspPayload{
 		Enable:  b.enable,
 		Drain:   b.drain,
@@ -494,14 +494,14 @@ func (b ControlMsgRspBuilder) Build() *sim.Msg {
 		Pause:   b.pause,
 		Invalid: b.invalid,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficClass: reflect.TypeOf(ControlMsgRspPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: payload,
 	}
 }

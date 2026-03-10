@@ -12,8 +12,8 @@ import (
 type TrafficMsgPayload struct{}
 
 // NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.Msg {
-	return &sim.Msg{
+func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          src,
@@ -29,7 +29,7 @@ func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.Msg {
 type StartSendEvent struct {
 	*sim.EventBase
 
-	Msg *sim.Msg
+	Msg *sim.GenericMsg
 }
 
 // NewStartSendEvent creates a new StartSendEvent.
@@ -52,7 +52,7 @@ type Agent struct {
 
 	ToOut sim.Port
 
-	Buffer []*sim.Msg
+	Buffer []*sim.GenericMsg
 }
 
 // NotifyRecv notifies that a port has received a message.

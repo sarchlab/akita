@@ -69,7 +69,7 @@ func (s *mshrStage) processOneReq() bool {
 }
 
 func (s *mshrStage) respondRead(
-	readMsg *sim.Msg,
+	readMsg *sim.GenericMsg,
 	data []byte,
 ) {
 	readPayload := sim.MsgPayload[mem.ReadReqPayload](readMsg)
@@ -85,7 +85,7 @@ func (s *mshrStage) respondRead(
 	tracing.TraceReqComplete(readMsg, s.cache)
 }
 
-func (s *mshrStage) respondWrite(writeMsg *sim.Msg) {
+func (s *mshrStage) respondWrite(writeMsg *sim.GenericMsg) {
 	writeDoneRsp := mem.WriteDoneRspBuilder{}.
 		WithSrc(s.cache.topPort.AsRemote()).
 		WithDst(writeMsg.Src).

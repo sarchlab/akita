@@ -20,7 +20,7 @@ type Spec struct {
 	EncodingOverhead  float64 `json:"encoding_overhead"`
 }
 
-// msgRef is a serializable representation of a *sim.Msg.
+// msgRef is a serializable representation of a *sim.GenericMsg.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -30,7 +30,7 @@ type msgRef struct {
 	TrafficBytes int            `json:"traffic_bytes"`
 }
 
-// flitState is a serializable representation of a flit *sim.Msg.
+// flitState is a serializable representation of a flit *sim.GenericMsg.
 type flitState struct {
 	ID            string         `json:"id"`
 	Src           sim.RemotePort `json:"src"`
@@ -62,7 +62,7 @@ type State struct {
 }
 
 type msgToAssemble struct {
-	msg             *sim.Msg
+	msg             *sim.GenericMsg
 	numFlitRequired int
 	numFlitArrived  int
 }
@@ -76,11 +76,11 @@ type Comp struct {
 	DevicePorts      []sim.Port
 	DefaultSwitchDst sim.RemotePort
 
-	msgOutBuf   []*sim.Msg
-	flitsToSend []*sim.Msg
+	msgOutBuf   []*sim.GenericMsg
+	flitsToSend []*sim.GenericMsg
 
 	assemblingMsgs []*msgToAssemble
-	assembledMsgs  []*sim.Msg
+	assembledMsgs  []*sim.GenericMsg
 }
 
 // PlugIn connects a port to the endpoint.
@@ -143,19 +143,19 @@ func (c *Comp) snapshotState() State {
 
 // restoreFromState restores runtime mutable data from a serializable State.
 func (c *Comp) restoreFromState(s State) {
-	c.msgOutBuf = make([]*sim.Msg, len(s.MsgOutBuf))
+	c.msgOutBuf = make([]*sim.GenericMsg, len(s.MsgOutBuf))
 	for i, ref := range s.MsgOutBuf {
 		c.msgOutBuf[i] = msgFromRef(ref)
 	}
 
-	c.flitsToSend = make([]*sim.Msg, len(s.FlitsToSend))
+	c.flitsToSend = make([]*sim.GenericMsg, len(s.FlitsToSend))
 	for i, fs := range s.FlitsToSend {
-		originalMsg := &sim.Msg{
+		originalMsg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID: fs.OriginalMsgID,
 			},
 		}
-		c.flitsToSend[i] = &sim.Msg{
+		c.flitsToSend[i] = &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  fs.ID,
 				Src: fs.Src,
@@ -172,22 +172,22 @@ func (c *Comp) restoreFromState(s State) {
 	c.assemblingMsgs = make([]*msgToAssemble, len(s.AssemblingMsgs))
 	for i, as := range s.AssemblingMsgs {
 		c.assemblingMsgs[i] = &msgToAssemble{
-			msg: &sim.Msg{
+			msg: &sim.GenericMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:           as.MsgID,
 					Src:          as.Src,
 					Dst:          as.Dst,
+					RspTo:        as.RspTo,
 					TrafficClass: as.TrafficClass,
 					TrafficBytes: as.TrafficBytes,
 				},
-				RspTo: as.RspTo,
 			},
 			numFlitRequired: as.NumFlitRequired,
 			numFlitArrived:  as.NumFlitArrived,
 		}
 	}
 
-	c.assembledMsgs = make([]*sim.Msg, len(s.AssembledMsgs))
+	c.assembledMsgs = make([]*sim.GenericMsg, len(s.AssembledMsgs))
 	for i, ref := range s.AssembledMsgs {
 		c.assembledMsgs[i] = msgFromRef(ref)
 	}
@@ -229,7 +229,7 @@ func (c *Comp) SyncState() {
 	c.GetState()
 }
 
-func msgRefFromMsg(msg *sim.Msg) msgRef {
+func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
 	return msgRef{
 		ID:           msg.ID,
 		Src:          msg.Src,
@@ -240,20 +240,20 @@ func msgRefFromMsg(msg *sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.Msg {
-	return &sim.Msg{
+func msgFromRef(ref msgRef) *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           ref.ID,
 			Src:          ref.Src,
 			Dst:          ref.Dst,
+			RspTo:        ref.RspTo,
 			TrafficClass: ref.TrafficClass,
 			TrafficBytes: ref.TrafficBytes,
 		},
-		RspTo: ref.RspTo,
 	}
 }
 
-func flitStateFromMsg(flit *sim.Msg) flitState {
+func flitStateFromMsg(flit *sim.GenericMsg) flitState {
 	payload := sim.MsgPayload[messaging.FlitPayload](flit)
 	return flitState{
 		ID:            flit.ID,
@@ -290,7 +290,7 @@ func (m *middleware) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flitMsg *sim.Msg) string {
+func (m *middleware) flitTaskID(flitMsg *sim.GenericMsg) string {
 	return fmt.Sprintf("%s_e2e", flitMsg.ID)
 }
 
@@ -330,7 +330,7 @@ func (m *middleware) prepareMsg() bool {
 			continue
 		}
 
-		msg := port.RetrieveOutgoing()
+		msg := port.RetrieveOutgoing().(*sim.GenericMsg)
 		m.msgOutBuf = append(m.msgOutBuf, msg)
 
 		madeProgress = true
@@ -364,11 +364,12 @@ func (m *middleware) recv() bool {
 	madeProgress := false
 
 	for i := 0; i < m.Comp.GetSpec().NumInputChannels; i++ {
-		received := m.NetworkPort.PeekIncoming()
-		if received == nil {
+		receivedI := m.NetworkPort.PeekIncoming()
+		if receivedI == nil {
 			return madeProgress
 		}
 
+		received := receivedI.(*sim.GenericMsg)
 		flitPayload := sim.MsgPayload[messaging.FlitPayload](received)
 		msg := flitPayload.Msg
 
@@ -455,7 +456,7 @@ func (m *middleware) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *middleware) logFlitE2ETask(flitMsg *sim.Msg, isEnd bool) {
+func (m *middleware) logFlitE2ETask(flitMsg *sim.GenericMsg, isEnd bool) {
 	if m.Comp.NumHooks() == 0 {
 		return
 	}
@@ -474,7 +475,7 @@ func (m *middleware) logFlitE2ETask(flitMsg *sim.Msg, isEnd bool) {
 	)
 }
 
-func (m *middleware) logMsgE2ETask(msg *sim.Msg, isEnd bool) {
+func (m *middleware) logMsgE2ETask(msg *sim.GenericMsg, isEnd bool) {
 	if m.Comp.NumHooks() == 0 {
 		return
 	}
@@ -487,7 +488,7 @@ func (m *middleware) logMsgE2ETask(msg *sim.Msg, isEnd bool) {
 	m.logMsgReq(isEnd, msg)
 }
 
-func (m *middleware) logMsgReq(isEnd bool, msg *sim.Msg) {
+func (m *middleware) logMsgReq(isEnd bool, msg *sim.GenericMsg) {
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(msg.ID), m.Comp)
 	} else {
@@ -499,7 +500,7 @@ func (m *middleware) logMsgReq(isEnd bool, msg *sim.Msg) {
 	}
 }
 
-func (m *middleware) logMsgRsp(isEnd bool, msg *sim.Msg) {
+func (m *middleware) logMsgRsp(isEnd bool, msg *sim.GenericMsg) {
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(msg.ID), m.Comp)
 	} else {
@@ -511,7 +512,7 @@ func (m *middleware) logMsgRsp(isEnd bool, msg *sim.Msg) {
 	}
 }
 
-func (m *middleware) msgToFlits(msg *sim.Msg) []*sim.Msg {
+func (m *middleware) msgToFlits(msg *sim.GenericMsg) []*sim.GenericMsg {
 	numFlit := 1
 
 	if msg.TrafficBytes > 0 {
@@ -521,7 +522,7 @@ func (m *middleware) msgToFlits(msg *sim.Msg) []*sim.Msg {
 		numFlit = (trafficByte-1)/m.Comp.GetSpec().FlitByteSize + 1
 	}
 
-	flits := make([]*sim.Msg, numFlit)
+	flits := make([]*sim.GenericMsg, numFlit)
 	for i := 0; i < numFlit; i++ {
 		flits[i] = messaging.FlitBuilder{}.
 			WithSrc(m.NetworkPort.AsRemote()).

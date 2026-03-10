@@ -21,12 +21,13 @@ func (m *ctrlMiddleware) Tick() bool {
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	madeProgress := false
-	msg := m.controlPort.PeekIncoming()
+	msgI := m.controlPort.PeekIncoming()
 
-	if msg == nil {
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *mem.ControlMsgPayload:
 		madeProgress = m.handleControlMsg(msg) || madeProgress
@@ -41,7 +42,7 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) handleControlMsg(msg *sim.Msg) bool {
+func (m *ctrlMiddleware) handleControlMsg(msg *sim.GenericMsg) bool {
 	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
 	m.ctrlMsgMustBeValidInCurrentStage(ctrlPayload)
 
@@ -80,11 +81,12 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
 }
 
 func (m *ctrlMiddleware) performCtrlReq() bool {
-	item := m.controlPort.PeekIncoming()
-	if item == nil {
+	itemI := m.controlPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](item)
 
 	if ctrlPayload.Enable {
@@ -107,7 +109,7 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg *sim.Msg) bool {
+func (m *ctrlMiddleware) handleTLBFlush(msg *sim.GenericMsg) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 	m.inflightFlushReq = msg
 	m.controlPort.RetrieveIncoming()
@@ -116,7 +118,7 @@ func (m *ctrlMiddleware) handleTLBFlush(msg *sim.Msg) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.Msg) {
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.GenericMsg) {
 	switch state := m.state; state {
 	case tlbStateEnable:
 		// valid
@@ -131,7 +133,7 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.Msg) {
 	}
 }
 
-func (m *ctrlMiddleware) handleTLBRestart(msg *sim.Msg) bool {
+func (m *ctrlMiddleware) handleTLBRestart(msg *sim.GenericMsg) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
 		WithDst(msg.Src).

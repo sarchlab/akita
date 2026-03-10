@@ -12,7 +12,7 @@ type Agent struct {
 
 	test       *Test
 	AgentPorts []sim.Port
-	MsgsToSend []*sim.Msg
+	MsgsToSend []*sim.GenericMsg
 	sendBytes  uint64
 	recvBytes  uint64
 }
@@ -88,9 +88,10 @@ func (a *Agent) recv() bool {
 	madeProgress := false
 
 	for _, port := range a.AgentPorts {
-		msg := port.RetrieveIncoming()
+		msgI := port.RetrieveIncoming()
 
-		if msg != nil {
+		if msgI != nil {
+			msg := msgI.(*sim.GenericMsg)
 			a.test.receiveMsg(msg, port)
 			a.recvBytes += uint64(msg.TrafficBytes)
 

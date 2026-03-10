@@ -80,23 +80,23 @@ type State struct {
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
 type dataMoverTransaction struct {
-	req           *sim.Msg // payload: *DataMoveRequestPayload
+	req           *sim.GenericMsg // payload: *DataMoveRequestPayload
 	reqPayload    *DataMoveRequestPayload
 	nextReadAddr  uint64
 	nextWriteAddr uint64
-	pendingRead   map[string]*sim.Msg // payload: *mem.ReadReqPayload
-	pendingWrite  map[string]*sim.Msg // payload: *mem.WriteReqPayload
+	pendingRead   map[string]*sim.GenericMsg // payload: *mem.ReadReqPayload
+	pendingWrite  map[string]*sim.GenericMsg // payload: *mem.WriteReqPayload
 }
 
-func newDataMoverTransaction(req *sim.Msg) *dataMoverTransaction {
+func newDataMoverTransaction(req *sim.GenericMsg) *dataMoverTransaction {
 	payload := sim.MsgPayload[DataMoveRequestPayload](req)
 	return &dataMoverTransaction{
 		req:           req,
 		reqPayload:    payload,
 		nextReadAddr:  payload.SrcAddress,
 		nextWriteAddr: payload.DstAddress,
-		pendingRead:   make(map[string]*sim.Msg),
-		pendingWrite:  make(map[string]*sim.Msg),
+		pendingRead:   make(map[string]*sim.GenericMsg),
+		pendingWrite:  make(map[string]*sim.GenericMsg),
 	}
 }
 
@@ -262,7 +262,7 @@ func (c *Comp) restoreTransaction(
 		ByteSize: ts.ByteSize,
 		SrcSide:  DateMovePort(ts.SrcSide), DstSide: DateMovePort(ts.DstSide),
 	}
-	req := &sim.Msg{
+	req := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: ts.ReqID, Src: ts.ReqSrc, Dst: ts.ReqDst,
 		},
@@ -273,12 +273,12 @@ func (c *Comp) restoreTransaction(
 		req: req, reqPayload: payload,
 		nextReadAddr:  ts.NextReadAddr,
 		nextWriteAddr: ts.NextWriteAddr,
-		pendingRead:   make(map[string]*sim.Msg, len(ts.PendingRead)),
-		pendingWrite:  make(map[string]*sim.Msg, len(ts.PendingWrite)),
+		pendingRead:   make(map[string]*sim.GenericMsg, len(ts.PendingRead)),
+		pendingWrite:  make(map[string]*sim.GenericMsg, len(ts.PendingWrite)),
 	}
 
 	for id, ps := range ts.PendingRead {
-		trans.pendingRead[id] = &sim.Msg{
+		trans.pendingRead[id] = &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
 			Payload: &mem.ReadReqPayload{
 				Address: ps.Address, AccessByteSize: c.srcByteGranularity,
@@ -289,7 +289,7 @@ func (c *Comp) restoreTransaction(
 	for id, ps := range ts.PendingWrite {
 		dataCopy := make([]byte, len(ps.Data))
 		copy(dataCopy, ps.Data)
-		trans.pendingWrite[id] = &sim.Msg{
+		trans.pendingWrite[id] = &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
 			Payload: &mem.WriteReqPayload{Address: ps.Address, Data: dataCopy},
 		}
@@ -368,11 +368,12 @@ func (m *dataMoverMiddleware) Tick() bool {
 
 // parseFromCP retrieves Msg from ctrlPort
 func (m *dataMoverMiddleware) parseFromCP() bool {
-	req := m.ctrlPort.RetrieveIncoming()
-	if req == nil {
+	reqI := m.ctrlPort.RetrieveIncoming()
+	if reqI == nil {
 		return false
 	}
 
+	req := reqI.(*sim.GenericMsg)
 	if m.currentTransaction != nil {
 		return false
 	}
@@ -444,11 +445,12 @@ func (m *dataMoverMiddleware) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	rsp := m.srcPort.PeekIncoming()
-	if rsp == nil {
+	rspI := m.srcPort.PeekIncoming()
+	if rspI == nil {
 		return false
 	}
 
+	rsp := rspI.(*sim.GenericMsg)
 	readRspPayload, ok := rsp.Payload.(*mem.DataReadyRspPayload)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
@@ -515,11 +517,12 @@ func (m *dataMoverMiddleware) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	rsp := m.dstPort.PeekIncoming()
-	if rsp == nil {
+	rspI := m.dstPort.PeekIncoming()
+	if rspI == nil {
 		return false
 	}
 
+	rsp := rspI.(*sim.GenericMsg)
 	_, ok := rsp.Payload.(*mem.WriteDoneRspPayload)
 	if !ok {
 		return false
@@ -551,13 +554,13 @@ func (m *dataMoverMiddleware) finishTransaction() bool {
 		return false
 	}
 
-	rsp := &sim.Msg{
+	rsp := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
-			Src: trans.req.Dst,
-			Dst: trans.req.Src,
+			ID:    sim.GetIDGenerator().Generate(),
+			Src:   trans.req.Dst,
+			Dst:   trans.req.Src,
+			RspTo: trans.req.ID,
 		},
-		RspTo: trans.req.ID,
 	}
 
 	err := m.ctrlPort.Send(rsp)

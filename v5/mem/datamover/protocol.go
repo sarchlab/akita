@@ -96,8 +96,8 @@ func (b DataMoveRequestBuilder) WithByteSize(
 	return b
 }
 
-// Build creates a new *sim.Msg with DataMoveRequestPayload.
-func (b DataMoveRequestBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with DataMoveRequestPayload.
+func (b DataMoveRequestBuilder) Build() *sim.GenericMsg {
 	payload := &DataMoveRequestPayload{
 		SrcAddress: b.srcAddress,
 		DstAddress: b.dstAddress,
@@ -105,7 +105,7 @@ func (b DataMoveRequestBuilder) Build() *sim.Msg {
 		SrcSide:    b.srcSide,
 		DstSide:    b.dstSide,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,

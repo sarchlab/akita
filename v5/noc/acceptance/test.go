@@ -13,8 +13,8 @@ type TrafficMsgPayload struct{}
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []*sim.Msg
-	receivedMsgs      []*sim.Msg
+	msgs              []*sim.GenericMsg
+	receivedMsgs      []*sim.GenericMsg
 	receivedMsgsTable map[string]bool
 }
 
@@ -49,7 +49,7 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &sim.Msg{
+		msg := &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:           sim.GetIDGenerator().Generate(),
 				Src:          srcPort.AsRemote(),
@@ -63,12 +63,12 @@ func (t *Test) GenerateMsgs(n uint64) {
 	}
 }
 
-func (t *Test) registerMsg(msg *sim.Msg) {
+func (t *Test) registerMsg(msg *sim.GenericMsg) {
 	t.msgs = append(t.msgs, msg)
 }
 
 // receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg *sim.Msg, recvPort sim.Port) {
+func (t *Test) receiveMsg(msg *sim.GenericMsg, recvPort sim.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
 
@@ -76,7 +76,7 @@ func (t *Test) receiveMsg(msg *sim.Msg, recvPort sim.Port) {
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	recvPort sim.Port,
 ) {
 	if msg.Dst != recvPort.AsRemote() {
@@ -84,7 +84,7 @@ func (t *Test) msgMustBeReceivedAtItsDestination(
 	}
 }
 
-func (t *Test) msgMustNotBeReceivedBefore(msg *sim.Msg) {
+func (t *Test) msgMustNotBeReceivedBefore(msg *sim.GenericMsg) {
 	if _, found := t.receivedMsgsTable[msg.ID]; found {
 		panic("msg is double delivered")
 	}

@@ -10,8 +10,8 @@ import (
 type mshrEntry struct {
 	pid         vm.PID
 	vAddr       uint64
-	Requests    []*sim.Msg // payload: *vm.TranslationReqPayload
-	reqToBottom *sim.Msg   // payload: *vm.TranslationReqPayload
+	Requests    []*sim.GenericMsg // payload: *vm.TranslationReqPayload
+	reqToBottom *sim.GenericMsg   // payload: *vm.TranslationReqPayload
 	page        vm.Page
 }
 

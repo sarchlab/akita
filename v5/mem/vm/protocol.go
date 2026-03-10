@@ -66,15 +66,15 @@ func (b TranslationReqBuilder) WithDeviceID(
 	return b
 }
 
-// Build creates a new *sim.Msg with TranslationReqPayload.
-func (b TranslationReqBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with TranslationReqPayload.
+func (b TranslationReqBuilder) Build() *sim.GenericMsg {
 	payload := &TranslationReqPayload{
 		VAddr:        b.vAddr,
 		PID:          b.pid,
 		DeviceID:     b.deviceID,
 		TransLatency: b.transLatency,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
@@ -126,19 +126,19 @@ func (b TranslationRspBuilder) WithPage(page Page) TranslationRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.Msg with TranslationRspPayload.
-func (b TranslationRspBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with TranslationRspPayload.
+func (b TranslationRspBuilder) Build() *sim.GenericMsg {
 	payload := &TranslationRspPayload{
 		Page: b.page,
 	}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          b.src,
 			Dst:          b.dst,
+			RspTo:        b.rspTo,
 			TrafficClass: reflect.TypeOf(TranslationReqPayload{}).String(),
 		},
-		RspTo:   b.rspTo,
 		Payload: payload,
 	}
 }
@@ -162,13 +162,13 @@ type PageMigrationReqToDriverPayload struct {
 	RespondToTop      bool
 }
 
-// NewPageMigrationReqToDriver creates a *sim.Msg with
+// NewPageMigrationReqToDriver creates a *sim.GenericMsg with
 // PageMigrationReqToDriverPayload.
 func NewPageMigrationReqToDriver(
 	src, dst sim.RemotePort,
-) *sim.Msg {
+) *sim.GenericMsg {
 	payload := &PageMigrationReqToDriverPayload{}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			Src:          src,
 			Dst:          dst,
@@ -187,20 +187,20 @@ type PageMigrationRspFromDriverPayload struct {
 	RspToTop  bool
 }
 
-// NewPageMigrationRspFromDriver creates a new *sim.Msg with
+// NewPageMigrationRspFromDriver creates a new *sim.GenericMsg with
 // PageMigrationRspFromDriverPayload.
 func NewPageMigrationRspFromDriver(
 	src, dst sim.RemotePort,
 	originalReqID string,
-) *sim.Msg {
+) *sim.GenericMsg {
 	payload := &PageMigrationRspFromDriverPayload{}
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			Src:          src,
 			Dst:          dst,
+			RspTo:        originalReqID,
 			TrafficClass: reflect.TypeOf(PageMigrationReqToDriverPayload{}).String(),
 		},
-		RspTo:   originalReqID,
 		Payload: payload,
 	}
 }

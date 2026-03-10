@@ -41,7 +41,7 @@ type Comp struct {
 
 	table []internal.Set
 
-	inflightFlushReq *sim.Msg // payload: *FlushReqPayload
+	inflightFlushReq *sim.GenericMsg // payload: *FlushReqPayload
 }
 
 func (c *Comp) reset() {
@@ -89,7 +89,7 @@ func (c *Comp) SetState(state State) {
 	}
 
 	if state.InflightFlushReqActive {
-		c.inflightFlushReq = &sim.Msg{
+		c.inflightFlushReq = &sim.GenericMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:  state.InflightFlushReqID,
 				Src: state.InflightFlushReqSrc,

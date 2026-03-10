@@ -7,7 +7,7 @@ import (
 )
 
 type pipelineTLBReq struct {
-	msg *sim.Msg // payload: *vm.TranslationReqPayload
+	msg *sim.GenericMsg // payload: *vm.TranslationReqPayload
 }
 
 func (r *pipelineTLBReq) TaskID() string {
@@ -55,11 +55,12 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		msg := m.topPort.RetrieveIncoming()
-		if msg == nil {
+		msgI := m.topPort.RetrieveIncoming()
+		if msgI == nil {
 			break
 		}
 
+		msg := msgI.(*sim.GenericMsg)
 		m.responsePipeline.Accept(&pipelineTLBReq{
 			msg: msg,
 		})
@@ -174,7 +175,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup(msg *sim.Msg) bool {
+func (m *tlbMiddleware) lookup(msg *sim.GenericMsg) bool {
 	spec := m.GetSpec()
 	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
 	mshrEntry := m.mshr.GetEntry(payload.PID, payload.VAddr)
@@ -192,7 +193,7 @@ func (m *tlbMiddleware) lookup(msg *sim.Msg) bool {
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -217,7 +218,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(msg *sim.Msg) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg *sim.GenericMsg) bool {
 	if m.mshr.IsFull() {
 		return false
 	}
@@ -249,7 +250,7 @@ func (m *tlbMiddleware) vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
@@ -274,7 +275,7 @@ func (m *tlbMiddleware) sendRspToTop(
 
 func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
-	msg *sim.Msg,
+	msg *sim.GenericMsg,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, msg)
 
@@ -285,7 +286,7 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(msg *sim.Msg) bool {
+func (m *tlbMiddleware) fetchBottom(msg *sim.GenericMsg) bool {
 	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
@@ -322,11 +323,12 @@ func (m *tlbMiddleware) parseBottom() bool {
 	if m.respondingMSHREntry != nil {
 		return false
 	}
-	item := m.bottomPort.PeekIncoming()
-	if item == nil {
+	itemI := m.bottomPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	spec := m.GetSpec()
 	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](item)
 	tracing.AddMilestone(

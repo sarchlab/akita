@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// msgRef is a serializable representation of a *sim.Msg.
+// msgRef is a serializable representation of a *sim.GenericMsg.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -56,7 +56,7 @@ type pipelineStageState struct {
 	CycleLeft int                 `json:"cycle_left"`
 }
 
-func msgRefFromMsg(msg *sim.Msg) msgRef {
+func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
 	return msgRef{
 		ID:           msg.ID,
 		Src:          msg.Src,
@@ -67,16 +67,16 @@ func msgRefFromMsg(msg *sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.Msg {
-	return &sim.Msg{
+func msgFromRef(ref msgRef) *sim.GenericMsg {
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           ref.ID,
 			Src:          ref.Src,
 			Dst:          ref.Dst,
+			RspTo:        ref.RspTo,
 			TrafficClass: ref.TrafficClass,
 			TrafficBytes: ref.TrafficBytes,
 		},
-		RspTo: ref.RspTo,
 	}
 }
 
@@ -110,7 +110,7 @@ func restoreMSHR(m mshr, states []mshrEntryState) {
 			vAddr: s.VAddr,
 			page:  s.Page,
 		}
-		entry.Requests = make([]*sim.Msg, len(s.Requests))
+		entry.Requests = make([]*sim.GenericMsg, len(s.Requests))
 		for j, r := range s.Requests {
 			entry.Requests[j] = msgFromRef(r)
 		}
@@ -237,7 +237,7 @@ func restoreMSHREntry(s mshrEntryState) *mshrEntry {
 		vAddr: s.VAddr,
 		page:  s.Page,
 	}
-	entry.Requests = make([]*sim.Msg, len(s.Requests))
+	entry.Requests = make([]*sim.GenericMsg, len(s.Requests))
 	for j, r := range s.Requests {
 		entry.Requests[j] = msgFromRef(r)
 	}

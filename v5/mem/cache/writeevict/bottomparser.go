@@ -28,7 +28,7 @@ func (p *bottomParser) Tick() bool {
 	}
 }
 
-func (p *bottomParser) processDoneRsp(msg *sim.Msg) bool {
+func (p *bottomParser) processDoneRsp(msg *sim.GenericMsg) bool {
 	trans := p.findTransactionByWriteToBottomID(msg.RspTo)
 	if trans == nil || trans.fetchAndWrite {
 		p.cache.bottomPort.RetrieveIncoming()
@@ -48,7 +48,7 @@ func (p *bottomParser) processDoneRsp(msg *sim.Msg) bool {
 	return true
 }
 
-func (p *bottomParser) processDataReady(msg *sim.Msg) bool {
+func (p *bottomParser) processDataReady(msg *sim.GenericMsg) bool {
 	trans := p.findTransactionByReadToBottomID(msg.RspTo)
 	if trans == nil {
 		p.cache.bottomPort.RetrieveIncoming()

@@ -61,11 +61,12 @@ func (m *middleware) Tick() bool {
 }
 
 func (m *middleware) processInput() bool {
-	msg := m.OutPort.PeekIncoming()
-	if msg == nil {
+	msgI := m.OutPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	switch msg.Payload.(type) {
 	case *PingReqPayload:
 		m.processingPingReq(msg)
@@ -78,7 +79,7 @@ func (m *middleware) processInput() bool {
 	return true
 }
 
-func (m *middleware) processingPingReq(msg *sim.Msg) {
+func (m *middleware) processingPingReq(msg *sim.GenericMsg) {
 	state := m.Component.GetState()
 
 	payload := sim.MsgPayload[PingReqPayload](msg)
@@ -94,7 +95,7 @@ func (m *middleware) processingPingReq(msg *sim.Msg) {
 	m.OutPort.RetrieveIncoming()
 }
 
-func (m *middleware) processingPingRsp(msg *sim.Msg) {
+func (m *middleware) processingPingRsp(msg *sim.GenericMsg) {
 	state := m.Component.GetState()
 
 	payload := sim.MsgPayload[PingRspPayload](msg)
@@ -137,13 +138,13 @@ func (m *middleware) sendRsp() bool {
 		return false
 	}
 
-	rsp := &sim.Msg{
+	rsp := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
-			Src: m.OutPort.AsRemote(),
-			Dst: trans.ReqSrc,
+			ID:    sim.GetIDGenerator().Generate(),
+			Src:   m.OutPort.AsRemote(),
+			Dst:   trans.ReqSrc,
+			RspTo: trans.ReqID,
 		},
-		RspTo: trans.ReqID,
 		Payload: &PingRspPayload{
 			SeqID: trans.SeqID,
 		},
@@ -167,7 +168,7 @@ func (m *middleware) sendPing() bool {
 		return false
 	}
 
-	pingMsg := &sim.Msg{
+	pingMsg := &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.OutPort.AsRemote(),

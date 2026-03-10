@@ -88,11 +88,12 @@ func (cache *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	msg := cache.topPort.PeekIncoming()
-	if msg == nil {
+	msgI := cache.topPort.PeekIncoming()
+	if msgI == nil {
 		return false
 	}
 
+	msg := msgI.(*sim.GenericMsg)
 	payload, ok := msg.Payload.(*vm.TranslationReqPayload)
 	if !ok || payload == nil {
 		return false
@@ -102,7 +103,7 @@ func (cache *mmuCacheMiddleware) lookup() bool {
 }
 
 func (cache *mmuCacheMiddleware) walkCacheLevels(
-	msg *sim.Msg, payload *vm.TranslationReqPayload,
+	msg *sim.GenericMsg, payload *vm.TranslationReqPayload,
 ) bool {
 	spec := cache.GetSpec()
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
@@ -172,11 +173,12 @@ func (cache *mmuCacheMiddleware) sendReqToBottom(
 func (cache *mmuCacheMiddleware) handleBottomPort() bool {
 	madeProgress := false
 
-	item := cache.bottomPort.PeekIncoming()
-	if item == nil {
+	itemI := cache.bottomPort.PeekIncoming()
+	if itemI == nil {
 		return false
 	}
 
+	item := itemI.(*sim.GenericMsg)
 	switch item.Payload.(type) {
 	case *vm.TranslationRspPayload:
 		madeProgress = cache.handleRsp(item) || madeProgress
@@ -186,7 +188,7 @@ func (cache *mmuCacheMiddleware) handleBottomPort() bool {
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) handleRsp(rsp *sim.Msg) bool {
+func (cache *mmuCacheMiddleware) handleRsp(rsp *sim.GenericMsg) bool {
 	if !cache.topPort.CanSend() {
 		return false
 	}

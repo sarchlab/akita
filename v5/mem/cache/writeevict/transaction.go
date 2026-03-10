@@ -19,11 +19,11 @@ const (
 type transaction struct {
 	id string
 
-	read         *sim.Msg // payload: *mem.ReadReqPayload
-	readToBottom *sim.Msg // payload: *mem.ReadReqPayload
+	read         *sim.GenericMsg // payload: *mem.ReadReqPayload
+	readToBottom *sim.GenericMsg // payload: *mem.ReadReqPayload
 
-	write         *sim.Msg // payload: *mem.WriteReqPayload
-	writeToBottom *sim.Msg // payload: *mem.WriteReqPayload
+	write         *sim.GenericMsg // payload: *mem.WriteReqPayload
+	writeToBottom *sim.GenericMsg // payload: *mem.WriteReqPayload
 
 	preCoalesceTransactions []*transaction
 

@@ -13,14 +13,14 @@ import (
 type FlitPayload struct {
 	SeqID        int
 	NumFlitInMsg int
-	Msg          *sim.Msg
+	Msg          *sim.GenericMsg
 	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
 // FlitBuilder can build flits
 type FlitBuilder struct {
 	src, dst            sim.RemotePort
-	msg                 *sim.Msg
+	msg                 *sim.GenericMsg
 	seqID, numFlitInMsg int
 }
 
@@ -49,13 +49,13 @@ func (b FlitBuilder) WithNumFlitInMsg(n int) FlitBuilder {
 }
 
 // WithMsg sets the msg of the flit to build.
-func (b FlitBuilder) WithMsg(msg *sim.Msg) FlitBuilder {
+func (b FlitBuilder) WithMsg(msg *sim.GenericMsg) FlitBuilder {
 	b.msg = msg
 	return b
 }
 
-// Build creates a new *sim.Msg with FlitPayload.
-func (b FlitBuilder) Build() *sim.Msg {
+// Build creates a new *sim.GenericMsg with FlitPayload.
+func (b FlitBuilder) Build() *sim.GenericMsg {
 	payload := &FlitPayload{
 		SeqID:        b.seqID,
 		NumFlitInMsg: b.numFlitInMsg,
@@ -71,7 +71,7 @@ func (b FlitBuilder) Build() *sim.Msg {
 		trafficClass = msgValue.String()
 	}
 
-	return &sim.Msg{
+	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           flitID,
 			Src:          b.src,

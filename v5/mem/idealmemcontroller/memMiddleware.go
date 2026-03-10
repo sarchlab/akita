@@ -32,11 +32,12 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 	spec := m.Component.GetSpec()
 
 	for i := 0; i < spec.Width; i++ {
-		msg := m.topPort.RetrieveIncoming()
-		if msg == nil {
+		msgI := m.topPort.RetrieveIncoming()
+		if msgI == nil {
 			break
 		}
 
+		msg := msgI.(*sim.GenericMsg)
 		tracing.TraceReqReceive(msg, m)
 
 		tx := m.msgToInflightTransaction(msg)
@@ -51,7 +52,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
 	spec := m.Component.GetSpec()
-	simMsg := msg.(*sim.Msg)
+	simMsg := msg.(*sim.GenericMsg)
 
 	switch payload := simMsg.Payload.(type) {
 	case *mem.ReadReqPayload:
