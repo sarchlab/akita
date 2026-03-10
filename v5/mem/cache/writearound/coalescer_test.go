@@ -45,8 +45,8 @@ var _ = Describe("Coalescer", func() {
 
 	Context("read", func() {
 		var (
-			read1 *mem.ReadReq
-			read2 *mem.ReadReq
+			read1 *sim.Msg
+			read2 *sim.Msg
 		)
 
 		BeforeEach(func() {
@@ -130,10 +130,11 @@ var _ = Describe("Coalescer", func() {
 				dirBuf.EXPECT().
 					Push(gomock.Any()).
 					Do(func(trans *transaction) {
+						readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
 						Expect(trans.preCoalesceTransactions).To(HaveLen(3))
-						Expect(trans.read.Address).To(Equal(uint64(0x100)))
-						Expect(trans.read.PID).To(Equal(vm.PID(1)))
-						Expect(trans.read.AccessByteSize).To(Equal(uint64(64)))
+						Expect(readPayload.Address).To(Equal(uint64(0x100)))
+						Expect(readPayload.PID).To(Equal(vm.PID(1)))
+						Expect(readPayload.AccessByteSize).To(Equal(uint64(64)))
 					})
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
@@ -269,9 +270,10 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().RetrieveIncoming().Times(2)
 			dirBuf.EXPECT().CanPush().Return(true)
 			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
-				Expect(trans.write.Address).To(Equal(uint64(0x100)))
-				Expect(trans.write.PID).To(Equal(vm.PID(1)))
-				Expect(trans.write.Data).To(Equal([]byte{
+				writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
+				Expect(writePayload.Address).To(Equal(uint64(0x100)))
+				Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Expect(writePayload.Data).To(Equal([]byte{
 					0, 0, 0, 0,
 					1, 2, 3, 4,
 					1, 2, 3, 4,
@@ -283,7 +285,7 @@ var _ = Describe("Coalescer", func() {
 					0, 0, 0, 0, 0, 0, 0, 0,
 					0, 0, 0, 0, 0, 0, 0, 0,
 				}))
-				Expect(trans.write.DirtyMask).To(Equal([]bool{
+				Expect(writePayload.DirtyMask).To(Equal([]bool{
 					false, false, false, false, true, true, true, true,
 					true, true, true, true, true, true, true, true,
 					false, false, false, false, false, false, false, false,
