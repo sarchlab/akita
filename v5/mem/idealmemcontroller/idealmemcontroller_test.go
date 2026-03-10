@@ -32,7 +32,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController = MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(1 * mem.MB).
-			WithLatency(10).
+			WithSpec(Spec{Width: 1, Latency: 10, CacheLineSize: 64}).
 			WithTopPort(sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
 			WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 			Build("MemCtrl")
