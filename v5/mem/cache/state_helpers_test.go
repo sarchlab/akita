@@ -48,11 +48,10 @@ func TestMsgRefRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDirectorySnapshotRestore(t *testing.T) {
+func setupDirectoryWithModifiedBlock() *DirectoryImpl {
 	vf := NewLRUVictimFinder()
 	dir := NewDirectory(2, 4, 64, vf)
 
-	// Modify some blocks.
 	set0 := &dir.Sets[0]
 	b := set0.Blocks[1]
 	b.PID = vm.PID(42)
@@ -63,23 +62,13 @@ func TestDirectorySnapshotRestore(t *testing.T) {
 	b.IsLocked = true
 	b.DirtyMask = []bool{true, false, true, false}
 
-	// Move block 1 to end of LRU (visit it).
 	dir.Visit(b)
 
-	// Take snapshot.
-	ds := SnapshotDirectory(dir)
+	return dir
+}
 
-	// Verify ValidateState passes.
-	if err := modeling.ValidateState(ds); err != nil {
-		t.Fatalf("ValidateState(DirectoryState) failed: %v", err)
-	}
-
-	// Build a fresh directory and restore.
-	dir2 := NewDirectory(2, 4, 64, vf)
-	RestoreDirectory(dir2, ds)
-
-	// Verify the modified block.
-	b2 := dir2.Sets[0].Blocks[1]
+func verifyRestoredBlock(t *testing.T, b2 *Block) {
+	t.Helper()
 
 	if b2.PID != vm.PID(42) {
 		t.Errorf("PID: got %d, want 42", b2.PID)
@@ -106,84 +95,74 @@ func TestDirectorySnapshotRestore(t *testing.T) {
 	}
 
 	if len(b2.DirtyMask) != 4 {
-		t.Fatalf("DirtyMask length: got %d, want 4", len(b2.DirtyMask))
+		t.Fatalf("DirtyMask length: got %d, want 4",
+			len(b2.DirtyMask))
 	}
 
 	if b2.DirtyMask[0] != true || b2.DirtyMask[1] != false {
 		t.Error("DirtyMask values mismatch")
 	}
+}
 
-	// Verify LRU order: after visiting block 1, it should be last.
+func TestDirectorySnapshotRestore(t *testing.T) {
+	dir := setupDirectoryWithModifiedBlock()
+
+	ds := SnapshotDirectory(dir)
+
+	if err := modeling.ValidateState(ds); err != nil {
+		t.Fatalf("ValidateState(DirectoryState) failed: %v", err)
+	}
+
+	vf := NewLRUVictimFinder()
+	dir2 := NewDirectory(2, 4, 64, vf)
+	RestoreDirectory(dir2, ds)
+
+	verifyRestoredBlock(t, dir2.Sets[0].Blocks[1])
+
 	lruOrder := ds.Sets[0].LRUOrder
 	if lruOrder[len(lruOrder)-1] != 1 {
 		t.Errorf("LRU last should be wayID 1, got %d",
 			lruOrder[len(lruOrder)-1])
 	}
 
-	// Verify the LRU queue is restored correctly with pointers.
 	lastLRU := dir2.Sets[0].LRUQueue[len(lruOrder)-1]
 	if lastLRU != dir2.Sets[0].Blocks[1] {
 		t.Error("LRU queue pointer not correctly restored")
 	}
 }
 
-func TestMSHRSnapshotRestore(t *testing.T) {
-	vf := NewLRUVictimFinder()
-	dir := NewDirectory(2, 4, 64, vf)
+func setupMSHRWithEntry(
+	dir *DirectoryImpl,
+) (MSHR, string, string) {
 	m := NewMSHR(4)
-
-	// Add an entry.
 	entry := m.Add(vm.PID(10), 0x2000)
 
-	// Link to a block.
 	entry.Block = dir.Sets[0].Blocks[2]
 
-	// Add some fake transactions.
 	trans0 := "transaction-0"
 	trans1 := "transaction-1"
 	entry.Requests = []interface{}{trans0, trans1}
 
-	// Set ReadReq and DataReady.
 	entry.ReadReq = &sim.Msg{
 		MsgMeta: sim.MsgMeta{
-			ID:  "read-1",
-			Src: "cache",
-			Dst: "mem",
+			ID: "read-1", Src: "cache", Dst: "mem",
 		},
 	}
 	entry.DataReady = &sim.Msg{
 		MsgMeta: sim.MsgMeta{
-			ID:  "data-1",
-			Src: "mem",
-			Dst: "cache",
+			ID: "data-1", Src: "mem", Dst: "cache",
 		},
 	}
 	entry.Data = []byte{0xAA, 0xBB, 0xCC}
 
-	// Build transaction lookup.
-	transLookup := map[interface{}]int{
-		trans0: 0,
-		trans1: 1,
-	}
+	return m, trans0, trans1
+}
 
-	ms := SnapshotMSHR(m, transLookup)
-
-	// Validate state.
-	if err := modeling.ValidateState(ms); err != nil {
-		t.Fatalf("ValidateState(MSHRState) failed: %v", err)
-	}
-
-	// Restore.
-	transactions := []interface{}{trans0, trans1}
-	m2 := NewMSHR(4)
-	RestoreMSHR(m2, ms, transactions, dir)
-
-	entries := m2.AllEntries()
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-
-	e := entries[0]
+func verifyRestoredMSHREntry(
+	t *testing.T, e *MSHREntry,
+	trans0, trans1 string,
+) {
+	t.Helper()
 
 	if e.PID != vm.PID(10) {
 		t.Errorf("PID: got %d, want 10", e.PID)
@@ -194,7 +173,8 @@ func TestMSHRSnapshotRestore(t *testing.T) {
 	}
 
 	if len(e.Requests) != 2 {
-		t.Fatalf("Requests length: got %d, want 2", len(e.Requests))
+		t.Fatalf("Requests length: got %d, want 2",
+			len(e.Requests))
 	}
 
 	if e.Requests[0] != trans0 || e.Requests[1] != trans1 {
@@ -219,11 +199,37 @@ func TestMSHRSnapshotRestore(t *testing.T) {
 	}
 
 	if len(e.Data) != 3 ||
-		e.Data[0] != 0xAA ||
-		e.Data[1] != 0xBB ||
+		e.Data[0] != 0xAA || e.Data[1] != 0xBB ||
 		e.Data[2] != 0xCC {
 		t.Error("Data not correctly restored")
 	}
+}
+
+func TestMSHRSnapshotRestore(t *testing.T) {
+	vf := NewLRUVictimFinder()
+	dir := NewDirectory(2, 4, 64, vf)
+	m, trans0, trans1 := setupMSHRWithEntry(dir)
+
+	transLookup := map[interface{}]int{
+		trans0: 0, trans1: 1,
+	}
+
+	ms := SnapshotMSHR(m, transLookup)
+
+	if err := modeling.ValidateState(ms); err != nil {
+		t.Fatalf("ValidateState(MSHRState) failed: %v", err)
+	}
+
+	transactions := []interface{}{trans0, trans1}
+	m2 := NewMSHR(4)
+	RestoreMSHR(m2, ms, transactions, dir)
+
+	entries := m2.AllEntries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	verifyRestoredMSHREntry(t, entries[0], trans0, trans1)
 }
 
 func TestMSHRSnapshotEmptyEntries(t *testing.T) {
@@ -252,14 +258,14 @@ func TestDirectorySnapshotEmptyBlocks(t *testing.T) {
 	}
 
 	if len(ds.Sets[0].Blocks) != 2 {
-		t.Fatalf("expected 2 blocks, got %d", len(ds.Sets[0].Blocks))
+		t.Fatalf("expected 2 blocks, got %d",
+			len(ds.Sets[0].Blocks))
 	}
 
 	if err := modeling.ValidateState(ds); err != nil {
 		t.Fatalf("ValidateState failed: %v", err)
 	}
 
-	// Restore to fresh directory.
 	dir2 := NewDirectory(1, 2, 64, vf)
 	RestoreDirectory(dir2, ds)
 
