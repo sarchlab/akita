@@ -74,7 +74,7 @@ type testAgent struct {
 	*sim.ComponentBase
 
 	port     sim.Port
-	received []sim.Msg
+	received []*sim.Msg
 }
 
 func newTestAgent(name string) *testAgent {
@@ -107,7 +107,7 @@ func (a *testAgent) Handle(sim.Event) error {
 	return nil
 }
 
-func (a *testAgent) send(msg sim.Msg) {
+func (a *testAgent) send(msg *sim.Msg) {
 	sendErr := a.port.Send(msg)
 	Expect(sendErr).To(BeNil())
 }
@@ -138,10 +138,9 @@ func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
 			break
 		}
 
-		if rsp, ok := msg.(sim.Rsp); ok {
-			id := rsp.GetRspTo()
+		if msg.IsRsp() {
 			a.completed++
-			a.completedIDs = append(a.completedIDs, id)
+			a.completedIDs = append(a.completedIDs, msg.RspTo)
 		}
 	}
 }
@@ -184,7 +183,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
+func makeReadReq(src, dst sim.RemotePort, index int) *sim.Msg {
 	addr := uint64(index * readSize)
 	return mem.ReadReqBuilder{}.
 		WithSrc(src).
@@ -260,7 +259,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp := agent.received[0].(*mem.DataReadyRsp)
+		rsp := agent.received[0].Payload.(*mem.DataReadyRspPayload)
 		Expect(rsp.Data).To(Equal(data))
 	})
 
@@ -296,10 +295,10 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		_, isWriteDone := agent.received[0].(*mem.WriteDoneRsp)
+		_, isWriteDone := agent.received[0].Payload.(*mem.WriteDoneRspPayload)
 		Expect(isWriteDone).To(BeTrue())
 
-		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
+		readRsp, ok := agent.received[1].Payload.(*mem.DataReadyRspPayload)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
@@ -347,7 +346,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
+		readRsp, ok := agent.received[1].Payload.(*mem.DataReadyRspPayload)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
@@ -359,7 +358,7 @@ func Example() {
 	dstRemote := memComp.topPort.AsRemote()
 
 	startCycles := make(map[string]int)
-	var pendingReq *mem.ReadReq
+	var pendingReq *sim.Msg
 	requestsSent := 0
 	cycles := 0
 	processed := 0

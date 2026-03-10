@@ -62,26 +62,11 @@ func (suite *TracerTestSuite) TearDownTest() {
 	}
 }
 
-// MockAccessReq implements mem.AccessReq for testing
+// MockAccessReq implements mem.AccessReqPayload for testing
 type MockAccessReq struct {
-	sim.MsgMeta
-
 	address  uint64
 	byteSize uint64
 	pid      vm.PID
-}
-
-func (r *MockAccessReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-func (r *MockAccessReq) Clone() sim.Msg {
-	return &MockAccessReq{
-		MsgMeta:  r.MsgMeta,
-		address:  r.address,
-		byteSize: r.byteSize,
-		pid:      r.pid,
-	}
 }
 
 func (r *MockAccessReq) GetAddress() uint64 {
