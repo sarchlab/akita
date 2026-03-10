@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 type bankActionType int
@@ -18,11 +19,11 @@ const (
 type transaction struct {
 	id string
 
-	read         *mem.ReadReq
-	readToBottom *mem.ReadReq
+	read         *sim.Msg // payload: *mem.ReadReqPayload
+	readToBottom *sim.Msg // payload: *mem.ReadReqPayload
 
-	write         *mem.WriteReq
-	writeToBottom *mem.WriteReq
+	write         *sim.Msg // payload: *mem.WriteReqPayload
+	writeToBottom *sim.Msg // payload: *mem.WriteReqPayload
 
 	preCoalesceTransactions []*transaction
 
@@ -37,16 +38,16 @@ type transaction struct {
 
 func (t *transaction) Address() uint64 {
 	if t.read != nil {
-		return t.read.Address
+		return sim.MsgPayload[mem.ReadReqPayload](t.read).Address
 	}
 
-	return t.write.Address
+	return sim.MsgPayload[mem.WriteReqPayload](t.write).Address
 }
 
 func (t *transaction) PID() vm.PID {
 	if t.read != nil {
-		return t.read.PID
+		return sim.MsgPayload[mem.ReadReqPayload](t.read).PID
 	}
 
-	return t.write.PID
+	return sim.MsgPayload[mem.WriteReqPayload](t.write).PID
 }
