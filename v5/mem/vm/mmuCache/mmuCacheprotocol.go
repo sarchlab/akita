@@ -1,15 +1,13 @@
 package mmuCache
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// FlushReqPayload is the payload for a mmuCache flush request to invalidate
-// certain entries.
-type FlushReqPayload struct {
+// FlushReq is a mmuCache flush request to invalidate certain entries.
+type FlushReq struct {
+	sim.MsgMeta
 	VAddr []uint64
 	PID   vm.PID
 }
@@ -45,25 +43,23 @@ func (b FlushReqBuilder) WithPID(pid vm.PID) FlushReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with FlushReqPayload.
-func (b FlushReqBuilder) Build() *sim.GenericMsg {
-	payload := &FlushReqPayload{
+// Build creates a new FlushReq.
+func (b FlushReqBuilder) Build() *FlushReq {
+	r := &FlushReq{
 		VAddr: b.vAddrs,
 		PID:   b.pid,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "mmuCache.FlushReq"
+	return r
 }
 
-// FlushRspPayload is the payload for a mmuCache flush response.
-type FlushRspPayload struct{}
+// FlushRsp is a mmuCache flush response.
+type FlushRsp struct {
+	sim.MsgMeta
+}
 
 // FlushRspBuilder can build mmuCache flush responses
 type FlushRspBuilder struct {
@@ -82,21 +78,20 @@ func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with FlushRspPayload.
-func (b FlushRspBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
-		},
-		Payload: &FlushRspPayload{},
-	}
+// Build creates a new FlushRsp.
+func (b FlushRspBuilder) Build() *FlushRsp {
+	r := &FlushRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "mmuCache.FlushRsp"
+	return r
 }
 
-// RestartReqPayload is the payload for a mmuCache restart request.
-type RestartReqPayload struct{}
+// RestartReq is a mmuCache restart request.
+type RestartReq struct {
+	sim.MsgMeta
+}
 
 // RestartReqBuilder can build mmuCache restart requests.
 type RestartReqBuilder struct {
@@ -115,21 +110,20 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with RestartReqPayload.
-func (b RestartReqBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
-		},
-		Payload: &RestartReqPayload{},
-	}
+// Build creates a new RestartReq.
+func (b RestartReqBuilder) Build() *RestartReq {
+	r := &RestartReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "mmuCache.RestartReq"
+	return r
 }
 
-// RestartRspPayload is the payload for a mmuCache restart response.
-type RestartRspPayload struct{}
+// RestartRsp is a mmuCache restart response.
+type RestartRsp struct {
+	sim.MsgMeta
+}
 
 // RestartRspBuilder can build mmuCache restart responses
 type RestartRspBuilder struct {
@@ -148,15 +142,12 @@ func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with RestartRspPayload.
-func (b RestartRspBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
-		},
-		Payload: &RestartRspPayload{},
-	}
+// Build creates a new RestartRsp.
+func (b RestartRspBuilder) Build() *RestartRsp {
+	r := &RestartRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "mmuCache.RestartRsp"
+	return r
 }

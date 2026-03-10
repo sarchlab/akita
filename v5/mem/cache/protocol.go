@@ -1,14 +1,13 @@
 package cache
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// FlushReqPayload is the payload for a flush request sent to a cache unit to
-// request it to flush all the cache lines.
-type FlushReqPayload struct {
+// FlushReq is a flush request sent to a cache unit to request it to flush all
+// the cache lines.
+type FlushReq struct {
+	sim.MsgMeta
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool
@@ -55,27 +54,24 @@ func (b FlushReqBuilder) PauseAfterFlushing() FlushReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with FlushReqPayload.
-func (b FlushReqBuilder) Build() *sim.GenericMsg {
-	payload := &FlushReqPayload{
+// Build creates a new FlushReq.
+func (b FlushReqBuilder) Build() *FlushReq {
+	r := &FlushReq{
 		InvalidateAllCachelines: b.invalidateAllCacheLines,
 		DiscardInflight:         b.discardInflight,
 		PauseAfterFlushing:      b.pauseAfterFlushing,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "cache.FlushReq"
+	return r
 }
 
-// FlushRspPayload is the payload for a response indicating a cache flush is
-// complete.
-type FlushRspPayload struct{}
+// FlushRsp is a response indicating a cache flush is complete.
+type FlushRsp struct {
+	sim.MsgMeta
+}
 
 // FlushRspBuilder can build flush responds.
 type FlushRspBuilder struct {
@@ -101,23 +97,21 @@ func (b FlushRspBuilder) WithRspTo(id string) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with FlushRspPayload.
-func (b FlushRspBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			RspTo:        b.rspTo,
-			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
-		},
-		Payload: &FlushRspPayload{},
-	}
+// Build creates a new FlushRsp.
+func (b FlushRspBuilder) Build() *FlushRsp {
+	r := &FlushRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.TrafficClass = "cache.FlushRsp"
+	return r
 }
 
-// RestartReqPayload is the payload for a restart request sent to a cache unit
-// to unpause it.
-type RestartReqPayload struct{}
+// RestartReq is a restart request sent to a cache unit to unpause it.
+type RestartReq struct {
+	sim.MsgMeta
+}
 
 // RestartReqBuilder can build restart requests.
 type RestartReqBuilder struct {
@@ -136,22 +130,20 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with RestartReqPayload.
-func (b RestartReqBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
-		},
-		Payload: &RestartReqPayload{},
-	}
+// Build creates a new RestartReq.
+func (b RestartReqBuilder) Build() *RestartReq {
+	r := &RestartReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "cache.RestartReq"
+	return r
 }
 
-// RestartRspPayload is the payload for a response indicating a cache restart
-// is complete.
-type RestartRspPayload struct{}
+// RestartRsp is a response indicating a cache restart is complete.
+type RestartRsp struct {
+	sim.MsgMeta
+}
 
 // RestartRspBuilder can build restart responds.
 type RestartRspBuilder struct {
@@ -177,16 +169,13 @@ func (b RestartRspBuilder) WithRspTo(id string) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with RestartRspPayload.
-func (b RestartRspBuilder) Build() *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			RspTo:        b.rspTo,
-			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
-		},
-		Payload: &RestartRspPayload{},
-	}
+// Build creates a new RestartRsp.
+func (b RestartRspBuilder) Build() *RestartRsp {
+	r := &RestartRsp{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.RspTo = b.rspTo
+	r.TrafficClass = "cache.RestartRsp"
+	return r
 }
