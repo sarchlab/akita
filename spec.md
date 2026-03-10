@@ -12,9 +12,9 @@ Redefine a component as a combination of **Spec, State, Ports, and Middlewares**
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
 
-### 3. Messages as Plain Structs (NEW)
+### 3. Messages as Plain Structs (DONE)
 
-The `Msg` interface in `sim/msg.go` should be replaced with a plain struct. Design a new message interface/struct that eliminates the need for every message type to implement `Meta()`, `Clone()`, etc. methods manually. Messages should be simple, serializable data. Also design the new interface for messages.
+`sim.Msg` is now a concrete struct with `MsgMeta` (ID, Src, Dst, TrafficClass, TrafficBytes) plus a `Payload any` field. All 31 message types are payload structs. Helper functions `MsgPayload[T]()` and `TryMsgPayload[T]()` provide typed access.
 
 ### 4. Port All First-Party Components (DONE — structurally ported, but State needs work)
 

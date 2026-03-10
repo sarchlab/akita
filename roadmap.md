@@ -20,38 +20,51 @@ Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types co
 
 ### M7: Move Mutable Runtime Data into State Structs — IN PROGRESS
 
-#### M7.1: Simple components (no queueing) ✅ — Budget: 6, Used: 2
-Populated State for 6 components: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint. All validated by Apollo. PR #19 merged.
+#### M7.1: Simple components (no queueing/cache deps) ✅ — Budget: 6, Used: 4
+Populated State for: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint.
 
-## Current Milestone
-
-### M7.2: Queueing snapshot + simplebankedmemory, switches, TLB — Budget: 6
-
-**Approach decided (cycle 63):** Add standalone `SnapshotPipeline()`/`RestorePipeline()`/`SnapshotBuffer()`/`RestoreBuffer()` functions to the queueing package. These use type assertions to access unexported `pipelineImpl`/`bufferImpl` internals. No interface changes = no mock file updates needed.
-
-Then populate State for 3 components using the established endpoint pattern:
-1. **simplebankedmemory** — bank pipeline/buffer contents → serializable state
-2. **switches** — per-portComplex pipeline/buffer/routing state → serializable state
-3. **TLB** — sets, MSHR, pipeline, buffer, inflightFlushReq → serializable state
+#### M7.2: Components with queueing deps ✅ — Budget: 6, Used: 4
+Added queueing snapshot functions (SnapshotPipeline/RestorePipeline/SnapshotBuffer/RestoreBuffer). Populated State for: simplebankedmemory, switches, TLB. PR #20 merged.
 
 ## Upcoming Milestones
 
-### M7.3: DRAM State serialization — Budget: TBD
-Deep internal packages (signal, cmdq, trans, org). Pointer graph flattening with index-based references. ~300-400 lines. Independent of queueing.
+### M7.3: DRAM State Population — NEXT
+Move mutable runtime data into State for the DRAM memory controller. Must serialize:
+- inflightTransactions (with *sim.Msg decomposition)
+- SubTransactionQueue contents
+- CommandQueue contents (per-rank queues + round-robin index)
+- Bank states (state enum, currentCmd, openRow, cyclesToCmdAvailable per bank)
+- Cross-reference pointer chain (Transaction ↔ SubTransaction ↔ Command) flattened via index-based references
 
-### M7.4: Cache variants State (writearound, writeevict, writethrough) — Budget: TBD
-Shared code for 3 near-identical cache variants. Directory, MSHR, transaction, stage serialization. ~400-500 lines shared.
+Estimated: ~300-400 lines. Self-contained (no shared state with caches).
 
-### M7.5: Writeback cache State — Budget: TBD
-Most complex cache variant. Additional write buffer, flusher, more actions. ~600-800 lines. Reuses Directory/MSHR serialization from M7.4.
+### M7.4: Cache State Population (writearound, writeevict, writethrough)
+Three near-identical cache variants (~90% shared code). Must serialize:
+- cache.Directory (Sets with Blocks + LRU ordering)
+- cache.MSHR (entries with *sim.Msg decomposition, *Block references, []interface{} Requests)
+- Transactions (11 fields each, 5 need pointer decomposition)
+- Pipeline/buffer contents (wrap transactions)
+- Component-level state (transactions, postCoalesceTransactions, isPaused)
+
+Estimated: ~400-500 lines (shared code for all 3 variants).
+
+### M7.5: Writeback Cache State Population
+Most complex cache. Additional state beyond M7.4:
+- 17-field transaction (vs 11 for others)
+- Write buffer stage (pendingEvictions, inflightFetch, inflightEviction)
+- MSHR stage state
+- Evicting list map
+- Cache state enum
+
+Can reuse Directory/MSHR serialization from M7.4.
+Estimated: ~600-800 lines.
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported
+4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 9/15)
 5. **CI Passes** — All checks green on main
-6. **M7.1 State Population** — 6 simple components have serializable State
 
 ## Lessons Learned
 - M1-M3 completed in 15 implementation cycles (budgeted 20).
@@ -59,8 +72,8 @@ Most complex cache variant. Additional write buffer, flusher, more actions. ~600
 - Iris's/Diana's detailed analysis before milestones prevents scope misestimation.
 - Multi-worker parallel approach is the winning pattern for mechanical refactoring.
 - M6 sub-milestones consistently completed in 2 cycles each (budgeted 4).
-- M7.1 completed in 2 cycles (budgeted 6) — team is efficient at this pattern now.
-- Total project so far: ~29 implementation cycles + ~12 planning/verification cycles across 63 orchestrator cycles.
-- **Key decision (cycle 63)**: Use standalone functions (not interface methods) to snapshot/restore queueing internals. Avoids 9 mock file updates. Type assertions to concrete impl are fine since we control all implementations.
-- The `*sim.Msg` pointer problem is universal — the endpoint decomposition pattern is proven.
-- Diana's Approach A (pragmatic) + standalone functions variant = lowest risk path to unblock all 7 queueing-dependent components.
+- Research for M7 revealed that the queueing/cache serialization problem is deeper than expected — need phased approach.
+- The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
+- queueing snapshot functions (Approach A) proved pragmatic — standalone functions avoiding interface changes + no mock updates.
+- M7.1 and M7.2 each completed in 4 cycles (budgeted 6) — consistent track record of finishing under budget.
+- Total project: ~35 implementation cycles across 67 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs).
