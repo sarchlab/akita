@@ -24,8 +24,17 @@ type Spec struct {
 }
 
 // State contains mutable runtime data for the TLB.
-// Runtime data with pointers/interfaces stays on the Comp struct.
-type State struct{}
+type State struct {
+	TLBState           string                `json:"tlb_state"`
+	Sets               []setState            `json:"sets"`
+	MSHREntries        []mshrEntryState      `json:"mshr_entries"`
+	HasRespondingMSHR  bool                  `json:"has_responding_mshr"`
+	RespondingMSHRData mshrEntryState        `json:"responding_mshr_data"`
+	PipelineStages     []pipelineStageState  `json:"pipeline_stages"`
+	BufferItems        []pipelineTLBReqState `json:"buffer_items"`
+	HasInflightFlushReq bool                 `json:"has_inflight_flush_req"`
+	InflightFlushReqMsg msgRef               `json:"inflight_flush_req_msg"`
+}
 
 // Comp is a Translation Lookaside Buffer (TLB) that stores part of the page
 // table.
