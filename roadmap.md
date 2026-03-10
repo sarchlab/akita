@@ -20,33 +20,30 @@ Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types co
 
 ### M7: Move Mutable Runtime Data into State Structs — IN PROGRESS
 
-#### M7.1: Simple components ✅ — Budget: 6, Used: 2
+#### M7.1: Simple components (no queueing) ✅ — Budget: 6, Used: 2
 Populated State for 6 components: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint. All validated by Apollo. PR #19 merged.
+
+## Current Milestone
+
+### M7.2: Queueing snapshot + simplebankedmemory, switches, TLB — Budget: 6
+
+**Approach decided (cycle 63):** Add standalone `SnapshotPipeline()`/`RestorePipeline()`/`SnapshotBuffer()`/`RestoreBuffer()` functions to the queueing package. These use type assertions to access unexported `pipelineImpl`/`bufferImpl` internals. No interface changes = no mock file updates needed.
+
+Then populate State for 3 components using the established endpoint pattern:
+1. **simplebankedmemory** — bank pipeline/buffer contents → serializable state
+2. **switches** — per-portComplex pipeline/buffer/routing state → serializable state
+3. **TLB** — sets, MSHR, pipeline, buffer, inflightFlushReq → serializable state
 
 ## Upcoming Milestones
 
-### M7 continued: 8 components still have empty State structs
+### M7.3: DRAM State serialization — Budget: TBD
+Deep internal packages (signal, cmdq, trans, org). Pointer graph flattening with index-based references. ~300-400 lines. Independent of queueing.
 
-Remaining components:
-1. **simplebankedmemory** — queueing.Pipeline/Buffer per bank
-2. **switches** — queueing.Pipeline/Buffer per port complex, routing table, arbiter
-3. **TLB** — queueing.Pipeline/Buffer, mshr, sets, *sim.Msg
-4. **DRAM** — deep internal packages (cmdq, trans, org, signal)
-5. **writearound** — cache.Directory, cache.MSHR, queueing.Buffer, stage structs, transactions
-6. **writeback** — most complex cache variant
-7. **writeevict** — similar to writearound
-8. **writethrough** — similar to writearound
+### M7.4: Cache variants State (writearound, writeevict, writethrough) — Budget: TBD
+Shared code for 3 near-identical cache variants. Directory, MSHR, transaction, stage serialization. ~400-500 lines shared.
 
-**Key blocker**: `queueing.Pipeline` and `queueing.Buffer` are interfaces. Their internals (stage contents, cycle counters, buffer elements) are not accessible for serialization. Need either:
-- Add snapshot/restore methods to existing queueing interfaces
-- Create `queueingv5` package with concrete serializable types (per migration.md vision)
-- Manual extraction approach per component
-
-#### M7.2: TBD — Planning in progress (cycle 62)
-Diana and Iris analyzing approaches. Expected scope: queueing serialization + simpler components.
-
-#### M7.3: TBD — Cache components
-Most complex group, deferred until queueing approach proven.
+### M7.5: Writeback cache State — Budget: TBD
+Most complex cache variant. Additional write buffer, flusher, more actions. ~600-800 lines. Reuses Directory/MSHR serialization from M7.4.
 
 ## Previously Completed Goals
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
@@ -63,6 +60,7 @@ Most complex group, deferred until queueing approach proven.
 - Multi-worker parallel approach is the winning pattern for mechanical refactoring.
 - M6 sub-milestones consistently completed in 2 cycles each (budgeted 4).
 - M7.1 completed in 2 cycles (budgeted 6) — team is efficient at this pattern now.
-- Total project so far: ~29 implementation cycles + ~12 planning/verification cycles across 62 orchestrator cycles.
-- Research for M7 revealed that the queueing/cache serialization problem is deeper than expected — need phased approach.
-- The `*sim.Msg` pointer problem is universal — the idealmemcontroller decomposition pattern is proven.
+- Total project so far: ~29 implementation cycles + ~12 planning/verification cycles across 63 orchestrator cycles.
+- **Key decision (cycle 63)**: Use standalone functions (not interface methods) to snapshot/restore queueing internals. Avoids 9 mock file updates. Type assertions to concrete impl are fine since we control all implementations.
+- The `*sim.Msg` pointer problem is universal — the endpoint decomposition pattern is proven.
+- Diana's Approach A (pragmatic) + standalone functions variant = lowest risk path to unblock all 7 queueing-dependent components.
