@@ -92,17 +92,17 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("data ready", func() {
 		var (
-			read1, read2             *mem.ReadReq
-			write1, write2           *mem.WriteReq
+			read1, read2             *sim.Msg
+			write1, write2           *sim.Msg
 			preCTrans1, preCTrans2   *transaction
 			preCTrans3, preCTrans4   *transaction
-			postCRead                *mem.ReadReq
-			postCWrite               *mem.WriteReq
-			readToBottom             *mem.ReadReq
+			postCRead                *sim.Msg
+			postCWrite               *sim.Msg
+			readToBottom             *sim.Msg
 			block                    *cache.Block
 			postCTrans1, postCTrans2 *transaction
 			mshrEntry                *cache.MSHREntry
-			dataReady                *mem.DataReadyRsp
+			dataReady                *sim.Msg
 		)
 
 		BeforeEach(func() {

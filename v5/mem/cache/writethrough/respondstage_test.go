@@ -18,15 +18,20 @@ var _ = Describe("Respond Stage", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
+
 		cache = &Comp{
 			topPort: topPort,
 		}
 		cache.TickingComponent = sim.NewTickingComponent(
 			"Cache", nil, 1, cache)
-		s = &respondStage{cache: cache}
 
+		s = &respondStage{cache: cache}
 	})
 
 	AfterEach(func() {
@@ -35,7 +40,7 @@ var _ = Describe("Respond Stage", func() {
 
 	Context("read", func() {
 		var (
-			read  *mem.ReadReq
+			read  *sim.Msg
 			trans *transaction
 		)
 
@@ -63,9 +68,10 @@ var _ = Describe("Respond Stage", func() {
 			trans.data = []byte{1, 2, 3, 4}
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(dr *mem.DataReadyRsp) {
-					Expect(dr.RespondTo).To(Equal(read.ID))
-					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
+				Do(func(msg *sim.Msg) {
+					drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
+					Expect(msg.RspTo).To(Equal(read.ID))
+					Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
 				})
 
 			madeProgress := s.Tick()
@@ -77,7 +83,7 @@ var _ = Describe("Respond Stage", func() {
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
+			write *sim.Msg
 			trans *transaction
 		)
 
@@ -103,8 +109,8 @@ var _ = Describe("Respond Stage", func() {
 			trans.data = []byte{1, 2, 3, 4}
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(done *mem.WriteDoneRsp) {
-					Expect(done.RespondTo).To(Equal(write.ID))
+				Do(func(msg *sim.Msg) {
+					Expect(msg.RspTo).To(Equal(write.ID))
 				})
 
 			madeProgress := s.Tick()

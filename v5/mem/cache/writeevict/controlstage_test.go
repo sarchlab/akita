@@ -85,7 +85,8 @@ var _ = Describe("Control Stage", func() {
 		transactions = []*transaction{{}}
 		s.cache.transactions = transactions
 		flushReq := cache.FlushReqBuilder{}.Build()
-		flushReq.DiscardInflight = false
+		flushPayload := sim.MsgPayload[cache.FlushReqPayload](flushReq)
+		flushPayload.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
@@ -101,8 +102,8 @@ var _ = Describe("Control Stage", func() {
 			PauseAfterFlushing().
 			Build()
 		s.currFlushReq = flushReq
-		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(rsp *cache.FlushRsp) {
-			Expect(rsp.RspTo).To(Equal(flushReq.ID))
+		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.Msg) {
+			Expect(msg.RspTo).To(Equal(flushReq.ID))
 		})
 
 		topPort.EXPECT().PeekIncoming().Return(nil)
