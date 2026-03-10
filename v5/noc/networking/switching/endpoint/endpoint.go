@@ -6,10 +6,22 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
+
+// Spec contains immutable configuration for the endpoint.
+type Spec struct {
+	NumInputChannels  int     `json:"num_input_channels"`
+	NumOutputChannels int     `json:"num_output_channels"`
+	FlitByteSize      int     `json:"flit_byte_size"`
+	EncodingOverhead  float64 `json:"encoding_overhead"`
+}
+
+// State contains mutable runtime data for the endpoint.
+type State struct{}
 
 type msgToAssemble struct {
 	msg             *sim.Msg
@@ -20,19 +32,14 @@ type msgToAssemble struct {
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	NetworkPort      sim.Port
 	DevicePorts      []sim.Port
 	DefaultSwitchDst sim.RemotePort
 
-	numInputChannels  int
-	numOutputChannels int
-	flitByteSize      int
-	encodingOverhead  float64
-	msgOutBuf         []*sim.Msg
-	flitsToSend       []*sim.Msg
+	msgOutBuf   []*sim.Msg
+	flitsToSend []*sim.Msg
 
 	assemblingMsgTable map[string]*list.Element
 	assemblingMsgs     *list.List
@@ -59,10 +66,6 @@ func (c *Comp) NotifySend() {
 // Unplug removes the association of a port and an endpoint.
 func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
@@ -97,7 +100,7 @@ func (m *middleware) flitTaskID(flitMsg *sim.Msg) string {
 func (m *middleware) sendFlitOut() bool {
 	madeProgress := false
 
-	for i := 0; i < m.numOutputChannels; i++ {
+	for i := 0; i < m.Comp.GetSpec().NumOutputChannels; i++ {
 		if len(m.flitsToSend) == 0 {
 			return madeProgress
 		}
@@ -163,7 +166,7 @@ func (m *middleware) prepareFlits() bool {
 func (m *middleware) recv() bool {
 	madeProgress := false
 
-	for i := 0; i < m.numInputChannels; i++ {
+	for i := 0; i < m.Comp.GetSpec().NumInputChannels; i++ {
 		received := m.NetworkPort.PeekIncoming()
 		if received == nil {
 			return madeProgress
@@ -318,8 +321,8 @@ func (m *middleware) msgToFlits(msg *sim.Msg) []*sim.Msg {
 	if msg.TrafficBytes > 0 {
 		trafficByte := msg.TrafficBytes
 		trafficByte += int(math.Ceil(
-			float64(trafficByte) * m.encodingOverhead))
-		numFlit = (trafficByte-1)/m.flitByteSize + 1
+			float64(trafficByte) * m.Comp.GetSpec().EncodingOverhead))
+		numFlit = (trafficByte-1)/m.Comp.GetSpec().FlitByteSize + 1
 	}
 
 	flits := make([]*sim.Msg, numFlit)

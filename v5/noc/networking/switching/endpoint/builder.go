@@ -3,6 +3,7 @@ package endpoint
 import (
 	"container/list"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -97,18 +98,23 @@ func (b Builder) Build(name string) *Comp {
 	b.freqMustBeGiven()
 	b.flitByteSizeMustBeGiven()
 
-	ep := &Comp{}
-	ep.TickingComponent = sim.NewTickingComponent(
-		name, b.engine, b.freq, ep)
-	ep.flitByteSize = b.flitByteSize
+	spec := Spec{
+		NumInputChannels:  b.numInputChannels,
+		NumOutputChannels: b.numOutputChannels,
+		FlitByteSize:      b.flitByteSize,
+		EncodingOverhead:  b.encodingOverhead,
+	}
 
-	ep.numInputChannels = b.numInputChannels
-	ep.numOutputChannels = b.numOutputChannels
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	ep := &Comp{Component: modelComp}
 
 	ep.assemblingMsgs = list.New()
 	ep.assemblingMsgTable = make(map[string]*list.Element)
-
-	ep.encodingOverhead = b.encodingOverhead
 
 	ep.NetworkPort = b.networkPort
 	ep.NetworkPort.SetComponent(ep)
