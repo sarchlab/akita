@@ -16,13 +16,23 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods for q
 
 The `Msg` interface in `sim/msg.go` should be replaced with a plain struct. Design a new message interface/struct that eliminates the need for every message type to implement `Meta()`, `Clone()`, etc. methods manually. Messages should be simple, serializable data. Also design the new interface for messages.
 
-### 4. Port All First-Party Components (NEW)
+### 4. Port All First-Party Components (DONE — structurally ported, but State needs work)
 
-All first-party components (caches, TLB, MMU, DRAM, datamover, banked memory, NOC components, examples, etc.) must be ported to use the `modeling` package's `Component[S,T]` pattern with Spec/State/Middlewares. Currently only `idealmemcontroller` has been ported.
+All first-party components (caches, TLB, MMU, DRAM, datamover, banked memory, NOC components, examples, etc.) have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. However, most have empty `State` structs — their mutable runtime data still lives on the wrapper `Comp` struct, making them non-serializable. See thread #6 below.
 
-### 5. CI Must Pass (NEW)
+### 5. CI Must Pass (DONE)
 
 All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
+
+### 6. Eliminate Comp Wrapper / Move Mutable Data into State (NEW)
+
+Human raised issue #61: currently, ported components like TLB have a `Comp` struct wrapping `*modeling.Component[Spec, State]`, but `State` is empty. All actual mutable runtime data (cache sets, MSHR entries, pipeline state, transaction queues, etc.) lives on the `Comp` struct. This means:
+
+- Components cannot actually be serialized via the State mechanism
+- The `Comp` wrapper duplicates the role that `State` should play
+- The modeling pattern is structurally present but semantically broken
+
+The goal is to move all mutable runtime data into `State` so components are truly serializable, OR redesign the component architecture to eliminate the need for the `Comp` wrapper struct. The key question: **can a component's mutable data (including things with pointers like MSHR, pipelines, buffers) be made serializable?**
 
 ## Success Criteria
 
@@ -31,6 +41,7 @@ All CI checks must pass on main. This includes linting (golangci-lint), tests (g
 - Acceptance test for save/load process passes
 - All first-party components use the modeling package pattern
 - Messages are plain structs, not interfaces
+- All first-party components have meaningful, serializable State structs (no empty State with data hidden on Comp)
 
 ## Constraints
 
