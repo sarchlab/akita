@@ -91,16 +91,7 @@ func buildEnvironment() {
 		WithControlPort(sim.NewPort(nil, 32, 32, "Cache.ControlPort"))
 	writeBackCache := builder.Build("Cache")
 
-	if *traceWithStdoutFlag {
-		logger := log.New(os.Stdout, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(writeBackCache, tracer)
-	} else if *traceFileFlag != "" {
-		traceFile, _ := os.Create(*traceFileFlag)
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
-		tracing.CollectTrace(writeBackCache, tracer)
-	}
+	setupTracing(writeBackCache)
 
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
@@ -118,6 +109,19 @@ func buildEnvironment() {
 	conn.PlugIn(dram.GetPortByName("Top"))
 
 	agent.TickLater()
+}
+
+func setupTracing(comp sim.Component) {
+	if *traceWithStdoutFlag {
+		logger := log.New(os.Stdout, "", 0)
+		tracer := trace.NewTracer(logger, engine)
+		tracing.CollectTrace(comp, tracer)
+	} else if *traceFileFlag != "" {
+		traceFile, _ := os.Create(*traceFileFlag)
+		logger := log.New(traceFile, "", 0)
+		tracer := trace.NewTracer(logger, engine)
+		tracing.CollectTrace(comp, tracer)
+	}
 }
 
 func runSimulation() {
