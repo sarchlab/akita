@@ -15,47 +15,24 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func TestGetStateAndSetState(t *testing.T) {
-	spec := Spec{
-		NumBlocks:       2,
-		NumLevels:       2,
-		PageSize:        4096,
-		Log2PageSize:    12,
-		NumReqPerCycle:  4,
-		LatencyPerLevel: 100,
-	}
-
+func buildTestCacheComp(name string, spec Spec) *Comp {
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithSpec(spec).
-		Build("TestMMUCache")
-
+		Build(name)
 	c := &Comp{
 		Component: modelComp,
 		state:     mmuCacheStateEnable,
 	}
-
-	// Build table
 	c.table = make([]internal.Set, spec.NumLevels)
 	for i := 0; i < spec.NumLevels; i++ {
 		c.table[i] = internal.NewSet(spec.NumBlocks)
 	}
+	return c
+}
 
-	// Populate some data
-	c.table[0].Update(0, vm.PID(1), 0x100)
-	c.table[0].Visit(0)
-	c.table[1].Update(1, vm.PID(2), 0x200)
-	c.table[1].Visit(1)
+func verifyCacheState(t *testing.T, s State) {
+	t.Helper()
 
-	// Set inflight flush req
-	c.inflightFlushReq = &sim.Msg{
-		MsgMeta: sim.MsgMeta{
-			ID:  "flush-123",
-			Src: sim.RemotePort("ctrl.port"),
-		},
-	}
-
-	// GetState should build state from runtime fields
-	s := c.GetState()
 	if s.CurrentState != mmuCacheStateEnable {
 		t.Errorf("CurrentState = %q, want %q", s.CurrentState, mmuCacheStateEnable)
 	}
@@ -71,31 +48,25 @@ func TestGetStateAndSetState(t *testing.T) {
 	if s.InflightFlushReqSrc != sim.RemotePort("ctrl.port") {
 		t.Errorf("InflightFlushReqSrc = %q, want %q", s.InflightFlushReqSrc, "ctrl.port")
 	}
+}
 
-	// Now restore from state using SetState
-	c2 := &Comp{
-		Component: modeling.NewBuilder[Spec, State]().
-			WithSpec(spec).
-			Build("TestMMUCache2"),
-	}
-	c2.SetState(s)
+func verifyCacheRestore(t *testing.T, c *Comp) {
+	t.Helper()
 
-	// Verify restored data
-	if c2.state != mmuCacheStateEnable {
-		t.Errorf("restored state = %q, want %q", c2.state, mmuCacheStateEnable)
+	if c.state != mmuCacheStateEnable {
+		t.Errorf("restored state = %q, want %q", c.state, mmuCacheStateEnable)
 	}
-	if len(c2.table) != 2 {
-		t.Fatalf("restored table len = %d, want 2", len(c2.table))
+	if len(c.table) != 2 {
+		t.Fatalf("restored table len = %d, want 2", len(c.table))
 	}
-	if c2.inflightFlushReq == nil {
+	if c.inflightFlushReq == nil {
 		t.Fatal("restored inflightFlushReq is nil")
 	}
-	if c2.inflightFlushReq.ID != "flush-123" {
-		t.Errorf("restored inflightFlushReq.ID = %q, want %q", c2.inflightFlushReq.ID, "flush-123")
+	if c.inflightFlushReq.ID != "flush-123" {
+		t.Errorf("restored inflightFlushReq.ID = %q, want %q", c.inflightFlushReq.ID, "flush-123")
 	}
 
-	// Verify table data survived round-trip
-	wayID, found := c2.table[0].Lookup(vm.PID(1), 0x100)
+	wayID, found := c.table[0].Lookup(vm.PID(1), 0x100)
 	if !found {
 		t.Error("table[0] lookup for PID=1,seg=0x100 not found")
 	}
@@ -103,13 +74,42 @@ func TestGetStateAndSetState(t *testing.T) {
 		t.Errorf("table[0] wayID = %d, want 0", wayID)
 	}
 
-	wayID, found = c2.table[1].Lookup(vm.PID(2), 0x200)
+	wayID, found = c.table[1].Lookup(vm.PID(2), 0x200)
 	if !found {
 		t.Error("table[1] lookup for PID=2,seg=0x200 not found")
 	}
 	if wayID != 1 {
 		t.Errorf("table[1] wayID = %d, want 1", wayID)
 	}
+}
+
+func TestGetStateAndSetState(t *testing.T) {
+	spec := Spec{
+		NumBlocks: 2, NumLevels: 2, PageSize: 4096,
+		Log2PageSize: 12, NumReqPerCycle: 4, LatencyPerLevel: 100,
+	}
+
+	c := buildTestCacheComp("TestMMUCache", spec)
+	c.table[0].Update(0, vm.PID(1), 0x100)
+	c.table[0].Visit(0)
+	c.table[1].Update(1, vm.PID(2), 0x200)
+	c.table[1].Visit(1)
+	c.inflightFlushReq = &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID: "flush-123", Src: sim.RemotePort("ctrl.port"),
+		},
+	}
+
+	s := c.GetState()
+	verifyCacheState(t, s)
+
+	c2 := &Comp{
+		Component: modeling.NewBuilder[Spec, State]().
+			WithSpec(spec).
+			Build("TestMMUCache2"),
+	}
+	c2.SetState(s)
+	verifyCacheRestore(t, c2)
 }
 
 func TestGetStateNoInflightFlush(t *testing.T) {

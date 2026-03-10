@@ -14,72 +14,51 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func TestGetStateAndSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
-
-	mmu := MakeBuilder().
+func buildTestMMU(engine sim.Engine, name string) *Comp {
+	return MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
-		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU.ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
+		WithTopPort(sim.NewPort(nil, 4096, 4096, name+".ToTop")).
+		WithMigrationPort(sim.NewPort(nil, 1, 1, name+".MigrationPort")).
 		WithMigrationServiceProvider(sim.RemotePort("MigrationService")).
-		Build("TestMMU")
+		Build(name)
+}
 
-	// Populate some runtime state
-	req := vm.TranslationReqBuilder{}.
-		WithSrc(sim.RemotePort("Agent")).
-		WithDst(sim.RemotePort("MMU.ToTop")).
-		WithPID(1).
-		WithVAddr(0x1000).
-		WithDeviceID(2).
-		Build()
-	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
-
+func populateMMURuntimeState(mmu *Comp, req *sim.Msg, payload *vm.TranslationReqPayload) {
 	mmu.walkingTranslations = []transaction{
 		{
-			req:        req,
-			reqPayload: payload,
+			req: req, reqPayload: payload,
 			page: vm.Page{
-				PID:      1,
-				VAddr:    0x1000,
-				PAddr:    0x2000,
-				PageSize: 4096,
-				Valid:    true,
-				DeviceID: 2,
-				Unified:  true,
+				PID: 1, VAddr: 0x1000, PAddr: 0x2000,
+				PageSize: 4096, Valid: true, DeviceID: 2, Unified: true,
 			},
 			cycleLeft: 5,
 		},
 	}
-
 	mmu.migrationQueue = []transaction{
 		{
-			req:        req,
-			reqPayload: payload,
+			req: req, reqPayload: payload,
 			page: vm.Page{
-				PID:      1,
-				VAddr:    0x3000,
-				PAddr:    0x4000,
-				PageSize: 4096,
-				Valid:    true,
-				DeviceID: 3,
+				PID: 1, VAddr: 0x3000, PAddr: 0x4000,
+				PageSize: 4096, Valid: true, DeviceID: 3,
 			},
 			cycleLeft: 2,
 		},
 	}
-
 	mmu.isDoingMigration = true
 	mmu.nextPhysicalPage = 0x8000
 	mmu.PageAccessedByDeviceID[0x1000] = []uint64{1, 2}
 	mmu.PageAccessedByDeviceID[0x3000] = []uint64{3}
+}
 
-	// GetState should build state from runtime fields
-	state := mmu.GetState()
+func verifyMMUState(t *testing.T, state State, reqID string) {
+	t.Helper()
+
 	if len(state.WalkingTranslations) != 1 {
 		t.Fatalf("expected 1 walking translation, got %d", len(state.WalkingTranslations))
 	}
-	if state.WalkingTranslations[0].ReqID != req.ID {
-		t.Errorf("expected req ID %s, got %s", req.ID, state.WalkingTranslations[0].ReqID)
+	if state.WalkingTranslations[0].ReqID != reqID {
+		t.Errorf("expected req ID %s, got %s", reqID, state.WalkingTranslations[0].ReqID)
 	}
 	if state.WalkingTranslations[0].CycleLeft != 5 {
 		t.Errorf("expected cycle_left 5, got %d", state.WalkingTranslations[0].CycleLeft)
@@ -99,46 +78,60 @@ func TestGetStateAndSetState(t *testing.T) {
 	if len(state.PageAccessedByDeviceID) != 2 {
 		t.Errorf("expected 2 device page access entries, got %d", len(state.PageAccessedByDeviceID))
 	}
+}
 
-	// Now create a new MMU and restore from state using SetState
-	mmu2 := MakeBuilder().
-		WithEngine(engine).
-		WithAutoPageAllocation(true).
-		WithTopPort(sim.NewPort(nil, 4096, 4096, "TestMMU2.ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU2.MigrationPort")).
-		WithMigrationServiceProvider(sim.RemotePort("MigrationService")).
-		Build("TestMMU2")
+func verifyMMURestore(t *testing.T, mmu *Comp, reqID string) {
+	t.Helper()
 
-	mmu2.SetState(state)
-
-	// Verify restored runtime fields
-	if len(mmu2.walkingTranslations) != 1 {
-		t.Fatalf("restored: expected 1 walking translation, got %d", len(mmu2.walkingTranslations))
+	if len(mmu.walkingTranslations) != 1 {
+		t.Fatalf("restored: expected 1 walking translation, got %d", len(mmu.walkingTranslations))
 	}
-	if mmu2.walkingTranslations[0].req.ID != req.ID {
-		t.Errorf("restored: expected req ID %s, got %s", req.ID, mmu2.walkingTranslations[0].req.ID)
+	if mmu.walkingTranslations[0].req.ID != reqID {
+		t.Errorf("restored: expected req ID %s, got %s", reqID, mmu.walkingTranslations[0].req.ID)
 	}
-	if mmu2.walkingTranslations[0].cycleLeft != 5 {
-		t.Errorf("restored: expected cycleLeft 5, got %d", mmu2.walkingTranslations[0].cycleLeft)
+	if mmu.walkingTranslations[0].cycleLeft != 5 {
+		t.Errorf("restored: expected cycleLeft 5, got %d", mmu.walkingTranslations[0].cycleLeft)
 	}
-	if mmu2.walkingTranslations[0].page.PAddr != 0x2000 {
-		t.Errorf("restored: expected page PAddr 0x2000, got 0x%x", mmu2.walkingTranslations[0].page.PAddr)
+	if mmu.walkingTranslations[0].page.PAddr != 0x2000 {
+		t.Errorf("restored: expected page PAddr 0x2000, got 0x%x", mmu.walkingTranslations[0].page.PAddr)
 	}
-	if mmu2.walkingTranslations[0].reqPayload.VAddr != 0x1000 {
-		t.Errorf("restored: expected reqPayload VAddr 0x1000, got 0x%x", mmu2.walkingTranslations[0].reqPayload.VAddr)
+	if mmu.walkingTranslations[0].reqPayload.VAddr != 0x1000 {
+		t.Errorf("restored: expected reqPayload VAddr 0x1000, got 0x%x", mmu.walkingTranslations[0].reqPayload.VAddr)
 	}
-	if !mmu2.isDoingMigration {
+	if !mmu.isDoingMigration {
 		t.Error("restored: expected isDoingMigration to be true")
 	}
-	if mmu2.nextPhysicalPage != 0x8000 {
-		t.Errorf("restored: expected nextPhysicalPage 0x8000, got 0x%x", mmu2.nextPhysicalPage)
+	if mmu.nextPhysicalPage != 0x8000 {
+		t.Errorf("restored: expected nextPhysicalPage 0x8000, got 0x%x", mmu.nextPhysicalPage)
 	}
-	if len(mmu2.PageAccessedByDeviceID) != 2 {
-		t.Errorf("restored: expected 2 device page access entries, got %d", len(mmu2.PageAccessedByDeviceID))
+	if len(mmu.PageAccessedByDeviceID) != 2 {
+		t.Errorf("restored: expected 2 device page access entries, got %d", len(mmu.PageAccessedByDeviceID))
 	}
-	if len(mmu2.PageAccessedByDeviceID[0x1000]) != 2 {
-		t.Errorf("restored: expected 2 device IDs for page 0x1000, got %d", len(mmu2.PageAccessedByDeviceID[0x1000]))
+	if len(mmu.PageAccessedByDeviceID[0x1000]) != 2 {
+		t.Errorf("restored: expected 2 device IDs for page 0x1000, got %d", len(mmu.PageAccessedByDeviceID[0x1000]))
 	}
+}
+
+func TestGetStateAndSetState(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	mmu := buildTestMMU(engine, "TestMMU")
+
+	req := vm.TranslationReqBuilder{}.
+		WithSrc(sim.RemotePort("Agent")).
+		WithDst(sim.RemotePort("MMU.ToTop")).
+		WithPID(1).
+		WithVAddr(0x1000).
+		WithDeviceID(2).
+		Build()
+	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
+	populateMMURuntimeState(mmu, req, payload)
+
+	state := mmu.GetState()
+	verifyMMUState(t, state, req.ID)
+
+	mmu2 := buildTestMMU(engine, "TestMMU2")
+	mmu2.SetState(state)
+	verifyMMURestore(t, mmu2, req.ID)
 }
 
 func TestTransactionStateWithMigration(t *testing.T) {

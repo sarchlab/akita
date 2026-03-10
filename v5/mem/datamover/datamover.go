@@ -133,126 +133,115 @@ type Comp struct {
 	buffer             *buffer
 }
 
+// snapshotPortSide returns the side string for a port.
+func (c *Comp) snapshotPortSide(port sim.Port) string {
+	switch port {
+	case c.insidePort:
+		return "inside"
+	case c.outsidePort:
+		return "outside"
+	default:
+		return ""
+	}
+}
+
+// snapshotBuffer converts the runtime buffer into a serializable bufferState.
+func (c *Comp) snapshotBuffer() bufferState {
+	bs := bufferState{
+		Offset:      c.buffer.offset,
+		Granularity: c.buffer.granularity,
+	}
+	for _, chunk := range c.buffer.data {
+		if chunk == nil {
+			bs.Chunks = append(bs.Chunks, dataChunk{Valid: false})
+		} else {
+			dataCopy := make([]byte, len(chunk))
+			copy(dataCopy, chunk)
+			bs.Chunks = append(bs.Chunks, dataChunk{Data: dataCopy, Valid: true})
+		}
+	}
+	return bs
+}
+
+// snapshotTransaction converts the runtime transaction into a serializable state.
+func (c *Comp) snapshotTransaction() dataMoverTransactionState {
+	trans := c.currentTransaction
+	ts := dataMoverTransactionState{
+		Active:        true,
+		ReqID:         trans.req.ID,
+		ReqSrc:        trans.req.Src,
+		ReqDst:        trans.req.Dst,
+		SrcAddress:    trans.reqPayload.SrcAddress,
+		DstAddress:    trans.reqPayload.DstAddress,
+		ByteSize:      trans.reqPayload.ByteSize,
+		SrcSide:       string(trans.reqPayload.SrcSide),
+		DstSide:       string(trans.reqPayload.DstSide),
+		NextReadAddr:  trans.nextReadAddr,
+		NextWriteAddr: trans.nextWriteAddr,
+		PendingRead:   make(map[string]pendingReadState, len(trans.pendingRead)),
+		PendingWrite:  make(map[string]pendingWriteState, len(trans.pendingWrite)),
+	}
+
+	for id, msg := range trans.pendingRead {
+		payload := sim.MsgPayload[mem.ReadReqPayload](msg)
+		ts.PendingRead[id] = pendingReadState{
+			ID: msg.ID, Src: msg.Src, Dst: msg.Dst,
+			Address: payload.Address,
+		}
+	}
+
+	for id, msg := range trans.pendingWrite {
+		payload := sim.MsgPayload[mem.WriteReqPayload](msg)
+		dataCopy := make([]byte, len(payload.Data))
+		copy(dataCopy, payload.Data)
+		ts.PendingWrite[id] = pendingWriteState{
+			ID: msg.ID, Src: msg.Src, Dst: msg.Dst,
+			Address: payload.Address, Data: dataCopy,
+		}
+	}
+
+	return ts
+}
+
 // snapshotState converts the Comp's runtime state into a serializable State.
 func (c *Comp) snapshotState() State {
 	s := State{
 		SrcByteGranularity: c.srcByteGranularity,
 		DstByteGranularity: c.dstByteGranularity,
+		SrcSide:            c.snapshotPortSide(c.srcPort),
+		DstSide:            c.snapshotPortSide(c.dstPort),
 	}
 
-	// Determine src/dst side strings from port identity.
-	if c.srcPort == c.insidePort {
-		s.SrcSide = "inside"
-	} else if c.srcPort == c.outsidePort {
-		s.SrcSide = "outside"
-	}
-
-	if c.dstPort == c.insidePort {
-		s.DstSide = "inside"
-	} else if c.dstPort == c.outsidePort {
-		s.DstSide = "outside"
-	}
-
-	// Snapshot buffer.
 	if c.buffer != nil {
-		s.Buffer = bufferState{
-			Offset:      c.buffer.offset,
-			Granularity: c.buffer.granularity,
-		}
-		for _, chunk := range c.buffer.data {
-			if chunk == nil {
-				s.Buffer.Chunks = append(s.Buffer.Chunks, dataChunk{
-					Valid: false,
-				})
-			} else {
-				dataCopy := make([]byte, len(chunk))
-				copy(dataCopy, chunk)
-				s.Buffer.Chunks = append(s.Buffer.Chunks, dataChunk{
-					Data:  dataCopy,
-					Valid: true,
-				})
-			}
-		}
+		s.Buffer = c.snapshotBuffer()
 	}
 
-	// Snapshot current transaction.
 	if c.currentTransaction != nil {
-		trans := c.currentTransaction
-		ts := dataMoverTransactionState{
-			Active:        true,
-			ReqID:         trans.req.ID,
-			ReqSrc:        trans.req.Src,
-			ReqDst:        trans.req.Dst,
-			SrcAddress:    trans.reqPayload.SrcAddress,
-			DstAddress:    trans.reqPayload.DstAddress,
-			ByteSize:      trans.reqPayload.ByteSize,
-			SrcSide:       string(trans.reqPayload.SrcSide),
-			DstSide:       string(trans.reqPayload.DstSide),
-			NextReadAddr:  trans.nextReadAddr,
-			NextWriteAddr: trans.nextWriteAddr,
-			PendingRead:   make(map[string]pendingReadState, len(trans.pendingRead)),
-			PendingWrite:  make(map[string]pendingWriteState, len(trans.pendingWrite)),
-		}
-
-		for id, msg := range trans.pendingRead {
-			payload := sim.MsgPayload[mem.ReadReqPayload](msg)
-			ts.PendingRead[id] = pendingReadState{
-				ID:      msg.ID,
-				Src:     msg.Src,
-				Dst:     msg.Dst,
-				Address: payload.Address,
-			}
-		}
-
-		for id, msg := range trans.pendingWrite {
-			payload := sim.MsgPayload[mem.WriteReqPayload](msg)
-			dataCopy := make([]byte, len(payload.Data))
-			copy(dataCopy, payload.Data)
-			ts.PendingWrite[id] = pendingWriteState{
-				ID:      msg.ID,
-				Src:     msg.Src,
-				Dst:     msg.Dst,
-				Address: payload.Address,
-				Data:    dataCopy,
-			}
-		}
-
-		s.CurrentTransaction = ts
+		s.CurrentTransaction = c.snapshotTransaction()
 	}
 
 	return s
 }
 
-// restoreFromState restores the Comp's runtime state from a serializable State.
-func (c *Comp) restoreFromState(s State) {
-	c.srcByteGranularity = s.SrcByteGranularity
-	c.dstByteGranularity = s.DstByteGranularity
-
-	// Restore port assignments from side strings.
-	switch s.SrcSide {
+// restorePortSide restores port and mapper from a side string.
+func (c *Comp) restorePortSide(side string) (sim.Port, mem.AddressToPortMapper) {
+	switch side {
 	case "inside":
-		c.srcPort = c.insidePort
-		c.srcPortMapper = c.insidePortMapper
+		return c.insidePort, c.insidePortMapper
 	case "outside":
-		c.srcPort = c.outsidePort
-		c.srcPortMapper = c.outsidePortMapper
+		return c.outsidePort, c.outsidePortMapper
+	default:
+		return nil, nil
 	}
+}
 
-	switch s.DstSide {
-	case "inside":
-		c.dstPort = c.insidePort
-		c.dstPortMapper = c.insidePortMapper
-	case "outside":
-		c.dstPort = c.outsidePort
-		c.dstPortMapper = c.outsidePortMapper
-	}
-
-	// Restore buffer.
+// restoreBuffer rebuilds the runtime buffer from a serializable bufferState.
+func (c *Comp) restoreBuffer(bs bufferState) *buffer {
 	buf := &buffer{
-		offset:      s.Buffer.Offset,
-		granularity: s.Buffer.Granularity,
+		offset:      bs.Offset,
+		granularity: bs.Granularity,
 	}
-	for _, chunk := range s.Buffer.Chunks {
+	for _, chunk := range bs.Chunks {
 		if !chunk.Valid {
 			buf.data = append(buf.data, nil)
 		} else {
@@ -261,34 +250,27 @@ func (c *Comp) restoreFromState(s State) {
 			buf.data = append(buf.data, dataCopy)
 		}
 	}
-	c.buffer = buf
+	return buf
+}
 
-	// Restore current transaction.
-	if !s.CurrentTransaction.Active {
-		c.currentTransaction = nil
-		return
-	}
-
-	ts := s.CurrentTransaction
+// restoreTransaction rebuilds the runtime transaction from its serializable state.
+func (c *Comp) restoreTransaction(
+	ts dataMoverTransactionState,
+) *dataMoverTransaction {
 	payload := &DataMoveRequestPayload{
-		SrcAddress: ts.SrcAddress,
-		DstAddress: ts.DstAddress,
-		ByteSize:   ts.ByteSize,
-		SrcSide:    DateMovePort(ts.SrcSide),
-		DstSide:    DateMovePort(ts.DstSide),
+		SrcAddress: ts.SrcAddress, DstAddress: ts.DstAddress,
+		ByteSize: ts.ByteSize,
+		SrcSide:  DateMovePort(ts.SrcSide), DstSide: DateMovePort(ts.DstSide),
 	}
 	req := &sim.Msg{
 		MsgMeta: sim.MsgMeta{
-			ID:  ts.ReqID,
-			Src: ts.ReqSrc,
-			Dst: ts.ReqDst,
+			ID: ts.ReqID, Src: ts.ReqSrc, Dst: ts.ReqDst,
 		},
 		Payload: payload,
 	}
 
 	trans := &dataMoverTransaction{
-		req:           req,
-		reqPayload:    payload,
+		req: req, reqPayload: payload,
 		nextReadAddr:  ts.NextReadAddr,
 		nextWriteAddr: ts.NextWriteAddr,
 		pendingRead:   make(map[string]*sim.Msg, len(ts.PendingRead)),
@@ -296,38 +278,42 @@ func (c *Comp) restoreFromState(s State) {
 	}
 
 	for id, ps := range ts.PendingRead {
-		msg := &sim.Msg{
-			MsgMeta: sim.MsgMeta{
-				ID:  ps.ID,
-				Src: ps.Src,
-				Dst: ps.Dst,
-			},
+		trans.pendingRead[id] = &sim.Msg{
+			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
 			Payload: &mem.ReadReqPayload{
-				Address:        ps.Address,
-				AccessByteSize: c.srcByteGranularity,
+				Address: ps.Address, AccessByteSize: c.srcByteGranularity,
 			},
 		}
-		trans.pendingRead[id] = msg
 	}
 
 	for id, ps := range ts.PendingWrite {
 		dataCopy := make([]byte, len(ps.Data))
 		copy(dataCopy, ps.Data)
-		msg := &sim.Msg{
-			MsgMeta: sim.MsgMeta{
-				ID:  ps.ID,
-				Src: ps.Src,
-				Dst: ps.Dst,
-			},
-			Payload: &mem.WriteReqPayload{
-				Address: ps.Address,
-				Data:    dataCopy,
-			},
+		trans.pendingWrite[id] = &sim.Msg{
+			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
+			Payload: &mem.WriteReqPayload{Address: ps.Address, Data: dataCopy},
 		}
-		trans.pendingWrite[id] = msg
 	}
 
-	c.currentTransaction = trans
+	return trans
+}
+
+// restoreFromState restores the Comp's runtime state from a serializable State.
+func (c *Comp) restoreFromState(s State) {
+	c.srcByteGranularity = s.SrcByteGranularity
+	c.dstByteGranularity = s.DstByteGranularity
+
+	c.srcPort, c.srcPortMapper = c.restorePortSide(s.SrcSide)
+	c.dstPort, c.dstPortMapper = c.restorePortSide(s.DstSide)
+
+	c.buffer = c.restoreBuffer(s.Buffer)
+
+	if !s.CurrentTransaction.Active {
+		c.currentTransaction = nil
+		return
+	}
+
+	c.currentTransaction = c.restoreTransaction(s.CurrentTransaction)
 }
 
 // GetState converts runtime mutable data into a serializable State.
