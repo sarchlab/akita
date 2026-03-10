@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -33,8 +34,11 @@ var _ = Describe("Bottom Parser", func() {
 			wayAssociativity: 4,
 			bankBufs:         []queueing.Buffer{bankBuf},
 		}
-		c.TickingComponent = sim.NewTickingComponent(
-			"Cache", nil, 1, c)
+		c.Component = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{}).
+			Build("Cache")
 		p = &bottomParser{cache: c}
 	})
 
