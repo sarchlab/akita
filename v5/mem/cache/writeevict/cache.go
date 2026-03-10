@@ -13,7 +13,19 @@ import (
 type Spec struct{}
 
 // State contains mutable runtime data for the write-evict cache.
-type State struct{}
+type State struct {
+	DirectoryState             cache.DirectoryState       `json:"directory_state"`
+	MSHRState                  cache.MSHRState            `json:"mshr_state"`
+	Transactions               []transactionState         `json:"transactions"`
+	NumTransactions            int                        `json:"num_transactions"`
+	DirBufIndices              []int                      `json:"dir_buf_indices"`
+	BankBufIndices             []bankBufState             `json:"bank_buf_indices"`
+	DirPipelineStages          []dirPipelineStageState    `json:"dir_pipeline_stages"`
+	DirPostPipelineBufIndices  []int                      `json:"dir_post_pipeline_buf_indices"`
+	BankPipelineStages         []bankPipelineState        `json:"bank_pipeline_stages"`
+	BankPostPipelineBufIndices []bankPostBufState         `json:"bank_post_pipeline_buf_indices"`
+	IsPaused                   bool                       `json:"is_paused"`
+}
 
 // Comp is a customized L1 cache the for R9nano GPUs.
 type Comp struct {
