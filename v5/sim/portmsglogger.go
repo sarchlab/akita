@@ -25,7 +25,7 @@ func NewPortMsgLogger(
 
 // Func writes the message information into the logger
 func (h *PortMsgLogger) Func(ctx HookCtx) {
-	msg, ok := ctx.Item.(Msg)
+	msg, ok := ctx.Item.(*Msg)
 	if !ok {
 		return
 	}
@@ -34,7 +34,7 @@ func (h *PortMsgLogger) Func(ctx HookCtx) {
 		h.CurrentTime(),
 		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,
-		msg.Meta().Src,
-		msg.Meta().Dst,
-		reflect.TypeOf(msg), msg.Meta().ID)
+		msg.Src,
+		msg.Dst,
+		reflect.TypeOf(msg.Payload), msg.ID)
 }
