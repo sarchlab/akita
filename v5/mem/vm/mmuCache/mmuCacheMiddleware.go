@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -91,35 +92,39 @@ func (cache *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	req, ok := msg.(*vm.TranslationReq)
-	if !ok || req == nil {
+	payload, ok := msg.Payload.(*vm.TranslationReqPayload)
+	if !ok || payload == nil {
 		return false
 	}
 
-	return cache.walkCacheLevels(req)
+	return cache.walkCacheLevels(msg, payload)
 }
 
-func (cache *mmuCacheMiddleware) walkCacheLevels(req *vm.TranslationReq) bool {
+func (cache *mmuCacheMiddleware) walkCacheLevels(
+	msg *sim.Msg, payload *vm.TranslationReqPayload,
+) bool {
 	totalLatency := cache.latencyPerLevel * uint64(cache.numLevels)
 
 	for level := cache.numLevels - 1; level >= 0; level-- {
-		found := cache.lookupLevel(level, req)
+		found := cache.lookupLevel(level, payload)
 		if !found {
 			break
 		}
 		totalLatency -= cache.latencyPerLevel
 	}
 
-	ok := cache.sendReqToBottom(req, totalLatency)
+	ok := cache.sendReqToBottom(payload, totalLatency)
 	if !ok {
 		return false
 	}
 	return true
 }
 
-func (cache *mmuCacheMiddleware) lookupLevel(level int, req *vm.TranslationReq) bool {
-	vAddr := req.VAddr
-	pid := req.PID
+func (cache *mmuCacheMiddleware) lookupLevel(
+	level int, payload *vm.TranslationReqPayload,
+) bool {
+	vAddr := payload.VAddr
+	pid := payload.PID
 
 	vpn := vAddr >> cache.log2PageSize
 	levelWidth := (64 - cache.log2PageSize) / uint64(cache.numLevels)
@@ -136,7 +141,7 @@ func (cache *mmuCacheMiddleware) lookupLevel(level int, req *vm.TranslationReq) 
 }
 
 func (cache *mmuCacheMiddleware) sendReqToBottom(
-	req *vm.TranslationReq,
+	payload *vm.TranslationReqPayload,
 	latency uint64) bool {
 	if !cache.bottomPort.CanSend() {
 		return false
@@ -145,9 +150,9 @@ func (cache *mmuCacheMiddleware) sendReqToBottom(
 	reqToBottom := vm.TranslationReqBuilder{}.
 		WithSrc(cache.bottomPort.AsRemote()).
 		WithDst(cache.LowModule.AsRemote()).
-		WithPID(req.PID).
-		WithVAddr(req.VAddr).
-		WithDeviceID(req.DeviceID).
+		WithPID(payload.PID).
+		WithVAddr(payload.VAddr).
+		WithDeviceID(payload.DeviceID).
 		WithTransLatency(latency).
 		Build()
 
@@ -169,27 +174,28 @@ func (cache *mmuCacheMiddleware) handleBottomPort() bool {
 		return false
 	}
 
-	switch rsp := item.(type) {
-	case *vm.TranslationRsp:
-		madeProgress = cache.handleRsp(rsp) || madeProgress
+	switch item.Payload.(type) {
+	case *vm.TranslationRspPayload:
+		madeProgress = cache.handleRsp(item) || madeProgress
 	default:
-		log.Panicf("cannot process request %s", reflect.TypeOf(item))
+		log.Panicf("cannot process request %s", reflect.TypeOf(item.Payload))
 	}
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
+func (cache *mmuCacheMiddleware) handleRsp(rsp *sim.Msg) bool {
 	if !cache.topPort.CanSend() {
 		return false
 	}
 
-	cache.updateCacheLevels(rsp)
+	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
+	cache.updateCacheLevels(rspPayload)
 
 	rspToTop := vm.TranslationRspBuilder{}.
 		WithSrc(cache.topPort.AsRemote()).
 		WithDst(cache.UpModule.AsRemote()).
-		WithRspTo(rsp.RespondTo).
-		WithPage(rsp.Page).
+		WithRspTo(rsp.RspTo).
+		WithPage(rspPayload.Page).
 		Build()
 
 	err := cache.topPort.Send(rspToTop)
@@ -208,8 +214,8 @@ func (cache *mmuCacheMiddleware) segToSetID(seg uint64) int {
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
-func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
-	page := rsp.Page
+func (cache *mmuCacheMiddleware) updateCacheLevels(rspPayload *vm.TranslationRspPayload) bool {
+	page := rspPayload.Page
 	vAddr := page.VAddr
 	pid := page.PID
 

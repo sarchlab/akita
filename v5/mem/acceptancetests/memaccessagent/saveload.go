@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // agentSnapshot is the serializable representation of a MemAccessAgent.
@@ -50,8 +50,8 @@ func (a *MemAccessAgent) LoadState(r io.Reader) error {
 	a.ReadLeft = snap.ReadLeft
 	a.MaxAddress = snap.MaxAddress
 	a.KnownMemValue = snap.KnownMemValue
-	a.PendingReadReq = make(map[string]*mem.ReadReq)
-	a.PendingWriteReq = make(map[string]*mem.WriteReq)
+	a.PendingReadReq = make(map[string]*sim.Msg)
+	a.PendingWriteReq = make(map[string]*sim.Msg)
 
 	return nil
 }

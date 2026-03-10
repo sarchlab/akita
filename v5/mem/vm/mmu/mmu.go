@@ -10,10 +10,11 @@ import (
 )
 
 type transaction struct {
-	req       *vm.TranslationReq
-	page      vm.Page
-	cycleLeft int
-	migration *vm.PageMigrationReqToDriver
+	req        *sim.Msg // payload: *vm.TranslationReqPayload
+	reqPayload *vm.TranslationReqPayload
+	page       vm.Page
+	cycleLeft  int
+	migration  *sim.Msg // payload: *vm.PageMigrationReqToDriverPayload
 }
 
 // Comp is the default mmu implementation. It is also an akita Component.
@@ -96,12 +97,12 @@ func (m *middleware) walkPageTable() bool {
 func (m *middleware) finalizePageWalk(
 	walkingIndex int,
 ) bool {
-	req := m.walkingTranslations[walkingIndex].req
-	page, found := m.pageTable.Find(req.PID, req.VAddr)
+	payload := m.walkingTranslations[walkingIndex].reqPayload
+	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
 
 	if !found {
 		if m.autoPageAllocation {
-			page = m.createDefaultPage(req.PID, req.VAddr, req.DeviceID)
+			page = m.createDefaultPage(payload.PID, payload.VAddr, payload.DeviceID)
 			m.pageTable.Insert(page)
 		} else {
 			panic("page not found")
@@ -138,7 +139,7 @@ func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
 }
 
 func (m *middleware) pageNeedMigrate(walking transaction) bool {
-	if walking.req.DeviceID == walking.page.DeviceID {
+	if walking.reqPayload.DeviceID == walking.page.DeviceID {
 		return false
 	}
 
@@ -182,8 +183,8 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 	}
 
 	trans := m.migrationQueue[0]
-	req := trans.req
-	page, found := m.pageTable.Find(req.PID, req.VAddr)
+	payload := trans.reqPayload
+	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
 
 	if !found {
 		panic("page not found")
@@ -191,7 +192,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 
 	trans.page = page
 
-	if req.DeviceID == page.DeviceID || page.IsPinned {
+	if payload.DeviceID == page.DeviceID || page.IsPinned {
 		if !m.topPort.CanSend() {
 			return false
 		}
@@ -274,7 +275,8 @@ func (m *middleware) processMigrationReturn() bool {
 	}
 
 	req := m.currentOnDemandMigration.req
-	page, found := m.pageTable.Find(req.PID, req.VAddr)
+	payload := m.currentOnDemandMigration.reqPayload
+	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
 
 	if !found {
 		panic("page not found")
@@ -311,20 +313,22 @@ func (m *middleware) parseFromTop() bool {
 
 	tracing.TraceReqReceive(req, m.Comp)
 
-	switch req := req.(type) {
-	case *vm.TranslationReq:
+	switch req.Payload.(type) {
+	case *vm.TranslationReqPayload:
 		m.startWalking(req)
 	default:
-		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req))
+		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req.Payload))
 	}
 
 	return true
 }
 
-func (m *middleware) startWalking(req *vm.TranslationReq) {
+func (m *middleware) startWalking(req *sim.Msg) {
+	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
-		req:       req,
-		cycleLeft: m.latency,
+		req:        req,
+		reqPayload: payload,
+		cycleLeft:  m.latency,
 	}
 
 	m.walkingTranslations = append(m.walkingTranslations, translationInPipeline)
@@ -360,7 +364,7 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 	alignedVAddr := (vAddr >> m.log2PageSize) << m.log2PageSize
 	pageSize := uint64(1) << m.log2PageSize
 	pAddr := m.allocatePhysicalPage()
-	
+
 	return vm.Page{
 		PID:         pid,
 		VAddr:       alignedVAddr,
@@ -376,15 +380,15 @@ func (m *middleware) createDefaultPage(pid vm.PID, vAddr uint64, deviceID uint64
 
 func (m *middleware) allocatePhysicalPage() uint64 {
 	pageSize := uint64(1) << m.log2PageSize
-	
+
 	for {
 		candidatePage := (m.nextPhysicalPage >> m.log2PageSize) << m.log2PageSize
-		
+
 		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
 			m.nextPhysicalPage = candidatePage + pageSize
 			return candidatePage
 		}
-		
+
 		m.nextPhysicalPage += pageSize
 	}
 }
@@ -392,25 +396,26 @@ func (m *middleware) allocatePhysicalPage() uint64 {
 func (m *middleware) createMigrationRequest(
 	trans transaction,
 	page vm.Page,
-) *vm.PageMigrationReqToDriver {
+) *sim.Msg {
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
-	migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID] =
-		append(migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID],
-			trans.req.VAddr)
+	migrationInfo.GPUReqToVAddrMap[trans.reqPayload.DeviceID] =
+		append(migrationInfo.GPUReqToVAddrMap[trans.reqPayload.DeviceID],
+			trans.reqPayload.VAddr)
 
 	m.PageAccessedByDeviceID[page.VAddr] =
 		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
 		m.migrationPort.AsRemote(), m.MigrationServiceProvider)
-	migrationReq.PID = page.PID
-	migrationReq.PageSize = page.PageSize
-	migrationReq.CurrPageHostGPU = page.DeviceID
-	migrationReq.MigrationInfo = migrationInfo
-	migrationReq.CurrAccessingGPUs = unique(
+	migrationPayload := sim.MsgPayload[vm.PageMigrationReqToDriverPayload](migrationReq)
+	migrationPayload.PID = page.PID
+	migrationPayload.PageSize = page.PageSize
+	migrationPayload.CurrPageHostGPU = page.DeviceID
+	migrationPayload.MigrationInfo = migrationInfo
+	migrationPayload.CurrAccessingGPUs = unique(
 		m.PageAccessedByDeviceID[page.VAddr])
-	migrationReq.RespondToTop = true
+	migrationPayload.RespondToTop = true
 
 	return migrationReq
 }

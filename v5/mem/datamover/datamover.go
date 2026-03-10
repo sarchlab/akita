@@ -12,20 +12,23 @@ import (
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
 type dataMoverTransaction struct {
-	req           *DataMoveRequest
+	req           *sim.Msg // payload: *DataMoveRequestPayload
+	reqPayload    *DataMoveRequestPayload
 	nextReadAddr  uint64
 	nextWriteAddr uint64
-	pendingRead   map[string]*mem.ReadReq
-	pendingWrite  map[string]*mem.WriteReq
+	pendingRead   map[string]*sim.Msg // payload: *mem.ReadReqPayload
+	pendingWrite  map[string]*sim.Msg // payload: *mem.WriteReqPayload
 }
 
-func newDataMoverTransaction(req *DataMoveRequest) *dataMoverTransaction {
+func newDataMoverTransaction(req *sim.Msg) *dataMoverTransaction {
+	payload := sim.MsgPayload[DataMoveRequestPayload](req)
 	return &dataMoverTransaction{
 		req:           req,
-		nextReadAddr:  req.SrcAddress,
-		nextWriteAddr: req.DstAddress,
-		pendingRead:   make(map[string]*mem.ReadReq),
-		pendingWrite:  make(map[string]*mem.WriteReq),
+		reqPayload:    payload,
+		nextReadAddr:  payload.SrcAddress,
+		nextWriteAddr: payload.DstAddress,
+		pendingRead:   make(map[string]*sim.Msg),
+		pendingWrite:  make(map[string]*sim.Msg),
 	}
 }
 
@@ -89,16 +92,16 @@ func (c *Comp) parseFromCP() bool {
 		return false
 	}
 
-	moveReq, ok := req.(*DataMoveRequest)
+	_, ok := req.Payload.(*DataMoveRequestPayload)
 	if !ok {
-		log.Panicf("can't process request of type %s", reflect.TypeOf(req))
+		log.Panicf("can't process request of type %s", reflect.TypeOf(req.Payload))
 	}
 
-	trans := newDataMoverTransaction(moveReq)
+	trans := newDataMoverTransaction(req)
 	c.currentTransaction = trans
 
-	c.setSrcSide(moveReq)
-	c.setDstSide(moveReq)
+	c.setSrcSide(trans.reqPayload)
+	c.setDstSide(trans.reqPayload)
 
 	c.buffer = &buffer{
 		granularity: c.srcByteGranularity,
@@ -123,7 +126,7 @@ func (c *Comp) readFromSrc() bool {
 		return false
 	}
 
-	transEndAddr := trans.req.SrcAddress + trans.req.ByteSize
+	transEndAddr := trans.reqPayload.SrcAddress + trans.reqPayload.ByteSize
 	if addr > transEndAddr {
 		return false
 	}
@@ -160,22 +163,23 @@ func (c *Comp) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	readRsp, ok := rsp.(*mem.DataReadyRsp)
+	readRspPayload, ok := rsp.Payload.(*mem.DataReadyRspPayload)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingRead[readRsp.RespondTo]
+	originalReq, ok := c.currentTransaction.pendingRead[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
-			readRsp.RespondTo)
+			rsp.RspTo)
 	}
 
-	offset := originalReq.Address - c.currentTransaction.req.SrcAddress
-	c.buffer.addData(offset, readRsp.Data)
+	originalReqPayload := sim.MsgPayload[mem.ReadReqPayload](originalReq)
+	offset := originalReqPayload.Address - c.currentTransaction.reqPayload.SrcAddress
+	c.buffer.addData(offset, readRspPayload.Data)
 
-	delete(c.currentTransaction.pendingRead, readRsp.RespondTo)
+	delete(c.currentTransaction.pendingRead, rsp.RspTo)
 	c.srcPort.RetrieveIncoming()
 	tracing.TraceReqFinalize(originalReq, c)
 
@@ -189,7 +193,7 @@ func (c *Comp) writeToDst() bool {
 	}
 
 	trans := c.currentTransaction
-	offset := trans.nextWriteAddr - trans.req.DstAddress
+	offset := trans.nextWriteAddr - trans.reqPayload.DstAddress
 	data, ok := c.buffer.extractData(offset, c.dstByteGranularity)
 
 	if !ok {
@@ -211,7 +215,7 @@ func (c *Comp) writeToDst() bool {
 
 	c.currentTransaction.nextWriteAddr += c.dstByteGranularity
 	c.currentTransaction.pendingWrite[req.ID] = req
-	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.req.DstAddress)
+	c.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.reqPayload.DstAddress)
 
 	tracing.TraceReqInitiate(req, c,
 		tracing.MsgIDAtReceiver(c.currentTransaction.req, c))
@@ -230,18 +234,18 @@ func (c *Comp) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	writeRsp, ok := rsp.(*mem.WriteDoneRsp)
+	_, ok := rsp.Payload.(*mem.WriteDoneRspPayload)
 	if !ok {
 		return false
 	}
 
-	originalReq, ok := c.currentTransaction.pendingWrite[writeRsp.RespondTo]
+	originalReq, ok := c.currentTransaction.pendingWrite[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s",
-			writeRsp.RespondTo)
+			rsp.RspTo)
 	}
 
-	delete(c.currentTransaction.pendingWrite, writeRsp.RespondTo)
+	delete(c.currentTransaction.pendingWrite, rsp.RspTo)
 	c.dstPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(originalReq, c)
@@ -257,11 +261,18 @@ func (c *Comp) finishTransaction() bool {
 
 	trans := c.currentTransaction
 
-	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
+	if trans.nextWriteAddr < trans.reqPayload.DstAddress+trans.reqPayload.ByteSize {
 		return false
 	}
 
-	rsp := trans.req.GenerateRsp()
+	rsp := &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: trans.req.Dst,
+			Dst: trans.req.Src,
+		},
+		RspTo: trans.req.ID,
+	}
 
 	err := c.ctrlPort.Send(rsp)
 	if err != nil {
@@ -270,7 +281,7 @@ func (c *Comp) finishTransaction() bool {
 
 	c.currentTransaction = nil
 	c.buffer = &buffer{
-		offset:      alignAddress(trans.req.SrcAddress, c.srcByteGranularity),
+		offset:      alignAddress(trans.reqPayload.SrcAddress, c.srcByteGranularity),
 		granularity: c.srcByteGranularity,
 	}
 
@@ -279,7 +290,7 @@ func (c *Comp) finishTransaction() bool {
 	return true
 }
 
-func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {
+func (c *Comp) setSrcSide(moveReq *DataMoveRequestPayload) {
 	switch moveReq.SrcSide {
 	case "inside":
 		c.srcPort = c.insidePort
@@ -296,7 +307,7 @@ func (c *Comp) setSrcSide(moveReq *DataMoveRequest) {
 	addressMustBeAligned(moveReq.SrcAddress, c.srcByteGranularity)
 }
 
-func (c *Comp) setDstSide(moveReq *DataMoveRequest) {
+func (c *Comp) setDstSide(moveReq *DataMoveRequestPayload) {
 	switch moveReq.DstSide {
 	case "inside":
 		c.dstPort = c.insidePort

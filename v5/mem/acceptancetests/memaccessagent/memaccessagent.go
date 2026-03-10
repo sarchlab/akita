@@ -25,8 +25,8 @@ type MemAccessAgent struct {
 	WriteLeft       int
 	ReadLeft        int
 	KnownMemValue   map[uint64][]uint32
-	PendingReadReq  map[string]*mem.ReadReq
-	PendingWriteReq map[string]*mem.WriteReq
+	PendingReadReq  map[string]*sim.Msg // payload: *mem.ReadReqPayload
+	PendingWriteReq map[string]*sim.Msg // payload: *mem.WriteReqPayload
 
 	memPort           sim.Port
 	UseVirtualAddress bool
@@ -36,9 +36,10 @@ type MemAccessAgent struct {
 	Rand *rand.Rand
 }
 
-func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
-	dataReady *mem.DataReadyRsp,
+func (a *MemAccessAgent) checkReadResult(read *sim.Msg,
+	dataReady *mem.DataReadyRspPayload,
 ) {
+	readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
 	found := false
 
 	var (
@@ -48,7 +49,7 @@ func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
 
 	result := bytesToUint32(dataReady.Data)
 
-	for i, value = range a.KnownMemValue[read.Address] {
+	for i, value = range a.KnownMemValue[readPayload.Address] {
 		if value == result {
 			found = true
 			break
@@ -56,9 +57,9 @@ func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
 	}
 
 	if found {
-		a.KnownMemValue[read.Address] = a.KnownMemValue[read.Address][i:]
+		a.KnownMemValue[readPayload.Address] = a.KnownMemValue[readPayload.Address][i:]
 	} else {
-		log.Panicf("Mismatch when read 0x%X", read.Address)
+		log.Panicf("Mismatch when read 0x%X", readPayload.Address)
 	}
 }
 
@@ -97,31 +98,34 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 		return false
 	}
 
-	switch msg := msg.(type) {
-	case *mem.WriteDoneRsp:
+	switch payload := msg.Payload.(type) {
+	case *mem.WriteDoneRspPayload:
+		_ = payload
 		if dumpLog {
-			write := a.PendingWriteReq[msg.RespondTo]
+			write := a.PendingWriteReq[msg.RspTo]
+			writePayload := sim.MsgPayload[mem.WriteReqPayload](write)
 			log.Printf("%.10f, agent, write complete, 0x%X\n",
-				a.CurrentTime(), write.Address)
+				a.CurrentTime(), writePayload.Address)
 		}
 
-		delete(a.PendingWriteReq, msg.RespondTo)
+		delete(a.PendingWriteReq, msg.RspTo)
 
 		return true
-	case *mem.DataReadyRsp:
-		req := a.PendingReadReq[msg.RespondTo]
-		delete(a.PendingReadReq, msg.RespondTo)
+	case *mem.DataReadyRspPayload:
+		req := a.PendingReadReq[msg.RspTo]
+		delete(a.PendingReadReq, msg.RspTo)
 
 		if dumpLog {
+			reqPayload := sim.MsgPayload[mem.ReadReqPayload](req)
 			log.Printf("%.10f, agent, read complete, 0x%X, %v\n",
-				a.CurrentTime(), req.Address, msg.Data)
+				a.CurrentTime(), reqPayload.Address, payload.Data)
 		}
 
-		a.checkReadResult(req, msg)
+		a.checkReadResult(req, payload)
 
 		return true
 	default:
-		log.Panicf("cannot process message of type %s", reflect.TypeOf(msg))
+		log.Panicf("cannot process message of type %s", reflect.TypeOf(msg.Payload))
 	}
 
 	return false
@@ -214,7 +218,8 @@ func (a *MemAccessAgent) isAddressInPendingReq(addr uint64) bool {
 
 func (a *MemAccessAgent) isAddressInPendingWrite(addr uint64) bool {
 	for _, write := range a.PendingWriteReq {
-		if write.Address == addr {
+		writePayload := sim.MsgPayload[mem.WriteReqPayload](write)
+		if writePayload.Address == addr {
 			return true
 		}
 	}
@@ -224,7 +229,8 @@ func (a *MemAccessAgent) isAddressInPendingWrite(addr uint64) bool {
 
 func (a *MemAccessAgent) isAddressInPendingRead(addr uint64) bool {
 	for _, read := range a.PendingReadReq {
-		if read.Address == addr {
+		readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
+		if readPayload.Address == addr {
 			return true
 		}
 	}
@@ -263,8 +269,9 @@ func (a *MemAccessAgent) doWrite() bool {
 		a.PendingWriteReq[writeReq.ID] = writeReq
 
 		if dumpLog {
+			writePayload := sim.MsgPayload[mem.WriteReqPayload](writeReq)
 			log.Printf("%.10f, agent, write, 0x%X, %v\n",
-				a.CurrentTime(), address, writeReq.Data)
+				a.CurrentTime(), address, writePayload.Data)
 		}
 
 		return true
@@ -293,8 +300,8 @@ func NewMemAccessAgent(engine sim.Engine) *MemAccessAgent {
 	agent.ReadLeft = 10000
 	agent.WriteLeft = 10000
 	agent.KnownMemValue = make(map[uint64][]uint32)
-	agent.PendingWriteReq = make(map[string]*mem.WriteReq)
-	agent.PendingReadReq = make(map[string]*mem.ReadReq)
+	agent.PendingWriteReq = make(map[string]*sim.Msg)
+	agent.PendingReadReq = make(map[string]*sim.Msg)
 
 	return agent
 }

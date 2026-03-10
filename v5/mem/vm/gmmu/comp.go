@@ -10,9 +10,10 @@ import (
 )
 
 type transaction struct {
-	req       *vm.TranslationReq
-	page      vm.Page
-	cycleLeft int
+	req        *sim.Msg // payload: *vm.TranslationReqPayload
+	reqPayload *vm.TranslationReqPayload
+	page       vm.Page
+	cycleLeft  int
 }
 
 // gmmu is the default gmmu implementation. It is also an akita Component.
@@ -70,20 +71,22 @@ func (gmmu *GMMU) parseFromTop() bool {
 
 	tracing.TraceReqReceive(req, gmmu)
 
-	switch req := req.(type) {
-	case *vm.TranslationReq:
+	switch req.Payload.(type) {
+	case *vm.TranslationReqPayload:
 		gmmu.startWalking(req)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(req))
+		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(req.Payload))
 	}
 
 	return true
 }
 
-func (gmmu *GMMU) startWalking(req *vm.TranslationReq) {
+func (gmmu *GMMU) startWalking(req *sim.Msg) {
+	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
-		req:       req,
-		cycleLeft: gmmu.latency,
+		req:        req,
+		reqPayload: payload,
+		cycleLeft:  gmmu.latency,
 	}
 
 	gmmu.walkingTranslations = append(gmmu.walkingTranslations, translationInPipeline)
@@ -102,13 +105,13 @@ func (gmmu *GMMU) walkPageTable() bool {
 			madeProgress = true
 			continue
 		}
-		req := gmmu.walkingTranslations[i].req
+		payload := gmmu.walkingTranslations[i].reqPayload
 
-		page, found := gmmu.pageTable.Find(req.PID, req.VAddr)
+		page, found := gmmu.pageTable.Find(payload.PID, payload.VAddr)
 		if !found {
 			log.Panicf(
 				"gmmu: page not found for PID %d VAddr 0x%x",
-				req.PID, req.VAddr,
+				payload.PID, payload.VAddr,
 			)
 		}
 
@@ -149,14 +152,14 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 		return false
 	}
 
-	walking := gmmu.walkingTranslations[walkingIndex].req
+	walking := gmmu.walkingTranslations[walkingIndex]
 
 	req := vm.TranslationReqBuilder{}.
 		WithSrc(gmmu.bottomPort.AsRemote()).
 		WithDst(gmmu.LowModule).
-		WithPID(walking.PID).
-		WithVAddr(walking.VAddr).
-		WithDeviceID(walking.DeviceID).
+		WithPID(walking.reqPayload.PID).
+		WithVAddr(walking.reqPayload.VAddr).
+		WithDeviceID(walking.reqPayload.DeviceID).
 		Build()
 
 	gmmu.remoteMemReqs[req.ID] = gmmu.walkingTranslations[walkingIndex]
@@ -171,8 +174,8 @@ func (gmmu *GMMU) processRemoteMemReq(walkingIndex int) bool {
 func (gmmu *GMMU) finalizePageWalk(
 	walkingIndex int,
 ) bool {
-	req := gmmu.walkingTranslations[walkingIndex].req
-	page, found := gmmu.pageTable.Find(req.PID, req.VAddr)
+	payload := gmmu.walkingTranslations[walkingIndex].reqPayload
+	page, found := gmmu.pageTable.Find(payload.PID, payload.VAddr)
 	if !found {
 		return false
 	}
@@ -218,17 +221,18 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 
 	tracing.TraceReqReceive(rsp, gmmu)
 
-	switch rsp := rsp.(type) {
-	case *vm.TranslationRsp:
+	switch rsp.Payload.(type) {
+	case *vm.TranslationRspPayload:
 		return gmmu.handleTranslationRsp(rsp)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(rsp))
+		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(rsp.Payload))
 		return false
 	}
 }
 
-func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
-	reqTransaction := gmmu.remoteMemReqs[response.RespondTo]
+func (gmmu *GMMU) handleTranslationRsp(response *sim.Msg) bool {
+	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](response)
+	reqTransaction := gmmu.remoteMemReqs[response.RspTo]
 
 	if reqTransaction.req == nil {
 		log.Panicf("Cannot find matching request for response %+v", response)
@@ -242,11 +246,11 @@ func (gmmu *GMMU) handleTranslationRsp(response *vm.TranslationRsp) bool {
 		WithSrc(gmmu.topPort.AsRemote()).
 		WithDst(reqTransaction.req.Src).
 		WithRspTo(response.ID).
-		WithPage(response.Page).
+		WithPage(rspPayload.Page).
 		Build()
 
 	gmmu.topPort.Send(rsp)
 
-	delete(gmmu.remoteMemReqs, response.RespondTo)
+	delete(gmmu.remoteMemReqs, response.RspTo)
 	return true
 }
