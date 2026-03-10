@@ -26,19 +26,12 @@ Populated State for: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint
 #### M7.2: Components with queueing deps ✅ — Budget: 6, Used: 4
 Added queueing snapshot functions (SnapshotPipeline/RestorePipeline/SnapshotBuffer/RestoreBuffer). Populated State for: simplebankedmemory, switches, TLB. PR #20 merged.
 
+### M7.3: DRAM State Population ✅ — Budget: 6, Used: 2
+Populated State for DRAM with full pointer-graph flattening (527-line state.go). Created internal accessor files. PR #21 merged.
+
 ## Upcoming Milestones
 
-### M7.3: DRAM State Population — NEXT
-Move mutable runtime data into State for the DRAM memory controller. Must serialize:
-- inflightTransactions (with *sim.Msg decomposition)
-- SubTransactionQueue contents
-- CommandQueue contents (per-rank queues + round-robin index)
-- Bank states (state enum, currentCmd, openRow, cyclesToCmdAvailable per bank)
-- Cross-reference pointer chain (Transaction ↔ SubTransaction ↔ Command) flattened via index-based references
-
-Estimated: ~300-400 lines. Self-contained (no shared state with caches).
-
-### M7.4: Cache State Population (writearound, writeevict, writethrough)
+### M7.4: Cache State Population (writearound, writeevict, writethrough) — NEXT
 Three near-identical cache variants (~90% shared code). Must serialize:
 - cache.Directory (Sets with Blocks + LRU ordering)
 - cache.MSHR (entries with *sim.Msg decomposition, *Block references, []interface{} Requests)
@@ -46,7 +39,9 @@ Three near-identical cache variants (~90% shared code). Must serialize:
 - Pipeline/buffer contents (wrap transactions)
 - Component-level state (transactions, postCoalesceTransactions, isPaused)
 
-Estimated: ~400-500 lines (shared code for all 3 variants).
+Approach: Create shared Directory/MSHR serialization helpers in v5/mem/cache/ package, then each cache gets its own state.go.
+
+Estimated: ~400-500 lines shared + ~200 per variant.
 
 ### M7.5: Writeback Cache State Population
 Most complex cache. Additional state beyond M7.4:
@@ -54,7 +49,7 @@ Most complex cache. Additional state beyond M7.4:
 - Write buffer stage (pendingEvictions, inflightFetch, inflightEviction)
 - MSHR stage state
 - Evicting list map
-- Cache state enum
+- Cache state enum (running/preFlushing/flushing/paused)
 
 Can reuse Directory/MSHR serialization from M7.4.
 Estimated: ~600-800 lines.
@@ -63,7 +58,7 @@ Estimated: ~600-800 lines.
 1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
 2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
 3. **Messages as Plain Structs** — `sim.Msg` is concrete struct with typed payloads
-4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 9/15)
+4. **Port All Components** — 16 tick-driven components structurally ported (State now populated for 10/15; remaining: 4 cache variants + idealmemcontroller already done)
 5. **CI Passes** — All checks green on main
 
 ## Lessons Learned
@@ -76,4 +71,5 @@ Estimated: ~600-800 lines.
 - The `*sim.Msg` pointer problem is universal across all components — the idealmemcontroller decomposition pattern is the proven solution.
 - queueing snapshot functions (Approach A) proved pragmatic — standalone functions avoiding interface changes + no mock updates.
 - M7.1 and M7.2 each completed in 4 cycles (budgeted 6) — consistent track record of finishing under budget.
-- Total project: ~35 implementation cycles across 67 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs).
+- M7.3 completed in 2 cycles (budgeted 6) — the DRAM pattern is well-understood now, single-worker approach worked well.
+- Total project: ~37 implementation cycles across 73 orchestrator cycles. Overhead from planning/verification is worthwhile (catches real bugs).
