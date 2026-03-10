@@ -15,45 +15,13 @@ const (
 	OutsidePort DateMovePort = "outside"
 )
 
-// A DataMoveRequest asks DataMover to transfer data
-type DataMoveRequest struct {
-	sim.MsgMeta
-
+// DataMoveRequestPayload is the payload for a data move request.
+type DataMoveRequestPayload struct {
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
 	SrcSide    DateMovePort
 	DstSide    DateMovePort
-}
-
-// Meta returns the metadata of the message
-func (req *DataMoveRequest) Meta() *sim.MsgMeta {
-	return &req.MsgMeta
-}
-
-// Clone creates a deep copy of the DataMoveRequest with a new ID
-func (req *DataMoveRequest) Clone() sim.Msg {
-	b := MakeDataMoveRequestBuilder().
-		WithSrc(req.Src).
-		WithDst(req.Dst).
-		WithDstAddress(req.DstAddress).
-		WithSrcAddress(req.SrcAddress).
-		WithSrcSide(req.SrcSide).
-		WithDstSide(req.DstSide).
-		WithByteSize(req.ByteSize)
-
-	return b.Build()
-}
-
-// GenerateRsp creates a response message for the request.
-func (req *DataMoveRequest) GenerateRsp() sim.Msg {
-	rsp := sim.GeneralRspBuilder{}.
-		WithSrc(req.Dst).
-		WithDst(req.Src).
-		WithOriginalReq(req).
-		Build()
-
-	return rsp
 }
 
 // DataMoveRequestBuilder can build new data move requests
@@ -128,18 +96,22 @@ func (b DataMoveRequestBuilder) WithByteSize(
 	return b
 }
 
-// Build creates a new DataMoveRequest.
-func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
-	r := &DataMoveRequest{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.SrcAddress = b.srcAddress
-	r.DstAddress = b.dstAddress
-	r.ByteSize = b.byteSize
-	r.SrcSide = b.srcSide
-	r.DstSide = b.dstSide
-	r.TrafficClass = reflect.TypeOf(DataMoveRequest{}).String()
-
-	return r
+// Build creates a new *sim.Msg with DataMoveRequestPayload.
+func (b DataMoveRequestBuilder) Build() *sim.Msg {
+	payload := &DataMoveRequestPayload{
+		SrcAddress: b.srcAddress,
+		DstAddress: b.dstAddress,
+		ByteSize:   b.byteSize,
+		SrcSide:    b.srcSide,
+		DstSide:    b.dstSide,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(DataMoveRequestPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }

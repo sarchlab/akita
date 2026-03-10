@@ -11,25 +11,19 @@ var accessReqByteOverhead = 12
 var accessRspByteOverhead = 4
 var controlMsgByteOverhead = 4
 
-// AccessReq abstracts read and write requests that are sent to the
-// cache modules or memory controllers.
-type AccessReq interface {
-	sim.Msg
+// AccessReqPayload abstracts read and write request payloads that are sent to
+// the cache modules or memory controllers.
+type AccessReqPayload interface {
 	GetAddress() uint64
 	GetByteSize() uint64
 	GetPID() vm.PID
 }
 
-// A AccessRsp is a respond in the memory system.
-type AccessRsp interface {
-	sim.Msg
-	sim.Rsp
-}
+// AccessRspPayload abstracts response payloads in the memory system.
+type AccessRspPayload interface{}
 
-// A ReadReq is a request sent to a memory controller to fetch data
-type ReadReq struct {
-	sim.MsgMeta
-
+// ReadReqPayload is the payload for a read request sent to a memory controller.
+type ReadReqPayload struct {
 	Address            uint64
 	AccessByteSize     uint64
 	PID                vm.PID
@@ -37,43 +31,18 @@ type ReadReq struct {
 	Info               interface{}
 }
 
-// Meta returns the message meta.
-func (r *ReadReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned ReadReq with different ID
-func (r *ReadReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GenerateRsp generate DataReadyRsp to ReadReq
-func (r *ReadReq) GenerateRsp(data []byte) sim.Rsp {
-	rsp := DataReadyRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		WithData(data).
-		Build()
-
-	return rsp
-}
-
 // GetByteSize returns the number of byte that the request is accessing.
-func (r *ReadReq) GetByteSize() uint64 {
+func (r *ReadReqPayload) GetByteSize() uint64 {
 	return r.AccessByteSize
 }
 
-// GetAddress returns the address that the request is accessing
-func (r *ReadReq) GetAddress() uint64 {
+// GetAddress returns the address that the request is accessing.
+func (r *ReadReqPayload) GetAddress() uint64 {
 	return r.Address
 }
 
 // GetPID returns the process ID that the request is working on.
-func (r *ReadReq) GetPID() vm.PID {
+func (r *ReadReqPayload) GetPID() vm.PID {
 	return r.PID
 }
 
@@ -128,27 +97,30 @@ func (b ReadReqBuilder) CanWaitForCoalesce() ReadReqBuilder {
 	return b
 }
 
-// Build creates a new ReadReq
-func (b ReadReqBuilder) Build() *ReadReq {
-	r := &ReadReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficBytes = accessReqByteOverhead
-	r.Address = b.address
-	r.PID = b.pid
-	r.Info = b.info
-	r.AccessByteSize = b.byteSize
-	r.CanWaitForCoalesce = b.canWaitForCoalesce
-	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with ReadReqPayload.
+func (b ReadReqBuilder) Build() *sim.Msg {
+	payload := &ReadReqPayload{
+		Address:            b.address,
+		AccessByteSize:     b.byteSize,
+		PID:                b.pid,
+		CanWaitForCoalesce: b.canWaitForCoalesce,
+		Info:               b.info,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficBytes: accessReqByteOverhead,
+			TrafficClass: reflect.TypeOf(ReadReqPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }
 
-// A WriteReq is a request sent to a memory controller to write data
-type WriteReq struct {
-	sim.MsgMeta
-
+// WriteReqPayload is the payload for a write request sent to a memory
+// controller.
+type WriteReqPayload struct {
 	Address            uint64
 	Data               []byte
 	DirtyMask          []bool
@@ -157,46 +129,22 @@ type WriteReq struct {
 	Info               interface{}
 }
 
-// Meta returns the meta data attached to a request.
-func (r *WriteReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned WriteReq with different ID
-func (r *WriteReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GenerateRsp generate WriteDoneRsp to the original WriteReq
-func (r *WriteReq) GenerateRsp() sim.Rsp {
-	rsp := WriteDoneRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		Build()
-
-	return rsp
-}
-
 // GetByteSize returns the number of byte that the request is writing.
-func (r *WriteReq) GetByteSize() uint64 {
+func (r *WriteReqPayload) GetByteSize() uint64 {
 	return uint64(len(r.Data))
 }
 
-// GetAddress returns the address that the request is accessing
-func (r *WriteReq) GetAddress() uint64 {
+// GetAddress returns the address that the request is accessing.
+func (r *WriteReqPayload) GetAddress() uint64 {
 	return r.Address
 }
 
-// GetPID returns the PID of the read address
-func (r *WriteReq) GetPID() vm.PID {
+// GetPID returns the PID of the read address.
+func (r *WriteReqPayload) GetPID() vm.PID {
 	return r.PID
 }
 
-// WriteReqBuilder can build read requests.
+// WriteReqBuilder can build write requests.
 type WriteReqBuilder struct {
 	src, dst           sim.RemotePort
 	pid                vm.PID
@@ -255,49 +203,32 @@ func (b WriteReqBuilder) CanWaitForCoalesce() WriteReqBuilder {
 	return b
 }
 
-// Build creates a new WriteReq
-func (b WriteReqBuilder) Build() *WriteReq {
-	r := &WriteReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.PID = b.pid
-	r.Info = b.info
-	r.Address = b.address
-	r.Data = b.data
-	r.TrafficBytes = len(r.Data) + accessReqByteOverhead
-	r.DirtyMask = b.dirtyMask
-	r.CanWaitForCoalesce = b.canWaitForCoalesce
-	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with WriteReqPayload.
+func (b WriteReqBuilder) Build() *sim.Msg {
+	payload := &WriteReqPayload{
+		Address:            b.address,
+		Data:               b.data,
+		DirtyMask:          b.dirtyMask,
+		PID:                b.pid,
+		CanWaitForCoalesce: b.canWaitForCoalesce,
+		Info:               b.info,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficBytes: len(b.data) + accessReqByteOverhead,
+			TrafficClass: reflect.TypeOf(WriteReqPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }
 
-// A DataReadyRsp is the respond sent from the lower module to the higher
-// module that carries the data loaded.
-type DataReadyRsp struct {
-	sim.MsgMeta
-
-	RespondTo string // The ID of the request it replies
-	Data      []byte
-}
-
-// Meta returns the meta data attached to each message.
-func (r *DataReadyRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned DataReadyRsp with different ID
-func (r *DataReadyRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GetRspTo returns the ID if the request that the respond is responding to.
-func (r *DataReadyRsp) GetRspTo() string {
-	return r.RespondTo
+// DataReadyRspPayload is the payload for a response carrying data loaded from
+// memory.
+type DataReadyRspPayload struct {
+	Data []byte
 }
 
 // DataReadyRspBuilder can build data ready responds.
@@ -331,47 +262,29 @@ func (b DataReadyRspBuilder) WithData(data []byte) DataReadyRspBuilder {
 	return b
 }
 
-// Build creates a new DataReadyRsp
-func (b DataReadyRspBuilder) Build() *DataReadyRsp {
-	r := &DataReadyRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficBytes = len(b.data) + accessRspByteOverhead
-	r.RespondTo = b.rspTo
-	r.Data = b.data
-	r.TrafficClass = reflect.TypeOf(ReadReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with DataReadyRspPayload.
+func (b DataReadyRspBuilder) Build() *sim.Msg {
+	payload := &DataReadyRspPayload{
+		Data: b.data,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficBytes: len(b.data) + accessRspByteOverhead,
+			TrafficClass: reflect.TypeOf(ReadReqPayload{}).String(),
+		},
+		RspTo:   b.rspTo,
+		Payload: payload,
+	}
 }
 
-// A WriteDoneRsp is a respond sent from the lower module to the higher module
-// to mark a previous requests is completed successfully.
-type WriteDoneRsp struct {
-	sim.MsgMeta
+// WriteDoneRspPayload is the payload for a response indicating a write
+// request is completed.
+type WriteDoneRspPayload struct{}
 
-	RespondTo string
-}
-
-// Meta returns the meta data associated with the message.
-func (r *WriteDoneRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned WriteDoneRsp with different ID
-func (r *WriteDoneRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GetRspTo returns the ID of the request that the respond is responding to.
-func (r *WriteDoneRsp) GetRspTo() string {
-	return r.RespondTo
-}
-
-// WriteDoneRspBuilder can build data ready responds.
+// WriteDoneRspBuilder can build write-done responds.
 type WriteDoneRspBuilder struct {
 	src, dst sim.RemotePort
 	rspTo    string
@@ -395,28 +308,24 @@ func (b WriteDoneRspBuilder) WithRspTo(id string) WriteDoneRspBuilder {
 	return b
 }
 
-// Build creates a new WriteDoneRsp
-func (b WriteDoneRspBuilder) Build() *WriteDoneRsp {
-	r := &WriteDoneRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficBytes = accessRspByteOverhead
-	r.RespondTo = b.rspTo
-	r.TrafficClass = reflect.TypeOf(WriteReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with WriteDoneRspPayload.
+func (b WriteDoneRspBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficBytes: accessRspByteOverhead,
+			TrafficClass: reflect.TypeOf(WriteReqPayload{}).String(),
+		},
+		RspTo:   b.rspTo,
+		Payload: &WriteDoneRspPayload{},
+	}
 }
 
-// ControlMsg is the commonly used message type for controlling the components
-// on the memory hierarchy. It is also used for responding the original
-// requester with the Done field. Drain is used to process all the requests in
-// the queue when drain happens the component will not accept any new requests
-// Enable enables the component work. If the enable = false, it will not process
-// any requests.
-type ControlMsg struct {
-	sim.MsgMeta
-
+// ControlMsgPayload is the payload for control messages used for managing
+// components on the memory hierarchy.
+type ControlMsgPayload struct {
 	DiscardTransations bool
 	Restart            bool
 	NotifyDone         bool
@@ -427,31 +336,7 @@ type ControlMsg struct {
 	Invalid            bool
 }
 
-// Meta returns the meta data associated with the ControlMsg.
-func (m *ControlMsg) Meta() *sim.MsgMeta {
-	return &m.MsgMeta
-}
-
-// Clone returns cloned ControlMsg with different ID
-func (m *ControlMsg) Clone() sim.Msg {
-	cloneMsg := *m
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// GenerateRsp generates a GeneralRsp for ControlMsg.
-func (m *ControlMsg) GenerateRsp() sim.Rsp {
-	rsp := sim.GeneralRspBuilder{}.
-		WithSrc(m.Dst).
-		WithDst(m.Src).
-		WithOriginalReq(m).
-		Build()
-
-	return rsp
-}
-
-// A ControlMsgBuilder can build control messages.
+// ControlMsgBuilder can build control messages.
 type ControlMsgBuilder struct {
 	src, dst            sim.RemotePort
 	discardTransactions bool
@@ -508,36 +393,32 @@ func (b ControlMsgBuilder) WithCtrlInfo(
 	return b
 }
 
-// Build creates a new ControlMsg.
-func (b ControlMsgBuilder) Build() *ControlMsg {
-	m := &ControlMsg{}
-	m.ID = sim.GetIDGenerator().Generate()
-	m.Src = b.src
-	m.Dst = b.dst
-	m.TrafficBytes = controlMsgByteOverhead
-
-	m.Enable = b.Enable
-	m.Drain = b.Drain
-	m.Flush = b.Flush
-	m.Invalid = b.Invalid
-
-	m.DiscardTransations = b.discardTransactions
-	m.Restart = b.restart
-	m.NotifyDone = b.notifyDone
-	m.Enable = b.Enable
-	m.Drain = b.Drain
-	m.Flush = b.Flush
-	m.Pause = b.Pause
-	m.Invalid = b.Invalid
-	m.TrafficClass = reflect.TypeOf(ControlMsg{}).String()
-
-	return m
+// Build creates a new *sim.Msg with ControlMsgPayload.
+func (b ControlMsgBuilder) Build() *sim.Msg {
+	payload := &ControlMsgPayload{
+		DiscardTransations: b.discardTransactions,
+		Restart:            b.restart,
+		NotifyDone:         b.notifyDone,
+		Enable:             b.Enable,
+		Drain:              b.Drain,
+		Flush:              b.Flush,
+		Pause:              b.Pause,
+		Invalid:            b.Invalid,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficBytes: controlMsgByteOverhead,
+			TrafficClass: reflect.TypeOf(ControlMsgPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }
 
-type ControlMsgRsp struct {
-	sim.MsgMeta
-
-	RspTo   string
+// ControlMsgRspPayload is the payload for control message responses.
+type ControlMsgRspPayload struct {
 	Enable  bool
 	Drain   bool
 	Flush   bool
@@ -545,29 +426,7 @@ type ControlMsgRsp struct {
 	Invalid bool
 }
 
-// Meta returns the meta data associated with the message.
-func (r *ControlMsgRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned ControlMsgRsp with different ID
-func (r *ControlMsgRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-	cloneMsg.Enable = r.Enable
-	cloneMsg.Drain = r.Drain
-	cloneMsg.Flush = r.Flush
-	cloneMsg.Pause = r.Pause
-	cloneMsg.Invalid = r.Invalid
-	return &cloneMsg
-}
-
-// GetRspTo returns the ID of the request that the respond is responding to.
-func (r *ControlMsgRsp) GetRspTo() string {
-	return r.RspTo
-}
-
-// ControlMsgRspBuilder can build control messages.
+// ControlMsgRspBuilder can build control message responses.
 type ControlMsgRspBuilder struct {
 	src, dst sim.RemotePort
 	rspTo    string
@@ -626,18 +485,23 @@ func (b ControlMsgRspBuilder) WithInvalid(invalid bool) ControlMsgRspBuilder {
 	return b
 }
 
-// Build creates a new ControlMsgRsp
-func (b ControlMsgRspBuilder) Build() *ControlMsgRsp {
-	r := &ControlMsgRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.RspTo = b.rspTo
-	r.Enable = b.enable
-	r.Drain = b.drain
-	r.Flush = b.flush
-	r.Pause = b.pause
-	r.Invalid = b.invalid
-	r.TrafficClass = reflect.TypeOf(ControlMsgRsp{}).String()
-	return r
+// Build creates a new *sim.Msg with ControlMsgRspPayload.
+func (b ControlMsgRspBuilder) Build() *sim.Msg {
+	payload := &ControlMsgRspPayload{
+		Enable:  b.enable,
+		Drain:   b.drain,
+		Flush:   b.flush,
+		Pause:   b.pause,
+		Invalid: b.invalid,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(ControlMsgRspPayload{}).String(),
+		},
+		RspTo:   b.rspTo,
+		Payload: payload,
+	}
 }

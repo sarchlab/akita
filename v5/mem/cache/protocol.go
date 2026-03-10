@@ -3,41 +3,15 @@ package cache
 import (
 	"reflect"
 
-	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// FlushReq is the request send to a cache unit to request it to flush all
-// the cache lines.
-type FlushReq struct {
-	sim.MsgMeta
-
+// FlushReqPayload is the payload for a flush request sent to a cache unit to
+// request it to flush all the cache lines.
+type FlushReqPayload struct {
 	InvalidateAllCachelines bool
 	DiscardInflight         bool
 	PauseAfterFlushing      bool
-}
-
-// Meta returns the meta data associated with the message.
-func (r *FlushReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned FlushReq with different ID
-func (r *FlushReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-func (r *FlushReq) GenerateRsp() sim.Rsp {
-	rsp := FlushRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		Build()
-
-	return rsp
 }
 
 // FlushReqBuilder can build flush requests.
@@ -81,46 +55,29 @@ func (b FlushReqBuilder) PauseAfterFlushing() FlushReqBuilder {
 	return b
 }
 
-// Build creates a new FlushReq
-func (b FlushReqBuilder) Build() *FlushReq {
-	r := &FlushReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.InvalidateAllCachelines = b.invalidateAllCacheLines
-	r.DiscardInflight = b.discardInflight
-	r.PauseAfterFlushing = b.pauseAfterFlushing
-	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with FlushReqPayload.
+func (b FlushReqBuilder) Build() *sim.Msg {
+	payload := &FlushReqPayload{
+		InvalidateAllCachelines: b.invalidateAllCacheLines,
+		DiscardInflight:         b.discardInflight,
+		PauseAfterFlushing:      b.pauseAfterFlushing,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }
 
-// FlushRsp is the respond sent from the a cache unit for finishing a cache
-// flush
-type FlushRsp struct {
-	sim.MsgMeta
+// FlushRspPayload is the payload for a response indicating a cache flush is
+// complete.
+type FlushRspPayload struct{}
 
-	RspTo string
-}
-
-// Meta returns the meta data associated with the message.
-func (r *FlushRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned FlushRsp with different ID
-func (r *FlushRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-func (r *FlushRsp) GetRspTo() string {
-	return r.RspTo
-}
-
-// FlushRspBuilder can build data ready responds.
+// FlushRspBuilder can build flush responds.
 type FlushRspBuilder struct {
 	src, dst sim.RemotePort
 	rspTo    string
@@ -144,48 +101,25 @@ func (b FlushRspBuilder) WithRspTo(id string) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new FlushRsp
-func (b FlushRspBuilder) Build() *FlushRsp {
-	r := &FlushRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.RspTo = b.rspTo
-	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with FlushRspPayload.
+func (b FlushRspBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
+		},
+		RspTo:   b.rspTo,
+		Payload: &FlushRspPayload{},
+	}
 }
 
-// RestartReq is the request send to a cache unit to request it unpause the
-// cache
-type RestartReq struct {
-	sim.MsgMeta
-}
+// RestartReqPayload is the payload for a restart request sent to a cache unit
+// to unpause it.
+type RestartReqPayload struct{}
 
-// Meta returns the meta data associated with the message.
-func (r *RestartReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned RestartReq with different ID
-func (r *RestartReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-func (r *RestartReq) GenerateRsp() sim.Rsp {
-	rsp := RestartRspBuilder{}.
-		WithSrc(r.Dst).
-		WithDst(r.Src).
-		WithRspTo(r.ID).
-		Build()
-
-	return rsp
-}
-
-// RestartReqBuilder can build data ready responds.
+// RestartReqBuilder can build restart requests.
 type RestartReqBuilder struct {
 	src, dst sim.RemotePort
 }
@@ -202,43 +136,24 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new RestartReq
-func (b RestartReqBuilder) Build() *RestartReq {
-	r := &RestartReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with RestartReqPayload.
+func (b RestartReqBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
+		},
+		Payload: &RestartReqPayload{},
+	}
 }
 
-// RestartRsp is the respond sent from the a cache unit for finishing a cache
-// flush
-type RestartRsp struct {
-	sim.MsgMeta
+// RestartRspPayload is the payload for a response indicating a cache restart
+// is complete.
+type RestartRspPayload struct{}
 
-	RspTo string
-}
-
-// Meta returns the meta data associated with the message.
-func (r *RestartRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned RestartRsp with different ID
-func (r *RestartRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = xid.New().String()
-
-	return &cloneMsg
-}
-
-func (r *RestartRsp) GetRspTo() string {
-	return r.RspTo
-}
-
-// RestartRspBuilder can build data ready responds.
+// RestartRspBuilder can build restart responds.
 type RestartRspBuilder struct {
 	src, dst sim.RemotePort
 	rspTo    string
@@ -262,14 +177,16 @@ func (b RestartRspBuilder) WithRspTo(id string) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new RestartRsp
-func (b RestartRspBuilder) Build() *RestartRsp {
-	r := &RestartRsp{}
-	r.ID = xid.New().String()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.RspTo = b.rspTo
-	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with RestartRspPayload.
+func (b RestartRspBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
+		},
+		RspTo:   b.rspTo,
+		Payload: &RestartRspPayload{},
+	}
 }

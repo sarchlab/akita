@@ -7,29 +7,14 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// A FlushReq asks the mmuCache to invalidate certain entries. It will not block any
-// incoming or outgoing ports.
-type FlushReq struct {
-	sim.MsgMeta
-
+// FlushReqPayload is the payload for a mmuCache flush request to invalidate
+// certain entries.
+type FlushReqPayload struct {
 	VAddr []uint64
 	PID   vm.PID
 }
 
-// Meta returns the meta data associated with the message.
-func (r *FlushReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned FlushReq with different ID
-func (r *FlushReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// FlushReqBuilder can build AT flush requests
+// FlushReqBuilder can build mmuCache flush requests
 type FlushReqBuilder struct {
 	src, dst sim.RemotePort
 	vAddrs   []uint64
@@ -60,38 +45,27 @@ func (b FlushReqBuilder) WithPID(pid vm.PID) FlushReqBuilder {
 	return b
 }
 
-// Build creates a new mmuCacheFlushReq
-func (b FlushReqBuilder) Build() *FlushReq {
-	r := &FlushReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.VAddr = b.vAddrs
-	r.PID = b.pid
-	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with FlushReqPayload.
+func (b FlushReqBuilder) Build() *sim.Msg {
+	payload := &FlushReqPayload{
+		VAddr: b.vAddrs,
+		PID:   b.pid,
+	}
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
+		},
+		Payload: payload,
+	}
 }
 
-// A FlushRsp is a response from AT indicating flush is complete
-type FlushRsp struct {
-	sim.MsgMeta
-}
+// FlushRspPayload is the payload for a mmuCache flush response.
+type FlushRspPayload struct{}
 
-// Meta returns the meta data associated with the message.
-func (r *FlushRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned FlushRsp with different ID
-func (r *FlushRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// FlushRspBuilder can build AT flush rsp
+// FlushRspBuilder can build mmuCache flush responses
 type FlushRspBuilder struct {
 	src, dst sim.RemotePort
 }
@@ -108,35 +82,21 @@ func (b FlushRspBuilder) WithDst(dst sim.RemotePort) FlushRspBuilder {
 	return b
 }
 
-// Build creates a new mmuCacheFlushRsps.
-func (b FlushRspBuilder) Build() *FlushRsp {
-	r := &FlushRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficClass = reflect.TypeOf(FlushReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with FlushRspPayload.
+func (b FlushRspBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(FlushReqPayload{}).String(),
+		},
+		Payload: &FlushRspPayload{},
+	}
 }
 
-// A RestartReq is a request to mmuCache to start accepting requests and resume
-// operations
-type RestartReq struct {
-	sim.MsgMeta
-}
-
-// Meta returns the meta data associated with the message.
-func (r *RestartReq) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned RestartReq with different ID
-func (r *RestartReq) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
+// RestartReqPayload is the payload for a mmuCache restart request.
+type RestartReqPayload struct{}
 
 // RestartReqBuilder can build mmuCache restart requests.
 type RestartReqBuilder struct {
@@ -155,36 +115,23 @@ func (b RestartReqBuilder) WithDst(dst sim.RemotePort) RestartReqBuilder {
 	return b
 }
 
-// Build creates a new mmuCacheRestartReq.
-func (b RestartReqBuilder) Build() *RestartReq {
-	r := &RestartReq{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with RestartReqPayload.
+func (b RestartReqBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
+		},
+		Payload: &RestartReqPayload{},
+	}
 }
 
-// A RestartRsp is a response from AT indicating it has resumed working
-type RestartRsp struct {
-	sim.MsgMeta
-}
+// RestartRspPayload is the payload for a mmuCache restart response.
+type RestartRspPayload struct{}
 
-// Meta returns the meta data associated with the message.
-func (r *RestartRsp) Meta() *sim.MsgMeta {
-	return &r.MsgMeta
-}
-
-// Clone returns cloned RestartRsp with different ID
-func (r *RestartRsp) Clone() sim.Msg {
-	cloneMsg := *r
-	cloneMsg.ID = sim.GetIDGenerator().Generate()
-
-	return &cloneMsg
-}
-
-// RestartRspBuilder can build AT flush rsp
+// RestartRspBuilder can build mmuCache restart responses
 type RestartRspBuilder struct {
 	src, dst sim.RemotePort
 }
@@ -201,13 +148,15 @@ func (b RestartRspBuilder) WithDst(dst sim.RemotePort) RestartRspBuilder {
 	return b
 }
 
-// Build creates a new mmuCacheRestartRsp
-func (b RestartRspBuilder) Build() *RestartRsp {
-	r := &RestartRsp{}
-	r.ID = sim.GetIDGenerator().Generate()
-	r.Src = b.src
-	r.Dst = b.dst
-	r.TrafficClass = reflect.TypeOf(RestartReq{}).String()
-
-	return r
+// Build creates a new *sim.Msg with RestartRspPayload.
+func (b RestartRspBuilder) Build() *sim.Msg {
+	return &sim.Msg{
+		MsgMeta: sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          b.src,
+			Dst:          b.dst,
+			TrafficClass: reflect.TypeOf(RestartReqPayload{}).String(),
+		},
+		Payload: &RestartRspPayload{},
+	}
 }
