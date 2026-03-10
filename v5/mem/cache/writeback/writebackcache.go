@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -18,10 +19,15 @@ const (
 	cacheStatePaused
 )
 
+// Spec contains immutable configuration for the writeback cache.
+type Spec struct{}
+
+// State contains mutable runtime data for the writeback cache.
+type State struct{}
+
 // Comp in the writeback package is a cache that performs the write-back policy.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -55,10 +61,6 @@ type Comp struct {
 // SetAddressToPortMapper sets the AddressToPortMapper used by the cache.
 func (c *Comp) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
 	c.addressToPortMapper = lmf
-}
-
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
 }
 
 type middleware struct {
