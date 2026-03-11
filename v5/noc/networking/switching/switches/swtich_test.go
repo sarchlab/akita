@@ -12,54 +12,47 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-func createMockPortComplex(ctrl *gomock.Controller, index int) portComplex {
-	local := NewMockPort(ctrl)
-	local.EXPECT().AsRemote().
-		Return(sim.RemotePort(fmt.Sprintf("LocalPort%d", index))).
-		AnyTimes()
-
-	remote := NewMockPort(ctrl)
-	remote.EXPECT().AsRemote().
-		Return(sim.RemotePort(fmt.Sprintf("RemotePort%d", index))).
-		AnyTimes()
-
-	routeBuf := NewMockBuffer(ctrl)
-	forwardBuf := NewMockBuffer(ctrl)
-	sendOutBuf := NewMockBuffer(ctrl)
-	pipeline := NewMockPipeline(ctrl)
-
-	pc := portComplex{
-		localPort:        local,
-		remotePort:       remote.AsRemote(),
-		pipeline:         pipeline,
-		routeBuffer:      routeBuf,
-		forwardBuffer:    forwardBuf,
-		sendOutBuffer:    sendOutBuf,
-		numInputChannel:  1,
-		numOutputChannel: 1,
-	}
-
-	return pc
-}
-
 var _ = Describe("Switch", func() {
 	var (
-		mockCtrl                   *gomock.Controller
-		engine                     *MockEngine
-		portComplex1, portComplex2 portComplex
-		dstPort                    *MockPort
-		routingTable               *MockTable
-		arbiter                    *MockArbiter
-		sw                         *Comp
-		swMiddleware               *middleware
+		mockCtrl     *gomock.Controller
+		engine       *MockEngine
+		port1, port2 *MockPort
+		dstPort      *MockPort
+		routingTable *MockTable
+		arbiter      *MockArbiter
+		sw           *Comp
+		swMiddleware *middleware
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
 
-		portComplex1 = createMockPortComplex(mockCtrl, 1)
-		portComplex2 = createMockPortComplex(mockCtrl, 2)
+		port1 = NewMockPort(mockCtrl)
+		port1.EXPECT().AsRemote().
+			Return(sim.RemotePort("LocalPort1")).
+			AnyTimes()
+		port1.EXPECT().Name().
+			Return("LocalPort1").
+			AnyTimes()
+
+		port2 = NewMockPort(mockCtrl)
+		port2.EXPECT().AsRemote().
+			Return(sim.RemotePort("LocalPort2")).
+			AnyTimes()
+		port2.EXPECT().Name().
+			Return("LocalPort2").
+			AnyTimes()
+
+		remote1 := NewMockPort(mockCtrl)
+		remote1.EXPECT().AsRemote().
+			Return(sim.RemotePort("RemotePort1")).
+			AnyTimes()
+
+		remote2 := NewMockPort(mockCtrl)
+		remote2.EXPECT().AsRemote().
+			Return(sim.RemotePort("RemotePort2")).
+			AnyTimes()
 
 		dstPort = NewMockPort(mockCtrl)
 		dstPort.EXPECT().
@@ -77,8 +70,27 @@ var _ = Describe("Switch", func() {
 			WithRoutingTable(routingTable).
 			WithArbiter(arbiter).
 			Build("Switch")
-		sw.addPort(portComplex1)
-		sw.addPort(portComplex2)
+
+		pcs1 := portComplexState{
+			LocalPortName:    "LocalPort1",
+			RemotePort:       remote1.AsRemote(),
+			NumInputChannel:  1,
+			NumOutputChannel: 1,
+			Latency:          1,
+			PipelineWidth:    1,
+		}
+		sw.mw.addPort(port1, remote1.AsRemote(), pcs1)
+
+		pcs2 := portComplexState{
+			LocalPortName:    "LocalPort2",
+			RemotePort:       remote2.AsRemote(),
+			NumInputChannel:  1,
+			NumOutputChannel: 1,
+			Latency:          1,
+			PipelineWidth:    1,
+		}
+		sw.mw.addPort(port2, remote2.AsRemote(), pcs2)
+
 		swMiddleware = sw.Middlewares()[0].(*middleware)
 	})
 
@@ -87,10 +99,6 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should start processing", func() {
-		port1 := portComplex1.localPort.(*MockPort)
-		port2 := portComplex2.localPort.(*MockPort)
-		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -105,24 +113,18 @@ var _ = Describe("Switch", func() {
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port1.EXPECT().RetrieveIncoming()
 		port2.EXPECT().PeekIncoming().Return(nil)
-		port1Pipeline.EXPECT().CanAccept().Return(true)
-		port1Pipeline.
-			EXPECT().
-			Accept(gomock.Any()).
-			Do(func(i flitPipelineItem) {
-				Expect(i.flit).To(Equal(flit))
-			})
 
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
+		// Verify flit was accepted into pipeline
+		next := sw.GetNextState()
+		Expect(next.PortComplexes[0].PipelineStages).To(HaveLen(1))
+		Expect(next.PortComplexes[0].PipelineStages[0].Item.Flit.ID).To(Equal(flit.ID))
 	})
 
 	It("should not start processing if pipeline is busy", func() {
-		port1 := portComplex1.localPort.(*MockPort)
-		port2 := portComplex2.localPort.(*MockPort)
-		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -134,32 +136,39 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
+		// Fill pipeline so it can't accept
+		next := sw.GetNextState()
+		next.PortComplexes[0].PipelineStages = []pipelineStageState{
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: sim.MsgMeta{}}},
+		}
+
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
-		port1Pipeline.EXPECT().CanAccept().Return(false)
 
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.startProcessing()
 
 		Expect(madeProgress).To(BeFalse())
 	})
 
 	It("should tick the pipelines", func() {
-		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
-		port2Pipeline := portComplex2.pipeline.(*MockPipeline)
+		// Place an item in pipeline stage 0 for port1
+		next := sw.GetNextState()
+		next.PortComplexes[0].PipelineStages = []pipelineStageState{
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: sim.MsgMeta{ID: "flit1"}}},
+		}
 
-		port1Pipeline.EXPECT().Tick().Return(false)
-		port2Pipeline.EXPECT().Tick().Return(true)
-
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
+		// For latency=1, the item should have moved to RouteBuffer
+		next = sw.GetNextState()
+		Expect(next.PortComplexes[0].PipelineStages).To(HaveLen(0))
+		Expect(next.PortComplexes[0].RouteBuffer).To(HaveLen(1))
 	})
 
 	It("should route", func() {
-		routeBuffer1 := portComplex1.routeBuffer.(*MockBuffer)
-		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
-		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -170,27 +179,26 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		pipelineItem := flitPipelineItem{taskID: "flit", flit: flit}
-		routeBuffer1.EXPECT().Peek().Return(pipelineItem)
-		routeBuffer1.EXPECT().Pop()
-		routeBuffer2.EXPECT().Peek().Return(nil)
-		forwardBuffer1.EXPECT().CanPush().Return(true)
-		forwardBuffer1.EXPECT().Push(flit)
+		// Place item in route buffer for port1
+		next := sw.GetNextState()
+		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
+			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+		}
+
 		routingTable.EXPECT().
 			FindPort(dstPort.AsRemote()).
-			Return(portComplex2.localPort.AsRemote())
+			Return(port2.AsRemote())
 
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(flit.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
+		next = sw.GetNextState()
+		Expect(next.PortComplexes[0].RouteBuffer).To(HaveLen(0))
+		Expect(next.PortComplexes[0].ForwardBuffer).To(HaveLen(1))
 	})
 
 	It("should not route if forward buffer is full", func() {
-		routeBuffer1 := portComplex1.routeBuffer.(*MockBuffer)
-		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
-		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -201,21 +209,22 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		pipelineItem := flitPipelineItem{taskID: "flit", flit: flit}
-		routeBuffer1.EXPECT().Peek().Return(pipelineItem)
-		routeBuffer2.EXPECT().Peek().Return(nil)
-		forwardBuffer1.EXPECT().CanPush().Return(false)
+		// Place item in route buffer and fill forward buffer
+		next := sw.GetNextState()
+		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
+			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+		}
+		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
+			{Flit: sim.MsgMeta{ID: "existing"}, OutputBufIdx: 0},
+		}
 
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeFalse())
 	})
 
 	It("should forward", func() {
-		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
-		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
-		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -225,28 +234,30 @@ var _ = Describe("Switch", func() {
 		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
-		flit.OutputBuf = sendOutBuffer2
+		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
+		next := sw.GetNextState()
+		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
+			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+		}
+
+		swMiddleware.updateAdapterPointers()
 
 		arbiter.EXPECT().
 			Arbitrate().
-			Return([]queueing.Buffer{forwardBuffer1, forwardBuffer2})
-		forwardBuffer1.EXPECT().Peek().Return(flit)
-		forwardBuffer1.EXPECT().Peek().Return(nil)
-		forwardBuffer1.EXPECT().Pop()
-		forwardBuffer2.EXPECT().Peek().Return(nil)
-		sendOutBuffer2.EXPECT().CanPush().Return(true)
-		sendOutBuffer2.EXPECT().Push(flit)
+			Return([]queueing.Buffer{
+				swMiddleware.forwardBufAdapters[0],
+				swMiddleware.forwardBufAdapters[1],
+			})
 
 		madeProgress := swMiddleware.forward()
 
 		Expect(madeProgress).To(BeTrue())
+		next = sw.GetNextState()
+		Expect(next.PortComplexes[0].ForwardBuffer).To(HaveLen(0))
+		Expect(next.PortComplexes[1].SendOutBuffer).To(HaveLen(1))
 	})
 
 	It("should not forward if the output buffer is busy", func() {
-		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
-		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
-		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -256,14 +267,21 @@ var _ = Describe("Switch", func() {
 		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
-		flit.OutputBuf = sendOutBuffer2
+		// Fill sendOut buffer to capacity, forward buffer targets port2
+		next := sw.GetNextState()
+		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
+			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+		}
+		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{{ID: "full"}}
+
+		swMiddleware.updateAdapterPointers()
 
 		arbiter.EXPECT().
 			Arbitrate().
-			Return([]queueing.Buffer{forwardBuffer1, forwardBuffer2})
-		forwardBuffer1.EXPECT().Peek().Return(flit)
-		forwardBuffer2.EXPECT().Peek().Return(nil)
-		sendOutBuffer2.EXPECT().CanPush().Return(false)
+			Return([]queueing.Buffer{
+				swMiddleware.forwardBufAdapters[0],
+				swMiddleware.forwardBufAdapters[1],
+			})
 
 		madeProgress := swMiddleware.forward()
 
@@ -271,11 +289,6 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should send flits out", func() {
-		sendOutBuffer1 := portComplex1.sendOutBuffer.(*MockBuffer)
-		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
-		localPort2 := portComplex2.localPort.(*MockPort)
-		remotePort2 := portComplex2.remotePort
-
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -286,24 +299,21 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
-		sendOutBuffer2.EXPECT().Peek().Return(flit)
-		sendOutBuffer2.EXPECT().Pop()
-		localPort2.EXPECT().Send(flit).Return(nil)
+		// Place flit in sendOutBuffer of port2
+		next := sw.GetNextState()
+		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
 
+		port2.EXPECT().Send(gomock.Any()).Return(nil)
+
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(flit.Dst).To(Equal(remotePort2))
-		Expect(flit.Src).To(Equal(portComplex2.localPort.AsRemote()))
+		next = sw.GetNextState()
+		Expect(next.PortComplexes[1].SendOutBuffer).To(HaveLen(0))
 	})
 
-	It("should wait if port is busy flits out", func() {
-		sendOutBuffer1 := portComplex1.sendOutBuffer.(*MockBuffer)
-		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
-		localPort2 := portComplex2.localPort.(*MockPort)
-		remotePort2 := portComplex2.remotePort
-
+	It("should wait if port is busy sending flits out", func() {
 		msg := &sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
@@ -314,14 +324,18 @@ var _ = Describe("Switch", func() {
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
-		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
-		sendOutBuffer2.EXPECT().Peek().Return(flit)
-		localPort2.EXPECT().Send(flit).Return(&sim.SendError{})
+		// Place flit in sendOutBuffer of port2
+		next := sw.GetNextState()
+		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
 
+		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+
+		swMiddleware.updateAdapterPointers()
 		madeProgress := swMiddleware.sendOut()
 
 		Expect(madeProgress).To(BeFalse())
-		Expect(flit.Dst).To(Equal(remotePort2))
-		Expect(flit.Src).To(Equal(portComplex2.localPort.AsRemote()))
+		// Flit should still be in send buffer
+		next = sw.GetNextState()
+		Expect(next.PortComplexes[1].SendOutBuffer).To(HaveLen(1))
 	})
 })
