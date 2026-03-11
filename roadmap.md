@@ -4,15 +4,16 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware.
 
-## Current State (after M12)
+## Current State (after M13)
 
 - 16 first-party components ported to `modeling.Component[Spec, State]`
 - Messages are concrete types (no builders)
 - Save/load works with acceptance test
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
-- idealmemcontroller fully transformed: Comp reduced to thin StorageOwner, AddressConverter inlined, middleware reads A/writes B
+- **idealmemcontroller** fully transformed (M12): Comp reduced to thin StorageOwner, AddressConverter inlined, middleware reads A/writes B
+- **TLB** fully transformed (M13): Comp eliminated, State canonical (free functions for sets/MSHR/pipeline), AddressToPortMapper inlined, internal package removed
 - Architecture direction fully clarified and approved by human (issues #145, #150)
-- All PRs merged through #32. Code builds and tests pass.
+- All PRs merged through #33. Code builds and tests pass.
 
 ## Phase: Architecture Transformation — Component by Component
 
@@ -44,20 +45,21 @@ The strategy is to transform each component following the pattern established in
 | tickingping (example) | 1 | None | Simple | Trivial |
 | ping (example) | N/A | N/A | Not modeling.Component | N/A |
 
-### M13: TLB — Comp Elimination + A-B State
-- Eliminate Comp wrapper (or reduce to thin type)
-- Migrate all Comp runtime fields into State (sets, MSHR, pipeline, buffer, respondingMSHREntry, inflightFlushReq, state string)
-- The `state string` field on Comp → already in State as `TLBState`
-- Inline AddressToPortMapper logic (port name in Spec, resolve via GetPortByName)
+### M13: TLB — Comp Elimination + A-B State ✅
+- Eliminated Comp wrapper, State canonical, free functions for sets/MSHR/pipeline
+- Inlined AddressToPortMapper, removed internal package, removed snapshot/restore
 - Middleware reads A buffer, writes B buffer
-- Remove snapshot/restore conversion layer (State becomes canonical)
-- **Budget**: 5 cycles
-- **Status**: NEXT
+- **Budget**: 5 cycles | **Used**: 3 cycles | PR #33
 
 ### M14: Simple Components Batch — mmuCache + addresstranslator + datamover + simplebankedmemory
 - These are smaller/simpler components that can be done together
 - Same pattern: eliminate Comp, inline deps, A-B state, State canonical
+- mmuCache: similar to TLB (internal/Set, ctrlMiddleware, 2 middlewares)
+- addresstranslator: 2x AddressToPortMapper, transactions
+- datamover: 2x AddressToPortMapper, buffer, currentTransaction
+- simplebankedmemory: Storage, AddressConverter, banks with pipelines
 - **Budget**: 6 cycles
+- **Status**: NEXT
 
 ### M15: MMU + Switch + Endpoint
 - mmu has PageTable as external dep (similar to Storage — external service)
@@ -107,12 +109,13 @@ The strategy is to transform each component following the pattern established in
 | M10 | 2 | 3 | CI fix + Dependabot |
 | M11 | 2 | 0 | Architecture design finalized |
 | M12 | 5 | 3 | A-B state + Comp elimination on idealmemcontroller |
+| M13 | 5 | 3 | TLB — Comp elimination + A-B state |
 
 ## Summary Statistics
-- Total milestones completed: 12
-- PRs merged: 32
+- Total milestones completed: 13
+- PRs merged: 33
 - Components ported: 16/16
-- Components fully transformed (Comp eliminated + A-B): 1/16
+- Components fully transformed (Comp eliminated + A-B): 2/16 (idealmemcontroller, TLB)
 
 ## Lessons Learned
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
