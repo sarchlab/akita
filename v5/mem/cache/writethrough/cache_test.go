@@ -7,6 +7,7 @@ import (
 
 	. "github.com/sarchlab/akita/v5/mem/cache/writethrough"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
@@ -21,20 +22,22 @@ var _ = Describe("Cache", func() {
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
 		cuPort              *MockPort
-		c                   *Comp
+		c                   *modeling.Component[Spec, State]
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		cuPort = NewMockPort(mockCtrl)
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("CuPort")).AnyTimes()
+		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("cuPort")).AnyTimes()
 
 		engine = sim.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
+
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
@@ -44,6 +47,7 @@ var _ = Describe("Cache", func() {
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
+
 		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
@@ -72,7 +76,7 @@ var _ = Describe("Cache", func() {
 		read.Address = 0x100
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
+		read.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
@@ -93,7 +97,7 @@ var _ = Describe("Cache", func() {
 		read1.Address = 0x100
 		read1.AccessByteSize = 4
 		read1.TrafficBytes = 12
-		read1.TrafficClass = "mem.ReadReq"
+		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := &mem.ReadReq{}
@@ -103,7 +107,7 @@ var _ = Describe("Cache", func() {
 		read2.Address = 0x104
 		read2.AccessByteSize = 4
 		read2.TrafficBytes = 12
-		read2.TrafficClass = "mem.ReadReq"
+		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
@@ -129,7 +133,7 @@ var _ = Describe("Cache", func() {
 		read1.Address = 0x100
 		read1.AccessByteSize = 4
 		read1.TrafficBytes = 12
-		read1.TrafficClass = "mem.ReadReq"
+		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
 		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -146,7 +150,7 @@ var _ = Describe("Cache", func() {
 		read2.Address = 0x104
 		read2.AccessByteSize = 4
 		read2.TrafficBytes = 12
-		read2.TrafficClass = "mem.ReadReq"
+		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -160,15 +164,14 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should write partial line", func() {
-		writeData := []byte{1, 2, 3, 4}
 		write := &mem.WriteReq{}
 		write.ID = sim.GetIDGenerator().Generate()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
-		write.Data = writeData
-		write.TrafficBytes = len(writeData) + 12
-		write.TrafficClass = "mem.WriteReq"
+		write.Data = []byte{1, 2, 3, 4}
+		write.TrafficBytes = 4 + 12
+		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -182,7 +185,12 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should write full line", func() {
-		writeData2 := []byte{
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = cuPort.AsRemote()
+		write.Dst = c.GetPortByName("Top").AsRemote()
+		write.Address = 0x100
+		write.Data = []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -192,14 +200,8 @@ var _ = Describe("Cache", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 		}
-		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
-		write.Src = cuPort.AsRemote()
-		write.Dst = c.GetPortByName("Top").AsRemote()
-		write.Address = 0x100
-		write.Data = writeData2
-		write.TrafficBytes = len(writeData2) + 12
-		write.TrafficClass = "mem.WriteReq"
+		write.TrafficBytes = 64 + 12
+		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(msg sim.Msg) {

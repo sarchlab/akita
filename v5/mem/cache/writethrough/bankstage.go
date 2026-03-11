@@ -6,15 +6,15 @@ import (
 )
 
 type bankTransaction struct {
-	*transaction
+	*transactionState
 }
 
 func (t *bankTransaction) TaskID() string {
-	return t.transaction.id
+	return t.transactionState.id
 }
 
 type bankStage struct {
-	cache          *Comp
+	cache          *middleware
 	bankID         int
 	numReqPerCycle int
 
@@ -54,7 +54,7 @@ func (s *bankStage) extractFromBuf() bool {
 	}
 
 	s.pipeline.Accept(&bankTransaction{
-		transaction: item.(*transaction),
+		transactionState: item.(*transactionState),
 	})
 	s.cache.bankBufs[s.bankID].Pop()
 
@@ -67,7 +67,7 @@ func (s *bankStage) finalizeTrans() bool {
 		return false
 	}
 
-	trans := item.(*bankTransaction).transaction
+	trans := item.(*bankTransaction).transactionState
 
 	switch trans.bankAction {
 	case bankActionReadHit:
@@ -81,8 +81,8 @@ func (s *bankStage) finalizeTrans() bool {
 	}
 }
 
-func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
-	block := trans.block
+func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
 		block.CacheAddress, trans.read.AccessByteSize)
@@ -106,9 +106,9 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	return true
 }
 
-func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
-	block := trans.block
-	blockSize := 1 << s.cache.log2BlockSize
+func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
 	data, err := s.cache.storage.Read(block.CacheAddress, uint64(blockSize))
 	if err != nil {
@@ -138,8 +138,8 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 	return true
 }
 
-func (s *bankStage) finalizeWriteFetchedTrans(trans *transaction) bool {
-	block := trans.block
+func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	err := s.cache.storage.Write(block.CacheAddress, trans.data)
 	if err != nil {
@@ -154,7 +154,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transaction) bool {
 	return true
 }
 
-func (s *bankStage) removeTransaction(trans *transaction) {
+func (s *bankStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.postCoalesceTransactions {
 		if t == trans {
 			s.cache.postCoalesceTransactions = append(

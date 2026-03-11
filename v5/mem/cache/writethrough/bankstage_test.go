@@ -1,13 +1,14 @@
 package writethrough
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -19,7 +20,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline        *MockPipeline
 		postPipelineBuf *MockBuffer
 		s               *bankStage
-		c               *Comp
+		c               *middleware
 	)
 
 	BeforeEach(func() {
@@ -28,17 +29,24 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 		pipeline = NewMockPipeline(mockCtrl)
 		postPipelineBuf = NewMockBuffer(mockCtrl)
-		c = &Comp{
-			bankLatency:   10,
-			bankBufs:      []queueing.Buffer{inBuf},
-			storage:       storage,
-			log2BlockSize: 6,
+		c = &middleware{
+			bankBufs: []queueing.Buffer{inBuf},
+			storage:  storage,
 		}
-		c.Component = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				BankLatency:      10,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumSets:          16,
+			}).
 			Build("Cache")
+
+		// Initialize directoryState
+		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+
 		s = &bankStage{
 			cache:           c,
 			bankID:          0,
@@ -63,7 +71,7 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should insert transactions into pipeline", func() {
-		trans := &transaction{}
+		trans := &transactionState{}
 
 		inBuf.EXPECT().Peek().Return(trans)
 		inBuf.EXPECT().Pop()
@@ -72,7 +80,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline.EXPECT().
 			Accept(gomock.Any()).
 			Do(func(t *bankTransaction) {
-				Expect(t.transaction).To(BeIdenticalTo(trans))
+				Expect(t.transactionState).To(BeIdenticalTo(trans))
 			})
 		postPipelineBuf.EXPECT().Peek().Return(nil)
 
@@ -84,11 +92,20 @@ var _ = Describe("Bankstage", func() {
 	Context("read hit", func() {
 		var (
 			preCRead1, preCRead2, postCRead    *mem.ReadReq
-			preCTrans1, preCTrans2, postCTrans *transaction
-			block                              *cache.Block
+			preCTrans1, preCTrans2, postCTrans *transactionState
+			blockSetID, blockWayID             int
 		)
 
 		BeforeEach(func() {
+			blockSetID = 0
+			blockWayID = 0
+
+			// Set up the block in directoryState
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount = 1
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
 			storage.Write(0x400, []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -99,38 +116,36 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				ReadCount:    1,
-			}
+
 			preCRead1 = &mem.ReadReq{}
 			preCRead1.ID = sim.GetIDGenerator().Generate()
 			preCRead1.Address = 0x104
 			preCRead1.AccessByteSize = 4
 			preCRead1.TrafficBytes = 12
-			preCRead1.TrafficClass = "mem.ReadReq"
+			preCRead1.TrafficClass = "req"
 
 			preCRead2 = &mem.ReadReq{}
 			preCRead2.ID = sim.GetIDGenerator().Generate()
 			preCRead2.Address = 0x108
 			preCRead2.AccessByteSize = 8
 			preCRead2.TrafficBytes = 12
-			preCRead2.TrafficClass = "mem.ReadReq"
+			preCRead2.TrafficClass = "req"
 
 			postCRead = &mem.ReadReq{}
 			postCRead.ID = sim.GetIDGenerator().Generate()
 			postCRead.Address = 0x100
 			postCRead.AccessByteSize = 64
 			postCRead.TrafficBytes = 12
-			postCRead.TrafficClass = "mem.ReadReq"
-			preCTrans1 = &transaction{read: preCRead1}
-			preCTrans2 = &transaction{read: preCRead2}
-			postCTrans = &transaction{
+			postCRead.TrafficClass = "req"
+			preCTrans1 = &transactionState{read: preCRead1}
+			preCTrans2 = &transactionState{read: preCRead2}
+			postCTrans = &transactionState{
 				read:       postCRead,
-				block:      block,
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionReadHit,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans1, preCTrans2,
 				},
 			}
@@ -138,7 +153,7 @@ var _ = Describe("Bankstage", func() {
 				c.postCoalesceTransactions, postCTrans)
 
 			postPipelineBuf.EXPECT().Peek().Return(&bankTransaction{
-				transaction: postCTrans,
+				transactionState: postCTrans,
 			})
 		})
 
@@ -154,39 +169,40 @@ var _ = Describe("Bankstage", func() {
 			Expect(preCTrans1.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 			Expect(preCTrans2.done).To(BeTrue())
-			Expect(block.ReadCount).To(Equal(0))
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
 			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans))
 		})
 	})
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
-			trans *transaction
-			block *cache.Block
+			write              *mem.WriteReq
+			trans              *transactionState
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				IsLocked:     true,
-			}
+			blockSetID = 0
+			blockWayID = 0
 
-			bankWriteData := []byte{
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			}
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
 			write = &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
 			write.Address = 0x100
-			write.Data = bankWriteData
+			write.Data = []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}
 			write.DirtyMask = []bool{
 				false, false, false, false, false, false, false, false,
 				true, true, true, true, true, true, true, true,
@@ -197,17 +213,19 @@ var _ = Describe("Bankstage", func() {
 				false, false, false, false, false, false, false, false,
 				false, false, false, false, false, false, false, false,
 			}
-			write.TrafficBytes = len(bankWriteData) + 12
-			write.TrafficClass = "mem.WriteReq"
-			trans = &transaction{
+			write.TrafficBytes = 64 + 12
+			write.TrafficClass = "req"
+			trans = &transactionState{
 				write:      write,
-				block:      block,
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionWrite,
 			}
 
 			postPipelineBuf.EXPECT().
 				Peek().
-				Return(&bankTransaction{transaction: trans})
+				Return(&bankTransaction{transactionState: trans})
 		})
 
 		It("should write", func() {
@@ -218,7 +236,7 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(block.IsLocked).To(BeFalse())
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal([]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
@@ -235,19 +253,23 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write fetched", func() {
 		var (
-			trans *transaction
-			block *cache.Block
+			trans              *transactionState
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				IsLocked:     true,
-			}
+			blockSetID = 0
+			blockWayID = 0
 
-			trans = &transaction{
-				block:      block,
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
+			trans = &transactionState{
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionWriteFetched,
 			}
 			trans.data = []byte{
@@ -264,7 +286,7 @@ var _ = Describe("Bankstage", func() {
 
 			postPipelineBuf.EXPECT().
 				Peek().
-				Return(&bankTransaction{transaction: trans})
+				Return(&bankTransaction{transactionState: trans})
 		})
 
 		It("should write fetched", func() {
@@ -275,8 +297,7 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			// Expect(s.currTrans).To(BeNil())
-			Expect(block.IsLocked).To(BeFalse())
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.data))
 		})

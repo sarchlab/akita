@@ -11,9 +11,8 @@ import (
 
 type controlStage struct {
 	ctrlPort     sim.Port
-	transactions *[]*transaction
-	directory    cache.Directory
-	cache        *Comp
+	transactions *[]*transactionState
+	cache        *middleware
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
@@ -43,7 +42,8 @@ func (s *controlStage) processCurrentFlush() bool {
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = s.currFlushReq.Src
 	rsp.RspTo = s.currFlushReq.ID
-	rsp.TrafficClass = "cache.FlushRsp"
+	rsp.TrafficBytes = 0
+	rsp.TrafficClass = "ctrl-rsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {
@@ -65,8 +65,12 @@ func (s *controlStage) hardResetCache() {
 		s.flushBuffer(bankBuf)
 	}
 
-	s.directory.Reset()
-	s.cache.mshr.Reset()
+	spec := s.cache.GetSpec()
+	blockSize := int(1 << spec.Log2BlockSize)
+	cache.DirectoryReset(
+		&s.cache.directoryState,
+		spec.NumSets, spec.WayAssociativity, blockSize)
+	s.cache.mshrState = cache.MSHRState{}
 	s.cache.coalesceStage.Reset()
 
 	for _, bankStage := range s.cache.bankStages {
@@ -139,7 +143,8 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
-	rsp.TrafficClass = "cache.RestartRsp"
+	rsp.TrafficBytes = 0
+	rsp.TrafficClass = "ctrl-rsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {

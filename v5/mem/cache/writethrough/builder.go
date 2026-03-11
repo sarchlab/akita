@@ -22,15 +22,16 @@ type Builder struct {
 	numBank               int
 	dirLatency            int
 	bankLatency           int
-	maxNumConcurrentTrans int
 	numReqPerCycle        int
+	maxNumConcurrentTrans int
 	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
-	addressMapperType     string
-	remotePorts           []sim.RemotePort
-	topPort               sim.Port
-	bottomPort            sim.Port
-	controlPort           sim.Port
+
+	addressMapperType string
+	remotePorts       []sim.RemotePort
+	topPort           sim.Port
+	bottomPort        sim.Port
+	controlPort       sim.Port
 }
 
 // MakeBuilder creates a builder with default parameter setting
@@ -44,6 +45,7 @@ func MakeBuilder() Builder {
 		numBank:               1,
 		numReqPerCycle:        4,
 		maxNumConcurrentTrans: 16,
+		dirLatency:            2,
 		bankLatency:           20,
 	}
 }
@@ -133,11 +135,14 @@ func (b Builder) WithAddressToPortMapper(
 	return b
 }
 
+// WithAddressMapperType sets the type of address mapper to use
 func (b Builder) WithAddressMapperType(t string) Builder {
 	b.addressMapperType = t
 	return b
 }
 
+// WithRemotePorts sets the remote ports that the cache can use to send
+// requests to other components.
 func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 	b.remotePorts = ports
 	return b
@@ -161,147 +166,114 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 	return b
 }
 
-// Build returns a new cache unit
-func (b Builder) Build(name string) *Comp {
+// Build returns a new cache component
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.assertAllRequiredInformationIsAvailable()
 
-	c := &Comp{
-		log2BlockSize:  b.log2BlockSize,
-		numReqPerCycle: b.numReqPerCycle,
-	}
-
-	b.setModelingComponent(c, name)
-	b.createPorts(c, name)
-	b.createBuffers(c, name)
-	b.configureCacheStructures(c)
-	b.configurAddressMapper(c)
-	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
-
-	b.buildStages(c)
-
-	if b.visTracer != nil {
-		tracing.CollectTrace(c, b.visTracer)
-	}
-
-	middleware := &middleware{Comp: c}
-	c.AddMiddleware(middleware)
-
-	return c
-}
-
-func (b Builder) setModelingComponent(c *Comp, name string) {
-	c.Component = modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithSpec(Spec{}).
-		Build(name)
-}
-
-func (b Builder) createPorts(c *Comp, name string) {
-	c.topPort = b.topPort
-	c.topPort.SetComponent(c)
-	c.AddPort("Top", c.topPort)
-
-	c.bottomPort = b.bottomPort
-	c.bottomPort.SetComponent(c)
-	c.AddPort("Bottom", c.bottomPort)
-
-	c.controlPort = b.controlPort
-	c.controlPort.SetComponent(c)
-	c.AddPort("Control", c.controlPort)
-}
-
-func (b Builder) createBuffers(c *Comp, name string) {
-	c.dirBuf = queueing.NewBuffer(name+".DirBuf", b.numReqPerCycle)
-	c.bankBufs = make([]queueing.Buffer, b.numBank)
-
-	for i := 0; i < b.numBank; i++ {
-		c.bankBufs[i] = queueing.NewBuffer(
-			fmt.Sprintf("%s.BankBuf%d", name, i),
-			b.numReqPerCycle,
-		)
-	}
-}
-
-func (b Builder) configureCacheStructures(c *Comp) {
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
 
-	c.mshr = cache.NewMSHR(b.numMSHREntry)
-	c.directory = cache.NewDirectory(
-		numSets, b.wayAssociativity, blockSize, cache.NewLRUVictimFinder())
-	c.storage = mem.NewStorage(b.totalByteSize)
-	c.bankLatency = b.bankLatency
-	c.wayAssociativity = b.wayAssociativity
-}
-
-func (b Builder) configurAddressMapper(c *Comp) {
-	if b.addressToPortMapper != nil {
-		c.addressToPortMapper = b.addressToPortMapper
-		return
+	spec := Spec{
+		NumReqPerCycle:        b.numReqPerCycle,
+		Log2BlockSize:         b.log2BlockSize,
+		BankLatency:           b.bankLatency,
+		WayAssociativity:      b.wayAssociativity,
+		MaxNumConcurrentTrans: b.maxNumConcurrentTrans,
+		NumBanks:              b.numBank,
+		NumMSHREntry:          b.numMSHREntry,
+		NumSets:               numSets,
+		TotalByteSize:         b.totalByteSize,
+		DirLatency:            b.dirLatency,
 	}
 
-	switch b.addressMapperType {
-	case "single":
-		if len(b.remotePorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
+	comp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
 
-		c.addressToPortMapper = &mem.SinglePortMapper{Port: b.remotePorts[0]}
-	case "interleaved":
-		if len(b.remotePorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
+	m := &middleware{
+		comp: comp,
+	}
 
-		mapper := mem.NewInterleavedAddressPortMapper(4096)
-		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-		c.addressToPortMapper = mapper
-	default:
-		panic("addressToPortMapper is nil.")
+	m.topPort = b.topPort
+	m.topPort.SetComponent(comp)
+	comp.AddPort("Top", m.topPort)
+	m.bottomPort = b.bottomPort
+	m.bottomPort.SetComponent(comp)
+	comp.AddPort("Bottom", m.bottomPort)
+	m.controlPort = b.controlPort
+	m.controlPort.SetComponent(comp)
+	comp.AddPort("Control", m.controlPort)
+
+	m.dirBuf = queueing.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
+	m.bankBufs = make([]queueing.Buffer, b.numBank)
+
+	for i := 0; i < b.numBank; i++ {
+		m.bankBufs[i] = queueing.NewBuffer(
+			fmt.Sprintf("%s.Bank%d.Buffer", name, i),
+			b.numReqPerCycle,
+		)
+	}
+
+	// Initialize DirectoryState using free function instead of runtime Directory
+	cache.DirectoryReset(&m.directoryState, numSets, b.wayAssociativity, blockSize)
+	// MSHRState starts empty, no initialization needed
+	m.storage = mem.NewStorage(b.totalByteSize)
+
+	b.configureAddressMapper(m)
+
+	b.buildStages(m)
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(m, b.visTracer)
+	}
+
+	comp.AddMiddleware(m)
+
+	return comp
+}
+
+func (b *Builder) buildStages(m *middleware) {
+	m.coalesceStage = &coalescer{cache: m}
+	b.buildDirStage(m)
+	b.buildBankStages(m)
+	m.parseBottomStage = &bottomParser{cache: m}
+	m.respondStage = &respondStage{cache: m}
+
+	m.controlStage = &controlStage{
+		ctrlPort:     m.controlPort,
+		transactions: &m.transactions,
+		cache:        m,
+		bankStages:   m.bankStages,
+		coalescer:    m.coalesceStage,
 	}
 }
 
-func (b *Builder) buildStages(c *Comp) {
-	c.coalesceStage = &coalescer{cache: c}
-	b.buildDirStage(c)
-	b.buildBankStages(c)
-	c.parseBottomStage = &bottomParser{cache: c}
-	c.respondStage = &respondStage{cache: c}
-
-	c.controlStage = &controlStage{
-		ctrlPort:     c.controlPort,
-		transactions: &c.transactions,
-		directory:    c.directory,
-		cache:        c,
-		bankStages:   c.bankStages,
-		coalescer:    c.coalesceStage,
-	}
-}
-
-func (b *Builder) buildDirStage(c *Comp) {
+func (b *Builder) buildDirStage(m *middleware) {
 	buf := queueing.NewBuffer(
-		c.Name()+".Directory.PostPipelineBuffer",
+		m.comp.Name()+".DirectoryStage.PostPipelineBuffer",
 		b.numReqPerCycle,
 	)
-	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", c.Name())
+	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", m.comp.Name())
 	pipeline := queueing.MakeBuilder().
 		WithPipelineWidth(b.numReqPerCycle).
 		WithNumStage(b.dirLatency).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(buf).
 		Build(pipelineName)
-	c.directoryStage = &directory{
-		cache:    c,
+	m.directoryStage = &directory{
+		cache:    m,
 		buf:      buf,
 		pipeline: pipeline,
 	}
 }
 
-func (b *Builder) buildBankStages(c *Comp) {
+func (b *Builder) buildBankStages(m *middleware) {
 	for i := 0; i < b.numBank; i++ {
-		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", c.Name(), i)
+		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", m.comp.Name(), i)
 		postPipelineBuf := queueing.NewBuffer(
-			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", c.Name(), i),
+			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
 			b.numReqPerCycle,
 		)
 		pipeline := queueing.MakeBuilder().
@@ -311,17 +283,43 @@ func (b *Builder) buildBankStages(c *Comp) {
 			WithPostPipelineBuffer(postPipelineBuf).
 			Build(pipelineName)
 		bs := &bankStage{
-			cache:           c,
+			cache:           m,
 			bankID:          i,
 			numReqPerCycle:  b.numReqPerCycle,
 			pipeline:        pipeline,
 			postPipelineBuf: postPipelineBuf,
 		}
-		c.bankStages = append(c.bankStages, bs)
+		m.bankStages = append(m.bankStages, bs)
 
 		if b.visTracer != nil {
 			tracing.CollectTrace(bs.pipeline, b.visTracer)
 		}
+	}
+}
+
+func (b *Builder) configureAddressMapper(m *middleware) {
+	if b.addressToPortMapper != nil {
+		m.addressToPortMapper = b.addressToPortMapper
+		return
+	}
+
+	switch b.addressMapperType {
+	case "single":
+		if len(b.remotePorts) != 1 {
+			panic("single address mapper requires exactly 1 port")
+		}
+		m.addressToPortMapper = &mem.SinglePortMapper{
+			Port: b.remotePorts[0],
+		}
+	case "interleaved":
+		if len(b.remotePorts) == 0 {
+			panic("interleaved address mapper requires at least 1 port")
+		}
+		mapper := mem.NewInterleavedAddressPortMapper(4096)
+		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
+		m.addressToPortMapper = mapper
+	default:
+		panic("addressMapperType must be \"single\" or \"interleaved\"")
 	}
 }
 
