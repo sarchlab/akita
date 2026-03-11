@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, split monolithic middlewares into multiple stages.
 
-## Current State (after M18)
+## Current State (after M19)
 
 ### Phase 1 COMPLETE: Component Model + A-B State + Comp Elimination + Dependency Inlining
 
@@ -14,6 +14,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
 - DRAM fully transformed: internal packages eliminated, all dependencies inlined as free functions
 - Caches transformed: MSHR/Directory as State + free functions, no Comp wrappers
+- MMU fully transformed: thin Comp, transactionState canonical, no SaveState/LoadState overrides
 - All builds/tests pass on main
 
 ### Remaining Gaps (to be addressed in Phase 2)
@@ -21,9 +22,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Issue | Components Affected | Description |
 |-------|-------------------|-------------|
 | Monolithic middleware | ALL 16 components | Every component has exactly 1 middleware. Human says this is historical; should be multiple. |
-| MMU thick Comp wrapper | `mem/vm/mmu` | Runtime transactions, page access tracking on Comp (not in State). SaveState/LoadState conversion layer still exists. |
-| Switch runtime objects | `noc/networking/switching/switches` | Pipeline/buffer runtime objects in middleware. SaveState/LoadState sync/restore layer. |
-| Endpoint runtime objects | `noc/networking/switching/endpoint` | Buffer runtime objects in middleware (less severe than Switch). |
+| Switch runtime objects | `noc/networking/switching/switches` | Pipeline/buffer runtime objects in middleware. SaveState/LoadState sync/restore layer still exists. |
+| Cache runtime copies | `mem/cache/*` | Caches still use runtime copies of directory/MSHR state in middleware with restoreFromState; addressToPortMapper dependency; queueing.Buffer runtime objects. Not yet fully canonical State. |
 | DRAM A-B pattern | `mem/dram` | Uses GetNextState() for both read and write in Tick() — should read GetState(), write GetNextState(). |
 | directconnection | `sim/directconnection` | Not using modeling.Component at all (uses TickingComponent directly). May be intentional — it's infrastructure, not a simulation component. |
 | examples/ping | `examples/ping` | Uses ComponentBase directly. Example/demo code — may not need transformation. |
@@ -31,34 +31,24 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Phase 2 Milestones
 
-### M19: MMU Full Transformation
+### ✅ M19: MMU Full Transformation — DONE (Budget: 4, Used: 2)
 
-**Goal:** Transform the MMU component to eliminate the thick Comp wrapper and make State canonical.
+Transformed MMU: thin Comp, transactionState canonical, no SaveState/LoadState overrides, vm.PageTable as external service on middleware.
+
+### M20: Switch — Make State Canonical
+
+**Goal:** Transform Switch to eliminate runtime pipeline/buffer objects, make State canonical, remove SaveState/LoadState conversion layers. (Endpoint is already clean — no conversion layers.)
 
 **What to do:**
-1. Move all runtime fields from Comp to State (walkingTranslations, migrationQueue, currentOnDemandMigration, isDoingMigration, toRemoveFromPTW, PageAccessedByDeviceID, nextPhysicalPage)
-2. Eliminate the runtime `transaction` type — use `transactionState` as the canonical type
-3. Remove SaveState/LoadState overrides and the sync/restore conversion layer (~85 LOC)
-4. Keep `vm.PageTable` as an external service reference on middleware (like Storage)
-5. Make middleware use GetState()/GetNextState() correctly for A-B pattern
-6. Update tests
+1. Replace `queueing.Pipeline` and `queueing.Buffer` runtime objects with State arrays. Pipeline tick/accept and buffer push/pop become free functions on State.
+2. Keep `routing.Table` and `arbitration.Arbiter` as external service references on middleware.
+3. Remove syncToState/restoreFromState and SaveState/LoadState overrides on Comp.
+4. The `portComplex` runtime type's data should live in `portComplexState` in State.
+5. Fix A-B state pattern: read from GetState(), write to GetNextState().
+6. Update tests.
 
 **Budget**: 4 cycles
-**Risk**: Medium. MMU has complex migration logic but the state decomposition already exists in transactionState/pageState.
-
-### M20: Switch & Endpoint — Make State Canonical
-
-**Goal:** Transform Switch and Endpoint to eliminate runtime pipeline/buffer objects, make State canonical, remove SaveState/LoadState conversion layers.
-
-**What to do:**
-1. **Switch**: Replace `queueing.Pipeline` and `queueing.Buffer` runtime objects with State arrays. Pipeline tick/accept and buffer push/pop become free functions on State. Keep `routing.Table` and `arbitration.Arbiter` as external service references on middleware.
-2. **Switch**: Remove syncToState/restoreFromState and SaveState/LoadState overrides.
-3. **Endpoint**: Replace runtime buffer objects with State arrays if any remain. Remove conversion layers.
-4. Fix A-B state pattern: GetState() for read, GetNextState() for write.
-5. Update tests.
-
-**Budget**: 5 cycles
-**Risk**: Medium-High. Switch has complex pipeline/buffer structures with multiple port complexes. The portComplex State type already exists but needs to become canonical.
+**Risk**: Medium. Switch has complex pipeline/buffer structures but the State types already exist. Pattern well-established by M18/M19.
 
 ### M21: Multi-Middleware Split — Reference Implementation
 
@@ -145,15 +135,16 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M16 | 8 | 4 | Write{around,evict,through} caches + tickingping — Comp elimination + shared free functions |
 | M17 | 6 | 3 | Writeback cache — Full transformation |
 | M18 | 8 | 3 | DRAM memory controller — Full transformation |
+| M19 | 4 | 2 | MMU — Full transformation (thin Comp, canonical State) |
 
 ## Summary Statistics
-- Total milestones completed: 18
-- Total cycles used: 88 (budgeted: 142)
-- PRs merged: 43
+- Total milestones completed: 19
+- Total cycles used: 90 (budgeted: 146)
+- PRs merged: 44
 - Components ported: 16/16
-- Components fully transformed (Comp eliminated + dependencies inlined): 14/16 (MMU and Switch have remaining gaps)
+- Components fully transformed (Comp eliminated + dependencies inlined): 15/16 (Switch has remaining gaps)
 - Components with multi-middleware: 3/16 (idealmemcontroller, TLB, mmuCache — all others have 1)
-- Phase 2 estimated: 30 cycles across 6 milestones
+- Phase 2 estimated: 28 cycles across 5 remaining milestones (M20-M24)
 
 ## Lessons Learned
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
