@@ -36,12 +36,13 @@ Human clarifications:
 - Dependencies create problems with A-B state (e.g., port routing must happen immediately, breaking next-cycle-visibility). Embedding logic in middleware avoids this.
 - Store port *names* (strings) in Spec, resolve via `GetPortByName()` at runtime. Port routing reads Spec (immutable), `Send()` is a side-effect on the network — not internal state.
 - `*mem.Storage` is the ONE allowed external reference per middleware (physical memory substrate, cannot be State due to size, sharing, mutexes).
+- Similarly, `vm.PageTable` (MMU) and `routing.Table` / `arbitration.Arbiter` (Switch) are external services — acceptable as middleware fields, like Storage.
 
-### MSHR and Directory as State + Free Functions
+### MSHR and Directory as State + Free Functions (DONE)
 
 Runtime objects like MSHR and Directory contain both data and behavior. Following the principle that **State holds data, middleware holds behavior**:
 
-- **MSHR**: `capacity` → Spec. `entries []MSHREntry` → State as `MSHRState`. Behavior (`Query`, `Add`, `Remove`, `IsFull`) → free functions operating on `*MSHRState` + Spec values. The serialization code already performs this decomposition (`MSHRState` exists in State).
+- **MSHR**: `capacity` → Spec. `entries []MSHREntry` → State as `MSHRState`. Behavior (`Query`, `Add`, `Remove`, `IsFull`) → free functions operating on `*MSHRState` + Spec values.
 - **Directory**: `sets []Set` → State as `DirectoryState`. Behavior (`Lookup`, `FindVictim`, `Visit`) → free functions operating on `*DirectoryState`. LRU victim finding uses the LRU queue already stored in `DirectoryState`.
 - These free functions live in `mem/cache/` and are shared by all cache types (writearound, writeevict, writethrough, writeback).
 - Block/entry cross-references use **indices** (setID, wayID, transaction index) instead of pointers.
@@ -54,18 +55,36 @@ Runtime objects like MSHR and Directory contain both data and behavior. Followin
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods. Components implement `StateSaver`/`StateLoader`. After Comp elimination, the snapshot/restore conversion layers disappear — State IS the canonical representation.
 
+### Multi-Middleware Split (NEXT PHASE)
+
+All components currently use a single monolithic middleware. The human has explicitly stated that this is a historical artifact and components SHOULD have multiple middlewares. This is the next major phase:
+
+- Each component should be decomposed into multiple middleware stages, each responsible for one logical function (e.g., parse incoming, process pipeline stage, respond).
+- Under A-B state semantics, each middleware reads from `current` (A buffer) and writes to `next` (B buffer). Middlewares within the same tick do NOT see each other's writes — this matches hardware pipeline register semantics.
+- The 1-cycle latency per middleware boundary is acceptable (per human clarification).
+- This change needs careful component-by-component analysis to identify natural stage boundaries.
+
+### Runtime Objects to State (REMAINING GAPS)
+
+Some components still have runtime objects that should be canonical State:
+- **Switch**: Pipeline stages, route/forward/sendOut buffers are runtime `queueing.Pipeline`/`queueing.Buffer` objects. These should become pure data in State with behavior as free functions.
+- **Endpoint**: Similar buffer runtime objects.
+- **MMU**: Runtime transactions (`[]transaction` with live message pointers), page access tracking, migration state on Comp — these need to become canonical State with SaveState/LoadState conversion eliminated.
+
 ## How You Consider the Project is Success
 
 - Simple, straightforward, intuitive APIs
 - All CI checks pass on main branch
 - Component = Spec + State + Ports + Middleware + Hooks (nothing else)
-- No Comp wrapper structs (except thin StorageOwner wrappers where needed)
+- No Comp wrapper structs (except thin wrappers for StorageOwner / external service interfaces)
 - No external dependency interfaces — logic embedded in middleware
-- A-B state pattern implemented in all components
+- A-B state pattern correctly used in all components (GetState for read, GetNextState for write)
 - Data from runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
+- No SaveState/LoadState conversion layers — State IS canonical
 - Acceptance test for save/load process passes
 - All first-party components use the modeling package pattern
 - Each component has multiple middlewares (not one monolithic middleware)
+- component_guide.md reflects the final architecture
 
 ## Constraints
 
@@ -74,7 +93,7 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Comp
 - Use tick-driven patterns; prefer countdowns over scheduled events
 - Middleware reads current State (read-only) and writes next State (write-only)
 - A little duplication is better than a little dependency
-- `*mem.Storage` is the sole allowed external reference held by middleware
+- `*mem.Storage` is the sole allowed external reference held by middleware (PageTable, RoutingTable, Arbiter are acceptable external service references)
 - Deep copy uses JSON round-trip (validated by ValidateState — no pointers)
 - 1-cycle delay from A-B buffering is acceptable for multi-middleware components
 
@@ -84,4 +103,6 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Comp
 - Iris's dependency elimination analysis: `workspace/iris/embed_logic_in_middleware_analysis.md`
 - Iris's MSHR decoupling analysis: `workspace/iris/mshr_dependency_analysis.md`
 - Human approvals: Issues #145 (Comp elimination), #150 (A-B state)
-- Idealmemcontroller serves as the reference implementation (PR #32)
+- Idealmemcontroller serves as the reference implementation for thin Comp + 2 middlewares
+- Writeback cache (mem/cache/writeback) is the reference for no-Comp with State as canonical
+- DRAM (mem/dram) is the reference for inlined dependencies with free functions
