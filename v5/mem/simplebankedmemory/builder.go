@@ -1,12 +1,8 @@
 package simplebankedmemory
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -22,14 +18,18 @@ type Builder struct {
 	topPortBufferSize   int
 	postPipelineBufSize int
 
-	bankSelectorType   string
+	bankSelectorKind   string
 	log2InterleaveSize uint64
-	customBankSelector bankSelector
 
-	capacity         uint64
-	storage          *mem.Storage
-	addressConverter mem.AddressConverter
-	topPort          sim.Port
+	addrConvKind           string
+	addrInterleavingSize   uint64
+	addrTotalNumOfElements int
+	addrCurrentElementIndex int
+	addrOffset             uint64
+
+	capacity uint64
+	storage  *mem.Storage
+	topPort  sim.Port
 }
 
 // MakeBuilder creates a builder with reasonable defaults.
@@ -42,7 +42,7 @@ func MakeBuilder() Builder {
 		stageLatency:        10,
 		topPortBufferSize:   16,
 		postPipelineBufSize: 1,
-		bankSelectorType:    "interleaved",
+		bankSelectorKind:    "interleaved",
 		log2InterleaveSize:  6,
 		capacity:            4 * mem.GB,
 	}
@@ -97,22 +97,15 @@ func (b Builder) WithPostPipelineBufferSize(size int) Builder {
 }
 
 // WithBankSelectorType selects the bank selector implementation by name.
-// Supported selectors:
-//   - "interleaved": addresses are interleaved across banks using log2InterleaveSize.
 func (b Builder) WithBankSelectorType(selectorType string) Builder {
-	b.bankSelectorType = selectorType
+	b.bankSelectorKind = selectorType
 	return b
 }
 
-// WithLog2InterleaveSize sets the log2 interleave size used by the default selector.
+// WithLog2InterleaveSize sets the log2 interleave size used by the default
+// selector.
 func (b Builder) WithLog2InterleaveSize(log2Size uint64) Builder {
 	b.log2InterleaveSize = log2Size
-	return b
-}
-
-// WithBankSelector overrides the bank selector with a custom implementation.
-func (b Builder) WithBankSelector(selector bankSelector) Builder {
-	b.customBankSelector = selector
 	return b
 }
 
@@ -128,11 +121,19 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 	return b
 }
 
-// WithAddressConverter sets the address converter.
+// WithAddressConverter sets the address converter, inlining the configuration
+// into the Spec if it is an InterleavingConverter.
 func (b Builder) WithAddressConverter(
 	addressConverter mem.AddressConverter,
 ) Builder {
-	b.addressConverter = addressConverter
+	if ic, ok := addressConverter.(mem.InterleavingConverter); ok {
+		b.addrConvKind = "interleaving"
+		b.addrInterleavingSize = ic.InterleavingSize
+		b.addrTotalNumOfElements = ic.TotalNumOfElements
+		b.addrCurrentElementIndex = ic.CurrentElementIndex
+		b.addrOffset = ic.Offset
+	}
+
 	return b
 }
 
@@ -153,47 +154,50 @@ func (b Builder) Build(name string) *Comp {
 		storage = mem.NewStorage(b.capacity)
 	}
 
-	spec := Spec{}
+	spec := Spec{
+		NumBanks:                       b.numBanks,
+		BankPipelineWidth:              b.bankPipelineWidth,
+		BankPipelineDepth:              b.bankPipelineDepth,
+		StageLatency:                   b.stageLatency,
+		PostPipelineBufSize:            b.postPipelineBufSize,
+		BankSelectorKind:               b.bankSelectorKind,
+		BankSelectorLog2InterleaveSize: b.log2InterleaveSize,
+		AddrConvKind:                   b.addrConvKind,
+		AddrInterleavingSize:           b.addrInterleavingSize,
+		AddrTotalNumOfElements:         b.addrTotalNumOfElements,
+		AddrCurrentElementIndex:        b.addrCurrentElementIndex,
+		AddrOffset:                     b.addrOffset,
+		StorageRef:                     name,
+	}
+
+	initialState := State{
+		Banks: make([]bankState, b.numBanks),
+	}
+
+	for i := range initialState.Banks {
+		initialState.Banks[i] = bankState{
+			PipelineStages:  nil,
+			PostPipelineBuf: nil,
+		}
+	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
+	modelComp.SetState(initialState)
 
 	c := &Comp{
-		Component:        modelComp,
-		Storage:          storage,
-		AddressConverter: b.addressConverter,
-		bankSelector:     b.determineBankSelector(),
+		Component: modelComp,
+		storage:   storage,
 	}
 
-	c.topPort = b.topPort
-	c.topPort.SetComponent(c)
-	c.AddPort("Top", c.topPort)
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
 
-	c.banks = make([]bank, b.numBanks)
-
-	for i := range c.banks {
-		postPipelineBuf := queueing.NewBuffer(
-			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
-			b.postPipelineBufSize,
-		)
-
-		pipeline := queueing.MakeBuilder().
-			WithPipelineWidth(b.bankPipelineWidth).
-			WithNumStage(b.bankPipelineDepth).
-			WithCyclePerStage(b.stageLatency).
-			WithPostPipelineBuffer(postPipelineBuf).
-			Build(fmt.Sprintf("%s.Bank[%d].Pipeline", name, i))
-
-		c.banks[i] = bank{
-			pipeline:        pipeline,
-			postPipelineBuf: postPipelineBuf,
-		}
-	}
-
-	c.AddMiddleware(&middleware{Comp: c})
+	mw := &middleware{comp: modelComp, storage: storage}
+	modelComp.AddMiddleware(mw)
 
 	return c
 }
@@ -225,21 +229,5 @@ func (b Builder) configurationMustBeValid() {
 
 	if b.postPipelineBufSize <= 0 {
 		panic("simplebankedmemory.Builder: postPipelineBufSize must be > 0")
-	}
-}
-
-func (b Builder) determineBankSelector() bankSelector {
-	if b.customBankSelector != nil {
-		return b.customBankSelector
-	}
-
-	selectorType := strings.ToLower(b.bankSelectorType)
-	switch selectorType {
-	case "", "interleaved":
-		return interleavedBankSelector{
-			Log2InterleaveSize: b.log2InterleaveSize,
-		}
-	default:
-		panic(fmt.Sprintf("simplebankedmemory.Builder: unsupported bank selector %q", b.bankSelectorType))
 	}
 }

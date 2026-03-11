@@ -8,14 +8,12 @@ import (
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	engine            sim.Engine
-	freq              sim.Freq
-	insidePortMapper  mem.AddressToPortMapper
-	outsidePortMapper mem.AddressToPortMapper
-	ctrlPort          sim.Port
-	insidePort        sim.Port
-	outsidePort       sim.Port
-	spec              *Spec
+	engine      sim.Engine
+	freq        sim.Freq
+	ctrlPort    sim.Port
+	insidePort  sim.Port
+	outsidePort sim.Port
+	spec        *Spec
 }
 
 // MakeBuilder creates a new Builder
@@ -48,19 +46,27 @@ func (sdmBuilder Builder) WithBufferSize(
 	return sdmBuilder
 }
 
-// WithInsidePortMapper sets the inside port mapper of StreamingDataMover
+// WithInsidePortMapper sets the inside port mapper of StreamingDataMover.
+// It inlines the mapper configuration into the Spec.
 func (sdmBuilder Builder) WithInsidePortMapper(
 	inputInsidePortMapper mem.AddressToPortMapper,
 ) Builder {
-	sdmBuilder.insidePortMapper = inputInsidePortMapper
+	inlineMapper(inputInsidePortMapper,
+		&sdmBuilder.spec.InsideMapperKind,
+		&sdmBuilder.spec.InsideMapperPorts,
+		&sdmBuilder.spec.InsideMapperInterleavingSize)
 	return sdmBuilder
 }
 
-// WithOutsidePortMapper sets the outside port mapper of StreamingDataMover
+// WithOutsidePortMapper sets the outside port mapper of StreamingDataMover.
+// It inlines the mapper configuration into the Spec.
 func (sdmBuilder Builder) WithOutsidePortMapper(
 	inputOutsidePortMapper mem.AddressToPortMapper,
 ) Builder {
-	sdmBuilder.outsidePortMapper = inputOutsidePortMapper
+	inlineMapper(inputOutsidePortMapper,
+		&sdmBuilder.spec.OutsideMapperKind,
+		&sdmBuilder.spec.OutsideMapperPorts,
+		&sdmBuilder.spec.OutsideMapperInterleavingSize)
 	return sdmBuilder
 }
 
@@ -113,25 +119,42 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 	modelComp.SetState(initialState)
 
 	sdm := &Comp{
-		Component:         modelComp,
-		insidePortMapper:  sdmBuilder.insidePortMapper,
-		outsidePortMapper: sdmBuilder.outsidePortMapper,
+		Component: modelComp,
 	}
 
-	middleware := &dataMoverMiddleware{Comp: sdm}
-	sdm.AddMiddleware(middleware)
+	middleware := &dataMoverMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(middleware)
 
-	sdm.ctrlPort = sdmBuilder.ctrlPort
-	sdm.ctrlPort.SetComponent(sdm)
-	sdm.AddPort("Control", sdm.ctrlPort)
+	sdmBuilder.ctrlPort.SetComponent(sdm)
+	modelComp.AddPort("Control", sdmBuilder.ctrlPort)
 
-	sdm.insidePort = sdmBuilder.insidePort
-	sdm.insidePort.SetComponent(sdm)
-	sdm.AddPort("Inside", sdm.insidePort)
+	sdmBuilder.insidePort.SetComponent(sdm)
+	modelComp.AddPort("Inside", sdmBuilder.insidePort)
 
-	sdm.outsidePort = sdmBuilder.outsidePort
-	sdm.outsidePort.SetComponent(sdm)
-	sdm.AddPort("Outside", sdm.outsidePort)
+	sdmBuilder.outsidePort.SetComponent(sdm)
+	modelComp.AddPort("Outside", sdmBuilder.outsidePort)
 
 	return sdm
+}
+
+// inlineMapper converts an AddressToPortMapper into serializable Spec fields.
+func inlineMapper(
+	mapper mem.AddressToPortMapper,
+	kind *string,
+	ports *[]sim.RemotePort,
+	interleavingSize *uint64,
+) {
+	switch m := mapper.(type) {
+	case *mem.SinglePortMapper:
+		*kind = "single"
+		*ports = []sim.RemotePort{m.Port}
+		*interleavingSize = 0
+	case *mem.InterleavedAddressPortMapper:
+		*kind = "interleaved"
+		*ports = make([]sim.RemotePort, len(m.LowModules))
+		copy(*ports, m.LowModules)
+		*interleavingSize = m.InterleavingSize
+	default:
+		panic("unsupported mapper type for inline conversion")
+	}
 }

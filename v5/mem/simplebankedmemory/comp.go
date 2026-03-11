@@ -1,24 +1,36 @@
 package simplebankedmemory
 
 import (
-	"io"
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // Spec contains immutable configuration for the simple banked memory.
-type Spec struct{}
+type Spec struct {
+	NumBanks                       int    `json:"num_banks"`
+	BankPipelineWidth              int    `json:"bank_pipeline_width"`
+	BankPipelineDepth              int    `json:"bank_pipeline_depth"`
+	StageLatency                   int    `json:"stage_latency"`
+	PostPipelineBufSize            int    `json:"post_pipeline_buf_size"`
+	BankSelectorKind               string `json:"bank_selector_kind"`
+	BankSelectorLog2InterleaveSize uint64 `json:"bank_selector_log2_interleave_size"`
+	AddrConvKind                   string `json:"addr_conv_kind"`
+	AddrInterleavingSize           uint64 `json:"addr_interleaving_size"`
+	AddrTotalNumOfElements         int    `json:"addr_total_num_of_elements"`
+	AddrCurrentElementIndex        int    `json:"addr_current_element_index"`
+	AddrOffset                     uint64 `json:"addr_offset"`
+	StorageRef                     string `json:"storage_ref"`
+}
 
-// bankPipelineItemState is a serializable representation of bankPipelineItem.
+// bankPipelineItemState is a serializable representation of a pipeline item.
 type bankPipelineItemState struct {
-	IsRead   bool          `json:"is_read"`
-	ReadMsg  mem.ReadReq   `json:"read_msg"`
-	WriteMsg mem.WriteReq  `json:"write_msg"`
+	IsRead    bool         `json:"is_read"`
+	ReadMsg   mem.ReadReq  `json:"read_msg"`
+	WriteMsg  mem.WriteReq `json:"write_msg"`
 	Committed bool         `json:"committed"`
 	ReadData  []byte       `json:"read_data"`
 }
@@ -42,164 +54,249 @@ type State struct {
 	Banks []bankState `json:"banks"`
 }
 
-type bank struct {
-	pipeline        queueing.Pipeline
-	postPipelineBuf queueing.Buffer
-}
-
-type bankPipelineItem struct {
-	msg       sim.Msg
-	committed bool
-	readData  []byte
-}
-
-func (i *bankPipelineItem) TaskID() string {
-	return i.msg.Meta().ID + "_pl"
-}
-
 // Comp models a banked memory with configurable banking and pipeline behavior.
 type Comp struct {
 	*modeling.Component[Spec, State]
 
-	topPort sim.Port
-
-	Storage          *mem.Storage
-	AddressConverter mem.AddressConverter
-
-	banks        []bank
-	bankSelector bankSelector
+	storage *mem.Storage
 }
 
-func bankPipelineItemStateFromItem(item *bankPipelineItem) bankPipelineItemState {
-	s := bankPipelineItemState{
-		Committed: item.committed,
-		ReadData:  item.readData,
-	}
-
-	switch m := item.msg.(type) {
-	case *mem.ReadReq:
-		s.IsRead = true
-		s.ReadMsg = *m
-	case *mem.WriteReq:
-		s.IsRead = false
-		s.WriteMsg = *m
-	}
-
-	return s
+// GetStorage returns the underlying storage.
+func (c *Comp) GetStorage() *mem.Storage {
+	return c.storage
 }
 
-func bankPipelineItemFromState(s bankPipelineItemState) *bankPipelineItem {
-	item := &bankPipelineItem{
-		committed: s.Committed,
-		readData:  s.ReadData,
-	}
-
-	if s.IsRead {
-		r := s.ReadMsg
-		item.msg = &r
-	} else {
-		w := s.WriteMsg
-		item.msg = &w
-	}
-
-	return item
+// StorageName returns the name used to identify this component's storage.
+func (c *Comp) StorageName() string {
+	return c.GetSpec().StorageRef
 }
 
-// snapshotState converts runtime mutable data into a serializable State.
-func (c *Comp) snapshotState() State {
-	s := State{
-		Banks: make([]bankState, len(c.banks)),
+// --- Free functions for pipeline / buffer / bank-selection / address conversion ---
+
+func pipelineCanAccept(bank bankState, spec Spec) bool {
+	if spec.BankPipelineDepth == 0 {
+		return len(bank.PostPipelineBuf) < spec.PostPipelineBufSize
 	}
 
-	for i, b := range c.banks {
-		pipeSnaps := queueing.SnapshotPipeline(b.pipeline)
-		stages := make([]bankPipelineStageState, len(pipeSnaps))
+	for lane := 0; lane < spec.BankPipelineWidth; lane++ {
+		if !pipelineSlotOccupied(bank, lane, 0) {
+			return true
+		}
+	}
 
-		for j, snap := range pipeSnaps {
-			item := snap.Elem.(*bankPipelineItem)
-			stages[j] = bankPipelineStageState{
-				Lane:      snap.Lane,
-				Stage:     snap.Stage,
-				Item:      bankPipelineItemStateFromItem(item),
-				CycleLeft: snap.CycleLeft,
+	return false
+}
+
+func pipelineSlotOccupied(bank bankState, lane, stage int) bool {
+	for _, s := range bank.PipelineStages {
+		if s.Lane == lane && s.Stage == stage {
+			return true
+		}
+	}
+
+	return false
+}
+
+func pipelineAccept(
+	bank *bankState,
+	spec Spec,
+	item bankPipelineItemState,
+) {
+	if spec.BankPipelineDepth == 0 {
+		bank.PostPipelineBuf = append(bank.PostPipelineBuf, item)
+		return
+	}
+
+	for lane := 0; lane < spec.BankPipelineWidth; lane++ {
+		if !pipelineSlotOccupied(*bank, lane, 0) {
+			bank.PipelineStages = append(bank.PipelineStages,
+				bankPipelineStageState{
+					Lane:      lane,
+					Stage:     0,
+					Item:      item,
+					CycleLeft: spec.StageLatency - 1,
+				})
+			return
+		}
+	}
+
+	panic("pipeline is full, call pipelineCanAccept first")
+}
+
+// pipelineTick advances items through the pipeline stages.
+// Items enter at stage 0 and advance towards stage (depth-1).
+// When an item finishes at the last stage, it moves to PostPipelineBuf.
+func pipelineTick(bank *bankState, spec Spec) bool {
+	madeProgress := false
+	remaining := make([]bankPipelineStageState, 0, len(bank.PipelineStages))
+
+	// Process from the last stage backwards for proper advancement.
+	// We collect items to keep and advance in multiple passes.
+
+	// Sort stages by stage number descending so we process the last stages first.
+	// We'll iterate from highest stage to lowest.
+	lastStage := spec.BankPipelineDepth - 1
+
+	// First pass: mark which stages are occupied after processing
+	type action int
+	const (
+		actionKeep action = iota
+		actionAdvanced
+		actionMoveToBuffer
+	)
+
+	actions := make([]action, len(bank.PipelineStages))
+	newStages := make([]bankPipelineStageState, len(bank.PipelineStages))
+	copy(newStages, bank.PipelineStages)
+
+	// Process from highest stage to stage 0
+	for stageNum := lastStage; stageNum >= 0; stageNum-- {
+		for i := range newStages {
+			if actions[i] != actionKeep {
+				continue
+			}
+
+			s := &newStages[i]
+			if s.Stage != stageNum {
+				continue
+			}
+
+			if s.CycleLeft > 0 {
+				s.CycleLeft--
+				madeProgress = true
+				continue
+			}
+
+			// CycleLeft == 0, try to advance
+			if stageNum == lastStage {
+				// Try to move to post-pipeline buffer
+				if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
+					bank.PostPipelineBuf = append(
+						bank.PostPipelineBuf, s.Item)
+					actions[i] = actionMoveToBuffer
+					madeProgress = true
+				}
+			} else {
+				// Try to move to next stage
+				nextStageNum := stageNum + 1
+				nextOccupied := false
+
+				for j := range newStages {
+					if actions[j] != actionKeep {
+						continue
+					}
+
+					if newStages[j].Lane == s.Lane &&
+						newStages[j].Stage == nextStageNum {
+						nextOccupied = true
+						break
+					}
+				}
+
+				if !nextOccupied {
+					s.Stage = nextStageNum
+					s.CycleLeft = spec.StageLatency - 1
+					actions[i] = actionAdvanced
+					madeProgress = true
+				}
 			}
 		}
-
-		bufElems := queueing.SnapshotBuffer(b.postPipelineBuf)
-		bufItems := make([]bankPipelineItemState, len(bufElems))
-
-		for j, elem := range bufElems {
-			item := elem.(*bankPipelineItem)
-			bufItems[j] = bankPipelineItemStateFromItem(item)
-		}
-
-		s.Banks[i] = bankState{
-			PipelineStages:  stages,
-			PostPipelineBuf: bufItems,
-		}
 	}
 
-	return s
-}
-
-// restoreFromState restores runtime mutable data from a serializable State.
-func (c *Comp) restoreFromState(s State) {
-	for i, bs := range s.Banks {
-		b := &c.banks[i]
-
-		pipeSnaps := make([]queueing.PipelineStageSnapshot, len(bs.PipelineStages))
-		for j, stage := range bs.PipelineStages {
-			pipeSnaps[j] = queueing.PipelineStageSnapshot{
-				Lane:      stage.Lane,
-				Stage:     stage.Stage,
-				Elem:      bankPipelineItemFromState(stage.Item),
-				CycleLeft: stage.CycleLeft,
-			}
+	for i, a := range actions {
+		if a == actionMoveToBuffer {
+			continue
 		}
 
-		queueing.RestorePipeline(b.pipeline, pipeSnaps)
-
-		bufElems := make([]interface{}, len(bs.PostPipelineBuf))
-		for j, item := range bs.PostPipelineBuf {
-			bufElems[j] = bankPipelineItemFromState(item)
+		s := newStages[i]
+		if a == actionAdvanced {
+			// Already updated stage/cycleLeft
 		}
 
-		queueing.RestoreBuffer(b.postPipelineBuf, bufElems)
+		remaining = append(remaining, s)
 	}
+
+	bank.PipelineStages = remaining
+
+	return madeProgress
 }
 
-// GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
-	return state
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
+func bufferPeek(bank bankState) (bankPipelineItemState, bool) {
+	if len(bank.PostPipelineBuf) == 0 {
+		return bankPipelineItemState{}, false
 	}
-	c.SetState(c.Component.GetState())
-	return nil
+
+	return bank.PostPipelineBuf[0], true
 }
+
+func bufferPop(bank *bankState) {
+	if len(bank.PostPipelineBuf) == 0 {
+		return
+	}
+
+	bank.PostPipelineBuf = bank.PostPipelineBuf[1:]
+}
+
+func selectBank(spec Spec, addr uint64) int {
+	interleaveSize := uint64(1) << spec.BankSelectorLog2InterleaveSize
+	if interleaveSize == 0 {
+		panic("simplebankedmemory: invalid interleave size")
+	}
+
+	return int((addr / interleaveSize) % uint64(spec.NumBanks))
+}
+
+func convertAddress(spec Spec, addr uint64) uint64 {
+	if spec.AddrConvKind == "" {
+		return addr
+	}
+
+	if addr < spec.AddrOffset {
+		log.Panic("address is smaller than offset")
+	}
+
+	a := addr - spec.AddrOffset
+	roundSize := spec.AddrInterleavingSize * uint64(spec.AddrTotalNumOfElements)
+	belongsTo := int(a % roundSize / spec.AddrInterleavingSize)
+
+	if belongsTo != spec.AddrCurrentElementIndex {
+		log.Panicf("address 0x%x does not belong to current element %d",
+			addr, spec.AddrCurrentElementIndex)
+	}
+
+	return a/roundSize*spec.AddrInterleavingSize +
+		addr%spec.AddrInterleavingSize
+}
+
+// --- Middleware ---
 
 type middleware struct {
-	*Comp
+	comp    *modeling.Component[Spec, State]
+	storage *mem.Storage
+}
+
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *middleware) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
 }
 
 func (m *middleware) Tick() (madeProgress bool) {
@@ -212,9 +309,11 @@ func (m *middleware) Tick() (madeProgress bool) {
 
 func (m *middleware) dispatchFromTopPort() bool {
 	madeProgress := false
+	spec := m.comp.GetSpec()
+	nextState := m.comp.GetNextState()
 
 	for {
-		msgI := m.topPort.PeekIncoming()
+		msgI := m.topPort().PeekIncoming()
 		if msgI == nil {
 			break
 		}
@@ -224,42 +323,59 @@ func (m *middleware) dispatchFromTopPort() bool {
 			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
 		}
 
-		if len(m.banks) == 0 {
+		if spec.NumBanks == 0 {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
 		addr := msg.GetAddress()
-		if m.AddressConverter != nil {
-			addr = m.AddressConverter.ConvertExternalToInternal(addr)
-		}
+		addr = convertAddress(spec, addr)
 
-		bankID := m.bankSelector.Select(addr, len(m.banks))
-		if bankID < 0 || bankID >= len(m.banks) {
+		bankID := selectBank(spec, addr)
+		if bankID < 0 || bankID >= spec.NumBanks {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}
 
-		b := &m.banks[bankID]
-		if !b.pipeline.CanAccept() {
+		b := &nextState.Banks[bankID]
+		if !pipelineCanAccept(*b, spec) {
 			break
 		}
 
-		m.topPort.RetrieveIncoming()
-		tracing.TraceReqReceive(msg, m.Comp)
+		m.topPort().RetrieveIncoming()
+		tracing.TraceReqReceive(msg, m)
 
-		item := &bankPipelineItem{msg: msg}
-		b.pipeline.Accept(item)
+		item := m.msgToItem(msg)
+		pipelineAccept(b, spec, item)
 		madeProgress = true
 	}
 
 	return madeProgress
 }
 
+func (m *middleware) msgToItem(msg sim.Msg) bankPipelineItemState {
+	switch r := msg.(type) {
+	case *mem.ReadReq:
+		return bankPipelineItemState{
+			IsRead:  true,
+			ReadMsg: *r,
+		}
+	case *mem.WriteReq:
+		return bankPipelineItemState{
+			IsRead:   false,
+			WriteMsg: *r,
+		}
+	default:
+		log.Panicf("simplebankedmemory: unsupported request type %T", msg)
+		return bankPipelineItemState{}
+	}
+}
+
 func (m *middleware) finalizeBanks() bool {
 	madeProgress := false
+	nextState := m.comp.GetNextState()
 
-	for i := range m.banks {
+	for i := range nextState.Banks {
 		for {
-			progress := m.finalizeSingle(&m.banks[i])
+			progress := m.finalizeSingle(&nextState.Banks[i])
 			if !progress {
 				break
 			}
@@ -271,92 +387,81 @@ func (m *middleware) finalizeBanks() bool {
 	return madeProgress
 }
 
-func (m *middleware) finalizeSingle(b *bank) bool {
-	itemIfc := b.postPipelineBuf.Peek()
-	if itemIfc == nil {
+func (m *middleware) finalizeSingle(b *bankState) bool {
+	item, ok := bufferPeek(*b)
+	if !ok {
 		return false
 	}
 
-	item := itemIfc.(*bankPipelineItem)
-
-	switch item.msg.(type) {
-	case *mem.ReadReq:
-		return m.finalizeRead(b, item)
-	case *mem.WriteReq:
-		return m.finalizeWrite(b, item)
-	default:
-		log.Panicf("simplebankedmemory: unsupported request type %T",
-			item.msg)
+	if item.IsRead {
+		return m.finalizeRead(b, &item)
 	}
 
-	return false
+	return m.finalizeWrite(b, &item)
 }
 
 func (m *middleware) finalizeRead(
-	b *bank,
-	item *bankPipelineItem,
+	b *bankState,
+	item *bankPipelineItemState,
 ) bool {
-	msg := item.msg
-	readReq := msg.(*mem.ReadReq)
+	spec := m.comp.GetSpec()
+	readReq := &item.ReadMsg
 
-	if !item.committed {
-		addr := readReq.Address
-		if m.AddressConverter != nil {
-			addr = m.AddressConverter.ConvertExternalToInternal(addr)
-		}
+	if !item.Committed {
+		addr := convertAddress(spec, readReq.Address)
 
-		data, err := m.Storage.Read(addr, readReq.AccessByteSize)
+		data, err := m.storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
 
-		item.readData = data
-		item.committed = true
+		item.ReadData = data
+		item.Committed = true
+
+		// Update the buffer head with the committed state
+		b.PostPipelineBuf[0] = *item
 	}
 
-	if !m.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
 	rsp := &mem.DataReadyRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.topPort.AsRemote()
-	rsp.Dst = msg.Meta().Src
-	rsp.RspTo = msg.Meta().ID
-	rsp.Data = item.readData
-	rsp.TrafficBytes = len(item.readData) + 4
+	rsp.Src = m.topPort().AsRemote()
+	rsp.Dst = readReq.Src
+	rsp.RspTo = readReq.ID
+	rsp.Data = item.ReadData
+	rsp.TrafficBytes = len(item.ReadData) + 4
 	rsp.TrafficClass = "mem.DataReadyRsp"
 
-	if err := m.topPort.Send(rsp); err != nil {
+	if err := m.topPort().Send(rsp); err != nil {
 		return false
 	}
 
-	tracing.TraceReqComplete(msg, m.Comp)
+	tracing.TraceReqComplete(&item.ReadMsg, m)
 
-	b.postPipelineBuf.Pop()
+	bufferPop(b)
 
 	return true
 }
 
 func (m *middleware) finalizeWrite(
-	b *bank,
-	item *bankPipelineItem,
+	b *bankState,
+	item *bankPipelineItemState,
 ) bool {
-	msg := item.msg
-	writeReq := msg.(*mem.WriteReq)
+	spec := m.comp.GetSpec()
+	writeReq := &item.WriteMsg
 
-	if !item.committed {
-		addr := writeReq.Address
-		if m.AddressConverter != nil {
-			addr = m.AddressConverter.ConvertExternalToInternal(addr)
-		}
+	if !item.Committed {
+		addr := convertAddress(spec, writeReq.Address)
 
 		if writeReq.DirtyMask == nil {
-			if err := m.Storage.Write(addr, writeReq.Data); err != nil {
+			if err := m.storage.Write(addr, writeReq.Data); err != nil {
 				log.Panic(err)
 			}
 		} else {
-			data, err := m.Storage.Read(addr, uint64(len(writeReq.Data)))
+			data, err := m.storage.Read(addr, uint64(len(writeReq.Data)))
 			if err != nil {
 				log.Panic(err)
 			}
@@ -367,43 +472,45 @@ func (m *middleware) finalizeWrite(
 				}
 			}
 
-			if err := m.Storage.Write(addr, data); err != nil {
+			if err := m.storage.Write(addr, data); err != nil {
 				log.Panic(err)
 			}
 		}
 
-		item.committed = true
+		item.Committed = true
+		b.PostPipelineBuf[0] = *item
 	}
 
-	if !m.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
 	rsp := &mem.WriteDoneRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.topPort.AsRemote()
-	rsp.Dst = msg.Meta().Src
-	rsp.RspTo = msg.Meta().ID
+	rsp.Src = m.topPort().AsRemote()
+	rsp.Dst = writeReq.Src
+	rsp.RspTo = writeReq.ID
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 
-	if err := m.topPort.Send(rsp); err != nil {
+	if err := m.topPort().Send(rsp); err != nil {
 		return false
 	}
 
-	tracing.TraceReqComplete(msg, m.Comp)
+	tracing.TraceReqComplete(&item.WriteMsg, m)
 
-	b.postPipelineBuf.Pop()
+	bufferPop(b)
 
 	return true
 }
 
 func (m *middleware) tickPipelines() bool {
 	madeProgress := false
+	spec := m.comp.GetSpec()
+	nextState := m.comp.GetNextState()
 
-	for i := range m.banks {
-		p := m.banks[i].pipeline
-		madeProgress = p.Tick() || madeProgress
+	for i := range nextState.Banks {
+		madeProgress = pipelineTick(&nextState.Banks[i], spec) || madeProgress
 	}
 
 	return madeProgress

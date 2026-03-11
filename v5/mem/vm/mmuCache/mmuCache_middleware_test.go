@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -11,49 +12,53 @@ import (
 var _ = Describe("MMUCacheMiddleware", func() {
 	var (
 		mockCtrl    *gomock.Controller
-		engine      sim.Engine
-		cache       *Comp
+		comp        *modeling.Component[Spec, State]
 		mw          *mmuCacheMiddleware
 		topPort     *MockPort
 		bottomPort  *MockPort
 		controlPort *MockPort
-		lowModule   *MockPort
-		upModule    *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
 
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
+		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().AsRemote().Return(sim.RemotePort("BottomPort")).AnyTimes()
+		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().AsRemote().Return(sim.RemotePort("ControlPort")).AnyTimes()
 		controlPort.EXPECT().Name().Return("ControlPort").AnyTimes()
-		lowModule = NewMockPort(mockCtrl)
-		lowModule.EXPECT().AsRemote().Return(sim.RemotePort("LowModule")).AnyTimes()
-		upModule = NewMockPort(mockCtrl)
-		upModule.EXPECT().AsRemote().Return(sim.RemotePort("UpModule")).AnyTimes()
+		controlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
-		cache = MakeBuilder().
-			WithEngine(engine).
-			WithNumLevels(2).
-			WithNumBlocks(4).
-			WithLatencyPerLevel(100).
-			WithTopPort(sim.NewPort(nil, 4800, 4800, "MMUCache.TopPort")).
-			WithBottomPort(sim.NewPort(nil, 4800, 4800, "MMUCache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 1, 1, "MMUCache.ControlPort")).
+		spec := Spec{
+			NumBlocks:       4,
+			NumLevels:       2,
+			PageSize:        4096,
+			Log2PageSize:    12,
+			NumReqPerCycle:  4,
+			LatencyPerLevel: 100,
+			LowModulePort:   sim.RemotePort("LowModule"),
+			UpModulePort:    sim.RemotePort("UpModule"),
+		}
+
+		initialState := State{
+			CurrentState: mmuCacheStateEnable,
+			Table:        initSets(spec.NumLevels, spec.NumBlocks),
+		}
+
+		comp = modeling.NewBuilder[Spec, State]().
+			WithSpec(spec).
 			Build("MMUCache")
-		cache.topPort = topPort
-		cache.bottomPort = bottomPort
-		cache.controlPort = controlPort
-		cache.LowModule = lowModule
-		cache.UpModule = upModule
-		cache.state = mmuCacheStateEnable
+		comp.SetState(initialState)
 
-		mw = &mmuCacheMiddleware{Comp: cache}
+		comp.AddPort("Top", topPort)
+		comp.AddPort("Bottom", bottomPort)
+		comp.AddPort("Control", controlPort)
+
+		mw = &mmuCacheMiddleware{comp: comp}
 	})
 
 	AfterEach(func() {
@@ -93,9 +98,15 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		req.VAddr = 0x3000
 		req.DeviceID = 2
 		req.TrafficClass = "vm.TranslationReq"
-		seg := segForLevel(cache, 1, req.VAddr)
-		wayID := setIDForSeg(cache, seg)
-		cache.table[1].Update(wayID, req.PID, seg)
+
+		// Compute seg and wayID for level 1
+		spec := comp.GetSpec()
+		seg := segForLevelSpec(spec, 1, req.VAddr)
+		wayID := setIDForSegSpec(spec, seg)
+
+		// Update the set in state
+		next := comp.GetNextState()
+		setUpdate(&next.Table[1], wayID, req.PID, seg)
 
 		topPort.EXPECT().PeekIncoming().Return(req)
 		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
@@ -135,11 +146,12 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.handleRsp(rsp)
 
-		spec := cache.GetSpec()
+		spec := comp.GetSpec()
+		next := comp.GetNextState()
 		Expect(madeProgress).To(BeTrue())
 		for level := 0; level < spec.NumLevels; level++ {
-			seg := segForLevel(cache, level, page.VAddr)
-			_, found := cache.table[level].Lookup(page.PID, seg)
+			seg := segForLevelSpec(spec, level, page.VAddr)
+			_, found := setLookup(&next.Table[level], page.PID, seg)
 			Expect(found).To(BeTrue())
 		}
 	})
@@ -147,16 +159,18 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	It("should flush and reset cache", func() {
 		pid := vm.PID(1)
 		vAddr := uint64(0x6000)
-		seg := segForLevel(cache, 0, vAddr)
-		wayID := setIDForSeg(cache, seg)
-		cache.table[0].Update(wayID, pid, seg)
+		spec := comp.GetSpec()
+		seg := segForLevelSpec(spec, 0, vAddr)
+		wayID := setIDForSegSpec(spec, seg)
 
-		flushReq := &FlushReq{}
-		flushReq.ID = sim.GetIDGenerator().Generate()
-		flushReq.Src = sim.RemotePort("Requester")
-		flushReq.TrafficClass = "mmuCache.FlushReq"
-		cache.inflightFlushReq = flushReq
-		cache.state = mmuCacheStateFlush
+		next := comp.GetNextState()
+		setUpdate(&next.Table[0], wayID, pid, seg)
+
+		// Set up flush state
+		next.InflightFlushReqActive = true
+		next.InflightFlushReqID = sim.GetIDGenerator().Generate()
+		next.InflightFlushReqSrc = sim.RemotePort("Requester")
+		next.CurrentState = mmuCacheStateFlush
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
 			rsp := sent.(*FlushRsp)
@@ -166,22 +180,21 @@ var _ = Describe("MMUCacheMiddleware", func() {
 
 		madeProgress := mw.processMMUCacheFlush()
 
+		next = comp.GetNextState()
 		Expect(madeProgress).To(BeTrue())
-		Expect(cache.state).To(Equal(mmuCacheStatePause))
-		Expect(cache.inflightFlushReq).To(BeNil())
-		_, found := cache.table[0].Lookup(pid, seg)
+		Expect(next.CurrentState).To(Equal(mmuCacheStatePause))
+		Expect(next.InflightFlushReqActive).To(BeFalse())
+		_, found := setLookup(&next.Table[0], pid, seg)
 		Expect(found).To(BeFalse())
 	})
 })
 
-func segForLevel(cache *Comp, level int, vAddr uint64) uint64 {
-	spec := cache.GetSpec()
+func segForLevelSpec(spec Spec, level int, vAddr uint64) uint64 {
 	vpn := vAddr >> spec.Log2PageSize
 	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
 	return (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 }
 
-func setIDForSeg(cache *Comp, seg uint64) int {
-	spec := cache.GetSpec()
+func setIDForSegSpec(spec Spec, seg uint64) int {
 	return int(seg % uint64(spec.NumBlocks))
 }

@@ -5,90 +5,119 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-const (
-	mmuCacheStateEnable = "enable"
-	mmuCacheStatePause  = "pause"
-	mmuCacheStateDrain  = "drain"
-	mmuCacheStateFlush  = "flush"
-)
-
 type mmuCacheMiddleware struct {
-	*Comp
+	comp *modeling.Component[Spec, State]
 }
 
-func (cache *mmuCacheMiddleware) Tick() bool {
-	madeProgress := false
+func (m *mmuCacheMiddleware) Name() string {
+	return m.comp.Name()
+}
 
-	switch cache.state {
+func (m *mmuCacheMiddleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *mmuCacheMiddleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *mmuCacheMiddleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *mmuCacheMiddleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *mmuCacheMiddleware) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *mmuCacheMiddleware) bottomPort() sim.Port {
+	return m.comp.GetPortByName("Bottom")
+}
+
+func (m *mmuCacheMiddleware) controlPort() sim.Port {
+	return m.comp.GetPortByName("Control")
+}
+
+func (m *mmuCacheMiddleware) Tick() bool {
+	madeProgress := false
+	next := m.comp.GetNextState()
+
+	switch next.CurrentState {
 	case mmuCacheStateDrain:
-		madeProgress = cache.handleDrain() || madeProgress
+		madeProgress = m.handleDrain() || madeProgress
 	case mmuCacheStatePause:
 		return false
 	case mmuCacheStateFlush:
-		madeProgress = cache.handleFlush() || madeProgress
+		madeProgress = m.handleFlush() || madeProgress
 	default:
-		madeProgress = cache.handleEnable() || madeProgress
+		madeProgress = m.handleEnable() || madeProgress
 	}
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) handleDrain() bool {
-	madeProgress := cache.processRequests()
+func (m *mmuCacheMiddleware) handleDrain() bool {
+	madeProgress := m.processRequests()
 
-	if cache.bottomPort.PeekIncoming() == nil && cache.topPort.PeekIncoming() == nil {
-		cache.state = mmuCacheStatePause
+	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
+		next := m.comp.GetNextState()
+		next.CurrentState = mmuCacheStatePause
 		tracing.AddMilestone(
-			cache.Comp.Name()+".drain",
+			m.comp.Name()+".drain",
 			tracing.MilestoneKindHardwareResource,
-			cache.Comp.Name()+".",
-			cache.Comp.Name(),
-			cache.Comp,
+			m.comp.Name()+".",
+			m.comp.Name(),
+			m,
 		)
 	}
 
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) handleFlush() bool {
-	if cache.inflightFlushReq == nil {
+func (m *mmuCacheMiddleware) handleFlush() bool {
+	next := m.comp.GetNextState()
+	if !next.InflightFlushReqActive {
 		return false
 	}
 
-	if cache.topPort.PeekIncoming() == nil && cache.bottomPort.PeekIncoming() == nil {
-		return cache.processMMUCacheFlush()
+	if m.topPort().PeekIncoming() == nil && m.bottomPort().PeekIncoming() == nil {
+		return m.processMMUCacheFlush()
 	}
 
-	return cache.processRequests()
+	return m.processRequests()
 }
 
 // handleEnable processes requests when cache is in enabled state.
-func (cache *mmuCacheMiddleware) handleEnable() bool {
-	return cache.processRequests()
+func (m *mmuCacheMiddleware) handleEnable() bool {
+	return m.processRequests()
 }
 
 // processRequests handles both incoming lookup requests and bottom port responses.
-func (cache *mmuCacheMiddleware) processRequests() bool {
+func (m *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	spec := cache.GetSpec()
+	spec := m.comp.GetSpec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = cache.lookup() || madeProgress
+		madeProgress = m.lookup() || madeProgress
 	}
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = cache.handleBottomPort() || madeProgress
+		madeProgress = m.handleBottomPort() || madeProgress
 	}
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) lookup() bool {
-	if !cache.bottomPort.CanSend() {
+func (m *mmuCacheMiddleware) lookup() bool {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
 
-	msgI := cache.topPort.PeekIncoming()
+	msgI := m.topPort().PeekIncoming()
 	if msgI == nil {
 		return false
 	}
@@ -98,34 +127,35 @@ func (cache *mmuCacheMiddleware) lookup() bool {
 		return false
 	}
 
-	return cache.walkCacheLevels(msg)
+	return m.walkCacheLevels(msg)
 }
 
-func (cache *mmuCacheMiddleware) walkCacheLevels(
+func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg *vm.TranslationReq,
 ) bool {
-	spec := cache.GetSpec()
+	spec := m.comp.GetSpec()
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
-		found := cache.lookupLevel(level, msg)
+		found := m.lookupLevel(level, msg)
 		if !found {
 			break
 		}
 		totalLatency -= spec.LatencyPerLevel
 	}
 
-	ok := cache.sendReqToBottom(msg, totalLatency)
+	ok := m.sendReqToBottom(msg, totalLatency)
 	if !ok {
 		return false
 	}
 	return true
 }
 
-func (cache *mmuCacheMiddleware) lookupLevel(
+func (m *mmuCacheMiddleware) lookupLevel(
 	level int, req *vm.TranslationReq,
 ) bool {
-	spec := cache.GetSpec()
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
 	vAddr := req.VAddr
 	pid := req.PID
 
@@ -133,95 +163,99 @@ func (cache *mmuCacheMiddleware) lookupLevel(
 	levelWidth := (64 - spec.Log2PageSize) / uint64(spec.NumLevels)
 	seg := (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 
-	subTable := cache.table[level]
-	wayID, found := subTable.Lookup(pid, seg)
+	wayID, found := setLookup(&next.Table[level], pid, seg)
 
 	if found {
-		subTable.Visit(wayID)
+		setVisit(&next.Table[level], wayID)
 		return true
 	}
 	return false
 }
 
-func (cache *mmuCacheMiddleware) sendReqToBottom(
+func (m *mmuCacheMiddleware) sendReqToBottom(
 	req *vm.TranslationReq,
 	latency uint64) bool {
-	if !cache.bottomPort.CanSend() {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
 
+	spec := m.comp.GetSpec()
+
 	reqToBottom := &vm.TranslationReq{}
 	reqToBottom.ID = sim.GetIDGenerator().Generate()
-	reqToBottom.Src = cache.bottomPort.AsRemote()
-	reqToBottom.Dst = cache.LowModule.AsRemote()
+	reqToBottom.Src = m.bottomPort().AsRemote()
+	reqToBottom.Dst = spec.LowModulePort
 	reqToBottom.PID = req.PID
 	reqToBottom.VAddr = req.VAddr
 	reqToBottom.DeviceID = req.DeviceID
 	reqToBottom.TransLatency = latency
 	reqToBottom.TrafficClass = "vm.TranslationReq"
 
-	err := cache.bottomPort.Send(reqToBottom)
+	err := m.bottomPort().Send(reqToBottom)
 	if err != nil {
 		return false
 	}
 
-	cache.topPort.RetrieveIncoming()
+	m.topPort().RetrieveIncoming()
 
 	return true
 }
 
-func (cache *mmuCacheMiddleware) handleBottomPort() bool {
+func (m *mmuCacheMiddleware) handleBottomPort() bool {
 	madeProgress := false
 
-	itemI := cache.bottomPort.PeekIncoming()
+	itemI := m.bottomPort().PeekIncoming()
 	if itemI == nil {
 		return false
 	}
 
 	switch item := itemI.(type) {
 	case *vm.TranslationRsp:
-		madeProgress = cache.handleRsp(item) || madeProgress
+		madeProgress = m.handleRsp(item) || madeProgress
 	default:
 		log.Panicf("cannot process request %s", fmt.Sprintf("%T", itemI))
 	}
 	return madeProgress
 }
 
-func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
-	if !cache.topPort.CanSend() {
+func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
-	cache.updateCacheLevels(rsp)
+	m.updateCacheLevels(rsp)
+
+	spec := m.comp.GetSpec()
 
 	rspToTop := &vm.TranslationRsp{
 		Page: rsp.Page,
 	}
 	rspToTop.ID = sim.GetIDGenerator().Generate()
-	rspToTop.Src = cache.topPort.AsRemote()
-	rspToTop.Dst = cache.UpModule.AsRemote()
+	rspToTop.Src = m.topPort().AsRemote()
+	rspToTop.Dst = spec.UpModulePort
 	rspToTop.RspTo = rsp.RspTo
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
-	err := cache.topPort.Send(rspToTop)
+	err := m.topPort().Send(rspToTop)
 	if err != nil {
 		return false
 	}
 
-	cache.bottomPort.RetrieveIncoming()
+	m.bottomPort().RetrieveIncoming()
 
 	return true
 }
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
-func (cache *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	spec := cache.GetSpec()
+func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
+	spec := m.comp.GetSpec()
 	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
-func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
-	spec := cache.GetSpec()
+func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
 	page := rsp.Page
 	vAddr := page.VAddr
 	pid := page.PID
@@ -231,45 +265,48 @@ func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
 		seg := (vpn >> (uint64(level) * levelWidth)) & ((1 << levelWidth) - 1)
 
-		subTable := cache.table[level]
-		wayID := cache.segToSetID(seg)
+		wayID := m.segToSetID(seg)
 
-		_, found := subTable.Lookup(pid, seg)
+		_, found := setLookup(&next.Table[level], pid, seg)
 		if found {
 			continue
 		}
 
-		subTable.Update(wayID, pid, seg)
+		setUpdate(&next.Table[level], wayID, pid, seg)
 	}
 
 	return true
 }
 
-func (cache *mmuCacheMiddleware) processMMUCacheFlush() bool {
-	req := cache.inflightFlushReq
+func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
+	next := m.comp.GetNextState()
+	spec := m.comp.GetSpec()
 
 	rsp := &FlushRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = cache.controlPort.AsRemote()
-	rsp.Dst = req.Src
+	rsp.Src = m.controlPort().AsRemote()
+	rsp.Dst = next.InflightFlushReqSrc
 	rsp.TrafficClass = "mmuCache.FlushRsp"
 
-	err := cache.controlPort.Send(rsp)
+	err := m.controlPort().Send(rsp)
 	if err != nil {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(req, cache.Comp),
+		next.InflightFlushReqID+"@"+m.comp.Name(),
 		tracing.MilestoneKindNetworkBusy,
-		cache.controlPort.Name(),
-		cache.Comp.Name(),
-		cache.Comp,
+		m.controlPort().Name(),
+		m.comp.Name(),
+		m,
 	)
 
-	cache.reset()
+	// Reset table
+	next.Table = initSets(spec.NumLevels, spec.NumBlocks)
 
-	cache.inflightFlushReq = nil
-	cache.state = mmuCacheStatePause
+	next.InflightFlushReqActive = false
+	next.InflightFlushReqID = ""
+	next.InflightFlushReqSrc = ""
+	next.CurrentState = mmuCacheStatePause
 
 	return true
 }
