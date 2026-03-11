@@ -16,9 +16,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-//go:generate mockgen -destination "mock_mem_test.go" -package $GOPACKAGE  -write_package_comment=false github.com/sarchlab/akita/v5/mem/mem AddressToPortMapper
 //go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim Port,Engine
-//go:generate mockgen -destination "mock_queueing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/queueing Buffer,Pipeline
 
 func TestCache(t *testing.T) {
 	log.SetOutput(GinkgoWriter)
@@ -109,12 +107,15 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should do read hit", func() {
-		// Set up a block in the directory for read hit
-		setID := int(0x10000 / uint64(m.blockSize) % uint64(m.numSets))
-		block := &m.directoryState.Sets[setID].Blocks[0]
+		state := m.comp.GetState()
+		spec := m.comp.GetSpec()
+		blockSize := 1 << spec.Log2BlockSize
+		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
 		block.IsValid = true
+		m.comp.SetState(state)
 		m.storage.Write(block.CacheAddress, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -147,11 +148,15 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should write hit", func() {
-		setID := int(0x10000 / uint64(m.blockSize) % uint64(m.numSets))
-		block := &m.directoryState.Sets[setID].Blocks[0]
+		state := m.comp.GetState()
+		spec := m.comp.GetSpec()
+		blockSize := 1 << spec.Log2BlockSize
+		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		block := &state.DirectoryState.Sets[setID].Blocks[0]
 		block.Tag = 0x10000
 		block.PID = 0
 		block.IsValid = true
+		m.comp.SetState(state)
 		m.storage.Write(block.CacheAddress, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -180,10 +185,13 @@ var _ = Describe("Write-Back Cache Integration", func() {
 
 		engine.Run()
 
-		retData, _ := m.storage.Read(block.CacheAddress+0x4, 4)
+		// Re-read state after engine run
+		postState := m.comp.GetState()
+		postBlock := &postState.DirectoryState.Sets[setID].Blocks[0]
+		retData, _ := m.storage.Read(postBlock.CacheAddress+0x4, 4)
 		Expect(retData).To(Equal(write.Data))
-		Expect(block.IsValid).To(BeTrue())
-		Expect(block.IsDirty).To(BeTrue())
+		Expect(postBlock.IsValid).To(BeTrue())
+		Expect(postBlock.IsDirty).To(BeTrue())
 	})
 
 	It("should do read miss, mshr miss, w/ fetch, w/o eviction", func() {
@@ -324,12 +332,16 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		})
 
 		// Fill target set with dirty blocks
-		setID := int(0x10000 / uint64(m.blockSize) % uint64(m.numSets))
-		for i := 0; i < m.wayAssociativity; i++ {
-			block := &m.directoryState.Sets[setID].Blocks[i]
+		state := m.comp.GetState()
+		spec := m.comp.GetSpec()
+		blockSize := 1 << spec.Log2BlockSize
+		setID := int(0x10000 / uint64(blockSize) % uint64(spec.NumSets))
+		for i := 0; i < spec.WayAssociativity; i++ {
+			block := &state.DirectoryState.Sets[setID].Blocks[i]
 			block.IsValid = true
 			block.IsDirty = true
 		}
+		m.comp.SetState(state)
 
 		read := &mem.ReadReq{}
 		read.ID = sim.GetIDGenerator().Generate()

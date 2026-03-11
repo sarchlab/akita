@@ -178,6 +178,7 @@ func (b Builder) WithAddressToPortMapper(
 // Build returns a new cache component
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.assertAllRequiredInformationIsAvailable()
+	b.resolveLegacyMapper()
 
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
@@ -195,8 +196,8 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		DirLatency:            b.dirLatency,
 	}
 
-	// Configure address mapper in Spec (if not using legacy mapper)
-	if b.legacyMapper == nil && b.addressMapperType != "" {
+	// Configure address mapper in Spec
+	if b.addressMapperType != "" {
 		remotePortNames := make([]string, len(b.remotePorts))
 		for i, rp := range b.remotePorts {
 			remotePortNames[i] = string(rp)
@@ -225,8 +226,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp.SetState(initialState)
 
 	m := &middleware{
-		comp:         comp,
-		legacyMapper: b.legacyMapper,
+		comp: comp,
 	}
 
 	m.topPort = b.topPort

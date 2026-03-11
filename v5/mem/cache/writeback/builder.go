@@ -6,23 +6,16 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine              sim.Engine
-	freq                sim.Freq
-	addressToPortMapper mem.AddressToPortMapper
-	wayAssociativity    int
-	log2BlockSize       uint64
-
-	interleaving          bool
-	numInterleavingBlock  int
-	interleavingUnitCount int
-	interleavingUnitIndex int
+	engine           sim.Engine
+	freq             sim.Freq
+	legacyMapper     mem.AddressToPortMapper
+	wayAssociativity int
+	log2BlockSize    uint64
 
 	byteSize            uint64
 	numMSHREntry        int
@@ -35,6 +28,8 @@ type Builder struct {
 	bankLatency int
 
 	addressMapperType string
+	remotePorts       []sim.RemotePort
+	interleavingSize  uint64
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -54,6 +49,7 @@ func MakeBuilder() Builder {
 		maxInflightFetch:    128,
 		maxInflightEviction: 128,
 		bankLatency:         10,
+		interleavingSize:    4096,
 	}
 }
 
@@ -88,8 +84,9 @@ func (b Builder) WithNumMSHREntry(n int) Builder {
 }
 
 // WithAddressToPortMapper sets the AddressToPortMapper to be used.
+// The mapper is read lazily at Tick time, so its fields can be set after Build.
 func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
-	b.addressToPortMapper = f
+	b.legacyMapper = f
 	return b
 }
 
@@ -106,20 +103,8 @@ func (b Builder) WithByteSize(byteSize uint64) Builder {
 	return b
 }
 
-// WithInterleaving sets the size that the cache is interleaved.
-func (b Builder) WithInterleaving(
-	numBlock, unitCount, unitIndex int,
-) Builder {
-	b.interleaving = true
-	b.numInterleavingBlock = numBlock
-	b.interleavingUnitCount = unitCount
-	b.interleavingUnitIndex = unitIndex
-
-	return b
-}
-
-// WithWriteBufferSize sets the number of cach lines that can reside in the
-// writebuffer.
+// WithWriteBufferSize sets the number of cache lines that can reside in the
+// write buffer.
 func (b Builder) WithWriteBufferSize(n int) Builder {
 	b.writeBufferCapacity = n
 	return b
@@ -146,13 +131,14 @@ func (b Builder) WithDirectoryLatency(n int) Builder {
 	return b
 }
 
-// WithBankLatency sets the number of cycles required to process each can
+// WithBankLatency sets the number of cycles required to process each cache
 // read/write operation.
 func (b Builder) WithBankLatency(n int) Builder {
 	b.bankLatency = n
 	return b
 }
 
+// WithAddressMapperType sets the address mapper type.
 func (b Builder) WithAddressMapperType(t string) Builder {
 	b.addressMapperType = t
 	return b
@@ -176,21 +162,15 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 	return b
 }
 
+// WithRemotePorts sets the remote ports for address mapping.
 func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
-	if b.addressMapperType == "single" {
-		if len(ports) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
+	b.remotePorts = ports
+	return b
+}
 
-		b.addressToPortMapper = &mem.SinglePortMapper{Port: ports[0]}
-	} else if b.addressMapperType == "interleaved" {
-		finder := mem.NewInterleavedAddressPortMapper(256)
-		finder.LowModules = append(finder.LowModules, ports...)
-		b.addressToPortMapper = finder
-	} else {
-		panic("unknown address mapper type")
-	}
-
+// WithInterleavingSize sets the interleaving size for the address mapper.
+func (b Builder) WithInterleavingSize(size uint64) Builder {
+	b.interleavingSize = size
 	return b
 }
 
@@ -214,54 +194,62 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		MaxInflightEviction: b.maxInflightEviction,
 	}
 
+	// Configure address mapper in Spec (if not using legacy mapper)
+	if b.legacyMapper == nil && b.addressMapperType != "" {
+		remotePortNames := make([]string, len(b.remotePorts))
+		for i, rp := range b.remotePorts {
+			remotePortNames[i] = string(rp)
+		}
+		spec.AddressMapperType = b.addressMapperType
+		spec.RemotePortNames = remotePortNames
+		spec.InterleavingSize = b.interleavingSize
+	}
+
+	laneWidth := b.numReqPerCycle
+	if laneWidth == 1 {
+		laneWidth = 2
+	}
+
+	initialState := State{
+		DirToBankBufIndices:         make([]bankBufState, 1),
+		WriteBufferToBankBufIndices: make([]bankBufState, 1),
+		BankPipelineStages:          make([]bankPipelineState, 1),
+		BankPostPipelineBufIndices:  make([]bankPostBufState, 1),
+		BankInflightTransCounts:         make([]int, 1),
+		BankDownwardInflightTransCounts: make([]int, 1),
+	}
+
+	// Initialize directory state
+	cache.DirectoryReset(
+		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
 
+	comp.SetState(initialState)
+
 	m := &middleware{
-		comp:             comp,
-		log2BlockSize:    b.log2BlockSize,
-		numReqPerCycle:   b.numReqPerCycle,
-		wayAssociativity: b.wayAssociativity,
-		numMSHREntry:     b.numMSHREntry,
-		numSets:          numSets,
-		blockSize:        blockSize,
-		state:            cacheStateRunning,
-		evictingList:     make(map[uint64]bool),
+		comp:         comp,
+		legacyMapper: b.legacyMapper,
+		state:        cacheStateRunning,
+		evictingList: make(map[uint64]bool),
 	}
 
 	b.createPorts(m, comp)
-	b.configureCache(m)
-	b.createInternalStages(m)
-	b.createInternalBuffers(m)
+	m.storage = mem.NewStorage(b.byteSize)
+
+	// Create thin buffer adapters
+	b.buildAdapters(m, laneWidth)
+
+	// Create internal stages
+	b.createInternalStages(m, laneWidth)
 
 	comp.AddMiddleware(m)
 
 	return comp
-}
-
-func (b *Builder) configureCache(m *middleware) {
-	// Initialize DirectoryState using free function
-	cache.DirectoryReset(
-		&m.directoryState,
-		m.numSets,
-		b.wayAssociativity,
-		m.blockSize,
-	)
-
-	// MSHRState starts empty, no initialization needed
-	m.storage = mem.NewStorage(b.byteSize)
-
-	if b.addressToPortMapper == nil {
-		panic(
-			"addressToPortMapper is nil. " +
-				"WithRemotePorts or WithAddressMapperType not set",
-		)
-	}
-
-	m.addressToPortMapper = b.addressToPortMapper
 }
 
 func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, State]) {
@@ -278,10 +266,84 @@ func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, Stat
 	comp.AddPort("Control", m.controlPort)
 }
 
-func (b *Builder) createInternalStages(m *middleware) {
+func (b *Builder) buildAdapters(m *middleware, laneWidth int) {
+	next := m.comp.GetNextState()
+
+	// Dir stage buffer adapter
+	m.dirStageBuffer = &stateTransBuffer{
+		name:     m.comp.Name() + ".DirStageBuffer",
+		items:    &next.DirStageBufIndices,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// Dir to bank buffer adapters
+	m.dirToBankBuffers = make([]*stateTransBuffer, 1)
+	m.dirToBankBuffers[0] = &stateTransBuffer{
+		name:     m.comp.Name() + ".DirToBankBuffer",
+		items:    &next.DirToBankBufIndices[0].Indices,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// Write buffer to bank buffer adapters
+	m.writeBufferToBankBuffers = make([]*stateTransBuffer, 1)
+	m.writeBufferToBankBuffers[0] = &stateTransBuffer{
+		name:     m.comp.Name() + ".WriteBufferToBankBuffer",
+		items:    &next.WriteBufferToBankBufIndices[0].Indices,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// MSHR stage buffer adapter
+	m.mshrStageBuffer = &stateTransBuffer{
+		name:     m.comp.Name() + ".MSHRStageBuffer",
+		items:    &next.MSHRStageBufEntries,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// Write buffer buffer adapter
+	m.writeBufferBuffer = &stateTransBuffer{
+		name:     m.comp.Name() + ".WriteBufferBuffer",
+		items:    &next.WriteBufferBufIndices,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// Dir post pipeline buf adapter
+	m.dirPostBufAdapter = &stateDirPostBufAdapter{
+		name:     m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
+		items:    &next.DirPostPipelineBufIndices,
+		capacity: b.numReqPerCycle,
+		mw:       m,
+	}
+
+	// Bank post pipeline buf adapters
+	m.bankPostBufAdapters = make([]*stateBankPostBufAdapter, 1)
+	m.bankPostBufAdapters[0] = &stateBankPostBufAdapter{
+		name: fmt.Sprintf(
+			"%s.Bank.PostPipelineBuffer", m.comp.Name()),
+		items:    &next.BankPostPipelineBufIndices[0].Indices,
+		capacity: laneWidth,
+		mw:       m,
+	}
+}
+
+func (b *Builder) createInternalStages(m *middleware, laneWidth int) {
 	m.topParser = &topParser{cache: m}
-	b.buildDirectoryStage(m)
-	b.buildBankStages(m)
+
+	m.dirStage = &directoryStage{
+		cache: m,
+	}
+
+	m.bankStages = make([]*bankStage, 1)
+	m.bankStages[0] = &bankStage{
+		cache:         m,
+		bankID:        0,
+		pipelineWidth: laneWidth,
+	}
+
 	m.mshrStage = &mshrStage{cache: m}
 	m.flusher = &flusher{cache: m}
 	m.writeBuffer = &writeBufferStage{
@@ -290,76 +352,4 @@ func (b *Builder) createInternalStages(m *middleware) {
 		maxInflightFetch:    b.maxInflightFetch,
 		maxInflightEviction: b.maxInflightEviction,
 	}
-}
-
-func (b *Builder) buildDirectoryStage(m *middleware) {
-	buf := queueing.NewBuffer(
-		m.comp.Name()+".DirectoryStageBuffer",
-		b.numReqPerCycle,
-	)
-	pipeline := queueing.
-		MakeBuilder().
-		WithCyclePerStage(1).
-		WithNumStage(b.dirLatency).
-		WithPipelineWidth(b.numReqPerCycle).
-		WithPostPipelineBuffer(buf).
-		Build(m.comp.Name() + ".BankPipeline")
-	m.dirStage = &directoryStage{
-		cache:    m,
-		pipeline: pipeline,
-		buf:      buf,
-	}
-}
-
-func (b *Builder) buildBankStages(m *middleware) {
-	m.bankStages = make([]*bankStage, 1)
-
-	laneWidth := b.numReqPerCycle
-	if laneWidth == 1 {
-		laneWidth = 2
-	}
-
-	buf := queueing.NewBuffer(
-		fmt.Sprintf("%s.Bank.PostPipelineBuffer", m.comp.Name()),
-		laneWidth,
-	)
-	pipeline := queueing.
-		MakeBuilder().
-		WithCyclePerStage(1).
-		WithNumStage(b.bankLatency).
-		WithPipelineWidth(laneWidth).
-		WithPostPipelineBuffer(buf).
-		Build(fmt.Sprintf("%s.Bank.Pipeline", m.comp.Name()))
-	m.bankStages[0] = &bankStage{
-		cache:           m,
-		bankID:          0,
-		pipeline:        pipeline,
-		postPipelineBuf: buf,
-		pipelineWidth:   laneWidth,
-	}
-}
-
-func (b *Builder) createInternalBuffers(m *middleware) {
-	m.dirStageBuffer = queueing.NewBuffer(
-		m.comp.Name()+".DirStageBuffer",
-		m.numReqPerCycle,
-	)
-	m.dirToBankBuffers = make([]queueing.Buffer, 1)
-	m.dirToBankBuffers[0] = queueing.NewBuffer(
-		m.comp.Name()+".DirToBankBuffer",
-		m.numReqPerCycle,
-	)
-	m.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
-	m.writeBufferToBankBuffers[0] = queueing.NewBuffer(
-		m.comp.Name()+".WriteBufferToBankBuffer",
-		m.numReqPerCycle,
-	)
-	m.mshrStageBuffer = queueing.NewBuffer(
-		m.comp.Name()+".MSHRStageBuffer",
-		m.numReqPerCycle,
-	)
-	m.writeBufferBuffer = queueing.NewBuffer(
-		m.comp.Name()+".WriteBufferBuffer",
-		m.numReqPerCycle,
-	)
 }

@@ -35,9 +35,9 @@ func (p *topParser) Tick() bool {
 		trans.write = msg
 	}
 
-	p.cache.dirStageBuffer.Push(trans)
-
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)
+
+	p.cache.dirStageBuffer.Push(trans)
 
 	tracing.TraceReqReceive(msg, p.cache)
 

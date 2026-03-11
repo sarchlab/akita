@@ -4,43 +4,59 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
 
 var _ = Describe("TopParser", func() {
 	var (
-		mockCtrl            *gomock.Controller
-		m                   *middleware
-		parser              *topParser
-		port                *MockPort
-		buf                 *MockBuffer
-		addressToPortMapper *MockAddressToPortMapper
+		mockCtrl *gomock.Controller
+		m        *middleware
+		parser   *topParser
+		port     *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		port = NewMockPort(mockCtrl)
-		buf = NewMockBuffer(mockCtrl)
 
-		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+		initialState := State{
+			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
+			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
+			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			BankInflightTransCounts:         []int{0},
+			BankDownwardInflightTransCounts: []int{0},
+		}
 
-		comp := MakeBuilder().
-			WithEngine(sim.NewSerialEngine()).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
-			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+		m = &middleware{
+			topPort:      port,
+			state:        cacheStateRunning,
+			evictingList: make(map[uint64]bool),
+		}
+		m.comp = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{
+				NumReqPerCycle: 4,
+				Log2BlockSize:  6,
+			}).
 			Build("Cache")
 
-		m = comp.Middlewares()[0].(*middleware)
+		m.comp.SetState(initialState)
+		next := m.comp.GetNextState()
+
+		m.dirStageBuffer = &stateTransBuffer{
+			name:     "Cache.DirStageBuf",
+			items:    &next.DirStageBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
 
 		parser = &topParser{
 			cache: m,
 		}
-		m.state = cacheStateRunning
-		m.topPort = port
-		m.dirStageBuffer = buf
 		m.inFlightTransactions = nil
 	})
 
@@ -60,21 +76,6 @@ var _ = Describe("TopParser", func() {
 		Expect(ret).To(BeFalse())
 	})
 
-	It("should return if the dir buf is full", func() {
-		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
-		read.Address = 0x100
-		read.AccessByteSize = 64
-		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
-		port.EXPECT().PeekIncoming().Return(read)
-		buf.EXPECT().CanPush().Return(false)
-
-		ret := parser.Tick()
-
-		Expect(ret).To(BeFalse())
-	})
-
 	It("should parse read from top", func() {
 		read := &mem.ReadReq{}
 		read.ID = sim.GetIDGenerator().Generate()
@@ -84,15 +85,12 @@ var _ = Describe("TopParser", func() {
 		read.TrafficClass = "mem.ReadReq"
 
 		port.EXPECT().PeekIncoming().Return(read)
-		buf.EXPECT().CanPush().Return(true)
-		buf.EXPECT().Push(gomock.Any()).Do(func(t *transactionState) {
-			Expect(t.read).To(BeIdenticalTo(read))
-		})
 		port.EXPECT().RetrieveIncoming().Return(read)
 
 		parser.Tick()
 
 		Expect(m.inFlightTransactions).To(HaveLen(1))
+		Expect(m.inFlightTransactions[0].read).To(BeIdenticalTo(read))
 	})
 
 	It("should parse write from top", func() {
@@ -103,15 +101,11 @@ var _ = Describe("TopParser", func() {
 		write.TrafficClass = "mem.WriteReq"
 
 		port.EXPECT().PeekIncoming().Return(write)
-		buf.EXPECT().CanPush().Return(true)
-		buf.EXPECT().Push(gomock.Any()).Do(func(t *transactionState) {
-			Expect(t.write).To(BeIdenticalTo(write))
-		})
 		port.EXPECT().RetrieveIncoming().Return(write)
 
 		parser.Tick()
 
 		Expect(m.inFlightTransactions).To(HaveLen(1))
+		Expect(m.inFlightTransactions[0].write).To(BeIdenticalTo(write))
 	})
-
 })
