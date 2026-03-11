@@ -2,21 +2,27 @@
 
 ## What to Build
 
-We are evolving the Akita V5 simulation framework toward a clean, minimal component model.
+We are evolving the Akita V5 simulation framework toward a clean, minimal component model inspired by digital circuit semantics.
 
 ### Core Component Model
 
 A component is exactly 5 things: **Spec, State, Ports, Middleware, Hooks**. Nothing else.
 
-- **Spec**: Immutable configuration. Primitive/JSON-friendly. Set once by builder.
-- **State**: ALL mutable data. Plain serializable structs only (no pointers, interfaces, channels). This is the single source of truth during tick.
-- **Ports**: Communication channels. Accessed via `GetPortByName()`.
-- **Middleware**: Tick logic. Reads current State + Spec, writes next State, sends/receives through Ports, may invoke Hooks. Each middleware is independent — no shared runtime objects.
+- **Spec**: Immutable configuration. Primitive/JSON-friendly values. Set once by builder. Includes algorithm parameters (e.g., interleaving sizes, capacities, timing tables) that previously lived in dependency objects.
+- **State**: ALL mutable data. Plain serializable structs only (no pointers, interfaces, channels). This is the single source of truth during tick. Data previously held by runtime objects (MSHR entries, directory sets, pipeline stages, bank states) must be represented as pure data in State.
+- **Ports**: Communication channels. Accessed via `GetPortByName()`. Port names stored as strings in Spec for routing.
+- **Middleware**: Tick logic. Reads current State + Spec, writes next State, sends/receives through Ports, may invoke Hooks. Each middleware is independent — no shared runtime objects between middlewares. May hold `*mem.Storage` as the sole external reference (Storage is physical substrate, not internal state).
 - **Hooks**: Extension points for monitoring/instrumentation.
 
-### A-B State (Double-Buffered)
+### A-B State (Double-Buffered) — IMPLEMENTED in modeling.Component
 
-Each component has TWO state copies: "current" (read-only during tick) and "next" (write-only during tick). After all middleware finishes, swap current↔next. This matches digital circuit semantics. Serialization only saves current state.
+Each component has TWO state copies: "current" (read-only during tick) and "next" (write-only during tick). Before middleware runs, `current` is deep-copied to `next`. After all middleware finishes, `next` becomes `current`. This matches digital circuit semantics where registers read old values and write new values in the same clock cycle.
+
+- `GetState()` → returns current (A buffer, read-only)
+- `GetNextState()` → returns pointer to next (B buffer, write-only)
+- `SetNextState()` → sets next buffer directly
+- `SetState()` → sets both buffers (for initialization/save-load)
+- Serialization saves only `current` state
 
 Human clarifications:
 - Single-middleware patterns (e.g., writeback cache with one middleware running all stages) are historical — components SHOULD have multiple middlewares.
@@ -25,9 +31,11 @@ Human clarifications:
 
 ### No Dependencies / No Comp Wrapper
 
-- **Eliminate ALL Comp wrapper structs.** Use `modeling.Component[Spec, State]` directly.
-- **Eliminate external dependencies** (e.g., AddressToPortMapper, VictimFinder, AddressConverter interfaces). Duplicate the logic directly into middleware instead. "A little duplication is better than a little dependency." (Rob Pike)
+- **Eliminate ALL Comp wrapper structs.** Use `modeling.Component[Spec, State]` directly. (Exception: thin wrappers for StorageOwner interface are acceptable.)
+- **Eliminate external dependencies** (e.g., AddressToPortMapper, VictimFinder, AddressConverter, SubTransSplitter, CommandQueue interfaces). Inline the logic directly into middleware instead. "A little duplication is better than a little dependency." (Rob Pike)
 - Dependencies create problems with A-B state (e.g., port routing must happen immediately, breaking next-cycle-visibility). Embedding logic in middleware avoids this.
+- Store port *names* (strings) in Spec, resolve via `GetPortByName()` at runtime. Port routing reads Spec (immutable), `Send()` is a side-effect on the network — not internal state.
+- `*mem.Storage` is the ONE allowed external reference per middleware (physical memory substrate, cannot be State due to size, sharing, mutexes).
 
 ### Messages as Concrete Types (DONE)
 
@@ -35,18 +43,20 @@ Human clarifications:
 
 ### Simulation Save/Load (DONE)
 
-The `simulation` package has `Save(filename)` and `Load(filename)` methods. Components implement `StateSaver`/`StateLoader`.
+The `simulation` package has `Save(filename)` and `Load(filename)` methods. Components implement `StateSaver`/`StateLoader`. After Comp elimination, the snapshot/restore conversion layers disappear — State IS the canonical representation.
 
-## Success Criteria
+## How You Consider the Project is Success
 
 - Simple, straightforward, intuitive APIs
 - All CI checks pass on main branch
 - Component = Spec + State + Ports + Middleware + Hooks (nothing else)
-- No Comp wrapper structs
+- No Comp wrapper structs (except thin StorageOwner wrappers where needed)
 - No external dependency interfaces — logic embedded in middleware
-- A-B state pattern implemented
+- A-B state pattern implemented in all components
+- Data from runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
 - Acceptance test for save/load process passes
 - All first-party components use the modeling package pattern
+- Each component has multiple middlewares (not one monolithic middleware)
 
 ## Constraints
 
@@ -55,3 +65,14 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Comp
 - Use tick-driven patterns; prefer countdowns over scheduled events
 - Middleware reads current State (read-only) and writes next State (write-only)
 - A little duplication is better than a little dependency
+- `*mem.Storage` is the sole allowed external reference held by middleware
+- Deep copy uses JSON round-trip (validated by ValidateState — no pointers)
+- 1-cycle delay from A-B buffering is acceptable for multi-middleware components
+
+## Resources
+
+- Diana's A-B state co-design analysis: `workspace/diana/ab_state_comp_elim_codesign.md`
+- Iris's dependency elimination analysis: `workspace/iris/embed_logic_in_middleware_analysis.md`
+- Iris's MSHR decoupling analysis: `workspace/iris/mshr_dependency_analysis.md`
+- Human approvals: Issues #145 (Comp elimination), #150 (A-B state)
+- Idealmemcontroller serves as the reference implementation (PR #32)
