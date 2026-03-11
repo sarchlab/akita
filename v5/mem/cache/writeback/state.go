@@ -686,33 +686,93 @@ func mshrTransLookup(
 	return m
 }
 
+func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
+	if len(evictingList) == 0 {
+		return nil
+	}
+
+	out := make(map[uint64]bool, len(evictingList))
+	for k, v := range evictingList {
+		out[k] = v
+	}
+
+	return out
+}
+
+func snapshotBankCounters(
+	bankStages []*bankStage,
+) (inflightCounts, downwardCounts []int) {
+	inflightCounts = make([]int, len(bankStages))
+	downwardCounts = make([]int, len(bankStages))
+
+	for i, bs := range bankStages {
+		inflightCounts[i] = bs.inflightTransCount
+		downwardCounts[i] = bs.downwardInflightTransCount
+	}
+
+	return inflightCounts, downwardCounts
+}
+
+func snapshotWriteBufferStage(
+	wb *writeBufferStage,
+	lookup map[*transaction]int,
+) (pending, fetchInfl, evictInfl []int) {
+	pending = snapshotTransList(wb.pendingEvictions, lookup)
+	fetchInfl = snapshotTransList(wb.inflightFetch, lookup)
+	evictInfl = snapshotTransList(wb.inflightEviction, lookup)
+
+	return pending, fetchInfl, evictInfl
+}
+
+func snapshotMSHRStageEntry(
+	ms *mshrStage,
+	mshrLookup map[*cache.MSHREntry]int,
+) (bool, int) {
+	if ms.processingMSHREntry == nil {
+		return false, 0
+	}
+
+	idx, ok := mshrLookup[ms.processingMSHREntry]
+	if !ok {
+		return true, 0
+	}
+
+	return true, idx
+}
+
+func snapshotFlusherState(
+	f *flusher,
+) ([]blockRef, bool, flushReqState) {
+	refs := snapshotFlusherBlocks(f.blockToEvict)
+
+	if f.processingFlush == nil {
+		return refs, false, flushReqState{}
+	}
+
+	return refs, true, flushReqState{
+		MsgMeta:                 f.processingFlush.MsgMeta,
+		InvalidateAllCachelines: f.processingFlush.InvalidateAllCachelines,
+		DiscardInflight:         f.processingFlush.DiscardInflight,
+		PauseAfterFlushing:      f.processingFlush.PauseAfterFlushing,
+	}
+}
+
 func (c *Comp) snapshotState() State {
 	lookup := buildTransIndex(c.inFlightTransactions)
 	mshrLookup := buildMSHREntryLookup(c.mshr)
 
 	s := State{
-		CacheState: int(c.state),
+		CacheState:     int(c.state),
+		DirectoryState: cache.SnapshotDirectory(c.directory),
+		MSHRState: cache.SnapshotMSHR(
+			c.mshr, mshrTransLookup(lookup)),
+		Transactions: snapshotAllTransactions(
+			c.inFlightTransactions, mshrLookup),
+		EvictingList: snapshotEvictingList(c.evictingList),
 	}
 
-	s.DirectoryState = cache.SnapshotDirectory(c.directory)
-	s.MSHRState = cache.SnapshotMSHR(
-		c.mshr, mshrTransLookup(lookup))
-	s.Transactions = snapshotAllTransactions(
-		c.inFlightTransactions, mshrLookup)
-
-	// Evicting list
-	if len(c.evictingList) > 0 {
-		s.EvictingList = make(map[uint64]bool, len(c.evictingList))
-		for k, v := range c.evictingList {
-			s.EvictingList[k] = v
-		}
-	}
-
-	// Internal buffers
-	s.DirStageBufIndices = snapshotDirBuf(
-		c.dirStageBuffer, lookup)
-	s.DirToBankBufIndices = snapshotBankBufs(
-		c.dirToBankBuffers, lookup)
+	s.DirStageBufIndices = snapshotDirBuf(c.dirStageBuffer, lookup)
+	s.DirToBankBufIndices = snapshotBankBufs(c.dirToBankBuffers, lookup)
 	s.WriteBufferToBankBufIndices = snapshotBankBufs(
 		c.writeBufferToBankBuffers, lookup)
 	s.MSHRStageBufEntries = snapshotMSHRStageBuf(
@@ -720,56 +780,23 @@ func (c *Comp) snapshotState() State {
 	s.WriteBufferBufIndices = snapshotWriteBufferBuf(
 		c.writeBufferBuffer, lookup)
 
-	// Directory pipeline + post-buf
 	s.DirPipelineStages = snapshotDirPipeline(
 		c.dirStage.pipeline, lookup)
 	s.DirPostPipelineBufIndices = snapshotDirPostBuf(
 		c.dirStage.buf, lookup)
-
-	// Bank pipelines + post-bufs + counters
-	s.BankPipelineStages = snapshotBankPipelines(
-		c.bankStages, lookup)
+	s.BankPipelineStages = snapshotBankPipelines(c.bankStages, lookup)
 	s.BankPostPipelineBufIndices = snapshotBankPostBufs(
 		c.bankStages, lookup)
 
-	s.BankInflightTransCounts = make([]int, len(c.bankStages))
-	s.BankDownwardInflightTransCounts = make([]int, len(c.bankStages))
-
-	for i, bs := range c.bankStages {
-		s.BankInflightTransCounts[i] = bs.inflightTransCount
-		s.BankDownwardInflightTransCounts[i] =
-			bs.downwardInflightTransCount
-	}
-
-	// Write buffer stage
-	s.PendingEvictionIndices = snapshotTransList(
-		c.writeBuffer.pendingEvictions, lookup)
-	s.InflightFetchIndices = snapshotTransList(
-		c.writeBuffer.inflightFetch, lookup)
-	s.InflightEvictionIndices = snapshotTransList(
-		c.writeBuffer.inflightEviction, lookup)
-
-	// MSHR stage
-	if c.mshrStage.processingMSHREntry != nil {
-		s.HasProcessingMSHREntry = true
-		if idx, ok := mshrLookup[c.mshrStage.processingMSHREntry]; ok {
-			s.ProcessingMSHREntryIdx = idx
-		}
-	}
-
-	// Flusher
-	s.FlusherBlockToEvictRefs = snapshotFlusherBlocks(
-		c.flusher.blockToEvict)
-
-	if c.flusher.processingFlush != nil {
-		s.HasProcessingFlush = true
-		s.ProcessingFlush = flushReqState{
-			MsgMeta:                 c.flusher.processingFlush.MsgMeta,
-			InvalidateAllCachelines: c.flusher.processingFlush.InvalidateAllCachelines,
-			DiscardInflight:         c.flusher.processingFlush.DiscardInflight,
-			PauseAfterFlushing:      c.flusher.processingFlush.PauseAfterFlushing,
-		}
-	}
+	s.BankInflightTransCounts, s.BankDownwardInflightTransCounts =
+		snapshotBankCounters(c.bankStages)
+	s.PendingEvictionIndices, s.InflightFetchIndices,
+		s.InflightEvictionIndices =
+		snapshotWriteBufferStage(c.writeBuffer, lookup)
+	s.HasProcessingMSHREntry, s.ProcessingMSHREntryIdx =
+		snapshotMSHRStageEntry(c.mshrStage, mshrLookup)
+	s.FlusherBlockToEvictRefs, s.HasProcessingFlush,
+		s.ProcessingFlush = snapshotFlusherState(c.flusher)
 
 	return s
 }
