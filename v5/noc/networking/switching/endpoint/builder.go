@@ -109,17 +109,25 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	ep := &Comp{Component: modelComp}
+	mw := &middleware{
+		comp: modelComp,
+	}
 
-	ep.NetworkPort = b.networkPort
-	ep.NetworkPort.SetComponent(ep)
+	ep := &Comp{
+		Component:   modelComp,
+		NetworkPort: b.networkPort,
+		mw:          mw,
+	}
+
+	mw.endpoint = ep
+
+	b.networkPort.SetComponent(ep)
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp)
 	}
 
-	middleware := &middleware{Comp: ep}
-	ep.AddMiddleware(middleware)
+	ep.AddMiddleware(mw)
 
 	return ep
 }
