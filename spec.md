@@ -12,31 +12,23 @@ Redefine a component as a combination of **Spec, State, Ports, and Middlewares**
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
 
-### 3. Messages as Concrete Types (IN PROGRESS — cleanup)
+### 3. Messages as Concrete Types (DONE)
 
-**Done:** `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) embedding `sim.MsgMeta`. No `Payload any`, no `GenericMsg`, no runtime casting. Components type-switch on concrete types: `case *mem.ReadReq:`.
+`sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) embedding `sim.MsgMeta`. No `Payload any`, no `GenericMsg`, no runtime casting, no message builders, no msgRef types. Components type-switch on concrete types: `case *mem.ReadReq:`. Messages are constructed as plain struct literals.
 
-**Remaining cleanup (per human direction in #109):** Remove message builder types. Since messages are pure data structs, callers should construct them directly via struct literals instead of using builder pattern. This eliminates ~22 builder types and ~200+ lines of boilerplate per protocol file. ID generation and default TrafficBytes/TrafficClass should be set via a simple helper or direct assignment.
+### 4. Port All First-Party Components (DONE — structurally ported, State needs work for writeback)
 
-**Also remaining:** Remove all `msgRef` types from state files. Now that messages are concrete and serializable, state files should store concrete message types directly instead of converting to/from msgRef.
-
-### 4. Port All First-Party Components (DONE — structurally ported, but State needs work)
-
-All first-party components (caches, TLB, MMU, DRAM, datamover, banked memory, NOC components, examples, etc.) have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. However, most have empty `State` structs — their mutable runtime data still lives on the wrapper `Comp` struct, making them non-serializable. See thread #6 below.
+All first-party components have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. State is populated for 15 of 16 components. Only writeback cache has an empty State struct.
 
 ### 5. CI Must Pass (DONE)
 
 All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
 
-### 6. Eliminate Comp Wrapper / Move Mutable Data into State (NEW)
+### 6. Eliminate Comp Wrapper / Move Mutable Data into State (IN PROGRESS)
 
-Human raised issue #61: currently, ported components like TLB have a `Comp` struct wrapping `*modeling.Component[Spec, State]`, but `State` is empty. All actual mutable runtime data (cache sets, MSHR entries, pipeline state, transaction queues, etc.) lives on the `Comp` struct. This means:
+Human raised issue #61: currently, ported components like TLB have a `Comp` struct wrapping `*modeling.Component[Spec, State]`, but mutable runtime data is duplicated — it exists on both the `Comp` struct (as live objects) and in `State` (as serializable snapshots). SaveState copies Comp→State, LoadState restores State→Comp.
 
-- Components cannot actually be serialized via the State mechanism
-- The `Comp` wrapper duplicates the role that `State` should play
-- The modeling pattern is structurally present but semantically broken
-
-The goal is to move all mutable runtime data into `State` so components are truly serializable, OR redesign the component architecture to eliminate the need for the `Comp` wrapper struct. The key question: **can a component's mutable data (including things with pointers like MSHR, pipelines, buffers) be made serializable?**
+The goal is to investigate whether the `Comp` wrapper can be simplified or eliminated, reducing duplication between live objects and their serializable representations.
 
 ## Success Criteria
 
