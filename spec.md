@@ -37,6 +37,15 @@ Human clarifications:
 - Store port *names* (strings) in Spec, resolve via `GetPortByName()` at runtime. Port routing reads Spec (immutable), `Send()` is a side-effect on the network — not internal state.
 - `*mem.Storage` is the ONE allowed external reference per middleware (physical memory substrate, cannot be State due to size, sharing, mutexes).
 
+### MSHR and Directory as State + Free Functions
+
+Runtime objects like MSHR and Directory contain both data and behavior. Following the principle that **State holds data, middleware holds behavior**:
+
+- **MSHR**: `capacity` → Spec. `entries []MSHREntry` → State as `MSHRState`. Behavior (`Query`, `Add`, `Remove`, `IsFull`) → free functions operating on `*MSHRState` + Spec values. The serialization code already performs this decomposition (`MSHRState` exists in State).
+- **Directory**: `sets []Set` → State as `DirectoryState`. Behavior (`Lookup`, `FindVictim`, `Visit`) → free functions operating on `*DirectoryState`. LRU victim finding uses the LRU queue already stored in `DirectoryState`.
+- These free functions live in `mem/cache/` and are shared by all cache types (writearound, writeevict, writethrough, writeback).
+- Block/entry cross-references use **indices** (setID, wayID, transaction index) instead of pointers.
+
 ### Messages as Concrete Types (DONE)
 
 `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types embedding `sim.MsgMeta`. No builders, no msgRef types. Components type-switch on concrete types.
