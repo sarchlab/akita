@@ -2,60 +2,56 @@
 
 ## What to Build
 
-We are evolving the Akita V5 simulation framework. The work has several major threads:
+We are evolving the Akita V5 simulation framework toward a clean, minimal component model.
 
-### 1. Component Model (DONE)
+### Core Component Model
 
-Redefine a component as a combination of **Spec, State, Ports, and Middlewares** (see `/v5/migration.md`). A `modeling` package provides `Component[S,T]` — a generic component parameterized by Spec and State types. Builders use `WithSpec()` instead of individual `With*` parameter methods.
+A component is exactly 5 things: **Spec, State, Ports, Middleware, Hooks**. Nothing else.
 
-### 2. Simulation Save/Load (DONE)
+- **Spec**: Immutable configuration. Primitive/JSON-friendly. Set once by builder.
+- **State**: ALL mutable data. Plain serializable structs only (no pointers, interfaces, channels). This is the single source of truth during tick.
+- **Ports**: Communication channels. Accessed via `GetPortByName()`.
+- **Middleware**: Tick logic. Reads current State + Spec, writes next State, sends/receives through Ports, may invoke Hooks. Each middleware is independent — no shared runtime objects.
+- **Hooks**: Extension points for monitoring/instrumentation.
 
-The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
+### A-B State (Double-Buffered)
 
-### 3. Messages as Concrete Types (DONE)
+Each component has TWO state copies: "current" (read-only during tick) and "next" (write-only during tick). After all middleware finishes, swap current↔next. This matches digital circuit semantics. Serialization only saves current state.
 
-`sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) embedding `sim.MsgMeta`. No `Payload any`, no `GenericMsg`, no runtime casting, no message builders, no msgRef types. Components type-switch on concrete types: `case *mem.ReadReq:`. Messages are constructed as plain struct literals.
+Human clarifications:
+- Single-middleware patterns (e.g., writeback cache with one middleware running all stages) are historical — components SHOULD have multiple middlewares.
+- Deferring visibility to next cycle is acceptable even if it slightly changes behavior.
+- Middleware should ONLY work with State, read from Spec, send/receive through Ports, and invoke Hooks.
 
-### 4. Port All First-Party Components (DONE)
+### No Dependencies / No Comp Wrapper
 
-All first-party components have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. State is fully populated for all 16 components with meaningful, serializable State structs.
+- **Eliminate ALL Comp wrapper structs.** Use `modeling.Component[Spec, State]` directly.
+- **Eliminate external dependencies** (e.g., AddressToPortMapper, VictimFinder, AddressConverter interfaces). Duplicate the logic directly into middleware instead. "A little duplication is better than a little dependency." (Rob Pike)
+- Dependencies create problems with A-B state (e.g., port routing must happen immediately, breaking next-cycle-visibility). Embedding logic in middleware avoids this.
 
-### 5. CI Must Pass (NEEDS FIX)
+### Messages as Concrete Types (DONE)
 
-All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests. Currently failing due to lint errors (unused variables in v5/mem/mem/protocol.go). Human issue #151.
+`sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types embedding `sim.MsgMeta`. No builders, no msgRef types. Components type-switch on concrete types.
 
-### 6. Component Creation Guide (DONE)
+### Simulation Save/Load (DONE)
 
-Human issue #148: component_guide.md written and merged (PR #27). Covers Spec, State, Ports, Middleware, Hooks, Builder pattern, and worked examples.
-
-### 7. Eliminate Comp Wrapper — Use modeling.Component Directly (DISCUSSION)
-
-Human issue #145: "A component should only have spec, ports, states, middleware and hooks. Can we just remove all the components struct definition from all the individual components and use modeling.component instead?"
-
-Active discussion with human. Key follow-up questions:
-- How to decouple MSHR (and similar objects) into data (State) + behavior (middleware)?
-- How to handle dependencies (e.g., AddrToPortMapper) without Comp?
-
-### 8. A-B State (Double-Buffered State) (DISCUSSION)
-
-Human issue #150: Proposes that each component has TWO state copies — "current" (read-only during tick) and "next" (write-only during tick). After all middleware finishes, swap current↔next. This prevents one middleware from reading state updated by another middleware in the same cycle, matching digital circuit semantics. Serialization only saves current state.
-
-### 9. Merge Dependabot PRs (TODO)
-
-Human issue #152: Merge the 6 open Dependabot dependency update PRs.
+The `simulation` package has `Save(filename)` and `Load(filename)` methods. Components implement `StateSaver`/`StateLoader`.
 
 ## Success Criteria
 
 - Simple, straightforward, intuitive APIs
 - All CI checks pass on main branch
+- Component = Spec + State + Ports + Middleware + Hooks (nothing else)
+- No Comp wrapper structs
+- No external dependency interfaces — logic embedded in middleware
+- A-B state pattern implemented
 - Acceptance test for save/load process passes
 - All first-party components use the modeling package pattern
-- Messages are concrete, serializable types behind a `sim.Msg` interface
-- All first-party components have meaningful, serializable State structs (no empty State with data hidden on Comp)
 
 ## Constraints
 
-- Follow the patterns described in `/v5/migration.md`
 - Keep State pure and serializable (no pointers, live handles, functions, channels)
 - Keep Spec primitive and JSON-friendly
 - Use tick-driven patterns; prefer countdowns over scheduled events
+- Middleware reads current State (read-only) and writes next State (write-only)
+- A little duplication is better than a little dependency

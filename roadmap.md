@@ -2,68 +2,94 @@
 
 ## Project Goal
 
-Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, port all first-party components, and continuously refine the architecture toward cleaner abstractions.
+Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware.
 
-## Current Phase: Architecture Discussion + CI Fix
+## Current State
 
-Three human issues require attention:
+- 16 first-party components ported to `modeling.Component[Spec, State]`
+- Messages are concrete types (no builders)
+- Save/load works
+- CI blocked by funlen lint error — PR #31 ready, CI queued
+- Dependabot PRs merged
+- Architecture direction clarified by human (issues #145, #150)
 
-### M9.1: Fix CI Failures (IMMEDIATE)
+## Phase: Architecture Transformation
 
-Human issue #151: CI is failing due to lint errors — unused variables in `v5/mem/mem/protocol.go`. Quick fix needed.
+### M10: Fix CI + Merge PR #31 (IMMEDIATE)
+- Merge PR #31 (funlen fix for writeback/state.go)
+- Verify CI passes on main
+- **Budget**: 2 cycles
 
-**Budget**: 2 cycles
+### M11: Discussion Response — Finalize Architecture Design
+- Respond to human's latest questions on #145 (no dependencies, embed logic) and #150 (A-B state OK with 1-cycle delay)
+- Produce a concrete design document showing the target component architecture
+- Need to address: what does "embed logic directly in middleware" mean for each current dependency?
+- **Budget**: 2 cycles (analysis only)
 
-### M9.2: Merge Dependabot PRs (IMMEDIATE)
+### M12: A-B State in modeling.Component
+- Add current/next State to `modeling.Component`
+- Implement swap-after-tick
+- Update GetState/SetState semantics
+- Proof of concept on idealmemcontroller (simplest multi-middleware component)
+- **Estimated budget**: 4-6 cycles
 
-Human issue #152: 6 open Dependabot PRs for npm dependency updates.
+### M13: Prototype Comp Elimination on idealmemcontroller
+- Remove Comp wrapper from idealmemcontroller
+- Move all mutable data to State
+- Embed dependency logic (AddressConverter) directly in middleware
+- Builder returns `*modeling.Component[Spec, State]`
+- **Estimated budget**: 4-6 cycles
 
-**Budget**: 2 cycles
+### M14: MSHR/Directory Data-Behavior Decoupling
+- MSHR data → State, behavior → free functions called by middleware
+- Directory data → State, behavior → free functions
+- Start with writeback cache as reference implementation
+- **Estimated budget**: 6-10 cycles
 
-### M9.3: Architecture Design — A-B State + Comp Elimination (DISCUSSION)
+### M15: Eliminate Dependencies Across All Components
+- Replace AddressToPortMapper with inline logic in middleware
+- Replace VictimFinder with inline logic
+- Replace AddressConverter with inline logic
+- Replace Storage interface with direct state access
+- **Estimated budget**: 8-12 cycles
 
-Two related architectural discussions happening in parallel:
-- **#145**: Comp elimination — human asking about MSHR decoupling and dependency injection
-- **#150**: A-B state (double-buffered state) — new proposal for digital-circuit-style state management
+### M16: Eliminate All Comp Wrappers
+- Apply Comp elimination to all 16 components
+- Each component's builder returns `*modeling.Component[Spec, State]`
+- **Estimated budget**: 12-20 cycles
 
-These discussions need analysis and response before any implementation milestone can be defined. Currently gathering analysis from workers (Diana on #150, Iris on #145).
-
-**Budget**: 2-4 cycles (analysis and discussion only)
-
-### M10: Implement Architecture Changes (PENDING DISCUSSION)
-
-After #145 and #150 discussions converge, define implementation milestones. Likely sub-milestones:
-- M10.1: A-B state in modeling.Component
-- M10.2: MSHR/Directory data-behavior decoupling
-- M10.3: Dependency injection pattern
-- M10.4: Comp elimination (per-component)
-
-**Estimated budget**: 20-30 cycles (TBD after discussion)
+### M17: Split Single-Middleware Components into Multiple Middlewares
+- Writeback cache: split pipeline stages into separate middlewares
+- Other caches similarly
+- Each middleware operates on A-B state independently
+- **Estimated budget**: 10-16 cycles
 
 ## ✅ Previous Milestones Complete
 
-### M1: Create `modeling` package with Component struct ✅ — Budget: 6, Used: 5
-### M2: Refactor `idealmemcontroller` to use modeling package ✅ — Budget: 6, Used: 4
-### M3: Implement simulation Save/Load with acceptance test ✅ — Budget: 8, Used: 6
-### M4: Fix CI lint failures ✅ — Budget: 3, Used: 2
-### M5: Redesign Messages as Plain Structs ✅ — Budget: 8, Used: 6
-### M6: Port All First-Party Components ✅ — Budget: 16, Used: 8
-### M7: Move Mutable Runtime Data into State Structs ✅ — Budget: 30, Used: 16
-### M8: Msg-as-Interface Redesign ✅ — Budget: 24, Used: 18
-### M9: Write Component Creation Guide ✅ — Budget: 4, Used: 2
+| Milestone | Budget | Used | Description |
+|-----------|--------|------|-------------|
+| M1 | 6 | 5 | Create `modeling` package |
+| M2 | 6 | 4 | Refactor idealmemcontroller |
+| M3 | 8 | 6 | Save/Load with acceptance test |
+| M4 | 3 | 2 | Fix CI lint failures |
+| M5 | 8 | 6 | Messages as plain structs |
+| M6 | 16 | 8 | Port all first-party components |
+| M7 | 30 | 16 | Move mutable data into State |
+| M8 | 24 | 18 | Msg-as-Interface redesign |
+| M9 | 4 | 2 | Component creation guide |
+| M9.1-M9.2 | 3 | 3* | CI fix + Dependabot (PR #31 ready, CI queued) |
+
+*M9.1-M9.2 used 3 cycles. Work is done (PR #31 + Dependabot merged) but CI was queued so couldn't be verified/merged.
 
 ## Summary Statistics
-- **Total implementation cycles**: ~53 across 108 orchestrator cycles
-- **Total milestones**: 9 root milestones (M1–M9), 12 sub-milestones
-- **PRs merged**: 27
-- **Components fully ported**: 16/16 with serializable State
-- **Concrete message types**: 30+
-- **Builder types removed**: ~22
+- Total milestones completed: 9 root + 12 sub-milestones
+- PRs merged: 30
+- Components ported: 16/16
 
 ## Lessons Learned
-- Multi-worker approach for mechanical changes works very well (M6, M7, M8)
-- Human feedback drives direction changes — stay responsive to discussion issues
-- Apollo's verification catches real issues — always verify
-- Breaking large milestones into sub-milestones with 2-6 cycle budgets is optimal
-- Architecture discussions should be fully resolved before starting implementation
-- CI regressions should be fixed immediately before they accumulate
+- CI can get stuck in "queued" state — don't waste cycles waiting for it
+- Architecture discussions should be fully resolved before implementation
+- Multi-worker mechanical changes work well
+- Breaking milestones to 2-6 cycle budgets is optimal
+- Human feedback drives direction — stay responsive
+- When CI is blocked, focus on other productive work (analysis, design) instead of waiting
