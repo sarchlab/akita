@@ -3,44 +3,70 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/vm/tlb/internal"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
-var _ = Describe("TLB", func() {
+var _ = Describe("TLB CtrlMiddleware", func() {
 
 	var (
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
 		comp        *Comp
 		ctrlMW      *ctrlMiddleware
-		set         *MockSet
-		topPort     *MockPort
-		bottomPort  *MockPort
 		controlPort *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-		set = NewMockSet(mockCtrl)
-		topPort = NewMockPort(mockCtrl)
-		bottomPort = NewMockPort(mockCtrl)
 		controlPort = NewMockPort(mockCtrl)
+		controlPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("ControlPort")).
+			AnyTimes()
+		controlPort.EXPECT().
+			Name().
+			Return("ControlPort").
+			AnyTimes()
+		controlPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
+
+		topPort := NewMockPort(mockCtrl)
+		topPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("TopPort")).
+			AnyTimes()
+		topPort.EXPECT().
+			Name().
+			Return("TopPort").
+			AnyTimes()
+		topPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
+
+		bottomPort := NewMockPort(mockCtrl)
+		bottomPort.EXPECT().
+			AsRemote().
+			Return(sim.RemotePort("BottomPort")).
+			AnyTimes()
+		bottomPort.EXPECT().
+			Name().
+			Return("BottomPort").
+			AnyTimes()
+		bottomPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 
 		comp = MakeBuilder().
 			WithEngine(engine).
 			WithTranslationProviderMapperType("single").
-			WithTranslationProviders("RemotePort").
-			WithTopPort(sim.NewPort(nil, 4, 4, "TLB.TopPort")).
-			WithBottomPort(sim.NewPort(nil, 4, 4, "TLB.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
+			WithTranslationProviders(sim.RemotePort("RemotePort")).
+			WithTopPort(topPort).
+			WithBottomPort(bottomPort).
+			WithControlPort(controlPort).
 			Build("TLB")
-		comp.topPort = topPort
-		comp.bottomPort = bottomPort
-		comp.controlPort = controlPort
-		comp.sets = []internal.Set{set}
 
 		ctrlMW = comp.Middlewares()[0].(*ctrlMiddleware)
 	})

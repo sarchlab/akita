@@ -3,7 +3,6 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -17,14 +16,15 @@ type Builder struct {
 	log2PageSize      uint64
 	pageSize          uint64
 	numMSHREntry      int
-	state             string
 	latency           int
-	addressMapper     mem.AddressToPortMapper
 	addressMapperType string
 	remotePorts       []sim.RemotePort
 	topPort           sim.Port
 	bottomPort        sim.Port
 	controlPort       sim.Port
+
+	// Legacy support for WithTranslationProviderMapper
+	legacyMapper mem.AddressToPortMapper
 }
 
 // MakeBuilder returns a Builder
@@ -36,7 +36,6 @@ func MakeBuilder() Builder {
 		numWays:        32,
 		pageSize:       4096,
 		numMSHREntry:   4,
-		state:          tlbStateEnable,
 		latency:        4,
 	}
 }
@@ -70,6 +69,7 @@ func (b Builder) WithNumWays(n int) Builder {
 // WithLog2PageSize sets the page size as a power of 2
 func (b Builder) WithLog2PageSize(n uint64) Builder {
 	b.log2PageSize = n
+	b.pageSize = 1 << n
 	return b
 }
 
@@ -108,7 +108,7 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 //
 // Deprecated: Use `WithTranslationProviderMapper` instead.
 func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
-	b.addressMapper = &mem.SinglePortMapper{
+	b.legacyMapper = &mem.SinglePortMapper{
 		Port: lowModule,
 	}
 	return b
@@ -132,7 +132,7 @@ func (b Builder) WithLatency(cycles int) Builder {
 func (b Builder) WithTranslationProviderMapper(
 	mapper mem.AddressToPortMapper,
 ) Builder {
-	b.addressMapper = mapper
+	b.legacyMapper = mapper
 	return b
 }
 
@@ -178,11 +178,25 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 
 // Build creates a new TLB
 func (b Builder) Build(name string) *Comp {
+	addrMapperKind, addrMapperPorts, addrMapperInterleavingSize := b.resolveAddressMapper()
+
 	spec := Spec{
-		NumSets:        b.numSets,
-		NumWays:        b.numWays,
-		PageSize:       b.pageSize,
-		NumReqPerCycle: b.numReqPerCycle,
+		NumSets:                    b.numSets,
+		NumWays:                    b.numWays,
+		PageSize:                   b.pageSize,
+		NumReqPerCycle:             b.numReqPerCycle,
+		MSHRSize:                   b.numMSHREntry,
+		Latency:                    b.latency,
+		PipelineWidth:              b.numReqPerCycle,
+		AddrMapperKind:             addrMapperKind,
+		AddrMapperPorts:            addrMapperPorts,
+		AddrMapperInterleavingSize: addrMapperInterleavingSize,
+	}
+
+	initialState := State{
+		TLBState:          tlbStateEnable,
+		Sets:              initSets(b.numSets, b.numWays),
+		PipelineNumStages: b.latency,
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
@@ -190,72 +204,65 @@ func (b Builder) Build(name string) *Comp {
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
+	modelComp.SetState(initialState)
 
-	tlb := &Comp{
-		Component:     modelComp,
-		addressMapper: b.addressMapper,
-		mshr:          newMSHR(b.numMSHREntry),
-		state:         b.state,
+	c := &Comp{
+		Component: modelComp,
 	}
 
-	b.createPorts(name, tlb)
-	b.createTranslationProviderMapper(tlb)
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
 
-	tlb.reset()
+	b.bottomPort.SetComponent(c)
+	modelComp.AddPort("Bottom", b.bottomPort)
 
-	buf := queueing.NewBuffer(name+".ResponsePipelineBuf", 16)
-	tlb.responseBuffer = buf
-	tlb.responsePipeline = queueing.MakeBuilder().
-		WithNumStage(b.latency).
-		WithCyclePerStage(1).
-		WithPipelineWidth(b.numReqPerCycle).
-		WithPostPipelineBuffer(buf).
-		Build(name + ".ResponsePipeline")
+	b.controlPort.SetComponent(c)
+	modelComp.AddPort("Control", b.controlPort)
 
-	ctrlMiddleware := &ctrlMiddleware{Comp: tlb}
-	tlb.AddMiddleware(ctrlMiddleware)
+	ctrlMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(ctrlMW)
 
-	middleware := &tlbMiddleware{Comp: tlb}
-	tlb.AddMiddleware(middleware)
+	tlbMW := &tlbMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(tlbMW)
 
-	return tlb
+	return c
 }
 
-func (b Builder) createTranslationProviderMapper(c *Comp) {
-	if c.addressMapper != nil {
-		return
+func (b Builder) resolveAddressMapper() (string, []sim.RemotePort, uint64) {
+	if b.legacyMapper != nil {
+		// Convert legacy mapper to spec fields
+		switch m := b.legacyMapper.(type) {
+		case *mem.SinglePortMapper:
+			return "single", []sim.RemotePort{m.Port}, 0
+		case *mem.InterleavedAddressPortMapper:
+			return "interleaved", m.LowModules, m.InterleavingSize
+		default:
+			// For any unknown mapper type, try to use it as single port
+			// Fall through to the addressMapperType logic
+		}
 	}
 
-	switch b.addressMapperType {
-	case "single":
-		if len(b.remotePorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
-		c.addressMapper = &mem.SinglePortMapper{
-			Port: b.remotePorts[0],
-		}
-	case "interleaved":
-		if len(b.remotePorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
-		mapper := mem.NewInterleavedAddressPortMapper(1 << b.log2PageSize)
-		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-		c.addressMapper = mapper
-	default:
-		panic("invalid address mapper type: " + b.addressMapperType)
+	interleavingSize := b.pageSize
+	if interleavingSize == 0 {
+		interleavingSize = 4096
 	}
-}
 
-func (b Builder) createPorts(name string, c *Comp) {
-	c.topPort = b.topPort
-	c.topPort.SetComponent(c)
-	c.AddPort("Top", c.topPort)
+	if b.addressMapperType != "" {
+		switch b.addressMapperType {
+		case "single":
+			if len(b.remotePorts) != 1 {
+				panic("single address mapper requires exactly 1 port")
+			}
+			return "single", b.remotePorts, 0
+		case "interleaved":
+			if len(b.remotePorts) == 0 {
+				panic("interleaved address mapper requires at least 1 port")
+			}
+			return "interleaved", b.remotePorts, interleavingSize
+		default:
+			panic("invalid address mapper type: " + b.addressMapperType)
+		}
+	}
 
-	c.bottomPort = b.bottomPort
-	c.bottomPort.SetComponent(c)
-	c.AddPort("Bottom", c.bottomPort)
-
-	c.controlPort = b.controlPort
-	c.controlPort.SetComponent(c)
-	c.AddPort("Control", c.controlPort)
+	panic("no address mapper configured")
 }
