@@ -193,9 +193,7 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	c := &Comp{
-		Component:      modelComp,
-		log2BlockSize:  b.log2BlockSize,
-		numReqPerCycle: b.numReqPerCycle,
+		Component: modelComp,
 	}
 
 	c.topPort = b.topPort
@@ -223,9 +221,6 @@ func (b Builder) Build(name string) *Comp {
 		numSets, b.wayAssociativity, blockSize,
 		cache.NewLRUVictimFinder())
 	c.storage = mem.NewStorage(b.totalByteSize)
-	c.bankLatency = b.bankLatency
-	c.wayAssociativity = b.wayAssociativity
-	c.maxNumConcurrentTrans = b.maxNumConcurrentTrans
 
 	b.configureAddressMapper(c)
 

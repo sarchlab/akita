@@ -108,7 +108,7 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 
 func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 	block := trans.block
-	blockSize := 1 << s.cache.log2BlockSize
+	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
 	data, err := s.cache.storage.Read(block.CacheAddress, uint64(blockSize))
 	if err != nil {

@@ -62,10 +62,10 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 
 	pid := trans.readToBottom.PID
 	addr := trans.Address()
-	cachelineID := (addr >> p.cache.log2BlockSize) << p.cache.log2BlockSize
+	cachelineID := (addr >> p.cache.GetSpec().Log2BlockSize) << p.cache.GetSpec().Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
-	dirtyMask := make([]bool, 1<<p.cache.log2BlockSize)
+	dirtyMask := make([]bool, 1<<p.cache.GetSpec().Log2BlockSize)
 	mshrEntry := p.cache.mshr.Query(pid, cachelineID)
 	p.mergeMSHRData(mshrEntry, data, dirtyMask)
 	p.finalizeMSHRTrans(mshrEntry, data)
@@ -168,7 +168,7 @@ func (p *bottomParser) removeTransaction(trans *transaction) {
 }
 
 func (p *bottomParser) getBankBuf(block *cache.Block) queueing.Buffer {
-	numWaysPerSet := p.cache.wayAssociativity
+	numWaysPerSet := p.cache.GetSpec().WayAssociativity
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(p.cache.bankBufs)
 

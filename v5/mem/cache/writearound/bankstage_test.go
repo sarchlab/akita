@@ -29,15 +29,16 @@ var _ = Describe("Bankstage", func() {
 		pipeline = NewMockPipeline(mockCtrl)
 		postPipelineBuf = NewMockBuffer(mockCtrl)
 		c = &Comp{
-			bankLatency:   10,
-			bankBufs:      []queueing.Buffer{inBuf},
-			storage:       storage,
-			log2BlockSize: 6,
+			bankBufs: []queueing.Buffer{inBuf},
+			storage:  storage,
 		}
 		c.Component = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				BankLatency:   10,
+				Log2BlockSize: 6,
+			}).
 			Build("Cache")
 		s = &bankStage{
 			cache:           c,

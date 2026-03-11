@@ -28,16 +28,17 @@ var _ = Describe("Bottom Parser", func() {
 		bankBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
 		c = &Comp{
-			log2BlockSize:    6,
-			bottomPort:       bottomPort,
-			mshr:             mshr,
-			wayAssociativity: 4,
-			bankBufs:         []queueing.Buffer{bankBuf},
+			bottomPort: bottomPort,
+			mshr:       mshr,
+			bankBufs:   []queueing.Buffer{bankBuf},
 		}
 		c.Component = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+			}).
 			Build("Cache")
 		p = &bottomParser{cache: c}
 	})

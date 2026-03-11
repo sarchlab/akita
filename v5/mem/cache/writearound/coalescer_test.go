@@ -24,15 +24,16 @@ var _ = Describe("Coalescer", func() {
 		topPort = NewMockPort(mockCtrl)
 		dirBuf = NewMockBuffer(mockCtrl)
 		cache = &Comp{
-			log2BlockSize:         6,
-			topPort:               topPort,
-			dirBuf:                dirBuf,
-			maxNumConcurrentTrans: 32,
+			topPort: topPort,
+			dirBuf:  dirBuf,
 		}
 		cache.Component = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				Log2BlockSize:         6,
+				MaxNumConcurrentTrans: 32,
+			}).
 			Build("Cache")
 		c = coalescer{cache: cache}
 	})

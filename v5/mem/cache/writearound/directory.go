@@ -24,7 +24,8 @@ type directory struct {
 }
 
 func (d *directory) Tick() (madeProgress bool) {
-	for i := 0; i < d.cache.numReqPerCycle; i++ {
+	spec := d.cache.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if !d.pipeline.CanAccept() {
 			break
 		}
@@ -43,7 +44,7 @@ func (d *directory) Tick() (madeProgress bool) {
 
 	madeProgress = d.pipeline.Tick() || madeProgress
 
-	for i := 0; i < d.cache.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		item := d.buf.Peek()
 		if item == nil {
 			break
@@ -65,7 +66,7 @@ func (d *directory) Tick() (madeProgress bool) {
 func (d *directory) processRead(trans *transaction) bool {
 	addr := trans.read.Address
 	pid := trans.read.PID
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
@@ -125,7 +126,7 @@ func (d *directory) processReadHit(
 
 func (d *directory) processReadMiss(trans *transaction) bool {
 	addr := trans.read.Address
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	victim := d.cache.directory.FindVictim(cacheLineID)
@@ -150,7 +151,7 @@ func (d *directory) processReadMiss(trans *transaction) bool {
 func (d *directory) processWrite(trans *transaction) bool {
 	addr := trans.write.Address
 	pid := trans.write.PID
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
@@ -229,7 +230,7 @@ func (d *directory) processWriteHit(
 	}
 
 	addr := trans.write.Address
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block.IsLocked = true
 	block.IsValid = true
@@ -252,7 +253,7 @@ func (d *directory) fetchFromBottom(
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
@@ -290,7 +291,7 @@ func (d *directory) fetchFromBottom(
 }
 
 func (d *directory) getBankBuf(block *cache.Block) queueing.Buffer {
-	numWaysPerSet := d.cache.directory.WayAssociativity()
+	numWaysPerSet := d.cache.GetSpec().WayAssociativity
 	blockID := block.SetID*numWaysPerSet + block.WayID
 	bankID := blockID % len(d.cache.bankBufs)
 

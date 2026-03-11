@@ -28,7 +28,7 @@ func (c *coalescer) Tick() bool {
 }
 
 func (c *coalescer) processReq(msg sim.Msg) bool {
-	if len(c.cache.transactions) >= c.cache.maxNumConcurrentTrans {
+	if len(c.cache.transactions) >= c.cache.GetSpec().MaxNumConcurrentTrans {
 		return false
 	}
 
@@ -146,7 +146,7 @@ func (c *coalescer) isReqLastInWave(msg sim.Msg) bool {
 }
 
 func (c *coalescer) canReqCoalesce(msg sim.Msg) bool {
-	blockSize := uint64(1 << c.cache.log2BlockSize)
+	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	accessReq := msg.(mem.AccessReq)
 	return accessReq.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
 }
@@ -178,7 +178,7 @@ func (c *coalescer) coalesceAndSend() bool {
 }
 
 func (c *coalescer) coalesceRead() *transaction {
-	blockSize := uint64(1 << c.cache.log2BlockSize)
+	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
 	coalescedRead := &mem.ReadReq{}
 	coalescedRead.ID = sim.GetIDGenerator().Generate()
@@ -196,7 +196,7 @@ func (c *coalescer) coalesceRead() *transaction {
 }
 
 func (c *coalescer) coalesceWrite() *transaction {
-	blockSize := uint64(1 << c.cache.log2BlockSize)
+	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
 	writeData := make([]byte, blockSize)
 	writeDirtyMask := make([]bool, blockSize)

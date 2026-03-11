@@ -45,13 +45,9 @@ type Comp struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	numReqPerCycle      int
-	log2BlockSize       uint64
 	storage             *mem.Storage
 	directory           cache.Directory
 	mshr                cache.MSHR
-	bankLatency         int
-	wayAssociativity    int
 	addressToPortMapper mem.AddressToPortMapper
 
 	dirBuf   queueing.Buffer
@@ -64,7 +60,6 @@ type Comp struct {
 	respondStage     *respondStage
 	controlStage     *controlStage
 
-	maxNumConcurrentTrans    int
 	transactions             []*transaction
 	postCoalesceTransactions []*transaction
 
@@ -107,7 +102,8 @@ func (m *middleware) runPipeline() bool {
 
 func (m *middleware) tickRespondStage() bool {
 	madeProgress := false
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondStage.Tick() || madeProgress
 	}
 
@@ -117,7 +113,8 @@ func (m *middleware) tickRespondStage() bool {
 func (m *middleware) tickParseBottomStage() bool {
 	madeProgress := false
 
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.parseBottomStage.Tick() || madeProgress
 	}
 
@@ -139,7 +136,8 @@ func (m *middleware) tickDirectoryStage() bool {
 
 func (m *middleware) tickCoalesceState() bool {
 	madeProgress := false
-	for i := 0; i < m.numReqPerCycle; i++ {
+	spec := m.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.coalesceStage.Tick() || madeProgress
 	}
 
