@@ -46,6 +46,8 @@ func (ds *directoryStage) tickPipeline() bool {
 func (ds *directoryStage) processTransaction() bool {
 	madeProgress := false
 	spec := ds.cache.comp.GetSpec()
+	// We use next because processTransaction is called in a loop and
+	// popDirPostBuf modifies next — subsequent iterations need to see removals.
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -121,6 +123,8 @@ func (ds *directoryStage) Reset() {
 func (ds *directoryStage) doRead(trans *transactionState) bool {
 	read := trans.read
 	spec := ds.cache.comp.GetSpec()
+	// Use next for MSHRQuery and DirectoryLookup because multiple
+	// transactions are processed per tick and need to see within-tick mutations.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
 
@@ -168,6 +172,8 @@ func (ds *directoryStage) handleReadHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
+	// Use next for block state check since within-tick mutations
+	// (blocks locked by previous transactions) must be visible.
 	next := ds.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
@@ -186,6 +192,8 @@ func (ds *directoryStage) handleReadHit(
 func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 	read := trans.read
 	spec := ds.cache.comp.GetSpec()
+	// Use next for MSHRIsFull and DirectoryFindVictim since within-tick
+	// mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cacheLineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
 
@@ -232,6 +240,8 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
+	// Use next for MSHRQuery and DirectoryLookup since within-tick
+	// mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -297,6 +307,7 @@ func (ds *directoryStage) doWriteHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
+	// Use next for block state check since within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
@@ -318,6 +329,8 @@ func (ds *directoryStage) doWriteMiss(trans *transactionState) bool {
 func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
+	// Use next for DirectoryFindVictim and block state checks since
+	// within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -342,6 +355,8 @@ func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 func (ds *directoryStage) writePartialLineMiss(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
+	// Use next for MSHRIsFull, DirectoryFindVictim, and block state checks
+	// since within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -491,8 +506,11 @@ func (ds *directoryStage) updateTransForEviction(
 	cacheLineID uint64,
 ) {
 	spec := ds.cache.comp.GetSpec()
+	// Read victim metadata from cur (frozen snapshot from previous tick)
+	// since we need the original block metadata before any within-tick changes.
+	cur := ds.cache.comp.GetState()
 	next := ds.cache.comp.GetNextState()
-	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
+	victim := &cur.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
 	trans.action = bankEvictAndFetch
 	trans.hasVictim = true

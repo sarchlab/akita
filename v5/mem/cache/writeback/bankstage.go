@@ -66,19 +66,20 @@ func (s *bankStage) Reset() {
 }
 
 func (s *bankStage) pullFromBuf() bool {
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 	spec := s.cache.comp.GetSpec()
 
 	if spec.BankLatency > 0 {
 		if !bankPipelineCanAccept(
-			next.BankPipelineStages[s.bankID].Stages,
+			cur.BankPipelineStages[s.bankID].Stages,
 			s.pipelineWidth,
 		) {
 			return false
 		}
 	} else {
 		// No pipeline - check post-buf capacity
-		if len(next.BankPostPipelineBufIndices[s.bankID].Indices) >= s.pipelineWidth {
+		if len(cur.BankPostPipelineBufIndices[s.bankID].Indices) >= s.pipelineWidth {
 			return false
 		}
 	}
@@ -146,6 +147,9 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 }
 
 func (s *bankStage) finalizeTrans() bool {
+	// NOTE: We use next for both reading and writing the postBuf indices here
+	// because finalizeTrans is called multiple times per tick, and each call
+	// must see the removals made by previous calls within the same tick.
 	next := s.cache.comp.GetNextState()
 	postBuf := &next.BankPostPipelineBufIndices[s.bankID].Indices
 
@@ -168,7 +172,6 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			// Remove element at index i
 			*postBuf = append((*postBuf)[:i], (*postBuf)[i+1:]...)
 			return true
 		}
@@ -183,15 +186,16 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	}
 
 	spec := s.cache.comp.GetSpec()
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
 	read := trans.read
 	addr := read.Address
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress+offset, read.AccessByteSize)
+		curBlock.CacheAddress+offset, read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +204,9 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
-	block.ReadCount--
+
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.ReadCount--
 
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
@@ -223,19 +229,21 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	}
 
 	spec := s.cache.comp.GetSpec()
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
 	write := trans.write
 	addr := write.Address
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	dirtyMask := s.writeData(block, write, offset, spec.Log2BlockSize)
+	dirtyMask := s.writeData(curBlock, write, offset, spec.Log2BlockSize)
 
-	block.IsValid = true
-	block.IsLocked = false
-	block.IsDirty = true
-	block.DirtyMask = dirtyMask
+	nextBlock.IsValid = true
+	nextBlock.IsLocked = false
+	nextBlock.IsDirty = true
+	nextBlock.DirtyMask = dirtyMask
 
 	s.removeTransaction(trans)
 
@@ -296,21 +304,24 @@ func (s *bankStage) finalizeBankWriteFetched(
 		return false
 	}
 
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
-	// Use block reference from the transaction itself
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	// Read CacheAddress from cur
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	// Push the transaction itself to MSHR stage
 	s.cache.mshrStageBuffer.Push(trans)
 
-	err := s.cache.storage.Write(block.CacheAddress, trans.mshrData)
+	err := s.cache.storage.Write(curBlock.CacheAddress, trans.mshrData)
 	if err != nil {
 		panic(err)
 	}
 
-	block.IsLocked = false
-	block.IsValid = true
+	// Write modifications to next
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.IsLocked = false
+	nextBlock.IsValid = true
 
 	s.inflightTransCount--
 
