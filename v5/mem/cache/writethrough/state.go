@@ -9,54 +9,17 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// msgRefFromSimMsg converts a sim.Msg into a serializable MsgRef.
-func msgRefFromSimMsg(msg sim.Msg) cache.MsgRef {
-	m := msg.Meta()
-	return cache.MsgRef{
-		ID:           m.ID,
-		Src:          m.Src,
-		Dst:          m.Dst,
-		RspTo:        m.RspTo,
-		TrafficClass: m.TrafficClass,
-		TrafficBytes: m.TrafficBytes,
-	}
-}
-
-// readReqFromRef converts a MsgRef back into a *mem.ReadReq with metadata.
-func readReqFromRef(ref cache.MsgRef) *mem.ReadReq {
-	r := &mem.ReadReq{}
-	r.ID = ref.ID
-	r.Src = ref.Src
-	r.Dst = ref.Dst
-	r.RspTo = ref.RspTo
-	r.TrafficClass = ref.TrafficClass
-	r.TrafficBytes = ref.TrafficBytes
-	return r
-}
-
-// writeReqFromRef converts a MsgRef back into a *mem.WriteReq with metadata.
-func writeReqFromRef(ref cache.MsgRef) *mem.WriteReq {
-	w := &mem.WriteReq{}
-	w.ID = ref.ID
-	w.Src = ref.Src
-	w.Dst = ref.Dst
-	w.RspTo = ref.RspTo
-	w.TrafficClass = ref.TrafficClass
-	w.TrafficBytes = ref.TrafficBytes
-	return w
-}
-
 // transactionState is the serializable representation of a transaction.
 type transactionState struct {
 	ID                     string       `json:"id"`
 	HasRead                bool         `json:"has_read"`
-	ReadMsg                cache.MsgRef `json:"read_msg"`
+	ReadMsg                sim.MsgMeta  `json:"read_msg"`
 	HasReadToBottom        bool         `json:"has_read_to_bottom"`
-	ReadToBottomMsg        cache.MsgRef `json:"read_to_bottom_msg"`
+	ReadToBottomMsg        sim.MsgMeta  `json:"read_to_bottom_msg"`
 	HasWrite               bool         `json:"has_write"`
-	WriteMsg               cache.MsgRef `json:"write_msg"`
+	WriteMsg               sim.MsgMeta  `json:"write_msg"`
 	HasWriteToBottom       bool         `json:"has_write_to_bottom"`
-	WriteToBottomMsg       cache.MsgRef `json:"write_to_bottom_msg"`
+	WriteToBottomMsg       sim.MsgMeta  `json:"write_to_bottom_msg"`
 	PreCoalesceTransIdxs   []int        `json:"pre_coalesce_trans_idxs"`
 	BankAction             int          `json:"bank_action"`
 	HasBlock               bool         `json:"has_block"`
@@ -132,22 +95,22 @@ func snapshotTransaction(
 
 	if t.read != nil {
 		s.HasRead = true
-		s.ReadMsg = msgRefFromSimMsg(t.read)
+		s.ReadMsg = t.read.MsgMeta
 	}
 
 	if t.readToBottom != nil {
 		s.HasReadToBottom = true
-		s.ReadToBottomMsg = msgRefFromSimMsg(t.readToBottom)
+		s.ReadToBottomMsg = t.readToBottom.MsgMeta
 	}
 
 	if t.write != nil {
 		s.HasWrite = true
-		s.WriteMsg = msgRefFromSimMsg(t.write)
+		s.WriteMsg = t.write.MsgMeta
 	}
 
 	if t.writeToBottom != nil {
 		s.HasWriteToBottom = true
-		s.WriteToBottomMsg = msgRefFromSimMsg(t.writeToBottom)
+		s.WriteToBottomMsg = t.writeToBottom.MsgMeta
 	}
 
 	snapshotTransBlock(t, &s)
@@ -249,19 +212,19 @@ func restoreTransactionCore(
 
 func restoreTransMsgs(t *transaction, s transactionState) {
 	if s.HasRead {
-		t.read = readReqFromRef(s.ReadMsg)
+		t.read = &mem.ReadReq{MsgMeta: s.ReadMsg}
 	}
 
 	if s.HasReadToBottom {
-		t.readToBottom = readReqFromRef(s.ReadToBottomMsg)
+		t.readToBottom = &mem.ReadReq{MsgMeta: s.ReadToBottomMsg}
 	}
 
 	if s.HasWrite {
-		t.write = writeReqFromRef(s.WriteMsg)
+		t.write = &mem.WriteReq{MsgMeta: s.WriteMsg}
 	}
 
 	if s.HasWriteToBottom {
-		t.writeToBottom = writeReqFromRef(s.WriteToBottomMsg)
+		t.writeToBottom = &mem.WriteReq{MsgMeta: s.WriteToBottomMsg}
 	}
 }
 
