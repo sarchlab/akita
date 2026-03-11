@@ -11,7 +11,7 @@ import (
 
 type controlStage struct {
 	ctrlPort     sim.Port
-	transactions *[]*transaction
+	transactions *[]*transactionState
 	directory    cache.Directory
 	cache        *Comp
 	coalescer    *coalescer

@@ -87,7 +87,7 @@ var _ = Describe("Directory", func() {
 	Context("read mshr hit", func() {
 		var (
 			read  *mem.ReadReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -99,7 +99,7 @@ var _ = Describe("Directory", func() {
 			read.TrafficBytes = 12
 			read.TrafficClass = "req"
 
-			trans = &transaction{
+			trans = &transactionState{
 				read: read,
 			}
 
@@ -124,7 +124,7 @@ var _ = Describe("Directory", func() {
 		var (
 			block *cache.Block
 			read  *mem.ReadReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -138,7 +138,7 @@ var _ = Describe("Directory", func() {
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
 			read.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				read: read,
 			}
 
@@ -153,7 +153,7 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Visit(block)
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(t *transaction) {
+				Do(func(t *transactionState) {
 					Expect(t.block).To(BeIdenticalTo(block))
 					Expect(t.bankAction).To(Equal(bankActionReadHit))
 				})
@@ -186,7 +186,7 @@ var _ = Describe("Directory", func() {
 		var (
 			block     *cache.Block
 			read      *mem.ReadReq
-			trans     *transaction
+			trans     *transactionState
 			mshrEntry *cache.MSHREntry
 		)
 
@@ -202,7 +202,7 @@ var _ = Describe("Directory", func() {
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
 			read.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				read: read,
 			}
 
@@ -291,7 +291,7 @@ var _ = Describe("Directory", func() {
 	Context("write mshr hit", func() {
 		var (
 			write     *mem.WriteReq
-			trans     *transaction
+			trans     *transactionState
 			mshrEntry *cache.MSHREntry
 		)
 
@@ -303,7 +303,7 @@ var _ = Describe("Directory", func() {
 			write.Data = []byte{1, 2, 3, 4}
 			write.TrafficBytes = 4 + 12
 			write.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				write: write,
 			}
 			mshrEntry = &cache.MSHREntry{}
@@ -337,7 +337,7 @@ var _ = Describe("Directory", func() {
 	Context("write hit", func() {
 		var (
 			write *mem.WriteReq
-			trans *transaction
+			trans *transactionState
 			block *cache.Block
 		)
 
@@ -349,7 +349,7 @@ var _ = Describe("Directory", func() {
 			write.Data = []byte{1, 2, 3, 4}
 			write.TrafficBytes = 4 + 12
 			write.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				write: write,
 			}
 			block = &cache.Block{IsValid: true}
@@ -366,7 +366,7 @@ var _ = Describe("Directory", func() {
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transaction) {
+				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWrite))
 					Expect(trans.block).To(BeIdenticalTo(block))
 				})
@@ -445,7 +445,7 @@ var _ = Describe("Directory", func() {
 	Context("write miss", func() {
 		var (
 			write *mem.WriteReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -456,7 +456,7 @@ var _ = Describe("Directory", func() {
 			write.Data = make([]byte, 64)
 			write.TrafficBytes = 64 + 12
 			write.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				write: write,
 			}
 		})

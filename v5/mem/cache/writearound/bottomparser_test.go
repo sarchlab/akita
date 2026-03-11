@@ -61,7 +61,7 @@ var _ = Describe("Bottom Parser", func() {
 			write1.PID = 1
 			write1.TrafficBytes = 12
 			write1.TrafficClass = "req"
-			preCTrans1 := &transaction{
+			preCTrans1 := &transactionState{
 				write: write1,
 			}
 			write2 := &mem.WriteReq{}
@@ -70,7 +70,7 @@ var _ = Describe("Bottom Parser", func() {
 			write2.PID = 1
 			write2.TrafficBytes = 12
 			write2.TrafficClass = "req"
-			preCTrans2 := &transaction{
+			preCTrans2 := &transactionState{
 				write: write2,
 			}
 			writeToBottom := &mem.WriteReq{}
@@ -79,9 +79,9 @@ var _ = Describe("Bottom Parser", func() {
 			writeToBottom.PID = 1
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "req"
-			postCTrans := &transaction{
+			postCTrans := &transactionState{
 				writeToBottom:           writeToBottom,
-				preCoalesceTransactions: []*transaction{preCTrans1, preCTrans2},
+				preCoalesceTransactions: []*transactionState{preCTrans1, preCTrans2},
 			}
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans)
@@ -107,13 +107,13 @@ var _ = Describe("Bottom Parser", func() {
 		var (
 			read1, read2             *mem.ReadReq
 			write1, write2           *mem.WriteReq
-			preCTrans1, preCTrans2   *transaction
-			preCTrans3, preCTrans4   *transaction
+			preCTrans1, preCTrans2   *transactionState
+			preCTrans3, preCTrans4   *transactionState
 			postCRead                *mem.ReadReq
 			postCWrite               *mem.WriteReq
 			readToBottom             *mem.ReadReq
 			block                    *cache.Block
-			postCTrans1, postCTrans2 *transaction
+			postCTrans1, postCTrans2 *transactionState
 			mshrEntry                *cache.MSHREntry
 			dataReady                *mem.DataReadyRsp
 		)
@@ -151,10 +151,10 @@ var _ = Describe("Bottom Parser", func() {
 			write2.TrafficBytes = 4 + 12
 			write2.TrafficClass = "req"
 
-			preCTrans1 = &transaction{read: read1}
-			preCTrans2 = &transaction{read: read2}
-			preCTrans3 = &transaction{write: write1}
-			preCTrans4 = &transaction{write: write2}
+			preCTrans1 = &transactionState{read: read1}
+			preCTrans2 = &transactionState{read: read2}
+			preCTrans3 = &transactionState{write: write1}
+			preCTrans4 = &transactionState{write: write2}
 
 			postCRead = &mem.ReadReq{}
 			postCRead.ID = sim.GetIDGenerator().Generate()
@@ -192,11 +192,11 @@ var _ = Describe("Bottom Parser", func() {
 				PID: 1,
 				Tag: 0x100,
 			}
-			postCTrans1 = &transaction{
+			postCTrans1 = &transactionState{
 				block:        block,
 				read:         postCRead,
 				readToBottom: readToBottom,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans1,
 					preCTrans2,
 				},
@@ -218,9 +218,9 @@ var _ = Describe("Bottom Parser", func() {
 			}
 			postCWrite.TrafficBytes = 16 + 12
 			postCWrite.TrafficClass = "req"
-			postCTrans2 = &transaction{
+			postCTrans2 = &transactionState{
 				write: postCWrite,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans3, preCTrans4,
 				},
 			}
@@ -247,7 +247,7 @@ var _ = Describe("Bottom Parser", func() {
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transaction) {
+				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
 				})
 
@@ -273,7 +273,7 @@ var _ = Describe("Bottom Parser", func() {
 			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transaction) {
+				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
 					Expect(trans.data).To(Equal([]byte{
 						1, 2, 3, 4, 5, 6, 7, 8,

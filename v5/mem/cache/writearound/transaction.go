@@ -15,7 +15,11 @@ const (
 	bankActionWriteFetched
 )
 
-type transaction struct {
+// transactionState is the canonical transaction type for the writearound cache.
+// All stages work with *transactionState directly. The snapshot/restore layer
+// in state.go converts between transactionState (runtime) and
+// transactionSnapshot (serializable) for persistence.
+type transactionState struct {
 	id string
 
 	read         *mem.ReadReq
@@ -24,7 +28,7 @@ type transaction struct {
 	write         *mem.WriteReq
 	writeToBottom *mem.WriteReq
 
-	preCoalesceTransactions []*transaction
+	preCoalesceTransactions []*transactionState
 
 	bankAction            bankActionType
 	block                 *cache.Block
@@ -35,7 +39,7 @@ type transaction struct {
 	done          bool
 }
 
-func (t *transaction) Address() uint64 {
+func (t *transactionState) Address() uint64 {
 	if t.read != nil {
 		return t.read.Address
 	}
@@ -43,7 +47,7 @@ func (t *transaction) Address() uint64 {
 	return t.write.Address
 }
 
-func (t *transaction) PID() vm.PID {
+func (t *transactionState) PID() vm.PID {
 	if t.read != nil {
 		return t.read.PID
 	}

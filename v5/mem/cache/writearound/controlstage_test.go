@@ -16,7 +16,7 @@ var _ = Describe("Control Stage", func() {
 		ctrlPort     *MockPort
 		topPort      *MockPort
 		bottomPort   *MockPort
-		transactions []*transaction
+		transactions []*transactionState
 		directory    *MockDirectory
 		s            *controlStage
 		cache        *Comp
@@ -85,7 +85,7 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should wait for the cache to finish transactions", func() {
-		transactions = []*transaction{{}}
+		transactions = []*transactionState{{}}
 		s.cache.transactions = transactions
 		flushReq := &cache2.FlushReq{}
 		flushReq.ID = sim.GetIDGenerator().Generate()

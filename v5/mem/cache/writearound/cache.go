@@ -26,7 +26,7 @@ type Spec struct {
 type State struct {
 	DirectoryState             cache.DirectoryState       `json:"directory_state"`
 	MSHRState                  cache.MSHRState            `json:"mshr_state"`
-	Transactions               []transactionState         `json:"transactions"`
+	Transactions               []transactionSnapshot      `json:"transactions"`
 	NumTransactions            int                        `json:"num_transactions"`
 	DirBufIndices              []int                      `json:"dir_buf_indices"`
 	BankBufIndices             []bankBufState             `json:"bank_buf_indices"`
@@ -60,8 +60,8 @@ type Comp struct {
 	respondStage     *respondStage
 	controlStage     *controlStage
 
-	transactions             []*transaction
-	postCoalesceTransactions []*transaction
+	transactions             []*transactionState
+	postCoalesceTransactions []*transactionState
 
 	isPaused bool
 }

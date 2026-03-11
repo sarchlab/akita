@@ -9,8 +9,8 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// transactionState is the serializable representation of a transaction.
-type transactionState struct {
+// transactionSnapshot is the serializable representation of a transactionState.
+type transactionSnapshot struct {
 	ID                     string       `json:"id"`
 	HasRead                bool         `json:"has_read"`
 	ReadMsg                sim.MsgMeta  `json:"read_msg"`
@@ -63,10 +63,10 @@ type bankPostBufState struct {
 }
 
 func buildTransIndex(
-	transactions []*transaction,
-	postCoalesceTransactions []*transaction,
-) map[*transaction]int {
-	m := make(map[*transaction]int,
+	transactions []*transactionState,
+	postCoalesceTransactions []*transactionState,
+) map[*transactionState]int {
+	m := make(map[*transactionState]int,
 		len(transactions)+len(postCoalesceTransactions))
 
 	for i, t := range transactions {
@@ -83,10 +83,10 @@ func buildTransIndex(
 }
 
 func snapshotTransaction(
-	t *transaction,
-	lookup map[*transaction]int,
-) transactionState {
-	s := transactionState{
+	t *transactionState,
+	lookup map[*transactionState]int,
+) transactionSnapshot {
+	s := transactionSnapshot{
 		ID:            t.id,
 		BankAction:    int(t.bankAction),
 		FetchAndWrite: t.fetchAndWrite,
@@ -120,7 +120,7 @@ func snapshotTransaction(
 	return s
 }
 
-func snapshotTransBlock(t *transaction, s *transactionState) {
+func snapshotTransBlock(t *transactionState, s *transactionSnapshot) {
 	if t.block != nil {
 		s.HasBlock = true
 		s.BlockSetID = t.block.SetID
@@ -128,7 +128,7 @@ func snapshotTransBlock(t *transaction, s *transactionState) {
 	}
 }
 
-func snapshotTransData(t *transaction, s *transactionState) {
+func snapshotTransData(t *transactionState, s *transactionSnapshot) {
 	if t.data != nil {
 		s.Data = make([]uint8, len(t.data))
 		copy(s.Data, t.data)
@@ -142,9 +142,9 @@ func snapshotTransData(t *transaction, s *transactionState) {
 }
 
 func snapshotPreCoalesce(
-	t *transaction,
-	s *transactionState,
-	lookup map[*transaction]int,
+	t *transactionState,
+	s *transactionSnapshot,
+	lookup map[*transactionState]int,
 ) {
 	if len(t.preCoalesceTransactions) > 0 {
 		s.PreCoalesceTransIdxs = make(
@@ -156,12 +156,12 @@ func snapshotPreCoalesce(
 }
 
 func snapshotAllTransactions(
-	transactions []*transaction,
-	postCoalesce []*transaction,
-	lookup map[*transaction]int,
-) []transactionState {
+	transactions []*transactionState,
+	postCoalesce []*transactionState,
+	lookup map[*transactionState]int,
+) []transactionSnapshot {
 	total := len(transactions) + len(postCoalesce)
-	states := make([]transactionState, total)
+	states := make([]transactionSnapshot, total)
 
 	for i, t := range transactions {
 		states[i] = snapshotTransaction(t, lookup)
@@ -177,26 +177,26 @@ func snapshotAllTransactions(
 }
 
 func restoreAllTransactions(
-	states []transactionState,
+	snapshots []transactionSnapshot,
 	numTrans int,
 	dir cache.Directory,
-) ([]*transaction, []*transaction) {
-	allTrans := make([]*transaction, len(states))
+) ([]*transactionState, []*transactionState) {
+	allTrans := make([]*transactionState, len(snapshots))
 
-	for i, s := range states {
+	for i, s := range snapshots {
 		allTrans[i] = restoreTransactionCore(s, dir)
 	}
 
-	wirePreCoalesce(allTrans, states)
+	wirePreCoalesce(allTrans, snapshots)
 
 	return allTrans[:numTrans], allTrans[numTrans:]
 }
 
 func restoreTransactionCore(
-	s transactionState,
+	s transactionSnapshot,
 	dir cache.Directory,
-) *transaction {
-	t := &transaction{
+) *transactionState {
+	t := &transactionState{
 		id:            s.ID,
 		bankAction:    bankActionType(s.BankAction),
 		fetchAndWrite: s.FetchAndWrite,
@@ -210,7 +210,7 @@ func restoreTransactionCore(
 	return t
 }
 
-func restoreTransMsgs(t *transaction, s transactionState) {
+func restoreTransMsgs(t *transactionState, s transactionSnapshot) {
 	if s.HasRead {
 		t.read = &mem.ReadReq{MsgMeta: s.ReadMsg}
 	}
@@ -229,8 +229,8 @@ func restoreTransMsgs(t *transaction, s transactionState) {
 }
 
 func restoreTransBlock(
-	t *transaction,
-	s transactionState,
+	t *transactionState,
+	s transactionSnapshot,
 	dir cache.Directory,
 ) {
 	if s.HasBlock {
@@ -239,7 +239,7 @@ func restoreTransBlock(
 	}
 }
 
-func restoreTransData(t *transaction, s transactionState) {
+func restoreTransData(t *transactionState, s transactionSnapshot) {
 	if s.Data != nil {
 		t.data = make([]byte, len(s.Data))
 		copy(t.data, s.Data)
@@ -253,15 +253,15 @@ func restoreTransData(t *transaction, s transactionState) {
 }
 
 func wirePreCoalesce(
-	allTrans []*transaction,
-	states []transactionState,
+	allTrans []*transactionState,
+	snapshots []transactionSnapshot,
 ) {
-	for i, s := range states {
+	for i, s := range snapshots {
 		if len(s.PreCoalesceTransIdxs) == 0 {
 			continue
 		}
 
-		refs := make([]*transaction, len(s.PreCoalesceTransIdxs))
+		refs := make([]*transactionState, len(s.PreCoalesceTransIdxs))
 		for j, idx := range s.PreCoalesceTransIdxs {
 			refs[j] = allTrans[idx]
 		}
@@ -272,13 +272,13 @@ func wirePreCoalesce(
 
 func snapshotDirBuf(
 	buf queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
 
 	for i, e := range elems {
-		indices[i] = lookup[e.(*transaction)]
+		indices[i] = lookup[e.(*transactionState)]
 	}
 
 	return indices
@@ -287,7 +287,7 @@ func snapshotDirBuf(
 func restoreDirBuf(
 	buf queueing.Buffer,
 	indices []int,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
@@ -299,7 +299,7 @@ func restoreDirBuf(
 
 func snapshotBankBufs(
 	bankBufs []queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankBufState {
 	result := make([]bankBufState, len(bankBufs))
 
@@ -308,7 +308,7 @@ func snapshotBankBufs(
 		indices := make([]int, len(elems))
 
 		for j, e := range elems {
-			indices[j] = lookup[e.(*transaction)]
+			indices[j] = lookup[e.(*transactionState)]
 		}
 
 		result[i] = bankBufState{Indices: indices}
@@ -320,7 +320,7 @@ func snapshotBankBufs(
 func restoreBankBufs(
 	bankBufs []queueing.Buffer,
 	states []bankBufState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, s := range states {
 		elems := make([]interface{}, len(s.Indices))
@@ -334,7 +334,7 @@ func restoreBankBufs(
 
 func snapshotDirPipeline(
 	p queueing.Pipeline,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []dirPipelineStageState {
 	snaps := queueing.SnapshotPipeline(p)
 	states := make([]dirPipelineStageState, len(snaps))
@@ -355,7 +355,7 @@ func snapshotDirPipeline(
 func restoreDirPipeline(
 	p queueing.Pipeline,
 	states []dirPipelineStageState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	snaps := make([]queueing.PipelineStageSnapshot, len(states))
 
@@ -375,7 +375,7 @@ func restoreDirPipeline(
 
 func snapshotDirPostBuf(
 	buf queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
@@ -391,7 +391,7 @@ func snapshotDirPostBuf(
 func restoreDirPostBuf(
 	buf queueing.Buffer,
 	indices []int,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
@@ -403,7 +403,7 @@ func restoreDirPostBuf(
 
 func snapshotBankPipelines(
 	bankStages []*bankStage,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankPipelineState {
 	result := make([]bankPipelineState, len(bankStages))
 
@@ -416,7 +416,7 @@ func snapshotBankPipelines(
 			states[j] = bankPipelineStageState{
 				Lane:       s.Lane,
 				Stage:      s.Stage,
-				TransIndex: lookup[bt.transaction],
+				TransIndex: lookup[bt.transactionState],
 				CycleLeft:  s.CycleLeft,
 			}
 		}
@@ -430,7 +430,7 @@ func snapshotBankPipelines(
 func restoreBankPipelines(
 	bankStages []*bankStage,
 	pipeStates []bankPipelineState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, ps := range pipeStates {
 		snaps := make(
@@ -441,7 +441,7 @@ func restoreBankPipelines(
 				Lane:  s.Lane,
 				Stage: s.Stage,
 				Elem: &bankTransaction{
-					transaction: allTrans[s.TransIndex],
+					transactionState: allTrans[s.TransIndex],
 				},
 				CycleLeft: s.CycleLeft,
 			}
@@ -453,7 +453,7 @@ func restoreBankPipelines(
 
 func snapshotBankPostBufs(
 	bankStages []*bankStage,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankPostBufState {
 	result := make([]bankPostBufState, len(bankStages))
 
@@ -463,7 +463,7 @@ func snapshotBankPostBufs(
 
 		for j, e := range elems {
 			bt := e.(*bankTransaction)
-			indices[j] = lookup[bt.transaction]
+			indices[j] = lookup[bt.transactionState]
 		}
 
 		result[i] = bankPostBufState{Indices: indices}
@@ -475,13 +475,13 @@ func snapshotBankPostBufs(
 func restoreBankPostBufs(
 	bankStages []*bankStage,
 	states []bankPostBufState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, s := range states {
 		elems := make([]interface{}, len(s.Indices))
 		for j, idx := range s.Indices {
 			elems[j] = &bankTransaction{
-				transaction: allTrans[idx],
+				transactionState: allTrans[idx],
 			}
 		}
 
@@ -491,7 +491,7 @@ func restoreBankPostBufs(
 }
 
 func mshrTransLookup(
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) map[interface{}]int {
 	m := make(map[interface{}]int, len(lookup))
 	for k, v := range lookup {
@@ -539,7 +539,7 @@ func (c *Comp) restoreFromState(s State) {
 	c.transactions = trans
 	c.postCoalesceTransactions = postCoalesce
 
-	allTrans := make([]*transaction, len(s.Transactions))
+	allTrans := make([]*transactionState, len(s.Transactions))
 	copy(allTrans[:s.NumTransactions], trans)
 	copy(allTrans[s.NumTransactions:], postCoalesce)
 
@@ -550,7 +550,7 @@ func (c *Comp) restoreFromState(s State) {
 func restoreMSHR(
 	c *Comp,
 	s State,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	ifaces := make([]interface{}, len(allTrans))
 	for i, t := range allTrans {
@@ -563,7 +563,7 @@ func restoreMSHR(
 func restoreBuffersAndPipelines(
 	c *Comp,
 	s State,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	restoreDirBuf(c.dirBuf, s.DirBufIndices, allTrans)
 	restoreBankBufs(c.bankBufs, s.BankBufIndices, allTrans)

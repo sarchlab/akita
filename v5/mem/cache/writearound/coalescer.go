@@ -11,7 +11,7 @@ import (
 
 type coalescer struct {
 	cache      *Comp
-	toCoalesce []*transaction
+	toCoalesce []*transactionState
 }
 
 func (c *coalescer) Reset() {
@@ -113,16 +113,16 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) createTransaction(msg sim.Msg) *transaction {
+func (c *coalescer) createTransaction(msg sim.Msg) *transactionState {
 	switch m := msg.(type) {
 	case *mem.ReadReq:
-		t := &transaction{
+		t := &transactionState{
 			read: m,
 		}
 
 		return t
 	case *mem.WriteReq:
-		t := &transaction{
+		t := &transactionState{
 			write: m,
 		}
 
@@ -152,7 +152,7 @@ func (c *coalescer) canReqCoalesce(msg sim.Msg) bool {
 }
 
 func (c *coalescer) coalesceAndSend() bool {
-	var trans *transaction
+	var trans *transactionState
 	if c.toCoalesce[0].read != nil {
 		trans = c.coalesceRead()
 		tracing.StartTaskWithSpecificLocation(trans.id,
@@ -177,7 +177,7 @@ func (c *coalescer) coalesceAndSend() bool {
 	return true
 }
 
-func (c *coalescer) coalesceRead() *transaction {
+func (c *coalescer) coalesceRead() *transactionState {
 	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
 	coalescedRead := &mem.ReadReq{}
@@ -188,14 +188,14 @@ func (c *coalescer) coalesceRead() *transaction {
 	coalescedRead.TrafficBytes = 12
 	coalescedRead.TrafficClass = "req"
 
-	return &transaction{
+	return &transactionState{
 		id:                      sim.GetIDGenerator().Generate(),
 		read:                    coalescedRead,
 		preCoalesceTransactions: c.toCoalesce,
 	}
 }
 
-func (c *coalescer) coalesceWrite() *transaction {
+func (c *coalescer) coalesceWrite() *transactionState {
 	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
 	writeData := make([]byte, blockSize)
@@ -220,7 +220,7 @@ func (c *coalescer) coalesceWrite() *transaction {
 		}
 	}
 
-	return &transaction{
+	return &transactionState{
 		id:                      sim.GetIDGenerator().Generate(),
 		write:                   coalescedWrite,
 		preCoalesceTransactions: c.toCoalesce,

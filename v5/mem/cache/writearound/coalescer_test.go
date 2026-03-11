@@ -95,7 +95,7 @@ var _ = Describe("Coalescer", func() {
 				dirBuf.EXPECT().CanPush().
 					Return(true)
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
 				topPort.EXPECT().PeekIncoming().Return(read3)
@@ -145,7 +145,7 @@ var _ = Describe("Coalescer", func() {
 					Return(true)
 				dirBuf.EXPECT().
 					Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(3))
 						Expect(trans.read.Address).To(Equal(uint64(0x100)))
 						Expect(trans.read.PID).To(Equal(vm.PID(1)))
@@ -196,11 +196,11 @@ var _ = Describe("Coalescer", func() {
 				dirBuf.EXPECT().CanPush().
 					Return(true).Times(2)
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
 					})
 
@@ -247,7 +247,7 @@ var _ = Describe("Coalescer", func() {
 					dirBuf.EXPECT().CanPush().Return(true)
 					dirBuf.EXPECT().
 						Push(gomock.Any()).
-						Do(func(trans *transaction) {
+						Do(func(trans *transactionState) {
 							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 						})
 					dirBuf.EXPECT().CanPush().Return(false)
@@ -296,7 +296,7 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
 			dirBuf.EXPECT().CanPush().Return(true)
-			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
+			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transactionState) {
 				Expect(trans.write.Address).To(Equal(uint64(0x100)))
 				Expect(trans.write.PID).To(Equal(vm.PID(1)))
 				Expect(trans.write.Data).To(Equal([]byte{

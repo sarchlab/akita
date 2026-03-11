@@ -90,7 +90,7 @@ func (p *bottomParser) mergeMSHRData(
 	dirtyMask []bool,
 ) {
 	for _, t := range mshrEntry.Requests {
-		trans := t.(*transaction)
+		trans := t.(*transactionState)
 
 		if trans.write == nil {
 			continue
@@ -112,7 +112,7 @@ func (p *bottomParser) finalizeMSHRTrans(
 	data []byte,
 ) {
 	for _, t := range mshrEntry.Requests {
-		trans := t.(*transaction)
+		trans := t.(*transactionState)
 		if trans.read != nil {
 			for _, preCTrans := range trans.preCoalesceTransactions {
 				offset := preCTrans.read.Address - mshrEntry.Block.Tag
@@ -133,7 +133,7 @@ func (p *bottomParser) finalizeMSHRTrans(
 
 func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
-) *transaction {
+) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
 		if trans.writeToBottom != nil && trans.writeToBottom.ID == id {
 			return trans
@@ -145,7 +145,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 
 func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
-) *transaction {
+) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
 		if trans.readToBottom != nil && trans.readToBottom.ID == id {
 			return trans
@@ -155,7 +155,7 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	return nil
 }
 
-func (p *bottomParser) removeTransaction(trans *transaction) {
+func (p *bottomParser) removeTransaction(trans *transactionState) {
 	for i, t := range p.cache.postCoalesceTransactions {
 		if t == trans {
 			p.cache.postCoalesceTransactions = append(

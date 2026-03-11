@@ -9,7 +9,7 @@ import (
 )
 
 type dirPipelineItem struct {
-	trans *transaction
+	trans *transactionState
 }
 
 func (i dirPipelineItem) TaskID() string {
@@ -35,7 +35,7 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		trans := item.(*transaction)
+		trans := item.(*transactionState)
 		d.pipeline.Accept(dirPipelineItem{trans})
 		d.cache.dirBuf.Pop()
 
@@ -63,7 +63,7 @@ func (d *directory) Tick() (madeProgress bool) {
 	return madeProgress
 }
 
-func (d *directory) processRead(trans *transaction) bool {
+func (d *directory) processRead(trans *transactionState) bool {
 	addr := trans.read.Address
 	pid := trans.read.PID
 	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
@@ -83,7 +83,7 @@ func (d *directory) processRead(trans *transaction) bool {
 }
 
 func (d *directory) processMSHRHit(
-	trans *transaction,
+	trans *transactionState,
 	mshrEntry *cache.MSHREntry,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
@@ -100,7 +100,7 @@ func (d *directory) processMSHRHit(
 }
 
 func (d *directory) processReadHit(
-	trans *transaction,
+	trans *transactionState,
 	block *cache.Block,
 ) bool {
 	if block.IsLocked {
@@ -124,7 +124,7 @@ func (d *directory) processReadHit(
 	return true
 }
 
-func (d *directory) processReadMiss(trans *transaction) bool {
+func (d *directory) processReadMiss(trans *transactionState) bool {
 	addr := trans.read.Address
 	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
@@ -148,7 +148,7 @@ func (d *directory) processReadMiss(trans *transaction) bool {
 	return true
 }
 
-func (d *directory) processWrite(trans *transaction) bool {
+func (d *directory) processWrite(trans *transactionState) bool {
 	addr := trans.write.Address
 	pid := trans.write.PID
 	blockSize := uint64(1 << d.cache.GetSpec().Log2BlockSize)
@@ -172,7 +172,7 @@ func (d *directory) processWrite(trans *transaction) bool {
 	return d.writeMiss(trans)
 }
 
-func (d *directory) writeMiss(trans *transaction) bool {
+func (d *directory) writeMiss(trans *transactionState) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
 		d.buf.Pop()
@@ -183,7 +183,7 @@ func (d *directory) writeMiss(trans *transaction) bool {
 	return false
 }
 
-func (d *directory) writeBottom(trans *transaction) bool {
+func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.write.Address
 
 	writeToBottom := &mem.WriteReq{}
@@ -210,7 +210,7 @@ func (d *directory) writeBottom(trans *transaction) bool {
 }
 
 func (d *directory) processWriteHit(
-	trans *transaction,
+	trans *transactionState,
 	block *cache.Block,
 ) bool {
 	if block.IsLocked || block.ReadCount > 0 {
@@ -248,7 +248,7 @@ func (d *directory) processWriteHit(
 }
 
 func (d *directory) fetchFromBottom(
-	trans *transaction,
+	trans *transactionState,
 	victim *cache.Block,
 ) bool {
 	addr := trans.Address()

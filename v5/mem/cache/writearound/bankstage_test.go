@@ -64,7 +64,7 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should insert transactions into pipeline", func() {
-		trans := &transaction{}
+		trans := &transactionState{}
 
 		inBuf.EXPECT().Peek().Return(trans)
 		inBuf.EXPECT().Pop()
@@ -73,7 +73,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline.EXPECT().
 			Accept(gomock.Any()).
 			Do(func(t *bankTransaction) {
-				Expect(t.transaction).To(BeIdenticalTo(trans))
+				Expect(t.transactionState).To(BeIdenticalTo(trans))
 			})
 		postPipelineBuf.EXPECT().Peek().Return(nil)
 
@@ -85,7 +85,7 @@ var _ = Describe("Bankstage", func() {
 	Context("read hit", func() {
 		var (
 			preCRead1, preCRead2, postCRead    *mem.ReadReq
-			preCTrans1, preCTrans2, postCTrans *transaction
+			preCTrans1, preCTrans2, postCTrans *transactionState
 			block                              *cache.Block
 		)
 
@@ -125,13 +125,13 @@ var _ = Describe("Bankstage", func() {
 			postCRead.AccessByteSize = 64
 			postCRead.TrafficBytes = 12
 			postCRead.TrafficClass = "req"
-			preCTrans1 = &transaction{read: preCRead1}
-			preCTrans2 = &transaction{read: preCRead2}
-			postCTrans = &transaction{
+			preCTrans1 = &transactionState{read: preCRead1}
+			preCTrans2 = &transactionState{read: preCRead2}
+			postCTrans = &transactionState{
 				read:       postCRead,
 				block:      block,
 				bankAction: bankActionReadHit,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans1, preCTrans2,
 				},
 			}
@@ -139,7 +139,7 @@ var _ = Describe("Bankstage", func() {
 				c.postCoalesceTransactions, postCTrans)
 
 			postPipelineBuf.EXPECT().Peek().Return(&bankTransaction{
-				transaction: postCTrans,
+				transactionState: postCTrans,
 			})
 		})
 
@@ -163,7 +163,7 @@ var _ = Describe("Bankstage", func() {
 	Context("write", func() {
 		var (
 			write *mem.WriteReq
-			trans *transaction
+			trans *transactionState
 			block *cache.Block
 		)
 
@@ -199,7 +199,7 @@ var _ = Describe("Bankstage", func() {
 			}
 			write.TrafficBytes = 64 + 12
 			write.TrafficClass = "req"
-			trans = &transaction{
+			trans = &transactionState{
 				write:      write,
 				block:      block,
 				bankAction: bankActionWrite,
@@ -207,7 +207,7 @@ var _ = Describe("Bankstage", func() {
 
 			postPipelineBuf.EXPECT().
 				Peek().
-				Return(&bankTransaction{transaction: trans})
+				Return(&bankTransaction{transactionState: trans})
 		})
 
 		It("should write", func() {
@@ -235,7 +235,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write fetched", func() {
 		var (
-			trans *transaction
+			trans *transactionState
 			block *cache.Block
 		)
 
@@ -246,7 +246,7 @@ var _ = Describe("Bankstage", func() {
 				IsLocked:     true,
 			}
 
-			trans = &transaction{
+			trans = &transactionState{
 				block:      block,
 				bankAction: bankActionWriteFetched,
 			}
@@ -264,7 +264,7 @@ var _ = Describe("Bankstage", func() {
 
 			postPipelineBuf.EXPECT().
 				Peek().
-				Return(&bankTransaction{transaction: trans})
+				Return(&bankTransaction{transactionState: trans})
 		})
 
 		It("should write fetched", func() {
