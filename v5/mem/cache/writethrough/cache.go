@@ -50,13 +50,13 @@ type middleware struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	storage     *mem.Storage
-	legacyMapper mem.AddressToPortMapper // resolved lazily on first Tick
+	storage *mem.Storage
 
-	// Resolved mapper data (from legacy mapper or Spec)
-	resolvedMapperType       string
-	resolvedPortNames        []string
-	resolvedInterleavingSize uint64
+	// curState holds the A-buffer snapshot for the current tick.
+	// Stored here so adapter read pointers remain valid for the tick duration.
+	// In production, set by updateAdapterPointers() from comp.GetState().
+	// In tests, set by syncForTest() from *comp.GetNextState().
+	curState State
 
 	// Thin buffer adapters (created once, pointers updated per-tick)
 	dirBufAdapter       *stateTransBuffer
@@ -104,64 +104,24 @@ func (m *middleware) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
-// resolveLegacyMapper converts a legacy AddressToPortMapper interface into
-// the middleware's resolvedSpec overlay on first call. This handles the
-// pattern where the mapper's fields are set after Build().
-func (m *middleware) resolveLegacyMapper() {
-	if m.legacyMapper == nil {
-		return
-	}
-
-	switch mapper := m.legacyMapper.(type) {
-	case *mem.SinglePortMapper:
-		m.resolvedMapperType = "single"
-		m.resolvedPortNames = []string{string(mapper.Port)}
-	case *mem.InterleavedAddressPortMapper:
-		m.resolvedMapperType = "interleaved"
-		names := make([]string, len(mapper.LowModules))
-		for i, p := range mapper.LowModules {
-			names[i] = string(p)
-		}
-		m.resolvedPortNames = names
-		m.resolvedInterleavingSize = mapper.InterleavingSize
-	default:
-		panic("unsupported legacy address mapper type")
-	}
-
-	m.legacyMapper = nil
-}
-
-// findPort resolves an address to a remote port using data from Spec
-// or resolved legacy mapper data.
+// findPort resolves an address to a remote port using data from Spec.
 func (m *middleware) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
-	mapperType := spec.AddressMapperType
-	portNames := spec.RemotePortNames
-	interleavingSize := spec.InterleavingSize
-
-	// Override with resolved legacy mapper data if present
-	if m.resolvedMapperType != "" {
-		mapperType = m.resolvedMapperType
-		portNames = m.resolvedPortNames
-		interleavingSize = m.resolvedInterleavingSize
-	}
-
-	switch mapperType {
+	switch spec.AddressMapperType {
 	case "single":
-		return sim.RemotePort(portNames[0])
+		return sim.RemotePort(spec.RemotePortNames[0])
 	case "interleaved":
-		n := uint64(len(portNames))
-		idx := address / interleavingSize % n
-		return sim.RemotePort(portNames[idx])
+		n := uint64(len(spec.RemotePortNames))
+		idx := address / spec.InterleavingSize % n
+		return sim.RemotePort(spec.RemotePortNames[idx])
 	}
 
-	panic("unknown address mapper type: " + mapperType)
+	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
 // Tick updates the state of the cache.
 func (m *middleware) Tick() bool {
-	m.resolveLegacyMapper()
 	m.updateAdapterPointers()
 
 	madeProgress := false
@@ -175,23 +135,60 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
+// syncForTest synchronizes curState from the next state buffer and updates
+// adapter read pointers. This is only needed in tests where state is set up
+// via GetNextState() without going through the Component.Tick() cycle.
+func (m *middleware) syncForTest() {
+	next := m.comp.GetNextState()
+	m.comp.SetState(*next)
+	m.curState = m.comp.GetState()
+	next = m.comp.GetNextState()
+
+	// Update adapter read pointers to curState, write pointers to next
+	if m.dirBufAdapter != nil {
+		m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+		m.dirBufAdapter.writeItems = &next.DirBufIndices
+	}
+	for i := range m.bankBufAdapters {
+		if m.bankBufAdapters[i] != nil {
+			m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+			m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
+		}
+	}
+	if m.dirPostBufAdapter != nil {
+		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+	}
+	for i := range m.bankPostBufAdapters {
+		if m.bankPostBufAdapters[i] != nil {
+			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+		}
+	}
+}
+
 func (m *middleware) updateAdapterPointers() {
+	m.curState = m.comp.GetState()
 	next := m.comp.GetNextState()
 
 	// Dir buf adapter
-	m.dirBufAdapter.items = &next.DirBufIndices
+	m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+	m.dirBufAdapter.writeItems = &next.DirBufIndices
 
 	// Bank buf adapters
 	for i := range m.bankBufAdapters {
-		m.bankBufAdapters[i].items = &next.BankBufIndices[i].Indices
+		m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+		m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
 	}
 
 	// Dir post pipeline buf adapter
-	m.dirPostBufAdapter.items = &next.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
 
 	// Bank post pipeline buf adapters
 	for i := range m.bankPostBufAdapters {
-		m.bankPostBufAdapters[i].items = &next.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
 	}
 }
 

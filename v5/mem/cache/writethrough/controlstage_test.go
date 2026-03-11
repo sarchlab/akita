@@ -74,10 +74,11 @@ var _ = Describe("Control Stage", func() {
 
 		// Create dir buf adapter
 		mw.dirBufAdapter = &stateTransBuffer{
-			name:     "Cache.DirBuf",
-			items:    &next.DirBufIndices,
-			capacity: 4,
-			mw:       mw,
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         mw,
 		}
 		mw.bankBufAdapters = nil
 

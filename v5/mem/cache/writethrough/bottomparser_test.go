@@ -45,19 +45,21 @@ var _ = Describe("Bottom Parser", func() {
 			}).
 			Build("Cache")
 
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
 		c.comp.SetState(initialState)
 
 		next := c.comp.GetNextState()
-		// Initialize directoryState
-		cache.DirectoryReset(&next.DirectoryState, 16, 4, 64)
 
 		// Create adapters
 		c.bankBufAdapters = []*stateTransBuffer{
 			{
-				name:     "Cache.BankBuf0",
-				items:    &next.BankBufIndices[0].Indices,
-				capacity: 4,
-				mw:       c,
+				name:       "Cache.BankBuf0",
+				readItems:  &next.BankBufIndices[0].Indices,
+				writeItems: &next.BankBufIndices[0].Indices,
+				capacity:   4,
+				mw:         c,
 			},
 		}
 
@@ -70,6 +72,7 @@ var _ = Describe("Bottom Parser", func() {
 
 	It("should do nothing if no respond", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
+		c.syncForTest()
 		madeProgress := p.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -114,6 +117,8 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			bottomPort.EXPECT().RetrieveIncoming()
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -266,6 +271,8 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 
+			c.syncForTest()
+
 			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -276,6 +283,8 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -302,6 +311,8 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 

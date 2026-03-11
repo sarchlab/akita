@@ -58,8 +58,9 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	stages := next.BankPipelineStages[s.bankID].Stages
+	stages := cur.BankPipelineStages[s.bankID].Stages
 
 	if !bankPipelineCanAccept(stages, s.numReqPerCycle) {
 		return false
@@ -98,19 +99,21 @@ func (s *bankStage) finalizeTrans() bool {
 }
 
 func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress, trans.read.AccessByteSize)
+		curBlock.CacheAddress, trans.read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
 
-	block.ReadCount--
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.ReadCount--
 
 	for _, t := range trans.preCoalesceTransactions {
-		offset := t.read.Address - block.Tag
+		offset := t.read.Address - curBlock.Tag
 		t.data = data[offset : offset+t.read.AccessByteSize]
 		t.done = true
 	}
@@ -124,16 +127,17 @@ func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
-	data, err := s.cache.storage.Read(block.CacheAddress, uint64(blockSize))
+	data, err := s.cache.storage.Read(curBlock.CacheAddress, uint64(blockSize))
 	if err != nil {
 		panic(err)
 	}
 
-	offset := trans.write.Address - block.Tag
+	offset := trans.write.Address - curBlock.Tag
 
 	for i := 0; i < len(trans.write.Data); i++ {
 		if trans.write.DirtyMask[i] {
@@ -141,13 +145,14 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 		}
 	}
 
-	err = s.cache.storage.Write(block.CacheAddress, data)
+	err = s.cache.storage.Write(curBlock.CacheAddress, data)
 	if err != nil {
 		panic(err)
 	}
 
-	block.DirtyMask = trans.write.DirtyMask
-	block.IsLocked = false
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.DirtyMask = trans.write.DirtyMask
+	nextBlock.IsLocked = false
 
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
 
@@ -157,16 +162,18 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
+	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	block := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	err := s.cache.storage.Write(block.CacheAddress, trans.data)
+	err := s.cache.storage.Write(curBlock.CacheAddress, trans.data)
 	if err != nil {
 		panic(err)
 	}
 
-	block.DirtyMask = trans.writeFetchedDirtyMask
-	block.IsLocked = false
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.DirtyMask = trans.writeFetchedDirtyMask
+	nextBlock.IsLocked = false
 
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
 

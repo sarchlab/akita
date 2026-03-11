@@ -39,6 +39,9 @@ var _ = Describe("Directory", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
 
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
@@ -56,30 +59,31 @@ var _ = Describe("Directory", func() {
 
 		c.comp.SetState(initialState)
 
-		// Initialize directoryState in State
 		next := c.comp.GetNextState()
-		cache.DirectoryReset(&next.DirectoryState, 16, 4, 64)
 
 		// Create adapters
 		c.dirBufAdapter = &stateTransBuffer{
-			name:     "Cache.DirBuf",
-			items:    &next.DirBufIndices,
-			capacity: 4,
-			mw:       c,
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         c,
 		}
 		c.bankBufAdapters = []*stateTransBuffer{
 			{
-				name:     "Cache.BankBuf0",
-				items:    &next.BankBufIndices[0].Indices,
-				capacity: 4,
-				mw:       c,
+				name:       "Cache.BankBuf0",
+				readItems:  &next.BankBufIndices[0].Indices,
+				writeItems: &next.BankBufIndices[0].Indices,
+				capacity:   4,
+				mw:         c,
 			},
 		}
 		c.dirPostBufAdapter = &stateDirPostBufAdapter{
-			name:     "Cache.DirPostBuf",
-			items:    &next.DirPostPipelineBufIndices,
-			capacity: 4,
-			mw:       c,
+			name:       "Cache.DirPostBuf",
+			readItems:  &next.DirPostPipelineBufIndices,
+			writeItems: &next.DirPostPipelineBufIndices,
+			capacity:   4,
+			mw:         c,
 		}
 
 		d = &directory{
@@ -92,6 +96,7 @@ var _ = Describe("Directory", func() {
 	})
 
 	It("should do nothing if no transaction", func() {
+		c.syncForTest()
 		madeProgress := d.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -127,6 +132,8 @@ var _ = Describe("Directory", func() {
 
 			// Put trans in post-pipeline buffer
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -168,6 +175,8 @@ var _ = Describe("Directory", func() {
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -195,6 +204,8 @@ var _ = Describe("Directory", func() {
 			// Fill up bank buffer
 			c.bankBufAdapters[0].capacity = 0
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -212,6 +223,8 @@ var _ = Describe("Directory", func() {
 
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 			Expect(madeProgress).To(BeFalse())
@@ -250,6 +263,8 @@ var _ = Describe("Directory", func() {
 				Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 			})
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -280,6 +295,8 @@ var _ = Describe("Directory", func() {
 			setID := 4 // (0x100 / 64) % 16 = 4
 			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].IsLocked = true
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -292,6 +309,8 @@ var _ = Describe("Directory", func() {
 
 			setID := 4
 			next.DirectoryState.Sets[setID].Blocks[next.DirectoryState.Sets[setID].LRUOrder[0]].ReadCount = 1
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -308,6 +327,8 @@ var _ = Describe("Directory", func() {
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x400)
 			cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), 0x500)
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -319,6 +340,8 @@ var _ = Describe("Directory", func() {
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -362,6 +385,8 @@ var _ = Describe("Directory", func() {
 					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
 					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -412,6 +437,8 @@ var _ = Describe("Directory", func() {
 					Expect(w.PID).To(Equal(vm.PID(1)))
 				})
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -434,6 +461,8 @@ var _ = Describe("Directory", func() {
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -451,6 +480,8 @@ var _ = Describe("Directory", func() {
 
 			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -471,6 +502,8 @@ var _ = Describe("Directory", func() {
 
 			c.bankBufAdapters[0].capacity = 0
 
+			c.syncForTest()
+
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -489,6 +522,8 @@ var _ = Describe("Directory", func() {
 			next.DirPostPipelineBufIndices = append(next.DirPostPipelineBufIndices, 0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
@@ -527,6 +562,8 @@ var _ = Describe("Directory", func() {
 					Expect(w.Data).To(HaveLen(64))
 					Expect(w.PID).To(Equal(vm.PID(1)))
 				})
+
+			c.syncForTest()
 
 			madeProgress := d.Tick()
 
