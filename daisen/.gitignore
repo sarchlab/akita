@@ -3,6 +3,7 @@ __debug_bin
 sample_trace_medium.csv
 .en*
 .env
+env
 TESTenv.txt
 test.json
 tmp.txt
