@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -59,18 +58,19 @@ func (s *controlStage) processCurrentFlush() bool {
 func (s *controlStage) hardResetCache() {
 	s.flushPort(s.cache.topPort)
 	s.flushPort(s.cache.bottomPort)
-	s.flushBuffer(s.cache.dirBuf)
+	s.cache.dirBufAdapter.Clear()
 
-	for _, bankBuf := range s.cache.bankBufs {
-		s.flushBuffer(bankBuf)
+	for _, bankBuf := range s.cache.bankBufAdapters {
+		bankBuf.Clear()
 	}
 
+	next := s.cache.comp.GetNextState()
 	spec := s.cache.GetSpec()
 	blockSize := int(1 << spec.Log2BlockSize)
 	cache.DirectoryReset(
-		&s.cache.directoryState,
+		&next.DirectoryState,
 		spec.NumSets, spec.WayAssociativity, blockSize)
-	s.cache.mshrState = cache.MSHRState{}
+	next.MSHRState = cache.MSHRState{}
 	s.cache.coalesceStage.Reset()
 
 	for _, bankStage := range s.cache.bankStages {
@@ -88,11 +88,6 @@ func (s *controlStage) hardResetCache() {
 func (s *controlStage) flushPort(port sim.Port) {
 	for port.PeekIncoming() != nil {
 		port.RetrieveIncoming()
-	}
-}
-
-func (s *controlStage) flushBuffer(buffer queueing.Buffer) {
-	for buffer.Pop() != nil {
 	}
 }
 

@@ -3,7 +3,6 @@ package writearound
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -67,20 +66,21 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
+	next := p.cache.comp.GetNextState()
 
-	entryIdx, found := cache.MSHRQuery(&p.cache.mshrState, pid, cachelineID)
+	entryIdx, found := cache.MSHRQuery(&next.MSHRState, pid, cachelineID)
 	if !found {
 		panic("MSHR entry not found for data ready response")
 	}
 
-	entry := &p.cache.mshrState.Entries[entryIdx]
-	blockTag := p.cache.directoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
+	entry := &next.MSHRState.Entries[entryIdx]
+	blockTag := next.DirectoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
 
 	// Resolve transaction pointers before any removals shift indices
 	entryTrans := p.resolveEntryTransactions(entry)
 	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
 	p.finalizeMSHRTrans(entryTrans, blockTag, data)
-	cache.MSHRRemove(&p.cache.mshrState, pid, cachelineID)
+	cache.MSHRRemove(&next.MSHRState, pid, cachelineID)
 
 	trans.bankAction = bankActionWriteFetched
 	trans.data = data
@@ -190,10 +190,12 @@ func (p *bottomParser) removeTransaction(trans *transactionState) {
 	}
 }
 
-func (p *bottomParser) getBankBuf(setID, wayID int) queueing.Buffer {
+func (p *bottomParser) getBankBuf(
+	setID, wayID int,
+) *stateTransBuffer {
 	numWaysPerSet := p.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
-	bankID := blockID % len(p.cache.bankBufs)
+	bankID := blockID % len(p.cache.bankBufAdapters)
 
-	return p.cache.bankBufs[bankID]
+	return p.cache.bankBufAdapters[bankID]
 }
