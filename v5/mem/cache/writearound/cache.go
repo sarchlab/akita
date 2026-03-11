@@ -52,6 +52,12 @@ type middleware struct {
 
 	storage *mem.Storage
 
+	// curState holds the A-buffer snapshot for the current tick.
+	// Stored here so adapter read pointers remain valid for the tick duration.
+	// In production, set by updateAdapterPointers() from comp.GetState().
+	// In tests, set by syncForTest() from *comp.GetNextState().
+	curState State
+
 	// Thin buffer adapters (created once, pointers updated per-tick)
 	dirBufAdapter       *stateTransBuffer
 	bankBufAdapters     []*stateTransBuffer
@@ -129,23 +135,60 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
+// syncForTest synchronizes curState from the next state buffer and updates
+// adapter read pointers. This is only needed in tests where state is set up
+// via GetNextState() without going through the Component.Tick() cycle.
+func (m *middleware) syncForTest() {
+	next := m.comp.GetNextState()
+	m.comp.SetState(*next)
+	m.curState = m.comp.GetState()
+	next = m.comp.GetNextState()
+
+	// Update adapter read pointers to curState, write pointers to next
+	if m.dirBufAdapter != nil {
+		m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+		m.dirBufAdapter.writeItems = &next.DirBufIndices
+	}
+	for i := range m.bankBufAdapters {
+		if m.bankBufAdapters[i] != nil {
+			m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+			m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
+		}
+	}
+	if m.dirPostBufAdapter != nil {
+		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+	}
+	for i := range m.bankPostBufAdapters {
+		if m.bankPostBufAdapters[i] != nil {
+			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+		}
+	}
+}
+
 func (m *middleware) updateAdapterPointers() {
+	m.curState = m.comp.GetState()
 	next := m.comp.GetNextState()
 
 	// Dir buf adapter
-	m.dirBufAdapter.items = &next.DirBufIndices
+	m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+	m.dirBufAdapter.writeItems = &next.DirBufIndices
 
 	// Bank buf adapters
 	for i := range m.bankBufAdapters {
-		m.bankBufAdapters[i].items = &next.BankBufIndices[i].Indices
+		m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+		m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
 	}
 
 	// Dir post pipeline buf adapter
-	m.dirPostBufAdapter.items = &next.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
 
 	// Bank post pipeline buf adapters
 	for i := range m.bankPostBufAdapters {
-		m.bankPostBufAdapters[i].items = &next.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
 	}
 }
 

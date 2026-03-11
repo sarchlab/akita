@@ -258,31 +258,34 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 func (b *Builder) buildAdapters(m *middleware) {
 	next := m.comp.GetNextState()
 
-	// Dir buf adapter
+	// Dir buf adapter (read/write pointers set by updateAdapterPointers each tick)
 	m.dirBufAdapter = &stateTransBuffer{
-		name:     m.comp.Name() + ".DirectoryBuffer",
-		items:    &next.DirBufIndices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".DirectoryBuffer",
+		readItems:  &next.DirBufIndices,
+		writeItems: &next.DirBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Bank buf adapters
 	m.bankBufAdapters = make([]*stateTransBuffer, b.numBank)
 	for i := 0; i < b.numBank; i++ {
 		m.bankBufAdapters[i] = &stateTransBuffer{
-			name: fmt.Sprintf("%s.Bank%d.Buffer", m.comp.Name(), i),
-			items:    &next.BankBufIndices[i].Indices,
-			capacity: b.numReqPerCycle,
-			mw:       m,
+			name:       fmt.Sprintf("%s.Bank%d.Buffer", m.comp.Name(), i),
+			readItems:  &next.BankBufIndices[i].Indices,
+			writeItems: &next.BankBufIndices[i].Indices,
+			capacity:   b.numReqPerCycle,
+			mw:         m,
 		}
 	}
 
 	// Dir post pipeline buf adapter
 	m.dirPostBufAdapter = &stateDirPostBufAdapter{
-		name:     m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
-		items:    &next.DirPostPipelineBufIndices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
+		readItems:  &next.DirPostPipelineBufIndices,
+		writeItems: &next.DirPostPipelineBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Bank post pipeline buf adapters
@@ -291,9 +294,10 @@ func (b *Builder) buildAdapters(m *middleware) {
 		m.bankPostBufAdapters[i] = &stateBankPostBufAdapter{
 			name: fmt.Sprintf(
 				"%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
-			items:    &next.BankPostPipelineBufIndices[i].Indices,
-			capacity: b.numReqPerCycle,
-			mw:       m,
+			readItems:  &next.BankPostPipelineBufIndices[i].Indices,
+			writeItems: &next.BankPostPipelineBufIndices[i].Indices,
+			capacity:   b.numReqPerCycle,
+			mw:         m,
 		}
 	}
 }

@@ -5,44 +5,48 @@ import (
 )
 
 // --- stateTransBuffer ---
-// Wraps a *[]int (transaction indices in postCoalesceTransactions).
+// Wraps read/write pointers to []int (transaction indices in postCoalesceTransactions).
 // Push/Pop/Peek convert between *transactionState and index.
 // Used for dirBuf and bankBufs.
+//
+// A-B pattern: readItems points to cur (A) state for Peek/CanPush/Size,
+// writeItems points to next (B) state for Pop/Push.
 
 type stateTransBuffer struct {
 	sim.HookableBase
-	name     string
-	items    *[]int
-	capacity int
-	mw       *middleware // needed to resolve indices to transaction pointers
+	name       string
+	readItems  *[]int // points to cur (A) state - for reads
+	writeItems *[]int // points to next (B) state - for writes
+	capacity   int
+	mw         *middleware // needed to resolve indices to transaction pointers
 }
 
 func (b *stateTransBuffer) Name() string  { return b.name }
 func (b *stateTransBuffer) Capacity() int { return b.capacity }
-func (b *stateTransBuffer) Size() int     { return len(*b.items) }
-func (b *stateTransBuffer) CanPush() bool { return len(*b.items) < b.capacity }
-func (b *stateTransBuffer) Clear()        { *b.items = (*b.items)[:0] }
+func (b *stateTransBuffer) Size() int     { return len(*b.readItems) }
+func (b *stateTransBuffer) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateTransBuffer) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateTransBuffer) Push(e interface{}) {
 	trans := e.(*transactionState)
 	idx := b.findPostCoalesceIdx(trans)
-	*b.items = append(*b.items, idx)
+	*b.writeItems = append(*b.writeItems, idx)
 }
 
 func (b *stateTransBuffer) Peek() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.readItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
+	idx := (*b.readItems)[0]
 	return b.mw.postCoalesceTransactions[idx]
 }
 
 func (b *stateTransBuffer) Pop() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
-	*b.items = (*b.items)[1:]
+	idx := (*b.writeItems)[0]
+	*b.writeItems = (*b.writeItems)[1:]
 	return b.mw.postCoalesceTransactions[idx]
 }
 
@@ -58,43 +62,44 @@ func (b *stateTransBuffer) findPostCoalesceIdx(
 }
 
 // --- stateDirPostBufAdapter ---
-// Wraps a *[]int (transaction indices). Peek/Pop return dirPipelineItem.
+// Wraps read/write pointers to []int (transaction indices). Peek/Pop return dirPipelineItem.
 // Used for directory post-pipeline buffer.
 
 type stateDirPostBufAdapter struct {
 	sim.HookableBase
-	name     string
-	items    *[]int
-	capacity int
-	mw       *middleware
+	name       string
+	readItems  *[]int // points to cur (A) state - for reads
+	writeItems *[]int // points to next (B) state - for writes
+	capacity   int
+	mw         *middleware
 }
 
 func (b *stateDirPostBufAdapter) Name() string  { return b.name }
 func (b *stateDirPostBufAdapter) Capacity() int { return b.capacity }
-func (b *stateDirPostBufAdapter) Size() int     { return len(*b.items) }
-func (b *stateDirPostBufAdapter) CanPush() bool { return len(*b.items) < b.capacity }
-func (b *stateDirPostBufAdapter) Clear()        { *b.items = (*b.items)[:0] }
+func (b *stateDirPostBufAdapter) Size() int     { return len(*b.readItems) }
+func (b *stateDirPostBufAdapter) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateDirPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateDirPostBufAdapter) Push(e interface{}) {
 	item := e.(dirPipelineItem)
 	idx := b.findPostCoalesceIdx(item.trans)
-	*b.items = append(*b.items, idx)
+	*b.writeItems = append(*b.writeItems, idx)
 }
 
 func (b *stateDirPostBufAdapter) Peek() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.readItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
+	idx := (*b.readItems)[0]
 	return dirPipelineItem{trans: b.mw.postCoalesceTransactions[idx]}
 }
 
 func (b *stateDirPostBufAdapter) Pop() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
-	*b.items = (*b.items)[1:]
+	idx := (*b.writeItems)[0]
+	*b.writeItems = (*b.writeItems)[1:]
 	return dirPipelineItem{trans: b.mw.postCoalesceTransactions[idx]}
 }
 
@@ -110,50 +115,51 @@ func (b *stateDirPostBufAdapter) findPostCoalesceIdx(
 }
 
 // --- stateBankPostBufAdapter ---
-// Wraps a *[]int (transaction indices). Peek/Pop return *bankTransaction.
+// Wraps read/write pointers to []int (transaction indices). Peek/Pop return *bankTransaction.
 // Used for bank post-pipeline buffers.
 
 type stateBankPostBufAdapter struct {
 	sim.HookableBase
-	name     string
-	items    *[]int
-	capacity int
-	mw       *middleware
+	name       string
+	readItems  *[]int // points to cur (A) state - for reads
+	writeItems *[]int // points to next (B) state - for writes
+	capacity   int
+	mw         *middleware
 }
 
 func (b *stateBankPostBufAdapter) Name() string  { return b.name }
 func (b *stateBankPostBufAdapter) Capacity() int { return b.capacity }
-func (b *stateBankPostBufAdapter) Size() int     { return len(*b.items) }
-func (b *stateBankPostBufAdapter) CanPush() bool { return len(*b.items) < b.capacity }
-func (b *stateBankPostBufAdapter) Clear()        { *b.items = (*b.items)[:0] }
+func (b *stateBankPostBufAdapter) Size() int     { return len(*b.readItems) }
+func (b *stateBankPostBufAdapter) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateBankPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateBankPostBufAdapter) Push(e interface{}) {
 	// Can accept either *bankTransaction or dirPipelineItem-wrapped
 	switch v := e.(type) {
 	case *bankTransaction:
 		idx := b.findPostCoalesceIdx(v.transactionState)
-		*b.items = append(*b.items, idx)
+		*b.writeItems = append(*b.writeItems, idx)
 	default:
 		panic("unexpected type pushed to stateBankPostBufAdapter")
 	}
 }
 
 func (b *stateBankPostBufAdapter) Peek() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.readItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
+	idx := (*b.readItems)[0]
 	return &bankTransaction{
 		transactionState: b.mw.postCoalesceTransactions[idx],
 	}
 }
 
 func (b *stateBankPostBufAdapter) Pop() interface{} {
-	if len(*b.items) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.items)[0]
-	*b.items = (*b.items)[1:]
+	idx := (*b.writeItems)[0]
+	*b.writeItems = (*b.writeItems)[1:]
 	return &bankTransaction{
 		transactionState: b.mw.postCoalesceTransactions[idx],
 	}

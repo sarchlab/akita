@@ -65,19 +65,20 @@ var _ = Describe("Control Stage", func() {
 			}).
 			Build("Cache")
 
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
 		mw.comp.SetState(initialState)
 
 		next := mw.comp.GetNextState()
 
-		// Initialize directoryState
-		cache.DirectoryReset(&next.DirectoryState, 16, 4, 64)
-
 		// Create dir buf adapter
 		mw.dirBufAdapter = &stateTransBuffer{
-			name:     "Cache.DirBuf",
-			items:    &next.DirBufIndices,
-			capacity: 4,
-			mw:       mw,
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         mw,
 		}
 		mw.bankBufAdapters = nil
 
@@ -98,6 +99,8 @@ var _ = Describe("Control Stage", func() {
 	It("should do nothing if no request", func() {
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
+		mw.syncForTest()
+
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -113,6 +116,8 @@ var _ = Describe("Control Stage", func() {
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		mw.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -136,6 +141,8 @@ var _ = Describe("Control Stage", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		mw.syncForTest()
 
 		madeProgress := s.Tick()
 

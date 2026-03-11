@@ -21,12 +21,13 @@ type directory struct {
 
 func (d *directory) Tick() (madeProgress bool) {
 	spec := d.cache.GetSpec()
+	cur := d.cache.comp.GetState()
 	next := d.cache.comp.GetNextState()
 
 	// Accept from dirBuf into pipeline
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if !dirPipelineCanAccept(
-			next.DirPipelineStages, spec.NumReqPerCycle) {
+			cur.DirPipelineStages, spec.NumReqPerCycle) {
 			break
 		}
 
@@ -84,18 +85,18 @@ func (d *directory) processRead(trans *transactionState) bool {
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	cur := d.cache.comp.GetState()
 
 	entryIdx, mshrFound := cache.MSHRQuery(
-		&next.MSHRState, pid, cacheLineID)
+		&cur.MSHRState, pid, cacheLineID)
 	if mshrFound {
 		return d.processMSHRHit(trans, entryIdx)
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.NumSets, int(blockSize),
+		&cur.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
-	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
+	if found && cur.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.processReadHit(trans, setID, wayID)
 	}
 
@@ -127,8 +128,9 @@ func (d *directory) processReadHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
+	cur := d.cache.comp.GetState()
 	next := d.cache.comp.GetNextState()
-	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
+	block := &cur.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
 		return false
 	}
@@ -142,7 +144,9 @@ func (d *directory) processReadHit(
 	trans.blockWayID = wayID
 	trans.hasBlock = true
 	trans.bankAction = bankActionReadHit
-	block.ReadCount++
+
+	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
+	nextBlock.ReadCount++
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 	bankBuf.Push(trans)
 
@@ -157,22 +161,25 @@ func (d *directory) processReadMiss(trans *transactionState) bool {
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
+	cur := d.cache.comp.GetState()
 	next := d.cache.comp.GetNextState()
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
-		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
-	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
+		&cur.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
+	victim := &cur.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
-	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
+	if cache.MSHRIsFull(&cur.MSHRState, spec.NumMSHREntry) {
 		return false
 	}
 
 	if !d.fetchFromBottom(trans, victimSetID, victimWayID) {
 		return false
 	}
+
+	_ = next // writes done in fetchFromBottom
 
 	d.cache.dirPostBufAdapter.Pop()
 	tracing.AddTaskStep(trans.id, d.cache, "read-miss")
@@ -186,10 +193,10 @@ func (d *directory) processWrite(trans *transactionState) bool {
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	cur := d.cache.comp.GetState()
 
 	entryIdx, mshrFound := cache.MSHRQuery(
-		&next.MSHRState, pid, cacheLineID)
+		&cur.MSHRState, pid, cacheLineID)
 	if mshrFound {
 		ok := d.writeBottom(trans)
 		if ok {
@@ -200,9 +207,9 @@ func (d *directory) processWrite(trans *transactionState) bool {
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
-		&next.DirectoryState, spec.NumSets, int(blockSize),
+		&cur.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
-	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
+	if found && cur.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
 		return d.processWriteHit(trans, setID, wayID)
 	}
 
@@ -250,8 +257,9 @@ func (d *directory) processWriteHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
+	cur := d.cache.comp.GetState()
 	next := d.cache.comp.GetNextState()
-	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
+	block := &cur.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
 	}
@@ -272,9 +280,11 @@ func (d *directory) processWriteHit(
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	block.IsLocked = true
-	block.IsValid = true
-	block.Tag = cacheLineID
+
+	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
+	nextBlock.IsLocked = true
+	nextBlock.IsValid = true
+	nextBlock.Tag = cacheLineID
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
 	trans.bankAction = bankActionWrite
