@@ -5,10 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-var accessReqByteOverhead = 12
-var accessRspByteOverhead = 4
-var controlMsgByteOverhead = 4
-
 // AccessReq abstracts read and write requests sent to cache modules or memory
 // controllers.
 type AccessReq interface {
