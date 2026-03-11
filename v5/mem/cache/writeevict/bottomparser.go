@@ -9,7 +9,7 @@ import (
 )
 
 type bottomParser struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (p *bottomParser) Tick() bool {
@@ -55,26 +55,38 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 		return true
 	}
 
-	bankBuf := p.getBankBuf(trans.block)
+	bankBuf := p.getBankBuf(trans.blockSetID, trans.blockWayID)
 	if !bankBuf.CanPush() {
 		return false
 	}
 
 	pid := trans.readToBottom.PID
 	addr := trans.Address()
-	cachelineID := (addr >> p.cache.log2BlockSize) << p.cache.log2BlockSize
+	spec := p.cache.GetSpec()
+	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
-	dirtyMask := make([]bool, 1<<p.cache.log2BlockSize)
-	mshrEntry := p.cache.mshr.Query(pid, cachelineID)
-	p.mergeMSHRData(mshrEntry, data, dirtyMask)
-	p.finalizeMSHRTrans(mshrEntry, data)
-	p.cache.mshr.Remove(pid, cachelineID)
+	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
+
+	entryIdx, found := cache.MSHRQuery(&p.cache.mshrState, pid, cachelineID)
+	if !found {
+		panic("MSHR entry not found for data ready response")
+	}
+
+	entry := &p.cache.mshrState.Entries[entryIdx]
+	blockTag := p.cache.directoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
+
+	// Resolve transaction pointers before any removals shift indices
+	entryTrans := p.resolveEntryTransactions(entry)
+	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
+	p.finalizeMSHRTrans(entryTrans, blockTag, data)
+	cache.MSHRRemove(&p.cache.mshrState, pid, cachelineID)
 
 	trans.bankAction = bankActionWriteFetched
 	trans.data = data
 	trans.writeFetchedDirtyMask = dirtyMask
 	bankBuf.Push(trans)
+
 	p.removeTransaction(trans)
 	p.cache.bottomPort.RetrieveIncoming()
 
@@ -83,19 +95,31 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	return true
 }
 
+// resolveEntryTransactions collects the actual transaction pointers from
+// the MSHR entry's TransactionIndices. This must be done before any
+// removeTransaction calls, since those shift the slice indices.
+func (p *bottomParser) resolveEntryTransactions(
+	entry *cache.MSHREntryState,
+) []*transactionState {
+	result := make([]*transactionState, len(entry.TransactionIndices))
+	for i, transIdx := range entry.TransactionIndices {
+		result[i] = p.cache.postCoalesceTransactions[transIdx]
+	}
+	return result
+}
+
 func (p *bottomParser) mergeMSHRData(
-	mshrEntry *cache.MSHREntry,
+	entryTrans []*transactionState,
+	blockTag uint64,
 	data []byte,
 	dirtyMask []bool,
 ) {
-	for _, t := range mshrEntry.Requests {
-		trans := t.(*transaction)
-
+	for _, trans := range entryTrans {
 		if trans.write == nil {
 			continue
 		}
 
-		offset := trans.write.Address - mshrEntry.Block.Tag
+		offset := trans.write.Address - blockTag
 
 		for i := 0; i < len(trans.write.Data); i++ {
 			if trans.write.DirtyMask[i] {
@@ -107,14 +131,14 @@ func (p *bottomParser) mergeMSHRData(
 }
 
 func (p *bottomParser) finalizeMSHRTrans(
-	mshrEntry *cache.MSHREntry,
+	entryTrans []*transactionState,
+	blockTag uint64,
 	data []byte,
 ) {
-	for _, t := range mshrEntry.Requests {
-		trans := t.(*transaction)
+	for _, trans := range entryTrans {
 		if trans.read != nil {
 			for _, preCTrans := range trans.preCoalesceTransactions {
-				offset := preCTrans.read.Address - mshrEntry.Block.Tag
+				offset := preCTrans.read.Address - blockTag
 				preCTrans.data = data[offset : offset+preCTrans.read.AccessByteSize]
 				preCTrans.done = true
 			}
@@ -132,7 +156,7 @@ func (p *bottomParser) finalizeMSHRTrans(
 
 func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
-) *transaction {
+) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
 		if trans.writeToBottom != nil && trans.writeToBottom.ID == id {
 			return trans
@@ -144,7 +168,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 
 func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
-) *transaction {
+) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
 		if trans.readToBottom != nil && trans.readToBottom.ID == id {
 			return trans
@@ -154,7 +178,7 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	return nil
 }
 
-func (p *bottomParser) removeTransaction(trans *transaction) {
+func (p *bottomParser) removeTransaction(trans *transactionState) {
 	for i, t := range p.cache.postCoalesceTransactions {
 		if t == trans {
 			p.cache.postCoalesceTransactions = append(
@@ -166,9 +190,9 @@ func (p *bottomParser) removeTransaction(trans *transaction) {
 	}
 }
 
-func (p *bottomParser) getBankBuf(block *cache.Block) queueing.Buffer {
-	numWaysPerSet := p.cache.wayAssociativity
-	blockID := block.SetID*numWaysPerSet + block.WayID
+func (p *bottomParser) getBankBuf(setID, wayID int) queueing.Buffer {
+	numWaysPerSet := p.cache.GetSpec().WayAssociativity
+	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(p.cache.bankBufs)
 
 	return p.cache.bankBufs[bankID]

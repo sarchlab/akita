@@ -9,7 +9,7 @@ import (
 )
 
 type dirPipelineItem struct {
-	trans *transaction
+	trans *transactionState
 }
 
 func (i dirPipelineItem) TaskID() string {
@@ -17,14 +17,15 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directory struct {
-	cache *Comp
+	cache *middleware
 
 	pipeline queueing.Pipeline
 	buf      queueing.Buffer
 }
 
 func (d *directory) Tick() (madeProgress bool) {
-	for i := 0; i < d.cache.numReqPerCycle; i++ {
+	spec := d.cache.GetSpec()
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if !d.pipeline.CanAccept() {
 			break
 		}
@@ -34,7 +35,7 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		trans := item.(*transaction)
+		trans := item.(*transactionState)
 		d.pipeline.Accept(dirPipelineItem{trans})
 		d.cache.dirBuf.Pop()
 
@@ -43,7 +44,7 @@ func (d *directory) Tick() (madeProgress bool) {
 
 	madeProgress = d.pipeline.Tick() || madeProgress
 
-	for i := 0; i < d.cache.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		item := d.buf.Peek()
 		if item == nil {
 			break
@@ -62,30 +63,35 @@ func (d *directory) Tick() (madeProgress bool) {
 	return madeProgress
 }
 
-func (d *directory) processRead(trans *transaction) bool {
+func (d *directory) processRead(trans *transactionState) bool {
 	addr := trans.read.Address
 	pid := trans.read.PID
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	spec := d.cache.GetSpec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
-	if mshrEntry != nil {
-		return d.processMSHRHit(trans, mshrEntry)
+	entryIdx, mshrFound := cache.MSHRQuery(
+		&d.cache.mshrState, pid, cacheLineID)
+	if mshrFound {
+		return d.processMSHRHit(trans, entryIdx)
 	}
 
-	block := d.cache.directory.Lookup(pid, cacheLineID)
-	if block != nil && block.IsValid {
-		return d.processReadHit(trans, block)
+	setID, wayID, found := cache.DirectoryLookup(
+		&d.cache.directoryState, spec.NumSets, int(blockSize), pid, cacheLineID)
+	if found && d.cache.directoryState.Sets[setID].Blocks[wayID].IsValid {
+		return d.processReadHit(trans, setID, wayID)
 	}
 
 	return d.processReadMiss(trans)
 }
 
 func (d *directory) processMSHRHit(
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
+	trans *transactionState,
+	entryIdx int,
 ) bool {
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	d.cache.mshrState.Entries[entryIdx].TransactionIndices =
+		append(d.cache.mshrState.Entries[entryIdx].TransactionIndices,
+			d.findPostCoalesceTransIdx(trans))
 
 	if trans.read != nil {
 		tracing.AddTaskStep(trans.id, d.cache, "read-mshr-hit")
@@ -99,22 +105,25 @@ func (d *directory) processMSHRHit(
 }
 
 func (d *directory) processReadHit(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
+	block := &d.cache.directoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
 		return false
 	}
 
-	bankBuf := d.getBankBuf(block)
+	bankBuf := d.getBankBuf(setID, wayID)
 	if !bankBuf.CanPush() {
 		return false
 	}
 
-	trans.block = block
+	trans.blockSetID = setID
+	trans.blockWayID = wayID
+	trans.hasBlock = true
 	trans.bankAction = bankActionReadHit
 	block.ReadCount++
-	d.cache.directory.Visit(block)
+	cache.DirectoryVisit(&d.cache.directoryState, setID, wayID)
 	bankBuf.Push(trans)
 
 	d.buf.Pop()
@@ -123,21 +132,24 @@ func (d *directory) processReadHit(
 	return true
 }
 
-func (d *directory) processReadMiss(trans *transaction) bool {
+func (d *directory) processReadMiss(trans *transactionState) bool {
 	addr := trans.read.Address
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	spec := d.cache.GetSpec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	victim := d.cache.directory.FindVictim(cacheLineID)
+	victimSetID, victimWayID := cache.DirectoryFindVictim(
+		&d.cache.directoryState, spec.NumSets, int(blockSize), cacheLineID)
+	victim := &d.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
-	if d.cache.mshr.IsFull() {
+	if cache.MSHRIsFull(&d.cache.mshrState, spec.NumMSHREntry) {
 		return false
 	}
 
-	if !d.fetchFromBottom(trans, victim) {
+	if !d.fetchFromBottom(trans, victimSetID, victimWayID) {
 		return false
 	}
 
@@ -147,31 +159,34 @@ func (d *directory) processReadMiss(trans *transaction) bool {
 	return true
 }
 
-func (d *directory) processWrite(trans *transaction) bool {
+func (d *directory) processWrite(trans *transactionState) bool {
 	addr := trans.write.Address
 	pid := trans.write.PID
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	spec := d.cache.GetSpec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
-	mshrEntry := d.cache.mshr.Query(pid, cacheLineID)
-	if mshrEntry != nil {
+	entryIdx, mshrFound := cache.MSHRQuery(
+		&d.cache.mshrState, pid, cacheLineID)
+	if mshrFound {
 		ok := d.writeBottom(trans)
 		if ok {
-			return d.processMSHRHit(trans, mshrEntry)
+			return d.processMSHRHit(trans, entryIdx)
 		}
 
 		return false
 	}
 
-	block := d.cache.directory.Lookup(pid, cacheLineID)
-	if block != nil && block.IsValid {
-		return d.processWriteHit(trans, block)
+	setID, wayID, found := cache.DirectoryLookup(
+		&d.cache.directoryState, spec.NumSets, int(blockSize), pid, cacheLineID)
+	if found && d.cache.directoryState.Sets[setID].Blocks[wayID].IsValid {
+		return d.processWriteHit(trans, setID, wayID)
 	}
 
 	return d.writeMiss(trans)
 }
 
-func (d *directory) writeMiss(trans *transaction) bool {
+func (d *directory) writeMiss(trans *transactionState) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
 		d.buf.Pop()
@@ -182,7 +197,7 @@ func (d *directory) writeMiss(trans *transaction) bool {
 	return false
 }
 
-func (d *directory) writeBottom(trans *transaction) bool {
+func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.write.Address
 
 	writeToBottom := &mem.WriteReq{}
@@ -209,14 +224,15 @@ func (d *directory) writeBottom(trans *transaction) bool {
 }
 
 func (d *directory) processWriteHit(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
+	block := &d.cache.directoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
 	}
 
-	bankBuf := d.getBankBuf(block)
+	bankBuf := d.getBankBuf(setID, wayID)
 	if !bankBuf.CanPush() {
 		return false
 	}
@@ -237,12 +253,13 @@ func (d *directory) processWriteHit(
 }
 
 func (d *directory) fetchFromBottom(
-	trans *transaction,
-	victim *cache.Block,
+	trans *transactionState,
+	victimSetID, victimWayID int,
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
-	blockSize := uint64(1 << d.cache.log2BlockSize)
+	spec := d.cache.GetSpec()
+	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
 	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
@@ -255,34 +272,55 @@ func (d *directory) fetchFromBottom(
 	readToBottom.AccessByteSize = blockSize
 	readToBottom.TrafficBytes = 12
 	readToBottom.TrafficClass = "req"
-	err := d.cache.bottomPort.Send(readToBottom)
 
+	err := d.cache.bottomPort.Send(readToBottom)
 	if err != nil {
 		return false
 	}
 
 	tracing.TraceReqInitiate(readToBottom, d.cache, trans.id)
 	trans.readToBottom = readToBottom
-	trans.block = victim
+	trans.blockSetID = victimSetID
+	trans.blockWayID = victimWayID
+	trans.hasBlock = true
 
-	mshrEntry := d.cache.mshr.Add(pid, cacheLineID)
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.ReadReq = readToBottom
-	mshrEntry.Block = victim
+	entryIdx := cache.MSHRAdd(
+		&d.cache.mshrState, spec.NumMSHREntry, pid, cacheLineID)
+	entry := &d.cache.mshrState.Entries[entryIdx]
+	entry.TransactionIndices = append(entry.TransactionIndices,
+		d.findPostCoalesceTransIdx(trans))
+	entry.HasReadReq = true
+	entry.ReadReq = readToBottom.MsgMeta
+	entry.HasBlock = true
+	entry.BlockSetID = victimSetID
+	entry.BlockWayID = victimWayID
 
+	victim := &d.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
 	victim.Tag = cacheLineID
-	victim.PID = pid
+	victim.PID = uint32(pid)
 	victim.IsValid = true
 	victim.IsLocked = true
-	d.cache.directory.Visit(victim)
+	cache.DirectoryVisit(&d.cache.directoryState, victimSetID, victimWayID)
 
 	return true
 }
 
-func (d *directory) getBankBuf(block *cache.Block) queueing.Buffer {
-	numWaysPerSet := d.cache.directory.WayAssociativity()
-	blockID := block.SetID*numWaysPerSet + block.WayID
+func (d *directory) getBankBuf(setID, wayID int) queueing.Buffer {
+	numWaysPerSet := d.cache.GetSpec().WayAssociativity
+	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(d.cache.bankBufs)
 
 	return d.cache.bankBufs[bankID]
+}
+
+// findPostCoalesceTransIdx returns the index of trans in
+// postCoalesceTransactions.
+func (d *directory) findPostCoalesceTransIdx(trans *transactionState) int {
+	for i, t := range d.cache.postCoalesceTransactions {
+		if t == trans {
+			return i
+		}
+	}
+
+	panic("transaction not found in postCoalesceTransactions")
 }
