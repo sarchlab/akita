@@ -38,11 +38,13 @@ func (s *controlStage) processCurrentFlush() bool {
 		return false
 	}
 
-	rsp := cache.FlushRspBuilder{}.
-		WithSrc(s.ctrlPort.AsRemote()).
-		WithDst(s.currFlushReq.Src).
-		WithRspTo(s.currFlushReq.ID).
-		Build()
+	rsp := &cache.FlushRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = s.ctrlPort.AsRemote()
+	rsp.Dst = s.currFlushReq.Src
+	rsp.RspTo = s.currFlushReq.ID
+	rsp.TrafficBytes = 0
+	rsp.TrafficClass = "ctrl-rsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {
@@ -134,10 +136,12 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 		s.cache.bottomPort.RetrieveIncoming()
 	}
 
-	rsp := cache.RestartRspBuilder{}.
-		WithSrc(s.ctrlPort.AsRemote()).
-		WithDst(msg.Src).
-		Build()
+	rsp := &cache.RestartRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = s.ctrlPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficBytes = 0
+	rsp.TrafficClass = "ctrl-rsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {

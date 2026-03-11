@@ -2,6 +2,7 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -144,12 +145,14 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	mshrEntry := m.respondingMSHREntry
 	page := mshrEntry.page
 	reqMsg := mshrEntry.Requests[0]
-	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(reqMsg.Src).
-		WithRspTo(reqMsg.ID).
-		WithPage(page).
-		Build()
+	rspToTop := &vm.TranslationRsp{
+		Page: page,
+	}
+	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.Src = m.topPort.AsRemote()
+	rspToTop.Dst = reqMsg.Src
+	rspToTop.RspTo = reqMsg.ID
+	rspToTop.TrafficClass = "vm.TranslationRsp"
 
 	err := m.topPort.Send(rspToTop)
 	if err != nil {
@@ -251,12 +254,14 @@ func (m *tlbMiddleware) sendRspToTop(
 	msg *vm.TranslationReq,
 	page vm.Page,
 ) bool {
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Src).
-		WithRspTo(msg.ID).
-		WithPage(page).
-		Build()
+	rsp := &vm.TranslationRsp{
+		Page: page,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.RspTo = msg.ID
+	rsp.TrafficClass = "vm.TranslationRsp"
 
 	err := m.topPort.Send(rsp)
 	if err == nil {
@@ -285,13 +290,14 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 }
 
 func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
-	fetchBottom := vm.TranslationReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressMapper.Find(msg.VAddr)).
-		WithPID(msg.PID).
-		WithVAddr(msg.VAddr).
-		WithDeviceID(msg.DeviceID).
-		Build()
+	fetchBottom := &vm.TranslationReq{}
+	fetchBottom.ID = sim.GetIDGenerator().Generate()
+	fetchBottom.Src = m.bottomPort.AsRemote()
+	fetchBottom.Dst = m.addressMapper.Find(msg.VAddr)
+	fetchBottom.PID = msg.PID
+	fetchBottom.VAddr = msg.VAddr
+	fetchBottom.DeviceID = msg.DeviceID
+	fetchBottom.TrafficClass = "vm.TranslationReq"
 
 	err := m.bottomPort.Send(fetchBottom)
 	if err != nil {
@@ -398,10 +404,11 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 	spec := m.GetSpec()
 	req := m.inflightFlushReq
 
-	rsp := FlushRspBuilder{}.
-		WithSrc(m.controlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
+	rsp := &FlushRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.controlPort.AsRemote()
+	rsp.Dst = req.Src
+	rsp.TrafficClass = "tlb.FlushRsp"
 
 	err := m.controlPort.Send(rsp)
 	if err != nil {

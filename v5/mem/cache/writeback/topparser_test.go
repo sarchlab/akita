@@ -58,10 +58,12 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should return if the dir buf is full", func() {
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x100).
-			WithByteSize(64).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x100
+		read.AccessByteSize = 64
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(false)
 
@@ -71,10 +73,12 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse read from top", func() {
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x100).
-			WithByteSize(64).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x100
+		read.AccessByteSize = 64
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
 		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(true)
@@ -89,9 +93,11 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should parse write from top", func() {
-		write := mem.WriteReqBuilder{}.
-			WithAddress(0x100).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Address = 0x100
+		write.TrafficBytes = 12
+		write.TrafficClass = "mem.WriteReq"
 
 		port.EXPECT().PeekIncoming().Return(write)
 		buf.EXPECT().CanPush().Return(true)

@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -132,11 +133,12 @@ func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
 
 	f.cache.state = cacheStateRunning
 
-	rsp := cache.RestartRspBuilder{}.
-		WithSrc(f.cache.controlPort.AsRemote()).
-		WithDst(msg.Src).
-		WithRspTo(msg.ID).
-		Build()
+	rsp := &cache.RestartRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = f.cache.controlPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.RspTo = msg.ID
+	rsp.TrafficClass = "cache.RestartRsp"
 	f.cache.controlPort.Send(rsp)
 
 	f.cache.controlPort.RetrieveIncoming()
@@ -157,11 +159,12 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	rsp := cache.FlushRspBuilder{}.
-		WithSrc(f.cache.controlPort.AsRemote()).
-		WithDst(f.processingFlush.Src).
-		WithRspTo(f.processingFlush.ID).
-		Build()
+	rsp := &cache.FlushRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = f.cache.controlPort.AsRemote()
+	rsp.Dst = f.processingFlush.Src
+	rsp.RspTo = f.processingFlush.ID
+	rsp.TrafficClass = "cache.FlushRsp"
 	f.cache.controlPort.Send(rsp)
 
 	f.cache.mshr.Reset()

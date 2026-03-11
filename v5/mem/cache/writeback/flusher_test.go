@@ -92,7 +92,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
@@ -107,7 +109,9 @@ var _ = Describe("Flusher", func() {
 			cacheModule.state = cacheStatePreFlushing
 			cacheModule.inFlightTransactions = append(
 				cacheModule.inFlightTransactions, &transaction{})
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
 			ret := f.Tick()
@@ -118,7 +122,9 @@ var _ = Describe("Flusher", func() {
 		It("should move to flush stage if no inflight transaction", func() {
 			cacheModule.state = cacheStatePreFlushing
 			cacheModule.inFlightTransactions = nil
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
 			sets := []cache.Set{
@@ -142,7 +148,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should stall if bank buffer is full", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
 			blocks := []*cache.Block{{Tag: 0x0}, {Tag: 0x40}}
@@ -157,7 +165,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should send read for eviction to bank", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
 			blocks := []*cache.Block{
@@ -193,7 +203,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should wait for bank buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -206,7 +218,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should wait for bank stage", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -220,7 +234,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should wait for write buffer buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -234,7 +250,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should wait for write buffer", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -249,7 +267,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should stall is controlPort sender is busy", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -265,7 +285,9 @@ var _ = Describe("Flusher", func() {
 
 		It("should send response if all the blocks are evicted", func() {
 			cacheModule.state = cacheStateFlushing
-			req := cache.FlushReqBuilder{}.Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 			f.blockToEvict = []*cache.Block{}
 
@@ -289,9 +311,10 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
-			req := cache.FlushReqBuilder{}.
-				DiscardInflight().
-				Build()
+			req := &cache.FlushReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.DiscardInflight = true
+			req.TrafficClass = "cache.FlushReq"
 			sets := []cache.Set{
 				{Blocks: []*cache.Block{
 					{IsDirty: true, IsValid: true, IsLocked: true},
@@ -326,7 +349,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
-			req := cache.RestartReqBuilder{}.Build()
+			req := &cache.RestartReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.RestartReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().CanSend().Return(false)
 
@@ -336,7 +361,9 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should restart", func() {
-			req := cache.RestartReqBuilder{}.Build()
+			req := &cache.RestartReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.TrafficClass = "cache.RestartReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			controlPort.EXPECT().CanSend().Return(true)

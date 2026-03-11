@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -149,14 +150,15 @@ func (cache *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	reqToBottom := vm.TranslationReqBuilder{}.
-		WithSrc(cache.bottomPort.AsRemote()).
-		WithDst(cache.LowModule.AsRemote()).
-		WithPID(req.PID).
-		WithVAddr(req.VAddr).
-		WithDeviceID(req.DeviceID).
-		WithTransLatency(latency).
-		Build()
+	reqToBottom := &vm.TranslationReq{}
+	reqToBottom.ID = sim.GetIDGenerator().Generate()
+	reqToBottom.Src = cache.bottomPort.AsRemote()
+	reqToBottom.Dst = cache.LowModule.AsRemote()
+	reqToBottom.PID = req.PID
+	reqToBottom.VAddr = req.VAddr
+	reqToBottom.DeviceID = req.DeviceID
+	reqToBottom.TransLatency = latency
+	reqToBottom.TrafficClass = "vm.TranslationReq"
 
 	err := cache.bottomPort.Send(reqToBottom)
 	if err != nil {
@@ -192,12 +194,14 @@ func (cache *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 	cache.updateCacheLevels(rsp)
 
-	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(cache.topPort.AsRemote()).
-		WithDst(cache.UpModule.AsRemote()).
-		WithRspTo(rsp.RspTo).
-		WithPage(rsp.Page).
-		Build()
+	rspToTop := &vm.TranslationRsp{
+		Page: rsp.Page,
+	}
+	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.Src = cache.topPort.AsRemote()
+	rspToTop.Dst = cache.UpModule.AsRemote()
+	rspToTop.RspTo = rsp.RspTo
+	rspToTop.TrafficClass = "vm.TranslationRsp"
 
 	err := cache.topPort.Send(rspToTop)
 	if err != nil {
@@ -244,10 +248,11 @@ func (cache *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool 
 func (cache *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	req := cache.inflightFlushReq
 
-	rsp := FlushRspBuilder{}.
-		WithSrc(cache.controlPort.AsRemote()).
-		WithDst(req.Src).
-		Build()
+	rsp := &FlushRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = cache.controlPort.AsRemote()
+	rsp.Dst = req.Src
+	rsp.TrafficClass = "mmuCache.FlushRsp"
 
 	err := cache.controlPort.Send(rsp)
 	if err != nil {

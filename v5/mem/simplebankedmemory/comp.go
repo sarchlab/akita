@@ -14,21 +14,13 @@ import (
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct{}
 
-// msgRef is a serializable representation of a sim.Msg's metadata.
-type msgRef struct {
-	ID           string         `json:"id"`
-	Src          sim.RemotePort `json:"src"`
-	Dst          sim.RemotePort `json:"dst"`
-	RspTo        string         `json:"rsp_to"`
-	TrafficClass string         `json:"traffic_class"`
-	TrafficBytes int            `json:"traffic_bytes"`
-}
-
 // bankPipelineItemState is a serializable representation of bankPipelineItem.
 type bankPipelineItemState struct {
-	Msg       msgRef `json:"msg"`
-	Committed bool   `json:"committed"`
-	ReadData  []byte `json:"read_data"`
+	IsRead   bool          `json:"is_read"`
+	ReadMsg  mem.ReadReq   `json:"read_msg"`
+	WriteMsg mem.WriteReq  `json:"write_msg"`
+	Committed bool         `json:"committed"`
+	ReadData  []byte       `json:"read_data"`
 }
 
 // bankPipelineStageState captures one non-nil pipeline slot.
@@ -78,44 +70,39 @@ type Comp struct {
 	bankSelector bankSelector
 }
 
-func msgRefFromMsg(m sim.Msg) msgRef {
-	meta := m.Meta()
-	return msgRef{
-		ID:           meta.ID,
-		Src:          meta.Src,
-		Dst:          meta.Dst,
-		RspTo:        meta.RspTo,
-		TrafficClass: meta.TrafficClass,
-		TrafficBytes: meta.TrafficBytes,
-	}
-}
-
-func msgFromRef(r msgRef) sim.Msg {
-	m := &sim.MsgMeta{
-		ID:           r.ID,
-		Src:          r.Src,
-		Dst:          r.Dst,
-		RspTo:        r.RspTo,
-		TrafficClass: r.TrafficClass,
-		TrafficBytes: r.TrafficBytes,
-	}
-	return m
-}
-
 func bankPipelineItemStateFromItem(item *bankPipelineItem) bankPipelineItemState {
-	return bankPipelineItemState{
-		Msg:       msgRefFromMsg(item.msg),
+	s := bankPipelineItemState{
 		Committed: item.committed,
 		ReadData:  item.readData,
 	}
+
+	switch m := item.msg.(type) {
+	case *mem.ReadReq:
+		s.IsRead = true
+		s.ReadMsg = *m
+	case *mem.WriteReq:
+		s.IsRead = false
+		s.WriteMsg = *m
+	}
+
+	return s
 }
 
 func bankPipelineItemFromState(s bankPipelineItemState) *bankPipelineItem {
-	return &bankPipelineItem{
-		msg:       msgFromRef(s.Msg),
+	item := &bankPipelineItem{
 		committed: s.Committed,
 		readData:  s.ReadData,
 	}
+
+	if s.IsRead {
+		r := s.ReadMsg
+		item.msg = &r
+	} else {
+		w := s.WriteMsg
+		item.msg = &w
+	}
+
+	return item
 }
 
 // snapshotState converts runtime mutable data into a serializable State.
@@ -331,12 +318,14 @@ func (m *middleware) finalizeRead(
 		return false
 	}
 
-	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Meta().Src).
-		WithRspTo(msg.Meta().ID).
-		WithData(item.readData).
-		Build()
+	rsp := &mem.DataReadyRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = msg.Meta().Src
+	rsp.RspTo = msg.Meta().ID
+	rsp.Data = item.readData
+	rsp.TrafficBytes = len(item.readData) + 4
+	rsp.TrafficClass = "mem.DataReadyRsp"
 
 	if err := m.topPort.Send(rsp); err != nil {
 		return false
@@ -390,11 +379,13 @@ func (m *middleware) finalizeWrite(
 		return false
 	}
 
-	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Meta().Src).
-		WithRspTo(msg.Meta().ID).
-		Build()
+	rsp := &mem.WriteDoneRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = msg.Meta().Src
+	rsp.RspTo = msg.Meta().ID
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.WriteDoneRsp"
 
 	if err := m.topPort.Send(rsp); err != nil {
 		return false

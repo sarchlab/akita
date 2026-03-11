@@ -49,11 +49,13 @@ var _ = Describe("Respond Stage", func() {
 		)
 
 		BeforeEach(func() {
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x100
+			read.PID = 1
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "req"
 			trans = &transaction{read: read}
 			cache.transactions = append(cache.transactions, trans)
 		})
@@ -92,10 +94,12 @@ var _ = Describe("Respond Stage", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x100
+			write.PID = 1
+			write.TrafficBytes = 12
+			write.TrafficClass = "req"
 			trans = &transaction{write: write}
 			cache.transactions = append(cache.transactions, trans)
 		})

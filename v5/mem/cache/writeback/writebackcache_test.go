@@ -128,12 +128,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10004
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -163,12 +165,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithData([]byte{9, 9, 9, 9}).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10004
+		write.Data = []byte{9, 9, 9, 9}
+		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -198,20 +202,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read1 := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read1 := &mem.ReadReq{}
+		read1.ID = sim.GetIDGenerator().Generate()
+		read1.Src = agentPort.AsRemote()
+		read1.Dst = cacheModule.topPort.AsRemote()
+		read1.Address = 0x10004
+		read1.AccessByteSize = 4
+		read1.TrafficBytes = 12
+		read1.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read1)
 
-		read2 := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10008).
-			WithByteSize(4).
-			Build()
+		read2 := &mem.ReadReq{}
+		read2.ID = sim.GetIDGenerator().Generate()
+		read2.Src = agentPort.AsRemote()
+		read2.Dst = cacheModule.topPort.AsRemote()
+		read2.Address = 0x10008
+		read2.AccessByteSize = 4
+		read2.TrafficBytes = 12
+		read2.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -247,28 +255,34 @@ var _ = Describe("Write-Back Cache Integration", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-		read1 := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read1 := &mem.ReadReq{}
+		read1.ID = sim.GetIDGenerator().Generate()
+		read1.Src = agentPort.AsRemote()
+		read1.Dst = cacheModule.topPort.AsRemote()
+		read1.Address = 0x10004
+		read1.AccessByteSize = 4
+		read1.TrafficBytes = 12
+		read1.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read1)
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10008).
-			WithData([]byte{9, 9, 9, 9}).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10008
+		write.Data = []byte{9, 9, 9, 9}
+		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
-		read2 := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10008).
-			WithByteSize(4).
-			Build()
+		read2 := &mem.ReadReq{}
+		read2.ID = sim.GetIDGenerator().Generate()
+		read2.Src = agentPort.AsRemote()
+		read2.Dst = cacheModule.topPort.AsRemote()
+		read2.Address = 0x10008
+		read2.AccessByteSize = 4
+		read2.TrafficBytes = 12
+		read2.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read2)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -308,12 +322,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10004
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg sim.Msg) {
@@ -340,20 +356,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			1, 2, 3, 4, 5, 6, 7, 8,
 		})
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithData([]byte{9, 9, 9, 9}).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10004
+		write.Data = []byte{9, 9, 9, 9}
+		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10000).
-			WithByteSize(8).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10000
+		read.AccessByteSize = 8
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -374,29 +394,34 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle write miss, mshr miss, w/o fetch, w/o eviction", func() {
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10000).
-			WithData([]byte{
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			}).
-			Build()
+		writeData := []byte{
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+		}
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10000
+		write.Data = writeData
+		write.TrafficBytes = len(writeData) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10004
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).
@@ -439,12 +464,14 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			set.Blocks[i].IsDirty = true
 		}
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10004
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).Do(func(msg sim.Msg) {
@@ -473,20 +500,24 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			set.Blocks[i].IsValid = true
 			set.Blocks[i].IsDirty = true
 		}
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10004).
-			WithData([]byte{9, 9, 9, 9}).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10004
+		write.Data = []byte{9, 9, 9, 9}
+		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10000).
-			WithByteSize(8).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10000
+		read.AccessByteSize = 8
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().
@@ -511,29 +542,34 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			set.Blocks[i].IsDirty = false
 		}
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10000).
-			WithData([]byte{
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			}).
-			Build()
+		writeData2 := []byte{
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+		}
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agentPort.AsRemote()
+		write.Dst = cacheModule.topPort.AsRemote()
+		write.Address = 0x10000
+		write.Data = writeData2
+		write.TrafficBytes = len(writeData2) + 12
+		write.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write)
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x10000).
-			WithByteSize(8).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agentPort.AsRemote()
+		read.Dst = cacheModule.topPort.AsRemote()
+		read.Address = 0x10000
+		read.AccessByteSize = 8
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		cacheModule.topPort.Deliver(read)
 
 		agentPort.EXPECT().
@@ -552,26 +588,31 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should flush", func() {
-		write1 := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x100000).
-			WithData([]byte{1, 2, 3, 4}).
-			Build()
+		write1 := &mem.WriteReq{}
+		write1.ID = sim.GetIDGenerator().Generate()
+		write1.Src = agentPort.AsRemote()
+		write1.Dst = cacheModule.topPort.AsRemote()
+		write1.Address = 0x100000
+		write1.Data = []byte{1, 2, 3, 4}
+		write1.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
+		write1.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write1)
 
-		write2 := mem.WriteReqBuilder{}.
-			WithSrc(agentPort.AsRemote()).
-			WithDst(cacheModule.topPort.AsRemote()).
-			WithAddress(0x100000).
-			WithData([]byte{1, 2, 3, 4}).
-			Build()
+		write2 := &mem.WriteReq{}
+		write2.ID = sim.GetIDGenerator().Generate()
+		write2.Src = agentPort.AsRemote()
+		write2.Dst = cacheModule.topPort.AsRemote()
+		write2.Address = 0x100000
+		write2.Data = []byte{1, 2, 3, 4}
+		write2.TrafficBytes = len([]byte{1, 2, 3, 4}) + 12
+		write2.TrafficClass = "mem.WriteReq"
 		cacheModule.topPort.Deliver(write2)
 
-		flush := cache.FlushReqBuilder{}.
-			WithSrc(controlAgentPort.AsRemote()).
-			WithDst(cacheModule.controlPort.AsRemote()).
-			Build()
+		flush := &cache.FlushReq{}
+		flush.ID = sim.GetIDGenerator().Generate()
+		flush.Src = controlAgentPort.AsRemote()
+		flush.Dst = cacheModule.controlPort.AsRemote()
+		flush.TrafficClass = "cache.FlushReq"
 		cacheModule.controlPort.Deliver(flush)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).AnyTimes()

@@ -248,12 +248,14 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	s.downwardInflightTransCount--
 	block.ReadCount--
 
-	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(read.Src).
-		WithRspTo(read.ID).
-		WithData(data).
-		Build()
+	dataReady := &mem.DataReadyRsp{}
+	dataReady.ID = sim.GetIDGenerator().Generate()
+	dataReady.Src = s.cache.topPort.AsRemote()
+	dataReady.Dst = read.Src
+	dataReady.RspTo = read.ID
+	dataReady.Data = data
+	dataReady.TrafficBytes = len(data) + 4
+	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
 	tracing.TraceReqComplete(read, s.cache)
@@ -283,11 +285,13 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 
-	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(trans.write.Src).
-		WithRspTo(trans.write.ID).
-		Build()
+	done := &mem.WriteDoneRsp{}
+	done.ID = sim.GetIDGenerator().Generate()
+	done.Src = s.cache.topPort.AsRemote()
+	done.Dst = trans.write.Src
+	done.RspTo = trans.write.ID
+	done.TrafficBytes = 4
+	done.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(done)
 
 	tracing.TraceReqComplete(trans.write, s.cache)

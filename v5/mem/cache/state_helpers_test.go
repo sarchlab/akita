@@ -8,46 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-func TestMsgRefRoundTrip(t *testing.T) {
-	msg := &sim.MsgMeta{
-		ID:           "msg-1",
-		Src:          "src-port",
-		Dst:          "dst-port",
-		TrafficClass: "data",
-		TrafficBytes: 64,
-		RspTo:        "rsp-1",
-	}
-
-	ref := MsgRefFromMsg(msg)
-	restored := MsgFromRef(ref)
-
-	meta := restored.Meta()
-
-	if meta.ID != msg.ID {
-		t.Errorf("ID: got %q, want %q", meta.ID, msg.ID)
-	}
-
-	if meta.Src != msg.Src {
-		t.Errorf("Src: got %q, want %q", meta.Src, msg.Src)
-	}
-
-	if meta.Dst != msg.Dst {
-		t.Errorf("Dst: got %q, want %q", meta.Dst, msg.Dst)
-	}
-
-	if meta.RspTo != msg.RspTo {
-		t.Errorf("RspTo: got %q, want %q", meta.RspTo, msg.RspTo)
-	}
-
-	if meta.TrafficClass != msg.TrafficClass {
-		t.Errorf("TrafficClass mismatch")
-	}
-
-	if meta.TrafficBytes != msg.TrafficBytes {
-		t.Errorf("TrafficBytes mismatch")
-	}
-}
-
 func setupDirectoryWithModifiedBlock() *DirectoryImpl {
 	vf := NewLRUVictimFinder()
 	dir := NewDirectory(2, 4, 64, vf)

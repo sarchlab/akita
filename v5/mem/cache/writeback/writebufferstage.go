@@ -3,6 +3,7 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -115,13 +116,15 @@ func (wb *writeBufferStage) fetchFromBottom(
 	}
 
 	lowModulePort := wb.cache.addressToPortMapper.Find(trans.fetchAddress)
-	read := mem.ReadReqBuilder{}.
-		WithSrc(wb.cache.bottomPort.AsRemote()).
-		WithDst(lowModulePort).
-		WithPID(trans.fetchPID).
-		WithAddress(trans.fetchAddress).
-		WithByteSize(1 << wb.cache.log2BlockSize).
-		Build()
+	read := &mem.ReadReq{}
+	read.ID = sim.GetIDGenerator().Generate()
+	read.Src = wb.cache.bottomPort.AsRemote()
+	read.Dst = lowModulePort
+	read.PID = trans.fetchPID
+	read.Address = trans.fetchAddress
+	read.AccessByteSize = 1 << wb.cache.log2BlockSize
+	read.TrafficBytes = 12
+	read.TrafficClass = "mem.ReadReq"
 	wb.cache.bottomPort.Send(read)
 
 	trans.fetchReadReq = read
@@ -206,14 +209,16 @@ func (wb *writeBufferStage) write() bool {
 	}
 
 	lowModulePort := wb.cache.addressToPortMapper.Find(trans.evictingAddr)
-	write := mem.WriteReqBuilder{}.
-		WithSrc(wb.cache.bottomPort.AsRemote()).
-		WithDst(lowModulePort).
-		WithPID(trans.evictingPID).
-		WithAddress(trans.evictingAddr).
-		WithData(trans.evictingData).
-		WithDirtyMask(trans.evictingDirtyMask).
-		Build()
+	write := &mem.WriteReq{}
+	write.ID = sim.GetIDGenerator().Generate()
+	write.Src = wb.cache.bottomPort.AsRemote()
+	write.Dst = lowModulePort
+	write.PID = trans.evictingPID
+	write.Address = trans.evictingAddr
+	write.Data = trans.evictingData
+	write.DirtyMask = trans.evictingDirtyMask
+	write.TrafficBytes = len(trans.evictingData) + 12
+	write.TrafficClass = "mem.WriteReq"
 	wb.cache.bottomPort.Send(write)
 
 	trans.evictionWriteReq = write

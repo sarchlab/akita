@@ -42,6 +42,11 @@ func validateStruct(v reflect.Value, path string, allowNestedStructs bool) error
 
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+
+		if tag := field.Tag.Get("json"); tag == "-" {
+			continue
+		}
+
 		fieldPath := fmt.Sprintf("%s.%s", path, field.Name)
 
 		if err := validateFieldType(field.Type, fieldPath, allowNestedStructs); err != nil {
@@ -134,6 +139,11 @@ func validateMapValue(elem reflect.Type, path string, allowNestedStructs bool) e
 func validateStructType(t reflect.Type, path string, allowNestedStructs bool) error {
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
+
+		if tag := field.Tag.Get("json"); tag == "-" {
+			continue
+		}
+
 		fieldPath := fmt.Sprintf("%s.%s", path, field.Name)
 
 		if err := validateFieldType(field.Type, fieldPath, allowNestedStructs); err != nil {

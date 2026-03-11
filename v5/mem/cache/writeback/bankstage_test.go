@@ -161,10 +161,12 @@ var _ = Describe("Bank Stage", func() {
 
 		BeforeEach(func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithByteSize(4).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x104
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			block = &cache.Block{
 				CacheAddress: 0x40,
 				ReadCount:    1,
@@ -221,10 +223,12 @@ var _ = Describe("Bank Stage", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithData([]byte{5, 6, 7, 8}).
-				Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x104
+			write.Data = []byte{5, 6, 7, 8}
+			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
+			write.TrafficClass = "mem.WriteReq"
 			block = &cache.Block{
 				CacheAddress: 0x40,
 				ReadCount:    1,

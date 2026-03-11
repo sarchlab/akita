@@ -2,6 +2,7 @@ package writeevict
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -37,12 +38,14 @@ func (s *respondStage) respondReadTrans(
 	}
 
 	read := trans.read
-	dr := mem.DataReadyRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(read.Src).
-		WithRspTo(read.ID).
-		WithData(trans.data).
-		Build()
+	dr := &mem.DataReadyRsp{}
+	dr.ID = sim.GetIDGenerator().Generate()
+	dr.Src = s.cache.topPort.AsRemote()
+	dr.Dst = read.Src
+	dr.RspTo = read.ID
+	dr.Data = trans.data
+	dr.TrafficBytes = len(trans.data) + 4
+	dr.TrafficClass = "rsp"
 
 	err := s.cache.topPort.Send(dr)
 	if err != nil {
@@ -64,11 +67,13 @@ func (s *respondStage) respondWriteTrans(
 	}
 
 	write := trans.write
-	done := mem.WriteDoneRspBuilder{}.
-		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(write.Src).
-		WithRspTo(write.ID).
-		Build()
+	done := &mem.WriteDoneRsp{}
+	done.ID = sim.GetIDGenerator().Generate()
+	done.Src = s.cache.topPort.AsRemote()
+	done.Dst = write.Src
+	done.RspTo = write.ID
+	done.TrafficBytes = 4
+	done.TrafficClass = "rsp"
 
 	err := s.cache.topPort.Send(done)
 	if err != nil {

@@ -5,41 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// MsgRef is a serializable representation of a sim.Msg's metadata.
-type MsgRef struct {
-	ID           string         `json:"id"`
-	Src          sim.RemotePort `json:"src"`
-	Dst          sim.RemotePort `json:"dst"`
-	RspTo        string         `json:"rsp_to"`
-	TrafficClass string         `json:"traffic_class"`
-	TrafficBytes int            `json:"traffic_bytes"`
-}
-
-// MsgRefFromMsg converts a sim.Msg into a serializable MsgRef.
-func MsgRefFromMsg(msg sim.Msg) MsgRef {
-	meta := msg.Meta()
-	return MsgRef{
-		ID:           meta.ID,
-		Src:          meta.Src,
-		Dst:          meta.Dst,
-		RspTo:        meta.RspTo,
-		TrafficClass: meta.TrafficClass,
-		TrafficBytes: meta.TrafficBytes,
-	}
-}
-
-// MsgFromRef converts a MsgRef back into a sim.Msg (as a *sim.MsgMeta).
-func MsgFromRef(ref MsgRef) sim.Msg {
-	return &sim.MsgMeta{
-		ID:           ref.ID,
-		Src:          ref.Src,
-		Dst:          ref.Dst,
-		RspTo:        ref.RspTo,
-		TrafficClass: ref.TrafficClass,
-		TrafficBytes: ref.TrafficBytes,
-	}
-}
-
 // BlockState is a serializable representation of a cache Block.
 type BlockState struct {
 	PID          uint32 `json:"pid"`
@@ -159,10 +124,10 @@ type MSHREntryState struct {
 	BlockSetID         int    `json:"block_set_id"`
 	BlockWayID         int    `json:"block_way_id"`
 	HasBlock           bool   `json:"has_block"`
-	HasReadReq         bool   `json:"has_read_req"`
-	ReadReq            MsgRef `json:"read_req"`
-	HasDataReady       bool   `json:"has_data_ready"`
-	DataReady          MsgRef `json:"data_ready"`
+	HasReadReq         bool         `json:"has_read_req"`
+	ReadReq            sim.MsgMeta  `json:"read_req"`
+	HasDataReady       bool         `json:"has_data_ready"`
+	DataReady          sim.MsgMeta  `json:"data_ready"`
 	Data               []byte `json:"data"`
 }
 
@@ -212,12 +177,12 @@ func snapshotMSHREntry(
 
 	if e.ReadReq != nil {
 		es.HasReadReq = true
-		es.ReadReq = MsgRefFromMsg(e.ReadReq)
+		es.ReadReq = *e.ReadReq.Meta()
 	}
 
 	if e.DataReady != nil {
 		es.HasDataReady = true
-		es.DataReady = MsgRefFromMsg(e.DataReady)
+		es.DataReady = *e.DataReady.Meta()
 	}
 
 	if e.Data != nil {
@@ -267,11 +232,13 @@ func restoreMSHREntry(
 	}
 
 	if es.HasReadReq {
-		e.ReadReq = MsgFromRef(es.ReadReq)
+		readReq := es.ReadReq
+		e.ReadReq = &readReq
 	}
 
 	if es.HasDataReady {
-		e.DataReady = MsgFromRef(es.DataReady)
+		dataReady := es.DataReady
+		e.DataReady = &dataReady
 	}
 
 	if es.Data != nil {

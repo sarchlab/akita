@@ -61,11 +61,12 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should send full latency on miss", func() {
-		req := vm.TranslationReqBuilder{}.
-			WithPID(1).
-			WithVAddr(0x2000).
-			WithDeviceID(3).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.PID = 1
+		req.VAddr = 0x2000
+		req.DeviceID = 3
+		req.TrafficClass = "vm.TranslationReq"
 
 		topPort.EXPECT().PeekIncoming().Return(req)
 		bottomPort.EXPECT().CanSend().Return(true).AnyTimes()
@@ -86,11 +87,12 @@ var _ = Describe("MMUCacheMiddleware", func() {
 	})
 
 	It("should reduce latency on upper-level hit", func() {
-		req := vm.TranslationReqBuilder{}.
-			WithPID(1).
-			WithVAddr(0x3000).
-			WithDeviceID(2).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.PID = 1
+		req.VAddr = 0x3000
+		req.DeviceID = 2
+		req.TrafficClass = "vm.TranslationReq"
 		seg := segForLevel(cache, 1, req.VAddr)
 		wayID := setIDForSeg(cache, seg)
 		cache.table[1].Update(wayID, req.PID, seg)
@@ -115,10 +117,12 @@ var _ = Describe("MMUCacheMiddleware", func() {
 			PAddr: 0x5000,
 			Valid: true,
 		}
-		rsp := vm.TranslationRspBuilder{}.
-			WithRspTo(sim.GetIDGenerator().Generate()).
-			WithPage(page).
-			Build()
+		rsp := &vm.TranslationRsp{
+			Page: page,
+		}
+		rsp.ID = sim.GetIDGenerator().Generate()
+		rsp.RspTo = sim.GetIDGenerator().Generate()
+		rsp.TrafficClass = "vm.TranslationRsp"
 
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
@@ -147,9 +151,11 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		wayID := setIDForSeg(cache, seg)
 		cache.table[0].Update(wayID, pid, seg)
 
-		cache.inflightFlushReq = FlushReqBuilder{}.
-			WithSrc(sim.RemotePort("Requester")).
-			Build()
+		flushReq := &FlushReq{}
+		flushReq.ID = sim.GetIDGenerator().Generate()
+		flushReq.Src = sim.RemotePort("Requester")
+		flushReq.TrafficClass = "mmuCache.FlushReq"
+		cache.inflightFlushReq = flushReq
 		cache.state = mmuCacheStateFlush
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {

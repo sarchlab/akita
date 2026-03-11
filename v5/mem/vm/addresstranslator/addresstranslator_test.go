@@ -91,11 +91,13 @@ var _ = Describe("Address Translator", func() {
 		)
 
 		BeforeEach(func() {
-			req = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithByteSize(4).
-				WithPID(1).
-				Build()
+			req = &mem.ReadReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Address = 0x100
+			req.AccessByteSize = 4
+			req.PID = 1
+			req.TrafficBytes = 12
+			req.TrafficClass = "mem.ReadReq"
 		})
 
 		It("should do nothing if there is no request", func() {
@@ -106,11 +108,12 @@ var _ = Describe("Address Translator", func() {
 
 		It("should send translation", func() {
 			var transReqReturn *vm.TranslationReq
-			transReq := vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq := &vm.TranslationReq{}
+			transReq.ID = sim.GetIDGenerator().Generate()
+			transReq.PID = 1
+			transReq.VAddr = 0x100
+			transReq.DeviceID = 1
+			transReq.TrafficClass = "vm.TranslationReq"
 
 			translation := &transaction{
 				translationReq: transReq,
@@ -162,19 +165,21 @@ var _ = Describe("Address Translator", func() {
 		)
 
 		BeforeEach(func() {
-			transReq1 = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq1 = &vm.TranslationReq{}
+			transReq1.ID = sim.GetIDGenerator().Generate()
+			transReq1.PID = 1
+			transReq1.VAddr = 0x100
+			transReq1.DeviceID = 1
+			transReq1.TrafficClass = "vm.TranslationReq"
 			trans1 = &transaction{
 				translationReq: transReq1,
 			}
-			transReq2 = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq2 = &vm.TranslationReq{}
+			transReq2.ID = sim.GetIDGenerator().Generate()
+			transReq2.PID = 1
+			transReq2.VAddr = 0x100
+			transReq2.DeviceID = 1
+			transReq2.TrafficClass = "vm.TranslationReq"
 			trans2 = &transaction{
 				translationReq: transReq2,
 			}
@@ -188,18 +193,22 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if send failed", func() {
-			req := mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			req := &mem.ReadReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Address = 0x10040
+			req.AccessByteSize = 4
+			req.TrafficBytes = 12
+			req.TrafficClass = "mem.ReadReq"
+			translationRsp := &vm.TranslationRsp{
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
+			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.RspTo = transReq1.ID
+			translationRsp.TrafficClass = "vm.TranslationRsp"
 
 			trans1.incomingReqs = []sim.Msg{req}
 			trans1.translationRsp = translationRsp
@@ -215,18 +224,22 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should forward read request", func() {
-			req := mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			req := &mem.ReadReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Address = 0x10040
+			req.AccessByteSize = 4
+			req.TrafficBytes = 12
+			req.TrafficClass = "mem.ReadReq"
+			translationRsp := &vm.TranslationRsp{
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
+			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.RspTo = transReq1.ID
+			translationRsp.TrafficClass = "vm.TranslationRsp"
 
 			trans1.incomingReqs = []sim.Msg{req}
 			trans1.translationRsp = translationRsp
@@ -256,19 +269,23 @@ var _ = Describe("Address Translator", func() {
 		It("should forward write request", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				WithData(data).
-				WithDirtyMask(dirty).
-				Build()
-			translationRsp := vm.TranslationRspBuilder{}.
-				WithRspTo(transReq1.ID).
-				WithPage(vm.Page{
+			write := &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x10040
+			write.Data = data
+			write.DirtyMask = dirty
+			write.TrafficBytes = len(data) + 12
+			write.TrafficClass = "mem.WriteReq"
+			translationRsp := &vm.TranslationRsp{
+				Page: vm.Page{
 					PID:   1,
 					VAddr: 0x10000,
 					PAddr: 0x20000,
-				}).
-				Build()
+				},
+			}
+			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.RspTo = transReq1.ID
+			translationRsp.TrafficClass = "vm.TranslationRsp"
 			trans1.incomingReqs = []sim.Msg{write}
 			trans1.translationRsp = translationRsp
 			trans1.translationDone = true
@@ -305,20 +322,28 @@ var _ = Describe("Address Translator", func() {
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			readToBottom = mem.ReadReqBuilder{}.
-				WithAddress(0x20040).
-				WithByteSize(4).
-				Build()
-			writeFromTop = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			writeToBottom = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
+			readFromTop = &mem.ReadReq{}
+			readFromTop.ID = sim.GetIDGenerator().Generate()
+			readFromTop.Address = 0x10040
+			readFromTop.AccessByteSize = 4
+			readFromTop.TrafficBytes = 12
+			readFromTop.TrafficClass = "mem.ReadReq"
+			readToBottom = &mem.ReadReq{}
+			readToBottom.ID = sim.GetIDGenerator().Generate()
+			readToBottom.Address = 0x20040
+			readToBottom.AccessByteSize = 4
+			readToBottom.TrafficBytes = 12
+			readToBottom.TrafficClass = "mem.ReadReq"
+			writeFromTop = &mem.WriteReq{}
+			writeFromTop.ID = sim.GetIDGenerator().Generate()
+			writeFromTop.Address = 0x10040
+			writeFromTop.TrafficBytes = 12
+			writeFromTop.TrafficClass = "mem.WriteReq"
+			writeToBottom = &mem.WriteReq{}
+			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.Address = 0x10040
+			writeToBottom.TrafficBytes = 12
+			writeToBottom.TrafficClass = "mem.WriteReq"
 
 			t.inflightReqToBottom = []reqToBottom{
 				{reqFromTop: readFromTop, reqToBottom: readToBottom},
@@ -334,9 +359,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond data ready", func() {
-			dataReady := mem.DataReadyRspBuilder{}.
-				WithRspTo(readToBottom.ID).
-				Build()
+			dataReady := &mem.DataReadyRsp{}
+			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.RspTo = readToBottom.ID
+			dataReady.TrafficBytes = 4
+			dataReady.TrafficClass = "mem.DataReadyRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -354,9 +381,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should respond write done", func() {
-			done := mem.WriteDoneRspBuilder{}.
-				WithRspTo(writeToBottom.ID).
-				Build()
+			done := &mem.WriteDoneRsp{}
+			done.ID = sim.GetIDGenerator().Generate()
+			done.RspTo = writeToBottom.ID
+			done.TrafficBytes = 4
+			done.TrafficClass = "mem.WriteDoneRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -373,9 +402,11 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should stall if TopPort is busy", func() {
-			dataReady := mem.DataReadyRspBuilder{}.
-				WithRspTo(readToBottom.ID).
-				Build()
+			dataReady := &mem.DataReadyRsp{}
+			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.RspTo = readToBottom.ID
+			dataReady.TrafficBytes = 4
+			dataReady.TrafficClass = "mem.DataReadyRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -399,20 +430,25 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should round-trip GetState/SetState", func() {
-			reqFromTop := mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			reqToBot := mem.ReadReqBuilder{}.
-				WithAddress(0x20040).
-				WithByteSize(4).
-				Build()
+			reqFromTop := &mem.ReadReq{}
+			reqFromTop.ID = sim.GetIDGenerator().Generate()
+			reqFromTop.Address = 0x10040
+			reqFromTop.AccessByteSize = 4
+			reqFromTop.TrafficBytes = 12
+			reqFromTop.TrafficClass = "mem.ReadReq"
+			reqToBot := &mem.ReadReq{}
+			reqToBot.ID = sim.GetIDGenerator().Generate()
+			reqToBot.Address = 0x20040
+			reqToBot.AccessByteSize = 4
+			reqToBot.TrafficBytes = 12
+			reqToBot.TrafficClass = "mem.ReadReq"
 
-			transReq := vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			transReq := &vm.TranslationReq{}
+			transReq.ID = sim.GetIDGenerator().Generate()
+			transReq.PID = 1
+			transReq.VAddr = 0x100
+			transReq.DeviceID = 1
+			transReq.TrafficClass = "vm.TranslationReq"
 
 			t.isFlushing = true
 			t.transactions = []*transaction{
@@ -476,28 +512,42 @@ var _ = Describe("Address Translator", func() {
 		)
 
 		BeforeEach(func() {
-			readFromTop = mem.ReadReqBuilder{}.
-				WithAddress(0x10040).
-				WithByteSize(4).
-				Build()
-			readToBottom = mem.ReadReqBuilder{}.
-				WithAddress(0x20040).
-				WithByteSize(4).
-				Build()
-			writeFromTop = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			writeToBottom = mem.WriteReqBuilder{}.
-				WithAddress(0x10040).
-				Build()
-			flushReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort.AsRemote()).
-				ToDiscardTransactions().
-				Build()
-			restartReq = mem.ControlMsgBuilder{}.
-				WithDst(t.ctrlPort.AsRemote()).
-				ToRestart().
-				Build()
+			readFromTop = &mem.ReadReq{}
+			readFromTop.ID = sim.GetIDGenerator().Generate()
+			readFromTop.Address = 0x10040
+			readFromTop.AccessByteSize = 4
+			readFromTop.TrafficBytes = 12
+			readFromTop.TrafficClass = "mem.ReadReq"
+			readToBottom = &mem.ReadReq{}
+			readToBottom.ID = sim.GetIDGenerator().Generate()
+			readToBottom.Address = 0x20040
+			readToBottom.AccessByteSize = 4
+			readToBottom.TrafficBytes = 12
+			readToBottom.TrafficClass = "mem.ReadReq"
+			writeFromTop = &mem.WriteReq{}
+			writeFromTop.ID = sim.GetIDGenerator().Generate()
+			writeFromTop.Address = 0x10040
+			writeFromTop.TrafficBytes = 12
+			writeFromTop.TrafficClass = "mem.WriteReq"
+			writeToBottom = &mem.WriteReq{}
+			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.Address = 0x10040
+			writeToBottom.TrafficBytes = 12
+			writeToBottom.TrafficClass = "mem.WriteReq"
+			flushReq = &mem.ControlMsg{
+				DiscardTransations: true,
+			}
+			flushReq.ID = sim.GetIDGenerator().Generate()
+			flushReq.Dst = t.ctrlPort.AsRemote()
+			flushReq.TrafficBytes = 4
+			flushReq.TrafficClass = "mem.ControlMsg"
+			restartReq = &mem.ControlMsg{
+				Restart: true,
+			}
+			restartReq.ID = sim.GetIDGenerator().Generate()
+			restartReq.Dst = t.ctrlPort.AsRemote()
+			restartReq.TrafficBytes = 4
+			restartReq.TrafficClass = "mem.ControlMsg"
 
 			t.inflightReqToBottom = []reqToBottom{
 				{reqFromTop: readFromTop, reqToBottom: readToBottom},

@@ -185,12 +185,15 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 
 func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
 	addr := uint64(index * readSize)
-	return mem.ReadReqBuilder{}.
-		WithSrc(src).
-		WithDst(dst).
-		WithAddress(addr).
-		WithByteSize(readSize).
-		Build()
+	r := &mem.ReadReq{}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = src
+	r.Dst = dst
+	r.Address = addr
+	r.AccessByteSize = readSize
+	r.TrafficBytes = 12
+	r.TrafficClass = "mem.ReadReq"
+	return r
 }
 
 func collectLatency(
@@ -245,12 +248,14 @@ var _ = Describe("SimpleBankedMemory", func() {
 		err := memComp.Storage.Write(0x0, data)
 		Expect(err).NotTo(HaveOccurred())
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agent.port.AsRemote()).
-			WithDst(memComp.topPort.AsRemote()).
-			WithAddress(0x0).
-			WithByteSize(uint64(len(data))).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agent.port.AsRemote()
+		read.Dst = memComp.topPort.AsRemote()
+		read.Address = 0x0
+		read.AccessByteSize = uint64(len(data))
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
 		agent.send(read)
 
@@ -272,19 +277,23 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		newData := []byte{0x10, 0x20, 0x30, 0x40}
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agent.port.AsRemote()).
-			WithDst(memComp.topPort.AsRemote()).
-			WithAddress(addr).
-			WithData(newData).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agent.port.AsRemote()
+		write.Dst = memComp.topPort.AsRemote()
+		write.Address = addr
+		write.Data = newData
+		write.TrafficBytes = len(newData) + 12
+		write.TrafficClass = "mem.WriteReq"
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agent.port.AsRemote()).
-			WithDst(memComp.topPort.AsRemote()).
-			WithAddress(addr).
-			WithByteSize(uint64(len(newData))).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agent.port.AsRemote()
+		read.Dst = memComp.topPort.AsRemote()
+		read.Address = addr
+		read.AccessByteSize = uint64(len(newData))
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
 		agent.send(write)
 		agent.send(read)
@@ -323,19 +332,24 @@ var _ = Describe("SimpleBankedMemory", func() {
 		conn.PlugIn(memComp.topPort)
 		conn.PlugIn(agent.port)
 
-		write := mem.WriteReqBuilder{}.
-			WithSrc(agent.port.AsRemote()).
-			WithDst(memComp.topPort.AsRemote()).
-			WithAddress(0x0).
-			WithData([]byte{1, 2, 3, 4}).
-			Build()
+		convWriteData := []byte{1, 2, 3, 4}
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Src = agent.port.AsRemote()
+		write.Dst = memComp.topPort.AsRemote()
+		write.Address = 0x0
+		write.Data = convWriteData
+		write.TrafficBytes = len(convWriteData) + 12
+		write.TrafficClass = "mem.WriteReq"
 
-		read := mem.ReadReqBuilder{}.
-			WithSrc(agent.port.AsRemote()).
-			WithDst(memComp.topPort.AsRemote()).
-			WithAddress(0x100). // Maps to same internal address as write
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Src = agent.port.AsRemote()
+		read.Dst = memComp.topPort.AsRemote()
+		read.Address = 0x100 // Maps to same internal address as write
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
 		agent.send(write)
 		agent.send(read)

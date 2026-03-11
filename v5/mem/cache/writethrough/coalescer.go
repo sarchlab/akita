@@ -180,11 +180,13 @@ func (c *coalescer) coalesceAndSend() bool {
 func (c *coalescer) coalesceRead() *transaction {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	coalescedRead := mem.ReadReqBuilder{}.
-		WithAddress(cachelineID).
-		WithByteSize(blockSize).
-		WithPID(c.toCoalesce[0].PID()).
-		Build()
+	coalescedRead := &mem.ReadReq{}
+	coalescedRead.ID = sim.GetIDGenerator().Generate()
+	coalescedRead.Address = cachelineID
+	coalescedRead.AccessByteSize = blockSize
+	coalescedRead.PID = c.toCoalesce[0].PID()
+	coalescedRead.TrafficBytes = 12
+	coalescedRead.TrafficClass = "mem.ReadReq"
 
 	return &transaction{
 		id:                      sim.GetIDGenerator().Generate(),
@@ -196,12 +198,16 @@ func (c *coalescer) coalesceRead() *transaction {
 func (c *coalescer) coalesceWrite() *transaction {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
 	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	coalescedWrite := mem.WriteReqBuilder{}.
-		WithAddress(cachelineID).
-		WithPID(c.toCoalesce[0].PID()).
-		WithData(make([]byte, blockSize)).
-		WithDirtyMask(make([]bool, blockSize)).
-		Build()
+	data := make([]byte, blockSize)
+	dirtyMask := make([]bool, blockSize)
+	coalescedWrite := &mem.WriteReq{}
+	coalescedWrite.ID = sim.GetIDGenerator().Generate()
+	coalescedWrite.Address = cachelineID
+	coalescedWrite.PID = c.toCoalesce[0].PID()
+	coalescedWrite.Data = data
+	coalescedWrite.DirtyMask = dirtyMask
+	coalescedWrite.TrafficBytes = len(data) + 12
+	coalescedWrite.TrafficClass = "mem.WriteReq"
 
 	for _, t := range c.toCoalesce {
 		offset := int(t.write.Address - cachelineID)

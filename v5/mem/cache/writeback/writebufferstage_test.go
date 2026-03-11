@@ -173,11 +173,13 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should combine with write requests", func() {
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x204).
-				WithData([]byte{10, 10, 10, 10}).
-				WithDirtyMask([]bool{true, true, true, true}).
-				Build()
+			write := &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x204
+			write.Data = []byte{10, 10, 10, 10}
+			write.DirtyMask = []bool{true, true, true, true}
+			write.TrafficBytes = len([]byte{10, 10, 10, 10}) + 12
+			write.TrafficClass = "mem.WriteReq"
 			writeTrans := &transaction{write: write}
 			trans.mshrEntry.Requests = append(
 				trans.mshrEntry.Requests,
@@ -231,7 +233,10 @@ var _ = Describe("Write Buffer Stage", func() {
 		)
 
 		BeforeEach(func() {
-			read = mem.ReadReqBuilder{}.Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			trans = &transaction{
 				read:         read,
 				action:       writeBufferFetch,
@@ -468,7 +473,10 @@ var _ = Describe("Write Buffer Stage", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.TrafficBytes = 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write:        write,
 				action:       writeBufferFlush,
@@ -569,14 +577,18 @@ var _ = Describe("Write Buffer Stage", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.TrafficBytes = 12
+			write.TrafficClass = "mem.WriteReq"
 			eviction = &transaction{
 				evictionWriteReq: write,
 			}
-			writeDone = mem.WriteDoneRspBuilder{}.
-				WithRspTo(write.ID).
-				Build()
+			writeDone = &mem.WriteDoneRsp{}
+			writeDone.ID = sim.GetIDGenerator().Generate()
+			writeDone.RspTo = write.ID
+			writeDone.TrafficBytes = 4
+			writeDone.TrafficClass = "mem.WriteDoneRsp"
 
 			wbStage.inflightEviction = append(
 				wbStage.inflightEviction,
@@ -618,9 +630,11 @@ var _ = Describe("Write Buffer Stage", func() {
 			mshrEntry = cache.NewMSHREntry()
 			mshrEntry.Block = block
 
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x200).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x200
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			fetch = &transaction{
 				block:        &cache.Block{},
 				fetchReadReq: read,
@@ -636,10 +650,12 @@ var _ = Describe("Write Buffer Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			dataReady = mem.DataReadyRspBuilder{}.
-				WithRspTo(read.ID).
-				WithData(data).
-				Build()
+			dataReady = &mem.DataReadyRsp{}
+			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.RspTo = read.ID
+			dataReady.Data = data
+			dataReady.TrafficBytes = len(data) + 4
+			dataReady.TrafficClass = "mem.DataReadyRsp"
 
 			wbStage.inflightFetch = append(wbStage.inflightFetch, fetch)
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
@@ -669,11 +685,13 @@ var _ = Describe("Write Buffer Stage", func() {
 		})
 
 		It("should combine with writes in MSHR entry", func() {
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x204).
-				WithData([]byte{10, 10, 10, 10}).
-				WithDirtyMask([]bool{true, true, true, true}).
-				Build()
+			write := &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x204
+			write.Data = []byte{10, 10, 10, 10}
+			write.DirtyMask = []bool{true, true, true, true}
+			write.TrafficBytes = len([]byte{10, 10, 10, 10}) + 12
+			write.TrafficClass = "mem.WriteReq"
 			writeTrans := &transaction{write: write}
 			fetch.mshrEntry.Requests = append(
 				fetch.mshrEntry.Requests,

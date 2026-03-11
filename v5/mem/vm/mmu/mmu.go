@@ -213,12 +213,14 @@ func (m *middleware) doPageWalkHit(
 	}
 
 	walking := m.walkingTranslations[walkingIndex]
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(walking.req.Src).
-		WithRspTo(walking.req.ID).
-		WithPage(walking.page).
-		Build()
+	rsp := &vm.TranslationRsp{
+		Page: walking.page,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = walking.req.Src
+	rsp.RspTo = walking.req.ID
+	rsp.TrafficClass = "vm.TranslationRsp"
 
 	m.topPort.Send(rsp)
 	m.toRemoveFromPTW = append(m.toRemoveFromPTW, walkingIndex)
@@ -304,12 +306,14 @@ func (m *middleware) sendTranslationRsp(
 	req := trans.req
 	page := trans.page
 
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rsp := &vm.TranslationRsp{
+		Page: page,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = req.Src
+	rsp.RspTo = req.ID
+	rsp.TrafficClass = "vm.TranslationRsp"
 	m.topPort.Send(rsp)
 
 	return true
@@ -332,12 +336,14 @@ func (m *middleware) processMigrationReturn() bool {
 		panic("page not found")
 	}
 
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(req.Src).
-		WithRspTo(req.ID).
-		WithPage(page).
-		Build()
+	rsp := &vm.TranslationRsp{
+		Page: page,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = req.Src
+	rsp.RspTo = req.ID
+	rsp.TrafficClass = "vm.TranslationRsp"
 	m.topPort.Send(rsp)
 
 	m.isDoingMigration = false

@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -248,14 +249,16 @@ func (d *directory) fullLineWriteMiss(trans *transaction) bool {
 func (d *directory) writeBottom(trans *transaction) bool {
 	addr := trans.write.Address
 
-	writeToBottom := mem.WriteReqBuilder{}.
-		WithSrc(d.cache.bottomPort.AsRemote()).
-		WithDst(d.cache.addressToPortMapper.Find(addr)).
-		WithAddress(addr).
-		WithPID(trans.write.PID).
-		WithData(trans.write.Data).
-		WithDirtyMask(trans.write.DirtyMask).
-		Build()
+	writeToBottom := &mem.WriteReq{}
+	writeToBottom.ID = sim.GetIDGenerator().Generate()
+	writeToBottom.Src = d.cache.bottomPort.AsRemote()
+	writeToBottom.Dst = d.cache.addressToPortMapper.Find(addr)
+	writeToBottom.Address = addr
+	writeToBottom.PID = trans.write.PID
+	writeToBottom.Data = trans.write.Data
+	writeToBottom.DirtyMask = trans.write.DirtyMask
+	writeToBottom.TrafficBytes = len(trans.write.Data) + 12
+	writeToBottom.TrafficClass = "mem.WriteReq"
 
 	err := d.cache.bottomPort.Send(writeToBottom)
 	if err != nil {
@@ -316,13 +319,15 @@ func (d *directory) fetchFromBottom(
 	cacheLineID := addr / blockSize * blockSize
 
 	bottomModule := d.cache.addressToPortMapper.Find(cacheLineID)
-	readToBottom := mem.ReadReqBuilder{}.
-		WithSrc(d.cache.bottomPort.AsRemote()).
-		WithDst(bottomModule).
-		WithAddress(cacheLineID).
-		WithPID(pid).
-		WithByteSize(blockSize).
-		Build()
+	readToBottom := &mem.ReadReq{}
+	readToBottom.ID = sim.GetIDGenerator().Generate()
+	readToBottom.Src = d.cache.bottomPort.AsRemote()
+	readToBottom.Dst = bottomModule
+	readToBottom.Address = cacheLineID
+	readToBottom.PID = pid
+	readToBottom.AccessByteSize = blockSize
+	readToBottom.TrafficBytes = 12
+	readToBottom.TrafficClass = "mem.ReadReq"
 	err := d.cache.bottomPort.Send(readToBottom)
 
 	if err != nil {

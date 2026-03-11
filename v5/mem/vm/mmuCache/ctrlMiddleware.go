@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -128,10 +129,11 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage() {
 }
 
 func (m *ctrlMiddleware) handleMMUCacheRestart(msg *RestartReq) bool {
-	rsp := RestartRspBuilder{}.
-		WithSrc(m.controlPort.AsRemote()).
-		WithDst(msg.Src).
-		Build()
+	rsp := &RestartRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.controlPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficClass = "mmuCache.RestartRsp"
 
 	err := m.controlPort.Send(rsp)
 	if err != nil {

@@ -65,9 +65,11 @@ var _ = Describe("MemController", func() {
 		})
 
 		It("should stall if substransaction queue is full", func() {
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x1000).
-				Build()
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x1000
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 
 			topPort.EXPECT().PeekIncoming().Return(read)
 			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
@@ -85,9 +87,11 @@ var _ = Describe("MemController", func() {
 		})
 
 		It("should push sub-transactions to subtrans queue", func() {
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x1000).
-				Build()
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x1000
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 
 			topPort.EXPECT().PeekIncoming().Return(read)
 			topPort.EXPECT().RetrieveIncoming().Return(read)
@@ -162,10 +166,13 @@ var _ = Describe("MemController", func() {
 			})
 
 		It("should send write done response", func() {
-			write := mem.WriteReqBuilder{}.
-				WithAddress(0x40).
-				WithData([]byte{1, 2, 3, 4}).
-				Build()
+			writeData := []byte{1, 2, 3, 4}
+			write := &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x40
+			write.Data = writeData
+			write.TrafficBytes = len(writeData) + 12
+			write.TrafficClass = "mem.WriteReq"
 			trans := &signal.Transaction{
 				InternalAddress: 0x40,
 				Write:           write,
@@ -191,10 +198,12 @@ var _ = Describe("MemController", func() {
 
 		It("should send data ready response", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4})
-			read := mem.ReadReqBuilder{}.
-				WithAddress(0x40).
-				WithByteSize(4).
-				Build()
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x40
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			trans := &signal.Transaction{
 				InternalAddress: 0x40,
 				Read:            read,

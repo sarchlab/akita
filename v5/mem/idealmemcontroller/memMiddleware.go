@@ -132,12 +132,14 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		log.Panic(err)
 	}
 
-	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(tx.Src).
-		WithRspTo(tx.ReqID).
-		WithData(data).
-		Build()
+	rsp := &mem.DataReadyRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = tx.Src
+	rsp.RspTo = tx.ReqID
+	rsp.Data = data
+	rsp.TrafficBytes = len(data) + 4
+	rsp.TrafficClass = "mem.DataReadyRsp"
 
 	networkErr := m.topPort.Send(rsp)
 	if networkErr != nil {
@@ -150,11 +152,13 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
-	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(tx.Src).
-		WithRspTo(tx.ReqID).
-		Build()
+	rsp := &mem.WriteDoneRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = tx.Src
+	rsp.RspTo = tx.ReqID
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.WriteDoneRsp"
 
 	networkErr := m.topPort.Send(rsp)
 	if networkErr != nil {

@@ -5,15 +5,18 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 var _ = Describe("Default SubTransSplitter", func() {
 
 	It("should split", func() {
-		read := mem.ReadReqBuilder{}.
-			WithAddress(1020).
-			WithByteSize(128).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 1020
+		read.AccessByteSize = 128
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		transaction := &signal.Transaction{
 			Read: read,
 		}

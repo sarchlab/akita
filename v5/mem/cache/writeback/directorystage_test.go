@@ -83,11 +83,13 @@ var _ = Describe("DirectoryStage", func() {
 		)
 
 		BeforeEach(func() {
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(64).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x100
+			read.PID = 1
+			read.AccessByteSize = 64
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			trans = &transaction{
 				read: read,
 			}
@@ -351,10 +353,12 @@ var _ = Describe("DirectoryStage", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x100
+			write.PID = 1
+			write.TrafficBytes = 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write: write,
 			}

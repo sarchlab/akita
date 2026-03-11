@@ -62,19 +62,24 @@ var _ = Describe("DRAM Integration", func() {
 	})
 
 	It("should read and write", func() {
-		write := mem.WriteReqBuilder{}.
-			WithAddress(0x40).
-			WithData([]byte{1, 2, 3, 4}).
-			WithSrc(srcPort.AsRemote()).
-			WithDst(memCtrl.topPort.AsRemote()).
-			Build()
+		writeData := []byte{1, 2, 3, 4}
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Address = 0x40
+		write.Data = writeData
+		write.Src = srcPort.AsRemote()
+		write.Dst = memCtrl.topPort.AsRemote()
+		write.TrafficBytes = len(writeData) + 12
+		write.TrafficClass = "mem.WriteReq"
 
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x40).
-			WithByteSize(4).
-			WithSrc(srcPort.AsRemote()).
-			WithDst(memCtrl.topPort.AsRemote()).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x40
+		read.AccessByteSize = 4
+		read.Src = srcPort.AsRemote()
+		read.Dst = memCtrl.topPort.AsRemote()
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
 		memCtrl.topPort.Deliver(write)
 		memCtrl.topPort.Deliver(read)

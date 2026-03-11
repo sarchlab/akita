@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
@@ -18,16 +19,6 @@ type Spec struct {
 	NumOutputChannels int     `json:"num_output_channels"`
 	FlitByteSize      int     `json:"flit_byte_size"`
 	EncodingOverhead  float64 `json:"encoding_overhead"`
-}
-
-// msgRef is a serializable representation of a sim.Msg.
-type msgRef struct {
-	ID           string         `json:"id"`
-	Src          sim.RemotePort `json:"src"`
-	Dst          sim.RemotePort `json:"dst"`
-	RspTo        string         `json:"rsp_to"`
-	TrafficClass string         `json:"traffic_class"`
-	TrafficBytes int            `json:"traffic_bytes"`
 }
 
 // flitState is a serializable representation of a *messaging.Flit.
@@ -55,10 +46,10 @@ type assemblingMsgState struct {
 
 // State contains mutable runtime data for the endpoint.
 type State struct {
-	MsgOutBuf      []msgRef             `json:"msg_out_buf"`
+	MsgOutBuf      []sim.MsgMeta        `json:"msg_out_buf"`
 	FlitsToSend    []flitState          `json:"flits_to_send"`
 	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
-	AssembledMsgs  []msgRef             `json:"assembled_msgs"`
+	AssembledMsgs  []sim.MsgMeta        `json:"assembled_msgs"`
 }
 
 type msgToAssemble struct {
@@ -109,9 +100,9 @@ func (c *Comp) Unplug(_ sim.Port) {
 func (c *Comp) snapshotState() State {
 	s := State{}
 
-	s.MsgOutBuf = make([]msgRef, len(c.msgOutBuf))
+	s.MsgOutBuf = make([]sim.MsgMeta, len(c.msgOutBuf))
 	for i, msg := range c.msgOutBuf {
-		s.MsgOutBuf[i] = msgRefFromMsg(msg)
+		s.MsgOutBuf[i] = *msg.Meta()
 	}
 
 	s.FlitsToSend = make([]flitState, len(c.flitsToSend))
@@ -134,9 +125,9 @@ func (c *Comp) snapshotState() State {
 		}
 	}
 
-	s.AssembledMsgs = make([]msgRef, len(c.assembledMsgs))
+	s.AssembledMsgs = make([]sim.MsgMeta, len(c.assembledMsgs))
 	for i, msg := range c.assembledMsgs {
-		s.AssembledMsgs[i] = msgRefFromMsg(msg)
+		s.AssembledMsgs[i] = *msg.Meta()
 	}
 
 	return s
@@ -145,8 +136,9 @@ func (c *Comp) snapshotState() State {
 // restoreFromState restores runtime mutable data from a serializable State.
 func (c *Comp) restoreFromState(s State) {
 	c.msgOutBuf = make([]sim.Msg, len(s.MsgOutBuf))
-	for i, ref := range s.MsgOutBuf {
-		c.msgOutBuf[i] = msgFromRef(ref)
+	for i := range s.MsgOutBuf {
+		meta := s.MsgOutBuf[i]
+		c.msgOutBuf[i] = &meta
 	}
 
 	c.flitsToSend = make([]*messaging.Flit, len(s.FlitsToSend))
@@ -183,8 +175,9 @@ func (c *Comp) restoreFromState(s State) {
 	}
 
 	c.assembledMsgs = make([]sim.Msg, len(s.AssembledMsgs))
-	for i, ref := range s.AssembledMsgs {
-		c.assembledMsgs[i] = msgFromRef(ref)
+	for i := range s.AssembledMsgs {
+		meta := s.AssembledMsgs[i]
+		c.assembledMsgs[i] = &meta
 	}
 }
 
@@ -222,29 +215,6 @@ func (c *Comp) LoadState(r io.Reader) error {
 // Deprecated: Use GetState() instead.
 func (c *Comp) SyncState() {
 	c.GetState()
-}
-
-func msgRefFromMsg(msg sim.Msg) msgRef {
-	meta := msg.Meta()
-	return msgRef{
-		ID:           meta.ID,
-		Src:          meta.Src,
-		Dst:          meta.Dst,
-		RspTo:        meta.RspTo,
-		TrafficClass: meta.TrafficClass,
-		TrafficBytes: meta.TrafficBytes,
-	}
-}
-
-func msgFromRef(ref msgRef) sim.Msg {
-	return &sim.MsgMeta{
-		ID:           ref.ID,
-		Src:          ref.Src,
-		Dst:          ref.Dst,
-		RspTo:        ref.RspTo,
-		TrafficClass: ref.TrafficClass,
-		TrafficBytes: ref.TrafficBytes,
-	}
 }
 
 func flitStateFromFlit(flit *messaging.Flit) flitState {
@@ -520,13 +490,15 @@ func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
 
 	flits := make([]*messaging.Flit, numFlit)
 	for i := 0; i < numFlit; i++ {
-		flits[i] = messaging.FlitBuilder{}.
-			WithSrc(m.NetworkPort.AsRemote()).
-			WithDst(m.DefaultSwitchDst).
-			WithSeqID(i).
-			WithNumFlitInMsg(numFlit).
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", i, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.Src = m.NetworkPort.AsRemote()
+		flit.Dst = m.DefaultSwitchDst
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.SeqID = i
+		flit.NumFlitInMsg = numFlit
+		flit.Msg = msg
+		flits[i] = flit
 	}
 
 	return flits

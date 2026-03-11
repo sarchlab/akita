@@ -59,10 +59,12 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should stall if topSender is busy", func() {
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x104).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x104
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		mshrEntry := &cache.MSHREntry{
 			Requests: []interface{}{read},
 			Data: []byte{
@@ -87,10 +89,12 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should send data ready to top", func() {
 		block := &cache.Block{Tag: 0x100}
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x104).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x104
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		trans := &transaction{read: read}
 		cacheModule.inFlightTransactions = append(
 			cacheModule.inFlightTransactions, trans)
@@ -125,10 +129,12 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should send write done to top", func() {
 		block := &cache.Block{Tag: 0x100}
-		write := mem.WriteReqBuilder{}.
-			WithAddress(0x104).
-			WithData([]byte{9, 9, 9, 9}).
-			Build()
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Address = 0x104
+		write.Data = []byte{9, 9, 9, 9}
+		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
+		write.TrafficClass = "mem.WriteReq"
 		trans := &transaction{write: write}
 		cacheModule.inFlightTransactions = append(
 			cacheModule.inFlightTransactions, trans)
@@ -164,10 +170,12 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should discard the request if it is no longer inflight", func() {
 		block := &cache.Block{Tag: 0x100}
-		read := mem.ReadReqBuilder{}.
-			WithAddress(0x104).
-			WithByteSize(4).
-			Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x104
+		read.AccessByteSize = 4
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		trans := &transaction{read: read}
 		mshrEntry := &cache.MSHREntry{
 			Requests: []interface{}{trans},

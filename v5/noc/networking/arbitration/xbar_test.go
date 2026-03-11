@@ -1,6 +1,9 @@
 package arbitration
 
 import (
+	"fmt"
+	"reflect"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/messaging"
@@ -43,25 +46,30 @@ var _ = Describe("XBar", func() {
 		msg := &sim.MsgMeta{
 			ID: sim.GetIDGenerator().Generate(),
 		}
-		flit1 := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit1 := &messaging.Flit{}
+		flit1.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit1.TrafficClass = reflect.TypeOf(msg).String()
+		flit1.Msg = msg
 		flit1.OutputBuf = buf1Remote
-		flit2 := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit2 := &messaging.Flit{}
+		flit2.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit2.TrafficClass = reflect.TypeOf(msg).String()
+		flit2.Msg = msg
 		flit2.OutputBuf = buf1Remote
-		flit3 := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit3 := &messaging.Flit{}
+		flit3.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit3.TrafficClass = reflect.TypeOf(msg).String()
+		flit3.Msg = msg
 		flit3.OutputBuf = buf3Remote
-		flit4 := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit4 := &messaging.Flit{}
+		flit4.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit4.TrafficClass = reflect.TypeOf(msg).String()
+		flit4.Msg = msg
 		flit4.OutputBuf = buf4Remote
-		flit5 := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit5 := &messaging.Flit{}
+		flit5.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit5.TrafficClass = reflect.TypeOf(msg).String()
+		flit5.Msg = msg
 		flit5.OutputBuf = buf1Remote
 
 		buf1.EXPECT().Peek().Return(flit1)

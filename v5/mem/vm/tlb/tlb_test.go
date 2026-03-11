@@ -91,11 +91,12 @@ var _ = Describe("TLB", func() {
 	})
 
 	It("should insert req into pipeline when topPort has req", func() {
-		req := vm.TranslationReqBuilder{}.
-			WithPID(1).
-			WithVAddr(uint64(0x100)).
-			WithDeviceID(1).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.PID = 1
+		req.VAddr = uint64(0x100)
+		req.DeviceID = 1
+		req.TrafficClass = "vm.TranslationReq"
 
 		topPort.EXPECT().RetrieveIncoming().Return(req).Times(1)
 		topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
@@ -122,11 +123,12 @@ var _ = Describe("TLB", func() {
 			set.EXPECT().Lookup(vm.PID(1), uint64(0x100)).
 				Return(wayID, page, true)
 
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(uint64(0x100)).
-				WithDeviceID(1).
-				Build()
+			req = &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.PID = 1
+			req.VAddr = uint64(0x100)
+			req.DeviceID = 1
+			req.TrafficClass = "vm.TranslationReq"
 		})
 
 		It("should respond to top", func() {
@@ -165,11 +167,12 @@ var _ = Describe("TLB", func() {
 				Return(sim.RemotePort("RemotePort")).
 				AnyTimes()
 
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			req = &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.PID = 1
+			req.VAddr = 0x100
+			req.DeviceID = 1
+			req.TrafficClass = "vm.TranslationReq"
 		})
 
 		It("should fetch from bottom and add entry to MSHR", func() {
@@ -201,26 +204,30 @@ var _ = Describe("TLB", func() {
 
 		BeforeEach(func() {
 			wayID = 1
-			req = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
-			fetchBottom = vm.TranslationReqBuilder{}.
-				WithPID(1).
-				WithVAddr(0x100).
-				WithDeviceID(1).
-				Build()
+			req = &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.PID = 1
+			req.VAddr = 0x100
+			req.DeviceID = 1
+			req.TrafficClass = "vm.TranslationReq"
+			fetchBottom = &vm.TranslationReq{}
+			fetchBottom.ID = sim.GetIDGenerator().Generate()
+			fetchBottom.PID = 1
+			fetchBottom.VAddr = 0x100
+			fetchBottom.DeviceID = 1
+			fetchBottom.TrafficClass = "vm.TranslationReq"
 			page = vm.Page{
 				PID:   1,
 				VAddr: 0x100,
 				PAddr: 0x200,
 				Valid: true,
 			}
-			rsp = vm.TranslationRspBuilder{}.
-				WithRspTo(fetchBottom.ID).
-				WithPage(page).
-				Build()
+			rsp = &vm.TranslationRsp{
+				Page: page,
+			}
+			rsp.ID = sim.GetIDGenerator().Generate()
+			rsp.RspTo = fetchBottom.ID
+			rsp.TrafficClass = "vm.TranslationRsp"
 		})
 
 		It("should do nothing if no return", func() {
@@ -284,12 +291,14 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle flush request", func() {
-			flushReq := FlushReqBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithVAddrs([]uint64{0x1000}).
-				WithPID(1).
-				Build()
+			flushReq := &FlushReq{
+				VAddr: []uint64{0x1000},
+				PID:   1,
+			}
+			flushReq.ID = sim.GetIDGenerator().Generate()
+			flushReq.Src = sim.RemotePort("")
+			flushReq.Dst = controlPort.AsRemote()
+			flushReq.TrafficClass = "tlb.FlushReq"
 			page := vm.Page{
 				PID:   1,
 				VAddr: 0x1000,
@@ -318,10 +327,11 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle restart request", func() {
-			restartReq := RestartReqBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				Build()
+			restartReq := &RestartReq{}
+			restartReq.ID = sim.GetIDGenerator().Generate()
+			restartReq.Src = sim.RemotePort("")
+			restartReq.Dst = controlPort.AsRemote()
+			restartReq.TrafficClass = "tlb.RestartReq"
 			controlPort.EXPECT().PeekIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().RetrieveIncoming().
@@ -338,11 +348,14 @@ var _ = Describe("TLB", func() {
 
 	Context("other control signals", func() {
 		It("should handle pause ctrl msg", func() {
-			pauseMsg := mem.ControlMsgBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithCtrlInfo(false, false, false, true, false).
-				Build()
+			pauseMsg := &mem.ControlMsg{
+				Pause: true,
+			}
+			pauseMsg.ID = sim.GetIDGenerator().Generate()
+			pauseMsg.Src = sim.RemotePort("")
+			pauseMsg.Dst = controlPort.AsRemote()
+			pauseMsg.TrafficBytes = 4
+			pauseMsg.TrafficClass = "mem.ControlMsg"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(pauseMsg)
@@ -356,11 +369,14 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle enable ctrl msg after pause", func() {
-			pause := mem.ControlMsgBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithCtrlInfo(false, false, false, true, false).
-				Build()
+			pause := &mem.ControlMsg{
+				Pause: true,
+			}
+			pause.ID = sim.GetIDGenerator().Generate()
+			pause.Src = sim.RemotePort("")
+			pause.Dst = controlPort.AsRemote()
+			pause.TrafficBytes = 4
+			pause.TrafficClass = "mem.ControlMsg"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(pause)
@@ -372,11 +388,14 @@ var _ = Describe("TLB", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(tlbComp.state).To(Equal(tlbStatePause))
 
-			enable := mem.ControlMsgBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithCtrlInfo(true, false, false, false, false).
-				Build()
+			enable := &mem.ControlMsg{
+				Enable: true,
+			}
+			enable.ID = sim.GetIDGenerator().Generate()
+			enable.Src = sim.RemotePort("")
+			enable.Dst = controlPort.AsRemote()
+			enable.TrafficBytes = 4
+			enable.TrafficClass = "mem.ControlMsg"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(enable)
@@ -389,11 +408,14 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle drain ctrl msg", func() {
-			drainMsg := mem.ControlMsgBuilder{}.
-				WithSrc(sim.RemotePort("")).
-				WithDst(controlPort.AsRemote()).
-				WithCtrlInfo(false, true, false, false, false).
-				Build()
+			drainMsg := &mem.ControlMsg{
+				Drain: true,
+			}
+			drainMsg.ID = sim.GetIDGenerator().Generate()
+			drainMsg.Src = sim.RemotePort("")
+			drainMsg.Dst = controlPort.AsRemote()
+			drainMsg.TrafficBytes = 4
+			drainMsg.TrafficClass = "mem.ControlMsg"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(drainMsg)
@@ -480,12 +502,14 @@ var _ = Describe("TLB Integration", func() {
 		lowModule.EXPECT().Deliver(gomock.Any()).
 			Do(func(req sim.Msg) {
 				translationReq := req.(*vm.TranslationReq)
-				rsp := vm.TranslationRspBuilder{}.
-					WithSrc(lowModule.AsRemote()).
-					WithDst(translationReq.Src).
-					WithPage(page).
-					WithRspTo(translationReq.ID).
-					Build()
+				rsp := &vm.TranslationRsp{
+					Page: page,
+				}
+				rsp.ID = sim.GetIDGenerator().Generate()
+				rsp.Src = lowModule.AsRemote()
+				rsp.Dst = translationReq.Src
+				rsp.RspTo = translationReq.ID
+				rsp.TrafficClass = "vm.TranslationRsp"
 				lowModuleCall.Times(0)
 				lowModule.EXPECT().PeekOutgoing().Return(rsp)
 				lowModule.EXPECT().RetrieveOutgoing().Return(rsp)
@@ -499,13 +523,14 @@ var _ = Describe("TLB Integration", func() {
 	})
 
 	It("should do tlb miss", func() {
-		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent.AsRemote()).
-			WithDst(tlbComp.topPort.AsRemote()).
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(1).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = agent.AsRemote()
+		req.Dst = tlbComp.topPort.AsRemote()
+		req.PID = 1
+		req.VAddr = 0x1000
+		req.DeviceID = 1
+		req.TrafficClass = "vm.TranslationReq"
 		tlbComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
@@ -520,13 +545,14 @@ var _ = Describe("TLB Integration", func() {
 
 	It("should have faster hit than miss", func() {
 		time1 := engine.CurrentTime()
-		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent.AsRemote()).
-			WithDst(tlbComp.topPort.AsRemote()).
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(1).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = agent.AsRemote()
+		req.Dst = tlbComp.topPort.AsRemote()
+		req.PID = 1
+		req.VAddr = 0x1000
+		req.DeviceID = 1
+		req.TrafficClass = "vm.TranslationReq"
 		tlbComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).

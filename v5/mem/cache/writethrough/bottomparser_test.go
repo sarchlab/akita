@@ -54,33 +54,41 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("write done", func() {
 		It("should handle write done", func() {
-			write1 := mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				Build()
+			write1 := &mem.WriteReq{}
+			write1.ID = sim.GetIDGenerator().Generate()
+			write1.Address = 0x100
+			write1.PID = 1
+			write1.TrafficBytes = 12
+			write1.TrafficClass = "mem.WriteReq"
 			preCTrans1 := &transaction{
 				write: write1,
 			}
-			write2 := mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				Build()
+			write2 := &mem.WriteReq{}
+			write2.ID = sim.GetIDGenerator().Generate()
+			write2.Address = 0x104
+			write2.PID = 1
+			write2.TrafficBytes = 12
+			write2.TrafficClass = "mem.WriteReq"
 			preCTrans2 := &transaction{
 				write: write2,
 			}
-			writeToBottom := mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				Build()
+			writeToBottom := &mem.WriteReq{}
+			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.Address = 0x100
+			writeToBottom.PID = 1
+			writeToBottom.TrafficBytes = 12
+			writeToBottom.TrafficClass = "mem.WriteReq"
 			postCTrans := &transaction{
 				writeToBottom:           writeToBottom,
 				preCoalesceTransactions: []*transaction{preCTrans1, preCTrans2},
 			}
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans)
-			done := mem.WriteDoneRspBuilder{}.
-				WithRspTo(writeToBottom.ID).
-				Build()
+			done := &mem.WriteDoneRsp{}
+			done.ID = sim.GetIDGenerator().Generate()
+			done.RspTo = writeToBottom.ID
+			done.TrafficBytes = 4
+			done.TrafficClass = "mem.WriteDoneRsp"
 
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			bottomPort.EXPECT().RetrieveIncoming()
@@ -110,56 +118,77 @@ var _ = Describe("Bottom Parser", func() {
 		)
 
 		BeforeEach(func() {
-			read1 = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
-			read2 = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
-			write1 = mem.WriteReqBuilder{}.
-				WithAddress(0x108).
-				WithPID(1).
-				WithData([]byte{9, 9, 9, 9}).
-				Build()
-			write2 = mem.WriteReqBuilder{}.
-				WithAddress(0x10C).
-				WithPID(1).
-				WithData([]byte{9, 9, 9, 9}).
-				Build()
+			read1 = &mem.ReadReq{}
+			read1.ID = sim.GetIDGenerator().Generate()
+			read1.Address = 0x100
+			read1.PID = 1
+			read1.AccessByteSize = 4
+			read1.TrafficBytes = 12
+			read1.TrafficClass = "mem.ReadReq"
+
+			read2 = &mem.ReadReq{}
+			read2.ID = sim.GetIDGenerator().Generate()
+			read2.Address = 0x104
+			read2.PID = 1
+			read2.AccessByteSize = 4
+			read2.TrafficBytes = 12
+			read2.TrafficClass = "mem.ReadReq"
+
+			write1Data := []byte{9, 9, 9, 9}
+			write1 = &mem.WriteReq{}
+			write1.ID = sim.GetIDGenerator().Generate()
+			write1.Address = 0x108
+			write1.PID = 1
+			write1.Data = write1Data
+			write1.TrafficBytes = len(write1Data) + 12
+			write1.TrafficClass = "mem.WriteReq"
+
+			write2Data := []byte{9, 9, 9, 9}
+			write2 = &mem.WriteReq{}
+			write2.ID = sim.GetIDGenerator().Generate()
+			write2.Address = 0x10C
+			write2.PID = 1
+			write2.Data = write2Data
+			write2.TrafficBytes = len(write2Data) + 12
+			write2.TrafficClass = "mem.WriteReq"
 
 			preCTrans1 = &transaction{read: read1}
 			preCTrans2 = &transaction{read: read2}
 			preCTrans3 = &transaction{write: write1}
 			preCTrans4 = &transaction{write: write2}
 
-			postCRead = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(64).
-				Build()
-			readToBottom = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(64).
-				Build()
+			postCRead = &mem.ReadReq{}
+			postCRead.ID = sim.GetIDGenerator().Generate()
+			postCRead.Address = 0x100
+			postCRead.PID = 1
+			postCRead.AccessByteSize = 64
+			postCRead.TrafficBytes = 12
+			postCRead.TrafficClass = "mem.ReadReq"
 
-			dataReady = mem.DataReadyRspBuilder{}.
-				WithRspTo(readToBottom.ID).
-				WithData([]byte{
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-				}).
-				Build()
+			readToBottom = &mem.ReadReq{}
+			readToBottom.ID = sim.GetIDGenerator().Generate()
+			readToBottom.Address = 0x100
+			readToBottom.PID = 1
+			readToBottom.AccessByteSize = 64
+			readToBottom.TrafficBytes = 12
+			readToBottom.TrafficClass = "mem.ReadReq"
+
+			dataReadyData := []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}
+			dataReady = &mem.DataReadyRsp{}
+			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.RspTo = readToBottom.ID
+			dataReady.Data = dataReadyData
+			dataReady.TrafficBytes = len(dataReadyData) + 4
+			dataReady.TrafficClass = "mem.DataReadyRsp"
 			block = &cache.Block{
 				PID: 1,
 				Tag: 0x100,
@@ -176,18 +205,22 @@ var _ = Describe("Bottom Parser", func() {
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans1)
 
-			postCWrite = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithData([]byte{
-					0, 0, 0, 0, 0, 0, 0, 0,
-					9, 9, 9, 9, 9, 9, 9, 9,
-				}).
-				WithDirtyMask([]bool{
-					false, false, false, false, false, false, false, false,
-					true, true, true, true, true, true, true, true,
-				}).
-				Build()
+			postCWriteData := []byte{
+				0, 0, 0, 0, 0, 0, 0, 0,
+				9, 9, 9, 9, 9, 9, 9, 9,
+			}
+			postCWriteDirtyMask := []bool{
+				false, false, false, false, false, false, false, false,
+				true, true, true, true, true, true, true, true,
+			}
+			postCWrite = &mem.WriteReq{}
+			postCWrite.ID = sim.GetIDGenerator().Generate()
+			postCWrite.Address = 0x100
+			postCWrite.PID = 1
+			postCWrite.Data = postCWriteData
+			postCWrite.DirtyMask = postCWriteDirtyMask
+			postCWrite.TrafficBytes = len(postCWriteData) + 12
+			postCWrite.TrafficClass = "mem.WriteReq"
 			postCTrans2 = &transaction{
 				write: postCWrite,
 				preCoalesceTransactions: []*transaction{

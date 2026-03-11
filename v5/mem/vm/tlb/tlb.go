@@ -33,7 +33,7 @@ type State struct {
 	PipelineStages     []pipelineStageState  `json:"pipeline_stages"`
 	BufferItems        []pipelineTLBReqState `json:"buffer_items"`
 	HasInflightFlushReq bool                 `json:"has_inflight_flush_req"`
-	InflightFlushReqMsg msgRef               `json:"inflight_flush_req_msg"`
+	InflightFlushReqMsg FlushReq             `json:"inflight_flush_req_msg"`
 }
 
 // Comp is a Translation Lookaside Buffer (TLB) that stores part of the page

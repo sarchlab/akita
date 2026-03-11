@@ -54,18 +54,23 @@ var _ = Describe("Coalescer", func() {
 		)
 
 		BeforeEach(func() {
-			read1 = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithByteSize(4).
-				CanWaitForCoalesce().
-				Build()
-			read2 = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithByteSize(4).
-				CanWaitForCoalesce().
-				Build()
+			read1 = &mem.ReadReq{}
+			read1.ID = sim.GetIDGenerator().Generate()
+			read1.Address = 0x100
+			read1.PID = 1
+			read1.AccessByteSize = 4
+			read1.CanWaitForCoalesce = true
+			read1.TrafficBytes = 12
+			read1.TrafficClass = "mem.ReadReq"
+
+			read2 = &mem.ReadReq{}
+			read2.ID = sim.GetIDGenerator().Generate()
+			read2.Address = 0x104
+			read2.PID = 1
+			read2.AccessByteSize = 4
+			read2.CanWaitForCoalesce = true
+			read2.TrafficBytes = 12
+			read2.TrafficClass = "mem.ReadReq"
 
 			topPort.EXPECT().PeekIncoming().Return(read1)
 			topPort.EXPECT().RetrieveIncoming()
@@ -77,12 +82,14 @@ var _ = Describe("Coalescer", func() {
 
 		Context("not coalescable", func() {
 			It("should send to dir stage", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x148).
-					WithPID(1).
-					WithByteSize(4).
-					CanWaitForCoalesce().
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x148
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.CanWaitForCoalesce = true
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().CanPush().
 					Return(true)
@@ -102,11 +109,13 @@ var _ = Describe("Coalescer", func() {
 			})
 
 			It("should stall if cannot send to dir", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x148).
-					WithPID(1).
-					WithByteSize(4).
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x148
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -122,11 +131,13 @@ var _ = Describe("Coalescer", func() {
 
 		Context("last in wave, coalescable", func() {
 			It("should send to dir stage", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x108).
-					WithPID(1).
-					WithByteSize(4).
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x108
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().
 					CanPush().
@@ -151,11 +162,13 @@ var _ = Describe("Coalescer", func() {
 			})
 
 			It("should stall if cannot send", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x108).
-					WithPID(1).
-					WithByteSize(4).
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x108
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -171,11 +184,13 @@ var _ = Describe("Coalescer", func() {
 
 		Context("last in wave, not coalescable", func() {
 			It("should send to dir stage", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x148).
-					WithPID(1).
-					WithByteSize(4).
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x148
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().CanPush().
 					Return(true).Times(2)
@@ -199,11 +214,13 @@ var _ = Describe("Coalescer", func() {
 			})
 
 			It("should stall is cannot send to dir stage", func() {
-				read3 := mem.ReadReqBuilder{}.
-					WithAddress(0x148).
-					WithPID(1).
-					WithByteSize(4).
-					Build()
+				read3 := &mem.ReadReq{}
+				read3.ID = sim.GetIDGenerator().Generate()
+				read3.Address = 0x148
+				read3.PID = 1
+				read3.AccessByteSize = 4
+				read3.TrafficBytes = 12
+				read3.TrafficClass = "mem.ReadReq"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -218,11 +235,13 @@ var _ = Describe("Coalescer", func() {
 
 			It("should stall if cannot send to dir stage in the second time",
 				func() {
-					read3 := mem.ReadReqBuilder{}.
-						WithAddress(0x148).
-						WithPID(1).
-						WithByteSize(4).
-						Build()
+					read3 := &mem.ReadReq{}
+					read3.ID = sim.GetIDGenerator().Generate()
+					read3.Address = 0x148
+					read3.PID = 1
+					read3.AccessByteSize = 4
+					read3.TrafficBytes = 12
+					read3.TrafficClass = "mem.ReadReq"
 
 					dirBuf.EXPECT().CanPush().Return(true)
 					dirBuf.EXPECT().
@@ -245,28 +264,34 @@ var _ = Describe("Coalescer", func() {
 
 	Context("write", func() {
 		It("should coalesce write", func() {
-			write1 := mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}).
-				WithDirtyMask([]bool{
-					true, true, true, true,
-					false, false, false, false,
-					true, true, true, true,
-				}).
-				CanWaitForCoalesce().
-				Build()
+			w1Data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
+			write1 := &mem.WriteReq{}
+			write1.ID = sim.GetIDGenerator().Generate()
+			write1.Address = 0x104
+			write1.PID = 1
+			write1.Data = w1Data
+			write1.DirtyMask = []bool{
+				true, true, true, true,
+				false, false, false, false,
+				true, true, true, true,
+			}
+			write1.CanWaitForCoalesce = true
+			write1.TrafficBytes = len(w1Data) + 12
+			write1.TrafficClass = "mem.WriteReq"
 
-			write2 := mem.WriteReqBuilder{}.
-				WithAddress(0x108).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}).
-				WithDirtyMask([]bool{
-					true, true, true, true,
-					true, true, true, true,
-					false, false, false, false,
-				}).
-				Build()
+			w2Data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
+			write2 := &mem.WriteReq{}
+			write2.ID = sim.GetIDGenerator().Generate()
+			write2.Address = 0x108
+			write2.PID = 1
+			write2.Data = w2Data
+			write2.DirtyMask = []bool{
+				true, true, true, true,
+				true, true, true, true,
+				false, false, false, false,
+			}
+			write2.TrafficBytes = len(w2Data) + 12
+			write2.TrafficClass = "mem.WriteReq"
 
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
