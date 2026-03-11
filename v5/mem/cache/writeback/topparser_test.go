@@ -11,7 +11,7 @@ import (
 var _ = Describe("TopParser", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		cache               *Comp
+		m                   *middleware
 		parser              *topParser
 		port                *MockPort
 		buf                 *MockBuffer
@@ -25,20 +25,23 @@ var _ = Describe("TopParser", func() {
 
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder().
+		comp := MakeBuilder().
+			WithEngine(sim.NewSerialEngine()).
 			WithAddressToPortMapper(addressToPortMapper).
 			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
 			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
-		cache = builder.Build("Cache")
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+			Build("Cache")
+
+		m = comp.Middlewares()[0].(*middleware)
 
 		parser = &topParser{
-			cache: cache,
+			cache: m,
 		}
-		cache.state = cacheStateRunning
-		cache.topPort = port
-		cache.dirStageBuffer = buf
-		cache.inFlightTransactions = nil
+		m.state = cacheStateRunning
+		m.topPort = port
+		m.dirStageBuffer = buf
+		m.inFlightTransactions = nil
 	})
 
 	AfterEach(func() {
@@ -52,7 +55,7 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should return if the cache is not in running stage", func() {
-		cache.state = cacheStateFlushing
+		m.state = cacheStateFlushing
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -82,14 +85,14 @@ var _ = Describe("TopParser", func() {
 
 		port.EXPECT().PeekIncoming().Return(read)
 		buf.EXPECT().CanPush().Return(true)
-		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
+		buf.EXPECT().Push(gomock.Any()).Do(func(t *transactionState) {
 			Expect(t.read).To(BeIdenticalTo(read))
 		})
 		port.EXPECT().RetrieveIncoming().Return(read)
 
 		parser.Tick()
 
-		Expect(cache.inFlightTransactions).To(HaveLen(1))
+		Expect(m.inFlightTransactions).To(HaveLen(1))
 	})
 
 	It("should parse write from top", func() {
@@ -101,14 +104,14 @@ var _ = Describe("TopParser", func() {
 
 		port.EXPECT().PeekIncoming().Return(write)
 		buf.EXPECT().CanPush().Return(true)
-		buf.EXPECT().Push(gomock.Any()).Do(func(t *transaction) {
+		buf.EXPECT().Push(gomock.Any()).Do(func(t *transactionState) {
 			Expect(t.write).To(BeIdenticalTo(write))
 		})
 		port.EXPECT().RetrieveIncoming().Return(write)
 
 		parser.Tick()
 
-		Expect(cache.inFlightTransactions).To(HaveLen(1))
+		Expect(m.inFlightTransactions).To(HaveLen(1))
 	})
 
 })

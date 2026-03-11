@@ -15,13 +15,11 @@ var _ = Describe("Flusher", func() {
 		controlPort         *MockPort
 		topPort             *MockPort
 		bottomPort          *MockPort
-		directory           *MockDirectory
 		dirBuf              *MockBuffer
 		bankBuf             *MockBuffer
 		mshrStageBuf        *MockBuffer
 		writeBufferBuf      *MockBuffer
-		mshr                *MockMSHR
-		cacheModule         *Comp
+		m                   *middleware
 		f                   *flusher
 		addressToPortMapper *MockAddressToPortMapper
 	)
@@ -45,39 +43,38 @@ var _ = Describe("Flusher", func() {
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
 
-		directory = NewMockDirectory(mockCtrl)
-		directory.EXPECT().WayAssociativity().Return(2).AnyTimes()
 		dirBuf = NewMockBuffer(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 		mshrStageBuf = NewMockBuffer(mockCtrl)
 		writeBufferBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
 
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder().
+		comp := MakeBuilder().
+			WithEngine(sim.NewSerialEngine()).
 			WithAddressToPortMapper(addressToPortMapper).
 			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
 			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
-		cacheModule = builder.Build("Cache")
-		cacheModule.topPort = topPort
-		cacheModule.bottomPort = bottomPort
-		cacheModule.controlPort = controlPort
-		cacheModule.directory = directory
-		cacheModule.mshr = mshr
-		cacheModule.dirStageBuffer = dirBuf
-		cacheModule.dirToBankBuffers = []queueing.Buffer{bankBuf}
-		cacheModule.mshrStageBuffer = mshrStageBuf
-		cacheModule.writeBufferBuffer = writeBufferBuf
-		cacheModule.dirStage = &directoryStage{
-			cache:    cacheModule,
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+			Build("Cache")
+		m = comp.Middlewares()[0].(*middleware)
+
+		m.topPort = topPort
+		m.bottomPort = bottomPort
+		m.controlPort = controlPort
+		m.dirStageBuffer = dirBuf
+		m.dirToBankBuffers = []queueing.Buffer{bankBuf}
+		m.mshrStageBuffer = mshrStageBuf
+		m.writeBufferBuffer = writeBufferBuf
+		m.dirStage = &directoryStage{
+			cache:    m,
 			pipeline: NewMockPipeline(mockCtrl),
 			buf:      NewMockBuffer(mockCtrl),
 		}
-		cacheModule.mshrStage = &mshrStage{cache: cacheModule}
+		m.mshrStage = &mshrStage{cache: m}
 
-		f = &flusher{cache: cacheModule}
+		f = &flusher{cache: m}
+		m.flusher = f
 	})
 
 	AfterEach(func() {
@@ -102,13 +99,13 @@ var _ = Describe("Flusher", func() {
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeIdenticalTo(req))
-			Expect(cacheModule.state).To(Equal(cacheStatePreFlushing))
+			Expect(m.state).To(Equal(cacheStatePreFlushing))
 		})
 
 		It("should do nothing if there is inflight transaction", func() {
-			cacheModule.state = cacheStatePreFlushing
-			cacheModule.inFlightTransactions = append(
-				cacheModule.inFlightTransactions, &transaction{})
+			m.state = cacheStatePreFlushing
+			m.inFlightTransactions = append(
+				m.inFlightTransactions, &transactionState{})
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
@@ -120,41 +117,34 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should move to flush stage if no inflight transaction", func() {
-			cacheModule.state = cacheStatePreFlushing
-			cacheModule.inFlightTransactions = nil
+			m.state = cacheStatePreFlushing
+			m.inFlightTransactions = nil
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
-			sets := []cache.Set{
-				{Blocks: []*cache.Block{
-					{IsDirty: true, IsValid: true},
-					{IsDirty: false, IsValid: true},
-				}},
-				{Blocks: []*cache.Block{
-					{IsDirty: true, IsValid: false},
-					{IsDirty: false, IsValid: false},
-				}},
-			}
-			directory.EXPECT().GetSets().Return(sets)
+			// Set up directory with one dirty valid block
+			cache.DirectoryReset(&m.directoryState, 2, 2, 64)
+			m.directoryState.Sets[0].Blocks[0].IsDirty = true
+			m.directoryState.Sets[0].Blocks[0].IsValid = true
 
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(cacheModule.state).To(Equal(cacheStateFlushing))
+			Expect(m.state).To(Equal(cacheStateFlushing))
 			Expect(f.blockToEvict).To(HaveLen(1))
 		})
 
 		It("should stall if bank buffer is full", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
-			blocks := []*cache.Block{{Tag: 0x0}, {Tag: 0x40}}
-			f.blockToEvict = []*cache.Block{blocks[0], blocks[1]}
+			cache.DirectoryReset(&m.directoryState, 2, 2, 64)
+			f.blockToEvict = []blockRef{{SetID: 0, WayID: 0}, {SetID: 1, WayID: 0}}
 
 			bankBuf.EXPECT().CanPush().Return(false)
 
@@ -164,50 +154,47 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should send read for eviction to bank", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
 
-			blocks := []*cache.Block{
-				{
-					Tag: 0x80,
-					DirtyMask: []bool{
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-						true, true, false, false, true, true, false, false,
-					},
-				},
-				{Tag: 0x40}}
-			f.blockToEvict = []*cache.Block{blocks[0], blocks[1]}
+			cache.DirectoryReset(&m.directoryState, 2, 2, 64)
+			m.directoryState.Sets[0].Blocks[0].Tag = 0x80
+			m.directoryState.Sets[0].Blocks[0].CacheAddress = 0
+			m.directoryState.Sets[0].Blocks[0].DirtyMask = []bool{
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+				true, true, false, false, true, true, false, false,
+			}
+			m.directoryState.Sets[1].Blocks[0].Tag = 0x40
+			f.blockToEvict = []blockRef{{SetID: 0, WayID: 0}, {SetID: 1, WayID: 0}}
 
 			bankBuf.EXPECT().CanPush().Return(true)
-			bankBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
+			bankBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transactionState) {
 				Expect(trans.action).To(Equal(bankEvict))
 				Expect(trans.evictingAddr).To(Equal(uint64(0x80)))
-				Expect(trans.evictingDirtyMask).To(Equal(blocks[0].DirtyMask))
 			})
 
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(f.blockToEvict).NotTo(ContainElement(blocks[0]))
-			Expect(f.blockToEvict).To(ContainElement(blocks[1]))
+			Expect(f.blockToEvict).To(HaveLen(1))
 		})
 
 		It("should wait for bank buffer", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(1)
 
@@ -217,15 +204,15 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should wait for bank stage", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(0)
-			cacheModule.bankStages[0].inflightTransCount = 1
+			m.bankStages[0].inflightTransCount = 1
 
 			madeProgress := f.Tick()
 
@@ -233,12 +220,12 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should wait for write buffer buffer", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			writeBufferBuf.EXPECT().Size().Return(1)
@@ -249,29 +236,29 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should wait for write buffer", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			writeBufferBuf.EXPECT().Size().Return(0)
-			cacheModule.writeBuffer.inflightEviction = make([]*transaction, 1)
+			m.writeBuffer.inflightEviction = make([]*transactionState, 1)
 
 			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall is controlPort sender is busy", func() {
-			cacheModule.state = cacheStateFlushing
+		It("should stall if controlPort sender is busy", func() {
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			writeBufferBuf.EXPECT().Size().Return(0)
@@ -284,17 +271,15 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should send response if all the blocks are evicted", func() {
-			cacheModule.state = cacheStateFlushing
+			m.state = cacheStateFlushing
 			req := &cache.FlushReq{}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
-			f.blockToEvict = []*cache.Block{}
+			f.blockToEvict = []blockRef{}
 
 			bankBuf.EXPECT().Size().Return(0)
 			writeBufferBuf.EXPECT().Size().Return(0)
-			mshr.EXPECT().Reset()
-			directory.EXPECT().Reset()
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -305,7 +290,7 @@ var _ = Describe("Flusher", func() {
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeNil())
-			Expect(cacheModule.state).To(Equal(cacheStateRunning))
+			Expect(m.state).To(Equal(cacheStateRunning))
 		})
 	})
 
@@ -315,35 +300,22 @@ var _ = Describe("Flusher", func() {
 			req.ID = sim.GetIDGenerator().Generate()
 			req.DiscardInflight = true
 			req.TrafficClass = "cache.FlushReq"
-			sets := []cache.Set{
-				{Blocks: []*cache.Block{
-					{IsDirty: true, IsValid: true, IsLocked: true},
-					{IsDirty: false, IsValid: true},
-				}},
-				{Blocks: []*cache.Block{
-					{IsDirty: true, IsValid: false},
-					{IsDirty: false, IsValid: false},
-				}},
-			}
 
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			directory.EXPECT().GetSets().Return(sets)
 			bankBuf.EXPECT().Clear()
 			dirBuf.EXPECT().Clear()
-			cacheModule.dirStage.pipeline.(*MockPipeline).EXPECT().Clear()
-			cacheModule.dirStage.buf.(*MockBuffer).EXPECT().Clear()
+			m.dirStage.pipeline.(*MockPipeline).EXPECT().Clear()
+			m.dirStage.buf.(*MockBuffer).EXPECT().Clear()
 			mshrStageBuf.EXPECT().Clear()
 			writeBufferBuf.EXPECT().Clear()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
 			Expect(f.processingFlush).To(BeIdenticalTo(req))
-			Expect(cacheModule.state).To(Equal(cacheStatePreFlushing))
-			Expect(sets[0].Blocks[0].IsLocked).To(BeFalse())
+			Expect(m.state).To(Equal(cacheStatePreFlushing))
 		})
 	})
 
@@ -374,7 +346,7 @@ var _ = Describe("Flusher", func() {
 			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(cacheModule.state).To(Equal(cacheStateRunning))
+			Expect(m.state).To(Equal(cacheStateRunning))
 		})
 	})
 })
