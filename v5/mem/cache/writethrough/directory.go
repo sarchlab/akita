@@ -62,9 +62,8 @@ func (d *directory) Tick() (madeProgress bool) {
 }
 
 func (d *directory) processRead(trans *transaction) bool {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-	addr := readPayload.Address
-	pid := readPayload.PID
+	addr := trans.read.Address
+	pid := trans.read.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -124,8 +123,7 @@ func (d *directory) processReadHit(
 }
 
 func (d *directory) processReadMiss(trans *transaction) bool {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-	addr := readPayload.Address
+	addr := trans.read.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -149,9 +147,8 @@ func (d *directory) processReadMiss(trans *transaction) bool {
 }
 
 func (d *directory) processWrite(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
-	pid := writePayload.PID
+	addr := trans.write.Address
+	pid := trans.write.PID
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -187,15 +184,13 @@ func (d *directory) processWrite(trans *transaction) bool {
 	return ok
 }
 
-func (d *directory) isPartialWrite(writeMsg *sim.GenericMsg) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
-
-	if len(writePayload.Data) < (1 << d.cache.log2BlockSize) {
+func (d *directory) isPartialWrite(writeMsg *mem.WriteReq) bool {
+	if len(writeMsg.Data) < (1 << d.cache.log2BlockSize) {
 		return true
 	}
 
-	if writePayload.DirtyMask != nil {
-		for _, byteDirty := range writePayload.DirtyMask {
+	if writeMsg.DirtyMask != nil {
+		for _, byteDirty := range writeMsg.DirtyMask {
 			if !byteDirty {
 				return true
 			}
@@ -206,8 +201,7 @@ func (d *directory) isPartialWrite(writeMsg *sim.GenericMsg) bool {
 }
 
 func (d *directory) partialWriteMiss(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
+	addr := trans.write.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	trans.fetchAndWrite = true
@@ -244,8 +238,7 @@ func (d *directory) partialWriteMiss(trans *transaction) bool {
 }
 
 func (d *directory) fullLineWriteMiss(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
+	addr := trans.write.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block := d.cache.directory.FindVictim(cacheLineID)
@@ -254,16 +247,15 @@ func (d *directory) fullLineWriteMiss(trans *transaction) bool {
 }
 
 func (d *directory) writeBottom(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
+	addr := trans.write.Address
 
 	writeToBottom := mem.WriteReqBuilder{}.
 		WithSrc(d.cache.bottomPort.AsRemote()).
 		WithDst(d.cache.addressToPortMapper.Find(addr)).
 		WithAddress(addr).
-		WithPID(writePayload.PID).
-		WithData(writePayload.Data).
-		WithDirtyMask(writePayload.DirtyMask).
+		WithPID(trans.write.PID).
+		WithData(trans.write.Data).
+		WithDirtyMask(trans.write.DirtyMask).
 		Build()
 
 	err := d.cache.bottomPort.Send(writeToBottom)
@@ -298,8 +290,7 @@ func (d *directory) processWriteHit(
 		}
 	}
 
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
+	addr := trans.write.Address
 	blockSize := uint64(1 << d.cache.log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	block.IsLocked = true
@@ -345,7 +336,7 @@ func (d *directory) fetchFromBottom(
 
 	mshrEntry := d.cache.mshr.Add(pid, cacheLineID)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.ReadReq = readToBottom
+	mshrEntry.ReadReq = &sim.GenericMsg{MsgMeta: readToBottom.MsgMeta}
 	mshrEntry.Block = victim
 
 	victim.Tag = cacheLineID

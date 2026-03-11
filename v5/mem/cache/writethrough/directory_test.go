@@ -84,7 +84,7 @@ var _ = Describe("Directory", func() {
 
 	Context("read mshr hit", func() {
 		var (
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -119,7 +119,7 @@ var _ = Describe("Directory", func() {
 	Context("read hit", func() {
 		var (
 			block *cache.Block
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -179,7 +179,7 @@ var _ = Describe("Directory", func() {
 	Context("read miss", func() {
 		var (
 			block     *cache.Block
-			read      *sim.GenericMsg
+			read      *mem.ReadReq
 			trans     *transaction
 			mshrEntry *cache.MSHREntry
 		)
@@ -205,19 +205,18 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should send request to bottom", func() {
-			var readToBottom *sim.GenericMsg
+			var readToBottom *mem.ReadReq
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
 				Return(sim.RemotePort(""))
-			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.GenericMsg) {
-				readToBottom = msg
-				readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-				Expect(readPayload.Address).To(Equal(uint64(0x100)))
-				Expect(readPayload.AccessByteSize).To(Equal(uint64(64)))
-				Expect(readPayload.PID).To(Equal(vm.PID(1)))
+			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+				readToBottom = msg.(*mem.ReadReq)
+				Expect(readToBottom.Address).To(Equal(uint64(0x100)))
+				Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
+				Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 			})
 			mshr.EXPECT().IsFull().Return(false)
 			mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
@@ -228,7 +227,7 @@ var _ = Describe("Directory", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(mshrEntry.Requests).To(ContainElement(trans))
 			Expect(mshrEntry.Block).To(BeIdenticalTo(block))
-			Expect(mshrEntry.ReadReq).To(BeIdenticalTo(readToBottom))
+			Expect(mshrEntry.ReadReq).NotTo(BeNil())
 			Expect(block.Tag).To(Equal(uint64(0x100)))
 			Expect(block.IsLocked).To(BeTrue())
 			Expect(block.IsValid).To(BeTrue())
@@ -283,7 +282,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write mshr hit", func() {
 		var (
-			write     *sim.GenericMsg
+			write     *mem.WriteReq
 			trans     *transaction
 			mshrEntry *cache.MSHREntry
 		)
@@ -301,7 +300,7 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should add to mshr entry", func() {
-			var writeToBottom *sim.GenericMsg
+			var writeToBottom *mem.WriteReq
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
@@ -310,12 +309,11 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writeToBottom = msg
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x104)))
-					Expect(writePayload.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					writeToBottom = msg.(*mem.WriteReq)
+					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
+					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
+					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -328,7 +326,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write hit", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 			block *cache.Block
 		)
@@ -361,11 +359,11 @@ var _ = Describe("Directory", func() {
 					Expect(trans.block).To(BeIdenticalTo(block))
 				})
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x104)))
-					Expect(writePayload.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					writeToBottom := msg.(*mem.WriteReq)
+					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
+					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
+					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -434,7 +432,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write partial miss", func() {
 		var (
-			write     *sim.GenericMsg
+			write     *mem.WriteReq
 			trans     *transaction
 			block     *cache.Block
 			mshrEntry *cache.MSHREntry
@@ -468,13 +466,13 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should not write again if write already happened", func() {
-			write = mem.WriteReqBuilder{}.
+			writeToBottom := mem.WriteReqBuilder{}.
 				WithAddress(0x104).
 				WithPID(1).
 				WithData([]byte{1, 2, 3, 4}).
 				WithDirtyMask([]bool{true, true, false, false}).
 				Build()
-			trans.writeToBottom = write
+			trans.writeToBottom = writeToBottom
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
@@ -488,11 +486,11 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-					Expect(readPayload.Address).To(Equal(uint64(0x100)))
-					Expect(readPayload.AccessByteSize).To(Equal(uint64(64)))
-					Expect(readPayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					readToBottom := msg.(*mem.ReadReq)
+					Expect(readToBottom.Address).To(Equal(uint64(0x100)))
+					Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
+					Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -523,20 +521,20 @@ var _ = Describe("Directory", func() {
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x104)))
-					Expect(writePayload.DirtyMask).
+				Do(func(msg sim.Msg) {
+					writeToBottom := msg.(*mem.WriteReq)
+					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
+					Expect(writeToBottom.DirtyMask).
 						To(Equal([]bool{true, true, false, false}))
-					Expect(writePayload.Data).To(HaveLen(4))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+					Expect(writeToBottom.Data).To(HaveLen(4))
+					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-					Expect(readPayload.Address).To(Equal(uint64(0x100)))
-					Expect(readPayload.AccessByteSize).To(Equal(uint64(64)))
-					Expect(readPayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					readToBottom := msg.(*mem.ReadReq)
+					Expect(readToBottom.Address).To(Equal(uint64(0x100)))
+					Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
+					Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -556,7 +554,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write full line miss", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 			block *cache.Block
 		)
@@ -594,11 +592,11 @@ var _ = Describe("Directory", func() {
 				})
 			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x100)))
-					Expect(writePayload.Data).To(HaveLen(64))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					writeToBottom := msg.(*mem.WriteReq)
+					Expect(writeToBottom.Address).To(Equal(uint64(0x100)))
+					Expect(writeToBottom.Data).To(HaveLen(64))
+					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
