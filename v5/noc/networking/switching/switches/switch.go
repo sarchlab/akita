@@ -92,22 +92,34 @@ type portComplex struct {
 type Comp struct {
 	*modeling.Component[Spec, State]
 
-	ports                []sim.Port
-	portToComplexMapping map[sim.RemotePort]portComplex
-	routingTable         routing.Table
-	arbiter              arbitration.Arbiter
+	mw *middleware // internal reference for port addition and delegation
 }
 
-// addPort adds a new port on the switch.
+// addPort adds a new port on the switch by delegating to the middleware.
 func (c *Comp) addPort(complex portComplex) {
-	c.ports = append(c.ports, complex.localPort)
-	c.portToComplexMapping[complex.localPort.AsRemote()] = complex
-	c.arbiter.AddBuffer(complex.forwardBuffer)
+	c.mw.addPort(complex)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
-	return c.routingTable
+	return c.mw.routingTable
+}
+
+// SaveState marshals the component's spec and state as JSON, ensuring the
+// runtime fields are synced into State first.
+func (c *Comp) SaveState(w io.Writer) error {
+	c.mw.syncToState()
+	return c.Component.SaveState(w)
+}
+
+// LoadState reads JSON from r and restores both the base state and the
+// runtime fields.
+func (c *Comp) LoadState(r io.Reader) error {
+	if err := c.Component.LoadState(r); err != nil {
+		return err
+	}
+	c.mw.restoreFromState(c.Component.GetState())
+	return nil
 }
 
 func flitPipelineItemStateFromItem(item flitPipelineItem) flitPipelineItemState {
@@ -126,14 +138,59 @@ func flitPipelineItemFromState(s flitPipelineItemState) flitPipelineItem {
 	}
 }
 
+type middleware struct {
+	comp *modeling.Component[Spec, State]
+
+	ports                []sim.Port
+	portToComplexMapping map[sim.RemotePort]portComplex
+	routingTable         routing.Table
+	arbiter              arbitration.Arbiter
+}
+
+// NamedHookable delegation methods.
+
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// addPort registers a port complex with the middleware.
+func (m *middleware) addPort(complex portComplex) {
+	m.ports = append(m.ports, complex.localPort)
+	m.portToComplexMapping[complex.localPort.AsRemote()] = complex
+	m.arbiter.AddBuffer(complex.forwardBuffer)
+}
+
+// syncToState converts runtime mutable data into a serializable State and
+// writes it to the component's next state buffer.
+func (m *middleware) syncToState() {
+	s := m.snapshotState()
+	m.comp.SetState(s)
+}
+
 // snapshotState converts runtime mutable data into a serializable State.
-func (c *Comp) snapshotState() State {
+func (m *middleware) snapshotState() State {
 	s := State{}
 
-	s.PortComplexes = make([]portComplexState, 0, len(c.ports))
+	s.PortComplexes = make([]portComplexState, 0, len(m.ports))
 
-	for _, port := range c.ports {
-		pc := c.portToComplexMapping[port.AsRemote()]
+	for _, port := range m.ports {
+		pc := m.portToComplexMapping[port.AsRemote()]
 
 		pcs := portComplexState{
 			LocalPortName: port.Name(),
@@ -184,17 +241,17 @@ func (c *Comp) snapshotState() State {
 }
 
 // restoreFromState restores runtime mutable data from a serializable State.
-func (c *Comp) restoreFromState(s State) {
+func (m *middleware) restoreFromState(s State) {
 	for _, pcs := range s.PortComplexes {
 		// Find the matching port complex by iterating ports
 		var pc portComplex
 		var portKey sim.RemotePort
 		found := false
 
-		for _, port := range c.ports {
+		for _, port := range m.ports {
 			if port.Name() == pcs.LocalPortName {
 				portKey = port.AsRemote()
-				pc = c.portToComplexMapping[portKey]
+				pc = m.portToComplexMapping[portKey]
 				found = true
 				break
 			}
@@ -243,40 +300,6 @@ func (c *Comp) restoreFromState(s State) {
 	}
 }
 
-// GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
-	return state
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
-	}
-	c.SetState(c.Component.GetState())
-	return nil
-}
-
-type middleware struct {
-	*Comp
-}
-
 // Tick update the Switch's state.
 func (m *middleware) Tick() bool {
 	madeProgress := false
@@ -295,7 +318,7 @@ func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
 }
 
 func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.Comp.Name()
+	return flit.ID + "_" + m.comp.Name()
 }
 
 func (m *middleware) startProcessing() (madeProgress bool) {
@@ -325,7 +348,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 			tracing.StartTask(
 				m.flitTaskID(flit),
 				m.flitParentTaskID(flit),
-				m.Comp, "flit", "flit_inside_sw",
+				m, "flit", "flit_inside_sw",
 				flit,
 			)
 		}
@@ -418,7 +441,7 @@ func (m *middleware) sendOut() (madeProgress bool) {
 
 				sendOutBuf.Pop()
 
-				tracing.EndTask(m.flitTaskID(flit), m.Comp)
+				tracing.EndTask(m.flitTaskID(flit), m)
 			}
 		}
 	}
@@ -430,7 +453,7 @@ func (m *middleware) assignFlitOutputBuf(flit *messaging.Flit) {
 	outPort := m.routingTable.FindPort(flit.Msg.Meta().Dst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
-			m.Comp.Name(), flit.Msg.Meta().Dst))
+			m.comp.Name(), flit.Msg.Meta().Dst))
 	}
 
 	pc := m.portToComplexMapping[outPort]
@@ -438,7 +461,7 @@ func (m *middleware) assignFlitOutputBuf(flit *messaging.Flit) {
 	flit.OutputBuf = pc.sendOutBuffer
 	if flit.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
-			m.Comp.Name(), flit.Msg.Meta().Dst))
+			m.comp.Name(), flit.Msg.Meta().Dst))
 	}
 }
 
@@ -496,7 +519,7 @@ func (a SwitchPortAdder) WithNumOutputChannel(num int) SwitchPortAdder {
 
 // AddPort adds the port to the switch.
 func (a SwitchPortAdder) AddPort() {
-	complexID := len(a.sw.ports)
+	complexID := len(a.sw.mw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
 	sendOutBuf := queueing.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
