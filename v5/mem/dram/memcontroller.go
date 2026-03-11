@@ -1,11 +1,6 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/org"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
@@ -39,31 +34,103 @@ func (p Protocol) isHBM() bool {
 }
 
 // Spec contains immutable configuration for the DRAM memory controller.
-type Spec struct{}
+type Spec struct {
+	// Protocol
+	Protocol int `json:"protocol"`
+
+	// Timing params
+	TAL        int `json:"t_al"`
+	TCL        int `json:"t_cl"`
+	TCWL       int `json:"t_cwl"`
+	TRL        int `json:"t_rl"`
+	TWL        int `json:"t_wl"`
+	ReadDelay  int `json:"read_delay"`
+	WriteDelay int `json:"write_delay"`
+	TRCD       int `json:"t_rcd"`
+	TRP        int `json:"t_rp"`
+	TRAS       int `json:"t_ras"`
+	TCCDS      int `json:"t_ccds"`
+	TCCDL      int `json:"t_ccdl"`
+	TRTRS      int `json:"t_rtrs"`
+	TRTP       int `json:"t_rtp"`
+	TWTRL      int `json:"t_wtrl"`
+	TWTRS      int `json:"t_wtrs"`
+	TWR        int `json:"t_wr"`
+	TPPD       int `json:"t_ppd"`
+	TRC        int `json:"t_rc"`
+	TRRDS      int `json:"t_rrds"`
+	TRRDL      int `json:"t_rrdl"`
+	TRCDRD     int `json:"t_rcdrd"`
+	TRCDWR     int `json:"t_rcdwr"`
+	TREFI      int `json:"t_refi"`
+	TRFC       int `json:"t_rfc"`
+	TRFCb      int `json:"t_rfcb"`
+	TCKESR     int `json:"t_ckesr"`
+	TXS        int `json:"t_xs"`
+	BurstCycle int `json:"burst_cycle"`
+
+	// Bus / burst / device params
+	BusWidth    int `json:"bus_width"`
+	BurstLength int `json:"burst_length"`
+	DeviceWidth int `json:"device_width"`
+
+	// Bank / rank / channel counts
+	NumChannel  int `json:"num_channel"`
+	NumRank     int `json:"num_rank"`
+	NumBankGroup int `json:"num_bank_group"`
+	NumBank     int `json:"num_bank"`
+	NumRow      int `json:"num_row"`
+	NumCol      int `json:"num_col"`
+
+	// Queue sizes
+	TransactionQueueSize int `json:"transaction_queue_size"`
+	CommandQueueCapacity int `json:"command_queue_capacity"`
+
+	// Address converter params
+	HasAddrConverter    bool   `json:"has_addr_converter"`
+	InterleavingSize    uint64 `json:"interleaving_size"`
+	TotalNumOfElements  int    `json:"total_num_of_elements"`
+	CurrentElementIndex int    `json:"current_element_index"`
+	Offset              uint64 `json:"offset"`
+
+	// Address mapping: position/mask pairs
+	ChannelPos    int    `json:"channel_pos"`
+	ChannelMask   uint64 `json:"channel_mask"`
+	RankPos       int    `json:"rank_pos"`
+	RankMask      uint64 `json:"rank_mask"`
+	BankGroupPos  int    `json:"bank_group_pos"`
+	BankGroupMask uint64 `json:"bank_group_mask"`
+	BankPos       int    `json:"bank_pos"`
+	BankMask      uint64 `json:"bank_mask"`
+	RowPos        int    `json:"row_pos"`
+	RowMask       uint64 `json:"row_mask"`
+	ColPos        int    `json:"col_pos"`
+	ColMask       uint64 `json:"col_mask"`
+
+	// Sub-transaction splitting
+	Log2AccessUnitSize uint64 `json:"log2_access_unit_size"`
+
+	// CmdCycles: cycles per command kind
+	CmdCycles map[CommandKind]int `json:"cmd_cycles"`
+
+	// The entire Timing structure (computed once in builder)
+	Timing Timing `json:"timing"`
+}
 
 // State contains mutable runtime data for the DRAM memory controller.
 type State struct {
-	Transactions  []transactionState  `json:"transactions"`
-	SubTransQueue subTransQueueState  `json:"sub_trans_queue"`
-	CommandQueues commandQueueState   `json:"command_queues"`
-	BankStates    bankStatesFlat      `json:"bank_states"`
+	Transactions  []transactionState `json:"transactions"`
+	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
+	CommandQueues commandQueueState  `json:"command_queues"`
+	BankStates    bankStatesFlat     `json:"bank_states"`
 }
 
-// Comp is a MemController handles read and write requests.
+// Comp is a MemController that handles read and write requests.
 type Comp struct {
 	*modeling.Component[Spec, State]
 
 	topPort sim.Port
-
-	storage             *mem.Storage
-	addrConverter       mem.AddressConverter
-	subTransSplitter    trans.SubTransSplitter
-	addrMapper          addressmapping.Mapper
-	subTransactionQueue trans.SubTransactionQueue
-	cmdQueue            cmdq.CommandQueue
-	channel             org.Channel
-
-	inflightTransactions []*signal.Transaction
+	storage *mem.Storage
 }
 
 type middleware struct {
@@ -72,45 +139,60 @@ type middleware struct {
 
 // Tick updates memory controller's internal state.
 func (m *middleware) Tick() (madeProgress bool) {
-	madeProgress = m.respond() || madeProgress
-	madeProgress = m.respond() || madeProgress
-	madeProgress = m.channel.Tick() || madeProgress
-	madeProgress = m.issue() || madeProgress
-	madeProgress = m.subTransactionQueue.Tick() || madeProgress
-	madeProgress = m.parseTop() || madeProgress
+	state := m.Comp.GetState()
+	spec := m.Comp.GetSpec()
 
-	return madeProgress
+	progress := false
+
+	progress = m.respond(&spec, &state) || progress
+	progress = m.respond(&spec, &state) || progress
+	progress = tickBanks(&spec, &state) || progress
+	progress = m.issue(&spec, &state) || progress
+	progress = tickSubTransQueue(&spec, &state) || progress
+	progress = m.parseTop(&spec, &state) || progress
+
+	m.Comp.SetState(state)
+
+	return progress
 }
 
-func (m *middleware) parseTop() (madeProgress bool) {
+func (m *middleware) parseTop(spec *Spec, state *State) bool {
 	msgI := m.topPort.PeekIncoming()
 	if msgI == nil {
 		return false
 	}
 
-	trans := &signal.Transaction{}
+	ts := transactionState{}
 
 	switch msg := msgI.(type) {
 	case *mem.ReadReq:
-		trans.Read = msg
+		ts.HasRead = true
+		ts.ReadMsg = *msg
 	case *mem.WriteReq:
-		trans.Write = msg
+		ts.HasWrite = true
+		ts.WriteMsg = *msg
 	}
 
-	m.assignTransInternalAddress(trans)
-	m.subTransSplitter.Split(trans)
+	// Assign internal address
+	globalAddr := transactionGlobalAddress(&ts)
+	ts.InternalAddress = convertExternalToInternal(spec, globalAddr)
 
-	if !m.subTransactionQueue.CanPush(len(trans.SubTransactions)) {
+	// Split into sub-transactions
+	transIdx := len(state.Transactions)
+	splitTransaction(spec, &ts, transIdx)
+
+	if !canPushSubTrans(state, len(ts.SubTransactions),
+		spec.TransactionQueueSize) {
 		return false
 	}
 
-	m.subTransactionQueue.Push(trans)
-	m.inflightTransactions = append(m.inflightTransactions, trans)
+	state.Transactions = append(state.Transactions, ts)
+	pushSubTrans(state, transIdx)
 	m.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msgI, m.Comp)
 
-	for _, st := range trans.SubTransactions {
+	for _, st := range ts.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
 			tracing.MsgIDAtReceiver(msgI, m.Comp),
@@ -125,33 +207,28 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	return true
 }
 
-func (m *middleware) assignTransInternalAddress(trans *signal.Transaction) {
-	if m.addrConverter != nil {
-		trans.InternalAddress = m.addrConverter.ConvertExternalToInternal(
-			trans.GlobalAddress())
-
-		return
-	}
-
-	trans.InternalAddress = trans.GlobalAddress()
-}
-
-func (m *middleware) issue() (madeProgress bool) {
-	cmd := m.cmdQueue.GetCommandToIssue()
+func (m *middleware) issue(spec *Spec, state *State) bool {
+	cmd := getCommandToIssue(spec, state)
 	if cmd == nil {
 		return false
 	}
 
-	m.channel.StartCommand(cmd)
-	m.channel.UpdateTiming(cmd)
+	bs := findBankStateByLocation(&state.BankStates, cmd.Location)
+	if bs == nil {
+		return false
+	}
+
+	startCommand(spec, state, bs, cmd)
+	updateTiming(spec, state, cmd)
 
 	return true
 }
 
-func (m *middleware) respond() (madeProgress bool) {
-	for i, t := range m.inflightTransactions {
-		if t.IsCompleted() {
-			done := m.finalizeTransaction(t, i)
+func (m *middleware) respond(spec *Spec, state *State) bool {
+	for i := range state.Transactions {
+		t := &state.Transactions[i]
+		if isTransactionCompleted(t) {
+			done := m.finalizeTransaction(spec, state, t, i)
 			if done {
 				return true
 			}
@@ -162,29 +239,32 @@ func (m *middleware) respond() (madeProgress bool) {
 }
 
 func (m *middleware) finalizeTransaction(
-	t *signal.Transaction,
+	spec *Spec,
+	state *State,
+	t *transactionState,
 	i int,
-) (done bool) {
-	if t.Write != nil {
-		done = m.finalizeWriteTrans(t, i)
+) bool {
+	if t.HasWrite {
+		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(t.Write, m.Comp)
+			tracing.TraceReqComplete(&t.WriteMsg, m.Comp)
 		}
-	} else {
-		done = m.finalizeReadTrans(t, i)
-		if done {
-			tracing.TraceReqComplete(t.Read, m.Comp)
-		}
+		return done
 	}
 
+	done := m.finalizeReadTrans(state, t, i)
+	if done {
+		tracing.TraceReqComplete(&t.ReadMsg, m.Comp)
+	}
 	return done
 }
 
 func (m *middleware) finalizeWriteTrans(
-	t *signal.Transaction,
+	state *State,
+	t *transactionState,
 	i int,
-) (done bool) {
-	err := m.storage.Write(t.InternalAddress, t.Write.Data)
+) bool {
+	err := m.storage.Write(t.InternalAddress, t.WriteMsg.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -192,17 +272,14 @@ func (m *middleware) finalizeWriteTrans(
 	writeDone := &mem.WriteDoneRsp{}
 	writeDone.ID = sim.GetIDGenerator().Generate()
 	writeDone.Src = m.topPort.AsRemote()
-	writeDone.Dst = t.Write.Src
-	writeDone.RspTo = t.Write.ID
+	writeDone.Dst = t.WriteMsg.Src
+	writeDone.RspTo = t.WriteMsg.ID
 	writeDone.TrafficBytes = 4
 	writeDone.TrafficClass = "mem.WriteDoneRsp"
 
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
-		m.inflightTransactions = append(
-			m.inflightTransactions[:i],
-			m.inflightTransactions[i+1:]...)
-
+		m.removeTransaction(state, i)
 		return true
 	}
 
@@ -210,10 +287,12 @@ func (m *middleware) finalizeWriteTrans(
 }
 
 func (m *middleware) finalizeReadTrans(
-	t *signal.Transaction,
+	state *State,
+	t *transactionState,
 	i int,
-) (done bool) {
-	data, err := m.storage.Read(t.InternalAddress, t.Read.AccessByteSize)
+) bool {
+	data, err := m.storage.Read(
+		t.InternalAddress, t.ReadMsg.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -221,20 +300,73 @@ func (m *middleware) finalizeReadTrans(
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
 	dataReady.Src = m.topPort.AsRemote()
-	dataReady.Dst = t.Read.Src
+	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data
-	dataReady.RspTo = t.Read.ID
+	dataReady.RspTo = t.ReadMsg.ID
 	dataReady.TrafficBytes = len(data) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
-		m.inflightTransactions = append(
-			m.inflightTransactions[:i],
-			m.inflightTransactions[i+1:]...)
-
+		m.removeTransaction(state, i)
 		return true
 	}
 
 	return false
+}
+
+// removeTransaction removes a transaction and remaps all references.
+func (m *middleware) removeTransaction(state *State, idx int) {
+	// Remove the transaction
+	state.Transactions = append(
+		state.Transactions[:idx],
+		state.Transactions[idx+1:]...,
+	)
+
+	// Remap sub-trans queue references
+	newEntries := state.SubTransQueue.Entries[:0]
+	for _, ref := range state.SubTransQueue.Entries {
+		if ref.TransIndex == idx {
+			continue // remove refs to deleted transaction
+		}
+		if ref.TransIndex > idx {
+			ref.TransIndex--
+		}
+		newEntries = append(newEntries, ref)
+	}
+	state.SubTransQueue.Entries = newEntries
+
+	// Remap command queue references
+	newCmdEntries := state.CommandQueues.Entries[:0]
+	for _, e := range state.CommandQueues.Entries {
+		if e.Command.SubTransRef.TransIndex == idx {
+			continue
+		}
+		if e.Command.SubTransRef.TransIndex > idx {
+			e.Command.SubTransRef.TransIndex--
+		}
+		newCmdEntries = append(newCmdEntries, e)
+	}
+	state.CommandQueues.Entries = newCmdEntries
+
+	// Remap bank current command references
+	for i := range state.BankStates.Entries {
+		bs := &state.BankStates.Entries[i].Data
+		if bs.HasCurrentCmd {
+			if bs.CurrentCmd.SubTransRef.TransIndex == idx {
+				// The transaction is done, so this cmd should already
+				// be completed. But just in case, update.
+				bs.CurrentCmd.SubTransRef.TransIndex = -1
+			} else if bs.CurrentCmd.SubTransRef.TransIndex > idx {
+				bs.CurrentCmd.SubTransRef.TransIndex--
+			}
+		}
+	}
+
+	// Also update TransactionIndex in SubTransactions
+	for ti := range state.Transactions {
+		for si := range state.Transactions[ti].SubTransactions {
+			state.Transactions[ti].SubTransactions[si].TransactionIndex = ti
+		}
+	}
 }
