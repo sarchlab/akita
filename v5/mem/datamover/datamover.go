@@ -550,7 +550,7 @@ func (m *dataMoverMiddleware) finishTransaction() bool {
 		return false
 	}
 
-	rsp := &sim.GenericMsg{
+	rsp := &DataMoveResponse{
 		MsgMeta: sim.MsgMeta{
 			ID:    sim.GetIDGenerator().Generate(),
 			Src:   trans.req.Dst,

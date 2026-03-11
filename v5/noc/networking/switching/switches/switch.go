@@ -132,16 +132,14 @@ func msgRefFromMsg(msg sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           ref.ID,
-			Src:          ref.Src,
-			Dst:          ref.Dst,
-			RspTo:        ref.RspTo,
-			TrafficClass: ref.TrafficClass,
-			TrafficBytes: ref.TrafficBytes,
-		},
+func msgFromRef(ref msgRef) sim.Msg {
+	return &sim.MsgMeta{
+		ID:           ref.ID,
+		Src:          ref.Src,
+		Dst:          ref.Dst,
+		RspTo:        ref.RspTo,
+		TrafficClass: ref.TrafficClass,
+		TrafficBytes: ref.TrafficBytes,
 	}
 }
 

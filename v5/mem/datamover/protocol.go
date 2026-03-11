@@ -13,6 +13,11 @@ const (
 	OutsidePort DateMovePort = "outside"
 )
 
+// DataMoveResponse is sent when a data move operation completes.
+type DataMoveResponse struct {
+	sim.MsgMeta
+}
+
 // DataMoveRequest is a data move request.
 type DataMoveRequest struct {
 	sim.MsgMeta

@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -336,7 +335,7 @@ func (d *directory) fetchFromBottom(
 
 	mshrEntry := d.cache.mshr.Add(pid, cacheLineID)
 	mshrEntry.Requests = append(mshrEntry.Requests, trans)
-	mshrEntry.ReadReq = &sim.GenericMsg{MsgMeta: readToBottom.MsgMeta}
+	mshrEntry.ReadReq = readToBottom
 	mshrEntry.Block = victim
 
 	victim.Tag = cacheLineID

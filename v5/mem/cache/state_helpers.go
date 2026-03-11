@@ -28,17 +28,15 @@ func MsgRefFromMsg(msg sim.Msg) MsgRef {
 	}
 }
 
-// MsgFromRef converts a MsgRef back into a sim.Msg (as a *sim.GenericMsg).
+// MsgFromRef converts a MsgRef back into a sim.Msg (as a *sim.MsgMeta).
 func MsgFromRef(ref MsgRef) sim.Msg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           ref.ID,
-			Src:          ref.Src,
-			Dst:          ref.Dst,
-			RspTo:        ref.RspTo,
-			TrafficClass: ref.TrafficClass,
-			TrafficBytes: ref.TrafficBytes,
-		},
+	return &sim.MsgMeta{
+		ID:           ref.ID,
+		Src:          ref.Src,
+		Dst:          ref.Dst,
+		RspTo:        ref.RspTo,
+		TrafficClass: ref.TrafficClass,
+		TrafficBytes: ref.TrafficBytes,
 	}
 }
 

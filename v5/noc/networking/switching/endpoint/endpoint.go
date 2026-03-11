@@ -151,10 +151,8 @@ func (c *Comp) restoreFromState(s State) {
 
 	c.flitsToSend = make([]*messaging.Flit, len(s.FlitsToSend))
 	for i, fs := range s.FlitsToSend {
-		originalMsg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID: fs.OriginalMsgID,
-			},
+		originalMsg := &sim.MsgMeta{
+			ID: fs.OriginalMsgID,
 		}
 		c.flitsToSend[i] = &messaging.Flit{
 			MsgMeta: sim.MsgMeta{
@@ -171,15 +169,13 @@ func (c *Comp) restoreFromState(s State) {
 	c.assemblingMsgs = make([]*msgToAssemble, len(s.AssemblingMsgs))
 	for i, as := range s.AssemblingMsgs {
 		c.assemblingMsgs[i] = &msgToAssemble{
-			msg: &sim.GenericMsg{
-				MsgMeta: sim.MsgMeta{
-					ID:           as.MsgID,
-					Src:          as.Src,
-					Dst:          as.Dst,
-					RspTo:        as.RspTo,
-					TrafficClass: as.TrafficClass,
-					TrafficBytes: as.TrafficBytes,
-				},
+			msg: &sim.MsgMeta{
+				ID:           as.MsgID,
+				Src:          as.Src,
+				Dst:          as.Dst,
+				RspTo:        as.RspTo,
+				TrafficClass: as.TrafficClass,
+				TrafficBytes: as.TrafficBytes,
 			},
 			numFlitRequired: as.NumFlitRequired,
 			numFlitArrived:  as.NumFlitArrived,
@@ -240,16 +236,14 @@ func msgRefFromMsg(msg sim.Msg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           ref.ID,
-			Src:          ref.Src,
-			Dst:          ref.Dst,
-			RspTo:        ref.RspTo,
-			TrafficClass: ref.TrafficClass,
-			TrafficBytes: ref.TrafficBytes,
-		},
+func msgFromRef(ref msgRef) sim.Msg {
+	return &sim.MsgMeta{
+		ID:           ref.ID,
+		Src:          ref.Src,
+		Dst:          ref.Dst,
+		RspTo:        ref.RspTo,
+		TrafficClass: ref.TrafficClass,
+		TrafficBytes: ref.TrafficBytes,
 	}
 }
 
