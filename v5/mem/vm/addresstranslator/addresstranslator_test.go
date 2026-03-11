@@ -1,6 +1,8 @@
 package addresstranslator
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
@@ -12,13 +14,11 @@ import (
 
 var _ = Describe("Address Translator", func() {
 	var (
-		mockCtrl              *gomock.Controller
-		topPort               *MockPort
-		bottomPort            *MockPort
-		translationPort       *MockPort
-		ctrlPort              *MockPort
-		memoryPortMapper      *MockAddressToPortMapper
-		translationPortMapper *MockAddressToPortMapper
+		mockCtrl        *gomock.Controller
+		topPort         *MockPort
+		bottomPort      *MockPort
+		translationPort *MockPort
+		ctrlPort        *MockPort
 
 		t           *Comp
 		tMiddleware *middleware
@@ -58,8 +58,6 @@ var _ = Describe("Address Translator", func() {
 			Name().
 			Return("TranslationPort").
 			AnyTimes()
-		memoryPortMapper = NewMockAddressToPortMapper(mockCtrl)
-		translationPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
 		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
@@ -69,8 +67,10 @@ var _ = Describe("Address Translator", func() {
 		builder := MakeBuilder().
 			WithLog2PageSize(12).
 			WithFreq(1).
-			WithMemoryProviderMapper(memoryPortMapper).
-			WithTranslationProviderMapper(translationPortMapper).
+			WithMemoryProviderType("single").
+			WithMemoryProviders(sim.RemotePort("MemPort")).
+			WithTranslationProviderMapperType("single").
+			WithTranslationProviders(sim.RemotePort("TranslationPort")).
 			WithTopPort(topPort).
 			WithBottomPort(bottomPort).
 			WithTranslationPort(translationPort).
@@ -115,15 +115,13 @@ var _ = Describe("Address Translator", func() {
 			transReq.DeviceID = 1
 			transReq.TrafficClass = "vm.TranslationReq"
 
-			translation := &transaction{
-				translationReq: transReq,
-			}
-			t.transactions = append(t.transactions, translation)
-			req.Address = 0x1040
+			// Set initial state with an existing transaction
+			nextState := t.GetNextState()
+			nextState.Transactions = append(nextState.Transactions, transactionState{
+				TranslationReqID: transReq.ID,
+			})
 
-			translationPortMapper.EXPECT().
-				Find(uint64(0x1040)).
-				Return(translationPort.AsRemote())
+			req.Address = 0x1040
 
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
@@ -136,16 +134,13 @@ var _ = Describe("Address Translator", func() {
 			needTick := tMiddleware.translate()
 
 			Expect(needTick).To(BeTrue())
-			Expect(translation.incomingReqs).NotTo(ContainElement(req))
-			Expect(t.transactions).To(HaveLen(2))
-			Expect(t.transactions[1].translationReq).
-				To(BeEquivalentTo(transReqReturn))
+			updatedState := t.GetNextState()
+			Expect(updatedState.Transactions).To(HaveLen(2))
+			Expect(updatedState.Transactions[1].TranslationReqID).
+				To(Equal(transReqReturn.ID))
 		})
 
 		It("should stall if cannot send for translation", func() {
-			translationPortMapper.EXPECT().
-				Find(uint64(0x100)).
-				Return(translationPort.AsRemote())
 			topPort.EXPECT().PeekIncoming().Return(req)
 			translationPort.EXPECT().
 				Send(gomock.Any()).
@@ -154,14 +149,14 @@ var _ = Describe("Address Translator", func() {
 			needTick := tMiddleware.translate()
 
 			Expect(needTick).To(BeFalse())
-			Expect(t.transactions).To(HaveLen(0))
+			updatedState := t.GetNextState()
+			Expect(updatedState.Transactions).To(HaveLen(0))
 		})
 	})
 
 	Context("parse translation", func() {
 		var (
 			transReq1, transReq2 *vm.TranslationReq
-			trans1, trans2       *transaction
 		)
 
 		BeforeEach(func() {
@@ -171,19 +166,18 @@ var _ = Describe("Address Translator", func() {
 			transReq1.VAddr = 0x100
 			transReq1.DeviceID = 1
 			transReq1.TrafficClass = "vm.TranslationReq"
-			trans1 = &transaction{
-				translationReq: transReq1,
-			}
 			transReq2 = &vm.TranslationReq{}
 			transReq2.ID = sim.GetIDGenerator().Generate()
 			transReq2.PID = 1
 			transReq2.VAddr = 0x100
 			transReq2.DeviceID = 1
 			transReq2.TrafficClass = "vm.TranslationReq"
-			trans2 = &transaction{
-				translationReq: transReq2,
+
+			nextState := t.GetNextState()
+			nextState.Transactions = []transactionState{
+				{TranslationReqID: transReq1.ID},
+				{TranslationReqID: transReq2.ID},
 			}
-			t.transactions = append(t.transactions, trans1, trans2)
 		})
 
 		It("should do nothing if there is no translation return", func() {
@@ -210,12 +204,13 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			trans1.incomingReqs = []sim.Msg{req}
-			trans1.translationRsp = translationRsp
-			trans1.translationDone = true
+			nextState := t.GetNextState()
+			nextState.Transactions[0].IncomingReqs = []incomingReqState{
+				msgToIncomingReqState(req),
+			}
+			nextState.Transactions[0].TranslationDone = true
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			memoryPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
 
 			madeProgress := tMiddleware.parseTranslation()
@@ -241,17 +236,17 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			trans1.incomingReqs = []sim.Msg{req}
-			trans1.translationRsp = translationRsp
-			trans1.translationDone = true
+			nextState := t.GetNextState()
+			nextState.Transactions[0].IncomingReqs = []incomingReqState{
+				msgToIncomingReqState(req),
+			}
+			nextState.Transactions[0].TranslationDone = true
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
-			memoryPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
 					read := msg.(*mem.ReadReq)
-					Expect(read).NotTo(BeIdenticalTo(req))
 					Expect(read.PID).To(Equal(vm.PID(0)))
 					Expect(read.Address).To(Equal(uint64(0x20040)))
 					Expect(read.AccessByteSize).To(Equal(uint64(4)))
@@ -262,8 +257,16 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.transactions).NotTo(ContainElement(trans1))
-			Expect(t.inflightReqToBottom).To(HaveLen(1))
+			updatedState := t.GetNextState()
+			Expect(updatedState.Transactions).NotTo(
+				ContainElement(
+					WithTransform(
+						func(ts transactionState) string { return ts.TranslationReqID },
+						Equal(transReq1.ID),
+					),
+				),
+			)
+			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should forward write request", func() {
@@ -286,17 +289,18 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.ID = sim.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
-			trans1.incomingReqs = []sim.Msg{write}
-			trans1.translationRsp = translationRsp
-			trans1.translationDone = true
+
+			nextState := t.GetNextState()
+			nextState.Transactions[0].IncomingReqs = []incomingReqState{
+				msgToIncomingReqState(write),
+			}
+			nextState.Transactions[0].TranslationDone = true
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
-			memoryPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
 					writeMsg := msg.(*mem.WriteReq)
-					Expect(writeMsg).NotTo(BeIdenticalTo(write))
 					Expect(writeMsg.PID).To(Equal(vm.PID(0)))
 					Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
 					Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
@@ -308,8 +312,8 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.transactions).NotTo(ContainElement(trans1))
-			Expect(t.inflightReqToBottom).To(HaveLen(1))
+			updatedState := t.GetNextState()
+			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 	})
 
@@ -345,11 +349,29 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
 
-			t.inflightReqToBottom = []reqToBottom{
-				{reqFromTop: readFromTop, reqToBottom: readToBottom},
-				{reqFromTop: writeFromTop, reqToBottom: writeToBottom},
+			nextState := t.GetNextState()
+			nextState.InflightReqToBottom = []reqToBottomState{
+				{
+					ReqFromTopID:    readFromTop.ID,
+					ReqFromTopSrc:   readFromTop.Src,
+					ReqFromTopDst:   readFromTop.Dst,
+					ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
+					ReqToBottomID:   readToBottom.ID,
+					ReqToBottomSrc:  readToBottom.Src,
+					ReqToBottomDst:  readToBottom.Dst,
+					ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+				},
+				{
+					ReqFromTopID:    writeFromTop.ID,
+					ReqFromTopSrc:   writeFromTop.Src,
+					ReqFromTopDst:   writeFromTop.Dst,
+					ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
+					ReqToBottomID:   writeToBottom.ID,
+					ReqToBottomSrc:  writeToBottom.Src,
+					ReqToBottomDst:  writeToBottom.Dst,
+					ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
+				},
 			}
-
 		})
 
 		It("should do nothing if there is no response to process", func() {
@@ -377,7 +399,8 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.respond()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.inflightReqToBottom).To(HaveLen(1))
+			updatedState := t.GetNextState()
+			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should respond write done", func() {
@@ -398,7 +421,8 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.respond()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.inflightReqToBottom).To(HaveLen(1))
+			updatedState := t.GetNextState()
+			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should stall if TopPort is busy", func() {
@@ -419,7 +443,8 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.respond()
 
 			Expect(madeProgress).To(BeFalse())
-			Expect(t.inflightReqToBottom).To(HaveLen(2))
+			updatedState := t.GetNextState()
+			Expect(updatedState.InflightReqToBottom).To(HaveLen(2))
 		})
 	})
 
@@ -427,77 +452,6 @@ var _ = Describe("Address Translator", func() {
 		It("should pass ValidateState", func() {
 			err := modeling.ValidateState(State{})
 			Expect(err).To(Succeed())
-		})
-
-		It("should round-trip GetState/SetState", func() {
-			reqFromTop := &mem.ReadReq{}
-			reqFromTop.ID = sim.GetIDGenerator().Generate()
-			reqFromTop.Address = 0x10040
-			reqFromTop.AccessByteSize = 4
-			reqFromTop.TrafficBytes = 12
-			reqFromTop.TrafficClass = "mem.ReadReq"
-			reqToBot := &mem.ReadReq{}
-			reqToBot.ID = sim.GetIDGenerator().Generate()
-			reqToBot.Address = 0x20040
-			reqToBot.AccessByteSize = 4
-			reqToBot.TrafficBytes = 12
-			reqToBot.TrafficClass = "mem.ReadReq"
-
-			transReq := &vm.TranslationReq{}
-			transReq.ID = sim.GetIDGenerator().Generate()
-			transReq.PID = 1
-			transReq.VAddr = 0x100
-			transReq.DeviceID = 1
-			transReq.TrafficClass = "vm.TranslationReq"
-
-			t.isFlushing = true
-			t.transactions = []*transaction{
-				{
-					incomingReqs:    []sim.Msg{reqFromTop},
-					translationReq:  transReq,
-					translationDone: true,
-				},
-			}
-			t.inflightReqToBottom = []reqToBottom{
-				{reqFromTop: reqFromTop, reqToBottom: reqToBot},
-			}
-
-			state := t.GetState()
-
-			Expect(state.IsFlushing).To(BeTrue())
-			Expect(state.Transactions).To(HaveLen(1))
-			Expect(state.Transactions[0].TranslationReqID).
-				To(Equal(transReq.ID))
-			Expect(state.Transactions[0].TranslationDone).To(BeTrue())
-			Expect(state.Transactions[0].IncomingReqs).To(HaveLen(1))
-			Expect(state.Transactions[0].IncomingReqs[0].ID).
-				To(Equal(reqFromTop.ID))
-			Expect(state.InflightReqToBottom).To(HaveLen(1))
-			Expect(state.InflightReqToBottom[0].ReqFromTopID).
-				To(Equal(reqFromTop.ID))
-			Expect(state.InflightReqToBottom[0].ReqToBottomID).
-				To(Equal(reqToBot.ID))
-
-			// Clear and restore
-			t.isFlushing = false
-			t.transactions = nil
-			t.inflightReqToBottom = nil
-
-			t.SetState(state)
-
-			Expect(t.isFlushing).To(BeTrue())
-			Expect(t.transactions).To(HaveLen(1))
-			Expect(t.transactions[0].translationReq.ID).
-				To(Equal(transReq.ID))
-			Expect(t.transactions[0].translationDone).To(BeTrue())
-			Expect(t.transactions[0].incomingReqs).To(HaveLen(1))
-			Expect(t.transactions[0].incomingReqs[0].Meta().ID).
-				To(Equal(reqFromTop.ID))
-			Expect(t.inflightReqToBottom).To(HaveLen(1))
-			Expect(t.inflightReqToBottom[0].reqFromTop.Meta().ID).
-				To(Equal(reqFromTop.ID))
-			Expect(t.inflightReqToBottom[0].reqToBottom.Meta().ID).
-				To(Equal(reqToBot.ID))
 		})
 	})
 
@@ -538,20 +492,39 @@ var _ = Describe("Address Translator", func() {
 				DiscardTransations: true,
 			}
 			flushReq.ID = sim.GetIDGenerator().Generate()
-			flushReq.Dst = t.ctrlPort.AsRemote()
+			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
 			flushReq.TrafficClass = "mem.ControlMsg"
 			restartReq = &mem.ControlMsg{
 				Restart: true,
 			}
 			restartReq.ID = sim.GetIDGenerator().Generate()
-			restartReq.Dst = t.ctrlPort.AsRemote()
+			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
 			restartReq.TrafficClass = "mem.ControlMsg"
 
-			t.inflightReqToBottom = []reqToBottom{
-				{reqFromTop: readFromTop, reqToBottom: readToBottom},
-				{reqFromTop: writeFromTop, reqToBottom: writeToBottom},
+			nextState := t.GetNextState()
+			nextState.InflightReqToBottom = []reqToBottomState{
+				{
+					ReqFromTopID:    readFromTop.ID,
+					ReqFromTopSrc:   readFromTop.Src,
+					ReqFromTopDst:   readFromTop.Dst,
+					ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
+					ReqToBottomID:   readToBottom.ID,
+					ReqToBottomSrc:  readToBottom.Src,
+					ReqToBottomDst:  readToBottom.Dst,
+					ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+				},
+				{
+					ReqFromTopID:    writeFromTop.ID,
+					ReqFromTopSrc:   writeFromTop.Src,
+					ReqFromTopDst:   writeFromTop.Dst,
+					ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
+					ReqToBottomID:   writeToBottom.ID,
+					ReqToBottomSrc:  writeToBottom.Src,
+					ReqToBottomDst:  writeToBottom.Dst,
+					ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
+				},
 			}
 		})
 
@@ -563,8 +536,9 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.isFlushing).To(BeTrue())
-			Expect(t.inflightReqToBottom).To(BeNil())
+			updatedState := t.GetNextState()
+			Expect(updatedState.IsFlushing).To(BeTrue())
+			Expect(updatedState.InflightReqToBottom).To(BeNil())
 		})
 
 		It("should handle restart req", func() {
@@ -578,7 +552,8 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tMiddleware.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(t.isFlushing).To(BeFalse())
+			updatedState := t.GetNextState()
+			Expect(updatedState.IsFlushing).To(BeFalse())
 		})
 
 	})
