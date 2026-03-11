@@ -1,7 +1,6 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 )
@@ -31,7 +30,9 @@ type transactionState struct {
 	preCoalesceTransactions []*transactionState
 
 	bankAction            bankActionType
-	block                 *cache.Block
+	blockSetID            int
+	blockWayID            int
+	hasBlock              bool
 	data                  []byte
 	writeFetchedDirtyMask []bool
 

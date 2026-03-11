@@ -119,10 +119,10 @@ func snapshotTransaction(
 }
 
 func snapshotTransBlock(t *transactionState, s *transactionSnapshot) {
-	if t.block != nil {
+	if t.hasBlock {
 		s.HasBlock = true
-		s.BlockSetID = t.block.SetID
-		s.BlockWayID = t.block.WayID
+		s.BlockSetID = t.blockSetID
+		s.BlockWayID = t.blockWayID
 	}
 }
 
@@ -177,12 +177,11 @@ func snapshotAllTransactions(
 func restoreAllTransactions(
 	snapshots []transactionSnapshot,
 	numTrans int,
-	dir cache.Directory,
 ) ([]*transactionState, []*transactionState) {
 	allTrans := make([]*transactionState, len(snapshots))
 
 	for i, s := range snapshots {
-		allTrans[i] = restoreTransactionCore(s, dir)
+		allTrans[i] = restoreTransactionCore(s)
 	}
 
 	wirePreCoalesce(allTrans, snapshots)
@@ -192,7 +191,6 @@ func restoreAllTransactions(
 
 func restoreTransactionCore(
 	s transactionSnapshot,
-	dir cache.Directory,
 ) *transactionState {
 	t := &transactionState{
 		id:            s.ID,
@@ -202,7 +200,7 @@ func restoreTransactionCore(
 	}
 
 	restoreTransMsgs(t, s)
-	restoreTransBlock(t, s, dir)
+	restoreTransBlock(t, s)
 	restoreTransData(t, s)
 
 	return t
@@ -229,11 +227,11 @@ func restoreTransMsgs(t *transactionState, s transactionSnapshot) {
 func restoreTransBlock(
 	t *transactionState,
 	s transactionSnapshot,
-	dir cache.Directory,
 ) {
 	if s.HasBlock {
-		sets := dir.GetSets()
-		t.block = sets[s.BlockSetID].Blocks[s.BlockWayID]
+		t.hasBlock = true
+		t.blockSetID = s.BlockSetID
+		t.blockWayID = s.BlockWayID
 	}
 }
 
@@ -266,6 +264,53 @@ func wirePreCoalesce(
 
 		allTrans[i].preCoalesceTransactions = refs
 	}
+}
+
+// deepCopyDirectoryState creates a deep copy of a DirectoryState.
+func deepCopyDirectoryState(ds cache.DirectoryState) cache.DirectoryState {
+	result := cache.DirectoryState{
+		Sets: make([]cache.SetState, len(ds.Sets)),
+	}
+
+	for i, set := range ds.Sets {
+		result.Sets[i] = cache.SetState{
+			Blocks:   make([]cache.BlockState, len(set.Blocks)),
+			LRUOrder: make([]int, len(set.LRUOrder)),
+		}
+		copy(result.Sets[i].Blocks, set.Blocks)
+		copy(result.Sets[i].LRUOrder, set.LRUOrder)
+
+		// Deep copy DirtyMask for each block
+		for j, b := range set.Blocks {
+			if b.DirtyMask != nil {
+				result.Sets[i].Blocks[j].DirtyMask = make([]bool, len(b.DirtyMask))
+				copy(result.Sets[i].Blocks[j].DirtyMask, b.DirtyMask)
+			}
+		}
+	}
+
+	return result
+}
+
+// deepCopyMSHRState creates a deep copy of an MSHRState.
+func deepCopyMSHRState(ms cache.MSHRState) cache.MSHRState {
+	result := cache.MSHRState{
+		Entries: make([]cache.MSHREntryState, len(ms.Entries)),
+	}
+
+	for i, e := range ms.Entries {
+		result.Entries[i] = e
+		if e.TransactionIndices != nil {
+			result.Entries[i].TransactionIndices = make([]int, len(e.TransactionIndices))
+			copy(result.Entries[i].TransactionIndices, e.TransactionIndices)
+		}
+		if e.Data != nil {
+			result.Entries[i].Data = make([]byte, len(e.Data))
+			copy(result.Entries[i].Data, e.Data)
+		}
+	}
+
+	return result
 }
 
 func snapshotDirBuf(
@@ -486,15 +531,4 @@ func restoreBankPostBufs(
 		queueing.RestoreBuffer(
 			bankStages[i].postPipelineBuf, elems)
 	}
-}
-
-func mshrTransLookup(
-	lookup map[*transactionState]int,
-) map[interface{}]int {
-	m := make(map[interface{}]int, len(lookup))
-	for k, v := range lookup {
-		m[k] = v
-	}
-
-	return m
 }

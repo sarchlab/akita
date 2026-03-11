@@ -47,8 +47,8 @@ type middleware struct {
 	controlPort sim.Port
 
 	storage             *mem.Storage
-	directory           cache.Directory
-	mshr                cache.MSHR
+	directoryState      cache.DirectoryState // runtime copy
+	mshrState           cache.MSHRState      // runtime copy
 	addressToPortMapper mem.AddressToPortMapper
 
 	dirBuf   queueing.Buffer
@@ -179,9 +179,11 @@ func (m *middleware) snapshotState() State {
 		NumTransactions: len(m.transactions),
 	}
 
-	s.DirectoryState = cache.SnapshotDirectory(m.directory)
-	s.MSHRState = cache.SnapshotMSHR(
-		m.mshr, mshrTransLookup(lookup))
+	// DirectoryState and MSHRState are already the canonical state.
+	// Deep copy them for the snapshot.
+	s.DirectoryState = deepCopyDirectoryState(m.directoryState)
+	s.MSHRState = deepCopyMSHRState(m.mshrState)
+
 	s.Transactions = snapshotAllTransactions(
 		m.transactions, m.postCoalesceTransactions, lookup)
 	s.DirBufIndices = snapshotDirBuf(m.dirBuf, lookup)
@@ -201,10 +203,10 @@ func (m *middleware) snapshotState() State {
 func (m *middleware) restoreFromState(s State) {
 	m.isPaused = s.IsPaused
 
-	cache.RestoreDirectory(m.directory, s.DirectoryState)
+	m.directoryState = deepCopyDirectoryState(s.DirectoryState)
+	m.mshrState = deepCopyMSHRState(s.MSHRState)
 
-	trans, postCoalesce := restoreAllTransactions(
-		s.Transactions, s.NumTransactions, m.directory)
+	trans, postCoalesce := restoreAllTransactions(s.Transactions, s.NumTransactions)
 	m.transactions = trans
 	m.postCoalesceTransactions = postCoalesce
 
@@ -212,21 +214,7 @@ func (m *middleware) restoreFromState(s State) {
 	copy(allTrans[:s.NumTransactions], trans)
 	copy(allTrans[s.NumTransactions:], postCoalesce)
 
-	restoreMSHR(m, s, allTrans)
 	restoreBuffersAndPipelines(m, s, allTrans)
-}
-
-func restoreMSHR(
-	m *middleware,
-	s State,
-	allTrans []*transactionState,
-) {
-	ifaces := make([]interface{}, len(allTrans))
-	for i, t := range allTrans {
-		ifaces[i] = t
-	}
-
-	cache.RestoreMSHR(m.mshr, s.MSHRState, ifaces, m.directory)
 }
 
 func restoreBuffersAndPipelines(
@@ -258,5 +246,3 @@ func (m *middleware) SetState(state State) {
 	m.comp.SetState(state)
 	m.restoreFromState(state)
 }
-
-

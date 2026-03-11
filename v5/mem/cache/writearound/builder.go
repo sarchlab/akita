@@ -216,10 +216,9 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		)
 	}
 
-	m.mshr = cache.NewMSHR(b.numMSHREntry)
-	m.directory = cache.NewDirectory(
-		numSets, b.wayAssociativity, blockSize,
-		cache.NewLRUVictimFinder())
+	// Initialize DirectoryState using free function instead of runtime Directory
+	cache.DirectoryReset(&m.directoryState, numSets, b.wayAssociativity, blockSize)
+	// MSHRState starts empty, no initialization needed
 	m.storage = mem.NewStorage(b.totalByteSize)
 
 	b.configureAddressMapper(m)
@@ -245,7 +244,6 @@ func (b *Builder) buildStages(m *middleware) {
 	m.controlStage = &controlStage{
 		ctrlPort:     m.controlPort,
 		transactions: &m.transactions,
-		directory:    m.directory,
 		cache:        m,
 		bankStages:   m.bankStages,
 		coalescer:    m.coalesceStage,

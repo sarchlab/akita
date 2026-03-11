@@ -1,14 +1,15 @@
 package writearound
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -16,8 +17,6 @@ var _ = Describe("Directory", func() {
 	var (
 		mockCtrl            *gomock.Controller
 		inBuf               *MockBuffer
-		dir                 *MockDirectory
-		mshr                *MockMSHR
 		bankBuf             *MockBuffer
 		bottomPort          *MockPort
 		addressToPortMapper *MockAddressToPortMapper
@@ -30,9 +29,6 @@ var _ = Describe("Directory", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		inBuf = NewMockBuffer(mockCtrl)
-		dir = NewMockDirectory(mockCtrl)
-		dir.EXPECT().WayAssociativity().Return(4).AnyTimes()
-		mshr = NewMockMSHR(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 
 		bottomPort = NewMockPort(mockCtrl)
@@ -46,10 +42,8 @@ var _ = Describe("Directory", func() {
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 		c = &middleware{
 			bottomPort:          bottomPort,
-			directory:           dir,
 			dirBuf:              inBuf,
 			addressToPortMapper: addressToPortMapper,
-			mshr:                mshr,
 			bankBufs:            []queueing.Buffer{bankBuf},
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
@@ -59,8 +53,14 @@ var _ = Describe("Directory", func() {
 				Log2BlockSize:    6,
 				NumReqPerCycle:   4,
 				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				NumSets:          16,
 			}).
 			Build("Cache")
+
+		// Initialize directoryState with 16 sets, 4 ways, blockSize=64
+		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+
 		d = &directory{
 			cache:    c,
 			pipeline: pipeline,
@@ -109,28 +109,28 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("Should add to mshr entry", func() {
-			mshrEntry := &cache.MSHREntry{}
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
+			// Pre-populate MSHR with an entry
+			entryIdx := cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), uint64(0x100))
+			// The trans is a postCoalesceTransaction, so register it
+			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+
 			buf.EXPECT().Pop()
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(mshrEntry.Requests).To(ContainElement(trans))
+			entry := c.mshrState.Entries[entryIdx]
+			Expect(entry.TransactionIndices).To(ContainElement(0))
 		})
 	})
 
 	Context("read hit", func() {
 		var (
-			block *cache.Block
 			read  *mem.ReadReq
 			trans *transactionState
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				IsValid: true,
-			}
 			read = &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.Address = 0x104
@@ -145,16 +145,23 @@ var _ = Describe("Directory", func() {
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), gomock.Any()).Return(nil)
 		})
 
 		It("should send transaction to bank", func() {
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
-			dir.EXPECT().Visit(block)
+			// Set up a valid block in directory at the right set for address 0x100
+			// setID = (0x100 / 64) % 16 = 4 % 16 = 4
+			setID := 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].IsValid = true
+			c.directoryState.Sets[setID].Blocks[wayID].Tag = 0x100
+			c.directoryState.Sets[setID].Blocks[wayID].PID = 1
+
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
 				Do(func(t *transactionState) {
-					Expect(t.block).To(BeIdenticalTo(block))
+					Expect(t.hasBlock).To(BeTrue())
+					Expect(t.blockSetID).To(Equal(setID))
+					Expect(t.blockWayID).To(Equal(wayID))
 					Expect(t.bankAction).To(Equal(bankActionReadHit))
 				})
 			buf.EXPECT().Pop()
@@ -162,11 +169,16 @@ var _ = Describe("Directory", func() {
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(block.ReadCount).To(Equal(1))
+			Expect(c.directoryState.Sets[setID].Blocks[wayID].ReadCount).To(Equal(1))
 		})
 
 		It("should stall if cannot send to bank", func() {
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
+			setID := 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].IsValid = true
+			c.directoryState.Sets[setID].Blocks[wayID].Tag = 0x100
+			c.directoryState.Sets[setID].Blocks[wayID].PID = 1
+
 			bankBuf.EXPECT().CanPush().Return(false)
 
 			madeProgress := d.Tick()
@@ -175,8 +187,13 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if block is locked", func() {
-			block.IsLocked = true
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
+			setID := 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].IsValid = true
+			c.directoryState.Sets[setID].Blocks[wayID].Tag = 0x100
+			c.directoryState.Sets[setID].Blocks[wayID].PID = 1
+			c.directoryState.Sets[setID].Blocks[wayID].IsLocked = true
+
 			madeProgress := d.Tick()
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -184,17 +201,11 @@ var _ = Describe("Directory", func() {
 
 	Context("read miss", func() {
 		var (
-			block     *cache.Block
-			read      *mem.ReadReq
-			trans     *transactionState
-			mshrEntry *cache.MSHREntry
+			read  *mem.ReadReq
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				IsValid: true,
-			}
-			mshrEntry = &cache.MSHREntry{}
 			read = &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.Address = 0x104
@@ -209,14 +220,12 @@ var _ = Describe("Directory", func() {
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), gomock.Any()).Return(nil)
 		})
 
 		It("should send request to bottom", func() {
+			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+
 			var readToBottom *mem.ReadReq
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
-			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
 				Return(sim.RemotePort(""))
@@ -226,47 +235,55 @@ var _ = Describe("Directory", func() {
 				Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
 				Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 			})
-			mshr.EXPECT().IsFull().Return(false)
-			mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			buf.EXPECT().Pop()
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(mshrEntry.Requests).To(ContainElement(trans))
-			Expect(mshrEntry.Block).To(BeIdenticalTo(block))
-			Expect(mshrEntry.ReadReq).To(BeIdenticalTo(readToBottom))
+			// Check MSHR entry was created
+			entryIdx, found := cache.MSHRQuery(&c.mshrState, vm.PID(1), 0x100)
+			Expect(found).To(BeTrue())
+			entry := c.mshrState.Entries[entryIdx]
+			Expect(entry.TransactionIndices).To(ContainElement(0))
+			Expect(entry.HasBlock).To(BeTrue())
+			Expect(entry.HasReadReq).To(BeTrue())
+
+			// Check victim block was set up
+			victimSetID := entry.BlockSetID
+			victimWayID := entry.BlockWayID
+			block := c.directoryState.Sets[victimSetID].Blocks[victimWayID]
 			Expect(block.Tag).To(Equal(uint64(0x100)))
 			Expect(block.IsLocked).To(BeTrue())
 			Expect(block.IsValid).To(BeTrue())
 			Expect(trans.readToBottom).To(BeIdenticalTo(readToBottom))
-			Expect(trans.block).To(BeIdenticalTo(block))
+			Expect(trans.hasBlock).To(BeTrue())
 		})
 
-		It("should stall is victim block is locked", func() {
-			block.IsLocked = true
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
+		It("should stall if victim block is locked", func() {
+			// Lock all victim candidates (LRU[0] for each way)
+			setID := 4 // (0x100 / 64) % 16 = 4
+			c.directoryState.Sets[setID].Blocks[c.directoryState.Sets[setID].LRUOrder[0]].IsLocked = true
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall is victim block is being read", func() {
-			block.ReadCount = 1
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
+		It("should stall if victim block is being read", func() {
+			setID := 4
+			c.directoryState.Sets[setID].Blocks[c.directoryState.Sets[setID].LRUOrder[0]].ReadCount = 1
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall is mshr is full", func() {
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
-			mshr.EXPECT().IsFull().Return(true)
+		It("should stall if mshr is full", func() {
+			// Fill up MSHR
+			cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), 0x200)
+			cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), 0x300)
+			cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), 0x400)
+			cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), 0x500)
 
 			madeProgress := d.Tick()
 
@@ -274,12 +291,11 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if send to bottom failed", func() {
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
+			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
 				Return(sim.RemotePort(""))
-			mshr.EXPECT().IsFull().Return(false)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
 			madeProgress := d.Tick()
@@ -290,9 +306,8 @@ var _ = Describe("Directory", func() {
 
 	Context("write mshr hit", func() {
 		var (
-			write     *mem.WriteReq
-			trans     *transactionState
-			mshrEntry *cache.MSHREntry
+			write *mem.WriteReq
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -306,17 +321,19 @@ var _ = Describe("Directory", func() {
 			trans = &transactionState{
 				write: write,
 			}
-			mshrEntry = &cache.MSHREntry{}
 		})
 
 		It("should add to mshr entry", func() {
 			var writeToBottom *mem.WriteReq
 
+			// Pre-populate MSHR
+			entryIdx := cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), uint64(0x100))
+			c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
 			buf.EXPECT().Pop()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -329,7 +346,8 @@ var _ = Describe("Directory", func() {
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(mshrEntry.Requests).To(ContainElement(trans))
+			entry := c.mshrState.Entries[entryIdx]
+			Expect(entry.TransactionIndices).To(ContainElement(0))
 			Expect(trans.writeToBottom).To(BeIdenticalTo(writeToBottom))
 		})
 	})
@@ -338,7 +356,6 @@ var _ = Describe("Directory", func() {
 		var (
 			write *mem.WriteReq
 			trans *transactionState
-			block *cache.Block
 		)
 
 		BeforeEach(func() {
@@ -352,7 +369,13 @@ var _ = Describe("Directory", func() {
 			trans = &transactionState{
 				write: write,
 			}
-			block = &cache.Block{IsValid: true}
+
+			// Set up a valid block
+			setID := 4 // (0x100 / 64) % 16 = 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].IsValid = true
+			c.directoryState.Sets[setID].Blocks[wayID].Tag = 0x100
+			c.directoryState.Sets[setID].Blocks[wayID].PID = 1
 		})
 
 		It("should send to bank", func() {
@@ -360,15 +383,12 @@ var _ = Describe("Directory", func() {
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
 			buf.EXPECT().Pop()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
-			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
 				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWrite))
-					Expect(trans.block).To(BeIdenticalTo(block))
+					Expect(trans.hasBlock).To(BeTrue())
 				})
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
@@ -381,32 +401,34 @@ var _ = Describe("Directory", func() {
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(block.IsLocked).To(BeTrue())
+			setID := 4
+			wayID := 0
+			Expect(c.directoryState.Sets[setID].Blocks[wayID].IsLocked).To(BeTrue())
 			Expect(trans.writeToBottom).NotTo(BeNil())
 		})
 
-		It("should stall is the block is locked", func() {
-			block.IsLocked = true
+		It("should stall if the block is locked", func() {
+			setID := 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].IsLocked = true
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 
 			madeProgress := d.Tick()
 
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall is the block is being read", func() {
-			block.ReadCount = 1
+		It("should stall if the block is being read", func() {
+			setID := 4
+			wayID := 0
+			c.directoryState.Sets[setID].Blocks[wayID].ReadCount = 1
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 
 			madeProgress := d.Tick()
 
@@ -417,8 +439,6 @@ var _ = Describe("Directory", func() {
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(false)
 
 			madeProgress := d.Tick()
@@ -426,12 +446,10 @@ var _ = Describe("Directory", func() {
 			Expect(madeProgress).To(BeFalse())
 		})
 
-		It("should stall is send to bottom failed", func() {
+		It("should stall if send to bottom failed", func() {
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(block)
 			bankBuf.EXPECT().CanPush().Return(true)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
@@ -466,8 +484,6 @@ var _ = Describe("Directory", func() {
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
 			buf.EXPECT().Peek().Return(nil)
 			buf.EXPECT().Pop()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {

@@ -82,7 +82,7 @@ func (s *bankStage) finalizeTrans() bool {
 }
 
 func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
-	block := trans.block
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
 		block.CacheAddress, trans.read.AccessByteSize)
@@ -107,7 +107,7 @@ func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
-	block := trans.block
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
 	data, err := s.cache.storage.Read(block.CacheAddress, uint64(blockSize))
@@ -139,7 +139,7 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
-	block := trans.block
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	err := s.cache.storage.Write(block.CacheAddress, trans.data)
 	if err != nil {

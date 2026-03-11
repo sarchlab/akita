@@ -1,13 +1,14 @@
 package writearound
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -36,10 +37,16 @@ var _ = Describe("Bankstage", func() {
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
-				BankLatency:   10,
-				Log2BlockSize: 6,
+				BankLatency:      10,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumSets:          16,
 			}).
 			Build("Cache")
+
+		// Initialize directoryState
+		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+
 		s = &bankStage{
 			cache:           c,
 			bankID:          0,
@@ -86,10 +93,19 @@ var _ = Describe("Bankstage", func() {
 		var (
 			preCRead1, preCRead2, postCRead    *mem.ReadReq
 			preCTrans1, preCTrans2, postCTrans *transactionState
-			block                              *cache.Block
+			blockSetID, blockWayID             int
 		)
 
 		BeforeEach(func() {
+			blockSetID = 0
+			blockWayID = 0
+
+			// Set up the block in directoryState
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount = 1
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
 			storage.Write(0x400, []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -100,11 +116,7 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				ReadCount:    1,
-			}
+
 			preCRead1 = &mem.ReadReq{}
 			preCRead1.ID = sim.GetIDGenerator().Generate()
 			preCRead1.Address = 0x104
@@ -129,7 +141,9 @@ var _ = Describe("Bankstage", func() {
 			preCTrans2 = &transactionState{read: preCRead2}
 			postCTrans = &transactionState{
 				read:       postCRead,
-				block:      block,
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionReadHit,
 				preCoalesceTransactions: []*transactionState{
 					preCTrans1, preCTrans2,
@@ -155,24 +169,26 @@ var _ = Describe("Bankstage", func() {
 			Expect(preCTrans1.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 			Expect(preCTrans2.done).To(BeTrue())
-			Expect(block.ReadCount).To(Equal(0))
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
 			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans))
 		})
 	})
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
-			trans *transactionState
-			block *cache.Block
+			write              *mem.WriteReq
+			trans              *transactionState
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				IsLocked:     true,
-			}
+			blockSetID = 0
+			blockWayID = 0
+
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			write = &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
@@ -201,7 +217,9 @@ var _ = Describe("Bankstage", func() {
 			write.TrafficClass = "req"
 			trans = &transactionState{
 				write:      write,
-				block:      block,
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionWrite,
 			}
 
@@ -218,7 +236,7 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(block.IsLocked).To(BeFalse())
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal([]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
@@ -235,19 +253,23 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write fetched", func() {
 		var (
-			trans *transactionState
-			block *cache.Block
+			trans              *transactionState
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			block = &cache.Block{
-				Tag:          0x100,
-				CacheAddress: 0x400,
-				IsLocked:     true,
-			}
+			blockSetID = 0
+			blockWayID = 0
+
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			trans = &transactionState{
-				block:      block,
+				blockSetID: blockSetID,
+				blockWayID: blockWayID,
+				hasBlock:   true,
 				bankAction: bankActionWriteFetched,
 			}
 			trans.data = []byte{
@@ -275,8 +297,7 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			// Expect(s.currTrans).To(BeNil())
-			Expect(block.IsLocked).To(BeFalse())
+			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.data))
 		})

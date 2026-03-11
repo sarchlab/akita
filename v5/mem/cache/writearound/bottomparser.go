@@ -55,21 +55,32 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 		return true
 	}
 
-	bankBuf := p.getBankBuf(trans.block)
+	bankBuf := p.getBankBuf(trans.blockSetID, trans.blockWayID)
 	if !bankBuf.CanPush() {
 		return false
 	}
 
 	pid := trans.readToBottom.PID
 	addr := trans.Address()
-	cachelineID := (addr >> p.cache.GetSpec().Log2BlockSize) << p.cache.GetSpec().Log2BlockSize
+	spec := p.cache.GetSpec()
+	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
-	dirtyMask := make([]bool, 1<<p.cache.GetSpec().Log2BlockSize)
-	mshrEntry := p.cache.mshr.Query(pid, cachelineID)
-	p.mergeMSHRData(mshrEntry, data, dirtyMask)
-	p.finalizeMSHRTrans(mshrEntry, data)
-	p.cache.mshr.Remove(pid, cachelineID)
+	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
+
+	entryIdx, found := cache.MSHRQuery(&p.cache.mshrState, pid, cachelineID)
+	if !found {
+		panic("MSHR entry not found for data ready response")
+	}
+
+	entry := &p.cache.mshrState.Entries[entryIdx]
+	blockTag := p.cache.directoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
+
+	// Resolve transaction pointers before any removals shift indices
+	entryTrans := p.resolveEntryTransactions(entry)
+	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
+	p.finalizeMSHRTrans(entryTrans, blockTag, data)
+	cache.MSHRRemove(&p.cache.mshrState, pid, cachelineID)
 
 	trans.bankAction = bankActionWriteFetched
 	trans.data = data
@@ -84,19 +95,31 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	return true
 }
 
+// resolveEntryTransactions collects the actual transaction pointers from
+// the MSHR entry's TransactionIndices. This must be done before any
+// removeTransaction calls, since those shift the slice indices.
+func (p *bottomParser) resolveEntryTransactions(
+	entry *cache.MSHREntryState,
+) []*transactionState {
+	result := make([]*transactionState, len(entry.TransactionIndices))
+	for i, transIdx := range entry.TransactionIndices {
+		result[i] = p.cache.postCoalesceTransactions[transIdx]
+	}
+	return result
+}
+
 func (p *bottomParser) mergeMSHRData(
-	mshrEntry *cache.MSHREntry,
+	entryTrans []*transactionState,
+	blockTag uint64,
 	data []byte,
 	dirtyMask []bool,
 ) {
-	for _, t := range mshrEntry.Requests {
-		trans := t.(*transactionState)
-
+	for _, trans := range entryTrans {
 		if trans.write == nil {
 			continue
 		}
 
-		offset := trans.write.Address - mshrEntry.Block.Tag
+		offset := trans.write.Address - blockTag
 
 		for i := 0; i < len(trans.write.Data); i++ {
 			if trans.write.DirtyMask[i] {
@@ -108,14 +131,14 @@ func (p *bottomParser) mergeMSHRData(
 }
 
 func (p *bottomParser) finalizeMSHRTrans(
-	mshrEntry *cache.MSHREntry,
+	entryTrans []*transactionState,
+	blockTag uint64,
 	data []byte,
 ) {
-	for _, t := range mshrEntry.Requests {
-		trans := t.(*transactionState)
+	for _, trans := range entryTrans {
 		if trans.read != nil {
 			for _, preCTrans := range trans.preCoalesceTransactions {
-				offset := preCTrans.read.Address - mshrEntry.Block.Tag
+				offset := preCTrans.read.Address - blockTag
 				preCTrans.data = data[offset : offset+preCTrans.read.AccessByteSize]
 				preCTrans.done = true
 			}
@@ -167,9 +190,9 @@ func (p *bottomParser) removeTransaction(trans *transactionState) {
 	}
 }
 
-func (p *bottomParser) getBankBuf(block *cache.Block) queueing.Buffer {
+func (p *bottomParser) getBankBuf(setID, wayID int) queueing.Buffer {
 	numWaysPerSet := p.cache.GetSpec().WayAssociativity
-	blockID := block.SetID*numWaysPerSet + block.WayID
+	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(p.cache.bankBufs)
 
 	return p.cache.bankBufs[bankID]

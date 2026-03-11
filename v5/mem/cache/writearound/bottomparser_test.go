@@ -1,14 +1,15 @@
 package writearound
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -17,7 +18,6 @@ var _ = Describe("Bottom Parser", func() {
 		mockCtrl   *gomock.Controller
 		bottomPort *MockPort
 		bankBuf    *MockBuffer
-		mshr       *MockMSHR
 		p          *bottomParser
 		c          *middleware
 	)
@@ -26,10 +26,8 @@ var _ = Describe("Bottom Parser", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		bottomPort = NewMockPort(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
 		c = &middleware{
 			bottomPort: bottomPort,
-			mshr:       mshr,
 			bankBufs:   []queueing.Buffer{bankBuf},
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
@@ -38,8 +36,14 @@ var _ = Describe("Bottom Parser", func() {
 			WithSpec(Spec{
 				Log2BlockSize:    6,
 				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				NumSets:          16,
 			}).
 			Build("Cache")
+
+		// Initialize directoryState
+		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+
 		p = &bottomParser{cache: c}
 	})
 
@@ -112,10 +116,9 @@ var _ = Describe("Bottom Parser", func() {
 			postCRead                *mem.ReadReq
 			postCWrite               *mem.WriteReq
 			readToBottom             *mem.ReadReq
-			block                    *cache.Block
 			postCTrans1, postCTrans2 *transactionState
-			mshrEntry                *cache.MSHREntry
 			dataReady                *mem.DataReadyRsp
+			blockSetID, blockWayID   int
 		)
 
 		BeforeEach(func() {
@@ -188,12 +191,19 @@ var _ = Describe("Bottom Parser", func() {
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
 			dataReady.TrafficClass = "rsp"
-			block = &cache.Block{
-				PID: 1,
-				Tag: 0x100,
-			}
+
+			// Set up a block in directory to serve as the MSHR block reference
+			// setID for addr 0x100 with blockSize=64: (0x100/64) % 16 = 4
+			blockSetID = 4
+			blockWayID = 0
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].PID = 1
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
 			postCTrans1 = &transactionState{
-				block:        block,
+				blockSetID:   blockSetID,
+				blockWayID:   blockWayID,
+				hasBlock:     true,
 				read:         postCRead,
 				readToBottom: readToBottom,
 				preCoalesceTransactions: []*transactionState{
@@ -225,13 +235,16 @@ var _ = Describe("Bottom Parser", func() {
 				},
 			}
 
-			mshrEntry = &cache.MSHREntry{
-				Block: block,
-			}
-			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans1)
+			// Set up MSHR entry with block reference and postCTrans1
+			entryIdx := cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), uint64(0x100))
+			entry := &c.mshrState.Entries[entryIdx]
+			entry.HasBlock = true
+			entry.BlockSetID = blockSetID
+			entry.BlockWayID = blockWayID
+			entry.TransactionIndices = append(entry.TransactionIndices, 0) // postCTrans1 idx
 		})
 
-		It("should stall is bank is busy", func() {
+		It("should stall if bank is busy", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bankBuf.EXPECT().CanPush().Return(false)
 
@@ -243,8 +256,6 @@ var _ = Describe("Bottom Parser", func() {
 		It("should send transaction to bank", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
-			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
 				Do(func(trans *transactionState) {
@@ -263,14 +274,15 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should combine write", func() {
-			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans2)
+			// Add postCTrans2 as another MSHR request
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans2)
+			entryIdx, _ := cache.MSHRQuery(&c.mshrState, vm.PID(1), uint64(0x100))
+			c.mshrState.Entries[entryIdx].TransactionIndices = append(
+				c.mshrState.Entries[entryIdx].TransactionIndices, 1) // postCTrans2 idx
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
-			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
 				Do(func(trans *transactionState) {
