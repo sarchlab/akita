@@ -7,14 +7,16 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// TrafficMsgPayload is the payload for a traffic message used in acceptance tests.
-type TrafficMsgPayload struct{}
+// TrafficMsg is a concrete message type used in acceptance tests.
+type TrafficMsg struct {
+	sim.MsgMeta
+}
 
 // Test is a test case.
 type Test struct {
 	agents            []*Agent
-	msgs              []*sim.GenericMsg
-	receivedMsgs      []*sim.GenericMsg
+	msgs              []*TrafficMsg
+	receivedMsgs      []*TrafficMsg
 	receivedMsgsTable map[string]bool
 }
 
@@ -49,26 +51,25 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPortID := rand.Intn(len(dstAgent.AgentPorts))
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
-		msg := &sim.GenericMsg{
+		msg := &TrafficMsg{
 			MsgMeta: sim.MsgMeta{
 				ID:           sim.GetIDGenerator().Generate(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
 				TrafficBytes: rand.Intn(4096),
 			},
-			Payload: &TrafficMsgPayload{},
 		}
 		srcAgent.MsgsToSend = append(srcAgent.MsgsToSend, msg)
 		t.registerMsg(msg)
 	}
 }
 
-func (t *Test) registerMsg(msg *sim.GenericMsg) {
+func (t *Test) registerMsg(msg *TrafficMsg) {
 	t.msgs = append(t.msgs, msg)
 }
 
 // receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg *sim.GenericMsg, recvPort sim.Port) {
+func (t *Test) receiveMsg(msg *TrafficMsg, recvPort sim.Port) {
 	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
 	t.msgMustNotBeReceivedBefore(msg)
 
@@ -76,7 +77,7 @@ func (t *Test) receiveMsg(msg *sim.GenericMsg, recvPort sim.Port) {
 }
 
 func (t *Test) msgMustBeReceivedAtItsDestination(
-	msg *sim.GenericMsg,
+	msg *TrafficMsg,
 	recvPort sim.Port,
 ) {
 	if msg.Dst != recvPort.AsRemote() {
@@ -84,7 +85,7 @@ func (t *Test) msgMustBeReceivedAtItsDestination(
 	}
 }
 
-func (t *Test) msgMustNotBeReceivedBefore(msg *sim.GenericMsg) {
+func (t *Test) msgMustNotBeReceivedBefore(msg *TrafficMsg) {
 	if _, found := t.receivedMsgsTable[msg.ID]; found {
 		panic("msg is double delivered")
 	}

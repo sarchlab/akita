@@ -6,8 +6,12 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-func newTestMsg() *sim.GenericMsg {
-	return &sim.GenericMsg{
+type testMsg struct {
+	sim.MsgMeta
+}
+
+func newTestMsg() *testMsg {
+	return &testMsg{
 		MsgMeta: sim.MsgMeta{
 			ID: sim.GetIDGenerator().Generate(),
 		},

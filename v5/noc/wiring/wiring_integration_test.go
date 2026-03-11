@@ -9,8 +9,9 @@ import (
 	"github.com/sarchlab/akita/v5/simulation"
 )
 
-// samplePayload is a simple payload type for testing
-type samplePayload struct {
+// sampleMsg is a concrete message type for testing
+type sampleMsg struct {
+	sim.MsgMeta
 	sendTime sim.VTimeInSec
 }
 
@@ -19,13 +20,13 @@ type wireTestComponent struct {
 	*sim.TickingComponent
 
 	port         *Port
-	msgsToSend   []*sim.GenericMsg
+	msgsToSend   []*sampleMsg
 	msgsReceived []sim.Msg
 }
 
 func newWireTestComponent(engine sim.Engine, name string) *wireTestComponent {
 	c := &wireTestComponent{
-		msgsToSend:   make([]*sim.GenericMsg, 0),
+		msgsToSend:   make([]*sampleMsg, 0),
 		msgsReceived: make([]sim.Msg, 0),
 	}
 
@@ -47,14 +48,14 @@ func (c *wireTestComponent) Tick() bool {
 		madeProgress = true
 
 		now := c.CurrentTime()
-		payload := rawMsg.(*sim.GenericMsg).Payload.(*samplePayload)
-		Expect(payload.sendTime).To(Equal(now - 1))
+		msg := rawMsg.(*sampleMsg)
+		Expect(msg.sendTime).To(Equal(now - 1))
 	}
 
 	// Try to send messages
 	if len(c.msgsToSend) > 0 {
 		msg := c.msgsToSend[0]
-		msg.Payload.(*samplePayload).sendTime = c.CurrentTime()
+		msg.sendTime = c.CurrentTime()
 
 		err := c.port.Send(c.msgsToSend[0])
 		if err == nil {
@@ -94,13 +95,12 @@ var _ = Describe("Wire Integration", func() {
 	It("should deliver messages one cycle after they are sent", func() {
 		// Create 10 messages to send
 		for i := 0; i < 10; i++ {
-			msg := &sim.GenericMsg{
+			msg := &sampleMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp1.port.AsRemote(),
 					Dst: comp2.port.AsRemote(),
 				},
-				Payload: &samplePayload{},
 			}
 			comp1.msgsToSend = append(comp1.msgsToSend, msg)
 		}
@@ -117,23 +117,21 @@ var _ = Describe("Wire Integration", func() {
 	It("should handle bidirectional message passing", func() {
 		// Create messages in both directions
 		for i := 0; i < 5; i++ {
-			msg1 := &sim.GenericMsg{
+			msg1 := &sampleMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp1.port.AsRemote(),
 					Dst: comp2.port.AsRemote(),
 				},
-				Payload: &samplePayload{},
 			}
 			comp1.msgsToSend = append(comp1.msgsToSend, msg1)
 
-			msg2 := &sim.GenericMsg{
+			msg2 := &sampleMsg{
 				MsgMeta: sim.MsgMeta{
 					ID:  sim.GetIDGenerator().Generate(),
 					Src: comp2.port.AsRemote(),
 					Dst: comp1.port.AsRemote(),
 				},
-				Payload: &samplePayload{},
 			}
 			comp2.msgsToSend = append(comp2.msgsToSend, msg2)
 		}
