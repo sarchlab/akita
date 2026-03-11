@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"reflect"
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
@@ -520,13 +521,15 @@ func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
 
 	flits := make([]*messaging.Flit, numFlit)
 	for i := 0; i < numFlit; i++ {
-		flits[i] = messaging.FlitBuilder{}.
-			WithSrc(m.NetworkPort.AsRemote()).
-			WithDst(m.DefaultSwitchDst).
-			WithSeqID(i).
-			WithNumFlitInMsg(numFlit).
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", i, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.Src = m.NetworkPort.AsRemote()
+		flit.Dst = m.DefaultSwitchDst
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.SeqID = i
+		flit.NumFlitInMsg = numFlit
+		flit.Msg = msg
+		flits[i] = flit
 	}
 
 	return flits

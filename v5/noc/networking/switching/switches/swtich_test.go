@@ -2,6 +2,7 @@ package switches
 
 import (
 	"fmt"
+	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -95,10 +96,11 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithDst(port1.AsRemote()).
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.Dst = port1.AsRemote()
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port1.EXPECT().RetrieveIncoming()
@@ -126,10 +128,11 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithDst(port1.AsRemote()).
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.Dst = port1.AsRemote()
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
@@ -162,9 +165,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		pipelineItem := flitPipelineItem{taskID: "flit", flit: flit}
 		routeBuffer1.EXPECT().Peek().Return(pipelineItem)
@@ -192,9 +196,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		pipelineItem := flitPipelineItem{taskID: "flit", flit: flit}
 		routeBuffer1.EXPECT().Peek().Return(pipelineItem)
@@ -216,9 +221,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
@@ -246,9 +252,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
@@ -274,9 +281,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
 		sendOutBuffer2.EXPECT().Peek().Return(flit)
@@ -301,9 +309,10 @@ var _ = Describe("Switch", func() {
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := messaging.FlitBuilder{}.
-			WithMsg(msg).
-			Build()
+		flit := &messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.TrafficClass = reflect.TypeOf(msg).String()
+		flit.Msg = msg
 
 		sendOutBuffer1.EXPECT().Peek().Return(nil).AnyTimes()
 		sendOutBuffer2.EXPECT().Peek().Return(flit)

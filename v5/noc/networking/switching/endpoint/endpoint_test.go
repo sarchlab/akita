@@ -1,6 +1,9 @@
 package endpoint
 
 import (
+	"fmt"
+	"reflect"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/messaging"
@@ -105,16 +108,18 @@ var _ = Describe("End Point", func() {
 			Dst: devicePort.AsRemote(),
 		}
 
-		flit0 := messaging.FlitBuilder{}.
-			WithSeqID(0).
-			WithNumFlitInMsg(2).
-			WithMsg(msg).
-			Build()
-		flit1 := messaging.FlitBuilder{}.
-			WithSeqID(1).
-			WithNumFlitInMsg(2).
-			WithMsg(msg).
-			Build()
+		flit0 := &messaging.Flit{}
+		flit0.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit0.TrafficClass = reflect.TypeOf(msg).String()
+		flit0.SeqID = 0
+		flit0.NumFlitInMsg = 2
+		flit0.Msg = msg
+		flit1 := &messaging.Flit{}
+		flit1.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 1, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit1.TrafficClass = reflect.TypeOf(msg).String()
+		flit1.SeqID = 1
+		flit1.NumFlitInMsg = 2
+		flit1.Msg = msg
 
 		networkPort.EXPECT().PeekIncoming().Return(flit0)
 		networkPort.EXPECT().PeekIncoming().Return(flit1)
