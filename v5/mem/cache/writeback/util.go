@@ -1,7 +1,6 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -16,8 +15,8 @@ func getCacheLineID(
 	return
 }
 
-func bankID(block *cache.Block, wayAssocitivity, numBanks int) int {
-	return (block.SetID*wayAssocitivity + block.WayID) % numBanks
+func bankID(setID, wayID, wayAssociativity, numBanks int) int {
+	return (setID*wayAssociativity + wayID) % numBanks
 }
 
 func clearPort(p sim.Port) {

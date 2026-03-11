@@ -8,10 +8,16 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-type flusher struct {
-	cache *Comp
+// blockRef is a set+way pair referencing a block in the directory.
+type blockRef struct {
+	SetID int `json:"set_id"`
+	WayID int `json:"way_id"`
+}
 
-	blockToEvict    []*cache.Block
+type flusher struct {
+	cache *middleware
+
+	blockToEvict    []blockRef
 	processingFlush *cache.FlushReq
 }
 
@@ -47,15 +53,15 @@ func (f *flusher) existInflightTransaction() bool {
 }
 
 func (f *flusher) prepareBlockToFlushList() {
-	sets := f.cache.directory.GetSets()
-	for _, set := range sets {
-		for _, block := range set.Blocks {
+	for setID, set := range f.cache.directoryState.Sets {
+		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
 				panic("all the blocks should be unlocked before flushing")
 			}
 
 			if block.IsValid && block.IsDirty {
-				f.blockToEvict = append(f.blockToEvict, block)
+				f.blockToEvict = append(f.blockToEvict,
+					blockRef{SetID: setID, WayID: wayID})
 			}
 		}
 	}
@@ -66,10 +72,11 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	block := f.blockToEvict[0]
+	ref := f.blockToEvict[0]
+	block := &f.cache.directoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
-		block,
-		f.cache.directory.WayAssociativity(),
+		ref.SetID, ref.WayID,
+		f.cache.wayAssociativity,
 		len(f.cache.dirToBankBuffers))
 	bankBuf := f.cache.dirToBankBuffers[bankNum]
 
@@ -77,12 +84,18 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	trans := &transaction{
+	trans := &transactionState{
 		flush:             f.processingFlush,
-		victim:            block,
+		hasVictim:         true,
+		victimPID:         0,
+		victimTag:         block.Tag,
+		victimCacheAddress: block.CacheAddress,
 		action:            bankEvict,
 		evictingAddr:      block.Tag,
 		evictingDirtyMask: block.DirtyMask,
+		blockSetID:        ref.SetID,
+		blockWayID:        ref.WayID,
+		hasBlock:          true,
 	}
 	bankBuf.Push(trans)
 
@@ -167,8 +180,14 @@ func (f *flusher) finalizeFlushing() bool {
 	rsp.TrafficClass = "cache.FlushRsp"
 	f.cache.controlPort.Send(rsp)
 
-	f.cache.mshr.Reset()
-	f.cache.directory.Reset()
+	// Reset MSHR and directory state
+	f.cache.mshrState = cache.MSHRState{}
+	cache.DirectoryReset(
+		&f.cache.directoryState,
+		f.cache.numSets,
+		f.cache.wayAssociativity,
+		f.cache.blockSize,
+	)
 
 	if f.processingFlush.PauseAfterFlushing {
 		f.cache.state = cacheStatePaused

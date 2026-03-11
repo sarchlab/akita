@@ -195,50 +195,64 @@ func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 }
 
 // Build creates a usable writeback cache.
-func (b Builder) Build(name string) *Comp {
-	modelComp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithSpec(Spec{}).
-		Build(name)
-
-	cache := &Comp{Component: modelComp}
-
-	b.configureCache(cache)
-	b.createPorts(cache)
-	b.createInternalStages(cache)
-	b.createInternalBuffers(cache)
-
-	middleware := &middleware{Comp: cache}
-	cache.AddMiddleware(middleware)
-
-	return cache
-}
-
-func (b *Builder) configureCache(cacheModule *Comp) {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	blockSize := 1 << b.log2BlockSize
-	vimctimFinder := cache.NewLRUVictimFinder()
-	numSet := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
-	directory := cache.NewDirectory(
-		numSet, b.wayAssociativity, blockSize, vimctimFinder)
+	numSets := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
 
-	if b.interleaving {
-		directory.AddrConverter = &mem.InterleavingConverter{
-			InterleavingSize: uint64(b.numInterleavingBlock) *
-				(1 << b.log2BlockSize),
-			TotalNumOfElements:  b.interleavingUnitCount,
-			CurrentElementIndex: b.interleavingUnitIndex,
-		}
+	spec := Spec{
+		NumReqPerCycle:      b.numReqPerCycle,
+		Log2BlockSize:       b.log2BlockSize,
+		BankLatency:         b.bankLatency,
+		WayAssociativity:    b.wayAssociativity,
+		NumBanks:            1,
+		NumSets:             numSets,
+		NumMSHREntry:        b.numMSHREntry,
+		TotalByteSize:       b.byteSize,
+		DirLatency:          b.dirLatency,
+		WriteBufferCapacity: b.writeBufferCapacity,
+		MaxInflightFetch:    b.maxInflightFetch,
+		MaxInflightEviction: b.maxInflightEviction,
 	}
 
-	mshr := cache.NewMSHR(b.numMSHREntry)
-	storage := mem.NewStorage(b.byteSize)
+	comp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
 
-	cacheModule.log2BlockSize = b.log2BlockSize
-	cacheModule.numReqPerCycle = b.numReqPerCycle
-	cacheModule.directory = directory
-	cacheModule.mshr = mshr
-	cacheModule.storage = storage
+	m := &middleware{
+		comp:             comp,
+		log2BlockSize:    b.log2BlockSize,
+		numReqPerCycle:   b.numReqPerCycle,
+		wayAssociativity: b.wayAssociativity,
+		numMSHREntry:     b.numMSHREntry,
+		numSets:          numSets,
+		blockSize:        blockSize,
+		state:            cacheStateRunning,
+		evictingList:     make(map[uint64]bool),
+	}
+
+	b.createPorts(m, comp)
+	b.configureCache(m)
+	b.createInternalStages(m)
+	b.createInternalBuffers(m)
+
+	comp.AddMiddleware(m)
+
+	return comp
+}
+
+func (b *Builder) configureCache(m *middleware) {
+	// Initialize DirectoryState using free function
+	cache.DirectoryReset(
+		&m.directoryState,
+		m.numSets,
+		b.wayAssociativity,
+		m.blockSize,
+	)
+
+	// MSHRState starts empty, no initialization needed
+	m.storage = mem.NewStorage(b.byteSize)
 
 	if b.addressToPortMapper == nil {
 		panic(
@@ -247,42 +261,40 @@ func (b *Builder) configureCache(cacheModule *Comp) {
 		)
 	}
 
-	cacheModule.addressToPortMapper = b.addressToPortMapper
-	cacheModule.state = cacheStateRunning
-	cacheModule.evictingList = make(map[uint64]bool)
+	m.addressToPortMapper = b.addressToPortMapper
 }
 
-func (b *Builder) createPorts(cache *Comp) {
-	cache.topPort = b.topPort
-	cache.topPort.SetComponent(cache)
-	cache.AddPort("Top", cache.topPort)
+func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, State]) {
+	m.topPort = b.topPort
+	m.topPort.SetComponent(comp)
+	comp.AddPort("Top", m.topPort)
 
-	cache.bottomPort = b.bottomPort
-	cache.bottomPort.SetComponent(cache)
-	cache.AddPort("Bottom", cache.bottomPort)
+	m.bottomPort = b.bottomPort
+	m.bottomPort.SetComponent(comp)
+	comp.AddPort("Bottom", m.bottomPort)
 
-	cache.controlPort = b.controlPort
-	cache.controlPort.SetComponent(cache)
-	cache.AddPort("Control", cache.controlPort)
+	m.controlPort = b.controlPort
+	m.controlPort.SetComponent(comp)
+	comp.AddPort("Control", m.controlPort)
 }
 
-func (b *Builder) createInternalStages(cache *Comp) {
-	cache.topParser = &topParser{cache: cache}
-	b.buildDirectoryStage(cache)
-	b.buildBankStages(cache)
-	cache.mshrStage = &mshrStage{cache: cache}
-	cache.flusher = &flusher{cache: cache}
-	cache.writeBuffer = &writeBufferStage{
-		cache:               cache,
+func (b *Builder) createInternalStages(m *middleware) {
+	m.topParser = &topParser{cache: m}
+	b.buildDirectoryStage(m)
+	b.buildBankStages(m)
+	m.mshrStage = &mshrStage{cache: m}
+	m.flusher = &flusher{cache: m}
+	m.writeBuffer = &writeBufferStage{
+		cache:               m,
 		writeBufferCapacity: b.writeBufferCapacity,
 		maxInflightFetch:    b.maxInflightFetch,
 		maxInflightEviction: b.maxInflightEviction,
 	}
 }
 
-func (b *Builder) buildDirectoryStage(cache *Comp) {
+func (b *Builder) buildDirectoryStage(m *middleware) {
 	buf := queueing.NewBuffer(
-		cache.Name()+".DirectoryStageBuffer",
+		m.comp.Name()+".DirectoryStageBuffer",
 		b.numReqPerCycle,
 	)
 	pipeline := queueing.
@@ -291,16 +303,16 @@ func (b *Builder) buildDirectoryStage(cache *Comp) {
 		WithNumStage(b.dirLatency).
 		WithPipelineWidth(b.numReqPerCycle).
 		WithPostPipelineBuffer(buf).
-		Build(cache.Name() + ".BankPipeline")
-	cache.dirStage = &directoryStage{
-		cache:    cache,
+		Build(m.comp.Name() + ".BankPipeline")
+	m.dirStage = &directoryStage{
+		cache:    m,
 		pipeline: pipeline,
 		buf:      buf,
 	}
 }
 
-func (b *Builder) buildBankStages(cache *Comp) {
-	cache.bankStages = make([]*bankStage, 1)
+func (b *Builder) buildBankStages(m *middleware) {
+	m.bankStages = make([]*bankStage, 1)
 
 	laneWidth := b.numReqPerCycle
 	if laneWidth == 1 {
@@ -308,7 +320,7 @@ func (b *Builder) buildBankStages(cache *Comp) {
 	}
 
 	buf := queueing.NewBuffer(
-		fmt.Sprintf("%s.Bank.PostPipelineBuffer", cache.Name()),
+		fmt.Sprintf("%s.Bank.PostPipelineBuffer", m.comp.Name()),
 		laneWidth,
 	)
 	pipeline := queueing.
@@ -317,9 +329,9 @@ func (b *Builder) buildBankStages(cache *Comp) {
 		WithNumStage(b.bankLatency).
 		WithPipelineWidth(laneWidth).
 		WithPostPipelineBuffer(buf).
-		Build(fmt.Sprintf("%s.Bank.Pipeline", cache.Name()))
-	cache.bankStages[0] = &bankStage{
-		cache:           cache,
+		Build(fmt.Sprintf("%s.Bank.Pipeline", m.comp.Name()))
+	m.bankStages[0] = &bankStage{
+		cache:           m,
 		bankID:          0,
 		pipeline:        pipeline,
 		postPipelineBuf: buf,
@@ -327,27 +339,27 @@ func (b *Builder) buildBankStages(cache *Comp) {
 	}
 }
 
-func (b *Builder) createInternalBuffers(cache *Comp) {
-	cache.dirStageBuffer = queueing.NewBuffer(
-		cache.Name()+".DirStageBuffer",
-		cache.numReqPerCycle,
+func (b *Builder) createInternalBuffers(m *middleware) {
+	m.dirStageBuffer = queueing.NewBuffer(
+		m.comp.Name()+".DirStageBuffer",
+		m.numReqPerCycle,
 	)
-	cache.dirToBankBuffers = make([]queueing.Buffer, 1)
-	cache.dirToBankBuffers[0] = queueing.NewBuffer(
-		cache.Name()+".DirToBankBuffer",
-		cache.numReqPerCycle,
+	m.dirToBankBuffers = make([]queueing.Buffer, 1)
+	m.dirToBankBuffers[0] = queueing.NewBuffer(
+		m.comp.Name()+".DirToBankBuffer",
+		m.numReqPerCycle,
 	)
-	cache.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
-	cache.writeBufferToBankBuffers[0] = queueing.NewBuffer(
-		cache.Name()+".WriteBufferToBankBuffer",
-		cache.numReqPerCycle,
+	m.writeBufferToBankBuffers = make([]queueing.Buffer, 1)
+	m.writeBufferToBankBuffers[0] = queueing.NewBuffer(
+		m.comp.Name()+".WriteBufferToBankBuffer",
+		m.numReqPerCycle,
 	)
-	cache.mshrStageBuffer = queueing.NewBuffer(
-		cache.Name()+".MSHRStageBuffer",
-		cache.numReqPerCycle,
+	m.mshrStageBuffer = queueing.NewBuffer(
+		m.comp.Name()+".MSHRStageBuffer",
+		m.numReqPerCycle,
 	)
-	cache.writeBufferBuffer = queueing.NewBuffer(
-		cache.Name()+".WriteBufferBuffer",
-		cache.numReqPerCycle,
+	m.writeBufferBuffer = queueing.NewBuffer(
+		m.comp.Name()+".WriteBufferBuffer",
+		m.numReqPerCycle,
 	)
 }

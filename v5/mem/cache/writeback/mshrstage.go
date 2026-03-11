@@ -1,20 +1,21 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mshrStage struct {
-	cache *Comp
+	cache *middleware
 
-	processingMSHREntry *cache.MSHREntry
+	// processingMSHREntryIdx stores the index into mshrState.Entries
+	hasProcessingMSHREntry bool
+	processingMSHREntryIdx int
 }
 
 func (s *mshrStage) Tick() bool {
-	if s.processingMSHREntry != nil {
+	if s.hasProcessingMSHREntry {
 		return s.processOneReq()
 	}
 
@@ -23,13 +24,15 @@ func (s *mshrStage) Tick() bool {
 		return false
 	}
 
-	s.processingMSHREntry = item.(*cache.MSHREntry)
+	s.hasProcessingMSHREntry = true
+	s.processingMSHREntryIdx = item.(int)
 
 	return s.processOneReq()
 }
 
 func (s *mshrStage) Reset() {
-	s.processingMSHREntry = nil
+	s.hasProcessingMSHREntry = false
+	s.processingMSHREntryIdx = 0
 	s.cache.mshrStageBuffer.Clear()
 }
 
@@ -38,8 +41,25 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	mshrEntry := s.processingMSHREntry
-	trans := mshrEntry.Requests[0].(*transaction)
+	mshrEntry := &s.cache.mshrState.Entries[s.processingMSHREntryIdx]
+
+	if len(mshrEntry.TransactionIndices) == 0 {
+		s.hasProcessingMSHREntry = false
+		return true
+	}
+
+	transIdx := mshrEntry.TransactionIndices[0]
+
+	if transIdx < 0 || transIdx >= len(s.cache.inFlightTransactions) {
+		// Invalid index, skip
+		mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
+		if len(mshrEntry.TransactionIndices) == 0 {
+			s.hasProcessingMSHREntry = false
+		}
+		return true
+	}
+
+	trans := s.cache.inFlightTransactions[transIdx]
 
 	transactionPresent := s.findTransaction(trans)
 
@@ -52,17 +72,17 @@ func (s *mshrStage) processOneReq() bool {
 			s.respondWrite(trans.write)
 		}
 
-		mshrEntry.Requests = mshrEntry.Requests[1:]
-		if len(mshrEntry.Requests) == 0 {
-			s.processingMSHREntry = nil
+		mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
+		if len(mshrEntry.TransactionIndices) == 0 {
+			s.hasProcessingMSHREntry = false
 		}
 
 		return true
 	}
 
-	mshrEntry.Requests = mshrEntry.Requests[1:]
-	if len(mshrEntry.Requests) == 0 {
-		s.processingMSHREntry = nil
+	mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
+	if len(mshrEntry.TransactionIndices) == 0 {
+		s.hasProcessingMSHREntry = false
 	}
 
 	return true
@@ -100,7 +120,7 @@ func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 	tracing.TraceReqComplete(write, s.cache)
 }
 
-func (s *mshrStage) removeTransaction(trans *transaction) {
+func (s *mshrStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			s.cache.inFlightTransactions = append(
@@ -114,7 +134,7 @@ func (s *mshrStage) removeTransaction(trans *transaction) {
 	panic("transaction not found")
 }
 
-func (s *mshrStage) findTransaction(trans *transaction) bool {
+func (s *mshrStage) findTransaction(trans *transactionState) bool {
 	for _, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			return true

@@ -11,7 +11,7 @@ import (
 )
 
 type bankStage struct {
-	cache  *Comp
+	cache  *middleware
 	bankID int
 
 	pipeline           queueing.Pipeline
@@ -24,7 +24,7 @@ type bankStage struct {
 }
 
 type bankPipelineElem struct {
-	trans *transaction
+	trans *transactionState
 }
 
 func (e bankPipelineElem) TaskID() string {
@@ -61,7 +61,7 @@ func (s *bankStage) pullFromBuf() bool {
 
 	trans := inBuf.Pop()
 	if trans != nil {
-		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
+		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transactionState)})
 
 		s.inflightTransCount++
 
@@ -82,14 +82,14 @@ func (s *bankStage) pullFromBuf() bool {
 	trans = inBuf.Pop()
 
 	if trans != nil {
-		t := trans.(*transaction)
+		t := trans.(*transactionState)
 
 		if t.action == writeBufferFetch {
 			s.cache.writeBufferBuffer.Push(trans)
 			return true
 		}
 
-		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transaction)})
+		s.pipeline.Accept(bankPipelineElem{trans: t})
 
 		s.inflightTransCount++
 
@@ -138,7 +138,7 @@ func (s *bankStage) finalizeTrans() bool {
 	return false
 }
 
-func (s *bankStage) finalizeReadHit(trans *transaction) bool {
+func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	if !s.cache.topPort.CanSend() {
 		return false
 	}
@@ -146,7 +146,7 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	read := trans.read
 	addr := read.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
-	block := trans.block
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
 		block.CacheAddress+offset, read.AccessByteSize)
@@ -175,7 +175,7 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	return true
 }
 
-func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
+func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	if !s.cache.topPort.CanSend() {
 		return false
 	}
@@ -183,7 +183,7 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	write := trans.write
 	addr := write.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
-	block := trans.block
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	dirtyMask := s.writeData(block, write, offset)
 
@@ -212,7 +212,7 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 }
 
 func (s *bankStage) writeData(
-	block *cache.Block,
+	block *cache.BlockState,
 	write *mem.WriteReq,
 	offset uint64,
 ) []bool {
@@ -244,15 +244,20 @@ func (s *bankStage) writeData(
 }
 
 func (s *bankStage) finalizeBankWriteFetched(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	if !s.cache.mshrStageBuffer.CanPush() {
 		return false
 	}
 
-	mshrEntry := trans.mshrEntry
-	block := mshrEntry.Block
-	s.cache.mshrStageBuffer.Push(mshrEntry)
+	if !trans.hasMSHREntry {
+		panic("bankWriteFetched without MSHR entry")
+	}
+
+	mshrEntry := &s.cache.mshrState.Entries[trans.mshrEntryIndex]
+	block := &s.cache.directoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
+
+	s.cache.mshrStageBuffer.Push(trans.mshrEntryIndex)
 
 	err := s.cache.storage.Write(block.CacheAddress, mshrEntry.Data)
 	if err != nil {
@@ -267,7 +272,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 	return true
 }
 
-func (s *bankStage) removeTransaction(trans *transaction) {
+func (s *bankStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			s.cache.inFlightTransactions = append(
@@ -278,7 +283,7 @@ func (s *bankStage) removeTransaction(trans *transaction) {
 		}
 	}
 
-	now := s.cache.Engine.CurrentTime()
+	now := s.cache.comp.Engine.CurrentTime()
 
 	fmt.Printf("%.10f, %s, Transaction %s not found\n",
 		now, s.cache.Name(), trans.id)
@@ -287,16 +292,14 @@ func (s *bankStage) removeTransaction(trans *transaction) {
 }
 
 func (s *bankStage) finalizeBankEviction(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	if !s.cache.writeBufferBuffer.CanPush() {
 		return false
 	}
 
-	victim := trans.victim
-
 	data, err := s.cache.storage.Read(
-		victim.CacheAddress, 1<<s.cache.log2BlockSize)
+		trans.victimCacheAddress, 1<<s.cache.log2BlockSize)
 	if err != nil {
 		panic(err)
 	}

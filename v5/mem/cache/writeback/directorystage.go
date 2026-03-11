@@ -12,7 +12,7 @@ import (
 )
 
 type dirPipelineItem struct {
-	trans *transaction
+	trans *transactionState
 }
 
 func (i dirPipelineItem) TaskID() string {
@@ -20,7 +20,7 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directoryStage struct {
-	cache    *Comp
+	cache    *middleware
 	pipeline queueing.Pipeline
 	buf      queueing.Buffer
 }
@@ -77,7 +77,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			break
 		}
 
-		trans := item.(*transaction)
+		trans := item.(*transactionState)
 		ds.pipeline.Accept(dirPipelineItem{trans})
 		ds.cache.dirStageBuffer.Pop()
 
@@ -93,29 +93,36 @@ func (ds *directoryStage) Reset() {
 	ds.cache.dirStageBuffer.Clear()
 }
 
-func (ds *directoryStage) doRead(trans *transaction) bool {
+func (ds *directoryStage) doRead(trans *transactionState) bool {
 	read := trans.read
 	cachelineID, _ := getCacheLineID(read.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(read.PID, cachelineID)
-	if mshrEntry != nil {
-		return ds.handleReadMSHRHit(trans, mshrEntry)
+	mshrIdx, found := cache.MSHRQuery(
+		&ds.cache.mshrState, read.PID, cachelineID)
+	if found {
+		return ds.handleReadMSHRHit(trans, mshrIdx)
 	}
 
-	block := ds.cache.directory.Lookup(read.PID, cachelineID)
-	if block != nil {
-		return ds.handleReadHit(trans, block)
+	setID, wayID, blockFound := cache.DirectoryLookup(
+		&ds.cache.directoryState,
+		ds.cache.numSets, ds.cache.blockSize,
+		read.PID, cachelineID)
+	if blockFound {
+		return ds.handleReadHit(trans, setID, wayID)
 	}
 
 	return ds.handleReadMiss(trans)
 }
 
 func (ds *directoryStage) handleReadMSHRHit(
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
+	trans *transactionState,
+	mshrIdx int,
 ) bool {
-	trans.mshrEntry = mshrEntry
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	trans.mshrEntryIndex = mshrIdx
+	trans.hasMSHREntry = true
+	ds.cache.mshrState.Entries[mshrIdx].TransactionIndices = append(
+		ds.cache.mshrState.Entries[mshrIdx].TransactionIndices,
+		ds.findTransIndex(trans))
 
 	ds.buf.Pop()
 
@@ -129,9 +136,10 @@ func (ds *directoryStage) handleReadMSHRHit(
 }
 
 func (ds *directoryStage) handleReadHit(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
 		return false
 	}
@@ -142,24 +150,29 @@ func (ds *directoryStage) handleReadHit(
 		"read-hit",
 	)
 
-	return ds.readFromBank(trans, block)
+	return ds.readFromBank(trans, setID, wayID)
 }
 
-func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
+func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 	read := trans.read
 	cacheLineID, _ := getCacheLineID(read.Address, ds.cache.log2BlockSize)
 
-	if ds.cache.mshr.IsFull() {
+	if cache.MSHRIsFull(&ds.cache.mshrState, ds.cache.numMSHREntry) {
 		return false
 	}
 
-	victim := ds.cache.directory.FindVictim(cacheLineID)
+	victimSetID, victimWayID := cache.DirectoryFindVictim(
+		&ds.cache.directoryState,
+		ds.cache.numSets, ds.cache.blockSize,
+		cacheLineID)
+	victim := &ds.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
+
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
 	if ds.needEviction(victim) {
-		ok := ds.evict(trans, victim)
+		ok := ds.evict(trans, victimSetID, victimWayID)
 		if ok {
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(trans.read, ds.cache),
@@ -171,7 +184,7 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 		return ok
 	}
 
-	ok := ds.fetch(trans, victim)
+	ok := ds.fetch(trans, victimSetID, victimWayID)
 	if ok {
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.read, ds.cache),
@@ -183,13 +196,14 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 	return ok
 }
 
-func (ds *directoryStage) doWrite(trans *transaction) bool {
+func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(write.PID, cachelineID)
-	if mshrEntry != nil {
-		ok := ds.doWriteMSHRHit(trans, mshrEntry)
+	mshrIdx, found := cache.MSHRQuery(
+		&ds.cache.mshrState, write.PID, cachelineID)
+	if found {
+		ok := ds.doWriteMSHRHit(trans, mshrIdx)
 		tracing.AddTaskStep(
 			tracing.MsgIDAtReceiver(trans.write, ds.cache),
 			ds.cache,
@@ -199,9 +213,12 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 		return ok
 	}
 
-	block := ds.cache.directory.Lookup(write.PID, cachelineID)
-	if block != nil {
-		ok := ds.doWriteHit(trans, block)
+	setID, wayID, blockFound := cache.DirectoryLookup(
+		&ds.cache.directoryState,
+		ds.cache.numSets, ds.cache.blockSize,
+		write.PID, cachelineID)
+	if blockFound {
+		ok := ds.doWriteHit(trans, setID, wayID)
 		if ok {
 			tracing.AddTaskStep(
 				tracing.MsgIDAtReceiver(trans.write, ds.cache),
@@ -226,11 +243,14 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 }
 
 func (ds *directoryStage) doWriteMSHRHit(
-	trans *transaction,
-	mshrEntry *cache.MSHREntry,
+	trans *transactionState,
+	mshrIdx int,
 ) bool {
-	trans.mshrEntry = mshrEntry
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	trans.mshrEntryIndex = mshrIdx
+	trans.hasMSHREntry = true
+	ds.cache.mshrState.Entries[mshrIdx].TransactionIndices = append(
+		ds.cache.mshrState.Entries[mshrIdx].TransactionIndices,
+		ds.findTransIndex(trans))
 
 	ds.buf.Pop()
 
@@ -238,17 +258,18 @@ func (ds *directoryStage) doWriteMSHRHit(
 }
 
 func (ds *directoryStage) doWriteHit(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
 	}
 
-	return ds.writeToBank(trans, block)
+	return ds.writeToBank(trans, setID, wayID)
 }
 
-func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
+func (ds *directoryStage) doWriteMiss(trans *transactionState) bool {
 	if ds.isWritingFullLine(trans.write) {
 		return ds.writeFullLineMiss(trans)
 	}
@@ -256,58 +277,71 @@ func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
 	return ds.writePartialLineMiss(trans)
 }
 
-func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
+func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
-	victim := ds.cache.directory.FindVictim(cachelineID)
+	victimSetID, victimWayID := cache.DirectoryFindVictim(
+		&ds.cache.directoryState,
+		ds.cache.numSets, ds.cache.blockSize,
+		cachelineID)
+	victim := &ds.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
+
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
 	if ds.needEviction(victim) {
-		return ds.evict(trans, victim)
+		return ds.evict(trans, victimSetID, victimWayID)
 	}
 
-	return ds.writeToBank(trans, victim)
+	return ds.writeToBank(trans, victimSetID, victimWayID)
 }
 
-func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
+func (ds *directoryStage) writePartialLineMiss(trans *transactionState) bool {
 	write := trans.write
 	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
-	if ds.cache.mshr.IsFull() {
+	if cache.MSHRIsFull(&ds.cache.mshrState, ds.cache.numMSHREntry) {
 		return false
 	}
 
-	victim := ds.cache.directory.FindVictim(cachelineID)
+	victimSetID, victimWayID := cache.DirectoryFindVictim(
+		&ds.cache.directoryState,
+		ds.cache.numSets, ds.cache.blockSize,
+		cachelineID)
+	victim := &ds.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
+
 	if victim.IsLocked || victim.ReadCount > 0 {
 		return false
 	}
 
 	if ds.needEviction(victim) {
-		return ds.evict(trans, victim)
+		return ds.evict(trans, victimSetID, victimWayID)
 	}
 
-	return ds.fetch(trans, victim)
+	return ds.fetch(trans, victimSetID, victimWayID)
 }
 
 func (ds *directoryStage) readFromBank(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
 	numBanks := len(ds.cache.dirToBankBuffers)
-	bank := bankID(block, ds.cache.directory.WayAssociativity(), numBanks)
+	bank := bankID(setID, wayID, ds.cache.wayAssociativity, numBanks)
 	bankBuf := ds.cache.dirToBankBuffers[bank]
 
 	if !bankBuf.CanPush() {
 		return false
 	}
 
-	ds.cache.directory.Visit(block)
+	cache.DirectoryVisit(&ds.cache.directoryState, setID, wayID)
 
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
 	block.ReadCount++
-	trans.block = block
+	trans.blockSetID = setID
+	trans.blockWayID = wayID
+	trans.hasBlock = true
 	trans.action = bankReadHit
 
 	ds.buf.Pop()
@@ -317,11 +351,11 @@ func (ds *directoryStage) readFromBank(
 }
 
 func (ds *directoryStage) writeToBank(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
 	numBanks := len(ds.cache.dirToBankBuffers)
-	bank := bankID(block, ds.cache.directory.WayAssociativity(), numBanks)
+	bank := bankID(setID, wayID, ds.cache.wayAssociativity, numBanks)
 	bankBuf := ds.cache.dirToBankBuffers[bank]
 
 	if !bankBuf.CanPush() {
@@ -332,12 +366,15 @@ func (ds *directoryStage) writeToBank(
 	addr := write.Address
 	cachelineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
-	ds.cache.directory.Visit(block)
+	cache.DirectoryVisit(&ds.cache.directoryState, setID, wayID)
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
 	block.IsLocked = true
 	block.Tag = cachelineID
 	block.IsValid = true
-	block.PID = write.PID
-	trans.block = block
+	block.PID = uint32(write.PID)
+	trans.blockSetID = setID
+	trans.blockWayID = wayID
+	trans.hasBlock = true
 	trans.action = bankWriteHit
 
 	ds.buf.Pop()
@@ -347,11 +384,11 @@ func (ds *directoryStage) writeToBank(
 }
 
 func (ds *directoryStage) evict(
-	trans *transaction,
-	victim *cache.Block,
+	trans *transactionState,
+	victimSetID, victimWayID int,
 ) bool {
-	bankNum := bankID(victim,
-		ds.cache.directory.WayAssociativity(), len(ds.cache.dirToBankBuffers))
+	bankNum := bankID(victimSetID, victimWayID,
+		ds.cache.wayAssociativity, len(ds.cache.dirToBankBuffers))
 	bankBuf := ds.cache.dirToBankBuffers[bankNum]
 
 	if !bankBuf.CanPush() {
@@ -373,52 +410,67 @@ func (ds *directoryStage) evict(
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
-	ds.updateTransForEviction(trans, victim, pid, cacheLineID)
-	ds.updateVictimBlockMetaData(victim, cacheLineID, pid)
+	ds.updateTransForEviction(trans, victimSetID, victimWayID, pid, cacheLineID)
+	ds.updateVictimBlockMetaData(victimSetID, victimWayID, cacheLineID, pid)
 
 	ds.buf.Pop()
 	bankBuf.Push(trans)
 
-	ds.cache.evictingList[trans.victim.Tag] = true
+	ds.cache.evictingList[trans.victimTag] = true
 
 	return true
 }
 
 func (ds *directoryStage) updateVictimBlockMetaData(
-	victim *cache.Block,
+	setID, wayID int,
 	cacheLineID uint64,
 	pid vm.PID,
 ) {
-	victim.Tag = cacheLineID
-	victim.PID = pid
-	victim.IsLocked = true
-	victim.IsDirty = false
-	ds.cache.directory.Visit(victim)
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
+	block.Tag = cacheLineID
+	block.PID = uint32(pid)
+	block.IsLocked = true
+	block.IsDirty = false
+	cache.DirectoryVisit(&ds.cache.directoryState, setID, wayID)
 }
 
 func (ds *directoryStage) updateTransForEviction(
-	trans *transaction,
-	victim *cache.Block,
+	trans *transactionState,
+	victimSetID, victimWayID int,
 	pid vm.PID,
 	cacheLineID uint64,
 ) {
+	victim := &ds.cache.directoryState.Sets[victimSetID].Blocks[victimWayID]
+
 	trans.action = bankEvictAndFetch
-	trans.victim = &cache.Block{
-		PID:          victim.PID,
-		Tag:          victim.Tag,
-		CacheAddress: victim.CacheAddress,
-		DirtyMask:    victim.DirtyMask,
+	trans.hasVictim = true
+	trans.victimPID = vm.PID(victim.PID)
+	trans.victimTag = victim.Tag
+	trans.victimCacheAddress = victim.CacheAddress
+	if victim.DirtyMask != nil {
+		trans.victimDirtyMask = make([]bool, len(victim.DirtyMask))
+		copy(trans.victimDirtyMask, victim.DirtyMask)
 	}
-	trans.block = victim
-	trans.evictingPID = trans.victim.PID
-	trans.evictingAddr = trans.victim.Tag
-	trans.evictingDirtyMask = victim.DirtyMask
+
+	trans.blockSetID = victimSetID
+	trans.blockWayID = victimWayID
+	trans.hasBlock = true
+	trans.evictingPID = trans.victimPID
+	trans.evictingAddr = trans.victimTag
+	trans.evictingDirtyMask = trans.victimDirtyMask
 
 	if ds.evictionNeedFetch(trans) {
-		mshrEntry := ds.cache.mshr.Add(pid, cacheLineID)
-		mshrEntry.Block = victim
-		mshrEntry.Requests = append(mshrEntry.Requests, trans)
-		trans.mshrEntry = mshrEntry
+		mshrIdx := cache.MSHRAdd(
+			&ds.cache.mshrState, ds.cache.numMSHREntry,
+			pid, cacheLineID)
+		entry := &ds.cache.mshrState.Entries[mshrIdx]
+		entry.BlockSetID = victimSetID
+		entry.BlockWayID = victimWayID
+		entry.HasBlock = true
+		entry.TransactionIndices = append(
+			entry.TransactionIndices, ds.findTransIndex(trans))
+		trans.mshrEntryIndex = mshrIdx
+		trans.hasMSHREntry = true
 		trans.fetchPID = pid
 		trans.fetchAddress = cacheLineID
 		trans.action = bankEvictAndFetch
@@ -427,7 +479,7 @@ func (ds *directoryStage) updateTransForEviction(
 	}
 }
 
-func (ds *directoryStage) evictionNeedFetch(t *transaction) bool {
+func (ds *directoryStage) evictionNeedFetch(t *transactionState) bool {
 	if t.write == nil {
 		return true
 	}
@@ -440,8 +492,8 @@ func (ds *directoryStage) evictionNeedFetch(t *transaction) bool {
 }
 
 func (ds *directoryStage) fetch(
-	trans *transaction,
-	block *cache.Block,
+	trans *transactionState,
+	setID, wayID int,
 ) bool {
 	var (
 		addr uint64
@@ -461,27 +513,37 @@ func (ds *directoryStage) fetch(
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
-	bankNum := bankID(block,
-		ds.cache.directory.WayAssociativity(), len(ds.cache.dirToBankBuffers))
+	bankNum := bankID(setID, wayID,
+		ds.cache.wayAssociativity, len(ds.cache.dirToBankBuffers))
 	bankBuf := ds.cache.dirToBankBuffers[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
 	}
 
-	mshrEntry := ds.cache.mshr.Add(pid, cacheLineID)
-	trans.mshrEntry = mshrEntry
-	trans.block = block
+	mshrIdx := cache.MSHRAdd(
+		&ds.cache.mshrState, ds.cache.numMSHREntry,
+		pid, cacheLineID)
+	trans.mshrEntryIndex = mshrIdx
+	trans.hasMSHREntry = true
+
+	trans.blockSetID = setID
+	trans.blockWayID = wayID
+	trans.hasBlock = true
+
+	block := &ds.cache.directoryState.Sets[setID].Blocks[wayID]
 	block.IsLocked = true
 	block.Tag = cacheLineID
-	block.PID = pid
+	block.PID = uint32(pid)
 	block.IsValid = true
-	ds.cache.directory.Visit(block)
+	cache.DirectoryVisit(&ds.cache.directoryState, setID, wayID)
 
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, ds.cache),
 		ds.cache,
-		fmt.Sprintf("add-mshr-entry-0x%x-0x%x", mshrEntry.Address, block.Tag),
+		fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
+			ds.cache.mshrState.Entries[mshrIdx].Address,
+			block.Tag),
 	)
 
 	ds.buf.Pop()
@@ -491,8 +553,12 @@ func (ds *directoryStage) fetch(
 	trans.fetchAddress = cacheLineID
 	bankBuf.Push(trans)
 
-	mshrEntry.Block = block
-	mshrEntry.Requests = append(mshrEntry.Requests, trans)
+	entry := &ds.cache.mshrState.Entries[mshrIdx]
+	entry.BlockSetID = setID
+	entry.BlockWayID = wayID
+	entry.HasBlock = true
+	entry.TransactionIndices = append(
+		entry.TransactionIndices, ds.findTransIndex(trans))
 
 	return true
 }
@@ -513,6 +579,17 @@ func (ds *directoryStage) isWritingFullLine(write *mem.WriteReq) bool {
 	return true
 }
 
-func (ds *directoryStage) needEviction(victim *cache.Block) bool {
+func (ds *directoryStage) needEviction(victim *cache.BlockState) bool {
 	return victim.IsValid && victim.IsDirty
+}
+
+// findTransIndex finds the index of trans in the inFlightTransactions list.
+func (ds *directoryStage) findTransIndex(trans *transactionState) int {
+	for i, t := range ds.cache.inFlightTransactions {
+		if t == trans {
+			return i
+		}
+	}
+	// Transaction might not be in inflight list (e.g. flush transactions)
+	return -1
 }
