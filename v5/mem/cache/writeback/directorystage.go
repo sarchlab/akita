@@ -77,6 +77,7 @@ func (ds *directoryStage) processTransaction() bool {
 func (ds *directoryStage) acceptNewTransaction() bool {
 	madeProgress := false
 	spec := ds.cache.comp.GetSpec()
+	cur := ds.cache.comp.GetState()
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -98,7 +99,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			ds.cache.dirStageBuffer.Pop()
 			madeProgress = true
 		} else {
-			if !dirPipelineCanAccept(next.DirPipelineStages, spec.NumReqPerCycle) {
+			if !dirPipelineCanAccept(cur.DirPipelineStages, spec.NumReqPerCycle) {
 				break
 			}
 			dirPipelineAccept(&next.DirPipelineStages, spec.NumReqPerCycle, transIdx)

@@ -53,31 +53,36 @@ var _ = Describe("DirectoryStage", func() {
 
 		m.dirStageBuffer = &stateTransBuffer{
 			name:     "Cache.DirStageBuf",
-			items:    &next.DirStageBufIndices,
+			readItems:  &next.DirStageBufIndices,
+			writeItems: &next.DirStageBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.dirToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.DirToBankBuf0",
-			items:    &next.DirToBankBufIndices[0].Indices,
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.writeBufferToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.WBToBankBuf0",
-			items:    &next.WriteBufferToBankBufIndices[0].Indices,
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.writeBufferBuffer = &stateTransBuffer{
 			name:     "Cache.WriteBufferBuf",
-			items:    &next.WriteBufferBufIndices,
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.dirPostBufAdapter = &stateDirPostBufAdapter{
 			name:     "Cache.DirPostBuf",
-			items:    &next.DirPostPipelineBufIndices,
+			readItems:  &next.DirPostPipelineBufIndices,
+			writeItems: &next.DirPostPipelineBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
@@ -123,6 +128,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should add to MSHR", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
@@ -142,6 +149,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should pass transaction to bank", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
@@ -155,6 +164,8 @@ var _ = Describe("DirectoryStage", func() {
 
 		Context("miss, mshr miss, no need to evict", func() {
 			It("should create mshr entry and fetch", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
@@ -178,6 +189,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should do evict", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
@@ -219,6 +232,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should send to bank", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
@@ -232,6 +247,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should send to bank", func() {
+				m.syncForTest()
+
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())

@@ -64,31 +64,36 @@ var _ = Describe("Bank Stage", func() {
 
 		m.dirToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.DirToBankBuf0",
-			items:    &next.DirToBankBufIndices[0].Indices,
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.writeBufferToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.WBToBankBuf0",
-			items:    &next.WriteBufferToBankBufIndices[0].Indices,
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.mshrStageBuffer = &stateTransBuffer{
 			name:     "Cache.MSHRStageBuf",
-			items:    &next.MSHRStageBufEntries,
+			readItems:  &next.MSHRStageBufEntries,
+			writeItems: &next.MSHRStageBufEntries,
 			capacity: 4,
 			mw:       m,
 		}
 		m.writeBufferBuffer = &stateTransBuffer{
 			name:     "Cache.WriteBufferBuf",
-			items:    &next.WriteBufferBufIndices,
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.bankPostBufAdapters = []*stateBankPostBufAdapter{{
 			name:     "Cache.BankPostBuf0",
-			items:    &next.BankPostPipelineBufIndices[0].Indices,
+			readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+			writeItems: &next.BankPostPipelineBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
@@ -142,6 +147,8 @@ var _ = Describe("Bank Stage", func() {
 		It("should stall if send buffer is full", func() {
 			topPort.EXPECT().CanSend().Return(false).AnyTimes()
 
+			m.syncForTest()
+
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
@@ -156,6 +163,8 @@ var _ = Describe("Bank Stage", func() {
 					Expect(dr.Meta().RspTo).To(Equal(read.ID))
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 
@@ -203,6 +212,8 @@ var _ = Describe("Bank Stage", func() {
 		It("should stall if send buffer is full", func() {
 			topPort.EXPECT().CanSend().Return(false).AnyTimes()
 
+			m.syncForTest()
+
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
@@ -215,6 +226,8 @@ var _ = Describe("Bank Stage", func() {
 				Do(func(msg sim.Msg) {
 					Expect(msg.Meta().RspTo).To(Equal(write.ID))
 				})
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 
@@ -268,6 +281,8 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should write to storage and send to mshr stage", func() {
+			m.syncForTest()
+
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -322,6 +337,8 @@ var _ = Describe("Bank Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			storage.Write(0x300, data)
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 

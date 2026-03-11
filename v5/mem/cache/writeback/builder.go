@@ -294,54 +294,60 @@ func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, Stat
 func (b *Builder) buildAdapters(m *middleware, laneWidth int) {
 	next := m.comp.GetNextState()
 
-	// Dir stage buffer adapter
+	// Dir stage buffer adapter (read/write pointers set by updateAdapterPointers each tick)
 	m.dirStageBuffer = &stateTransBuffer{
-		name:     m.comp.Name() + ".DirStageBuffer",
-		items:    &next.DirStageBufIndices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".DirStageBuffer",
+		readItems:  &next.DirStageBufIndices,
+		writeItems: &next.DirStageBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Dir to bank buffer adapters
 	m.dirToBankBuffers = make([]*stateTransBuffer, 1)
 	m.dirToBankBuffers[0] = &stateTransBuffer{
-		name:     m.comp.Name() + ".DirToBankBuffer",
-		items:    &next.DirToBankBufIndices[0].Indices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".DirToBankBuffer",
+		readItems:  &next.DirToBankBufIndices[0].Indices,
+		writeItems: &next.DirToBankBufIndices[0].Indices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Write buffer to bank buffer adapters
 	m.writeBufferToBankBuffers = make([]*stateTransBuffer, 1)
 	m.writeBufferToBankBuffers[0] = &stateTransBuffer{
-		name:     m.comp.Name() + ".WriteBufferToBankBuffer",
-		items:    &next.WriteBufferToBankBufIndices[0].Indices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".WriteBufferToBankBuffer",
+		readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+		writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// MSHR stage buffer adapter
 	m.mshrStageBuffer = &stateTransBuffer{
-		name:     m.comp.Name() + ".MSHRStageBuffer",
-		items:    &next.MSHRStageBufEntries,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".MSHRStageBuffer",
+		readItems:  &next.MSHRStageBufEntries,
+		writeItems: &next.MSHRStageBufEntries,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Write buffer buffer adapter
 	m.writeBufferBuffer = &stateTransBuffer{
-		name:     m.comp.Name() + ".WriteBufferBuffer",
-		items:    &next.WriteBufferBufIndices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".WriteBufferBuffer",
+		readItems:  &next.WriteBufferBufIndices,
+		writeItems: &next.WriteBufferBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Dir post pipeline buf adapter
 	m.dirPostBufAdapter = &stateDirPostBufAdapter{
-		name:     m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
-		items:    &next.DirPostPipelineBufIndices,
-		capacity: b.numReqPerCycle,
-		mw:       m,
+		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
+		readItems:  &next.DirPostPipelineBufIndices,
+		writeItems: &next.DirPostPipelineBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
 	}
 
 	// Bank post pipeline buf adapters
@@ -349,9 +355,10 @@ func (b *Builder) buildAdapters(m *middleware, laneWidth int) {
 	m.bankPostBufAdapters[0] = &stateBankPostBufAdapter{
 		name: fmt.Sprintf(
 			"%s.Bank.PostPipelineBuffer", m.comp.Name()),
-		items:    &next.BankPostPipelineBufIndices[0].Indices,
-		capacity: laneWidth,
-		mw:       m,
+		readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+		writeItems: &next.BankPostPipelineBufIndices[0].Indices,
+		capacity:   laneWidth,
+		mw:         m,
 	}
 }
 

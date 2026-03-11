@@ -49,7 +49,8 @@ var _ = Describe("TopParser", func() {
 
 		m.dirStageBuffer = &stateTransBuffer{
 			name:     "Cache.DirStageBuf",
-			items:    &next.DirStageBufIndices,
+			readItems:  &next.DirStageBufIndices,
+			writeItems: &next.DirStageBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
@@ -66,12 +67,16 @@ var _ = Describe("TopParser", func() {
 
 	It("should return if no req to parse", func() {
 		port.EXPECT().PeekIncoming().Return(nil)
+		m.syncForTest()
+
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should return if the cache is not in running stage", func() {
 		m.state = cacheStateFlushing
+		m.syncForTest()
+
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -86,6 +91,8 @@ var _ = Describe("TopParser", func() {
 
 		port.EXPECT().PeekIncoming().Return(read)
 		port.EXPECT().RetrieveIncoming().Return(read)
+
+		m.syncForTest()
 
 		parser.Tick()
 
@@ -102,6 +109,8 @@ var _ = Describe("TopParser", func() {
 
 		port.EXPECT().PeekIncoming().Return(write)
 		port.EXPECT().RetrieveIncoming().Return(write)
+
+		m.syncForTest()
 
 		parser.Tick()
 

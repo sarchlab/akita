@@ -66,7 +66,19 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			AnyTimes()
 
 		engine = sim.NewSerialEngine()
-		addressToPortMapper = &mem.SinglePortMapper{}
+
+		dram = idealmemcontroller.MakeBuilder().
+			WithEngine(engine).
+			WithNewStorage(4 * mem.GB).
+			WithFreq(1 * sim.GHz).
+			WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 200, CacheLineSize: 64}).
+			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+			Build("DRAM")
+
+		addressToPortMapper = &mem.SinglePortMapper{
+			Port: dram.GetPortByName("Top").AsRemote(),
+		}
 
 		cacheComp = MakeBuilder().
 			WithEngine(engine).
@@ -78,17 +90,6 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithControlPort(sim.NewPort(nil, 8, 8, "Cache.ControlPort")).
 			Build("Cache")
 		m = cacheComp.Middlewares()[0].(*middleware)
-
-		dram = idealmemcontroller.MakeBuilder().
-			WithEngine(engine).
-			WithNewStorage(4 * mem.GB).
-			WithFreq(1 * sim.GHz).
-			WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 200, CacheLineSize: 64}).
-			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
-			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
-			Build("DRAM")
-
-		addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).

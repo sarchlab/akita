@@ -52,7 +52,8 @@ var _ = Describe("MSHR Stage", func() {
 
 		m.mshrStageBuffer = &stateTransBuffer{
 			name:     "Cache.MSHRStageBuf",
-			items:    &next.MSHRStageBufEntries,
+			readItems:  &next.MSHRStageBufEntries,
+			writeItems: &next.MSHRStageBufEntries,
 			capacity: 4,
 			mw:       m,
 		}
@@ -68,6 +69,8 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should do nothing if there is no entry in input buffer", func() {
+		m.syncForTest()
+
 		ret := ms.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -102,6 +105,8 @@ var _ = Describe("MSHR Stage", func() {
 		next.MSHRStageBufEntries = []int{1}
 
 		topPort.EXPECT().CanSend().Return(false)
+
+		m.syncForTest()
 
 		ret := ms.Tick()
 
@@ -143,6 +148,8 @@ var _ = Describe("MSHR Stage", func() {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 
+		m.syncForTest()
+
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
@@ -173,6 +180,8 @@ var _ = Describe("MSHR Stage", func() {
 		next.MSHRStageBufEntries = []int{0}
 
 		topPort.EXPECT().CanSend().Return(true)
+
+		m.syncForTest()
 
 		ret := ms.Tick()
 

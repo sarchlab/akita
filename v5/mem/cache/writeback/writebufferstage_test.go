@@ -57,19 +57,22 @@ var _ = Describe("WriteBufferStage", func() {
 
 		m.writeBufferBuffer = &stateTransBuffer{
 			name:     "Cache.WriteBufferBuf",
-			items:    &next.WriteBufferBufIndices,
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.writeBufferToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.WBToBankBuf0",
-			items:    &next.WriteBufferToBankBufIndices[0].Indices,
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.dirToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.DirToBankBuf0",
-			items:    &next.DirToBankBufIndices[0].Indices,
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
@@ -89,6 +92,8 @@ var _ = Describe("WriteBufferStage", func() {
 
 	It("should do nothing if no transactions", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+		m.syncForTest()
 
 		ret := wb.Tick()
 
@@ -118,6 +123,8 @@ var _ = Describe("WriteBufferStage", func() {
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().Send(gomock.Any())
 
+			m.syncForTest()
+
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -141,6 +148,8 @@ var _ = Describe("WriteBufferStage", func() {
 			next.WriteBufferBufIndices = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -166,6 +175,8 @@ var _ = Describe("WriteBufferStage", func() {
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().Send(gomock.Any())
 
+			m.syncForTest()
+
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -178,6 +189,8 @@ var _ = Describe("WriteBufferStage", func() {
 			wb.pendingEvictions = []*transactionState{{}}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -207,6 +220,8 @@ var _ = Describe("WriteBufferStage", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(rsp)
 			bottomPort.EXPECT().RetrieveIncoming().Return(rsp)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 

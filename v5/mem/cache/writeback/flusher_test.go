@@ -73,43 +73,50 @@ var _ = Describe("Flusher", func() {
 
 		m.dirStageBuffer = &stateTransBuffer{
 			name:     "Cache.DirStageBuf",
-			items:    &next.DirStageBufIndices,
+			readItems:  &next.DirStageBufIndices,
+			writeItems: &next.DirStageBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.dirToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.DirToBankBuf0",
-			items:    &next.DirToBankBufIndices[0].Indices,
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.writeBufferToBankBuffers = []*stateTransBuffer{{
 			name:     "Cache.WBToBankBuf0",
-			items:    &next.WriteBufferToBankBufIndices[0].Indices,
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
 		m.mshrStageBuffer = &stateTransBuffer{
 			name:     "Cache.MSHRStageBuf",
-			items:    &next.MSHRStageBufEntries,
+			readItems:  &next.MSHRStageBufEntries,
+			writeItems: &next.MSHRStageBufEntries,
 			capacity: 4,
 			mw:       m,
 		}
 		m.writeBufferBuffer = &stateTransBuffer{
 			name:     "Cache.WriteBufferBuf",
-			items:    &next.WriteBufferBufIndices,
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.dirPostBufAdapter = &stateDirPostBufAdapter{
 			name:     "Cache.DirPostBuf",
-			items:    &next.DirPostPipelineBufIndices,
+			readItems:  &next.DirPostPipelineBufIndices,
+			writeItems: &next.DirPostPipelineBufIndices,
 			capacity: 4,
 			mw:       m,
 		}
 		m.bankPostBufAdapters = []*stateBankPostBufAdapter{{
 			name:     "Cache.BankPostBuf0",
-			items:    &next.BankPostPipelineBufIndices[0].Indices,
+			readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+			writeItems: &next.BankPostPipelineBufIndices[0].Indices,
 			capacity: 4,
 			mw:       m,
 		}}
@@ -138,6 +145,8 @@ var _ = Describe("Flusher", func() {
 
 	It("should do nothing if no request", func() {
 		controlPort.EXPECT().PeekIncoming().Return(nil)
+		m.syncForTest()
+
 		ret := f.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -149,6 +158,8 @@ var _ = Describe("Flusher", func() {
 			req.TrafficClass = "cache.FlushReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+
+			m.syncForTest()
 
 			ret := f.Tick()
 
@@ -165,6 +176,8 @@ var _ = Describe("Flusher", func() {
 			req.ID = sim.GetIDGenerator().Generate()
 			req.TrafficClass = "cache.FlushReq"
 			f.processingFlush = req
+
+			m.syncForTest()
 
 			ret := f.Tick()
 
@@ -184,6 +197,8 @@ var _ = Describe("Flusher", func() {
 			cache.DirectoryReset(&next.DirectoryState, 2, 2, 64)
 			next.DirectoryState.Sets[0].Blocks[0].IsDirty = true
 			next.DirectoryState.Sets[0].Blocks[0].IsValid = true
+
+			m.syncForTest()
 
 			ret := f.Tick()
 
@@ -206,6 +221,8 @@ var _ = Describe("Flusher", func() {
 					Expect(msg.Meta().RspTo).To(Equal(req.ID))
 				})
 
+			m.syncForTest()
+
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -225,6 +242,8 @@ var _ = Describe("Flusher", func() {
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
+			m.syncForTest()
+
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
@@ -241,6 +260,8 @@ var _ = Describe("Flusher", func() {
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().CanSend().Return(false)
 
+			m.syncForTest()
+
 			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeFalse())
@@ -256,6 +277,8 @@ var _ = Describe("Flusher", func() {
 			controlPort.EXPECT().Send(gomock.Any())
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
+
+			m.syncForTest()
 
 			madeProgress := f.Tick()
 

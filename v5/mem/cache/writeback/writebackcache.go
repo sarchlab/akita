@@ -89,6 +89,11 @@ type middleware struct {
 
 	storage *mem.Storage
 
+	// curState holds the A-buffer snapshot for the current tick.
+	// Stored here so adapter read pointers remain valid for the tick duration.
+	// In production, set by updateAdapterPointers() from comp.GetState().
+	curState State
+
 	// Thin buffer adapters (created once, pointers updated per-tick)
 	dirStageBuffer           *stateTransBuffer
 	dirToBankBuffers         []*stateTransBuffer
@@ -172,34 +177,88 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
+// syncForTest synchronizes curState from the next state buffer and updates
+// adapter read pointers. This is only needed in tests where state is set up
+// via GetNextState() without going through the Component.Tick() cycle.
+func (m *middleware) syncForTest() {
+	next := m.comp.GetNextState()
+	m.comp.SetState(*next)
+	m.curState = m.comp.GetState()
+	next = m.comp.GetNextState()
+
+	// Update adapter read pointers to curState, write pointers to next
+	if m.dirStageBuffer != nil {
+		m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
+		m.dirStageBuffer.writeItems = &next.DirStageBufIndices
+	}
+	for i := range m.dirToBankBuffers {
+		if m.dirToBankBuffers[i] != nil {
+			m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
+			m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
+		}
+	}
+	for i := range m.writeBufferToBankBuffers {
+		if m.writeBufferToBankBuffers[i] != nil {
+			m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
+			m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
+		}
+	}
+	if m.mshrStageBuffer != nil {
+		m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
+		m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
+	}
+	if m.writeBufferBuffer != nil {
+		m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
+		m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
+	}
+	if m.dirPostBufAdapter != nil {
+		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+	}
+	for i := range m.bankPostBufAdapters {
+		if m.bankPostBufAdapters[i] != nil {
+			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+		}
+	}
+}
+
 func (m *middleware) updateAdapterPointers() {
+	m.curState = m.comp.GetState()
 	next := m.comp.GetNextState()
 
 	// Dir stage buffer adapter
-	m.dirStageBuffer.items = &next.DirStageBufIndices
+	m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
+	m.dirStageBuffer.writeItems = &next.DirStageBufIndices
 
 	// Dir to bank buffer adapters
 	for i := range m.dirToBankBuffers {
-		m.dirToBankBuffers[i].items = &next.DirToBankBufIndices[i].Indices
+		m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
+		m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
 	}
 
 	// Write buffer to bank buffer adapters
 	for i := range m.writeBufferToBankBuffers {
-		m.writeBufferToBankBuffers[i].items = &next.WriteBufferToBankBufIndices[i].Indices
+		m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
+		m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
 	}
 
 	// MSHR stage buffer adapter
-	m.mshrStageBuffer.items = &next.MSHRStageBufEntries
+	m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
+	m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
 
 	// Write buffer buffer adapter
-	m.writeBufferBuffer.items = &next.WriteBufferBufIndices
+	m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
+	m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
 
 	// Dir post pipeline buf adapter
-	m.dirPostBufAdapter.items = &next.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
 
 	// Bank post pipeline buf adapters
 	for i := range m.bankPostBufAdapters {
-		m.bankPostBufAdapters[i].items = &next.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
 	}
 }
 
