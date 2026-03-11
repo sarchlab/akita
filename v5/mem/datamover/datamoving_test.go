@@ -109,15 +109,16 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("outside").
-			WithDstAddress(0).
-			WithDstSide("inside").
-			WithByteSize(4096).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "outside"
+		req.DstAddress = 0
+		req.DstSide = "inside"
+		req.ByteSize = 4096
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		dataMover.ctrlPort.Deliver(req)
 
@@ -136,15 +137,16 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(0).
-			WithDstSide("outside").
-			WithByteSize(4096).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "inside"
+		req.DstAddress = 0
+		req.DstSide = "outside"
+		req.ByteSize = 4096
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		dataMover.ctrlPort.Deliver(req)
 
@@ -163,15 +165,16 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(4096).
-			WithDstSide("outside").
-			WithByteSize(4096).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "inside"
+		req.DstAddress = 4096
+		req.DstSide = "outside"
+		req.ByteSize = 4096
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		dataMover.ctrlPort.Deliver(req)
 
@@ -190,15 +193,16 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("outside").
-			WithDstAddress(512).
-			WithDstSide("inside").
-			WithByteSize(512).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "outside"
+		req.DstAddress = 512
+		req.DstSide = "inside"
+		req.ByteSize = 512
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		dataMover.ctrlPort.Deliver(req)
 
@@ -209,15 +213,16 @@ var _ = Describe("DataMover", func() {
 	})
 
 	It("should handle zero-size transfers", func() {
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(0).
-			WithDstSide("outside").
-			WithByteSize(0).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "inside"
+		req.DstAddress = 0
+		req.DstSide = "outside"
+		req.ByteSize = 0
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		Expect(func() { dataMover.ctrlPort.Deliver(req) }).NotTo(Panic())
 	})
@@ -232,15 +237,16 @@ var _ = Describe("DataMover", func() {
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
 
-		req := MakeDataMoveRequestBuilder().
-			WithSrc(srcPort.AsRemote()).
-			WithDst(dataMover.ctrlPort.AsRemote()).
-			WithSrcAddress(0).
-			WithSrcSide("inside").
-			WithDstAddress(512).
-			WithDstSide("inside").
-			WithByteSize(512).
-			Build()
+		req := &DataMoveRequest{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = srcPort.AsRemote()
+		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.SrcAddress = 0
+		req.SrcSide = "inside"
+		req.DstAddress = 512
+		req.DstSide = "inside"
+		req.ByteSize = 512
+		req.TrafficClass = "datamover.DataMoveRequest"
 
 		dataMover.ctrlPort.Deliver(req)
 

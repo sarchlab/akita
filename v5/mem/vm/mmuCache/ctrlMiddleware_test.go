@@ -57,19 +57,23 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := RestartReqBuilder{}.
-			WithSrc(sim.RemotePort("Requester")).
-			Build()
+		req := &RestartReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = sim.RemotePort("Requester")
+		req.TrafficClass = "mmuCache.RestartReq"
 
-		topMsg := vm.TranslationReqBuilder{}.
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(1).
-			Build()
-		bottomMsg := vm.TranslationRspBuilder{}.
-			WithRspTo(sim.GetIDGenerator().Generate()).
-			WithPage(vm.Page{}).
-			Build()
+		topMsg := &vm.TranslationReq{}
+		topMsg.ID = sim.GetIDGenerator().Generate()
+		topMsg.PID = 1
+		topMsg.VAddr = 0x1000
+		topMsg.DeviceID = 1
+		topMsg.TrafficClass = "vm.TranslationReq"
+		bottomMsg := &vm.TranslationRsp{
+			Page: vm.Page{},
+		}
+		bottomMsg.ID = sim.GetIDGenerator().Generate()
+		bottomMsg.RspTo = sim.GetIDGenerator().Generate()
+		bottomMsg.TrafficClass = "vm.TranslationRsp"
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
 			rsp := sent.(*RestartRsp)
@@ -94,9 +98,10 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should accept flush request in enable state", func() {
 		cache.state = mmuCacheStateEnable
-		req := FlushReqBuilder{}.
-			WithSrc(sim.RemotePort("Requester")).
-			Build()
+		req := &FlushReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = sim.RemotePort("Requester")
+		req.TrafficClass = "mmuCache.FlushReq"
 		controlPort.EXPECT().RetrieveIncoming()
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
@@ -108,10 +113,13 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should handle control pause", func() {
 		cache.state = mmuCacheStateEnable
-		msg := mem.ControlMsgBuilder{}.
-			WithDst(sim.RemotePort("ControlPort")).
-			WithCtrlInfo(false, false, false, true, false).
-			Build()
+		msg := &mem.ControlMsg{
+			Pause: true,
+		}
+		msg.ID = sim.GetIDGenerator().Generate()
+		msg.Dst = sim.RemotePort("ControlPort")
+		msg.TrafficBytes = 4
+		msg.TrafficClass = "mem.ControlMsg"
 
 		controlPort.EXPECT().PeekIncoming().Return(msg)
 		controlPort.EXPECT().PeekIncoming().Return(msg)

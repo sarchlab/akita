@@ -198,13 +198,14 @@ func (gmmu *GMMU) processRemoteMemReq(state *State, walkingIndex int) bool {
 	spec := gmmu.GetSpec()
 	walking := state.WalkingTranslations[walkingIndex]
 
-	req := vm.TranslationReqBuilder{}.
-		WithSrc(gmmu.bottomPort.AsRemote()).
-		WithDst(spec.LowModule).
-		WithPID(vm.PID(walking.PID)).
-		WithVAddr(walking.VAddr).
-		WithDeviceID(walking.DeviceID).
-		Build()
+	req := &vm.TranslationReq{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Src = gmmu.bottomPort.AsRemote()
+	req.Dst = spec.LowModule
+	req.PID = vm.PID(walking.PID)
+	req.VAddr = walking.VAddr
+	req.DeviceID = walking.DeviceID
+	req.TrafficClass = "vm.TranslationReq"
 
 	state.RemoteMemReqs[req.ID] = walking
 
@@ -239,12 +240,14 @@ func (gmmu *GMMU) doPageWalkHit(
 	}
 	walking := state.WalkingTranslations[walkingIndex]
 
-	rsp := vm.TranslationRspBuilder{}.
-		WithSrc(gmmu.topPort.AsRemote()).
-		WithDst(walking.ReqSrc).
-		WithRspTo(walking.ReqID).
-		WithPage(pageFromPageState(walking.Page)).
-		Build()
+	rsp := &vm.TranslationRsp{
+		Page: pageFromPageState(walking.Page),
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = gmmu.topPort.AsRemote()
+	rsp.Dst = walking.ReqSrc
+	rsp.RspTo = walking.ReqID
+	rsp.TrafficClass = "vm.TranslationRsp"
 
 	gmmu.topPort.Send(rsp)
 
@@ -297,12 +300,14 @@ func (gmmu *GMMU) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 		return false
 	}
 
-	rspToTop := vm.TranslationRspBuilder{}.
-		WithSrc(gmmu.topPort.AsRemote()).
-		WithDst(reqTransaction.ReqSrc).
-		WithRspTo(rsp.ID).
-		WithPage(rsp.Page).
-		Build()
+	rspToTop := &vm.TranslationRsp{
+		Page: rsp.Page,
+	}
+	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.Src = gmmu.topPort.AsRemote()
+	rspToTop.Dst = reqTransaction.ReqSrc
+	rspToTop.RspTo = rsp.ID
+	rspToTop.TrafficClass = "vm.TranslationRsp"
 
 	gmmu.topPort.Send(rspToTop)
 

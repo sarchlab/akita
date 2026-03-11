@@ -116,13 +116,14 @@ func TestGetStateAndSetState(t *testing.T) {
 	engine := sim.NewSerialEngine()
 	mmu := buildTestMMU(engine, "TestMMU")
 
-	req := vm.TranslationReqBuilder{}.
-		WithSrc(sim.RemotePort("Agent")).
-		WithDst(sim.RemotePort("MMU.ToTop")).
-		WithPID(1).
-		WithVAddr(0x1000).
-		WithDeviceID(2).
-		Build()
+	req := &vm.TranslationReq{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Src = sim.RemotePort("Agent")
+	req.Dst = sim.RemotePort("MMU.ToTop")
+	req.PID = 1
+	req.VAddr = 0x1000
+	req.DeviceID = 2
+	req.TrafficClass = "vm.TranslationReq"
 	populateMMURuntimeState(mmu, req)
 
 	state := mmu.GetState()
@@ -142,13 +143,14 @@ func TestTransactionStateWithMigration(t *testing.T) {
 		},
 	}
 
-	req := vm.TranslationReqBuilder{}.
-		WithSrc(sim.RemotePort("Agent")).
-		WithDst(sim.RemotePort("MMU.ToTop")).
-		WithPID(1).
-		WithVAddr(0x1000).
-		WithDeviceID(2).
-		Build()
+	req := &vm.TranslationReq{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Src = sim.RemotePort("Agent")
+	req.Dst = sim.RemotePort("MMU.ToTop")
+	req.PID = 1
+	req.VAddr = 0x1000
+	req.DeviceID = 2
+	req.TrafficClass = "vm.TranslationReq"
 
 	trans := transaction{
 		req: req,

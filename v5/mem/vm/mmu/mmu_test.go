@@ -56,12 +56,13 @@ var _ = Describe("MMU", func() {
 
 	Context("parse top", func() {
 		It("should process translation request", func() {
-			translationReq := vm.TranslationReqBuilder{}.
-				WithDst(mmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x100000100).
-				WithDeviceID(0).
-				Build()
+			translationReq := &vm.TranslationReq{}
+			translationReq.ID = sim.GetIDGenerator().Generate()
+			translationReq.Dst = mmuComp.topPort.AsRemote()
+			translationReq.PID = 1
+			translationReq.VAddr = 0x100000100
+			translationReq.DeviceID = 0
+			translationReq.TrafficClass = "vm.TranslationReq"
 			topPort.EXPECT().
 				RetrieveIncoming().
 				Return(translationReq)
@@ -85,12 +86,13 @@ var _ = Describe("MMU", func() {
 
 	Context("walk page table", func() {
 		It("should reduce translation cycles", func() {
-			req := vm.TranslationReqBuilder{}.
-				WithDst(topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x1020).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x1020
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 			walking := transaction{req: req, cycleLeft: 10}
 			mmuComp.walkingTranslations = append(mmuComp.walkingTranslations, walking)
 
@@ -108,12 +110,13 @@ var _ = Describe("MMU", func() {
 				PageSize: 4096,
 				Valid:    true,
 			}
-			req := vm.TranslationReqBuilder{}.
-				WithDst(mmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x1000).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = mmuComp.topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x1000
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 			walking := transaction{req: req, cycleLeft: 0}
 			mmuComp.walkingTranslations = append(mmuComp.walkingTranslations, walking)
 
@@ -142,12 +145,13 @@ var _ = Describe("MMU", func() {
 				PageSize: 4096,
 				Valid:    true,
 			}
-			req := vm.TranslationReqBuilder{}.
-				WithDst(mmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x1000).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = mmuComp.topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x1000
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 			walking := transaction{req: req, cycleLeft: 0}
 			mmuComp.walkingTranslations =
 				append(mmuComp.walkingTranslations, walking)
@@ -184,12 +188,13 @@ var _ = Describe("MMU", func() {
 				Find(vm.PID(1), uint64(0x1000)).
 				Return(page, true).
 				AnyTimes()
-			req = vm.TranslationReqBuilder{}.
-				WithDst(mmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x1000).
-				WithDeviceID(0).
-				Build()
+			req = &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = mmuComp.topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x1000
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 			walking = transaction{
 				req:       req,
 				page:      page,
@@ -318,12 +323,13 @@ var _ = Describe("MMU", func() {
 				Find(vm.PID(1), uint64(0x1000)).
 				Return(page, true).
 				AnyTimes()
-			req = vm.TranslationReqBuilder{}.
-				WithDst(mmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x1000).
-				WithDeviceID(0).
-				Build()
+			req = &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = mmuComp.topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x1000
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 			migrating = transaction{req: req, cycleLeft: 0}
 			mmuComp.currentOnDemandMigration = migrating
 			migrationDone = vm.NewPageMigrationRspFromDriver("", "", req.ID)
@@ -421,13 +427,14 @@ var _ = Describe("MMU Integration", func() {
 		}
 		mmuComp.pageTable.Insert(page)
 
-		req := vm.TranslationReqBuilder{}.
-			WithSrc(agent.AsRemote()).
-			WithDst(mmuComp.topPort.AsRemote()).
-			WithPID(1).
-			WithVAddr(0x1000).
-			WithDeviceID(0).
-			Build()
+		req := &vm.TranslationReq{}
+		req.ID = sim.GetIDGenerator().Generate()
+		req.Src = agent.AsRemote()
+		req.Dst = mmuComp.topPort.AsRemote()
+		req.PID = 1
+		req.VAddr = 0x1000
+		req.DeviceID = 0
+		req.TrafficClass = "vm.TranslationReq"
 		mmuComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).

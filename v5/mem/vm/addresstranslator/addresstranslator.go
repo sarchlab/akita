@@ -271,13 +271,14 @@ func (m *middleware) translate() bool {
 	vAddr := item.GetAddress()
 	vPageID := m.addrToPageID(vAddr)
 
-	transReq := vm.TranslationReqBuilder{}.
-		WithSrc(m.translationPort.AsRemote()).
-		WithDst(m.translationPortMapper.Find(vAddr)).
-		WithPID(item.GetPID()).
-		WithVAddr(vPageID).
-		WithDeviceID(m.GetSpec().DeviceID).
-		Build()
+	transReq := &vm.TranslationReq{}
+	transReq.ID = sim.GetIDGenerator().Generate()
+	transReq.Src = m.translationPort.AsRemote()
+	transReq.Dst = m.translationPortMapper.Find(vAddr)
+	transReq.PID = item.GetPID()
+	transReq.VAddr = vPageID
+	transReq.DeviceID = m.GetSpec().DeviceID
+	transReq.TrafficClass = "vm.TranslationReq"
 
 	err := m.translationPort.Send(transReq)
 	if err != nil {
@@ -385,12 +386,15 @@ func (m *middleware) respond() bool {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RspTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			fromMeta := reqFromTop.Meta()
-			rspToTop = mem.DataReadyRspBuilder{}.
-				WithSrc(m.topPort.AsRemote()).
-				WithDst(fromMeta.Src).
-				WithRspTo(fromMeta.ID).
-				WithData(rsp.Data).
-				Build()
+			rspToTop = &mem.DataReadyRsp{
+				Data: rsp.Data,
+			}
+			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
+			rspToTop.Meta().Src = m.topPort.AsRemote()
+			rspToTop.Meta().Dst = fromMeta.Src
+			rspToTop.Meta().RspTo = fromMeta.ID
+			rspToTop.Meta().TrafficBytes = len(rsp.Data) + 4
+			rspToTop.Meta().TrafficClass = "mem.DataReadyRsp"
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
 				tracing.MilestoneKindData,
@@ -405,11 +409,13 @@ func (m *middleware) respond() bool {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RspTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
 			fromMeta := reqFromTop.Meta()
-			rspToTop = mem.WriteDoneRspBuilder{}.
-				WithSrc(m.topPort.AsRemote()).
-				WithDst(fromMeta.Src).
-				WithRspTo(fromMeta.ID).
-				Build()
+			rspToTop = &mem.WriteDoneRsp{}
+			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
+			rspToTop.Meta().Src = m.topPort.AsRemote()
+			rspToTop.Meta().Dst = fromMeta.Src
+			rspToTop.Meta().RspTo = fromMeta.ID
+			rspToTop.Meta().TrafficBytes = 4
+			rspToTop.Meta().TrafficClass = "mem.WriteDoneRsp"
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
 				tracing.MilestoneKindSubTask,
@@ -469,14 +475,16 @@ func (m *middleware) createTranslatedReadReq(
 ) *mem.ReadReq {
 	offset := readReq.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
-	clone := mem.ReadReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.memoryPortMapper.Find(addr)).
-		WithAddress(addr).
-		WithByteSize(readReq.AccessByteSize).
-		WithPID(0).
-		WithInfo(readReq.Info).
-		Build()
+	clone := &mem.ReadReq{}
+	clone.ID = sim.GetIDGenerator().Generate()
+	clone.Src = m.bottomPort.AsRemote()
+	clone.Dst = m.memoryPortMapper.Find(addr)
+	clone.Address = addr
+	clone.AccessByteSize = readReq.AccessByteSize
+	clone.PID = 0
+	clone.Info = readReq.Info
+	clone.TrafficBytes = 12
+	clone.TrafficClass = "mem.ReadReq"
 	clone.CanWaitForCoalesce = readReq.CanWaitForCoalesce
 
 	return clone
@@ -488,15 +496,17 @@ func (m *middleware) createTranslatedWriteReq(
 ) *mem.WriteReq {
 	offset := writeReq.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
-	clone := mem.WriteReqBuilder{}.
-		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.memoryPortMapper.Find(addr)).
-		WithData(writeReq.Data).
-		WithDirtyMask(writeReq.DirtyMask).
-		WithAddress(addr).
-		WithPID(0).
-		WithInfo(writeReq.Info).
-		Build()
+	clone := &mem.WriteReq{}
+	clone.ID = sim.GetIDGenerator().Generate()
+	clone.Src = m.bottomPort.AsRemote()
+	clone.Dst = m.memoryPortMapper.Find(addr)
+	clone.Data = writeReq.Data
+	clone.DirtyMask = writeReq.DirtyMask
+	clone.Address = addr
+	clone.PID = 0
+	clone.Info = writeReq.Info
+	clone.TrafficBytes = len(writeReq.Data) + 12
+	clone.TrafficClass = "mem.WriteReq"
 	clone.CanWaitForCoalesce = writeReq.CanWaitForCoalesce
 
 	return clone
@@ -582,11 +592,14 @@ func (m *middleware) handleCtrlRequest() bool {
 }
 
 func (m *middleware) handleFlushReq(msg *mem.ControlMsg) bool {
-	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(m.ctrlPort.AsRemote()).
-		WithDst(msg.Src).
-		ToNotifyDone().
-		Build()
+	rsp := &mem.ControlMsg{
+		NotifyDone: true,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.ControlMsg"
 
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
@@ -603,11 +616,14 @@ func (m *middleware) handleFlushReq(msg *mem.ControlMsg) bool {
 }
 
 func (m *middleware) handleRestartReq(msg *mem.ControlMsg) bool {
-	rsp := mem.ControlMsgBuilder{}.
-		WithSrc(m.ctrlPort.AsRemote()).
-		WithDst(msg.Src).
-		ToNotifyDone().
-		Build()
+	rsp := &mem.ControlMsg{
+		NotifyDone: true,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort.AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.ControlMsg"
 
 	err := m.ctrlPort.Send(rsp)
 

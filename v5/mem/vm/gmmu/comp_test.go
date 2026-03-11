@@ -79,12 +79,13 @@ var _ = Describe("Builder", func() {
 
 	Context("GMMU parse from top", func() {
 		It("should process translation request", func() {
-			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmuComp.topPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x00000001).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = gmmuComp.topPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x00000001
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 
 			topPort.EXPECT().
 				RetrieveIncoming().
@@ -100,13 +101,14 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("should walk page table", func() {
-			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmuComp.topPort.AsRemote()).
-				WithSrc(upperComponentPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x10000001).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Src = upperComponentPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x10000001
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 
 			page := vm.Page{
 				PID:      vm.PID(1),
@@ -149,13 +151,14 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("should send request remotely", func() {
-			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmuComp.topPort.AsRemote()).
-				WithSrc(upperComponentPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x10000001).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Src = upperComponentPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x10000001
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 
 			page := vm.Page{
 				PID:      vm.PID(1),
@@ -191,13 +194,14 @@ var _ = Describe("Builder", func() {
 		})
 
 		It("should return response from remote page table", func() {
-			req := vm.TranslationReqBuilder{}.
-				WithDst(gmmuComp.topPort.AsRemote()).
-				WithSrc(upperComponentPort.AsRemote()).
-				WithPID(1).
-				WithVAddr(0x10000001).
-				WithDeviceID(0).
-				Build()
+			req := &vm.TranslationReq{}
+			req.ID = sim.GetIDGenerator().Generate()
+			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Src = upperComponentPort.AsRemote()
+			req.PID = 1
+			req.VAddr = 0x10000001
+			req.DeviceID = 0
+			req.TrafficClass = "vm.TranslationReq"
 
 			page := vm.Page{
 				PID:      vm.PID(1),
@@ -239,12 +243,14 @@ var _ = Describe("Builder", func() {
 			bottomPort.EXPECT().
 				RetrieveIncoming().
 				DoAndReturn(func() sim.Msg {
-					rsp := vm.TranslationRspBuilder{}.
-						WithSrc(gmmuComp.GetSpec().LowModule).
-						WithDst(gmmuComp.bottomPort.AsRemote()).
-						WithRspTo(sentReqToBottom.ID).
-						WithPage(page).
-						Build()
+					rsp := &vm.TranslationRsp{
+						Page: page,
+					}
+					rsp.ID = sim.GetIDGenerator().Generate()
+					rsp.Src = gmmuComp.GetSpec().LowModule
+					rsp.Dst = gmmuComp.bottomPort.AsRemote()
+					rsp.RspTo = sentReqToBottom.ID
+					rsp.TrafficClass = "vm.TranslationRsp"
 					return rsp
 				})
 

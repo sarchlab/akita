@@ -417,13 +417,15 @@ func (m *dataMoverMiddleware) readFromSrc() bool {
 		return false
 	}
 
-	req := mem.ReadReqBuilder{}.
-		WithAddress(addr).
-		WithSrc(m.srcPort.AsRemote()).
-		WithDst(m.srcPortMapper.Find(addr)).
-		WithByteSize(m.srcByteGranularity).
-		WithPID(0).
-		Build()
+	req := &mem.ReadReq{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Address = addr
+	req.Src = m.srcPort.AsRemote()
+	req.Dst = m.srcPortMapper.Find(addr)
+	req.AccessByteSize = m.srcByteGranularity
+	req.PID = 0
+	req.TrafficBytes = 12
+	req.TrafficClass = "mem.ReadReq"
 
 	err := m.srcPort.Send(req)
 	if err != nil {
@@ -485,13 +487,15 @@ func (m *dataMoverMiddleware) writeToDst() bool {
 		return false
 	}
 
-	req := mem.WriteReqBuilder{}.
-		WithAddress(m.currentTransaction.nextWriteAddr).
-		WithData(data).
-		WithSrc(m.dstPort.AsRemote()).
-		WithDst(m.dstPortMapper.Find(m.currentTransaction.nextWriteAddr)).
-		WithPID(0).
-		Build()
+	req := &mem.WriteReq{}
+	req.ID = sim.GetIDGenerator().Generate()
+	req.Address = m.currentTransaction.nextWriteAddr
+	req.Data = data
+	req.Src = m.dstPort.AsRemote()
+	req.Dst = m.dstPortMapper.Find(m.currentTransaction.nextWriteAddr)
+	req.PID = 0
+	req.TrafficBytes = len(data) + 12
+	req.TrafficClass = "mem.WriteReq"
 
 	err := m.dstPort.Send(req)
 	if err != nil {
