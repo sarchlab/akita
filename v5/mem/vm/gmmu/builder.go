@@ -90,6 +90,7 @@ func (b Builder) WithBottomPort(port sim.Port) Builder {
 	return b
 }
 
+// Build returns a new GMMU
 func (b Builder) Build(name string) *GMMU {
 	spec := Spec{
 		DeviceID:            b.deviceID,
@@ -105,7 +106,7 @@ func (b Builder) Build(name string) *GMMU {
 		WithSpec(spec).
 		Build(name)
 
-	gmmu := &GMMU{
+	c := &GMMU{
 		Component: modelComp,
 	}
 
@@ -114,28 +115,29 @@ func (b Builder) Build(name string) *GMMU {
 	}
 	modelComp.SetState(initialState)
 
-	b.createPageTable(gmmu)
-	b.createPorts(name, gmmu)
-
-	middleware := &gmmuMiddleware{GMMU: gmmu}
-	gmmu.AddMiddleware(middleware)
-
-	return gmmu
-}
-
-func (b Builder) createPageTable(gmmu *GMMU) {
-	if b.pageTable != nil {
-		gmmu.pageTable = b.pageTable
-	} else {
-		gmmu.pageTable = vm.NewPageTable(b.log2PageSize)
+	pt := b.pageTable
+	if pt == nil {
+		pt = vm.NewPageTable(b.log2PageSize)
 	}
+
+	mw := &middleware{
+		comp:      modelComp,
+		pageTable: pt,
+	}
+	modelComp.AddMiddleware(mw)
+
+	b.createPorts(c, modelComp)
+
+	return c
 }
 
-func (b Builder) createPorts(name string, gmmu *GMMU) {
-	gmmu.topPort = b.topPort
-	gmmu.topPort.SetComponent(gmmu)
-	gmmu.AddPort("Top", gmmu.topPort)
-	gmmu.bottomPort = b.bottomPort
-	gmmu.bottomPort.SetComponent(gmmu)
-	gmmu.AddPort("Bottom", gmmu.bottomPort)
+func (b Builder) createPorts(
+	c *GMMU,
+	modelComp *modeling.Component[Spec, State],
+) {
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
+
+	b.bottomPort.SetComponent(c)
+	modelComp.AddPort("Bottom", b.bottomPort)
 }

@@ -17,6 +17,9 @@ type Spec struct {
 	Latency             int            `json:"latency"`
 	MaxRequestsInFlight int            `json:"max_requests_in_flight"`
 	LowModule           sim.RemotePort `json:"low_module"`
+
+	// MigrationServiceProvider is the port used for page migration requests.
+	MigrationServiceProvider sim.RemotePort `json:"migration_service_provider"`
 }
 
 // pageState captures vm.Page fields in a serializable form.
@@ -61,24 +64,49 @@ type State struct {
 // GMMU is the default gmmu implementation. It is also an akita Component.
 type GMMU struct {
 	*modeling.Component[Spec, State]
+}
 
-	topPort    sim.Port
-	bottomPort sim.Port
-
-	// MigrationServiceProvider is the port used for page migration requests and
-	// responses between the GMMU and the migration service.
-	MigrationServiceProvider sim.RemotePort
-
+// middleware provides the Tick method for the GMMU.
+type middleware struct {
+	comp      *modeling.Component[Spec, State]
 	pageTable vm.PageTable
 }
 
-// gmmuMiddleware provides the Tick method for the GMMU.
-type gmmuMiddleware struct {
-	*GMMU
+// Name delegates to the component.
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+// AcceptHook delegates to the component.
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+// Hooks delegates to the component.
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+// NumHooks delegates to the component.
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+// InvokeHook delegates to the component.
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *middleware) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *middleware) bottomPort() sim.Port {
+	return m.comp.GetPortByName("Bottom")
 }
 
 // Tick defines how the gmmu updates state each cycle.
-func (m *gmmuMiddleware) Tick() bool {
+func (m *middleware) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
@@ -88,33 +116,34 @@ func (m *gmmuMiddleware) Tick() bool {
 	return madeProgress
 }
 
-func (gmmu *GMMU) parseFromTop() bool {
-	spec := gmmu.GetSpec()
-	state := gmmu.GetState()
+func (m *middleware) parseFromTop() bool {
+	spec := m.comp.GetSpec()
+	nextState := m.comp.GetNextState()
 
-	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(nextState.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
-	reqI := gmmu.topPort.RetrieveIncoming()
+	reqI := m.topPort().RetrieveIncoming()
 	if reqI == nil {
 		return false
 	}
 
 	switch req := reqI.(type) {
 	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, gmmu)
-		gmmu.startWalking(req)
+		tracing.TraceReqReceive(req, m)
+		m.startWalking(req)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", fmt.Sprintf("%T", reqI))
+		log.Panicf("gmmu cannot handle request of type %s",
+			fmt.Sprintf("%T", reqI))
 	}
 
 	return true
 }
 
-func (gmmu *GMMU) startWalking(req *vm.TranslationReq) {
-	spec := gmmu.GetSpec()
-	state := gmmu.GetState()
+func (m *middleware) startWalking(req *vm.TranslationReq) {
+	spec := m.comp.GetSpec()
+	nextState := m.comp.GetNextState()
 
 	ts := transactionState{
 		ReqID:     req.ID,
@@ -126,30 +155,30 @@ func (gmmu *GMMU) startWalking(req *vm.TranslationReq) {
 		CycleLeft: spec.Latency,
 	}
 
-	state.WalkingTranslations = append(state.WalkingTranslations, ts)
-	gmmu.SetState(state)
+	nextState.WalkingTranslations = append(
+		nextState.WalkingTranslations, ts)
 }
 
-func (gmmu *GMMU) walkPageTable() bool {
-	state := gmmu.GetState()
+func (m *middleware) walkPageTable() bool {
+	nextState := m.comp.GetNextState()
 
-	if len(state.WalkingTranslations) == 0 {
+	if len(nextState.WalkingTranslations) == 0 {
 		return false
 	}
 
 	madeProgress := false
-	spec := gmmu.GetSpec()
+	spec := m.comp.GetSpec()
 
-	for i := 0; i < len(state.WalkingTranslations); i++ {
-		if state.WalkingTranslations[i].CycleLeft > 0 {
-			state.WalkingTranslations[i].CycleLeft--
+	for i := 0; i < len(nextState.WalkingTranslations); i++ {
+		if nextState.WalkingTranslations[i].CycleLeft > 0 {
+			nextState.WalkingTranslations[i].CycleLeft--
 			madeProgress = true
 			continue
 		}
 
-		ts := state.WalkingTranslations[i]
+		ts := nextState.WalkingTranslations[i]
 
-		page, found := gmmu.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
+		page, found := m.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 		if !found {
 			log.Panicf(
 				"gmmu: page not found for PID %d VAddr 0x%x",
@@ -158,19 +187,18 @@ func (gmmu *GMMU) walkPageTable() bool {
 		}
 
 		if page.DeviceID == spec.DeviceID {
-			madeProgress = gmmu.finalizePageWalk(&state, i) || madeProgress
+			madeProgress = m.finalizePageWalk(nextState, i) || madeProgress
 		} else {
-			madeProgress = gmmu.processRemoteMemReq(&state, i) || madeProgress
+			madeProgress = m.processRemoteMemReq(nextState, i) || madeProgress
 		}
 	}
 
-	gmmu.removeCompletedTranslations(&state)
-	gmmu.SetState(state)
+	m.removeCompletedTranslations(nextState)
 
 	return madeProgress
 }
 
-func (gmmu *GMMU) removeCompletedTranslations(state *State) {
+func (m *middleware) removeCompletedTranslations(state *State) {
 	if len(state.ToRemoveFromPTW) == 0 {
 		return
 	}
@@ -190,17 +218,20 @@ func (gmmu *GMMU) removeCompletedTranslations(state *State) {
 	state.ToRemoveFromPTW = nil
 }
 
-func (gmmu *GMMU) processRemoteMemReq(state *State, walkingIndex int) bool {
-	if !gmmu.bottomPort.CanSend() {
+func (m *middleware) processRemoteMemReq(
+	state *State,
+	walkingIndex int,
+) bool {
+	if !m.bottomPort().CanSend() {
 		return false
 	}
 
-	spec := gmmu.GetSpec()
+	spec := m.comp.GetSpec()
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := &vm.TranslationReq{}
 	req.ID = sim.GetIDGenerator().Generate()
-	req.Src = gmmu.bottomPort.AsRemote()
+	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
 	req.VAddr = walking.VAddr
@@ -209,33 +240,33 @@ func (gmmu *GMMU) processRemoteMemReq(state *State, walkingIndex int) bool {
 
 	state.RemoteMemReqs[req.ID] = walking
 
-	gmmu.bottomPort.Send(req)
+	m.bottomPort().Send(req)
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	return true
 }
 
-func (gmmu *GMMU) finalizePageWalk(
+func (m *middleware) finalizePageWalk(
 	state *State,
 	walkingIndex int,
 ) bool {
 	ts := state.WalkingTranslations[walkingIndex]
-	page, found := gmmu.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
+	page, found := m.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 	if !found {
 		return false
 	}
 
 	state.WalkingTranslations[walkingIndex].Page = pageStateFromPage(page)
 
-	return gmmu.doPageWalkHit(state, walkingIndex)
+	return m.doPageWalkHit(state, walkingIndex)
 }
 
-func (gmmu *GMMU) doPageWalkHit(
+func (m *middleware) doPageWalkHit(
 	state *State,
 	walkingIndex int,
 ) bool {
-	if !gmmu.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 	walking := state.WalkingTranslations[walkingIndex]
@@ -244,12 +275,12 @@ func (gmmu *GMMU) doPageWalkHit(
 		Page: pageFromPageState(walking.Page),
 	}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = gmmu.topPort.AsRemote()
+	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
 	rsp.TrafficClass = "vm.TranslationRsp"
 
-	gmmu.topPort.Send(rsp)
+	m.topPort().Send(rsp)
 
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
@@ -261,42 +292,43 @@ func (gmmu *GMMU) doPageWalkHit(
 				Dst: walking.ReqDst,
 			},
 		},
-		gmmu,
+		m,
 	)
 
 	return true
 }
 
-func (gmmu *GMMU) fetchFromBottom() bool {
-	if !gmmu.topPort.CanSend() {
+func (m *middleware) fetchFromBottom() bool {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
-	rspI := gmmu.bottomPort.RetrieveIncoming()
+	rspI := m.bottomPort().RetrieveIncoming()
 	if rspI == nil {
 		return false
 	}
 
 	switch rsp := rspI.(type) {
 	case *vm.TranslationRsp:
-		tracing.TraceReqReceive(rsp, gmmu)
-		return gmmu.handleTranslationRsp(rsp)
+		tracing.TraceReqReceive(rsp, m)
+		return m.handleTranslationRsp(rsp)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", fmt.Sprintf("%T", rspI))
+		log.Panicf("gmmu cannot handle request of type %s",
+			fmt.Sprintf("%T", rspI))
 		return false
 	}
 }
 
-func (gmmu *GMMU) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
-	state := gmmu.GetState()
+func (m *middleware) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
+	nextState := m.comp.GetNextState()
 
-	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
+	reqTransaction, exists := nextState.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == "" {
 		log.Panicf("Cannot find matching request for response %+v", rsp)
 	}
 
-	if !gmmu.topPort.CanSend() {
+	if !m.topPort().CanSend() {
 		return false
 	}
 
@@ -304,15 +336,14 @@ func (gmmu *GMMU) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 		Page: rsp.Page,
 	}
 	rspToTop.ID = sim.GetIDGenerator().Generate()
-	rspToTop.Src = gmmu.topPort.AsRemote()
+	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID
 	rspToTop.TrafficClass = "vm.TranslationRsp"
 
-	gmmu.topPort.Send(rspToTop)
+	m.topPort().Send(rspToTop)
 
-	delete(state.RemoteMemReqs, rsp.RspTo)
-	gmmu.SetState(state)
+	delete(nextState.RemoteMemReqs, rsp.RspTo)
 
 	return true
 }
