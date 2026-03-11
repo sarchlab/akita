@@ -57,13 +57,19 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	s := &Comp{Component: modelComp}
-	s.routingTable = b.routingTable
-	s.arbiter = b.arbiter
-	s.portToComplexMapping = make(map[sim.RemotePort]portComplex)
+	mw := &middleware{
+		comp:                 modelComp,
+		portToComplexMapping: make(map[sim.RemotePort]portComplex),
+		routingTable:         b.routingTable,
+		arbiter:              b.arbiter,
+	}
 
-	middleware := &middleware{Comp: s}
-	s.AddMiddleware(middleware)
+	s := &Comp{
+		Component: modelComp,
+		mw:        mw,
+	}
+
+	modelComp.AddMiddleware(mw)
 
 	return s
 }
