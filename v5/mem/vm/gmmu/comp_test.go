@@ -20,6 +20,7 @@ var _ = Describe("Builder", func() {
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
 		gmmuComp           *GMMU
+		mw                 *middleware
 	)
 
 	BeforeEach(func() {
@@ -42,24 +43,25 @@ var _ = Describe("Builder", func() {
 		topPort.EXPECT().AsRemote().
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
+		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().AsRemote().
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
+		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
 		builder := MakeBuilder().
 			WithEngine(engine).
 			WithDeviceID(0).
 			WithPageWalkingLatency(1).
 			WithLowModule(lowerComponentPort.AsRemote()).
-			WithTopPort(sim.NewPort(nil, 4096, 4096, "MMU.TopPort")).
-			WithBottomPort(sim.NewPort(nil, 4096, 4096, "MMU.BottomPort"))
+			WithPageTable(pageTable).
+			WithTopPort(topPort).
+			WithBottomPort(bottomPort)
 
 		gmmuComp = builder.Build("MMU")
-		gmmuComp.topPort = topPort
-		gmmuComp.bottomPort = bottomPort
-		gmmuComp.pageTable = pageTable
+		mw = gmmuComp.Middlewares()[0].(*middleware)
 	})
 
 	AfterEach(func() {
@@ -71,8 +73,7 @@ var _ = Describe("Builder", func() {
 			Expect(gmmuComp.Engine).To(Equal(engine))
 			Expect(gmmuComp.Freq).To(Equal(1 * sim.GHz))
 			Expect(gmmuComp.GetSpec().MaxRequestsInFlight).To(Equal(16))
-			Expect(gmmuComp.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.topPort).To(Equal(topPort))
+			Expect(mw.pageTable).To(Equal(pageTable))
 			Expect(gmmuComp.GetSpec().DeviceID).To(Equal(uint64(0)))
 		})
 	})
@@ -81,7 +82,7 @@ var _ = Describe("Builder", func() {
 		It("should process translation request", func() {
 			req := &vm.TranslationReq{}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Dst = topPort.AsRemote()
 			req.PID = 1
 			req.VAddr = 0x00000001
 			req.DeviceID = 0
@@ -94,16 +95,16 @@ var _ = Describe("Builder", func() {
 			topPort.EXPECT().CanSend().
 				Return(false)
 
-			gmmuComp.Tick()
+			mw.Tick()
 
-			state := gmmuComp.GetState()
-			Expect(len(state.WalkingTranslations)).To(Equal(1))
+			nextState := gmmuComp.GetNextState()
+			Expect(len(nextState.WalkingTranslations)).To(Equal(1))
 		})
 
 		It("should walk page table", func() {
 			req := &vm.TranslationReq{}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
 			req.VAddr = 0x10000001
@@ -141,9 +142,9 @@ var _ = Describe("Builder", func() {
 				}).
 				Return(nil)
 
-			gmmuComp.parseFromTop()
-			gmmuComp.walkPageTable()
-			gmmuComp.walkPageTable()
+			mw.parseFromTop()
+			mw.walkPageTable()
+			mw.walkPageTable()
 
 			Expect(sentRsp).NotTo(BeNil())
 			Expect(sentRsp.Page).To(Equal(page))
@@ -153,7 +154,7 @@ var _ = Describe("Builder", func() {
 		It("should send request remotely", func() {
 			req := &vm.TranslationReq{}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
 			req.VAddr = 0x10000001
@@ -188,15 +189,15 @@ var _ = Describe("Builder", func() {
 				Send(gomock.Any()).
 				Return(nil)
 
-			gmmuComp.parseFromTop()
-			gmmuComp.walkPageTable()
-			gmmuComp.walkPageTable()
+			mw.parseFromTop()
+			mw.walkPageTable()
+			mw.walkPageTable()
 		})
 
 		It("should return response from remote page table", func() {
 			req := &vm.TranslationReq{}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.Dst = gmmuComp.topPort.AsRemote()
+			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
 			req.VAddr = 0x10000001
@@ -248,7 +249,7 @@ var _ = Describe("Builder", func() {
 					}
 					rsp.ID = sim.GetIDGenerator().Generate()
 					rsp.Src = gmmuComp.GetSpec().LowModule
-					rsp.Dst = gmmuComp.bottomPort.AsRemote()
+					rsp.Dst = bottomPort.AsRemote()
 					rsp.RspTo = sentReqToBottom.ID
 					rsp.TrafficClass = "vm.TranslationRsp"
 					return rsp
@@ -262,10 +263,10 @@ var _ = Describe("Builder", func() {
 				}).
 				Return(nil)
 
-			gmmuComp.parseFromTop()
-			gmmuComp.walkPageTable()
-			gmmuComp.walkPageTable()
-			gmmuComp.fetchFromBottom()
+			mw.parseFromTop()
+			mw.walkPageTable()
+			mw.walkPageTable()
+			mw.fetchFromBottom()
 
 			Expect(sentRsp).NotTo(BeNil())
 			Expect(sentRsp.Page).To(Equal(page))
