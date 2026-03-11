@@ -8,19 +8,20 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// FlitPayload is the payload for a flit, the smallest transferring unit on a
+// Flit is a concrete message representing the smallest transferring unit on a
 // network.
-type FlitPayload struct {
+type Flit struct {
+	sim.MsgMeta
 	SeqID        int
 	NumFlitInMsg int
-	Msg          *sim.GenericMsg
+	Msg          sim.Msg
 	OutputBuf    queueing.Buffer // The buffer to route to within a switch
 }
 
 // FlitBuilder can build flits
 type FlitBuilder struct {
 	src, dst            sim.RemotePort
-	msg                 *sim.GenericMsg
+	msg                 sim.Msg
 	seqID, numFlitInMsg int
 }
 
@@ -49,35 +50,28 @@ func (b FlitBuilder) WithNumFlitInMsg(n int) FlitBuilder {
 }
 
 // WithMsg sets the msg of the flit to build.
-func (b FlitBuilder) WithMsg(msg *sim.GenericMsg) FlitBuilder {
+func (b FlitBuilder) WithMsg(msg sim.Msg) FlitBuilder {
 	b.msg = msg
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with FlitPayload.
-func (b FlitBuilder) Build() *sim.GenericMsg {
-	payload := &FlitPayload{
-		SeqID:        b.seqID,
-		NumFlitInMsg: b.numFlitInMsg,
-		Msg:          b.msg,
-	}
+// Build creates a new *Flit.
+func (b FlitBuilder) Build() *Flit {
 	flitID := fmt.Sprintf("flit-%d-msg-%s-%s",
-		b.seqID, b.msg.ID,
+		b.seqID, b.msg.Meta().ID,
 		sim.GetIDGenerator().Generate())
 
-	var trafficClass string
-	if b.msg.Payload != nil {
-		msgValue := reflect.TypeOf(b.msg.Payload).Elem()
-		trafficClass = msgValue.String()
-	}
+	trafficClass := reflect.TypeOf(b.msg).String()
 
-	return &sim.GenericMsg{
+	return &Flit{
 		MsgMeta: sim.MsgMeta{
 			ID:           flitID,
 			Src:          b.src,
 			Dst:          b.dst,
 			TrafficClass: trafficClass,
 		},
-		Payload: payload,
+		SeqID:        b.seqID,
+		NumFlitInMsg: b.numFlitInMsg,
+		Msg:          b.msg,
 	}
 }
