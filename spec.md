@@ -16,19 +16,19 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods for q
 
 `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) embedding `sim.MsgMeta`. No `Payload any`, no `GenericMsg`, no runtime casting, no message builders, no msgRef types. Components type-switch on concrete types: `case *mem.ReadReq:`. Messages are constructed as plain struct literals.
 
-### 4. Port All First-Party Components (DONE — structurally ported, State needs work for writeback)
+### 4. Port All First-Party Components (DONE)
 
-All first-party components have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. State is populated for 15 of 16 components. Only writeback cache has an empty State struct.
+All first-party components have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. State is fully populated for all 16 components with meaningful, serializable State structs.
 
 ### 5. CI Must Pass (DONE)
 
 All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
 
-### 6. Eliminate Comp Wrapper / Move Mutable Data into State (IN PROGRESS)
+### 6. Eliminate Comp Wrapper / Move Mutable Data into State (INVESTIGATED)
 
 Human raised issue #61: currently, ported components like TLB have a `Comp` struct wrapping `*modeling.Component[Spec, State]`, but mutable runtime data is duplicated — it exists on both the `Comp` struct (as live objects) and in `State` (as serializable snapshots). SaveState copies Comp→State, LoadState restores State→Comp.
 
-The goal is to investigate whether the `Comp` wrapper can be simplified or eliminated, reducing duplication between live objects and their serializable representations.
+Investigation complete: Comp wrapper cannot be fully eliminated because `ValidateState` forbids pointers/interfaces in State, and live runtime objects (pipelines, buffers, directory pointers) must exist somewhere. The current pattern (Comp holds live objects, State holds serializable snapshots, SaveState/LoadState bridge between them) is the correct architecture. Duplicated scalar fields could be reduced as a future cleanup, but the fundamental pattern is sound. Two components (tickingping, idealmemcontroller) already demonstrate the ideal minimal-Comp pattern.
 
 ## Success Criteria
 

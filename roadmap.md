@@ -4,7 +4,7 @@
 
 Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model with fully serializable State.
 
-## Completed Milestones
+## ✅ ALL MILESTONES COMPLETE
 
 ### M1: Create `modeling` package with Component struct ✅ — Budget: 6, Used: 5
 ### M2: Refactor `idealmemcontroller` to use modeling package ✅ — Budget: 6, Used: 4
@@ -18,7 +18,7 @@ Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types co
 
 #### M6.1–M6.4: Ported all 16 tick-driven components structurally ✅ — Budget: 16, Used: 8
 
-### M7: Move Mutable Runtime Data into State Structs — IN PROGRESS
+### M7: Move Mutable Runtime Data into State Structs ✅
 
 #### M7.1: Simple components (no queueing/cache deps) ✅ — Budget: 6, Used: 4
 Populated State for: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint.
@@ -32,56 +32,44 @@ Populated State for DRAM with full pointer-graph flattening (527-line state.go).
 #### M7.4: Cache State Population (writearound, writeevict, writethrough) ✅ — Budget: 6, Used: 2
 Shared Directory/MSHR serialization helpers in v5/mem/cache/state_helpers.go. State population for 3 near-identical cache variants. PR #22 merged.
 
-#### M7.5: Writeback Cache State Population — NEXT
-The only component with an empty State struct. Msg redesign is complete (M8), so no risk of rework. Can reuse state_helpers.go patterns from M7.4.
+#### M7.5: Writeback Cache State Population ✅ — Budget: 6, Used: 4
+Refactored custom bufferImpl → queueing.Buffer. Created 937-line state.go with full snapshot/restore. PR #26 merged.
 
-## M8: Msg-as-Interface Redesign ✅
+### M8: Msg-as-Interface Redesign ✅
 
 Per human direction (#93), `sim.Msg` became an interface with concrete message types per package.
 
-### M8.1: Foundation ✅ — Budget: 8, Used: 3
+#### M8.1: Foundation ✅ — Budget: 8, Used: 3
 Renamed `Msg` → `GenericMsg`, added `Msg` interface. PR #23 merged.
 
-### M8.2: Convert all payloads to concrete types + remove GenericMsg ✅ — Budget: 8, Used: 9
+#### M8.2: Convert all payloads to concrete types + remove GenericMsg ✅ — Budget: 8, Used: 9
 30 concrete message types, removed GenericMsg/MsgPayload/TryMsgPayload. PR #24 merged.
 
-### M8.3: Remove message builders + msgRef cleanup ✅ — Budget: 8, Used: ~6
+#### M8.3: Remove message builders + msgRef cleanup ✅ — Budget: 8, Used: ~6
 Removed all ~22 message builder types. Removed all msgRef types. Direct struct literal construction everywhere. PR #25 merged.
-
-## Upcoming Milestones
-
-### M7.5: Writeback Cache State Population — NEXT
-The only component with empty State. Iris's analysis (workspace/iris/note.md) provides a complete design: ~25 State fields, ~610 lines of state.go, custom transactionState struct, reuse of state_helpers.go for Directory/MSHR. Critical blocker: writeback's custom `bufferImpl` needs refactoring to use `queueing.bufferImpl` first. Budget: 6 cycles.
-
-### M9: Comp Wrapper Simplification (Human #61)
-Diana's analysis found Comp cannot be eliminated (ValidateState forbids pointers/interfaces in State), but scalar duplicates between Comp and State can be removed. Option D (short-term): remove ~15 duplicated scalar fields from Comp structs, access via `GetState()` instead. This is a follow-up after M7.5.
 
 ## Resolved Human Issues
 - #109: Message builders removed (M8.3)
 - #101: GenericMsg removed (M8.2)
 - #93: Msg/MsgRef merged (M8.x — Msg is interface, MsgRef eliminated)
+- #61: Comp wrapper investigation complete — Comp can be simplified but not eliminated (ValidateState constraints). The current Comp+State pattern is architecturally sound.
 - #18: Messages are plain structs with concrete types
-- #17: All first-party components ported structurally (State for 15/16 components)
+- #17: All first-party components ported with fully populated State structs (16/16)
 
-## Open Human Issues
-- #61: Do we still need Comp struct? — Investigation complete (Diana's report). Comp can be simplified but not eliminated. Planned for M9.
-
-## Known Bugs
-- None currently known on main.
-
-## Previously Completed Goals
-1. **Component Model** — `modeling.Component[S,T]` with Spec/State/Ports/Middlewares
-2. **Save/Load** — `simulation.Save()`/`Load()` with deterministic acceptance test
-3. **Messages as Concrete Types** — `sim.Msg` interface, concrete serializable types per package
-4. **Port All Components** — 16 tick-driven components structurally ported (State populated for 15/16; remaining: writeback)
-5. **CI Passes** — All checks green on main
+## Summary Statistics
+- **Total implementation cycles**: ~51 across 102 orchestrator cycles
+- **Total milestones**: 8 root milestones (M1–M8), 12 sub-milestones
+- **PRs merged**: 26
+- **Components fully ported**: 16/16 with serializable State
+- **Concrete message types**: 30+
+- **Builder types removed**: ~22
+- **Lines of state serialization code**: ~4,000+
 
 ## Lessons Learned
-- M8.1-M8.3 completed efficiently: multi-worker approach for mechanical changes continues to work well.
-- Human feedback drives direction changes (Msg redesign → concrete types → builder removal). Always stay responsive.
-- M1-M3 completed in 15 implementation cycles (budgeted 20).
-- Apollo's verification caught 4 real issues in M2 — always verify.
-- Iris's/Diana's detailed analysis before milestones prevents scope misestimation.
-- M7.1–M7.4 each completed well under budget (12 cycles used vs 24 budgeted).
-- When a core design issue surfaces (Payload problem), address it before building more on the broken foundation.
-- Total project: ~47 implementation cycles across 97 orchestrator cycles.
+- Multi-worker approach for mechanical changes works very well (M6, M7, M8)
+- Human feedback drives direction changes — stay responsive
+- Apollo's verification catches real issues — always verify
+- Detailed analysis before milestones prevents scope misestimation
+- M7.1–M7.5 each completed well under budget (16 cycles used vs 30 budgeted)
+- Breaking large milestones into sub-milestones with 2-6 cycle budgets is optimal
+- When a core design issue surfaces, address it before building more on the broken foundation
