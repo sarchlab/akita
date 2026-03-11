@@ -28,6 +28,7 @@ type Builder struct {
 	addressMapperType string
 	remotePorts       []sim.RemotePort
 	interleavingSize  uint64
+	legacyMapper      mem.AddressToPortMapper // set by WithAddressToPortMapper, read at Build time
 	topPort           sim.Port
 	bottomPort        sim.Port
 	controlPort       sim.Port
@@ -166,21 +167,11 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 // WithAddressToPortMapper specifies how the cache units to create should find
 // low level modules. This configures the address mapper using the legacy
 // interface. Prefer WithAddressMapperType + WithRemotePorts for new code.
+// The mapper is read at Build() time, so its fields can be set after this call.
 func (b Builder) WithAddressToPortMapper(
 	mapper mem.AddressToPortMapper,
 ) Builder {
-	// Convert legacy interface to data-based configuration
-	switch m := mapper.(type) {
-	case *mem.SinglePortMapper:
-		b.addressMapperType = "single"
-		b.remotePorts = []sim.RemotePort{m.Port}
-	case *mem.InterleavedAddressPortMapper:
-		b.addressMapperType = "interleaved"
-		b.remotePorts = m.LowModules
-		b.interleavingSize = m.InterleavingSize
-	default:
-		panic(fmt.Sprintf("unsupported address mapper type: %T", mapper))
-	}
+	b.legacyMapper = mapper
 	return b
 }
 
@@ -190,11 +181,6 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
-
-	remotePortNames := make([]string, len(b.remotePorts))
-	for i, rp := range b.remotePorts {
-		remotePortNames[i] = string(rp)
-	}
 
 	spec := Spec{
 		NumReqPerCycle:        b.numReqPerCycle,
@@ -207,9 +193,17 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		NumSets:               numSets,
 		TotalByteSize:         b.totalByteSize,
 		DirLatency:            b.dirLatency,
-		AddressMapperType:     b.addressMapperType,
-		RemotePortNames:       remotePortNames,
-		InterleavingSize:      b.interleavingSize,
+	}
+
+	// Configure address mapper in Spec (if not using legacy mapper)
+	if b.legacyMapper == nil && b.addressMapperType != "" {
+		remotePortNames := make([]string, len(b.remotePorts))
+		for i, rp := range b.remotePorts {
+			remotePortNames[i] = string(rp)
+		}
+		spec.AddressMapperType = b.addressMapperType
+		spec.RemotePortNames = remotePortNames
+		spec.InterleavingSize = b.interleavingSize
 	}
 
 	initialState := State{
@@ -231,7 +225,8 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp.SetState(initialState)
 
 	m := &middleware{
-		comp: comp,
+		comp:         comp,
+		legacyMapper: b.legacyMapper,
 	}
 
 	m.topPort = b.topPort
@@ -328,6 +323,26 @@ func (b *Builder) buildBankStages(m *middleware) {
 		}
 		m.bankStages = append(m.bankStages, bs)
 	}
+}
+
+func (b *Builder) resolveLegacyMapper() {
+	if b.legacyMapper == nil {
+		return
+	}
+
+	switch m := b.legacyMapper.(type) {
+	case *mem.SinglePortMapper:
+		b.addressMapperType = "single"
+		b.remotePorts = []sim.RemotePort{m.Port}
+	case *mem.InterleavedAddressPortMapper:
+		b.addressMapperType = "interleaved"
+		b.remotePorts = m.LowModules
+		b.interleavingSize = m.InterleavingSize
+	default:
+		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
+	}
+
+	b.legacyMapper = nil
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

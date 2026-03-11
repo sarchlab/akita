@@ -222,12 +222,11 @@ func (d *directory) writeMiss(trans *transactionState) bool {
 
 func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.write.Address
-	spec := d.cache.GetSpec()
 
 	writeToBottom := &mem.WriteReq{}
 	writeToBottom.ID = sim.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
-	writeToBottom.Dst = findPort(spec, addr)
+	writeToBottom.Dst = d.cache.findPort(addr)
 	writeToBottom.Address = addr
 	writeToBottom.PID = trans.write.PID
 	writeToBottom.Data = trans.write.Data
@@ -301,7 +300,7 @@ func (d *directory) fetchFromBottom(
 	cacheLineID := addr / blockSize * blockSize
 	next := d.cache.comp.GetNextState()
 
-	bottomModule := findPort(spec, cacheLineID)
+	bottomModule := d.cache.findPort(cacheLineID)
 	readToBottom := &mem.ReadReq{}
 	readToBottom.ID = sim.GetIDGenerator().Generate()
 	readToBottom.Src = d.cache.bottomPort.AsRemote()

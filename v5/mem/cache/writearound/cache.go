@@ -50,7 +50,13 @@ type middleware struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	storage *mem.Storage
+	storage     *mem.Storage
+	legacyMapper mem.AddressToPortMapper // resolved lazily on first Tick
+
+	// Resolved mapper data (from legacy mapper or Spec)
+	resolvedMapperType       string
+	resolvedPortNames        []string
+	resolvedInterleavingSize uint64
 
 	// Thin buffer adapters (created once, pointers updated per-tick)
 	dirBufAdapter       *stateTransBuffer
@@ -98,27 +104,64 @@ func (m *middleware) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
-// findPort is a free function that resolves an address to a remote port
-// using data from Spec instead of an interface. The remote port names in
-// Spec are string representations of sim.RemotePort.
-func findPort(
-	spec Spec,
-	address uint64,
-) sim.RemotePort {
-	switch spec.AddressMapperType {
-	case "single":
-		return sim.RemotePort(spec.RemotePortNames[0])
-	case "interleaved":
-		n := uint64(len(spec.RemotePortNames))
-		idx := address / spec.InterleavingSize % n
-		return sim.RemotePort(spec.RemotePortNames[idx])
+// resolveLegacyMapper converts a legacy AddressToPortMapper interface into
+// the middleware's resolvedSpec overlay on first call. This handles the
+// pattern where the mapper's fields are set after Build().
+func (m *middleware) resolveLegacyMapper() {
+	if m.legacyMapper == nil {
+		return
 	}
 
-	panic("unknown address mapper type: " + spec.AddressMapperType)
+	switch mapper := m.legacyMapper.(type) {
+	case *mem.SinglePortMapper:
+		m.resolvedMapperType = "single"
+		m.resolvedPortNames = []string{string(mapper.Port)}
+	case *mem.InterleavedAddressPortMapper:
+		m.resolvedMapperType = "interleaved"
+		names := make([]string, len(mapper.LowModules))
+		for i, p := range mapper.LowModules {
+			names[i] = string(p)
+		}
+		m.resolvedPortNames = names
+		m.resolvedInterleavingSize = mapper.InterleavingSize
+	default:
+		panic("unsupported legacy address mapper type")
+	}
+
+	m.legacyMapper = nil
+}
+
+// findPort resolves an address to a remote port using data from Spec
+// or resolved legacy mapper data.
+func (m *middleware) findPort(address uint64) sim.RemotePort {
+	spec := m.comp.GetSpec()
+
+	mapperType := spec.AddressMapperType
+	portNames := spec.RemotePortNames
+	interleavingSize := spec.InterleavingSize
+
+	// Override with resolved legacy mapper data if present
+	if m.resolvedMapperType != "" {
+		mapperType = m.resolvedMapperType
+		portNames = m.resolvedPortNames
+		interleavingSize = m.resolvedInterleavingSize
+	}
+
+	switch mapperType {
+	case "single":
+		return sim.RemotePort(portNames[0])
+	case "interleaved":
+		n := uint64(len(portNames))
+		idx := address / interleavingSize % n
+		return sim.RemotePort(portNames[idx])
+	}
+
+	panic("unknown address mapper type: " + mapperType)
 }
 
 // Tick updates the state of the cache.
 func (m *middleware) Tick() bool {
+	m.resolveLegacyMapper()
 	m.updateAdapterPointers()
 
 	madeProgress := false
