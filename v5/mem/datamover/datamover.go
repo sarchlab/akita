@@ -80,23 +80,20 @@ type State struct {
 // A dataMoverTransaction contains a data moving request from a single
 // source/destination with Read/Write requests correspond to it.
 type dataMoverTransaction struct {
-	req           *sim.GenericMsg // payload: *DataMoveRequestPayload
-	reqPayload    *DataMoveRequestPayload
+	req           *DataMoveRequest
 	nextReadAddr  uint64
 	nextWriteAddr uint64
-	pendingRead   map[string]*sim.GenericMsg // payload: *mem.ReadReqPayload
-	pendingWrite  map[string]*sim.GenericMsg // payload: *mem.WriteReqPayload
+	pendingRead   map[string]*mem.ReadReq
+	pendingWrite  map[string]*mem.WriteReq
 }
 
-func newDataMoverTransaction(req *sim.GenericMsg) *dataMoverTransaction {
-	payload := sim.MsgPayload[DataMoveRequestPayload](req)
+func newDataMoverTransaction(req *DataMoveRequest) *dataMoverTransaction {
 	return &dataMoverTransaction{
 		req:           req,
-		reqPayload:    payload,
-		nextReadAddr:  payload.SrcAddress,
-		nextWriteAddr: payload.DstAddress,
-		pendingRead:   make(map[string]*sim.GenericMsg),
-		pendingWrite:  make(map[string]*sim.GenericMsg),
+		nextReadAddr:  req.SrcAddress,
+		nextWriteAddr: req.DstAddress,
+		pendingRead:   make(map[string]*mem.ReadReq),
+		pendingWrite:  make(map[string]*mem.WriteReq),
 	}
 }
 
@@ -171,11 +168,11 @@ func (c *Comp) snapshotTransaction() dataMoverTransactionState {
 		ReqID:         trans.req.ID,
 		ReqSrc:        trans.req.Src,
 		ReqDst:        trans.req.Dst,
-		SrcAddress:    trans.reqPayload.SrcAddress,
-		DstAddress:    trans.reqPayload.DstAddress,
-		ByteSize:      trans.reqPayload.ByteSize,
-		SrcSide:       string(trans.reqPayload.SrcSide),
-		DstSide:       string(trans.reqPayload.DstSide),
+		SrcAddress:    trans.req.SrcAddress,
+		DstAddress:    trans.req.DstAddress,
+		ByteSize:      trans.req.ByteSize,
+		SrcSide:       string(trans.req.SrcSide),
+		DstSide:       string(trans.req.DstSide),
 		NextReadAddr:  trans.nextReadAddr,
 		NextWriteAddr: trans.nextWriteAddr,
 		PendingRead:   make(map[string]pendingReadState, len(trans.pendingRead)),
@@ -183,20 +180,18 @@ func (c *Comp) snapshotTransaction() dataMoverTransactionState {
 	}
 
 	for id, msg := range trans.pendingRead {
-		payload := sim.MsgPayload[mem.ReadReqPayload](msg)
 		ts.PendingRead[id] = pendingReadState{
 			ID: msg.ID, Src: msg.Src, Dst: msg.Dst,
-			Address: payload.Address,
+			Address: msg.Address,
 		}
 	}
 
 	for id, msg := range trans.pendingWrite {
-		payload := sim.MsgPayload[mem.WriteReqPayload](msg)
-		dataCopy := make([]byte, len(payload.Data))
-		copy(dataCopy, payload.Data)
+		dataCopy := make([]byte, len(msg.Data))
+		copy(dataCopy, msg.Data)
 		ts.PendingWrite[id] = pendingWriteState{
 			ID: msg.ID, Src: msg.Src, Dst: msg.Dst,
-			Address: payload.Address, Data: dataCopy,
+			Address: msg.Address, Data: dataCopy,
 		}
 	}
 
@@ -257,42 +252,47 @@ func (c *Comp) restoreBuffer(bs bufferState) *buffer {
 func (c *Comp) restoreTransaction(
 	ts dataMoverTransactionState,
 ) *dataMoverTransaction {
-	payload := &DataMoveRequestPayload{
-		SrcAddress: ts.SrcAddress, DstAddress: ts.DstAddress,
-		ByteSize: ts.ByteSize,
-		SrcSide:  DateMovePort(ts.SrcSide), DstSide: DateMovePort(ts.DstSide),
+	req := &DataMoveRequest{
+		SrcAddress: ts.SrcAddress,
+		DstAddress: ts.DstAddress,
+		ByteSize:   ts.ByteSize,
+		SrcSide:    DateMovePort(ts.SrcSide),
+		DstSide:    DateMovePort(ts.DstSide),
 	}
-	req := &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID: ts.ReqID, Src: ts.ReqSrc, Dst: ts.ReqDst,
-		},
-		Payload: payload,
-	}
+	req.ID = ts.ReqID
+	req.Src = ts.ReqSrc
+	req.Dst = ts.ReqDst
 
 	trans := &dataMoverTransaction{
-		req: req, reqPayload: payload,
+		req:           req,
 		nextReadAddr:  ts.NextReadAddr,
 		nextWriteAddr: ts.NextWriteAddr,
-		pendingRead:   make(map[string]*sim.GenericMsg, len(ts.PendingRead)),
-		pendingWrite:  make(map[string]*sim.GenericMsg, len(ts.PendingWrite)),
+		pendingRead:   make(map[string]*mem.ReadReq, len(ts.PendingRead)),
+		pendingWrite:  make(map[string]*mem.WriteReq, len(ts.PendingWrite)),
 	}
 
 	for id, ps := range ts.PendingRead {
-		trans.pendingRead[id] = &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
-			Payload: &mem.ReadReqPayload{
-				Address: ps.Address, AccessByteSize: c.srcByteGranularity,
-			},
+		r := &mem.ReadReq{
+			Address:        ps.Address,
+			AccessByteSize: c.srcByteGranularity,
 		}
+		r.ID = ps.ID
+		r.Src = ps.Src
+		r.Dst = ps.Dst
+		trans.pendingRead[id] = r
 	}
 
 	for id, ps := range ts.PendingWrite {
 		dataCopy := make([]byte, len(ps.Data))
 		copy(dataCopy, ps.Data)
-		trans.pendingWrite[id] = &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{ID: ps.ID, Src: ps.Src, Dst: ps.Dst},
-			Payload: &mem.WriteReqPayload{Address: ps.Address, Data: dataCopy},
+		w := &mem.WriteReq{
+			Address: ps.Address,
+			Data:    dataCopy,
 		}
+		w.ID = ps.ID
+		w.Src = ps.Src
+		w.Dst = ps.Dst
+		trans.pendingWrite[id] = w
 	}
 
 	return trans
@@ -373,21 +373,20 @@ func (m *dataMoverMiddleware) parseFromCP() bool {
 		return false
 	}
 
-	req := reqI.(*sim.GenericMsg)
-	if m.currentTransaction != nil {
-		return false
+	req, ok := reqI.(*DataMoveRequest)
+	if !ok {
+		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
 
-	_, ok := req.Payload.(*DataMoveRequestPayload)
-	if !ok {
-		log.Panicf("can't process request of type %s", reflect.TypeOf(req.Payload))
+	if m.currentTransaction != nil {
+		return false
 	}
 
 	trans := newDataMoverTransaction(req)
 	m.currentTransaction = trans
 
-	m.setSrcSide(trans.reqPayload)
-	m.setDstSide(trans.reqPayload)
+	m.setSrcSide(req)
+	m.setDstSide(req)
 
 	m.buffer = &buffer{
 		granularity: m.srcByteGranularity,
@@ -413,7 +412,7 @@ func (m *dataMoverMiddleware) readFromSrc() bool {
 		return false
 	}
 
-	transEndAddr := trans.reqPayload.SrcAddress + trans.reqPayload.ByteSize
+	transEndAddr := trans.req.SrcAddress + trans.req.ByteSize
 	if addr > transEndAddr {
 		return false
 	}
@@ -450,8 +449,7 @@ func (m *dataMoverMiddleware) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	rsp := rspI.(*sim.GenericMsg)
-	readRspPayload, ok := rsp.Payload.(*mem.DataReadyRspPayload)
+	rsp, ok := rspI.(*mem.DataReadyRsp)
 	if !ok {
 		// it can be write done rsp if src and dst is the same side. So ignore.
 		return false
@@ -463,9 +461,8 @@ func (m *dataMoverMiddleware) processDataReadyFromSrc() bool {
 			rsp.RspTo)
 	}
 
-	originalReqPayload := sim.MsgPayload[mem.ReadReqPayload](originalReq)
-	offset := originalReqPayload.Address - m.currentTransaction.reqPayload.SrcAddress
-	m.buffer.addData(offset, readRspPayload.Data)
+	offset := originalReq.Address - m.currentTransaction.req.SrcAddress
+	m.buffer.addData(offset, rsp.Data)
 
 	delete(m.currentTransaction.pendingRead, rsp.RspTo)
 	m.srcPort.RetrieveIncoming()
@@ -481,7 +478,7 @@ func (m *dataMoverMiddleware) writeToDst() bool {
 	}
 
 	trans := m.currentTransaction
-	offset := trans.nextWriteAddr - trans.reqPayload.DstAddress
+	offset := trans.nextWriteAddr - trans.req.DstAddress
 	data, ok := m.buffer.extractData(offset, m.dstByteGranularity)
 
 	if !ok {
@@ -503,7 +500,7 @@ func (m *dataMoverMiddleware) writeToDst() bool {
 
 	m.currentTransaction.nextWriteAddr += m.dstByteGranularity
 	m.currentTransaction.pendingWrite[req.ID] = req
-	m.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.reqPayload.DstAddress)
+	m.buffer.moveOffsetForwardTo(trans.nextWriteAddr - trans.req.DstAddress)
 
 	tracing.TraceReqInitiate(req, m,
 		tracing.MsgIDAtReceiver(m.currentTransaction.req, m))
@@ -522,8 +519,7 @@ func (m *dataMoverMiddleware) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	rsp := rspI.(*sim.GenericMsg)
-	_, ok := rsp.Payload.(*mem.WriteDoneRspPayload)
+	rsp, ok := rspI.(*mem.WriteDoneRsp)
 	if !ok {
 		return false
 	}
@@ -550,7 +546,7 @@ func (m *dataMoverMiddleware) finishTransaction() bool {
 
 	trans := m.currentTransaction
 
-	if trans.nextWriteAddr < trans.reqPayload.DstAddress+trans.reqPayload.ByteSize {
+	if trans.nextWriteAddr < trans.req.DstAddress+trans.req.ByteSize {
 		return false
 	}
 
@@ -570,7 +566,7 @@ func (m *dataMoverMiddleware) finishTransaction() bool {
 
 	m.currentTransaction = nil
 	m.buffer = &buffer{
-		offset:      alignAddress(trans.reqPayload.SrcAddress, m.srcByteGranularity),
+		offset:      alignAddress(trans.req.SrcAddress, m.srcByteGranularity),
 		granularity: m.srcByteGranularity,
 	}
 
@@ -579,7 +575,7 @@ func (m *dataMoverMiddleware) finishTransaction() bool {
 	return true
 }
 
-func (m *dataMoverMiddleware) setSrcSide(moveReq *DataMoveRequestPayload) {
+func (m *dataMoverMiddleware) setSrcSide(moveReq *DataMoveRequest) {
 	spec := m.Component.GetSpec()
 	switch moveReq.SrcSide {
 	case "inside":
@@ -597,7 +593,7 @@ func (m *dataMoverMiddleware) setSrcSide(moveReq *DataMoveRequestPayload) {
 	addressMustBeAligned(moveReq.SrcAddress, m.srcByteGranularity)
 }
 
-func (m *dataMoverMiddleware) setDstSide(moveReq *DataMoveRequestPayload) {
+func (m *dataMoverMiddleware) setDstSide(moveReq *DataMoveRequest) {
 	spec := m.Component.GetSpec()
 	switch moveReq.DstSide {
 	case "inside":

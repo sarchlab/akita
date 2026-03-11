@@ -23,27 +23,29 @@ func TestMsgRefRoundTrip(t *testing.T) {
 	ref := MsgRefFromMsg(msg)
 	restored := MsgFromRef(ref)
 
-	if restored.ID != msg.ID {
-		t.Errorf("ID: got %q, want %q", restored.ID, msg.ID)
+	meta := restored.Meta()
+
+	if meta.ID != msg.ID {
+		t.Errorf("ID: got %q, want %q", meta.ID, msg.ID)
 	}
 
-	if restored.Src != msg.Src {
-		t.Errorf("Src: got %q, want %q", restored.Src, msg.Src)
+	if meta.Src != msg.Src {
+		t.Errorf("Src: got %q, want %q", meta.Src, msg.Src)
 	}
 
-	if restored.Dst != msg.Dst {
-		t.Errorf("Dst: got %q, want %q", restored.Dst, msg.Dst)
+	if meta.Dst != msg.Dst {
+		t.Errorf("Dst: got %q, want %q", meta.Dst, msg.Dst)
 	}
 
-	if restored.RspTo != msg.RspTo {
-		t.Errorf("RspTo: got %q, want %q", restored.RspTo, msg.RspTo)
+	if meta.RspTo != msg.RspTo {
+		t.Errorf("RspTo: got %q, want %q", meta.RspTo, msg.RspTo)
 	}
 
-	if restored.TrafficClass != msg.TrafficClass {
+	if meta.TrafficClass != msg.TrafficClass {
 		t.Errorf("TrafficClass mismatch")
 	}
 
-	if restored.TrafficBytes != msg.TrafficBytes {
+	if meta.TrafficBytes != msg.TrafficBytes {
 		t.Errorf("TrafficBytes mismatch")
 	}
 }
@@ -190,11 +192,11 @@ func verifyRestoredMSHREntry(
 			e.Block.SetID, e.Block.WayID)
 	}
 
-	if e.ReadReq == nil || e.ReadReq.ID != "read-1" {
+	if e.ReadReq == nil || e.ReadReq.Meta().ID != "read-1" {
 		t.Error("ReadReq not correctly restored")
 	}
 
-	if e.DataReady == nil || e.DataReady.ID != "data-1" {
+	if e.DataReady == nil || e.DataReady.Meta().ID != "data-1" {
 		t.Error("DataReady not correctly restored")
 	}
 

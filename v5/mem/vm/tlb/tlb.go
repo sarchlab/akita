@@ -56,7 +56,7 @@ type Comp struct {
 	responsePipeline    queueing.Pipeline
 	responseBuffer      queueing.Buffer
 
-	inflightFlushReq *sim.GenericMsg // payload: *FlushReqPayload
+	inflightFlushReq *FlushReq
 }
 
 // reset sets all the entries in the TLB to be invalid

@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// MsgRef is a serializable representation of a *sim.GenericMsg.
+// MsgRef is a serializable representation of a sim.Msg's metadata.
 type MsgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -15,20 +15,21 @@ type MsgRef struct {
 	TrafficBytes int            `json:"traffic_bytes"`
 }
 
-// MsgRefFromMsg converts a *sim.GenericMsg into a serializable MsgRef.
-func MsgRefFromMsg(msg *sim.GenericMsg) MsgRef {
+// MsgRefFromMsg converts a sim.Msg into a serializable MsgRef.
+func MsgRefFromMsg(msg sim.Msg) MsgRef {
+	meta := msg.Meta()
 	return MsgRef{
-		ID:           msg.ID,
-		Src:          msg.Src,
-		Dst:          msg.Dst,
-		RspTo:        msg.RspTo,
-		TrafficClass: msg.TrafficClass,
-		TrafficBytes: msg.TrafficBytes,
+		ID:           meta.ID,
+		Src:          meta.Src,
+		Dst:          meta.Dst,
+		RspTo:        meta.RspTo,
+		TrafficClass: meta.TrafficClass,
+		TrafficBytes: meta.TrafficBytes,
 	}
 }
 
-// MsgFromRef converts a MsgRef back into a *sim.GenericMsg.
-func MsgFromRef(ref MsgRef) *sim.GenericMsg {
+// MsgFromRef converts a MsgRef back into a sim.Msg (as a *sim.GenericMsg).
+func MsgFromRef(ref MsgRef) sim.Msg {
 	return &sim.GenericMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           ref.ID,

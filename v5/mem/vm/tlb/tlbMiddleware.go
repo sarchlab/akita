@@ -2,12 +2,11 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type pipelineTLBReq struct {
-	msg *sim.GenericMsg // payload: *vm.TranslationReqPayload
+	msg *vm.TranslationReq
 }
 
 func (r *pipelineTLBReq) TaskID() string {
@@ -60,7 +59,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 			break
 		}
 
-		msg := msgI.(*sim.GenericMsg)
+		msg := msgI.(*vm.TranslationReq)
 		m.responsePipeline.Accept(&pipelineTLBReq{
 			msg: msg,
 		})
@@ -175,16 +174,15 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	return true
 }
 
-func (m *tlbMiddleware) lookup(msg *sim.GenericMsg) bool {
+func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
 	spec := m.GetSpec()
-	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
-	mshrEntry := m.mshr.GetEntry(payload.PID, payload.VAddr)
+	mshrEntry := m.mshr.GetEntry(msg.PID, msg.VAddr)
 	if mshrEntry != nil {
 		return m.processTLBMSHRHit(mshrEntry, msg)
 	}
-	setID := m.vAddrToSetID(payload.VAddr, spec)
+	setID := m.vAddrToSetID(msg.VAddr, spec)
 	set := m.sets[setID]
-	wayID, page, found := set.Lookup(payload.PID, payload.VAddr)
+	wayID, page, found := set.Lookup(msg.PID, msg.VAddr)
 
 	if found && page.Valid {
 		return m.handleTranslationHit(msg, setID, wayID, page)
@@ -193,7 +191,7 @@ func (m *tlbMiddleware) lookup(msg *sim.GenericMsg) bool {
 }
 
 func (m *tlbMiddleware) handleTranslationHit(
-	msg *sim.GenericMsg,
+	msg *vm.TranslationReq,
 	setID, wayID int,
 	page vm.Page,
 ) bool {
@@ -218,7 +216,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 	return true
 }
 
-func (m *tlbMiddleware) handleTranslationMiss(msg *sim.GenericMsg) bool {
+func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
 	if m.mshr.IsFull() {
 		return false
 	}
@@ -250,7 +248,7 @@ func (m *tlbMiddleware) vAddrToSetID(vAddr uint64, spec Spec) (setID int) {
 }
 
 func (m *tlbMiddleware) sendRspToTop(
-	msg *sim.GenericMsg,
+	msg *vm.TranslationReq,
 	page vm.Page,
 ) bool {
 	rsp := vm.TranslationRspBuilder{}.
@@ -275,7 +273,7 @@ func (m *tlbMiddleware) sendRspToTop(
 
 func (m *tlbMiddleware) processTLBMSHRHit(
 	mshrEntry *mshrEntry,
-	msg *sim.GenericMsg,
+	msg *vm.TranslationReq,
 ) bool {
 	mshrEntry.Requests = append(mshrEntry.Requests, msg)
 
@@ -286,14 +284,13 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	return true
 }
 
-func (m *tlbMiddleware) fetchBottom(msg *sim.GenericMsg) bool {
-	payload := sim.MsgPayload[vm.TranslationReqPayload](msg)
+func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 	fetchBottom := vm.TranslationReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
-		WithDst(m.addressMapper.Find(payload.VAddr)).
-		WithPID(payload.PID).
-		WithVAddr(payload.VAddr).
-		WithDeviceID(payload.DeviceID).
+		WithDst(m.addressMapper.Find(msg.VAddr)).
+		WithPID(msg.PID).
+		WithVAddr(msg.VAddr).
+		WithDeviceID(msg.DeviceID).
 		Build()
 
 	err := m.bottomPort.Send(fetchBottom)
@@ -309,7 +306,7 @@ func (m *tlbMiddleware) fetchBottom(msg *sim.GenericMsg) bool {
 		m.Comp,
 	)
 
-	mshrEntry := m.mshr.Add(payload.PID, payload.VAddr)
+	mshrEntry := m.mshr.Add(msg.PID, msg.VAddr)
 	mshrEntry.Requests = append(mshrEntry.Requests, msg)
 	mshrEntry.reqToBottom = fetchBottom
 
@@ -328,9 +325,8 @@ func (m *tlbMiddleware) parseBottom() bool {
 		return false
 	}
 
-	item := itemI.(*sim.GenericMsg)
+	item := itemI.(*vm.TranslationRsp)
 	spec := m.GetSpec()
-	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](item)
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.Comp),
 		tracing.MilestoneKindData,
@@ -338,7 +334,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 		m.Comp.Name(),
 		m.Comp,
 	)
-	page := rspPayload.Page
+	page := item.Page
 
 	mshrEntryPresent := m.mshr.IsEntryPresent(page.PID, page.VAddr)
 	if !mshrEntryPresent {
@@ -401,7 +397,6 @@ func (m *tlbMiddleware) handleFlush() bool {
 func (m *tlbMiddleware) processTLBFlush() bool {
 	spec := m.GetSpec()
 	req := m.inflightFlushReq
-	flushPayload := sim.MsgPayload[FlushReqPayload](req)
 
 	rsp := FlushRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
@@ -420,10 +415,10 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 		m.Comp,
 	)
 
-	for _, vAddr := range flushPayload.VAddr {
+	for _, vAddr := range req.VAddr {
 		setID := m.vAddrToSetID(vAddr, spec)
 		set := m.sets[setID]
-		wayID, page, found := set.Lookup(flushPayload.PID, vAddr)
+		wayID, page, found := set.Lookup(req.PID, vAddr)
 
 		if !found {
 			continue
