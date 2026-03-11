@@ -1,8 +1,6 @@
 package writearound
 
 import (
-	"io"
-
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -261,21 +259,4 @@ func (m *middleware) SetState(state State) {
 	m.restoreFromState(state)
 }
 
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (m *middleware) SaveState(w io.Writer) error {
-	m.GetState()
-	return m.comp.SaveState(w)
-}
 
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (m *middleware) LoadState(r io.Reader) error {
-	if err := m.comp.LoadState(r); err != nil {
-		return err
-	}
-
-	m.SetState(m.comp.GetState())
-
-	return nil
-}
