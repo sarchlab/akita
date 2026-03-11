@@ -16,7 +16,7 @@ var _ = Describe("Bank Stage", func() {
 		mockCtrl            *gomock.Controller
 		cacheModule         *Comp
 		pipeline            *MockPipeline
-		postPipelineBuf     *bufferImpl
+		postPipelineBuf     queueing.Buffer
 		dirInBuf            *MockBuffer
 		writeBufferInBuf    *MockBuffer
 		bs                  *bankStage
@@ -30,7 +30,7 @@ var _ = Describe("Bank Stage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		pipeline = NewMockPipeline(mockCtrl)
-		postPipelineBuf = &bufferImpl{capacity: 2}
+		postPipelineBuf = queueing.NewBuffer("Test.PostPipelineBuf", 2)
 		dirInBuf = NewMockBuffer(mockCtrl)
 		writeBufferInBuf = NewMockBuffer(mockCtrl)
 		mshrStageBuffer = NewMockBuffer(mockCtrl)

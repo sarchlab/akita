@@ -307,10 +307,10 @@ func (b *Builder) buildBankStages(cache *Comp) {
 		laneWidth = 2
 	}
 
-	buf := &bufferImpl{
-		name:     fmt.Sprintf("%s.Bank.PostPipelineBuffer", cache.Name()),
-		capacity: laneWidth,
-	}
+	buf := queueing.NewBuffer(
+		fmt.Sprintf("%s.Bank.PostPipelineBuffer", cache.Name()),
+		laneWidth,
+	)
 	pipeline := queueing.
 		MakeBuilder().
 		WithCyclePerStage(1).

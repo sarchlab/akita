@@ -2,7 +2,6 @@ package writeback
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
@@ -17,103 +16,11 @@ type bankStage struct {
 
 	pipeline           queueing.Pipeline
 	pipelineWidth      int
-	postPipelineBuf    *bufferImpl
+	postPipelineBuf    queueing.Buffer
 	inflightTransCount int
 
 	// Count the trans that needs to be sent to the write buffer.
 	downwardInflightTransCount int
-}
-
-type bufferImpl struct {
-	sim.HookableBase
-
-	name     string
-	capacity int
-	elements []interface{}
-}
-
-func (b *bufferImpl) Name() string {
-	return b.name
-}
-
-func (b *bufferImpl) CanPush() bool {
-	return len(b.elements) < b.capacity
-}
-
-func (b *bufferImpl) Push(e interface{}) {
-	if len(b.elements) >= b.capacity {
-		log.Panic("buffer overflow")
-	}
-
-	b.elements = append(b.elements, e)
-
-	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
-			Domain: b,
-			Pos:    queueing.HookPosBufPush,
-			Item:   e,
-			Detail: nil,
-		})
-	}
-}
-
-func (b *bufferImpl) Pop() interface{} {
-	if len(b.elements) == 0 {
-		return nil
-	}
-
-	e := b.elements[0]
-	b.elements = b.elements[1:]
-
-	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
-			Domain: b,
-			Pos:    queueing.HookPosBufPush,
-			Item:   e,
-			Detail: nil,
-		})
-	}
-
-	return e
-}
-
-func (b *bufferImpl) Peek() interface{} {
-	if len(b.elements) == 0 {
-		return nil
-	}
-
-	return b.elements[0]
-}
-
-func (b *bufferImpl) Capacity() int {
-	return b.capacity
-}
-
-func (b *bufferImpl) Size() int {
-	return len(b.elements)
-}
-
-func (b *bufferImpl) Clear() {
-	b.elements = nil
-}
-
-func (b *bufferImpl) Get(i int) interface{} {
-	return b.elements[i]
-}
-
-func (b *bufferImpl) Remove(i int) {
-	element := b.elements[i]
-
-	b.elements = append(b.elements[:i], b.elements[i+1:]...)
-
-	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
-			Domain: b,
-			Pos:    queueing.HookPosBufPush,
-			Item:   element,
-			Detail: nil,
-		})
-	}
 }
 
 type bankPipelineElem struct {
@@ -198,8 +105,10 @@ func (s *bankStage) pullFromBuf() bool {
 }
 
 func (s *bankStage) finalizeTrans() bool {
-	for i := 0; i < s.postPipelineBuf.Size(); i++ {
-		trans := s.postPipelineBuf.Get(i).(bankPipelineElem).trans
+	elems := queueing.SnapshotBuffer(s.postPipelineBuf)
+
+	for i, e := range elems {
+		trans := e.(bankPipelineElem).trans
 
 		done := false
 
@@ -217,7 +126,10 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			s.postPipelineBuf.Remove(i)
+			remaining := make([]interface{}, 0, len(elems)-1)
+			remaining = append(remaining, elems[:i]...)
+			remaining = append(remaining, elems[i+1:]...)
+			queueing.RestoreBuffer(s.postPipelineBuf, remaining)
 
 			return true
 		}
