@@ -45,9 +45,9 @@ func (m *tlbMiddleware) controlPort() sim.Port {
 
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
-	state := m.comp.GetState()
+	next := m.comp.GetNextState()
 
-	switch state.TLBState {
+	switch next.TLBState {
 	case tlbStateDrain:
 		madeProgress = m.handleDrain() || madeProgress
 	case tlbStatePause:
@@ -158,9 +158,8 @@ func (m *tlbMiddleware) handleDrain() bool {
 
 	madeProgress = m.processPipeline() || madeProgress
 
-	state := m.comp.GetState()
-	if mshrIsEmpty(state.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
-		next := m.comp.GetNextState()
+	next := m.comp.GetNextState()
+	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
 		tracing.AddMilestone(
 			m.comp.Name()+".drain",
@@ -175,11 +174,14 @@ func (m *tlbMiddleware) handleDrain() bool {
 }
 
 func (m *tlbMiddleware) respondMSHREntry() bool {
-	state := m.comp.GetState()
-	if !state.HasRespondingMSHR {
+	next := m.comp.GetNextState()
+	if !next.HasRespondingMSHR {
 		return false
 	}
-	next := m.comp.GetNextState()
+	if len(next.RespondingMSHRData.Requests) == 0 {
+		next.HasRespondingMSHR = false
+		return false
+	}
 	mshrEntry := &next.RespondingMSHRData
 	page := mshrEntry.Page
 	reqMsg := mshrEntry.Requests[0]
@@ -217,16 +219,15 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 
 func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
 	spec := m.comp.GetSpec()
-	state := m.comp.GetState()
+	next := m.comp.GetNextState()
 
-	_, found := mshrGetEntry(state.MSHREntries, msg.PID, msg.VAddr)
+	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
 	if found {
 		return m.processTLBMSHRHit(msg)
 	}
 
 	setID := vAddrToSetID(msg.VAddr, spec)
-	set := state.Sets[setID]
-	wayID, page, setFound := setLookup(&set, msg.PID, msg.VAddr)
+	wayID, page, setFound := setLookup(&next.Sets[setID], msg.PID, msg.VAddr)
 
 	if setFound && page.Valid {
 		return m.handleTranslationHit(msg, setID, wayID, page)
@@ -263,10 +264,10 @@ func (m *tlbMiddleware) handleTranslationHit(
 }
 
 func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
-	state := m.comp.GetState()
+	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
-	if mshrIsFull(state.MSHREntries, spec.MSHRSize) {
+	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
 		return false
 	}
 
@@ -378,8 +379,8 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) parseBottom() bool {
-	state := m.comp.GetState()
-	if state.HasRespondingMSHR {
+	next := m.comp.GetNextState()
+	if next.HasRespondingMSHR {
 		return false
 	}
 	itemI := m.bottomPort().PeekIncoming()
@@ -398,12 +399,11 @@ func (m *tlbMiddleware) parseBottom() bool {
 	)
 	page := item.Page
 
-	if !mshrIsEntryPresent(state.MSHREntries, page.PID, page.VAddr) {
+	if !mshrIsEntryPresent(next.MSHREntries, page.PID, page.VAddr) {
 		m.bottomPort().RetrieveIncoming()
 		return true
 	}
 
-	next := m.comp.GetNextState()
 	setID := vAddrToSetID(page.VAddr, spec)
 	wayID, ok := setEvict(&next.Sets[setID])
 
@@ -433,15 +433,15 @@ func (m *tlbMiddleware) parseBottom() bool {
 }
 
 func (m *tlbMiddleware) handleFlush() bool {
-	state := m.comp.GetState()
-	if !state.HasInflightFlushReq {
+	next := m.comp.GetNextState()
+	if !next.HasInflightFlushReq {
 		return false
 	}
 
 	madeProgress := false
 	spec := m.comp.GetSpec()
 
-	if mshrIsEmpty(state.MSHREntries) && !state.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
+	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
 		return madeProgress
 	}

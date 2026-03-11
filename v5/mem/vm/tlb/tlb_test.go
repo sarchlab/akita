@@ -37,6 +37,9 @@ var _ = Describe("TLB", func() {
 			Name().
 			Return("TopPort").
 			AnyTimes()
+		topPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
@@ -46,6 +49,9 @@ var _ = Describe("TLB", func() {
 			Name().
 			Return("BottomPort").
 			AnyTimes()
+		bottomPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
@@ -54,6 +60,9 @@ var _ = Describe("TLB", func() {
 		controlPort.EXPECT().
 			Name().
 			Return("ControlPort").
+			AnyTimes()
+		controlPort.EXPECT().
+			SetComponent(gomock.Any()).
 			AnyTimes()
 
 		tlbComp = MakeBuilder().

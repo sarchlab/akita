@@ -29,6 +29,9 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 			Name().
 			Return("ControlPort").
 			AnyTimes()
+		controlPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 
 		topPort := NewMockPort(mockCtrl)
 		topPort.EXPECT().
@@ -39,6 +42,9 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 			Name().
 			Return("TopPort").
 			AnyTimes()
+		topPort.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 
 		bottomPort := NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
@@ -48,6 +54,9 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		bottomPort.EXPECT().
 			Name().
 			Return("BottomPort").
+			AnyTimes()
+		bottomPort.EXPECT().
+			SetComponent(gomock.Any()).
 			AnyTimes()
 
 		comp = MakeBuilder().
