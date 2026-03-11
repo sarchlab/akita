@@ -5,26 +5,27 @@ import (
 )
 
 // --- stateTransBuffer ---
-// Wraps read/write pointers to []int (transaction indices in postCoalesceTransactions).
+// Wraps pointers to []int (transaction indices in postCoalesceTransactions).
 // Push/Pop/Peek convert between *transactionState and index.
 // Used for dirBuf and bankBufs.
 //
-// A-B pattern: readItems points to cur (A) state for Peek/CanPush/Size,
-// writeItems points to next (B) state for Pop/Push.
+// A-B pattern: readItems points to cur (A) state (reserved for future use),
+// writeItems points to next (B) state and is used by all operations
+// (Peek/Pop/Push/CanPush/Size) to ensure intra-tick consistency.
 
 type stateTransBuffer struct {
 	sim.HookableBase
 	name       string
-	readItems  *[]int // points to cur (A) state - for reads
-	writeItems *[]int // points to next (B) state - for writes
+	readItems  *[]int // points to cur (A) state - reserved
+	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
 	mw         *middleware // needed to resolve indices to transaction pointers
 }
 
 func (b *stateTransBuffer) Name() string  { return b.name }
 func (b *stateTransBuffer) Capacity() int { return b.capacity }
-func (b *stateTransBuffer) Size() int     { return len(*b.readItems) }
-func (b *stateTransBuffer) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateTransBuffer) Size() int     { return len(*b.writeItems) }
+func (b *stateTransBuffer) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateTransBuffer) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateTransBuffer) Push(e interface{}) {
@@ -33,11 +34,13 @@ func (b *stateTransBuffer) Push(e interface{}) {
 	*b.writeItems = append(*b.writeItems, idx)
 }
 
+// Peek reads from writeItems (next/B state) so it sees mutations from Pop
+// within the same tick.
 func (b *stateTransBuffer) Peek() interface{} {
-	if len(*b.readItems) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.readItems)[0]
+	idx := (*b.writeItems)[0]
 	return b.mw.postCoalesceTransactions[idx]
 }
 
@@ -68,16 +71,16 @@ func (b *stateTransBuffer) findPostCoalesceIdx(
 type stateDirPostBufAdapter struct {
 	sim.HookableBase
 	name       string
-	readItems  *[]int // points to cur (A) state - for reads
-	writeItems *[]int // points to next (B) state - for writes
+	readItems  *[]int // points to cur (A) state - reserved
+	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
 	mw         *middleware
 }
 
 func (b *stateDirPostBufAdapter) Name() string  { return b.name }
 func (b *stateDirPostBufAdapter) Capacity() int { return b.capacity }
-func (b *stateDirPostBufAdapter) Size() int     { return len(*b.readItems) }
-func (b *stateDirPostBufAdapter) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateDirPostBufAdapter) Size() int     { return len(*b.writeItems) }
+func (b *stateDirPostBufAdapter) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateDirPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateDirPostBufAdapter) Push(e interface{}) {
@@ -86,11 +89,13 @@ func (b *stateDirPostBufAdapter) Push(e interface{}) {
 	*b.writeItems = append(*b.writeItems, idx)
 }
 
+// Peek reads from writeItems (next/B state) so it sees mutations from Pop
+// within the same tick.
 func (b *stateDirPostBufAdapter) Peek() interface{} {
-	if len(*b.readItems) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.readItems)[0]
+	idx := (*b.writeItems)[0]
 	return dirPipelineItem{trans: b.mw.postCoalesceTransactions[idx]}
 }
 
@@ -121,16 +126,16 @@ func (b *stateDirPostBufAdapter) findPostCoalesceIdx(
 type stateBankPostBufAdapter struct {
 	sim.HookableBase
 	name       string
-	readItems  *[]int // points to cur (A) state - for reads
-	writeItems *[]int // points to next (B) state - for writes
+	readItems  *[]int // points to cur (A) state - reserved
+	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
 	mw         *middleware
 }
 
 func (b *stateBankPostBufAdapter) Name() string  { return b.name }
 func (b *stateBankPostBufAdapter) Capacity() int { return b.capacity }
-func (b *stateBankPostBufAdapter) Size() int     { return len(*b.readItems) }
-func (b *stateBankPostBufAdapter) CanPush() bool { return len(*b.readItems) < b.capacity }
+func (b *stateBankPostBufAdapter) Size() int     { return len(*b.writeItems) }
+func (b *stateBankPostBufAdapter) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateBankPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
 func (b *stateBankPostBufAdapter) Push(e interface{}) {
@@ -144,11 +149,13 @@ func (b *stateBankPostBufAdapter) Push(e interface{}) {
 	}
 }
 
+// Peek reads from writeItems (next/B state) so it sees mutations from Pop
+// within the same tick.
 func (b *stateBankPostBufAdapter) Peek() interface{} {
-	if len(*b.readItems) == 0 {
+	if len(*b.writeItems) == 0 {
 		return nil
 	}
-	idx := (*b.readItems)[0]
+	idx := (*b.writeItems)[0]
 	return &bankTransaction{
 		transactionState: b.mw.postCoalesceTransactions[idx],
 	}
