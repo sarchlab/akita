@@ -88,13 +88,12 @@ func (m *middleware) parseTop() (madeProgress bool) {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
 	trans := &signal.Transaction{}
 
-	switch msg.Payload.(type) {
-	case *mem.ReadReqPayload:
+	switch msg := msgI.(type) {
+	case *mem.ReadReq:
 		trans.Read = msg
-	case *mem.WriteReqPayload:
+	case *mem.WriteReq:
 		trans.Write = msg
 	}
 
@@ -109,12 +108,12 @@ func (m *middleware) parseTop() (madeProgress bool) {
 	m.inflightTransactions = append(m.inflightTransactions, trans)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, m.Comp)
+	tracing.TraceReqReceive(msgI, m.Comp)
 
 	for _, st := range trans.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
-			tracing.MsgIDAtReceiver(msg, m.Comp),
+			tracing.MsgIDAtReceiver(msgI, m.Comp),
 			m.Comp,
 			"sub-trans",
 			"sub-trans",
@@ -185,8 +184,7 @@ func (m *middleware) finalizeWriteTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](t.Write)
-	err := m.storage.Write(t.InternalAddress, writePayload.Data)
+	err := m.storage.Write(t.InternalAddress, t.Write.Data)
 	if err != nil {
 		panic(err)
 	}
@@ -213,8 +211,7 @@ func (m *middleware) finalizeReadTrans(
 	t *signal.Transaction,
 	i int,
 ) (done bool) {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](t.Read)
-	data, err := m.storage.Read(t.InternalAddress, readPayload.AccessByteSize)
+	data, err := m.storage.Read(t.InternalAddress, t.Read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}

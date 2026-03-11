@@ -8,10 +8,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/dram/internal/org"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
+	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// msgRef is a serializable representation of a *sim.GenericMsg.
+// msgRef is a serializable representation of a sim.Msg's metadata.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -104,28 +105,38 @@ type subTransQueueState struct {
 	Entries []subTransRef `json:"entries"`
 }
 
-func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
+func msgRefFromSimMsg(msg sim.Msg) msgRef {
+	meta := msg.Meta()
 	return msgRef{
-		ID:           msg.ID,
-		Src:          msg.Src,
-		Dst:          msg.Dst,
-		RspTo:        msg.RspTo,
-		TrafficClass: msg.TrafficClass,
-		TrafficBytes: msg.TrafficBytes,
+		ID:           meta.ID,
+		Src:          meta.Src,
+		Dst:          meta.Dst,
+		RspTo:        meta.RspTo,
+		TrafficClass: meta.TrafficClass,
+		TrafficBytes: meta.TrafficBytes,
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           ref.ID,
-			Src:          ref.Src,
-			Dst:          ref.Dst,
-			RspTo:        ref.RspTo,
-			TrafficClass: ref.TrafficClass,
-			TrafficBytes: ref.TrafficBytes,
-		},
-	}
+func readReqFromRef(ref msgRef) *mem.ReadReq {
+	r := &mem.ReadReq{}
+	r.ID = ref.ID
+	r.Src = ref.Src
+	r.Dst = ref.Dst
+	r.RspTo = ref.RspTo
+	r.TrafficClass = ref.TrafficClass
+	r.TrafficBytes = ref.TrafficBytes
+	return r
+}
+
+func writeReqFromRef(ref msgRef) *mem.WriteReq {
+	w := &mem.WriteReq{}
+	w.ID = ref.ID
+	w.Src = ref.Src
+	w.Dst = ref.Dst
+	w.RspTo = ref.RspTo
+	w.TrafficClass = ref.TrafficClass
+	w.TrafficBytes = ref.TrafficBytes
+	return w
 }
 
 // subTransLookup maps a *SubTransaction to its (transIndex, subIndex).
@@ -156,12 +167,12 @@ func snapshotTransaction(
 
 	if t.Read != nil {
 		ts.HasRead = true
-		ts.ReadMsg = msgRefFromMsg(t.Read)
+		ts.ReadMsg = msgRefFromSimMsg(t.Read)
 	}
 
 	if t.Write != nil {
 		ts.HasWrite = true
-		ts.WriteMsg = msgRefFromMsg(t.Write)
+		ts.WriteMsg = msgRefFromSimMsg(t.Write)
 	}
 
 	ts.SubTransactions = make([]subTransState, len(t.SubTransactions))
@@ -371,11 +382,11 @@ func restoreTransaction(ts transactionState) *signal.Transaction {
 	}
 
 	if ts.HasRead {
-		t.Read = msgFromRef(ts.ReadMsg)
+		t.Read = readReqFromRef(ts.ReadMsg)
 	}
 
 	if ts.HasWrite {
-		t.Write = msgFromRef(ts.WriteMsg)
+		t.Write = writeReqFromRef(ts.WriteMsg)
 	}
 
 	t.SubTransactions = make(
