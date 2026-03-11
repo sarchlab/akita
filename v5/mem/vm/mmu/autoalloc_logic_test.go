@@ -19,16 +19,16 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	middleware := &middleware{Comp: mmu}
+	mw := mmu.Middlewares()[0].(*middleware)
 
 	// Test physical page allocation starts at 0
-	firstPage := middleware.createDefaultPage(vm.PID(1), 0x1234, 2)
+	firstPage := mw.createDefaultPage(vm.PID(1), 0x1234, 2)
 	if firstPage.PAddr != 0 {
 		t.Errorf("Expected first physical page to be 0, got 0x%x", firstPage.PAddr)
 	}
 
 	// Test second allocation gets next page
-	secondPage := middleware.createDefaultPage(vm.PID(1), 0x5678, 2)
+	secondPage := mw.createDefaultPage(vm.PID(1), 0x5678, 2)
 	expectedSecondPAddr := uint64(4096) // 1 << 12 (default page size)
 	if secondPage.PAddr != expectedSecondPAddr {
 		t.Errorf("Expected second physical page to be 0x%x, got 0x%x", expectedSecondPAddr, secondPage.PAddr)
@@ -79,15 +79,15 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	middleware := &middleware{Comp: mmu}
+	mw := mmu.Middlewares()[0].(*middleware)
 
 	// Test multiple allocations to ensure unique physical pages
 	allocatedPages := make(map[uint64]bool)
 	pageSize := uint64(4096)
 
 	for i := 0; i < 10; i++ {
-		page := middleware.createDefaultPage(vm.PID(1), uint64(i*0x1000), 1)
-		
+		page := mw.createDefaultPage(vm.PID(1), uint64(i*0x1000), 1)
+
 		// Check that physical address is unique
 		if allocatedPages[page.PAddr] {
 			t.Errorf("Physical page 0x%x allocated twice", page.PAddr)
@@ -139,7 +139,9 @@ func TestAutoPageAllocationEnabled(t *testing.T) {
 		t.Error("Auto page allocation should be enabled when set")
 	}
 
-	if mmu.nextPhysicalPage != 0 {
-		t.Errorf("Next physical page should start at 0, got %d", mmu.nextPhysicalPage)
+	state := mmu.GetState()
+	if state.NextPhysicalPage != 0 {
+		t.Errorf("Next physical page should start at 0, got %d",
+			state.NextPhysicalPage)
 	}
 }
