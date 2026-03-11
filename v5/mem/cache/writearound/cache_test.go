@@ -67,7 +67,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read miss", func() {
-		dram.Storage.Write(0x100, []byte{1, 2, 3, 4})
+		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4})
 		read := &mem.ReadReq{}
 		read.ID = sim.GetIDGenerator().Generate()
 		read.Src = cuPort.AsRemote()
@@ -88,7 +88,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read miss coalesce", func() {
-		dram.Storage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = sim.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -124,7 +124,7 @@ var _ = Describe("Cache", func() {
 	})
 
 	It("should do read hit", func() {
-		dram.Storage.Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
+		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
 		read1.ID = sim.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
@@ -179,7 +179,7 @@ var _ = Describe("Cache", func() {
 
 		engine.Run()
 
-		data, _ := dram.Storage.Read(0x100, 4)
+		data, _ := dram.GetStorage().Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 
@@ -208,7 +208,7 @@ var _ = Describe("Cache", func() {
 			})
 		engine.Run()
 
-		data, _ := dram.Storage.Read(0x100, 4)
+		data, _ := dram.GetStorage().Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 

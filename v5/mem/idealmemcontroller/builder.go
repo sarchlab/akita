@@ -8,15 +8,14 @@ import (
 
 // Builder builds ideal memory controller components.
 type Builder struct {
-	spec             *Spec
-	freq             sim.Freq
-	capacity         uint64
-	engine           sim.Engine
-	topBufSize       int
-	storage          *mem.Storage
-	addressConverter mem.AddressConverter
-	topPort          sim.Port
-	ctrlPort         sim.Port
+	spec       *Spec
+	freq       sim.Freq
+	capacity   uint64
+	engine     sim.Engine
+	topBufSize int
+	storage    *mem.Storage
+	topPort    sim.Port
+	ctrlPort   sim.Port
 }
 
 // MakeBuilder returns a new Builder
@@ -73,7 +72,14 @@ func (b Builder) WithStorage(storage *mem.Storage) Builder {
 func (b Builder) WithAddressConverter(
 	addressConverter mem.AddressConverter,
 ) Builder {
-	b.addressConverter = addressConverter
+	if ic, ok := addressConverter.(mem.InterleavingConverter); ok {
+		b.spec.AddrConvKind = "interleaving"
+		b.spec.AddrInterleavingSize = ic.InterleavingSize
+		b.spec.AddrTotalNumOfElements = ic.TotalNumOfElements
+		b.spec.AddrCurrentElementIndex = ic.CurrentElementIndex
+		b.spec.AddrOffset = ic.Offset
+	}
+
 	return b
 }
 
@@ -107,28 +113,27 @@ func (b Builder) Build(
 		Build(name)
 	modelComp.SetState(initialState)
 
-	c := &Comp{
-		Component:        modelComp,
-		addressConverter: b.addressConverter,
-	}
-
+	var storage *mem.Storage
 	if b.storage == nil {
-		c.Storage = mem.NewStorage(b.capacity)
+		storage = mem.NewStorage(b.capacity)
 	} else {
-		c.Storage = b.storage
+		storage = b.storage
 	}
 
-	ctrlMiddleware := &ctrlMiddleware{Comp: c}
-	c.AddMiddleware(ctrlMiddleware)
-	funcMiddleware := &memMiddleware{Comp: c}
-	c.AddMiddleware(funcMiddleware)
+	c := &Comp{
+		Component: modelComp,
+		storage:   storage,
+	}
 
-	c.topPort = b.topPort
-	c.topPort.SetComponent(c)
-	c.AddPort("Top", c.topPort)
-	c.ctrlPort = b.ctrlPort
-	c.ctrlPort.SetComponent(c)
-	c.AddPort("Control", c.ctrlPort)
+	ctrlMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(ctrlMW)
+	memMW := &memMiddleware{comp: modelComp, storage: c.storage}
+	modelComp.AddMiddleware(memMW)
+
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
+	b.ctrlPort.SetComponent(c)
+	modelComp.AddPort("Control", b.ctrlPort)
 
 	return c
 }

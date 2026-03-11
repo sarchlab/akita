@@ -28,16 +28,18 @@ var _ = Describe("Ideal Memory Controller", func() {
 			AsRemote().
 			Return(sim.RemotePort("Port")).
 			AnyTimes()
+		port.EXPECT().
+			SetComponent(gomock.Any()).
+			AnyTimes()
 
 		memController = MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(1 * mem.MB).
 			WithSpec(Spec{Width: 1, Latency: 10, CacheLineSize: 64}).
-			WithTopPort(sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
+			WithTopPort(port).
 			WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 			Build("MemCtrl")
 		memController.Freq = 1000 * sim.MHz
-		memController.topPort = port
 	})
 
 	AfterEach(func() {
@@ -47,7 +49,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should accept read request and add to inflight transactions", func() {
 		readReq := &mem.ReadReq{}
 		readReq.ID = sim.GetIDGenerator().Generate()
-		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
 		readReq.TrafficBytes = 12
@@ -68,7 +70,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		writeData1 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = sim.GetIDGenerator().Generate()
-		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData1
 		writeReq.DirtyMask = []bool{false, false, true, false}
@@ -87,7 +89,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should send read response after latency ticks", func() {
 		readReq := &mem.ReadReq{}
 		readReq.ID = sim.GetIDGenerator().Generate()
-		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
 		readReq.TrafficBytes = 12
@@ -120,7 +122,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		writeData2 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = sim.GetIDGenerator().Generate()
-		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData2
 		writeReq.TrafficBytes = len(writeData2) + 12
@@ -145,7 +147,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		// Verify data was written to storage
-		data, err := memController.Storage.Read(0, 4)
+		data, err := memController.GetStorage().Read(0, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{0, 1, 2, 3}))
 	})
@@ -153,7 +155,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should retry send when port is busy", func() {
 		readReq := &mem.ReadReq{}
 		readReq.ID = sim.GetIDGenerator().Generate()
-		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
 		readReq.TrafficBytes = 12
@@ -189,13 +191,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should write with dirty mask", func() {
 		// Pre-write data
-		err := memController.Storage.Write(0, []byte{10, 20, 30, 40})
+		err := memController.GetStorage().Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
 		writeData3 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
 		writeReq.ID = sim.GetIDGenerator().Generate()
-		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData3
 		writeReq.DirtyMask = []bool{false, false, true, false}
@@ -218,7 +220,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		memController.Tick()
 
 		// Check that only dirty bytes were written
-		data, err := memController.Storage.Read(0, 4)
+		data, err := memController.GetStorage().Read(0, 4)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal([]byte{10, 20, 2, 40}))
 	})

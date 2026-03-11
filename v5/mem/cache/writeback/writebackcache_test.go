@@ -191,7 +191,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle read miss, mshr hit", func() {
-		dram.Storage.Write(0x10000, []byte{
+		dram.GetStorage().Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -243,7 +243,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle write miss, mshr hit", func() {
-		dram.Storage.Write(0x10000,
+		dram.GetStorage().Write(0x10000,
 			[]byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -311,7 +311,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should do read miss, mshr miss, w/ fetch, w/o eviction", func() {
-		dram.Storage.Write(0x10000, []byte{
+		dram.GetStorage().Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -345,7 +345,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should do write miss, mshr miss, w/ fetch, w/o eviction", func() {
-		dram.Storage.Write(0x10000, []byte{
+		dram.GetStorage().Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -447,7 +447,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle read miss, mshr miss, w/ fetch, w/ eviction", func() {
-		dram.Storage.Write(0x10000, []byte{
+		dram.GetStorage().Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
@@ -484,7 +484,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 	})
 
 	It("should handle write miss, mshr miss, w/ fetch, w/ eviction", func() {
-		dram.Storage.Write(0x10000, []byte{
+		dram.GetStorage().Write(0x10000, []byte{
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,
 			1, 2, 3, 4, 5, 6, 7, 8,

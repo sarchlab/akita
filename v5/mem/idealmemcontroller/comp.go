@@ -13,18 +13,23 @@ type Spec struct {
 	CacheLineSize int    `json:"cache_line_size"`
 	StorageRef    string `json:"storage_ref"`
 	AddrConvKind  string `json:"addr_conv_kind"`
+
+	AddrInterleavingSize    uint64 `json:"addr_interleaving_size"`
+	AddrTotalNumOfElements  int    `json:"addr_total_num_of_elements"`
+	AddrCurrentElementIndex int    `json:"addr_current_element_index"`
+	AddrOffset              uint64 `json:"addr_offset"`
 }
 
 // inflightTransaction tracks an in-progress memory request with a countdown.
 type inflightTransaction struct {
-	CycleLeft      int              `json:"cycle_left"`
-	Address        uint64           `json:"address"`
-	AccessByteSize uint64           `json:"access_byte_size"`
-	ReqID          string           `json:"req_id"`
-	IsRead         bool             `json:"is_read"`
-	Data           []byte           `json:"data,omitempty"`
-	DirtyMask      []bool           `json:"dirty_mask,omitempty"`
-	Src            sim.RemotePort   `json:"src"`
+	CycleLeft      int            `json:"cycle_left"`
+	Address        uint64         `json:"address"`
+	AccessByteSize uint64         `json:"access_byte_size"`
+	ReqID          string         `json:"req_id"`
+	IsRead         bool           `json:"is_read"`
+	Data           []byte         `json:"data,omitempty"`
+	DirtyMask      []bool         `json:"dirty_mask,omitempty"`
+	Src            sim.RemotePort `json:"src"`
 }
 
 // State contains mutable runtime data for the ideal memory controller.
@@ -41,15 +46,12 @@ type State struct {
 type Comp struct {
 	*modeling.Component[Spec, State]
 
-	topPort          sim.Port
-	ctrlPort         sim.Port
-	Storage          *mem.Storage
-	addressConverter mem.AddressConverter
+	storage *mem.Storage
 }
 
 // GetStorage returns the underlying storage.
 func (c *Comp) GetStorage() *mem.Storage {
-	return c.Storage
+	return c.storage
 }
 
 // StorageName returns the name used to identify this component's storage.

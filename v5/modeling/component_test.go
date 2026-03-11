@@ -360,3 +360,233 @@ func TestValidateStateInvalid(t *testing.T) {
 		})
 	}
 }
+
+// --- A-B double-buffered state tests ---
+
+func TestGetStateReturnsCurrentBuffer(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{Counter: 10, LastStatus: "init"})
+
+	got := comp.GetState()
+	if got.Counter != 10 {
+		t.Errorf("GetState().Counter = %d, want 10", got.Counter)
+	}
+	if got.LastStatus != "init" {
+		t.Errorf("GetState().LastStatus = %q, want %q", got.LastStatus, "init")
+	}
+}
+
+func TestGetNextStateReturnsWritablePointer(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{Counter: 5})
+
+	next := comp.GetNextState()
+	next.Counter = 99
+	next.LastStatus = "modified"
+
+	// GetNextState should reflect the mutation.
+	got := comp.GetNextState()
+	if got.Counter != 99 {
+		t.Errorf("GetNextState().Counter = %d, want 99", got.Counter)
+	}
+	if got.LastStatus != "modified" {
+		t.Errorf("GetNextState().LastStatus = %q, want %q", got.LastStatus, "modified")
+	}
+}
+
+func TestSetNextStateSetsNextBuffer(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{Counter: 1})
+	comp.SetNextState(TestState{Counter: 42, LastStatus: "next"})
+
+	// Current should still be the original.
+	if comp.GetState().Counter != 1 {
+		t.Errorf("GetState().Counter = %d, want 1", comp.GetState().Counter)
+	}
+
+	// Next should be the new value.
+	if comp.GetNextState().Counter != 42 {
+		t.Errorf("GetNextState().Counter = %d, want 42", comp.GetNextState().Counter)
+	}
+}
+
+// stateModifyMiddleware modifies the next buffer during Tick via GetNextState.
+type stateModifyMiddleware struct {
+	comp *modeling.Component[TestSpec, TestState]
+}
+
+func (m *stateModifyMiddleware) Tick() bool {
+	next := m.comp.GetNextState()
+	next.Counter += 10
+	next.LastStatus = "ticked"
+
+	return true
+}
+
+func TestTickPromotesNextToCurrent(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{Counter: 5, LastStatus: "init"})
+	comp.AddMiddleware(&stateModifyMiddleware{comp: comp})
+
+	comp.Tick()
+
+	got := comp.GetState()
+	if got.Counter != 15 {
+		t.Errorf("after Tick, GetState().Counter = %d, want 15", got.Counter)
+	}
+	if got.LastStatus != "ticked" {
+		t.Errorf("after Tick, GetState().LastStatus = %q, want %q", got.LastStatus, "ticked")
+	}
+}
+
+// currentCheckMiddleware verifies that current is unchanged during tick
+// while next is being modified.
+type currentCheckMiddleware struct {
+	comp           *modeling.Component[TestSpec, TestState]
+	currentDuTick  int
+	nextDuringTick int
+}
+
+func (m *currentCheckMiddleware) Tick() bool {
+	// Read current (should be unmodified snapshot).
+	m.currentDuTick = m.comp.GetState().Counter
+
+	// Modify next.
+	next := m.comp.GetNextState()
+	next.Counter = 999
+	m.nextDuringTick = next.Counter
+
+	return true
+}
+
+func TestChangesToNextDontAffectCurrentDuringTick(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{Counter: 42})
+
+	mw := &currentCheckMiddleware{comp: comp}
+	comp.AddMiddleware(mw)
+
+	comp.Tick()
+
+	// During tick, current should have been 42 (unchanged).
+	if mw.currentDuTick != 42 {
+		t.Errorf("current during tick = %d, want 42", mw.currentDuTick)
+	}
+
+	// During tick, next was set to 999.
+	if mw.nextDuringTick != 999 {
+		t.Errorf("next during tick = %d, want 999", mw.nextDuringTick)
+	}
+
+	// After tick, current should be 999 (promoted from next).
+	if comp.GetState().Counter != 999 {
+		t.Errorf("after Tick, GetState().Counter = %d, want 999", comp.GetState().Counter)
+	}
+}
+
+func TestDeepCopySliceIndependence(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(TestState{
+		Counter: 1,
+		Values:  []int{10, 20, 30},
+		Tags:    []string{"a", "b"},
+	})
+
+	// Modify the next buffer's slices.
+	next := comp.GetNextState()
+	next.Values = append(next.Values, 40)
+	next.Tags[0] = "modified"
+
+	// Current should be unaffected because SetState deep-copied.
+	current := comp.GetState()
+	if len(current.Values) != 3 {
+		t.Errorf("current Values len = %d, want 3", len(current.Values))
+	}
+	if current.Tags[0] != "a" {
+		t.Errorf("current Tags[0] = %q, want %q", current.Tags[0], "a")
+	}
+}
+
+func TestDeepCopyMapIndependence(t *testing.T) {
+	type MapState struct {
+		Counts map[string]int `json:"counts"`
+	}
+
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, MapState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	comp.SetState(MapState{Counts: map[string]int{"a": 1, "b": 2}})
+
+	// Modify the next buffer's map.
+	next := comp.GetNextState()
+	next.Counts["c"] = 3
+	next.Counts["a"] = 100
+
+	// Current should be unaffected.
+	current := comp.GetState()
+	if len(current.Counts) != 2 {
+		t.Errorf("current Counts len = %d, want 2", len(current.Counts))
+	}
+	if current.Counts["a"] != 1 {
+		t.Errorf("current Counts[a] = %d, want 1", current.Counts["a"])
+	}
+}
+
+func TestSetStateSyncsBothBuffers(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	comp := modeling.NewBuilder[TestSpec, TestState]().
+		WithEngine(engine).
+		WithFreq(1 * sim.GHz).
+		Build("TestComp")
+
+	state := TestState{Counter: 77, Values: []int{1, 2}, LastStatus: "synced"}
+	comp.SetState(state)
+
+	// Both buffers should agree.
+	if comp.GetState().Counter != 77 {
+		t.Errorf("GetState().Counter = %d, want 77", comp.GetState().Counter)
+	}
+	if comp.GetNextState().Counter != 77 {
+		t.Errorf("GetNextState().Counter = %d, want 77", comp.GetNextState().Counter)
+	}
+
+	// They should be independent copies.
+	comp.GetNextState().Counter = 88
+	if comp.GetState().Counter != 77 {
+		t.Errorf("modifying next changed current: GetState().Counter = %d, want 77",
+			comp.GetState().Counter)
+	}
+}
