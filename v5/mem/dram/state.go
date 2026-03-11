@@ -9,18 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/sim"
 )
-
-// msgRef is a serializable representation of a sim.Msg's metadata.
-type msgRef struct {
-	ID           string         `json:"id"`
-	Src          sim.RemotePort `json:"src"`
-	Dst          sim.RemotePort `json:"dst"`
-	RspTo        string         `json:"rsp_to"`
-	TrafficClass string         `json:"traffic_class"`
-	TrafficBytes int            `json:"traffic_bytes"`
-}
 
 // subTransRef identifies a SubTransaction by its parent transaction index
 // and its position within that transaction's SubTransactions slice.
@@ -41,8 +30,8 @@ type subTransState struct {
 type transactionState struct {
 	HasRead         bool            `json:"has_read"`
 	HasWrite        bool            `json:"has_write"`
-	ReadMsg         msgRef          `json:"read_msg"`
-	WriteMsg        msgRef          `json:"write_msg"`
+	ReadMsg         mem.ReadReq     `json:"read_msg"`
+	WriteMsg        mem.WriteReq    `json:"write_msg"`
 	InternalAddress uint64          `json:"internal_address"`
 	SubTransactions []subTransState `json:"sub_transactions"`
 }
@@ -105,40 +94,6 @@ type subTransQueueState struct {
 	Entries []subTransRef `json:"entries"`
 }
 
-func msgRefFromSimMsg(msg sim.Msg) msgRef {
-	meta := msg.Meta()
-	return msgRef{
-		ID:           meta.ID,
-		Src:          meta.Src,
-		Dst:          meta.Dst,
-		RspTo:        meta.RspTo,
-		TrafficClass: meta.TrafficClass,
-		TrafficBytes: meta.TrafficBytes,
-	}
-}
-
-func readReqFromRef(ref msgRef) *mem.ReadReq {
-	r := &mem.ReadReq{}
-	r.ID = ref.ID
-	r.Src = ref.Src
-	r.Dst = ref.Dst
-	r.RspTo = ref.RspTo
-	r.TrafficClass = ref.TrafficClass
-	r.TrafficBytes = ref.TrafficBytes
-	return r
-}
-
-func writeReqFromRef(ref msgRef) *mem.WriteReq {
-	w := &mem.WriteReq{}
-	w.ID = ref.ID
-	w.Src = ref.Src
-	w.Dst = ref.Dst
-	w.RspTo = ref.RspTo
-	w.TrafficClass = ref.TrafficClass
-	w.TrafficBytes = ref.TrafficBytes
-	return w
-}
-
 // subTransLookup maps a *SubTransaction to its (transIndex, subIndex).
 type subTransLookup map[*signal.SubTransaction]subTransRef
 
@@ -167,12 +122,12 @@ func snapshotTransaction(
 
 	if t.Read != nil {
 		ts.HasRead = true
-		ts.ReadMsg = msgRefFromSimMsg(t.Read)
+		ts.ReadMsg = *t.Read
 	}
 
 	if t.Write != nil {
 		ts.HasWrite = true
-		ts.WriteMsg = msgRefFromSimMsg(t.Write)
+		ts.WriteMsg = *t.Write
 	}
 
 	ts.SubTransactions = make([]subTransState, len(t.SubTransactions))
@@ -382,11 +337,13 @@ func restoreTransaction(ts transactionState) *signal.Transaction {
 	}
 
 	if ts.HasRead {
-		t.Read = readReqFromRef(ts.ReadMsg)
+		r := ts.ReadMsg
+		t.Read = &r
 	}
 
 	if ts.HasWrite {
-		t.Write = writeReqFromRef(ts.WriteMsg)
+		w := ts.WriteMsg
+		t.Write = &w
 	}
 
 	t.SubTransactions = make(
