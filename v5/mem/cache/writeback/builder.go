@@ -9,6 +9,30 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// resolveLegacyMapper converts a legacy AddressToPortMapper set via
+// WithAddressToPortMapper into the builder's addressMapperType/remotePorts/
+// interleavingSize fields. This allows Build() to always populate Spec from
+// the builder, matching the writearound pattern.
+func (b *Builder) resolveLegacyMapper() {
+	if b.legacyMapper == nil {
+		return
+	}
+
+	switch m := b.legacyMapper.(type) {
+	case *mem.SinglePortMapper:
+		b.addressMapperType = "single"
+		b.remotePorts = []sim.RemotePort{m.Port}
+	case *mem.InterleavedAddressPortMapper:
+		b.addressMapperType = "interleaved"
+		b.remotePorts = m.LowModules
+		b.interleavingSize = m.InterleavingSize
+	default:
+		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
+	}
+
+	b.legacyMapper = nil
+}
+
 // A Builder can build writeback caches
 type Builder struct {
 	engine           sim.Engine
@@ -176,6 +200,8 @@ func (b Builder) WithInterleavingSize(size uint64) Builder {
 
 // Build creates a usable writeback cache.
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+	b.resolveLegacyMapper()
+
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.byteSize / uint64(b.wayAssociativity*blockSize))
 
@@ -194,8 +220,8 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		MaxInflightEviction: b.maxInflightEviction,
 	}
 
-	// Configure address mapper in Spec (if not using legacy mapper)
-	if b.legacyMapper == nil && b.addressMapperType != "" {
+	// Configure address mapper in Spec
+	if b.addressMapperType != "" {
 		remotePortNames := make([]string, len(b.remotePorts))
 		for i, rp := range b.remotePorts {
 			remotePortNames[i] = string(rp)
@@ -233,7 +259,6 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	m := &middleware{
 		comp:         comp,
-		legacyMapper: b.legacyMapper,
 		state:        cacheStateRunning,
 		evictingList: make(map[uint64]bool),
 	}

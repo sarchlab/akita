@@ -87,13 +87,7 @@ type middleware struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	storage      *mem.Storage
-	legacyMapper mem.AddressToPortMapper // resolved lazily on first Tick
-
-	// Resolved mapper data (from legacy mapper or Spec)
-	resolvedMapperType       string
-	resolvedPortNames        []string
-	resolvedInterleavingSize uint64
+	storage *mem.Storage
 
 	// Thin buffer adapters (created once, pointers updated per-tick)
 	dirStageBuffer           *stateTransBuffer
@@ -147,63 +141,24 @@ func (m *middleware) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
-// resolveLegacyMapper converts a legacy AddressToPortMapper interface into
-// the middleware's resolved data on first call.
-func (m *middleware) resolveLegacyMapper() {
-	if m.legacyMapper == nil {
-		return
-	}
-
-	switch mapper := m.legacyMapper.(type) {
-	case *mem.SinglePortMapper:
-		m.resolvedMapperType = "single"
-		m.resolvedPortNames = []string{string(mapper.Port)}
-	case *mem.InterleavedAddressPortMapper:
-		m.resolvedMapperType = "interleaved"
-		names := make([]string, len(mapper.LowModules))
-		for i, p := range mapper.LowModules {
-			names[i] = string(p)
-		}
-		m.resolvedPortNames = names
-		m.resolvedInterleavingSize = mapper.InterleavingSize
-	default:
-		panic("unsupported legacy address mapper type")
-	}
-
-	m.legacyMapper = nil
-}
-
-// findPort resolves an address to a remote port using data from Spec
-// or resolved legacy mapper data.
+// findPort resolves an address to a remote port using data from Spec.
 func (m *middleware) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
-	mapperType := spec.AddressMapperType
-	portNames := spec.RemotePortNames
-	interleavingSize := spec.InterleavingSize
-
-	// Override with resolved legacy mapper data if present
-	if m.resolvedMapperType != "" {
-		mapperType = m.resolvedMapperType
-		portNames = m.resolvedPortNames
-		interleavingSize = m.resolvedInterleavingSize
-	}
-
-	switch mapperType {
+	switch spec.AddressMapperType {
 	case "single":
-		return sim.RemotePort(portNames[0])
+		return sim.RemotePort(spec.RemotePortNames[0])
 	case "interleaved":
-		n := uint64(len(portNames))
-		idx := address / interleavingSize % n
-		return sim.RemotePort(portNames[idx])
+		n := uint64(len(spec.RemotePortNames))
+		idx := address / spec.InterleavingSize % n
+		return sim.RemotePort(spec.RemotePortNames[idx])
 	}
 
-	panic("unknown address mapper type: " + mapperType)
+	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
 // Tick updates the internal states of the Cache.
 func (m *middleware) Tick() bool {
-	m.resolveLegacyMapper()
 	m.updateAdapterPointers()
 
 	madeProgress := false
