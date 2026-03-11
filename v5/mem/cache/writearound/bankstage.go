@@ -1,9 +1,7 @@
 package writearound
 
 import (
-	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -85,10 +83,9 @@ func (s *bankStage) finalizeTrans() bool {
 
 func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	block := trans.block
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress, readPayload.AccessByteSize)
+		block.CacheAddress, trans.read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -96,9 +93,8 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 	block.ReadCount--
 
 	for _, t := range trans.preCoalesceTransactions {
-		tReadPayload := sim.MsgPayload[mem.ReadReqPayload](t.read)
-		offset := tReadPayload.Address - block.Tag
-		t.data = data[offset : offset+tReadPayload.AccessByteSize]
+		offset := t.read.Address - block.Tag
+		t.data = data[offset : offset+t.read.AccessByteSize]
 		t.done = true
 	}
 
@@ -111,7 +107,6 @@ func (s *bankStage) finalizeReadHitTrans(trans *transaction) bool {
 }
 
 func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
 	block := trans.block
 	blockSize := 1 << s.cache.log2BlockSize
 
@@ -120,11 +115,11 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 		panic(err)
 	}
 
-	offset := writePayload.Address - block.Tag
+	offset := trans.write.Address - block.Tag
 
-	for i := 0; i < len(writePayload.Data); i++ {
-		if writePayload.DirtyMask[i] {
-			data[offset+uint64(i)] = writePayload.Data[i]
+	for i := 0; i < len(trans.write.Data); i++ {
+		if trans.write.DirtyMask[i] {
+			data[offset+uint64(i)] = trans.write.Data[i]
 		}
 	}
 
@@ -133,7 +128,7 @@ func (s *bankStage) finalizeWriteTrans(trans *transaction) bool {
 		panic(err)
 	}
 
-	block.DirtyMask = writePayload.DirtyMask
+	block.DirtyMask = trans.write.DirtyMask
 	block.IsLocked = false
 
 	s.postPipelineBuf.Pop()

@@ -4,8 +4,47 @@ import (
 	"io"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
+	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 )
+
+// msgRefFromSimMsg converts a sim.Msg into a serializable MsgRef.
+func msgRefFromSimMsg(msg sim.Msg) cache.MsgRef {
+	m := msg.Meta()
+	return cache.MsgRef{
+		ID:           m.ID,
+		Src:          m.Src,
+		Dst:          m.Dst,
+		RspTo:        m.RspTo,
+		TrafficClass: m.TrafficClass,
+		TrafficBytes: m.TrafficBytes,
+	}
+}
+
+// readReqFromRef converts a MsgRef back into a *mem.ReadReq with metadata.
+func readReqFromRef(ref cache.MsgRef) *mem.ReadReq {
+	r := &mem.ReadReq{}
+	r.ID = ref.ID
+	r.Src = ref.Src
+	r.Dst = ref.Dst
+	r.RspTo = ref.RspTo
+	r.TrafficClass = ref.TrafficClass
+	r.TrafficBytes = ref.TrafficBytes
+	return r
+}
+
+// writeReqFromRef converts a MsgRef back into a *mem.WriteReq with metadata.
+func writeReqFromRef(ref cache.MsgRef) *mem.WriteReq {
+	w := &mem.WriteReq{}
+	w.ID = ref.ID
+	w.Src = ref.Src
+	w.Dst = ref.Dst
+	w.RspTo = ref.RspTo
+	w.TrafficClass = ref.TrafficClass
+	w.TrafficBytes = ref.TrafficBytes
+	return w
+}
 
 // transactionState is the serializable representation of a transaction.
 type transactionState struct {
@@ -93,22 +132,22 @@ func snapshotTransaction(
 
 	if t.read != nil {
 		s.HasRead = true
-		s.ReadMsg = cache.MsgRefFromMsg(t.read)
+		s.ReadMsg = msgRefFromSimMsg(t.read)
 	}
 
 	if t.readToBottom != nil {
 		s.HasReadToBottom = true
-		s.ReadToBottomMsg = cache.MsgRefFromMsg(t.readToBottom)
+		s.ReadToBottomMsg = msgRefFromSimMsg(t.readToBottom)
 	}
 
 	if t.write != nil {
 		s.HasWrite = true
-		s.WriteMsg = cache.MsgRefFromMsg(t.write)
+		s.WriteMsg = msgRefFromSimMsg(t.write)
 	}
 
 	if t.writeToBottom != nil {
 		s.HasWriteToBottom = true
-		s.WriteToBottomMsg = cache.MsgRefFromMsg(t.writeToBottom)
+		s.WriteToBottomMsg = msgRefFromSimMsg(t.writeToBottom)
 	}
 
 	snapshotTransBlock(t, &s)
@@ -210,19 +249,19 @@ func restoreTransactionCore(
 
 func restoreTransMsgs(t *transaction, s transactionState) {
 	if s.HasRead {
-		t.read = cache.MsgFromRef(s.ReadMsg)
+		t.read = readReqFromRef(s.ReadMsg)
 	}
 
 	if s.HasReadToBottom {
-		t.readToBottom = cache.MsgFromRef(s.ReadToBottomMsg)
+		t.readToBottom = readReqFromRef(s.ReadToBottomMsg)
 	}
 
 	if s.HasWrite {
-		t.write = cache.MsgFromRef(s.WriteMsg)
+		t.write = writeReqFromRef(s.WriteMsg)
 	}
 
 	if s.HasWriteToBottom {
-		t.writeToBottom = cache.MsgFromRef(s.WriteToBottomMsg)
+		t.writeToBottom = writeReqFromRef(s.WriteToBottomMsg)
 	}
 }
 

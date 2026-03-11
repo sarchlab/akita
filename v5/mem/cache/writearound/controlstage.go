@@ -17,7 +17,7 @@ type controlStage struct {
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
-	currFlushReq *sim.GenericMsg // payload: *cache.FlushReqPayload
+	currFlushReq *cache.FlushReq
 }
 
 func (s *controlStage) Tick() bool {
@@ -75,8 +75,7 @@ func (s *controlStage) hardResetCache() {
 	s.cache.transactions = nil
 	s.cache.postCoalesceTransactions = nil
 
-	flushPayload := sim.MsgPayload[cache.FlushReqPayload](s.currFlushReq)
-	if flushPayload.PauseAfterFlushing {
+	if s.currFlushReq.PauseAfterFlushing {
 		s.cache.isPaused = true
 	}
 }
@@ -98,21 +97,20 @@ func (s *controlStage) processNewRequest() bool {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	switch msg.Payload.(type) {
-	case *cache.FlushReqPayload:
+	switch msg := msgI.(type) {
+	case *cache.FlushReq:
 		return s.startCacheFlush(msg)
-	case *cache.RestartReqPayload:
+	case *cache.RestartReq:
 		return s.doCacheRestart(msg)
 	default:
 		log.Panicf("cannot handle request of type %s ",
-			reflect.TypeOf(msg.Payload))
+			reflect.TypeOf(msgI))
 	}
 
 	panic("never")
 }
 
-func (s *controlStage) startCacheFlush(msg *sim.GenericMsg) bool {
+func (s *controlStage) startCacheFlush(msg *cache.FlushReq) bool {
 	if s.currFlushReq != nil {
 		return false
 	}
@@ -123,7 +121,7 @@ func (s *controlStage) startCacheFlush(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (s *controlStage) doCacheRestart(msg *sim.GenericMsg) bool {
+func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 	s.cache.isPaused = false
 
 	s.ctrlPort.RetrieveIncoming()
@@ -150,6 +148,5 @@ func (s *controlStage) doCacheRestart(msg *sim.GenericMsg) bool {
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	flushPayload := sim.MsgPayload[cache.FlushReqPayload](s.currFlushReq)
-	return !flushPayload.DiscardInflight && len(s.cache.transactions) != 0
+	return !s.currFlushReq.DiscardInflight && len(s.cache.transactions) != 0
 }
