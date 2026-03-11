@@ -4,113 +4,68 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware.
 
-## Current State (after M16)
+## Current State (after M17)
 
 - 16 first-party components ported to `modeling.Component[Spec, State]`
 - Messages are concrete types (no builders)
 - Save/load works with acceptance test passing
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
-- **13 components fully transformed** (Comp eliminated + A-B state):
-  1. idealmemcontroller (M12)
-  2. TLB (M13)
-  3. mmuCache (M14)
-  4. addresstranslator (M14)
-  5. datamover (M14)
-  6. simplebankedmemory (M14)
-  7. GMMU (M15)
-  8. Switch (M15)
-  9. Endpoint (M15)
-  10. writearound cache (M16)
-  11. writeevict cache (M16)
-  12. writethrough cache (M16)
-  13. tickingping (M16)
+- **14 components fully transformed** (Comp eliminated or thin wrapper + A-B state):
+  1. idealmemcontroller (M12) — thin Comp wrapper for Storage
+  2. TLB (M13) — thin Comp wrapper for PageTable
+  3. mmuCache (M14) — thin Comp wrapper
+  4. addresstranslator (M14) — thin Comp wrapper
+  5. datamover (M14) — thin Comp wrapper
+  6. simplebankedmemory (M14) — thin Comp wrapper
+  7. GMMU (M15) — thin wrapper
+  8. Switch (M15) — thin Comp wrapper
+  9. Endpoint (M15) — thin Comp wrapper
+  10. writearound cache (M16) — no Comp, returns `*modeling.Component` directly
+  11. writeevict cache (M16) — no Comp, returns `*modeling.Component` directly
+  12. writethrough cache (M16) — no Comp, returns `*modeling.Component` directly
+  13. tickingping (M16) — no Comp, returns `*modeling.Component` directly
+  14. writeback cache (M17) — no Comp, returns `*modeling.Component` directly
 - Shared MSHR/Directory free functions created in `mem/cache/` (directory_ops.go, mshr_ops.go)
 - Architecture direction fully clarified and approved by human (issues #145, #150)
-- All PRs merged through #41. Code builds and all tests pass on main.
+- All PRs merged through #42. Code builds and all tests pass on main.
 
-## Remaining Components
+## Remaining Work
 
 | Component | LOC | Dependencies to Inline | State Complexity | Planned |
 |-----------|-----|----------------------|-----------------|---------|
-| writearound cache | ~2250 | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory sets, MSHR, pipelines, buffers | M16 |
-| writeevict cache | ~2250 | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory sets, MSHR, pipelines, buffers | M16 |
-| writethrough cache | ~2250 | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory sets, MSHR, pipelines, buffers | M16 |
-| writeback cache | ~3200 | Directory, MSHR, Storage, AddrToPortMapper, VictimFinder, AddrConverter | 60+ fields, 6 internal stages | M17 |
 | DRAM | ~4800 | AddrConverter, SubTransSplitter, AddrMapper, CmdQueue, Channel, Banks | Banks, channels, queues, timing | M18 |
-| tickingping (example) | trivial | None | Simple counter | M16 (bundled) |
 
-### Key Insight: The 3 Simpler Caches Are Nearly Identical
+After DRAM, only final cleanup/documentation remains (M19).
 
-writearound, writeevict, and writethrough share identical Comp structs, identical state.go files, and nearly identical stage implementations. They differ primarily in directory.go (write policy) and small details in bottom parser/coalescer. This means:
-- Transform ONE cache fully as a template
-- Apply the same pattern to the other two with minimal changes
-- Common cache utilities (MSHR free functions, Directory free functions) can be shared via the `mem/cache/` package
+### M18: DRAM Memory Controller — Full Transformation (NEXT)
 
-## Phase: Cache Architecture Transformation
-
-### ~~M16: Write{around,evict,through} Caches + tickingping~~ ✅ DONE (4 cycles, budget 8)
-
-Transformed all 3 simpler caches + tickingping. Created shared MSHR/Directory free functions. PR #41 merged.
-
-### M17: Writeback Cache — Full Transformation (NEXT)
-
-**Goal:** Transform the most complex cache component following the M16 pattern.
+**Goal:** Transform the DRAM memory controller to match the established pattern. This is the last substantive component transformation.
 
 **What to do:**
-1. Populate Spec with immutable config: `NumReqPerCycle`, `Log2BlockSize`, `BankLatency`, `WayAssociativity`, `NumBanks`, `NumSets`, `NumMSHREntry`, `TotalByteSize`, `DirLatency`, `WriteBufferCapacity`, `MaxInflightFetch`, `MaxInflightEviction`
-2. Eliminate Comp wrapper → Builder returns `*modeling.Component[Spec, State]`
-3. Reuse shared MSHR/Directory free functions from `mem/cache/` (directory_ops.go, mshr_ops.go)
-4. Replace all `cache.Directory` calls with free function calls on `state.DirectoryState`
-5. Replace all `cache.MSHR` calls with free function calls on `state.MSHRState`
-6. Inline AddressToPortMapper: store port names in Spec, resolve via `GetPortByName()`
-7. 6 existing stages (topParser, directoryStage, bankStage, writeBufferStage, mshrStage, flusher) each become separate middleware
-8. Remove ~964 LOC snapshot/restore conversion layer. State IS the canonical representation
-9. Eliminate all runtime `*transaction` pointer chains → index-based `transactionState` in State
-10. Remove `SaveState/LoadState` overrides — `modeling.Component` handles A-B state
-
-**Complexity notes:**
-- 3150 LOC production code, ~3000 LOC tests
-- 6 stages (vs 5 for simpler caches) + writeBufferStage + mshrStage are unique to writeback
-- `directory.GetSets()` used in flusher — need DirectoryGetSets free function
-- VictimFinder already uses LRU queue in DirectoryState (no separate dependency)
-- evictingList map needs to be in State (already is)
-
-**Budget**: 6 cycles (pattern well-established from M16; the main challenge is the extra stages and test rewriting)
-**Risk**: Medium-High. More complex than the simpler caches but pattern is proven.
-
-### M18: DRAM Memory Controller
-
-**Goal:** Transform DRAM with its multiple internal packages.
-
-**What to do:**
-1. Inline all 7 dependencies: AddressConverter, SubTransSplitter, AddressMapper, CommandQueue, Channel, Banks
-2. Bank state, channel state, queue contents → State (serialization code already does this decomposition)
-3. Timing tables (~200 entries) → Spec
-4. Remove internal/ package structure — flatten into middleware
-5. Use A-B state for all mutable data
+1. **Populate Spec** with ALL immutable config: Protocol, timing parameters (30+ tXXX values), bus/burst/device params, bank/rank/channel counts, queue sizes, address converter params, address mapping bit positions/masks. Timing table (currently computed in builder) should be computed once and stored in Spec.
+2. **Eliminate Comp wrapper** → Builder returns `*modeling.Component[Spec, State]` (or thin wrapper for Storage only)
+3. **Inline all 7 dependencies** into middleware:
+   - `AddressConverter` → params in Spec, inline conversion logic (~15 LOC)
+   - `SubTransSplitter` → `log2AccessUnitSize` in Spec, inline split logic (~25 LOC)
+   - `AddressMapper` → bit position/mask params in Spec, inline mapping (~12 LOC)
+   - `SubTransactionQueue` (FCFSSubTransactionQueue) → queue contents in State, logic in middleware (~60 LOC)
+   - `CommandQueue` → queue contents in State, logic in middleware (~60 LOC)
+   - `Channel + Banks` → bank states in State, timing in Spec, logic in middleware (~220 LOC)
+   - `inflightTransactions` → already in State as `[]transactionState`, make canonical
+4. **Remove internal/ packages** — flatten all logic into the dram package as middleware free functions
+5. **Remove snapshot/restore conversion layer** (~495 LOC in state.go) — State IS the canonical representation
+6. **Remove signal package** — Command/SubTransaction/Transaction become plain State structs
+7. **Update all tests** to work with State + free functions
 
 **Budget**: 8 cycles
 **Risk**: Medium-High. Many internal packages but each is individually simple. Existing state.go already decomposes everything.
 
-### M19: Multi-Middleware Split + Final Cleanup
+### M19: Final Cleanup + Documentation
 
-**Goal:** Split any remaining single-middleware components into multiple middlewares. Update component creation guide. Final cleanup.
+**Goal:** Final verification, update component_guide.md, ensure all thin Comp wrappers are minimal, cleanup any remaining issues.
 
-**Budget**: 6 cycles
-**Risk**: Low. By this point all patterns are well-established.
-
-### M20: Project Completion
-
-**Goal:** Final verification, documentation, and sign-off.
-- All components use `modeling.Component[Spec, State]` directly
-- No Comp wrappers (except thin StorageOwner wrappers)
-- All dependencies inlined
-- A-B state everywhere
-- Save/load acceptance test passes
-- CI green
-- component_guide.md updated to reflect final architecture
-
-**Budget**: 2 cycles
+**Budget**: 4 cycles
+**Risk**: Low.
 
 ## ✅ Completed Milestones
 
@@ -132,13 +87,14 @@ Transformed all 3 simpler caches + tickingping. Created shared MSHR/Directory fr
 | M14 | 6 | 3 | Simple Components Batch (mmuCache, addresstranslator, datamover, simplebankedmemory) |
 | M15 | 5 | 3 | GMMU + Switch + Endpoint — Comp elimination + A-B state |
 | M16 | 8 | 4 | Write{around,evict,through} caches + tickingping — Comp elimination + shared free functions |
+| M17 | 6 | 3 | Writeback cache — Full transformation |
 
 ## Summary Statistics
-- Total milestones completed: 16
-- PRs merged: 41
+- Total milestones completed: 17
+- PRs merged: 42
 - Components ported: 16/16
-- Components fully transformed (Comp eliminated + A-B): 13/16
-- Remaining to transform: 3 (writeback cache + DRAM + multi-MW split/cleanup)
+- Components fully transformed (Comp eliminated + A-B): 14/16 (DRAM remaining, plus thin wrappers are acceptable)
+- Remaining to transform: 1 substantive (DRAM) + final cleanup
 
 ## Lessons Learned
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
@@ -154,6 +110,7 @@ Transformed all 3 simpler caches + tickingping. Created shared MSHR/Directory fr
 - Components with external services (Storage, PageTable, RoutingTable) keep those as middleware fields
 - The 3 simpler caches are nearly identical — transform one, replicate twice
 - Budget estimates are improving: M14 and M15 both finished well under budget (3 cycles each, budgets of 6 and 5)
-- **Revised estimation**: Simpler milestones need 3-4 cycles, not 5-6. Bump cache milestones accordingly.
-- M16 finished in 4 cycles (budget 8). Multi-worker parallel approach worked well for cache replication.
-- Shared free functions (directory_ops.go, mshr_ops.go) are reusable for writeback cache — reduces M17 effort.
+- M16 finished in 4 cycles (budget 8). M17 finished in 3 cycles (budget 6).
+- Shared free functions (directory_ops.go, mshr_ops.go) are reusable for writeback cache — reduces effort.
+- DRAM has an existing state.go with complete snapshot/restore that proves the decomposition is structurally sound.
+- **Revised estimation**: Complex components (writeback) take 3-4 cycles. DRAM may take more due to 5 internal packages.
