@@ -3,7 +3,6 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
@@ -12,10 +11,9 @@ import (
 var _ = Describe("MSHR Stage", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		cacheModule         *Comp
+		m                   *middleware
 		ms                  *mshrStage
 		inBuf               *MockBuffer
-		mshr                *MockMSHR
 		topPort             *MockPort
 		addressToPortMapper *MockAddressToPortMapper
 	)
@@ -23,7 +21,6 @@ var _ = Describe("MSHR Stage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		inBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
@@ -32,19 +29,21 @@ var _ = Describe("MSHR Stage", func() {
 
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder().
+		comp := MakeBuilder().
+			WithEngine(sim.NewSerialEngine()).
 			WithAddressToPortMapper(addressToPortMapper).
 			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
 			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
-		cacheModule = builder.Build("Cache")
-		cacheModule.mshr = mshr
-		cacheModule.mshrStageBuffer = inBuf
-		cacheModule.inFlightTransactions = nil
-		cacheModule.topPort = topPort
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+			Build("Cache")
+		m = comp.Middlewares()[0].(*middleware)
+
+		m.mshrStageBuffer = inBuf
+		m.inFlightTransactions = nil
+		m.topPort = topPort
 
 		ms = &mshrStage{
-			cache: cacheModule,
+			cache: m,
 		}
 	})
 
@@ -65,9 +64,12 @@ var _ = Describe("MSHR Stage", func() {
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		mshrEntry := &cache.MSHREntry{
-			Requests: []interface{}{read},
-			Data: []byte{
+		trans := &transactionState{read: read}
+		m.inFlightTransactions = []*transactionState{trans}
+
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{trans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -78,30 +80,29 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
 		}
-		inBuf.EXPECT().Pop().Return(mshrEntry)
+
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(false)
 
 		ret := ms.Tick()
 
 		Expect(ret).To(BeFalse())
-		Expect(ms.processingMSHREntry).To(BeIdenticalTo(mshrEntry))
+		Expect(ms.hasProcessingTrans).To(BeTrue())
 	})
 
 	It("should send data ready to top", func() {
-		block := &cache.Block{Tag: 0x100}
 		read := &mem.ReadReq{}
 		read.ID = sim.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		trans := &transaction{read: read}
-		cacheModule.inFlightTransactions = append(
-			cacheModule.inFlightTransactions, trans)
-		mshrEntry := &cache.MSHREntry{
-			Requests: []interface{}{trans},
-			Block:    block,
-			Data: []byte{
+		trans := &transactionState{read: read}
+		m.inFlightTransactions = []*transactionState{trans}
+
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{trans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -112,7 +113,7 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
 		}
-		inBuf.EXPECT().Pop().Return(mshrEntry)
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -123,38 +124,33 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.processingMSHREntry).To(BeNil())
-		Expect(cacheModule.inFlightTransactions).NotTo(ContainElement(trans))
+		Expect(ms.hasProcessingTrans).To(BeFalse())
+		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
 	})
 
 	It("should send write done to top", func() {
-		block := &cache.Block{Tag: 0x100}
 		write := &mem.WriteReq{}
 		write.ID = sim.GetIDGenerator().Generate()
 		write.Address = 0x104
 		write.Data = []byte{9, 9, 9, 9}
 		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
 		write.TrafficClass = "mem.WriteReq"
-		trans := &transaction{write: write}
-		cacheModule.inFlightTransactions = append(
-			cacheModule.inFlightTransactions, trans)
-		mshrEntry := &cache.MSHREntry{
-			PID:      1,
-			Address:  0x100,
-			Requests: []interface{}{trans},
-			Block:    block,
-			Data: []byte{
-				1, 2, 3, 4, 9, 9, 9, 9,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			},
+		trans := &transactionState{write: write}
+		m.inFlightTransactions = []*transactionState{trans}
+
+		ms.hasProcessingTrans = true
+		ms.processingTrans = &transactionState{}
+		ms.processingTransList = []*transactionState{trans}
+		ms.processingData = []byte{
+			1, 2, 3, 4, 9, 9, 9, 9,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
 		}
-		ms.processingMSHREntry = mshrEntry
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -164,23 +160,18 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.processingMSHREntry).To(BeNil())
-		Expect(cacheModule.inFlightTransactions).NotTo(ContainElement(trans))
+		Expect(ms.hasProcessingTrans).To(BeFalse())
+		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
-		block := &cache.Block{Tag: 0x100}
-		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
-		read.Address = 0x104
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
-		trans := &transaction{read: read}
-		mshrEntry := &cache.MSHREntry{
-			Requests: []interface{}{trans},
-			Block:    block,
-			Data: []byte{
+		// Create a "stale" transaction pointer that's not in inFlightTransactions
+		staleTrans := &transactionState{}
+		m.inFlightTransactions = nil
+
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{staleTrans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -191,12 +182,13 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
 		}
-		inBuf.EXPECT().Pop().Return(mshrEntry)
+
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(true)
 
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.processingMSHREntry).To(BeNil())
+		Expect(ms.hasProcessingTrans).To(BeFalse())
 	})
 })

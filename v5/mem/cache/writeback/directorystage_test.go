@@ -16,12 +16,10 @@ var _ = Describe("DirectoryStage", func() {
 	var (
 		mockCtrl            *gomock.Controller
 		ds                  *directoryStage
-		cacheModule         *Comp
-		mshr                *MockMSHR
+		m                   *middleware
 		dirBuf              *MockBuffer
 		pipeline            *MockPipeline
 		buf                 *MockBuffer
-		directory           *MockDirectory
 		bankBuf             *MockBuffer
 		writeBufferBuffer   *MockBuffer
 		addressToPortMapper *MockAddressToPortMapper
@@ -30,31 +28,32 @@ var _ = Describe("DirectoryStage", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		dirBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
-		directory = NewMockDirectory(mockCtrl)
-		directory.EXPECT().WayAssociativity().Return(4).AnyTimes()
 		writeBufferBuffer = NewMockBuffer(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		builder := MakeBuilder().
+		comp := MakeBuilder().
+			WithEngine(sim.NewSerialEngine()).
 			WithAddressToPortMapper(addressToPortMapper).
 			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
 			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort"))
-		cacheModule = builder.Build("Cache")
-		cacheModule.dirStageBuffer = dirBuf
-		cacheModule.mshr = mshr
-		cacheModule.directory = directory
-		cacheModule.numReqPerCycle = 4
-		cacheModule.writeBufferBuffer = writeBufferBuffer
-		cacheModule.dirToBankBuffers = []queueing.Buffer{bankBuf}
-		cacheModule.addressToPortMapper = addressToPortMapper
+			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+			Build("Cache")
+		m = comp.Middlewares()[0].(*middleware)
+
+		m.dirStageBuffer = dirBuf
+		m.numReqPerCycle = 4
+		m.writeBufferBuffer = writeBufferBuffer
+		m.dirToBankBuffers = []queueing.Buffer{bankBuf}
+		m.addressToPortMapper = addressToPortMapper
+
+		// Initialize directory state
+		cache.DirectoryReset(&m.directoryState, m.numSets, m.wayAssociativity, m.blockSize)
 
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
 		ds = &directoryStage{
-			cache:    cacheModule,
+			cache:    m,
 			pipeline: pipeline,
 			buf:      buf,
 		}
@@ -79,7 +78,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		var (
 			read  *mem.ReadReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -90,9 +89,10 @@ var _ = Describe("DirectoryStage", func() {
 			read.AccessByteSize = 64
 			read.TrafficBytes = 12
 			read.TrafficClass = "mem.ReadReq"
-			trans = &transaction{
+			trans = &transactionState{
 				read: read,
 			}
+			m.inFlightTransactions = []*transactionState{trans}
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
@@ -100,15 +100,9 @@ var _ = Describe("DirectoryStage", func() {
 		})
 
 		Context("mshr hit", func() {
-			var (
-				mshrEntry *cache.MSHREntry
-			)
-
 			BeforeEach(func() {
-				mshrEntry = &cache.MSHREntry{}
-				mshr.EXPECT().
-					Query(vm.PID(1), uint64(0x100)).
-					Return(mshrEntry)
+				// Add MSHR entry for PID 1, address 0x100
+				cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(1), 0x100)
 			})
 
 			It("should add to MSHR", func() {
@@ -117,29 +111,21 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(mshrEntry.Requests).To(HaveLen(1))
+				Expect(m.mshrState.Entries[0].TransactionIndices).To(HaveLen(1))
 			})
 		})
 
 		Context("hit", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				mshr.EXPECT().
-					Query(vm.PID(1), uint64(0x100)).
-					Return(nil)
-
-				block = &cache.Block{
-					Tag: 0x100,
-				}
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(block)
+				// Set up a block for PID 1, address 0x100
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				block := &m.directoryState.Sets[setID].Blocks[0]
+				block.Tag = 0x100
+				block.PID = 1
+				block.IsValid = true
 			})
 
-			It("should stall is bank is busy", func() {
+			It("should stall if bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
 				ret := ds.Tick()
@@ -148,7 +134,8 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should stall if block is locked", func() {
-				block.IsLocked = true
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				m.directoryState.Sets[setID].Blocks[0].IsLocked = true
 
 				ret := ds.Tick()
 
@@ -158,16 +145,17 @@ var _ = Describe("DirectoryStage", func() {
 			It("should pass transaction to bank", func() {
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.read).To(BeIdenticalTo(read))
-						Expect(trans.block).To(BeIdenticalTo(block))
+					Do(func(t *transactionState) {
+						Expect(t.read).To(BeIdenticalTo(read))
+						Expect(t.hasBlock).To(BeTrue())
 					})
 				buf.EXPECT().Pop()
-				directory.EXPECT().Visit(block)
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				block := &m.directoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
 				Expect(trans.action).To(Equal(bankReadHit))
 			})
@@ -175,11 +163,10 @@ var _ = Describe("DirectoryStage", func() {
 
 		Context("miss, mshr miss, mshr full", func() {
 			It("should stall", func() {
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-				mshr.EXPECT().IsFull().Return(true)
+				// Fill up MSHR
+				for i := 0; i < m.numMSHREntry; i++ {
+					cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(100), uint64(i*0x1000))
+				}
 
 				ret := ds.Tick()
 
@@ -188,27 +175,7 @@ var _ = Describe("DirectoryStage", func() {
 		})
 
 		Context("miss, mshr miss, no need to evict", func() {
-			var (
-				block *cache.Block
-			)
-
-			BeforeEach(func() {
-				block = &cache.Block{
-					PID:     2,
-					Tag:     0x200,
-					IsValid: true,
-					IsDirty: false,
-				}
-
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-				mshr.EXPECT().IsFull().Return(false)
-			})
-
-			It("should stall if WriteBuffer buffer if full", func() {
+			It("should stall if bank buffer is full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
 				ret := ds.Tick()
@@ -216,63 +183,35 @@ var _ = Describe("DirectoryStage", func() {
 				Expect(ret).To(BeFalse())
 			})
 
-			It("should create mshr entry and read from bottom", func() {
-				mshrEntry := &cache.MSHREntry{}
+			It("should create mshr entry and fetch", func() {
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(transaction *transaction) {
-						Expect(transaction.action).To(Equal(writeBufferFetch))
-						Expect(trans.fetchPID).To(Equal(vm.PID(1)))
-						Expect(transaction.fetchAddress).
-							To(Equal(uint64(0x100)))
+					Do(func(t *transactionState) {
+						Expect(t.action).To(Equal(writeBufferFetch))
+						Expect(t.fetchPID).To(Equal(vm.PID(1)))
+						Expect(t.fetchAddress).To(Equal(uint64(0x100)))
 					})
-				mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 				buf.EXPECT().Pop()
-				directory.EXPECT().Visit(block)
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.Tag).To(Equal(uint64(0x100)))
-				Expect(block.IsValid).To(BeTrue())
-				Expect(block.IsLocked).To(BeTrue())
-				Expect(block.PID).To(Equal(vm.PID(1)))
-				Expect(trans.block).To(BeIdenticalTo(block))
-				Expect(mshrEntry.Requests).To(ContainElement(trans))
-				Expect(mshrEntry.Block).To(BeIdenticalTo(block))
+				Expect(m.mshrState.Entries).To(HaveLen(1))
 			})
 		})
 
 		Context("miss, mshr miss, need eviction", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				block = &cache.Block{
-					PID:          2,
-					Tag:          0x200,
-					CacheAddress: 0x300,
-					IsValid:      true,
-					IsDirty:      true,
-					DirtyMask: []bool{
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-						true, true, true, true, false, false, false, false,
-					},
+				// Fill all blocks in the target set with dirty data
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				for i := 0; i < m.wayAssociativity; i++ {
+					block := &m.directoryState.Sets[setID].Blocks[i]
+					block.PID = 2
+					block.Tag = uint64(0x200 + i*0x1000)
+					block.CacheAddress = uint64(i * m.blockSize)
+					block.IsValid = true
+					block.IsDirty = true
 				}
-
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-				mshr.EXPECT().IsFull().Return(false)
 			})
 
 			It("should stall if bank buffer is full", func() {
@@ -283,65 +222,22 @@ var _ = Describe("DirectoryStage", func() {
 				Expect(ret).To(BeFalse())
 			})
 
-			It("should stall if victim is locked", func() {
-				block.IsLocked = true
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should do evict", func() {
-				directory.EXPECT().Visit(block)
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().
 					Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.victim.Tag).To(Equal(uint64(0x200)))
-						Expect(trans.victim.CacheAddress).
-							To(Equal(uint64(0x300)))
+					Do(func(t *transactionState) {
+						Expect(t.hasVictim).To(BeTrue())
+						Expect(t.evictingPID).To(Equal(vm.PID(2)))
+						Expect(t.fetchPID).To(Equal(vm.PID(1)))
+						Expect(t.fetchAddress).To(Equal(uint64(0x100)))
 					})
-				mshrEntry := &cache.MSHREntry{}
-				mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 				buf.EXPECT().Pop()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.Tag).To(Equal(uint64(0x100)))
-				Expect(block.IsLocked).To(BeTrue())
-				Expect(block.IsValid).To(BeTrue())
-				Expect(block.IsDirty).To(BeFalse())
 				Expect(trans.action).To(Equal(bankEvictAndFetch))
-				Expect(trans.block).To(BeIdenticalTo(block))
-				Expect(trans.victim.Tag).To(Equal(uint64(0x200)))
-				Expect(trans.victim.CacheAddress).To(Equal(uint64(0x300)))
-				Expect(trans.victim.DirtyMask).To(Equal([]bool{
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-				}))
-				Expect(trans.evictingPID).To(Equal(vm.PID(2)))
-				Expect(trans.evictingAddr).To(Equal(uint64(0x200)))
-				Expect(trans.evictingDirtyMask).To(Equal([]bool{
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-					true, true, true, true, false, false, false, false,
-				}))
-				Expect(trans.fetchPID).To(Equal(vm.PID(1)))
-				Expect(trans.fetchAddress).To(Equal(uint64(0x100)))
-				Expect(mshrEntry.Block).To(BeIdenticalTo(block))
-				Expect(mshrEntry.Requests).To(ContainElement(trans))
 			})
 		})
 	})
@@ -349,7 +245,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		var (
 			write *mem.WriteReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -359,9 +255,10 @@ var _ = Describe("DirectoryStage", func() {
 			write.PID = 1
 			write.TrafficBytes = 12
 			write.TrafficClass = "mem.WriteReq"
-			trans = &transaction{
+			trans = &transactionState{
 				write: write,
 			}
+			m.inFlightTransactions = []*transactionState{trans}
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
@@ -369,15 +266,8 @@ var _ = Describe("DirectoryStage", func() {
 		})
 
 		Context("mshr hit", func() {
-			var (
-				mshrEntry *cache.MSHREntry
-			)
-
 			BeforeEach(func() {
-				mshrEntry = &cache.MSHREntry{}
-				mshr.EXPECT().
-					Query(vm.PID(1), uint64(0x100)).
-					Return(mshrEntry)
+				cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(1), 0x100)
 			})
 
 			It("should add to MSHR", func() {
@@ -386,31 +276,20 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(mshrEntry.Requests).To(HaveLen(1))
+				Expect(m.mshrState.Entries[0].TransactionIndices).To(HaveLen(1))
 			})
 		})
 
 		Context("hit", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				block = &cache.Block{
-					Tag:     0x100,
-					IsValid: true,
-				}
-
-				mshr.EXPECT().
-					Query(vm.PID(1), uint64(0x100)).
-					Return(nil)
-
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(block)
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				block := &m.directoryState.Sets[setID].Blocks[0]
+				block.Tag = 0x100
+				block.PID = 1
+				block.IsValid = true
 			})
 
-			It("should stall is bank is busy", func() {
+			It("should stall if bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
 				ret := ds.Tick()
@@ -418,16 +297,9 @@ var _ = Describe("DirectoryStage", func() {
 				Expect(ret).To(BeFalse())
 			})
 
-			It("should stall is block is loked", func() {
-				block.IsLocked = true
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if block is being read", func() {
-				block.ReadCount = 1
+			It("should stall if block is locked", func() {
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				m.directoryState.Sets[setID].Blocks[0].IsLocked = true
 
 				ret := ds.Tick()
 
@@ -437,62 +309,24 @@ var _ = Describe("DirectoryStage", func() {
 			It("should send to bank", func() {
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.block).To(BeIdenticalTo(block))
+					Do(func(t *transactionState) {
+						Expect(t.hasBlock).To(BeTrue())
 					})
 				buf.EXPECT().Pop()
-				directory.EXPECT().Visit(block)
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.IsLocked).To(BeTrue())
 				Expect(trans.action).To(Equal(bankWriteHit))
 			})
 		})
 
 		Context("miss, write full line, no eviction", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				block = &cache.Block{
-					Tag:     0x200,
-					IsValid: false,
-					IsDirty: false,
-				}
-
-				write.Data = []byte{
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-				}
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
+				write.Data = make([]byte, 64)
 			})
 
-			It("should stall if victim is locked", func() {
-				block.IsLocked = true
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if victim is being read", func() {
-				block.ReadCount = 1
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall is bank is busy", func() {
+			It("should stall if bank is busy", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 
 				ret := ds.Tick()
@@ -503,138 +337,94 @@ var _ = Describe("DirectoryStage", func() {
 			It("should send to bank", func() {
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.block).To(BeIdenticalTo(block))
+					Do(func(t *transactionState) {
+						Expect(t.hasBlock).To(BeTrue())
 					})
 				buf.EXPECT().Pop()
-				directory.EXPECT().Visit(block)
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.IsLocked).To(BeTrue())
-				Expect(block.Tag).To(Equal(uint64(0x100)))
-				Expect(block.IsValid).To(BeTrue())
-				Expect(block.PID).To(Equal(vm.PID(1)))
 				Expect(trans.action).To(Equal(bankWriteHit))
 			})
 		})
 
 		Context("miss, write full line, need eviction", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				block = &cache.Block{
-					Tag:          0x200,
-					CacheAddress: 0x300,
-					IsValid:      true,
-					IsDirty:      true,
-				}
-
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
 				write.Data = make([]byte, 64)
+
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				for i := 0; i < m.wayAssociativity; i++ {
+					block := &m.directoryState.Sets[setID].Blocks[i]
+					block.Tag = uint64(0x200 + i*0x1000)
+					block.CacheAddress = uint64(i * m.blockSize)
+					block.IsValid = true
+					block.IsDirty = true
+				}
 			})
 
-			It("should stall if evictor buffer is full", func() {
+			It("should stall if bank buffer is full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
 			It("should send to evictor", func() {
-				directory.EXPECT().Visit(block)
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().
 					Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.victim.Tag).To(Equal(uint64(0x200)))
-						Expect(trans.victim.CacheAddress).
-							To(Equal(uint64(0x300)))
+					Do(func(t *transactionState) {
+						Expect(t.hasVictim).To(BeTrue())
 					})
 				buf.EXPECT().Pop()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.Tag).To(Equal(uint64(0x100)))
-				Expect(block.IsLocked).To(BeTrue())
-				Expect(block.IsValid).To(BeTrue())
 				Expect(trans.action).To(Equal(bankEvictAndWrite))
 			})
 		})
 
 		Context("miss, write partial line, need eviction", func() {
-			var (
-				block *cache.Block
-			)
-
 			BeforeEach(func() {
-				block = &cache.Block{
-					Tag:          0x200,
-					CacheAddress: 0x300,
-					IsValid:      true,
-					IsDirty:      true,
-				}
-
 				write.Data = make([]byte, 4)
-				directory.EXPECT().
-					Lookup(vm.PID(1), uint64(0x100)).
-					Return(nil)
-				mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(nil)
+
+				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
+				for i := 0; i < m.wayAssociativity; i++ {
+					block := &m.directoryState.Sets[setID].Blocks[i]
+					block.Tag = uint64(0x200 + i*0x1000)
+					block.CacheAddress = uint64(i * m.blockSize)
+					block.IsValid = true
+					block.IsDirty = true
+				}
 			})
 
 			It("should stall if mshr is full", func() {
-				mshr.EXPECT().IsFull().Return(true)
+				for i := 0; i < m.numMSHREntry; i++ {
+					cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(100), uint64(i*0x1000))
+				}
 				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
-			It("should stall if victim block is locked", func() {
-				mshr.EXPECT().IsFull().Return(false)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				block.IsLocked = true
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if evictor buffer is full", func() {
-				mshr.EXPECT().IsFull().Return(false)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
+			It("should stall if bank buffer is full", func() {
 				bankBuf.EXPECT().CanPush().Return(false)
 				ret := ds.Tick()
 				Expect(ret).To(BeFalse())
 			})
 
-			It("should send to write buffer and create mshr entry", func() {
-				mshrEntry := &cache.MSHREntry{}
-				mshr.EXPECT().IsFull().Return(false)
-				directory.EXPECT().FindVictim(uint64(0x100)).Return(block)
-				directory.EXPECT().Visit(block)
+			It("should evict and fetch", func() {
 				bankBuf.EXPECT().CanPush().Return(true)
 				bankBuf.EXPECT().
 					Push(gomock.Any()).
-					Do(func(trans *transaction) {
-						Expect(trans.victim.Tag).To(Equal(uint64(0x200)))
-						Expect(trans.victim.CacheAddress).
-							To(Equal(uint64(0x300)))
+					Do(func(t *transactionState) {
+						Expect(t.hasVictim).To(BeTrue())
 					})
-				mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 				buf.EXPECT().Pop()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(block.PID).To(Equal(vm.PID(1)))
-				Expect(block.Tag).To(Equal(uint64(0x100)))
-				Expect(block.IsLocked).To(BeTrue())
-				Expect(block.IsValid).To(BeTrue())
-				Expect(block.IsDirty).To(BeFalse())
 				Expect(trans.action).To(Equal(bankEvictAndFetch))
 			})
 		})

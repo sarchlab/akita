@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"io"
-
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -10,36 +8,42 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// transactionState is the serializable representation of a transaction.
-type transactionState struct {
-	ID                  string       `json:"id"`
-	Action              int          `json:"action"`
-	HasRead             bool         `json:"has_read"`
-	ReadMsg             sim.MsgMeta  `json:"read_msg"`
-	HasWrite            bool         `json:"has_write"`
-	WriteMsg            sim.MsgMeta  `json:"write_msg"`
-	HasFlush            bool         `json:"has_flush"`
-	FlushMsg            sim.MsgMeta  `json:"flush_msg"`
-	FlushInvalidateAll  bool         `json:"flush_invalidate_all"`
+// transactionSnapshot is the serializable representation of a transactionState.
+type transactionSnapshot struct {
+	ID                   string      `json:"id"`
+	Action               int         `json:"action"`
+	HasRead              bool        `json:"has_read"`
+	ReadMsg              sim.MsgMeta `json:"read_msg"`
+	HasWrite             bool        `json:"has_write"`
+	WriteMsg             sim.MsgMeta `json:"write_msg"`
+	HasFlush             bool        `json:"has_flush"`
+	FlushMsg             sim.MsgMeta `json:"flush_msg"`
+	FlushInvalidateAll   bool        `json:"flush_invalidate_all"`
 	FlushDiscardInflight bool        `json:"flush_discard_inflight"`
-	FlushPauseAfter     bool         `json:"flush_pause_after"`
-	HasBlock            bool         `json:"has_block"`
-	BlockSetID          int          `json:"block_set_id"`
-	BlockWayID          int          `json:"block_way_id"`
-	HasVictim           bool         `json:"has_victim"`
-	Victim              cache.BlockState `json:"victim"`
-	FetchPID            uint32       `json:"fetch_pid"`
-	FetchAddress        uint64       `json:"fetch_address"`
-	FetchedData         []byte       `json:"fetched_data"`
-	HasFetchReadReq     bool         `json:"has_fetch_read_req"`
-	FetchReadReqMsg     sim.MsgMeta  `json:"fetch_read_req_msg"`
-	EvictingPID         uint32       `json:"evicting_pid"`
-	EvictingAddr        uint64       `json:"evicting_addr"`
-	EvictingData        []byte       `json:"evicting_data"`
-	EvictingDirtyMask   []bool       `json:"evicting_dirty_mask"`
-	HasEvictionWriteReq bool         `json:"has_eviction_write_req"`
-	EvictionWriteReqMsg sim.MsgMeta  `json:"eviction_write_req_msg"`
-	MSHREntryIndex      int          `json:"mshr_entry_index"`
+	FlushPauseAfter      bool        `json:"flush_pause_after"`
+	HasBlock             bool        `json:"has_block"`
+	BlockSetID           int         `json:"block_set_id"`
+	BlockWayID           int         `json:"block_way_id"`
+	HasVictim            bool        `json:"has_victim"`
+	VictimPID            uint32      `json:"victim_pid"`
+	VictimTag            uint64      `json:"victim_tag"`
+	VictimCacheAddress   uint64      `json:"victim_cache_address"`
+	VictimDirtyMask      []bool      `json:"victim_dirty_mask"`
+	FetchPID             uint32      `json:"fetch_pid"`
+	FetchAddress         uint64      `json:"fetch_address"`
+	FetchedData          []byte      `json:"fetched_data"`
+	HasFetchReadReq      bool        `json:"has_fetch_read_req"`
+	FetchReadReqMsg      sim.MsgMeta `json:"fetch_read_req_msg"`
+	EvictingPID          uint32      `json:"evicting_pid"`
+	EvictingAddr         uint64      `json:"evicting_addr"`
+	EvictingData         []byte      `json:"evicting_data"`
+	EvictingDirtyMask    []bool      `json:"evicting_dirty_mask"`
+	HasEvictionWriteReq  bool        `json:"has_eviction_write_req"`
+	EvictionWriteReqMsg  sim.MsgMeta `json:"eviction_write_req_msg"`
+	MSHREntryIndex         int         `json:"mshr_entry_index"`
+	HasMSHREntry           bool        `json:"has_mshr_entry"`
+	MSHRData               []byte      `json:"mshr_data"`
+	MSHRTransactionIndices []int       `json:"mshr_transaction_indices"`
 }
 
 // dirPipelineStageState captures one directory pipeline slot.
@@ -73,24 +77,18 @@ type bankPostBufState struct {
 	Indices []int `json:"indices"`
 }
 
-// blockRef is a set+way pair referencing a block in the directory.
-type blockRef struct {
-	SetID int `json:"set_id"`
-	WayID int `json:"way_id"`
-}
-
 // flushReqState is a serializable representation of a cache.FlushReq.
 type flushReqState struct {
-	MsgMeta                sim.MsgMeta `json:"msg_meta"`
-	InvalidateAllCachelines bool       `json:"invalidate_all_cachelines"`
-	DiscardInflight         bool       `json:"discard_inflight"`
-	PauseAfterFlushing      bool       `json:"pause_after_flushing"`
+	MsgMeta                 sim.MsgMeta `json:"msg_meta"`
+	InvalidateAllCachelines bool        `json:"invalidate_all_cachelines"`
+	DiscardInflight         bool        `json:"discard_inflight"`
+	PauseAfterFlushing      bool        `json:"pause_after_flushing"`
 }
 
 func buildTransIndex(
-	transactions []*transaction,
-) map[*transaction]int {
-	m := make(map[*transaction]int, len(transactions))
+	transactions []*transactionState,
+) map[*transactionState]int {
+	m := make(map[*transactionState]int, len(transactions))
 	for i, t := range transactions {
 		m[t] = i
 	}
@@ -98,31 +96,19 @@ func buildTransIndex(
 	return m
 }
 
-func buildMSHREntryLookup(
-	mshr cache.MSHR,
-) map[*cache.MSHREntry]int {
-	entries := mshr.AllEntries()
-	m := make(map[*cache.MSHREntry]int, len(entries))
-
-	for i, e := range entries {
-		m[e] = i
-	}
-
-	return m
-}
-
 func snapshotTransaction(
-	t *transaction,
-	mshrLookup map[*cache.MSHREntry]int,
-) transactionState {
-	s := transactionState{
+	t *transactionState,
+	lookup map[*transactionState]int,
+) transactionSnapshot {
+	s := transactionSnapshot{
 		ID:             t.id,
 		Action:         int(t.action),
 		FetchPID:       uint32(t.fetchPID),
 		FetchAddress:   t.fetchAddress,
 		EvictingPID:    uint32(t.evictingPID),
 		EvictingAddr:   t.evictingAddr,
-		MSHREntryIndex: -1,
+		MSHREntryIndex: t.mshrEntryIndex,
+		HasMSHREntry:   t.hasMSHREntry,
 	}
 
 	if t.read != nil {
@@ -143,59 +129,23 @@ func snapshotTransaction(
 		s.FlushPauseAfter = t.flush.PauseAfterFlushing
 	}
 
-	if t.block != nil {
+	if t.hasBlock {
 		s.HasBlock = true
-		s.BlockSetID = t.block.SetID
-		s.BlockWayID = t.block.WayID
+		s.BlockSetID = t.blockSetID
+		s.BlockWayID = t.blockWayID
 	}
 
-	snapshotVictim(t, &s)
-	snapshotTransData(t, &s)
-
-	if t.fetchReadReq != nil {
-		s.HasFetchReadReq = true
-		s.FetchReadReqMsg = t.fetchReadReq.MsgMeta
-	}
-
-	if t.evictionWriteReq != nil {
-		s.HasEvictionWriteReq = true
-		s.EvictionWriteReqMsg = t.evictionWriteReq.MsgMeta
-	}
-
-	if t.mshrEntry != nil {
-		if idx, ok := mshrLookup[t.mshrEntry]; ok {
-			s.MSHREntryIndex = idx
+	if t.hasVictim {
+		s.HasVictim = true
+		s.VictimPID = uint32(t.victimPID)
+		s.VictimTag = t.victimTag
+		s.VictimCacheAddress = t.victimCacheAddress
+		if t.victimDirtyMask != nil {
+			s.VictimDirtyMask = make([]bool, len(t.victimDirtyMask))
+			copy(s.VictimDirtyMask, t.victimDirtyMask)
 		}
 	}
 
-	return s
-}
-
-func snapshotVictim(t *transaction, s *transactionState) {
-	if t.victim == nil {
-		return
-	}
-
-	s.HasVictim = true
-	s.Victim = cache.BlockState{
-		PID:          uint32(t.victim.PID),
-		Tag:          t.victim.Tag,
-		WayID:        t.victim.WayID,
-		SetID:        t.victim.SetID,
-		CacheAddress: t.victim.CacheAddress,
-		IsValid:      t.victim.IsValid,
-		IsDirty:      t.victim.IsDirty,
-		ReadCount:    t.victim.ReadCount,
-		IsLocked:     t.victim.IsLocked,
-	}
-
-	if t.victim.DirtyMask != nil {
-		s.Victim.DirtyMask = make([]bool, len(t.victim.DirtyMask))
-		copy(s.Victim.DirtyMask, t.victim.DirtyMask)
-	}
-}
-
-func snapshotTransData(t *transaction, s *transactionState) {
 	if t.fetchedData != nil {
 		s.FetchedData = make([]byte, len(t.fetchedData))
 		copy(s.FetchedData, t.fetchedData)
@@ -210,59 +160,80 @@ func snapshotTransData(t *transaction, s *transactionState) {
 		s.EvictingDirtyMask = make([]bool, len(t.evictingDirtyMask))
 		copy(s.EvictingDirtyMask, t.evictingDirtyMask)
 	}
+
+	if t.fetchReadReq != nil {
+		s.HasFetchReadReq = true
+		s.FetchReadReqMsg = t.fetchReadReq.MsgMeta
+	}
+
+	if t.evictionWriteReq != nil {
+		s.HasEvictionWriteReq = true
+		s.EvictionWriteReqMsg = t.evictionWriteReq.MsgMeta
+	}
+
+	if t.mshrData != nil {
+		s.MSHRData = make([]byte, len(t.mshrData))
+		copy(s.MSHRData, t.mshrData)
+	}
+
+	if t.mshrTransactions != nil {
+		s.MSHRTransactionIndices = make([]int, len(t.mshrTransactions))
+		for i, mt := range t.mshrTransactions {
+			if idx, ok := lookup[mt]; ok {
+				s.MSHRTransactionIndices[i] = idx
+			}
+		}
+	}
+
+	return s
 }
 
 func snapshotAllTransactions(
-	transactions []*transaction,
-	mshrLookup map[*cache.MSHREntry]int,
-) []transactionState {
-	states := make([]transactionState, len(transactions))
+	transactions []*transactionState,
+	lookup map[*transactionState]int,
+) []transactionSnapshot {
+	states := make([]transactionSnapshot, len(transactions))
 
 	for i, t := range transactions {
-		states[i] = snapshotTransaction(t, mshrLookup)
+		states[i] = snapshotTransaction(t, lookup)
 	}
 
 	return states
 }
 
 func restoreAllTransactions(
-	states []transactionState,
-	dir cache.Directory,
-	mshrEntries []*cache.MSHREntry,
-) []*transaction {
-	allTrans := make([]*transaction, len(states))
+	states []transactionSnapshot,
+) []*transactionState {
+	allTrans := make([]*transactionState, len(states))
 
 	for i, s := range states {
-		allTrans[i] = restoreTransactionCore(s, dir, mshrEntries)
+		allTrans[i] = restoreTransactionCore(s)
+	}
+
+	// Second pass: resolve mshrTransactions pointers from saved indices
+	for _, t := range allTrans {
+		if t.mshrTransactionRestoreIndices != nil {
+			t.mshrTransactions = make([]*transactionState, 0, len(t.mshrTransactionRestoreIndices))
+			for _, idx := range t.mshrTransactionRestoreIndices {
+				if idx >= 0 && idx < len(allTrans) {
+					t.mshrTransactions = append(t.mshrTransactions, allTrans[idx])
+				}
+			}
+			t.mshrTransactionRestoreIndices = nil
+		}
 	}
 
 	return allTrans
 }
 
 func restoreTransactionCore(
-	s transactionState,
-	dir cache.Directory,
-	mshrEntries []*cache.MSHREntry,
-) *transaction {
-	t := &transaction{
+	s transactionSnapshot,
+) *transactionState {
+	t := &transactionState{
 		id:     s.ID,
 		action: action(s.Action),
 	}
 
-	restoreTransMsgs(t, s)
-	restoreTransBlock(t, s, dir)
-	restoreTransVictim(t, s)
-	restoreTransData(t, s)
-	restoreTransFetchEvict(t, s)
-
-	if s.MSHREntryIndex >= 0 && s.MSHREntryIndex < len(mshrEntries) {
-		t.mshrEntry = mshrEntries[s.MSHREntryIndex]
-	}
-
-	return t
-}
-
-func restoreTransMsgs(t *transaction, s transactionState) {
 	if s.HasRead {
 		t.read = &mem.ReadReq{MsgMeta: s.ReadMsg}
 	}
@@ -279,45 +250,29 @@ func restoreTransMsgs(t *transaction, s transactionState) {
 			PauseAfterFlushing:      s.FlushPauseAfter,
 		}
 	}
-}
 
-func restoreTransBlock(
-	t *transaction,
-	s transactionState,
-	dir cache.Directory,
-) {
 	if s.HasBlock {
-		sets := dir.GetSets()
-		t.block = sets[s.BlockSetID].Blocks[s.BlockWayID]
-	}
-}
-
-func restoreTransVictim(t *transaction, s transactionState) {
-	if !s.HasVictim {
-		return
+		t.hasBlock = true
+		t.blockSetID = s.BlockSetID
+		t.blockWayID = s.BlockWayID
 	}
 
-	v := &cache.Block{
-		PID:          vm.PID(s.Victim.PID),
-		Tag:          s.Victim.Tag,
-		WayID:        s.Victim.WayID,
-		SetID:        s.Victim.SetID,
-		CacheAddress: s.Victim.CacheAddress,
-		IsValid:      s.Victim.IsValid,
-		IsDirty:      s.Victim.IsDirty,
-		ReadCount:    s.Victim.ReadCount,
-		IsLocked:     s.Victim.IsLocked,
+	if s.HasVictim {
+		t.hasVictim = true
+		t.victimPID = vm.PID(s.VictimPID)
+		t.victimTag = s.VictimTag
+		t.victimCacheAddress = s.VictimCacheAddress
+		if s.VictimDirtyMask != nil {
+			t.victimDirtyMask = make([]bool, len(s.VictimDirtyMask))
+			copy(t.victimDirtyMask, s.VictimDirtyMask)
+		}
 	}
 
-	if s.Victim.DirtyMask != nil {
-		v.DirtyMask = make([]bool, len(s.Victim.DirtyMask))
-		copy(v.DirtyMask, s.Victim.DirtyMask)
-	}
+	t.fetchPID = vm.PID(s.FetchPID)
+	t.fetchAddress = s.FetchAddress
+	t.evictingPID = vm.PID(s.EvictingPID)
+	t.evictingAddr = s.EvictingAddr
 
-	t.victim = v
-}
-
-func restoreTransData(t *transaction, s transactionState) {
 	if s.FetchedData != nil {
 		t.fetchedData = make([]byte, len(s.FetchedData))
 		copy(t.fetchedData, s.FetchedData)
@@ -332,13 +287,6 @@ func restoreTransData(t *transaction, s transactionState) {
 		t.evictingDirtyMask = make([]bool, len(s.EvictingDirtyMask))
 		copy(t.evictingDirtyMask, s.EvictingDirtyMask)
 	}
-}
-
-func restoreTransFetchEvict(t *transaction, s transactionState) {
-	t.fetchPID = vm.PID(s.FetchPID)
-	t.fetchAddress = s.FetchAddress
-	t.evictingPID = vm.PID(s.EvictingPID)
-	t.evictingAddr = s.EvictingAddr
 
 	if s.HasFetchReadReq {
 		t.fetchReadReq = &mem.ReadReq{MsgMeta: s.FetchReadReqMsg}
@@ -349,17 +297,83 @@ func restoreTransFetchEvict(t *transaction, s transactionState) {
 			MsgMeta: s.EvictionWriteReqMsg,
 		}
 	}
+
+	t.mshrEntryIndex = s.MSHREntryIndex
+	t.hasMSHREntry = s.HasMSHREntry
+
+	if s.MSHRData != nil {
+		t.mshrData = make([]byte, len(s.MSHRData))
+		copy(t.mshrData, s.MSHRData)
+	}
+
+	// mshrTransactions are resolved in a second pass by
+	// resolveTransactionMSHRPointers, after all transactions are restored.
+	// We store the raw indices temporarily in a helper field.
+	if s.MSHRTransactionIndices != nil {
+		t.mshrTransactionRestoreIndices = make([]int, len(s.MSHRTransactionIndices))
+		copy(t.mshrTransactionRestoreIndices, s.MSHRTransactionIndices)
+	}
+
+	return t
 }
+
+// --- Deep copy helpers ---
+
+func deepCopyDirectoryState(ds cache.DirectoryState) cache.DirectoryState {
+	result := cache.DirectoryState{
+		Sets: make([]cache.SetState, len(ds.Sets)),
+	}
+
+	for i, set := range ds.Sets {
+		result.Sets[i] = cache.SetState{
+			Blocks:   make([]cache.BlockState, len(set.Blocks)),
+			LRUOrder: make([]int, len(set.LRUOrder)),
+		}
+		copy(result.Sets[i].Blocks, set.Blocks)
+		copy(result.Sets[i].LRUOrder, set.LRUOrder)
+
+		for j, b := range set.Blocks {
+			if b.DirtyMask != nil {
+				result.Sets[i].Blocks[j].DirtyMask = make([]bool, len(b.DirtyMask))
+				copy(result.Sets[i].Blocks[j].DirtyMask, b.DirtyMask)
+			}
+		}
+	}
+
+	return result
+}
+
+func deepCopyMSHRState(ms cache.MSHRState) cache.MSHRState {
+	result := cache.MSHRState{
+		Entries: make([]cache.MSHREntryState, len(ms.Entries)),
+	}
+
+	for i, e := range ms.Entries {
+		result.Entries[i] = e
+		if e.TransactionIndices != nil {
+			result.Entries[i].TransactionIndices = make([]int, len(e.TransactionIndices))
+			copy(result.Entries[i].TransactionIndices, e.TransactionIndices)
+		}
+		if e.Data != nil {
+			result.Entries[i].Data = make([]byte, len(e.Data))
+			copy(result.Entries[i].Data, e.Data)
+		}
+	}
+
+	return result
+}
+
+// --- Buffer snapshot/restore helpers ---
 
 func snapshotDirBuf(
 	buf queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
 
 	for i, e := range elems {
-		indices[i] = lookup[e.(*transaction)]
+		indices[i] = lookup[e.(*transactionState)]
 	}
 
 	return indices
@@ -368,7 +382,7 @@ func snapshotDirBuf(
 func restoreDirBuf(
 	buf queueing.Buffer,
 	indices []int,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
@@ -380,7 +394,7 @@ func restoreDirBuf(
 
 func snapshotBankBufs(
 	bankBufs []queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankBufState {
 	result := make([]bankBufState, len(bankBufs))
 
@@ -389,7 +403,7 @@ func snapshotBankBufs(
 		indices := make([]int, len(elems))
 
 		for j, e := range elems {
-			indices[j] = lookup[e.(*transaction)]
+			indices[j] = lookup[e.(*transactionState)]
 		}
 
 		result[i] = bankBufState{Indices: indices}
@@ -401,7 +415,7 @@ func snapshotBankBufs(
 func restoreBankBufs(
 	bankBufs []queueing.Buffer,
 	states []bankBufState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, s := range states {
 		elems := make([]interface{}, len(s.Indices))
@@ -415,14 +429,13 @@ func restoreBankBufs(
 
 func snapshotMSHRStageBuf(
 	buf queueing.Buffer,
-	mshrLookup map[*cache.MSHREntry]int,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
 
 	for i, e := range elems {
-		entry := e.(*cache.MSHREntry)
-		indices[i] = mshrLookup[entry]
+		indices[i] = lookup[e.(*transactionState)]
 	}
 
 	return indices
@@ -431,34 +444,7 @@ func snapshotMSHRStageBuf(
 func restoreMSHRStageBuf(
 	buf queueing.Buffer,
 	indices []int,
-	mshrEntries []*cache.MSHREntry,
-) {
-	elems := make([]interface{}, len(indices))
-	for i, idx := range indices {
-		elems[i] = mshrEntries[idx]
-	}
-
-	queueing.RestoreBuffer(buf, elems)
-}
-
-func snapshotWriteBufferBuf(
-	buf queueing.Buffer,
-	lookup map[*transaction]int,
-) []int {
-	elems := queueing.SnapshotBuffer(buf)
-	indices := make([]int, len(elems))
-
-	for i, e := range elems {
-		indices[i] = lookup[e.(*transaction)]
-	}
-
-	return indices
-}
-
-func restoreWriteBufferBuf(
-	buf queueing.Buffer,
-	indices []int,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
@@ -468,9 +454,38 @@ func restoreWriteBufferBuf(
 	queueing.RestoreBuffer(buf, elems)
 }
 
+func snapshotWriteBufferBuf(
+	buf queueing.Buffer,
+	lookup map[*transactionState]int,
+) []int {
+	elems := queueing.SnapshotBuffer(buf)
+	indices := make([]int, len(elems))
+
+	for i, e := range elems {
+		indices[i] = lookup[e.(*transactionState)]
+	}
+
+	return indices
+}
+
+func restoreWriteBufferBuf(
+	buf queueing.Buffer,
+	indices []int,
+	allTrans []*transactionState,
+) {
+	elems := make([]interface{}, len(indices))
+	for i, idx := range indices {
+		elems[i] = allTrans[idx]
+	}
+
+	queueing.RestoreBuffer(buf, elems)
+}
+
+// --- Pipeline snapshot/restore helpers ---
+
 func snapshotDirPipeline(
 	p queueing.Pipeline,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []dirPipelineStageState {
 	snaps := queueing.SnapshotPipeline(p)
 	states := make([]dirPipelineStageState, len(snaps))
@@ -491,7 +506,7 @@ func snapshotDirPipeline(
 func restoreDirPipeline(
 	p queueing.Pipeline,
 	states []dirPipelineStageState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	snaps := make([]queueing.PipelineStageSnapshot, len(states))
 
@@ -511,7 +526,7 @@ func restoreDirPipeline(
 
 func snapshotDirPostBuf(
 	buf queueing.Buffer,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
@@ -527,7 +542,7 @@ func snapshotDirPostBuf(
 func restoreDirPostBuf(
 	buf queueing.Buffer,
 	indices []int,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
@@ -539,7 +554,7 @@ func restoreDirPostBuf(
 
 func snapshotBankPipelines(
 	bankStages []*bankStage,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankPipelineState {
 	result := make([]bankPipelineState, len(bankStages))
 
@@ -566,7 +581,7 @@ func snapshotBankPipelines(
 func restoreBankPipelines(
 	bankStages []*bankStage,
 	pipeStates []bankPipelineState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, ps := range pipeStates {
 		snaps := make(
@@ -589,7 +604,7 @@ func restoreBankPipelines(
 
 func snapshotBankPostBufs(
 	bankStages []*bankStage,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) []bankPostBufState {
 	result := make([]bankPostBufState, len(bankStages))
 
@@ -611,7 +626,7 @@ func snapshotBankPostBufs(
 func restoreBankPostBufs(
 	bankStages []*bankStage,
 	states []bankPostBufState,
-	allTrans []*transaction,
+	allTrans []*transactionState,
 ) {
 	for i, s := range states {
 		elems := make([]interface{}, len(s.Indices))
@@ -626,9 +641,11 @@ func restoreBankPostBufs(
 	}
 }
 
+// --- Transaction list helpers ---
+
 func snapshotTransList(
-	list []*transaction,
-	lookup map[*transaction]int,
+	list []*transactionState,
+	lookup map[*transactionState]int,
 ) []int {
 	indices := make([]int, len(list))
 	for i, t := range list {
@@ -640,9 +657,9 @@ func snapshotTransList(
 
 func restoreTransList(
 	indices []int,
-	allTrans []*transaction,
-) []*transaction {
-	list := make([]*transaction, len(indices))
+	allTrans []*transactionState,
+) []*transactionState {
+	list := make([]*transactionState, len(indices))
 	for i, idx := range indices {
 		list[i] = allTrans[idx]
 	}
@@ -650,41 +667,7 @@ func restoreTransList(
 	return list
 }
 
-func snapshotFlusherBlocks(
-	blocks []*cache.Block,
-) []blockRef {
-	refs := make([]blockRef, len(blocks))
-	for i, b := range blocks {
-		refs[i] = blockRef{SetID: b.SetID, WayID: b.WayID}
-	}
-
-	return refs
-}
-
-func restoreFlusherBlocks(
-	refs []blockRef,
-	dir cache.Directory,
-) []*cache.Block {
-	sets := dir.GetSets()
-	blocks := make([]*cache.Block, len(refs))
-
-	for i, r := range refs {
-		blocks[i] = sets[r.SetID].Blocks[r.WayID]
-	}
-
-	return blocks
-}
-
-func mshrTransLookup(
-	lookup map[*transaction]int,
-) map[interface{}]int {
-	m := make(map[interface{}]int, len(lookup))
-	for k, v := range lookup {
-		m[k] = v
-	}
-
-	return m
-}
+// --- Evicting list ---
 
 func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
 	if len(evictingList) == 0 {
@@ -698,6 +681,8 @@ func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
 
 	return out
 }
+
+// --- Bank counters ---
 
 func snapshotBankCounters(
 	bankStages []*bankStage,
@@ -713,9 +698,11 @@ func snapshotBankCounters(
 	return inflightCounts, downwardCounts
 }
 
+// --- Write buffer stage ---
+
 func snapshotWriteBufferStage(
 	wb *writeBufferStage,
-	lookup map[*transaction]int,
+	lookup map[*transactionState]int,
 ) (pending, fetchInfl, evictInfl []int) {
 	pending = snapshotTransList(wb.pendingEvictions, lookup)
 	fetchInfl = snapshotTransList(wb.inflightFetch, lookup)
@@ -724,26 +711,32 @@ func snapshotWriteBufferStage(
 	return pending, fetchInfl, evictInfl
 }
 
+// --- MSHR stage ---
+
 func snapshotMSHRStageEntry(
 	ms *mshrStage,
-	mshrLookup map[*cache.MSHREntry]int,
+	lookup map[*transactionState]int,
 ) (bool, int) {
-	if ms.processingMSHREntry == nil {
+	if !ms.hasProcessingTrans {
 		return false, 0
 	}
 
-	idx, ok := mshrLookup[ms.processingMSHREntry]
-	if !ok {
-		return true, 0
+	if ms.processingTrans != nil {
+		if idx, ok := lookup[ms.processingTrans]; ok {
+			return true, idx
+		}
 	}
 
-	return true, idx
+	return true, 0
 }
+
+// --- Flusher ---
 
 func snapshotFlusherState(
 	f *flusher,
 ) ([]blockRef, bool, flushReqState) {
-	refs := snapshotFlusherBlocks(f.blockToEvict)
+	refs := make([]blockRef, len(f.blockToEvict))
+	copy(refs, f.blockToEvict)
 
 	if f.processingFlush == nil {
 		return refs, false, flushReqState{}
@@ -757,125 +750,88 @@ func snapshotFlusherState(
 	}
 }
 
-func (c *Comp) snapshotState() State {
-	lookup := buildTransIndex(c.inFlightTransactions)
-	mshrLookup := buildMSHREntryLookup(c.mshr)
+// --- State snapshot/restore on middleware ---
+
+func (m *middleware) snapshotState() State {
+	lookup := buildTransIndex(m.inFlightTransactions)
 
 	s := State{
-		CacheState:     int(c.state),
-		DirectoryState: cache.SnapshotDirectory(c.directory),
-		MSHRState: cache.SnapshotMSHR(
-			c.mshr, mshrTransLookup(lookup)),
-		Transactions: snapshotAllTransactions(
-			c.inFlightTransactions, mshrLookup),
-		EvictingList: snapshotEvictingList(c.evictingList),
+		CacheState:   int(m.state),
+		EvictingList: snapshotEvictingList(m.evictingList),
 	}
 
-	s.DirStageBufIndices = snapshotDirBuf(c.dirStageBuffer, lookup)
-	s.DirToBankBufIndices = snapshotBankBufs(c.dirToBankBuffers, lookup)
+	// Deep copy directory and MSHR state
+	s.DirectoryState = deepCopyDirectoryState(m.directoryState)
+	s.MSHRState = deepCopyMSHRState(m.mshrState)
+
+	s.Transactions = snapshotAllTransactions(
+		m.inFlightTransactions, lookup)
+
+	s.DirStageBufIndices = snapshotDirBuf(m.dirStageBuffer, lookup)
+	s.DirToBankBufIndices = snapshotBankBufs(m.dirToBankBuffers, lookup)
 	s.WriteBufferToBankBufIndices = snapshotBankBufs(
-		c.writeBufferToBankBuffers, lookup)
-	s.MSHRStageBufEntries = snapshotMSHRStageBuf(
-		c.mshrStageBuffer, mshrLookup)
+		m.writeBufferToBankBuffers, lookup)
+	s.MSHRStageBufEntries = snapshotMSHRStageBuf(m.mshrStageBuffer, lookup)
 	s.WriteBufferBufIndices = snapshotWriteBufferBuf(
-		c.writeBufferBuffer, lookup)
+		m.writeBufferBuffer, lookup)
 
 	s.DirPipelineStages = snapshotDirPipeline(
-		c.dirStage.pipeline, lookup)
+		m.dirStage.pipeline, lookup)
 	s.DirPostPipelineBufIndices = snapshotDirPostBuf(
-		c.dirStage.buf, lookup)
-	s.BankPipelineStages = snapshotBankPipelines(c.bankStages, lookup)
+		m.dirStage.buf, lookup)
+	s.BankPipelineStages = snapshotBankPipelines(m.bankStages, lookup)
 	s.BankPostPipelineBufIndices = snapshotBankPostBufs(
-		c.bankStages, lookup)
+		m.bankStages, lookup)
 
 	s.BankInflightTransCounts, s.BankDownwardInflightTransCounts =
-		snapshotBankCounters(c.bankStages)
+		snapshotBankCounters(m.bankStages)
 	s.PendingEvictionIndices, s.InflightFetchIndices,
 		s.InflightEvictionIndices =
-		snapshotWriteBufferStage(c.writeBuffer, lookup)
+		snapshotWriteBufferStage(m.writeBuffer, lookup)
 	s.HasProcessingMSHREntry, s.ProcessingMSHREntryIdx =
-		snapshotMSHRStageEntry(c.mshrStage, mshrLookup)
+		snapshotMSHRStageEntry(m.mshrStage, lookup)
 	s.FlusherBlockToEvictRefs, s.HasProcessingFlush,
-		s.ProcessingFlush = snapshotFlusherState(c.flusher)
+		s.ProcessingFlush = snapshotFlusherState(m.flusher)
 
 	return s
 }
 
-func (c *Comp) restoreFromState(s State) {
-	c.state = cacheState(s.CacheState)
+func (m *middleware) restoreFromState(s State) {
+	m.state = cacheState(s.CacheState)
 
-	cache.RestoreDirectory(c.directory, s.DirectoryState)
+	m.directoryState = deepCopyDirectoryState(s.DirectoryState)
+	m.mshrState = deepCopyMSHRState(s.MSHRState)
 
-	// Restore MSHR first to get entry pointers
-	ifaces := make([]interface{}, 0)
-	cache.RestoreMSHR(c.mshr, s.MSHRState, ifaces, c.directory)
-	mshrEntries := c.mshr.AllEntries()
-
-	// Restore transactions
-	allTrans := restoreAllTransactions(
-		s.Transactions, c.directory, mshrEntries)
-	c.inFlightTransactions = allTrans
-
-	// Re-wire MSHR entry Requests to point to restored transactions
-	rewireMSHRRequests(c.mshr, s.MSHRState, allTrans)
+	allTrans := restoreAllTransactions(s.Transactions)
+	m.inFlightTransactions = allTrans
 
 	// Evicting list
-	c.evictingList = make(map[uint64]bool)
+	m.evictingList = make(map[uint64]bool)
 	for k, v := range s.EvictingList {
-		c.evictingList[k] = v
+		m.evictingList[k] = v
 	}
 
-	restoreBuffersAndPipelines(c, s, allTrans, mshrEntries)
-	restoreBankCounters(c, s)
-	restoreWriteBufferStage(c, s, allTrans)
-	restoreMSHRStage(c, s, mshrEntries)
-	restoreFlusherState(c, s)
-}
-
-func rewireMSHRRequests(
-	m cache.MSHR,
-	ms cache.MSHRState,
-	allTrans []*transaction,
-) {
-	entries := m.AllEntries()
-	for i, es := range ms.Entries {
-		reqs := make([]interface{}, len(es.TransactionIndices))
-		for j, idx := range es.TransactionIndices {
-			reqs[j] = allTrans[idx]
-		}
-
-		entries[i].Requests = reqs
-	}
-}
-
-func restoreBuffersAndPipelines(
-	c *Comp,
-	s State,
-	allTrans []*transaction,
-	mshrEntries []*cache.MSHREntry,
-) {
-	restoreDirBuf(c.dirStageBuffer, s.DirStageBufIndices, allTrans)
-	restoreBankBufs(c.dirToBankBuffers,
+	// Restore buffers and pipelines
+	restoreDirBuf(m.dirStageBuffer, s.DirStageBufIndices, allTrans)
+	restoreBankBufs(m.dirToBankBuffers,
 		s.DirToBankBufIndices, allTrans)
-	restoreBankBufs(c.writeBufferToBankBuffers,
+	restoreBankBufs(m.writeBufferToBankBuffers,
 		s.WriteBufferToBankBufIndices, allTrans)
-	restoreMSHRStageBuf(c.mshrStageBuffer,
-		s.MSHRStageBufEntries, mshrEntries)
-	restoreWriteBufferBuf(c.writeBufferBuffer,
+	restoreMSHRStageBuf(m.mshrStageBuffer, s.MSHRStageBufEntries, allTrans)
+	restoreWriteBufferBuf(m.writeBufferBuffer,
 		s.WriteBufferBufIndices, allTrans)
 
 	restoreDirPipeline(
-		c.dirStage.pipeline, s.DirPipelineStages, allTrans)
+		m.dirStage.pipeline, s.DirPipelineStages, allTrans)
 	restoreDirPostBuf(
-		c.dirStage.buf, s.DirPostPipelineBufIndices, allTrans)
+		m.dirStage.buf, s.DirPostPipelineBufIndices, allTrans)
 	restoreBankPipelines(
-		c.bankStages, s.BankPipelineStages, allTrans)
+		m.bankStages, s.BankPipelineStages, allTrans)
 	restoreBankPostBufs(
-		c.bankStages, s.BankPostPipelineBufIndices, allTrans)
-}
+		m.bankStages, s.BankPostPipelineBufIndices, allTrans)
 
-func restoreBankCounters(c *Comp, s State) {
-	for i, bs := range c.bankStages {
+	// Bank counters
+	for i, bs := range m.bankStages {
 		if i < len(s.BankInflightTransCounts) {
 			bs.inflightTransCount = s.BankInflightTransCounts[i]
 		}
@@ -885,43 +841,31 @@ func restoreBankCounters(c *Comp, s State) {
 				s.BankDownwardInflightTransCounts[i]
 		}
 	}
-}
 
-func restoreWriteBufferStage(
-	c *Comp,
-	s State,
-	allTrans []*transaction,
-) {
-	c.writeBuffer.pendingEvictions = restoreTransList(
+	// Write buffer stage
+	m.writeBuffer.pendingEvictions = restoreTransList(
 		s.PendingEvictionIndices, allTrans)
-	c.writeBuffer.inflightFetch = restoreTransList(
+	m.writeBuffer.inflightFetch = restoreTransList(
 		s.InflightFetchIndices, allTrans)
-	c.writeBuffer.inflightEviction = restoreTransList(
+	m.writeBuffer.inflightEviction = restoreTransList(
 		s.InflightEvictionIndices, allTrans)
-}
 
-func restoreMSHRStage(
-	c *Comp,
-	s State,
-	mshrEntries []*cache.MSHREntry,
-) {
-	c.mshrStage.processingMSHREntry = nil
-
-	if s.HasProcessingMSHREntry {
-		idx := s.ProcessingMSHREntryIdx
-		if idx >= 0 && idx < len(mshrEntries) {
-			c.mshrStage.processingMSHREntry = mshrEntries[idx]
-		}
+	// MSHR stage
+	m.mshrStage.hasProcessingTrans = s.HasProcessingMSHREntry
+	if s.HasProcessingMSHREntry && s.ProcessingMSHREntryIdx >= 0 && s.ProcessingMSHREntryIdx < len(allTrans) {
+		trans := allTrans[s.ProcessingMSHREntryIdx]
+		m.mshrStage.processingTrans = trans
+		m.mshrStage.processingTransList = trans.mshrTransactions
+		m.mshrStage.processingData = trans.mshrData
 	}
-}
 
-func restoreFlusherState(c *Comp, s State) {
-	c.flusher.blockToEvict = restoreFlusherBlocks(
-		s.FlusherBlockToEvictRefs, c.directory)
-	c.flusher.processingFlush = nil
+	// Flusher
+	m.flusher.blockToEvict = make([]blockRef, len(s.FlusherBlockToEvictRefs))
+	copy(m.flusher.blockToEvict, s.FlusherBlockToEvictRefs)
+	m.flusher.processingFlush = nil
 
 	if s.HasProcessingFlush {
-		c.flusher.processingFlush = &cache.FlushReq{
+		m.flusher.processingFlush = &cache.FlushReq{
 			MsgMeta:                 s.ProcessingFlush.MsgMeta,
 			InvalidateAllCachelines: s.ProcessingFlush.InvalidateAllCachelines,
 			DiscardInflight:         s.ProcessingFlush.DiscardInflight,
@@ -931,34 +875,15 @@ func restoreFlusherState(c *Comp, s State) {
 }
 
 // GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
+func (m *middleware) GetState() State {
+	state := m.snapshotState()
+	m.comp.SetState(state)
 
 	return state
 }
 
 // SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
-	}
-
-	c.SetState(c.Component.GetState())
-
-	return nil
+func (m *middleware) SetState(state State) {
+	m.comp.SetState(state)
+	m.restoreFromState(state)
 }

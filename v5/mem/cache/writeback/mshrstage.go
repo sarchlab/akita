@@ -1,20 +1,23 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mshrStage struct {
-	cache *Comp
+	cache *middleware
 
-	processingMSHREntry *cache.MSHREntry
+	// The transaction that carries MSHR data/transaction pointers
+	hasProcessingTrans     bool
+	processingTrans        *transactionState
+	processingTransList    []*transactionState
+	processingData         []byte
 }
 
 func (s *mshrStage) Tick() bool {
-	if s.processingMSHREntry != nil {
+	if s.hasProcessingTrans {
 		return s.processOneReq()
 	}
 
@@ -23,13 +26,20 @@ func (s *mshrStage) Tick() bool {
 		return false
 	}
 
-	s.processingMSHREntry = item.(*cache.MSHREntry)
+	trans := item.(*transactionState)
+	s.hasProcessingTrans = true
+	s.processingTrans = trans
+	s.processingTransList = trans.mshrTransactions
+	s.processingData = trans.mshrData
 
 	return s.processOneReq()
 }
 
 func (s *mshrStage) Reset() {
-	s.processingMSHREntry = nil
+	s.hasProcessingTrans = false
+	s.processingTrans = nil
+	s.processingTransList = nil
+	s.processingData = nil
 	s.cache.mshrStageBuffer.Clear()
 }
 
@@ -38,8 +48,12 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	mshrEntry := s.processingMSHREntry
-	trans := mshrEntry.Requests[0].(*transaction)
+	if len(s.processingTransList) == 0 {
+		s.hasProcessingTrans = false
+		return true
+	}
+
+	trans := s.processingTransList[0]
 
 	transactionPresent := s.findTransaction(trans)
 
@@ -47,22 +61,22 @@ func (s *mshrStage) processOneReq() bool {
 		s.removeTransaction(trans)
 
 		if trans.read != nil {
-			s.respondRead(trans.read, mshrEntry.Data)
+			s.respondRead(trans.read, s.processingData)
 		} else {
 			s.respondWrite(trans.write)
 		}
 
-		mshrEntry.Requests = mshrEntry.Requests[1:]
-		if len(mshrEntry.Requests) == 0 {
-			s.processingMSHREntry = nil
+		s.processingTransList = s.processingTransList[1:]
+		if len(s.processingTransList) == 0 {
+			s.hasProcessingTrans = false
 		}
 
 		return true
 	}
 
-	mshrEntry.Requests = mshrEntry.Requests[1:]
-	if len(mshrEntry.Requests) == 0 {
-		s.processingMSHREntry = nil
+	s.processingTransList = s.processingTransList[1:]
+	if len(s.processingTransList) == 0 {
+		s.hasProcessingTrans = false
 	}
 
 	return true
@@ -100,7 +114,7 @@ func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 	tracing.TraceReqComplete(write, s.cache)
 }
 
-func (s *mshrStage) removeTransaction(trans *transaction) {
+func (s *mshrStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			s.cache.inFlightTransactions = append(
@@ -114,7 +128,7 @@ func (s *mshrStage) removeTransaction(trans *transaction) {
 	panic("transaction not found")
 }
 
-func (s *mshrStage) findTransaction(trans *transaction) bool {
+func (s *mshrStage) findTransaction(trans *transactionState) bool {
 	for _, t := range s.cache.inFlightTransactions {
 		if trans == t {
 			return true

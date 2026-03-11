@@ -23,28 +23,52 @@ const (
 	writeBufferFlush
 )
 
-type transaction struct {
+// transactionState is the canonical runtime transaction type.
+// All stages work with *transactionState directly.
+type transactionState struct {
 	action
 
-	id                string
-	read              *mem.ReadReq
-	write             *mem.WriteReq
-	flush             *cache.FlushReq
-	block             *cache.Block
-	victim            *cache.Block
-	fetchPID          vm.PID
-	fetchAddress      uint64
-	fetchedData       []byte
-	fetchReadReq      *mem.ReadReq
+	id    string
+	read  *mem.ReadReq
+	write *mem.WriteReq
+	flush *cache.FlushReq
+
+	// Block reference (into directoryState)
+	blockSetID int
+	blockWayID int
+	hasBlock   bool
+
+	// Victim data (inlined, not a pointer to cache.Block)
+	victimPID          vm.PID
+	victimTag          uint64
+	victimCacheAddress uint64
+	victimDirtyMask    []bool
+	hasVictim          bool
+
+	fetchPID     vm.PID
+	fetchAddress uint64
+	fetchedData  []byte
+	fetchReadReq *mem.ReadReq
+
 	evictingPID       vm.PID
 	evictingAddr      uint64
 	evictingData      []byte
 	evictingDirtyMask []bool
 	evictionWriteReq  *mem.WriteReq
-	mshrEntry         *cache.MSHREntry
+
+	// MSHR entry reference (into mshrState.Entries)
+	mshrEntryIndex int
+	hasMSHREntry   bool
+
+	// Data saved from MSHR entry before removal (for bank/mshr stage)
+	mshrData         []byte
+	mshrTransactions []*transactionState
+
+	// Temporary field used only during restore to defer pointer resolution
+	mshrTransactionRestoreIndices []int
 }
 
-func (t transaction) accessReq() mem.AccessReq {
+func (t *transactionState) accessReq() mem.AccessReq {
 	if t.read != nil {
 		return t.read
 	}
@@ -56,7 +80,7 @@ func (t transaction) accessReq() mem.AccessReq {
 	return nil
 }
 
-func (t transaction) req() sim.Msg {
+func (t *transactionState) req() sim.Msg {
 	if t.read != nil {
 		return t.read
 	}

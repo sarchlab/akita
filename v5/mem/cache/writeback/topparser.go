@@ -7,7 +7,7 @@ import (
 )
 
 type topParser struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (p *topParser) Tick() bool {
@@ -24,7 +24,7 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	trans := &transaction{
+	trans := &transactionState{
 		id: sim.GetIDGenerator().Generate(),
 	}
 

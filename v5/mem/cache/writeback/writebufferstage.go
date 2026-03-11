@@ -3,20 +3,21 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type writeBufferStage struct {
-	cache *Comp
+	cache *middleware
 
 	writeBufferCapacity int
 	maxInflightFetch    int
 	maxInflightEviction int
 
-	pendingEvictions []*transaction
-	inflightFetch    []*transaction
-	inflightEviction []*transaction
+	pendingEvictions []*transactionState
+	inflightFetch    []*transactionState
+	inflightEviction []*transactionState
 }
 
 func (wb *writeBufferStage) Tick() bool {
@@ -35,7 +36,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 		return false
 	}
 
-	trans := item.(*transaction)
+	trans := item.(*transactionState)
 	switch trans.action {
 	case writeBufferFetch:
 		return wb.processWriteBufferFetch(trans)
@@ -51,7 +52,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 }
 
 func (wb *writeBufferStage) processWriteBufferFetch(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	if wb.findDataLocally(trans) {
 		return wb.sendFetchedDataToBank(trans)
@@ -60,7 +61,7 @@ func (wb *writeBufferStage) processWriteBufferFetch(
 	return wb.fetchFromBottom(trans)
 }
 
-func (wb *writeBufferStage) findDataLocally(trans *transaction) bool {
+func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 	for _, e := range wb.inflightEviction {
 		if e.evictingAddr == trans.fetchAddress {
 			trans.fetchedData = e.evictingData
@@ -79,10 +80,10 @@ func (wb *writeBufferStage) findDataLocally(trans *transaction) bool {
 }
 
 func (wb *writeBufferStage) sendFetchedDataToBank(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
-	bankNum := bankID(trans.block,
-		wb.cache.directory.WayAssociativity(),
+	bankNum := bankID(trans.blockSetID, trans.blockWayID,
+		wb.cache.wayAssociativity,
 		len(wb.cache.dirToBankBuffers))
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
 
@@ -91,11 +92,22 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 		return false
 	}
 
-	trans.mshrEntry.Data = trans.fetchedData
-	trans.action = bankWriteFetched
-	wb.combineData(trans.mshrEntry)
+	if !trans.hasMSHREntry {
+		panic("sendFetchedDataToBank without MSHR entry")
+	}
 
-	wb.cache.mshr.Remove(trans.mshrEntry.PID, trans.mshrEntry.Address)
+	mshrEntry := &wb.cache.mshrState.Entries[trans.mshrEntryIndex]
+	mshrEntry.Data = trans.fetchedData
+	trans.action = bankWriteFetched
+	wb.combineData(trans.mshrEntryIndex)
+
+	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	trans.mshrData = make([]byte, len(mshrEntry.Data))
+	copy(trans.mshrData, mshrEntry.Data)
+	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+
+	cache.MSHRRemove(&wb.cache.mshrState,
+		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
 	bankBuf.Push(trans)
 
@@ -105,7 +117,7 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 }
 
 func (wb *writeBufferStage) fetchFromBottom(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	if wb.tooManyInflightFetches() {
 		return false
@@ -138,15 +150,15 @@ func (wb *writeBufferStage) fetchFromBottom(
 }
 
 func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	if wb.writeBufferFull() {
 		return false
 	}
 
 	bankNum := bankID(
-		trans.block,
-		wb.cache.directory.WayAssociativity(),
+		trans.blockSetID, trans.blockWayID,
+		wb.cache.wayAssociativity,
 		len(wb.cache.dirToBankBuffers),
 	)
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
@@ -165,7 +177,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 }
 
 func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
-	trans *transaction,
+	trans *transactionState,
 ) bool {
 	ok := wb.processWriteBufferFlush(trans, false)
 	if ok {
@@ -177,7 +189,7 @@ func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
 }
 
 func (wb *writeBufferStage) processWriteBufferFlush(
-	trans *transaction,
+	trans *transactionState,
 	popAfterDone bool,
 ) bool {
 	if wb.writeBufferFull() {
@@ -252,8 +264,8 @@ func (wb *writeBufferStage) processDataReadyRsp(
 ) bool {
 	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
-		trans.block,
-		wb.cache.directory.WayAssociativity(),
+		trans.blockSetID, trans.blockWayID,
+		wb.cache.wayAssociativity,
 		len(wb.cache.dirToBankBuffers),
 	)
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankIndex]
@@ -262,12 +274,23 @@ func (wb *writeBufferStage) processDataReadyRsp(
 		return false
 	}
 
+	if !trans.hasMSHREntry {
+		panic("processDataReadyRsp without MSHR entry")
+	}
+
 	trans.fetchedData = msg.Data
 	trans.action = bankWriteFetched
-	trans.mshrEntry.Data = msg.Data
-	wb.combineData(trans.mshrEntry)
+	mshrEntry := &wb.cache.mshrState.Entries[trans.mshrEntryIndex]
+	mshrEntry.Data = msg.Data
+	wb.combineData(trans.mshrEntryIndex)
 
-	wb.cache.mshr.Remove(trans.mshrEntry.PID, trans.mshrEntry.Address)
+	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	trans.mshrData = make([]byte, len(mshrEntry.Data))
+	copy(trans.mshrData, mshrEntry.Data)
+	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+
+	cache.MSHRRemove(&wb.cache.mshrState,
+		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
 	bankBuf.Push(trans)
 
@@ -279,15 +302,23 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	return true
 }
 
-func (wb *writeBufferStage) combineData(mshrEntry *cache.MSHREntry) {
-	mshrEntry.Block.DirtyMask = make([]bool, 1<<wb.cache.log2BlockSize)
-	for _, t := range mshrEntry.Requests {
-		trans := t.(*transaction)
+func (wb *writeBufferStage) combineData(mshrIdx int) {
+	mshrEntry := &wb.cache.mshrState.Entries[mshrIdx]
+	block := &wb.cache.directoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
+
+	block.DirtyMask = make([]bool, 1<<wb.cache.log2BlockSize)
+
+	for _, transIdx := range mshrEntry.TransactionIndices {
+		if transIdx < 0 || transIdx >= len(wb.cache.inFlightTransactions) {
+			continue
+		}
+
+		trans := wb.cache.inFlightTransactions[transIdx]
 		if trans.read != nil {
 			continue
 		}
 
-		mshrEntry.Block.IsDirty = true
+		block.IsDirty = true
 		write := trans.write
 		_, offset := getCacheLineID(write.Address, wb.cache.log2BlockSize)
 
@@ -295,7 +326,7 @@ func (wb *writeBufferStage) combineData(mshrEntry *cache.MSHREntry) {
 			if write.DirtyMask == nil || write.DirtyMask[i] {
 				index := offset + uint64(i)
 				mshrEntry.Data[index] = write.Data[i]
-				mshrEntry.Block.DirtyMask[index] = true
+				block.DirtyMask[index] = true
 			}
 		}
 	}
@@ -303,7 +334,7 @@ func (wb *writeBufferStage) combineData(mshrEntry *cache.MSHREntry) {
 
 func (wb *writeBufferStage) findInflightFetchByFetchReadReqID(
 	id string,
-) *transaction {
+) *transactionState {
 	for _, t := range wb.inflightFetch {
 		if t.fetchReadReq.ID == id {
 			return t
@@ -313,7 +344,7 @@ func (wb *writeBufferStage) findInflightFetchByFetchReadReqID(
 	panic("inflight read not found")
 }
 
-func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
+func (wb *writeBufferStage) removeInflightFetch(f *transactionState) {
 	for i, trans := range wb.inflightFetch {
 		if trans == f {
 			wb.inflightFetch = append(
@@ -363,4 +394,19 @@ func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 
 func (wb *writeBufferStage) Reset() {
 	wb.cache.writeBufferBuffer.Clear()
+}
+
+// resolveEntryTransactions collects the actual transaction pointers from
+// the MSHR entry's TransactionIndices. This must be done before any
+// removeTransaction calls, since those shift the slice indices.
+func (wb *writeBufferStage) resolveEntryTransactions(
+	entry *cache.MSHREntryState,
+) []*transactionState {
+	result := make([]*transactionState, 0, len(entry.TransactionIndices))
+	for _, transIdx := range entry.TransactionIndices {
+		if transIdx >= 0 && transIdx < len(wb.cache.inFlightTransactions) {
+			result = append(result, wb.cache.inFlightTransactions[transIdx])
+		}
+	}
+	return result
 }
