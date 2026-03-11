@@ -48,23 +48,23 @@ var _ = Describe("XBar", func() {
 		flit1 := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit1).OutputBuf = buf1Remote
+		flit1.OutputBuf = buf1Remote
 		flit2 := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit2).OutputBuf = buf1Remote
+		flit2.OutputBuf = buf1Remote
 		flit3 := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit3).OutputBuf = buf3Remote
+		flit3.OutputBuf = buf3Remote
 		flit4 := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit4).OutputBuf = buf4Remote
+		flit4.OutputBuf = buf4Remote
 		flit5 := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit5).OutputBuf = buf1Remote
+		flit5.OutputBuf = buf1Remote
 
 		buf1.EXPECT().Peek().Return(flit1)
 		buf2.EXPECT().Peek().Return(flit2)

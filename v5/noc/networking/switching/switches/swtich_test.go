@@ -185,8 +185,7 @@ var _ = Describe("Switch", func() {
 		madeProgress := swMiddleware.route()
 
 		Expect(madeProgress).To(BeTrue())
-		flitPayload := sim.MsgPayload[messaging.FlitPayload](flit)
-		Expect(flitPayload.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
+		Expect(flit.OutputBuf).To(BeIdenticalTo(portComplex2.sendOutBuffer))
 	})
 
 	It("should not route if forward buffer is full", func() {
@@ -230,7 +229,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit).OutputBuf = sendOutBuffer2
+		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
 			Arbitrate().
@@ -262,7 +261,7 @@ var _ = Describe("Switch", func() {
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
 			Build()
-		sim.MsgPayload[messaging.FlitPayload](flit).OutputBuf = sendOutBuffer2
+		flit.OutputBuf = sendOutBuffer2
 
 		arbiter.EXPECT().
 			Arbitrate().

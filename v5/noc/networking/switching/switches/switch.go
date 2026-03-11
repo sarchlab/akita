@@ -17,7 +17,7 @@ import (
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
-// msgRef is a serializable representation of a *sim.GenericMsg.
+// msgRef is a serializable representation of a sim.Msg.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -58,7 +58,7 @@ type State struct {
 
 type flitPipelineItem struct {
 	taskID string
-	flit   *sim.GenericMsg // payload: *messaging.FlitPayload
+	flit   *messaging.Flit
 }
 
 func (f flitPipelineItem) TaskID() string {
@@ -120,14 +120,15 @@ func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routingTable
 }
 
-func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
+func msgRefFromMsg(msg sim.Msg) msgRef {
+	meta := msg.Meta()
 	return msgRef{
-		ID:           msg.ID,
-		Src:          msg.Src,
-		Dst:          msg.Dst,
-		RspTo:        msg.RspTo,
-		TrafficClass: msg.TrafficClass,
-		TrafficBytes: msg.TrafficBytes,
+		ID:           meta.ID,
+		Src:          meta.Src,
+		Dst:          meta.Dst,
+		RspTo:        meta.RspTo,
+		TrafficClass: meta.TrafficClass,
+		TrafficBytes: meta.TrafficBytes,
 	}
 }
 
@@ -154,7 +155,16 @@ func flitPipelineItemStateFromItem(item flitPipelineItem) flitPipelineItemState 
 func flitPipelineItemFromState(s flitPipelineItemState) flitPipelineItem {
 	return flitPipelineItem{
 		taskID: s.TaskID,
-		flit:   msgFromRef(s.Flit),
+		flit: &messaging.Flit{
+			MsgMeta: sim.MsgMeta{
+				ID:           s.Flit.ID,
+				Src:          s.Flit.Src,
+				Dst:          s.Flit.Dst,
+				RspTo:        s.Flit.RspTo,
+				TrafficClass: s.Flit.TrafficClass,
+				TrafficBytes: s.Flit.TrafficBytes,
+			},
+		},
 	}
 }
 
@@ -193,20 +203,20 @@ func (c *Comp) snapshotState() State {
 			pcs.RouteBuffer[i] = flitPipelineItemStateFromItem(item)
 		}
 
-		// Snapshot forwardBuffer (holds *sim.GenericMsg)
+		// Snapshot forwardBuffer (holds *messaging.Flit)
 		fwdElems := queueing.SnapshotBuffer(pc.forwardBuffer)
 		pcs.ForwardBuffer = make([]msgRef, len(fwdElems))
 		for i, elem := range fwdElems {
-			msg := elem.(*sim.GenericMsg)
-			pcs.ForwardBuffer[i] = msgRefFromMsg(msg)
+			flit := elem.(*messaging.Flit)
+			pcs.ForwardBuffer[i] = msgRefFromMsg(flit)
 		}
 
-		// Snapshot sendOutBuffer (holds *sim.GenericMsg)
+		// Snapshot sendOutBuffer (holds *messaging.Flit)
 		sendElems := queueing.SnapshotBuffer(pc.sendOutBuffer)
 		pcs.SendOutBuffer = make([]msgRef, len(sendElems))
 		for i, elem := range sendElems {
-			msg := elem.(*sim.GenericMsg)
-			pcs.SendOutBuffer[i] = msgRefFromMsg(msg)
+			flit := elem.(*messaging.Flit)
+			pcs.SendOutBuffer[i] = msgRefFromMsg(flit)
 		}
 
 		s.PortComplexes = append(s.PortComplexes, pcs)
@@ -258,14 +268,32 @@ func (c *Comp) restoreFromState(s State) {
 		// Restore forwardBuffer
 		fwdElems := make([]interface{}, len(pcs.ForwardBuffer))
 		for i, ref := range pcs.ForwardBuffer {
-			fwdElems[i] = msgFromRef(ref)
+			fwdElems[i] = &messaging.Flit{
+				MsgMeta: sim.MsgMeta{
+					ID:           ref.ID,
+					Src:          ref.Src,
+					Dst:          ref.Dst,
+					RspTo:        ref.RspTo,
+					TrafficClass: ref.TrafficClass,
+					TrafficBytes: ref.TrafficBytes,
+				},
+			}
 		}
 		queueing.RestoreBuffer(pc.forwardBuffer, fwdElems)
 
 		// Restore sendOutBuffer
 		sendElems := make([]interface{}, len(pcs.SendOutBuffer))
 		for i, ref := range pcs.SendOutBuffer {
-			sendElems[i] = msgFromRef(ref)
+			sendElems[i] = &messaging.Flit{
+				MsgMeta: sim.MsgMeta{
+					ID:           ref.ID,
+					Src:          ref.Src,
+					Dst:          ref.Dst,
+					RspTo:        ref.RspTo,
+					TrafficClass: ref.TrafficClass,
+					TrafficBytes: ref.TrafficBytes,
+				},
+			}
 		}
 		queueing.RestoreBuffer(pc.sendOutBuffer, sendElems)
 	}
@@ -318,12 +346,12 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flitMsg *sim.GenericMsg) string {
-	return flitMsg.ID + "_e2e"
+func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_e2e"
 }
 
-func (m *middleware) flitTaskID(flitMsg *sim.GenericMsg) string {
-	return flitMsg.ID + "_" + m.Comp.Name()
+func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.Comp.Name()
 }
 
 func (m *middleware) startProcessing() (madeProgress bool) {
@@ -340,10 +368,10 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			item := itemI.(*sim.GenericMsg)
+			flit := itemI.(*messaging.Flit)
 			pipelineItem := flitPipelineItem{
-				taskID: m.flitTaskID(item),
-				flit:   item,
+				taskID: m.flitTaskID(flit),
+				flit:   flit,
 			}
 			pc.pipeline.Accept(pipelineItem)
 			port.RetrieveIncoming()
@@ -351,10 +379,10 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 			madeProgress = true
 
 			tracing.StartTask(
-				m.flitTaskID(item),
-				m.flitParentTaskID(item),
+				m.flitTaskID(flit),
+				m.flitParentTaskID(flit),
 				m.Comp, "flit", "flit_inside_sw",
-				item,
+				flit,
 			)
 		}
 	}
@@ -388,11 +416,10 @@ func (m *middleware) route() (madeProgress bool) {
 			}
 
 			pipelineItem := item.(flitPipelineItem)
-			flitMsg := pipelineItem.flit
-			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
-			m.assignFlitOutputBuf(flitMsg, flitPayload)
+			flit := pipelineItem.flit
+			m.assignFlitOutputBuf(flit)
 			routeBuf.Pop()
-			forwardBuf.Push(flitMsg)
+			forwardBuf.Push(flit)
 
 			madeProgress = true
 		}
@@ -411,13 +438,12 @@ func (m *middleware) forward() (madeProgress bool) {
 				break
 			}
 
-			flitMsg := item.(*sim.GenericMsg)
-			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
-			if !flitPayload.OutputBuf.CanPush() {
+			flit := item.(*messaging.Flit)
+			if !flit.OutputBuf.CanPush() {
 				break
 			}
 
-			flitPayload.OutputBuf.Push(flitMsg)
+			flit.OutputBuf.Push(flit)
 			buf.Pop()
 
 			madeProgress = true
@@ -438,17 +464,17 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				break
 			}
 
-			flitMsg := item.(*sim.GenericMsg)
-			flitMsg.Src = pc.localPort.AsRemote()
-			flitMsg.Dst = pc.remotePort
+			flit := item.(*messaging.Flit)
+			flit.Src = pc.localPort.AsRemote()
+			flit.Dst = pc.remotePort
 
-			err := pc.localPort.Send(flitMsg)
+			err := pc.localPort.Send(flit)
 			if err == nil {
 				madeProgress = true
 
 				sendOutBuf.Pop()
 
-				tracing.EndTask(m.flitTaskID(flitMsg), m.Comp)
+				tracing.EndTask(m.flitTaskID(flit), m.Comp)
 			}
 		}
 	}
@@ -456,22 +482,19 @@ func (m *middleware) sendOut() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) assignFlitOutputBuf(
-	flitMsg *sim.GenericMsg,
-	flitPayload *messaging.FlitPayload,
-) {
-	outPort := m.routingTable.FindPort(flitPayload.Msg.Dst)
+func (m *middleware) assignFlitOutputBuf(flit *messaging.Flit) {
+	outPort := m.routingTable.FindPort(flit.Msg.Meta().Dst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
-			m.Comp.Name(), flitPayload.Msg.Dst))
+			m.Comp.Name(), flit.Msg.Meta().Dst))
 	}
 
 	pc := m.portToComplexMapping[outPort]
 
-	flitPayload.OutputBuf = pc.sendOutBuffer
-	if flitPayload.OutputBuf == nil {
+	flit.OutputBuf = pc.sendOutBuffer
+	if flit.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
-			m.Comp.Name(), flitPayload.Msg.Dst))
+			m.Comp.Name(), flit.Msg.Meta().Dst))
 	}
 }
 

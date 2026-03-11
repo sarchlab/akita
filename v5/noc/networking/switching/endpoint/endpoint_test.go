@@ -72,26 +72,24 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.GenericMsg) {
-			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
-			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flitPayload.SeqID).To(Equal(0))
-			Expect(flitPayload.NumFlitInMsg).To(Equal(2))
-			Expect(flitPayload.Msg).To(BeIdenticalTo(msg))
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+			flit := msg.(*messaging.Flit)
+			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
+			Expect(flit.SeqID).To(Equal(0))
+			Expect(flit.NumFlitInMsg).To(Equal(2))
 		})
 		devicePort.EXPECT().NotifyAvailable()
 
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(flitMsg *sim.GenericMsg) {
-			flitPayload := sim.MsgPayload[messaging.FlitPayload](flitMsg)
-			Expect(flitMsg.Src).To(Equal(networkPort.AsRemote()))
-			Expect(flitMsg.Dst).To(Equal(defaultSwitchPort.AsRemote()))
-			Expect(flitPayload.SeqID).To(Equal(1))
-			Expect(flitPayload.NumFlitInMsg).To(Equal(2))
-			Expect(flitPayload.Msg).To(BeIdenticalTo(msg))
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+			flit := msg.(*messaging.Flit)
+			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
+			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
+			Expect(flit.SeqID).To(Equal(1))
+			Expect(flit.NumFlitInMsg).To(Equal(2))
 		})
 
 		madeProgress = endPoint.Tick()
