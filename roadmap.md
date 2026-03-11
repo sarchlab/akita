@@ -4,13 +4,13 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware.
 
-## Current State (after M15)
+## Current State (after M16)
 
 - 16 first-party components ported to `modeling.Component[Spec, State]`
 - Messages are concrete types (no builders)
 - Save/load works with acceptance test passing
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
-- **9 components fully transformed** (Comp eliminated + A-B state):
+- **13 components fully transformed** (Comp eliminated + A-B state):
   1. idealmemcontroller (M12)
   2. TLB (M13)
   3. mmuCache (M14)
@@ -20,8 +20,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
   7. GMMU (M15)
   8. Switch (M15)
   9. Endpoint (M15)
+  10. writearound cache (M16)
+  11. writeevict cache (M16)
+  12. writethrough cache (M16)
+  13. tickingping (M16)
+- Shared MSHR/Directory free functions created in `mem/cache/` (directory_ops.go, mshr_ops.go)
 - Architecture direction fully clarified and approved by human (issues #145, #150)
-- All PRs merged through #40. Code builds and all tests pass on main.
+- All PRs merged through #41. Code builds and all tests pass on main.
 
 ## Remaining Components
 
@@ -43,49 +48,35 @@ writearound, writeevict, and writethrough share identical Comp structs, identica
 
 ## Phase: Cache Architecture Transformation
 
-### M16: Write{around,evict,through} Caches + tickingping (NEXT)
+### ~~M16: Write{around,evict,through} Caches + tickingping~~ ✅ DONE (4 cycles, budget 8)
 
-**Goal:** Transform the 3 simpler cache types + tickingping. Since they're nearly identical, do one fully then replicate.
+Transformed all 3 simpler caches + tickingping. Created shared MSHR/Directory free functions. PR #41 merged.
 
-**What to do for each cache:**
-1. Eliminate Comp wrapper → `modeling.Component[Spec, State]`
-2. Move immutable config to Spec: `numReqPerCycle`, `log2BlockSize`, `bankLatency`, `wayAssociativity`, `maxNumConcurrentTrans`
-3. Inline AddressToPortMapper: store port names in Spec, resolve via `GetPortByName()`
-4. Inline AddressConverter: interleaving params to Spec, conversion logic directly in middleware
-5. Eliminate `cache.Directory` dependency: directory data already in `State.DirectoryState`, add free functions for Lookup/FindVictim/Visit that operate on State
-6. Eliminate `cache.MSHR` dependency: MSHR data already in `State.MSHRState`, add free functions for Query/Add/Remove that operate on State
-7. Each stage becomes its own middleware reading `GetState()` / writing `GetNextState()`
-8. Remove snapshot/restore conversion layer (state.go ~610 LOC each)
-9. All runtime `*transaction` slices → use State transaction indices
+### M17: Writeback Cache — Full Transformation (NEXT)
 
-**MSHR/Directory free functions** (in `mem/cache/` package, shared by all caches):
-- `MSHRQuery(state *MSHRState, pid sim.PID, addr uint64) *MSHREntryState`
-- `MSHRAdd(state *MSHRState, capacity int, pid sim.PID, addr uint64) (*MSHREntryState, error)`
-- `MSHRRemove(state *MSHRState, pid sim.PID, addr uint64)`
-- `MSHRIsFull(state *MSHRState, capacity int) bool`
-- `DirectoryLookup(state *DirectoryState, pid sim.PID, addr uint64, blockSize uint64) *BlockState`
-- `DirectoryEvict(state *DirectoryState, setID int) *BlockState` (LRU)
-- `DirectoryVisit(state *DirectoryState, setID int, wayID int)`
-
-**tickingping:** Trivial — just eliminate Comp wrapper, move config to Spec.
-
-**Budget**: 8 cycles
-**Risk**: Medium. The pattern is established but cache stages have complex transaction flow. The near-identical nature of the 3 caches reduces risk (do one, replicate twice).
-
-### M17: Writeback Cache — Full Transformation
-
-**Goal:** Transform the most complex cache component.
+**Goal:** Transform the most complex cache component following the M16 pattern.
 
 **What to do:**
-1. Reuse MSHR/Directory free functions from M16
-2. Eliminate Comp wrapper
-3. Inline VictimFinder (LRU — use LRU queue already in DirectoryState)
-4. 6 existing stages (topParser, directoryStage, bankStage, writeBufferStage, mshrStage, flusher) each become separate middleware
-5. Remove ~964 LOC snapshot/restore conversion layer
-6. Eliminate all runtime `*transaction` pointer chains → index-based State
+1. Populate Spec with immutable config: `NumReqPerCycle`, `Log2BlockSize`, `BankLatency`, `WayAssociativity`, `NumBanks`, `NumSets`, `NumMSHREntry`, `TotalByteSize`, `DirLatency`, `WriteBufferCapacity`, `MaxInflightFetch`, `MaxInflightEviction`
+2. Eliminate Comp wrapper → Builder returns `*modeling.Component[Spec, State]`
+3. Reuse shared MSHR/Directory free functions from `mem/cache/` (directory_ops.go, mshr_ops.go)
+4. Replace all `cache.Directory` calls with free function calls on `state.DirectoryState`
+5. Replace all `cache.MSHR` calls with free function calls on `state.MSHRState`
+6. Inline AddressToPortMapper: store port names in Spec, resolve via `GetPortByName()`
+7. 6 existing stages (topParser, directoryStage, bankStage, writeBufferStage, mshrStage, flusher) each become separate middleware
+8. Remove ~964 LOC snapshot/restore conversion layer. State IS the canonical representation
+9. Eliminate all runtime `*transaction` pointer chains → index-based `transactionState` in State
+10. Remove `SaveState/LoadState` overrides — `modeling.Component` handles A-B state
 
-**Budget**: 8 cycles
-**Risk**: High. Writeback cache has the most complex state and stage interactions.
+**Complexity notes:**
+- 3150 LOC production code, ~3000 LOC tests
+- 6 stages (vs 5 for simpler caches) + writeBufferStage + mshrStage are unique to writeback
+- `directory.GetSets()` used in flusher — need DirectoryGetSets free function
+- VictimFinder already uses LRU queue in DirectoryState (no separate dependency)
+- evictingList map needs to be in State (already is)
+
+**Budget**: 6 cycles (pattern well-established from M16; the main challenge is the extra stages and test rewriting)
+**Risk**: Medium-High. More complex than the simpler caches but pattern is proven.
 
 ### M18: DRAM Memory Controller
 
@@ -140,13 +131,14 @@ writearound, writeevict, and writethrough share identical Comp structs, identica
 | M13 | 5 | 3 | TLB — Comp elimination + A-B state |
 | M14 | 6 | 3 | Simple Components Batch (mmuCache, addresstranslator, datamover, simplebankedmemory) |
 | M15 | 5 | 3 | GMMU + Switch + Endpoint — Comp elimination + A-B state |
+| M16 | 8 | 4 | Write{around,evict,through} caches + tickingping — Comp elimination + shared free functions |
 
 ## Summary Statistics
-- Total milestones completed: 15
-- PRs merged: 40
+- Total milestones completed: 16
+- PRs merged: 41
 - Components ported: 16/16
-- Components fully transformed (Comp eliminated + A-B): 9/16
-- Remaining to transform: 7 (4 caches + DRAM + tickingping + possibly writeback needs multi-MW split)
+- Components fully transformed (Comp eliminated + A-B): 13/16
+- Remaining to transform: 3 (writeback cache + DRAM + multi-MW split/cleanup)
 
 ## Lessons Learned
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
@@ -163,3 +155,5 @@ writearound, writeevict, and writethrough share identical Comp structs, identica
 - The 3 simpler caches are nearly identical — transform one, replicate twice
 - Budget estimates are improving: M14 and M15 both finished well under budget (3 cycles each, budgets of 6 and 5)
 - **Revised estimation**: Simpler milestones need 3-4 cycles, not 5-6. Bump cache milestones accordingly.
+- M16 finished in 4 cycles (budget 8). Multi-worker parallel approach worked well for cache replication.
+- Shared free functions (directory_ops.go, mshr_ops.go) are reusable for writeback cache — reduces M17 effort.
