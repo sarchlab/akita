@@ -23,7 +23,44 @@ const (
 type Spec struct{}
 
 // State contains mutable runtime data for the writeback cache.
-type State struct{}
+type State struct {
+	CacheState     int                `json:"cache_state"`
+	DirectoryState cache.DirectoryState `json:"directory_state"`
+	MSHRState      cache.MSHRState    `json:"mshr_state"`
+	Transactions   []transactionState `json:"transactions"`
+	EvictingList   map[uint64]bool    `json:"evicting_list"`
+
+	// 5 buffer snapshots (transaction indices)
+	DirStageBufIndices          []int          `json:"dir_stage_buf_indices"`
+	DirToBankBufIndices         []bankBufState `json:"dir_to_bank_buf_indices"`
+	WriteBufferToBankBufIndices []bankBufState `json:"write_buffer_to_bank_buf_indices"`
+	MSHRStageBufEntries         []int          `json:"mshr_stage_buf_entries"`
+	WriteBufferBufIndices       []int          `json:"write_buffer_buf_indices"`
+
+	// Directory pipeline + post-buf
+	DirPipelineStages         []dirPipelineStageState `json:"dir_pipeline_stages"`
+	DirPostPipelineBufIndices []int                   `json:"dir_post_pipeline_buf_indices"`
+
+	// Bank pipeline + post-buf + counters
+	BankPipelineStages              []bankPipelineState `json:"bank_pipeline_stages"`
+	BankPostPipelineBufIndices      []bankPostBufState  `json:"bank_post_pipeline_buf_indices"`
+	BankInflightTransCounts         []int               `json:"bank_inflight_trans_counts"`
+	BankDownwardInflightTransCounts []int               `json:"bank_downward_inflight_trans_counts"`
+
+	// Write buffer stage
+	PendingEvictionIndices  []int `json:"pending_eviction_indices"`
+	InflightFetchIndices    []int `json:"inflight_fetch_indices"`
+	InflightEvictionIndices []int `json:"inflight_eviction_indices"`
+
+	// MSHR stage
+	HasProcessingMSHREntry bool `json:"has_processing_mshr_entry"`
+	ProcessingMSHREntryIdx int  `json:"processing_mshr_entry_idx"`
+
+	// Flusher
+	FlusherBlockToEvictRefs []blockRef    `json:"flusher_block_to_evict_refs"`
+	HasProcessingFlush      bool          `json:"has_processing_flush"`
+	ProcessingFlush         flushReqState `json:"processing_flush"`
+}
 
 // Comp in the writeback package is a cache that performs the write-back policy.
 type Comp struct {
