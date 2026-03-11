@@ -44,10 +44,11 @@ var _ = Describe("Coalescer", func() {
 
 		next := mw.comp.GetNextState()
 		mw.dirBufAdapter = &stateTransBuffer{
-			name:     "Cache.DirBuf",
-			items:    &next.DirBufIndices,
-			capacity: 4,
-			mw:       mw,
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         mw,
 		}
 
 		co = coalescer{cache: mw}

@@ -45,27 +45,30 @@ var _ = Describe("Bankstage", func() {
 			}).
 			Build("Cache")
 
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
 		c.comp.SetState(initialState)
 
-		// Initialize directoryState
 		next := c.comp.GetNextState()
-		cache.DirectoryReset(&next.DirectoryState, 16, 4, 64)
 
 		// Create adapters
 		c.bankBufAdapters = []*stateTransBuffer{
 			{
-				name:     "Cache.BankBuf0",
-				items:    &next.BankBufIndices[0].Indices,
-				capacity: 1,
-				mw:       c,
+				name:       "Cache.BankBuf0",
+				readItems:  &next.BankBufIndices[0].Indices,
+				writeItems: &next.BankBufIndices[0].Indices,
+				capacity:   1,
+				mw:         c,
 			},
 		}
 		c.bankPostBufAdapters = []*stateBankPostBufAdapter{
 			{
-				name:     "Cache.BankPostBuf0",
-				items:    &next.BankPostPipelineBufIndices[0].Indices,
-				capacity: 1,
-				mw:       c,
+				name:       "Cache.BankPostBuf0",
+				readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+				writeItems: &next.BankPostPipelineBufIndices[0].Indices,
+				capacity:   1,
+				mw:         c,
 			},
 		}
 
@@ -81,6 +84,7 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should do nothing if no request", func() {
+		c.syncForTest()
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -92,6 +96,8 @@ var _ = Describe("Bankstage", func() {
 		trans := &transactionState{}
 		c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
 		next.BankBufIndices[0].Indices = append(next.BankBufIndices[0].Indices, 0)
+
+		c.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -172,6 +178,8 @@ var _ = Describe("Bankstage", func() {
 		It("should read", func() {
 			next := c.comp.GetNextState()
 
+			c.syncForTest()
+
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -244,6 +252,8 @@ var _ = Describe("Bankstage", func() {
 		It("should write", func() {
 			next := c.comp.GetNextState()
 
+			c.syncForTest()
+
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -305,6 +315,8 @@ var _ = Describe("Bankstage", func() {
 
 		It("should write fetched", func() {
 			next := c.comp.GetNextState()
+
+			c.syncForTest()
 
 			madeProgress := s.Tick()
 
