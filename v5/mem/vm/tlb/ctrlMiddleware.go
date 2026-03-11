@@ -5,12 +5,45 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type ctrlMiddleware struct {
-	*Comp
+	comp *modeling.Component[Spec, State]
+}
+
+func (m *ctrlMiddleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *ctrlMiddleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *ctrlMiddleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *ctrlMiddleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *ctrlMiddleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *ctrlMiddleware) controlPort() sim.Port {
+	return m.comp.GetPortByName("Control")
+}
+
+func (m *ctrlMiddleware) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *ctrlMiddleware) bottomPort() sim.Port {
+	return m.comp.GetPortByName("Bottom")
 }
 
 func (m *ctrlMiddleware) Tick() bool {
@@ -21,7 +54,7 @@ func (m *ctrlMiddleware) Tick() bool {
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	madeProgress := false
-	msg := m.controlPort.PeekIncoming()
+	msg := m.controlPort().PeekIncoming()
 
 	if msg == nil {
 		return false
@@ -50,7 +83,8 @@ func (m *ctrlMiddleware) handleControlMsg(msg *mem.ControlMsg) bool {
 func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
 	ctrlMsg *mem.ControlMsg,
 ) {
-	switch state := m.state; state {
+	state := m.comp.GetState()
+	switch s := state.TLBState; s {
 	case tlbStateEnable:
 		if ctrlMsg.Enable {
 			log.Panic("TLB is already enabled")
@@ -79,28 +113,29 @@ func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
 }
 
 func (m *ctrlMiddleware) performCtrlReq() bool {
-	itemI := m.controlPort.PeekIncoming()
+	itemI := m.controlPort().PeekIncoming()
 	if itemI == nil {
 		return false
 	}
 
 	item := itemI.(*mem.ControlMsg)
+	next := m.comp.GetNextState()
 
 	if item.Enable {
-		m.state = tlbStateEnable
+		next.TLBState = tlbStateEnable
 	} else if item.Drain {
-		m.state = tlbStateDrain
+		next.TLBState = tlbStateDrain
 	} else if item.Pause {
-		m.state = tlbStatePause
+		next.TLBState = tlbStatePause
 	}
 
-	m.controlPort.RetrieveIncoming()
+	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m.Comp),
+		tracing.MsgIDAtReceiver(item, m),
 		tracing.MilestoneKindNetworkBusy,
-		m.controlPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
+		m.controlPort().Name(),
+		m.comp.Name(),
+		m,
 	)
 
 	return true
@@ -108,15 +143,19 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 
 func (m *ctrlMiddleware) handleTLBFlush(msg *FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
-	m.inflightFlushReq = msg
-	m.controlPort.RetrieveIncoming()
-	m.state = tlbStateFlush
+
+	next := m.comp.GetNextState()
+	next.HasInflightFlushReq = true
+	next.InflightFlushReqMsg = *msg
+	m.controlPort().RetrieveIncoming()
+	next.TLBState = tlbStateFlush
 
 	return true
 }
 
 func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
-	switch state := m.state; state {
+	state := m.comp.GetState()
+	switch s := state.TLBState; s {
 	case tlbStateEnable:
 		// valid
 	case tlbStatePause:
@@ -126,40 +165,41 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
 	case tlbStateFlush:
 		log.Panic("TLB is already flushing")
 	default:
-		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(msg))
+		log.Panicf("Unknown TLB state: %s, msg: %s", s, reflect.TypeOf(msg))
 	}
 }
 
 func (m *ctrlMiddleware) handleTLBRestart(msg *RestartReq) bool {
 	rsp := &RestartRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.controlPort.AsRemote()
+	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficClass = "tlb.RestartRsp"
 
-	err := m.controlPort.Send(rsp)
+	err := m.controlPort().Send(rsp)
 	if err != nil {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m.Comp),
+		tracing.MsgIDAtReceiver(msg, m),
 		tracing.MilestoneKindNetworkBusy,
-		m.controlPort.Name(),
-		m.Comp.Name(),
-		m.Comp,
+		m.controlPort().Name(),
+		m.comp.Name(),
+		m,
 	)
 
-	m.state = tlbStateEnable
+	next := m.comp.GetNextState()
+	next.TLBState = tlbStateEnable
 
-	for m.topPort.PeekIncoming() != nil {
-		m.topPort.RetrieveIncoming()
+	for m.topPort().PeekIncoming() != nil {
+		m.topPort().RetrieveIncoming()
 	}
 
-	for m.bottomPort.PeekIncoming() != nil {
-		m.bottomPort.RetrieveIncoming()
+	for m.bottomPort().PeekIncoming() != nil {
+		m.bottomPort().RetrieveIncoming()
 	}
 
-	m.controlPort.RetrieveIncoming()
+	m.controlPort().RetrieveIncoming()
 
 	return true
 }
