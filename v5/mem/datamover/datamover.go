@@ -293,6 +293,19 @@ func (m *dataMoverMiddleware) Tick() bool {
 	return madeProgress
 }
 
+// resolveByteGranularity returns the byte granularity for a given port side.
+func resolveByteGranularity(spec Spec, side DateMovePort) uint64 {
+	switch side {
+	case "inside":
+		return spec.InsideByteGranularity
+	case "outside":
+		return spec.OutsideByteGranularity
+	default:
+		log.Panicf("can't process port side %s", side)
+		return 0
+	}
+}
+
 // parseFromCP retrieves Msg from ctrlPort
 func (m *dataMoverMiddleware) parseFromCP() bool {
 	reqI := m.ctrlPort().RetrieveIncoming()
@@ -312,28 +325,10 @@ func (m *dataMoverMiddleware) parseFromCP() bool {
 
 	spec := m.comp.GetSpec()
 
-	// Set src side
-	var srcByteGranularity uint64
-	switch req.SrcSide {
-	case "inside":
-		srcByteGranularity = spec.InsideByteGranularity
-	case "outside":
-		srcByteGranularity = spec.OutsideByteGranularity
-	default:
-		log.Panicf("can't process source port of type %s", req.SrcSide)
-	}
+	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
 	addressMustBeAligned(req.SrcAddress, srcByteGranularity)
 
-	// Set dst side
-	var dstByteGranularity uint64
-	switch req.DstSide {
-	case "inside":
-		dstByteGranularity = spec.InsideByteGranularity
-	case "outside":
-		dstByteGranularity = spec.OutsideByteGranularity
-	default:
-		log.Panicf("can't process destination port of type %s", req.DstSide)
-	}
+	dstByteGranularity := resolveByteGranularity(spec, req.DstSide)
 	addressMustBeAligned(req.DstAddress, dstByteGranularity)
 
 	next.SrcSide = string(req.SrcSide)

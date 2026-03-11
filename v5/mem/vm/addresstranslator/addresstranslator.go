@@ -264,15 +264,28 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
-	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(translatedReq, m),
-		tracing.MilestoneKindNetworkBusy,
-		m.bottomPort().Name(),
-		m.comp.Name(),
-		m,
-	)
+	reqToBot := buildReqToBottom(reqState, translatedReq)
+	nextState.InflightReqToBottom = append(
+		nextState.InflightReqToBottom, reqToBot)
+	trans.IncomingReqs = trans.IncomingReqs[1:]
 
-	reqToBot := reqToBottomState{
+	if len(trans.IncomingReqs) == 0 {
+		removeTransaction(nextState, transIdx)
+	}
+
+	m.traceTranslationComplete(trans, reqState, translatedReq)
+
+	m.translationPort().RetrieveIncoming()
+
+	return true
+}
+
+// buildReqToBottom creates a reqToBottomState from the incoming request
+// and the translated outgoing request.
+func buildReqToBottom(
+	reqState incomingReqState, translatedReq sim.Msg,
+) reqToBottomState {
+	return reqToBottomState{
 		ReqFromTopID:    reqState.ID,
 		ReqFromTopSrc:   reqState.Src,
 		ReqFromTopDst:   reqState.Dst,
@@ -282,14 +295,23 @@ func (m *middleware) parseTranslation() bool {
 		ReqToBottomDst:  translatedReq.Meta().Dst,
 		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
 	}
-	nextState.InflightReqToBottom = append(nextState.InflightReqToBottom, reqToBot)
-	trans.IncomingReqs = trans.IncomingReqs[1:]
+}
 
-	if len(trans.IncomingReqs) == 0 {
-		removeTransaction(nextState, transIdx)
-	}
+// traceTranslationComplete records tracing milestones for a completed
+// translation and initiates the downstream request trace.
+func (m *middleware) traceTranslationComplete(
+	trans *transactionState,
+	reqState incomingReqState,
+	translatedReq sim.Msg,
+) {
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(translatedReq, m),
+		tracing.MilestoneKindNetworkBusy,
+		m.bottomPort().Name(),
+		m.comp.Name(),
+		m,
+	)
 
-	// Build a fake msg to get the correct task ID for tracing
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
 		reqState.RspTo, reqState.Type)
 
@@ -301,8 +323,6 @@ func (m *middleware) parseTranslation() bool {
 		m,
 	)
 
-	m.translationPort().RetrieveIncoming()
-
 	fakeTransReq := &vm.TranslationReq{}
 	fakeTransReq.ID = trans.TranslationReqID
 	fakeTransReq.Src = trans.TranslationReqSrc
@@ -310,8 +330,6 @@ func (m *middleware) parseTranslation() bool {
 	tracing.TraceReqFinalize(fakeTransReq, m)
 	tracing.TraceReqInitiate(translatedReq, m,
 		tracing.MsgIDAtReceiver(fakeFromTop, m))
-
-	return true
 }
 
 //nolint:funlen,gocyclo

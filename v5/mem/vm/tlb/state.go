@@ -189,7 +189,10 @@ func pipelineCanAccept(stages []pipelineStageState, width int, numStages int) bo
 	return count < width
 }
 
-func pipelineAccept(stages []pipelineStageState, width int, numStages int, item pipelineTLBReqState) []pipelineStageState {
+func pipelineAccept(
+	stages []pipelineStageState, width int, numStages int,
+	item pipelineTLBReqState,
+) []pipelineStageState {
 	// Find an empty lane at the last stage
 	lastStage := numStages - 1
 	usedLanes := make(map[int]bool)

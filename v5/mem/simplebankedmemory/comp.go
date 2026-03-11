@@ -123,97 +123,128 @@ func pipelineAccept(
 	panic("pipeline is full, call pipelineCanAccept first")
 }
 
+// pipelineAction describes what happened to a pipeline stage item.
+type pipelineAction int
+
+const (
+	pipelineActionKeep pipelineAction = iota
+	pipelineActionAdvanced
+	pipelineActionMoveToBuffer
+)
+
+// processStageItem processes a single pipeline stage item and returns
+// the resulting action and whether progress was made.
+func processStageItem(
+	s *bankPipelineStageState,
+	stageNum, lastStage int,
+	bank *bankState,
+	spec Spec,
+	newStages []bankPipelineStageState,
+	actions []pipelineAction,
+) (pipelineAction, bool) {
+	if s.CycleLeft > 0 {
+		s.CycleLeft--
+		return pipelineActionKeep, true
+	}
+
+	if stageNum == lastStage {
+		return tryMoveToBuffer(s, bank, spec)
+	}
+
+	return tryAdvanceStage(s, stageNum, spec, newStages, actions)
+}
+
+// tryMoveToBuffer attempts to move an item from the last stage into the
+// post-pipeline buffer.
+func tryMoveToBuffer(
+	s *bankPipelineStageState,
+	bank *bankState,
+	spec Spec,
+) (pipelineAction, bool) {
+	if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
+		bank.PostPipelineBuf = append(bank.PostPipelineBuf, s.Item)
+		return pipelineActionMoveToBuffer, true
+	}
+
+	return pipelineActionKeep, false
+}
+
+// tryAdvanceStage attempts to advance an item to the next pipeline stage.
+func tryAdvanceStage(
+	s *bankPipelineStageState,
+	stageNum int,
+	spec Spec,
+	newStages []bankPipelineStageState,
+	actions []pipelineAction,
+) (pipelineAction, bool) {
+	nextStageNum := stageNum + 1
+
+	if isNextStageOccupied(s.Lane, nextStageNum, newStages, actions) {
+		return pipelineActionKeep, false
+	}
+
+	s.Stage = nextStageNum
+	s.CycleLeft = spec.StageLatency - 1
+
+	return pipelineActionAdvanced, true
+}
+
+// isNextStageOccupied checks whether the given lane/stage is already occupied
+// by an active (non-processed) item.
+func isNextStageOccupied(
+	lane, stage int,
+	stages []bankPipelineStageState,
+	actions []pipelineAction,
+) bool {
+	for j := range stages {
+		if actions[j] != pipelineActionKeep {
+			continue
+		}
+
+		if stages[j].Lane == lane && stages[j].Stage == stage {
+			return true
+		}
+	}
+
+	return false
+}
+
 // pipelineTick advances items through the pipeline stages.
 // Items enter at stage 0 and advance towards stage (depth-1).
 // When an item finishes at the last stage, it moves to PostPipelineBuf.
 func pipelineTick(bank *bankState, spec Spec) bool {
 	madeProgress := false
-	remaining := make([]bankPipelineStageState, 0, len(bank.PipelineStages))
-
-	// Process from the last stage backwards for proper advancement.
-	// We collect items to keep and advance in multiple passes.
-
-	// Sort stages by stage number descending so we process the last stages first.
-	// We'll iterate from highest stage to lowest.
 	lastStage := spec.BankPipelineDepth - 1
 
-	// First pass: mark which stages are occupied after processing
-	type action int
-	const (
-		actionKeep action = iota
-		actionAdvanced
-		actionMoveToBuffer
-	)
-
-	actions := make([]action, len(bank.PipelineStages))
+	actions := make([]pipelineAction, len(bank.PipelineStages))
 	newStages := make([]bankPipelineStageState, len(bank.PipelineStages))
 	copy(newStages, bank.PipelineStages)
 
-	// Process from highest stage to stage 0
 	for stageNum := lastStage; stageNum >= 0; stageNum-- {
 		for i := range newStages {
-			if actions[i] != actionKeep {
+			if actions[i] != pipelineActionKeep {
 				continue
 			}
 
-			s := &newStages[i]
-			if s.Stage != stageNum {
+			if newStages[i].Stage != stageNum {
 				continue
 			}
 
-			if s.CycleLeft > 0 {
-				s.CycleLeft--
-				madeProgress = true
-				continue
-			}
-
-			// CycleLeft == 0, try to advance
-			if stageNum == lastStage {
-				// Try to move to post-pipeline buffer
-				if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
-					bank.PostPipelineBuf = append(
-						bank.PostPipelineBuf, s.Item)
-					actions[i] = actionMoveToBuffer
-					madeProgress = true
-				}
-			} else {
-				// Try to move to next stage
-				nextStageNum := stageNum + 1
-				nextOccupied := false
-
-				for j := range newStages {
-					if actions[j] != actionKeep {
-						continue
-					}
-
-					if newStages[j].Lane == s.Lane &&
-						newStages[j].Stage == nextStageNum {
-						nextOccupied = true
-						break
-					}
-				}
-
-				if !nextOccupied {
-					s.Stage = nextStageNum
-					s.CycleLeft = spec.StageLatency - 1
-					actions[i] = actionAdvanced
-					madeProgress = true
-				}
-			}
+			act, progress := processStageItem(
+				&newStages[i], stageNum, lastStage,
+				bank, spec, newStages, actions,
+			)
+			actions[i] = act
+			madeProgress = madeProgress || progress
 		}
 	}
 
+	remaining := make([]bankPipelineStageState, 0, len(newStages))
+
 	for i, a := range actions {
-		if a == actionMoveToBuffer {
-			continue
+		if a != pipelineActionMoveToBuffer {
+			remaining = append(remaining, newStages[i])
 		}
-
-		s := newStages[i]
-		if a == actionAdvanced {
-			// Already updated stage/cycleLeft
-		}
-
-		remaining = append(remaining, s)
 	}
 
 	bank.PipelineStages = remaining
