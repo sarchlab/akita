@@ -58,10 +58,10 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	mw := &middleware{
-		comp:                 modelComp,
-		portToComplexMapping: make(map[sim.RemotePort]portComplex),
-		routingTable:         b.routingTable,
-		arbiter:              b.arbiter,
+		comp:         modelComp,
+		routingTable: b.routingTable,
+		arbiter:      b.arbiter,
+		portIndex:    make(map[sim.RemotePort]int),
 	}
 
 	s := &Comp{
