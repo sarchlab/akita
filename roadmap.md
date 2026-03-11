@@ -2,30 +2,43 @@
 
 ## Project Goal
 
-Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model with fully serializable State.
+Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, port all first-party components, and continuously refine the architecture toward cleaner abstractions.
 
-## Current Phase: M9 — Component Guide + Comp Elimination Design
+## Current Phase: Architecture Discussion + CI Fix
 
-### M9: Write Component Creation Guide (IN PROGRESS)
+Three human issues require attention:
 
-Human issue #148: Write a guide on how to create a V5 component. This documents the current component model (Spec, State, Ports, Middleware, Hooks) and serves as both user documentation and a design reference for the Comp elimination work.
+### M9.1: Fix CI Failures (IMMEDIATE)
 
-**Budget**: 4 cycles
+Human issue #151: CI is failing due to lint errors — unused variables in `v5/mem/mem/protocol.go`. Quick fix needed.
 
-### M10: Eliminate Comp Wrapper — Use modeling.Component Directly (BLOCKED — awaiting human feedback)
+**Budget**: 2 cycles
 
-Human issue #145: "A component should only have spec, ports, states, middleware and hooks." Can we remove all per-component Comp structs and use `modeling.Component` directly?
+### M9.2: Merge Dependabot PRs (IMMEDIATE)
 
-**Status**: Analysis complete. Design proposal posted on issue #145.
+Human issue #152: 6 open Dependabot PRs for npm dependency updates.
 
-**Key findings from analysis (Iris #146, Diana #147)**:
-- 16 Comp structs with ~159 extra fields in 4 categories
-- Port refs (42), immutable config (22), mutable scalars (10) → CAN be eliminated (easy)
-- Live runtime objects (103) → CAN be eliminated via RuntimeContext pattern on middleware (harder)
-- Proposed 3-phase approach: slim Comp → RuntimeContext → eliminate Comp
-- Awaiting human direction before implementing
+**Budget**: 2 cycles
 
-**Estimated budget**: 12-16 cycles (phased)
+### M9.3: Architecture Design — A-B State + Comp Elimination (DISCUSSION)
+
+Two related architectural discussions happening in parallel:
+- **#145**: Comp elimination — human asking about MSHR decoupling and dependency injection
+- **#150**: A-B state (double-buffered state) — new proposal for digital-circuit-style state management
+
+These discussions need analysis and response before any implementation milestone can be defined. Currently gathering analysis from workers (Diana on #150, Iris on #145).
+
+**Budget**: 2-4 cycles (analysis and discussion only)
+
+### M10: Implement Architecture Changes (PENDING DISCUSSION)
+
+After #145 and #150 discussions converge, define implementation milestones. Likely sub-milestones:
+- M10.1: A-B state in modeling.Component
+- M10.2: MSHR/Directory data-behavior decoupling
+- M10.3: Dependency injection pattern
+- M10.4: Comp elimination (per-component)
+
+**Estimated budget**: 20-30 cycles (TBD after discussion)
 
 ## ✅ Previous Milestones Complete
 
@@ -34,65 +47,23 @@ Human issue #145: "A component should only have spec, ports, states, middleware 
 ### M3: Implement simulation Save/Load with acceptance test ✅ — Budget: 8, Used: 6
 ### M4: Fix CI lint failures ✅ — Budget: 3, Used: 2
 ### M5: Redesign Messages as Plain Structs ✅ — Budget: 8, Used: 6
-
-Replaced `sim.Msg` interface with concrete `Msg` struct. All 31 message types converted to payload structs. PR #14 merged.
-
-### M6: Port All First-Party Components ✅
-
-#### M6.1–M6.4: Ported all 16 tick-driven components structurally ✅ — Budget: 16, Used: 8
-
-### M7: Move Mutable Runtime Data into State Structs ✅
-
-#### M7.1: Simple components (no queueing/cache deps) ✅ — Budget: 6, Used: 4
-Populated State for: mmuCache, mmu, gmmu, addresstranslator, datamover, endpoint.
-
-#### M7.2: Components with queueing deps ✅ — Budget: 6, Used: 4
-Added queueing snapshot functions (SnapshotPipeline/RestorePipeline/SnapshotBuffer/RestoreBuffer). Populated State for: simplebankedmemory, switches, TLB. PR #20 merged.
-
-#### M7.3: DRAM State Population ✅ — Budget: 6, Used: 2
-Populated State for DRAM with full pointer-graph flattening (527-line state.go). PR #21 merged.
-
-#### M7.4: Cache State Population (writearound, writeevict, writethrough) ✅ — Budget: 6, Used: 2
-Shared Directory/MSHR serialization helpers in v5/mem/cache/state_helpers.go. State population for 3 near-identical cache variants. PR #22 merged.
-
-#### M7.5: Writeback Cache State Population ✅ — Budget: 6, Used: 4
-Refactored custom bufferImpl → queueing.Buffer. Created 937-line state.go with full snapshot/restore. PR #26 merged.
-
-### M8: Msg-as-Interface Redesign ✅
-
-Per human direction (#93), `sim.Msg` became an interface with concrete message types per package.
-
-#### M8.1: Foundation ✅ — Budget: 8, Used: 3
-Renamed `Msg` → `GenericMsg`, added `Msg` interface. PR #23 merged.
-
-#### M8.2: Convert all payloads to concrete types + remove GenericMsg ✅ — Budget: 8, Used: 9
-30 concrete message types, removed GenericMsg/MsgPayload/TryMsgPayload. PR #24 merged.
-
-#### M8.3: Remove message builders + msgRef cleanup ✅ — Budget: 8, Used: ~6
-Removed all ~22 message builder types. Removed all msgRef types. Direct struct literal construction everywhere. PR #25 merged.
-
-## Resolved Human Issues
-- #109: Message builders removed (M8.3)
-- #101: GenericMsg removed (M8.2)
-- #93: Msg/MsgRef merged (M8.x — Msg is interface, MsgRef eliminated)
-- #61: Comp wrapper investigation complete — Comp can be simplified but not eliminated (ValidateState constraints). The current Comp+State pattern is architecturally sound.
-- #18: Messages are plain structs with concrete types
-- #17: All first-party components ported with fully populated State structs (16/16)
+### M6: Port All First-Party Components ✅ — Budget: 16, Used: 8
+### M7: Move Mutable Runtime Data into State Structs ✅ — Budget: 30, Used: 16
+### M8: Msg-as-Interface Redesign ✅ — Budget: 24, Used: 18
+### M9: Write Component Creation Guide ✅ — Budget: 4, Used: 2
 
 ## Summary Statistics
-- **Total implementation cycles**: ~51 across 102 orchestrator cycles
-- **Total milestones**: 8 root milestones (M1–M8), 12 sub-milestones
-- **PRs merged**: 26
+- **Total implementation cycles**: ~53 across 108 orchestrator cycles
+- **Total milestones**: 9 root milestones (M1–M9), 12 sub-milestones
+- **PRs merged**: 27
 - **Components fully ported**: 16/16 with serializable State
 - **Concrete message types**: 30+
 - **Builder types removed**: ~22
-- **Lines of state serialization code**: ~4,000+
 
 ## Lessons Learned
 - Multi-worker approach for mechanical changes works very well (M6, M7, M8)
-- Human feedback drives direction changes — stay responsive
+- Human feedback drives direction changes — stay responsive to discussion issues
 - Apollo's verification catches real issues — always verify
-- Detailed analysis before milestones prevents scope misestimation
-- M7.1–M7.5 each completed well under budget (16 cycles used vs 30 budgeted)
 - Breaking large milestones into sub-milestones with 2-6 cycle budgets is optimal
-- When a core design issue surfaces, address it before building more on the broken foundation
+- Architecture discussions should be fully resolved before starting implementation
+- CI regressions should be fixed immediately before they accumulate

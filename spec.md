@@ -20,25 +20,29 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods for q
 
 All first-party components have been structurally ported to use the `modeling` package's `Component[S,T]` pattern. State is fully populated for all 16 components with meaningful, serializable State structs.
 
-### 5. CI Must Pass (DONE)
+### 5. CI Must Pass (NEEDS FIX)
 
-All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
+All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests. Currently failing due to lint errors (unused variables in v5/mem/mem/protocol.go). Human issue #151.
 
-### 6. Component Creation Guide (IN PROGRESS)
+### 6. Component Creation Guide (DONE)
 
-Human raised issue #148: Write a guide on how to create a component in V5. This guide should document the current component model including Spec, State, Ports, Middleware, Hooks, and the Builder pattern.
+Human issue #148: component_guide.md written and merged (PR #27). Covers Spec, State, Ports, Middleware, Hooks, Builder pattern, and worked examples.
 
 ### 7. Eliminate Comp Wrapper — Use modeling.Component Directly (DISCUSSION)
 
-Human raised issue #145: "A component should only have spec, ports, states, middleware and hooks. Can we just remove all the components struct definition from all the individual components and use modeling.component instead?"
+Human issue #145: "A component should only have spec, ports, states, middleware and hooks. Can we just remove all the components struct definition from all the individual components and use modeling.component instead?"
 
-Human wants to discuss before coding. The goal is to eliminate all per-component `Comp` structs so that `modeling.Component[Spec, State]` IS the component — no wrapper needed. This means:
-- Ports should be accessible from modeling.Component (it already inherits PortOwnerBase)
-- All mutable runtime data should live in State (or be reconstructable from State+Spec)
-- Live runtime objects (pipelines, buffers, etc.) should be managed by middleware or reconstructed as needed
-- No duplicated fields between Comp and State
+Active discussion with human. Key follow-up questions:
+- How to decouple MSHR (and similar objects) into data (State) + behavior (middleware)?
+- How to handle dependencies (e.g., AddrToPortMapper) without Comp?
 
-Analysis complete. Awaiting human feedback on design proposal before implementing.
+### 8. A-B State (Double-Buffered State) (DISCUSSION)
+
+Human issue #150: Proposes that each component has TWO state copies — "current" (read-only during tick) and "next" (write-only during tick). After all middleware finishes, swap current↔next. This prevents one middleware from reading state updated by another middleware in the same cycle, matching digital circuit semantics. Serialization only saves current state.
+
+### 9. Merge Dependabot PRs (TODO)
+
+Human issue #152: Merge the 6 open Dependabot dependency update PRs.
 
 ## Success Criteria
 
