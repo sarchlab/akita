@@ -55,12 +55,10 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
-				Src:          devicePort.AsRemote(),
-				TrafficBytes: 33,
-			},
+		msg := &sim.MsgMeta{
+			ID:           sim.GetIDGenerator().Generate(),
+			Src:          devicePort.AsRemote(),
+			TrafficBytes: 33,
 		}
 
 		networkPort.EXPECT().PeekIncoming().Return(nil).AnyTimes()
@@ -102,11 +100,9 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Dst: devicePort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Dst: devicePort.AsRemote(),
 		}
 
 		flit0 := messaging.FlitBuilder{}.

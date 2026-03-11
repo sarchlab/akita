@@ -40,10 +40,8 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID: sim.GetIDGenerator().Generate(),
-			},
+		msg := &sim.MsgMeta{
+			ID: sim.GetIDGenerator().Generate(),
 		}
 		flit1 := messaging.FlitBuilder{}.
 			WithMsg(msg).

@@ -6,11 +6,9 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-func newTestMsg() *GenericMsg {
-	return &GenericMsg{
-		MsgMeta: MsgMeta{
-			ID: GetIDGenerator().Generate(),
-		},
+func newTestMsg() *MsgMeta {
+	return &MsgMeta{
+		ID: GetIDGenerator().Generate(),
 	}
 }
 

@@ -90,12 +90,10 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithDst(port1.AsRemote()).
@@ -123,12 +121,10 @@ var _ = Describe("Switch", func() {
 		port2 := portComplex2.localPort.(*MockPort)
 		port1Pipeline := portComplex1.pipeline.(*MockPipeline)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithDst(port1.AsRemote()).
@@ -161,12 +157,10 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
@@ -193,12 +187,10 @@ var _ = Describe("Switch", func() {
 		routeBuffer2 := portComplex2.routeBuffer.(*MockBuffer)
 		forwardBuffer1 := portComplex1.forwardBuffer.(*MockBuffer)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
@@ -219,12 +211,10 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
@@ -251,12 +241,10 @@ var _ = Describe("Switch", func() {
 		forwardBuffer2 := portComplex2.forwardBuffer.(*MockBuffer)
 		sendOutBuffer2 := portComplex2.sendOutBuffer.(*MockBuffer)
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
@@ -281,12 +269,10 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
@@ -310,12 +296,10 @@ var _ = Describe("Switch", func() {
 		localPort2 := portComplex2.localPort.(*MockPort)
 		remotePort2 := portComplex2.remotePort
 
-		msg := &sim.GenericMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
-				Src: dstPort.AsRemote(),
-				Dst: dstPort.AsRemote(),
-			},
+		msg := &sim.MsgMeta{
+			ID:  sim.GetIDGenerator().Generate(),
+			Src: dstPort.AsRemote(),
+			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.FlitBuilder{}.
 			WithMsg(msg).
