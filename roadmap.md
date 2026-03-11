@@ -2,9 +2,9 @@
 
 ## Project Goal
 
-Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, split monolithic middlewares into multiple stages.
+Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (after M19)
+## Current State (after M20, Cycle 166)
 
 ### Phase 1 COMPLETE: Component Model + A-B State + Comp Elimination + Dependency Inlining
 
@@ -15,103 +15,143 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - DRAM fully transformed: internal packages eliminated, all dependencies inlined as free functions
 - Caches transformed: MSHR/Directory as State + free functions, no Comp wrappers
 - MMU fully transformed: thin Comp, transactionState canonical, no SaveState/LoadState overrides
+- Switch fully transformed: State canonical, queueing objects eliminated, no conversion layers
 - All builds/tests pass on main
 
-### Remaining Gaps (to be addressed in Phase 2)
+### Phase 1 Summary Statistics
 
-| Issue | Components Affected | Description |
-|-------|-------------------|-------------|
-| Monolithic middleware | ALL 16 components | Every component has exactly 1 middleware. Human says this is historical; should be multiple. |
-| Switch runtime objects | `noc/networking/switching/switches` | Pipeline/buffer runtime objects in middleware. SaveState/LoadState sync/restore layer still exists. |
-| Cache runtime copies | `mem/cache/*` | Caches still use runtime copies of directory/MSHR state in middleware with restoreFromState; addressToPortMapper dependency; queueing.Buffer runtime objects. Not yet fully canonical State. |
-| DRAM A-B pattern | `mem/dram` | Uses GetNextState() for both read and write in Tick() — should read GetState(), write GetNextState(). |
-| directconnection | `sim/directconnection` | Not using modeling.Component at all (uses TickingComponent directly). May be intentional — it's infrastructure, not a simulation component. |
-| examples/ping | `examples/ping` | Uses ComponentBase directly. Example/demo code — may not need transformation. |
-| component_guide.md | docs | Needs update to reflect final architecture (multi-middleware, A-B state, no Comp pattern). |
+| Metric | Value |
+|--------|-------|
+| Milestones completed | 20 (M1–M20) |
+| Total cycles used | ~94 (budgeted: ~150) |
+| PRs merged | 45 |
+| Components ported | 16/16 |
+| Components fully transformed (State canonical) | 16/16 |
 
-## Phase 2 Milestones
+### Remaining Gaps (Phase 2 scope)
 
-### ✅ M19: MMU Full Transformation — DONE (Budget: 4, Used: 2)
+| Gap | Components | Description | Priority |
+|-----|-----------|-------------|----------|
+| **Cache runtime copies** | writeback, writearound, writeevict, writethrough | Middleware holds runtime copies of DirectoryState/MSHRState, queueing.Buffer/Pipeline objects, addressToPortMapper dependency, restoreFromState layers | HIGH |
+| **DRAM A-B pattern** | mem/dram | Uses `GetNextState()` for both read and write — should use `GetState()` for read, `GetNextState()` for write | MEDIUM |
+| **Monolithic middleware** | 13/16 components | All but idealmemcontroller, TLB, mmuCache have exactly 1 middleware. Should be multiple. | HIGH |
+| **component_guide.md** | docs | Needs update to reflect final architecture | LOW |
+| **directconnection** | sim/directconnection | Not using modeling.Component (uses TickingComponent). Infrastructure — may be intentional. | LOW |
+| **examples/ping** | examples/ping | Uses ComponentBase directly. Example code. | LOW |
 
-Transformed MMU: thin Comp, transactionState canonical, no SaveState/LoadState overrides, vm.PageTable as external service on middleware.
+---
 
-### M20: Switch — Make State Canonical
+## Phase 2: Cache Cleanup + Multi-Middleware Split
 
-**Goal:** Transform Switch to eliminate runtime pipeline/buffer objects, make State canonical, remove SaveState/LoadState conversion layers. (Endpoint is already clean — no conversion layers.)
+### M21: Cache Components — Eliminate Runtime Copies + Inline Dependencies
+
+**Goal:** Make the 4 cache components (writeback, writearound, writeevict, writethrough) fully clean: eliminate all runtime copies, queueing objects, addressToPortMapper dependency, and restoreFromState conversion layers. State becomes the sole canonical representation used directly by middleware.
 
 **What to do:**
-1. Replace `queueing.Pipeline` and `queueing.Buffer` runtime objects with State arrays. Pipeline tick/accept and buffer push/pop become free functions on State.
-2. Keep `routing.Table` and `arbitration.Arbiter` as external service references on middleware.
-3. Remove syncToState/restoreFromState and SaveState/LoadState overrides on Comp.
-4. The `portComplex` runtime type's data should live in `portComplexState` in State.
-5. Fix A-B state pattern: read from GetState(), write to GetNextState().
-6. Update tests.
+1. **Eliminate runtime copies**: Remove `directoryState` and `mshrState` runtime copies from middleware. Middleware should read/write these directly through `GetState()`/`GetNextState()` (they're already in State).
+2. **Replace queueing.Buffer/Pipeline runtime objects** with State arrays + free functions (following Switch M20 pattern). The data is already in State — just remove the runtime wrapper objects.
+3. **Inline addressToPortMapper**: Store port names and routing config in Spec. Resolve ports via `GetPortByName()`. Inline the routing logic (~15 LOC) directly into middleware.
+4. **Remove restoreFromState**: Since State is canonical and middleware works with it directly, the restore function is unnecessary.
+5. **Fix A-B pattern**: Ensure all reads come from `GetState()` and all writes go to `GetNextState()`.
+6. **Start with writearound** (simplest), then replicate to writeevict, writethrough, writeback.
+
+**Budget**: 8 cycles
+**Risk**: Medium. The MSHR/Directory free functions already exist. The main work is removing the queueing runtime wrappers and inline the port routing. Pattern established by Switch (M20).
+
+### M22: DRAM + Simple Components — Fix A-B Pattern + Inline Remaining Dependencies
+
+**Goal:** Fix the DRAM A-B pattern issue. Verify all simple components (addresstranslator, datamover, simplebankedmemory, endpoint, tickingping) have correct A-B usage. Inline any remaining dependency interfaces.
+
+**What to do:**
+1. **DRAM**: Change `GetNextState()` reads to `GetState()` reads, keep `GetNextState()` for writes.
+2. **Audit all components** for A-B correctness: every `Tick()` should use `GetState()` for read, `GetNextState()` for write.
+3. Inline any remaining dependency interfaces found during audit.
+4. Verify save/load acceptance test still passes.
 
 **Budget**: 4 cycles
-**Risk**: Medium. Switch has complex pipeline/buffer structures but the State types already exist. Pattern well-established by M18/M19.
+**Risk**: Low. The A-B change is mechanical. DRAM behavior may change slightly (reads old values instead of current writes) but this is the intended semantics.
 
-### M21: Multi-Middleware Split — Reference Implementation
+### M23: Multi-Middleware Split — Simple Components
 
-**Goal:** Split the idealmemcontroller (which already has 2 middlewares) into a clean reference, then split 2-3 additional simple components to establish the pattern.
+**Goal:** Split the simpler single-middleware components into multiple middlewares following natural stage boundaries.
 
-**What to do:**
-1. Verify idealmemcontroller already properly demonstrates multi-middleware with A-B state
-2. Split addresstranslator into 2 middlewares (parse + respond)
-3. Split datamover into 2 middlewares (ctrl + data transfer)
-4. Split simplebankedmemory into 2 middlewares (ctrl + memory operations)
-5. Ensure all use correct A-B state pattern
-6. Verify save/load still works
-7. Document the multi-middleware pattern in component_guide.md
+**Target components and proposed splits:**
+1. **addresstranslator** → 2 MW: parse incoming, send response
+2. **datamover** → 2 MW: control, data transfer
+3. **simplebankedmemory** → 2 MW: control, memory operations
+4. **endpoint** → 2 MW: incoming processing, outgoing processing
+5. **tickingping** → 2 MW: receive, send
+6. **DRAM** → 3-5 MW: parseTop, subTransQueue, bankTick, issue, respond
 
-**Budget**: 5 cycles
-**Risk**: Low-Medium. These are simple components; the split is mostly mechanical.
+**Each split must:**
+- Maintain correct A-B state semantics (read current, write next)
+- Not break save/load (State struct unchanged)
+- Pass existing tests
+- Document the middleware boundary rationale
 
-### M22: Multi-Middleware Split — Cache Components
+**Budget**: 6 cycles
+**Risk**: Low-Medium. These are simpler components. DRAM is the most complex here but already has logical separation in its Tick() function.
 
-**Goal:** Split the 4 cache components into multiple middlewares following the established pattern.
+### M24: Multi-Middleware Split — Cache Components
 
-**What to do:**
-1. Design cache middleware boundaries (Diana's analysis suggested 6 stages for writeback: topParser → directory → bank → writeBuffer → mshr → flusher)
-2. Split writearound cache first (simplest cache) — establish cache multi-middleware pattern
-3. Replicate to writeevict, writethrough
-4. Split writeback cache (most complex — 6+ stages)
-5. Verify +1 cycle latency per boundary is acceptable (adjust Spec timing constants if needed)
-6. Verify save/load still works
+**Goal:** Split the 4 cache components into multiple middlewares.
 
-**Budget**: 8 cycles
-**Risk**: High. Cache split is the most complex change. Each stage must read from current and write to next without seeing other stages' writes. Need careful testing.
+**Proposed middleware boundaries (based on Diana's analysis):**
+- **writearound**: topParser → directory → bank → bottomParser → respond (5 stages)
+- **writeevict**: same structure as writearound
+- **writethrough**: same structure
+- **writeback**: topParser → directory → bank → writeBuffer → mshr → flusher (6 stages)
 
-### M23: Multi-Middleware Split — Remaining Components
-
-**Goal:** Split remaining components: TLB, mmuCache, MMU, Switch, Endpoint, DRAM.
-
-**What to do:**
-1. TLB already has 2 middlewares — verify A-B correctness
-2. mmuCache already has 2 middlewares — verify A-B correctness
-3. Split MMU into multiple middlewares (parseFromTop, walkPageTable, migration, respond)
-4. Split Switch into multiple middlewares per pipeline stage
-5. Split Endpoint into multiple middlewares
-6. Split DRAM into multiple middlewares (parseTop, subTransQueue, issue, bankTick, respond)
-7. Verify all save/load works
+**Key considerations:**
+- +1 cycle latency per middleware boundary — compensate via Spec timing constants if needed
+- Each stage reads from `current`, writes to `next` — stages don't see each other's writes
+- Shared free functions (directory_ops, mshr_ops) work with State by index — already compatible
 
 **Budget**: 8 cycles
-**Risk**: Medium-High. MMU and Switch are complex but patterns established by M21-M22 should help.
+**Risk**: High. Cache split is the most complex change. The writeback cache has the most stages and complex inter-stage data flow.
 
-### M24: Final Cleanup + Documentation
+### M25: Multi-Middleware Split — Complex Components (MMU, Switch, TLB, mmuCache)
 
-**Goal:** Final verification, update all documentation, ensure consistency across all components.
+**Goal:** Split remaining components into multiple middlewares.
 
-**What to do:**
-1. Update component_guide.md to reflect final architecture
-2. Ensure all components follow the same pattern consistently
-3. Fix any remaining A-B state pattern issues (GetState for read, GetNextState for write)
-4. Clean up any remaining thin Comp wrappers that can be eliminated
-5. Verify full test suite and acceptance tests pass
-6. Review directconnection — determine if it should use modeling.Component or stay as infrastructure
-7. Final code review pass
+1. **TLB** — already has 2 MW, verify A-B correctness
+2. **mmuCache** — already has 2 MW, verify A-B correctness
+3. **MMU** → 3-4 MW: parseFromTop, walkPageTable, migration, respond
+4. **Switch** → multiple MW per pipeline stage (route, forward, sendOut per port complex)
+
+**Budget**: 6 cycles
+**Risk**: Medium. MMU and Switch are complex but TLB/mmuCache may only need verification.
+
+### M26: Final Cleanup + Documentation
+
+**Goal:** Final pass — consistency, documentation, edge cases.
+
+1. **Update component_guide.md** to reflect the final multi-middleware architecture with A-B state
+2. **Review directconnection** — determine if it should use modeling.Component or stay as infrastructure
+3. **Review examples/ping** — update if needed
+4. **Ensure all components** follow the identical pattern consistently
+5. **Full test suite pass** + acceptance tests
+6. **Clean up any remaining thin Comp wrappers**
+7. **Final code review pass**
 
 **Budget**: 4 cycles
 **Risk**: Low.
+
+---
+
+## Phase 2 Summary
+
+| Milestone | Scope | Budget | Dependencies |
+|-----------|-------|--------|-------------|
+| M21 | Cache cleanup (runtime copies, queueing, deps) | 8 | — |
+| M22 | DRAM A-B fix + audit all components | 4 | — |
+| M23 | Multi-MW split — simple components | 6 | M22 |
+| M24 | Multi-MW split — cache components | 8 | M21, M23 |
+| M25 | Multi-MW split — complex components | 6 | M23 |
+| M26 | Final cleanup + docs | 4 | M24, M25 |
+| **Total** | | **36** | |
+
+---
 
 ## ✅ Completed Milestones (Phase 1)
 
@@ -130,33 +170,27 @@ Transformed MMU: thin Comp, transactionState canonical, no SaveState/LoadState o
 | M11 | 2 | 0 | Architecture design finalized |
 | M12 | 5 | 3 | A-B state + Comp elimination on idealmemcontroller |
 | M13 | 5 | 3 | TLB — Comp elimination + A-B state |
-| M14 | 6 | 3 | Simple Components Batch (mmuCache, addresstranslator, datamover, simplebankedmemory) |
+| M14 | 6 | 3 | Simple Components Batch (4 components) |
 | M15 | 5 | 3 | GMMU + Switch + Endpoint — Comp elimination + A-B state |
-| M16 | 8 | 4 | Write{around,evict,through} caches + tickingping — Comp elimination + shared free functions |
+| M16 | 8 | 4 | Write{around,evict,through} caches + tickingping |
 | M17 | 6 | 3 | Writeback cache — Full transformation |
 | M18 | 8 | 3 | DRAM memory controller — Full transformation |
 | M19 | 4 | 2 | MMU — Full transformation (thin Comp, canonical State) |
+| M20 | 4 | 2 | Switch — State canonical, eliminate queueing objects |
 
-## Summary Statistics
-- Total milestones completed: 19
-- Total cycles used: 90 (budgeted: 146)
-- PRs merged: 44
-- Components ported: 16/16
-- Components fully transformed (Comp eliminated + dependencies inlined): 15/16 (Switch has remaining gaps)
-- Components with multi-middleware: 3/16 (idealmemcontroller, TLB, mmuCache — all others have 1)
-- Phase 2 estimated: 28 cycles across 5 remaining milestones (M20-M24)
+**Phase 1 totals**: Budget: 150, Used: 94 (37% under budget)
 
 ## Lessons Learned
+
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
 - Architecture discussions should be fully resolved before implementation
 - Multi-worker mechanical changes work well with clear patterns
 - Breaking milestones to 2-6 cycle budgets is optimal
 - Human feedback drives direction — stay responsive
-- Combined milestones work when scope is small — M14 (4 components) done in 3 cycles
+- Combined milestones work when scope is small
 - idealmemcontroller is the reference implementation — follow its patterns
 - The snapshot/restore conversion layer disappears when State is canonical (big code reduction)
 - A-B state deep copy via JSON round-trip is acceptable for small States
-- Lint errors from multi-branch merges should be caught BEFORE merging to main
 - Components with external services (Storage, PageTable, RoutingTable) keep those as middleware fields
 - The 3 simpler caches are nearly identical — transform one, replicate twice
 - Budget estimates are improving: most milestones finish well under budget
@@ -164,3 +198,4 @@ Transformed MMU: thin Comp, transactionState canonical, no SaveState/LoadState o
 - DRAM has an existing state.go with complete snapshot/restore that proves decomposition is structurally sound
 - **Multi-middleware split is the next major architectural change** — needs careful planning per component
 - **Reference implementations matter**: establish the pattern on simple components first, then replicate
+- **M21 and M22 can run in parallel** since they affect different components
