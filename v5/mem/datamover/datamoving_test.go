@@ -104,7 +104,7 @@ var _ = Describe("DataMover", func() {
 		for i := 0; i < 4096; i++ {
 			data[i] = byte(i)
 		}
-		outsideMem.Storage.Write(0, data)
+		outsideMem.GetStorage().Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -124,7 +124,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.Storage.Read(0, 4096)).To(Equal(data))
+		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
 	})
 
 	It("should move data inside to outside", func() {
@@ -132,7 +132,7 @@ var _ = Describe("DataMover", func() {
 		for i := 0; i < 4096; i++ {
 			data[i] = byte(i)
 		}
-		insideMem.Storage.Write(0, data)
+		insideMem.GetStorage().Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -152,7 +152,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(insideMem.Storage.Read(0, 4096)).To(Equal(data))
+		Expect(insideMem.GetStorage().Read(0, 4096)).To(Equal(data))
 	})
 
 	It("should move on difference addresses", func() {
@@ -160,7 +160,7 @@ var _ = Describe("DataMover", func() {
 		for i := 0; i < 4096; i++ {
 			data[i] = byte(i)
 		}
-		insideMem.Storage.Write(0, data)
+		insideMem.GetStorage().Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -180,7 +180,7 @@ var _ = Describe("DataMover", func() {
 
 		engine.Run()
 
-		Expect(outsideMem.Storage.Read(4096, 4096)).To(Equal(data))
+		Expect(outsideMem.GetStorage().Read(4096, 4096)).To(Equal(data))
 	})
 
 	It("should move partial data", func() {
@@ -188,7 +188,7 @@ var _ = Describe("DataMover", func() {
 		for i := 0; i < 1024; i++ {
 			data[i] = byte(i)
 		}
-		outsideMem.Storage.Write(0, data)
+		outsideMem.GetStorage().Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -209,7 +209,7 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := data[:512]
-		Expect(insideMem.Storage.Read(512, 512)).To(Equal(expected))
+		Expect(insideMem.GetStorage().Read(512, 512)).To(Equal(expected))
 	})
 
 	It("should handle zero-size transfers", func() {
@@ -232,7 +232,7 @@ var _ = Describe("DataMover", func() {
 		for i := 0; i < 1024; i++ {
 			data[i] = byte(i)
 		}
-		insideMem.Storage.Write(0, data)
+		insideMem.GetStorage().Write(0, data)
 
 		srcPort.EXPECT().
 			Deliver(gomock.Any())
@@ -253,6 +253,6 @@ var _ = Describe("DataMover", func() {
 		engine.Run()
 
 		expected := append(data[:512], data[:512]...)
-		Expect(insideMem.Storage.Read(0, 1024)).To(Equal(expected))
+		Expect(insideMem.GetStorage().Read(0, 1024)).To(Equal(expected))
 	})
 })

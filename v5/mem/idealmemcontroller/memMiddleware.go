@@ -5,12 +5,38 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type memMiddleware struct {
-	*Comp
+	comp    *modeling.Component[Spec, State]
+	storage *mem.Storage
+}
+
+func (m *memMiddleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *memMiddleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *memMiddleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *memMiddleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *memMiddleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *memMiddleware) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
 }
 
 func (m *memMiddleware) Tick() bool {
@@ -23,15 +49,15 @@ func (m *memMiddleware) Tick() bool {
 }
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 	if state.CurrentState != "enable" {
 		return false
 	}
 
-	spec := m.Component.GetSpec()
+	spec := m.comp.GetSpec()
 
 	for i := 0; i < spec.Width; i++ {
-		msgI := m.topPort.RetrieveIncoming()
+		msgI := m.topPort().RetrieveIncoming()
 		if msgI == nil {
 			break
 		}
@@ -40,17 +66,18 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		tracing.TraceReqReceive(msg, m)
 
 		tx := m.msgToInflightTransaction(msg)
-		state.InflightTransactions = append(state.InflightTransactions, tx)
+
+		nextState := m.comp.GetNextState()
+		nextState.InflightTransactions = append(
+			nextState.InflightTransactions, tx)
 		madeProgress = true
 	}
-
-	m.Component.SetState(state)
 
 	return madeProgress
 }
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
-	spec := m.Component.GetSpec()
+	spec := m.comp.GetSpec()
 
 	switch payload := msg.(type) {
 	case *mem.ReadReq:
@@ -80,16 +107,16 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 }
 
 func (m *memMiddleware) processCountdowns() bool {
-	state := m.Component.GetState()
-	if state.CurrentState == "pause" {
+	nextState := m.comp.GetNextState()
+	if nextState.CurrentState == "pause" {
 		return false
 	}
 
 	madeProgress := false
-	remaining := make([]inflightTransaction, 0, len(state.InflightTransactions))
+	remaining := make([]inflightTransaction, 0, len(nextState.InflightTransactions))
 
-	for i := range state.InflightTransactions {
-		tx := &state.InflightTransactions[i]
+	for i := range nextState.InflightTransactions {
+		tx := nextState.InflightTransactions[i]
 
 		if tx.CycleLeft > 0 {
 			tx.CycleLeft--
@@ -97,18 +124,17 @@ func (m *memMiddleware) processCountdowns() bool {
 		}
 
 		if tx.CycleLeft == 0 {
-			sent := m.sendResponse(tx)
+			sent := m.sendResponse(&tx)
 			if sent {
 				madeProgress = true
 				continue // remove from list
 			}
 		}
 
-		remaining = append(remaining, *tx)
+		remaining = append(remaining, tx)
 	}
 
-	state.InflightTransactions = remaining
-	m.Component.SetState(state)
+	nextState.InflightTransactions = remaining
 
 	return madeProgress
 }
@@ -122,26 +148,24 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	addr := tx.Address
-	if m.addressConverter != nil {
-		addr = m.addressConverter.ConvertExternalToInternal(addr)
-	}
+	spec := m.comp.GetSpec()
+	addr := convertAddress(spec, tx.Address)
 
-	data, err := m.Storage.Read(addr, tx.AccessByteSize)
+	data, err := m.storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	rsp := &mem.DataReadyRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.topPort.AsRemote()
+	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
 	rsp.Data = data
 	rsp.TrafficBytes = len(data) + 4
 	rsp.TrafficClass = "mem.DataReadyRsp"
 
-	networkErr := m.topPort.Send(rsp)
+	networkErr := m.topPort().Send(rsp)
 	if networkErr != nil {
 		return false
 	}
@@ -154,29 +178,27 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := &mem.WriteDoneRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.topPort.AsRemote()
+	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
 	rsp.TrafficBytes = 4
 	rsp.TrafficClass = "mem.WriteDoneRsp"
 
-	networkErr := m.topPort.Send(rsp)
+	networkErr := m.topPort().Send(rsp)
 	if networkErr != nil {
 		return false
 	}
 
-	addr := tx.Address
-	if m.addressConverter != nil {
-		addr = m.addressConverter.ConvertExternalToInternal(addr)
-	}
+	spec := m.comp.GetSpec()
+	addr := convertAddress(spec, tx.Address)
 
 	if tx.DirtyMask == nil {
-		err := m.Storage.Write(addr, tx.Data)
+		err := m.storage.Write(addr, tx.Data)
 		if err != nil {
 			log.Panic(err)
 		}
 	} else {
-		data, err := m.Storage.Read(addr, uint64(len(tx.Data)))
+		data, err := m.storage.Read(addr, uint64(len(tx.Data)))
 		if err != nil {
 			panic(err)
 		}
@@ -187,7 +209,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 			}
 		}
 
-		err = m.Storage.Write(addr, data)
+		err = m.storage.Write(addr, data)
 		if err != nil {
 			panic(err)
 		}
@@ -201,4 +223,25 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 func (m *memMiddleware) traceReqComplete(reqID string) {
 	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
 	tracing.EndTask(taskID, m)
+}
+
+func convertAddress(spec Spec, addr uint64) uint64 {
+	if spec.AddrConvKind == "" {
+		return addr
+	}
+
+	if addr < spec.AddrOffset {
+		log.Panic("address is smaller than offset")
+	}
+
+	a := addr - spec.AddrOffset
+	roundSize := spec.AddrInterleavingSize * uint64(spec.AddrTotalNumOfElements)
+	belongsTo := int(a % roundSize / spec.AddrInterleavingSize)
+
+	if belongsTo != spec.AddrCurrentElementIndex {
+		log.Panicf("address 0x%x does not belong to current element %d",
+			addr, spec.AddrCurrentElementIndex)
+	}
+
+	return a/roundSize*spec.AddrInterleavingSize + addr%spec.AddrInterleavingSize
 }
