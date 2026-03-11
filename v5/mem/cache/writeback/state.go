@@ -40,8 +40,10 @@ type transactionSnapshot struct {
 	EvictingDirtyMask    []bool      `json:"evicting_dirty_mask"`
 	HasEvictionWriteReq  bool        `json:"has_eviction_write_req"`
 	EvictionWriteReqMsg  sim.MsgMeta `json:"eviction_write_req_msg"`
-	MSHREntryIndex       int         `json:"mshr_entry_index"`
-	HasMSHREntry         bool        `json:"has_mshr_entry"`
+	MSHREntryIndex         int         `json:"mshr_entry_index"`
+	HasMSHREntry           bool        `json:"has_mshr_entry"`
+	MSHRData               []byte      `json:"mshr_data"`
+	MSHRTransactionIndices []int       `json:"mshr_transaction_indices"`
 }
 
 // dirPipelineStageState captures one directory pipeline slot.
@@ -169,6 +171,20 @@ func snapshotTransaction(
 		s.EvictionWriteReqMsg = t.evictionWriteReq.MsgMeta
 	}
 
+	if t.mshrData != nil {
+		s.MSHRData = make([]byte, len(t.mshrData))
+		copy(s.MSHRData, t.mshrData)
+	}
+
+	if t.mshrTransactions != nil {
+		s.MSHRTransactionIndices = make([]int, len(t.mshrTransactions))
+		for i, mt := range t.mshrTransactions {
+			if idx, ok := lookup[mt]; ok {
+				s.MSHRTransactionIndices[i] = idx
+			}
+		}
+	}
+
 	return s
 }
 
@@ -192,6 +208,19 @@ func restoreAllTransactions(
 
 	for i, s := range states {
 		allTrans[i] = restoreTransactionCore(s)
+	}
+
+	// Second pass: resolve mshrTransactions pointers from saved indices
+	for _, t := range allTrans {
+		if t.mshrTransactionRestoreIndices != nil {
+			t.mshrTransactions = make([]*transactionState, 0, len(t.mshrTransactionRestoreIndices))
+			for _, idx := range t.mshrTransactionRestoreIndices {
+				if idx >= 0 && idx < len(allTrans) {
+					t.mshrTransactions = append(t.mshrTransactions, allTrans[idx])
+				}
+			}
+			t.mshrTransactionRestoreIndices = nil
+		}
 	}
 
 	return allTrans
@@ -271,6 +300,19 @@ func restoreTransactionCore(
 
 	t.mshrEntryIndex = s.MSHREntryIndex
 	t.hasMSHREntry = s.HasMSHREntry
+
+	if s.MSHRData != nil {
+		t.mshrData = make([]byte, len(s.MSHRData))
+		copy(t.mshrData, s.MSHRData)
+	}
+
+	// mshrTransactions are resolved in a second pass by
+	// resolveTransactionMSHRPointers, after all transactions are restored.
+	// We store the raw indices temporarily in a helper field.
+	if s.MSHRTransactionIndices != nil {
+		t.mshrTransactionRestoreIndices = make([]int, len(s.MSHRTransactionIndices))
+		copy(t.mshrTransactionRestoreIndices, s.MSHRTransactionIndices)
+	}
 
 	return t
 }
@@ -387,12 +429,13 @@ func restoreBankBufs(
 
 func snapshotMSHRStageBuf(
 	buf queueing.Buffer,
+	lookup map[*transactionState]int,
 ) []int {
 	elems := queueing.SnapshotBuffer(buf)
 	indices := make([]int, len(elems))
 
 	for i, e := range elems {
-		indices[i] = e.(int)
+		indices[i] = lookup[e.(*transactionState)]
 	}
 
 	return indices
@@ -401,10 +444,11 @@ func snapshotMSHRStageBuf(
 func restoreMSHRStageBuf(
 	buf queueing.Buffer,
 	indices []int,
+	allTrans []*transactionState,
 ) {
 	elems := make([]interface{}, len(indices))
 	for i, idx := range indices {
-		elems[i] = idx
+		elems[i] = allTrans[idx]
 	}
 
 	queueing.RestoreBuffer(buf, elems)
@@ -671,12 +715,19 @@ func snapshotWriteBufferStage(
 
 func snapshotMSHRStageEntry(
 	ms *mshrStage,
+	lookup map[*transactionState]int,
 ) (bool, int) {
-	if !ms.hasProcessingMSHREntry {
+	if !ms.hasProcessingTrans {
 		return false, 0
 	}
 
-	return true, ms.processingMSHREntryIdx
+	if ms.processingTrans != nil {
+		if idx, ok := lookup[ms.processingTrans]; ok {
+			return true, idx
+		}
+	}
+
+	return true, 0
 }
 
 // --- Flusher ---
@@ -720,7 +771,7 @@ func (m *middleware) snapshotState() State {
 	s.DirToBankBufIndices = snapshotBankBufs(m.dirToBankBuffers, lookup)
 	s.WriteBufferToBankBufIndices = snapshotBankBufs(
 		m.writeBufferToBankBuffers, lookup)
-	s.MSHRStageBufEntries = snapshotMSHRStageBuf(m.mshrStageBuffer)
+	s.MSHRStageBufEntries = snapshotMSHRStageBuf(m.mshrStageBuffer, lookup)
 	s.WriteBufferBufIndices = snapshotWriteBufferBuf(
 		m.writeBufferBuffer, lookup)
 
@@ -738,7 +789,7 @@ func (m *middleware) snapshotState() State {
 		s.InflightEvictionIndices =
 		snapshotWriteBufferStage(m.writeBuffer, lookup)
 	s.HasProcessingMSHREntry, s.ProcessingMSHREntryIdx =
-		snapshotMSHRStageEntry(m.mshrStage)
+		snapshotMSHRStageEntry(m.mshrStage, lookup)
 	s.FlusherBlockToEvictRefs, s.HasProcessingFlush,
 		s.ProcessingFlush = snapshotFlusherState(m.flusher)
 
@@ -766,7 +817,7 @@ func (m *middleware) restoreFromState(s State) {
 		s.DirToBankBufIndices, allTrans)
 	restoreBankBufs(m.writeBufferToBankBuffers,
 		s.WriteBufferToBankBufIndices, allTrans)
-	restoreMSHRStageBuf(m.mshrStageBuffer, s.MSHRStageBufEntries)
+	restoreMSHRStageBuf(m.mshrStageBuffer, s.MSHRStageBufEntries, allTrans)
 	restoreWriteBufferBuf(m.writeBufferBuffer,
 		s.WriteBufferBufIndices, allTrans)
 
@@ -800,8 +851,13 @@ func (m *middleware) restoreFromState(s State) {
 		s.InflightEvictionIndices, allTrans)
 
 	// MSHR stage
-	m.mshrStage.hasProcessingMSHREntry = s.HasProcessingMSHREntry
-	m.mshrStage.processingMSHREntryIdx = s.ProcessingMSHREntryIdx
+	m.mshrStage.hasProcessingTrans = s.HasProcessingMSHREntry
+	if s.HasProcessingMSHREntry && s.ProcessingMSHREntryIdx >= 0 && s.ProcessingMSHREntryIdx < len(allTrans) {
+		trans := allTrans[s.ProcessingMSHREntryIdx]
+		m.mshrStage.processingTrans = trans
+		m.mshrStage.processingTransList = trans.mshrTransactions
+		m.mshrStage.processingData = trans.mshrData
+	}
 
 	// Flusher
 	m.flusher.blockToEvict = make([]blockRef, len(s.FlusherBlockToEvictRefs))

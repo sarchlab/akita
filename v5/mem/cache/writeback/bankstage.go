@@ -250,16 +250,13 @@ func (s *bankStage) finalizeBankWriteFetched(
 		return false
 	}
 
-	if !trans.hasMSHREntry {
-		panic("bankWriteFetched without MSHR entry")
-	}
+	// Use block reference from the transaction itself (MSHR entry may have been removed)
+	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	mshrEntry := &s.cache.mshrState.Entries[trans.mshrEntryIndex]
-	block := &s.cache.directoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
+	// Push the transaction itself to MSHR stage (it carries mshrTransactions and mshrData)
+	s.cache.mshrStageBuffer.Push(trans)
 
-	s.cache.mshrStageBuffer.Push(trans.mshrEntryIndex)
-
-	err := s.cache.storage.Write(block.CacheAddress, mshrEntry.Data)
+	err := s.cache.storage.Write(block.CacheAddress, trans.mshrData)
 	if err != nil {
 		panic(err)
 	}

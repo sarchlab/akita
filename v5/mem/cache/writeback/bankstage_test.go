@@ -311,26 +311,24 @@ var _ = Describe("Bank Stage", func() {
 			block.CacheAddress = 0x40
 			block.IsLocked = true
 
-			m.mshrState.Entries = append(m.mshrState.Entries, cache.MSHREntryState{
-				BlockSetID: 0,
-				BlockWayID: 0,
-				HasBlock:   true,
-				Data: []byte{
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-				},
-			})
+			fetchedData := []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}
 
 			trans = &transactionState{
-				mshrEntryIndex: 0,
-				hasMSHREntry:   true,
-				action:         bankWriteFetched,
+				blockSetID:       0,
+				blockWayID:       0,
+				hasBlock:         true,
+				mshrData:         fetchedData,
+				mshrTransactions: []*transactionState{},
+				action:           bankWriteFetched,
 			}
 			postPipelineBuf.Push(bankPipelineElem{trans: trans})
 
@@ -351,13 +349,13 @@ var _ = Describe("Bank Stage", func() {
 
 		It("should write to storage and send to mshr stage", func() {
 			mshrStageBuffer.EXPECT().CanPush().Return(true)
-			mshrStageBuffer.EXPECT().Push(0) // mshr entry index
+			mshrStageBuffer.EXPECT().Push(gomock.Any()) // the transaction
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
 			writtenData, _ := storage.Read(0x40, 64)
-			Expect(writtenData).To(Equal(m.mshrState.Entries[0].Data))
+			Expect(writtenData).To(Equal(trans.mshrData))
 			block := &m.directoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())
 			Expect(block.IsValid).To(BeTrue())

@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
@@ -69,9 +67,9 @@ var _ = Describe("MSHR Stage", func() {
 		trans := &transactionState{read: read}
 		m.inFlightTransactions = []*transactionState{trans}
 
-		m.mshrState.Entries = append(m.mshrState.Entries, cache.MSHREntryState{
-			TransactionIndices: []int{0},
-			Data: []byte{
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{trans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -81,15 +79,15 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
-		})
+		}
 
-		inBuf.EXPECT().Pop().Return(0) // mshr entry index
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(false)
 
 		ret := ms.Tick()
 
 		Expect(ret).To(BeFalse())
-		Expect(ms.hasProcessingMSHREntry).To(BeTrue())
+		Expect(ms.hasProcessingTrans).To(BeTrue())
 	})
 
 	It("should send data ready to top", func() {
@@ -102,9 +100,9 @@ var _ = Describe("MSHR Stage", func() {
 		trans := &transactionState{read: read}
 		m.inFlightTransactions = []*transactionState{trans}
 
-		m.mshrState.Entries = append(m.mshrState.Entries, cache.MSHREntryState{
-			TransactionIndices: []int{0},
-			Data: []byte{
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{trans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -114,8 +112,8 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
-		})
-		inBuf.EXPECT().Pop().Return(0)
+		}
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -126,7 +124,7 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingMSHREntry).To(BeFalse())
+		Expect(ms.hasProcessingTrans).To(BeFalse())
 		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
 	})
 
@@ -140,23 +138,19 @@ var _ = Describe("MSHR Stage", func() {
 		trans := &transactionState{write: write}
 		m.inFlightTransactions = []*transactionState{trans}
 
-		m.mshrState.Entries = append(m.mshrState.Entries, cache.MSHREntryState{
-			PID:                1,
-			Address:            0x100,
-			TransactionIndices: []int{0},
-			Data: []byte{
-				1, 2, 3, 4, 9, 9, 9, 9,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-				1, 2, 3, 4, 5, 6, 7, 8,
-			},
-		})
-		ms.hasProcessingMSHREntry = true
-		ms.processingMSHREntryIdx = 0
+		ms.hasProcessingTrans = true
+		ms.processingTrans = &transactionState{}
+		ms.processingTransList = []*transactionState{trans}
+		ms.processingData = []byte{
+			1, 2, 3, 4, 9, 9, 9, 9,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+			1, 2, 3, 4, 5, 6, 7, 8,
+		}
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -166,23 +160,18 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingMSHREntry).To(BeFalse())
+		Expect(ms.hasProcessingTrans).To(BeFalse())
 		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
-		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
-		read.Address = 0x104
-		read.AccessByteSize = 4
-		read.TrafficBytes = 12
-		read.TrafficClass = "mem.ReadReq"
-		trans := &transactionState{read: read}
-		// NOT in inFlightTransactions
+		// Create a "stale" transaction pointer that's not in inFlightTransactions
+		staleTrans := &transactionState{}
+		m.inFlightTransactions = nil
 
-		m.mshrState.Entries = append(m.mshrState.Entries, cache.MSHREntryState{
-			TransactionIndices: []int{0},
-			Data: []byte{
+		mshrTrans := &transactionState{
+			mshrTransactions: []*transactionState{staleTrans},
+			mshrData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -192,21 +181,14 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
-		})
+		}
 
-		// The transaction is at index 0 but inFlightTransactions is empty
-		// This should cause an out-of-bounds. Let me adjust:
-		// Put a different trans in inflight so index 0 works but findTransaction fails
-		otherTrans := &transactionState{}
-		m.inFlightTransactions = []*transactionState{otherTrans}
-		_ = trans
-
-		inBuf.EXPECT().Pop().Return(0)
+		inBuf.EXPECT().Pop().Return(mshrTrans)
 		topPort.EXPECT().CanSend().Return(true)
 
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingMSHREntry).To(BeFalse())
+		Expect(ms.hasProcessingTrans).To(BeFalse())
 	})
 })

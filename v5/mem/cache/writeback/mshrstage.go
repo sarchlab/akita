@@ -9,13 +9,15 @@ import (
 type mshrStage struct {
 	cache *middleware
 
-	// processingMSHREntryIdx stores the index into mshrState.Entries
-	hasProcessingMSHREntry bool
-	processingMSHREntryIdx int
+	// The transaction that carries MSHR data/transaction pointers
+	hasProcessingTrans     bool
+	processingTrans        *transactionState
+	processingTransList    []*transactionState
+	processingData         []byte
 }
 
 func (s *mshrStage) Tick() bool {
-	if s.hasProcessingMSHREntry {
+	if s.hasProcessingTrans {
 		return s.processOneReq()
 	}
 
@@ -24,15 +26,20 @@ func (s *mshrStage) Tick() bool {
 		return false
 	}
 
-	s.hasProcessingMSHREntry = true
-	s.processingMSHREntryIdx = item.(int)
+	trans := item.(*transactionState)
+	s.hasProcessingTrans = true
+	s.processingTrans = trans
+	s.processingTransList = trans.mshrTransactions
+	s.processingData = trans.mshrData
 
 	return s.processOneReq()
 }
 
 func (s *mshrStage) Reset() {
-	s.hasProcessingMSHREntry = false
-	s.processingMSHREntryIdx = 0
+	s.hasProcessingTrans = false
+	s.processingTrans = nil
+	s.processingTransList = nil
+	s.processingData = nil
 	s.cache.mshrStageBuffer.Clear()
 }
 
@@ -41,25 +48,12 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	mshrEntry := &s.cache.mshrState.Entries[s.processingMSHREntryIdx]
-
-	if len(mshrEntry.TransactionIndices) == 0 {
-		s.hasProcessingMSHREntry = false
+	if len(s.processingTransList) == 0 {
+		s.hasProcessingTrans = false
 		return true
 	}
 
-	transIdx := mshrEntry.TransactionIndices[0]
-
-	if transIdx < 0 || transIdx >= len(s.cache.inFlightTransactions) {
-		// Invalid index, skip
-		mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
-		if len(mshrEntry.TransactionIndices) == 0 {
-			s.hasProcessingMSHREntry = false
-		}
-		return true
-	}
-
-	trans := s.cache.inFlightTransactions[transIdx]
+	trans := s.processingTransList[0]
 
 	transactionPresent := s.findTransaction(trans)
 
@@ -67,22 +61,22 @@ func (s *mshrStage) processOneReq() bool {
 		s.removeTransaction(trans)
 
 		if trans.read != nil {
-			s.respondRead(trans.read, mshrEntry.Data)
+			s.respondRead(trans.read, s.processingData)
 		} else {
 			s.respondWrite(trans.write)
 		}
 
-		mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
-		if len(mshrEntry.TransactionIndices) == 0 {
-			s.hasProcessingMSHREntry = false
+		s.processingTransList = s.processingTransList[1:]
+		if len(s.processingTransList) == 0 {
+			s.hasProcessingTrans = false
 		}
 
 		return true
 	}
 
-	mshrEntry.TransactionIndices = mshrEntry.TransactionIndices[1:]
-	if len(mshrEntry.TransactionIndices) == 0 {
-		s.hasProcessingMSHREntry = false
+	s.processingTransList = s.processingTransList[1:]
+	if len(s.processingTransList) == 0 {
+		s.hasProcessingTrans = false
 	}
 
 	return true

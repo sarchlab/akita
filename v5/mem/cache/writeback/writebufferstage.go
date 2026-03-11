@@ -101,6 +101,11 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	trans.action = bankWriteFetched
 	wb.combineData(trans.mshrEntryIndex)
 
+	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	trans.mshrData = make([]byte, len(mshrEntry.Data))
+	copy(trans.mshrData, mshrEntry.Data)
+	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+
 	cache.MSHRRemove(&wb.cache.mshrState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
@@ -279,6 +284,11 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	mshrEntry.Data = msg.Data
 	wb.combineData(trans.mshrEntryIndex)
 
+	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	trans.mshrData = make([]byte, len(mshrEntry.Data))
+	copy(trans.mshrData, mshrEntry.Data)
+	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+
 	cache.MSHRRemove(&wb.cache.mshrState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
@@ -384,4 +394,19 @@ func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 
 func (wb *writeBufferStage) Reset() {
 	wb.cache.writeBufferBuffer.Clear()
+}
+
+// resolveEntryTransactions collects the actual transaction pointers from
+// the MSHR entry's TransactionIndices. This must be done before any
+// removeTransaction calls, since those shift the slice indices.
+func (wb *writeBufferStage) resolveEntryTransactions(
+	entry *cache.MSHREntryState,
+) []*transactionState {
+	result := make([]*transactionState, 0, len(entry.TransactionIndices))
+	for _, transIdx := range entry.TransactionIndices {
+		if transIdx >= 0 && transIdx < len(wb.cache.inFlightTransactions) {
+			result = append(result, wb.cache.inFlightTransactions[transIdx])
+		}
+	}
+	return result
 }

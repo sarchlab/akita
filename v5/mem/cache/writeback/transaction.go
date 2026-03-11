@@ -59,6 +59,13 @@ type transactionState struct {
 	// MSHR entry reference (into mshrState.Entries)
 	mshrEntryIndex int
 	hasMSHREntry   bool
+
+	// Data saved from MSHR entry before removal (for bank/mshr stage)
+	mshrData         []byte
+	mshrTransactions []*transactionState
+
+	// Temporary field used only during restore to defer pointer resolution
+	mshrTransactionRestoreIndices []int
 }
 
 func (t *transactionState) accessReq() mem.AccessReq {
