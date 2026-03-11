@@ -23,11 +23,11 @@ func Example() {
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	conn.PlugIn(agentA.OutPort)
-	conn.PlugIn(agentB.OutPort)
+	conn.PlugIn(agentA.GetPortByName("Out"))
+	conn.PlugIn(agentB.GetPortByName("Out"))
 
 	state := agentA.GetState()
-	state.PingDst = agentB.OutPort.AsRemote()
+	state.PingDst = agentB.GetPortByName("Out").AsRemote()
 	state.NumPingNeedToSend = 2
 	agentA.SetState(state)
 

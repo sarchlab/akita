@@ -39,16 +39,32 @@ type State struct {
 	CurrentTransactions []pingTransactionState `json:"current_transactions"`
 }
 
-// Comp is a ticking ping component that sends ping requests and responds to
-// them.
-type Comp struct {
-	*modeling.Component[Spec, State]
-
-	OutPort sim.Port
+type middleware struct {
+	comp *modeling.Component[Spec, State]
 }
 
-type middleware struct {
-	*Comp
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *middleware) outPort() sim.Port {
+	return m.comp.GetPortByName("Out")
 }
 
 func (m *middleware) Tick() bool {
@@ -63,7 +79,7 @@ func (m *middleware) Tick() bool {
 }
 
 func (m *middleware) processInput() bool {
-	msgI := m.OutPort.PeekIncoming()
+	msgI := m.outPort().PeekIncoming()
 	if msgI == nil {
 		return false
 	}
@@ -81,7 +97,7 @@ func (m *middleware) processInput() bool {
 }
 
 func (m *middleware) processingPingReq(msg *PingReq) {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 
 	trans := pingTransactionState{
 		SeqID:     msg.SeqID,
@@ -91,24 +107,24 @@ func (m *middleware) processingPingReq(msg *PingReq) {
 	}
 	state.CurrentTransactions = append(state.CurrentTransactions, trans)
 
-	m.Component.SetState(state)
-	m.OutPort.RetrieveIncoming()
+	m.comp.SetState(state)
+	m.outPort().RetrieveIncoming()
 }
 
 func (m *middleware) processingPingRsp(msg *PingRsp) {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 
 	seqID := msg.SeqID
 	startTime := state.StartTimes[seqID]
-	currentTime := m.CurrentTime()
+	currentTime := m.comp.CurrentTime()
 	duration := currentTime - sim.VTimeInSec(startTime)
 
 	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
-	m.OutPort.RetrieveIncoming()
+	m.outPort().RetrieveIncoming()
 }
 
 func (m *middleware) countDown() bool {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 	madeProgress := false
 
 	for i := range state.CurrentTransactions {
@@ -119,14 +135,14 @@ func (m *middleware) countDown() bool {
 	}
 
 	if madeProgress {
-		m.Component.SetState(state)
+		m.comp.SetState(state)
 	}
 
 	return madeProgress
 }
 
 func (m *middleware) sendRsp() bool {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 
 	if len(state.CurrentTransactions) == 0 {
 		return false
@@ -140,26 +156,26 @@ func (m *middleware) sendRsp() bool {
 	rsp := &PingRsp{
 		MsgMeta: sim.MsgMeta{
 			ID:    sim.GetIDGenerator().Generate(),
-			Src:   m.OutPort.AsRemote(),
+			Src:   m.outPort().AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
 		},
 		SeqID: trans.SeqID,
 	}
 
-	err := m.OutPort.Send(rsp)
+	err := m.outPort().Send(rsp)
 	if err != nil {
 		return false
 	}
 
 	state.CurrentTransactions = state.CurrentTransactions[1:]
-	m.Component.SetState(state)
+	m.comp.SetState(state)
 
 	return true
 }
 
 func (m *middleware) sendPing() bool {
-	state := m.Component.GetState()
+	state := m.comp.GetState()
 
 	if state.NumPingNeedToSend == 0 {
 		return false
@@ -168,21 +184,21 @@ func (m *middleware) sendPing() bool {
 	pingMsg := &PingReq{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
-			Src: m.OutPort.AsRemote(),
+			Src: m.outPort().AsRemote(),
 			Dst: state.PingDst,
 		},
 		SeqID: state.NextSeqID,
 	}
 
-	err := m.OutPort.Send(pingMsg)
+	err := m.outPort().Send(pingMsg)
 	if err != nil {
 		return false
 	}
 
-	state.StartTimes = append(state.StartTimes, float64(m.CurrentTime()))
+	state.StartTimes = append(state.StartTimes, float64(m.comp.CurrentTime()))
 	state.NumPingNeedToSend--
 	state.NextSeqID++
-	m.Component.SetState(state)
+	m.comp.SetState(state)
 
 	return true
 }
