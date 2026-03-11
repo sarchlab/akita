@@ -10,26 +10,11 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// type dataMoverLogger struct{}
-
-// func (l *dataMoverLogger) StartTask(task tracing.Task) {
-// 	fmt.Printf("Start task %+v\n", task)
-// }
-
-// func (l *dataMoverLogger) StepTask(task tracing.Task) {
-// 	// Do nothing.
-// }
-
-// func (l *dataMoverLogger) EndTask(task tracing.Task) {
-// 	fmt.Printf("End task %+v\n", task)
-// }
-
 var _ = Describe("DataMover", func() {
 	var (
-		mockCtrl  *gomock.Controller
-		engine    sim.Engine
-		dataMover *Comp
-		// logger     *dataMoverLogger
+		mockCtrl   *gomock.Controller
+		engine     sim.Engine
+		dataMover  *Comp
 		insideMem  *idealmemcontroller.Comp
 		outsideMem *idealmemcontroller.Comp
 		conn       *directconnection.Comp
@@ -84,17 +69,14 @@ var _ = Describe("DataMover", func() {
 			WithOutsidePort(sim.NewPort(nil, 64, 64, "DataMover.DstPort")).
 			Build("DataMover")
 
-		// logger = new(dataMoverLogger)
-		// tracing.CollectTrace(dataMover, logger)
-
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
 		conn.PlugIn(srcPort)
-		conn.PlugIn(dataMover.ctrlPort)
-		conn.PlugIn(dataMover.insidePort)
-		conn.PlugIn(dataMover.outsidePort)
+		conn.PlugIn(dataMover.GetPortByName("Control"))
+		conn.PlugIn(dataMover.GetPortByName("Inside"))
+		conn.PlugIn(dataMover.GetPortByName("Outside"))
 		conn.PlugIn(insideMem.GetPortByName("Top"))
 		conn.PlugIn(outsideMem.GetPortByName("Top"))
 	})
@@ -112,7 +94,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "outside"
 		req.DstAddress = 0
@@ -120,7 +102,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.ctrlPort.Deliver(req)
+		dataMover.GetPortByName("Control").Deliver(req)
 
 		engine.Run()
 
@@ -140,7 +122,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 0
@@ -148,7 +130,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.ctrlPort.Deliver(req)
+		dataMover.GetPortByName("Control").Deliver(req)
 
 		engine.Run()
 
@@ -168,7 +150,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 4096
@@ -176,7 +158,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 4096
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.ctrlPort.Deliver(req)
+		dataMover.GetPortByName("Control").Deliver(req)
 
 		engine.Run()
 
@@ -196,7 +178,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "outside"
 		req.DstAddress = 512
@@ -204,7 +186,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 512
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.ctrlPort.Deliver(req)
+		dataMover.GetPortByName("Control").Deliver(req)
 
 		engine.Run()
 
@@ -216,7 +198,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 0
@@ -224,7 +206,9 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 0
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		Expect(func() { dataMover.ctrlPort.Deliver(req) }).NotTo(Panic())
+		Expect(func() {
+			dataMover.GetPortByName("Control").Deliver(req)
+		}).NotTo(Panic())
 	})
 
 	It("should handle overlapping ranges", func() {
@@ -240,7 +224,7 @@ var _ = Describe("DataMover", func() {
 		req := &DataMoveRequest{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
-		req.Dst = dataMover.ctrlPort.AsRemote()
+		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
 		req.SrcSide = "inside"
 		req.DstAddress = 512
@@ -248,7 +232,7 @@ var _ = Describe("DataMover", func() {
 		req.ByteSize = 512
 		req.TrafficClass = "datamover.DataMoveRequest"
 
-		dataMover.ctrlPort.Deliver(req)
+		dataMover.GetPortByName("Control").Deliver(req)
 
 		engine.Run()
 
