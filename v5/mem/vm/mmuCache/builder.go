@@ -13,18 +13,10 @@ type Builder struct {
 	numLevels       int
 	numBlocks       int
 	pageSize        uint64
-	segLength       int
-	lowModule       sim.Port
-	upModule        sim.Port
-	numMSHREntry    int
-	mshrEntryDepth  int
-	isPrediction    bool
-	bloomFilterSize int
+	lowModule       sim.RemotePort
+	upModule        sim.RemotePort
 	latencyPerLevel uint64
 	log2PageSize    uint64
-
-	maxInflightTransactions int
-	inflightTransactions    int
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -34,29 +26,24 @@ type Builder struct {
 // MakeBuilder returns a Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                    1 * sim.GHz,
-		numReqPerCycle:          4,
-		numLevels:               5,
-		numBlocks:               1,
-		pageSize:                4096,
-		numMSHREntry:            64,
-		mshrEntryDepth:          64,
-		latencyPerLevel:         100,
-		log2PageSize:            12,
-		isPrediction:            false,
-		bloomFilterSize:         64,
-		maxInflightTransactions: 16,
-		inflightTransactions:    0,
-		segLength:               16,
+		freq:            1 * sim.GHz,
+		numReqPerCycle:  4,
+		numLevels:       5,
+		numBlocks:       1,
+		pageSize:        4096,
+		latencyPerLevel: 100,
+		log2PageSize:    12,
 	}
 }
 
+// WithLatencyPerLevel sets the latency per level
 func (b Builder) WithLatencyPerLevel(latency uint64) Builder {
 	b.latencyPerLevel = latency
 	return b
 }
 
-func (b Builder) WithUpperModule(m sim.Port) Builder {
+// WithUpperModule sets the upper module remote port
+func (b Builder) WithUpperModule(m sim.RemotePort) Builder {
 	b.upModule = m
 	return b
 }
@@ -64,16 +51,6 @@ func (b Builder) WithUpperModule(m sim.Port) Builder {
 // WithNumLevels sets the number of levels in the mmuCache
 func (b Builder) WithNumLevels(n int) Builder {
 	b.numLevels = n
-	return b
-}
-
-func (b Builder) WithSegLength(length int) Builder {
-	b.segLength = length
-	return b
-}
-
-func (b Builder) WithMSHREntryDepth(depth int) Builder {
-	b.mshrEntryDepth = depth
 	return b
 }
 
@@ -110,24 +87,8 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of mmuCache miss.
-func (b Builder) WithLowModule(lowModule sim.Port) Builder {
+func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
 	b.lowModule = lowModule
-	return b
-}
-
-// WithNumMSHREntry sets the number of mshr entry
-func (b Builder) WithNumMSHREntry(num int) Builder {
-	b.numMSHREntry = num
-	return b
-}
-
-func (b Builder) WithPrediction() Builder {
-	b.isPrediction = true
-	return b
-}
-
-func (b Builder) WithBloomFilterSize(size int) Builder {
-	b.bloomFilterSize = size
 	return b
 }
 
@@ -162,6 +123,13 @@ func (b Builder) Build(name string) *Comp {
 		Log2PageSize:    b.log2PageSize,
 		NumReqPerCycle:  b.numReqPerCycle,
 		LatencyPerLevel: b.latencyPerLevel,
+		LowModulePort:   b.lowModule,
+		UpModulePort:    b.upModule,
+	}
+
+	initialState := State{
+		CurrentState: mmuCacheStateEnable,
+		Table:        initSets(b.numLevels, b.numBlocks),
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
@@ -169,34 +137,26 @@ func (b Builder) Build(name string) *Comp {
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
+	modelComp.SetState(initialState)
 
-	mmuCache := &Comp{
+	c := &Comp{
 		Component: modelComp,
 	}
 
-	mmuCache.LowModule = b.lowModule
-	mmuCache.UpModule = b.upModule
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
 
-	b.createPorts(name, mmuCache)
+	b.bottomPort.SetComponent(c)
+	modelComp.AddPort("Bottom", b.bottomPort)
 
-	mmuCache.AddMiddleware(&ctrlMiddleware{Comp: mmuCache})
-	mmuCache.AddMiddleware(&mmuCacheMiddleware{Comp: mmuCache})
+	b.controlPort.SetComponent(c)
+	modelComp.AddPort("Control", b.controlPort)
 
-	mmuCache.reset()
-	mmuCache.state = mmuCacheStateEnable
+	ctrlMW := &ctrlMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(ctrlMW)
 
-	return mmuCache
-}
+	cacheMW := &mmuCacheMiddleware{comp: modelComp}
+	modelComp.AddMiddleware(cacheMW)
 
-func (b Builder) createPorts(name string, mmuCache *Comp) {
-	mmuCache.topPort = b.topPort
-	mmuCache.topPort.SetComponent(mmuCache)
-	mmuCache.AddPort("Top", mmuCache.topPort)
-	mmuCache.bottomPort = b.bottomPort
-	mmuCache.bottomPort.SetComponent(mmuCache)
-	mmuCache.AddPort("Bottom", mmuCache.bottomPort)
-
-	mmuCache.controlPort = b.controlPort
-	mmuCache.controlPort.SetComponent(mmuCache)
-	mmuCache.AddPort("Control", mmuCache.controlPort)
+	return c
 }

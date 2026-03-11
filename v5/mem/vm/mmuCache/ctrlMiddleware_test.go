@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -12,8 +13,7 @@ import (
 var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	var (
 		mockCtrl    *gomock.Controller
-		engine      sim.Engine
-		cache       *Comp
+		comp        *modeling.Component[Spec, State]
 		ctrl        *ctrlMiddleware
 		topPort     *MockPort
 		bottomPort  *MockPort
@@ -22,26 +22,40 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
 
 		topPort = NewMockPort(mockCtrl)
+		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
+		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().AsRemote().Return(sim.RemotePort("ControlPort")).AnyTimes()
 		controlPort.EXPECT().Name().Return("ControlPort").AnyTimes()
+		controlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
-		cache = MakeBuilder().
-			WithEngine(engine).
-			WithTopPort(sim.NewPort(nil, 4800, 4800, "MMUCache.TopPort")).
-			WithBottomPort(sim.NewPort(nil, 4800, 4800, "MMUCache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 1, 1, "MMUCache.ControlPort")).
+		spec := Spec{
+			NumBlocks:       1,
+			NumLevels:       5,
+			PageSize:        4096,
+			Log2PageSize:    12,
+			NumReqPerCycle:  4,
+			LatencyPerLevel: 100,
+		}
+
+		initialState := State{
+			CurrentState: mmuCacheStatePause,
+			Table:        initSets(spec.NumLevels, spec.NumBlocks),
+		}
+
+		comp = modeling.NewBuilder[Spec, State]().
+			WithSpec(spec).
 			Build("MMUCache")
-		cache.topPort = topPort
-		cache.bottomPort = bottomPort
-		cache.controlPort = controlPort
-		cache.state = mmuCacheStatePause
+		comp.SetState(initialState)
 
-		ctrl = &ctrlMiddleware{Comp: cache}
+		comp.AddPort("Top", topPort)
+		comp.AddPort("Bottom", bottomPort)
+		comp.AddPort("Control", controlPort)
+
+		ctrl = &ctrlMiddleware{comp: comp}
 	})
 
 	AfterEach(func() {
@@ -92,12 +106,19 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		madeProgress := ctrl.handleMMUCacheRestart(req)
 
+		next := comp.GetNextState()
 		Expect(madeProgress).To(BeTrue())
-		Expect(cache.state).To(Equal(mmuCacheStateEnable))
+		Expect(next.CurrentState).To(Equal(mmuCacheStateEnable))
 	})
 
 	It("should accept flush request in enable state", func() {
-		cache.state = mmuCacheStateEnable
+		// Set state to enable (both base and next)
+		spec := comp.GetSpec()
+		comp.SetState(State{
+			CurrentState: mmuCacheStateEnable,
+			Table:        initSets(spec.NumLevels, spec.NumBlocks),
+		})
+
 		req := &FlushReq{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = sim.RemotePort("Requester")
@@ -106,13 +127,22 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
 
+		next := comp.GetNextState()
 		Expect(madeProgress).To(BeTrue())
-		Expect(cache.inflightFlushReq).To(Equal(req))
-		Expect(cache.state).To(Equal(mmuCacheStateFlush))
+		Expect(next.InflightFlushReqActive).To(BeTrue())
+		Expect(next.InflightFlushReqID).To(Equal(req.ID))
+		Expect(next.InflightFlushReqSrc).To(Equal(req.Src))
+		Expect(next.CurrentState).To(Equal(mmuCacheStateFlush))
 	})
 
 	It("should handle control pause", func() {
-		cache.state = mmuCacheStateEnable
+		// Set state to enable (both base and next)
+		spec := comp.GetSpec()
+		comp.SetState(State{
+			CurrentState: mmuCacheStateEnable,
+			Table:        initSets(spec.NumLevels, spec.NumBlocks),
+		})
+
 		msg := &mem.ControlMsg{
 			Pause: true,
 		}
@@ -127,7 +157,8 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		madeProgress := ctrl.handleIncomingCommands()
 
+		next := comp.GetNextState()
 		Expect(madeProgress).To(BeTrue())
-		Expect(cache.state).To(Equal(mmuCacheStatePause))
+		Expect(next.CurrentState).To(Equal(mmuCacheStatePause))
 	})
 })
