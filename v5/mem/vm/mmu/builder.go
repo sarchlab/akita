@@ -111,53 +111,41 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	mmu := &Comp{
-		Component:              modelComp,
-		PageAccessedByDeviceID: make(map[uint64][]uint64),
-	}
-
-	if spec.AutoPageAllocation {
-		mmu.nextPhysicalPage = 0
-	}
+	mmu := &Comp{Component: modelComp}
 
 	b.createPorts(name, mmu)
-	b.createPageTable(mmu)
 
-	mw := &middleware{Comp: mmu}
+	pt := b.createPageTable()
+
+	mw := &middleware{comp: modelComp, pageTable: pt}
 	mmu.AddMiddleware(mw)
 
 	return mmu
 }
 
-func (b Builder) createPageTable(mmu *Comp) {
+func (b Builder) createPageTable() vm.PageTable {
 	if b.pageTable != nil {
-		// Check if the provided page table is compatible with the MMU's page size
 		b.validatePageTablePageSize()
-		mmu.pageTable = b.pageTable
-	} else {
-		mmu.pageTable = vm.NewPageTable(b.log2PageSize)
+		return b.pageTable
 	}
+
+	return vm.NewPageTable(b.log2PageSize)
 }
 
 // validatePageTablePageSize checks if the provided page table's page size
 // is consistent with the MMU's log2PageSize configuration.
 func (b Builder) validatePageTablePageSize() {
-	// If the page table implements pageTable interface with GetLog2PageSize, validate the page size
 	if pageTableInterface, ok := b.pageTable.(pageTable); ok {
 		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
 		if pageTableLog2PageSize != b.log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}
 	}
-	// For page tables that don't implement the local pageTable interface, we cannot validate
-	// the page size so we assume the user has ensured compatibility
 }
 
 func (b Builder) createPorts(name string, mmu *Comp) {
-	mmu.topPort = b.topPort
-	mmu.topPort.SetComponent(mmu)
-	mmu.AddPort("Top", mmu.topPort)
-	mmu.migrationPort = b.migrationPort
-	mmu.migrationPort.SetComponent(mmu)
-	mmu.AddPort("Migration", mmu.migrationPort)
+	b.topPort.SetComponent(mmu)
+	mmu.AddPort("Top", b.topPort)
+	b.migrationPort.SetComponent(mmu)
+	mmu.AddPort("Migration", b.migrationPort)
 }
