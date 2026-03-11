@@ -4,19 +4,28 @@
 
 Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model with fully serializable State.
 
-## Current Phase: Investigating M9
+## Current Phase: M9 — Component Guide + Comp Elimination Design
 
-### M9: Eliminate Comp Wrapper — Use modeling.Component Directly (INVESTIGATING)
+### M9: Write Component Creation Guide (IN PROGRESS)
+
+Human issue #148: Write a guide on how to create a V5 component. This documents the current component model (Spec, State, Ports, Middleware, Hooks) and serves as both user documentation and a design reference for the Comp elimination work.
+
+**Budget**: 4 cycles
+
+### M10: Eliminate Comp Wrapper — Use modeling.Component Directly (BLOCKED — awaiting human feedback)
 
 Human issue #145: "A component should only have spec, ports, states, middleware and hooks." Can we remove all per-component Comp structs and use `modeling.Component` directly?
 
-**Status**: Research phase. Two analysts (Iris, Diana) are investigating feasibility and risks. Discussion required before any implementation.
+**Status**: Analysis complete. Design proposal posted on issue #145.
 
-**Key questions**:
-- Where do live runtime objects (pipelines, buffers, directory, MSHR) live if not on Comp?
-- Can ports be accessed by name instead of stored as fields?
-- What design pattern replaces Comp for holding middleware-shared runtime state?
-- What are the performance and API implications?
+**Key findings from analysis (Iris #146, Diana #147)**:
+- 16 Comp structs with ~159 extra fields in 4 categories
+- Port refs (42), immutable config (22), mutable scalars (10) → CAN be eliminated (easy)
+- Live runtime objects (103) → CAN be eliminated via RuntimeContext pattern on middleware (harder)
+- Proposed 3-phase approach: slim Comp → RuntimeContext → eliminate Comp
+- Awaiting human direction before implementing
+
+**Estimated budget**: 12-16 cycles (phased)
 
 ## ✅ Previous Milestones Complete
 

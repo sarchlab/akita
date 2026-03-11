@@ -24,7 +24,11 @@ All first-party components have been structurally ported to use the `modeling` p
 
 All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
 
-### 6. Eliminate Comp Wrapper — Use modeling.Component Directly (IN PROGRESS)
+### 6. Component Creation Guide (IN PROGRESS)
+
+Human raised issue #148: Write a guide on how to create a component in V5. This guide should document the current component model including Spec, State, Ports, Middleware, Hooks, and the Builder pattern.
+
+### 7. Eliminate Comp Wrapper — Use modeling.Component Directly (DISCUSSION)
 
 Human raised issue #145: "A component should only have spec, ports, states, middleware and hooks. Can we just remove all the components struct definition from all the individual components and use modeling.component instead?"
 
@@ -34,7 +38,7 @@ Human wants to discuss before coding. The goal is to eliminate all per-component
 - Live runtime objects (pipelines, buffers, etc.) should be managed by middleware or reconstructed as needed
 - No duplicated fields between Comp and State
 
-This is a design discussion first — investigate feasibility and propose a concrete plan before implementing.
+Analysis complete. Awaiting human feedback on design proposal before implementing.
 
 ## Success Criteria
 
