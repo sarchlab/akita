@@ -139,19 +139,17 @@ type middleware struct {
 
 // Tick updates memory controller's internal state.
 func (m *middleware) Tick() (madeProgress bool) {
-	state := m.Comp.GetState()
+	state := m.Comp.GetNextState()
 	spec := m.Comp.GetSpec()
 
 	progress := false
 
-	progress = m.respond(&spec, &state) || progress
-	progress = m.respond(&spec, &state) || progress
-	progress = tickBanks(&spec, &state) || progress
-	progress = m.issue(&spec, &state) || progress
-	progress = tickSubTransQueue(&spec, &state) || progress
-	progress = m.parseTop(&spec, &state) || progress
-
-	m.Comp.SetState(state)
+	progress = m.respond(&spec, state) || progress
+	progress = m.respond(&spec, state) || progress
+	progress = tickBanks(&spec, state) || progress
+	progress = m.issue(&spec, state) || progress
+	progress = tickSubTransQueue(&spec, state) || progress
+	progress = m.parseTop(&spec, state) || progress
 
 	return progress
 }
