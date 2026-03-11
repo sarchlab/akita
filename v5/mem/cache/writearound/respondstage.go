@@ -7,7 +7,7 @@ import (
 )
 
 type respondStage struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (s *respondStage) Tick() bool {

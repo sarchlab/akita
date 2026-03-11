@@ -12,7 +12,7 @@ import (
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Comp
+		cache    *middleware
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -26,10 +26,10 @@ var _ = Describe("Respond Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		cache = &Comp{
+		cache = &middleware{
 			topPort: topPort,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		cache.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{}).

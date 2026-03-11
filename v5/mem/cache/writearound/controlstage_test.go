@@ -19,7 +19,7 @@ var _ = Describe("Control Stage", func() {
 		transactions []*transactionState
 		directory    *MockDirectory
 		s            *controlStage
-		cache        *Comp
+		cache        *middleware
 		inBuf        *MockBuffer
 		mshr         *MockMSHR
 		c            *coalescer
@@ -51,14 +51,14 @@ var _ = Describe("Control Stage", func() {
 
 		transactions = nil
 
-		cache = &Comp{
+		cache = &middleware{
 			topPort:       topPort,
 			bottomPort:    bottomPort,
 			dirBuf:        inBuf,
 			mshr:          mshr,
 			coalesceStage: c,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		cache.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{}).

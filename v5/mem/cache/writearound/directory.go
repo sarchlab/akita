@@ -17,7 +17,7 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directory struct {
-	cache *Comp
+	cache *middleware
 
 	pipeline queueing.Pipeline
 	buf      queueing.Buffer

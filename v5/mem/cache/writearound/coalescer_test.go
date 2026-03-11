@@ -13,7 +13,7 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Comp
+		cache    *middleware
 		topPort  *MockPort
 		dirBuf   *MockBuffer
 		c        coalescer
@@ -23,11 +23,11 @@ var _ = Describe("Coalescer", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
 		dirBuf = NewMockBuffer(mockCtrl)
-		cache = &Comp{
+		cache = &middleware{
 			topPort: topPort,
 			dirBuf:  dirBuf,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		cache.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{

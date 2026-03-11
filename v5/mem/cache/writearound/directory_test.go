@@ -24,7 +24,7 @@ var _ = Describe("Directory", func() {
 		pipeline            *MockPipeline
 		buf                 *MockBuffer
 		d                   *directory
-		c                   *Comp
+		c                   *middleware
 	)
 
 	BeforeEach(func() {
@@ -44,7 +44,7 @@ var _ = Describe("Directory", func() {
 		pipeline = NewMockPipeline(mockCtrl)
 		buf = NewMockBuffer(mockCtrl)
 		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
-		c = &Comp{
+		c = &middleware{
 			bottomPort:          bottomPort,
 			directory:           dir,
 			dirBuf:              inBuf,
@@ -52,7 +52,7 @@ var _ = Describe("Directory", func() {
 			mshr:                mshr,
 			bankBufs:            []queueing.Buffer{bankBuf},
 		}
-		c.Component = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{

@@ -1,8 +1,6 @@
 package writearound
 
 import (
-	"io"
-
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -11,24 +9,24 @@ import (
 
 // transactionSnapshot is the serializable representation of a transactionState.
 type transactionSnapshot struct {
-	ID                     string       `json:"id"`
-	HasRead                bool         `json:"has_read"`
-	ReadMsg                sim.MsgMeta  `json:"read_msg"`
-	HasReadToBottom        bool         `json:"has_read_to_bottom"`
-	ReadToBottomMsg        sim.MsgMeta  `json:"read_to_bottom_msg"`
-	HasWrite               bool         `json:"has_write"`
-	WriteMsg               sim.MsgMeta  `json:"write_msg"`
-	HasWriteToBottom       bool         `json:"has_write_to_bottom"`
-	WriteToBottomMsg       sim.MsgMeta  `json:"write_to_bottom_msg"`
-	PreCoalesceTransIdxs   []int        `json:"pre_coalesce_trans_idxs"`
-	BankAction             int          `json:"bank_action"`
-	HasBlock               bool         `json:"has_block"`
-	BlockSetID             int          `json:"block_set_id"`
-	BlockWayID             int          `json:"block_way_id"`
-	Data                   []uint8      `json:"data"`
-	WriteFetchedDirtyMask  []bool       `json:"write_fetched_dirty_mask"`
-	FetchAndWrite          bool         `json:"fetch_and_write"`
-	Done                   bool         `json:"done"`
+	ID                    string      `json:"id"`
+	HasRead               bool        `json:"has_read"`
+	ReadMsg               sim.MsgMeta `json:"read_msg"`
+	HasReadToBottom       bool        `json:"has_read_to_bottom"`
+	ReadToBottomMsg       sim.MsgMeta `json:"read_to_bottom_msg"`
+	HasWrite              bool        `json:"has_write"`
+	WriteMsg              sim.MsgMeta `json:"write_msg"`
+	HasWriteToBottom      bool        `json:"has_write_to_bottom"`
+	WriteToBottomMsg      sim.MsgMeta `json:"write_to_bottom_msg"`
+	PreCoalesceTransIdxs  []int       `json:"pre_coalesce_trans_idxs"`
+	BankAction            int         `json:"bank_action"`
+	HasBlock              bool        `json:"has_block"`
+	BlockSetID            int         `json:"block_set_id"`
+	BlockWayID            int         `json:"block_way_id"`
+	Data                  []uint8     `json:"data"`
+	WriteFetchedDirtyMask []bool      `json:"write_fetched_dirty_mask"`
+	FetchAndWrite         bool        `json:"fetch_and_write"`
+	Done                  bool        `json:"done"`
 }
 
 // dirPipelineStageState captures one directory pipeline slot.
@@ -499,112 +497,4 @@ func mshrTransLookup(
 	}
 
 	return m
-}
-
-func (c *Comp) snapshotState() State {
-	lookup := buildTransIndex(
-		c.transactions, c.postCoalesceTransactions)
-
-	s := State{
-		IsPaused:       c.isPaused,
-		NumTransactions: len(c.transactions),
-	}
-
-	s.DirectoryState = cache.SnapshotDirectory(c.directory)
-	s.MSHRState = cache.SnapshotMSHR(
-		c.mshr, mshrTransLookup(lookup))
-	s.Transactions = snapshotAllTransactions(
-		c.transactions, c.postCoalesceTransactions, lookup)
-	s.DirBufIndices = snapshotDirBuf(c.dirBuf, lookup)
-	s.BankBufIndices = snapshotBankBufs(c.bankBufs, lookup)
-	s.DirPipelineStages = snapshotDirPipeline(
-		c.directoryStage.pipeline, lookup)
-	s.DirPostPipelineBufIndices = snapshotDirPostBuf(
-		c.directoryStage.buf, lookup)
-	s.BankPipelineStages = snapshotBankPipelines(
-		c.bankStages, lookup)
-	s.BankPostPipelineBufIndices = snapshotBankPostBufs(
-		c.bankStages, lookup)
-
-	return s
-}
-
-func (c *Comp) restoreFromState(s State) {
-	c.isPaused = s.IsPaused
-
-	cache.RestoreDirectory(c.directory, s.DirectoryState)
-
-	trans, postCoalesce := restoreAllTransactions(
-		s.Transactions, s.NumTransactions, c.directory)
-	c.transactions = trans
-	c.postCoalesceTransactions = postCoalesce
-
-	allTrans := make([]*transactionState, len(s.Transactions))
-	copy(allTrans[:s.NumTransactions], trans)
-	copy(allTrans[s.NumTransactions:], postCoalesce)
-
-	restoreMSHR(c, s, allTrans)
-	restoreBuffersAndPipelines(c, s, allTrans)
-}
-
-func restoreMSHR(
-	c *Comp,
-	s State,
-	allTrans []*transactionState,
-) {
-	ifaces := make([]interface{}, len(allTrans))
-	for i, t := range allTrans {
-		ifaces[i] = t
-	}
-
-	cache.RestoreMSHR(c.mshr, s.MSHRState, ifaces, c.directory)
-}
-
-func restoreBuffersAndPipelines(
-	c *Comp,
-	s State,
-	allTrans []*transactionState,
-) {
-	restoreDirBuf(c.dirBuf, s.DirBufIndices, allTrans)
-	restoreBankBufs(c.bankBufs, s.BankBufIndices, allTrans)
-	restoreDirPipeline(
-		c.directoryStage.pipeline, s.DirPipelineStages, allTrans)
-	restoreDirPostBuf(
-		c.directoryStage.buf, s.DirPostPipelineBufIndices, allTrans)
-	restoreBankPipelines(c.bankStages, s.BankPipelineStages, allTrans)
-	restoreBankPostBufs(
-		c.bankStages, s.BankPostPipelineBufIndices, allTrans)
-}
-
-// GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
-
-	return state
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
-	}
-
-	c.SetState(c.Component.GetState())
-
-	return nil
 }

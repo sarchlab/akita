@@ -166,8 +166,8 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 	return b
 }
 
-// Build returns a new cache unit
-func (b Builder) Build(name string) *Comp {
+// Build returns a new cache component
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.assertAllRequiredInformationIsAvailable()
 
 	blockSize := 1 << b.log2BlockSize
@@ -186,97 +186,96 @@ func (b Builder) Build(name string) *Comp {
 		DirLatency:            b.dirLatency,
 	}
 
-	modelComp := modeling.NewBuilder[Spec, State]().
+	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
 
-	c := &Comp{
-		Component: modelComp,
+	m := &middleware{
+		comp: comp,
 	}
 
-	c.topPort = b.topPort
-	c.topPort.SetComponent(c)
-	c.AddPort("Top", c.topPort)
-	c.bottomPort = b.bottomPort
-	c.bottomPort.SetComponent(c)
-	c.AddPort("Bottom", c.bottomPort)
-	c.controlPort = b.controlPort
-	c.controlPort.SetComponent(c)
-	c.AddPort("Control", c.controlPort)
+	m.topPort = b.topPort
+	m.topPort.SetComponent(comp)
+	comp.AddPort("Top", m.topPort)
+	m.bottomPort = b.bottomPort
+	m.bottomPort.SetComponent(comp)
+	comp.AddPort("Bottom", m.bottomPort)
+	m.controlPort = b.controlPort
+	m.controlPort.SetComponent(comp)
+	comp.AddPort("Control", m.controlPort)
 
-	c.dirBuf = queueing.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
-	c.bankBufs = make([]queueing.Buffer, b.numBank)
+	m.dirBuf = queueing.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
+	m.bankBufs = make([]queueing.Buffer, b.numBank)
 
 	for i := 0; i < b.numBank; i++ {
-		c.bankBufs[i] = queueing.NewBuffer(
+		m.bankBufs[i] = queueing.NewBuffer(
 			fmt.Sprintf("%s.Bank%d.Buffer", name, i),
 			b.numReqPerCycle,
 		)
 	}
 
-	c.mshr = cache.NewMSHR(b.numMSHREntry)
-	c.directory = cache.NewDirectory(
+	m.mshr = cache.NewMSHR(b.numMSHREntry)
+	m.directory = cache.NewDirectory(
 		numSets, b.wayAssociativity, blockSize,
 		cache.NewLRUVictimFinder())
-	c.storage = mem.NewStorage(b.totalByteSize)
+	m.storage = mem.NewStorage(b.totalByteSize)
 
-	b.configureAddressMapper(c)
+	b.configureAddressMapper(m)
 
-	b.buildStages(c)
+	b.buildStages(m)
 
 	if b.visTracer != nil {
-		tracing.CollectTrace(c, b.visTracer)
+		tracing.CollectTrace(m, b.visTracer)
 	}
 
-	middleware := &middleware{Comp: c}
-	c.AddMiddleware(middleware)
+	comp.AddMiddleware(m)
 
-	return c
+	return comp
 }
 
-func (b *Builder) buildStages(c *Comp) {
-	c.coalesceStage = &coalescer{cache: c}
-	b.buildDirStage(c)
-	b.buildBankStages(c)
-	c.parseBottomStage = &bottomParser{cache: c}
-	c.respondStage = &respondStage{cache: c}
+func (b *Builder) buildStages(m *middleware) {
+	m.coalesceStage = &coalescer{cache: m}
+	b.buildDirStage(m)
+	b.buildBankStages(m)
+	m.parseBottomStage = &bottomParser{cache: m}
+	m.respondStage = &respondStage{cache: m}
 
-	c.controlStage = &controlStage{
-		ctrlPort:     c.controlPort,
-		transactions: &c.transactions,
-		directory:    c.directory,
-		cache:        c,
-		bankStages:   c.bankStages,
-		coalescer:    c.coalesceStage,
+	m.controlStage = &controlStage{
+		ctrlPort:     m.controlPort,
+		transactions: &m.transactions,
+		directory:    m.directory,
+		cache:        m,
+		bankStages:   m.bankStages,
+		coalescer:    m.coalesceStage,
 	}
 }
 
-func (b *Builder) buildDirStage(c *Comp) {
+func (b *Builder) buildDirStage(m *middleware) {
 	buf := queueing.NewBuffer(
-		c.Name()+".DirectoryStage.PostPipelineBuffer",
+		m.comp.Name()+".DirectoryStage.PostPipelineBuffer",
 		b.numReqPerCycle,
 	)
-	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", c.Name())
+	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", m.comp.Name())
 	pipeline := queueing.MakeBuilder().
 		WithPipelineWidth(b.numReqPerCycle).
 		WithNumStage(b.dirLatency).
 		WithCyclePerStage(1).
 		WithPostPipelineBuffer(buf).
 		Build(pipelineName)
-	c.directoryStage = &directory{
-		cache:    c,
+	m.directoryStage = &directory{
+		cache:    m,
 		buf:      buf,
 		pipeline: pipeline,
 	}
 }
 
-func (b *Builder) buildBankStages(c *Comp) {
+func (b *Builder) buildBankStages(m *middleware) {
 	for i := 0; i < b.numBank; i++ {
-		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", c.Name(), i)
+		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", m.comp.Name(), i)
 		postPipelineBuf := queueing.NewBuffer(
-			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", c.Name(), i),
+			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
 			b.numReqPerCycle,
 		)
 		pipeline := queueing.MakeBuilder().
@@ -286,13 +285,13 @@ func (b *Builder) buildBankStages(c *Comp) {
 			WithPostPipelineBuffer(postPipelineBuf).
 			Build(pipelineName)
 		bs := &bankStage{
-			cache:           c,
+			cache:           m,
 			bankID:          i,
 			numReqPerCycle:  b.numReqPerCycle,
 			pipeline:        pipeline,
 			postPipelineBuf: postPipelineBuf,
 		}
-		c.bankStages = append(c.bankStages, bs)
+		m.bankStages = append(m.bankStages, bs)
 
 		if b.visTracer != nil {
 			tracing.CollectTrace(bs.pipeline, b.visTracer)
@@ -300,9 +299,9 @@ func (b *Builder) buildBankStages(c *Comp) {
 	}
 }
 
-func (b *Builder) configureAddressMapper(c *Comp) {
+func (b *Builder) configureAddressMapper(m *middleware) {
 	if b.addressToPortMapper != nil {
-		c.addressToPortMapper = b.addressToPortMapper
+		m.addressToPortMapper = b.addressToPortMapper
 		return
 	}
 
@@ -311,7 +310,7 @@ func (b *Builder) configureAddressMapper(c *Comp) {
 		if len(b.remotePorts) != 1 {
 			panic("single address mapper requires exactly 1 port")
 		}
-		c.addressToPortMapper = &mem.SinglePortMapper{
+		m.addressToPortMapper = &mem.SinglePortMapper{
 			Port: b.remotePorts[0],
 		}
 	case "interleaved":
@@ -320,7 +319,7 @@ func (b *Builder) configureAddressMapper(c *Comp) {
 		}
 		mapper := mem.NewInterleavedAddressPortMapper(4096)
 		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-		c.addressToPortMapper = mapper
+		m.addressToPortMapper = mapper
 	default:
 		panic("addressMapperType must be \"single\" or \"interleaved\"")
 	}

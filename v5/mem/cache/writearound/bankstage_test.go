@@ -19,7 +19,7 @@ var _ = Describe("Bankstage", func() {
 		pipeline        *MockPipeline
 		postPipelineBuf *MockBuffer
 		s               *bankStage
-		c               *Comp
+		c               *middleware
 	)
 
 	BeforeEach(func() {
@@ -28,11 +28,11 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 		pipeline = NewMockPipeline(mockCtrl)
 		postPipelineBuf = NewMockBuffer(mockCtrl)
-		c = &Comp{
+		c = &middleware{
 			bankBufs: []queueing.Buffer{inBuf},
 			storage:  storage,
 		}
-		c.Component = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{

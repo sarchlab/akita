@@ -9,7 +9,7 @@ import (
 )
 
 type bottomParser struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (p *bottomParser) Tick() bool {

@@ -7,6 +7,7 @@ import (
 
 	. "github.com/sarchlab/akita/v5/mem/cache/writearound"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
@@ -21,7 +22,7 @@ var _ = Describe("Cache", func() {
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
 		cuPort              *MockPort
-		c                   *Comp
+		c                   *modeling.Component[Spec, State]
 	)
 
 	BeforeEach(func() {

@@ -19,7 +19,7 @@ var _ = Describe("Bottom Parser", func() {
 		bankBuf    *MockBuffer
 		mshr       *MockMSHR
 		p          *bottomParser
-		c          *Comp
+		c          *middleware
 	)
 
 	BeforeEach(func() {
@@ -27,12 +27,12 @@ var _ = Describe("Bottom Parser", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
 		mshr = NewMockMSHR(mockCtrl)
-		c = &Comp{
+		c = &middleware{
 			bottomPort: bottomPort,
 			mshr:       mshr,
 			bankBufs:   []queueing.Buffer{bankBuf},
 		}
-		c.Component = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
