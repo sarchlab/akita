@@ -173,13 +173,15 @@ func (a *MemAccessAgent) doRead() bool {
 		return false
 	}
 
-	readReq := mem.ReadReqBuilder{}.
-		WithSrc(a.memPort.AsRemote()).
-		WithDst(a.LowModule.AsRemote()).
-		WithAddress(address).
-		WithByteSize(4).
-		WithPID(1).
-		Build()
+	readReq := &mem.ReadReq{}
+	readReq.ID = sim.GetIDGenerator().Generate()
+	readReq.Src = a.memPort.AsRemote()
+	readReq.Dst = a.LowModule.AsRemote()
+	readReq.Address = address
+	readReq.AccessByteSize = 4
+	readReq.PID = 1
+	readReq.TrafficBytes = 12
+	readReq.TrafficClass = "mem.ReadReq"
 
 	err := a.memPort.Send(readReq)
 	if err == nil {
@@ -248,13 +250,16 @@ func (a *MemAccessAgent) doWrite() bool {
 		return false
 	}
 
-	writeReq := mem.WriteReqBuilder{}.
-		WithSrc(a.memPort.AsRemote()).
-		WithDst(a.LowModule.AsRemote()).
-		WithAddress(address).
-		WithPID(1).
-		WithData(uint32ToBytes(data)).
-		Build()
+	writeData := uint32ToBytes(data)
+	writeReq := &mem.WriteReq{}
+	writeReq.ID = sim.GetIDGenerator().Generate()
+	writeReq.Src = a.memPort.AsRemote()
+	writeReq.Dst = a.LowModule.AsRemote()
+	writeReq.Address = address
+	writeReq.PID = 1
+	writeReq.Data = writeData
+	writeReq.TrafficBytes = len(writeData) + 12
+	writeReq.TrafficClass = "mem.WriteReq"
 
 	err := a.memPort.Send(writeReq)
 	if err == nil {

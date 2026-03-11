@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/dram/internal/addressmapping"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,7 +30,10 @@ var _ = Describe("ClosePageCommandCreator", func() {
 	})
 
 	It("should create read precharge commands", func() {
-		read := mem.ReadReqBuilder{}.Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		trans := &signal.Transaction{Read: read}
 		subTrans := &signal.SubTransaction{
 			Transaction: trans,

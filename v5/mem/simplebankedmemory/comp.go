@@ -331,12 +331,14 @@ func (m *middleware) finalizeRead(
 		return false
 	}
 
-	rsp := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Meta().Src).
-		WithRspTo(msg.Meta().ID).
-		WithData(item.readData).
-		Build()
+	rsp := &mem.DataReadyRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = msg.Meta().Src
+	rsp.RspTo = msg.Meta().ID
+	rsp.Data = item.readData
+	rsp.TrafficBytes = len(item.readData) + 4
+	rsp.TrafficClass = "mem.DataReadyRsp"
 
 	if err := m.topPort.Send(rsp); err != nil {
 		return false
@@ -390,11 +392,13 @@ func (m *middleware) finalizeWrite(
 		return false
 	}
 
-	rsp := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Meta().Src).
-		WithRspTo(msg.Meta().ID).
-		Build()
+	rsp := &mem.WriteDoneRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.topPort.AsRemote()
+	rsp.Dst = msg.Meta().Src
+	rsp.RspTo = msg.Meta().ID
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.WriteDoneRsp"
 
 	if err := m.topPort.Send(rsp); err != nil {
 		return false

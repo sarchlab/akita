@@ -89,11 +89,13 @@ var _ = Describe("Directory", func() {
 		)
 
 		BeforeEach(func() {
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x104
+			read.PID = 1
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 
 			trans = &transaction{
 				read: read,
@@ -127,11 +129,13 @@ var _ = Describe("Directory", func() {
 			block = &cache.Block{
 				IsValid: true,
 			}
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x104
+			read.PID = 1
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			trans = &transaction{
 				read: read,
 			}
@@ -189,11 +193,13 @@ var _ = Describe("Directory", func() {
 				IsValid: true,
 			}
 			mshrEntry = &cache.MSHREntry{}
-			read = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithByteSize(4).
-				Build()
+			read = &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.Address = 0x104
+			read.PID = 1
+			read.AccessByteSize = 4
+			read.TrafficBytes = 12
+			read.TrafficClass = "mem.ReadReq"
 			trans = &transaction{
 				read: read,
 			}
@@ -288,11 +294,14 @@ var _ = Describe("Directory", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4}).
-				Build()
+			writeMshrData := []byte{1, 2, 3, 4}
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x104
+			write.PID = 1
+			write.Data = writeMshrData
+			write.TrafficBytes = len(writeMshrData) + 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write: write,
 			}
@@ -332,11 +341,14 @@ var _ = Describe("Directory", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4}).
-				Build()
+			writeHitData := []byte{1, 2, 3, 4}
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x104
+			write.PID = 1
+			write.Data = writeHitData
+			write.TrafficBytes = len(writeHitData) + 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write: write,
 			}
@@ -439,12 +451,15 @@ var _ = Describe("Directory", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4}).
-				WithDirtyMask([]bool{true, true, false, false}).
-				Build()
+			writePartialData := []byte{1, 2, 3, 4}
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x104
+			write.PID = 1
+			write.Data = writePartialData
+			write.DirtyMask = []bool{true, true, false, false}
+			write.TrafficBytes = len(writePartialData) + 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write: write,
 			}
@@ -466,12 +481,15 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should not write again if write already happened", func() {
-			writeToBottom := mem.WriteReqBuilder{}.
-				WithAddress(0x104).
-				WithPID(1).
-				WithData([]byte{1, 2, 3, 4}).
-				WithDirtyMask([]bool{true, true, false, false}).
-				Build()
+			wbData := []byte{1, 2, 3, 4}
+			writeToBottom := &mem.WriteReq{}
+			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.Address = 0x104
+			writeToBottom.PID = 1
+			writeToBottom.Data = wbData
+			writeToBottom.DirtyMask = []bool{true, true, false, false}
+			writeToBottom.TrafficBytes = len(wbData) + 12
+			writeToBottom.TrafficClass = "mem.WriteReq"
 			trans.writeToBottom = writeToBottom
 
 			pipeline.EXPECT().CanAccept().Return(false)
@@ -560,11 +578,14 @@ var _ = Describe("Directory", func() {
 		)
 
 		BeforeEach(func() {
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithPID(1).
-				WithData(make([]byte, 64)).
-				Build()
+			writeFullData := make([]byte, 64)
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x100
+			write.PID = 1
+			write.Data = writeFullData
+			write.TrafficBytes = len(writeFullData) + 12
+			write.TrafficClass = "mem.WriteReq"
 			trans = &transaction{
 				write: write,
 			}

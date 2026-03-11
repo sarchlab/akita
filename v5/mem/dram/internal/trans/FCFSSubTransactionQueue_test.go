@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -75,7 +76,10 @@ var _ = Describe("FCFSSubTransactionQueue", func() {
 	})
 
 	It("should add read command to queue", func() {
-		read := mem.ReadReqBuilder{}.Build()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 		trans := &signal.Transaction{
 			Read: read,
 		}

@@ -2,6 +2,7 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 type ctrlMiddleware struct {
@@ -29,11 +30,12 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	rsp := mem.ControlMsgRspBuilder{}.
-		WithSrc(m.ctrlPort.AsRemote()).
-		WithDst(state.CurrentCmdSrc).
-		WithRspTo(state.CurrentCmdID).
-		Build()
+	rsp := &mem.ControlMsgRsp{}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort.AsRemote()
+	rsp.Dst = state.CurrentCmdSrc
+	rsp.RspTo = state.CurrentCmdID
+	rsp.TrafficClass = "mem.ControlMsgRsp"
 
 	err := m.ctrlPort.Send(rsp)
 	if err != nil {
@@ -71,12 +73,13 @@ func (m *ctrlMiddleware) handleEnable(
 		state.CurrentState = "enable"
 		m.Component.SetState(state)
 
-		rsp := mem.ControlMsgRspBuilder{}.
-			WithSrc(m.ctrlPort.AsRemote()).
-			WithDst(msg.Src).
-			WithRspTo(msg.ID).
-			WithEnable(true).
-			Build()
+		rsp := &mem.ControlMsgRsp{}
+		rsp.ID = sim.GetIDGenerator().Generate()
+		rsp.Src = m.ctrlPort.AsRemote()
+		rsp.Dst = msg.Src
+		rsp.RspTo = msg.ID
+		rsp.Enable = true
+		rsp.TrafficClass = "mem.ControlMsgRsp"
 
 		err := m.ctrlPort.Send(rsp)
 		if err != nil {
@@ -98,12 +101,13 @@ func (m *ctrlMiddleware) handlePause(
 		state.CurrentState = "pause"
 		m.Component.SetState(state)
 
-		rsp := mem.ControlMsgRspBuilder{}.
-			WithSrc(m.ctrlPort.AsRemote()).
-			WithDst(msg.Src).
-			WithRspTo(msg.ID).
-			WithPause(true).
-			Build()
+		rsp := &mem.ControlMsgRsp{}
+		rsp.ID = sim.GetIDGenerator().Generate()
+		rsp.Src = m.ctrlPort.AsRemote()
+		rsp.Dst = msg.Src
+		rsp.RspTo = msg.ID
+		rsp.Pause = true
+		rsp.TrafficClass = "mem.ControlMsgRsp"
 
 		err := m.ctrlPort.Send(rsp)
 		if err != nil {

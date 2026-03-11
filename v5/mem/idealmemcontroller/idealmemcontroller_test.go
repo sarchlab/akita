@@ -45,11 +45,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept read request and add to inflight transactions", func() {
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := &mem.ReadReq{}
+		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Address = 0
+		readReq.AccessByteSize = 4
+		readReq.TrafficBytes = 12
+		readReq.TrafficClass = "mem.ReadReq"
 		port.EXPECT().RetrieveIncoming().Return(readReq)
 
 		madeProgress := memController.Tick()
@@ -63,12 +65,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should accept write request and add to inflight transactions", func() {
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData([]byte{0, 1, 2, 3}).
-			WithDirtyMask([]bool{false, false, true, false}).
-			Build()
+		writeData1 := []byte{0, 1, 2, 3}
+		writeReq := &mem.WriteReq{}
+		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Address = 0
+		writeReq.Data = writeData1
+		writeReq.DirtyMask = []bool{false, false, true, false}
+		writeReq.TrafficBytes = len(writeData1) + 12
+		writeReq.TrafficClass = "mem.WriteReq"
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
 
 		madeProgress := memController.Tick()
@@ -80,11 +85,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should send read response after latency ticks", func() {
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := &mem.ReadReq{}
+		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Address = 0
+		readReq.AccessByteSize = 4
+		readReq.TrafficBytes = 12
+		readReq.TrafficClass = "mem.ReadReq"
 
 		// Tick 1: take request, CycleLeft: 10 → 9
 		port.EXPECT().RetrieveIncoming().Return(readReq)
@@ -110,11 +117,14 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should send write response after latency ticks", func() {
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData([]byte{0, 1, 2, 3}).
-			Build()
+		writeData2 := []byte{0, 1, 2, 3}
+		writeReq := &mem.WriteReq{}
+		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Address = 0
+		writeReq.Data = writeData2
+		writeReq.TrafficBytes = len(writeData2) + 12
+		writeReq.TrafficClass = "mem.WriteReq"
 
 		// Tick 1: take request, CycleLeft: 10 → 9
 		port.EXPECT().RetrieveIncoming().Return(writeReq)
@@ -141,11 +151,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should retry send when port is busy", func() {
-		readReq := mem.ReadReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithByteSize(4).
-			Build()
+		readReq := &mem.ReadReq{}
+		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.Dst = memController.topPort.AsRemote()
+		readReq.Address = 0
+		readReq.AccessByteSize = 4
+		readReq.TrafficBytes = 12
+		readReq.TrafficClass = "mem.ReadReq"
 
 		// Tick 1: take request, CycleLeft: 10 → 9
 		port.EXPECT().RetrieveIncoming().Return(readReq)
@@ -180,12 +192,15 @@ var _ = Describe("Ideal Memory Controller", func() {
 		err := memController.Storage.Write(0, []byte{10, 20, 30, 40})
 		Expect(err).ToNot(HaveOccurred())
 
-		writeReq := mem.WriteReqBuilder{}.
-			WithDst(memController.topPort.AsRemote()).
-			WithAddress(0).
-			WithData([]byte{0, 1, 2, 3}).
-			WithDirtyMask([]bool{false, false, true, false}).
-			Build()
+		writeData3 := []byte{0, 1, 2, 3}
+		writeReq := &mem.WriteReq{}
+		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.Dst = memController.topPort.AsRemote()
+		writeReq.Address = 0
+		writeReq.Data = writeData3
+		writeReq.DirtyMask = []bool{false, false, true, false}
+		writeReq.TrafficBytes = len(writeData3) + 12
+		writeReq.TrafficClass = "mem.WriteReq"
 
 		// Tick 1: take request
 		port.EXPECT().RetrieveIncoming().Return(writeReq)

@@ -189,11 +189,13 @@ func (m *middleware) finalizeWriteTrans(
 		panic(err)
 	}
 
-	writeDone := mem.WriteDoneRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(t.Write.Src).
-		WithRspTo(t.Write.ID).
-		Build()
+	writeDone := &mem.WriteDoneRsp{}
+	writeDone.ID = sim.GetIDGenerator().Generate()
+	writeDone.Src = m.topPort.AsRemote()
+	writeDone.Dst = t.Write.Src
+	writeDone.RspTo = t.Write.ID
+	writeDone.TrafficBytes = 4
+	writeDone.TrafficClass = "mem.WriteDoneRsp"
 
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
@@ -216,12 +218,14 @@ func (m *middleware) finalizeReadTrans(
 		panic(err)
 	}
 
-	dataReady := mem.DataReadyRspBuilder{}.
-		WithSrc(m.topPort.AsRemote()).
-		WithDst(t.Read.Src).
-		WithData(data).
-		WithRspTo(t.Read.ID).
-		Build()
+	dataReady := &mem.DataReadyRsp{}
+	dataReady.ID = sim.GetIDGenerator().Generate()
+	dataReady.Src = m.topPort.AsRemote()
+	dataReady.Dst = t.Read.Src
+	dataReady.Data = data
+	dataReady.RspTo = t.Read.ID
+	dataReady.TrafficBytes = len(data) + 4
+	dataReady.TrafficClass = "mem.DataReadyRsp"
 
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
