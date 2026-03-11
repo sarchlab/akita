@@ -91,8 +91,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1020).
 				WithDeviceID(0).
 				Build()
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			walking := transaction{req: req, reqPayload: reqPayload, cycleLeft: 10}
+			walking := transaction{req: req, cycleLeft: 10}
 			mmuComp.walkingTranslations = append(mmuComp.walkingTranslations, walking)
 
 			madeProgress := mmuMiddleware.walkPageTable()
@@ -115,8 +114,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			walking := transaction{req: req, reqPayload: reqPayload, cycleLeft: 0}
+			walking := transaction{req: req, cycleLeft: 0}
 			mmuComp.walkingTranslations = append(mmuComp.walkingTranslations, walking)
 
 			pageTable.EXPECT().
@@ -125,9 +123,9 @@ var _ = Describe("MMU", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					rspPayload := sim.MsgPayload[vm.TranslationRspPayload](msg)
-					Expect(rspPayload.Page).To(Equal(page))
+				Do(func(msg sim.Msg) {
+					rsp := msg.(*vm.TranslationRsp)
+					Expect(rsp.Page).To(Equal(page))
 				})
 
 			madeProgress := mmuMiddleware.walkPageTable()
@@ -150,8 +148,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			walking := transaction{req: req, reqPayload: reqPayload, cycleLeft: 0}
+			walking := transaction{req: req, cycleLeft: 0}
 			mmuComp.walkingTranslations =
 				append(mmuComp.walkingTranslations, walking)
 
@@ -169,7 +166,7 @@ var _ = Describe("MMU", func() {
 	Context("migration", func() {
 		var (
 			page    vm.Page
-			req     *sim.GenericMsg
+			req     *vm.TranslationReq
 			walking transaction
 		)
 
@@ -193,12 +190,10 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
 			walking = transaction{
-				req:        req,
-				reqPayload: reqPayload,
-				page:       page,
-				cycleLeft:  0,
+				req:       req,
+				page:      page,
+				cycleLeft: 0,
 			}
 		})
 
@@ -218,8 +213,7 @@ var _ = Describe("MMU", func() {
 
 		It("should place the page in the migration queue "+
 			"if the page is being migrated", func() {
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			reqPayload.PID = 2
+			req.PID = 2
 			page.PID = 2
 			page.IsMigrating = true
 			pageTable.EXPECT().
@@ -284,8 +278,7 @@ var _ = Describe("MMU", func() {
 
 		It("should reply to the GPU if the page is already on the "+
 			"destination GPU", func() {
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](walking.req)
-			reqPayload.DeviceID = 2
+			req.DeviceID = 2
 			mmuComp.migrationQueue = append(mmuComp.migrationQueue, walking)
 
 			updatedPage := page
@@ -305,9 +298,9 @@ var _ = Describe("MMU", func() {
 	Context("when received migrated page information", func() {
 		var (
 			page          vm.Page
-			req           *sim.GenericMsg
+			req           *vm.TranslationReq
 			migrating     transaction
-			migrationDone *sim.GenericMsg
+			migrationDone *vm.PageMigrationRspFromDriver
 		)
 
 		BeforeEach(func() {
@@ -331,8 +324,7 @@ var _ = Describe("MMU", func() {
 				WithVAddr(0x1000).
 				WithDeviceID(0).
 				Build()
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			migrating = transaction{req: req, reqPayload: reqPayload, cycleLeft: 0}
+			migrating = transaction{req: req, cycleLeft: 0}
 			mmuComp.currentOnDemandMigration = migrating
 			migrationDone = vm.NewPageMigrationRspFromDriver("", "", req.ID)
 		})
@@ -359,9 +351,9 @@ var _ = Describe("MMU", func() {
 			migrationPort.EXPECT().PeekIncoming().Return(migrationDone)
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					rspPayload := sim.MsgPayload[vm.TranslationRspPayload](msg)
-					Expect(rspPayload.Page).To(Equal(page))
+				Do(func(msg sim.Msg) {
+					rsp := msg.(*vm.TranslationRsp)
+					Expect(rsp.Page).To(Equal(page))
 				})
 			migrationPort.EXPECT().RetrieveIncoming()
 
@@ -439,9 +431,9 @@ var _ = Describe("MMU Integration", func() {
 		mmuComp.topPort.Deliver(req)
 
 		agent.EXPECT().Deliver(gomock.Any()).
-			Do(func(rsp *sim.GenericMsg) {
-				rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
-				Expect(rspPayload.Page).To(Equal(page))
+			Do(func(msg sim.Msg) {
+				rsp := msg.(*vm.TranslationRsp)
+				Expect(rsp.Page).To(Equal(page))
 				Expect(rsp.RspTo).To(Equal(req.ID))
 			})
 

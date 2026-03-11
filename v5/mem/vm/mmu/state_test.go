@@ -24,10 +24,10 @@ func buildTestMMU(engine sim.Engine, name string) *Comp {
 		Build(name)
 }
 
-func populateMMURuntimeState(mmu *Comp, req *sim.GenericMsg, payload *vm.TranslationReqPayload) {
+func populateMMURuntimeState(mmu *Comp, req *vm.TranslationReq) {
 	mmu.walkingTranslations = []transaction{
 		{
-			req: req, reqPayload: payload,
+			req: req,
 			page: vm.Page{
 				PID: 1, VAddr: 0x1000, PAddr: 0x2000,
 				PageSize: 4096, Valid: true, DeviceID: 2, Unified: true,
@@ -37,7 +37,7 @@ func populateMMURuntimeState(mmu *Comp, req *sim.GenericMsg, payload *vm.Transla
 	}
 	mmu.migrationQueue = []transaction{
 		{
-			req: req, reqPayload: payload,
+			req: req,
 			page: vm.Page{
 				PID: 1, VAddr: 0x3000, PAddr: 0x4000,
 				PageSize: 4096, Valid: true, DeviceID: 3,
@@ -95,8 +95,8 @@ func verifyMMURestore(t *testing.T, mmu *Comp, reqID string) {
 	if mmu.walkingTranslations[0].page.PAddr != 0x2000 {
 		t.Errorf("restored: expected page PAddr 0x2000, got 0x%x", mmu.walkingTranslations[0].page.PAddr)
 	}
-	if mmu.walkingTranslations[0].reqPayload.VAddr != 0x1000 {
-		t.Errorf("restored: expected reqPayload VAddr 0x1000, got 0x%x", mmu.walkingTranslations[0].reqPayload.VAddr)
+	if mmu.walkingTranslations[0].req.VAddr != 0x1000 {
+		t.Errorf("restored: expected req VAddr 0x1000, got 0x%x", mmu.walkingTranslations[0].req.VAddr)
 	}
 	if !mmu.isDoingMigration {
 		t.Error("restored: expected isDoingMigration to be true")
@@ -123,8 +123,7 @@ func TestGetStateAndSetState(t *testing.T) {
 		WithVAddr(0x1000).
 		WithDeviceID(2).
 		Build()
-	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
-	populateMMURuntimeState(mmu, req, payload)
+	populateMMURuntimeState(mmu, req)
 
 	state := mmu.GetState()
 	verifyMMUState(t, state, req.ID)
@@ -135,7 +134,7 @@ func TestGetStateAndSetState(t *testing.T) {
 }
 
 func TestTransactionStateWithMigration(t *testing.T) {
-	migrationReq := &sim.GenericMsg{
+	migrationReq := &vm.PageMigrationReqToDriver{
 		MsgMeta: sim.MsgMeta{
 			ID:  "mig-123",
 			Src: sim.RemotePort("MMU.MigrationPort"),
@@ -150,11 +149,9 @@ func TestTransactionStateWithMigration(t *testing.T) {
 		WithVAddr(0x1000).
 		WithDeviceID(2).
 		Build()
-	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 
 	trans := transaction{
-		req:        req,
-		reqPayload: payload,
+		req: req,
 		page: vm.Page{
 			PID:      1,
 			VAddr:    0x1000,

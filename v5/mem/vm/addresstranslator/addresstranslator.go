@@ -1,9 +1,9 @@
 package addresstranslator
 
 import (
+	"fmt"
 	"io"
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -19,12 +19,13 @@ type Spec struct {
 	NumReqPerCycle int    `json:"num_req_per_cycle"`
 }
 
-// incomingReqState is a serializable representation of an incoming *sim.GenericMsg.
+// incomingReqState is a serializable representation of an incoming request.
 type incomingReqState struct {
 	ID    string         `json:"id"`
 	Src   sim.RemotePort `json:"src"`
 	Dst   sim.RemotePort `json:"dst"`
 	RspTo string         `json:"rsp_to"`
+	Type  string         `json:"type"`
 }
 
 // transactionState is a serializable representation of a runtime transaction.
@@ -38,12 +39,14 @@ type transactionState struct {
 
 // reqToBottomState is a serializable representation of a runtime reqToBottom.
 type reqToBottomState struct {
-	ReqFromTopID  string         `json:"req_from_top_id"`
-	ReqFromTopSrc sim.RemotePort `json:"req_from_top_src"`
-	ReqFromTopDst sim.RemotePort `json:"req_from_top_dst"`
+	ReqFromTopID   string         `json:"req_from_top_id"`
+	ReqFromTopSrc  sim.RemotePort `json:"req_from_top_src"`
+	ReqFromTopDst  sim.RemotePort `json:"req_from_top_dst"`
+	ReqFromTopType string         `json:"req_from_top_type"`
 	ReqToBottomID  string         `json:"req_to_bottom_id"`
 	ReqToBottomSrc sim.RemotePort `json:"req_to_bottom_src"`
 	ReqToBottomDst sim.RemotePort `json:"req_to_bottom_dst"`
+	ReqToBottomType string        `json:"req_to_bottom_type"`
 }
 
 // State contains mutable runtime data for the AddressTranslator.
@@ -54,15 +57,15 @@ type State struct {
 }
 
 type transaction struct {
-	incomingReqs    []*sim.GenericMsg
-	translationReq  *sim.GenericMsg // payload: *vm.TranslationReqPayload
-	translationRsp  *sim.GenericMsg // payload: *vm.TranslationRspPayload
+	incomingReqs    []sim.Msg
+	translationReq  *vm.TranslationReq
+	translationRsp  *vm.TranslationRsp
 	translationDone bool
 }
 
 type reqToBottom struct {
-	reqFromTop  *sim.GenericMsg
-	reqToBottom *sim.GenericMsg
+	reqFromTop  sim.Msg
+	reqToBottom sim.Msg
 }
 
 // Comp is an AddressTranslator that forwards the read/write requests with
@@ -96,11 +99,13 @@ func (c *Comp) GetState() State {
 		}
 
 		for _, req := range t.incomingReqs {
+			meta := req.Meta()
 			ts.IncomingReqs = append(ts.IncomingReqs, incomingReqState{
-				ID:    req.ID,
-				Src:   req.Src,
-				Dst:   req.Dst,
-				RspTo: req.RspTo,
+				ID:    meta.ID,
+				Src:   meta.Src,
+				Dst:   meta.Dst,
+				RspTo: meta.RspTo,
+				Type:  fmt.Sprintf("%T", req),
 			})
 		}
 
@@ -114,20 +119,46 @@ func (c *Comp) GetState() State {
 	}
 
 	for _, r := range c.inflightReqToBottom {
+		fromMeta := r.reqFromTop.Meta()
+		toMeta := r.reqToBottom.Meta()
 		state.InflightReqToBottom = append(state.InflightReqToBottom,
 			reqToBottomState{
-				ReqFromTopID:   r.reqFromTop.ID,
-				ReqFromTopSrc:  r.reqFromTop.Src,
-				ReqFromTopDst:  r.reqFromTop.Dst,
-				ReqToBottomID:  r.reqToBottom.ID,
-				ReqToBottomSrc: r.reqToBottom.Src,
-				ReqToBottomDst: r.reqToBottom.Dst,
+				ReqFromTopID:    fromMeta.ID,
+				ReqFromTopSrc:   fromMeta.Src,
+				ReqFromTopDst:   fromMeta.Dst,
+				ReqFromTopType:  fmt.Sprintf("%T", r.reqFromTop),
+				ReqToBottomID:   toMeta.ID,
+				ReqToBottomSrc:  toMeta.Src,
+				ReqToBottomDst:  toMeta.Dst,
+				ReqToBottomType: fmt.Sprintf("%T", r.reqToBottom),
 			})
 	}
 
 	c.Component.SetState(state)
 
 	return state
+}
+
+// restoreMemMsg reconstructs a concrete mem message from saved metadata and
+// type string. Only *mem.ReadReq and *mem.WriteReq are used as incoming
+// requests in the address translator.
+func restoreMemMsg(id string, src, dst sim.RemotePort, rspTo, typ string) sim.Msg {
+	switch typ {
+	case "*mem.WriteReq":
+		m := &mem.WriteReq{}
+		m.ID = id
+		m.Src = src
+		m.Dst = dst
+		m.RspTo = rspTo
+		return m
+	default: // "*mem.ReadReq" or unknown — default to ReadReq
+		m := &mem.ReadReq{}
+		m.ID = id
+		m.Src = src
+		m.Dst = dst
+		m.RspTo = rspTo
+		return m
+	}
 }
 
 // SetState restores runtime mutable data from a serializable State.
@@ -143,18 +174,13 @@ func (c *Comp) SetState(state State) {
 		}
 
 		for _, reqState := range ts.IncomingReqs {
-			t.incomingReqs = append(t.incomingReqs, &sim.GenericMsg{
-				MsgMeta: sim.MsgMeta{
-					ID:    reqState.ID,
-					Src:   reqState.Src,
-					Dst:   reqState.Dst,
-					RspTo: reqState.RspTo,
-				},
-			})
+			t.incomingReqs = append(t.incomingReqs,
+				restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
+					reqState.RspTo, reqState.Type))
 		}
 
 		if ts.TranslationReqID != "" {
-			t.translationReq = &sim.GenericMsg{
+			t.translationReq = &vm.TranslationReq{
 				MsgMeta: sim.MsgMeta{
 					ID:  ts.TranslationReqID,
 					Src: ts.TranslationReqSrc,
@@ -169,20 +195,10 @@ func (c *Comp) SetState(state State) {
 	c.inflightReqToBottom = nil
 	for _, rs := range state.InflightReqToBottom {
 		c.inflightReqToBottom = append(c.inflightReqToBottom, reqToBottom{
-			reqFromTop: &sim.GenericMsg{
-				MsgMeta: sim.MsgMeta{
-					ID:  rs.ReqFromTopID,
-					Src: rs.ReqFromTopSrc,
-					Dst: rs.ReqFromTopDst,
-				},
-			},
-			reqToBottom: &sim.GenericMsg{
-				MsgMeta: sim.MsgMeta{
-					ID:  rs.ReqToBottomID,
-					Src: rs.ReqToBottomSrc,
-					Dst: rs.ReqToBottomDst,
-				},
-			},
+			reqFromTop: restoreMemMsg(rs.ReqFromTopID, rs.ReqFromTopSrc,
+				rs.ReqFromTopDst, "", rs.ReqFromTopType),
+			reqToBottom: restoreMemMsg(rs.ReqToBottomID, rs.ReqToBottomSrc,
+				rs.ReqToBottomDst, "", rs.ReqToBottomType),
 		})
 	}
 }
@@ -251,15 +267,14 @@ func (m *middleware) translate() bool {
 		return false
 	}
 
-	item := itemI.(*sim.GenericMsg)
-	payload := item.Payload.(mem.AccessReqPayload)
-	vAddr := payload.GetAddress()
+	item := itemI.(mem.AccessReq)
+	vAddr := item.GetAddress()
 	vPageID := m.addrToPageID(vAddr)
 
 	transReq := vm.TranslationReqBuilder{}.
 		WithSrc(m.translationPort.AsRemote()).
 		WithDst(m.translationPortMapper.Find(vAddr)).
-		WithPID(payload.GetPID()).
+		WithPID(item.GetPID()).
 		WithVAddr(vPageID).
 		WithDeviceID(m.GetSpec().DeviceID).
 		Build()
@@ -270,16 +285,16 @@ func (m *middleware) translate() bool {
 	}
 
 	trans := &transaction{
-		incomingReqs:   []*sim.GenericMsg{item},
+		incomingReqs:   []sim.Msg{itemI},
 		translationReq: transReq,
 	}
 	m.transactions = append(m.transactions, trans)
 
-	tracing.TraceReqReceive(item, m.Comp)
+	tracing.TraceReqReceive(itemI, m.Comp)
 	tracing.TraceReqInitiate(
 		transReq,
 		m.Comp,
-		tracing.MsgIDAtReceiver(item, m.Comp),
+		tracing.MsgIDAtReceiver(itemI, m.Comp),
 	)
 
 	m.topPort.RetrieveIncoming()
@@ -293,7 +308,7 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
-	rsp := rspI.(*sim.GenericMsg)
+	rsp := rspI.(*vm.TranslationRsp)
 	trans := m.findTranslationByReqID(rsp.RspTo)
 
 	if trans == nil {
@@ -304,10 +319,8 @@ func (m *middleware) parseTranslation() bool {
 	trans.translationRsp = rsp
 	trans.translationDone = true
 
-	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](rsp)
-
 	reqFromTop := trans.incomingReqs[0]
-	translatedReq := m.createTranslatedReq(reqFromTop, rspPayload.Page)
+	translatedReq := m.createTranslatedReq(reqFromTop, rsp.Page)
 
 	err := m.bottomPort.Send(translatedReq)
 	if err != nil {
@@ -357,27 +370,26 @@ func (m *middleware) respond() bool {
 		return false
 	}
 
-	rsp := rspI.(*sim.GenericMsg)
 	var (
-		reqFromTop       *sim.GenericMsg
+		reqFromTop       sim.Msg
 		reqToBottomCombo reqToBottom
-		rspToTop         *sim.GenericMsg
+		rspToTop         sim.Msg
 	)
 
 	reqInBottom := false
 
-	switch rsp.Payload.(type) {
-	case *mem.DataReadyRspPayload:
+	switch rsp := rspI.(type) {
+	case *mem.DataReadyRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RspTo)
 		if reqInBottom {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RspTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
-			drPayload := sim.MsgPayload[mem.DataReadyRspPayload](rsp)
+			fromMeta := reqFromTop.Meta()
 			rspToTop = mem.DataReadyRspBuilder{}.
 				WithSrc(m.topPort.AsRemote()).
-				WithDst(reqFromTop.Src).
-				WithRspTo(reqFromTop.ID).
-				WithData(drPayload.Data).
+				WithDst(fromMeta.Src).
+				WithRspTo(fromMeta.ID).
+				WithData(rsp.Data).
 				Build()
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
@@ -387,15 +399,16 @@ func (m *middleware) respond() bool {
 				m.Comp,
 			)
 		}
-	case *mem.WriteDoneRspPayload:
+	case *mem.WriteDoneRsp:
 		reqInBottom = m.isReqInBottomByID(rsp.RspTo)
 		if reqInBottom {
 			reqToBottomCombo = m.findReqToBottomByID(rsp.RspTo)
 			reqFromTop = reqToBottomCombo.reqFromTop
+			fromMeta := reqFromTop.Meta()
 			rspToTop = mem.WriteDoneRspBuilder{}.
 				WithSrc(m.topPort.AsRemote()).
-				WithDst(reqFromTop.Src).
-				WithRspTo(reqFromTop.ID).
+				WithDst(fromMeta.Src).
+				WithRspTo(fromMeta.ID).
 				Build()
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(reqFromTop, m.Comp),
@@ -406,7 +419,7 @@ func (m *middleware) respond() bool {
 			)
 		}
 	default:
-		log.Panicf("cannot handle respond of type %s", reflect.TypeOf(rsp.Payload))
+		log.Panicf("cannot handle respond of type %s", fmt.Sprintf("%T", rspI))
 	}
 
 	if reqInBottom {
@@ -423,7 +436,8 @@ func (m *middleware) respond() bool {
 			m.Comp,
 		)
 
-		m.removeReqToBottomByID(rsp.RspTo)
+		rspMeta := rspI.Meta()
+		m.removeReqToBottomByID(rspMeta.RspTo)
 
 		tracing.TraceReqFinalize(reqToBottomCombo.reqToBottom, m.Comp)
 		tracing.TraceReqComplete(reqToBottomCombo.reqFromTop, m.Comp)
@@ -435,59 +449,55 @@ func (m *middleware) respond() bool {
 }
 
 func (m *middleware) createTranslatedReq(
-	msg *sim.GenericMsg,
+	msg sim.Msg,
 	page vm.Page,
-) *sim.GenericMsg {
-	switch msg.Payload.(type) {
-	case *mem.ReadReqPayload:
-		return m.createTranslatedReadReq(msg, page)
-	case *mem.WriteReqPayload:
-		return m.createTranslatedWriteReq(msg, page)
+) sim.Msg {
+	switch req := msg.(type) {
+	case *mem.ReadReq:
+		return m.createTranslatedReadReq(req, page)
+	case *mem.WriteReq:
+		return m.createTranslatedWriteReq(req, page)
 	default:
-		log.Panicf("cannot translate request of type %s", reflect.TypeOf(msg.Payload))
+		log.Panicf("cannot translate request of type %s", fmt.Sprintf("%T", msg))
 		return nil
 	}
 }
 
 func (m *middleware) createTranslatedReadReq(
-	msg *sim.GenericMsg,
+	readReq *mem.ReadReq,
 	page vm.Page,
-) *sim.GenericMsg {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-	offset := readPayload.Address % (1 << m.GetSpec().Log2PageSize)
+) *mem.ReadReq {
+	offset := readReq.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.ReadReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
 		WithDst(m.memoryPortMapper.Find(addr)).
 		WithAddress(addr).
-		WithByteSize(readPayload.AccessByteSize).
+		WithByteSize(readReq.AccessByteSize).
 		WithPID(0).
-		WithInfo(readPayload.Info).
+		WithInfo(readReq.Info).
 		Build()
-	clonePayload := sim.MsgPayload[mem.ReadReqPayload](clone)
-	clonePayload.CanWaitForCoalesce = readPayload.CanWaitForCoalesce
+	clone.CanWaitForCoalesce = readReq.CanWaitForCoalesce
 
 	return clone
 }
 
 func (m *middleware) createTranslatedWriteReq(
-	msg *sim.GenericMsg,
+	writeReq *mem.WriteReq,
 	page vm.Page,
-) *sim.GenericMsg {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-	offset := writePayload.Address % (1 << m.GetSpec().Log2PageSize)
+) *mem.WriteReq {
+	offset := writeReq.Address % (1 << m.GetSpec().Log2PageSize)
 	addr := page.PAddr + offset
 	clone := mem.WriteReqBuilder{}.
 		WithSrc(m.bottomPort.AsRemote()).
 		WithDst(m.memoryPortMapper.Find(addr)).
-		WithData(writePayload.Data).
-		WithDirtyMask(writePayload.DirtyMask).
+		WithData(writeReq.Data).
+		WithDirtyMask(writeReq.DirtyMask).
 		WithAddress(addr).
 		WithPID(0).
-		WithInfo(writePayload.Info).
+		WithInfo(writeReq.Info).
 		Build()
-	clonePayload := sim.MsgPayload[mem.WriteReqPayload](clone)
-	clonePayload.CanWaitForCoalesce = writePayload.CanWaitForCoalesce
+	clone.CanWaitForCoalesce = writeReq.CanWaitForCoalesce
 
 	return clone
 }
@@ -519,7 +529,8 @@ func (m *middleware) removeExistingTranslation(trans *transaction) {
 
 func (m *middleware) isReqInBottomByID(id string) bool {
 	for _, r := range m.inflightReqToBottom {
-		if r.reqToBottom.ID == id {
+		meta := r.reqToBottom.Meta()
+		if meta.ID == id {
 			return true
 		}
 	}
@@ -529,7 +540,8 @@ func (m *middleware) isReqInBottomByID(id string) bool {
 
 func (m *middleware) findReqToBottomByID(id string) reqToBottom {
 	for _, r := range m.inflightReqToBottom {
-		if r.reqToBottom.ID == id {
+		meta := r.reqToBottom.Meta()
+		if meta.ID == id {
 			return r
 		}
 	}
@@ -539,7 +551,8 @@ func (m *middleware) findReqToBottomByID(id string) reqToBottom {
 
 func (m *middleware) removeReqToBottomByID(id string) {
 	for i, r := range m.inflightReqToBottom {
-		if r.reqToBottom.ID == id {
+		meta := r.reqToBottom.Meta()
+		if meta.ID == id {
 			m.inflightReqToBottom = append(
 				m.inflightReqToBottom[:i],
 				m.inflightReqToBottom[i+1:]...)
@@ -557,19 +570,18 @@ func (m *middleware) handleCtrlRequest() bool {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
+	msg := msgI.(*mem.ControlMsg)
 
-	if ctrlPayload.DiscardTransations {
+	if msg.DiscardTransations {
 		return m.handleFlushReq(msg)
-	} else if ctrlPayload.Restart {
+	} else if msg.Restart {
 		return m.handleRestartReq(msg)
 	}
 
 	panic("never")
 }
 
-func (m *middleware) handleFlushReq(msg *sim.GenericMsg) bool {
+func (m *middleware) handleFlushReq(msg *mem.ControlMsg) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(m.ctrlPort.AsRemote()).
 		WithDst(msg.Src).
@@ -590,7 +602,7 @@ func (m *middleware) handleFlushReq(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (m *middleware) handleRestartReq(msg *sim.GenericMsg) bool {
+func (m *middleware) handleRestartReq(msg *mem.ControlMsg) bool {
 	rsp := mem.ControlMsgBuilder{}.
 		WithSrc(m.ctrlPort.AsRemote()).
 		WithDst(msg.Src).

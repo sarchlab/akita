@@ -1,9 +1,9 @@
 package mmu
 
 import (
+	"fmt"
 	"io"
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -59,7 +59,7 @@ type devicePageAccess struct {
 }
 
 // State contains mutable runtime data for the MMU.
-// Runtime structs with *sim.GenericMsg remain on Comp for runtime use;
+// Runtime structs with concrete msg types remain on Comp for runtime use;
 // State holds parallel serializable versions for checkpoint/restore.
 type State struct {
 	WalkingTranslations      []transactionState `json:"walking_translations"`
@@ -72,11 +72,10 @@ type State struct {
 }
 
 type transaction struct {
-	req        *sim.GenericMsg // payload: *vm.TranslationReqPayload
-	reqPayload *vm.TranslationReqPayload
+	req        *vm.TranslationReq
 	page       vm.Page
 	cycleLeft  int
-	migration  *sim.GenericMsg // payload: *vm.PageMigrationReqToDriverPayload
+	migration  *vm.PageMigrationReqToDriver
 }
 
 // Comp is the default mmu implementation. It is also an akita Component.
@@ -148,12 +147,12 @@ func (m *middleware) finalizePageWalk(
 	walkingIndex int,
 ) bool {
 	spec := m.GetSpec()
-	payload := m.walkingTranslations[walkingIndex].reqPayload
-	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
+	req := m.walkingTranslations[walkingIndex].req
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 
 	if !found {
 		if spec.AutoPageAllocation {
-			page = m.createDefaultPage(payload.PID, payload.VAddr, payload.DeviceID)
+			page = m.createDefaultPage(req.PID, req.VAddr, req.DeviceID)
 			m.pageTable.Insert(page)
 		} else {
 			panic("page not found")
@@ -191,7 +190,7 @@ func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
 }
 
 func (m *middleware) pageNeedMigrate(walking transaction) bool {
-	if walking.reqPayload.DeviceID == walking.page.DeviceID {
+	if walking.req.DeviceID == walking.page.DeviceID {
 		return false
 	}
 
@@ -235,8 +234,8 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 	}
 
 	trans := m.migrationQueue[0]
-	payload := trans.reqPayload
-	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
+	req := trans.req
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 
 	if !found {
 		panic("page not found")
@@ -244,7 +243,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 
 	trans.page = page
 
-	if payload.DeviceID == page.DeviceID || page.IsPinned {
+	if req.DeviceID == page.DeviceID || page.IsPinned {
 		if !m.topPort.CanSend() {
 			return false
 		}
@@ -327,8 +326,7 @@ func (m *middleware) processMigrationReturn() bool {
 	}
 
 	req := m.currentOnDemandMigration.req
-	payload := m.currentOnDemandMigration.reqPayload
-	page, found := m.pageTable.Find(payload.PID, payload.VAddr)
+	page, found := m.pageTable.Find(req.PID, req.VAddr)
 
 	if !found {
 		panic("page not found")
@@ -364,26 +362,22 @@ func (m *middleware) parseFromTop() bool {
 		return false
 	}
 
-	req := reqI.(*sim.GenericMsg)
-	tracing.TraceReqReceive(req, m.Comp)
-
-	switch req.Payload.(type) {
-	case *vm.TranslationReqPayload:
+	switch req := reqI.(type) {
+	case *vm.TranslationReq:
+		tracing.TraceReqReceive(req, m.Comp)
 		m.startWalking(req)
 	default:
-		log.Panicf("MMU canot handle request of type %s", reflect.TypeOf(req.Payload))
+		log.Panicf("MMU canot handle request of type %s", fmt.Sprintf("%T", reqI))
 	}
 
 	return true
 }
 
-func (m *middleware) startWalking(req *sim.GenericMsg) {
+func (m *middleware) startWalking(req *vm.TranslationReq) {
 	spec := m.GetSpec()
-	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 	translationInPipeline := transaction{
-		req:        req,
-		reqPayload: payload,
-		cycleLeft:  spec.Latency,
+		req:       req,
+		cycleLeft: spec.Latency,
 	}
 
 	m.walkingTranslations = append(m.walkingTranslations, translationInPipeline)
@@ -453,27 +447,26 @@ func (m *middleware) allocatePhysicalPage() uint64 {
 func (m *middleware) createMigrationRequest(
 	trans transaction,
 	page vm.Page,
-) *sim.GenericMsg {
+) *vm.PageMigrationReqToDriver {
 	spec := m.GetSpec()
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
-	migrationInfo.GPUReqToVAddrMap[trans.reqPayload.DeviceID] =
-		append(migrationInfo.GPUReqToVAddrMap[trans.reqPayload.DeviceID],
-			trans.reqPayload.VAddr)
+	migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID] =
+		append(migrationInfo.GPUReqToVAddrMap[trans.req.DeviceID],
+			trans.req.VAddr)
 
 	m.PageAccessedByDeviceID[page.VAddr] =
 		append(m.PageAccessedByDeviceID[page.VAddr], page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
 		m.migrationPort.AsRemote(), spec.MigrationServiceProvider)
-	migrationPayload := sim.MsgPayload[vm.PageMigrationReqToDriverPayload](migrationReq)
-	migrationPayload.PID = page.PID
-	migrationPayload.PageSize = page.PageSize
-	migrationPayload.CurrPageHostGPU = page.DeviceID
-	migrationPayload.MigrationInfo = migrationInfo
-	migrationPayload.CurrAccessingGPUs = unique(
+	migrationReq.PID = page.PID
+	migrationReq.PageSize = page.PageSize
+	migrationReq.CurrPageHostGPU = page.DeviceID
+	migrationReq.MigrationInfo = migrationInfo
+	migrationReq.CurrAccessingGPUs = unique(
 		m.PageAccessedByDeviceID[page.VAddr])
-	migrationPayload.RespondToTop = true
+	migrationReq.RespondToTop = true
 
 	return migrationReq
 }
@@ -519,13 +512,10 @@ func transToState(t transaction) transactionState {
 		ts.ReqID = t.req.ID
 		ts.ReqSrc = t.req.Src
 		ts.ReqDst = t.req.Dst
-	}
-
-	if t.reqPayload != nil {
-		ts.PID = uint32(t.reqPayload.PID)
-		ts.VAddr = t.reqPayload.VAddr
-		ts.DeviceID = t.reqPayload.DeviceID
-		ts.TransLatency = t.reqPayload.TransLatency
+		ts.PID = uint32(t.req.PID)
+		ts.VAddr = t.req.VAddr
+		ts.DeviceID = t.req.DeviceID
+		ts.TransLatency = t.req.TransLatency
 	}
 
 	if t.migration != nil {
@@ -539,33 +529,28 @@ func transToState(t transaction) transactionState {
 }
 
 // stateToTrans converts a serializable transactionState back to a runtime
-// transaction. The *sim.GenericMsg is reconstructed with enough data to send responses.
+// transaction. The concrete types are reconstructed with enough data to send responses.
 func stateToTrans(ts transactionState) transaction {
-	payload := &vm.TranslationReqPayload{
+	req := &vm.TranslationReq{
+		MsgMeta: sim.MsgMeta{
+			ID:  ts.ReqID,
+			Src: ts.ReqSrc,
+			Dst: ts.ReqDst,
+		},
 		PID:          vm.PID(ts.PID),
 		VAddr:        ts.VAddr,
 		DeviceID:     ts.DeviceID,
 		TransLatency: ts.TransLatency,
 	}
 
-	req := &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:  ts.ReqID,
-			Src: ts.ReqSrc,
-			Dst: ts.ReqDst,
-		},
-		Payload: payload,
-	}
-
 	t := transaction{
-		req:        req,
-		reqPayload: payload,
-		page:       stateToPage(ts.Page),
-		cycleLeft:  ts.CycleLeft,
+		req:       req,
+		page:      stateToPage(ts.Page),
+		cycleLeft: ts.CycleLeft,
 	}
 
 	if ts.HasMigration {
-		t.migration = &sim.GenericMsg{
+		t.migration = &vm.PageMigrationReqToDriver{
 			MsgMeta: sim.MsgMeta{
 				ID:  ts.MigrationReqID,
 				Src: ts.MigrationReqSrc,

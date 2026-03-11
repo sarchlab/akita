@@ -131,11 +131,11 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentRsp *sim.GenericMsg
+			var sentRsp *vm.TranslationRsp
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					sentRsp = msg
+				Do(func(msg sim.Msg) {
+					sentRsp = msg.(*vm.TranslationRsp)
 				}).
 				Return(nil)
 
@@ -144,10 +144,8 @@ var _ = Describe("Builder", func() {
 			gmmuComp.walkPageTable()
 
 			Expect(sentRsp).NotTo(BeNil())
-			translationRsp := sim.MsgPayload[vm.TranslationRspPayload](sentRsp)
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			Expect(translationRsp.Page).To(Equal(page))
-			Expect(translationRsp.Page.PID).To(Equal(reqPayload.PID))
+			Expect(sentRsp.Page).To(Equal(page))
+			Expect(sentRsp.Page.PID).To(Equal(req.PID))
 		})
 
 		It("should send request remotely", func() {
@@ -230,17 +228,17 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
-			var sentReqToBottom *sim.GenericMsg
+			var sentReqToBottom *vm.TranslationReq
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					sentReqToBottom = msg
+				Do(func(msg sim.Msg) {
+					sentReqToBottom = msg.(*vm.TranslationReq)
 				}).
 				Return(nil)
 
 			bottomPort.EXPECT().
 				RetrieveIncoming().
-				DoAndReturn(func() *sim.GenericMsg {
+				DoAndReturn(func() sim.Msg {
 					rsp := vm.TranslationRspBuilder{}.
 						WithSrc(gmmuComp.GetSpec().LowModule).
 						WithDst(gmmuComp.bottomPort.AsRemote()).
@@ -250,11 +248,11 @@ var _ = Describe("Builder", func() {
 					return rsp
 				})
 
-			var sentRsp *sim.GenericMsg
+			var sentRsp *vm.TranslationRsp
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					sentRsp = msg
+				Do(func(msg sim.Msg) {
+					sentRsp = msg.(*vm.TranslationRsp)
 				}).
 				Return(nil)
 
@@ -264,10 +262,8 @@ var _ = Describe("Builder", func() {
 			gmmuComp.fetchFromBottom()
 
 			Expect(sentRsp).NotTo(BeNil())
-			translationRsp := sim.MsgPayload[vm.TranslationRspPayload](sentRsp)
-			reqPayload := sim.MsgPayload[vm.TranslationReqPayload](req)
-			Expect(translationRsp.Page).To(Equal(page))
-			Expect(translationRsp.Page.PID).To(Equal(reqPayload.PID))
+			Expect(sentRsp.Page).To(Equal(page))
+			Expect(sentRsp.Page.PID).To(Equal(req.PID))
 		})
 	})
 })
