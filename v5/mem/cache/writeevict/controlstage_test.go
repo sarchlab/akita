@@ -88,7 +88,10 @@ var _ = Describe("Control Stage", func() {
 	It("should wait for the cache to finish transactions", func() {
 		transactions = []*transaction{{}}
 		s.cache.transactions = transactions
-		flushReq := cache.FlushReqBuilder{}.Build()
+		flushReq := &cache.FlushReq{}
+		flushReq.ID = sim.GetIDGenerator().Generate()
+		flushReq.TrafficBytes = 0
+		flushReq.TrafficClass = "ctrl"
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
@@ -99,11 +102,13 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should reset directory", func() {
-		flushReq := cache.FlushReqBuilder{}.
-			InvalidateAllCacheLines().
-			DiscardInflight().
-			PauseAfterFlushing().
-			Build()
+		flushReq := &cache.FlushReq{}
+		flushReq.ID = sim.GetIDGenerator().Generate()
+		flushReq.InvalidateAllCachelines = true
+		flushReq.DiscardInflight = true
+		flushReq.PauseAfterFlushing = true
+		flushReq.TrafficBytes = 0
+		flushReq.TrafficClass = "ctrl"
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
 			Expect(msg.Meta().RspTo).To(Equal(flushReq.ID))

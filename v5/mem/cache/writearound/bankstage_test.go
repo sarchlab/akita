@@ -104,18 +104,26 @@ var _ = Describe("Bankstage", func() {
 				CacheAddress: 0x400,
 				ReadCount:    1,
 			}
-			preCRead1 = mem.ReadReqBuilder{}.
-				WithAddress(0x104).
-				WithByteSize(4).
-				Build()
-			preCRead2 = mem.ReadReqBuilder{}.
-				WithAddress(0x108).
-				WithByteSize(8).
-				Build()
-			postCRead = mem.ReadReqBuilder{}.
-				WithAddress(0x100).
-				WithByteSize(64).
-				Build()
+			preCRead1 = &mem.ReadReq{}
+			preCRead1.ID = sim.GetIDGenerator().Generate()
+			preCRead1.Address = 0x104
+			preCRead1.AccessByteSize = 4
+			preCRead1.TrafficBytes = 12
+			preCRead1.TrafficClass = "req"
+
+			preCRead2 = &mem.ReadReq{}
+			preCRead2.ID = sim.GetIDGenerator().Generate()
+			preCRead2.Address = 0x108
+			preCRead2.AccessByteSize = 8
+			preCRead2.TrafficBytes = 12
+			preCRead2.TrafficClass = "req"
+
+			postCRead = &mem.ReadReq{}
+			postCRead.ID = sim.GetIDGenerator().Generate()
+			postCRead.Address = 0x100
+			postCRead.AccessByteSize = 64
+			postCRead.TrafficBytes = 12
+			postCRead.TrafficClass = "req"
 			preCTrans1 = &transaction{read: preCRead1}
 			preCTrans2 = &transaction{read: preCRead2}
 			postCTrans = &transaction{
@@ -165,29 +173,31 @@ var _ = Describe("Bankstage", func() {
 				IsLocked:     true,
 			}
 
-			write = mem.WriteReqBuilder{}.
-				WithAddress(0x100).
-				WithData([]byte{
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-					1, 2, 3, 4, 5, 6, 7, 8,
-				}).
-				WithDirtyMask([]bool{
-					false, false, false, false, false, false, false, false,
-					true, true, true, true, true, true, true, true,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-				}).
-				Build()
+			write = &mem.WriteReq{}
+			write.ID = sim.GetIDGenerator().Generate()
+			write.Address = 0x100
+			write.Data = []byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}
+			write.DirtyMask = []bool{
+				false, false, false, false, false, false, false, false,
+				true, true, true, true, true, true, true, true,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+			}
+			write.TrafficBytes = 64 + 12
+			write.TrafficClass = "req"
 			trans = &transaction{
 				write:      write,
 				block:      block,
