@@ -15,8 +15,8 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	msgI := p.cache.topPort.PeekIncoming()
-	if msgI == nil {
+	msg := p.cache.topPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
@@ -24,15 +24,14 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
 	trans := &transaction{
 		id: sim.GetIDGenerator().Generate(),
 	}
 
-	switch msg.Payload.(type) {
-	case *mem.ReadReqPayload:
+	switch msg := msg.(type) {
+	case *mem.ReadReq:
 		trans.read = msg
-	case *mem.WriteReqPayload:
+	case *mem.WriteReq:
 		trans.write = msg
 	}
 

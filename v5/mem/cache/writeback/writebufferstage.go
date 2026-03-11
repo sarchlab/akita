@@ -3,7 +3,6 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -228,16 +227,15 @@ func (wb *writeBufferStage) write() bool {
 }
 
 func (wb *writeBufferStage) processReturnRsp() bool {
-	msgI := wb.cache.bottomPort.PeekIncoming()
-	if msgI == nil {
+	msg := wb.cache.bottomPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	switch msg.Payload.(type) {
-	case *mem.DataReadyRspPayload:
+	switch msg := msg.(type) {
+	case *mem.DataReadyRsp:
 		return wb.processDataReadyRsp(msg)
-	case *mem.WriteDoneRspPayload:
+	case *mem.WriteDoneRsp:
 		return wb.processWriteDoneRsp(msg)
 	default:
 		panic("unknown msg type")
@@ -245,7 +243,7 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 }
 
 func (wb *writeBufferStage) processDataReadyRsp(
-	msg *sim.GenericMsg,
+	msg *mem.DataReadyRsp,
 ) bool {
 	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
@@ -259,10 +257,9 @@ func (wb *writeBufferStage) processDataReadyRsp(
 		return false
 	}
 
-	drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
-	trans.fetchedData = drPayload.Data
+	trans.fetchedData = msg.Data
 	trans.action = bankWriteFetched
-	trans.mshrEntry.Data = drPayload.Data
+	trans.mshrEntry.Data = msg.Data
 	wb.combineData(trans.mshrEntry)
 
 	wb.cache.mshr.Remove(trans.mshrEntry.PID, trans.mshrEntry.Address)
@@ -286,13 +283,13 @@ func (wb *writeBufferStage) combineData(mshrEntry *cache.MSHREntry) {
 		}
 
 		mshrEntry.Block.IsDirty = true
-		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-		_, offset := getCacheLineID(writePayload.Address, wb.cache.log2BlockSize)
+		write := trans.write
+		_, offset := getCacheLineID(write.Address, wb.cache.log2BlockSize)
 
-		for i := 0; i < len(writePayload.Data); i++ {
-			if writePayload.DirtyMask == nil || writePayload.DirtyMask[i] {
+		for i := 0; i < len(write.Data); i++ {
+			if write.DirtyMask == nil || write.DirtyMask[i] {
 				index := offset + uint64(i)
-				mshrEntry.Data[index] = writePayload.Data[i]
+				mshrEntry.Data[index] = write.Data[i]
 				mshrEntry.Block.DirtyMask[index] = true
 			}
 		}
@@ -327,7 +324,7 @@ func (wb *writeBufferStage) removeInflightFetch(f *transaction) {
 }
 
 func (wb *writeBufferStage) processWriteDoneRsp(
-	msg *sim.GenericMsg,
+	msg *mem.WriteDoneRsp,
 ) bool {
 	for i := len(wb.inflightEviction) - 1; i >= 0; i-- {
 		e := wb.inflightEviction[i]

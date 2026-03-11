@@ -3,7 +3,6 @@ package writeback
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -69,31 +68,30 @@ func (s *mshrStage) processOneReq() bool {
 }
 
 func (s *mshrStage) respondRead(
-	readMsg *sim.GenericMsg,
+	read *mem.ReadReq,
 	data []byte,
 ) {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](readMsg)
-	_, offset := getCacheLineID(readPayload.Address, s.cache.log2BlockSize)
+	_, offset := getCacheLineID(read.Address, s.cache.log2BlockSize)
 	dataReady := mem.DataReadyRspBuilder{}.
 		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(readMsg.Src).
-		WithRspTo(readMsg.ID).
-		WithData(data[offset : offset+readPayload.AccessByteSize]).
+		WithDst(read.Src).
+		WithRspTo(read.ID).
+		WithData(data[offset : offset+read.AccessByteSize]).
 		Build()
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(readMsg, s.cache)
+	tracing.TraceReqComplete(read, s.cache)
 }
 
-func (s *mshrStage) respondWrite(writeMsg *sim.GenericMsg) {
+func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 	writeDoneRsp := mem.WriteDoneRspBuilder{}.
 		WithSrc(s.cache.topPort.AsRemote()).
-		WithDst(writeMsg.Src).
-		WithRspTo(writeMsg.ID).
+		WithDst(write.Src).
+		WithRspTo(write.ID).
 		Build()
 	s.cache.topPort.Send(writeDoneRsp)
 
-	tracing.TraceReqComplete(writeMsg, s.cache)
+	tracing.TraceReqComplete(write, s.cache)
 }
 
 func (s *mshrStage) removeTransaction(trans *transaction) {

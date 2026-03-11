@@ -121,7 +121,7 @@ type bankPipelineElem struct {
 }
 
 func (e bankPipelineElem) TaskID() string {
-	return e.trans.req().ID + "_write_back_bank_pipeline"
+	return e.trans.req().Meta().ID + "_write_back_bank_pipeline"
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
@@ -232,13 +232,12 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 	}
 
 	read := trans.read
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
-	addr := readPayload.Address
+	addr := read.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
 	block := trans.block
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress+offset, readPayload.AccessByteSize)
+		block.CacheAddress+offset, read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -259,15 +258,6 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(read, s.cache)
 
-	// log.Printf("%.10f, %s, bank read hit finalize，"+
-	// " %s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, s.cache.Name(),
-	// 	trans.read.ID,
-	// 	trans.read.Address, block.Tag,
-	// 	block.SetID, block.WayID,
-	// 	dataReady.Data,
-	// )
-
 	return true
 }
 
@@ -277,12 +267,11 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 	}
 
 	write := trans.write
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](write)
-	addr := writePayload.Address
+	addr := write.Address
 	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
 	block := trans.block
 
-	dirtyMask := s.writeData(block, writePayload, offset)
+	dirtyMask := s.writeData(block, write, offset)
 
 	block.IsValid = true
 	block.IsLocked = false
@@ -303,21 +292,12 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(trans.write, s.cache)
 
-	// log.Printf("%.10f, %s, bank write hit finalize， "+
-	// "%s, %04X, %04X, (%d, %d), %v\n",
-	// 	now, s.cache.Name(),
-	// 	trans.write.ID,
-	// 	trans.write.Address, block.Tag,
-	// 	block.SetID, block.WayID,
-	// 	write.Data,
-	// )
-
 	return true
 }
 
 func (s *bankStage) writeData(
 	block *cache.Block,
-	write *mem.WriteReqPayload,
+	write *mem.WriteReq,
 	offset uint64,
 ) []bool {
 	data, err := s.cache.storage.Read(
@@ -368,25 +348,12 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	s.inflightTransCount--
 
-	// if trans.accessReq() != nil {
-	// 	log.Printf("%.10f, %s, write fetched, "+
-	// 		"%s, %04X, %04X, (%d, %d), %v\n",
-	// 		now, s.cache.Name(),
-	// 		trans.accessReq().Meta().ID,
-	// 		trans.accessReq().GetAddress(), block.Tag,
-	// 		block.SetID, block.WayID,
-	// 		mshrEntry.Data,
-	// 	)
-	// }
-
 	return true
 }
 
 func (s *bankStage) removeTransaction(trans *transaction) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
-			// fmt.Printf("%.10f, %s, trans %s removed in bank stage.\n",
-			// 	now, s.cache.Name(), t.id)
 			s.cache.inFlightTransactions = append(
 				(s.cache.inFlightTransactions)[:i],
 				(s.cache.inFlightTransactions)[i+1:]...)
@@ -430,17 +397,6 @@ func (s *bankStage) finalizeBankEviction(
 	default:
 		panic("unsupported action")
 	}
-
-	// if trans.accessReq() != nil {
-	// 	log.Printf("%.10f, %s, bank read for eviction， "+
-	// 		"%s, %04X, %04X, (%d, %d), %v\n",
-	// 		now, s.cache.Name(),
-	// 		trans.accessReq().Meta().ID,
-	// 		trans.accessReq().GetAddress(), victim.Tag,
-	// 		victim.SetID, victim.WayID,
-	// 		data,
-	// 	)
-	// }
 
 	delete(s.cache.evictingList, trans.evictingAddr)
 	s.cache.writeBufferBuffer.Push(trans)

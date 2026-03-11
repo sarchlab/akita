@@ -94,16 +94,15 @@ func (ds *directoryStage) Reset() {
 }
 
 func (ds *directoryStage) doRead(trans *transaction) bool {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-	cachelineID, _ := getCacheLineID(
-		readPayload.Address, ds.cache.log2BlockSize)
+	read := trans.read
+	cachelineID, _ := getCacheLineID(read.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(readPayload.PID, cachelineID)
+	mshrEntry := ds.cache.mshr.Query(read.PID, cachelineID)
 	if mshrEntry != nil {
 		return ds.handleReadMSHRHit(trans, mshrEntry)
 	}
 
-	block := ds.cache.directory.Lookup(readPayload.PID, cachelineID)
+	block := ds.cache.directory.Lookup(read.PID, cachelineID)
 	if block != nil {
 		return ds.handleReadHit(trans, block)
 	}
@@ -147,8 +146,8 @@ func (ds *directoryStage) handleReadHit(
 }
 
 func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-	cacheLineID, _ := getCacheLineID(readPayload.Address, ds.cache.log2BlockSize)
+	read := trans.read
+	cacheLineID, _ := getCacheLineID(read.Address, ds.cache.log2BlockSize)
 
 	if ds.cache.mshr.IsFull() {
 		return false
@@ -185,10 +184,10 @@ func (ds *directoryStage) handleReadMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) doWrite(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
+	write := trans.write
+	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
-	mshrEntry := ds.cache.mshr.Query(writePayload.PID, cachelineID)
+	mshrEntry := ds.cache.mshr.Query(write.PID, cachelineID)
 	if mshrEntry != nil {
 		ok := ds.doWriteMSHRHit(trans, mshrEntry)
 		tracing.AddTaskStep(
@@ -200,7 +199,7 @@ func (ds *directoryStage) doWrite(trans *transaction) bool {
 		return ok
 	}
 
-	block := ds.cache.directory.Lookup(writePayload.PID, cachelineID)
+	block := ds.cache.directory.Lookup(write.PID, cachelineID)
 	if block != nil {
 		ok := ds.doWriteHit(trans, block)
 		if ok {
@@ -258,8 +257,8 @@ func (ds *directoryStage) doWriteMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
+	write := trans.write
+	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
 	victim := ds.cache.directory.FindVictim(cachelineID)
 	if victim.IsLocked || victim.ReadCount > 0 {
@@ -274,8 +273,8 @@ func (ds *directoryStage) writeFullLineMiss(trans *transaction) bool {
 }
 
 func (ds *directoryStage) writePartialLineMiss(trans *transaction) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	cachelineID, _ := getCacheLineID(writePayload.Address, ds.cache.log2BlockSize)
+	write := trans.write
+	cachelineID, _ := getCacheLineID(write.Address, ds.cache.log2BlockSize)
 
 	if ds.cache.mshr.IsFull() {
 		return false
@@ -329,15 +328,15 @@ func (ds *directoryStage) writeToBank(
 		return false
 	}
 
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-	addr := writePayload.Address
+	write := trans.write
+	addr := write.Address
 	cachelineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
 
 	ds.cache.directory.Visit(block)
 	block.IsLocked = true
 	block.Tag = cachelineID
 	block.IsValid = true
-	block.PID = writePayload.PID
+	block.PID = write.PID
 	trans.block = block
 	trans.action = bankWriteHit
 
@@ -365,13 +364,11 @@ func (ds *directoryStage) evict(
 	)
 
 	if trans.read != nil {
-		readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-		addr = readPayload.Address
-		pid = readPayload.PID
+		addr = trans.read.Address
+		pid = trans.read.PID
 	} else {
-		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-		addr = writePayload.Address
-		pid = writePayload.PID
+		addr = trans.write.Address
+		pid = trans.write.PID
 	}
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
@@ -449,19 +446,17 @@ func (ds *directoryStage) fetch(
 	var (
 		addr uint64
 		pid  vm.PID
-		req  *sim.GenericMsg
+		req  sim.Msg
 	)
 
 	if trans.read != nil {
 		req = trans.read
-		readPayload := sim.MsgPayload[mem.ReadReqPayload](trans.read)
-		addr = readPayload.Address
-		pid = readPayload.PID
+		addr = trans.read.Address
+		pid = trans.read.PID
 	} else {
 		req = trans.write
-		writePayload := sim.MsgPayload[mem.WriteReqPayload](trans.write)
-		addr = writePayload.Address
-		pid = writePayload.PID
+		addr = trans.write.Address
+		pid = trans.write.PID
 	}
 
 	cacheLineID, _ := getCacheLineID(addr, ds.cache.log2BlockSize)
@@ -502,15 +497,13 @@ func (ds *directoryStage) fetch(
 	return true
 }
 
-func (ds *directoryStage) isWritingFullLine(writeMsg *sim.GenericMsg) bool {
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](writeMsg)
-
-	if len(writePayload.Data) != (1 << ds.cache.log2BlockSize) {
+func (ds *directoryStage) isWritingFullLine(write *mem.WriteReq) bool {
+	if len(write.Data) != (1 << ds.cache.log2BlockSize) {
 		return false
 	}
 
-	if writePayload.DirtyMask != nil {
-		for _, dirty := range writePayload.DirtyMask {
+	if write.DirtyMask != nil {
+		for _, dirty := range write.DirtyMask {
 			if !dirty {
 				return false
 			}

@@ -2,10 +2,8 @@ package writeback
 
 import (
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -13,7 +11,7 @@ type flusher struct {
 	cache *Comp
 
 	blockToEvict    []*cache.Block
-	processingFlush *sim.GenericMsg // payload: *cache.FlushReqPayload
+	processingFlush *cache.FlushReq
 }
 
 func (f *flusher) Tick() bool {
@@ -93,28 +91,26 @@ func (f *flusher) processFlush() bool {
 }
 
 func (f *flusher) extractFromPort() bool {
-	itemI := f.cache.controlPort.PeekIncoming()
-	if itemI == nil {
+	msg := f.cache.controlPort.PeekIncoming()
+	if msg == nil {
 		return false
 	}
 
-	item := itemI.(*sim.GenericMsg)
-	switch item.Payload.(type) {
-	case *cache.FlushReqPayload:
-		return f.startProcessingFlush(item)
-	case *cache.RestartReqPayload:
-		return f.handleCacheRestart(item)
+	switch msg := msg.(type) {
+	case *cache.FlushReq:
+		return f.startProcessingFlush(msg)
+	case *cache.RestartReq:
+		return f.handleCacheRestart(msg)
 	default:
-		log.Panicf("Cannot process request of %s", reflect.TypeOf(item.Payload))
+		log.Panicf("Cannot process request of type %T", msg)
 	}
 
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg *sim.GenericMsg) bool {
-	flushPayload := sim.MsgPayload[cache.FlushReqPayload](msg)
+func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
 	f.processingFlush = msg
-	if flushPayload.DiscardInflight {
+	if msg.DiscardInflight {
 		f.cache.discardInflightTransactions()
 	}
 
@@ -126,7 +122,7 @@ func (f *flusher) startProcessingFlush(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (f *flusher) handleCacheRestart(msg *sim.GenericMsg) bool {
+func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
 	if !f.cache.controlPort.CanSend() {
 		return false
 	}
@@ -171,8 +167,7 @@ func (f *flusher) finalizeFlushing() bool {
 	f.cache.mshr.Reset()
 	f.cache.directory.Reset()
 
-	flushPayload := sim.MsgPayload[cache.FlushReqPayload](f.processingFlush)
-	if flushPayload.PauseAfterFlushing {
+	if f.processingFlush.PauseAfterFlushing {
 		f.cache.state = cacheStatePaused
 	} else {
 		f.cache.state = cacheStateRunning
