@@ -176,9 +176,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 func (s *bankStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.postCoalesceTransactions {
 		if t == trans {
-			s.cache.postCoalesceTransactions = append(
-				s.cache.postCoalesceTransactions[:i],
-				s.cache.postCoalesceTransactions[i+1:]...)
+			s.cache.postCoalesceTransactions[i] = nil
 
 			return
 		}
@@ -189,7 +187,7 @@ func (s *bankStage) findPostCoalesceIdx(
 	trans *transactionState,
 ) int {
 	for i, t := range s.cache.postCoalesceTransactions {
-		if t == trans {
+		if t != nil && t == trans {
 			return i
 		}
 	}

@@ -211,6 +211,11 @@ func (m *middleware) tickCoalesceState() bool {
 func (m *middleware) GetState() State {
 	next := m.comp.GetNextState()
 
+	// Compact nil entries from postCoalesceTransactions before snapshot.
+	// During a tick, removeTransaction nils out entries to keep indices stable;
+	// here we compact and remap all indices in State arrays.
+	m.compactPostCoalesceTransactions(next)
+
 	// Snapshot transactions into the state
 	lookup := buildTransIndex(m.transactions, m.postCoalesceTransactions)
 	next.Transactions = snapshotAllTransactions(
@@ -219,6 +224,67 @@ func (m *middleware) GetState() State {
 	next.IsPaused = m.isPaused
 
 	return *next
+}
+
+// compactPostCoalesceTransactions removes nil entries from
+// postCoalesceTransactions and remaps all indices in State arrays.
+func (m *middleware) compactPostCoalesceTransactions(next *State) {
+	old := m.postCoalesceTransactions
+	remap := make(map[int]int)
+	compacted := make([]*transactionState, 0, len(old))
+
+	for i, t := range old {
+		if t != nil {
+			remap[i] = len(compacted)
+			compacted = append(compacted, t)
+		}
+	}
+
+	if len(compacted) == len(old) {
+		return // nothing to compact
+	}
+
+	m.postCoalesceTransactions = compacted
+
+	// Remap all index arrays in State
+	remapIndices := func(indices []int) []int {
+		result := make([]int, 0, len(indices))
+		for _, idx := range indices {
+			if newIdx, ok := remap[idx]; ok {
+				result = append(result, newIdx)
+			}
+		}
+		return result
+	}
+
+	next.DirBufIndices = remapIndices(next.DirBufIndices)
+	for i := range next.BankBufIndices {
+		next.BankBufIndices[i].Indices = remapIndices(next.BankBufIndices[i].Indices)
+	}
+	next.DirPostPipelineBufIndices = remapIndices(next.DirPostPipelineBufIndices)
+	for i := range next.BankPostPipelineBufIndices {
+		next.BankPostPipelineBufIndices[i].Indices = remapIndices(
+			next.BankPostPipelineBufIndices[i].Indices)
+	}
+	for i := range next.DirPipelineStages {
+		if newIdx, ok := remap[next.DirPipelineStages[i].TransIndex]; ok {
+			next.DirPipelineStages[i].TransIndex = newIdx
+		}
+	}
+	for i := range next.BankPipelineStages {
+		for j := range next.BankPipelineStages[i].Stages {
+			if newIdx, ok := remap[next.BankPipelineStages[i].Stages[j].TransIndex]; ok {
+				next.BankPipelineStages[i].Stages[j].TransIndex = newIdx
+			}
+		}
+	}
+	// Also remap MSHR TransactionIndices
+	for i := range next.MSHRState.Entries {
+		entry := &next.MSHRState.Entries[i]
+		if len(entry.TransactionIndices) > 0 {
+			entry.TransactionIndices = remapIndices(entry.TransactionIndices)
+		}
+	}
 }
 
 // SetState restores runtime mutable data from a serializable State.

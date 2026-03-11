@@ -50,7 +50,7 @@ func (b *stateTransBuffer) findPostCoalesceIdx(
 	trans *transactionState,
 ) int {
 	for i, t := range b.mw.postCoalesceTransactions {
-		if t == trans {
+		if t != nil && t == trans {
 			return i
 		}
 	}
@@ -102,7 +102,7 @@ func (b *stateDirPostBufAdapter) findPostCoalesceIdx(
 	trans *transactionState,
 ) int {
 	for i, t := range b.mw.postCoalesceTransactions {
-		if t == trans {
+		if t != nil && t == trans {
 			return i
 		}
 	}
@@ -163,7 +163,7 @@ func (b *stateBankPostBufAdapter) findPostCoalesceIdx(
 	trans *transactionState,
 ) int {
 	for i, t := range b.mw.postCoalesceTransactions {
-		if t == trans {
+		if t != nil && t == trans {
 			return i
 		}
 	}

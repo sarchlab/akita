@@ -61,12 +61,18 @@ func (d *directory) Tick() (madeProgress bool) {
 
 		trans := item.(dirPipelineItem).trans
 
+		var processed bool
 		if trans.read != nil {
-			madeProgress = d.processRead(trans) || madeProgress
-			continue
+			processed = d.processRead(trans)
+		} else {
+			processed = d.processWrite(trans)
 		}
 
-		madeProgress = d.processWrite(trans) || madeProgress
+		if !processed {
+			break
+		}
+
+		madeProgress = true
 	}
 
 	return madeProgress
@@ -350,7 +356,7 @@ func (d *directory) getBankBuf(setID, wayID int) *stateTransBuffer {
 // postCoalesceTransactions.
 func (d *directory) findPostCoalesceTransIdx(trans *transactionState) int {
 	for i, t := range d.cache.postCoalesceTransactions {
-		if t == trans {
+		if t != nil && t == trans {
 			return i
 		}
 	}
