@@ -4,7 +4,21 @@
 
 Evolve Akita V5: redefine component model, implement save/load, make messages plain structs, and port all first-party components to the new model with fully serializable State.
 
-## ✅ ALL MILESTONES COMPLETE
+## Current Phase: Investigating M9
+
+### M9: Eliminate Comp Wrapper — Use modeling.Component Directly (INVESTIGATING)
+
+Human issue #145: "A component should only have spec, ports, states, middleware and hooks." Can we remove all per-component Comp structs and use `modeling.Component` directly?
+
+**Status**: Research phase. Two analysts (Iris, Diana) are investigating feasibility and risks. Discussion required before any implementation.
+
+**Key questions**:
+- Where do live runtime objects (pipelines, buffers, directory, MSHR) live if not on Comp?
+- Can ports be accessed by name instead of stored as fields?
+- What design pattern replaces Comp for holding middleware-shared runtime state?
+- What are the performance and API implications?
+
+## ✅ Previous Milestones Complete
 
 ### M1: Create `modeling` package with Component struct ✅ — Budget: 6, Used: 5
 ### M2: Refactor `idealmemcontroller` to use modeling package ✅ — Budget: 6, Used: 4

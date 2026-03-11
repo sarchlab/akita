@@ -24,11 +24,17 @@ All first-party components have been structurally ported to use the `modeling` p
 
 All CI checks must pass on main. This includes linting (golangci-lint), tests (ginkgo), and acceptance tests.
 
-### 6. Eliminate Comp Wrapper / Move Mutable Data into State (INVESTIGATED)
+### 6. Eliminate Comp Wrapper — Use modeling.Component Directly (IN PROGRESS)
 
-Human raised issue #61: currently, ported components like TLB have a `Comp` struct wrapping `*modeling.Component[Spec, State]`, but mutable runtime data is duplicated — it exists on both the `Comp` struct (as live objects) and in `State` (as serializable snapshots). SaveState copies Comp→State, LoadState restores State→Comp.
+Human raised issue #145: "A component should only have spec, ports, states, middleware and hooks. Can we just remove all the components struct definition from all the individual components and use modeling.component instead?"
 
-Investigation complete: Comp wrapper cannot be fully eliminated because `ValidateState` forbids pointers/interfaces in State, and live runtime objects (pipelines, buffers, directory pointers) must exist somewhere. The current pattern (Comp holds live objects, State holds serializable snapshots, SaveState/LoadState bridge between them) is the correct architecture. Duplicated scalar fields could be reduced as a future cleanup, but the fundamental pattern is sound. Two components (tickingping, idealmemcontroller) already demonstrate the ideal minimal-Comp pattern.
+Human wants to discuss before coding. The goal is to eliminate all per-component `Comp` structs so that `modeling.Component[Spec, State]` IS the component — no wrapper needed. This means:
+- Ports should be accessible from modeling.Component (it already inherits PortOwnerBase)
+- All mutable runtime data should live in State (or be reconstructable from State+Spec)
+- Live runtime objects (pipelines, buffers, etc.) should be managed by middleware or reconstructed as needed
+- No duplicated fields between Comp and State
+
+This is a design discussion first — investigate feasibility and propose a concrete plan before implementing.
 
 ## Success Criteria
 
