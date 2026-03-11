@@ -2,12 +2,7 @@ package dram
 
 import (
 	"fmt"
-	"io"
 
-	"github.com/sarchlab/akita/v5/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/org"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
 	"github.com/sarchlab/akita/v5/mem/mem"
 )
 
@@ -38,34 +33,29 @@ type transactionState struct {
 
 // commandState is a serializable representation of a Command.
 type commandState struct {
-	ID        string `json:"id"`
-	Kind      int    `json:"kind"`
-	Address   uint64 `json:"address"`
-	CycleLeft int    `json:"cycle_left"`
-	Channel   uint64 `json:"channel"`
-	Rank      uint64 `json:"rank"`
-	BankGroup uint64 `json:"bank_group"`
-	Bank      uint64 `json:"bank"`
-	Row       uint64 `json:"row"`
-	Column    uint64 `json:"column"`
+	ID          string      `json:"id"`
+	Kind        int         `json:"kind"`
+	Address     uint64      `json:"address"`
+	CycleLeft   int         `json:"cycle_left"`
+	Location    Location    `json:"location"`
 	SubTransRef subTransRef `json:"sub_trans_ref"`
 }
 
 // bankEntry is a bankState tagged with its rank/bankGroup/bank indices.
 type bankEntry struct {
-	Rank      int        `json:"rank"`
-	BankGroup int        `json:"bank_group"`
-	BankIndex int        `json:"bank_index"`
-	Data      bankState  `json:"data"`
+	Rank      int       `json:"rank"`
+	BankGroup int       `json:"bank_group"`
+	BankIndex int       `json:"bank_index"`
+	Data      bankState `json:"data"`
 }
 
-// bankState is a serializable representation of a BankImpl.
+// bankState is a serializable representation of a Bank.
 type bankState struct {
-	State                int              `json:"state"`
-	OpenRow              uint64           `json:"open_row"`
-	HasCurrentCmd        bool             `json:"has_current_cmd"`
-	CurrentCmd           commandState     `json:"current_cmd"`
-	CyclesToCmdAvailable map[string]int   `json:"cycles_to_cmd_available"`
+	State                int            `json:"state"`
+	OpenRow              uint64         `json:"open_row"`
+	HasCurrentCmd        bool           `json:"has_current_cmd"`
+	CurrentCmd           commandState   `json:"current_cmd"`
+	CyclesToCmdAvailable map[string]int `json:"cycles_to_cmd_available"`
 }
 
 // bankStatesFlat is a flattened representation of the 3D bank array.
@@ -82,7 +72,7 @@ type queueEntry struct {
 	Command    commandState `json:"command"`
 }
 
-// commandQueueState is a serializable representation of CommandQueueImpl.
+// commandQueueState is a serializable representation of CommandQueues.
 type commandQueueState struct {
 	NumQueues      int          `json:"num_queues"`
 	Entries        []queueEntry `json:"entries"`
@@ -94,402 +84,85 @@ type subTransQueueState struct {
 	Entries []subTransRef `json:"entries"`
 }
 
-// subTransLookup maps a *SubTransaction to its (transIndex, subIndex).
-type subTransLookup map[*signal.SubTransaction]subTransRef
-
-func buildSubTransLookup(
-	transactions []*signal.Transaction,
-) subTransLookup {
-	lookup := make(subTransLookup)
-	for ti, t := range transactions {
-		for si, st := range t.SubTransactions {
-			lookup[st] = subTransRef{
-				TransIndex: ti,
-				SubIndex:   si,
-			}
+// isTransactionCompleted checks if all sub-transactions of a transaction
+// in the state are completed.
+func isTransactionCompleted(t *transactionState) bool {
+	for _, st := range t.SubTransactions {
+		if !st.Completed {
+			return false
 		}
 	}
-	return lookup
+	return true
 }
 
-func snapshotTransaction(
-	t *signal.Transaction,
-	transIndex int,
-) transactionState {
-	ts := transactionState{
-		InternalAddress: t.InternalAddress,
-	}
-
-	if t.Read != nil {
-		ts.HasRead = true
-		ts.ReadMsg = *t.Read
-	}
-
-	if t.Write != nil {
-		ts.HasWrite = true
-		ts.WriteMsg = *t.Write
-	}
-
-	ts.SubTransactions = make([]subTransState, len(t.SubTransactions))
-	for i, st := range t.SubTransactions {
-		ts.SubTransactions[i] = subTransState{
-			ID:               st.ID,
-			Address:          st.Address,
-			Completed:        st.Completed,
-			TransactionIndex: transIndex,
-		}
-	}
-
-	return ts
+// isTransactionRead returns true if the transaction is a read.
+func isTransactionRead(t *transactionState) bool {
+	return t.HasRead
 }
 
-func snapshotCommand(
-	cmd *signal.Command,
-	lookup subTransLookup,
-) commandState {
-	cs := commandState{
-		ID:        cmd.ID,
-		Kind:      int(cmd.Kind),
-		Address:   cmd.Address,
-		CycleLeft: cmd.CycleLeft,
-		Channel:   cmd.Location.Channel,
-		Rank:      cmd.Location.Rank,
-		BankGroup: cmd.Location.BankGroup,
-		Bank:      cmd.Location.Bank,
-		Row:       cmd.Location.Row,
-		Column:    cmd.Location.Column,
+// transactionGlobalAddress returns the address being accessed.
+func transactionGlobalAddress(t *transactionState) uint64 {
+	if t.HasRead {
+		return t.ReadMsg.Address
 	}
-
-	if cmd.SubTrans != nil {
-		cs.SubTransRef = lookup[cmd.SubTrans]
-	}
-
-	return cs
+	return t.WriteMsg.Address
 }
 
-func snapshotBank(
-	b *org.BankImpl,
-	lookup subTransLookup,
-) bankState {
-	bs := bankState{
-		State:   int(b.GetState()),
-		OpenRow: b.GetOpenRow(),
-		CyclesToCmdAvailable: snapshotCyclesToCmdAvailable(
-			b.GetCyclesToCmdAvailable()),
+// transactionAccessByteSize returns number of bytes being accessed.
+func transactionAccessByteSize(t *transactionState) uint64 {
+	if t.HasRead {
+		return t.ReadMsg.AccessByteSize
 	}
-
-	currentCmd := b.GetCurrentCmd()
-	if currentCmd != nil {
-		bs.HasCurrentCmd = true
-		bs.CurrentCmd = snapshotCommand(currentCmd, lookup)
-	}
-
-	return bs
+	return uint64(len(t.WriteMsg.Data))
 }
 
-func snapshotCyclesToCmdAvailable(
-	m map[signal.CommandKind]int,
-) map[string]int {
-	out := make(map[string]int, len(m))
-	for k, v := range m {
-		out[fmt.Sprintf("%d", int(k))] = v
-	}
-	return out
+// cmdKindToString converts a CommandKind int to string key.
+func cmdKindToString(k CommandKind) string {
+	return fmt.Sprintf("%d", int(k))
 }
 
-func snapshotCommandQueue(
-	cq *cmdq.CommandQueueImpl,
-	lookup subTransLookup,
-) commandQueueState {
-	cqs := commandQueueState{
-		NumQueues:      len(cq.Queues),
-		NextQueueIndex: cq.GetNextQueueIndex(),
-	}
-
-	for i, q := range cq.Queues {
-		for _, cmd := range q {
-			cqs.Entries = append(cqs.Entries, queueEntry{
-				QueueIndex: i,
-				Command:    snapshotCommand(cmd, lookup),
-			})
-		}
-	}
-
-	if cqs.Entries == nil {
-		cqs.Entries = []queueEntry{}
-	}
-
-	return cqs
+// stringToCmdKind converts a string key back to CommandKind.
+func stringToCmdKind(s string) CommandKind {
+	var k int
+	fmt.Sscanf(s, "%d", &k)
+	return CommandKind(k)
 }
 
-func snapshotSubTransQueue(
-	q *trans.FCFSSubTransactionQueue,
-	lookup subTransLookup,
-) subTransQueueState {
-	sqs := subTransQueueState{
-		Entries: make([]subTransRef, len(q.Queue)),
-	}
-
-	for i, st := range q.Queue {
-		sqs.Entries[i] = lookup[st]
-	}
-
-	return sqs
-}
-
-func snapshotBanks(
-	banks org.Banks,
-	lookup subTransLookup,
-) bankStatesFlat {
+// initBankStatesFlat creates initial bank states for all banks (all closed).
+func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 	flat := bankStatesFlat{
-		NumRanks:      len(banks),
-		NumBankGroups: len(banks[0]),
-		NumBanks:      len(banks[0][0]),
+		NumRanks:      numRanks,
+		NumBankGroups: numBankGroups,
+		NumBanks:      numBanks,
+		Entries:       make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
 	}
 
-	for i := range banks {
-		for j := range banks[i] {
-			for k := range banks[i][j] {
-				bi := banks[i][j][k].(*org.BankImpl)
-				flat.Entries = append(flat.Entries,
-					bankEntry{
-						Rank:      i,
-						BankGroup: j,
-						BankIndex: k,
-						Data:      snapshotBank(bi, lookup),
-					})
+	for i := 0; i < numRanks; i++ {
+		for j := 0; j < numBankGroups; j++ {
+			for k := 0; k < numBanks; k++ {
+				flat.Entries = append(flat.Entries, bankEntry{
+					Rank:      i,
+					BankGroup: j,
+					BankIndex: k,
+					Data: bankState{
+						State:                int(BankStateClosed),
+						CyclesToCmdAvailable: make(map[string]int),
+					},
+				})
 			}
 		}
-	}
-
-	if flat.Entries == nil {
-		flat.Entries = []bankEntry{}
 	}
 
 	return flat
 }
 
-// snapshotState converts runtime mutable data into a serializable State.
-func (c *Comp) snapshotState() State {
-	lookup := buildSubTransLookup(c.inflightTransactions)
-
-	s := State{}
-	s.Transactions = snapshotTransactions(c.inflightTransactions)
-
-	stq := c.subTransactionQueue.(*trans.FCFSSubTransactionQueue)
-	s.SubTransQueue = snapshotSubTransQueue(stq, lookup)
-
-	cqi := c.cmdQueue.(*cmdq.CommandQueueImpl)
-	s.CommandQueues = snapshotCommandQueue(cqi, lookup)
-
-	chi := c.channel.(*org.ChannelImpl)
-	s.BankStates = snapshotBanks(chi.Banks, lookup)
-
-	return s
-}
-
-func snapshotTransactions(
-	transactions []*signal.Transaction,
-) []transactionState {
-	states := make([]transactionState, len(transactions))
-	for i, t := range transactions {
-		states[i] = snapshotTransaction(t, i)
-	}
-	return states
-}
-
-// restoreFromState restores runtime mutable data from a serializable State.
-func (c *Comp) restoreFromState(s State) {
-	transactions := restoreTransactions(s.Transactions)
-	c.inflightTransactions = transactions
-
-	stq := c.subTransactionQueue.(*trans.FCFSSubTransactionQueue)
-	restoreSubTransQueue(stq, s.SubTransQueue, transactions)
-
-	cqi := c.cmdQueue.(*cmdq.CommandQueueImpl)
-	restoreCommandQueue(cqi, s.CommandQueues, transactions)
-
-	chi := c.channel.(*org.ChannelImpl)
-	restoreBanks(chi.Banks, s.BankStates, transactions)
-}
-
-func restoreTransactions(
-	states []transactionState,
-) []*signal.Transaction {
-	transactions := make([]*signal.Transaction, len(states))
-	for i, ts := range states {
-		transactions[i] = restoreTransaction(ts)
-	}
-
-	// Wire back-pointers.
-	for _, t := range transactions {
-		for _, st := range t.SubTransactions {
-			st.Transaction = t
+// findBankState returns a pointer to the bankState for the given indices.
+func findBankState(flat *bankStatesFlat, rank, bankGroup, bank int) *bankState {
+	for i := range flat.Entries {
+		e := &flat.Entries[i]
+		if e.Rank == rank && e.BankGroup == bankGroup && e.BankIndex == bank {
+			return &e.Data
 		}
 	}
-
-	return transactions
-}
-
-func restoreTransaction(ts transactionState) *signal.Transaction {
-	t := &signal.Transaction{
-		InternalAddress: ts.InternalAddress,
-	}
-
-	if ts.HasRead {
-		r := ts.ReadMsg
-		t.Read = &r
-	}
-
-	if ts.HasWrite {
-		w := ts.WriteMsg
-		t.Write = &w
-	}
-
-	t.SubTransactions = make(
-		[]*signal.SubTransaction, len(ts.SubTransactions))
-	for i, ss := range ts.SubTransactions {
-		t.SubTransactions[i] = &signal.SubTransaction{
-			ID:        ss.ID,
-			Address:   ss.Address,
-			Completed: ss.Completed,
-		}
-	}
-
-	return t
-}
-
-func resolveSubTrans(
-	ref subTransRef,
-	transactions []*signal.Transaction,
-) *signal.SubTransaction {
-	return transactions[ref.TransIndex].
-		SubTransactions[ref.SubIndex]
-}
-
-func restoreSubTransQueue(
-	q *trans.FCFSSubTransactionQueue,
-	sqs subTransQueueState,
-	transactions []*signal.Transaction,
-) {
-	q.Queue = make([]*signal.SubTransaction, len(sqs.Entries))
-	for i, ref := range sqs.Entries {
-		q.Queue[i] = resolveSubTrans(ref, transactions)
-	}
-}
-
-func restoreCommand(
-	cs commandState,
-	transactions []*signal.Transaction,
-) *signal.Command {
-	cmd := &signal.Command{
-		ID:        cs.ID,
-		Kind:      signal.CommandKind(cs.Kind),
-		Address:   cs.Address,
-		CycleLeft: cs.CycleLeft,
-	}
-
-	cmd.Location.Channel = cs.Channel
-	cmd.Location.Rank = cs.Rank
-	cmd.Location.BankGroup = cs.BankGroup
-	cmd.Location.Bank = cs.Bank
-	cmd.Location.Row = cs.Row
-	cmd.Location.Column = cs.Column
-	cmd.SubTrans = resolveSubTrans(
-		cs.SubTransRef, transactions)
-
-	return cmd
-}
-
-func restoreCommandQueue(
-	cq *cmdq.CommandQueueImpl,
-	cqs commandQueueState,
-	transactions []*signal.Transaction,
-) {
-	cq.SetNextQueueIndex(cqs.NextQueueIndex)
-
-	for i := range cq.Queues {
-		cq.Queues[i] = nil
-	}
-
-	for _, entry := range cqs.Entries {
-		cmd := restoreCommand(entry.Command, transactions)
-		cq.Queues[entry.QueueIndex] = append(
-			cq.Queues[entry.QueueIndex], cmd)
-	}
-}
-
-func restoreBanks(
-	banks org.Banks,
-	flat bankStatesFlat,
-	transactions []*signal.Transaction,
-) {
-	for _, entry := range flat.Entries {
-		bi := banks[entry.Rank][entry.BankGroup][entry.BankIndex].(*org.BankImpl)
-		restoreBank(bi, entry.Data, transactions)
-	}
-}
-
-func restoreBank(
-	b *org.BankImpl,
-	bs bankState,
-	transactions []*signal.Transaction,
-) {
-	b.SetState(org.BankState(bs.State))
-	b.SetOpenRow(bs.OpenRow)
-	restoreBankCyclesToCmd(b, bs.CyclesToCmdAvailable)
-
-	if bs.HasCurrentCmd {
-		cmd := restoreCommand(bs.CurrentCmd, transactions)
-		b.SetCurrentCmd(cmd)
-	} else {
-		b.SetCurrentCmd(nil)
-	}
-}
-
-func restoreBankCyclesToCmd(
-	b *org.BankImpl,
-	m map[string]int,
-) {
-	cycles := make(map[signal.CommandKind]int, len(m))
-
-	for k, v := range m {
-		var kindInt int
-		_, _ = fmt.Sscanf(k, "%d", &kindInt)
-		cycles[signal.CommandKind(kindInt)] = v
-	}
-
-	b.SetCyclesToCmdAvailable(cycles)
-}
-
-// GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
-	return state
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
-	}
-
-	c.SetState(c.Component.GetState())
-
 	return nil
 }

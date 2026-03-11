@@ -1,19 +1,10 @@
 package dram
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-
-	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/tracing"
-
-	"github.com/sarchlab/akita/v5/mem/dram/internal/addressmapping"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/cmdq"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/org"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/trans"
 )
 
 // Builder can build new memory controllers.
@@ -22,7 +13,12 @@ type Builder struct {
 	freq             sim.Freq
 	useGlobalStorage bool
 	storage          *mem.Storage
-	addrConverter    mem.AddressConverter
+
+	hasAddrConverter    bool
+	interleavingSize    uint64
+	totalNumOfElements  int
+	currentElementIndex int
+	offset              uint64
 
 	protocol             Protocol
 	transactionQueueSize int
@@ -129,41 +125,25 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 }
 
 // WithGlobalStorage asks the DRAM to use a global storage instead of a local
-// storage. Use this when you want to provide a unified storage for your whole
-// simulation. The address of the storage is the global physical address.
+// storage.
 func (b Builder) WithGlobalStorage(s *mem.Storage) Builder {
 	b.storage = s
 	b.useGlobalStorage = true
-
 	return b
 }
 
 // WithInterleavingAddrConversion sets the rule to convert the global physical
 // address to the internal physical address.
-//
-// For example, in a GPU that has 8 memory controllers. The addresses are
-// interleaved across all the memory controllers at the page granularity. The
-// current DRAM is the 3rd in the array of 8 memory controller. Also, there are
-// 4 GPUs in total and each GPU has 4GB memory. The CPU also has 4GB memory,
-// occupying the physical address from 0-4GB. The current GPU is the 2nd GPU. So
-// the address range is from 8GB - 12GB. In this case, the use should call this
-// function as `WithAddrConversion(4096, 8, 3, 8*mem.GB, 12*mem.GB)`.
-//
-// If there is only cone memory controller in your simulation, this function
-// should not be called and the global physical address is equivalent to the
-// DRAM controller's internal physical address.
 func (b Builder) WithInterleavingAddrConversion(
 	interleaveGranularity uint64,
 	numTotalUnit, currentUnitIndex int,
 	lowerBound, upperBound uint64,
 ) Builder {
-	b.addrConverter = mem.InterleavingConverter{
-		InterleavingSize:    interleaveGranularity,
-		TotalNumOfElements:  numTotalUnit,
-		CurrentElementIndex: currentUnitIndex,
-		Offset:              lowerBound,
-	}
-
+	b.hasAddrConverter = true
+	b.interleavingSize = interleaveGranularity
+	b.totalNumOfElements = numTotalUnit
+	b.currentElementIndex = currentUnitIndex
+	b.offset = lowerBound
 	return b
 }
 
@@ -173,229 +153,205 @@ func (b Builder) WithProtocol(protocol Protocol) Builder {
 	return b
 }
 
-// WithTransactionQueueSize sets the number of transactions can be buffered
-// before converting them into commands. Note that accesses that touches
-// multiple access units (BusWidth/8*BurstLength bytes) may need to be split
-// into multiple transactions.
+// WithTransactionQueueSize sets the number of transactions can be buffered.
 func (b Builder) WithTransactionQueueSize(n int) Builder {
 	b.transactionQueueSize = n
 	return b
 }
 
-// WithCommandQueueSize sets the number of command that each command queue
-// can hold.
+// WithCommandQueueSize sets the number of commands per command queue.
 func (b Builder) WithCommandQueueSize(n int) Builder {
 	b.commandQueueSize = n
 	return b
 }
 
-// WithBusWidth sets the number of bits can be transferred out of the banks
-// at the same time.
+// WithBusWidth sets the bus width.
 func (b Builder) WithBusWidth(n int) Builder {
 	b.busWidth = n
 	return b
 }
 
-// WithBurstLength sets the number of access (each access manipulates the amount
-// of data that equals the bus width) that takes place as one group.
+// WithBurstLength sets the burst length.
 func (b Builder) WithBurstLength(n int) Builder {
 	b.burstLength = n
 	return b
 }
 
-// WithDeviceWidth sets the number of bit that a bank can deliver at the same
-// time.
+// WithDeviceWidth sets the device width.
 func (b Builder) WithDeviceWidth(n int) Builder {
 	b.deviceWidth = n
 	return b
 }
 
-// WithNumChannel sets the channels that the memory controller controls.
+// WithNumChannel sets the number of channels.
 func (b Builder) WithNumChannel(n int) Builder {
 	b.numChannel = n
 	return b
 }
 
-// WithNumRank sets the number of ranks in each channel. Number of ranks is
-// typically the last parameter to determine. Here is how you can calculate
-// the number of ranks. Suppose your total memory capacity is B_{ctrl}, channel
-// count N_{chn}, row count N_{row}, column count N_col, bus width W_b, device
-// width W_d. You can calculate the bank size as B_b with B_b = N_{col} *
-// N_{row} * W_d. The rank size can be calculated with B_r = B_b * N_b *
-// N_{device_per_rank}, where N_{device_per_rank} can be calculated with
-// N_{device_per_rank} = W_b/W_d. Finally, the number of ranks is N_r =
-// B_{ctrl} / N_{chn} / B_r.
+// WithNumRank sets the number of ranks.
 func (b Builder) WithNumRank(n int) Builder {
 	b.numRank = n
 	return b
 }
 
-// WithNumBankGroup sets the number of bank groups in each rank.
+// WithNumBankGroup sets the number of bank groups.
 func (b Builder) WithNumBankGroup(n int) Builder {
 	b.numBankGroup = n
 	return b
 }
 
-// WithNumBank sets the number of banks in each bank group.
+// WithNumBank sets the number of banks.
 func (b Builder) WithNumBank(n int) Builder {
 	b.numBank = n
 	return b
 }
 
-// WithNumRow sets the number of rows in each DRAM array.
+// WithNumRow sets the number of rows.
 func (b Builder) WithNumRow(n int) Builder {
 	b.numRow = n
 	return b
 }
 
-// WithNumCol sets the number of columns in each DRAM array.
+// WithNumCol sets the number of columns.
 func (b Builder) WithNumCol(n int) Builder {
 	b.numCol = n
 	return b
 }
 
-// WithTopPort sets the top port of the memory controller.
+// WithTopPort sets the top port.
 func (b Builder) WithTopPort(port sim.Port) Builder {
 	b.topPort = port
 	return b
 }
 
-// WithAdditionalTracer adds one tracer to the memory controller and all the
-// banks.
+// WithAdditionalTracer adds one tracer.
 func (b Builder) WithAdditionalTracer(t tracing.Tracer) Builder {
 	b.tracers = append(b.tracers, t)
 	return b
 }
 
-// WithTAL sets the additional latency to column access in cycles.
+// WithTAL sets tAL.
 func (b Builder) WithTAL(cycle int) Builder {
 	b.tAL = cycle
 	return b
 }
 
-// WithTCL sets the column access strobe latency in cycles
+// WithTCL sets tCL.
 func (b Builder) WithTCL(cycle int) Builder {
 	b.tCL = cycle
 	return b
 }
 
-// WithTCWL sets the column write strobe latency in cycles
+// WithTCWL sets tCWL.
 func (b Builder) WithTCWL(cycle int) Builder {
 	b.tCWL = cycle
 	return b
 }
 
-// WithTRCD sets the row-to-column delay in cycles.
+// WithTRCD sets tRCD.
 func (b Builder) WithTRCD(cycle int) Builder {
 	b.tRCD = cycle
 	return b
 }
 
-// WithTRP sets the row precharge latency in cycles.
+// WithTRP sets tRP.
 func (b Builder) WithTRP(cycle int) Builder {
 	b.tRP = cycle
 	return b
 }
 
-// WithTRAS sets the row access strobe latency in cycles.
+// WithTRAS sets tRAS.
 func (b Builder) WithTRAS(cycle int) Builder {
 	b.tRAS = cycle
 	return b
 }
 
-// WithTCCDL sets the long column-to-column delay in cycles. The long delay
-// describes accesses to banks in the same bank group.
+// WithTCCDL sets tCCDL.
 func (b Builder) WithTCCDL(cycle int) Builder {
 	b.tCCDL = cycle
 	return b
 }
 
-// WithTCCDS sets the short column-to-column delay in cycles. The long delay
-// describes accesses to banks from different bank groups.
+// WithTCCDS sets tCCDS.
 func (b Builder) WithTCCDS(cycle int) Builder {
 	b.tCCDS = cycle
 	return b
 }
 
-// WithTRTRS sets the rank-to-rank switching latency.
+// WithTRTRS sets tRTRS.
 func (b Builder) WithTRTRS(cycle int) Builder {
 	b.tRTRS = cycle
 	return b
 }
 
-// WithTRTP sets the row-to-precharge latency in cycles.
+// WithTRTP sets tRTP.
 func (b Builder) WithTRTP(cycle int) Builder {
 	b.tRTP = cycle
 	return b
 }
 
-// WithTWTRL sets the long write-to-read latency in cycles. The long latency
-// describes write and read to banks from the same bank group.
+// WithTWTRL sets tWTRL.
 func (b Builder) WithTWTRL(cycle int) Builder {
 	b.tWTRL = cycle
 	return b
 }
 
-// WithTWTRS sets the short write-to-read latency in cycles. The short latency
-// describes write and read to banks from different bank groups.
+// WithTWTRS sets tWTRS.
 func (b Builder) WithTWTRS(cycle int) Builder {
 	b.tWTRS = cycle
 	return b
 }
 
-// WithTWR sets the write recovery time in cycles.
+// WithTWR sets tWR.
 func (b Builder) WithTWR(cycle int) Builder {
 	b.tWR = cycle
 	return b
 }
 
-// WithTPPD sets the precharge to precharge delay in cycles.
+// WithTPPD sets tPPD.
 func (b Builder) WithTPPD(cycle int) Builder {
 	b.tPPD = cycle
 	return b
 }
 
-// WithTRRDL sets the long activate to activate latency in cycles. The long
-// latency describes activating different banks from the same bank group.
+// WithTRRDL sets tRRDL.
 func (b Builder) WithTRRDL(cycle int) Builder {
 	b.tRRDL = cycle
 	return b
 }
 
-// WithTRRDS sets the short activate to activate latency in cycles. The short
-// latency describes activating different banks from different bank groups.
+// WithTRRDS sets tRRDS.
 func (b Builder) WithTRRDS(cycle int) Builder {
 	b.tRRDS = cycle
 	return b
 }
 
-// WithTRCDRD sets the activate to read latency in cycles. It only works for
-// GDDR DRAMs.
+// WithTRCDRD sets tRCDRD.
 func (b Builder) WithTRCDRD(cycle int) Builder {
 	b.tRCDRD = cycle
 	return b
 }
 
-// WithTRCDWR sets the activate to write latency in cycles. It only works for
-// GDDR DRAMs.
+// WithTRCDWR sets tRCDWR.
 func (b Builder) WithTRCDWR(cycle int) Builder {
 	b.tRCDWR = cycle
 	return b
 }
 
-// WithTREFI sets the refresh interval in cycles.
+// WithTREFI sets tREFI.
 func (b Builder) WithTREFI(cycle int) Builder {
 	b.tREFI = cycle
 	return b
 }
 
-// WithRFC sets the refresh cycle time in cycles.
+// WithRFC sets tRFC.
 func (b Builder) WithRFC(cycle int) Builder {
 	b.tRFC = cycle
 	return b
 }
 
-// WithRFCb sets the refresh to activate bank latency in cycles.
+// WithRFCb sets tRFCb.
 func (b Builder) WithRFCb(cycle int) Builder {
 	b.tRFCb = cycle
 	return b
@@ -403,46 +359,38 @@ func (b Builder) WithRFCb(cycle int) Builder {
 
 // Build builds a new MemController.
 func (b Builder) Build(name string) *Comp {
+	b.calculateBurstCycle()
+	b.tRL = b.tAL + b.tCL
+	b.tWL = b.tAL + b.tCWL
+	b.readDelay = b.tRL + b.burstCycle
+	b.writeDelay = b.tRL + b.burstCycle
+	b.tRC = b.tRAS + b.tRP
+
+	spec := b.buildSpec()
+	timing := b.generateTiming()
+	spec.Timing = timing
+
+	initialState := State{
+		SubTransQueue: subTransQueueState{
+			Entries: []subTransRef{},
+		},
+		CommandQueues: commandQueueState{
+			NumQueues: b.numChannel * b.numRank,
+			Entries:   []queueEntry{},
+		},
+		BankStates: initBankStatesFlat(
+			b.numRank, b.numBankGroup, b.numBank),
+	}
+
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
-		WithSpec(Spec{}).
+		WithSpec(spec).
 		Build(name)
+	modelComp.SetState(initialState)
 
 	m := &Comp{
-		Component:     modelComp,
-		addrConverter: b.addrConverter,
-		storage:       b.storage,
-	}
-
-	b.attachTracers(m)
-	b.buildChannel(name, m)
-
-	m.addrConverter = b.addrConverter
-	m.addrMapper = addressmapping.MakeBuilder().
-		WithBurstLength(b.burstLength).
-		WithBusWidth(b.busWidth).
-		WithNumChannel(b.numChannel).
-		WithNumRank(b.numRank).
-		WithNumBankGroup(b.numBankGroup).
-		WithNumBank(b.numBank).
-		WithNumCol(b.numCol).
-		WithNumRow(b.numRow).
-		Build()
-
-	numAccessUnitBit, _ := log2(uint64(b.busWidth / 8 * b.burstLength))
-	m.subTransSplitter = trans.NewSubTransSplitter(numAccessUnitBit)
-	m.cmdQueue = &cmdq.CommandQueueImpl{
-		Queues:           make([]cmdq.Queue, b.numChannel*b.numRank),
-		CapacityPerQueue: b.commandQueueSize,
-		Channel:          m.channel,
-	}
-	m.subTransactionQueue = &trans.FCFSSubTransactionQueue{
-		Capacity: b.transactionQueueSize,
-		CmdQueue: m.cmdQueue,
-		CmdCreator: &trans.ClosePageCommandCreator{
-			AddrMapper: m.addrMapper,
-		},
+		Component: modelComp,
 	}
 
 	if b.useGlobalStorage {
@@ -459,78 +407,202 @@ func (b Builder) Build(name string) *Comp {
 	m.topPort.SetComponent(m)
 	m.AddPort("Top", m.topPort)
 
-	middleware := &middleware{Comp: m}
-	m.AddMiddleware(middleware)
+	for _, tracer := range b.tracers {
+		tracing.CollectTrace(m, tracer)
+	}
+
+	mw := &middleware{Comp: m}
+	m.AddMiddleware(mw)
 
 	return m
 }
 
-func (b Builder) attachTracers(hookable tracing.NamedHookable) {
-	for _, tracer := range b.tracers {
-		tracing.CollectTrace(hookable, tracer)
+func (b Builder) buildSpec() Spec {
+	numAccessUnitBit, _ := log2(uint64(b.busWidth / 8 * b.burstLength))
+
+	// Build address mapping
+	addrMapping := b.buildAddressMapping()
+
+	cmdCycles := map[CommandKind]int{
+		CmdKindRead:           b.readDelay,
+		CmdKindReadPrecharge:  b.tRP,
+		CmdKindWrite:          b.writeDelay,
+		CmdKindWritePrecharge: b.tRP,
+		CmdKindActivate:       b.tRCD - b.tAL,
+		CmdKindPrecharge:      b.tRP,
+		CmdKindRefreshBank:    1,
+		CmdKindRefresh:        1,
+		CmdKindSRefEnter:      1,
+		CmdKindSRefExit:       1,
+	}
+
+	if b.protocol.isGDDR() || b.protocol.isHBM() {
+		cmdCycles[CmdKindActivate] = b.tRCDRD - b.tAL
+	}
+
+	return Spec{
+		Protocol:   int(b.protocol),
+		TAL:        b.tAL,
+		TCL:        b.tCL,
+		TCWL:       b.tCWL,
+		TRL:        b.tRL,
+		TWL:        b.tWL,
+		ReadDelay:  b.readDelay,
+		WriteDelay: b.writeDelay,
+		TRCD:       b.tRCD,
+		TRP:        b.tRP,
+		TRAS:       b.tRAS,
+		TCCDS:      b.tCCDS,
+		TCCDL:      b.tCCDL,
+		TRTRS:      b.tRTRS,
+		TRTP:       b.tRTP,
+		TWTRL:      b.tWTRL,
+		TWTRS:      b.tWTRS,
+		TWR:        b.tWR,
+		TPPD:       b.tPPD,
+		TRC:        b.tRC,
+		TRRDS:      b.tRRDS,
+		TRRDL:      b.tRRDL,
+		TRCDRD:     b.tRCDRD,
+		TRCDWR:     b.tRCDWR,
+		TREFI:      b.tREFI,
+		TRFC:       b.tRFC,
+		TRFCb:      b.tRFCb,
+		TCKESR:     b.tCKESR,
+		TXS:        b.tXS,
+		BurstCycle: b.burstCycle,
+
+		BusWidth:    b.busWidth,
+		BurstLength: b.burstLength,
+		DeviceWidth: b.deviceWidth,
+
+		NumChannel:   b.numChannel,
+		NumRank:      b.numRank,
+		NumBankGroup: b.numBankGroup,
+		NumBank:      b.numBank,
+		NumRow:       b.numRow,
+		NumCol:       b.numCol,
+
+		TransactionQueueSize: b.transactionQueueSize,
+		CommandQueueCapacity: b.commandQueueSize,
+
+		HasAddrConverter:    b.hasAddrConverter,
+		InterleavingSize:    b.interleavingSize,
+		TotalNumOfElements:  b.totalNumOfElements,
+		CurrentElementIndex: b.currentElementIndex,
+		Offset:              b.offset,
+
+		ChannelPos:    addrMapping.channelPos,
+		ChannelMask:   addrMapping.channelMask,
+		RankPos:       addrMapping.rankPos,
+		RankMask:      addrMapping.rankMask,
+		BankGroupPos:  addrMapping.bankGroupPos,
+		BankGroupMask: addrMapping.bankGroupMask,
+		BankPos:       addrMapping.bankPos,
+		BankMask:      addrMapping.bankMask,
+		RowPos:        addrMapping.rowPos,
+		RowMask:       addrMapping.rowMask,
+		ColPos:        addrMapping.colPos,
+		ColMask:       addrMapping.colMask,
+
+		Log2AccessUnitSize: numAccessUnitBit,
+
+		CmdCycles: cmdCycles,
 	}
 }
 
-func (b Builder) buildChannel(name string, m *Comp) {
-	timing := b.generateTiming()
-	channel := &org.ChannelImpl{
-		Timing: timing,
+type addrMappingResult struct {
+	channelPos    int
+	channelMask   uint64
+	rankPos       int
+	rankMask      uint64
+	bankGroupPos  int
+	bankGroupMask uint64
+	bankPos       int
+	bankMask      uint64
+	rowPos        int
+	rowMask       uint64
+	colPos        int
+	colMask       uint64
+}
+
+func (b Builder) buildAddressMapping() addrMappingResult {
+	// Replicate the logic from addressmapping.Builder.Build()
+	channelBit, _ := log2(uint64(b.numChannel))
+	rankBit, _ := log2(uint64(b.numRank))
+	bankGroupBit, _ := log2(uint64(b.numBankGroup))
+	bankBit, _ := log2(uint64(b.numBank))
+	rowBit, _ := log2(uint64(b.numRow))
+	colBit, _ := log2(uint64(b.numCol))
+	colLoBit, _ := log2(uint64(b.burstLength))
+	colHiBit := colBit - colLoBit
+	accessUnitBit, _ := log2(uint64(b.busWidth / 8 * b.burstLength))
+
+	r := addrMappingResult{
+		channelMask:   (1 << channelBit) - 1,
+		rankMask:      (1 << rankBit) - 1,
+		bankGroupMask: (1 << bankGroupBit) - 1,
+		bankMask:      (1 << bankBit) - 1,
+		rowMask:       (1 << rowBit) - 1,
+		colMask:       (1 << colHiBit) - 1,
 	}
 
-	channel.Banks = make(org.Banks, b.numRank)
-	for i := 0; i < b.numRank; i++ {
-		channel.Banks[i] = make([][]org.Bank, b.numBankGroup)
+	// Default bit order high to low:
+	// Row, Channel, Rank, Bank, BankGroup, Column
+	type locItem int
+	const (
+		liChannel   locItem = iota
+		liRank
+		liBankGroup
+		liBank
+		liRow
+		liColumn
+	)
 
-		for j := 0; j < b.numBankGroup; j++ {
-			channel.Banks[i][j] = make([]org.Bank, b.numBank)
+	bitOrder := []locItem{
+		liRow,
+		liChannel,
+		liRank,
+		liBank,
+		liBankGroup,
+		liColumn,
+	}
 
-			for k := 0; k < b.numBank; k++ {
-				bankName := fmt.Sprintf("%s.Bank[%d][%d][%d]",
-					name, i, j, k)
-				bank := org.NewBankImpl(bankName)
-				bank.CmdCycles = map[signal.CommandKind]int{
-					signal.CmdKindRead:           b.readDelay,
-					signal.CmdKindReadPrecharge:  b.tRP,
-					signal.CmdKindWrite:          b.writeDelay,
-					signal.CmdKindWritePrecharge: b.tRP,
-					signal.CmdKindActivate:       b.tRCD - b.tAL,
-					signal.CmdKindPrecharge:      b.tRP,
-					signal.CmdKindRefreshBank:    1,
-					signal.CmdKindRefresh:        1,
-					signal.CmdKindSRefEnter:      1,
-					signal.CmdKindSRefExit:       1,
-				}
-
-				if b.protocol.isGDDR() || b.protocol.isHBM() {
-					bank.CmdCycles[signal.CmdKindActivate] = b.tRCDRD - b.tAL
-				}
-
-				channel.Banks[i][j][k] = bank
-
-				b.attachTracers(bank)
-			}
+	pos := accessUnitBit
+	for i := len(bitOrder) - 1; i >= 0; i-- {
+		switch bitOrder[i] {
+		case liChannel:
+			r.channelPos = int(pos)
+			pos += channelBit
+		case liRank:
+			r.rankPos = int(pos)
+			pos += rankBit
+		case liBankGroup:
+			r.bankGroupPos = int(pos)
+			pos += bankGroupBit
+		case liBank:
+			r.bankPos = int(pos)
+			pos += bankBit
+		case liRow:
+			r.rowPos = int(pos)
+			pos += rowBit
+		case liColumn:
+			r.colPos = int(pos)
+			pos += colHiBit
 		}
 	}
 
-	m.channel = channel
+	return r
 }
 
-//nolint:gocyclo,funlen,govet
-func (b *Builder) generateTiming() org.Timing {
-	t := org.Timing{
-		SameBank:              org.MakeTimeTable(),
-		OtherBanksInBankGroup: org.MakeTimeTable(),
-		SameRank:              org.MakeTimeTable(),
-		OtherRanks:            org.MakeTimeTable(),
+//nolint:gocyclo,funlen
+func (b *Builder) generateTiming() Timing {
+	t := Timing{
+		SameBank:              MakeTimeTable(),
+		OtherBanksInBankGroup: MakeTimeTable(),
+		SameRank:              MakeTimeTable(),
+		OtherRanks:            MakeTimeTable(),
 	}
-
-	b.calculateBurstCycle()
-
-	b.tRL = b.tAL + b.tCL
-	b.tWL = b.tAL + b.tCWL
-	b.readDelay = b.tRL + b.burstCycle
-	b.writeDelay = b.tRL + b.burstCycle
-	b.tRC = b.tRAS + b.tRP
 
 	readToReadL := max(b.burstCycle, b.tCCDL)
 	readToReadS := max(b.burstCycle, b.tCCDS)
@@ -567,7 +639,7 @@ func (b *Builder) generateTiming() org.Timing {
 		activateToWrite = b.tRCDWR
 	}
 
-	activateToRefresh := b.tRC // need to precharge before ref, so it's tRC
+	activateToRefresh := b.tRC
 
 	refreshToRefresh := b.tREFI
 	refreshToActivate := b.tRFC
@@ -577,203 +649,186 @@ func (b *Builder) generateTiming() org.Timing {
 	selfRefreshExit := b.tXS
 
 	if b.numBankGroup == 1 {
-		// Bank-group can be disabled. In that case
-		// the value of tXXX_S should be used instead of tXXX_L
-		// (because now the device is running at a lower freq)
-		// we overwrite the following values so that we don't have
-		// to change the assignment of the vectors
 		readToReadL = max(b.burstCycle, b.tCCDS)
 		writeToReadL = b.writeDelay + b.tWTRS
 		writeToWriteL = max(b.burstCycle, b.tCCDS)
 		activateToActivateL = b.tRRDS
 	}
 
-	t.SameBank[signal.CmdKindRead] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadL},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWrite},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
-		{NextCmdKind: signal.CmdKindPrecharge, MinCycleInBetween: readToPrecharge},
+	t.SameBank[CmdKindRead] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: readToPrecharge},
+	}
+	t.OtherBanksInBankGroup[CmdKindRead] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	}
+	t.SameRank[CmdKindRead] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadS},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadS},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	}
+	t.OtherRanks[CmdKindRead] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadO},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWriteO},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadO},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWriteO},
 	}
 
-	t.OtherBanksInBankGroup[signal.CmdKindRead] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadL},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWrite},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	t.SameBank[CmdKindWrite] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteL},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL},
+		{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: writeToPrecharge},
 	}
-	t.SameRank[signal.CmdKindRead] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadS},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWrite},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadS},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	t.OtherBanksInBankGroup[CmdKindWrite] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteL},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL},
 	}
-	t.OtherRanks[signal.CmdKindRead] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadO},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWriteO},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadO},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWriteO},
+	t.SameRank[CmdKindWrite] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadS},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteS},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadS},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteS},
+	}
+	t.OtherRanks[CmdKindWrite] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadO},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteO},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadO},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteO},
 	}
 
-	t.SameBank[signal.CmdKindWrite] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadL},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteL},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL},
-		{NextCmdKind: signal.CmdKindPrecharge, MinCycleInBetween: writeToPrecharge}}
-	t.OtherBanksInBankGroup[signal.CmdKindWrite] = []org.TimeTableEntry{
-		{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadL},
-		{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteL},
-		{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
-		{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL}}
-	t.SameRank[signal.CmdKindWrite] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadS},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteS},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadS},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteS}}
-	t.OtherRanks[signal.CmdKindWrite] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadO},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteO},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadO},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteO}}
+	// READ_PRECHARGE
+	t.SameBank[CmdKindReadPrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: readpToAct},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: readToActivate},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: readToActivate},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: readToActivate},
+	}
+	t.OtherBanksInBankGroup[CmdKindReadPrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	}
+	t.SameRank[CmdKindReadPrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadS},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadS},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWrite},
+	}
+	t.OtherRanks[CmdKindReadPrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: readToReadO},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: readToWriteO},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: readToReadO},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: readToWriteO},
+	}
 
-	// command READ_PRECHARGE
-	t.SameBank[signal.CmdKindReadPrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: readpToAct},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: readToActivate},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: readToActivate},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: readToActivate}}
-	t.OtherBanksInBankGroup[signal.CmdKindReadPrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadL},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWrite},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadL},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWrite}}
-	t.SameRank[signal.CmdKindReadPrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadS},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWrite},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadS},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWrite}}
-	t.OtherRanks[signal.CmdKindReadPrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: readToReadO},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: readToWriteO},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: readToReadO},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: readToWriteO}}
+	// WRITE_PRECHARGE
+	t.SameBank[CmdKindWritePrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: writeToActivate},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: writeToActivate},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: writeToActivate},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: writeToActivate},
+	}
+	t.OtherBanksInBankGroup[CmdKindWritePrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteL},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL},
+	}
+	t.SameRank[CmdKindWritePrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadS},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteS},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadS},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteS},
+	}
+	t.OtherRanks[CmdKindWritePrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: writeToReadO},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: writeToWriteO},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: writeToReadO},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: writeToWriteO},
+	}
 
-	// command WRITE_PRECHARGE
-	t.SameBank[signal.CmdKindWritePrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: writeToActivate},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: writeToActivate},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: writeToActivate},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: writeToActivate}}
-	t.OtherBanksInBankGroup[signal.CmdKindWritePrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadL},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteL},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadL},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteL}}
-	t.SameRank[signal.CmdKindWritePrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadS},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteS},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadS},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteS}}
-	t.OtherRanks[signal.CmdKindWritePrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: writeToReadO},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: writeToWriteO},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: writeToReadO},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: writeToWriteO}}
+	// ACTIVATE
+	t.SameBank[CmdKindActivate] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: activateToActivate},
+		{NextCmdKind: CmdKindRead, MinCycleInBetween: activateToRead},
+		{NextCmdKind: CmdKindWrite, MinCycleInBetween: activateToWrite},
+		{NextCmdKind: CmdKindReadPrecharge, MinCycleInBetween: activateToRead},
+		{NextCmdKind: CmdKindWritePrecharge, MinCycleInBetween: activateToWrite},
+		{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: activateToPrecharge},
+	}
+	t.OtherBanksInBankGroup[CmdKindActivate] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: activateToActivateL},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: activateToRefresh},
+	}
+	t.SameRank[CmdKindActivate] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: activateToActivateS},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: activateToRefresh},
+	}
 
-	// command ACTIVATE
-	t.SameBank[signal.CmdKindActivate] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: activateToActivate},
-			{NextCmdKind: signal.CmdKindRead, MinCycleInBetween: activateToRead},
-			{NextCmdKind: signal.CmdKindWrite, MinCycleInBetween: activateToWrite},
-			{NextCmdKind: signal.CmdKindReadPrecharge, MinCycleInBetween: activateToRead},
-			{NextCmdKind: signal.CmdKindWritePrecharge, MinCycleInBetween: activateToWrite},
-			{NextCmdKind: signal.CmdKindPrecharge, MinCycleInBetween: activateToPrecharge},
+	// PRECHARGE
+	t.SameBank[CmdKindPrecharge] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: prechargeToActivate},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: prechargeToActivate},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: prechargeToActivate},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: prechargeToActivate},
+	}
+
+	if b.protocol.isGDDR() || Protocol(b.protocol) == LPDDR4 {
+		t.OtherBanksInBankGroup[CmdKindPrecharge] = []TimeTableEntry{
+			{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
 		}
-
-	t.OtherBanksInBankGroup[signal.CmdKindActivate] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: activateToActivateL},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: activateToRefresh}}
-
-	t.SameRank[signal.CmdKindActivate] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: activateToActivateS},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: activateToRefresh}}
-
-	// command PRECHARGE
-	t.SameBank[signal.CmdKindPrecharge] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: prechargeToActivate},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: prechargeToActivate},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: prechargeToActivate},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: prechargeToActivate}}
-
-	// for those who need tPPD
-	if b.protocol.isGDDR() || b.protocol == LPDDR4 {
-		t.OtherBanksInBankGroup[signal.CmdKindPrecharge] =
-			[]org.TimeTableEntry{
-				{NextCmdKind: signal.CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
-			}
-
-		t.SameRank[signal.CmdKindPrecharge] =
-			[]org.TimeTableEntry{
-				{NextCmdKind: signal.CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
-			}
+		t.SameRank[CmdKindPrecharge] = []TimeTableEntry{
+			{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
+		}
 	}
 
-	// command REFRESH_BANK
-	t.SameRank[signal.CmdKindRefreshBank] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: refreshToActivateBank},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: refreshToActivateBank},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: refreshToActivateBank},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: refreshToActivateBank}}
+	// REFRESH_BANK
+	t.SameRank[CmdKindRefreshBank] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivateBank},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: refreshToActivateBank},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToActivateBank},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: refreshToActivateBank},
+	}
+	t.OtherBanksInBankGroup[CmdKindRefreshBank] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivate},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
+	}
+	t.SameRank[CmdKindRefreshBank] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivate},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
+	}
 
-	t.OtherBanksInBankGroup[signal.CmdKindRefreshBank] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: refreshToActivate},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
-		}
+	// REFRESH
+	t.SameRank[CmdKindRefresh] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivate},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: refreshToActivate},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: refreshToActivate},
+	}
 
-	t.SameRank[signal.CmdKindRefreshBank] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: refreshToActivate},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
-		}
+	// SREF_ENTER
+	t.SameRank[CmdKindSRefEnter] = []TimeTableEntry{
+		{NextCmdKind: CmdKindSRefExit, MinCycleInBetween: selfRefreshEntryToExit},
+	}
 
-	// REFRESH, SREF_ENTER and SREF_EXIT are isued to the entire
-	// rank  command REFRESH
-	t.SameRank[signal.CmdKindRefresh] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: refreshToActivate},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: refreshToActivate},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: refreshToActivate}}
-
-	// command SREF_ENTER
-	// TODO: add power down commands
-	t.SameRank[signal.CmdKindSRefEnter] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindSRefExit, MinCycleInBetween: selfRefreshEntryToExit}}
-
-	// command SREF_EXIT
-	t.SameRank[signal.CmdKindSRefExit] =
-		[]org.TimeTableEntry{
-			{NextCmdKind: signal.CmdKindActivate, MinCycleInBetween: selfRefreshExit},
-			{NextCmdKind: signal.CmdKindRefresh, MinCycleInBetween: selfRefreshExit},
-			{NextCmdKind: signal.CmdKindRefreshBank, MinCycleInBetween: selfRefreshExit},
-			{NextCmdKind: signal.CmdKindSRefEnter, MinCycleInBetween: selfRefreshExit}}
+	// SREF_EXIT
+	t.SameRank[CmdKindSRefExit] = []TimeTableEntry{
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: selfRefreshExit},
+		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: selfRefreshExit},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: selfRefreshExit},
+		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: selfRefreshExit},
+	}
 
 	return t
 }
@@ -819,6 +874,5 @@ func max(a, b int) int {
 	if a > b {
 		return a
 	}
-
 	return b
 }

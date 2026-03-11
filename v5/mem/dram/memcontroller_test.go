@@ -3,229 +3,298 @@ package dram
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/dram/internal/signal"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
-	"go.uber.org/mock/gomock"
+	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
-var _ = Describe("MemController", func() {
+var _ = Describe("Address Operations", func() {
+	It("should convert external to internal without converter", func() {
+		spec := &Spec{HasAddrConverter: false}
+		Expect(convertExternalToInternal(spec, 0x1000)).To(
+			Equal(uint64(0x1000)))
+	})
+
+	It("should convert external to internal with interleaving", func() {
+		spec := &Spec{
+			HasAddrConverter:    true,
+			InterleavingSize:    4096,
+			TotalNumOfElements:  8,
+			CurrentElementIndex: 3,
+			Offset:              0,
+		}
+		// addr = 0 + highBits*8*4096 + 3*4096 + lowBits
+		// For addr = 3*4096 = 12288: highBits=0, lowBits=0
+		// internal = 0*4096 + 0 = 0
+		Expect(convertExternalToInternal(spec, 3*4096)).To(
+			Equal(uint64(0)))
+	})
+
+	It("should map address", func() {
+		b := MakeBuilder()
+		spec := b.buildSpec()
+
+		loc := mapAddress(&spec, 0)
+		Expect(loc.Channel).To(Equal(uint64(0)))
+		Expect(loc.Rank).To(Equal(uint64(0)))
+	})
+})
+
+var _ = Describe("Transaction Splitting", func() {
+	It("should split a transaction into sub-transactions", func() {
+		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		trans := &transactionState{
+			HasRead: true,
+			ReadMsg: mem.ReadReq{},
+		}
+		trans.ReadMsg.Address = 0x100
+		trans.ReadMsg.AccessByteSize = 128
+
+		splitTransaction(spec, trans, 0)
+		// 128 bytes at 64-byte units = 2 sub-transactions
+		Expect(trans.SubTransactions).To(HaveLen(2))
+		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
+		Expect(trans.SubTransactions[1].Address).To(Equal(uint64(0x140)))
+	})
+
+	It("should align to unit boundaries", func() {
+		spec := &Spec{Log2AccessUnitSize: 6} // 64 bytes
+		trans := &transactionState{
+			HasRead: true,
+			ReadMsg: mem.ReadReq{},
+		}
+		trans.ReadMsg.Address = 0x110 // Not aligned
+		trans.ReadMsg.AccessByteSize = 4
+
+		splitTransaction(spec, trans, 0)
+		Expect(trans.SubTransactions).To(HaveLen(1))
+		Expect(trans.SubTransactions[0].Address).To(Equal(uint64(0x100)))
+	})
+})
+
+var _ = Describe("Bank Operations", func() {
+	It("should get required command kind for closed bank", func() {
+		bs := &bankState{
+			State:                int(BankStateClosed),
+			CyclesToCmdAvailable: make(map[string]int),
+		}
+		cmd := &commandState{
+			Kind:     int(CmdKindReadPrecharge),
+			Location: Location{Row: 10},
+		}
+
+		requiredKind := getRequiredCommandKind(bs, cmd)
+		Expect(requiredKind).To(Equal(CmdKindActivate))
+	})
+
+	It("should get required command kind for open bank - same row", func() {
+		bs := &bankState{
+			State:                int(BankStateOpen),
+			OpenRow:              10,
+			CyclesToCmdAvailable: make(map[string]int),
+		}
+		cmd := &commandState{
+			Kind:     int(CmdKindReadPrecharge),
+			Location: Location{Row: 10},
+		}
+
+		requiredKind := getRequiredCommandKind(bs, cmd)
+		Expect(requiredKind).To(Equal(CmdKindReadPrecharge))
+	})
+
+	It("should get precharge for open bank - different row", func() {
+		bs := &bankState{
+			State:                int(BankStateOpen),
+			OpenRow:              5,
+			CyclesToCmdAvailable: make(map[string]int),
+		}
+		cmd := &commandState{
+			Kind:     int(CmdKindReadPrecharge),
+			Location: Location{Row: 10},
+		}
+
+		requiredKind := getRequiredCommandKind(bs, cmd)
+		Expect(requiredKind).To(Equal(CmdKindPrecharge))
+	})
+
+	It("should tick banks and count down", func() {
+		spec := &Spec{
+			CmdCycles: map[CommandKind]int{
+				CmdKindActivate: 5,
+			},
+		}
+		state := &State{
+			BankStates: bankStatesFlat{
+				NumRanks:      1,
+				NumBankGroups: 1,
+				NumBanks:      1,
+				Entries: []bankEntry{
+					{
+						Rank: 0, BankGroup: 0, BankIndex: 0,
+						Data: bankState{
+							State: int(BankStateClosed),
+							HasCurrentCmd: true,
+							CurrentCmd: commandState{
+								Kind:      int(CmdKindActivate),
+								CycleLeft: 2,
+							},
+							CyclesToCmdAvailable: map[string]int{
+								cmdKindToString(CmdKindRead): 3,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		progress := tickBanks(spec, state)
+		Expect(progress).To(BeTrue())
+		bs := &state.BankStates.Entries[0].Data
+		Expect(bs.CurrentCmd.CycleLeft).To(Equal(1))
+		Expect(bs.CyclesToCmdAvailable[cmdKindToString(CmdKindRead)]).To(
+			Equal(2))
+	})
+
+	It("should complete command and mark subtrans done", func() {
+		state := &State{
+			Transactions: []transactionState{
+				{
+					HasRead: true,
+					SubTransactions: []subTransState{
+						{ID: "st1", Completed: false},
+					},
+				},
+			},
+			BankStates: bankStatesFlat{
+				Entries: []bankEntry{
+					{
+						Data: bankState{
+							State: int(BankStateOpen),
+							HasCurrentCmd: true,
+							CurrentCmd: commandState{
+								Kind:      int(CmdKindReadPrecharge),
+								CycleLeft: 1,
+								SubTransRef: subTransRef{
+									TransIndex: 0,
+									SubIndex:   0,
+								},
+							},
+							CyclesToCmdAvailable: make(map[string]int),
+						},
+					},
+				},
+			},
+		}
+
+		spec := &Spec{CmdCycles: map[CommandKind]int{}}
+		tickBanks(spec, state)
+
+		Expect(state.BankStates.Entries[0].Data.HasCurrentCmd).To(BeFalse())
+		Expect(state.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
+	})
+})
+
+var _ = Describe("Queue Operations", func() {
+	It("should check if sub-trans queue can push", func() {
+		state := &State{
+			SubTransQueue: subTransQueueState{
+				Entries: make([]subTransRef, 5),
+			},
+		}
+		Expect(canPushSubTrans(state, 3, 10)).To(BeTrue())
+		Expect(canPushSubTrans(state, 6, 10)).To(BeFalse())
+	})
+
+	It("should push sub-transactions", func() {
+		state := &State{
+			Transactions: []transactionState{
+				{
+					SubTransactions: []subTransState{
+						{ID: "st0"},
+						{ID: "st1"},
+					},
+				},
+			},
+			SubTransQueue: subTransQueueState{
+				Entries: []subTransRef{},
+			},
+		}
+
+		pushSubTrans(state, 0)
+		Expect(state.SubTransQueue.Entries).To(HaveLen(2))
+		Expect(state.SubTransQueue.Entries[0]).To(Equal(
+			subTransRef{TransIndex: 0, SubIndex: 0}))
+	})
+})
+
+var _ = Describe("DRAM Integration", func() {
 	var (
-		mockCtrl *gomock.Controller
-
-		topPort             *MockPort
-		addrConverter       *MockAddressConverter
-		subTransSplitter    *MockSubTransSplitter
-		subTransactionQueue *MockSubTransactionQueue
-		cmdQueue            *MockCommandQueue
-		channel             *MockChannel
-		storage             *mem.Storage
-
-		memCtrl           *Comp
-		memCtrlMiddleware *middleware
+		engine  sim.Engine
+		memCtrl *Comp
 	)
 
 	BeforeEach(func() {
-		mockCtrl = gomock.NewController(GinkgoT())
-
-		topPort = NewMockPort(mockCtrl)
-		topPort.EXPECT().AsRemote().Return(sim.RemotePort("TopPort")).AnyTimes()
-
-		subTransactionQueue = NewMockSubTransactionQueue(mockCtrl)
-		subTransSplitter = NewMockSubTransSplitter(mockCtrl)
-		addrConverter = NewMockAddressConverter(mockCtrl)
-		cmdQueue = NewMockCommandQueue(mockCtrl)
-		channel = NewMockChannel(mockCtrl)
-		storage = mem.NewStorage(4 * mem.GB)
-
+		engine = sim.NewSerialEngine()
 		memCtrl = MakeBuilder().
+			WithEngine(engine).
 			WithTopPort(sim.NewPort(nil, 1024, 1024, "MemCtrl.TopPort")).
 			Build("MemCtrl")
-		memCtrl.topPort = topPort
-		memCtrl.subTransactionQueue = subTransactionQueue
-		memCtrl.subTransSplitter = subTransSplitter
-		memCtrl.addrConverter = addrConverter
-		memCtrl.cmdQueue = cmdQueue
-		memCtrl.channel = channel
-		memCtrl.storage = storage
-		memCtrlMiddleware = memCtrl.Middlewares()[0].(*middleware)
 	})
 
-	AfterEach(func() {
-		mockCtrl.Finish()
-	})
+	It("should read and write via direct connection", func() {
+		srcPort := sim.NewPort(nil, 1024, 1024, "SrcPort")
+		conn := directconnection.MakeBuilder().
+			WithEngine(engine).
+			WithFreq(1 * sim.GHz).
+			Build("Conn")
+		conn.PlugIn(memCtrl.topPort)
+		conn.PlugIn(srcPort)
 
-	Context("parse top", func() {
-		It("should do nothing if no message", func() {
-			topPort.EXPECT().PeekIncoming().Return(nil)
+		writeData := []byte{1, 2, 3, 4}
+		write := &mem.WriteReq{}
+		write.ID = sim.GetIDGenerator().Generate()
+		write.Address = 0x40
+		write.Data = writeData
+		write.Src = srcPort.AsRemote()
+		write.Dst = memCtrl.topPort.AsRemote()
+		write.TrafficBytes = len(writeData) + 12
+		write.TrafficClass = "mem.WriteReq"
 
-			madeProgress := memCtrlMiddleware.parseTop()
+		read := &mem.ReadReq{}
+		read.ID = sim.GetIDGenerator().Generate()
+		read.Address = 0x40
+		read.AccessByteSize = 4
+		read.Src = srcPort.AsRemote()
+		read.Dst = memCtrl.topPort.AsRemote()
+		read.TrafficBytes = 12
+		read.TrafficClass = "mem.ReadReq"
 
-			Expect(madeProgress).To(BeFalse())
-		})
+		srcPort.Send(write)
+		srcPort.Send(read)
 
-		It("should stall if substransaction queue is full", func() {
-			read := &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
-			read.Address = 0x1000
-			read.TrafficBytes = 12
-			read.TrafficClass = "mem.ReadReq"
+		engine.Run()
 
-			topPort.EXPECT().PeekIncoming().Return(read)
-			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
-			subTransSplitter.EXPECT().
-				Split(gomock.Any()).
-				Do(func(t *signal.Transaction) {
-					Expect(t.Read).To(BeIdenticalTo(read))
-					t.SubTransactions = make([]*signal.SubTransaction, 3)
-				})
-			subTransactionQueue.EXPECT().CanPush(3).Return(false)
+		// Collect responses
+		var writeDone *mem.WriteDoneRsp
+		var dataReady *mem.DataReadyRsp
 
-			madeProgress := memCtrlMiddleware.parseTop()
-
-			Expect(madeProgress).To(BeFalse())
-		})
-
-		It("should push sub-transactions to subtrans queue", func() {
-			read := &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
-			read.Address = 0x1000
-			read.TrafficBytes = 12
-			read.TrafficClass = "mem.ReadReq"
-
-			topPort.EXPECT().PeekIncoming().Return(read)
-			topPort.EXPECT().RetrieveIncoming().Return(read)
-			addrConverter.EXPECT().ConvertExternalToInternal(uint64(0x1000))
-			subTransSplitter.EXPECT().
-				Split(gomock.Any()).
-				Do(func(t *signal.Transaction) {
-					Expect(t.Read).To(BeIdenticalTo(read))
-					for i := 0; i < 3; i++ {
-						st := &signal.SubTransaction{}
-						t.SubTransactions = append(t.SubTransactions, st)
-					}
-				})
-			subTransactionQueue.EXPECT().CanPush(3).Return(true)
-			subTransactionQueue.EXPECT().Push(gomock.Any())
-
-			madeProgress := memCtrlMiddleware.parseTop()
-
-			Expect(madeProgress).To(BeTrue())
-			Expect(memCtrl.inflightTransactions).To(HaveLen(1))
-		})
-
-	})
-
-	Context("issue", func() {
-		It("should not issue if nothing is ready", func() {
-			cmdQueue.EXPECT().
-				GetCommandToIssue().
-				Return(nil)
-
-			madeProgress := memCtrlMiddleware.issue()
-
-			Expect(madeProgress).To(BeFalse())
-		})
-
-		It("should issue", func() {
-			cmd := &signal.Command{}
-			cmdQueue.EXPECT().
-				GetCommandToIssue().
-				Return(cmd)
-			channel.EXPECT().StartCommand(cmd)
-			channel.EXPECT().UpdateTiming(cmd)
-
-			madeProgress := memCtrlMiddleware.issue()
-
-			Expect(madeProgress).To(BeTrue())
-		})
-	})
-
-	Context("respond", func() {
-		It("should do nothing if there is no transaction", func() {
-			madeProgress := memCtrlMiddleware.respond()
-
-			Expect(madeProgress).To(BeFalse())
-		})
-
-		It("should do nothing if there is no completed transaction",
-			func() {
-				trans := &signal.Transaction{}
-				subTransaction := &signal.SubTransaction{
-					Transaction: trans,
-					Completed:   false,
-				}
-				trans.SubTransactions = append(trans.SubTransactions,
-					subTransaction)
-				memCtrl.inflightTransactions = append(
-					memCtrl.inflightTransactions, trans)
-
-				madeProgress := memCtrlMiddleware.respond()
-
-				Expect(madeProgress).To(BeFalse())
-			})
-
-		It("should send write done response", func() {
-			writeData := []byte{1, 2, 3, 4}
-			write := &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
-			write.Address = 0x40
-			write.Data = writeData
-			write.TrafficBytes = len(writeData) + 12
-			write.TrafficClass = "mem.WriteReq"
-			trans := &signal.Transaction{
-				InternalAddress: 0x40,
-				Write:           write,
+		for {
+			msg := srcPort.RetrieveIncoming()
+			if msg == nil {
+				break
 			}
-			subTransaction := &signal.SubTransaction{
-				Transaction: trans,
-				Completed:   true,
+			switch m := msg.(type) {
+			case *mem.WriteDoneRsp:
+				writeDone = m
+			case *mem.DataReadyRsp:
+				dataReady = m
 			}
-			trans.SubTransactions = append(trans.SubTransactions,
-				subTransaction)
-			memCtrl.inflightTransactions = append(memCtrl.inflightTransactions,
-				trans)
+		}
 
-			topPort.EXPECT().Send(gomock.Any()).Return(nil)
-
-			madeProgress := memCtrlMiddleware.respond()
-
-			Expect(madeProgress).To(BeTrue())
-			data, _ := storage.Read(0x40, 4)
-			Expect(data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(memCtrl.inflightTransactions).NotTo(ContainElement(trans))
-		})
-
-		It("should send data ready response", func() {
-			storage.Write(0x40, []byte{1, 2, 3, 4})
-			read := &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
-			read.Address = 0x40
-			read.AccessByteSize = 4
-			read.TrafficBytes = 12
-			read.TrafficClass = "mem.ReadReq"
-			trans := &signal.Transaction{
-				InternalAddress: 0x40,
-				Read:            read,
-			}
-			subTransaction := &signal.SubTransaction{
-				Transaction: trans,
-				Completed:   true,
-			}
-			trans.SubTransactions = append(trans.SubTransactions,
-				subTransaction)
-			memCtrl.inflightTransactions = append(memCtrl.inflightTransactions,
-				trans)
-
-			topPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
-			}).Return(nil)
-
-			madeProgress := memCtrlMiddleware.respond()
-
-			Expect(madeProgress).To(BeTrue())
-			Expect(memCtrl.inflightTransactions).NotTo(ContainElement(trans))
-		})
+		Expect(writeDone).NotTo(BeNil())
+		Expect(writeDone.RspTo).To(Equal(write.ID))
+		Expect(dataReady).NotTo(BeNil())
+		Expect(dataReady.RspTo).To(Equal(read.ID))
+		Expect(dataReady.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
 })
