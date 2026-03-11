@@ -1,8 +1,6 @@
 package datamover
 
 import (
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -15,8 +13,14 @@ const (
 	OutsidePort DateMovePort = "outside"
 )
 
-// DataMoveRequestPayload is the payload for a data move request.
-type DataMoveRequestPayload struct {
+// DataMoveResponse is sent when a data move operation completes.
+type DataMoveResponse struct {
+	sim.MsgMeta
+}
+
+// DataMoveRequest is a data move request.
+type DataMoveRequest struct {
+	sim.MsgMeta
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
@@ -96,22 +100,18 @@ func (b DataMoveRequestBuilder) WithByteSize(
 	return b
 }
 
-// Build creates a new *sim.GenericMsg with DataMoveRequestPayload.
-func (b DataMoveRequestBuilder) Build() *sim.GenericMsg {
-	payload := &DataMoveRequestPayload{
+// Build creates a new DataMoveRequest.
+func (b DataMoveRequestBuilder) Build() *DataMoveRequest {
+	r := &DataMoveRequest{
 		SrcAddress: b.srcAddress,
 		DstAddress: b.dstAddress,
 		ByteSize:   b.byteSize,
 		SrcSide:    b.srcSide,
 		DstSide:    b.dstSide,
 	}
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
-			Src:          b.src,
-			Dst:          b.dst,
-			TrafficClass: reflect.TypeOf(DataMoveRequestPayload{}).String(),
-		},
-		Payload: payload,
-	}
+	r.ID = sim.GetIDGenerator().Generate()
+	r.Src = b.src
+	r.Dst = b.dst
+	r.TrafficClass = "datamover.DataMoveRequest"
+	return r
 }

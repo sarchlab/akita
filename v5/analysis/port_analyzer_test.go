@@ -8,6 +8,10 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+type testMsg struct {
+	sim.MsgMeta
+}
+
 var _ = Describe("Port Analyzer", func() {
 	var (
 		mockCtrl *gomock.Controller
@@ -57,7 +61,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic", func() {
-		msg := &sim.GenericMsg{
+		msg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
@@ -101,7 +105,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log traffic if only a middle period has value", func() {
-		msg := &sim.GenericMsg{
+		msg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Dst:          port.AsRemote(),
@@ -145,14 +149,14 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log incoming and outgoing traffic", func() {
-		outMsg := &sim.GenericMsg{
+		outMsg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
 				Dst:          outgoingPort.AsRemote(),
 			},
 		}
-		inMsg := &sim.GenericMsg{
+		inMsg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 10000,
 				Dst:          port.AsRemote(),
@@ -222,7 +226,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when there is a gap period", func() {
-		msg := &sim.GenericMsg{
+		msg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),
@@ -266,7 +270,7 @@ var _ = Describe("Port Analyzer", func() {
 	})
 
 	It("should log period traffic when simulation ends", func() {
-		msg := &sim.GenericMsg{
+		msg := &testMsg{
 			MsgMeta: sim.MsgMeta{
 				TrafficBytes: 100,
 				Src:          port.AsRemote(),

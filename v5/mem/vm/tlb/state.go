@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// msgRef is a serializable representation of a *sim.GenericMsg.
+// msgRef is a serializable representation of a message's metadata.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -56,7 +56,7 @@ type pipelineStageState struct {
 	CycleLeft int                 `json:"cycle_left"`
 }
 
-func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
+func msgRefFromTranslationReq(msg *vm.TranslationReq) msgRef {
 	return msgRef{
 		ID:           msg.ID,
 		Src:          msg.Src,
@@ -67,17 +67,37 @@ func msgRefFromMsg(msg *sim.GenericMsg) msgRef {
 	}
 }
 
-func msgFromRef(ref msgRef) *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           ref.ID,
-			Src:          ref.Src,
-			Dst:          ref.Dst,
-			RspTo:        ref.RspTo,
-			TrafficClass: ref.TrafficClass,
-			TrafficBytes: ref.TrafficBytes,
-		},
+func translationReqFromRef(ref msgRef) *vm.TranslationReq {
+	r := &vm.TranslationReq{}
+	r.ID = ref.ID
+	r.Src = ref.Src
+	r.Dst = ref.Dst
+	r.RspTo = ref.RspTo
+	r.TrafficClass = ref.TrafficClass
+	r.TrafficBytes = ref.TrafficBytes
+	return r
+}
+
+func msgRefFromFlushReq(msg *FlushReq) msgRef {
+	return msgRef{
+		ID:           msg.ID,
+		Src:          msg.Src,
+		Dst:          msg.Dst,
+		RspTo:        msg.RspTo,
+		TrafficClass: msg.TrafficClass,
+		TrafficBytes: msg.TrafficBytes,
 	}
+}
+
+func flushReqFromRef(ref msgRef) *FlushReq {
+	r := &FlushReq{}
+	r.ID = ref.ID
+	r.Src = ref.Src
+	r.Dst = ref.Dst
+	r.RspTo = ref.RspTo
+	r.TrafficClass = ref.TrafficClass
+	r.TrafficBytes = ref.TrafficBytes
+	return r
 }
 
 func snapshotMSHR(m mshr) []mshrEntryState {
@@ -91,11 +111,11 @@ func snapshotMSHR(m mshr) []mshrEntryState {
 		}
 		states[i].Requests = make([]msgRef, len(e.Requests))
 		for j, r := range e.Requests {
-			states[i].Requests[j] = msgRefFromMsg(r)
+			states[i].Requests[j] = msgRefFromTranslationReq(r)
 		}
 		if e.reqToBottom != nil {
 			states[i].HasReqToBottom = true
-			states[i].ReqToBottom = msgRefFromMsg(e.reqToBottom)
+			states[i].ReqToBottom = msgRefFromTranslationReq(e.reqToBottom)
 		}
 	}
 	return states
@@ -110,12 +130,12 @@ func restoreMSHR(m mshr, states []mshrEntryState) {
 			vAddr: s.VAddr,
 			page:  s.Page,
 		}
-		entry.Requests = make([]*sim.GenericMsg, len(s.Requests))
+		entry.Requests = make([]*vm.TranslationReq, len(s.Requests))
 		for j, r := range s.Requests {
-			entry.Requests[j] = msgFromRef(r)
+			entry.Requests[j] = translationReqFromRef(r)
 		}
 		if s.HasReqToBottom {
-			entry.reqToBottom = msgFromRef(s.ReqToBottom)
+			entry.reqToBottom = translationReqFromRef(s.ReqToBottom)
 		}
 		impl.entries[i] = entry
 	}
@@ -169,7 +189,7 @@ func snapshotPipeline(p queueing.Pipeline) []pipelineStageState {
 			Lane:  s.Lane,
 			Stage: s.Stage,
 			Item: pipelineTLBReqState{
-				Msg: msgRefFromMsg(req.msg),
+				Msg: msgRefFromTranslationReq(req.msg),
 			},
 			CycleLeft: s.CycleLeft,
 		}
@@ -184,7 +204,7 @@ func restorePipeline(p queueing.Pipeline, states []pipelineStageState) {
 			Lane:  s.Lane,
 			Stage: s.Stage,
 			Elem: &pipelineTLBReq{
-				msg: msgFromRef(s.Item.Msg),
+				msg: translationReqFromRef(s.Item.Msg),
 			},
 			CycleLeft: s.CycleLeft,
 		}
@@ -198,7 +218,7 @@ func snapshotBuffer(b queueing.Buffer) []pipelineTLBReqState {
 	for i, e := range elems {
 		req := e.(*pipelineTLBReq)
 		states[i] = pipelineTLBReqState{
-			Msg: msgRefFromMsg(req.msg),
+			Msg: msgRefFromTranslationReq(req.msg),
 		}
 	}
 	return states
@@ -208,7 +228,7 @@ func restoreBuffer(b queueing.Buffer, states []pipelineTLBReqState) {
 	elems := make([]interface{}, len(states))
 	for i, s := range states {
 		elems[i] = &pipelineTLBReq{
-			msg: msgFromRef(s.Msg),
+			msg: translationReqFromRef(s.Msg),
 		}
 	}
 	queueing.RestoreBuffer(b, elems)
@@ -222,11 +242,11 @@ func snapshotMSHREntry(e *mshrEntry) mshrEntryState {
 	}
 	s.Requests = make([]msgRef, len(e.Requests))
 	for j, r := range e.Requests {
-		s.Requests[j] = msgRefFromMsg(r)
+		s.Requests[j] = msgRefFromTranslationReq(r)
 	}
 	if e.reqToBottom != nil {
 		s.HasReqToBottom = true
-		s.ReqToBottom = msgRefFromMsg(e.reqToBottom)
+		s.ReqToBottom = msgRefFromTranslationReq(e.reqToBottom)
 	}
 	return s
 }
@@ -237,12 +257,12 @@ func restoreMSHREntry(s mshrEntryState) *mshrEntry {
 		vAddr: s.VAddr,
 		page:  s.Page,
 	}
-	entry.Requests = make([]*sim.GenericMsg, len(s.Requests))
+	entry.Requests = make([]*vm.TranslationReq, len(s.Requests))
 	for j, r := range s.Requests {
-		entry.Requests[j] = msgFromRef(r)
+		entry.Requests[j] = translationReqFromRef(r)
 	}
 	if s.HasReqToBottom {
-		entry.reqToBottom = msgFromRef(s.ReqToBottom)
+		entry.reqToBottom = translationReqFromRef(s.ReqToBottom)
 	}
 	return entry
 }
@@ -266,7 +286,7 @@ func (c *Comp) snapshotState() State {
 
 	if c.inflightFlushReq != nil {
 		s.HasInflightFlushReq = true
-		s.InflightFlushReqMsg = msgRefFromMsg(c.inflightFlushReq)
+		s.InflightFlushReqMsg = msgRefFromFlushReq(c.inflightFlushReq)
 	}
 
 	return s
@@ -289,7 +309,7 @@ func (c *Comp) restoreFromState(s State) {
 	restoreBuffer(c.responseBuffer, s.BufferItems)
 
 	if s.HasInflightFlushReq {
-		c.inflightFlushReq = msgFromRef(s.InflightFlushReqMsg)
+		c.inflightFlushReq = flushReqFromRef(s.InflightFlushReqMsg)
 	} else {
 		c.inflightFlushReq = nil
 	}

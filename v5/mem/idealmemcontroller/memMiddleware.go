@@ -3,7 +3,6 @@ package idealmemcontroller
 import (
 	"fmt"
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
@@ -37,7 +36,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 			break
 		}
 
-		msg := msgI.(*sim.GenericMsg)
+		msg := msgI.(sim.Msg)
 		tracing.TraceReqReceive(msg, m)
 
 		tx := m.msgToInflightTransaction(msg)
@@ -52,31 +51,30 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
 	spec := m.Component.GetSpec()
-	simMsg := msg.(*sim.GenericMsg)
 
-	switch payload := simMsg.Payload.(type) {
-	case *mem.ReadReqPayload:
+	switch payload := msg.(type) {
+	case *mem.ReadReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
 			AccessByteSize: payload.AccessByteSize,
-			ReqID:          simMsg.ID,
+			ReqID:          payload.ID,
 			IsRead:         true,
-			Src:            simMsg.Src,
+			Src:            payload.Src,
 		}
-	case *mem.WriteReqPayload:
+	case *mem.WriteReq:
 		return inflightTransaction{
 			CycleLeft:      spec.Latency,
 			Address:        payload.Address,
 			AccessByteSize: uint64(len(payload.Data)),
-			ReqID:          simMsg.ID,
+			ReqID:          payload.ID,
 			IsRead:         false,
 			Data:           payload.Data,
 			DirtyMask:      payload.DirtyMask,
-			Src:            simMsg.Src,
+			Src:            payload.Src,
 		}
 	default:
-		log.Panicf("cannot handle request of type %s", reflect.TypeOf(simMsg.Payload))
+		log.Panicf("cannot handle request of type %T", msg)
 		return inflightTransaction{}
 	}
 }

@@ -1,8 +1,8 @@
 package gmmu
 
 import (
+	"fmt"
 	"log"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -101,32 +101,28 @@ func (gmmu *GMMU) parseFromTop() bool {
 		return false
 	}
 
-	req := reqI.(*sim.GenericMsg)
-	tracing.TraceReqReceive(req, gmmu)
-
-	switch req.Payload.(type) {
-	case *vm.TranslationReqPayload:
+	switch req := reqI.(type) {
+	case *vm.TranslationReq:
+		tracing.TraceReqReceive(req, gmmu)
 		gmmu.startWalking(req)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(req.Payload))
+		log.Panicf("gmmu cannot handle request of type %s", fmt.Sprintf("%T", reqI))
 	}
 
 	return true
 }
 
-func (gmmu *GMMU) startWalking(req *sim.GenericMsg) {
+func (gmmu *GMMU) startWalking(req *vm.TranslationReq) {
 	spec := gmmu.GetSpec()
 	state := gmmu.GetState()
-
-	payload := sim.MsgPayload[vm.TranslationReqPayload](req)
 
 	ts := transactionState{
 		ReqID:     req.ID,
 		ReqSrc:    req.Src,
 		ReqDst:    req.Dst,
-		PID:       uint64(payload.PID),
-		VAddr:     payload.VAddr,
-		DeviceID:  payload.DeviceID,
+		PID:       uint64(req.PID),
+		VAddr:     req.VAddr,
+		DeviceID:  req.DeviceID,
 		CycleLeft: spec.Latency,
 	}
 
@@ -255,7 +251,7 @@ func (gmmu *GMMU) doPageWalkHit(
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	tracing.TraceReqComplete(
-		&sim.GenericMsg{
+		&vm.TranslationReq{
 			MsgMeta: sim.MsgMeta{
 				ID:  walking.ReqID,
 				Src: walking.ReqSrc,
@@ -278,42 +274,39 @@ func (gmmu *GMMU) fetchFromBottom() bool {
 		return false
 	}
 
-	rsp := rspI.(*sim.GenericMsg)
-	tracing.TraceReqReceive(rsp, gmmu)
-
-	switch rsp.Payload.(type) {
-	case *vm.TranslationRspPayload:
+	switch rsp := rspI.(type) {
+	case *vm.TranslationRsp:
+		tracing.TraceReqReceive(rsp, gmmu)
 		return gmmu.handleTranslationRsp(rsp)
 	default:
-		log.Panicf("gmmu cannot handle request of type %s", reflect.TypeOf(rsp.Payload))
+		log.Panicf("gmmu cannot handle request of type %s", fmt.Sprintf("%T", rspI))
 		return false
 	}
 }
 
-func (gmmu *GMMU) handleTranslationRsp(response *sim.GenericMsg) bool {
+func (gmmu *GMMU) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 	state := gmmu.GetState()
 
-	rspPayload := sim.MsgPayload[vm.TranslationRspPayload](response)
-	reqTransaction, exists := state.RemoteMemReqs[response.RspTo]
+	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == "" {
-		log.Panicf("Cannot find matching request for response %+v", response)
+		log.Panicf("Cannot find matching request for response %+v", rsp)
 	}
 
 	if !gmmu.topPort.CanSend() {
 		return false
 	}
 
-	rsp := vm.TranslationRspBuilder{}.
+	rspToTop := vm.TranslationRspBuilder{}.
 		WithSrc(gmmu.topPort.AsRemote()).
 		WithDst(reqTransaction.ReqSrc).
-		WithRspTo(response.ID).
-		WithPage(rspPayload.Page).
+		WithRspTo(rsp.ID).
+		WithPage(rsp.Page).
 		Build()
 
-	gmmu.topPort.Send(rsp)
+	gmmu.topPort.Send(rspToTop)
 
-	delete(state.RemoteMemReqs, response.RspTo)
+	delete(state.RemoteMemReqs, rsp.RspTo)
 	gmmu.SetState(state)
 
 	return true

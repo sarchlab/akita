@@ -7,13 +7,15 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// PingReqPayload is the payload for a ping request message.
-type PingReqPayload struct {
+// PingReq is a ping request message.
+type PingReq struct {
+	sim.MsgMeta
 	SeqID int
 }
 
-// PingRspPayload is the payload for a ping response message.
-type PingRspPayload struct {
+// PingRsp is a ping response message.
+type PingRsp struct {
+	sim.MsgMeta
 	SeqID int
 }
 
@@ -26,7 +28,7 @@ type StartPingEvent struct {
 type RspPingEvent struct {
 	*sim.EventBase
 
-	pingMsg *sim.GenericMsg
+	pingMsg *PingReq
 }
 
 type Comp struct {
@@ -56,15 +58,13 @@ func (c *Comp) Handle(e sim.Event) error {
 }
 
 func (c *Comp) StartPing(evt StartPingEvent) {
-	pingMsg := &sim.GenericMsg{
+	pingMsg := &PingReq{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: c.OutPort.AsRemote(),
 			Dst: evt.Dst,
 		},
-		Payload: &PingReqPayload{
-			SeqID: c.nextSeqID,
-		},
+		SeqID: c.nextSeqID,
 	}
 
 	c.OutPort.Send(pingMsg)
@@ -76,17 +76,14 @@ func (c *Comp) StartPing(evt StartPingEvent) {
 
 func (c *Comp) RspPing(evt RspPingEvent) {
 	msg := evt.pingMsg
-	payload := sim.MsgPayload[PingReqPayload](msg)
-	rsp := &sim.GenericMsg{
+	rsp := &PingRsp{
 		MsgMeta: sim.MsgMeta{
 			ID:    sim.GetIDGenerator().Generate(),
 			Src:   c.OutPort.AsRemote(),
 			Dst:   msg.Src,
 			RspTo: msg.ID,
 		},
-		Payload: &PingRspPayload{
-			SeqID: payload.SeqID,
-		},
+		SeqID: msg.SeqID,
 	}
 
 	c.OutPort.Send(rsp)
@@ -96,18 +93,18 @@ func (c *Comp) NotifyRecv(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	msg := port.RetrieveIncoming().(*sim.GenericMsg)
-	switch msg.Payload.(type) {
-	case *PingReqPayload:
-		c.processPingMsg(msg)
-	case *PingRspPayload:
-		c.processPingRsp(msg)
+	msg := port.RetrieveIncoming()
+	switch m := msg.(type) {
+	case *PingReq:
+		c.processPingMsg(m)
+	case *PingRsp:
+		c.processPingRsp(m)
 	default:
-		panic("cannot process msg of type " + reflect.TypeOf(msg.Payload).String())
+		panic("cannot process msg of type " + reflect.TypeOf(msg).String())
 	}
 }
 
-func (c *Comp) processPingMsg(msg *sim.GenericMsg) {
+func (c *Comp) processPingMsg(msg *PingReq) {
 	rspEvent := RspPingEvent{
 		EventBase: sim.NewEventBase(c.Engine.CurrentTime()+2, c),
 		pingMsg:   msg,
@@ -115,9 +112,8 @@ func (c *Comp) processPingMsg(msg *sim.GenericMsg) {
 	c.Engine.Schedule(rspEvent)
 }
 
-func (c *Comp) processPingRsp(msg *sim.GenericMsg) {
-	payload := sim.MsgPayload[PingRspPayload](msg)
-	seqID := payload.SeqID
+func (c *Comp) processPingRsp(msg *PingRsp) {
+	seqID := msg.SeqID
 	startTime := c.startTime[seqID]
 	now := c.Engine.CurrentTime()
 	duration := now - startTime

@@ -107,7 +107,7 @@ func (a *testAgent) Handle(sim.Event) error {
 	return nil
 }
 
-func (a *testAgent) send(msg *sim.GenericMsg) {
+func (a *testAgent) send(msg sim.Msg) {
 	sendErr := a.port.Send(msg)
 	Expect(sendErr).To(BeNil())
 }
@@ -183,7 +183,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst sim.RemotePort, index int) *sim.GenericMsg {
+func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
 	addr := uint64(index * readSize)
 	return mem.ReadReqBuilder{}.
 		WithSrc(src).
@@ -259,7 +259,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		}
 
 		Expect(agent.received).To(HaveLen(1))
-		rsp := agent.received[0].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
+		rsp := agent.received[0].(*mem.DataReadyRsp)
 		Expect(rsp.Data).To(Equal(data))
 	})
 
@@ -295,10 +295,10 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		_, isWriteDone := agent.received[0].(*sim.GenericMsg).Payload.(*mem.WriteDoneRspPayload)
+		_, isWriteDone := agent.received[0].(*mem.WriteDoneRsp)
 		Expect(isWriteDone).To(BeTrue())
 
-		readRsp, ok := agent.received[1].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
+		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal(newData))
 
@@ -346,7 +346,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		Expect(agent.received).To(HaveLen(2))
 
-		readRsp, ok := agent.received[1].(*sim.GenericMsg).Payload.(*mem.DataReadyRspPayload)
+		readRsp, ok := agent.received[1].(*mem.DataReadyRsp)
 		Expect(ok).To(BeTrue())
 		Expect(readRsp.Data).To(Equal([]byte{1, 2, 3, 4}))
 	})
@@ -358,7 +358,7 @@ func Example() {
 	dstRemote := memComp.topPort.AsRemote()
 
 	startCycles := make(map[string]int)
-	var pendingReq *sim.GenericMsg
+	var pendingReq *mem.ReadReq
 	requestsSent := 0
 	cycles := 0
 	processed := 0

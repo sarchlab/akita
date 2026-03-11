@@ -226,7 +226,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("fetch, local miss", func() {
 		var (
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -268,7 +268,7 @@ var _ = Describe("Write Buffer Stage", func() {
 				Return(sim.RemotePort("DramPort")).
 				AnyTimes()
 
-			var fetchReq *sim.GenericMsg
+			var fetchReq *mem.ReadReq
 
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x1000)).
@@ -276,14 +276,14 @@ var _ = Describe("Write Buffer Stage", func() {
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					fetchReq = msg
-					reqPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-					Expect(msg.Src).To(Equal(cacheModule.bottomPort.AsRemote()))
-					Expect(msg.Dst).To(Equal(dramPort.AsRemote()))
-					Expect(reqPayload.PID).To(Equal(trans.fetchPID))
-					Expect(reqPayload.Address).To(Equal(uint64(0x1000)))
-					Expect(reqPayload.AccessByteSize).To(Equal(uint64(64)))
+				Do(func(msg sim.Msg) {
+					req := msg.(*mem.ReadReq)
+					fetchReq = req
+					Expect(req.Src).To(Equal(cacheModule.bottomPort.AsRemote()))
+					Expect(req.Dst).To(Equal(dramPort.AsRemote()))
+					Expect(req.PID).To(Equal(trans.fetchPID))
+					Expect(req.Address).To(Equal(uint64(0x1000)))
+					Expect(req.AccessByteSize).To(Equal(uint64(64)))
 				})
 			writeBufferBuffer.EXPECT().Pop()
 
@@ -463,7 +463,7 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("when sending write requests", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 		)
 
@@ -536,20 +536,20 @@ var _ = Describe("Write Buffer Stage", func() {
 				Find(uint64(0x1000)).
 				Return(dramPort.AsRemote())
 
-			var writeReq *sim.GenericMsg
+			var writeReq *mem.WriteReq
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writeReq = msg
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(msg.Src).
+				Do(func(msg sim.Msg) {
+					req := msg.(*mem.WriteReq)
+					writeReq = req
+					Expect(req.Src).
 						To(Equal(wbStage.cache.bottomPort.AsRemote()))
-					Expect(msg.Dst).To(Equal(dramPort.AsRemote()))
-					Expect(writePayload.PID).To(Equal(trans.evictingPID))
-					Expect(writePayload.Address).To(Equal(uint64(0x1000)))
-					Expect(writePayload.Data).To(Equal(trans.evictingData))
-					Expect(writePayload.DirtyMask).To(Equal(trans.evictingDirtyMask))
+					Expect(req.Dst).To(Equal(dramPort.AsRemote()))
+					Expect(req.PID).To(Equal(trans.evictingPID))
+					Expect(req.Address).To(Equal(uint64(0x1000)))
+					Expect(req.Data).To(Equal(trans.evictingData))
+					Expect(req.DirtyMask).To(Equal(trans.evictingDirtyMask))
 				})
 
 			madeProgress := wbStage.write()
@@ -564,8 +564,8 @@ var _ = Describe("Write Buffer Stage", func() {
 	Context("when received write-done rsp", func() {
 		var (
 			eviction  *transaction
-			write     *sim.GenericMsg
-			writeDone *sim.GenericMsg
+			write     *mem.WriteReq
+			writeDone *mem.WriteDoneRsp
 		)
 
 		BeforeEach(func() {
@@ -605,11 +605,11 @@ var _ = Describe("Write Buffer Stage", func() {
 
 	Context("when received data-ready rsp", func() {
 		var (
-			read      *sim.GenericMsg
+			read      *mem.ReadReq
 			fetch     *transaction
 			block     *cache.Block
 			mshrEntry *cache.MSHREntry
-			dataReady *sim.GenericMsg
+			dataReady *mem.DataReadyRsp
 			data      []byte
 		)
 

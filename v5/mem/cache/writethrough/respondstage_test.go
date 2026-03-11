@@ -44,7 +44,7 @@ var _ = Describe("Respond Stage", func() {
 
 	Context("read", func() {
 		var (
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -72,10 +72,10 @@ var _ = Describe("Respond Stage", func() {
 			trans.data = []byte{1, 2, 3, 4}
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					drPayload := sim.MsgPayload[mem.DataReadyRspPayload](msg)
-					Expect(msg.RspTo).To(Equal(read.ID))
-					Expect(drPayload.Data).To(Equal([]byte{1, 2, 3, 4}))
+				Do(func(msg sim.Msg) {
+					dr := msg.(*mem.DataReadyRsp)
+					Expect(dr.RspTo).To(Equal(read.ID))
+					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 				})
 
 			madeProgress := s.Tick()
@@ -87,7 +87,7 @@ var _ = Describe("Respond Stage", func() {
 
 	Context("write", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 		)
 
@@ -113,8 +113,8 @@ var _ = Describe("Respond Stage", func() {
 			trans.data = []byte{1, 2, 3, 4}
 			trans.done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					Expect(msg.RspTo).To(Equal(write.ID))
+				Do(func(msg sim.Msg) {
+					Expect(msg.Meta().RspTo).To(Equal(write.ID))
 				})
 
 			madeProgress := s.Tick()

@@ -24,11 +24,10 @@ func (c *coalescer) Tick() bool {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	return c.processReq(msg)
+	return c.processReq(msgI)
 }
 
-func (c *coalescer) processReq(msg *sim.GenericMsg) bool {
+func (c *coalescer) processReq(msg sim.Msg) bool {
 	if len(c.cache.transactions) >= c.cache.maxNumConcurrentTrans {
 		return false
 	}
@@ -48,7 +47,7 @@ func (c *coalescer) processReq(msg *sim.GenericMsg) bool {
 	return c.processReqNoncoalescable(msg)
 }
 
-func (c *coalescer) processReqCoalescable(msg *sim.GenericMsg) bool {
+func (c *coalescer) processReqCoalescable(msg sim.Msg) bool {
 	trans := c.createTransaction(msg)
 	c.toCoalesce = append(c.toCoalesce, trans)
 	c.cache.transactions = append(c.cache.transactions, trans)
@@ -59,7 +58,7 @@ func (c *coalescer) processReqCoalescable(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (c *coalescer) processReqNoncoalescable(msg *sim.GenericMsg) bool {
+func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -76,7 +75,7 @@ func (c *coalescer) processReqNoncoalescable(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.GenericMsg) bool {
+func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -92,7 +91,7 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.GenericMsg) bool {
+func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
 	if !c.cache.dirBuf.CanPush() {
 		return false
 	}
@@ -114,42 +113,42 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg *sim.GenericMsg) bool
 	return true
 }
 
-func (c *coalescer) createTransaction(msg *sim.GenericMsg) *transaction {
-	switch msg.Payload.(type) {
-	case *mem.ReadReqPayload:
+func (c *coalescer) createTransaction(msg sim.Msg) *transaction {
+	switch m := msg.(type) {
+	case *mem.ReadReq:
 		t := &transaction{
-			read: msg,
+			read: m,
 		}
 
 		return t
-	case *mem.WriteReqPayload:
+	case *mem.WriteReq:
 		t := &transaction{
-			write: msg,
+			write: m,
 		}
 
 		return t
 	default:
 		log.Panicf("cannot process request of type %s\n",
-			reflect.TypeOf(msg.Payload))
+			reflect.TypeOf(msg))
 		return nil
 	}
 }
 
-func (c *coalescer) isReqLastInWave(msg *sim.GenericMsg) bool {
-	switch payload := msg.Payload.(type) {
-	case *mem.ReadReqPayload:
-		return !payload.CanWaitForCoalesce
-	case *mem.WriteReqPayload:
-		return !payload.CanWaitForCoalesce
+func (c *coalescer) isReqLastInWave(msg sim.Msg) bool {
+	switch m := msg.(type) {
+	case *mem.ReadReq:
+		return !m.CanWaitForCoalesce
+	case *mem.WriteReq:
+		return !m.CanWaitForCoalesce
 	default:
 		panic("unknown type")
 	}
 }
 
-func (c *coalescer) canReqCoalesce(msg *sim.GenericMsg) bool {
+func (c *coalescer) canReqCoalesce(msg sim.Msg) bool {
 	blockSize := uint64(1 << c.cache.log2BlockSize)
-	payload := msg.Payload.(mem.AccessReqPayload)
-	return payload.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
+	accessReq := msg.(mem.AccessReq)
+	return accessReq.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
 }
 
 func (c *coalescer) coalesceAndSend() bool {
@@ -204,16 +203,13 @@ func (c *coalescer) coalesceWrite() *transaction {
 		WithDirtyMask(make([]bool, blockSize)).
 		Build()
 
-	coalescedPayload := sim.MsgPayload[mem.WriteReqPayload](coalescedWrite)
-
 	for _, t := range c.toCoalesce {
-		wPayload := sim.MsgPayload[mem.WriteReqPayload](t.write)
-		offset := int(wPayload.Address - cachelineID)
+		offset := int(t.write.Address - cachelineID)
 
-		for i := 0; i < len(wPayload.Data); i++ {
-			if wPayload.DirtyMask == nil || wPayload.DirtyMask[i] {
-				coalescedPayload.Data[i+offset] = wPayload.Data[i]
-				coalescedPayload.DirtyMask[i+offset] = true
+		for i := 0; i < len(t.write.Data); i++ {
+			if t.write.DirtyMask == nil || t.write.DirtyMask[i] {
+				coalescedWrite.Data[i+offset] = t.write.Data[i]
+				coalescedWrite.DirtyMask[i+offset] = true
 			}
 		}
 	}

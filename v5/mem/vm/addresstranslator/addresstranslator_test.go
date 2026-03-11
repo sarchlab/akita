@@ -87,7 +87,7 @@ var _ = Describe("Address Translator", func() {
 
 	Context("translate stage", func() {
 		var (
-			req *sim.GenericMsg
+			req *mem.ReadReq
 		)
 
 		BeforeEach(func() {
@@ -105,7 +105,7 @@ var _ = Describe("Address Translator", func() {
 		})
 
 		It("should send translation", func() {
-			var transReqReturn *sim.GenericMsg
+			var transReqReturn *vm.TranslationReq
 			transReq := vm.TranslationReqBuilder{}.
 				WithPID(1).
 				WithVAddr(0x100).
@@ -116,8 +116,7 @@ var _ = Describe("Address Translator", func() {
 				translationReq: transReq,
 			}
 			t.transactions = append(t.transactions, translation)
-			reqPayload := sim.MsgPayload[mem.ReadReqPayload](req)
-			reqPayload.Address = 0x1040
+			req.Address = 0x1040
 
 			translationPortMapper.EXPECT().
 				Find(uint64(0x1040)).
@@ -126,8 +125,8 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			translationPort.EXPECT().Send(gomock.Any()).
-				DoAndReturn(func(req *sim.GenericMsg) *sim.SendError {
-					transReqReturn = req
+				DoAndReturn(func(msg sim.Msg) *sim.SendError {
+					transReqReturn = msg.(*vm.TranslationReq)
 					return nil
 				})
 
@@ -158,7 +157,7 @@ var _ = Describe("Address Translator", func() {
 
 	Context("parse translation", func() {
 		var (
-			transReq1, transReq2 *sim.GenericMsg
+			transReq1, transReq2 *vm.TranslationReq
 			trans1, trans2       *transaction
 		)
 
@@ -202,7 +201,7 @@ var _ = Describe("Address Translator", func() {
 				}).
 				Build()
 
-			trans1.incomingReqs = []*sim.GenericMsg{req}
+			trans1.incomingReqs = []sim.Msg{req}
 			trans1.translationRsp = translationRsp
 			trans1.translationDone = true
 
@@ -229,7 +228,7 @@ var _ = Describe("Address Translator", func() {
 				}).
 				Build()
 
-			trans1.incomingReqs = []*sim.GenericMsg{req}
+			trans1.incomingReqs = []sim.Msg{req}
 			trans1.translationRsp = translationRsp
 			trans1.translationDone = true
 
@@ -237,12 +236,12 @@ var _ = Describe("Address Translator", func() {
 			translationPort.EXPECT().RetrieveIncoming()
 			memoryPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(read *sim.GenericMsg) {
+				Do(func(msg sim.Msg) {
+					read := msg.(*mem.ReadReq)
 					Expect(read).NotTo(BeIdenticalTo(req))
-					readPayload := sim.MsgPayload[mem.ReadReqPayload](read)
-					Expect(readPayload.PID).To(Equal(vm.PID(0)))
-					Expect(readPayload.Address).To(Equal(uint64(0x20040)))
-					Expect(readPayload.AccessByteSize).To(Equal(uint64(4)))
+					Expect(read.PID).To(Equal(vm.PID(0)))
+					Expect(read.Address).To(Equal(uint64(0x20040)))
+					Expect(read.AccessByteSize).To(Equal(uint64(4)))
 					Expect(read.Src).To(Equal(bottomPort.AsRemote()))
 				}).
 				Return(nil)
@@ -270,7 +269,7 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				}).
 				Build()
-			trans1.incomingReqs = []*sim.GenericMsg{write}
+			trans1.incomingReqs = []sim.Msg{write}
 			trans1.translationRsp = translationRsp
 			trans1.translationDone = true
 
@@ -278,14 +277,14 @@ var _ = Describe("Address Translator", func() {
 			translationPort.EXPECT().RetrieveIncoming()
 			memoryPortMapper.EXPECT().Find(uint64(0x20040))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					Expect(msg).NotTo(BeIdenticalTo(write))
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.PID).To(Equal(vm.PID(0)))
-					Expect(writePayload.Address).To(Equal(uint64(0x20040)))
-					Expect(msg.Src).To(Equal(bottomPort.AsRemote()))
-					Expect(writePayload.Data).To(Equal(data))
-					Expect(writePayload.DirtyMask).To(Equal(dirty))
+				Do(func(msg sim.Msg) {
+					writeMsg := msg.(*mem.WriteReq)
+					Expect(writeMsg).NotTo(BeIdenticalTo(write))
+					Expect(writeMsg.PID).To(Equal(vm.PID(0)))
+					Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
+					Expect(writeMsg.Src).To(Equal(bottomPort.AsRemote()))
+					Expect(writeMsg.Data).To(Equal(data))
+					Expect(writeMsg.DirtyMask).To(Equal(dirty))
 				}).
 				Return(nil)
 
@@ -299,10 +298,10 @@ var _ = Describe("Address Translator", func() {
 
 	Context("respond", func() {
 		var (
-			readFromTop   *sim.GenericMsg
-			writeFromTop  *sim.GenericMsg
-			readToBottom  *sim.GenericMsg
-			writeToBottom *sim.GenericMsg
+			readFromTop   *mem.ReadReq
+			writeFromTop  *mem.WriteReq
+			readToBottom  *mem.ReadReq
+			writeToBottom *mem.WriteReq
 		)
 
 		BeforeEach(func() {
@@ -340,11 +339,10 @@ var _ = Describe("Address Translator", func() {
 				Build()
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(dr *sim.GenericMsg) {
+				Do(func(msg sim.Msg) {
+					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.RspTo).To(Equal(readFromTop.ID))
-					drPayload := sim.MsgPayload[mem.DataReadyRspPayload](dr)
-					dataReadyPayload := sim.MsgPayload[mem.DataReadyRspPayload](dataReady)
-					Expect(drPayload.Data).To(Equal(dataReadyPayload.Data))
+					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
 				Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming()
@@ -361,8 +359,9 @@ var _ = Describe("Address Translator", func() {
 				Build()
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(done *sim.GenericMsg) {
-					Expect(done.RspTo).To(Equal(writeFromTop.ID))
+				Do(func(msg sim.Msg) {
+					doneMsg := msg.(*mem.WriteDoneRsp)
+					Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
 				}).
 				Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming()
@@ -379,11 +378,10 @@ var _ = Describe("Address Translator", func() {
 				Build()
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(dr *sim.GenericMsg) {
+				Do(func(msg sim.Msg) {
+					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.RspTo).To(Equal(readFromTop.ID))
-					drPayload := sim.MsgPayload[mem.DataReadyRspPayload](dr)
-					dataReadyPayload := sim.MsgPayload[mem.DataReadyRspPayload](dataReady)
-					Expect(drPayload.Data).To(Equal(dataReadyPayload.Data))
+					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
 				Return(&sim.SendError{})
 
@@ -419,7 +417,7 @@ var _ = Describe("Address Translator", func() {
 			t.isFlushing = true
 			t.transactions = []*transaction{
 				{
-					incomingReqs:    []*sim.GenericMsg{reqFromTop},
+					incomingReqs:    []sim.Msg{reqFromTop},
 					translationReq:  transReq,
 					translationDone: true,
 				},
@@ -457,24 +455,24 @@ var _ = Describe("Address Translator", func() {
 				To(Equal(transReq.ID))
 			Expect(t.transactions[0].translationDone).To(BeTrue())
 			Expect(t.transactions[0].incomingReqs).To(HaveLen(1))
-			Expect(t.transactions[0].incomingReqs[0].ID).
+			Expect(t.transactions[0].incomingReqs[0].Meta().ID).
 				To(Equal(reqFromTop.ID))
 			Expect(t.inflightReqToBottom).To(HaveLen(1))
-			Expect(t.inflightReqToBottom[0].reqFromTop.ID).
+			Expect(t.inflightReqToBottom[0].reqFromTop.Meta().ID).
 				To(Equal(reqFromTop.ID))
-			Expect(t.inflightReqToBottom[0].reqToBottom.ID).
+			Expect(t.inflightReqToBottom[0].reqToBottom.Meta().ID).
 				To(Equal(reqToBot.ID))
 		})
 	})
 
 	Context("when handling control messages", func() {
 		var (
-			readFromTop   *sim.GenericMsg
-			writeFromTop  *sim.GenericMsg
-			readToBottom  *sim.GenericMsg
-			writeToBottom *sim.GenericMsg
-			flushReq      *sim.GenericMsg
-			restartReq    *sim.GenericMsg
+			readFromTop   *mem.ReadReq
+			writeFromTop  *mem.WriteReq
+			readToBottom  *mem.ReadReq
+			writeToBottom *mem.WriteReq
+			flushReq      *mem.ControlMsg
+			restartReq    *mem.ControlMsg
 		)
 
 		BeforeEach(func() {

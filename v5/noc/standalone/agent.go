@@ -7,21 +7,21 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// TrafficMsgPayload is the payload for a traffic message used in standalone
-// network tests.
-type TrafficMsgPayload struct{}
+// TrafficMsg is a traffic message used in standalone network tests.
+type TrafficMsg struct {
+	sim.MsgMeta
+}
 
 // NewTrafficMsg creates a new traffic message
-func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.GenericMsg {
-	return &sim.GenericMsg{
+func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *TrafficMsg {
+	return &TrafficMsg{
 		MsgMeta: sim.MsgMeta{
 			ID:           sim.GetIDGenerator().Generate(),
 			Src:          src,
 			Dst:          dst,
 			TrafficBytes: byteSize,
-			TrafficClass: reflect.TypeOf(TrafficMsgPayload{}).String(),
+			TrafficClass: reflect.TypeOf(TrafficMsg{}).String(),
 		},
-		Payload: &TrafficMsgPayload{},
 	}
 }
 
@@ -29,7 +29,7 @@ func NewTrafficMsg(src, dst sim.RemotePort, byteSize int) *sim.GenericMsg {
 type StartSendEvent struct {
 	*sim.EventBase
 
-	Msg *sim.GenericMsg
+	Msg *TrafficMsg
 }
 
 // NewStartSendEvent creates a new StartSendEvent.
@@ -52,7 +52,7 @@ type Agent struct {
 
 	ToOut sim.Port
 
-	Buffer []*sim.GenericMsg
+	Buffer []*TrafficMsg
 }
 
 // NotifyRecv notifies that a port has received a message.

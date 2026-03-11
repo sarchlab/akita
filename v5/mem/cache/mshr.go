@@ -13,8 +13,8 @@ type MSHREntry struct {
 	Address   uint64
 	Requests  []interface{}
 	Block     *Block
-	ReadReq   *sim.GenericMsg
-	DataReady *sim.GenericMsg
+	ReadReq   sim.Msg
+	DataReady sim.Msg
 	Data      []byte
 }
 

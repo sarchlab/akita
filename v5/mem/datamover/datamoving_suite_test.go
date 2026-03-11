@@ -73,25 +73,32 @@ func setupTransactionState(comp *Comp) {
 	comp.srcByteGranularity = 64
 	comp.dstByteGranularity = 256
 
-	payload := &DataMoveRequestPayload{
-		SrcAddress: 0, DstAddress: 4096,
-		ByteSize: 4096, SrcSide: "inside", DstSide: "outside",
+	req := &DataMoveRequest{
+		SrcAddress: 0,
+		DstAddress: 4096,
+		ByteSize:   4096,
+		SrcSide:    "inside",
+		DstSide:    "outside",
 	}
-	req := &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{ID: "test-req-1", Src: "src-port", Dst: "dst-port"},
-		Payload: payload,
-	}
+	req.ID = "test-req-1"
+	req.Src = "src-port"
+	req.Dst = "dst-port"
+
 	comp.currentTransaction = &dataMoverTransaction{
-		req: req, reqPayload: payload,
-		nextReadAddr: 128, nextWriteAddr: 4352,
-		pendingRead: make(map[string]*sim.GenericMsg),
-		pendingWrite: make(map[string]*sim.GenericMsg),
+		req:           req,
+		nextReadAddr:  128,
+		nextWriteAddr: 4352,
+		pendingRead:   make(map[string]*mem.ReadReq),
+		pendingWrite:  make(map[string]*mem.WriteReq),
 	}
 
-	readReq := &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{ID: "read-1", Src: "dm.inside", Dst: "mem.top"},
-		Payload: &mem.ReadReqPayload{Address: 64, AccessByteSize: 64},
+	readReq := &mem.ReadReq{
+		Address:        64,
+		AccessByteSize: 64,
 	}
+	readReq.ID = "read-1"
+	readReq.Src = "dm.inside"
+	readReq.Dst = "mem.top"
 	comp.currentTransaction.pendingRead["read-1"] = readReq
 
 	comp.buffer = &buffer{

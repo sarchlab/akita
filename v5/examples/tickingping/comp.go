@@ -7,13 +7,15 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// PingReqPayload is the payload for a ping request message.
-type PingReqPayload struct {
+// PingReq is a ping request message.
+type PingReq struct {
+	sim.MsgMeta
 	SeqID int
 }
 
-// PingRspPayload is the payload for a ping response message.
-type PingRspPayload struct {
+// PingRsp is a ping response message.
+type PingRsp struct {
+	sim.MsgMeta
 	SeqID int
 }
 
@@ -66,11 +68,10 @@ func (m *middleware) processInput() bool {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	switch msg.Payload.(type) {
-	case *PingReqPayload:
+	switch msg := msgI.(type) {
+	case *PingReq:
 		m.processingPingReq(msg)
-	case *PingRspPayload:
+	case *PingRsp:
 		m.processingPingRsp(msg)
 	default:
 		panic("unknown message type")
@@ -79,12 +80,11 @@ func (m *middleware) processInput() bool {
 	return true
 }
 
-func (m *middleware) processingPingReq(msg *sim.GenericMsg) {
+func (m *middleware) processingPingReq(msg *PingReq) {
 	state := m.Component.GetState()
 
-	payload := sim.MsgPayload[PingReqPayload](msg)
 	trans := pingTransactionState{
-		SeqID:     payload.SeqID,
+		SeqID:     msg.SeqID,
 		CycleLeft: 2,
 		ReqID:     msg.ID,
 		ReqSrc:    msg.Src,
@@ -95,11 +95,10 @@ func (m *middleware) processingPingReq(msg *sim.GenericMsg) {
 	m.OutPort.RetrieveIncoming()
 }
 
-func (m *middleware) processingPingRsp(msg *sim.GenericMsg) {
+func (m *middleware) processingPingRsp(msg *PingRsp) {
 	state := m.Component.GetState()
 
-	payload := sim.MsgPayload[PingRspPayload](msg)
-	seqID := payload.SeqID
+	seqID := msg.SeqID
 	startTime := state.StartTimes[seqID]
 	currentTime := m.CurrentTime()
 	duration := currentTime - sim.VTimeInSec(startTime)
@@ -138,16 +137,14 @@ func (m *middleware) sendRsp() bool {
 		return false
 	}
 
-	rsp := &sim.GenericMsg{
+	rsp := &PingRsp{
 		MsgMeta: sim.MsgMeta{
 			ID:    sim.GetIDGenerator().Generate(),
 			Src:   m.OutPort.AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
 		},
-		Payload: &PingRspPayload{
-			SeqID: trans.SeqID,
-		},
+		SeqID: trans.SeqID,
 	}
 
 	err := m.OutPort.Send(rsp)
@@ -168,15 +165,13 @@ func (m *middleware) sendPing() bool {
 		return false
 	}
 
-	pingMsg := &sim.GenericMsg{
+	pingMsg := &PingReq{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.OutPort.AsRemote(),
 			Dst: state.PingDst,
 		},
-		Payload: &PingReqPayload{
-			SeqID: state.NextSeqID,
-		},
+		SeqID: state.NextSeqID,
 	}
 
 	err := m.OutPort.Send(pingMsg)

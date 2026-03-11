@@ -21,20 +21,19 @@ func (m *ctrlMiddleware) Tick() bool {
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	madeProgress := false
-	msgI := m.controlPort.PeekIncoming()
+	msg := m.controlPort.PeekIncoming()
 
-	if msgI == nil {
+	if msg == nil {
 		return false
 	}
 
-	msg := msgI.(*sim.GenericMsg)
-	switch msg.Payload.(type) {
-	case *mem.ControlMsgPayload:
-		madeProgress = m.handleControlMsg(msg) || madeProgress
-	case *FlushReqPayload:
-		madeProgress = m.handleTLBFlush(msg) || madeProgress
-	case *RestartReqPayload:
-		madeProgress = m.handleTLBRestart(msg) || madeProgress
+	switch msg.(type) {
+	case *mem.ControlMsg:
+		madeProgress = m.handleControlMsg(msg.(*mem.ControlMsg)) || madeProgress
+	case *FlushReq:
+		madeProgress = m.handleTLBFlush(msg.(*FlushReq)) || madeProgress
+	case *RestartReq:
+		madeProgress = m.handleTLBRestart(msg.(*RestartReq)) || madeProgress
 	default:
 		panic("Unhandled message")
 	}
@@ -42,37 +41,36 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) handleControlMsg(msg *sim.GenericMsg) bool {
-	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](msg)
-	m.ctrlMsgMustBeValidInCurrentStage(ctrlPayload)
+func (m *ctrlMiddleware) handleControlMsg(msg *mem.ControlMsg) bool {
+	m.ctrlMsgMustBeValidInCurrentStage(msg)
 
 	return m.performCtrlReq()
 }
 
 func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
-	ctrlPayload *mem.ControlMsgPayload,
+	ctrlMsg *mem.ControlMsg,
 ) {
 	switch state := m.state; state {
 	case tlbStateEnable:
-		if ctrlPayload.Enable {
+		if ctrlMsg.Enable {
 			log.Panic("TLB is already enabled")
 		}
 	case tlbStatePause:
-		if ctrlPayload.Pause {
+		if ctrlMsg.Pause {
 			log.Panic("TLB is already paused")
 		}
-		if ctrlPayload.Drain {
+		if ctrlMsg.Drain {
 			log.Panic("Cannot drain when TLB is paused")
 		}
 	case tlbStateDrain:
-		if ctrlPayload.Drain {
+		if ctrlMsg.Drain {
 			log.Panic("TLB is already draining")
 		}
-		if ctrlPayload.Pause || ctrlPayload.Enable {
+		if ctrlMsg.Pause || ctrlMsg.Enable {
 			log.Panic("Cannot pause/enable when TLB is draining")
 		}
 	case tlbStateFlush:
-		if ctrlPayload.Drain || ctrlPayload.Enable || ctrlPayload.Pause {
+		if ctrlMsg.Drain || ctrlMsg.Enable || ctrlMsg.Pause {
 			log.Panic("Cannot pause/enable/drain when TLB is flushing")
 		}
 	default:
@@ -86,14 +84,13 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 		return false
 	}
 
-	item := itemI.(*sim.GenericMsg)
-	ctrlPayload := sim.MsgPayload[mem.ControlMsgPayload](item)
+	item := itemI.(*mem.ControlMsg)
 
-	if ctrlPayload.Enable {
+	if item.Enable {
 		m.state = tlbStateEnable
-	} else if ctrlPayload.Drain {
+	} else if item.Drain {
 		m.state = tlbStateDrain
-	} else if ctrlPayload.Pause {
+	} else if item.Pause {
 		m.state = tlbStatePause
 	}
 
@@ -109,7 +106,7 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg *sim.GenericMsg) bool {
+func (m *ctrlMiddleware) handleTLBFlush(msg *FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 	m.inflightFlushReq = msg
 	m.controlPort.RetrieveIncoming()
@@ -118,7 +115,7 @@ func (m *ctrlMiddleware) handleTLBFlush(msg *sim.GenericMsg) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.GenericMsg) {
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
 	switch state := m.state; state {
 	case tlbStateEnable:
 		// valid
@@ -129,11 +126,11 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg *sim.GenericMsg) 
 	case tlbStateFlush:
 		log.Panic("TLB is already flushing")
 	default:
-		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(msg.Payload))
+		log.Panicf("Unknown TLB state: %s, msg: %s", state, reflect.TypeOf(msg))
 	}
 }
 
-func (m *ctrlMiddleware) handleTLBRestart(msg *sim.GenericMsg) bool {
+func (m *ctrlMiddleware) handleTLBRestart(msg *RestartReq) bool {
 	rsp := RestartRspBuilder{}.
 		WithSrc(m.controlPort.AsRemote()).
 		WithDst(msg.Src).

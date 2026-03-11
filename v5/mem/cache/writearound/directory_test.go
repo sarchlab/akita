@@ -85,7 +85,7 @@ var _ = Describe("Directory", func() {
 
 	Context("read mshr hit", func() {
 		var (
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -120,7 +120,7 @@ var _ = Describe("Directory", func() {
 	Context("read hit", func() {
 		var (
 			block *cache.Block
-			read  *sim.GenericMsg
+			read  *mem.ReadReq
 			trans *transaction
 		)
 
@@ -180,7 +180,7 @@ var _ = Describe("Directory", func() {
 	Context("read miss", func() {
 		var (
 			block     *cache.Block
-			read      *sim.GenericMsg
+			read      *mem.ReadReq
 			trans     *transaction
 			mshrEntry *cache.MSHREntry
 		)
@@ -206,19 +206,18 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should send request to bottom", func() {
-			var readToBottom *sim.GenericMsg
+			var readToBottom *mem.ReadReq
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			dir.EXPECT().FindVictim(uint64(0x100)).Return(block)
 			dir.EXPECT().Visit(block)
 			addressToPortMapper.EXPECT().
 				Find(uint64(0x100)).
 				Return(sim.RemotePort(""))
-			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg *sim.GenericMsg) {
-				readToBottom = msg
-				readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
-				Expect(readPayload.Address).To(Equal(uint64(0x100)))
-				Expect(readPayload.AccessByteSize).To(Equal(uint64(64)))
-				Expect(readPayload.PID).To(Equal(vm.PID(1)))
+			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+				readToBottom = msg.(*mem.ReadReq)
+				Expect(readToBottom.Address).To(Equal(uint64(0x100)))
+				Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
+				Expect(readToBottom.PID).To(Equal(vm.PID(1)))
 			})
 			mshr.EXPECT().IsFull().Return(false)
 			mshr.EXPECT().Add(vm.PID(1), uint64(0x100)).Return(mshrEntry)
@@ -284,7 +283,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write mshr hit", func() {
 		var (
-			write     *sim.GenericMsg
+			write     *mem.WriteReq
 			trans     *transaction
 			mshrEntry *cache.MSHREntry
 		)
@@ -302,7 +301,7 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should add to mshr entry", func() {
-			var writeToBottom *sim.GenericMsg
+			var writeToBottom *mem.WriteReq
 
 			pipeline.EXPECT().CanAccept().Return(false)
 			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
@@ -311,12 +310,11 @@ var _ = Describe("Directory", func() {
 			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
 			addressToPortMapper.EXPECT().Find(uint64(0x104))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writeToBottom = msg
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x104)))
-					Expect(writePayload.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					writeToBottom = msg.(*mem.WriteReq)
+					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
+					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
+					Expect(writeToBottom.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -329,7 +327,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write hit", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 			block *cache.Block
 		)
@@ -362,11 +360,11 @@ var _ = Describe("Directory", func() {
 					Expect(trans.block).To(BeIdenticalTo(block))
 				})
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x104)))
-					Expect(writePayload.Data).To(Equal([]byte{1, 2, 3, 4}))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					w := msg.(*mem.WriteReq)
+					Expect(w.Address).To(Equal(uint64(0x104)))
+					Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
+					Expect(w.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()
@@ -435,7 +433,7 @@ var _ = Describe("Directory", func() {
 
 	Context("write miss", func() {
 		var (
-			write *sim.GenericMsg
+			write *mem.WriteReq
 			trans *transaction
 		)
 
@@ -459,11 +457,11 @@ var _ = Describe("Directory", func() {
 			dir.EXPECT().Lookup(vm.PID(1), uint64(0x100)).Return(nil)
 			addressToPortMapper.EXPECT().Find(uint64(0x100))
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
-					Expect(writePayload.Address).To(Equal(uint64(0x100)))
-					Expect(writePayload.Data).To(HaveLen(64))
-					Expect(writePayload.PID).To(Equal(vm.PID(1)))
+				Do(func(msg sim.Msg) {
+					w := msg.(*mem.WriteReq)
+					Expect(w.Address).To(Equal(uint64(0x100)))
+					Expect(w.Data).To(HaveLen(64))
+					Expect(w.PID).To(Equal(vm.PID(1)))
 				})
 
 			madeProgress := d.Tick()

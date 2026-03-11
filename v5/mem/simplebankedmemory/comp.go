@@ -14,7 +14,7 @@ import (
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct{}
 
-// msgRef is a serializable representation of a *sim.GenericMsg.
+// msgRef is a serializable representation of a sim.Msg's metadata.
 type msgRef struct {
 	ID           string         `json:"id"`
 	Src          sim.RemotePort `json:"src"`
@@ -56,13 +56,13 @@ type bank struct {
 }
 
 type bankPipelineItem struct {
-	msg       *sim.GenericMsg
+	msg       sim.Msg
 	committed bool
 	readData  []byte
 }
 
 func (i *bankPipelineItem) TaskID() string {
-	return i.msg.ID + "_pl"
+	return i.msg.Meta().ID + "_pl"
 }
 
 // Comp models a banked memory with configurable banking and pipeline behavior.
@@ -78,28 +78,28 @@ type Comp struct {
 	bankSelector bankSelector
 }
 
-func msgRefFromMsg(m *sim.GenericMsg) msgRef {
+func msgRefFromMsg(m sim.Msg) msgRef {
+	meta := m.Meta()
 	return msgRef{
-		ID:           m.ID,
-		Src:          m.Src,
-		Dst:          m.Dst,
-		RspTo:        m.RspTo,
-		TrafficClass: m.TrafficClass,
-		TrafficBytes: m.TrafficBytes,
+		ID:           meta.ID,
+		Src:          meta.Src,
+		Dst:          meta.Dst,
+		RspTo:        meta.RspTo,
+		TrafficClass: meta.TrafficClass,
+		TrafficBytes: meta.TrafficBytes,
 	}
 }
 
-func msgFromRef(r msgRef) *sim.GenericMsg {
-	return &sim.GenericMsg{
-		MsgMeta: sim.MsgMeta{
-			ID:           r.ID,
-			Src:          r.Src,
-			Dst:          r.Dst,
-			RspTo:        r.RspTo,
-			TrafficClass: r.TrafficClass,
-			TrafficBytes: r.TrafficBytes,
-		},
+func msgFromRef(r msgRef) sim.Msg {
+	m := &sim.MsgMeta{
+		ID:           r.ID,
+		Src:          r.Src,
+		Dst:          r.Dst,
+		RspTo:        r.RspTo,
+		TrafficClass: r.TrafficClass,
+		TrafficBytes: r.TrafficBytes,
 	}
+	return m
 }
 
 func bankPipelineItemStateFromItem(item *bankPipelineItem) bankPipelineItemState {
@@ -232,17 +232,16 @@ func (m *middleware) dispatchFromTopPort() bool {
 			break
 		}
 
-		msg := msgI.(*sim.GenericMsg)
-		payload, ok := msg.Payload.(mem.AccessReqPayload)
+		msg, ok := msgI.(mem.AccessReq)
 		if !ok {
-			log.Panicf("simplebankedmemory: unsupported message type %T", msg.Payload)
+			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
 		}
 
 		if len(m.banks) == 0 {
 			log.Panic("simplebankedmemory: no banks configured")
 		}
 
-		addr := payload.GetAddress()
+		addr := msg.GetAddress()
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
@@ -293,14 +292,14 @@ func (m *middleware) finalizeSingle(b *bank) bool {
 
 	item := itemIfc.(*bankPipelineItem)
 
-	switch item.msg.Payload.(type) {
-	case *mem.ReadReqPayload:
+	switch item.msg.(type) {
+	case *mem.ReadReq:
 		return m.finalizeRead(b, item)
-	case *mem.WriteReqPayload:
+	case *mem.WriteReq:
 		return m.finalizeWrite(b, item)
 	default:
 		log.Panicf("simplebankedmemory: unsupported request type %T",
-			item.msg.Payload)
+			item.msg)
 	}
 
 	return false
@@ -311,15 +310,15 @@ func (m *middleware) finalizeRead(
 	item *bankPipelineItem,
 ) bool {
 	msg := item.msg
-	readPayload := sim.MsgPayload[mem.ReadReqPayload](msg)
+	readReq := msg.(*mem.ReadReq)
 
 	if !item.committed {
-		addr := readPayload.Address
+		addr := readReq.Address
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
 
-		data, err := m.Storage.Read(addr, readPayload.AccessByteSize)
+		data, err := m.Storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
 			log.Panic(err)
 		}
@@ -334,8 +333,8 @@ func (m *middleware) finalizeRead(
 
 	rsp := mem.DataReadyRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Src).
-		WithRspTo(msg.ID).
+		WithDst(msg.Meta().Src).
+		WithRspTo(msg.Meta().ID).
 		WithData(item.readData).
 		Build()
 
@@ -355,27 +354,27 @@ func (m *middleware) finalizeWrite(
 	item *bankPipelineItem,
 ) bool {
 	msg := item.msg
-	writePayload := sim.MsgPayload[mem.WriteReqPayload](msg)
+	writeReq := msg.(*mem.WriteReq)
 
 	if !item.committed {
-		addr := writePayload.Address
+		addr := writeReq.Address
 		if m.AddressConverter != nil {
 			addr = m.AddressConverter.ConvertExternalToInternal(addr)
 		}
 
-		if writePayload.DirtyMask == nil {
-			if err := m.Storage.Write(addr, writePayload.Data); err != nil {
+		if writeReq.DirtyMask == nil {
+			if err := m.Storage.Write(addr, writeReq.Data); err != nil {
 				log.Panic(err)
 			}
 		} else {
-			data, err := m.Storage.Read(addr, uint64(len(writePayload.Data)))
+			data, err := m.Storage.Read(addr, uint64(len(writeReq.Data)))
 			if err != nil {
 				log.Panic(err)
 			}
 
-			for i := range writePayload.Data {
-				if writePayload.DirtyMask[i] {
-					data[i] = writePayload.Data[i]
+			for i := range writeReq.Data {
+				if writeReq.DirtyMask[i] {
+					data[i] = writeReq.Data[i]
 				}
 			}
 
@@ -393,8 +392,8 @@ func (m *middleware) finalizeWrite(
 
 	rsp := mem.WriteDoneRspBuilder{}.
 		WithSrc(m.topPort.AsRemote()).
-		WithDst(msg.Src).
-		WithRspTo(msg.ID).
+		WithDst(msg.Meta().Src).
+		WithRspTo(msg.Meta().ID).
 		Build()
 
 	if err := m.topPort.Send(rsp); err != nil {

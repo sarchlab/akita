@@ -275,8 +275,8 @@ var _ = Describe("Flusher", func() {
 			directory.EXPECT().Reset()
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg *sim.GenericMsg) {
-					Expect(msg.RspTo).To(Equal(req.ID))
+				Do(func(msg sim.Msg) {
+					Expect(msg.Meta().RspTo).To(Equal(req.ID))
 				})
 
 			ret := f.Tick()
@@ -314,8 +314,6 @@ var _ = Describe("Flusher", func() {
 			writeBufferBuf.EXPECT().Clear()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
-
-			// bottomPortSender.EXPECT().Clear()
 
 			ret := f.Tick()
 

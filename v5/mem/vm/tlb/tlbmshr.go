@@ -4,14 +4,13 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 type mshrEntry struct {
 	pid         vm.PID
 	vAddr       uint64
-	Requests    []*sim.GenericMsg // payload: *vm.TranslationReqPayload
-	reqToBottom *sim.GenericMsg   // payload: *vm.TranslationReqPayload
+	Requests    []*vm.TranslationReq
+	reqToBottom *vm.TranslationReq
 	page        vm.Page
 }
 

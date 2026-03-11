@@ -8,13 +8,15 @@ import (
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
-// --- Payload types ---
+// --- Concrete message types ---
 
-type PingReqPayload struct {
+type PingReq struct {
+	sim.MsgMeta
 	SeqID int
 }
 
-type PingRspPayload struct {
+type PingRsp struct {
+	sim.MsgMeta
 	SeqID int
 }
 
@@ -32,7 +34,7 @@ type PingState struct {
 }
 
 type pingTransaction struct {
-	req       *sim.GenericMsg
+	req       *PingReq
 	cycleLeft int
 }
 
@@ -62,18 +64,15 @@ func (m *pingMiddleware) processInput() bool {
 		return false
 	}
 
-	msg := rawMsg.(*sim.GenericMsg)
-
-	switch payload := msg.Payload.(type) {
-	case *PingReqPayload:
-		_ = payload
+	switch msg := rawMsg.(type) {
+	case *PingReq:
 		trans := &pingTransaction{req: msg, cycleLeft: 2}
 		m.currentTransactions = append(m.currentTransactions, trans)
 		m.outPort.RetrieveIncoming()
-	case *PingRspPayload:
+	case *PingRsp:
 		state := m.comp.GetState()
 		state.CompletedPings++
-		seqID := payload.SeqID
+		seqID := msg.SeqID
 		startTime := state.StartTimes[seqID]
 		currentTime := m.comp.CurrentTime()
 		duration := currentTime - startTime
@@ -109,14 +108,13 @@ func (m *pingMiddleware) sendRsp() bool {
 		return false
 	}
 
-	reqPayload := trans.req.Payload.(*PingReqPayload)
-	rsp := &sim.GenericMsg{
+	rsp := &PingRsp{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: trans.req.Src,
 		},
-		Payload: &PingRspPayload{SeqID: reqPayload.SeqID},
+		SeqID: trans.req.SeqID,
 	}
 
 	err := m.outPort.Send(rsp)
@@ -134,13 +132,13 @@ func (m *pingMiddleware) sendPing() bool {
 		return false
 	}
 
-	req := &sim.GenericMsg{
+	req := &PingReq{
 		MsgMeta: sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: m.pingDst,
 		},
-		Payload: &PingReqPayload{SeqID: state.NextSeqID},
+		SeqID: state.NextSeqID,
 	}
 
 	err := m.outPort.Send(req)
