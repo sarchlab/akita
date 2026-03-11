@@ -50,18 +50,21 @@ Removed all ~22 message builder types. Removed all msgRef types. Direct struct l
 
 ## Upcoming Milestones
 
-### M9: Writeback Cache State + Comp Wrapper Investigation
-Populate State for writeback cache (the last component with empty State). Investigate Comp wrapper elimination per human issue #61.
+### M7.5: Writeback Cache State Population — NEXT
+The only component with empty State. Iris's analysis (workspace/iris/note.md) provides a complete design: ~25 State fields, ~610 lines of state.go, custom transactionState struct, reuse of state_helpers.go for Directory/MSHR. Critical blocker: writeback's custom `bufferImpl` needs refactoring to use `queueing.bufferImpl` first. Budget: 6 cycles.
+
+### M9: Comp Wrapper Simplification (Human #61)
+Diana's analysis found Comp cannot be eliminated (ValidateState forbids pointers/interfaces in State), but scalar duplicates between Comp and State can be removed. Option D (short-term): remove ~15 duplicated scalar fields from Comp structs, access via `GetState()` instead. This is a follow-up after M7.5.
 
 ## Resolved Human Issues
 - #109: Message builders removed (M8.3)
 - #101: GenericMsg removed (M8.2)
 - #93: Msg/MsgRef merged (M8.x — Msg is interface, MsgRef eliminated)
 - #18: Messages are plain structs with concrete types
-- #17: All first-party components ported structurally
+- #17: All first-party components ported structurally (State for 15/16 components)
 
 ## Open Human Issues
-- #61: Do we still need Comp struct? — Under investigation
+- #61: Do we still need Comp struct? — Investigation complete (Diana's report). Comp can be simplified but not eliminated. Planned for M9.
 
 ## Known Bugs
 - None currently known on main.
