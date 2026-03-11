@@ -3,9 +3,7 @@ package endpoint
 
 import (
 	"fmt"
-	"io"
 	"math"
-	"reflect"
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
@@ -15,10 +13,11 @@ import (
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
-	NumInputChannels  int     `json:"num_input_channels"`
-	NumOutputChannels int     `json:"num_output_channels"`
-	FlitByteSize      int     `json:"flit_byte_size"`
-	EncodingOverhead  float64 `json:"encoding_overhead"`
+	NumInputChannels  int            `json:"num_input_channels"`
+	NumOutputChannels int            `json:"num_output_channels"`
+	FlitByteSize      int            `json:"flit_byte_size"`
+	EncodingOverhead  float64        `json:"encoding_overhead"`
+	DefaultSwitchDst  sim.RemotePort `json:"default_switch_dst"`
 }
 
 // flitState is a serializable representation of a *messaging.Flit.
@@ -52,32 +51,21 @@ type State struct {
 	AssembledMsgs  []sim.MsgMeta        `json:"assembled_msgs"`
 }
 
-type msgToAssemble struct {
-	msg             sim.Msg
-	numFlitRequired int
-	numFlitArrived  int
-}
-
 // Comp is an akita component(Endpoint) that delegates sending and receiving
 // actions of a few ports.
 type Comp struct {
 	*modeling.Component[Spec, State]
 
 	NetworkPort      sim.Port
-	DevicePorts      []sim.Port
 	DefaultSwitchDst sim.RemotePort
 
-	msgOutBuf   []sim.Msg
-	flitsToSend []*messaging.Flit
-
-	assemblingMsgs []*msgToAssemble
-	assembledMsgs  []sim.Msg
+	mw *middleware
 }
 
 // PlugIn connects a port to the endpoint.
 func (c *Comp) PlugIn(port sim.Port) {
 	port.SetConnection(c)
-	c.DevicePorts = append(c.DevicePorts, port)
+	c.mw.devicePorts = append(c.mw.devicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
@@ -96,127 +84,6 @@ func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
-// snapshotState converts runtime mutable data into a serializable State.
-func (c *Comp) snapshotState() State {
-	s := State{}
-
-	s.MsgOutBuf = make([]sim.MsgMeta, len(c.msgOutBuf))
-	for i, msg := range c.msgOutBuf {
-		s.MsgOutBuf[i] = *msg.Meta()
-	}
-
-	s.FlitsToSend = make([]flitState, len(c.flitsToSend))
-	for i, flit := range c.flitsToSend {
-		s.FlitsToSend[i] = flitStateFromFlit(flit)
-	}
-
-	s.AssemblingMsgs = make([]assemblingMsgState, len(c.assemblingMsgs))
-	for i, a := range c.assemblingMsgs {
-		meta := a.msg.Meta()
-		s.AssemblingMsgs[i] = assemblingMsgState{
-			MsgID:           meta.ID,
-			Src:             meta.Src,
-			Dst:             meta.Dst,
-			RspTo:           meta.RspTo,
-			TrafficClass:    meta.TrafficClass,
-			TrafficBytes:    meta.TrafficBytes,
-			NumFlitRequired: a.numFlitRequired,
-			NumFlitArrived:  a.numFlitArrived,
-		}
-	}
-
-	s.AssembledMsgs = make([]sim.MsgMeta, len(c.assembledMsgs))
-	for i, msg := range c.assembledMsgs {
-		s.AssembledMsgs[i] = *msg.Meta()
-	}
-
-	return s
-}
-
-// restoreFromState restores runtime mutable data from a serializable State.
-func (c *Comp) restoreFromState(s State) {
-	c.msgOutBuf = make([]sim.Msg, len(s.MsgOutBuf))
-	for i := range s.MsgOutBuf {
-		meta := s.MsgOutBuf[i]
-		c.msgOutBuf[i] = &meta
-	}
-
-	c.flitsToSend = make([]*messaging.Flit, len(s.FlitsToSend))
-	for i, fs := range s.FlitsToSend {
-		originalMsg := &sim.MsgMeta{
-			ID: fs.OriginalMsgID,
-		}
-		c.flitsToSend[i] = &messaging.Flit{
-			MsgMeta: sim.MsgMeta{
-				ID:  fs.ID,
-				Src: fs.Src,
-				Dst: fs.Dst,
-			},
-			SeqID:        fs.SeqID,
-			NumFlitInMsg: fs.NumFlitInMsg,
-			Msg:          originalMsg,
-		}
-	}
-
-	c.assemblingMsgs = make([]*msgToAssemble, len(s.AssemblingMsgs))
-	for i, as := range s.AssemblingMsgs {
-		c.assemblingMsgs[i] = &msgToAssemble{
-			msg: &sim.MsgMeta{
-				ID:           as.MsgID,
-				Src:          as.Src,
-				Dst:          as.Dst,
-				RspTo:        as.RspTo,
-				TrafficClass: as.TrafficClass,
-				TrafficBytes: as.TrafficBytes,
-			},
-			numFlitRequired: as.NumFlitRequired,
-			numFlitArrived:  as.NumFlitArrived,
-		}
-	}
-
-	c.assembledMsgs = make([]sim.Msg, len(s.AssembledMsgs))
-	for i := range s.AssembledMsgs {
-		meta := s.AssembledMsgs[i]
-		c.assembledMsgs[i] = &meta
-	}
-}
-
-// GetState converts runtime mutable data into a serializable State.
-func (c *Comp) GetState() State {
-	state := c.snapshotState()
-	c.Component.SetState(state)
-	return state
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (c *Comp) SetState(state State) {
-	c.Component.SetState(state)
-	c.restoreFromState(state)
-}
-
-// SaveState marshals the component's spec and state as JSON, ensuring the
-// runtime fields are synced into State first.
-func (c *Comp) SaveState(w io.Writer) error {
-	c.GetState()
-	return c.Component.SaveState(w)
-}
-
-// LoadState reads JSON from r and restores both the base state and the
-// runtime fields.
-func (c *Comp) LoadState(r io.Reader) error {
-	if err := c.Component.LoadState(r); err != nil {
-		return err
-	}
-	c.SetState(c.Component.GetState())
-	return nil
-}
-
-// SyncState copies mutable runtime data into the State struct.
-// Deprecated: Use GetState() instead.
-func (c *Comp) SyncState() {
-	c.GetState()
-}
-
 func flitStateFromFlit(flit *messaging.Flit) flitState {
 	return flitState{
 		ID:            flit.ID,
@@ -228,15 +95,81 @@ func flitStateFromFlit(flit *messaging.Flit) flitState {
 	}
 }
 
+func flitFromFlitState(fs flitState) *messaging.Flit {
+	return &messaging.Flit{
+		MsgMeta: sim.MsgMeta{
+			ID:  fs.ID,
+			Src: fs.Src,
+			Dst: fs.Dst,
+		},
+		SeqID:        fs.SeqID,
+		NumFlitInMsg: fs.NumFlitInMsg,
+		Msg: &sim.MsgMeta{
+			ID: fs.OriginalMsgID,
+		},
+	}
+}
+
+// msgMetaToFlitStates converts a MsgMeta into a slice of flitState entries.
+func msgMetaToFlitStates(
+	meta sim.MsgMeta,
+	spec Spec,
+	networkPortRemote sim.RemotePort,
+	defaultSwitchDst sim.RemotePort,
+) []flitState {
+	numFlit := 1
+	if meta.TrafficBytes > 0 {
+		trafficByte := meta.TrafficBytes
+		trafficByte += int(math.Ceil(
+			float64(trafficByte) * spec.EncodingOverhead))
+		numFlit = (trafficByte-1)/spec.FlitByteSize + 1
+	}
+
+	flits := make([]flitState, numFlit)
+	for i := 0; i < numFlit; i++ {
+		flits[i] = flitState{
+			ID:            fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
+			Src:           networkPortRemote,
+			Dst:           defaultSwitchDst,
+			SeqID:         i,
+			NumFlitInMsg:  numFlit,
+			OriginalMsgID: meta.ID,
+		}
+	}
+
+	return flits
+}
+
 type middleware struct {
-	*Comp
+	comp        *modeling.Component[Spec, State]
+	endpoint    *Comp // back-reference for NetworkPort / DefaultSwitchDst
+	devicePorts []sim.Port
+}
+
+// NamedHookable delegation methods.
+
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
 }
 
 // Tick update the endpoint state.
 func (m *middleware) Tick() bool {
-	m.Comp.Lock()
-	defer m.Comp.Unlock()
-
 	madeProgress := false
 
 	madeProgress = m.sendFlitOut() || madeProgress
@@ -253,26 +186,29 @@ func (m *middleware) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
-	return fmt.Sprintf("%s_e2e", flit.ID)
+func (m *middleware) flitTaskID(flitID string) string {
+	return fmt.Sprintf("%s_e2e", flitID)
 }
 
 func (m *middleware) sendFlitOut() bool {
 	madeProgress := false
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
 
-	for i := 0; i < m.Comp.GetSpec().NumOutputChannels; i++ {
-		if len(m.flitsToSend) == 0 {
+	for i := 0; i < spec.NumOutputChannels; i++ {
+		if len(next.FlitsToSend) == 0 {
 			return madeProgress
 		}
 
-		flit := m.flitsToSend[0]
-		err := m.NetworkPort.Send(flit)
+		fs := next.FlitsToSend[0]
+		flit := flitFromFlitState(fs)
 
+		err := m.endpoint.NetworkPort.Send(flit)
 		if err == nil {
-			m.flitsToSend = m.flitsToSend[1:]
+			next.FlitsToSend = next.FlitsToSend[1:]
 
-			if len(m.flitsToSend) == 0 {
-				for _, p := range m.DevicePorts {
+			if len(next.FlitsToSend) == 0 {
+				for _, p := range m.devicePorts {
 					p.NotifyAvailable()
 				}
 			}
@@ -286,15 +222,16 @@ func (m *middleware) sendFlitOut() bool {
 
 func (m *middleware) prepareMsg() bool {
 	madeProgress := false
+	next := m.comp.GetNextState()
 
-	for i := 0; i < len(m.DevicePorts); i++ {
-		port := m.DevicePorts[i]
+	for i := 0; i < len(m.devicePorts); i++ {
+		port := m.devicePorts[i]
 		if port.PeekOutgoing() == nil {
 			continue
 		}
 
 		msg := port.RetrieveOutgoing()
-		m.msgOutBuf = append(m.msgOutBuf, msg)
+		next.MsgOutBuf = append(next.MsgOutBuf, *msg.Meta())
 
 		madeProgress = true
 	}
@@ -304,19 +241,22 @@ func (m *middleware) prepareMsg() bool {
 
 func (m *middleware) prepareFlits() bool {
 	madeProgress := false
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
+	networkPortRemote := m.endpoint.NetworkPort.AsRemote()
 
 	for {
-		if len(m.msgOutBuf) == 0 {
+		if len(next.MsgOutBuf) == 0 {
 			return madeProgress
 		}
 
-		msg := m.msgOutBuf[0]
-		m.msgOutBuf = m.msgOutBuf[1:]
-		flits := m.msgToFlits(msg)
-		m.flitsToSend = append(m.flitsToSend, flits...)
+		meta := next.MsgOutBuf[0]
+		next.MsgOutBuf = next.MsgOutBuf[1:]
+		flitStates := msgMetaToFlitStates(meta, spec, networkPortRemote, m.endpoint.DefaultSwitchDst)
+		next.FlitsToSend = append(next.FlitsToSend, flitStates...)
 
-		for _, flit := range flits {
-			m.logFlitE2ETask(flit, false)
+		for _, fs := range flitStates {
+			m.logFlitE2ETaskFromState(fs, false, &meta)
 		}
 
 		madeProgress = true
@@ -325,9 +265,11 @@ func (m *middleware) prepareFlits() bool {
 
 func (m *middleware) recv() bool {
 	madeProgress := false
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
 
-	for i := 0; i < m.Comp.GetSpec().NumInputChannels; i++ {
-		receivedI := m.NetworkPort.PeekIncoming()
+	for i := 0; i < spec.NumInputChannels; i++ {
+		receivedI := m.endpoint.NetworkPort.PeekIncoming()
 		if receivedI == nil {
 			return madeProgress
 		}
@@ -335,28 +277,32 @@ func (m *middleware) recv() bool {
 		flit := receivedI.(*messaging.Flit)
 		msg := flit.Msg
 
-		var assembling *msgToAssemble
-		for _, a := range m.assemblingMsgs {
-			if a.msg.Meta().ID == msg.Meta().ID {
-				assembling = a
+		var assemblingIdx int = -1
+		for j, a := range next.AssemblingMsgs {
+			if a.MsgID == msg.Meta().ID {
+				assemblingIdx = j
 				break
 			}
 		}
 
-		if assembling == nil {
-			assembling = &msgToAssemble{
-				msg:             msg,
-				numFlitRequired: flit.NumFlitInMsg,
-				numFlitArrived:  0,
-			}
-			m.assemblingMsgs = append(m.assemblingMsgs, assembling)
+		if assemblingIdx < 0 {
+			next.AssemblingMsgs = append(next.AssemblingMsgs, assemblingMsgState{
+				MsgID:           msg.Meta().ID,
+				Src:             msg.Meta().Src,
+				Dst:             msg.Meta().Dst,
+				RspTo:           msg.Meta().RspTo,
+				TrafficClass:    msg.Meta().TrafficClass,
+				TrafficBytes:    msg.Meta().TrafficBytes,
+				NumFlitRequired: flit.NumFlitInMsg,
+				NumFlitArrived:  1,
+			})
+		} else {
+			next.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}
 
-		assembling.numFlitArrived++
+		m.endpoint.NetworkPort.RetrieveIncoming()
 
-		m.NetworkPort.RetrieveIncoming()
-
-		m.logFlitE2ETask(flit, true)
+		m.logFlitE2ETaskFromFlit(flit, true)
 
 		madeProgress = true
 	}
@@ -366,33 +312,43 @@ func (m *middleware) recv() bool {
 
 func (m *middleware) assemble() bool {
 	madeProgress := false
+	next := m.comp.GetNextState()
 
-	remaining := m.assemblingMsgs[:0]
-	for _, assembling := range m.assemblingMsgs {
-		if assembling.numFlitArrived < assembling.numFlitRequired {
-			remaining = append(remaining, assembling)
+	remaining := next.AssemblingMsgs[:0]
+	for _, a := range next.AssemblingMsgs {
+		if a.NumFlitArrived < a.NumFlitRequired {
+			remaining = append(remaining, a)
 			continue
 		}
 
-		m.assembledMsgs = append(m.assembledMsgs, assembling.msg)
+		assembled := sim.MsgMeta{
+			ID:           a.MsgID,
+			Src:          a.Src,
+			Dst:          a.Dst,
+			RspTo:        a.RspTo,
+			TrafficClass: a.TrafficClass,
+			TrafficBytes: a.TrafficBytes,
+		}
+		next.AssembledMsgs = append(next.AssembledMsgs, assembled)
 		madeProgress = true
 	}
 
-	m.assemblingMsgs = remaining
+	next.AssemblingMsgs = remaining
 
 	return madeProgress
 }
 
 func (m *middleware) tryDeliver() bool {
 	madeProgress := false
+	next := m.comp.GetNextState()
 
-	for len(m.assembledMsgs) > 0 {
-		msg := m.assembledMsgs[0]
-		dst := msg.Meta().Dst
+	for len(next.AssembledMsgs) > 0 {
+		meta := next.AssembledMsgs[0]
+		dst := meta.Dst
 
 		var dstPort sim.Port
 
-		for _, port := range m.DevicePorts {
+		for _, port := range m.devicePorts {
 			if port.AsRemote() == dst {
 				dstPort = port
 				break
@@ -403,6 +359,15 @@ func (m *middleware) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
+		msg := &sim.MsgMeta{
+			ID:           meta.ID,
+			Src:          meta.Src,
+			Dst:          meta.Dst,
+			RspTo:        meta.RspTo,
+			TrafficClass: meta.TrafficClass,
+			TrafficBytes: meta.TrafficBytes,
+		}
+
 		err := dstPort.Deliver(msg)
 		if err != nil {
 			return madeProgress
@@ -410,7 +375,7 @@ func (m *middleware) tryDeliver() bool {
 
 		m.logMsgE2ETask(msg, true)
 
-		m.assembledMsgs = m.assembledMsgs[1:]
+		next.AssembledMsgs = next.AssembledMsgs[1:]
 
 		madeProgress = true
 	}
@@ -418,26 +383,47 @@ func (m *middleware) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *middleware) logFlitE2ETask(flit *messaging.Flit, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
+func (m *middleware) logFlitE2ETaskFromState(
+	fs flitState, isEnd bool, meta *sim.MsgMeta,
+) {
+	if m.comp.NumHooks() == 0 {
 		return
 	}
 
-	msg := flit.Msg
+	if isEnd {
+		tracing.EndTask(m.flitTaskID(fs.ID), m)
+		return
+	}
+
+	flit := flitFromFlitState(fs)
+	flit.Msg = meta
+
+	tracing.StartTaskWithSpecificLocation(
+		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
+		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
+	)
+}
+
+func (m *middleware) logFlitE2ETaskFromFlit(
+	flit *messaging.Flit, isEnd bool,
+) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit), m.Comp)
+		tracing.EndTask(m.flitTaskID(flit.ID), m)
 		return
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit), m.msgTaskID(msg.Meta().ID),
-		m.Comp, "flit_e2e", "flit_e2e", m.Comp.Name()+".FlitBuf", flit,
+		m.flitTaskID(flit.ID), m.msgTaskID(flit.Msg.Meta().ID),
+		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
 
 func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
-	if m.Comp.NumHooks() == 0 {
+	if m.comp.NumHooks() == 0 {
 		return
 	}
 
@@ -454,12 +440,12 @@ func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m.Comp)
+		tracing.EndTask(m.msgTaskID(meta.ID), m)
 	} else {
 		tracing.StartTask(
 			m.msgTaskID(meta.ID),
 			meta.ID+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", msg,
+			m, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }
@@ -467,39 +453,12 @@ func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
 func (m *middleware) logMsgRsp(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m.Comp)
+		tracing.EndTask(m.msgTaskID(meta.ID), m)
 	} else {
 		tracing.StartTask(
 			m.msgTaskID(meta.ID),
 			meta.RspTo+"_req_out",
-			m.Comp, "msg_e2e", "msg_e2e", msg,
+			m, "msg_e2e", "msg_e2e", msg,
 		)
 	}
-}
-
-func (m *middleware) msgToFlits(msg sim.Msg) []*messaging.Flit {
-	numFlit := 1
-	meta := msg.Meta()
-
-	if meta.TrafficBytes > 0 {
-		trafficByte := meta.TrafficBytes
-		trafficByte += int(math.Ceil(
-			float64(trafficByte) * m.Comp.GetSpec().EncodingOverhead))
-		numFlit = (trafficByte-1)/m.Comp.GetSpec().FlitByteSize + 1
-	}
-
-	flits := make([]*messaging.Flit, numFlit)
-	for i := 0; i < numFlit; i++ {
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", i, msg.Meta().ID, sim.GetIDGenerator().Generate())
-		flit.Src = m.NetworkPort.AsRemote()
-		flit.Dst = m.DefaultSwitchDst
-		flit.TrafficClass = reflect.TypeOf(msg).String()
-		flit.SeqID = i
-		flit.NumFlitInMsg = numFlit
-		flit.Msg = msg
-		flits[i] = flit
-	}
-
-	return flits
 }
