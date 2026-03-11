@@ -17,20 +17,10 @@ import (
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
-// msgRef is a serializable representation of a sim.Msg.
-type msgRef struct {
-	ID           string         `json:"id"`
-	Src          sim.RemotePort `json:"src"`
-	Dst          sim.RemotePort `json:"dst"`
-	RspTo        string         `json:"rsp_to"`
-	TrafficClass string         `json:"traffic_class"`
-	TrafficBytes int            `json:"traffic_bytes"`
-}
-
 // flitPipelineItemState is a serializable flit pipeline item.
 type flitPipelineItemState struct {
-	TaskID string `json:"task_id"`
-	Flit   msgRef `json:"flit"`
+	TaskID string      `json:"task_id"`
+	Flit   sim.MsgMeta `json:"flit"`
 }
 
 // pipelineStageState captures one non-nil pipeline slot.
@@ -47,8 +37,8 @@ type portComplexState struct {
 	RemotePort     sim.RemotePort          `json:"remote_port"`
 	PipelineStages []pipelineStageState    `json:"pipeline_stages"`
 	RouteBuffer    []flitPipelineItemState `json:"route_buffer"`
-	ForwardBuffer  []msgRef                `json:"forward_buffer"`
-	SendOutBuffer  []msgRef                `json:"send_out_buffer"`
+	ForwardBuffer  []sim.MsgMeta           `json:"forward_buffer"`
+	SendOutBuffer  []sim.MsgMeta           `json:"send_out_buffer"`
 }
 
 // State contains mutable runtime data for the switch.
@@ -120,33 +110,10 @@ func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routingTable
 }
 
-func msgRefFromMsg(msg sim.Msg) msgRef {
-	meta := msg.Meta()
-	return msgRef{
-		ID:           meta.ID,
-		Src:          meta.Src,
-		Dst:          meta.Dst,
-		RspTo:        meta.RspTo,
-		TrafficClass: meta.TrafficClass,
-		TrafficBytes: meta.TrafficBytes,
-	}
-}
-
-func msgFromRef(ref msgRef) sim.Msg {
-	return &sim.MsgMeta{
-		ID:           ref.ID,
-		Src:          ref.Src,
-		Dst:          ref.Dst,
-		RspTo:        ref.RspTo,
-		TrafficClass: ref.TrafficClass,
-		TrafficBytes: ref.TrafficBytes,
-	}
-}
-
 func flitPipelineItemStateFromItem(item flitPipelineItem) flitPipelineItemState {
 	return flitPipelineItemState{
 		TaskID: item.taskID,
-		Flit:   msgRefFromMsg(item.flit),
+		Flit:   item.flit.MsgMeta,
 	}
 }
 
@@ -154,14 +121,7 @@ func flitPipelineItemFromState(s flitPipelineItemState) flitPipelineItem {
 	return flitPipelineItem{
 		taskID: s.TaskID,
 		flit: &messaging.Flit{
-			MsgMeta: sim.MsgMeta{
-				ID:           s.Flit.ID,
-				Src:          s.Flit.Src,
-				Dst:          s.Flit.Dst,
-				RspTo:        s.Flit.RspTo,
-				TrafficClass: s.Flit.TrafficClass,
-				TrafficBytes: s.Flit.TrafficBytes,
-			},
+			MsgMeta: s.Flit,
 		},
 	}
 }
@@ -203,18 +163,18 @@ func (c *Comp) snapshotState() State {
 
 		// Snapshot forwardBuffer (holds *messaging.Flit)
 		fwdElems := queueing.SnapshotBuffer(pc.forwardBuffer)
-		pcs.ForwardBuffer = make([]msgRef, len(fwdElems))
+		pcs.ForwardBuffer = make([]sim.MsgMeta, len(fwdElems))
 		for i, elem := range fwdElems {
 			flit := elem.(*messaging.Flit)
-			pcs.ForwardBuffer[i] = msgRefFromMsg(flit)
+			pcs.ForwardBuffer[i] = flit.MsgMeta
 		}
 
 		// Snapshot sendOutBuffer (holds *messaging.Flit)
 		sendElems := queueing.SnapshotBuffer(pc.sendOutBuffer)
-		pcs.SendOutBuffer = make([]msgRef, len(sendElems))
+		pcs.SendOutBuffer = make([]sim.MsgMeta, len(sendElems))
 		for i, elem := range sendElems {
 			flit := elem.(*messaging.Flit)
-			pcs.SendOutBuffer[i] = msgRefFromMsg(flit)
+			pcs.SendOutBuffer[i] = flit.MsgMeta
 		}
 
 		s.PortComplexes = append(s.PortComplexes, pcs)
@@ -265,32 +225,18 @@ func (c *Comp) restoreFromState(s State) {
 
 		// Restore forwardBuffer
 		fwdElems := make([]interface{}, len(pcs.ForwardBuffer))
-		for i, ref := range pcs.ForwardBuffer {
+		for i, meta := range pcs.ForwardBuffer {
 			fwdElems[i] = &messaging.Flit{
-				MsgMeta: sim.MsgMeta{
-					ID:           ref.ID,
-					Src:          ref.Src,
-					Dst:          ref.Dst,
-					RspTo:        ref.RspTo,
-					TrafficClass: ref.TrafficClass,
-					TrafficBytes: ref.TrafficBytes,
-				},
+				MsgMeta: meta,
 			}
 		}
 		queueing.RestoreBuffer(pc.forwardBuffer, fwdElems)
 
 		// Restore sendOutBuffer
 		sendElems := make([]interface{}, len(pcs.SendOutBuffer))
-		for i, ref := range pcs.SendOutBuffer {
+		for i, meta := range pcs.SendOutBuffer {
 			sendElems[i] = &messaging.Flit{
-				MsgMeta: sim.MsgMeta{
-					ID:           ref.ID,
-					Src:          ref.Src,
-					Dst:          ref.Dst,
-					RspTo:        ref.RspTo,
-					TrafficClass: ref.TrafficClass,
-					TrafficBytes: ref.TrafficBytes,
-				},
+				MsgMeta: meta,
 			}
 		}
 		queueing.RestoreBuffer(pc.sendOutBuffer, sendElems)
