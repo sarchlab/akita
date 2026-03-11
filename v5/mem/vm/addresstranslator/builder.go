@@ -181,30 +181,40 @@ func (b Builder) Build(name string) *Comp {
 		NumReqPerCycle: b.numReqPerCycle,
 	}
 
+	b.populateMemMapperSpec(&spec)
+	b.populateTransMapperSpec(&spec)
+
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
 
-	t := &Comp{
+	c := &Comp{
 		Component: modelComp,
 	}
 
-	b.createPorts(name, t)
-	b.setupMemoryPortMapper(t)
-	b.setupTranslationPortMapper(t)
+	mw := &middleware{comp: modelComp}
+	modelComp.AddMiddleware(mw)
 
-	middleware := &middleware{Comp: t}
-	t.AddMiddleware(middleware)
+	b.createPorts(c, modelComp)
 
-	return t
+	return c
 }
 
-// setupMemoryPortMapper configures the memory port mapper for the address translator
-func (b Builder) setupMemoryPortMapper(t *Comp) {
+func (b Builder) populateMemMapperSpec(spec *Spec) {
 	if b.memPortMapper != nil {
-		t.memoryPortMapper = b.memPortMapper
+		switch m := b.memPortMapper.(type) {
+		case *mem.SinglePortMapper:
+			spec.MemMapperKind = "single"
+			spec.MemMapperPorts = []sim.RemotePort{m.Port}
+		case *mem.InterleavedAddressPortMapper:
+			spec.MemMapperKind = "interleaved"
+			spec.MemMapperPorts = m.LowModules
+			spec.MemMapperInterleavingSize = m.InterleavingSize
+		default:
+			panic("unsupported memory port mapper type for spec conversion")
+		}
 		return
 	}
 
@@ -213,25 +223,33 @@ func (b Builder) setupMemoryPortMapper(t *Comp) {
 		if len(b.memRemotePorts) != 1 {
 			panic("single address mapper requires exactly 1 port")
 		}
-		t.memoryPortMapper = &mem.SinglePortMapper{
-			Port: b.memRemotePorts[0],
-		}
+		spec.MemMapperKind = "single"
+		spec.MemMapperPorts = b.memRemotePorts
 	case "interleaved":
 		if len(b.memRemotePorts) == 0 {
 			panic("interleaved address mapper requires at least 1 port")
 		}
-		mapper := mem.NewInterleavedAddressPortMapper(1 << b.log2PageSize)
-		mapper.LowModules = append(mapper.LowModules, b.memRemotePorts...)
-		t.memoryPortMapper = mapper
+		spec.MemMapperKind = "interleaved"
+		spec.MemMapperPorts = b.memRemotePorts
+		spec.MemMapperInterleavingSize = 1 << b.log2PageSize
 	default:
 		panic("invalid address mapper type: " + b.memPortMapperType)
 	}
 }
 
-// setupTranslationPortMapper configures the translation port mapper for the address translator
-func (b Builder) setupTranslationPortMapper(t *Comp) {
+func (b Builder) populateTransMapperSpec(spec *Spec) {
 	if b.translationPortMapper != nil {
-		t.translationPortMapper = b.translationPortMapper
+		switch m := b.translationPortMapper.(type) {
+		case *mem.SinglePortMapper:
+			spec.TransMapperKind = "single"
+			spec.TransMapperPorts = []sim.RemotePort{m.Port}
+		case *mem.InterleavedAddressPortMapper:
+			spec.TransMapperKind = "interleaved"
+			spec.TransMapperPorts = m.LowModules
+			spec.TransMapperInterleavingSize = m.InterleavingSize
+		default:
+			panic("unsupported translation port mapper type for spec conversion")
+		}
 		return
 	}
 
@@ -240,36 +258,30 @@ func (b Builder) setupTranslationPortMapper(t *Comp) {
 		if len(b.translationRemotePorts) != 1 {
 			panic("single translation mapper requires exactly 1 port")
 		}
-		t.translationPortMapper = &mem.SinglePortMapper{
-			Port: b.translationRemotePorts[0],
-		}
+		spec.TransMapperKind = "single"
+		spec.TransMapperPorts = b.translationRemotePorts
 	case "interleaved":
 		if len(b.translationRemotePorts) == 0 {
 			panic("interleaved translation mapper requires at least 1 port")
 		}
-		mapper := mem.NewInterleavedAddressPortMapper(1 << b.log2PageSize)
-		mapper.LowModules = append(mapper.LowModules,
-			b.translationRemotePorts...)
-		t.translationPortMapper = mapper
+		spec.TransMapperKind = "interleaved"
+		spec.TransMapperPorts = b.translationRemotePorts
+		spec.TransMapperInterleavingSize = 1 << b.log2PageSize
 	default:
 		panic("invalid translation mapper type: " + b.translationPortMapperType)
 	}
 }
 
-func (b Builder) createPorts(name string, t *Comp) {
-	t.topPort = b.topPort
-	t.topPort.SetComponent(t)
-	t.AddPort("Top", t.topPort)
+func (b Builder) createPorts(c *Comp, modelComp *modeling.Component[Spec, State]) {
+	b.topPort.SetComponent(c)
+	modelComp.AddPort("Top", b.topPort)
 
-	t.bottomPort = b.bottomPort
-	t.bottomPort.SetComponent(t)
-	t.AddPort("Bottom", t.bottomPort)
+	b.bottomPort.SetComponent(c)
+	modelComp.AddPort("Bottom", b.bottomPort)
 
-	t.translationPort = b.translationPort
-	t.translationPort.SetComponent(t)
-	t.AddPort("Translation", t.translationPort)
+	b.translationPort.SetComponent(c)
+	modelComp.AddPort("Translation", b.translationPort)
 
-	t.ctrlPort = b.ctrlPort
-	t.ctrlPort.SetComponent(t)
-	t.AddPort("Control", t.ctrlPort)
+	b.ctrlPort.SetComponent(c)
+	modelComp.AddPort("Control", b.ctrlPort)
 }
