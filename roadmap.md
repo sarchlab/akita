@@ -4,68 +4,51 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware.
 
-## Current State (after M13)
+## Current State (after M14)
 
 - 16 first-party components ported to `modeling.Component[Spec, State]`
 - Messages are concrete types (no builders)
 - Save/load works with acceptance test
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
-- **idealmemcontroller** fully transformed (M12): Comp reduced to thin StorageOwner, AddressConverter inlined, middleware reads A/writes B
-- **TLB** fully transformed (M13): Comp eliminated, State canonical (free functions for sets/MSHR/pipeline), AddressToPortMapper inlined, internal package removed
+- **6 components fully transformed** (Comp eliminated + A-B): idealmemcontroller, TLB, mmuCache, addresstranslator, datamover, simplebankedmemory
 - Architecture direction fully clarified and approved by human (issues #145, #150)
-- All PRs merged through #33. Code builds and tests pass.
+- All PRs merged through #36. Code builds and tests pass. CI lint errors from M14 fixed.
 
 ## Phase: Architecture Transformation — Component by Component
 
 The strategy is to transform each component following the pattern established in idealmemcontroller (M12):
 1. Make middleware read from `GetState()` (A buffer) and write to `GetNextState()` (B buffer)
-2. Eliminate Comp wrapper struct (or reduce to thin StorageOwner)
+2. Eliminate Comp wrapper struct (or reduce to thin interface wrapper)
 3. Inline all dependency logic into middleware (AddressConverter, AddressToPortMapper, VictimFinder, etc.)
 4. Move all runtime data into State as pure serializable structs
 5. Remove snapshot/restore conversion layers (State IS the canonical representation)
 
 ### Component Difficulty Assessment
 
-| Component | Middlewares | Dependencies | State Complexity | Difficulty |
-|-----------|-----------|-------------|-----------------|-----------|
+| Component | Middlewares | Dependencies | State Complexity | Status |
+|-----------|-----------|-------------|-----------------|--------|
 | idealmemcontroller | 2 | AddressConverter, Storage | ~10 fields | ✅ DONE (M12) |
-| TLB | 2 | AddressToPortMapper | Sets, MSHR, Pipeline, Buffer | Medium |
-| mmuCache | 2 (ctrl+data) | None significant | Sets, FlushReq | Easy-Medium |
-| simplebankedmemory | 1 | AddressConverter, Storage | Banks with pipelines | Medium |
-| addresstranslator | 1 | 2× AddressToPortMapper | Transactions | Easy-Medium |
-| datamover | 1 | 2× AddressToPortMapper | Inflight reqs | Easy-Medium |
-| mmu | 1 | PageTable (external) | Translations, migration | Medium |
-| switch | 1 | RoutingTable, Arbiter | Port mappings, buffers | Medium |
-| endpoint | 1 | None significant | Msg assembly/disassembly | Easy-Medium |
-| writearound cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | Hard |
-| writeevict cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | Hard |
-| writethrough cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | Hard |
-| writeback cache | 1 (monolithic, 6 stages) | Directory, MSHR, Storage, AddrToPortMapper, VictimFinder | Huge state (60+ fields) | Very Hard |
-| DRAM | 1 | AddrConverter, SubTransSplitter, AddrMapper, CmdQueue, Channel, Banks | Banks, channels, queues | Hard |
-| tickingping (example) | 1 | None | Simple | Trivial |
+| TLB | 2 | AddressToPortMapper | Sets, MSHR, Pipeline, Buffer | ✅ DONE (M13) |
+| mmuCache | 2 (ctrl+data) | None significant | Sets, FlushReq | ✅ DONE (M14) |
+| addresstranslator | 1 | 2× AddressToPortMapper | Transactions | ✅ DONE (M14) |
+| datamover | 1 | 2× AddressToPortMapper | Inflight reqs | ✅ DONE (M14) |
+| simplebankedmemory | 1 | AddressConverter, Storage | Banks with pipelines | ✅ DONE (M14) |
+| GMMU (mmu) | 1 | PageTable (external) | Translations, migration | 🔜 M15 |
+| switch | 1 | RoutingTable, Arbiter | Port mappings, buffers, pipelines | 🔜 M15 |
+| endpoint | 1 | None significant | Msg assembly/disassembly | 🔜 M15 |
+| writearound cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | M16 |
+| writeevict cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | M16 |
+| writethrough cache | 1 (monolithic) | Directory, MSHR, Storage, AddrToPortMapper, AddrConverter | Transactions, directory, MSHR | M16 |
+| writeback cache | 1 (monolithic, 6 stages) | Directory, MSHR, Storage, AddrToPortMapper, VictimFinder | Huge state (60+ fields) | M17 |
+| DRAM | 1 | AddrConverter, SubTransSplitter, AddrMapper, CmdQueue, Channel, Banks | Banks, channels, queues | M18 |
+| tickingping (example) | 1 | None | Simple | Trivial (skip) |
 | ping (example) | N/A | N/A | Not modeling.Component | N/A |
 
-### M13: TLB — Comp Elimination + A-B State ✅
-- Eliminated Comp wrapper, State canonical, free functions for sets/MSHR/pipeline
-- Inlined AddressToPortMapper, removed internal package, removed snapshot/restore
-- Middleware reads A buffer, writes B buffer
-- **Budget**: 5 cycles | **Used**: 3 cycles | PR #33
-
-### M14: Simple Components Batch — mmuCache + addresstranslator + datamover + simplebankedmemory
-- These are smaller/simpler components that can be done together
-- Same pattern: eliminate Comp, inline deps, A-B state, State canonical
-- mmuCache: similar to TLB (internal/Set, ctrlMiddleware, 2 middlewares)
-- addresstranslator: 2x AddressToPortMapper, transactions
-- datamover: 2x AddressToPortMapper, buffer, currentTransaction
-- simplebankedmemory: Storage, AddressConverter, banks with pipelines
-- **Budget**: 6 cycles
-- **Status**: NEXT
-
-### M15: MMU + Switch + Endpoint
-- mmu has PageTable as external dep (similar to Storage — external service)
-- switch has RoutingTable + Arbiter (need careful analysis)
-- endpoint has msg assembly logic
-- **Budget**: 6 cycles
+### M15: GMMU + Switch + Endpoint — NEXT (Issue #181)
+- GMMU: eliminate topPort/bottomPort from Comp, keep pageTable as external ref in middleware, use A-B state
+- Switch: move ports/portComplex/routingTable/arbiter to middleware, keep runtime pipelines/buffers, reduce Comp
+- Endpoint: move all runtime fields to State, eliminate snapshot/restore conversion, use A-B state
+- **Budget**: 5 cycles
 
 ### M16: Cache Architecture — MSHR/Directory Decoupling + Write{around,evict,through}
 - These 3 caches share similar structure (Directory, MSHR, Storage, single middleware)
@@ -110,12 +93,13 @@ The strategy is to transform each component following the pattern established in
 | M11 | 2 | 0 | Architecture design finalized |
 | M12 | 5 | 3 | A-B state + Comp elimination on idealmemcontroller |
 | M13 | 5 | 3 | TLB — Comp elimination + A-B state |
+| M14 | 6 | 3 | Simple Components Batch (mmuCache, addresstranslator, datamover, simplebankedmemory) |
 
 ## Summary Statistics
-- Total milestones completed: 13
-- PRs merged: 33
+- Total milestones completed: 14
+- PRs merged: 36
 - Components ported: 16/16
-- Components fully transformed (Comp eliminated + A-B): 2/16 (idealmemcontroller, TLB)
+- Components fully transformed (Comp eliminated + A-B): 6/16
 
 ## Lessons Learned
 - CI can get stuck in "queued" state — don't waste cycles waiting for it
@@ -123,7 +107,9 @@ The strategy is to transform each component following the pattern established in
 - Multi-worker mechanical changes work well with clear patterns
 - Breaking milestones to 2-6 cycle budgets is optimal
 - Human feedback drives direction — stay responsive
-- Combined milestones work when scope is small
+- Combined milestones work when scope is small — M14 (4 components) done in 3 cycles
 - idealmemcontroller is the reference implementation — follow its patterns
 - The snapshot/restore conversion layer disappears when State is canonical (big code reduction)
 - A-B state deep copy via JSON round-trip is acceptable for small States
+- Lint errors from multi-branch merges should be caught BEFORE merging to main (run linter locally)
+- Components with external services (Storage, PageTable, RoutingTable) keep those as middleware fields — they are external substrate, not internal state
