@@ -3,13 +3,15 @@ package writeevict_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	. "github.com/sarchlab/akita/v5/mem/cache/writeevict"
-	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/sim/directconnection"
 	gomock "go.uber.org/mock/gomock"
 
+	. "github.com/sarchlab/akita/v5/mem/cache/writeevict"
+	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/directconnection"
+
+	"github.com/sarchlab/akita/v5/mem/mem"
 )
 
 var _ = Describe("Cache", func() {
@@ -20,20 +22,22 @@ var _ = Describe("Cache", func() {
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
 		cuPort              *MockPort
-		c                   *Comp
+		c                   *modeling.Component[Spec, State]
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
+
 		cuPort = NewMockPort(mockCtrl)
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("CuPort")).AnyTimes()
+		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("cuPort")).AnyTimes()
 
 		engine = sim.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
+
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
@@ -43,6 +47,7 @@ var _ = Describe("Cache", func() {
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
 		}
+
 		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
@@ -207,4 +212,5 @@ var _ = Describe("Cache", func() {
 		data, _ := dram.GetStorage().Read(0x100, 4)
 		Expect(data).To(Equal([]byte{1, 2, 3, 4}))
 	})
+
 })

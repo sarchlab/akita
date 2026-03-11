@@ -35,25 +35,20 @@ func (b Builder) WithOutPort(port sim.Port) Builder {
 	return b
 }
 
-// Build creates a new Comp.
-func (b Builder) Build(name string) *Comp {
-	modelComp := modeling.NewBuilder[Spec, State]().
+// Build creates a new tickingping component.
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(Spec{}).
 		Build(name)
-	modelComp.SetState(State{})
+	comp.SetState(State{})
 
-	c := &Comp{
-		Component: modelComp,
-	}
+	mw := &middleware{comp: comp}
+	comp.AddMiddleware(mw)
 
-	mw := &middleware{Comp: c}
-	c.AddMiddleware(mw)
+	b.outPort.SetComponent(comp)
+	comp.AddPort("Out", b.outPort)
 
-	c.OutPort = b.outPort
-	c.OutPort.SetComponent(c)
-	c.AddPort("Out", c.OutPort)
-
-	return c
+	return comp
 }

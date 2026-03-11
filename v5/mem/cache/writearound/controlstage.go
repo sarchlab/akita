@@ -11,9 +11,8 @@ import (
 
 type controlStage struct {
 	ctrlPort     sim.Port
-	transactions *[]*transaction
-	directory    cache.Directory
-	cache        *Comp
+	transactions *[]*transactionState
+	cache        *middleware
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
@@ -66,8 +65,12 @@ func (s *controlStage) hardResetCache() {
 		s.flushBuffer(bankBuf)
 	}
 
-	s.directory.Reset()
-	s.cache.mshr.Reset()
+	spec := s.cache.GetSpec()
+	blockSize := int(1 << spec.Log2BlockSize)
+	cache.DirectoryReset(
+		&s.cache.directoryState,
+		spec.NumSets, spec.WayAssociativity, blockSize)
+	s.cache.mshrState = cache.MSHRState{}
 	s.cache.coalesceStage.Reset()
 
 	for _, bankStage := range s.cache.bankStages {

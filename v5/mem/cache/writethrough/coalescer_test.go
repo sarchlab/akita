@@ -13,7 +13,7 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Comp
+		cache    *middleware
 		topPort  *MockPort
 		dirBuf   *MockBuffer
 		c        coalescer
@@ -23,16 +23,17 @@ var _ = Describe("Coalescer", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
 		dirBuf = NewMockBuffer(mockCtrl)
-		cache = &Comp{
-			log2BlockSize:         6,
-			topPort:               topPort,
-			dirBuf:                dirBuf,
-			maxNumConcurrentTrans: 32,
+		cache = &middleware{
+			topPort: topPort,
+			dirBuf:  dirBuf,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		cache.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				Log2BlockSize:         6,
+				MaxNumConcurrentTrans: 32,
+			}).
 			Build("Cache")
 		c = coalescer{cache: cache}
 	})
@@ -61,7 +62,7 @@ var _ = Describe("Coalescer", func() {
 			read1.AccessByteSize = 4
 			read1.CanWaitForCoalesce = true
 			read1.TrafficBytes = 12
-			read1.TrafficClass = "mem.ReadReq"
+			read1.TrafficClass = "req"
 
 			read2 = &mem.ReadReq{}
 			read2.ID = sim.GetIDGenerator().Generate()
@@ -70,7 +71,7 @@ var _ = Describe("Coalescer", func() {
 			read2.AccessByteSize = 4
 			read2.CanWaitForCoalesce = true
 			read2.TrafficBytes = 12
-			read2.TrafficClass = "mem.ReadReq"
+			read2.TrafficClass = "req"
 
 			topPort.EXPECT().PeekIncoming().Return(read1)
 			topPort.EXPECT().RetrieveIncoming()
@@ -89,12 +90,12 @@ var _ = Describe("Coalescer", func() {
 				read3.AccessByteSize = 4
 				read3.CanWaitForCoalesce = true
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().CanPush().
 					Return(true)
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
 				topPort.EXPECT().PeekIncoming().Return(read3)
@@ -115,7 +116,7 @@ var _ = Describe("Coalescer", func() {
 				read3.PID = 1
 				read3.AccessByteSize = 4
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -137,14 +138,14 @@ var _ = Describe("Coalescer", func() {
 				read3.PID = 1
 				read3.AccessByteSize = 4
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().
 					CanPush().
 					Return(true)
 				dirBuf.EXPECT().
 					Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(3))
 						Expect(trans.read.Address).To(Equal(uint64(0x100)))
 						Expect(trans.read.PID).To(Equal(vm.PID(1)))
@@ -168,7 +169,7 @@ var _ = Describe("Coalescer", func() {
 				read3.PID = 1
 				read3.AccessByteSize = 4
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -190,16 +191,16 @@ var _ = Describe("Coalescer", func() {
 				read3.PID = 1
 				read3.AccessByteSize = 4
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().CanPush().
 					Return(true).Times(2)
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 					})
 				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transaction) {
+					Do(func(trans *transactionState) {
 						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
 					})
 
@@ -220,7 +221,7 @@ var _ = Describe("Coalescer", func() {
 				read3.PID = 1
 				read3.AccessByteSize = 4
 				read3.TrafficBytes = 12
-				read3.TrafficClass = "mem.ReadReq"
+				read3.TrafficClass = "req"
 
 				dirBuf.EXPECT().CanPush().
 					Return(false)
@@ -241,12 +242,12 @@ var _ = Describe("Coalescer", func() {
 					read3.PID = 1
 					read3.AccessByteSize = 4
 					read3.TrafficBytes = 12
-					read3.TrafficClass = "mem.ReadReq"
+					read3.TrafficClass = "req"
 
 					dirBuf.EXPECT().CanPush().Return(true)
 					dirBuf.EXPECT().
 						Push(gomock.Any()).
-						Do(func(trans *transaction) {
+						Do(func(trans *transactionState) {
 							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
 						})
 					dirBuf.EXPECT().CanPush().Return(false)
@@ -264,40 +265,38 @@ var _ = Describe("Coalescer", func() {
 
 	Context("write", func() {
 		It("should coalesce write", func() {
-			w1Data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
 			write1 := &mem.WriteReq{}
 			write1.ID = sim.GetIDGenerator().Generate()
 			write1.Address = 0x104
 			write1.PID = 1
-			write1.Data = w1Data
+			write1.Data = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
 			write1.DirtyMask = []bool{
 				true, true, true, true,
 				false, false, false, false,
 				true, true, true, true,
 			}
 			write1.CanWaitForCoalesce = true
-			write1.TrafficBytes = len(w1Data) + 12
-			write1.TrafficClass = "mem.WriteReq"
+			write1.TrafficBytes = 12 + 12
+			write1.TrafficClass = "req"
 
-			w2Data := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
 			write2 := &mem.WriteReq{}
 			write2.ID = sim.GetIDGenerator().Generate()
 			write2.Address = 0x108
 			write2.PID = 1
-			write2.Data = w2Data
+			write2.Data = []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9}
 			write2.DirtyMask = []bool{
 				true, true, true, true,
 				true, true, true, true,
 				false, false, false, false,
 			}
-			write2.TrafficBytes = len(w2Data) + 12
-			write2.TrafficClass = "mem.WriteReq"
+			write2.TrafficBytes = 12 + 12
+			write2.TrafficClass = "req"
 
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
 			dirBuf.EXPECT().CanPush().Return(true)
-			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transaction) {
+			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transactionState) {
 				Expect(trans.write.Address).To(Equal(uint64(0x100)))
 				Expect(trans.write.PID).To(Equal(vm.PID(1)))
 				Expect(trans.write.Data).To(Equal([]byte{

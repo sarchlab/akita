@@ -7,7 +7,7 @@ import (
 )
 
 type respondStage struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (s *respondStage) Tick() bool {
@@ -30,9 +30,7 @@ func (s *respondStage) Tick() bool {
 	return false
 }
 
-func (s *respondStage) respondReadTrans(
-	trans *transaction,
-) bool {
+func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	if !trans.done {
 		return false
 	}
@@ -45,7 +43,7 @@ func (s *respondStage) respondReadTrans(
 	dr.RspTo = read.ID
 	dr.Data = trans.data
 	dr.TrafficBytes = len(trans.data) + 4
-	dr.TrafficClass = "mem.DataReadyRsp"
+	dr.TrafficClass = "rsp"
 
 	err := s.cache.topPort.Send(dr)
 	if err != nil {
@@ -59,9 +57,7 @@ func (s *respondStage) respondReadTrans(
 	return true
 }
 
-func (s *respondStage) respondWriteTrans(
-	trans *transaction,
-) bool {
+func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	if !trans.done {
 		return false
 	}
@@ -73,7 +69,7 @@ func (s *respondStage) respondWriteTrans(
 	done.Dst = write.Src
 	done.RspTo = write.ID
 	done.TrafficBytes = 4
-	done.TrafficClass = "mem.WriteDoneRsp"
+	done.TrafficClass = "rsp"
 
 	err := s.cache.topPort.Send(done)
 	if err != nil {
@@ -87,7 +83,7 @@ func (s *respondStage) respondWriteTrans(
 	return true
 }
 
-func (s *respondStage) removeTransaction(trans *transaction) {
+func (s *respondStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.transactions {
 		if t == trans {
 			s.cache.transactions = append(s.cache.transactions[:i],

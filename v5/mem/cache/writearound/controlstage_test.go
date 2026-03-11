@@ -1,11 +1,13 @@
 package writearound
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	cache2 "github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
 )
 
@@ -16,12 +18,10 @@ var _ = Describe("Control Stage", func() {
 		ctrlPort     *MockPort
 		topPort      *MockPort
 		bottomPort   *MockPort
-		transactions []*transaction
-		directory    *MockDirectory
+		transactions []*transactionState
 		s            *controlStage
-		cache        *Comp
+		mw           *middleware
 		inBuf        *MockBuffer
-		mshr         *MockMSHR
 		c            *coalescer
 	)
 
@@ -44,31 +44,34 @@ var _ = Describe("Control Stage", func() {
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
 
-		directory = NewMockDirectory(mockCtrl)
 		inBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
-		c = &coalescer{cache: cache}
+		c = &coalescer{cache: mw}
 
 		transactions = nil
 
-		cache = &Comp{
+		mw = &middleware{
 			topPort:       topPort,
 			bottomPort:    bottomPort,
 			dirBuf:        inBuf,
-			mshr:          mshr,
 			coalesceStage: c,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		mw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				NumSets:          16,
+				WayAssociativity: 4,
+				Log2BlockSize:    6,
+			}).
 			Build("Cache")
+
+		// Initialize directoryState
+		cache.DirectoryReset(&mw.directoryState, 16, 4, 64)
 
 		s = &controlStage{
 			ctrlPort:     ctrlPort,
 			transactions: &transactions,
-			directory:    directory,
-			cache:        cache,
+			cache:        mw,
 		}
 	})
 
@@ -85,7 +88,7 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should wait for the cache to finish transactions", func() {
-		transactions = []*transaction{{}}
+		transactions = []*transactionState{{}}
 		s.cache.transactions = transactions
 		flushReq := &cache2.FlushReq{}
 		flushReq.ID = sim.GetIDGenerator().Generate()
@@ -116,8 +119,6 @@ var _ = Describe("Control Stage", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
 		inBuf.EXPECT().Pop()
-		directory.EXPECT().Reset()
-		mshr.EXPECT().Reset()
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 

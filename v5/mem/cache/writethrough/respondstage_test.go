@@ -12,7 +12,7 @@ import (
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *Comp
+		cache    *middleware
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -26,10 +26,10 @@ var _ = Describe("Respond Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		cache = &Comp{
+		cache = &middleware{
 			topPort: topPort,
 		}
-		cache.Component = modeling.NewBuilder[Spec, State]().
+		cache.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{}).
@@ -45,7 +45,7 @@ var _ = Describe("Respond Stage", func() {
 	Context("read", func() {
 		var (
 			read  *mem.ReadReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -55,8 +55,8 @@ var _ = Describe("Respond Stage", func() {
 			read.PID = 1
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
-			read.TrafficClass = "mem.ReadReq"
-			trans = &transaction{read: read}
+			read.TrafficClass = "req"
+			trans = &transactionState{read: read}
 			cache.transactions = append(cache.transactions, trans)
 		})
 
@@ -90,7 +90,7 @@ var _ = Describe("Respond Stage", func() {
 	Context("write", func() {
 		var (
 			write *mem.WriteReq
-			trans *transaction
+			trans *transactionState
 		)
 
 		BeforeEach(func() {
@@ -99,8 +99,8 @@ var _ = Describe("Respond Stage", func() {
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12
-			write.TrafficClass = "mem.WriteReq"
-			trans = &transaction{write: write}
+			write.TrafficClass = "req"
+			trans = &transactionState{write: write}
 			cache.transactions = append(cache.transactions, trans)
 		})
 

@@ -7,7 +7,7 @@ import (
 )
 
 type respondStage struct {
-	cache *Comp
+	cache *middleware
 }
 
 func (s *respondStage) Tick() bool {
@@ -30,9 +30,7 @@ func (s *respondStage) Tick() bool {
 	return false
 }
 
-func (s *respondStage) respondReadTrans(
-	trans *transaction,
-) bool {
+func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	if !trans.done {
 		return false
 	}
@@ -59,9 +57,7 @@ func (s *respondStage) respondReadTrans(
 	return true
 }
 
-func (s *respondStage) respondWriteTrans(
-	trans *transaction,
-) bool {
+func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	if !trans.done {
 		return false
 	}
@@ -87,7 +83,7 @@ func (s *respondStage) respondWriteTrans(
 	return true
 }
 
-func (s *respondStage) removeTransaction(trans *transaction) {
+func (s *respondStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.transactions {
 		if t == trans {
 			s.cache.transactions = append(s.cache.transactions[:i],

@@ -1,14 +1,15 @@
 package writeevict
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -17,28 +18,32 @@ var _ = Describe("Bottom Parser", func() {
 		mockCtrl   *gomock.Controller
 		bottomPort *MockPort
 		bankBuf    *MockBuffer
-		mshr       *MockMSHR
 		p          *bottomParser
-		c          *Comp
+		c          *middleware
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		bottomPort = NewMockPort(mockCtrl)
 		bankBuf = NewMockBuffer(mockCtrl)
-		mshr = NewMockMSHR(mockCtrl)
-		c = &Comp{
-			log2BlockSize:    6,
-			bottomPort:       bottomPort,
-			mshr:             mshr,
-			wayAssociativity: 4,
-			bankBufs:         []queueing.Buffer{bankBuf},
+		c = &middleware{
+			bottomPort: bottomPort,
+			bankBufs:   []queueing.Buffer{bankBuf},
 		}
-		c.Component = modeling.NewBuilder[Spec, State]().
+		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
-			WithSpec(Spec{}).
+			WithSpec(Spec{
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumMSHREntry:     4,
+				NumSets:          16,
+			}).
 			Build("Cache")
+
+		// Initialize directoryState
+		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+
 		p = &bottomParser{cache: c}
 	})
 
@@ -60,7 +65,7 @@ var _ = Describe("Bottom Parser", func() {
 			write1.PID = 1
 			write1.TrafficBytes = 12
 			write1.TrafficClass = "req"
-			preCTrans1 := &transaction{
+			preCTrans1 := &transactionState{
 				write: write1,
 			}
 			write2 := &mem.WriteReq{}
@@ -69,7 +74,7 @@ var _ = Describe("Bottom Parser", func() {
 			write2.PID = 1
 			write2.TrafficBytes = 12
 			write2.TrafficClass = "req"
-			preCTrans2 := &transaction{
+			preCTrans2 := &transactionState{
 				write: write2,
 			}
 			writeToBottom := &mem.WriteReq{}
@@ -78,9 +83,9 @@ var _ = Describe("Bottom Parser", func() {
 			writeToBottom.PID = 1
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "req"
-			postCTrans := &transaction{
+			postCTrans := &transactionState{
 				writeToBottom:           writeToBottom,
-				preCoalesceTransactions: []*transaction{preCTrans1, preCTrans2},
+				preCoalesceTransactions: []*transactionState{preCTrans1, preCTrans2},
 			}
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans)
@@ -106,15 +111,14 @@ var _ = Describe("Bottom Parser", func() {
 		var (
 			read1, read2             *mem.ReadReq
 			write1, write2           *mem.WriteReq
-			preCTrans1, preCTrans2   *transaction
-			preCTrans3, preCTrans4   *transaction
+			preCTrans1, preCTrans2   *transactionState
+			preCTrans3, preCTrans4   *transactionState
 			postCRead                *mem.ReadReq
 			postCWrite               *mem.WriteReq
 			readToBottom             *mem.ReadReq
-			block                    *cache.Block
-			postCTrans1, postCTrans2 *transaction
-			mshrEntry                *cache.MSHREntry
+			postCTrans1, postCTrans2 *transactionState
 			dataReady                *mem.DataReadyRsp
+			blockSetID, blockWayID   int
 		)
 
 		BeforeEach(func() {
@@ -150,10 +154,10 @@ var _ = Describe("Bottom Parser", func() {
 			write2.TrafficBytes = 4 + 12
 			write2.TrafficClass = "req"
 
-			preCTrans1 = &transaction{read: read1}
-			preCTrans2 = &transaction{read: read2}
-			preCTrans3 = &transaction{write: write1}
-			preCTrans4 = &transaction{write: write2}
+			preCTrans1 = &transactionState{read: read1}
+			preCTrans2 = &transactionState{read: read2}
+			preCTrans3 = &transactionState{write: write1}
+			preCTrans4 = &transactionState{write: write2}
 
 			postCRead = &mem.ReadReq{}
 			postCRead.ID = sim.GetIDGenerator().Generate()
@@ -187,15 +191,22 @@ var _ = Describe("Bottom Parser", func() {
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
 			dataReady.TrafficClass = "rsp"
-			block = &cache.Block{
-				PID: 1,
-				Tag: 0x100,
-			}
-			postCTrans1 = &transaction{
-				block:        block,
+
+			// Set up a block in directory to serve as the MSHR block reference
+			// setID for addr 0x100 with blockSize=64: (0x100/64) % 16 = 4
+			blockSetID = 4
+			blockWayID = 0
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].PID = 1
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
+			postCTrans1 = &transactionState{
+				blockSetID:   blockSetID,
+				blockWayID:   blockWayID,
+				hasBlock:     true,
 				read:         postCRead,
 				readToBottom: readToBottom,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans1,
 					preCTrans2,
 				},
@@ -217,20 +228,23 @@ var _ = Describe("Bottom Parser", func() {
 			}
 			postCWrite.TrafficBytes = 16 + 12
 			postCWrite.TrafficClass = "req"
-			postCTrans2 = &transaction{
+			postCTrans2 = &transactionState{
 				write: postCWrite,
-				preCoalesceTransactions: []*transaction{
+				preCoalesceTransactions: []*transactionState{
 					preCTrans3, preCTrans4,
 				},
 			}
 
-			mshrEntry = &cache.MSHREntry{
-				Block: block,
-			}
-			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans1)
+			// Set up MSHR entry with block reference and postCTrans1
+			entryIdx := cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), uint64(0x100))
+			entry := &c.mshrState.Entries[entryIdx]
+			entry.HasBlock = true
+			entry.BlockSetID = blockSetID
+			entry.BlockWayID = blockWayID
+			entry.TransactionIndices = append(entry.TransactionIndices, 0) // postCTrans1 idx
 		})
 
-		It("should stall is bank is busy", func() {
+		It("should stall if bank is busy", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bankBuf.EXPECT().CanPush().Return(false)
 
@@ -242,11 +256,9 @@ var _ = Describe("Bottom Parser", func() {
 		It("should send transaction to bank", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
-			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transaction) {
+				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
 				})
 
@@ -262,17 +274,18 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should combine write", func() {
-			mshrEntry.Requests = append(mshrEntry.Requests, postCTrans2)
+			// Add postCTrans2 as another MSHR request
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans2)
+			entryIdx, _ := cache.MSHRQuery(&c.mshrState, vm.PID(1), uint64(0x100))
+			c.mshrState.Entries[entryIdx].TransactionIndices = append(
+				c.mshrState.Entries[entryIdx].TransactionIndices, 1) // postCTrans2 idx
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			mshr.EXPECT().Query(vm.PID(1), uint64(0x100)).Return(mshrEntry)
-			mshr.EXPECT().Remove(vm.PID(1), uint64(0x100))
 			bankBuf.EXPECT().CanPush().Return(true)
 			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transaction) {
+				Do(func(trans *transactionState) {
 					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
 					Expect(trans.data).To(Equal([]byte{
 						1, 2, 3, 4, 5, 6, 7, 8,

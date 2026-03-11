@@ -15,6 +15,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/tracing"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -91,7 +92,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 }
 
 func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
-	*writethrough.Comp, *writeback.Comp, *idealmemcontroller.Comp,
+	*modeling.Component[writethrough.Spec, writethrough.State], *writeback.Comp, *idealmemcontroller.Comp,
 ) {
 	memCtrl := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
