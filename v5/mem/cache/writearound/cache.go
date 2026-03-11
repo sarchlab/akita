@@ -9,7 +9,18 @@ import (
 )
 
 // Spec contains immutable configuration for the writearound cache.
-type Spec struct{}
+type Spec struct {
+	NumReqPerCycle        int    `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64 `json:"log2_block_size"`
+	BankLatency           int    `json:"bank_latency"`
+	WayAssociativity      int    `json:"way_associativity"`
+	MaxNumConcurrentTrans int    `json:"max_num_concurrent_trans"`
+	NumBanks              int    `json:"num_banks"`
+	NumMSHREntry          int    `json:"num_mshr_entry"`
+	NumSets               int    `json:"num_sets"`
+	TotalByteSize         uint64 `json:"total_byte_size"`
+	DirLatency            int    `json:"dir_latency"`
+}
 
 // State contains mutable runtime data for the writearound cache.
 type State struct {

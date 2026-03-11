@@ -170,10 +170,26 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *Comp {
 	b.assertAllRequiredInformationIsAvailable()
 
+	blockSize := 1 << b.log2BlockSize
+	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
+
+	spec := Spec{
+		NumReqPerCycle:        b.numReqPerCycle,
+		Log2BlockSize:         b.log2BlockSize,
+		BankLatency:           b.bankLatency,
+		WayAssociativity:      b.wayAssociativity,
+		MaxNumConcurrentTrans: b.maxNumConcurrentTrans,
+		NumBanks:              b.numBank,
+		NumMSHREntry:          b.numMSHREntry,
+		NumSets:               numSets,
+		TotalByteSize:         b.totalByteSize,
+		DirLatency:            b.dirLatency,
+	}
+
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
-		WithSpec(Spec{}).
+		WithSpec(spec).
 		Build(name)
 
 	c := &Comp{
@@ -203,10 +219,8 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	c.mshr = cache.NewMSHR(b.numMSHREntry)
-	blockSize := 1 << b.log2BlockSize
-	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
 	c.directory = cache.NewDirectory(
-		numSets, b.wayAssociativity, 1<<b.log2BlockSize,
+		numSets, b.wayAssociativity, blockSize,
 		cache.NewLRUVictimFinder())
 	c.storage = mem.NewStorage(b.totalByteSize)
 	c.bankLatency = b.bankLatency
