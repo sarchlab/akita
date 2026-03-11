@@ -50,7 +50,7 @@ Per human direction (#93), `sim.Msg` becomes an interface. Design by Iris (works
 ### M8.1: Foundation — Msg interface + GenericMsg rename + Port/Connection updates ✅ — Budget: 8, Used: 3
 Renamed `Msg` → `GenericMsg`, added `Msg` interface with `Meta() *MsgMeta`, updated Port/Buffer/Connection/tracing/analysis. PR #23 merged.
 
-### M8.2: Convert all payloads to concrete message types + remove GenericMsg — CURRENT
+### M8.2: Convert all payloads to concrete message types + remove GenericMsg ✅ — Budget: 8, Used: 9
 **Scope:** Convert all 30 payload types to concrete message structs embedding `sim.MsgMeta`, update all ~40 component files and ~50 test files, remove `GenericMsg`/`MsgPayload[T]`/`TryMsgPayload[T]`. Also remove all `msgRef` definitions and simplify state serialization.
 
 Per human direction (#101): simplicity is the top priority. GenericMsg must go. Each package defines concrete, serializable message types. No runtime type casting, no `Payload any`.
@@ -91,10 +91,16 @@ case *mem.ReadReq:
 - `AccessReqPayload` / `AccessRspPayload` in mem/mem/protocol.go → replace with `AccessReq` / `AccessRsp` interfaces on the new concrete types
 - `tracing/api.go` functions taking `*sim.GenericMsg` → update to take `sim.Msg` (handle tracing differently)
 
-### M8.3: State cleanup + writeback cache state — AFTER M8.2
-- Remove all `MsgRef`/`msgRef` and related functions
-- Update all state.go files to store concrete message types directly
-- Complete writeback cache state population (was M7.5)
+### M8.3: Remove message builders + msgRef cleanup — NEXT
+Per human direction (#109): messages are pure data, so builder pattern is unnecessary boilerplate. Remove all ~22 message builder types across 7 protocol files. Replace with direct struct literal construction. Also remove all `msgRef` types (9 files) — store concrete message types directly in state.
+
+**Scope:**
+1. Remove all message builder structs and their methods from protocol files
+2. Update all ~30+ call sites to use direct struct literal construction
+3. Add a simple `sim.InitMsg(meta *MsgMeta, src, dst RemotePort)` helper for ID generation + common setup
+4. Remove all `msgRef`/`MsgRef` types and conversion functions from state files
+5. Update state serialization to store concrete message types directly
+6. Update all tests
 
 ### M9: Comp Wrapper Elimination — AFTER M8
 Human issue #61.

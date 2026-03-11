@@ -12,13 +12,13 @@ Redefine a component as a combination of **Spec, State, Ports, and Middlewares**
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods for quiescent-only checkpointing. Components implement `StateSaver`/`StateLoader` interfaces. An acceptance test (`TestSaveLoadDeterminism`) verifies deterministic save/load/resume.
 
-### 3. Messages as Concrete Types (IN PROGRESS — redesign)
+### 3. Messages as Concrete Types (IN PROGRESS — cleanup)
 
-**Current state:** `sim.Msg` is a concrete struct with `MsgMeta` + `Payload any`. The `Payload any` field makes messages non-serializable and requires runtime type assertions (`MsgPayload[T]()`).
+**Done:** `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) embedding `sim.MsgMeta`. No `Payload any`, no `GenericMsg`, no runtime casting. Components type-switch on concrete types: `case *mem.ReadReq:`.
 
-**Target state (per human direction in #93):** `sim.Msg` becomes an **interface** with a single `Meta() *MsgMeta` method. Each package defines concrete, serializable message types (e.g., `mem.ReadReq`, `cache.FlushReq`) that embed `sim.MsgMeta`. Messages are naturally serializable — no `Payload any`, no `MsgRef`, no runtime casting. Components type-switch on the concrete type: `case *mem.ReadReq:` instead of `MsgPayload[T]()`.
+**Remaining cleanup (per human direction in #109):** Remove message builder types. Since messages are pure data structs, callers should construct them directly via struct literals instead of using builder pattern. This eliminates ~22 builder types and ~200+ lines of boilerplate per protocol file. ID generation and default TrafficBytes/TrafficClass should be set via a simple helper or direct assignment.
 
-**Design:** See `workspace/iris/msg_as_interface_design.md` for full spec. Key: minimal interface (`Meta() *MsgMeta`), shared `MsgMeta` base struct with pointer receiver, builders return concrete types.
+**Also remaining:** Remove all `msgRef` types from state files. Now that messages are concrete and serializable, state files should store concrete message types directly instead of converting to/from msgRef.
 
 ### 4. Port All First-Party Components (DONE — structurally ported, but State needs work)
 
