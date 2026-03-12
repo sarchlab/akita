@@ -13,31 +13,6 @@ type respondMW struct {
 	storage *mem.Storage
 }
 
-// Name delegates to the underlying component.
-func (m *respondMW) Name() string {
-	return m.comp.Name()
-}
-
-// AcceptHook delegates to the underlying component.
-func (m *respondMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-// Hooks delegates to the underlying component.
-func (m *respondMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-// NumHooks delegates to the underlying component.
-func (m *respondMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-// InvokeHook delegates to the underlying component.
-func (m *respondMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // Tick runs the respond stage twice (matching original execution order).
 func (m *respondMW) Tick() bool {
 	curVal := m.comp.GetState()
@@ -74,14 +49,14 @@ func (m *respondMW) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m)
+			tracing.TraceReqComplete(&t.WriteMsg, m.comp)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m)
+		tracing.TraceReqComplete(&t.ReadMsg, m.comp)
 	}
 	return done
 }

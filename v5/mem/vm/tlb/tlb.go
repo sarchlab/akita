@@ -1,7 +1,6 @@
 package tlb
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -40,8 +39,4 @@ type State struct {
 	PipelineNumStages   int                   `json:"pipeline_num_stages"`
 }
 
-// Comp is a Translation Lookaside Buffer (TLB) that stores part of the page
-// table.
-type Comp struct {
-	*modeling.Component[Spec, State]
-}
+

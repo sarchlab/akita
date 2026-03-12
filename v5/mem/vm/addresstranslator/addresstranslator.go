@@ -108,26 +108,6 @@ type parseTranslateMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *parseTranslateMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *parseTranslateMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *parseTranslateMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *parseTranslateMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *parseTranslateMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *parseTranslateMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -197,11 +177,11 @@ func (m *parseTranslateMW) translate() bool {
 	}
 	nextState.Transactions = append(nextState.Transactions, trans)
 
-	tracing.TraceReqReceive(itemI, m)
+	tracing.TraceReqReceive(itemI, m.comp)
 	tracing.TraceReqInitiate(
 		transReq,
-		m,
-		tracing.MsgIDAtReceiver(itemI, m),
+		m.comp,
+		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
 
 	m.topPort().RetrieveIncoming()
@@ -289,26 +269,6 @@ type respondPipelineMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *respondPipelineMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *respondPipelineMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *respondPipelineMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *respondPipelineMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *respondPipelineMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *respondPipelineMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -393,31 +353,31 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	translatedReq sim.Msg,
 ) {
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(translatedReq, m),
+		tracing.MsgIDAtReceiver(translatedReq, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.bottomPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
 		reqState.RspTo, reqState.Type)
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(fakeFromTop, m),
+		tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 		tracing.MilestoneKindTranslation,
 		"translation",
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	fakeTransReq := &vm.TranslationReq{}
 	fakeTransReq.ID = trans.TranslationReqID
 	fakeTransReq.Src = trans.TranslationReqSrc
 	fakeTransReq.Dst = trans.TranslationReqDst
-	tracing.TraceReqFinalize(fakeTransReq, m)
-	tracing.TraceReqInitiate(translatedReq, m,
-		tracing.MsgIDAtReceiver(fakeFromTop, m))
+	tracing.TraceReqFinalize(fakeTransReq, m.comp)
+	tracing.TraceReqInitiate(translatedReq, m.comp,
+		tracing.MsgIDAtReceiver(fakeFromTop, m.comp))
 }
 
 //nolint:funlen,gocyclo
@@ -457,11 +417,11 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopDst,
 				"", reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m),
+				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 				tracing.MilestoneKindData,
 				"data",
 				m.comp.Name(),
-				m,
+				m.comp,
 			)
 		}
 	case *mem.WriteDoneRsp:
@@ -482,11 +442,11 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopDst,
 				"", reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(
-				tracing.MsgIDAtReceiver(fakeFromTop, m),
+				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 				tracing.MilestoneKindSubTask,
 				"subtask",
 				m.comp.Name(),
-				m,
+				m.comp,
 			)
 		}
 	default:
@@ -506,11 +466,11 @@ func (m *respondPipelineMW) respond() bool {
 			"", reqFromTopState.ReqFromTopType)
 
 		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(fakeFromTop, m),
+			tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 			tracing.MilestoneKindNetworkBusy,
 			m.topPort().Name(),
 			m.comp.Name(),
-			m,
+			m.comp,
 		)
 
 		nextState := m.comp.GetNextState()
@@ -522,8 +482,8 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqToBottomSrc,
 			reqFromTopState.ReqToBottomDst,
 			"", reqFromTopState.ReqToBottomType)
-		tracing.TraceReqFinalize(fakeReqToBottom, m)
-		tracing.TraceReqComplete(fakeFromTop, m)
+		tracing.TraceReqFinalize(fakeReqToBottom, m.comp)
+		tracing.TraceReqComplete(fakeFromTop, m.comp)
 	}
 
 	m.bottomPort().RetrieveIncoming()

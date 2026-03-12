@@ -504,28 +504,6 @@ type routeForwardSendMW struct {
 	arbiter      arbitration.Arbiter
 }
 
-// NamedHookable delegation methods.
-
-func (m *routeForwardSendMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *routeForwardSendMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *routeForwardSendMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *routeForwardSendMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *routeForwardSendMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // Tick runs sendOut → forward → route.
 func (m *routeForwardSendMW) Tick() bool {
 	m.updateAdapterPointers()
@@ -637,7 +615,7 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				madeProgress = true
 				numSent++
 
-				tracing.EndTask(m.flitTaskID(flit), m)
+				tracing.EndTask(m.flitTaskID(flit), m.comp)
 			}
 		}
 
@@ -655,28 +633,6 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 
 type receivePipelineMW struct {
 	*switchInfra
-}
-
-// NamedHookable delegation methods.
-
-func (m *receivePipelineMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *receivePipelineMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *receivePipelineMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *receivePipelineMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *receivePipelineMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 // Tick runs movePipeline → startProcessing.
@@ -732,7 +688,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 			tracing.StartTask(
 				m.flitTaskID(flit),
 				m.flitParentTaskID(flit),
-				m, "flit", "flit_inside_sw",
+				m.comp, "flit", "flit_inside_sw",
 				flit,
 			)
 		}

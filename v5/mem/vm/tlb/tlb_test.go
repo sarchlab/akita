@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
@@ -17,7 +18,7 @@ var _ = Describe("TLB", func() {
 	var (
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
-		tlbComp     *Comp
+		tlbComp     *modeling.Component[Spec, State]
 		tlbMW       *tlbMiddleware
 		tlbCtrlMW   *ctrlMiddleware
 		topPort     *MockPort
@@ -461,7 +462,7 @@ var _ = Describe("TLB Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		tlbComp    *Comp
+		tlbComp    *modeling.Component[Spec, State]
 		lowModule  *MockPort
 		agent      *MockPort
 		connection sim.Connection

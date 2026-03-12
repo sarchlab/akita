@@ -114,9 +114,9 @@ func (d *directory) processMSHRHit(
 			d.findPostCoalesceTransIdx(trans))
 
 	if trans.read != nil {
-		tracing.AddTaskStep(trans.id, d.cache, "read-mshr-hit")
+		tracing.AddTaskStep(trans.id, d.cache.comp, "read-mshr-hit")
 	} else {
-		tracing.AddTaskStep(trans.id, d.cache, "write-mshr-hit")
+		tracing.AddTaskStep(trans.id, d.cache.comp, "write-mshr-hit")
 	}
 
 	d.cache.dirPostBufAdapter.Pop()
@@ -151,7 +151,7 @@ func (d *directory) processReadHit(
 	bankBuf.Push(trans)
 
 	d.cache.dirPostBufAdapter.Pop()
-	tracing.AddTaskStep(trans.id, d.cache, "read-hit")
+	tracing.AddTaskStep(trans.id, d.cache.comp, "read-hit")
 
 	return true
 }
@@ -182,7 +182,7 @@ func (d *directory) processReadMiss(trans *transactionState) bool {
 	_ = next // writes done in fetchFromBottom
 
 	d.cache.dirPostBufAdapter.Pop()
-	tracing.AddTaskStep(trans.id, d.cache, "read-miss")
+	tracing.AddTaskStep(trans.id, d.cache.comp, "read-miss")
 
 	return true
 }
@@ -218,7 +218,7 @@ func (d *directory) processWrite(trans *transactionState) bool {
 
 func (d *directory) writeMiss(trans *transactionState) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskStep(trans.id, d.cache, "write-miss")
+		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
 		d.cache.dirPostBufAdapter.Pop()
 
 		return true
@@ -248,7 +248,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 
 	trans.writeToBottom = writeToBottom
 
-	tracing.TraceReqInitiate(writeToBottom, d.cache, trans.id)
+	tracing.TraceReqInitiate(writeToBottom, d.cache.comp, trans.id)
 
 	return true
 }
@@ -279,7 +279,7 @@ func (d *directory) processWriteHit(
 	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	nextBlock.IsValid = false
 
-	tracing.AddTaskStep(trans.id, d.cache, "write-hit")
+	tracing.AddTaskStep(trans.id, d.cache.comp, "write-hit")
 	d.cache.dirPostBufAdapter.Pop()
 
 	return true
@@ -312,7 +312,7 @@ func (d *directory) fetchFromBottom(
 		return false
 	}
 
-	tracing.TraceReqInitiate(readToBottom, d.cache, trans.id)
+	tracing.TraceReqInitiate(readToBottom, d.cache.comp, trans.id)
 	trans.readToBottom = readToBottom
 	trans.blockSetID = victimSetID
 	trans.blockWayID = victimWayID

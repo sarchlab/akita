@@ -1,7 +1,6 @@
 package mmuCache
 
 import (
-	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -33,7 +32,4 @@ type State struct {
 	InflightFlushReqActive bool           `json:"inflight_flush_req_active"`
 }
 
-// Comp is the mmuCache component.
-type Comp struct {
-	*modeling.Component[Spec, State]
-}
+

@@ -41,8 +41,8 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 	p.removeTransaction(trans)
 	p.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.writeToBottom, p.cache)
-	tracing.EndTask(trans.id, p.cache)
+	tracing.TraceReqFinalize(trans.writeToBottom, p.cache.comp)
+	tracing.EndTask(trans.id, p.cache.comp)
 
 	return true
 }
@@ -96,7 +96,7 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 
 	p.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.readToBottom, p.cache)
+	tracing.TraceReqFinalize(trans.readToBottom, p.cache.comp)
 
 	return true
 }
@@ -159,7 +159,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 			p.removeTransaction(trans)
 		}
 
-		tracing.EndTask(trans.id, p.cache)
+		tracing.EndTask(trans.id, p.cache.comp)
 	}
 }
 

@@ -15,28 +15,6 @@ type dataTransferMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-// NamedHookable delegation methods.
-
-func (m *dataTransferMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *dataTransferMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *dataTransferMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *dataTransferMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *dataTransferMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *dataTransferMW) insidePort() sim.Port {
 	return m.comp.GetPortByName("Inside")
 }
@@ -161,8 +139,8 @@ func (m *dataTransferMW) readFromSrc() bool {
 		Address: req.Address,
 	}
 
-	tracing.TraceReqInitiate(req, m,
-		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m))
+	tracing.TraceReqInitiate(req, m.comp,
+		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m.comp))
 
 	return true
 }
@@ -205,7 +183,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m)
+	tracing.TraceReqFinalize(traceReq, m.comp)
 
 	return true
 }
@@ -254,8 +232,8 @@ func (m *dataTransferMW) writeToDst() bool {
 	}
 	bufferMoveOffsetForwardTo(&next.Buffer, nextTrans.NextWriteAddr-curTrans.DstAddress)
 
-	tracing.TraceReqInitiate(req, m,
-		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m))
+	tracing.TraceReqInitiate(req, m.comp,
+		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m.comp))
 
 	return true
 }
@@ -294,7 +272,7 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 	traceReq.ID = originalReq.ID
 	traceReq.Src = originalReq.Src
 	traceReq.Dst = originalReq.Dst
-	tracing.TraceReqFinalize(traceReq, m)
+	tracing.TraceReqFinalize(traceReq, m.comp)
 
 	return false
 }

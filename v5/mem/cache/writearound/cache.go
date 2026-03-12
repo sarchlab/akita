@@ -76,28 +76,6 @@ type pipelineMW struct {
 	isPaused bool
 }
 
-// --- NamedHookable delegation ---
-
-func (m *pipelineMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *pipelineMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *pipelineMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *pipelineMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *pipelineMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // GetSpec returns the immutable specification.
 func (m *pipelineMW) GetSpec() Spec {
 	return m.comp.GetSpec()
@@ -340,28 +318,6 @@ func (m *pipelineMW) SetState(state State) {
 type controlMW struct {
 	comp         *modeling.Component[Spec, State]
 	controlStage *controlStage
-}
-
-// --- NamedHookable delegation ---
-
-func (m *controlMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *controlMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *controlMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *controlMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *controlMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 // Tick runs the control stage.

@@ -12,31 +12,6 @@ type parseTopMW struct {
 	topPort sim.Port
 }
 
-// Name delegates to the underlying component.
-func (m *parseTopMW) Name() string {
-	return m.comp.Name()
-}
-
-// AcceptHook delegates to the underlying component.
-func (m *parseTopMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-// Hooks delegates to the underlying component.
-func (m *parseTopMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-// NumHooks delegates to the underlying component.
-func (m *parseTopMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-// InvokeHook delegates to the underlying component.
-func (m *parseTopMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // Tick runs the parseTop stage.
 func (m *parseTopMW) Tick() bool {
 	curVal := m.comp.GetState()
@@ -81,13 +56,13 @@ func (m *parseTopMW) parseTop(spec *Spec, cur *State, next *State) bool {
 	pushSubTrans(next, transIdx)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msgI, m)
+	tracing.TraceReqReceive(msgI, m.comp)
 
 	for _, st := range ts.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
-			tracing.MsgIDAtReceiver(msgI, m),
-			m,
+			tracing.MsgIDAtReceiver(msgI, m.comp),
+			m.comp,
 			"sub-trans",
 			"sub-trans",
 			m.comp.Name()+".SubTransQueue",

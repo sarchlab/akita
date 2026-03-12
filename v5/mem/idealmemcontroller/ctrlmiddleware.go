@@ -10,10 +10,6 @@ type ctrlMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *ctrlMiddleware) Name() string {
-	return m.comp.Name()
-}
-
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 	madeProgress = m.handleIncomingCommands() || madeProgress
 	madeProgress = m.handleStateUpdate() || madeProgress

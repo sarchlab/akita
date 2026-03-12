@@ -11,26 +11,6 @@ type tlbMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *tlbMiddleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *tlbMiddleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *tlbMiddleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *tlbMiddleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *tlbMiddleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *tlbMiddleware) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -166,7 +146,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".MSHR",
 			m.comp.Name(),
-			m,
+			m.comp,
 		)
 	}
 
@@ -200,11 +180,11 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&reqMsg, m),
+		tracing.MsgIDAtReceiver(&reqMsg, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.topPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	mshrEntry.Requests = mshrEntry.Requests[1:]
@@ -212,7 +192,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 		next.HasRespondingMSHR = false
 	}
 
-	tracing.TraceReqComplete(&reqMsg, m)
+	tracing.TraceReqComplete(&reqMsg, m.comp)
 
 	return true
 }
@@ -249,16 +229,16 @@ func (m *tlbMiddleware) handleTranslationHit(
 	setVisit(&next.Sets[setID], wayID)
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m),
+		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindData,
 		m.comp.Name()+".Sets",
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
-	tracing.TraceReqReceive(msg, m)
-	tracing.AddTaskStep(tracing.MsgIDAtReceiver(msg, m), m, "hit")
-	tracing.TraceReqComplete(msg, m)
+	tracing.TraceReqReceive(msg, m.comp)
+	tracing.AddTaskStep(tracing.MsgIDAtReceiver(msg, m.comp), m.comp, "hit")
+	tracing.TraceReqComplete(msg, m.comp)
 
 	return true
 }
@@ -272,19 +252,19 @@ func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m),
+		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindHardwareResource,
 		m.comp.Name()+".MSHR",
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	fetched := m.fetchBottom(msg)
 	if fetched {
-		tracing.TraceReqReceive(msg, m)
+		tracing.TraceReqReceive(msg, m.comp)
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(msg, m),
-			m,
+			tracing.MsgIDAtReceiver(msg, m.comp),
+			m.comp,
 			"miss",
 		)
 
@@ -313,11 +293,11 @@ func (m *tlbMiddleware) sendRspToTop(
 	err := m.topPort().Send(rsp)
 	if err == nil {
 		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(msg, m),
+			tracing.MsgIDAtReceiver(msg, m.comp),
 			tracing.MilestoneKindNetworkBusy,
 			m.topPort().Name(),
 			m.comp.Name(),
-			m,
+			m.comp,
 		)
 	}
 	return err == nil
@@ -333,9 +313,9 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 	}
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, *msg)
 
-	tracing.TraceReqReceive(msg, m)
+	tracing.TraceReqReceive(msg, m.comp)
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(msg, m), m, "mshr-hit")
+		tracing.MsgIDAtReceiver(msg, m.comp), m.comp, "mshr-hit")
 
 	return true
 }
@@ -358,11 +338,11 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 	}
 
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m),
+		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.bottomPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	next := m.comp.GetNextState()
@@ -372,8 +352,8 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 	next.MSHREntries[idx].HasReqToBottom = true
 	next.MSHREntries[idx].ReqToBottom = *fetchBottom
 
-	tracing.TraceReqInitiate(fetchBottom, m,
-		tracing.MsgIDAtReceiver(msg, m))
+	tracing.TraceReqInitiate(fetchBottom, m.comp,
+		tracing.MsgIDAtReceiver(msg, m.comp))
 
 	return true
 }
@@ -391,11 +371,11 @@ func (m *tlbMiddleware) parseBottom() bool {
 	item := itemI.(*vm.TranslationRsp)
 	spec := m.comp.GetSpec()
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m),
+		tracing.MsgIDAtReceiver(item, m.comp),
 		tracing.MilestoneKindData,
 		m.bottomPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 	page := item.Page
 
@@ -426,7 +406,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	m.bottomPort().RetrieveIncoming()
 
 	if next.RespondingMSHRData.HasReqToBottom {
-		tracing.TraceReqFinalize(&reqToBottom, m)
+		tracing.TraceReqFinalize(&reqToBottom, m.comp)
 	}
 
 	return true
@@ -475,11 +455,11 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&req, m),
+		tracing.MsgIDAtReceiver(&req, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	for _, vAddr := range req.VAddr {
@@ -490,11 +470,11 @@ func (m *tlbMiddleware) processTLBFlush() bool {
 			continue
 		}
 		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(&req, m),
+			tracing.MsgIDAtReceiver(&req, m.comp),
 			tracing.MilestoneKindDependency,
 			m.comp.Name()+".Sets",
 			m.comp.Name(),
-			m,
+			m.comp,
 		)
 		page.Valid = false
 		setUpdate(&next.Sets[setID], wayID, page)

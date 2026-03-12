@@ -121,7 +121,7 @@ func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
 	s.removeTransaction(trans)
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
 
-	tracing.EndTask(trans.id, s.cache)
+	tracing.EndTask(trans.id, s.cache.comp)
 
 	return true
 }
@@ -156,7 +156,7 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
 
-	tracing.EndTask(trans.id, s.cache)
+	tracing.EndTask(trans.id, s.cache.comp)
 
 	return true
 }

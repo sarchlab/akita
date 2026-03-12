@@ -52,7 +52,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 
 	s.removeTransaction(trans)
 
-	tracing.TraceReqComplete(read, s.cache)
+	tracing.TraceReqComplete(read, s.cache.comp)
 
 	return true
 }
@@ -78,7 +78,7 @@ func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 
 	s.removeTransaction(trans)
 
-	tracing.TraceReqComplete(write, s.cache)
+	tracing.TraceReqComplete(write, s.cache.comp)
 
 	return true
 }
