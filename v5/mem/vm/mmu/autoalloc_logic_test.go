@@ -19,7 +19,7 @@ func TestAutoPageAllocationLogic(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	mw := mmu.Middlewares()[0].(*middleware)
+	mw := mmu.Middlewares()[0].(*translationMW)
 
 	// Test physical page allocation starts at 0
 	firstPage := mw.createDefaultPage(vm.PID(1), 0x1234, 2)
@@ -79,7 +79,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 		WithMigrationPort(sim.NewPort(nil, 1, 1, "TestMMU.MigrationPort")).
 		Build("TestMMU")
 
-	mw := mmu.Middlewares()[0].(*middleware)
+	mw := mmu.Middlewares()[0].(*translationMW)
 
 	// Test multiple allocations to ensure unique physical pages
 	allocatedPages := make(map[uint64]bool)
