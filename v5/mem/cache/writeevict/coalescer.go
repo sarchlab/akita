@@ -59,7 +59,7 @@ func (c *coalescer) processReqCoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirBufAdapter.CanPush() {
 		return false
 	}
 
@@ -76,7 +76,7 @@ func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirBufAdapter.CanPush() {
 		return false
 	}
 
@@ -92,13 +92,13 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirBufAdapter.CanPush() {
 		return false
 	}
 
 	c.coalesceAndSend()
 
-	if !c.cache.dirBuf.CanPush() {
+	if !c.cache.dirBufAdapter.CanPush() {
 		return true
 	}
 
@@ -169,9 +169,11 @@ func (c *coalescer) coalesceAndSend() bool {
 			nil)
 	}
 
-	c.cache.dirBuf.Push(trans)
+	// Add to postCoalesceTransactions BEFORE pushing to buffer
+	// (Push needs to find the index)
 	c.cache.postCoalesceTransactions =
 		append(c.cache.postCoalesceTransactions, trans)
+	c.cache.dirBufAdapter.Push(trans)
 	c.toCoalesce = nil
 
 	return true

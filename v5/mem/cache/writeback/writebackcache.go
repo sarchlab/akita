@@ -4,8 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
-
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -33,6 +31,11 @@ type Spec struct {
 	WriteBufferCapacity int    `json:"write_buffer_capacity"`
 	MaxInflightFetch    int    `json:"max_inflight_fetch"`
 	MaxInflightEviction int    `json:"max_inflight_eviction"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
 }
 
 // State contains mutable runtime data for the writeback cache.
@@ -84,16 +87,25 @@ type middleware struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	storage             *mem.Storage
-	directoryState      cache.DirectoryState // runtime copy
-	mshrState           cache.MSHRState      // runtime copy
-	addressToPortMapper mem.AddressToPortMapper
+	storage *mem.Storage
 
-	dirStageBuffer           queueing.Buffer
-	dirToBankBuffers         []queueing.Buffer
-	writeBufferToBankBuffers []queueing.Buffer
-	mshrStageBuffer          queueing.Buffer
-	writeBufferBuffer        queueing.Buffer
+	// curState holds the A-buffer snapshot for the current tick.
+	// Stored here so adapter read pointers remain valid for the tick duration.
+	// In production, set by updateAdapterPointers() from comp.GetState().
+	curState State
+
+	// Thin buffer adapters (created once, pointers updated per-tick)
+	dirStageBuffer           *stateTransBuffer
+	dirToBankBuffers         []*stateTransBuffer
+	writeBufferToBankBuffers []*stateTransBuffer
+	mshrStageBuffer          *stateTransBuffer
+	writeBufferBuffer        *stateTransBuffer
+
+	// Dir pipeline/post-buf adapters
+	dirPostBufAdapter *stateDirPostBufAdapter
+
+	// Bank pipeline/post-buf adapters
+	bankPostBufAdapters []*stateBankPostBufAdapter
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage
@@ -101,13 +113,6 @@ type middleware struct {
 	bankStages  []*bankStage
 	mshrStage   *mshrStage
 	flusher     *flusher
-
-	log2BlockSize    uint64
-	numReqPerCycle   int
-	wayAssociativity int
-	numMSHREntry     int
-	numSets          int
-	blockSize        int
 
 	state                cacheState
 	inFlightTransactions []*transactionState
@@ -141,13 +146,26 @@ func (m *middleware) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
-// SetAddressToPortMapper sets the AddressToPortMapper used by the cache.
-func (m *middleware) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
-	m.addressToPortMapper = lmf
+// findPort resolves an address to a remote port using data from Spec.
+func (m *middleware) findPort(address uint64) sim.RemotePort {
+	spec := m.comp.GetSpec()
+
+	switch spec.AddressMapperType {
+	case "single":
+		return sim.RemotePort(spec.RemotePortNames[0])
+	case "interleaved":
+		n := uint64(len(spec.RemotePortNames))
+		idx := address / spec.InterleavingSize % n
+		return sim.RemotePort(spec.RemotePortNames[idx])
+	}
+
+	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
 // Tick updates the internal states of the Cache.
 func (m *middleware) Tick() bool {
+	m.updateAdapterPointers()
+
 	madeProgress := false
 
 	if m.state != cacheStatePaused {
@@ -159,25 +177,112 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
+// syncForTest synchronizes curState from the next state buffer and updates
+// adapter read pointers. This is only needed in tests where state is set up
+// via GetNextState() without going through the Component.Tick() cycle.
+func (m *middleware) syncForTest() {
+	next := m.comp.GetNextState()
+	m.comp.SetState(*next)
+	m.curState = m.comp.GetState()
+	next = m.comp.GetNextState()
+
+	// Update adapter read pointers to curState, write pointers to next
+	if m.dirStageBuffer != nil {
+		m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
+		m.dirStageBuffer.writeItems = &next.DirStageBufIndices
+	}
+	for i := range m.dirToBankBuffers {
+		if m.dirToBankBuffers[i] != nil {
+			m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
+			m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
+		}
+	}
+	for i := range m.writeBufferToBankBuffers {
+		if m.writeBufferToBankBuffers[i] != nil {
+			m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
+			m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
+		}
+	}
+	if m.mshrStageBuffer != nil {
+		m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
+		m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
+	}
+	if m.writeBufferBuffer != nil {
+		m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
+		m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
+	}
+	if m.dirPostBufAdapter != nil {
+		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+	}
+	for i := range m.bankPostBufAdapters {
+		if m.bankPostBufAdapters[i] != nil {
+			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+		}
+	}
+}
+
+func (m *middleware) updateAdapterPointers() {
+	m.curState = m.comp.GetState()
+	next := m.comp.GetNextState()
+
+	// Dir stage buffer adapter
+	m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
+	m.dirStageBuffer.writeItems = &next.DirStageBufIndices
+
+	// Dir to bank buffer adapters
+	for i := range m.dirToBankBuffers {
+		m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
+		m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
+	}
+
+	// Write buffer to bank buffer adapters
+	for i := range m.writeBufferToBankBuffers {
+		m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
+		m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
+	}
+
+	// MSHR stage buffer adapter
+	m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
+	m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
+
+	// Write buffer buffer adapter
+	m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
+	m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
+
+	// Dir post pipeline buf adapter
+	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+
+	// Bank post pipeline buf adapters
+	for i := range m.bankPostBufAdapters {
+		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+	}
+}
+
 func (m *middleware) runPipeline() bool {
 	madeProgress := false
 
-	madeProgress = m.runStage(m.mshrStage) || madeProgress
+	spec := m.comp.GetSpec()
+
+	madeProgress = m.runStage(m.mshrStage, spec.NumReqPerCycle) || madeProgress
 
 	for _, bs := range m.bankStages {
 		madeProgress = bs.Tick() || madeProgress
 	}
 
-	madeProgress = m.runStage(m.writeBuffer) || madeProgress
-	madeProgress = m.runStage(m.dirStage) || madeProgress
-	madeProgress = m.runStage(m.topParser) || madeProgress
+	madeProgress = m.runStage(m.writeBuffer, spec.NumReqPerCycle) || madeProgress
+	madeProgress = m.runStage(m.dirStage, spec.NumReqPerCycle) || madeProgress
+	madeProgress = m.runStage(m.topParser, spec.NumReqPerCycle) || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) runStage(stage sim.Ticker) bool {
+func (m *middleware) runStage(stage sim.Ticker, n int) bool {
 	madeProgress := false
-	for i := 0; i < m.numReqPerCycle; i++ {
+	for i := 0; i < n; i++ {
 		madeProgress = stage.Tick() || madeProgress
 	}
 
@@ -185,10 +290,12 @@ func (m *middleware) runStage(stage sim.Ticker) bool {
 }
 
 func (m *middleware) discardInflightTransactions() {
-	for i := range m.directoryState.Sets {
-		for j := range m.directoryState.Sets[i].Blocks {
-			m.directoryState.Sets[i].Blocks[j].ReadCount = 0
-			m.directoryState.Sets[i].Blocks[j].IsLocked = false
+	next := m.comp.GetNextState()
+
+	for i := range next.DirectoryState.Sets {
+		for j := range next.DirectoryState.Sets[i].Blocks {
+			next.DirectoryState.Sets[i].Blocks[j].ReadCount = 0
+			next.DirectoryState.Sets[i].Blocks[j].IsLocked = false
 		}
 	}
 
@@ -204,4 +311,96 @@ func (m *middleware) discardInflightTransactions() {
 	clearPort(m.topPort)
 
 	m.inFlightTransactions = nil
+}
+
+// GetState converts runtime mutable data into a serializable State.
+func (m *middleware) GetState() State {
+	next := m.comp.GetNextState()
+
+	lookup := buildTransIndex(m.inFlightTransactions)
+	next.Transactions = snapshotAllTransactions(
+		m.inFlightTransactions, lookup)
+	next.CacheState = int(m.state)
+	next.EvictingList = snapshotEvictingList(m.evictingList)
+
+	// Bank counters
+	for i, bs := range m.bankStages {
+		next.BankInflightTransCounts[i] = bs.inflightTransCount
+		next.BankDownwardInflightTransCounts[i] = bs.downwardInflightTransCount
+	}
+
+	// Write buffer stage
+	next.PendingEvictionIndices = snapshotTransList(m.writeBuffer.pendingEvictions, lookup)
+	next.InflightFetchIndices = snapshotTransList(m.writeBuffer.inflightFetch, lookup)
+	next.InflightEvictionIndices = snapshotTransList(m.writeBuffer.inflightEviction, lookup)
+
+	// MSHR stage
+	next.HasProcessingMSHREntry, next.ProcessingMSHREntryIdx =
+		snapshotMSHRStageEntry(m.mshrStage, lookup)
+
+	// Flusher
+	next.FlusherBlockToEvictRefs, next.HasProcessingFlush,
+		next.ProcessingFlush = snapshotFlusherState(m.flusher)
+
+	return *next
+}
+
+// SetState restores runtime mutable data from a serializable State.
+func (m *middleware) SetState(state State) {
+	m.comp.SetState(state)
+
+	m.state = cacheState(state.CacheState)
+
+	allTrans := restoreAllTransactions(state.Transactions)
+	m.inFlightTransactions = allTrans
+
+	// Evicting list
+	m.evictingList = make(map[uint64]bool)
+	for k, v := range state.EvictingList {
+		m.evictingList[k] = v
+	}
+
+	// Bank counters
+	for i, bs := range m.bankStages {
+		if i < len(state.BankInflightTransCounts) {
+			bs.inflightTransCount = state.BankInflightTransCounts[i]
+		}
+		if i < len(state.BankDownwardInflightTransCounts) {
+			bs.downwardInflightTransCount =
+				state.BankDownwardInflightTransCounts[i]
+		}
+	}
+
+	// Write buffer stage
+	m.writeBuffer.pendingEvictions = restoreTransList(
+		state.PendingEvictionIndices, allTrans)
+	m.writeBuffer.inflightFetch = restoreTransList(
+		state.InflightFetchIndices, allTrans)
+	m.writeBuffer.inflightEviction = restoreTransList(
+		state.InflightEvictionIndices, allTrans)
+
+	// MSHR stage
+	m.mshrStage.hasProcessingTrans = state.HasProcessingMSHREntry
+	if state.HasProcessingMSHREntry &&
+		state.ProcessingMSHREntryIdx >= 0 &&
+		state.ProcessingMSHREntryIdx < len(allTrans) {
+		trans := allTrans[state.ProcessingMSHREntryIdx]
+		m.mshrStage.processingTrans = trans
+		m.mshrStage.processingTransList = trans.mshrTransactions
+		m.mshrStage.processingData = trans.mshrData
+	}
+
+	// Flusher
+	m.flusher.blockToEvict = make([]blockRef, len(state.FlusherBlockToEvictRefs))
+	copy(m.flusher.blockToEvict, state.FlusherBlockToEvictRefs)
+	m.flusher.processingFlush = nil
+
+	if state.HasProcessingFlush {
+		m.flusher.processingFlush = &cache.FlushReq{
+			MsgMeta:                 state.ProcessingFlush.MsgMeta,
+			InvalidateAllCachelines: state.ProcessingFlush.InvalidateAllCachelines,
+			DiscardInflight:         state.ProcessingFlush.DiscardInflight,
+			PauseAfterFlushing:      state.ProcessingFlush.PauseAfterFlushing,
+		}
+	}
 }

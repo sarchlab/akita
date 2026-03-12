@@ -6,12 +6,11 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// A Builder can build an writeevict cache
+// A Builder can build a writeevict cache
 type Builder struct {
 	engine                sim.Engine
 	freq                  sim.Freq
@@ -24,11 +23,12 @@ type Builder struct {
 	bankLatency           int
 	numReqPerCycle        int
 	maxNumConcurrentTrans int
-	addressToPortMapper   mem.AddressToPortMapper
 	visTracer             tracing.Tracer
 
 	addressMapperType string
 	remotePorts       []sim.RemotePort
+	interleavingSize  uint64
+	legacyMapper      mem.AddressToPortMapper // set by WithAddressToPortMapper, read at Build time
 	topPort           sim.Port
 	bottomPort        sim.Port
 	controlPort       sim.Port
@@ -47,6 +47,7 @@ func MakeBuilder() Builder {
 		maxNumConcurrentTrans: 16,
 		dirLatency:            2,
 		bankLatency:           20,
+		interleavingSize:      4096,
 	}
 }
 
@@ -126,15 +127,6 @@ func (b Builder) WithVisTracer(tracer tracing.Tracer) Builder {
 	return b
 }
 
-// WithAddressToPortMapper specifies how the cache units to create should find
-// low level modules.
-func (b Builder) WithAddressToPortMapper(
-	addressToPortMapper mem.AddressToPortMapper,
-) Builder {
-	b.addressToPortMapper = addressToPortMapper
-	return b
-}
-
 // WithAddressMapperType sets the type of address mapper to use
 func (b Builder) WithAddressMapperType(t string) Builder {
 	b.addressMapperType = t
@@ -145,6 +137,12 @@ func (b Builder) WithAddressMapperType(t string) Builder {
 // requests to other components.
 func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
 	b.remotePorts = ports
+	return b
+}
+
+// WithInterleavingSize sets the interleaving size for the address mapper.
+func (b Builder) WithInterleavingSize(size uint64) Builder {
+	b.interleavingSize = size
 	return b
 }
 
@@ -166,9 +164,21 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 	return b
 }
 
+// WithAddressToPortMapper specifies how the cache units to create should find
+// low level modules. This configures the address mapper using the legacy
+// interface. Prefer WithAddressMapperType + WithRemotePorts for new code.
+// The mapper is read at Build() time, so its fields can be set after this call.
+func (b Builder) WithAddressToPortMapper(
+	mapper mem.AddressToPortMapper,
+) Builder {
+	b.legacyMapper = mapper
+	return b
+}
+
 // Build returns a new cache component
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.assertAllRequiredInformationIsAvailable()
+	b.resolveLegacyMapper()
 
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
@@ -186,11 +196,34 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		DirLatency:            b.dirLatency,
 	}
 
+	// Configure address mapper in Spec
+	if b.addressMapperType != "" {
+		remotePortNames := make([]string, len(b.remotePorts))
+		for i, rp := range b.remotePorts {
+			remotePortNames[i] = string(rp)
+		}
+		spec.AddressMapperType = b.addressMapperType
+		spec.RemotePortNames = remotePortNames
+		spec.InterleavingSize = b.interleavingSize
+	}
+
+	initialState := State{
+		BankBufIndices:             make([]bankBufState, b.numBank),
+		BankPipelineStages:         make([]bankPipelineState, b.numBank),
+		BankPostPipelineBufIndices: make([]bankPostBufState, b.numBank),
+	}
+
+	// Initialize directory state
+	cache.DirectoryReset(
+		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
+
+	comp.SetState(initialState)
 
 	m := &middleware{
 		comp: comp,
@@ -206,22 +239,10 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	m.controlPort.SetComponent(comp)
 	comp.AddPort("Control", m.controlPort)
 
-	m.dirBuf = queueing.NewBuffer(name+".DirectoryBuffer", b.numReqPerCycle)
-	m.bankBufs = make([]queueing.Buffer, b.numBank)
-
-	for i := 0; i < b.numBank; i++ {
-		m.bankBufs[i] = queueing.NewBuffer(
-			fmt.Sprintf("%s.Bank%d.Buffer", name, i),
-			b.numReqPerCycle,
-		)
-	}
-
-	// Initialize DirectoryState using free function instead of runtime Directory
-	cache.DirectoryReset(&m.directoryState, numSets, b.wayAssociativity, blockSize)
-	// MSHRState starts empty, no initialization needed
 	m.storage = mem.NewStorage(b.totalByteSize)
 
-	b.configureAddressMapper(m)
+	// Create thin buffer adapters
+	b.buildAdapters(m)
 
 	b.buildStages(m)
 
@@ -234,9 +255,56 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	return comp
 }
 
+func (b *Builder) buildAdapters(m *middleware) {
+	next := m.comp.GetNextState()
+
+	// Dir buf adapter (read/write pointers set by updateAdapterPointers each tick)
+	m.dirBufAdapter = &stateTransBuffer{
+		name:       m.comp.Name() + ".DirectoryBuffer",
+		readItems:  &next.DirBufIndices,
+		writeItems: &next.DirBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
+	}
+
+	// Bank buf adapters
+	m.bankBufAdapters = make([]*stateTransBuffer, b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		m.bankBufAdapters[i] = &stateTransBuffer{
+			name:       fmt.Sprintf("%s.Bank%d.Buffer", m.comp.Name(), i),
+			readItems:  &next.BankBufIndices[i].Indices,
+			writeItems: &next.BankBufIndices[i].Indices,
+			capacity:   b.numReqPerCycle,
+			mw:         m,
+		}
+	}
+
+	// Dir post pipeline buf adapter
+	m.dirPostBufAdapter = &stateDirPostBufAdapter{
+		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
+		readItems:  &next.DirPostPipelineBufIndices,
+		writeItems: &next.DirPostPipelineBufIndices,
+		capacity:   b.numReqPerCycle,
+		mw:         m,
+	}
+
+	// Bank post pipeline buf adapters
+	m.bankPostBufAdapters = make([]*stateBankPostBufAdapter, b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		m.bankPostBufAdapters[i] = &stateBankPostBufAdapter{
+			name: fmt.Sprintf(
+				"%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
+			readItems:  &next.BankPostPipelineBufIndices[i].Indices,
+			writeItems: &next.BankPostPipelineBufIndices[i].Indices,
+			capacity:   b.numReqPerCycle,
+			mw:         m,
+		}
+	}
+}
+
 func (b *Builder) buildStages(m *middleware) {
 	m.coalesceStage = &coalescer{cache: m}
-	b.buildDirStage(m)
+	m.directoryStage = &directory{cache: m}
 	b.buildBankStages(m)
 	m.parseBottomStage = &bottomParser{cache: m}
 	m.respondStage = &respondStage{cache: m}
@@ -250,77 +318,35 @@ func (b *Builder) buildStages(m *middleware) {
 	}
 }
 
-func (b *Builder) buildDirStage(m *middleware) {
-	buf := queueing.NewBuffer(
-		m.comp.Name()+".DirectoryStage.PostPipelineBuffer",
-		b.numReqPerCycle,
-	)
-	pipelineName := fmt.Sprintf("%s.Directory.Pipeline", m.comp.Name())
-	pipeline := queueing.MakeBuilder().
-		WithPipelineWidth(b.numReqPerCycle).
-		WithNumStage(b.dirLatency).
-		WithCyclePerStage(1).
-		WithPostPipelineBuffer(buf).
-		Build(pipelineName)
-	m.directoryStage = &directory{
-		cache:    m,
-		buf:      buf,
-		pipeline: pipeline,
-	}
-}
-
 func (b *Builder) buildBankStages(m *middleware) {
 	for i := 0; i < b.numBank; i++ {
-		pipelineName := fmt.Sprintf("%s.Bank[%d].Pipeline", m.comp.Name(), i)
-		postPipelineBuf := queueing.NewBuffer(
-			fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
-			b.numReqPerCycle,
-		)
-		pipeline := queueing.MakeBuilder().
-			WithPipelineWidth(b.numReqPerCycle).
-			WithNumStage(b.bankLatency).
-			WithCyclePerStage(1).
-			WithPostPipelineBuffer(postPipelineBuf).
-			Build(pipelineName)
 		bs := &bankStage{
-			cache:           m,
-			bankID:          i,
-			numReqPerCycle:  b.numReqPerCycle,
-			pipeline:        pipeline,
-			postPipelineBuf: postPipelineBuf,
+			cache:          m,
+			bankID:         i,
+			numReqPerCycle: b.numReqPerCycle,
 		}
 		m.bankStages = append(m.bankStages, bs)
-
-		if b.visTracer != nil {
-			tracing.CollectTrace(bs.pipeline, b.visTracer)
-		}
 	}
 }
 
-func (b *Builder) configureAddressMapper(m *middleware) {
-	if b.addressToPortMapper != nil {
-		m.addressToPortMapper = b.addressToPortMapper
+func (b *Builder) resolveLegacyMapper() {
+	if b.legacyMapper == nil {
 		return
 	}
 
-	switch b.addressMapperType {
-	case "single":
-		if len(b.remotePorts) != 1 {
-			panic("single address mapper requires exactly 1 port")
-		}
-		m.addressToPortMapper = &mem.SinglePortMapper{
-			Port: b.remotePorts[0],
-		}
-	case "interleaved":
-		if len(b.remotePorts) == 0 {
-			panic("interleaved address mapper requires at least 1 port")
-		}
-		mapper := mem.NewInterleavedAddressPortMapper(4096)
-		mapper.LowModules = append(mapper.LowModules, b.remotePorts...)
-		m.addressToPortMapper = mapper
+	switch m := b.legacyMapper.(type) {
+	case *mem.SinglePortMapper:
+		b.addressMapperType = "single"
+		b.remotePorts = []sim.RemotePort{m.Port}
+	case *mem.InterleavedAddressPortMapper:
+		b.addressMapperType = "interleaved"
+		b.remotePorts = m.LowModules
+		b.interleavingSize = m.InterleavingSize
 	default:
-		panic("addressMapperType must be \"single\" or \"interleaved\"")
+		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
+
+	b.legacyMapper = nil
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

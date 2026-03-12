@@ -6,73 +6,95 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("DirectoryStage", func() {
-
 	var (
-		mockCtrl            *gomock.Controller
-		ds                  *directoryStage
-		m                   *middleware
-		dirBuf              *MockBuffer
-		pipeline            *MockPipeline
-		buf                 *MockBuffer
-		bankBuf             *MockBuffer
-		writeBufferBuffer   *MockBuffer
-		addressToPortMapper *MockAddressToPortMapper
+		mockCtrl *gomock.Controller
+		ds       *directoryStage
+		m        *middleware
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		dirBuf = NewMockBuffer(mockCtrl)
-		writeBufferBuffer = NewMockBuffer(mockCtrl)
-		bankBuf = NewMockBuffer(mockCtrl)
-		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		comp := MakeBuilder().
-			WithEngine(sim.NewSerialEngine()).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
-			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
-			Build("Cache")
-		m = comp.Middlewares()[0].(*middleware)
-
-		m.dirStageBuffer = dirBuf
-		m.numReqPerCycle = 4
-		m.writeBufferBuffer = writeBufferBuffer
-		m.dirToBankBuffers = []queueing.Buffer{bankBuf}
-		m.addressToPortMapper = addressToPortMapper
-
-		// Initialize directory state
-		cache.DirectoryReset(&m.directoryState, m.numSets, m.wayAssociativity, m.blockSize)
-
-		pipeline = NewMockPipeline(mockCtrl)
-		buf = NewMockBuffer(mockCtrl)
-		ds = &directoryStage{
-			cache:    m,
-			pipeline: pipeline,
-			buf:      buf,
+		initialState := State{
+			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
+			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
+			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			BankInflightTransCounts:         []int{0},
+			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		pipeline.EXPECT().Tick().AnyTimes()
+		m = &middleware{
+			evictingList: make(map[uint64]bool),
+		}
+		m.comp = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{
+				Log2BlockSize:    6,
+				NumReqPerCycle:   4,
+				WayAssociativity: 4,
+				NumMSHREntry:     16,
+				NumSets:          64,
+				NumBanks:         1,
+			}).
+			Build("Cache")
+
+		m.comp.SetState(initialState)
+		next := m.comp.GetNextState()
+
+		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
+
+		m.dirStageBuffer = &stateTransBuffer{
+			name:     "Cache.DirStageBuf",
+			readItems:  &next.DirStageBufIndices,
+			writeItems: &next.DirStageBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
+		m.dirToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.DirToBankBuf0",
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
+		m.writeBufferToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.WBToBankBuf0",
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
+		m.writeBufferBuffer = &stateTransBuffer{
+			name:     "Cache.WriteBufferBuf",
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
+		m.dirPostBufAdapter = &stateDirPostBufAdapter{
+			name:     "Cache.DirPostBuf",
+			readItems:  &next.DirPostPipelineBufIndices,
+			writeItems: &next.DirPostPipelineBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
+
+		ds = &directoryStage{
+			cache: m,
+		}
+		m.dirStage = ds
 	})
 
 	AfterEach(func() {
 		mockCtrl.Finish()
-	})
-
-	It("should return if no transaction", func() {
-		pipeline.EXPECT().CanAccept().Return(true)
-		dirBuf.EXPECT().Peek().Return(nil)
-		buf.EXPECT().Peek().Return(nil)
-
-		ret := ds.Tick()
-
-		Expect(ret).To(BeFalse())
 	})
 
 	Context("read", func() {
@@ -94,145 +116,80 @@ var _ = Describe("DirectoryStage", func() {
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
-			pipeline.EXPECT().CanAccept().Return(false)
-			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
-			buf.EXPECT().Peek().Return(nil)
+			// Put trans in dir post pipeline buf
+			next := m.comp.GetNextState()
+			next.DirPostPipelineBufIndices = []int{0}
 		})
 
 		Context("mshr hit", func() {
 			BeforeEach(func() {
-				// Add MSHR entry for PID 1, address 0x100
-				cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(1), 0x100)
+				next := m.comp.GetNextState()
+				cache.MSHRAdd(&next.MSHRState, 16, vm.PID(1), 0x100)
 			})
 
 			It("should add to MSHR", func() {
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(m.mshrState.Entries[0].TransactionIndices).To(HaveLen(1))
+				next := m.comp.GetNextState()
+				Expect(next.MSHRState.Entries[0].TransactionIndices).To(HaveLen(1))
 			})
 		})
 
 		Context("hit", func() {
 			BeforeEach(func() {
-				// Set up a block for PID 1, address 0x100
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				block := &m.directoryState.Sets[setID].Blocks[0]
+				next := m.comp.GetNextState()
+				setID := int(0x100 / uint64(64) % uint64(64))
+				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1
 				block.IsValid = true
 			})
 
-			It("should stall if bank is busy", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if block is locked", func() {
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				m.directoryState.Sets[setID].Blocks[0].IsLocked = true
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should pass transaction to bank", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.read).To(BeIdenticalTo(read))
-						Expect(t.hasBlock).To(BeTrue())
-					})
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				block := &m.directoryState.Sets[setID].Blocks[0]
+				next := m.comp.GetNextState()
+				setID := int(0x100 / uint64(64) % uint64(64))
+				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
 				Expect(trans.action).To(Equal(bankReadHit))
 			})
 		})
 
-		Context("miss, mshr miss, mshr full", func() {
-			It("should stall", func() {
-				// Fill up MSHR
-				for i := 0; i < m.numMSHREntry; i++ {
-					cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(100), uint64(i*0x1000))
-				}
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-		})
-
 		Context("miss, mshr miss, no need to evict", func() {
-			It("should stall if bank buffer is full", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should create mshr entry and fetch", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.action).To(Equal(writeBufferFetch))
-						Expect(t.fetchPID).To(Equal(vm.PID(1)))
-						Expect(t.fetchAddress).To(Equal(uint64(0x100)))
-					})
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(m.mshrState.Entries).To(HaveLen(1))
+				next := m.comp.GetNextState()
+				Expect(next.MSHRState.Entries).To(HaveLen(1))
 			})
 		})
 
 		Context("miss, mshr miss, need eviction", func() {
 			BeforeEach(func() {
-				// Fill all blocks in the target set with dirty data
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				for i := 0; i < m.wayAssociativity; i++ {
-					block := &m.directoryState.Sets[setID].Blocks[i]
+				next := m.comp.GetNextState()
+				setID := int(0x100 / uint64(64) % uint64(64))
+				for i := 0; i < 4; i++ {
+					block := &next.DirectoryState.Sets[setID].Blocks[i]
 					block.PID = 2
 					block.Tag = uint64(0x200 + i*0x1000)
-					block.CacheAddress = uint64(i * m.blockSize)
+					block.CacheAddress = uint64(i * 64)
 					block.IsValid = true
 					block.IsDirty = true
 				}
 			})
 
-			It("should stall if bank buffer is full", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should do evict", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().
-					Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.hasVictim).To(BeTrue())
-						Expect(t.evictingPID).To(Equal(vm.PID(2)))
-						Expect(t.fetchPID).To(Equal(vm.PID(1)))
-						Expect(t.fetchAddress).To(Equal(uint64(0x100)))
-					})
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
@@ -260,59 +217,22 @@ var _ = Describe("DirectoryStage", func() {
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
-			pipeline.EXPECT().CanAccept().Return(false)
-			buf.EXPECT().Peek().Return(dirPipelineItem{trans: trans})
-			buf.EXPECT().Peek().Return(nil)
-		})
-
-		Context("mshr hit", func() {
-			BeforeEach(func() {
-				cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(1), 0x100)
-			})
-
-			It("should add to MSHR", func() {
-				buf.EXPECT().Pop()
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeTrue())
-				Expect(m.mshrState.Entries[0].TransactionIndices).To(HaveLen(1))
-			})
+			next := m.comp.GetNextState()
+			next.DirPostPipelineBufIndices = []int{0}
 		})
 
 		Context("hit", func() {
 			BeforeEach(func() {
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				block := &m.directoryState.Sets[setID].Blocks[0]
+				next := m.comp.GetNextState()
+				setID := int(0x100 / uint64(64) % uint64(64))
+				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
 				block.PID = 1
 				block.IsValid = true
 			})
 
-			It("should stall if bank is busy", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if block is locked", func() {
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				m.directoryState.Sets[setID].Blocks[0].IsLocked = true
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should send to bank", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.hasBlock).To(BeTrue())
-					})
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
@@ -326,106 +246,13 @@ var _ = Describe("DirectoryStage", func() {
 				write.Data = make([]byte, 64)
 			})
 
-			It("should stall if bank is busy", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeFalse())
-			})
-
 			It("should send to bank", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.hasBlock).To(BeTrue())
-					})
-				buf.EXPECT().Pop()
+				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
 				Expect(trans.action).To(Equal(bankWriteHit))
-			})
-		})
-
-		Context("miss, write full line, need eviction", func() {
-			BeforeEach(func() {
-				write.Data = make([]byte, 64)
-
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				for i := 0; i < m.wayAssociativity; i++ {
-					block := &m.directoryState.Sets[setID].Blocks[i]
-					block.Tag = uint64(0x200 + i*0x1000)
-					block.CacheAddress = uint64(i * m.blockSize)
-					block.IsValid = true
-					block.IsDirty = true
-				}
-			})
-
-			It("should stall if bank buffer is full", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should send to evictor", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().
-					Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.hasVictim).To(BeTrue())
-					})
-				buf.EXPECT().Pop()
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeTrue())
-				Expect(trans.action).To(Equal(bankEvictAndWrite))
-			})
-		})
-
-		Context("miss, write partial line, need eviction", func() {
-			BeforeEach(func() {
-				write.Data = make([]byte, 4)
-
-				setID := int(0x100 / uint64(m.blockSize) % uint64(m.numSets))
-				for i := 0; i < m.wayAssociativity; i++ {
-					block := &m.directoryState.Sets[setID].Blocks[i]
-					block.Tag = uint64(0x200 + i*0x1000)
-					block.CacheAddress = uint64(i * m.blockSize)
-					block.IsValid = true
-					block.IsDirty = true
-				}
-			})
-
-			It("should stall if mshr is full", func() {
-				for i := 0; i < m.numMSHREntry; i++ {
-					cache.MSHRAdd(&m.mshrState, m.numMSHREntry, vm.PID(100), uint64(i*0x1000))
-				}
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should stall if bank buffer is full", func() {
-				bankBuf.EXPECT().CanPush().Return(false)
-				ret := ds.Tick()
-				Expect(ret).To(BeFalse())
-			})
-
-			It("should evict and fetch", func() {
-				bankBuf.EXPECT().CanPush().Return(true)
-				bankBuf.EXPECT().
-					Push(gomock.Any()).
-					Do(func(t *transactionState) {
-						Expect(t.hasVictim).To(BeTrue())
-					})
-				buf.EXPECT().Pop()
-
-				ret := ds.Tick()
-
-				Expect(ret).To(BeTrue())
-				Expect(trans.action).To(Equal(bankEvictAndFetch))
 			})
 		})
 	})

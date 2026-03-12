@@ -3,7 +3,6 @@ package writethrough
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -67,27 +66,34 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
+	cur := p.cache.comp.GetState()
+	next := p.cache.comp.GetNextState()
 
-	entryIdx, found := cache.MSHRQuery(&p.cache.mshrState, pid, cachelineID)
+	entryIdx, found := cache.MSHRQuery(&cur.MSHRState, pid, cachelineID)
 	if !found {
 		panic("MSHR entry not found for data ready response")
 	}
 
-	entry := &p.cache.mshrState.Entries[entryIdx]
-	blockTag := p.cache.directoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
+	entry := &cur.MSHRState.Entries[entryIdx]
+	blockTag := cur.DirectoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
 
 	// Resolve transaction pointers before any removals shift indices
 	entryTrans := p.resolveEntryTransactions(entry)
 	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
-	p.finalizeMSHRTrans(entryTrans, blockTag, data)
-	cache.MSHRRemove(&p.cache.mshrState, pid, cachelineID)
 
+	// Set up trans for bank processing and push BEFORE any removals
+	// (adapter needs to find trans in postCoalesceTransactions by pointer)
 	trans.bankAction = bankActionWriteFetched
 	trans.data = data
 	trans.writeFetchedDirtyMask = dirtyMask
 	bankBuf.Push(trans)
 
-	p.removeTransaction(trans)
+	// Finalize MSHR transactions (marks pre-coalesce as done, removes
+	// from postCoalesceTransactions). Skip the fetcher trans — it's been
+	// pushed to the bank buffer and will be removed after bank processing.
+	p.finalizeMSHRTransExcept(entryTrans, blockTag, data, trans)
+	cache.MSHRRemove(&next.MSHRState, pid, cachelineID)
+
 	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.readToBottom, p.cache)
@@ -135,6 +141,15 @@ func (p *bottomParser) finalizeMSHRTrans(
 	blockTag uint64,
 	data []byte,
 ) {
+	p.finalizeMSHRTransExcept(entryTrans, blockTag, data, nil)
+}
+
+func (p *bottomParser) finalizeMSHRTransExcept(
+	entryTrans []*transactionState,
+	blockTag uint64,
+	data []byte,
+	except *transactionState,
+) {
 	for _, trans := range entryTrans {
 		if trans.read != nil {
 			for _, preCTrans := range trans.preCoalesceTransactions {
@@ -148,7 +163,9 @@ func (p *bottomParser) finalizeMSHRTrans(
 			}
 		}
 
-		p.removeTransaction(trans)
+		if trans != except {
+			p.removeTransaction(trans)
+		}
 
 		tracing.EndTask(trans.id, p.cache)
 	}
@@ -158,7 +175,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
 ) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans.writeToBottom != nil && trans.writeToBottom.ID == id {
+		if trans != nil && trans.writeToBottom != nil && trans.writeToBottom.ID == id {
 			return trans
 		}
 	}
@@ -170,7 +187,7 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
 ) *transactionState {
 	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans.readToBottom != nil && trans.readToBottom.ID == id {
+		if trans != nil && trans.readToBottom != nil && trans.readToBottom.ID == id {
 			return trans
 		}
 	}
@@ -181,19 +198,19 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 func (p *bottomParser) removeTransaction(trans *transactionState) {
 	for i, t := range p.cache.postCoalesceTransactions {
 		if t == trans {
-			p.cache.postCoalesceTransactions = append(
-				(p.cache.postCoalesceTransactions)[:i],
-				(p.cache.postCoalesceTransactions)[i+1:]...)
+			p.cache.postCoalesceTransactions[i] = nil
 
 			return
 		}
 	}
 }
 
-func (p *bottomParser) getBankBuf(setID, wayID int) queueing.Buffer {
+func (p *bottomParser) getBankBuf(
+	setID, wayID int,
+) *stateTransBuffer {
 	numWaysPerSet := p.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
-	bankID := blockID % len(p.cache.bankBufs)
+	bankID := blockID % len(p.cache.bankBufAdapters)
 
-	return p.cache.bankBufs[bankID]
+	return p.cache.bankBufAdapters[bankID]
 }

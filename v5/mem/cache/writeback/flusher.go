@@ -49,11 +49,17 @@ func (f *flusher) processPreFlushing() bool {
 }
 
 func (f *flusher) existInflightTransaction() bool {
-	return len(f.cache.inFlightTransactions) > 0
+	for _, t := range f.cache.inFlightTransactions {
+		if t != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *flusher) prepareBlockToFlushList() {
-	for setID, set := range f.cache.directoryState.Sets {
+	cur := f.cache.comp.GetState()
+	for setID, set := range cur.DirectoryState.Sets {
 		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
 				panic("all the blocks should be unlocked before flushing")
@@ -72,11 +78,13 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
+	cur := f.cache.comp.GetState()
+	spec := f.cache.comp.GetSpec()
 	ref := f.blockToEvict[0]
-	block := &f.cache.directoryState.Sets[ref.SetID].Blocks[ref.WayID]
+	block := &cur.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
-		f.cache.wayAssociativity,
+		spec.WayAssociativity,
 		len(f.cache.dirToBankBuffers))
 	bankBuf := f.cache.dirToBankBuffers[bankNum]
 
@@ -85,18 +93,21 @@ func (f *flusher) processFlush() bool {
 	}
 
 	trans := &transactionState{
-		flush:             f.processingFlush,
-		hasVictim:         true,
-		victimPID:         0,
-		victimTag:         block.Tag,
+		flush:              f.processingFlush,
+		hasVictim:          true,
+		victimPID:          0,
+		victimTag:          block.Tag,
 		victimCacheAddress: block.CacheAddress,
-		action:            bankEvict,
-		evictingAddr:      block.Tag,
-		evictingDirtyMask: block.DirtyMask,
-		blockSetID:        ref.SetID,
-		blockWayID:        ref.WayID,
-		hasBlock:          true,
+		action:             bankEvict,
+		evictingAddr:       block.Tag,
+		evictingDirtyMask:  block.DirtyMask,
+		blockSetID:         ref.SetID,
+		blockWayID:         ref.WayID,
+		hasBlock:           true,
 	}
+
+	// Add to inFlightTransactions so adapter can find it
+	f.cache.inFlightTransactions = append(f.cache.inFlightTransactions, trans)
 	bankBuf.Push(trans)
 
 	f.blockToEvict = f.blockToEvict[1:]
@@ -172,6 +183,9 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
+	spec := f.cache.comp.GetSpec()
+	next := f.cache.comp.GetNextState()
+
 	rsp := &cache.FlushRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = f.cache.controlPort.AsRemote()
@@ -181,12 +195,13 @@ func (f *flusher) finalizeFlushing() bool {
 	f.cache.controlPort.Send(rsp)
 
 	// Reset MSHR and directory state
-	f.cache.mshrState = cache.MSHRState{}
+	next.MSHRState = cache.MSHRState{}
+	blockSize := 1 << spec.Log2BlockSize
 	cache.DirectoryReset(
-		&f.cache.directoryState,
-		f.cache.numSets,
-		f.cache.wayAssociativity,
-		f.cache.blockSize,
+		&next.DirectoryState,
+		spec.NumSets,
+		spec.WayAssociativity,
+		blockSize,
 	)
 
 	if f.processingFlush.PauseAfterFlushing {

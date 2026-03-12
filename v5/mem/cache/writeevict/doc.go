@@ -1,2 +1,2 @@
-// Package writeevict provides a RDNA GPU L1 cache implementation.
+// Package writeevict provides a GCN3 GPU L1 cache implementation.
 package writeevict

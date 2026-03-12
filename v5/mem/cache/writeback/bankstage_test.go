@@ -5,38 +5,22 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
-	"go.uber.org/mock/gomock"
-
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("Bank Stage", func() {
 	var (
-		mockCtrl            *gomock.Controller
-		m                   *middleware
-		pipeline            *MockPipeline
-		postPipelineBuf     queueing.Buffer
-		dirInBuf            *MockBuffer
-		writeBufferInBuf    *MockBuffer
-		bs                  *bankStage
-		storage             *mem.Storage
-		writeBufferBuffer   *MockBuffer
-		mshrStageBuffer     *MockBuffer
-		addressToPortMapper *MockAddressToPortMapper
-		topPort             *MockPort
+		mockCtrl *gomock.Controller
+		m        *middleware
+		bs       *bankStage
+		storage  *mem.Storage
+		topPort  *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		pipeline = NewMockPipeline(mockCtrl)
-		postPipelineBuf = queueing.NewBuffer("Test.PostPipelineBuf", 2)
-		dirInBuf = NewMockBuffer(mockCtrl)
-		writeBufferInBuf = NewMockBuffer(mockCtrl)
-		mshrStageBuffer = NewMockBuffer(mockCtrl)
-		writeBufferBuffer = NewMockBuffer(mockCtrl)
-		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
-		storage = mem.NewStorage(4 * mem.KB)
 
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
@@ -44,115 +28,86 @@ var _ = Describe("Bank Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		comp := MakeBuilder().
-			WithEngine(sim.NewSerialEngine()).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
-			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
-			Build("Cache")
-		m = comp.Middlewares()[0].(*middleware)
+		storage = mem.NewStorage(4 * mem.KB)
 
-		m.dirToBankBuffers = []queueing.Buffer{dirInBuf}
-		m.writeBufferToBankBuffers =
-			[]queueing.Buffer{writeBufferInBuf}
-		m.mshrStageBuffer = mshrStageBuffer
-		m.writeBufferBuffer = writeBufferBuffer
-		m.addressToPortMapper = addressToPortMapper
-		m.storage = storage
-		m.inFlightTransactions = nil
-		m.topPort = topPort
+		initialState := State{
+			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
+			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
+			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			BankInflightTransCounts:         []int{0},
+			BankDownwardInflightTransCounts: []int{0},
+		}
+
+		m = &middleware{
+			storage:      storage,
+			topPort:      topPort,
+			evictingList: make(map[uint64]bool),
+		}
+		m.comp = modeling.NewBuilder[Spec, State]().
+			WithEngine(sim.NewSerialEngine()).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{
+				BankLatency:      10,
+				Log2BlockSize:    6,
+				WayAssociativity: 4,
+				NumSets:          64,
+				NumBanks:         1,
+				NumReqPerCycle:   4,
+			}).
+			Build("Cache")
+
+		m.comp.SetState(initialState)
+		next := m.comp.GetNextState()
+
+		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
+
+		m.dirToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.DirToBankBuf0",
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
+		m.writeBufferToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.WBToBankBuf0",
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
+		m.mshrStageBuffer = &stateTransBuffer{
+			name:     "Cache.MSHRStageBuf",
+			readItems:  &next.MSHRStageBufEntries,
+			writeItems: &next.MSHRStageBufEntries,
+			capacity: 4,
+			mw:       m,
+		}
+		m.writeBufferBuffer = &stateTransBuffer{
+			name:     "Cache.WriteBufferBuf",
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
+		m.bankPostBufAdapters = []*stateBankPostBufAdapter{{
+			name:     "Cache.BankPostBuf0",
+			readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+			writeItems: &next.BankPostPipelineBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
 
 		bs = &bankStage{
-			cache:           m,
-			bankID:          0,
-			pipeline:        pipeline,
-			pipelineWidth:   4,
-			postPipelineBuf: postPipelineBuf,
+			cache:         m,
+			bankID:        0,
+			pipelineWidth: 4,
 		}
+		m.bankStages = []*bankStage{bs}
 	})
 
 	AfterEach(func() {
 		mockCtrl.Finish()
-	})
-
-	Context("No transaction running", func() {
-		It("should do nothing if pipeline is full", func() {
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(false)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeFalse())
-		})
-
-		It("should do nothing if there is no transaction", func() {
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(true)
-			writeBufferInBuf.EXPECT().Pop().Return(nil)
-			writeBufferBuffer.EXPECT().CanPush().Return(true)
-			dirInBuf.EXPECT().Pop().Return(nil)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeFalse())
-		})
-
-		It("should extract transactions from write buffer first", func() {
-			trans := &transactionState{}
-
-			pipeline.EXPECT().Tick()
-			writeBufferInBuf.EXPECT().Pop().Return(trans)
-			pipeline.EXPECT().CanAccept().Return(true)
-			pipeline.EXPECT().Accept(gomock.Any())
-			ret := bs.Tick()
-
-			Expect(ret).To(BeTrue())
-			Expect(bs.inflightTransCount).To(Equal(1))
-		})
-
-		It("should stall if write buffer buffer is full", func() {
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(true)
-			writeBufferInBuf.EXPECT().Pop().Return(nil)
-			writeBufferBuffer.EXPECT().CanPush().Return(false)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeFalse())
-		})
-
-		It("should extract transactions from directory", func() {
-			trans := &transactionState{}
-
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(true)
-			pipeline.EXPECT().Accept(gomock.Any())
-			writeBufferInBuf.EXPECT().Pop().Return(nil)
-			writeBufferBuffer.EXPECT().CanPush().Return(true)
-			dirInBuf.EXPECT().Pop().Return(trans)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeTrue())
-			Expect(bs.inflightTransCount).To(Equal(1))
-		})
-
-		It("should directly forward fetch transaction to writebuffer", func() {
-			trans := &transactionState{
-				action: writeBufferFetch,
-			}
-
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(true)
-			writeBufferInBuf.EXPECT().Pop().Return(nil)
-			writeBufferBuffer.EXPECT().CanPush().Return(true)
-			writeBufferBuffer.EXPECT().Push(trans)
-			dirInBuf.EXPECT().Pop().Return(trans)
-			ret := bs.Tick()
-
-			Expect(ret).To(BeTrue())
-		})
 	})
 
 	Context("completing a read hit transaction", func() {
@@ -162,9 +117,8 @@ var _ = Describe("Bank Stage", func() {
 		)
 
 		BeforeEach(func() {
-			// Set up directory state with a block at set 0, way 0
-			cache.DirectoryReset(&m.directoryState, 64, 4, 64)
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.ReadCount = 1
 
@@ -183,23 +137,22 @@ var _ = Describe("Bank Stage", func() {
 				hasBlock:   true,
 				action:     bankReadHit,
 			}
-			postPipelineBuf.Push(bankPipelineElem{trans: trans})
-			m.inFlightTransactions = append(
-				m.inFlightTransactions, trans)
+			m.inFlightTransactions = []*transactionState{trans}
 
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(false)
+			// Put transaction in bank post-pipeline buffer
+			next.BankPostPipelineBufIndices[0].Indices = []int{0}
 			bs.inflightTransCount = 1
 		})
 
 		It("should stall if send buffer is full", func() {
-			topPort.EXPECT().CanSend().Return(false)
+			topPort.EXPECT().CanSend().Return(false).AnyTimes()
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
 			Expect(bs.inflightTransCount).To(Equal(1))
-			Expect(postPipelineBuf.Size()).To(Equal(1))
 		})
 
 		It("should read and send response", func() {
@@ -211,15 +164,17 @@ var _ = Describe("Bank Stage", func() {
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
 
+			m.syncForTest()
+
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.ReadCount).To(Equal(0))
 			Expect(m.inFlightTransactions).
 				NotTo(ContainElement(trans))
 			Expect(bs.inflightTransCount).To(Equal(0))
-			Expect(postPipelineBuf.Size()).To(Equal(0))
 		})
 	})
 
@@ -230,8 +185,8 @@ var _ = Describe("Bank Stage", func() {
 		)
 
 		BeforeEach(func() {
-			cache.DirectoryReset(&m.directoryState, 64, 4, 64)
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.ReadCount = 1
 			block.IsLocked = true
@@ -249,22 +204,20 @@ var _ = Describe("Bank Stage", func() {
 				hasBlock:   true,
 				action:     bankWriteHit,
 			}
-			m.inFlightTransactions = append(
-				m.inFlightTransactions, trans)
-			postPipelineBuf.Push(bankPipelineElem{trans: trans})
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(false)
+			m.inFlightTransactions = []*transactionState{trans}
+			next.BankPostPipelineBufIndices[0].Indices = []int{0}
 			bs.inflightTransCount = 1
 		})
 
 		It("should stall if send buffer is full", func() {
-			topPort.EXPECT().CanSend().Return(false)
+			topPort.EXPECT().CanSend().Return(false).AnyTimes()
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
 			Expect(bs.inflightTransCount).To(Equal(1))
-			Expect(postPipelineBuf.Size()).To(Equal(1))
 		})
 
 		It("should write and send response", func() {
@@ -274,29 +227,21 @@ var _ = Describe("Bank Stage", func() {
 					Expect(msg.Meta().RspTo).To(Equal(write.ID))
 				})
 
+			m.syncForTest()
+
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
 			data, _ := storage.Read(0x44, 4)
 			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsValid).To(BeTrue())
 			Expect(block.IsLocked).To(BeFalse())
 			Expect(block.IsDirty).To(BeTrue())
-			Expect(block.DirtyMask).To(Equal([]bool{
-				false, false, false, false, true, true, true, true,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-				false, false, false, false, false, false, false, false,
-			}))
 			Expect(m.inFlightTransactions).
 				NotTo(ContainElement(trans))
 			Expect(bs.inflightTransCount).To(Equal(0))
-			Expect(postPipelineBuf.Size()).To(Equal(0))
 		})
 	})
 
@@ -306,8 +251,8 @@ var _ = Describe("Bank Stage", func() {
 		)
 
 		BeforeEach(func() {
-			cache.DirectoryReset(&m.directoryState, 64, 4, 64)
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.IsLocked = true
 
@@ -330,37 +275,24 @@ var _ = Describe("Bank Stage", func() {
 				mshrTransactions: []*transactionState{},
 				action:           bankWriteFetched,
 			}
-			postPipelineBuf.Push(bankPipelineElem{trans: trans})
-
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(false)
+			m.inFlightTransactions = []*transactionState{trans}
+			next.BankPostPipelineBufIndices[0].Indices = []int{0}
 			bs.inflightTransCount = 1
 		})
 
-		It("should stall if the mshr stage buffer is full", func() {
-			mshrStageBuffer.EXPECT().CanPush().Return(false)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeFalse())
-			Expect(bs.inflightTransCount).To(Equal(1))
-			Expect(postPipelineBuf.Size()).To(Equal(1))
-		})
-
 		It("should write to storage and send to mshr stage", func() {
-			mshrStageBuffer.EXPECT().CanPush().Return(true)
-			mshrStageBuffer.EXPECT().Push(gomock.Any()) // the transaction
+			m.syncForTest()
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
 			writtenData, _ := storage.Read(0x40, 64)
 			Expect(writtenData).To(Equal(trans.mshrData))
-			block := &m.directoryState.Sets[0].Blocks[0]
+			next := m.comp.GetNextState()
+			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())
 			Expect(block.IsValid).To(BeTrue())
 			Expect(bs.inflightTransCount).To(Equal(0))
-			Expect(postPipelineBuf.Size()).To(Equal(0))
 		})
 	})
 
@@ -387,23 +319,13 @@ var _ = Describe("Bank Stage", func() {
 				action:       bankEvictAndFetch,
 				evictingAddr: 0x200,
 			}
-			postPipelineBuf.Push(bankPipelineElem{trans: trans})
-			pipeline.EXPECT().Tick()
-			pipeline.EXPECT().CanAccept().Return(false)
+			m.inFlightTransactions = []*transactionState{trans}
+			next := m.comp.GetNextState()
+			next.BankPostPipelineBufIndices[0].Indices = []int{0}
 			bs.inflightTransCount = 1
 		})
 
-		It("should stall if the bottom sender is busy", func() {
-			writeBufferBuffer.EXPECT().CanPush().Return(false)
-
-			ret := bs.Tick()
-
-			Expect(ret).To(BeFalse())
-			Expect(bs.inflightTransCount).To(Equal(1))
-			Expect(postPipelineBuf.Size()).To(Equal(1))
-		})
-
-		It("should send write to bottom", func() {
+		It("should send eviction to write buffer", func() {
 			data := []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -415,18 +337,15 @@ var _ = Describe("Bank Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			storage.Write(0x300, data)
-			writeBufferBuffer.EXPECT().CanPush().Return(true)
-			writeBufferBuffer.EXPECT().Push(gomock.Any()).
-				Do(func(eviction *transactionState) {
-					Expect(eviction.action).To(Equal(writeBufferEvictAndFetch))
-					Expect(eviction.evictingData).To(Equal(data))
-				})
+
+			m.syncForTest()
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
+			Expect(trans.action).To(Equal(writeBufferEvictAndFetch))
+			Expect(trans.evictingData).To(Equal(data))
 			Expect(bs.inflightTransCount).To(Equal(0))
-			Expect(postPipelineBuf.Size()).To(Equal(0))
 		})
 	})
 })

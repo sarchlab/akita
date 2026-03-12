@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -14,9 +13,7 @@ type bankStage struct {
 	cache  *middleware
 	bankID int
 
-	pipeline           queueing.Pipeline
 	pipelineWidth      int
-	postPipelineBuf    queueing.Buffer
 	inflightTransCount int
 
 	// Count the trans that needs to be sent to the write buffer.
@@ -32,37 +29,68 @@ func (e bankPipelineElem) TaskID() string {
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
-	for i := 0; i < s.cache.numReqPerCycle; i++ {
+	spec := s.cache.comp.GetSpec()
+
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.finalizeTrans() || madeProgress
 	}
 
-	madeProgress = s.pipeline.Tick() || madeProgress
+	madeProgress = s.tickPipeline() || madeProgress
 
-	for i := 0; i < s.cache.numReqPerCycle; i++ {
+	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.pullFromBuf() || madeProgress
 	}
 
 	return madeProgress
 }
 
+func (s *bankStage) tickPipeline() bool {
+	next := s.cache.comp.GetNextState()
+	spec := s.cache.comp.GetSpec()
+	return bankPipelineTick(
+		&next.BankPipelineStages[s.bankID].Stages,
+		&next.BankPostPipelineBufIndices[s.bankID].Indices,
+		s.pipelineWidth,
+		spec.BankLatency,
+	)
+}
+
 func (s *bankStage) Reset() {
+	next := s.cache.comp.GetNextState()
 	s.cache.dirToBankBuffers[s.bankID].Clear()
-	s.pipeline.Clear()
-	s.postPipelineBuf.Clear()
+	next.BankPipelineStages[s.bankID].Stages =
+		next.BankPipelineStages[s.bankID].Stages[:0]
+	next.BankPostPipelineBufIndices[s.bankID].Indices =
+		next.BankPostPipelineBufIndices[s.bankID].Indices[:0]
 	s.inflightTransCount = 0
 }
 
 func (s *bankStage) pullFromBuf() bool {
-	if !s.pipeline.CanAccept() {
-		return false
+	cur := s.cache.comp.GetState()
+	next := s.cache.comp.GetNextState()
+	spec := s.cache.comp.GetSpec()
+
+	if spec.BankLatency > 0 {
+		if !bankPipelineCanAccept(
+			cur.BankPipelineStages[s.bankID].Stages,
+			s.pipelineWidth,
+		) {
+			return false
+		}
+	} else {
+		// No pipeline - check post-buf capacity
+		if len(cur.BankPostPipelineBufIndices[s.bankID].Indices) >= s.pipelineWidth {
+			return false
+		}
 	}
 
 	inBuf := s.cache.writeBufferToBankBuffers[s.bankID]
 
 	trans := inBuf.Pop()
 	if trans != nil {
-		s.pipeline.Accept(bankPipelineElem{trans: trans.(*transactionState)})
-
+		t := trans.(*transactionState)
+		transIdx := s.findTransIdx(t)
+		s.acceptIntoPipeline(next, spec, transIdx)
 		s.inflightTransCount++
 
 		return true
@@ -89,8 +117,8 @@ func (s *bankStage) pullFromBuf() bool {
 			return true
 		}
 
-		s.pipeline.Accept(bankPipelineElem{trans: t})
-
+		transIdx := s.findTransIdx(t)
+		s.acceptIntoPipeline(next, spec, transIdx)
 		s.inflightTransCount++
 
 		switch t.action {
@@ -104,11 +132,29 @@ func (s *bankStage) pullFromBuf() bool {
 	return false
 }
 
-func (s *bankStage) finalizeTrans() bool {
-	elems := queueing.SnapshotBuffer(s.postPipelineBuf)
+func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
+	if spec.BankLatency > 0 {
+		bankPipelineAccept(
+			&next.BankPipelineStages[s.bankID].Stages,
+			s.pipelineWidth,
+			transIdx,
+		)
+	} else {
+		// Bypass pipeline: put directly in post-pipeline buffer
+		next.BankPostPipelineBufIndices[s.bankID].Indices = append(
+			next.BankPostPipelineBufIndices[s.bankID].Indices, transIdx)
+	}
+}
 
-	for i, e := range elems {
-		trans := e.(bankPipelineElem).trans
+func (s *bankStage) finalizeTrans() bool {
+	// NOTE: We use next for both reading and writing the postBuf indices here
+	// because finalizeTrans is called multiple times per tick, and each call
+	// must see the removals made by previous calls within the same tick.
+	next := s.cache.comp.GetNextState()
+	postBuf := &next.BankPostPipelineBufIndices[s.bankID].Indices
+
+	for i, idx := range *postBuf {
+		trans := s.cache.inFlightTransactions[idx]
 
 		done := false
 
@@ -126,11 +172,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			remaining := make([]interface{}, 0, len(elems)-1)
-			remaining = append(remaining, elems[:i]...)
-			remaining = append(remaining, elems[i+1:]...)
-			queueing.RestoreBuffer(s.postPipelineBuf, remaining)
-
+			*postBuf = append((*postBuf)[:i], (*postBuf)[i+1:]...)
 			return true
 		}
 	}
@@ -143,13 +185,17 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 		return false
 	}
 
+	spec := s.cache.comp.GetSpec()
+	cur := s.cache.comp.GetState()
+	next := s.cache.comp.GetNextState()
+
 	read := trans.read
 	addr := read.Address
-	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
-	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
-		block.CacheAddress+offset, read.AccessByteSize)
+		curBlock.CacheAddress+offset, read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -158,7 +204,9 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
-	block.ReadCount--
+
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.ReadCount--
 
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
@@ -180,17 +228,22 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 		return false
 	}
 
+	spec := s.cache.comp.GetSpec()
+	cur := s.cache.comp.GetState()
+	next := s.cache.comp.GetNextState()
+
 	write := trans.write
 	addr := write.Address
-	_, offset := getCacheLineID(addr, s.cache.log2BlockSize)
-	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	dirtyMask := s.writeData(block, write, offset)
+	dirtyMask := s.writeData(curBlock, write, offset, spec.Log2BlockSize)
 
-	block.IsValid = true
-	block.IsLocked = false
-	block.IsDirty = true
-	block.DirtyMask = dirtyMask
+	nextBlock.IsValid = true
+	nextBlock.IsLocked = false
+	nextBlock.IsDirty = true
+	nextBlock.DirtyMask = dirtyMask
 
 	s.removeTransaction(trans)
 
@@ -215,16 +268,17 @@ func (s *bankStage) writeData(
 	block *cache.BlockState,
 	write *mem.WriteReq,
 	offset uint64,
+	log2BlockSize uint64,
 ) []bool {
 	data, err := s.cache.storage.Read(
-		block.CacheAddress, 1<<s.cache.log2BlockSize)
+		block.CacheAddress, 1<<log2BlockSize)
 	if err != nil {
 		panic(err)
 	}
 
 	dirtyMask := block.DirtyMask
 	if dirtyMask == nil {
-		dirtyMask = make([]bool, 1<<s.cache.log2BlockSize)
+		dirtyMask = make([]bool, 1<<log2BlockSize)
 	}
 
 	for i := 0; i < len(write.Data); i++ {
@@ -250,19 +304,24 @@ func (s *bankStage) finalizeBankWriteFetched(
 		return false
 	}
 
-	// Use block reference from the transaction itself (MSHR entry may have been removed)
-	block := &s.cache.directoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	cur := s.cache.comp.GetState()
+	next := s.cache.comp.GetNextState()
 
-	// Push the transaction itself to MSHR stage (it carries mshrTransactions and mshrData)
+	// Read CacheAddress from cur
+	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+
+	// Push the transaction itself to MSHR stage
 	s.cache.mshrStageBuffer.Push(trans)
 
-	err := s.cache.storage.Write(block.CacheAddress, trans.mshrData)
+	err := s.cache.storage.Write(curBlock.CacheAddress, trans.mshrData)
 	if err != nil {
 		panic(err)
 	}
 
-	block.IsLocked = false
-	block.IsValid = true
+	// Write modifications to next
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock.IsLocked = false
+	nextBlock.IsValid = true
 
 	s.inflightTransCount--
 
@@ -272,10 +331,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 func (s *bankStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
-			s.cache.inFlightTransactions = append(
-				(s.cache.inFlightTransactions)[:i],
-				(s.cache.inFlightTransactions)[i+1:]...)
-
+			s.cache.inFlightTransactions[i] = nil
 			return
 		}
 	}
@@ -291,12 +347,14 @@ func (s *bankStage) removeTransaction(trans *transactionState) {
 func (s *bankStage) finalizeBankEviction(
 	trans *transactionState,
 ) bool {
+	spec := s.cache.comp.GetSpec()
+
 	if !s.cache.writeBufferBuffer.CanPush() {
 		return false
 	}
 
 	data, err := s.cache.storage.Read(
-		trans.victimCacheAddress, 1<<s.cache.log2BlockSize)
+		trans.victimCacheAddress, 1<<spec.Log2BlockSize)
 	if err != nil {
 		panic(err)
 	}
@@ -321,4 +379,13 @@ func (s *bankStage) finalizeBankEviction(
 	s.downwardInflightTransCount--
 
 	return true
+}
+
+func (s *bankStage) findTransIdx(trans *transactionState) int {
+	for i, t := range s.cache.inFlightTransactions {
+		if t == trans {
+			return i
+		}
+	}
+	panic("transaction not found in inFlightTransactions")
 }

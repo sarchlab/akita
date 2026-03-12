@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,24 +13,24 @@ import (
 
 var _ = Describe("Bankstage", func() {
 	var (
-		mockCtrl        *gomock.Controller
-		inBuf           *MockBuffer
-		storage         *mem.Storage
-		pipeline        *MockPipeline
-		postPipelineBuf *MockBuffer
-		s               *bankStage
-		c               *middleware
+		mockCtrl *gomock.Controller
+		storage  *mem.Storage
+		s        *bankStage
+		c        *middleware
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		inBuf = NewMockBuffer(mockCtrl)
 		storage = mem.NewStorage(4 * mem.KB)
-		pipeline = NewMockPipeline(mockCtrl)
-		postPipelineBuf = NewMockBuffer(mockCtrl)
+
+		initialState := State{
+			BankBufIndices:             []bankBufState{{Indices: nil}},
+			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
+		}
+
 		c = &middleware{
-			bankBufs: []queueing.Buffer{inBuf},
-			storage:  storage,
+			storage: storage,
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -41,18 +40,42 @@ var _ = Describe("Bankstage", func() {
 				Log2BlockSize:    6,
 				WayAssociativity: 4,
 				NumSets:          16,
+				NumBanks:         1,
+				NumReqPerCycle:   1,
 			}).
 			Build("Cache")
 
-		// Initialize directoryState
-		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
+		c.comp.SetState(initialState)
+
+		next := c.comp.GetNextState()
+
+		// Create adapters
+		c.bankBufAdapters = []*stateTransBuffer{
+			{
+				name:       "Cache.BankBuf0",
+				readItems:  &next.BankBufIndices[0].Indices,
+				writeItems: &next.BankBufIndices[0].Indices,
+				capacity:   1,
+				mw:         c,
+			},
+		}
+		c.bankPostBufAdapters = []*stateBankPostBufAdapter{
+			{
+				name:       "Cache.BankPostBuf0",
+				readItems:  &next.BankPostPipelineBufIndices[0].Indices,
+				writeItems: &next.BankPostPipelineBufIndices[0].Indices,
+				capacity:   1,
+				mw:         c,
+			},
+		}
 
 		s = &bankStage{
-			cache:           c,
-			bankID:          0,
-			numReqPerCycle:  1,
-			pipeline:        pipeline,
-			postPipelineBuf: postPipelineBuf,
+			cache:          c,
+			bankID:         0,
+			numReqPerCycle: 1,
 		}
 	})
 
@@ -61,32 +84,25 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		pipeline.EXPECT().Tick().Return(false)
-		inBuf.EXPECT().Peek().Return(nil)
-		postPipelineBuf.EXPECT().Peek().Return(nil)
-
+		c.syncForTest()
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
 	})
 
 	It("should insert transactions into pipeline", func() {
-		trans := &transactionState{}
+		next := c.comp.GetNextState()
 
-		inBuf.EXPECT().Peek().Return(trans)
-		inBuf.EXPECT().Pop()
-		pipeline.EXPECT().Tick().Return(false)
-		pipeline.EXPECT().CanAccept().Return(true)
-		pipeline.EXPECT().
-			Accept(gomock.Any()).
-			Do(func(t *bankTransaction) {
-				Expect(t.transactionState).To(BeIdenticalTo(trans))
-			})
-		postPipelineBuf.EXPECT().Peek().Return(nil)
+		trans := &transactionState{}
+		c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+		next.BankBufIndices[0].Indices = append(next.BankBufIndices[0].Indices, 0)
+
+		c.syncForTest()
 
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
+		Expect(next.BankPipelineStages[0].Stages).To(HaveLen(1))
 	})
 
 	Context("read hit", func() {
@@ -100,11 +116,13 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
+			next := c.comp.GetNextState()
+
 			// Set up the block in directoryState
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount = 1
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount = 1
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			storage.Write(0x400, []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -152,15 +170,15 @@ var _ = Describe("Bankstage", func() {
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans)
 
-			postPipelineBuf.EXPECT().Peek().Return(&bankTransaction{
-				transactionState: postCTrans,
-			})
+			// Put in post-pipeline buffer
+			next.BankPostPipelineBufIndices[0].Indices = append(
+				next.BankPostPipelineBufIndices[0].Indices, 0)
 		})
 
 		It("should read", func() {
-			pipeline.EXPECT().Tick()
-			inBuf.EXPECT().Peek().Return(nil)
-			postPipelineBuf.EXPECT().Pop()
+			next := c.comp.GetNextState()
+
+			c.syncForTest()
 
 			madeProgress := s.Tick()
 
@@ -169,7 +187,7 @@ var _ = Describe("Bankstage", func() {
 			Expect(preCTrans1.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
 			Expect(preCTrans2.done).To(BeTrue())
-			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
+			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
 			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans))
 		})
 	})
@@ -185,10 +203,12 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+			next := c.comp.GetNextState()
+
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			write = &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
@@ -223,20 +243,21 @@ var _ = Describe("Bankstage", func() {
 				bankAction: bankActionWrite,
 			}
 
-			postPipelineBuf.EXPECT().
-				Peek().
-				Return(&bankTransaction{transactionState: trans})
+			c.postCoalesceTransactions = append(
+				c.postCoalesceTransactions, trans)
+			next.BankPostPipelineBufIndices[0].Indices = append(
+				next.BankPostPipelineBufIndices[0].Indices, 0)
 		})
 
 		It("should write", func() {
-			pipeline.EXPECT().Tick()
-			inBuf.EXPECT().Peek().Return(nil)
-			postPipelineBuf.EXPECT().Pop()
+			next := c.comp.GetNextState()
+
+			c.syncForTest()
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
+			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal([]byte{
 				0, 0, 0, 0, 0, 0, 0, 0,
@@ -261,10 +282,12 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+			next := c.comp.GetNextState()
+
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			trans = &transactionState{
 				blockSetID: blockSetID,
@@ -284,20 +307,21 @@ var _ = Describe("Bankstage", func() {
 			}
 			trans.writeFetchedDirtyMask = make([]bool, 64)
 
-			postPipelineBuf.EXPECT().
-				Peek().
-				Return(&bankTransaction{transactionState: trans})
+			c.postCoalesceTransactions = append(
+				c.postCoalesceTransactions, trans)
+			next.BankPostPipelineBufIndices[0].Indices = append(
+				next.BankPostPipelineBufIndices[0].Indices, 0)
 		})
 
 		It("should write fetched", func() {
-			pipeline.EXPECT().Tick()
-			inBuf.EXPECT().Peek().Return(nil)
-			postPipelineBuf.EXPECT().Pop()
+			next := c.comp.GetNextState()
+
+			c.syncForTest()
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
+			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.data))
 		})

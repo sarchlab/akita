@@ -21,8 +21,7 @@ var _ = Describe("Control Stage", func() {
 		transactions []*transactionState
 		s            *controlStage
 		mw           *middleware
-		inBuf        *MockBuffer
-		c            *coalescer
+		co           *coalescer
 	)
 
 	BeforeEach(func() {
@@ -44,16 +43,17 @@ var _ = Describe("Control Stage", func() {
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
 
-		inBuf = NewMockBuffer(mockCtrl)
-		c = &coalescer{cache: mw}
-
 		transactions = nil
 
+		initialState := State{
+			BankBufIndices:             []bankBufState{},
+			BankPipelineStages:         []bankPipelineState{},
+			BankPostPipelineBufIndices: []bankPostBufState{},
+		}
+
 		mw = &middleware{
-			topPort:       topPort,
-			bottomPort:    bottomPort,
-			dirBuf:        inBuf,
-			coalesceStage: c,
+			topPort:    topPort,
+			bottomPort: bottomPort,
 		}
 		mw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -65,8 +65,25 @@ var _ = Describe("Control Stage", func() {
 			}).
 			Build("Cache")
 
-		// Initialize directoryState
-		cache.DirectoryReset(&mw.directoryState, 16, 4, 64)
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
+		mw.comp.SetState(initialState)
+
+		next := mw.comp.GetNextState()
+
+		// Create dir buf adapter
+		mw.dirBufAdapter = &stateTransBuffer{
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         mw,
+		}
+		mw.bankBufAdapters = nil
+
+		co = &coalescer{cache: mw}
+		mw.coalesceStage = co
 
 		s = &controlStage{
 			ctrlPort:     ctrlPort,
@@ -81,6 +98,8 @@ var _ = Describe("Control Stage", func() {
 
 	It("should do nothing if no request", func() {
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
+
+		mw.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -97,6 +116,8 @@ var _ = Describe("Control Stage", func() {
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		mw.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -118,9 +139,10 @@ var _ = Describe("Control Stage", func() {
 
 		topPort.EXPECT().PeekIncoming().Return(nil)
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
-		inBuf.EXPECT().Pop()
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		mw.syncForTest()
 
 		madeProgress := s.Tick()
 

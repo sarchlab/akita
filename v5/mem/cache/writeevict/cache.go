@@ -4,7 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -20,6 +19,11 @@ type Spec struct {
 	NumSets               int    `json:"num_sets"`
 	TotalByteSize         uint64 `json:"total_byte_size"`
 	DirLatency            int    `json:"dir_latency"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
 }
 
 // State contains mutable runtime data for the writeevict cache.
@@ -46,13 +50,19 @@ type middleware struct {
 	bottomPort  sim.Port
 	controlPort sim.Port
 
-	storage             *mem.Storage
-	directoryState      cache.DirectoryState // runtime copy
-	mshrState           cache.MSHRState      // runtime copy
-	addressToPortMapper mem.AddressToPortMapper
+	storage *mem.Storage
 
-	dirBuf   queueing.Buffer
-	bankBufs []queueing.Buffer
+	// curState holds the A-buffer snapshot for the current tick.
+	// Stored here so adapter read pointers remain valid for the tick duration.
+	// In production, set by updateAdapterPointers() from comp.GetState().
+	// In tests, set by syncForTest() from *comp.GetNextState().
+	curState State
+
+	// Thin buffer adapters (created once, pointers updated per-tick)
+	dirBufAdapter       *stateTransBuffer
+	bankBufAdapters     []*stateTransBuffer
+	dirPostBufAdapter   *stateDirPostBufAdapter
+	bankPostBufAdapters []*stateBankPostBufAdapter
 
 	coalesceStage    *coalescer
 	directoryStage   *directory
@@ -94,14 +104,26 @@ func (m *middleware) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
-// SetAddressToPortMapper sets the finder that tells which remote port can serve
-// the data on a certain address.
-func (m *middleware) SetAddressToPortMapper(lmf mem.AddressToPortMapper) {
-	m.addressToPortMapper = lmf
+// findPort resolves an address to a remote port using data from Spec.
+func (m *middleware) findPort(address uint64) sim.RemotePort {
+	spec := m.comp.GetSpec()
+
+	switch spec.AddressMapperType {
+	case "single":
+		return sim.RemotePort(spec.RemotePortNames[0])
+	case "interleaved":
+		n := uint64(len(spec.RemotePortNames))
+		idx := address / spec.InterleavingSize % n
+		return sim.RemotePort(spec.RemotePortNames[idx])
+	}
+
+	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
 // Tick updates the state of the cache.
 func (m *middleware) Tick() bool {
+	m.updateAdapterPointers()
+
 	madeProgress := false
 
 	if !m.isPaused {
@@ -111,6 +133,63 @@ func (m *middleware) Tick() bool {
 	madeProgress = m.controlStage.Tick() || madeProgress
 
 	return madeProgress
+}
+
+// syncForTest synchronizes curState from the next state buffer and updates
+// adapter read pointers. This is only needed in tests where state is set up
+// via GetNextState() without going through the Component.Tick() cycle.
+func (m *middleware) syncForTest() {
+	next := m.comp.GetNextState()
+	m.comp.SetState(*next)
+	m.curState = m.comp.GetState()
+	next = m.comp.GetNextState()
+
+	// Update adapter read pointers to curState, write pointers to next
+	if m.dirBufAdapter != nil {
+		m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+		m.dirBufAdapter.writeItems = &next.DirBufIndices
+	}
+	for i := range m.bankBufAdapters {
+		if m.bankBufAdapters[i] != nil {
+			m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+			m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
+		}
+	}
+	if m.dirPostBufAdapter != nil {
+		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+	}
+	for i := range m.bankPostBufAdapters {
+		if m.bankPostBufAdapters[i] != nil {
+			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+		}
+	}
+}
+
+func (m *middleware) updateAdapterPointers() {
+	m.curState = m.comp.GetState()
+	next := m.comp.GetNextState()
+
+	// Dir buf adapter
+	m.dirBufAdapter.readItems = &m.curState.DirBufIndices
+	m.dirBufAdapter.writeItems = &next.DirBufIndices
+
+	// Bank buf adapters
+	for i := range m.bankBufAdapters {
+		m.bankBufAdapters[i].readItems = &m.curState.BankBufIndices[i].Indices
+		m.bankBufAdapters[i].writeItems = &next.BankBufIndices[i].Indices
+	}
+
+	// Dir post pipeline buf adapter
+	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
+	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
+
+	// Bank post pipeline buf adapters
+	for i := range m.bankPostBufAdapters {
+		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
+		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
+	}
 }
 
 func (m *middleware) runPipeline() bool {
@@ -168,81 +247,94 @@ func (m *middleware) tickCoalesceState() bool {
 	return madeProgress
 }
 
-// --- State snapshot/restore ---
-
-func (m *middleware) snapshotState() State {
-	lookup := buildTransIndex(
-		m.transactions, m.postCoalesceTransactions)
-
-	s := State{
-		IsPaused:        m.isPaused,
-		NumTransactions: len(m.transactions),
-	}
-
-	// DirectoryState and MSHRState are already the canonical state.
-	// Deep copy them for the snapshot.
-	s.DirectoryState = deepCopyDirectoryState(m.directoryState)
-	s.MSHRState = deepCopyMSHRState(m.mshrState)
-
-	s.Transactions = snapshotAllTransactions(
-		m.transactions, m.postCoalesceTransactions, lookup)
-	s.DirBufIndices = snapshotDirBuf(m.dirBuf, lookup)
-	s.BankBufIndices = snapshotBankBufs(m.bankBufs, lookup)
-	s.DirPipelineStages = snapshotDirPipeline(
-		m.directoryStage.pipeline, lookup)
-	s.DirPostPipelineBufIndices = snapshotDirPostBuf(
-		m.directoryStage.buf, lookup)
-	s.BankPipelineStages = snapshotBankPipelines(
-		m.bankStages, lookup)
-	s.BankPostPipelineBufIndices = snapshotBankPostBufs(
-		m.bankStages, lookup)
-
-	return s
-}
-
-func (m *middleware) restoreFromState(s State) {
-	m.isPaused = s.IsPaused
-
-	m.directoryState = deepCopyDirectoryState(s.DirectoryState)
-	m.mshrState = deepCopyMSHRState(s.MSHRState)
-
-	trans, postCoalesce := restoreAllTransactions(s.Transactions, s.NumTransactions)
-	m.transactions = trans
-	m.postCoalesceTransactions = postCoalesce
-
-	allTrans := make([]*transactionState, len(s.Transactions))
-	copy(allTrans[:s.NumTransactions], trans)
-	copy(allTrans[s.NumTransactions:], postCoalesce)
-
-	restoreBuffersAndPipelines(m, s, allTrans)
-}
-
-func restoreBuffersAndPipelines(
-	m *middleware,
-	s State,
-	allTrans []*transactionState,
-) {
-	restoreDirBuf(m.dirBuf, s.DirBufIndices, allTrans)
-	restoreBankBufs(m.bankBufs, s.BankBufIndices, allTrans)
-	restoreDirPipeline(
-		m.directoryStage.pipeline, s.DirPipelineStages, allTrans)
-	restoreDirPostBuf(
-		m.directoryStage.buf, s.DirPostPipelineBufIndices, allTrans)
-	restoreBankPipelines(m.bankStages, s.BankPipelineStages, allTrans)
-	restoreBankPostBufs(
-		m.bankStages, s.BankPostPipelineBufIndices, allTrans)
-}
-
 // GetState converts runtime mutable data into a serializable State.
 func (m *middleware) GetState() State {
-	state := m.snapshotState()
-	m.comp.SetState(state)
+	next := m.comp.GetNextState()
 
-	return state
+	// Compact nil entries from postCoalesceTransactions before snapshot.
+	// During a tick, removeTransaction nils out entries to keep indices stable;
+	// here we compact and remap all indices in State arrays.
+	m.compactPostCoalesceTransactions(next)
+
+	// Snapshot transactions into the state
+	lookup := buildTransIndex(m.transactions, m.postCoalesceTransactions)
+	next.Transactions = snapshotAllTransactions(
+		m.transactions, m.postCoalesceTransactions, lookup)
+	next.NumTransactions = len(m.transactions)
+	next.IsPaused = m.isPaused
+
+	return *next
+}
+
+// compactPostCoalesceTransactions removes nil entries from
+// postCoalesceTransactions and remaps all indices in State arrays.
+func (m *middleware) compactPostCoalesceTransactions(next *State) {
+	old := m.postCoalesceTransactions
+	remap := make(map[int]int)
+	compacted := make([]*transactionState, 0, len(old))
+
+	for i, t := range old {
+		if t != nil {
+			remap[i] = len(compacted)
+			compacted = append(compacted, t)
+		}
+	}
+
+	if len(compacted) == len(old) {
+		return // nothing to compact
+	}
+
+	m.postCoalesceTransactions = compacted
+
+	// Remap all index arrays in State
+	remapIndices := func(indices []int) []int {
+		result := make([]int, 0, len(indices))
+		for _, idx := range indices {
+			if newIdx, ok := remap[idx]; ok {
+				result = append(result, newIdx)
+			}
+		}
+		return result
+	}
+
+	next.DirBufIndices = remapIndices(next.DirBufIndices)
+	for i := range next.BankBufIndices {
+		next.BankBufIndices[i].Indices = remapIndices(next.BankBufIndices[i].Indices)
+	}
+	next.DirPostPipelineBufIndices = remapIndices(next.DirPostPipelineBufIndices)
+	for i := range next.BankPostPipelineBufIndices {
+		next.BankPostPipelineBufIndices[i].Indices = remapIndices(
+			next.BankPostPipelineBufIndices[i].Indices)
+	}
+	for i := range next.DirPipelineStages {
+		if newIdx, ok := remap[next.DirPipelineStages[i].TransIndex]; ok {
+			next.DirPipelineStages[i].TransIndex = newIdx
+		}
+	}
+	for i := range next.BankPipelineStages {
+		for j := range next.BankPipelineStages[i].Stages {
+			if newIdx, ok := remap[next.BankPipelineStages[i].Stages[j].TransIndex]; ok {
+				next.BankPipelineStages[i].Stages[j].TransIndex = newIdx
+			}
+		}
+	}
+	// Also remap MSHR TransactionIndices
+	for i := range next.MSHRState.Entries {
+		entry := &next.MSHRState.Entries[i]
+		if len(entry.TransactionIndices) > 0 {
+			entry.TransactionIndices = remapIndices(entry.TransactionIndices)
+		}
+	}
 }
 
 // SetState restores runtime mutable data from a serializable State.
 func (m *middleware) SetState(state State) {
 	m.comp.SetState(state)
-	m.restoreFromState(state)
+
+	// Restore transactions from state
+	trans, postCoalesce := restoreAllTransactions(
+		state.Transactions, state.NumTransactions)
+	m.transactions = trans
+	m.postCoalesceTransactions = postCoalesce
+	m.isPaused = state.IsPaused
 }

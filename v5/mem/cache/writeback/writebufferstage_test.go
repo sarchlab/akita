@@ -4,46 +4,78 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
-	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("WriteBufferStage", func() {
 	var (
-		mockCtrl            *gomock.Controller
-		m                   *middleware
-		wb                  *writeBufferStage
-		writeBufferBuf      *MockBuffer
-		bottomPort          *MockPort
-		bankBuf             *MockBuffer
-		addressToPortMapper *MockAddressToPortMapper
+		mockCtrl   *gomock.Controller
+		m          *middleware
+		wb         *writeBufferStage
+		bottomPort *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		writeBufferBuf = NewMockBuffer(mockCtrl)
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
-		bankBuf = NewMockBuffer(mockCtrl)
-		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
 
-		comp := MakeBuilder().
-			WithEngine(sim.NewSerialEngine()).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
-			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+		initialState := State{
+			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
+			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
+			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			BankInflightTransCounts:         []int{0},
+			BankDownwardInflightTransCounts: []int{0},
+		}
+
+		m = &middleware{
+			bottomPort:   bottomPort,
+			evictingList: make(map[uint64]bool),
+		}
+		m.comp = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{
+				Log2BlockSize:    6,
+				NumReqPerCycle:   4,
+				WayAssociativity: 4,
+				NumSets:          64,
+				NumBanks:         1,
+				AddressMapperType: "single",
+				RemotePortNames:   []string{"DRAM"},
+			}).
 			Build("Cache")
-		m = comp.Middlewares()[0].(*middleware)
 
-		m.writeBufferBuffer = writeBufferBuf
-		m.bottomPort = bottomPort
-		m.writeBufferToBankBuffers = []queueing.Buffer{bankBuf}
-		m.addressToPortMapper = addressToPortMapper
+		m.comp.SetState(initialState)
+		next := m.comp.GetNextState()
+
+		m.writeBufferBuffer = &stateTransBuffer{
+			name:     "Cache.WriteBufferBuf",
+			readItems:  &next.WriteBufferBufIndices,
+			writeItems: &next.WriteBufferBufIndices,
+			capacity: 4,
+			mw:       m,
+		}
+		m.writeBufferToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.WBToBankBuf0",
+			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
+			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
+		m.dirToBankBuffers = []*stateTransBuffer{{
+			name:     "Cache.DirToBankBuf0",
+			readItems:  &next.DirToBankBufIndices[0].Indices,
+			writeItems: &next.DirToBankBufIndices[0].Indices,
+			capacity: 4,
+			mw:       m,
+		}}
 
 		wb = &writeBufferStage{
 			cache:               m,
@@ -59,8 +91,9 @@ var _ = Describe("WriteBufferStage", func() {
 	})
 
 	It("should do nothing if no transactions", func() {
-		writeBufferBuf.EXPECT().Peek().Return(nil)
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+		m.syncForTest()
 
 		ret := wb.Tick()
 
@@ -69,6 +102,9 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("processing new writeBufferFetch transactions", func() {
 		It("should fetch from bottom", func() {
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
 				action:       writeBufferFetch,
 				fetchAddress: 0x100,
@@ -76,19 +112,18 @@ var _ = Describe("WriteBufferStage", func() {
 				blockSetID:   0,
 				blockWayID:   0,
 				hasBlock:     true,
-				read: &mem.ReadReq{},
+				read:         read,
 			}
-			trans.read.ID = sim.GetIDGenerator().Generate()
-			trans.read.TrafficClass = "mem.ReadReq"
+			m.inFlightTransactions = []*transactionState{trans}
 
-			writeBufferBuf.EXPECT().Peek().Return(trans)
+			next := m.comp.GetNextState()
+			next.WriteBufferBufIndices = []int{0}
+
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().Send(gomock.Any())
-			writeBufferBuf.EXPECT().Pop()
-			addressToPortMapper.EXPECT().
-				Find(uint64(0x100)).
-				Return(sim.RemotePort("DRAM"))
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -99,16 +134,22 @@ var _ = Describe("WriteBufferStage", func() {
 		It("should stall fetch if too many inflight fetches", func() {
 			wb.inflightFetch = make([]*transactionState, 4)
 
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
 				action:       writeBufferFetch,
 				fetchAddress: 0x100,
-				read: &mem.ReadReq{},
+				read:         read,
 			}
-			trans.read.ID = sim.GetIDGenerator().Generate()
-			trans.read.TrafficClass = "mem.ReadReq"
+			m.inFlightTransactions = []*transactionState{trans}
 
-			writeBufferBuf.EXPECT().Peek().Return(trans)
+			next := m.comp.GetNextState()
+			next.WriteBufferBufIndices = []int{0}
+
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -118,23 +159,23 @@ var _ = Describe("WriteBufferStage", func() {
 
 	Context("writing evictions", func() {
 		It("should send eviction to bottom", func() {
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
 				evictingAddr: 0x200,
 				evictingPID:  2,
 				evictingData: make([]byte, 64),
-				read: &mem.ReadReq{},
+				read:         read,
 			}
-			trans.read.ID = sim.GetIDGenerator().Generate()
-			trans.read.TrafficClass = "mem.ReadReq"
+			m.inFlightTransactions = []*transactionState{trans}
 			wb.pendingEvictions = []*transactionState{trans}
 
-			writeBufferBuf.EXPECT().Peek().Return(nil)
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 			bottomPort.EXPECT().CanSend().Return(true)
 			bottomPort.EXPECT().Send(gomock.Any())
-			addressToPortMapper.EXPECT().
-				Find(uint64(0x200)).
-				Return(sim.RemotePort("DRAM"))
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -147,8 +188,9 @@ var _ = Describe("WriteBufferStage", func() {
 			wb.inflightEviction = make([]*transactionState, 4)
 			wb.pendingEvictions = []*transactionState{{}}
 
-			writeBufferBuf.EXPECT().Peek().Return(nil)
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 
@@ -162,21 +204,24 @@ var _ = Describe("WriteBufferStage", func() {
 			evictWrite.ID = "write-1"
 			evictWrite.TrafficClass = "mem.WriteReq"
 
+			read := &mem.ReadReq{}
+			read.ID = sim.GetIDGenerator().Generate()
+			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
 				evictionWriteReq: evictWrite,
-				read: &mem.ReadReq{},
+				read:             read,
 			}
-			trans.read.ID = sim.GetIDGenerator().Generate()
-			trans.read.TrafficClass = "mem.ReadReq"
+			m.inFlightTransactions = []*transactionState{trans}
 			wb.inflightEviction = []*transactionState{trans}
 
 			rsp := &mem.WriteDoneRsp{}
 			rsp.RspTo = "write-1"
 			rsp.TrafficClass = "mem.WriteDoneRsp"
 
-			writeBufferBuf.EXPECT().Peek().Return(nil)
 			bottomPort.EXPECT().PeekIncoming().Return(rsp)
 			bottomPort.EXPECT().RetrieveIncoming().Return(rsp)
+
+			m.syncForTest()
 
 			ret := wb.Tick()
 

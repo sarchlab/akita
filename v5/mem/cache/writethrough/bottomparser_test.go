@@ -5,7 +5,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,7 +16,6 @@ var _ = Describe("Bottom Parser", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		bottomPort *MockPort
-		bankBuf    *MockBuffer
 		p          *bottomParser
 		c          *middleware
 	)
@@ -25,10 +23,15 @@ var _ = Describe("Bottom Parser", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		bottomPort = NewMockPort(mockCtrl)
-		bankBuf = NewMockBuffer(mockCtrl)
+
+		initialState := State{
+			BankBufIndices:             []bankBufState{{Indices: nil}},
+			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
+		}
+
 		c = &middleware{
 			bottomPort: bottomPort,
-			bankBufs:   []queueing.Buffer{bankBuf},
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -38,11 +41,27 @@ var _ = Describe("Bottom Parser", func() {
 				WayAssociativity: 4,
 				NumMSHREntry:     4,
 				NumSets:          16,
+				NumBanks:         1,
 			}).
 			Build("Cache")
 
-		// Initialize directoryState
-		cache.DirectoryReset(&c.directoryState, 16, 4, 64)
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
+
+		c.comp.SetState(initialState)
+
+		next := c.comp.GetNextState()
+
+		// Create adapters
+		c.bankBufAdapters = []*stateTransBuffer{
+			{
+				name:       "Cache.BankBuf0",
+				readItems:  &next.BankBufIndices[0].Indices,
+				writeItems: &next.BankBufIndices[0].Indices,
+				capacity:   4,
+				mw:         c,
+			},
+		}
 
 		p = &bottomParser{cache: c}
 	})
@@ -53,6 +72,7 @@ var _ = Describe("Bottom Parser", func() {
 
 	It("should do nothing if no respond", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
+		c.syncForTest()
 		madeProgress := p.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -97,6 +117,8 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			bottomPort.EXPECT().RetrieveIncoming()
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -192,13 +214,13 @@ var _ = Describe("Bottom Parser", func() {
 			dataReady.TrafficBytes = len(drData) + 4
 			dataReady.TrafficClass = "rsp"
 
-			// Set up a block in directory to serve as the MSHR block reference
-			// setID for addr 0x100 with blockSize=64: (0x100/64) % 16 = 4
 			blockSetID = 4
 			blockWayID = 0
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].PID = 1
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
-			c.directoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
+
+			next := c.comp.GetNextState()
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].PID = 1
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
+			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
 			postCTrans1 = &transactionState{
 				blockSetID:   blockSetID,
@@ -236,8 +258,8 @@ var _ = Describe("Bottom Parser", func() {
 			}
 
 			// Set up MSHR entry with block reference and postCTrans1
-			entryIdx := cache.MSHRAdd(&c.mshrState, 4, vm.PID(1), uint64(0x100))
-			entry := &c.mshrState.Entries[entryIdx]
+			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
+			entry := &next.MSHRState.Entries[entryIdx]
 			entry.HasBlock = true
 			entry.BlockSetID = blockSetID
 			entry.BlockWayID = blockWayID
@@ -245,8 +267,11 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should stall if bank is busy", func() {
+			c.bankBufAdapters[0].capacity = 0
+
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-			bankBuf.EXPECT().CanPush().Return(false)
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -254,13 +279,12 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should send transaction to bank", func() {
+			next := c.comp.GetNextState()
+
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			bankBuf.EXPECT().CanPush().Return(true)
-			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transactionState) {
-					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
-				})
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -269,45 +293,26 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(preCTrans1.data).To(Equal([]byte{1, 2, 3, 4}))
 			Expect(preCTrans2.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(c.postCoalesceTransactions).
-				NotTo(ContainElement(postCTrans1))
+			// Bank buf should have a write-fetched transaction
+			Expect(next.BankBufIndices[0].Indices).To(HaveLen(1))
+			// Fetcher trans should have bankAction set
+			Expect(postCTrans1.bankAction).To(Equal(bankActionWriteFetched))
 		})
 
 		It("should combine write", func() {
+			next := c.comp.GetNextState()
+
 			// Add postCTrans2 as another MSHR request
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, postCTrans2)
-			entryIdx, _ := cache.MSHRQuery(&c.mshrState, vm.PID(1), uint64(0x100))
-			c.mshrState.Entries[entryIdx].TransactionIndices = append(
-				c.mshrState.Entries[entryIdx].TransactionIndices, 1) // postCTrans2 idx
+			entryIdx, _ := cache.MSHRQuery(&next.MSHRState, vm.PID(1), uint64(0x100))
+			next.MSHRState.Entries[entryIdx].TransactionIndices = append(
+				next.MSHRState.Entries[entryIdx].TransactionIndices, 1) // postCTrans2 idx
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-			bankBuf.EXPECT().CanPush().Return(true)
-			bankBuf.EXPECT().Push(gomock.Any()).
-				Do(func(trans *transactionState) {
-					Expect(trans.bankAction).To(Equal(bankActionWriteFetched))
-					Expect(trans.data).To(Equal([]byte{
-						1, 2, 3, 4, 5, 6, 7, 8,
-						9, 9, 9, 9, 9, 9, 9, 9,
-						1, 2, 3, 4, 5, 6, 7, 8,
-						1, 2, 3, 4, 5, 6, 7, 8,
-						1, 2, 3, 4, 5, 6, 7, 8,
-						1, 2, 3, 4, 5, 6, 7, 8,
-						1, 2, 3, 4, 5, 6, 7, 8,
-						1, 2, 3, 4, 5, 6, 7, 8,
-					}))
-					Expect(trans.writeFetchedDirtyMask).To(Equal([]bool{
-						false, false, false, false, false, false, false, false,
-						true, true, true, true, true, true, true, true,
-						false, false, false, false, false, false, false, false,
-						false, false, false, false, false, false, false, false,
-						false, false, false, false, false, false, false, false,
-						false, false, false, false, false, false, false, false,
-						false, false, false, false, false, false, false, false,
-						false, false, false, false, false, false, false, false,
-					}))
-				})
+
+			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -318,10 +323,20 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
 			Expect(preCTrans3.done).To(BeTrue())
 			Expect(preCTrans4.done).To(BeTrue())
-			Expect(c.postCoalesceTransactions).
-				NotTo(ContainElement(postCTrans1))
-			Expect(c.postCoalesceTransactions).
-				NotTo(ContainElement(postCTrans2))
+			// postCTrans2 is nil'd out (removed); postCTrans1 stays (in bank buf)
+			Expect(postCTrans1.bankAction).To(Equal(bankActionWriteFetched))
+			Expect(postCTrans1.data).To(Equal([]byte{
+				1, 2, 3, 4, 5, 6, 7, 8,
+				9, 9, 9, 9, 9, 9, 9, 9,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+				1, 2, 3, 4, 5, 6, 7, 8,
+			}))
+			// Bank buf should have the fetcher transaction
+			Expect(next.BankBufIndices[0].Indices).To(HaveLen(1))
 		})
 	})
 

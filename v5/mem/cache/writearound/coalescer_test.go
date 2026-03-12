@@ -13,21 +13,25 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *middleware
+		mw       *middleware
 		topPort  *MockPort
-		dirBuf   *MockBuffer
-		c        coalescer
+		co       coalescer
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		topPort = NewMockPort(mockCtrl)
-		dirBuf = NewMockBuffer(mockCtrl)
-		cache = &middleware{
-			topPort: topPort,
-			dirBuf:  dirBuf,
+
+		initialState := State{
+			BankBufIndices:             []bankBufState{{Indices: nil}},
+			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
-		cache.comp = modeling.NewBuilder[Spec, State]().
+
+		mw = &middleware{
+			topPort: topPort,
+		}
+		mw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
@@ -35,7 +39,19 @@ var _ = Describe("Coalescer", func() {
 				MaxNumConcurrentTrans: 32,
 			}).
 			Build("Cache")
-		c = coalescer{cache: cache}
+
+		mw.comp.SetState(initialState)
+
+		next := mw.comp.GetNextState()
+		mw.dirBufAdapter = &stateTransBuffer{
+			name:       "Cache.DirBuf",
+			readItems:  &next.DirBufIndices,
+			writeItems: &next.DirBufIndices,
+			capacity:   4,
+			mw:         mw,
+		}
+
+		co = coalescer{cache: mw}
 	})
 
 	AfterEach(func() {
@@ -44,7 +60,8 @@ var _ = Describe("Coalescer", func() {
 
 	It("should do nothing if no req", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
-		madeProgress := c.Tick()
+		mw.syncForTest()
+		madeProgress := co.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
 
@@ -77,8 +94,8 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().RetrieveIncoming()
 			topPort.EXPECT().PeekIncoming().Return(read2)
 			topPort.EXPECT().RetrieveIncoming()
-			c.Tick()
-			c.Tick()
+			co.Tick()
+			co.Tick()
 		})
 
 		Context("not coalescable", func() {
@@ -92,21 +109,17 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().CanPush().
-					Return(true)
-				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transactionState) {
-						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
-					})
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
-				madeProgress := c.Tick()
+				mw.syncForTest()
+
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
-				Expect(cache.transactions).To(HaveLen(3))
-				Expect(c.toCoalesce).To(HaveLen(1))
-				Expect(cache.postCoalesceTransactions).To(HaveLen(1))
+				Expect(mw.transactions).To(HaveLen(3))
+				Expect(co.toCoalesce).To(HaveLen(1))
+				Expect(mw.postCoalesceTransactions).To(HaveLen(1))
 			})
 
 			It("should stall if cannot send to dir", func() {
@@ -118,15 +131,17 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().CanPush().
-					Return(false)
+				mw.dirBufAdapter.capacity = 0
+
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
-				madeProgress := c.Tick()
+				mw.syncForTest()
+
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(cache.transactions).To(HaveLen(2))
-				Expect(c.toCoalesce).To(HaveLen(2))
+				Expect(mw.transactions).To(HaveLen(2))
+				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 		})
 
@@ -140,26 +155,23 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().
-					CanPush().
-					Return(true)
-				dirBuf.EXPECT().
-					Push(gomock.Any()).
-					Do(func(trans *transactionState) {
-						Expect(trans.preCoalesceTransactions).To(HaveLen(3))
-						Expect(trans.read.Address).To(Equal(uint64(0x100)))
-						Expect(trans.read.PID).To(Equal(vm.PID(1)))
-						Expect(trans.read.AccessByteSize).To(Equal(uint64(64)))
-					})
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
-				madeProgress := c.Tick()
+				mw.syncForTest()
+
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
-				Expect(cache.transactions).To(HaveLen(3))
-				Expect(c.toCoalesce).To(HaveLen(0))
-				Expect(cache.postCoalesceTransactions).To(HaveLen(1))
+				Expect(mw.transactions).To(HaveLen(3))
+				Expect(co.toCoalesce).To(HaveLen(0))
+				Expect(mw.postCoalesceTransactions).To(HaveLen(1))
+				// Check the coalesced transaction
+				pt := mw.postCoalesceTransactions[0]
+				Expect(pt.preCoalesceTransactions).To(HaveLen(3))
+				Expect(pt.read.Address).To(Equal(uint64(0x100)))
+				Expect(pt.read.PID).To(Equal(vm.PID(1)))
+				Expect(pt.read.AccessByteSize).To(Equal(uint64(64)))
 			})
 
 			It("should stall if cannot send", func() {
@@ -171,15 +183,17 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().CanPush().
-					Return(false)
+				mw.dirBufAdapter.capacity = 0
+
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
-				madeProgress := c.Tick()
+				mw.syncForTest()
+
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(cache.transactions).To(HaveLen(2))
-				Expect(c.toCoalesce).To(HaveLen(2))
+				Expect(mw.transactions).To(HaveLen(2))
+				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 		})
 
@@ -193,25 +207,17 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().CanPush().
-					Return(true).Times(2)
-				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transactionState) {
-						Expect(trans.preCoalesceTransactions).To(HaveLen(2))
-					})
-				dirBuf.EXPECT().Push(gomock.Any()).
-					Do(func(trans *transactionState) {
-						Expect(trans.preCoalesceTransactions).To(HaveLen(1))
-					})
-
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
-				madeProgress := c.Tick()
+
+				mw.syncForTest()
+
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
-				Expect(cache.transactions).To(HaveLen(3))
-				Expect(c.toCoalesce).To(HaveLen(0))
-				Expect(cache.postCoalesceTransactions).To(HaveLen(2))
+				Expect(mw.transactions).To(HaveLen(3))
+				Expect(co.toCoalesce).To(HaveLen(0))
+				Expect(mw.postCoalesceTransactions).To(HaveLen(2))
 			})
 
 			It("should stall is cannot send to dir stage", func() {
@@ -223,15 +229,15 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				dirBuf.EXPECT().CanPush().
-					Return(false)
+				mw.dirBufAdapter.capacity = 0
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
-				madeProgress := c.Tick()
+				mw.syncForTest()
+				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(cache.transactions).To(HaveLen(2))
-				Expect(c.toCoalesce).To(HaveLen(2))
+				Expect(mw.transactions).To(HaveLen(2))
+				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 
 			It("should stall if cannot send to dir stage in the second time",
@@ -244,21 +250,19 @@ var _ = Describe("Coalescer", func() {
 					read3.TrafficBytes = 12
 					read3.TrafficClass = "req"
 
-					dirBuf.EXPECT().CanPush().Return(true)
-					dirBuf.EXPECT().
-						Push(gomock.Any()).
-						Do(func(trans *transactionState) {
-							Expect(trans.preCoalesceTransactions).To(HaveLen(2))
-						})
-					dirBuf.EXPECT().CanPush().Return(false)
+					// Allow first push, then fill buffer
+					mw.dirBufAdapter.capacity = 1
+
 					topPort.EXPECT().PeekIncoming().Return(read3)
 
-					madeProgress := c.Tick()
+					mw.syncForTest()
+
+					madeProgress := co.Tick()
 
 					Expect(madeProgress).To(BeTrue())
-					Expect(cache.transactions).To(HaveLen(2))
-					Expect(c.toCoalesce).To(HaveLen(0))
-					Expect(cache.postCoalesceTransactions).To(HaveLen(1))
+					Expect(mw.transactions).To(HaveLen(2))
+					Expect(co.toCoalesce).To(HaveLen(0))
+					Expect(mw.postCoalesceTransactions).To(HaveLen(1))
 				})
 		})
 	})
@@ -295,41 +299,41 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
-			dirBuf.EXPECT().CanPush().Return(true)
-			dirBuf.EXPECT().Push(gomock.Any()).Do(func(trans *transactionState) {
-				Expect(trans.write.Address).To(Equal(uint64(0x100)))
-				Expect(trans.write.PID).To(Equal(vm.PID(1)))
-				Expect(trans.write.Data).To(Equal([]byte{
-					0, 0, 0, 0,
-					1, 2, 3, 4,
-					1, 2, 3, 4,
-					5, 6, 7, 8,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-					0, 0, 0, 0, 0, 0, 0, 0,
-				}))
-				Expect(trans.write.DirtyMask).To(Equal([]bool{
-					false, false, false, false, true, true, true, true,
-					true, true, true, true, true, true, true, true,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-					false, false, false, false, false, false, false, false,
-				}))
-			})
 
-			madeProgress := c.Tick()
+			mw.syncForTest()
+
+			madeProgress := co.Tick()
 			Expect(madeProgress).To(BeTrue())
 
-			madeProgress = c.Tick()
+			madeProgress = co.Tick()
 			Expect(madeProgress).To(BeTrue())
 
-			Expect(cache.postCoalesceTransactions).To(HaveLen(1))
+			Expect(mw.postCoalesceTransactions).To(HaveLen(1))
+			pt := mw.postCoalesceTransactions[0]
+			Expect(pt.write.Address).To(Equal(uint64(0x100)))
+			Expect(pt.write.PID).To(Equal(vm.PID(1)))
+			Expect(pt.write.Data).To(Equal([]byte{
+				0, 0, 0, 0,
+				1, 2, 3, 4,
+				1, 2, 3, 4,
+				5, 6, 7, 8,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0,
+			}))
+			Expect(pt.write.DirtyMask).To(Equal([]bool{
+				false, false, false, false, true, true, true, true,
+				true, true, true, true, true, true, true, true,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+				false, false, false, false, false, false, false, false,
+			}))
 		})
 	})
 })

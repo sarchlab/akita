@@ -10,10 +10,10 @@ type mshrStage struct {
 	cache *middleware
 
 	// The transaction that carries MSHR data/transaction pointers
-	hasProcessingTrans     bool
-	processingTrans        *transactionState
-	processingTransList    []*transactionState
-	processingData         []byte
+	hasProcessingTrans  bool
+	processingTrans     *transactionState
+	processingTransList []*transactionState
+	processingData      []byte
 }
 
 func (s *mshrStage) Tick() bool {
@@ -57,11 +57,13 @@ func (s *mshrStage) processOneReq() bool {
 
 	transactionPresent := s.findTransaction(trans)
 
+	spec := s.cache.comp.GetSpec()
+
 	if transactionPresent {
 		s.removeTransaction(trans)
 
 		if trans.read != nil {
-			s.respondRead(trans.read, s.processingData)
+			s.respondRead(trans.read, s.processingData, spec.Log2BlockSize)
 		} else {
 			s.respondWrite(trans.write)
 		}
@@ -85,8 +87,9 @@ func (s *mshrStage) processOneReq() bool {
 func (s *mshrStage) respondRead(
 	read *mem.ReadReq,
 	data []byte,
+	log2BlockSize uint64,
 ) {
-	_, offset := getCacheLineID(read.Address, s.cache.log2BlockSize)
+	_, offset := getCacheLineID(read.Address, log2BlockSize)
 	respondData := data[offset : offset+read.AccessByteSize]
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
@@ -117,10 +120,7 @@ func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 func (s *mshrStage) removeTransaction(trans *transactionState) {
 	for i, t := range s.cache.inFlightTransactions {
 		if trans == t {
-			s.cache.inFlightTransactions = append(
-				(s.cache.inFlightTransactions)[:i],
-				(s.cache.inFlightTransactions)[i+1:]...)
-
+			s.cache.inFlightTransactions[i] = nil
 			return
 		}
 	}

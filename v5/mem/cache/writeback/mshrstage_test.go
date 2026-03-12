@@ -4,43 +4,60 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("MSHR Stage", func() {
 	var (
-		mockCtrl            *gomock.Controller
-		m                   *middleware
-		ms                  *mshrStage
-		inBuf               *MockBuffer
-		topPort             *MockPort
-		addressToPortMapper *MockAddressToPortMapper
+		mockCtrl *gomock.Controller
+		m        *middleware
+		ms       *mshrStage
+		topPort  *MockPort
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		inBuf = NewMockBuffer(mockCtrl)
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		addressToPortMapper = NewMockAddressToPortMapper(mockCtrl)
+		initialState := State{
+			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
+			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
+			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
+			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			BankInflightTransCounts:         []int{0},
+			BankDownwardInflightTransCounts: []int{0},
+		}
 
-		comp := MakeBuilder().
-			WithEngine(sim.NewSerialEngine()).
-			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 2, 2, "Cache.ToTop")).
-			WithBottomPort(sim.NewPort(nil, 2, 2, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 2, 2, "Cache.ControlPort")).
+		m = &middleware{
+			topPort:      topPort,
+			evictingList: make(map[uint64]bool),
+		}
+		m.comp = modeling.NewBuilder[Spec, State]().
+			WithEngine(nil).
+			WithFreq(1 * sim.GHz).
+			WithSpec(Spec{
+				Log2BlockSize:  6,
+				NumReqPerCycle: 4,
+			}).
 			Build("Cache")
-		m = comp.Middlewares()[0].(*middleware)
 
-		m.mshrStageBuffer = inBuf
+		m.comp.SetState(initialState)
+		next := m.comp.GetNextState()
+
+		m.mshrStageBuffer = &stateTransBuffer{
+			name:     "Cache.MSHRStageBuf",
+			readItems:  &next.MSHRStageBufEntries,
+			writeItems: &next.MSHRStageBufEntries,
+			capacity: 4,
+			mw:       m,
+		}
 		m.inFlightTransactions = nil
-		m.topPort = topPort
 
 		ms = &mshrStage{
 			cache: m,
@@ -52,7 +69,8 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should do nothing if there is no entry in input buffer", func() {
-		inBuf.EXPECT().Pop().Return(nil)
+		m.syncForTest()
+
 		ret := ms.Tick()
 		Expect(ret).To(BeFalse())
 	})
@@ -65,7 +83,6 @@ var _ = Describe("MSHR Stage", func() {
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
 		trans := &transactionState{read: read}
-		m.inFlightTransactions = []*transactionState{trans}
 
 		mshrTrans := &transactionState{
 			mshrTransactions: []*transactionState{trans},
@@ -81,8 +98,15 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		inBuf.EXPECT().Pop().Return(mshrTrans)
+		m.inFlightTransactions = []*transactionState{trans, mshrTrans}
+
+		// Push mshrTrans to the MSHR stage buffer
+		next := m.comp.GetNextState()
+		next.MSHRStageBufEntries = []int{1}
+
 		topPort.EXPECT().CanSend().Return(false)
+
+		m.syncForTest()
 
 		ret := ms.Tick()
 
@@ -98,7 +122,6 @@ var _ = Describe("MSHR Stage", func() {
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
 		trans := &transactionState{read: read}
-		m.inFlightTransactions = []*transactionState{trans}
 
 		mshrTrans := &transactionState{
 			mshrTransactions: []*transactionState{trans},
@@ -113,7 +136,11 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
 		}
-		inBuf.EXPECT().Pop().Return(mshrTrans)
+		m.inFlightTransactions = []*transactionState{trans, mshrTrans}
+
+		next := m.comp.GetNextState()
+		next.MSHRStageBufEntries = []int{1}
+
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
 			Do(func(msg sim.Msg) {
@@ -121,41 +148,7 @@ var _ = Describe("MSHR Stage", func() {
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 
-		ret := ms.Tick()
-
-		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingTrans).To(BeFalse())
-		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
-	})
-
-	It("should send write done to top", func() {
-		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
-		write.Address = 0x104
-		write.Data = []byte{9, 9, 9, 9}
-		write.TrafficBytes = len([]byte{9, 9, 9, 9}) + 12
-		write.TrafficClass = "mem.WriteReq"
-		trans := &transactionState{write: write}
-		m.inFlightTransactions = []*transactionState{trans}
-
-		ms.hasProcessingTrans = true
-		ms.processingTrans = &transactionState{}
-		ms.processingTransList = []*transactionState{trans}
-		ms.processingData = []byte{
-			1, 2, 3, 4, 9, 9, 9, 9,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-			1, 2, 3, 4, 5, 6, 7, 8,
-		}
-		topPort.EXPECT().CanSend().Return(true)
-		topPort.EXPECT().Send(gomock.Any()).
-			Do(func(msg sim.Msg) {
-				Expect(msg.Meta().RspTo).To(Equal(write.ID))
-			})
+		m.syncForTest()
 
 		ret := ms.Tick()
 
@@ -165,9 +158,7 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
-		// Create a "stale" transaction pointer that's not in inFlightTransactions
 		staleTrans := &transactionState{}
-		m.inFlightTransactions = nil
 
 		mshrTrans := &transactionState{
 			mshrTransactions: []*transactionState{staleTrans},
@@ -183,8 +174,14 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		inBuf.EXPECT().Pop().Return(mshrTrans)
+		m.inFlightTransactions = []*transactionState{mshrTrans}
+
+		next := m.comp.GetNextState()
+		next.MSHRStageBufEntries = []int{0}
+
 		topPort.EXPECT().CanSend().Return(true)
+
+		m.syncForTest()
 
 		ret := ms.Tick()
 

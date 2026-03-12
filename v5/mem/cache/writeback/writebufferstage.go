@@ -82,8 +82,10 @@ func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 func (wb *writeBufferStage) sendFetchedDataToBank(
 	trans *transactionState,
 ) bool {
+	spec := wb.cache.comp.GetSpec()
+	next := wb.cache.comp.GetNextState()
 	bankNum := bankID(trans.blockSetID, trans.blockWayID,
-		wb.cache.wayAssociativity,
+		spec.WayAssociativity,
 		len(wb.cache.dirToBankBuffers))
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
 
@@ -96,17 +98,17 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 		panic("sendFetchedDataToBank without MSHR entry")
 	}
 
-	mshrEntry := &wb.cache.mshrState.Entries[trans.mshrEntryIndex]
+	mshrEntry := &next.MSHRState.Entries[trans.mshrEntryIndex]
 	mshrEntry.Data = trans.fetchedData
 	trans.action = bankWriteFetched
 	wb.combineData(trans.mshrEntryIndex)
 
-	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	// Resolve MSHR transaction pointers before removal
 	trans.mshrData = make([]byte, len(mshrEntry.Data))
 	copy(trans.mshrData, mshrEntry.Data)
 	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
 
-	cache.MSHRRemove(&wb.cache.mshrState,
+	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
 	bankBuf.Push(trans)
@@ -127,14 +129,15 @@ func (wb *writeBufferStage) fetchFromBottom(
 		return false
 	}
 
-	lowModulePort := wb.cache.addressToPortMapper.Find(trans.fetchAddress)
+	spec := wb.cache.comp.GetSpec()
+	lowModulePort := wb.cache.findPort(trans.fetchAddress)
 	read := &mem.ReadReq{}
 	read.ID = sim.GetIDGenerator().Generate()
 	read.Src = wb.cache.bottomPort.AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.fetchPID
 	read.Address = trans.fetchAddress
-	read.AccessByteSize = 1 << wb.cache.log2BlockSize
+	read.AccessByteSize = 1 << spec.Log2BlockSize
 	read.TrafficBytes = 12
 	read.TrafficClass = "mem.ReadReq"
 	wb.cache.bottomPort.Send(read)
@@ -156,9 +159,10 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 		return false
 	}
 
+	spec := wb.cache.comp.GetSpec()
 	bankNum := bankID(
 		trans.blockSetID, trans.blockWayID,
-		wb.cache.wayAssociativity,
+		spec.WayAssociativity,
 		len(wb.cache.dirToBankBuffers),
 	)
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
@@ -220,7 +224,7 @@ func (wb *writeBufferStage) write() bool {
 		return false
 	}
 
-	lowModulePort := wb.cache.addressToPortMapper.Find(trans.evictingAddr)
+	lowModulePort := wb.cache.findPort(trans.evictingAddr)
 	write := &mem.WriteReq{}
 	write.ID = sim.GetIDGenerator().Generate()
 	write.Src = wb.cache.bottomPort.AsRemote()
@@ -262,10 +266,13 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 func (wb *writeBufferStage) processDataReadyRsp(
 	msg *mem.DataReadyRsp,
 ) bool {
+	spec := wb.cache.comp.GetSpec()
+	next := wb.cache.comp.GetNextState()
+
 	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
 		trans.blockSetID, trans.blockWayID,
-		wb.cache.wayAssociativity,
+		spec.WayAssociativity,
 		len(wb.cache.dirToBankBuffers),
 	)
 	bankBuf := wb.cache.writeBufferToBankBuffers[bankIndex]
@@ -280,16 +287,16 @@ func (wb *writeBufferStage) processDataReadyRsp(
 
 	trans.fetchedData = msg.Data
 	trans.action = bankWriteFetched
-	mshrEntry := &wb.cache.mshrState.Entries[trans.mshrEntryIndex]
+	mshrEntry := &next.MSHRState.Entries[trans.mshrEntryIndex]
 	mshrEntry.Data = msg.Data
 	wb.combineData(trans.mshrEntryIndex)
 
-	// Resolve MSHR transaction pointers before removal (indices shift after remove)
+	// Resolve MSHR transaction pointers before removal
 	trans.mshrData = make([]byte, len(mshrEntry.Data))
 	copy(trans.mshrData, mshrEntry.Data)
 	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
 
-	cache.MSHRRemove(&wb.cache.mshrState,
+	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
 	bankBuf.Push(trans)
@@ -303,10 +310,12 @@ func (wb *writeBufferStage) processDataReadyRsp(
 }
 
 func (wb *writeBufferStage) combineData(mshrIdx int) {
-	mshrEntry := &wb.cache.mshrState.Entries[mshrIdx]
-	block := &wb.cache.directoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
+	spec := wb.cache.comp.GetSpec()
+	next := wb.cache.comp.GetNextState()
+	mshrEntry := &next.MSHRState.Entries[mshrIdx]
+	block := &next.DirectoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
 
-	block.DirtyMask = make([]bool, 1<<wb.cache.log2BlockSize)
+	block.DirtyMask = make([]bool, 1<<spec.Log2BlockSize)
 
 	for _, transIdx := range mshrEntry.TransactionIndices {
 		if transIdx < 0 || transIdx >= len(wb.cache.inFlightTransactions) {
@@ -320,7 +329,7 @@ func (wb *writeBufferStage) combineData(mshrIdx int) {
 
 		block.IsDirty = true
 		write := trans.write
-		_, offset := getCacheLineID(write.Address, wb.cache.log2BlockSize)
+		_, offset := getCacheLineID(write.Address, spec.Log2BlockSize)
 
 		for i := 0; i < len(write.Data); i++ {
 			if write.DirtyMask == nil || write.DirtyMask[i] {
@@ -397,8 +406,7 @@ func (wb *writeBufferStage) Reset() {
 }
 
 // resolveEntryTransactions collects the actual transaction pointers from
-// the MSHR entry's TransactionIndices. This must be done before any
-// removeTransaction calls, since those shift the slice indices.
+// the MSHR entry's TransactionIndices.
 func (wb *writeBufferStage) resolveEntryTransactions(
 	entry *cache.MSHREntryState,
 ) []*transactionState {
