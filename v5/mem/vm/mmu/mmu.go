@@ -118,11 +118,12 @@ func (m *middleware) Tick() bool {
 func (m *middleware) walkPageTable() bool {
 	madeProgress := false
 
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	for i := 0; i < len(next.WalkingTranslations); i++ {
-		if next.WalkingTranslations[i].CycleLeft > 0 {
-			next.WalkingTranslations[i].CycleLeft--
+	for i := 0; i < len(cur.WalkingTranslations); i++ {
+		if cur.WalkingTranslations[i].CycleLeft > 0 {
+			next.WalkingTranslations[i].CycleLeft = cur.WalkingTranslations[i].CycleLeft - 1
 			madeProgress = true
 
 			continue
@@ -148,8 +149,9 @@ func (m *middleware) walkPageTable() bool {
 
 func (m *middleware) finalizePageWalk(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
-	walking := next.WalkingTranslations[walkingIndex]
+	walking := cur.WalkingTranslations[walkingIndex]
 
 	page, found := m.pageTable.Find(
 		vm.PID(walking.PID), walking.VAddr)
@@ -179,9 +181,10 @@ func (m *middleware) finalizePageWalk(walkingIndex int) bool {
 
 func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	if len(next.MigrationQueue) >= spec.MigrationQueueSize {
+	if len(cur.MigrationQueue) >= spec.MigrationQueueSize {
 		return false
 	}
 
@@ -246,7 +249,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 
 	next := m.comp.GetNextState()
 
-	trans := next.MigrationQueue[0]
+	trans := cur.MigrationQueue[0]
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
 
@@ -341,8 +344,9 @@ func (m *middleware) processMigrationReturn() bool {
 		return false
 	}
 
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
-	trans := next.CurrentOnDemandMigration
+	trans := cur.CurrentOnDemandMigration
 
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
