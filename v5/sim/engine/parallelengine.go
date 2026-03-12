@@ -1,4 +1,4 @@
-package sim
+package engine
 
 import (
 	"log"
@@ -7,19 +7,22 @@ import (
 	"sync"
 
 	"runtime"
+
+	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/hook"
 )
 
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
-	HookableBase
+	hook.HookableBase
 
 	pauseLock              sync.Mutex
 	nowLock                sync.RWMutex
-	now                    VTimeInSec
+	now                    sim.VTimeInSec
 	runningSecondaryEvents bool
 
-	eventChan    chan Event
+	eventChan    chan sim.Event
 	waitGroup    sync.WaitGroup
 	maxGoRoutine int
 
@@ -33,7 +36,7 @@ type ParallelEngine struct {
 func NewParallelEngine() *ParallelEngine {
 	e := new(ParallelEngine)
 
-	e.eventChan = make(chan Event, 10000)
+	e.eventChan = make(chan sim.Event, 10000)
 
 	e.maxGoRoutine = runtime.GOMAXPROCS(0)
 	numQueues := runtime.GOMAXPROCS(0)
@@ -88,8 +91,8 @@ func NewParallelEngine() *ParallelEngine {
 // 	}
 // }
 
-func (e *ParallelEngine) readNow() VTimeInSec {
-	var now VTimeInSec
+func (e *ParallelEngine) readNow() sim.VTimeInSec {
+	var now sim.VTimeInSec
 
 	e.nowLock.RLock()
 	now = e.now
@@ -98,14 +101,14 @@ func (e *ParallelEngine) readNow() VTimeInSec {
 	return now
 }
 
-func (e *ParallelEngine) writeNow(t VTimeInSec) {
+func (e *ParallelEngine) writeNow(t sim.VTimeInSec) {
 	e.nowLock.Lock()
 	e.now = t
 	e.nowLock.Unlock()
 }
 
 // Schedule register an event to be happen in the future
-func (e *ParallelEngine) Schedule(evt Event) {
+func (e *ParallelEngine) Schedule(evt sim.Event) {
 	now := e.readNow()
 	if evt.Time() < now {
 		log.Panicf(
@@ -160,8 +163,8 @@ func (e *ParallelEngine) determineWhatToRun() {
 
 func (e *ParallelEngine) earliestTimeInQueueGroup(
 	queues []EventQueue,
-) VTimeInSec {
-	earliestTime := VTimeInSec(math.MaxFloat64)
+) sim.VTimeInSec {
+	earliestTime := sim.VTimeInSec(math.MaxFloat64)
 
 	for _, q := range queues {
 		if q.Len() == 0 {
@@ -260,22 +263,22 @@ func (e *ParallelEngine) runEventsUntilConflict(
 // 	e.eventChan <- evt
 // }
 
-func (e *ParallelEngine) runEventWithTempWorker(evt Event) {
+func (e *ParallelEngine) runEventWithTempWorker(evt sim.Event) {
 	e.waitGroup.Add(1)
 
 	go e.tempWorkerRun(evt)
 }
 
-func (e *ParallelEngine) tempWorkerRun(evt Event) {
+func (e *ParallelEngine) tempWorkerRun(evt sim.Event) {
 	now := e.readNow()
 
 	if evt.Time() < now {
 		log.Panic("running event in the past")
 	}
 
-	hookCtx := HookCtx{
+	hookCtx := hook.HookCtx{
 		Domain: e,
-		Pos:    HookPosBeforeEvent,
+		Pos:    hook.HookPosBeforeEvent,
 		Item:   evt,
 	}
 	e.InvokeHook(hookCtx)
@@ -283,7 +286,7 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	handler := evt.Handler()
 	_ = handler.Handle(evt)
 
-	hookCtx.Pos = HookPosAfterEvent
+	hookCtx.Pos = hook.HookPosAfterEvent
 	e.InvokeHook(hookCtx)
 
 	e.waitGroup.Done()
@@ -302,6 +305,6 @@ func (e *ParallelEngine) Continue() {
 
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
-func (e *ParallelEngine) CurrentTime() VTimeInSec {
+func (e *ParallelEngine) CurrentTime() sim.VTimeInSec {
 	return e.readNow()
 }

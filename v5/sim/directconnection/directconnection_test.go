@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -143,7 +144,7 @@ var _ = Describe("Direct Connection Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
@@ -198,7 +199,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 
 	numAgents := 100
 	numMsgsPerAgent := 1000
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	connection := MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
 	agents := make([]*agent, 0, numAgents)
 

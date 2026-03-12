@@ -1,17 +1,19 @@
-package sim
+package engine
 
 import (
 	"container/heap"
 	"container/list"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // EventQueue are a queue of event ordered by the time of events
 type EventQueue interface {
-	Push(evt Event)
-	Pop() Event
+	Push(evt sim.Event)
+	Pop() sim.Event
 	Len() int
-	Peek() Event
+	Peek() sim.Event
 }
 
 // EventQueueImpl provides a thread safe event queue
@@ -24,23 +26,23 @@ type EventQueueImpl struct {
 // NewEventQueue creates and returns a newly created EventQueue
 func NewEventQueue() *EventQueueImpl {
 	q := new(EventQueueImpl)
-	q.events = make([]Event, 0)
+	q.events = make([]sim.Event, 0)
 	heap.Init(&q.events)
 
 	return q
 }
 
 // Push adds an event to the event queue
-func (q *EventQueueImpl) Push(evt Event) {
+func (q *EventQueueImpl) Push(evt sim.Event) {
 	q.Lock()
 	heap.Push(&q.events, evt)
 	q.Unlock()
 }
 
 // Pop returns the next earliest event
-func (q *EventQueueImpl) Pop() Event {
+func (q *EventQueueImpl) Pop() sim.Event {
 	q.Lock()
-	e := heap.Pop(&q.events).(Event)
+	e := heap.Pop(&q.events).(sim.Event)
 	q.Unlock()
 
 	return e
@@ -57,7 +59,7 @@ func (q *EventQueueImpl) Len() int {
 
 // Peek returns the event in front of the queue without removing it from the
 // queue
-func (q *EventQueueImpl) Peek() Event {
+func (q *EventQueueImpl) Peek() sim.Event {
 	q.Lock()
 	evt := q.events[0]
 	q.Unlock()
@@ -65,7 +67,7 @@ func (q *EventQueueImpl) Peek() Event {
 	return evt
 }
 
-type eventHeap []Event
+type eventHeap []sim.Event
 
 // Len returns the length of the event queue
 func (h eventHeap) Len() int {
@@ -85,7 +87,7 @@ func (h eventHeap) Swap(i, j int) {
 
 // Push adds an event into the event queue
 func (h *eventHeap) Push(x interface{}) {
-	event := x.(Event)
+	event := x.(sim.Event)
 	*h = append(*h, event)
 }
 
@@ -114,13 +116,13 @@ func NewInsertionQueue() *InsertionQueue {
 }
 
 // Push add an event to the event queue
-func (q *InsertionQueue) Push(evt Event) {
+func (q *InsertionQueue) Push(evt sim.Event) {
 	var ele *list.Element
 
 	q.lock.RLock()
 
 	for ele = q.l.Front(); ele != nil; ele = ele.Next() {
-		if ele.Value.(Event).Time() > evt.Time() {
+		if ele.Value.(sim.Event).Time() > evt.Time() {
 			break
 		}
 	}
@@ -140,12 +142,12 @@ func (q *InsertionQueue) Push(evt Event) {
 }
 
 // Pop returns the event with the smallest time, and removes it from the queue
-func (q *InsertionQueue) Pop() Event {
+func (q *InsertionQueue) Pop() sim.Event {
 	q.lock.Lock()
 	evt := q.l.Remove(q.l.Front())
 	q.lock.Unlock()
 
-	return evt.(Event)
+	return evt.(sim.Event)
 }
 
 // Len return the number of events in the queue
@@ -159,9 +161,9 @@ func (q *InsertionQueue) Len() int {
 
 // Peek returns the event at the front of the queue without removing it from
 // the queue.
-func (q *InsertionQueue) Peek() Event {
+func (q *InsertionQueue) Peek() sim.Event {
 	q.lock.RLock()
-	evt := q.l.Front().Value.(Event)
+	evt := q.l.Front().Value.(sim.Event)
 
 	q.lock.RUnlock()
 

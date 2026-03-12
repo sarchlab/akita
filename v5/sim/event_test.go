@@ -5,6 +5,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/sim/engine"
 )
 
 var r = rand.New(rand.NewSource(1))
@@ -55,17 +56,17 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 }
 
 func ExampleEvent() {
-	engine := sim.NewSerialEngine()
+	e := engine.NewSerialEngine()
 
 	splitHandler := SplitHandler{
 		total:  0,
-		engine: engine,
+		engine: e,
 	}
-	engine.Schedule(SplitEvent{
+	e.Schedule(SplitEvent{
 		time:    0,
 		handler: &splitHandler,
 	})
-	engine.Run()
+	e.Run()
 	fmt.Printf("Total number at time 10: %d\n", splitHandler.total)
 	// Output: Total number at time 10: 185
 }
