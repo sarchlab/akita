@@ -7,6 +7,7 @@ on:
 jobs:
   akitartm_compile:
     runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -22,6 +23,7 @@ jobs:
 
   daisen_compile:
     runs-on: self-hosted
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Use Node.js
@@ -37,6 +39,7 @@ jobs:
 
   akita_build_lint_test:
     runs-on: self-hosted
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Set up Go
@@ -62,6 +65,7 @@ jobs:
 
   noc_acceptance_test:
     runs-on: self-hosted
+    timeout-minutes: 20
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +87,7 @@ jobs:
 
   mem_acceptance_test:
     runs-on: self-hosted
+    timeout-minutes: 20
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
