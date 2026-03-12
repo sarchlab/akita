@@ -120,12 +120,20 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - **Lesson: Never proceed with implementation without explicit human approval on discussed items.**
 
 ### M29: Address Human Code Review Feedback (issue #296)
-- Budget: 4 | Used: 0
+- Budget: 6 | Used: 0
 - Scope:
-  1. Remove unnecessary Comp wrappers in TLB and mmuCache
-  2. Eliminate middleware boilerplate (Name, AcceptHook, Hooks, NumHooks, InvokeHook) — change tracing to accept component reference
-  3. Rename `tlbprotocol.go` → `messages.go` for clarity
-- Status: PENDING
+  1. **Remove 2 unnecessary Comp wrappers** in `mem/vm/tlb/tlb.go` and `mem/vm/mmuCache/mmuCache.go` — builders return `*modeling.Component[Spec, State]` directly
+  2. **Eliminate ~160 middleware delegation methods** (~480 lines) — change all tracing calls from `tracing.Foo(..., m)` to `tracing.Foo(..., m.comp)` across 33 middleware structs, then delete Name/AcceptHook/Hooks/NumHooks/InvokeHook methods
+  3. **Fix 3 `CollectTrace(pmw, ...)` calls** in cache builders to pass component instead of middleware
+  4. **Rename `tlbprotocol.go` → `messages.go`** and `mmuCacheProtocol.go` → `messages.go`
+- Acceptance criteria:
+  - `go build ./...` passes
+  - `go vet ./...` passes
+  - All existing tests pass
+  - No middleware struct implements Name/AcceptHook/Hooks/NumHooks/InvokeHook
+  - No `type Comp struct` in TLB or mmuCache
+  - All `CollectTrace` calls pass component (not middleware) as the domain
+- Status: READY — handing to Ares
 
 ---
 
