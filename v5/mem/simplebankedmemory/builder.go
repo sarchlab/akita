@@ -196,8 +196,10 @@ func (b Builder) Build(name string) *Comp {
 	b.topPort.SetComponent(c)
 	modelComp.AddPort("Top", b.topPort)
 
-	mw := &middleware{comp: modelComp, storage: storage}
-	modelComp.AddMiddleware(mw)
+	tfMW := &tickFinalizeMW{comp: modelComp, storage: storage}
+	modelComp.AddMiddleware(tfMW)
+	dMW := &dispatchMW{comp: modelComp}
+	modelComp.AddMiddleware(dMW)
 
 	return c
 }
