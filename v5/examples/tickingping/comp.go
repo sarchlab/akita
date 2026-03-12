@@ -97,7 +97,7 @@ func (m *middleware) processInput() bool {
 }
 
 func (m *middleware) processingPingReq(msg *PingReq) {
-	state := m.comp.GetState()
+	next := m.comp.GetNextState()
 
 	trans := pingTransactionState{
 		SeqID:     msg.SeqID,
@@ -105,9 +105,8 @@ func (m *middleware) processingPingReq(msg *PingReq) {
 		ReqID:     msg.ID,
 		ReqSrc:    msg.Src,
 	}
-	state.CurrentTransactions = append(state.CurrentTransactions, trans)
+	next.CurrentTransactions = append(next.CurrentTransactions, trans)
 
-	m.comp.SetState(state)
 	m.outPort().RetrieveIncoming()
 }
 
@@ -124,18 +123,14 @@ func (m *middleware) processingPingRsp(msg *PingRsp) {
 }
 
 func (m *middleware) countDown() bool {
-	state := m.comp.GetState()
+	next := m.comp.GetNextState()
 	madeProgress := false
 
-	for i := range state.CurrentTransactions {
-		if state.CurrentTransactions[i].CycleLeft > 0 {
-			state.CurrentTransactions[i].CycleLeft--
+	for i := range next.CurrentTransactions {
+		if next.CurrentTransactions[i].CycleLeft > 0 {
+			next.CurrentTransactions[i].CycleLeft--
 			madeProgress = true
 		}
-	}
-
-	if madeProgress {
-		m.comp.SetState(state)
 	}
 
 	return madeProgress
@@ -168,8 +163,8 @@ func (m *middleware) sendRsp() bool {
 		return false
 	}
 
-	state.CurrentTransactions = state.CurrentTransactions[1:]
-	m.comp.SetState(state)
+	next := m.comp.GetNextState()
+	next.CurrentTransactions = next.CurrentTransactions[1:]
 
 	return true
 }
@@ -195,10 +190,10 @@ func (m *middleware) sendPing() bool {
 		return false
 	}
 
-	state.StartTimes = append(state.StartTimes, float64(m.comp.CurrentTime()))
-	state.NumPingNeedToSend--
-	state.NextSeqID++
-	m.comp.SetState(state)
+	next := m.comp.GetNextState()
+	next.StartTimes = append(next.StartTimes, float64(m.comp.CurrentTime()))
+	next.NumPingNeedToSend--
+	next.NextSeqID++
 
 	return true
 }
