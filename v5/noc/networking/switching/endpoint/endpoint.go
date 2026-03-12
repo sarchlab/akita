@@ -57,35 +57,42 @@ type Comp struct {
 	*modeling.Component[Spec, State]
 }
 
-// mw returns the middleware from the component's middleware list.
-func (c *Comp) mw() *middleware {
-	return c.Middlewares()[0].(*middleware)
+// outgoingMW returns the outgoing middleware from the component's middleware list.
+func (c *Comp) outgoingMW() *outgoingMW {
+	return c.Middlewares()[0].(*outgoingMW)
+}
+
+// incomingMW returns the incoming middleware from the component's middleware list.
+func (c *Comp) incomingMW() *incomingMW {
+	return c.Middlewares()[1].(*incomingMW)
 }
 
 // NetworkPort returns the network port of the endpoint.
 func (c *Comp) NetworkPort() sim.Port {
-	return c.mw().networkPort
+	return c.outgoingMW().networkPort
 }
 
 // SetNetworkPort sets the network port of the endpoint.
 func (c *Comp) SetNetworkPort(p sim.Port) {
-	c.mw().networkPort = p
+	c.outgoingMW().networkPort = p
+	c.incomingMW().networkPort = p
 }
 
 // DefaultSwitchDst returns the default switch destination.
 func (c *Comp) DefaultSwitchDst() sim.RemotePort {
-	return c.mw().defaultSwitchDst
+	return c.outgoingMW().defaultSwitchDst
 }
 
 // SetDefaultSwitchDst sets the default switch destination.
 func (c *Comp) SetDefaultSwitchDst(dst sim.RemotePort) {
-	c.mw().defaultSwitchDst = dst
+	c.outgoingMW().defaultSwitchDst = dst
 }
 
 // PlugIn connects a port to the endpoint.
 func (c *Comp) PlugIn(port sim.Port) {
 	port.SetConnection(c)
-	c.mw().devicePorts = append(c.mw().devicePorts, port)
+	c.outgoingMW().devicePorts = append(c.outgoingMW().devicePorts, port)
+	c.incomingMW().devicePorts = append(c.incomingMW().devicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
@@ -149,58 +156,57 @@ func msgMetaToFlitStates(
 	return flits
 }
 
-type middleware struct {
-	comp           *modeling.Component[Spec, State]
-	devicePorts    []sim.Port
-	networkPort    sim.Port
+// outgoingMW handles the device→network path:
+// sendFlitOut, prepareMsg, prepareFlits.
+type outgoingMW struct {
+	comp             *modeling.Component[Spec, State]
+	devicePorts      []sim.Port
+	networkPort      sim.Port
 	defaultSwitchDst sim.RemotePort
 }
 
 // NamedHookable delegation methods.
 
-func (m *middleware) Name() string {
+func (m *outgoingMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *outgoingMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *outgoingMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *outgoingMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *outgoingMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
-// Tick update the endpoint state.
-func (m *middleware) Tick() bool {
+// Tick runs the outgoing stages.
+func (m *outgoingMW) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.sendFlitOut() || madeProgress
 	madeProgress = m.prepareMsg() || madeProgress
 	madeProgress = m.prepareFlits() || madeProgress
-	madeProgress = m.tryDeliver() || madeProgress
-	madeProgress = m.assemble() || madeProgress
-	madeProgress = m.recv() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) msgTaskID(msgID string) string {
+func (m *outgoingMW) msgTaskID(msgID string) string {
 	return fmt.Sprintf("msg_%s_e2e", msgID)
 }
 
-func (m *middleware) flitTaskID(flitID string) string {
+func (m *outgoingMW) flitTaskID(flitID string) string {
 	return fmt.Sprintf("%s_e2e", flitID)
 }
 
-func (m *middleware) sendFlitOut() bool {
+func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	cur := m.comp.GetState()
@@ -236,7 +242,7 @@ func (m *middleware) sendFlitOut() bool {
 	return madeProgress
 }
 
-func (m *middleware) prepareMsg() bool {
+func (m *outgoingMW) prepareMsg() bool {
 	madeProgress := false
 
 	for i := 0; i < len(m.devicePorts); i++ {
@@ -255,7 +261,7 @@ func (m *middleware) prepareMsg() bool {
 	return madeProgress
 }
 
-func (m *middleware) prepareFlits() bool {
+func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	next := m.comp.GetNextState()
@@ -279,7 +285,118 @@ func (m *middleware) prepareFlits() bool {
 	}
 }
 
-func (m *middleware) recv() bool {
+func (m *outgoingMW) logFlitE2ETaskFromState(
+	fs flitState, isEnd bool, meta *sim.MsgMeta,
+) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
+
+	if isEnd {
+		tracing.EndTask(m.flitTaskID(fs.ID), m)
+		return
+	}
+
+	flit := flitFromFlitState(fs)
+	flit.Msg = meta
+
+	tracing.StartTaskWithSpecificLocation(
+		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
+		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
+	)
+}
+
+func (m *outgoingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
+	if m.comp.NumHooks() == 0 {
+		return
+	}
+
+	meta := msg.Meta()
+
+	if meta.IsRsp() {
+		m.logMsgRsp(isEnd, msg)
+		return
+	}
+
+	m.logMsgReq(isEnd, msg)
+}
+
+func (m *outgoingMW) logMsgReq(isEnd bool, msg sim.Msg) {
+	meta := msg.Meta()
+	if isEnd {
+		tracing.EndTask(m.msgTaskID(meta.ID), m)
+	} else {
+		tracing.StartTask(
+			m.msgTaskID(meta.ID),
+			meta.ID+"_req_out",
+			m, "msg_e2e", "msg_e2e", msg,
+		)
+	}
+}
+
+func (m *outgoingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
+	meta := msg.Meta()
+	if isEnd {
+		tracing.EndTask(m.msgTaskID(meta.ID), m)
+	} else {
+		tracing.StartTask(
+			m.msgTaskID(meta.ID),
+			meta.RspTo+"_req_out",
+			m, "msg_e2e", "msg_e2e", msg,
+		)
+	}
+}
+
+// incomingMW handles the network→device path:
+// tryDeliver, assemble, recv.
+type incomingMW struct {
+	comp        *modeling.Component[Spec, State]
+	devicePorts []sim.Port
+	networkPort sim.Port
+}
+
+// NamedHookable delegation methods.
+
+func (m *incomingMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *incomingMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *incomingMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *incomingMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *incomingMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs the incoming stages.
+func (m *incomingMW) Tick() bool {
+	madeProgress := false
+
+	madeProgress = m.tryDeliver() || madeProgress
+	madeProgress = m.assemble() || madeProgress
+	madeProgress = m.recv() || madeProgress
+
+	return madeProgress
+}
+
+func (m *incomingMW) msgTaskID(msgID string) string {
+	return fmt.Sprintf("msg_%s_e2e", msgID)
+}
+
+func (m *incomingMW) flitTaskID(flitID string) string {
+	return fmt.Sprintf("%s_e2e", flitID)
+}
+
+func (m *incomingMW) recv() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	next := m.comp.GetNextState()
@@ -326,7 +443,7 @@ func (m *middleware) recv() bool {
 	return madeProgress
 }
 
-func (m *middleware) assemble() bool {
+func (m *incomingMW) assemble() bool {
 	madeProgress := false
 	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
@@ -356,7 +473,7 @@ func (m *middleware) assemble() bool {
 	return madeProgress
 }
 
-func (m *middleware) tryDeliver() bool {
+func (m *incomingMW) tryDeliver() bool {
 	madeProgress := false
 	cur := m.comp.GetState()
 
@@ -407,28 +524,7 @@ func (m *middleware) tryDeliver() bool {
 	return madeProgress
 }
 
-func (m *middleware) logFlitE2ETaskFromState(
-	fs flitState, isEnd bool, meta *sim.MsgMeta,
-) {
-	if m.comp.NumHooks() == 0 {
-		return
-	}
-
-	if isEnd {
-		tracing.EndTask(m.flitTaskID(fs.ID), m)
-		return
-	}
-
-	flit := flitFromFlitState(fs)
-	flit.Msg = meta
-
-	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
-		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
-	)
-}
-
-func (m *middleware) logFlitE2ETaskFromFlit(
+func (m *incomingMW) logFlitE2ETaskFromFlit(
 	flit *messaging.Flit, isEnd bool,
 ) {
 	if m.comp.NumHooks() == 0 {
@@ -446,7 +542,7 @@ func (m *middleware) logFlitE2ETaskFromFlit(
 	)
 }
 
-func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
+func (m *incomingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
@@ -461,7 +557,7 @@ func (m *middleware) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 	m.logMsgReq(isEnd, msg)
 }
 
-func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
+func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(meta.ID), m)
@@ -474,7 +570,7 @@ func (m *middleware) logMsgReq(isEnd bool, msg sim.Msg) {
 	}
 }
 
-func (m *middleware) logMsgRsp(isEnd bool, msg sim.Msg) {
+func (m *incomingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
 		tracing.EndTask(m.msgTaskID(meta.ID), m)
