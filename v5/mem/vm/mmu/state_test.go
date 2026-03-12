@@ -24,13 +24,8 @@ func buildTestMMU(engine sim.Engine, name string) *Comp {
 		Build(name)
 }
 
-func TestGetStateAndSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
-	mmu := buildTestMMU(engine, "TestMMU")
-
-	reqID := sim.GetIDGenerator().Generate()
-
-	state := State{
+func makeTestState(reqID string) State {
+	return State{
 		WalkingTranslations: []transactionState{
 			{
 				ReqID:    reqID,
@@ -68,10 +63,10 @@ func TestGetStateAndSetState(t *testing.T) {
 			{PageVAddr: 0x3000, DeviceIDs: []uint64{3}},
 		},
 	}
+}
 
-	mmu.SetState(state)
-
-	got := mmu.GetState()
+func verifyState(t *testing.T, got State, reqID string) {
+	t.Helper()
 
 	if len(got.WalkingTranslations) != 1 {
 		t.Fatalf("expected 1 walking translation, got %d",
@@ -104,4 +99,17 @@ func TestGetStateAndSetState(t *testing.T) {
 		t.Errorf("expected 2 device page access entries, got %d",
 			len(got.PageAccessedByDeviceID))
 	}
+}
+
+func TestGetStateAndSetState(t *testing.T) {
+	engine := sim.NewSerialEngine()
+	mmu := buildTestMMU(engine, "TestMMU")
+
+	reqID := sim.GetIDGenerator().Generate()
+	state := makeTestState(reqID)
+
+	mmu.SetState(state)
+	got := mmu.GetState()
+
+	verifyState(t, got, reqID)
 }

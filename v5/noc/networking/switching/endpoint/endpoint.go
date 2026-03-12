@@ -84,17 +84,6 @@ func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
-func flitStateFromFlit(flit *messaging.Flit) flitState {
-	return flitState{
-		ID:            flit.ID,
-		Src:           flit.Src,
-		Dst:           flit.Dst,
-		SeqID:         flit.SeqID,
-		NumFlitInMsg:  flit.NumFlitInMsg,
-		OriginalMsgID: flit.Msg.Meta().ID,
-	}
-}
-
 func flitFromFlitState(fs flitState) *messaging.Flit {
 	return &messaging.Flit{
 		MsgMeta: sim.MsgMeta{

@@ -110,6 +110,15 @@ func snapshotTransaction(
 		HasMSHREntry:   t.hasMSHREntry,
 	}
 
+	snapshotTransMessages(t, &s)
+	snapshotTransBlocks(t, &s)
+	snapshotTransData(t, &s)
+	snapshotTransMSHR(t, &s, lookup)
+
+	return s
+}
+
+func snapshotTransMessages(t *transactionState, s *transactionSnapshot) {
 	if t.read != nil {
 		s.HasRead = true
 		s.ReadMsg = t.read.MsgMeta
@@ -128,6 +137,18 @@ func snapshotTransaction(
 		s.FlushPauseAfter = t.flush.PauseAfterFlushing
 	}
 
+	if t.fetchReadReq != nil {
+		s.HasFetchReadReq = true
+		s.FetchReadReqMsg = t.fetchReadReq.MsgMeta
+	}
+
+	if t.evictionWriteReq != nil {
+		s.HasEvictionWriteReq = true
+		s.EvictionWriteReqMsg = t.evictionWriteReq.MsgMeta
+	}
+}
+
+func snapshotTransBlocks(t *transactionState, s *transactionSnapshot) {
 	if t.hasBlock {
 		s.HasBlock = true
 		s.BlockSetID = t.blockSetID
@@ -144,7 +165,9 @@ func snapshotTransaction(
 			copy(s.VictimDirtyMask, t.victimDirtyMask)
 		}
 	}
+}
 
+func snapshotTransData(t *transactionState, s *transactionSnapshot) {
 	if t.fetchedData != nil {
 		s.FetchedData = make([]byte, len(t.fetchedData))
 		copy(s.FetchedData, t.fetchedData)
@@ -160,21 +183,17 @@ func snapshotTransaction(
 		copy(s.EvictingDirtyMask, t.evictingDirtyMask)
 	}
 
-	if t.fetchReadReq != nil {
-		s.HasFetchReadReq = true
-		s.FetchReadReqMsg = t.fetchReadReq.MsgMeta
-	}
-
-	if t.evictionWriteReq != nil {
-		s.HasEvictionWriteReq = true
-		s.EvictionWriteReqMsg = t.evictionWriteReq.MsgMeta
-	}
-
 	if t.mshrData != nil {
 		s.MSHRData = make([]byte, len(t.mshrData))
 		copy(s.MSHRData, t.mshrData)
 	}
+}
 
+func snapshotTransMSHR(
+	t *transactionState,
+	s *transactionSnapshot,
+	lookup map[*transactionState]int,
+) {
 	if t.mshrTransactions != nil {
 		s.MSHRTransactionIndices = make([]int, len(t.mshrTransactions))
 		for i, mt := range t.mshrTransactions {
@@ -183,8 +202,6 @@ func snapshotTransaction(
 			}
 		}
 	}
-
-	return s
 }
 
 func snapshotAllTransactions(
@@ -233,6 +250,28 @@ func restoreTransactionCore(
 		action: action(s.Action),
 	}
 
+	restoreTransMessages(s, t)
+	restoreTransBlocks(s, t)
+
+	t.fetchPID = vm.PID(s.FetchPID)
+	t.fetchAddress = s.FetchAddress
+	t.evictingPID = vm.PID(s.EvictingPID)
+	t.evictingAddr = s.EvictingAddr
+
+	restoreTransData(s, t)
+
+	t.mshrEntryIndex = s.MSHREntryIndex
+	t.hasMSHREntry = s.HasMSHREntry
+
+	if s.MSHRTransactionIndices != nil {
+		t.mshrTransactionRestoreIndices = make([]int, len(s.MSHRTransactionIndices))
+		copy(t.mshrTransactionRestoreIndices, s.MSHRTransactionIndices)
+	}
+
+	return t
+}
+
+func restoreTransMessages(s transactionSnapshot, t *transactionState) {
 	if s.HasRead {
 		t.read = &mem.ReadReq{MsgMeta: s.ReadMsg}
 	}
@@ -250,6 +289,18 @@ func restoreTransactionCore(
 		}
 	}
 
+	if s.HasFetchReadReq {
+		t.fetchReadReq = &mem.ReadReq{MsgMeta: s.FetchReadReqMsg}
+	}
+
+	if s.HasEvictionWriteReq {
+		t.evictionWriteReq = &mem.WriteReq{
+			MsgMeta: s.EvictionWriteReqMsg,
+		}
+	}
+}
+
+func restoreTransBlocks(s transactionSnapshot, t *transactionState) {
 	if s.HasBlock {
 		t.hasBlock = true
 		t.blockSetID = s.BlockSetID
@@ -266,12 +317,9 @@ func restoreTransactionCore(
 			copy(t.victimDirtyMask, s.VictimDirtyMask)
 		}
 	}
+}
 
-	t.fetchPID = vm.PID(s.FetchPID)
-	t.fetchAddress = s.FetchAddress
-	t.evictingPID = vm.PID(s.EvictingPID)
-	t.evictingAddr = s.EvictingAddr
-
+func restoreTransData(s transactionSnapshot, t *transactionState) {
 	if s.FetchedData != nil {
 		t.fetchedData = make([]byte, len(s.FetchedData))
 		copy(t.fetchedData, s.FetchedData)
@@ -287,30 +335,10 @@ func restoreTransactionCore(
 		copy(t.evictingDirtyMask, s.EvictingDirtyMask)
 	}
 
-	if s.HasFetchReadReq {
-		t.fetchReadReq = &mem.ReadReq{MsgMeta: s.FetchReadReqMsg}
-	}
-
-	if s.HasEvictionWriteReq {
-		t.evictionWriteReq = &mem.WriteReq{
-			MsgMeta: s.EvictionWriteReqMsg,
-		}
-	}
-
-	t.mshrEntryIndex = s.MSHREntryIndex
-	t.hasMSHREntry = s.HasMSHREntry
-
 	if s.MSHRData != nil {
 		t.mshrData = make([]byte, len(s.MSHRData))
 		copy(t.mshrData, s.MSHRData)
 	}
-
-	if s.MSHRTransactionIndices != nil {
-		t.mshrTransactionRestoreIndices = make([]int, len(s.MSHRTransactionIndices))
-		copy(t.mshrTransactionRestoreIndices, s.MSHRTransactionIndices)
-	}
-
-	return t
 }
 
 // --- Transaction list helpers ---

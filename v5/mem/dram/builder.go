@@ -419,27 +419,36 @@ func (b Builder) Build(name string) *Comp {
 
 func (b Builder) buildSpec() Spec {
 	numAccessUnitBit, _ := log2(uint64(b.busWidth / 8 * b.burstLength))
-
-	// Build address mapping
 	addrMapping := b.buildAddressMapping()
+	cmdCycles := b.buildCmdCycles()
 
-	cmdCycles := map[CommandKind]int{
-		CmdKindRead:           b.readDelay,
-		CmdKindReadPrecharge:  b.tRP,
-		CmdKindWrite:          b.writeDelay,
-		CmdKindWritePrecharge: b.tRP,
-		CmdKindActivate:       b.tRCD - b.tAL,
-		CmdKindPrecharge:      b.tRP,
-		CmdKindRefreshBank:    1,
-		CmdKindRefresh:        1,
-		CmdKindSRefEnter:      1,
-		CmdKindSRefExit:       1,
-	}
+	spec := b.buildTimingSpec()
+	spec.BusWidth = b.busWidth
+	spec.BurstLength = b.burstLength
+	spec.DeviceWidth = b.deviceWidth
+	spec.NumChannel = b.numChannel
+	spec.NumRank = b.numRank
+	spec.NumBankGroup = b.numBankGroup
+	spec.NumBank = b.numBank
+	spec.NumRow = b.numRow
+	spec.NumCol = b.numCol
+	spec.TransactionQueueSize = b.transactionQueueSize
+	spec.CommandQueueCapacity = b.commandQueueSize
+	spec.HasAddrConverter = b.hasAddrConverter
+	spec.InterleavingSize = b.interleavingSize
+	spec.TotalNumOfElements = b.totalNumOfElements
+	spec.CurrentElementIndex = b.currentElementIndex
+	spec.Offset = b.offset
 
-	if b.protocol.isGDDR() || b.protocol.isHBM() {
-		cmdCycles[CmdKindActivate] = b.tRCDRD - b.tAL
-	}
+	b.applyAddrMapping(&spec, addrMapping)
 
+	spec.Log2AccessUnitSize = numAccessUnitBit
+	spec.CmdCycles = cmdCycles
+
+	return spec
+}
+
+func (b Builder) buildTimingSpec() Spec {
 	return Spec{
 		Protocol:   int(b.protocol),
 		TAL:        b.tAL,
@@ -471,44 +480,43 @@ func (b Builder) buildSpec() Spec {
 		TCKESR:     b.tCKESR,
 		TXS:        b.tXS,
 		BurstCycle: b.burstCycle,
-
-		BusWidth:    b.busWidth,
-		BurstLength: b.burstLength,
-		DeviceWidth: b.deviceWidth,
-
-		NumChannel:   b.numChannel,
-		NumRank:      b.numRank,
-		NumBankGroup: b.numBankGroup,
-		NumBank:      b.numBank,
-		NumRow:       b.numRow,
-		NumCol:       b.numCol,
-
-		TransactionQueueSize: b.transactionQueueSize,
-		CommandQueueCapacity: b.commandQueueSize,
-
-		HasAddrConverter:    b.hasAddrConverter,
-		InterleavingSize:    b.interleavingSize,
-		TotalNumOfElements:  b.totalNumOfElements,
-		CurrentElementIndex: b.currentElementIndex,
-		Offset:              b.offset,
-
-		ChannelPos:    addrMapping.channelPos,
-		ChannelMask:   addrMapping.channelMask,
-		RankPos:       addrMapping.rankPos,
-		RankMask:      addrMapping.rankMask,
-		BankGroupPos:  addrMapping.bankGroupPos,
-		BankGroupMask: addrMapping.bankGroupMask,
-		BankPos:       addrMapping.bankPos,
-		BankMask:      addrMapping.bankMask,
-		RowPos:        addrMapping.rowPos,
-		RowMask:       addrMapping.rowMask,
-		ColPos:        addrMapping.colPos,
-		ColMask:       addrMapping.colMask,
-
-		Log2AccessUnitSize: numAccessUnitBit,
-
-		CmdCycles: cmdCycles,
 	}
+}
+
+func (b Builder) buildCmdCycles() map[CommandKind]int {
+	cmdCycles := map[CommandKind]int{
+		CmdKindRead:           b.readDelay,
+		CmdKindReadPrecharge:  b.tRP,
+		CmdKindWrite:          b.writeDelay,
+		CmdKindWritePrecharge: b.tRP,
+		CmdKindActivate:       b.tRCD - b.tAL,
+		CmdKindPrecharge:      b.tRP,
+		CmdKindRefreshBank:    1,
+		CmdKindRefresh:        1,
+		CmdKindSRefEnter:      1,
+		CmdKindSRefExit:       1,
+	}
+
+	if b.protocol.isGDDR() || b.protocol.isHBM() {
+		cmdCycles[CmdKindActivate] = b.tRCDRD - b.tAL
+	}
+
+	return cmdCycles
+}
+
+func (b Builder) applyAddrMapping(spec *Spec, m addrMappingResult) {
+	spec.ChannelPos = m.channelPos
+	spec.ChannelMask = m.channelMask
+	spec.RankPos = m.rankPos
+	spec.RankMask = m.rankMask
+	spec.BankGroupPos = m.bankGroupPos
+	spec.BankGroupMask = m.bankGroupMask
+	spec.BankPos = m.bankPos
+	spec.BankMask = m.bankMask
+	spec.RowPos = m.rowPos
+	spec.RowMask = m.rowMask
+	spec.ColPos = m.colPos
+	spec.ColMask = m.colMask
 }
 
 type addrMappingResult struct {
@@ -527,7 +535,6 @@ type addrMappingResult struct {
 }
 
 func (b Builder) buildAddressMapping() addrMappingResult {
-	// Replicate the logic from addressmapping.Builder.Build()
 	channelBit, _ := log2(uint64(b.numChannel))
 	rankBit, _ := log2(uint64(b.numRank))
 	bankGroupBit, _ := log2(uint64(b.numBankGroup))
@@ -547,11 +554,31 @@ func (b Builder) buildAddressMapping() addrMappingResult {
 		colMask:       (1 << colHiBit) - 1,
 	}
 
-	// Default bit order high to low:
-	// Row, Channel, Rank, Bank, BankGroup, Column
+	bitWidths := addrBitWidths{
+		channel:   channelBit,
+		rank:      rankBit,
+		bankGroup: bankGroupBit,
+		bank:      bankBit,
+		row:       rowBit,
+		colHi:     colHiBit,
+	}
+
+	r.assignBitPositions(accessUnitBit, bitWidths)
+
+	return r
+}
+
+type addrBitWidths struct {
+	channel, rank, bankGroup, bank, row, colHi uint64
+}
+
+func (r *addrMappingResult) assignBitPositions(
+	startPos uint64, w addrBitWidths,
+) {
+	// Default bit order high→low: Row, Channel, Rank, Bank, BankGroup, Column
 	type locItem int
 	const (
-		liChannel   locItem = iota
+		liChannel locItem = iota
 		liRank
 		liBankGroup
 		liBank
@@ -560,39 +587,32 @@ func (b Builder) buildAddressMapping() addrMappingResult {
 	)
 
 	bitOrder := []locItem{
-		liRow,
-		liChannel,
-		liRank,
-		liBank,
-		liBankGroup,
-		liColumn,
+		liRow, liChannel, liRank, liBank, liBankGroup, liColumn,
 	}
 
-	pos := accessUnitBit
+	pos := startPos
 	for i := len(bitOrder) - 1; i >= 0; i-- {
 		switch bitOrder[i] {
 		case liChannel:
 			r.channelPos = int(pos)
-			pos += channelBit
+			pos += w.channel
 		case liRank:
 			r.rankPos = int(pos)
-			pos += rankBit
+			pos += w.rank
 		case liBankGroup:
 			r.bankGroupPos = int(pos)
-			pos += bankGroupBit
+			pos += w.bankGroup
 		case liBank:
 			r.bankPos = int(pos)
-			pos += bankBit
+			pos += w.bank
 		case liRow:
 			r.rowPos = int(pos)
-			pos += rowBit
+			pos += w.row
 		case liColumn:
 			r.colPos = int(pos)
-			pos += colHiBit
+			pos += w.colHi
 		}
 	}
-
-	return r
 }
 
 //nolint:gocyclo,funlen
@@ -785,7 +805,7 @@ func (b *Builder) generateTiming() Timing {
 		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: prechargeToActivate},
 	}
 
-	if b.protocol.isGDDR() || Protocol(b.protocol) == LPDDR4 {
+	if b.protocol.isGDDR() || b.protocol == LPDDR4 {
 		t.OtherBanksInBankGroup[CmdKindPrecharge] = []TimeTableEntry{
 			{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
 		}

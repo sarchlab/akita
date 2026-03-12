@@ -183,6 +183,40 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	blockSize := 1 << b.log2BlockSize
 	numSets := int(b.totalByteSize / uint64(b.wayAssociativity*blockSize))
 
+	spec := b.buildSpec(numSets)
+
+	initialState := State{
+		BankBufIndices:             make([]bankBufState, b.numBank),
+		BankPipelineStages:         make([]bankPipelineState, b.numBank),
+		BankPostPipelineBufIndices: make([]bankPostBufState, b.numBank),
+	}
+
+	cache.DirectoryReset(
+		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+
+	comp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	comp.SetState(initialState)
+
+	m := b.buildMiddleware(comp)
+
+	b.buildAdapters(m)
+	b.buildStages(m)
+
+	if b.visTracer != nil {
+		tracing.CollectTrace(m, b.visTracer)
+	}
+
+	comp.AddMiddleware(m)
+
+	return comp
+}
+
+func (b *Builder) buildSpec(numSets int) Spec {
 	spec := Spec{
 		NumReqPerCycle:        b.numReqPerCycle,
 		Log2BlockSize:         b.log2BlockSize,
@@ -196,7 +230,6 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		DirLatency:            b.dirLatency,
 	}
 
-	// Configure address mapper in Spec
 	if b.addressMapperType != "" {
 		remotePortNames := make([]string, len(b.remotePorts))
 		for i, rp := range b.remotePorts {
@@ -207,27 +240,13 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		spec.InterleavingSize = b.interleavingSize
 	}
 
-	initialState := State{
-		BankBufIndices:             make([]bankBufState, b.numBank),
-		BankPipelineStages:         make([]bankPipelineState, b.numBank),
-		BankPostPipelineBufIndices: make([]bankPostBufState, b.numBank),
-	}
+	return spec
+}
 
-	// Initialize directory state
-	cache.DirectoryReset(
-		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
-
-	comp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithSpec(spec).
-		Build(name)
-
-	comp.SetState(initialState)
-
-	m := &middleware{
-		comp: comp,
-	}
+func (b *Builder) buildMiddleware(
+	comp *modeling.Component[Spec, State],
+) *middleware {
+	m := &middleware{comp: comp}
 
 	m.topPort = b.topPort
 	m.topPort.SetComponent(comp)
@@ -241,18 +260,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	m.storage = mem.NewStorage(b.totalByteSize)
 
-	// Create thin buffer adapters
-	b.buildAdapters(m)
-
-	b.buildStages(m)
-
-	if b.visTracer != nil {
-		tracing.CollectTrace(m, b.visTracer)
-	}
-
-	comp.AddMiddleware(m)
-
-	return comp
+	return m
 }
 
 func (b *Builder) buildAdapters(m *middleware) {

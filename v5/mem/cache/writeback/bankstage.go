@@ -70,18 +70,8 @@ func (s *bankStage) pullFromBuf() bool {
 	next := s.cache.comp.GetNextState()
 	spec := s.cache.comp.GetSpec()
 
-	if spec.BankLatency > 0 {
-		if !bankPipelineCanAccept(
-			cur.BankPipelineStages[s.bankID].Stages,
-			s.pipelineWidth,
-		) {
-			return false
-		}
-	} else {
-		// No pipeline - check post-buf capacity
-		if len(cur.BankPostPipelineBufIndices[s.bankID].Indices) >= s.pipelineWidth {
-			return false
-		}
+	if !s.canAcceptIntoPipeline(cur) {
+		return false
 	}
 
 	inBuf := s.cache.writeBufferToBankBuffers[s.bankID]
@@ -106,8 +96,26 @@ func (s *bankStage) pullFromBuf() bool {
 		return false
 	}
 
-	inBuf = s.cache.dirToBankBuffers[s.bankID]
-	trans = inBuf.Pop()
+	return s.pullFromDirBuffer(next, spec)
+}
+
+func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
+	spec := s.cache.comp.GetSpec()
+
+	if spec.BankLatency > 0 {
+		return bankPipelineCanAccept(
+			cur.BankPipelineStages[s.bankID].Stages,
+			s.pipelineWidth,
+		)
+	}
+
+	// No pipeline - check post-buf capacity
+	return len(cur.BankPostPipelineBufIndices[s.bankID].Indices) < s.pipelineWidth
+}
+
+func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
+	inBuf := s.cache.dirToBankBuffers[s.bankID]
+	trans := inBuf.Pop()
 
 	if trans != nil {
 		t := trans.(*transactionState)

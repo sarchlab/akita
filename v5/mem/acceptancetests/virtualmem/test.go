@@ -92,7 +92,9 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 }
 
 func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
-	*modeling.Component[writethrough.Spec, writethrough.State], *modeling.Component[writeback.Spec, writeback.State], *idealmemcontroller.Comp,
+	*modeling.Component[writethrough.Spec, writethrough.State],
+	*modeling.Component[writeback.Spec, writeback.State],
+	*idealmemcontroller.Comp,
 ) {
 	memCtrl := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).

@@ -568,22 +568,7 @@ func (ds *directoryStage) fetch(
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
 
-	var (
-		addr uint64
-		pid  vm.PID
-		req  sim.Msg
-	)
-
-	if trans.read != nil {
-		req = trans.read
-		addr = trans.read.Address
-		pid = trans.read.PID
-	} else {
-		req = trans.write
-		addr = trans.write.Address
-		pid = trans.write.PID
-	}
-
+	addr, pid, req := ds.transAddrPIDReq(trans)
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	bankNum := bankID(setID, wayID,
@@ -599,24 +584,18 @@ func (ds *directoryStage) fetch(
 		pid, cacheLineID)
 	trans.mshrEntryIndex = mshrIdx
 	trans.hasMSHREntry = true
-
 	trans.blockSetID = setID
 	trans.blockWayID = wayID
 	trans.hasBlock = true
 
-	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
-	block.IsLocked = true
-	block.Tag = cacheLineID
-	block.PID = uint32(pid)
-	block.IsValid = true
-	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
+	ds.updateBlockForFetch(next, setID, wayID, cacheLineID, pid)
 
 	tracing.AddTaskStep(
 		tracing.MsgIDAtReceiver(req, ds.cache),
 		ds.cache,
 		fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
 			next.MSHRState.Entries[mshrIdx].Address,
-			block.Tag),
+			next.DirectoryState.Sets[setID].Blocks[wayID].Tag),
 	)
 
 	ds.popDirPostBuf()
@@ -626,14 +605,43 @@ func (ds *directoryStage) fetch(
 	trans.fetchAddress = cacheLineID
 	bankBuf.Push(trans)
 
+	ds.addMSHREntryBlock(next, mshrIdx, setID, wayID, trans)
+
+	return true
+}
+
+func (ds *directoryStage) transAddrPIDReq(
+	trans *transactionState,
+) (uint64, vm.PID, sim.Msg) {
+	if trans.read != nil {
+		return trans.read.Address, trans.read.PID, trans.read
+	}
+
+	return trans.write.Address, trans.write.PID, trans.write
+}
+
+func (ds *directoryStage) updateBlockForFetch(
+	next *State, setID, wayID int,
+	cacheLineID uint64, pid vm.PID,
+) {
+	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
+	block.IsLocked = true
+	block.Tag = cacheLineID
+	block.PID = uint32(pid)
+	block.IsValid = true
+	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
+}
+
+func (ds *directoryStage) addMSHREntryBlock(
+	next *State, mshrIdx, setID, wayID int,
+	trans *transactionState,
+) {
 	entry := &next.MSHRState.Entries[mshrIdx]
 	entry.BlockSetID = setID
 	entry.BlockWayID = wayID
 	entry.HasBlock = true
 	entry.TransactionIndices = append(
 		entry.TransactionIndices, ds.findTransIndex(trans))
-
-	return true
 }
 
 func (ds *directoryStage) isWritingFullLine(write *mem.WriteReq, log2BlockSize uint64) bool {
