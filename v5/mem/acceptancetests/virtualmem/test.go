@@ -133,8 +133,12 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 	return L1Cache, L2Cache, memCtrl
 }
 
-func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
-	*modeling.Component[mmu.Spec, mmu.State], *modeling.Component[tlb.Spec, tlb.State], *modeling.Component[tlb.Spec, tlb.State],
+func buildTranslationHierarchy(
+	engine sim.Engine, s *simulation.Simulation,
+) (
+	*modeling.Component[mmu.Spec, mmu.State],
+	*modeling.Component[tlb.Spec, tlb.State],
+	*modeling.Component[tlb.Spec, tlb.State],
 ) {
 	pageTable := setupPageTable(*maxAddressFlag)
 
