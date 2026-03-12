@@ -4,7 +4,16 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (ALL MILESTONES COMPLETE — Cycle 231)
+## Current State (ALL MILESTONES COMPLETE — Cycle 232)
+
+### M30: Fix CI (issue #305) — DONE (Cycle 232)
+- Budget: 0 (fixed directly by Athena)
+- PR #57 merged to main
+- Fixed 2 issues blocking CI:
+  1. Dead `go:generate` lines in `writearound_suite_test.go` referencing deleted interfaces (Directory, MSHR, Pipeline)
+  2. Lint error: line too long in `virtualmem/test.go`
+- All CI steps now pass locally: `go generate`, `go build`, `golangci-lint`, `go test`
+- **Lesson**: After removing interfaces, always check and update `go:generate` directives that reference them.
 
 ### What's Done
 
