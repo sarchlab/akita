@@ -134,7 +134,7 @@ func (b *stateFlitBuffer) Size() int       { return len(*b.items) }
 func (b *stateFlitBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateFlitBuffer) Clear()          { *b.items = nil }
 
-func (b *stateFlitBuffer) Push(e interface{}) {
+func (b *stateFlitBuffer) Push(e any) {
 	item := e.(flitPipelineItem)
 	*b.items = append(*b.items, flitPipelineItemState{
 		TaskID: item.taskID,
@@ -142,7 +142,7 @@ func (b *stateFlitBuffer) Push(e interface{}) {
 	})
 }
 
-func (b *stateFlitBuffer) Peek() interface{} {
+func (b *stateFlitBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
@@ -153,7 +153,7 @@ func (b *stateFlitBuffer) Peek() interface{} {
 	}
 }
 
-func (b *stateFlitBuffer) Pop() interface{} {
+func (b *stateFlitBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
@@ -181,7 +181,7 @@ func (b *stateForwardBuffer) Size() int       { return len(*b.items) }
 func (b *stateForwardBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateForwardBuffer) Clear()          { *b.items = nil }
 
-func (b *stateForwardBuffer) Push(e interface{}) {
+func (b *stateForwardBuffer) Push(e any) {
 	flit := e.(*messaging.Flit)
 	entry := forwardBufferEntry{
 		Flit: flitMetaFromFlit(flit),
@@ -193,7 +193,7 @@ func (b *stateForwardBuffer) Push(e interface{}) {
 	*b.items = append(*b.items, entry)
 }
 
-func (b *stateForwardBuffer) Peek() interface{} {
+func (b *stateForwardBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
@@ -203,7 +203,7 @@ func (b *stateForwardBuffer) Peek() interface{} {
 	return flit
 }
 
-func (b *stateForwardBuffer) Pop() interface{} {
+func (b *stateForwardBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
@@ -230,19 +230,19 @@ func (b *stateSendOutBuffer) Size() int       { return len(*b.items) }
 func (b *stateSendOutBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateSendOutBuffer) Clear()          { *b.items = nil }
 
-func (b *stateSendOutBuffer) Push(e interface{}) {
+func (b *stateSendOutBuffer) Push(e any) {
 	flit := e.(*messaging.Flit)
 	*b.items = append(*b.items, flitMetaFromFlit(flit))
 }
 
-func (b *stateSendOutBuffer) Peek() interface{} {
+func (b *stateSendOutBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
 	return (*b.items)[0].toFlit()
 }
 
-func (b *stateSendOutBuffer) Pop() interface{} {
+func (b *stateSendOutBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}

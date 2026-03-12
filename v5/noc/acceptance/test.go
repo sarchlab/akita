@@ -68,11 +68,6 @@ func (t *Test) registerMsg(msg *TrafficMsg) {
 	t.msgs = append(t.msgs, msg)
 }
 
-// receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg *TrafficMsg, recvPort sim.Port) {
-	t.receiveMsgMeta(&msg.MsgMeta, recvPort)
-}
-
 // receiveMsgMeta marks that a message (identified by its MsgMeta) is received.
 func (t *Test) receiveMsgMeta(meta *sim.MsgMeta, recvPort sim.Port) {
 	if meta.Dst != recvPort.AsRemote() {
