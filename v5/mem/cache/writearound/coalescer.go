@@ -53,7 +53,7 @@ func (c *coalescer) processReqCoalescable(msg sim.Msg) bool {
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, c.cache)
+	tracing.TraceReqReceive(msg, c.cache.comp)
 
 	return true
 }
@@ -70,7 +70,7 @@ func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
 	c.cache.transactions = append(c.cache.transactions, trans)
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, c.cache)
+	tracing.TraceReqReceive(msg, c.cache.comp)
 
 	return true
 }
@@ -86,7 +86,7 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, c.cache)
+	tracing.TraceReqReceive(msg, c.cache.comp)
 
 	return true
 }
@@ -108,7 +108,7 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, c.cache)
+	tracing.TraceReqReceive(msg, c.cache.comp)
 
 	return true
 }
@@ -156,16 +156,16 @@ func (c *coalescer) coalesceAndSend() bool {
 	if c.toCoalesce[0].read != nil {
 		trans = c.coalesceRead()
 		tracing.StartTaskWithSpecificLocation(trans.id,
-			tracing.MsgIDAtReceiver(c.toCoalesce[0].read, c.cache),
-			c.cache, "cache_transaction", "read",
-			c.cache.Name()+".Local",
+			tracing.MsgIDAtReceiver(c.toCoalesce[0].read, c.cache.comp),
+			c.cache.comp, "cache_transaction", "read",
+			c.cache.comp.Name()+".Local",
 			nil)
 	} else {
 		trans = c.coalesceWrite()
 		tracing.StartTaskWithSpecificLocation(trans.id,
-			tracing.MsgIDAtReceiver(c.toCoalesce[0].write, c.cache),
-			c.cache, "cache_transaction", "write",
-			c.cache.Name()+".Local",
+			tracing.MsgIDAtReceiver(c.toCoalesce[0].write, c.cache.comp),
+			c.cache.comp, "cache_transaction", "write",
+			c.cache.comp.Name()+".Local",
 			nil)
 	}
 

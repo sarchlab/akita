@@ -15,26 +15,6 @@ type memMiddleware struct {
 	storage *mem.Storage
 }
 
-func (m *memMiddleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *memMiddleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *memMiddleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *memMiddleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *memMiddleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *memMiddleware) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -63,7 +43,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 		}
 
 		msg := msgI.(sim.Msg)
-		tracing.TraceReqReceive(msg, m)
+		tracing.TraceReqReceive(msg, m.comp)
 
 		tx := m.msgToInflightTransaction(msg)
 
@@ -221,8 +201,8 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
-	tracing.EndTask(taskID, m)
+	taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
+	tracing.EndTask(taskID, m.comp)
 }
 
 func convertAddress(spec Spec, addr uint64) uint64 {

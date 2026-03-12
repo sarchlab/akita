@@ -146,8 +146,8 @@ func (wb *writeBufferStage) fetchFromBottom(
 	wb.inflightFetch = append(wb.inflightFetch, trans)
 	wb.cache.writeBufferBuffer.Pop()
 
-	tracing.TraceReqInitiate(read, wb.cache,
-		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
+	tracing.TraceReqInitiate(read, wb.cache.comp,
+		tracing.MsgIDAtReceiver(trans.req(), wb.cache.comp))
 
 	return true
 }
@@ -241,8 +241,8 @@ func (wb *writeBufferStage) write() bool {
 	wb.pendingEvictions = wb.pendingEvictions[1:]
 	wb.inflightEviction = append(wb.inflightEviction, trans)
 
-	tracing.TraceReqInitiate(write, wb.cache,
-		tracing.MsgIDAtReceiver(trans.req(), wb.cache))
+	tracing.TraceReqInitiate(write, wb.cache.comp,
+		tracing.MsgIDAtReceiver(trans.req(), wb.cache.comp))
 
 	return true
 }
@@ -304,7 +304,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(trans)
 	wb.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache)
+	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache.comp)
 
 	return true
 }
@@ -379,7 +379,7 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 				wb.inflightEviction[i+1:]...,
 			)
 			wb.cache.bottomPort.RetrieveIncoming()
-			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache)
+			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache.comp)
 
 			return true
 		}

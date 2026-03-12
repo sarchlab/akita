@@ -14,28 +14,6 @@ type ctrlParseMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-// NamedHookable delegation methods.
-
-func (m *ctrlParseMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *ctrlParseMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *ctrlParseMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *ctrlParseMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *ctrlParseMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *ctrlParseMW) ctrlPort() sim.Port {
 	return m.comp.GetPortByName("Control")
 }
@@ -101,7 +79,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		Granularity: srcByteGranularity,
 	}
 
-	tracing.TraceReqReceive(req, m)
+	tracing.TraceReqReceive(req, m.comp)
 
 	return true
 }
@@ -144,7 +122,7 @@ func (m *ctrlParseMW) finishTransaction() bool {
 		Granularity: cur.SrcByteGranularity,
 	}
 
-	tracing.TraceReqComplete(rsp, m)
+	tracing.TraceReqComplete(rsp, m.comp)
 
 	return true
 }

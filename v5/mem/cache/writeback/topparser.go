@@ -39,7 +39,7 @@ func (p *topParser) Tick() bool {
 
 	p.cache.dirStageBuffer.Push(trans)
 
-	tracing.TraceReqReceive(msg, p.cache)
+	tracing.TraceReqReceive(msg, p.cache.comp)
 
 	p.cache.topPort.RetrieveIncoming()
 

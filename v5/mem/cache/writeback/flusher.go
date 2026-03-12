@@ -143,7 +143,7 @@ func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
 	f.pipeline.state = cacheStatePreFlushing
 	f.ctrlPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, f.pipeline)
+	tracing.TraceReqReceive(msg, f.pipeline.comp)
 
 	return true
 }
@@ -211,7 +211,7 @@ func (f *flusher) finalizeFlushing() bool {
 		f.pipeline.state = cacheStateRunning
 	}
 
-	tracing.TraceReqComplete(f.processingFlush, f.pipeline)
+	tracing.TraceReqComplete(f.processingFlush, f.pipeline.comp)
 	f.processingFlush = nil
 
 	return true

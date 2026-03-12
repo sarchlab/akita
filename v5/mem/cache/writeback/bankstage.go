@@ -226,7 +226,7 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(read, s.cache)
+	tracing.TraceReqComplete(read, s.cache.comp)
 
 	return true
 }
@@ -267,7 +267,7 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	done.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(done)
 
-	tracing.TraceReqComplete(trans.write, s.cache)
+	tracing.TraceReqComplete(trans.write, s.cache.comp)
 
 	return true
 }
@@ -347,7 +347,7 @@ func (s *bankStage) removeTransaction(trans *transactionState) {
 	now := s.cache.comp.Engine.CurrentTime()
 
 	fmt.Printf("%.10f, %s, Transaction %s not found\n",
-		now, s.cache.Name(), trans.id)
+		now, s.cache.comp.Name(), trans.id)
 
 	panic("transaction not found")
 }

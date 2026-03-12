@@ -103,7 +103,7 @@ func (s *mshrStage) respondRead(
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(read, s.cache)
+	tracing.TraceReqComplete(read, s.cache.comp)
 }
 
 func (s *mshrStage) respondWrite(write *mem.WriteReq) {
@@ -116,7 +116,7 @@ func (s *mshrStage) respondWrite(write *mem.WriteReq) {
 	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(writeDoneRsp)
 
-	tracing.TraceReqComplete(write, s.cache)
+	tracing.TraceReqComplete(write, s.cache.comp)
 }
 
 func (s *mshrStage) removeTransaction(trans *transactionState) {

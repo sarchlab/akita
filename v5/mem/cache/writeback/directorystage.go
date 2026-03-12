@@ -160,8 +160,8 @@ func (ds *directoryStage) handleReadMSHRHit(
 	ds.popDirPostBuf()
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(trans.read, ds.cache),
-		ds.cache,
+		tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+		ds.cache.comp,
 		"read-mshr-hit",
 	)
 
@@ -181,8 +181,8 @@ func (ds *directoryStage) handleReadHit(
 	}
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(trans.read, ds.cache),
-		ds.cache,
+		tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+		ds.cache.comp,
 		"read-hit",
 	)
 
@@ -216,8 +216,8 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 		ok := ds.evict(trans, victimSetID, victimWayID)
 		if ok {
 			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(trans.read, ds.cache),
-				ds.cache,
+				tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+				ds.cache.comp,
 				"read-miss",
 			)
 		}
@@ -228,8 +228,8 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 	ok := ds.fetch(trans, victimSetID, victimWayID)
 	if ok {
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.read, ds.cache),
-			ds.cache,
+			tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+			ds.cache.comp,
 			"read-miss",
 		)
 	}
@@ -250,8 +250,8 @@ func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	if found {
 		ok := ds.doWriteMSHRHit(trans, mshrIdx)
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.write, ds.cache),
-			ds.cache,
+			tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+			ds.cache.comp,
 			"write-mshr-hit",
 		)
 
@@ -266,8 +266,8 @@ func (ds *directoryStage) doWrite(trans *transactionState) bool {
 		ok := ds.doWriteHit(trans, setID, wayID)
 		if ok {
 			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(trans.write, ds.cache),
-				ds.cache,
+				tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+				ds.cache.comp,
 				"write-hit",
 			)
 		}
@@ -278,8 +278,8 @@ func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	ok := ds.doWriteMiss(trans)
 	if ok {
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.write, ds.cache),
-			ds.cache,
+			tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+			ds.cache.comp,
 			"write-miss",
 		)
 	}
@@ -591,8 +591,8 @@ func (ds *directoryStage) fetch(
 	ds.updateBlockForFetch(next, setID, wayID, cacheLineID, pid)
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(req, ds.cache),
-		ds.cache,
+		tracing.MsgIDAtReceiver(req, ds.cache.comp),
+		ds.cache.comp,
 		fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
 			next.MSHRState.Entries[mshrIdx].Address,
 			next.DirectoryState.Sets[setID].Blocks[wayID].Tag),

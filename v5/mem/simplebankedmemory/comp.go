@@ -306,26 +306,6 @@ type tickFinalizeMW struct {
 	storage *mem.Storage
 }
 
-func (m *tickFinalizeMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *tickFinalizeMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *tickFinalizeMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *tickFinalizeMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *tickFinalizeMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *tickFinalizeMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -407,7 +387,7 @@ func (m *tickFinalizeMW) finalizeRead(
 		return false
 	}
 
-	tracing.TraceReqComplete(&item.ReadMsg, m)
+	tracing.TraceReqComplete(&item.ReadMsg, m.comp)
 
 	bufferPop(b)
 
@@ -465,7 +445,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 		return false
 	}
 
-	tracing.TraceReqComplete(&item.WriteMsg, m)
+	tracing.TraceReqComplete(&item.WriteMsg, m.comp)
 
 	bufferPop(b)
 
@@ -489,26 +469,6 @@ func (m *tickFinalizeMW) tickPipelines() bool {
 
 type dispatchMW struct {
 	comp *modeling.Component[Spec, State]
-}
-
-func (m *dispatchMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *dispatchMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *dispatchMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *dispatchMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *dispatchMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 func (m *dispatchMW) topPort() sim.Port {
@@ -552,7 +512,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		}
 
 		m.topPort().RetrieveIncoming()
-		tracing.TraceReqReceive(msg, m)
+		tracing.TraceReqReceive(msg, m.comp)
 
 		item := m.msgToItem(msg)
 		pipelineAccept(&next.Banks[bankID], spec, item)

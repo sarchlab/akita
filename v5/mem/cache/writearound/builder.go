@@ -209,7 +209,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	cmw := b.buildControlMW(comp, pmw)
 
 	if b.visTracer != nil {
-		tracing.CollectTrace(pmw, b.visTracer)
+		tracing.CollectTrace(comp, b.visTracer)
 	}
 
 	comp.AddMiddleware(pmw) // index 0
