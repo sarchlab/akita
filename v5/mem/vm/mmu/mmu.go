@@ -238,11 +238,13 @@ func (m *middleware) doPageWalkHit(walkingIndex int) bool {
 }
 
 func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(next.MigrationQueue) == 0 {
+	if len(cur.MigrationQueue) == 0 {
 		return false
 	}
+
+	next := m.comp.GetNextState()
 
 	trans := next.MigrationQueue[0]
 	page, found := m.pageTable.Find(
@@ -266,7 +268,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 		return true
 	}
 
-	if next.IsDoingMigration {
+	if cur.IsDoingMigration {
 		return false
 	}
 
@@ -372,9 +374,9 @@ func (m *middleware) processMigrationReturn() bool {
 
 func (m *middleware) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(next.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 

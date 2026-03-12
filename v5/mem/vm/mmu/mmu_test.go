@@ -76,8 +76,9 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top "+
 			"if MMU is servicing max requests",
 			func() {
-				next := mmuComp.GetNextState()
-				next.WalkingTranslations = make([]transactionState, 16)
+				mmuComp.SetState(State{
+					WalkingTranslations: make([]transactionState, 16),
+				})
 
 				madeProgress := mmuMiddleware.parseFromTop()
 
@@ -256,20 +257,22 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should wait if mmu is waiting for a migration to finish", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
-			next.IsDoingMigration = true
+			mmuComp.SetState(State{
+				MigrationQueue:   []transactionState{walking},
+				IsDoingMigration: true,
+			})
 
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
 
 		It("should stall if send failed", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			migrationPort.EXPECT().
 				Send(gomock.Any()).
@@ -278,13 +281,14 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
 
 		It("should send migration request", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			migrationPort.EXPECT().
 				Send(gomock.Any()).
@@ -296,7 +300,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(0))
 			Expect(next.IsDoingMigration).To(BeTrue())
 		})
@@ -304,8 +308,9 @@ var _ = Describe("MMU", func() {
 		It("should reply to the GPU if the page is already on the "+
 			"destination GPU", func() {
 			walking.DeviceID = 2
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			updatedPage := page
 			updatedPage.IsMigrating = false
@@ -316,7 +321,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(0))
 			Expect(next.IsDoingMigration).To(BeFalse())
 		})
