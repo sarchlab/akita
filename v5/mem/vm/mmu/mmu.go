@@ -56,13 +56,8 @@ type State struct {
 	ToRemoveFromPTW          []int              `json:"to_remove_from_ptw"`
 }
 
-// Comp is the default mmu implementation. It is also an akita Component.
-type Comp struct {
-	*modeling.Component[Spec, State]
-}
-
-// PageTable returns the page table used by the MMU.
-func (c *Comp) PageTable() vm.PageTable {
+// PageTable returns the page table from an MMU component.
+func PageTable(c *modeling.Component[Spec, State]) vm.PageTable {
 	return c.Middlewares()[0].(*middleware).pageTable
 }
 

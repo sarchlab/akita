@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
@@ -17,7 +18,7 @@ var _ = Describe("MMU", func() {
 		topPort       *MockPort
 		migrationPort *MockPort
 		pageTable     *MockPageTable
-		mmuComp       *Comp
+		mmuComp       *modeling.Component[Spec, State]
 		mmuMiddleware *middleware
 	)
 
@@ -424,7 +425,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		mmuComp    *Comp
+		mmuComp    *modeling.Component[Spec, State]
 		agent      *MockPort
 		connection sim.Connection
 	)
@@ -468,7 +469,7 @@ var _ = Describe("MMU Integration", func() {
 			Valid:    true,
 			DeviceID: 1,
 		}
-		mmuComp.PageTable().Insert(page)
+		PageTable(mmuComp).Insert(page)
 
 		topPort := mmuComp.GetPortByName("Top")
 

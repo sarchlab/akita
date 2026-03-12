@@ -95,7 +95,7 @@ func (b Builder) WithMigrationPort(port sim.Port) Builder {
 }
 
 // Build returns a newly created MMU component
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := Spec{
 		Latency:                  b.pageWalkingLatency,
 		MaxRequestsInFlight:      b.maxNumReqInFlight,
@@ -111,16 +111,14 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	mmu := &Comp{Component: modelComp}
-
-	b.createPorts(name, mmu)
+	b.createPorts(name, modelComp)
 
 	pt := b.createPageTable()
 
 	mw := &middleware{comp: modelComp, pageTable: pt}
-	mmu.AddMiddleware(mw)
+	modelComp.AddMiddleware(mw)
 
-	return mmu
+	return modelComp
 }
 
 func (b Builder) createPageTable() vm.PageTable {
@@ -143,7 +141,7 @@ func (b Builder) validatePageTablePageSize() {
 	}
 }
 
-func (b Builder) createPorts(name string, mmu *Comp) {
+func (b Builder) createPorts(name string, mmu *modeling.Component[Spec, State]) {
 	b.topPort.SetComponent(mmu)
 	mmu.AddPort("Top", b.topPort)
 	b.migrationPort.SetComponent(mmu)
