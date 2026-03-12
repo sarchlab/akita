@@ -324,47 +324,6 @@ func (m *outgoingMW) logFlitE2ETaskFromState(
 	)
 }
 
-func (m *outgoingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
-	if m.comp.NumHooks() == 0 {
-		return
-	}
-
-	meta := msg.Meta()
-
-	if meta.IsRsp() {
-		m.logMsgRsp(isEnd, msg)
-		return
-	}
-
-	m.logMsgReq(isEnd, msg)
-}
-
-func (m *outgoingMW) logMsgReq(isEnd bool, msg sim.Msg) {
-	meta := msg.Meta()
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(meta.ID),
-			meta.ID+"_req_out",
-			m, "msg_e2e", "msg_e2e", msg,
-		)
-	}
-}
-
-func (m *outgoingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
-	meta := msg.Meta()
-	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m)
-	} else {
-		tracing.StartTask(
-			m.msgTaskID(meta.ID),
-			meta.RspTo+"_req_out",
-			m, "msg_e2e", "msg_e2e", msg,
-		)
-	}
-}
-
 // incomingMW handles the network→device path:
 // tryDeliver, assemble, recv.
 type incomingMW struct {

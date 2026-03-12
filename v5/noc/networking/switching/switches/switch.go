@@ -431,12 +431,6 @@ func (c *Comp) routeForwardSendMiddleware() *routeForwardSendMW {
 	return c.Middlewares()[0].(*routeForwardSendMW)
 }
 
-// receivePipelineMiddleware returns the receivePipelineMW from the
-// component's middleware list (registered at index 1).
-func (c *Comp) receivePipelineMiddleware() *receivePipelineMW {
-	return c.Middlewares()[1].(*receivePipelineMW)
-}
-
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
 	return c.routeForwardSendMiddleware().routingTable
@@ -543,10 +537,6 @@ func (m *routeForwardSendMW) Tick() bool {
 	madeProgress = m.route() || madeProgress
 
 	return madeProgress
-}
-
-func (m *routeForwardSendMW) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
 }
 
 func (m *routeForwardSendMW) flitTaskID(flit *messaging.Flit) string {
