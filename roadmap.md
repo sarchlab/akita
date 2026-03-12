@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (after M24, Cycle 204)
+## Current State (after M25, Cycle 210)
 
 ### What's Done
 
@@ -20,19 +20,20 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Dependencies inlined (caches) | ✅ | legacyMapper resolved at Build time, routing via Spec |
 | A-B pattern correct | ✅ | All components use GetState() for reads, GetNextState() for writes |
 | Comp wrapper elimination | ✅ | addresstranslator, datamover, MMU, GMMU, DRAM — Comp removed |
-| CI passing | ✅ | Build, vet, tests all pass (PR #50 merged) |
+| CI passing | ✅ | Build, vet, tests all pass (PR #51 merged) |
 | Multi-MW split (batch 1) | ✅ | endpoint(2), DRAM(3), switch(2), simplebankedmemory(2), tickingping(2) |
 | Multi-MW split (batch 2) | ✅ | addresstranslator(2), datamover(2), MMU(2), GMMU(2) |
+| Multi-MW split (batch 3) | ✅ | writeback(2), writearound(2), writeevict(2), writethrough(2) — PR #51 |
 
 ### Per-Component Status
 
 | Component | Comp Wrapper? | A-B Correct? | Multi-MW? | MW Count | Notes |
 |-----------|:---:|:---:|:---:|:---:|---|
 | idealmemcontroller | thin (StorageOwner) | ✅ | ✅ | 2 | Reference implementation |
-| writearound cache | none | ✅ | ❌ | 1 | Need split (M25) |
-| writeevict cache | none | ✅ | ❌ | 1 | Need split (M25) |
-| writethrough cache | none | ✅ | ❌ | 1 | Need split (M25) |
-| writeback cache | none | ✅ | ❌ | 1 | Need split (M25) |
+| writearound cache | none | ✅ | ✅ | 2 | Done (M25) |
+| writeevict cache | none | ✅ | ✅ | 2 | Done (M25) |
+| writethrough cache | none | ✅ | ✅ | 2 | Done (M25) |
+| writeback cache | none | ✅ | ✅ | 2 | Done (M25) |
 | TLB | thin | ✅ | ✅ | 2 | Done |
 | mmuCache | thin | ✅ | ✅ | 2 | Done |
 | DRAM | none | ✅ | ✅ | 3 | Done (M23) |
@@ -47,11 +48,11 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ### Summary of Remaining Gaps
 
-1. **4/16 components still have 1 middleware** — writeback, writearound, writeevict, writethrough (all caches)
-2. **component_guide.md** needs update for final multi-MW architecture with A-B state
-3. **VictimFinder interface** still exists (unused in production but not removed)
-4. **queueing.Buffer adapters** still used by switch for arbitration compatibility
-5. **examples/ping** still uses old event-driven model (not modeling.Component)
+1. **component_guide.md** needs update for A-B state, multi-MW, no-dependency patterns
+2. **VictimFinder interface + old Directory struct** still exist (unused dead code — not removed)
+3. **queueing.Buffer adapters** still used by switch for arbitration compatibility
+4. **examples/ping** still uses old event-driven model (not modeling.Component)
+5. **Thin Comp wrappers** remain in 6 components for StorageOwner/API interfaces (acceptable per spec)
 
 ---
 
@@ -74,38 +75,22 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Split 4 components into multiple middlewares
 - addresstranslator → 2 MW, datamover → 2 MW, MMU → 2 MW, GMMU → 2 MW
 
-### M25: Multi-Middleware Split — Cache Components ⬅️ NEXT
+### ✅ M25: Multi-Middleware Split — Cache Components (DONE)
+- Budget: 8 | Used: ~6 | PR: #51
+- Split all 4 cache components into pipelineMW + controlMW
+- writeback(2), writearound(2), writeevict(2), writethrough(2)
 
-**Goal:** Split the 4 cache components into multiple middlewares.
+### M26: Final Cleanup + Documentation ⬅️ NEXT
 
-**Proposed middleware boundaries:**
-- **writearound/writeevict/writethrough** (~5,100-5,200 LOC each, ~340 LOC in cache.go) → 3 MW: FrontEnd (coalescer), Core (directory+bank), BackEnd (bottomParser+respond+control)
-- **writeback** (~6,000 LOC, ~400 LOC in writebackcache.go) → 3 MW: FrontEnd (topParser), Core (directory+bank), BackEnd (writeBuffer+mshr+flusher)
+**Goal:** Final pass — consistency, documentation, dead code removal.
 
-**Key considerations:**
-- Under current MiddlewareHolder.Tick(), all MWs execute sequentially within one Tick — zero added latency
-- Each stage reads from `current`, writes to `next` — stages don't see each other's writes
-- No State struct changes needed — inter-stage buffers already exist as named fields
-- Start with one cache variant (writearound), replicate pattern to others
-- The 3 simpler caches (writearound, writeevict, writethrough) share near-identical code structure
-- These are the **largest and most complex** components — budget accordingly
-
-**Budget**: 8 cycles
-**Risk**: Medium-high — caches are the largest components, with complex stage interactions (pipeline adapters, shared transaction pools, multiple buffer types).
-
-### M26: Final Cleanup + Documentation
-
-**Goal:** Final pass — consistency, documentation, edge cases.
-
-1. **Update component_guide.md** to reflect the final multi-MW architecture with A-B state
-2. **Review directconnection** — determine if it should use modeling.Component or stay as infrastructure
+1. **Update component_guide.md** to reflect the final multi-MW architecture with A-B state patterns
+2. **Remove dead code**: VictimFinder interface, old Directory struct (unused since MSHR/Directory moved to State + free functions)
 3. **Review examples/ping** — update to modeling.Component or document as legacy
-4. **Ensure all components** follow the identical pattern consistently
-5. **Full test suite pass** + acceptance tests
-6. **Clean up any remaining thin Comp wrappers** where possible
-7. **Remove unused VictimFinder interface** if no longer referenced
-8. **Remove queueing.Buffer adapters** if possible
-9. **Final code review pass**
+4. **Review directconnection** — determine if it should use modeling.Component or stay as infrastructure
+5. **Ensure all components** follow the identical pattern consistently
+6. **Full test suite pass** + CI green
+7. **Final code review pass**
 
 **Budget**: 4 cycles
 
@@ -120,9 +105,9 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M22 | Fix A-B + eliminate Comp | 6 | ~3 | ✅ Done |
 | M23 | Multi-MW split (batch 1: 5 components) | 6 | ~5 | ✅ Done |
 | M24 | Multi-MW split (batch 2: 4 non-cache) | 6 | ~4 | ✅ Done |
-| M25 | Multi-MW split (batch 3: 4 caches) | 8 | — | ⬅️ NEXT |
-| M26 | Final cleanup + docs | 4 | — | Pending |
-| **Total Phase 2** | | **40** | **~19** | |
+| M25 | Multi-MW split (batch 3: 4 caches) | 8 | ~6 | ✅ Done |
+| M26 | Final cleanup + docs | 4 | — | ⬅️ NEXT |
+| **Total Phase 2** | | **40** | **~25** | |
 
 ---
 
@@ -155,6 +140,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M22 | 6 | ~3 | Fix A-B pattern + eliminate Comp wrappers |
 | M23 | 6 | ~5 | Multi-MW split — 5 components |
 | M24 | 6 | ~4 | Multi-MW split — 4 non-cache components |
+| M25 | 8 | ~6 | Multi-MW split — 4 cache components |
 
 **Phase 1 totals**: Budget: 160, Used: ~100 (37% under budget)
 

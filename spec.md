@@ -26,15 +26,15 @@ Each component has TWO state copies: "current" (read-only during tick) and "next
 
 **Critical rule**: Middleware MUST use `GetState()` for all reads and `GetNextState()` for all writes. Using `GetNextState()` for reads is a bug — it means a middleware sees its own writes and other middlewares' writes from the same tick, breaking the A-B isolation.
 
-### Multi-Middleware Architecture — IN PROGRESS
+### Multi-Middleware Architecture — DONE
 
-All components should have **multiple middlewares**, each responsible for one logical function. This is the target architecture — single-middleware patterns are historical artifacts.
+All components have **multiple middlewares**, each responsible for one logical function. Single-middleware patterns are eliminated.
 
 - Under A-B state semantics, each middleware reads from `current` (A buffer) and writes to `next` (B buffer). Middlewares within the same tick do NOT see each other's writes — this matches hardware pipeline register semantics.
 - The +1 cycle latency per middleware boundary is acceptable (per human clarification).
-- Components should be decomposed into natural stage boundaries (e.g., parse → process → respond).
+- Components are decomposed into natural stage boundaries (e.g., pipeline + control, parse + respond).
 
-**Current status**: 12/16 components have multiple middlewares. Remaining 4 (writeback, writearound, writeevict, writethrough caches) still have single monolithic middlewares.
+**Current status**: All 16/16 components have multiple middlewares (2-3 each).
 
 ### No Dependencies — Inline All Logic
 
