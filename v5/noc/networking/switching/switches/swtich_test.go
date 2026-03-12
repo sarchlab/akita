@@ -302,6 +302,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
 
@@ -327,6 +328,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
