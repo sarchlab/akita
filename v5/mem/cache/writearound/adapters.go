@@ -229,6 +229,61 @@ func dirPipelineAccept(
 	panic("dir pipeline is full")
 }
 
+type dirAction int
+
+const (
+	dirKeep    dirAction = iota
+	dirAdvance dirAction = iota
+	dirMoveBuf dirAction = iota
+)
+
+func dirNextStageOccupied(
+	newStages []dirPipelineStageState,
+	actions []dirAction,
+	lane, nextStage int,
+) bool {
+	for j := range newStages {
+		if actions[j] != dirKeep {
+			continue
+		}
+		if newStages[j].Lane == lane && newStages[j].Stage == nextStage {
+			return true
+		}
+	}
+	return false
+}
+
+func dirProcessItem(
+	newStages []dirPipelineStageState,
+	actions []dirAction,
+	postBuf *[]int,
+	postBufCapacity int,
+	i, stageNum, lastStage int,
+) bool {
+	if newStages[i].CycleLeft > 0 {
+		newStages[i].CycleLeft--
+		return true
+	}
+
+	if stageNum == lastStage {
+		if len(*postBuf) < postBufCapacity {
+			*postBuf = append(*postBuf, newStages[i].TransIndex)
+			actions[i] = dirMoveBuf
+			return true
+		}
+		return false
+	}
+
+	nextStage := stageNum + 1
+	if !dirNextStageOccupied(newStages, actions, newStages[i].Lane, nextStage) {
+		newStages[i].Stage = nextStage
+		newStages[i].CycleLeft = 0
+		actions[i] = dirAdvance
+		return true
+	}
+	return false
+}
+
 func dirPipelineTick(
 	stages *[]dirPipelineStageState,
 	postBuf *[]int,
@@ -242,66 +297,25 @@ func dirPipelineTick(
 	madeProgress := false
 	lastStage := numStages - 1
 
-	type action int
-	const (
-		keep    action = iota
-		advance action = iota
-		moveBuf action = iota
-	)
-
-	actions := make([]action, len(*stages))
+	actions := make([]dirAction, len(*stages))
 	newStages := make([]dirPipelineStageState, len(*stages))
 	copy(newStages, *stages)
 
 	for stageNum := lastStage; stageNum >= 0; stageNum-- {
 		for i := range newStages {
-			if actions[i] != keep {
+			if actions[i] != dirKeep || newStages[i].Stage != stageNum {
 				continue
 			}
-			if newStages[i].Stage != stageNum {
-				continue
-			}
-
-			if newStages[i].CycleLeft > 0 {
-				newStages[i].CycleLeft--
+			if dirProcessItem(newStages, actions, postBuf,
+				postBufCapacity, i, stageNum, lastStage) {
 				madeProgress = true
-				continue
-			}
-
-			if stageNum == lastStage {
-				// Move to post-pipeline buffer
-				if len(*postBuf) < postBufCapacity {
-					*postBuf = append(*postBuf, newStages[i].TransIndex)
-					actions[i] = moveBuf
-					madeProgress = true
-				}
-			} else {
-				// Advance to next stage
-				nextStage := stageNum + 1
-				occupied := false
-				for j := range newStages {
-					if actions[j] != keep {
-						continue
-					}
-					if newStages[j].Lane == newStages[i].Lane &&
-						newStages[j].Stage == nextStage {
-						occupied = true
-						break
-					}
-				}
-				if !occupied {
-					newStages[i].Stage = nextStage
-					newStages[i].CycleLeft = 0
-					actions[i] = advance
-					madeProgress = true
-				}
 			}
 		}
 	}
 
 	remaining := make([]dirPipelineStageState, 0, len(newStages))
 	for i, a := range actions {
-		if a != moveBuf {
+		if a != dirMoveBuf {
 			remaining = append(remaining, newStages[i])
 		}
 	}
@@ -353,6 +367,61 @@ func bankPipelineAccept(
 	panic("bank pipeline is full")
 }
 
+type bankAction int
+
+const (
+	bankKeep    bankAction = iota
+	bankAdvance bankAction = iota
+	bankMoveBuf bankAction = iota
+)
+
+func bankNextStageOccupied(
+	newStages []bankPipelineStageState,
+	actions []bankAction,
+	lane, nextStage int,
+) bool {
+	for j := range newStages {
+		if actions[j] != bankKeep {
+			continue
+		}
+		if newStages[j].Lane == lane && newStages[j].Stage == nextStage {
+			return true
+		}
+	}
+	return false
+}
+
+func bankProcessItem(
+	newStages []bankPipelineStageState,
+	actions []bankAction,
+	postBuf *[]int,
+	postBufCapacity int,
+	i, stageNum, lastStage int,
+) bool {
+	if newStages[i].CycleLeft > 0 {
+		newStages[i].CycleLeft--
+		return true
+	}
+
+	if stageNum == lastStage {
+		if len(*postBuf) < postBufCapacity {
+			*postBuf = append(*postBuf, newStages[i].TransIndex)
+			actions[i] = bankMoveBuf
+			return true
+		}
+		return false
+	}
+
+	nextStage := stageNum + 1
+	if !bankNextStageOccupied(newStages, actions, newStages[i].Lane, nextStage) {
+		newStages[i].Stage = nextStage
+		newStages[i].CycleLeft = 0
+		actions[i] = bankAdvance
+		return true
+	}
+	return false
+}
+
 func bankPipelineTick(
 	stages *[]bankPipelineStageState,
 	postBuf *[]int,
@@ -366,64 +435,25 @@ func bankPipelineTick(
 	madeProgress := false
 	lastStage := numStages - 1
 
-	type action int
-	const (
-		keep    action = iota
-		advance action = iota
-		moveBuf action = iota
-	)
-
-	actions := make([]action, len(*stages))
+	actions := make([]bankAction, len(*stages))
 	newStages := make([]bankPipelineStageState, len(*stages))
 	copy(newStages, *stages)
 
 	for stageNum := lastStage; stageNum >= 0; stageNum-- {
 		for i := range newStages {
-			if actions[i] != keep {
+			if actions[i] != bankKeep || newStages[i].Stage != stageNum {
 				continue
 			}
-			if newStages[i].Stage != stageNum {
-				continue
-			}
-
-			if newStages[i].CycleLeft > 0 {
-				newStages[i].CycleLeft--
+			if bankProcessItem(newStages, actions, postBuf,
+				postBufCapacity, i, stageNum, lastStage) {
 				madeProgress = true
-				continue
-			}
-
-			if stageNum == lastStage {
-				if len(*postBuf) < postBufCapacity {
-					*postBuf = append(*postBuf, newStages[i].TransIndex)
-					actions[i] = moveBuf
-					madeProgress = true
-				}
-			} else {
-				nextStage := stageNum + 1
-				occupied := false
-				for j := range newStages {
-					if actions[j] != keep {
-						continue
-					}
-					if newStages[j].Lane == newStages[i].Lane &&
-						newStages[j].Stage == nextStage {
-						occupied = true
-						break
-					}
-				}
-				if !occupied {
-					newStages[i].Stage = nextStage
-					newStages[i].CycleLeft = 0
-					actions[i] = advance
-					madeProgress = true
-				}
 			}
 		}
 	}
 
 	remaining := make([]bankPipelineStageState, 0, len(newStages))
 	for i, a := range actions {
-		if a != moveBuf {
+		if a != bankMoveBuf {
 			remaining = append(remaining, newStages[i])
 		}
 	}
