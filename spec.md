@@ -96,6 +96,10 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
+### CI Infrastructure
+
+All CI workflow jobs must use GitHub-hosted runners (`ubuntu-latest`) instead of `self-hosted` runners. Self-hosted runners are unreliable/unavailable, causing all CI runs to be stuck in "queued" state indefinitely.
+
 ## How You Consider the Project is Success
 
 1. Simple, straightforward, intuitive APIs

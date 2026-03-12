@@ -4,7 +4,15 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (ALL MILESTONES COMPLETE — Cycle 232)
+## Current State (Cycle 234)
+
+### M31: Fix CI — Switch from self-hosted to GitHub-hosted runners (IN PROGRESS)
+- Budget: 3
+- Problem: All CI runs stuck in "queued" because self-hosted runners are unavailable (issue #306)
+- Solution: Change `runs-on: self-hosted` → `runs-on: ubuntu-latest` in `.github/workflows/test.yml` (all 5 jobs)
+- Acceptance: CI action run completes (not stuck in queued) and all jobs pass
+
+### Previous Milestones Complete (through Cycle 232)
 
 ### M30: Fix CI (issue #305) — DONE (Cycle 232)
 - Budget: 0 (fixed directly by Athena)
