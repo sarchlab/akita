@@ -85,7 +85,7 @@ func TestPhysicalPageAllocator(t *testing.T) {
 	allocatedPages := make(map[uint64]bool)
 	pageSize := uint64(4096)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		page := mw.createDefaultPage(vm.PID(1), uint64(i*0x1000), 1)
 
 		// Check that physical address is unique

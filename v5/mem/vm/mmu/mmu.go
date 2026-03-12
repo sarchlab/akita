@@ -548,11 +548,6 @@ func (m *migrationMW) createMigrationRequest(
 	return migrationReq
 }
 
-func (m *migrationMW) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
-	tracing.EndTask(taskID, m)
-}
-
 // Helper functions for devicePageAccess slice.
 
 func unique(intSlice []uint64) []uint64 {

@@ -139,10 +139,7 @@ func bufferExtractData(
 			return nil, false
 		}
 
-		bytesToCopy := bs.Granularity - slotOffset
-		if sizeLeft < bytesToCopy {
-			bytesToCopy = sizeLeft
-		}
+		bytesToCopy := min(bs.Granularity-slotOffset, sizeLeft)
 
 		copy(data[size-sizeLeft:],
 			bs.Chunks[i].Data[slotOffset:slotOffset+bytesToCopy])

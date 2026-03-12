@@ -84,7 +84,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should move data outside to inside", func() {
 		data := make([]byte, 4096)
-		for i := 0; i < 4096; i++ {
+		for i := range 4096 {
 			data[i] = byte(i)
 		}
 		outsideMem.GetStorage().Write(0, data)
@@ -112,7 +112,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should move data inside to outside", func() {
 		data := make([]byte, 4096)
-		for i := 0; i < 4096; i++ {
+		for i := range 4096 {
 			data[i] = byte(i)
 		}
 		insideMem.GetStorage().Write(0, data)
@@ -140,7 +140,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should move on difference addresses", func() {
 		data := make([]byte, 4096)
-		for i := 0; i < 4096; i++ {
+		for i := range 4096 {
 			data[i] = byte(i)
 		}
 		insideMem.GetStorage().Write(0, data)
@@ -168,7 +168,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should move partial data", func() {
 		data := make([]byte, 1024)
-		for i := 0; i < 1024; i++ {
+		for i := range 1024 {
 			data[i] = byte(i)
 		}
 		outsideMem.GetStorage().Write(0, data)
@@ -214,7 +214,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should handle overlapping ranges", func() {
 		data := make([]byte, 1024)
-		for i := 0; i < 1024; i++ {
+		for i := range 1024 {
 			data[i] = byte(i)
 		}
 		insideMem.GetStorage().Write(0, data)

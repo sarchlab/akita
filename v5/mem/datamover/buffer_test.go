@@ -60,7 +60,6 @@ var _ = Describe("Buffer", func() {
 		}
 
 		for _, tt := range tests {
-			tt := tt
 			Context(tt.name, func() {
 				It("should extract data correctly", func() {
 					bs := &bufferState{

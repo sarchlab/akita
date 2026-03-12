@@ -321,10 +321,6 @@ func (m *respondPipelineMW) translationPort() sim.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
-func (m *respondPipelineMW) ctrlPort() sim.Port {
-	return m.comp.GetPortByName("Control")
-}
-
 // Tick runs the respond pipeline: respond + parseTranslation.
 func (m *respondPipelineMW) Tick() bool {
 	madeProgress := false
