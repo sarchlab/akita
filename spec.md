@@ -34,7 +34,7 @@ All components should have **multiple middlewares**, each responsible for one lo
 - The +1 cycle latency per middleware boundary is acceptable (per human clarification).
 - Components should be decomposed into natural stage boundaries (e.g., parse → process → respond).
 
-**Current status**: 8/16 components have multiple middlewares. Remaining 8 (addresstranslator, datamover, MMU, GMMU, writeback, writearound, writeevict, writethrough) still have single monolithic middlewares.
+**Current status**: 12/16 components have multiple middlewares. Remaining 4 (writeback, writearound, writeevict, writethrough caches) still have single monolithic middlewares.
 
 ### No Dependencies — Inline All Logic
 
