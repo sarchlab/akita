@@ -6,11 +6,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Current State (Cycle 234)
 
-### M31: Fix CI — Switch from self-hosted to GitHub-hosted runners (IN PROGRESS)
-- Budget: 3
-- Problem: All CI runs stuck in "queued" because self-hosted runners are unavailable (issue #306)
-- Solution: Change `runs-on: self-hosted` → `runs-on: ubuntu-latest` in `.github/workflows/test.yml` (all 5 jobs)
-- Acceptance: CI action run completes (not stuck in queued) and all jobs pass
+### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
+- Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
+- Original scope was to switch to ubuntu-latest, but human directive #309 forbids that
+- Rescoped: Add `timeout-minutes` to all 5 CI jobs (addressing human issue #310 about hanging NOC test)
+- PR #59 merged: akitartm_compile(10), daisen_compile(10), akita_build_lint_test(30), noc_acceptance_test(20), mem_acceptance_test(20)
+- Self-hosted runners kept per human directive. Runs may be queued while runners are offline.
+- **Lesson: Always check human constraints before defining milestone scope. M31 was blocked from the start because it violated human issue #309.**
 
 ### Previous Milestones Complete (through Cycle 232)
 

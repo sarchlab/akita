@@ -98,7 +98,7 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 ### CI Infrastructure
 
-All CI workflow jobs must use GitHub-hosted runners (`ubuntu-latest`) instead of `self-hosted` runners. Self-hosted runners are unreliable/unavailable, causing all CI runs to be stuck in "queued" state indefinitely.
+All CI workflow jobs use `self-hosted` runners per human directive (issue #309). GitHub-hosted runners are not an option due to budget constraints. All 5 CI jobs have `timeout-minutes` set to prevent hanging (issue #310). Self-hosted runners may be temporarily unavailable (queued) — wait for them to come online.
 
 ## How You Consider the Project is Success
 
