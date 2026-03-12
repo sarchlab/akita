@@ -28,6 +28,14 @@ type flitState struct {
 	SeqID         int            `json:"seq_id"`
 	NumFlitInMsg  int            `json:"num_flit_in_msg"`
 	OriginalMsgID string         `json:"original_msg_id"`
+
+	// Original message metadata (carried so that the receiving endpoint
+	// can reconstruct the full Msg when assembling flits).
+	MsgSrc          sim.RemotePort `json:"msg_src"`
+	MsgDst          sim.RemotePort `json:"msg_dst"`
+	MsgRspTo        string         `json:"msg_rsp_to"`
+	MsgTrafficClass string         `json:"msg_traffic_class"`
+	MsgTrafficBytes int            `json:"msg_traffic_bytes"`
 }
 
 // assemblingMsgState is a serializable representation of a message being
@@ -121,7 +129,12 @@ func flitFromFlitState(fs flitState) *messaging.Flit {
 		SeqID:        fs.SeqID,
 		NumFlitInMsg: fs.NumFlitInMsg,
 		Msg: &sim.MsgMeta{
-			ID: fs.OriginalMsgID,
+			ID:           fs.OriginalMsgID,
+			Src:          fs.MsgSrc,
+			Dst:          fs.MsgDst,
+			RspTo:        fs.MsgRspTo,
+			TrafficClass: fs.MsgTrafficClass,
+			TrafficBytes: fs.MsgTrafficBytes,
 		},
 	}
 }
@@ -144,12 +157,17 @@ func msgMetaToFlitStates(
 	flits := make([]flitState, numFlit)
 	for i := 0; i < numFlit; i++ {
 		flits[i] = flitState{
-			ID:            fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
-			Src:           networkPortRemote,
-			Dst:           defaultSwitchDst,
-			SeqID:         i,
-			NumFlitInMsg:  numFlit,
-			OriginalMsgID: meta.ID,
+			ID:              fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
+			Src:             networkPortRemote,
+			Dst:             defaultSwitchDst,
+			SeqID:           i,
+			NumFlitInMsg:    numFlit,
+			OriginalMsgID:   meta.ID,
+			MsgSrc:          meta.Src,
+			MsgDst:          meta.Dst,
+			MsgRspTo:        meta.RspTo,
+			MsgTrafficClass: meta.TrafficClass,
+			MsgTrafficBytes: meta.TrafficBytes,
 		}
 	}
 
@@ -215,7 +233,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 	for i := 0; i < spec.NumOutputChannels; i++ {
 		if numSent >= len(cur.FlitsToSend) {
-			return madeProgress
+			break
 		}
 
 		fs := cur.FlitsToSend[numSent]

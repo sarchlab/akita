@@ -142,7 +142,7 @@ var _ = Describe("Switch", func() {
 		// Fill pipeline so it can't accept
 		next := sw.GetNextState()
 		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: sim.MsgMeta{}}},
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: flitMeta{}}},
 		}
 
 		port1.EXPECT().PeekIncoming().Return(flit)
@@ -158,7 +158,7 @@ var _ = Describe("Switch", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := sw.GetNextState()
 		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: sim.MsgMeta{ID: "flit1"}}},
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "flit1"}}}},
 		}
 
 		rpMW.updateAdapterPointers()
@@ -185,7 +185,7 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer for port1
 		next := sw.GetNextState()
 		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
-			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+			{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
 		}
 
 		routingTable.EXPECT().
@@ -215,10 +215,10 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer and fill forward buffer
 		next := sw.GetNextState()
 		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
-			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+			{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
 		}
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: sim.MsgMeta{ID: "existing"}, OutputBufIdx: 0},
+			{Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "existing"}}, OutputBufIdx: 0},
 		}
 
 		rfsMW.updateAdapterPointers()
@@ -240,7 +240,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+			{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
 		}
 
 		rfsMW.updateAdapterPointers()
@@ -273,9 +273,9 @@ var _ = Describe("Switch", func() {
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := sw.GetNextState()
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+			{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
 		}
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{{ID: "full"}}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{{MsgMeta: sim.MsgMeta{ID: "full"}}}
 
 		rfsMW.updateAdapterPointers()
 
@@ -304,7 +304,7 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{flitMetaFromFlit(flit)}
 		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
@@ -330,7 +330,7 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{flitMetaFromFlit(flit)}
 		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})

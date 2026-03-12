@@ -24,17 +24,70 @@ func (f flitPipelineItem) TaskID() string {
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
+// flitMeta is a fully serializable snapshot of a messaging.Flit, including the
+// original message metadata so a downstream endpoint can reconstruct the Msg.
+type flitMeta struct {
+	sim.MsgMeta
+
+	SeqID        int `json:"seq_id"`
+	NumFlitInMsg int `json:"num_flit_in_msg"`
+
+	// Original message metadata.
+	MsgID           string         `json:"msg_id"`
+	MsgSrc          sim.RemotePort `json:"msg_src"`
+	MsgDst          sim.RemotePort `json:"msg_dst_meta"`
+	MsgRspTo        string         `json:"msg_rsp_to"`
+	MsgTrafficClass string         `json:"msg_traffic_class"`
+	MsgTrafficBytes int            `json:"msg_traffic_bytes"`
+}
+
+// flitMetaFromFlit captures all relevant fields of a *messaging.Flit.
+func flitMetaFromFlit(flit *messaging.Flit) flitMeta {
+	fm := flitMeta{
+		MsgMeta:      flit.MsgMeta,
+		SeqID:        flit.SeqID,
+		NumFlitInMsg: flit.NumFlitInMsg,
+	}
+	if flit.Msg != nil {
+		m := flit.Msg.Meta()
+		fm.MsgID = m.ID
+		fm.MsgSrc = m.Src
+		fm.MsgDst = m.Dst
+		fm.MsgRspTo = m.RspTo
+		fm.MsgTrafficClass = m.TrafficClass
+		fm.MsgTrafficBytes = m.TrafficBytes
+	}
+	return fm
+}
+
+// toFlit reconstructs a *messaging.Flit from the serialized flitMeta.
+func (fm flitMeta) toFlit() *messaging.Flit {
+	return &messaging.Flit{
+		MsgMeta:      fm.MsgMeta,
+		SeqID:        fm.SeqID,
+		NumFlitInMsg: fm.NumFlitInMsg,
+		Msg: &sim.MsgMeta{
+			ID:           fm.MsgID,
+			Src:          fm.MsgSrc,
+			Dst:          fm.MsgDst,
+			RspTo:        fm.MsgRspTo,
+			TrafficClass: fm.MsgTrafficClass,
+			TrafficBytes: fm.MsgTrafficBytes,
+		},
+	}
+}
+
 // flitPipelineItemState is a serializable flit pipeline item.
 type flitPipelineItemState struct {
-	TaskID string         `json:"task_id"`
-	Flit   sim.MsgMeta    `json:"flit"`
-	MsgDst sim.RemotePort `json:"msg_dst"` // final destination for routing
+	TaskID  string         `json:"task_id"`
+	Flit    flitMeta       `json:"flit"`
+	RouteTo sim.RemotePort `json:"route_to"` // final destination for routing
 }
 
 // forwardBufferEntry is a flit waiting to be forwarded, with its assigned output.
 type forwardBufferEntry struct {
-	Flit         sim.MsgMeta `json:"flit"`
-	OutputBufIdx int         `json:"output_buf_idx"`
+	Flit         flitMeta `json:"flit"`
+	OutputBufIdx int      `json:"output_buf_idx"`
 }
 
 // pipelineStageState captures one non-nil pipeline slot.
@@ -56,7 +109,7 @@ type portComplexState struct {
 	PipelineStages   []pipelineStageState    `json:"pipeline_stages"`
 	RouteBuffer      []flitPipelineItemState `json:"route_buffer"`
 	ForwardBuffer    []forwardBufferEntry    `json:"forward_buffer"`
-	SendOutBuffer    []sim.MsgMeta           `json:"send_out_buffer"`
+	SendOutBuffer    []flitMeta              `json:"send_out_buffer"`
 }
 
 // State contains mutable runtime data for the switch.
@@ -85,7 +138,7 @@ func (b *stateFlitBuffer) Push(e interface{}) {
 	item := e.(flitPipelineItem)
 	*b.items = append(*b.items, flitPipelineItemState{
 		TaskID: item.taskID,
-		Flit:   item.flit.MsgMeta,
+		Flit:   flitMetaFromFlit(item.flit),
 	})
 }
 
@@ -96,7 +149,7 @@ func (b *stateFlitBuffer) Peek() interface{} {
 	s := (*b.items)[0]
 	return flitPipelineItem{
 		taskID: s.TaskID,
-		flit:   &messaging.Flit{MsgMeta: s.Flit},
+		flit:   s.Flit.toFlit(),
 	}
 }
 
@@ -108,7 +161,7 @@ func (b *stateFlitBuffer) Pop() interface{} {
 	*b.items = (*b.items)[1:]
 	return flitPipelineItem{
 		taskID: s.TaskID,
-		flit:   &messaging.Flit{MsgMeta: s.Flit},
+		flit:   s.Flit.toFlit(),
 	}
 }
 
@@ -131,7 +184,7 @@ func (b *stateForwardBuffer) Clear()          { *b.items = nil }
 func (b *stateForwardBuffer) Push(e interface{}) {
 	flit := e.(*messaging.Flit)
 	entry := forwardBufferEntry{
-		Flit: flit.MsgMeta,
+		Flit: flitMetaFromFlit(flit),
 	}
 	// OutputBuf should be a stateSendOutBuffer; find its index.
 	if sob, ok := flit.OutputBuf.(*stateSendOutBuffer); ok {
@@ -145,7 +198,7 @@ func (b *stateForwardBuffer) Peek() interface{} {
 		return nil
 	}
 	e := (*b.items)[0]
-	flit := &messaging.Flit{MsgMeta: e.Flit}
+	flit := e.Flit.toFlit()
 	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
@@ -156,17 +209,17 @@ func (b *stateForwardBuffer) Pop() interface{} {
 	}
 	e := (*b.items)[0]
 	*b.items = (*b.items)[1:]
-	flit := &messaging.Flit{MsgMeta: e.Flit}
+	flit := e.Flit.toFlit()
 	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
-// stateSendOutBuffer wraps a *[]sim.MsgMeta to satisfy queueing.Buffer.
+// stateSendOutBuffer wraps a *[]flitMeta to satisfy queueing.Buffer.
 // Used for sendOutBuffer.
 type stateSendOutBuffer struct {
 	sim.HookableBase
 	name     string
-	items    *[]sim.MsgMeta
+	items    *[]flitMeta
 	capacity int
 	portIdx  int // index of this port in middleware.ports
 }
@@ -179,23 +232,23 @@ func (b *stateSendOutBuffer) Clear()          { *b.items = nil }
 
 func (b *stateSendOutBuffer) Push(e interface{}) {
 	flit := e.(*messaging.Flit)
-	*b.items = append(*b.items, flit.MsgMeta)
+	*b.items = append(*b.items, flitMetaFromFlit(flit))
 }
 
 func (b *stateSendOutBuffer) Peek() interface{} {
 	if len(*b.items) == 0 {
 		return nil
 	}
-	return &messaging.Flit{MsgMeta: (*b.items)[0]}
+	return (*b.items)[0].toFlit()
 }
 
 func (b *stateSendOutBuffer) Pop() interface{} {
 	if len(*b.items) == 0 {
 		return nil
 	}
-	meta := (*b.items)[0]
+	fm := (*b.items)[0]
 	*b.items = (*b.items)[1:]
-	return &messaging.Flit{MsgMeta: meta}
+	return fm.toFlit()
 }
 
 // --- Free functions for pipeline operations ---
@@ -516,7 +569,7 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 			}
 
 			item := pcs.RouteBuffer[0]
-			outputBufIdx := m.resolveOutputBufIdx(item.MsgDst)
+			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
 
 			pcs.RouteBuffer = pcs.RouteBuffer[1:]
 			pcs.ForwardBuffer = append(pcs.ForwardBuffer, forwardBufferEntry{
@@ -584,8 +637,8 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
-			meta := curPcs.SendOutBuffer[numSent]
-			flit := &messaging.Flit{MsgMeta: meta}
+			fm := curPcs.SendOutBuffer[numSent]
+			flit := fm.toFlit()
 			flit.Src = port.AsRemote()
 			flit.Dst = curPcs.RemotePort
 
@@ -677,9 +730,9 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 
 			flit := itemI.(*messaging.Flit)
 			item := flitPipelineItemState{
-				TaskID: m.flitTaskID(flit),
-				Flit:   flit.MsgMeta,
-				MsgDst: flit.Msg.Meta().Dst,
+				TaskID:  m.flitTaskID(flit),
+				Flit:    flitMetaFromFlit(flit),
+				RouteTo: flit.Msg.Meta().Dst,
 			}
 			pipelineAccept(nextPcs, item)
 			port.RetrieveIncoming()
