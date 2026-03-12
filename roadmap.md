@@ -63,17 +63,16 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 ### ✅ M22: Fix A-B Pattern + Eliminate Comp Wrappers (All Remaining Components) (DONE)
 - Budget: 6 | Used: ~3 | PR: #48
 
-### M23: Multi-Middleware Split — Simple Components
+### M23: Multi-Middleware Split — Endpoint, DRAM, Switch, SimpleBankedMemory, TickingPing
 
-**Goal:** Split the simpler single-middleware components into multiple middlewares following natural stage boundaries.
+**Goal:** Split 5 components with the clearest stage boundaries into multiple middlewares.
 
 **Target components and proposed splits:**
-1. **addresstranslator** → 2 MW: parse incoming, send response
-2. **datamover** → 2 MW: control, data transfer
-3. **simplebankedmemory** → 2 MW: control, memory operations
-4. **tickingping** → 2 MW: receive, send
-5. **GMMU** → 2 MW: parse, walk+respond
-6. **MMU** → 2 MW: parse, walk+respond
+1. **endpoint** → 2 MW: incoming (network→local), outgoing (local→network). Zero shared state — trivial split.
+2. **DRAM** → 3 MW: parseTop, bankTick, respond. Stages already free functions.
+3. **tickingping** → 2 MW: receive+process, send. Example component.
+4. **simplebankedmemory** → 2 MW: dispatch, tick+finalize.
+5. **switch** → 2 MW: receive+pipeline, route+forward.
 
 **Each split must:**
 - Maintain correct A-B state semantics (read current, write next)
@@ -82,14 +81,15 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 **Budget**: 6 cycles
 
-### M24: Multi-Middleware Split — DRAM + Network Components
+### M24: Multi-Middleware Split — AddressTranslator, DataMover, MMU, GMMU
 
-**Goal:** Split DRAM, endpoint, and switch into multiple middlewares.
+**Goal:** Split the remaining non-cache single-middleware components.
 
 **Proposed splits:**
-- **DRAM** → 3 MW: parseTop (receive requests, create sub-transactions), bankTick (process commands, update timing), respond (send completed transactions)
-- **endpoint** → 2 MW: incoming (network→local), outgoing (local→network)
-- **switch** → 2-3 MW: receive, route/arbitrate, forward
+- **addresstranslator** → 2 MW: ctrl+translate, respond+pipeline
+- **datamover** → 2 MW: ctrl+parse, data transfer
+- **MMU** → 2 MW: translation engine, migration engine (MigrationQueue as natural boundary)
+- **GMMU** → 2 MW: parse+walk, fetchFromBottom+respond
 
 **Budget**: 6 cycles
 
@@ -98,16 +98,17 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 **Goal:** Split the 4 cache components into multiple middlewares.
 
 **Proposed middleware boundaries:**
-- **writearound/writeevict/writethrough**: topParser → directory → bank → bottomParser → respond (5 stages)
-- **writeback**: topParser → directory → bank → writeBuffer → mshr → flusher (6 stages)
+- **writearound/writeevict/writethrough** → 3 MW: FrontEnd (topParser/coalescer), Core (directory+bank), BackEnd (bottomParser+respond+control)
+- **writeback** → 3 MW: FrontEnd (topParser), Core (directory+bank), BackEnd (writeBuffer+mshr+flusher)
 
 **Key considerations:**
-- +1 cycle latency per middleware boundary (acceptable per human)
+- Under current MiddlewareHolder.Tick(), all MWs execute sequentially within one Tick — zero added latency (per Iris's analysis)
 - Each stage reads from `current`, writes to `next` — stages don't see each other's writes
-- Currently, all stages run within a single middleware's Tick() — the split makes them independent middlewares
+- No State struct changes needed — inter-stage buffers already exist as named fields
+- Start with one cache variant (writearound), replicate pattern to others
 
 **Budget**: 8 cycles
-**Risk**: High. Cache split is the most complex change. The writeback cache has the most stages and complex inter-stage data flow.
+**Risk**: Medium (reduced from high — Iris's analysis showed no latency impact and no state changes needed).
 
 ### M26: Final Cleanup + Documentation
 
@@ -119,7 +120,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 4. **Ensure all components** follow the identical pattern consistently
 5. **Full test suite pass** + acceptance tests
 6. **Clean up any remaining thin Comp wrappers**
-7. **Final code review pass**
+7. **Remove unused VictimFinder interface**
+8. **Final code review pass**
 
 **Budget**: 4 cycles
 
@@ -132,8 +134,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M21 | Cache cleanup | 8 | ✅ Done (~6 used) |
 | M21.5 | Fix CI lint failures | 2 | ✅ Done (1 used) |
 | M22 | Fix A-B + eliminate Comp | 6 | ✅ Done (~3 used) |
-| M23 | Multi-MW split — simple components | 6 | ⬅️ NEXT |
-| M24 | Multi-MW split — DRAM + network | 6 | Pending |
+| M23 | Multi-MW split — endpoint, DRAM, switch, simplebankedmemory, tickingping | 6 | ⬅️ NEXT |
+| M24 | Multi-MW split — addresstranslator, datamover, MMU, GMMU | 6 | Pending |
 | M25 | Multi-MW split — cache components | 8 | Pending |
 | M26 | Final cleanup + docs | 4 | Pending |
 | **Total Phase 2** | | **40** | |
