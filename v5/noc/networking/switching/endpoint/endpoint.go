@@ -55,17 +55,37 @@ type State struct {
 // actions of a few ports.
 type Comp struct {
 	*modeling.Component[Spec, State]
+}
 
-	NetworkPort      sim.Port
-	DefaultSwitchDst sim.RemotePort
+// mw returns the middleware from the component's middleware list.
+func (c *Comp) mw() *middleware {
+	return c.Middlewares()[0].(*middleware)
+}
 
-	mw *middleware
+// NetworkPort returns the network port of the endpoint.
+func (c *Comp) NetworkPort() sim.Port {
+	return c.mw().networkPort
+}
+
+// SetNetworkPort sets the network port of the endpoint.
+func (c *Comp) SetNetworkPort(p sim.Port) {
+	c.mw().networkPort = p
+}
+
+// DefaultSwitchDst returns the default switch destination.
+func (c *Comp) DefaultSwitchDst() sim.RemotePort {
+	return c.mw().defaultSwitchDst
+}
+
+// SetDefaultSwitchDst sets the default switch destination.
+func (c *Comp) SetDefaultSwitchDst(dst sim.RemotePort) {
+	c.mw().defaultSwitchDst = dst
 }
 
 // PlugIn connects a port to the endpoint.
 func (c *Comp) PlugIn(port sim.Port) {
 	port.SetConnection(c)
-	c.mw.devicePorts = append(c.mw.devicePorts, port)
+	c.mw().devicePorts = append(c.mw().devicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
@@ -130,9 +150,10 @@ func msgMetaToFlitStates(
 }
 
 type middleware struct {
-	comp        *modeling.Component[Spec, State]
-	endpoint    *Comp // back-reference for NetworkPort / DefaultSwitchDst
-	devicePorts []sim.Port
+	comp           *modeling.Component[Spec, State]
+	devicePorts    []sim.Port
+	networkPort    sim.Port
+	defaultSwitchDst sim.RemotePort
 }
 
 // NamedHookable delegation methods.
@@ -194,7 +215,7 @@ func (m *middleware) sendFlitOut() bool {
 		fs := cur.FlitsToSend[numSent]
 		flit := flitFromFlitState(fs)
 
-		err := m.endpoint.NetworkPort.Send(flit)
+		err := m.networkPort.Send(flit)
 		if err == nil {
 			numSent++
 			madeProgress = true
@@ -238,7 +259,7 @@ func (m *middleware) prepareFlits() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	next := m.comp.GetNextState()
-	networkPortRemote := m.endpoint.NetworkPort.AsRemote()
+	networkPortRemote := m.networkPort.AsRemote()
 
 	for {
 		if len(next.MsgOutBuf) == 0 {
@@ -247,7 +268,7 @@ func (m *middleware) prepareFlits() bool {
 
 		meta := next.MsgOutBuf[0]
 		next.MsgOutBuf = next.MsgOutBuf[1:]
-		flitStates := msgMetaToFlitStates(meta, spec, networkPortRemote, m.endpoint.DefaultSwitchDst)
+		flitStates := msgMetaToFlitStates(meta, spec, networkPortRemote, m.defaultSwitchDst)
 		next.FlitsToSend = append(next.FlitsToSend, flitStates...)
 
 		for _, fs := range flitStates {
@@ -264,7 +285,7 @@ func (m *middleware) recv() bool {
 	next := m.comp.GetNextState()
 
 	for i := 0; i < spec.NumInputChannels; i++ {
-		receivedI := m.endpoint.NetworkPort.PeekIncoming()
+		receivedI := m.networkPort.PeekIncoming()
 		if receivedI == nil {
 			return madeProgress
 		}
@@ -295,7 +316,7 @@ func (m *middleware) recv() bool {
 			next.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}
 
-		m.endpoint.NetworkPort.RetrieveIncoming()
+		m.networkPort.RetrieveIncoming()
 
 		m.logFlitE2ETaskFromFlit(flit, true)
 

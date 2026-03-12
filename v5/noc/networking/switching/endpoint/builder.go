@@ -110,24 +110,21 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 
 	mw := &middleware{
-		comp: modelComp,
+		comp:        modelComp,
+		networkPort: b.networkPort,
 	}
 
 	ep := &Comp{
-		Component:   modelComp,
-		NetworkPort: b.networkPort,
-		mw:          mw,
+		Component: modelComp,
 	}
 
-	mw.endpoint = ep
+	ep.AddMiddleware(mw)
 
 	b.networkPort.SetComponent(ep)
 
 	for _, dp := range b.devicePorts {
 		ep.PlugIn(dp)
 	}
-
-	ep.AddMiddleware(mw)
 
 	return ep
 }

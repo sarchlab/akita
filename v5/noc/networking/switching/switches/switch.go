@@ -370,13 +370,16 @@ func isNextStageOccupied(
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
 	*modeling.Component[Spec, State]
+}
 
-	mw *middleware // internal reference for port addition and delegation
+// mw returns the middleware from the component's middleware list.
+func (c *Comp) mw() *middleware {
+	return c.Middlewares()[0].(*middleware)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
-	return c.mw.routingTable
+	return c.mw().routingTable
 }
 
 // --- Middleware ---
@@ -705,5 +708,5 @@ func (a SwitchPortAdder) AddPort() {
 		Latency:          a.latency,
 		PipelineWidth:    a.numInputChannel,
 	}
-	a.sw.mw.addPort(a.localPort, a.remotePort.AsRemote(), pcs)
+	a.sw.mw().addPort(a.localPort, a.remotePort.AsRemote(), pcs)
 }

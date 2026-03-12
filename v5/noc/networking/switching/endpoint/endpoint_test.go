@@ -49,8 +49,8 @@ var _ = Describe("End Point", func() {
 			WithDevicePorts([]sim.Port{devicePort}).
 			WithNetworkPort(sim.NewPort(nil, 4, 4, "EndPoint.NetworkPort")).
 			Build("EndPoint")
-		endPoint.NetworkPort = networkPort
-		endPoint.DefaultSwitchDst = defaultSwitchPort.AsRemote()
+		endPoint.SetNetworkPort(networkPort)
+		endPoint.SetDefaultSwitchDst(defaultSwitchPort.AsRemote())
 	})
 
 	AfterEach(func() {

@@ -242,7 +242,7 @@ func (c *Connector) ConnectDevice(
 	epNode := c.createEndPoint(ports, param, swNode)
 	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
 	c.createRemoteInfoFoEP(
-		epNode, swNode, epNode.endPoint.NetworkPort, swPort, conn,
+		epNode, swNode, epNode.endPoint.NetworkPort(), swPort, conn,
 	)
 }
 
@@ -259,7 +259,7 @@ func (c *Connector) ConnectDeviceWithEPName(
 	epNode := c.createEndPointWithName(ports, param, swNode, epName)
 	swPort, conn := c.connectEndPointWithSwitch(swNode, epNode.endPoint, param)
 	c.createRemoteInfoFoEP(
-		epNode, swNode, epNode.endPoint.NetworkPort, swPort,
+		epNode, swNode, epNode.endPoint.NetworkPort(), swPort,
 		conn)
 
 	return epPort, swPort
@@ -294,7 +294,7 @@ func (c *Connector) createEndPointWithName(
 		param.DeviceEndParam.IncomingBufSize,
 		param.DeviceEndParam.OutgoingBufSize,
 		endPoint.Name()+".NetworkPort")
-	endPoint.NetworkPort = epPort
+	endPoint.SetNetworkPort(epPort)
 
 	epNode := &deviceNode{
 		ports:    ports,
@@ -320,13 +320,13 @@ func (c *Connector) connectEndPointWithSwitch(
 	param DeviceToSwitchLinkParameter,
 ) (sim.Port, namedHookableConnection) {
 	sw := swNode.sw
-	epPort := endPoint.NetworkPort
+	epPort := endPoint.NetworkPort()
 
 	swPort := c.portFactory(sw,
 		param.SwitchEndParam.IncomingBufSize,
 		param.SwitchEndParam.OutgoingBufSize,
 		fmt.Sprintf("%s.Port[%d]", sw.Name(), len(swNode.remotes)))
-	endPoint.DefaultSwitchDst = swPort.AsRemote()
+	endPoint.SetDefaultSwitchDst(swPort.AsRemote())
 	switches.MakeSwitchPortAdder(sw).
 		WithPorts(swPort, epPort).
 		WithLatency(param.SwitchEndParam.Latency).
