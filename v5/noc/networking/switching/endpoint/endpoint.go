@@ -182,27 +182,33 @@ func (m *middleware) flitTaskID(flitID string) string {
 func (m *middleware) sendFlitOut() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
+
+	numSent := 0
 
 	for i := 0; i < spec.NumOutputChannels; i++ {
-		if len(next.FlitsToSend) == 0 {
+		if numSent >= len(cur.FlitsToSend) {
 			return madeProgress
 		}
 
-		fs := next.FlitsToSend[0]
+		fs := cur.FlitsToSend[numSent]
 		flit := flitFromFlitState(fs)
 
 		err := m.endpoint.NetworkPort.Send(flit)
 		if err == nil {
-			next.FlitsToSend = next.FlitsToSend[1:]
-
-			if len(next.FlitsToSend) == 0 {
-				for _, p := range m.devicePorts {
-					p.NotifyAvailable()
-				}
-			}
-
+			numSent++
 			madeProgress = true
+		}
+	}
+
+	if numSent > 0 {
+		next := m.comp.GetNextState()
+		next.FlitsToSend = next.FlitsToSend[numSent:]
+
+		if len(next.FlitsToSend) == 0 {
+			for _, p := range m.devicePorts {
+				p.NotifyAvailable()
+			}
 		}
 	}
 
@@ -211,7 +217,6 @@ func (m *middleware) sendFlitOut() bool {
 
 func (m *middleware) prepareMsg() bool {
 	madeProgress := false
-	next := m.comp.GetNextState()
 
 	for i := 0; i < len(m.devicePorts); i++ {
 		port := m.devicePorts[i]
@@ -220,6 +225,7 @@ func (m *middleware) prepareMsg() bool {
 		}
 
 		msg := port.RetrieveOutgoing()
+		next := m.comp.GetNextState()
 		next.MsgOutBuf = append(next.MsgOutBuf, *msg.Meta())
 
 		madeProgress = true
@@ -301,10 +307,12 @@ func (m *middleware) recv() bool {
 
 func (m *middleware) assemble() bool {
 	madeProgress := false
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	remaining := next.AssemblingMsgs[:0]
-	for _, a := range next.AssemblingMsgs {
+	remaining := make([]assemblingMsgState, 0, len(cur.AssemblingMsgs))
+
+	for _, a := range cur.AssemblingMsgs {
 		if a.NumFlitArrived < a.NumFlitRequired {
 			remaining = append(remaining, a)
 			continue
@@ -329,10 +337,12 @@ func (m *middleware) assemble() bool {
 
 func (m *middleware) tryDeliver() bool {
 	madeProgress := false
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	for len(next.AssembledMsgs) > 0 {
-		meta := next.AssembledMsgs[0]
+	numDelivered := 0
+
+	for i := 0; i < len(cur.AssembledMsgs); i++ {
+		meta := cur.AssembledMsgs[i]
 		dst := meta.Dst
 
 		var dstPort sim.Port
@@ -359,14 +369,18 @@ func (m *middleware) tryDeliver() bool {
 
 		err := dstPort.Deliver(msg)
 		if err != nil {
-			return madeProgress
+			break
 		}
 
 		m.logMsgE2ETask(msg, true)
 
-		next.AssembledMsgs = next.AssembledMsgs[1:]
-
+		numDelivered++
 		madeProgress = true
+	}
+
+	if numDelivered > 0 {
+		next := m.comp.GetNextState()
+		next.AssembledMsgs = next.AssembledMsgs[numDelivered:]
 	}
 
 	return madeProgress
