@@ -14,26 +14,6 @@ type ctrlMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *ctrlMiddleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *ctrlMiddleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *ctrlMiddleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *ctrlMiddleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *ctrlMiddleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *ctrlMiddleware) controlPort() sim.Port {
 	return m.comp.GetPortByName("Control")
 }
@@ -131,11 +111,11 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m),
+		tracing.MsgIDAtReceiver(item, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	return true
@@ -181,11 +161,11 @@ func (m *ctrlMiddleware) handleTLBRestart(msg *RestartReq) bool {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(msg, m),
+		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	next := m.comp.GetNextState()

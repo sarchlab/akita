@@ -177,7 +177,7 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 }
 
 // Build creates a new TLB
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	addrMapperKind, addrMapperPorts, addrMapperInterleavingSize := b.resolveAddressMapper()
 
 	spec := Spec{
@@ -206,17 +206,13 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.SetState(initialState)
 
-	c := &Comp{
-		Component: modelComp,
-	}
-
-	b.topPort.SetComponent(c)
+	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
 
-	b.bottomPort.SetComponent(c)
+	b.bottomPort.SetComponent(modelComp)
 	modelComp.AddPort("Bottom", b.bottomPort)
 
-	b.controlPort.SetComponent(c)
+	b.controlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", b.controlPort)
 
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
@@ -225,7 +221,7 @@ func (b Builder) Build(name string) *Comp {
 	tlbMW := &tlbMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(tlbMW)
 
-	return c
+	return modelComp
 }
 
 func (b Builder) resolveAddressMapper() (string, []sim.RemotePort, uint64) {

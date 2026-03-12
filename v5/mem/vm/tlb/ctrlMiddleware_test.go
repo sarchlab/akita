@@ -3,6 +3,7 @@ package tlb
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
 )
@@ -12,7 +13,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 	var (
 		mockCtrl    *gomock.Controller
 		engine      *MockEngine
-		comp        *Comp
+		comp        *modeling.Component[Spec, State]
 		ctrlMW      *ctrlMiddleware
 		controlPort *MockPort
 	)

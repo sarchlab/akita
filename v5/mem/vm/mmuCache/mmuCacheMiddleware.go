@@ -14,26 +14,6 @@ type mmuCacheMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *mmuCacheMiddleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *mmuCacheMiddleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *mmuCacheMiddleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *mmuCacheMiddleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *mmuCacheMiddleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *mmuCacheMiddleware) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -74,7 +54,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".",
 			m.comp.Name(),
-			m,
+			m.comp,
 		)
 	}
 
@@ -297,7 +277,7 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
-		m,
+		m.comp,
 	)
 
 	// Reset table

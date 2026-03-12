@@ -111,7 +111,7 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 }
 
 // Build creates a new mmuCache
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	if b.numBlocks <= 0 {
 		panic("mmuCache.Builder: numBlocks must be > 0")
 	}
@@ -139,17 +139,13 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.SetState(initialState)
 
-	c := &Comp{
-		Component: modelComp,
-	}
-
-	b.topPort.SetComponent(c)
+	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
 
-	b.bottomPort.SetComponent(c)
+	b.bottomPort.SetComponent(modelComp)
 	modelComp.AddPort("Bottom", b.bottomPort)
 
-	b.controlPort.SetComponent(c)
+	b.controlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", b.controlPort)
 
 	ctrlMW := &ctrlMiddleware{comp: modelComp}
@@ -158,5 +154,5 @@ func (b Builder) Build(name string) *Comp {
 	cacheMW := &mmuCacheMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(cacheMW)
 
-	return c
+	return modelComp
 }
