@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (PROJECT COMPLETE — Cycle 215)
+## Current State (ALL MILESTONES COMPLETE — Cycle 231)
 
 ### What's Done
 
@@ -19,8 +19,10 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Dependencies inlined (DRAM) | ✅ | All internal packages eliminated, logic embedded |
 | Dependencies inlined (caches) | ✅ | legacyMapper resolved at Build time, routing via Spec |
 | A-B pattern correct | ✅ | All components use GetState() for reads, GetNextState() for writes |
-| Comp wrapper elimination | ✅ | addresstranslator, datamover, MMU, GMMU, DRAM — Comp removed |
-| CI passing | ✅ | Build, vet, tests all pass (PR #51 merged) |
+| Comp wrapper elimination | ✅ | addresstranslator, datamover, MMU, GMMU, DRAM, TLB, mmuCache — Comp removed |
+| Middleware boilerplate eliminated | ✅ | All ~160 delegation methods removed, tracing passes m.comp |
+| Protocol files renamed | ✅ | tlbprotocol.go → messages.go, mmuCacheProtocol.go → messages.go |
+| CI passing | ✅ | Build, vet, tests all pass (PR #56 merged) |
 | Multi-MW split (batch 1) | ✅ | endpoint(2), DRAM(3), switch(2), simplebankedmemory(2), tickingping(2) |
 | Multi-MW split (batch 2) | ✅ | addresstranslator(2), datamover(2), MMU(2), GMMU(2) |
 | Multi-MW split (batch 3) | ✅ | writeback(2), writearound(2), writeevict(2), writethrough(2) — PR #51 |
@@ -34,8 +36,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | writeevict cache | none | ✅ | ✅ | 2 | Done (M25) |
 | writethrough cache | none | ✅ | ✅ | 2 | Done (M25) |
 | writeback cache | none | ✅ | ✅ | 2 | Done (M25) |
-| TLB | thin | ✅ | ✅ | 2 | Done |
-| mmuCache | thin | ✅ | ✅ | 2 | Done |
+| TLB | none | ✅ | ✅ | 2 | Done (M29 removed wrapper) |
+| mmuCache | none | ✅ | ✅ | 2 | Done (M29 removed wrapper) |
 | DRAM | none | ✅ | ✅ | 3 | Done (M23) |
 | addresstranslator | none | ✅ | ✅ | 2 | Done (M24) |
 | datamover | none | ✅ | ✅ | 2 | Done (M24) |
@@ -46,13 +48,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | switch | thin (API) | ✅ | ✅ | 2 | Done (M23) |
 | tickingping | none | ✅ | ✅ | 2 | Done (M23) |
 
-### Summary of Remaining Gaps
+### Summary of Remaining Items (all acceptable per spec)
 
-1. **component_guide.md** needs update for A-B state, multi-MW, no-dependency patterns
-2. **VictimFinder interface + old Directory struct** still exist (unused dead code — not removed)
-3. **queueing.Buffer adapters** still used by switch for arbitration compatibility
-4. **examples/ping** still uses old event-driven model (not modeling.Component)
-5. **Thin Comp wrappers** remain in 6 components for StorageOwner/API interfaces (acceptable per spec)
+1. ✅ **component_guide.md** updated in M26
+2. ✅ **Dead code** (VictimFinder, old Directory, etc.) removed in M26
+3. **queueing.Buffer adapters** still used by switch for arbitration compatibility (acceptable)
+4. **examples/ping** uses old event-driven model (marked as legacy in M26)
+5. **Thin Comp wrappers** remain in 4 components for StorageOwner/API interfaces (acceptable per spec: idealmemcontroller, simplebankedmemory, endpoint, switch)
 
 ---
 
@@ -119,8 +121,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - **Reverted via PR #55.** Sim package restored to original state.
 - **Lesson: Never proceed with implementation without explicit human approval on discussed items.**
 
-### M29: Address Human Code Review Feedback (issue #296)
-- Budget: 6 | Used: 0
+### ✅ M29: Address Human Code Review Feedback (issue #296) (DONE)
+- Budget: 6 | Used: ~4 | PR: #56
 - Scope:
   1. **Remove 2 unnecessary Comp wrappers** in `mem/vm/tlb/tlb.go` and `mem/vm/mmuCache/mmuCache.go` — builders return `*modeling.Component[Spec, State]` directly
   2. **Eliminate ~160 middleware delegation methods** (~480 lines) — change all tracing calls from `tracing.Foo(..., m)` to `tracing.Foo(..., m.comp)` across 33 middleware structs, then delete Name/AcceptHook/Hooks/NumHooks/InvokeHook methods
@@ -133,7 +135,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
   - No middleware struct implements Name/AcceptHook/Hooks/NumHooks/InvokeHook
   - No `type Comp struct` in TLB or mmuCache
   - All `CollectTrace` calls pass component (not middleware) as the domain
-- Status: READY — handing to Ares
+- Status: ✅ DONE — verified by Apollo, merged via PR #56
 
 ---
 
