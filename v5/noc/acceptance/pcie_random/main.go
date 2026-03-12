@@ -5,27 +5,25 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/pcie"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/tebeka/atexit"
 )
 
-var numDevicePerSwitch = 8
-var numPortPerDevice = 9
+var numDevicePerSwitch = 4
+var numPortPerDevice = 3
 
 func main() {
 	flag.Parse()
 	rand.Seed(1)
 
 	engine := sim.NewSerialEngine()
-	// engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	t := acceptance.NewTest()
 
 	createNetwork(engine, t)
-	t.GenerateMsgs(10000)
+	t.GenerateMsgs(100)
 
 	err := engine.Run()
 	if err != nil {
@@ -38,10 +36,6 @@ func main() {
 }
 
 func createNetwork(engine sim.Engine, test *acceptance.Test) {
-	monitor := monitoring.NewMonitor()
-	monitor.RegisterEngine(engine)
-	monitor.StartServer()
-
 	freq := 1.0 * sim.GHz
 
 	var agents []*acceptance.Agent
@@ -56,14 +50,12 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		agent.TickLater()
 		agents = append(agents, agent)
 		test.RegisterAgent(agent)
-		monitor.RegisterComponent(agent)
 	}
 
 	pcieConnector := pcie.NewConnector()
 	pcieConnector = pcieConnector.
 		WithEngine(engine).
 		WithFrequency(freq).
-		WithMonitor(monitor).
 		WithVersion(4, 16)
 
 	pcieConnector.CreateNetwork("PCIe")

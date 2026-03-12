@@ -10,20 +10,18 @@ type bankTickMW struct {
 
 // Tick runs tickBanks, issue, and tickSubTransQueue.
 func (m *bankTickMW) Tick() bool {
-	curVal := m.comp.GetState()
-	cur := &curVal
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
 	progress := tickBanks(&spec, next)
-	progress = m.issue(&spec, cur, next) || progress
+	progress = m.issue(&spec, next) || progress
 	progress = tickSubTransQueue(&spec, next) || progress
 
 	return progress
 }
 
-func (m *bankTickMW) issue(spec *Spec, cur *State, next *State) bool {
-	cmd := getCommandToIssue(spec, cur, next)
+func (m *bankTickMW) issue(spec *Spec, next *State) bool {
+	cmd := getCommandToIssue(spec, next)
 	if cmd == nil {
 		return false
 	}

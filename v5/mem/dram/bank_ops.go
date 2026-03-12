@@ -44,10 +44,16 @@ func completeCommand(state *State, bs *bankState) {
 
 	kind := CommandKind(cmd.Kind)
 	if isReadOrWrite(kind) {
-		// Mark the sub-transaction as completed
+		// Mark the sub-transaction as completed.
+		// The ref may have been invalidated (TransIndex == -1) if the
+		// parent transaction was already removed by respondMW. In that
+		// case there is nothing to mark.
 		ref := cmd.SubTransRef
-		state.Transactions[ref.TransIndex].
-			SubTransactions[ref.SubIndex].Completed = true
+		if ref.TransIndex >= 0 && ref.TransIndex < len(state.Transactions) &&
+			ref.SubIndex >= 0 && ref.SubIndex < len(state.Transactions[ref.TransIndex].SubTransactions) {
+			state.Transactions[ref.TransIndex].
+				SubTransactions[ref.SubIndex].Completed = true
+		}
 	}
 
 	bs.HasCurrentCmd = false

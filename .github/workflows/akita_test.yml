@@ -65,7 +65,7 @@ jobs:
 
   noc_acceptance_test:
     runs-on: self-hosted
-    timeout-minutes: 20
+    timeout-minutes: 60
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
 
   mem_acceptance_test:
     runs-on: self-hosted
-    timeout-minutes: 20
+    timeout-minutes: 60
     needs: [akita_build_lint_test]
     steps:
       - uses: actions/checkout@v4

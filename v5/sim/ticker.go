@@ -147,6 +147,12 @@ func (c *TickingComponent) NotifyRecv(
 	c.TickLater()
 }
 
+// SetTicker replaces the Ticker used by Handle. This allows wrapper types
+// (e.g. endpoint.Comp) to override the Tick method after construction.
+func (c *TickingComponent) SetTicker(t Ticker) {
+	c.ticker = t
+}
+
 // Handle triggers the tick function of the TickingComponent
 func (c *TickingComponent) Handle(e Event) error {
 	madeProgress := c.ticker.Tick()

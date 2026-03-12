@@ -36,8 +36,10 @@ type transactionState struct {
 	data                  []byte
 	writeFetchedDirtyMask []bool
 
-	fetchAndWrite bool
-	done          bool
+	fetchAndWrite   bool
+	done            bool
+	bottomWriteDone bool
+	bankDone        bool
 }
 
 func (t *transactionState) Address() uint64 {

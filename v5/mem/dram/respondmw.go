@@ -15,18 +15,16 @@ type respondMW struct {
 
 // Tick runs the respond stage twice (matching original execution order).
 func (m *respondMW) Tick() bool {
-	curVal := m.comp.GetState()
-	cur := &curVal
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
-	progress := m.respond(&spec, cur, next)
-	progress = m.respond(&spec, cur, next) || progress
+	progress := m.respond(&spec, next)
+	progress = m.respond(&spec, next) || progress
 
 	return progress
 }
 
-func (m *respondMW) respond(spec *Spec, cur *State, next *State) bool {
+func (m *respondMW) respond(spec *Spec, next *State) bool {
 	for i := range next.Transactions {
 		t := &next.Transactions[i]
 		if isTransactionCompleted(t) {

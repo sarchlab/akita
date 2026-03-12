@@ -123,6 +123,10 @@ func (b Builder) Build(name string) *Comp {
 		Component: modelComp,
 	}
 
+	// Override the ticker so that Handle() calls ep.Tick() (the fast
+	// shallow-copy version) rather than modelComp.Tick() (JSON deep-copy).
+	ep.SetTicker(ep)
+
 	ep.AddMiddleware(outMW)
 	ep.AddMiddleware(inMW)
 

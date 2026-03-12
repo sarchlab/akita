@@ -25,6 +25,8 @@ type transactionSnapshot struct {
 	WriteFetchedDirtyMask []bool      `json:"write_fetched_dirty_mask"`
 	FetchAndWrite         bool        `json:"fetch_and_write"`
 	Done                  bool        `json:"done"`
+	BottomWriteDone       bool        `json:"bottom_write_done"`
+	BankDone              bool        `json:"bank_done"`
 }
 
 // dirPipelineStageState captures one directory pipeline slot.
@@ -85,8 +87,10 @@ func snapshotTransaction(
 	s := transactionSnapshot{
 		ID:            t.id,
 		BankAction:    int(t.bankAction),
-		FetchAndWrite: t.fetchAndWrite,
-		Done:          t.done,
+		FetchAndWrite:   t.fetchAndWrite,
+		Done:            t.done,
+		BottomWriteDone: t.bottomWriteDone,
+		BankDone:        t.bankDone,
 	}
 
 	if t.read != nil {
@@ -193,8 +197,10 @@ func restoreTransactionCore(
 	t := &transactionState{
 		id:            s.ID,
 		bankAction:    bankActionType(s.BankAction),
-		fetchAndWrite: s.FetchAndWrite,
-		done:          s.Done,
+		fetchAndWrite:   s.FetchAndWrite,
+		done:            s.Done,
+		bottomWriteDone: s.BottomWriteDone,
+		bankDone:        s.BankDone,
 	}
 
 	restoreTransMsgs(t, s)

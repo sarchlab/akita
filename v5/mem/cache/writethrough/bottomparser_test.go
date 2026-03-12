@@ -125,7 +125,9 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(madeProgress).To(BeTrue())
 			Expect(preCTrans1.done).To(BeTrue())
 			Expect(preCTrans2.done).To(BeTrue())
-			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans))
+			// Transaction stays until bankDone is also true.
+			Expect(postCTrans.bottomWriteDone).To(BeTrue())
+			Expect(c.postCoalesceTransactions).To(ContainElement(postCTrans))
 		})
 	})
 

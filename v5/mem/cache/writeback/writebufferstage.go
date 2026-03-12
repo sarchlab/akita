@@ -98,10 +98,11 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 		panic("sendFetchedDataToBank without MSHR entry")
 	}
 
-	mshrEntry := &next.MSHRState.Entries[trans.mshrEntryIndex]
+	mshrIdx := wb.lookupMSHRIndex(trans)
+	mshrEntry := &next.MSHRState.Entries[mshrIdx]
 	mshrEntry.Data = trans.fetchedData
 	trans.action = bankWriteFetched
-	wb.combineData(trans.mshrEntryIndex)
+	wb.combineData(mshrIdx)
 
 	// Resolve MSHR transaction pointers before removal
 	trans.mshrData = make([]byte, len(mshrEntry.Data))
@@ -285,11 +286,12 @@ func (wb *writeBufferStage) processDataReadyRsp(
 		panic("processDataReadyRsp without MSHR entry")
 	}
 
+	mshrIdx := wb.lookupMSHRIndex(trans)
 	trans.fetchedData = msg.Data
 	trans.action = bankWriteFetched
-	mshrEntry := &next.MSHRState.Entries[trans.mshrEntryIndex]
+	mshrEntry := &next.MSHRState.Entries[mshrIdx]
 	mshrEntry.Data = msg.Data
-	wb.combineData(trans.mshrEntryIndex)
+	wb.combineData(mshrIdx)
 
 	// Resolve MSHR transaction pointers before removal
 	trans.mshrData = make([]byte, len(mshrEntry.Data))
@@ -403,6 +405,18 @@ func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 
 func (wb *writeBufferStage) Reset() {
 	wb.cache.writeBufferBuffer.Clear()
+}
+
+// lookupMSHRIndex finds the current index of the MSHR entry for this
+// transaction.  The stored mshrEntryIndex may be stale because MSHRRemove
+// shifts entries, so we re-query by PID+Address.
+func (wb *writeBufferStage) lookupMSHRIndex(trans *transactionState) int {
+	next := wb.cache.comp.GetNextState()
+	idx, found := cache.MSHRQuery(&next.MSHRState, trans.fetchPID, trans.fetchAddress)
+	if !found {
+		panic("lookupMSHRIndex: MSHR entry not found")
+	}
+	return idx
 }
 
 // resolveEntryTransactions collects the actual transaction pointers from

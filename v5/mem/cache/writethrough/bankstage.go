@@ -58,9 +58,8 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	stages := cur.BankPipelineStages[s.bankID].Stages
+	stages := next.BankPipelineStages[s.bankID].Stages
 
 	if !bankPipelineCanAccept(stages, s.numReqPerCycle) {
 		return false
@@ -99,27 +98,25 @@ func (s *bankStage) finalizeTrans() bool {
 }
 
 func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
-		curBlock.CacheAddress, trans.read.AccessByteSize)
+		nextBlock.CacheAddress, trans.read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
 
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock.ReadCount--
 
 	for _, t := range trans.preCoalesceTransactions {
-		offset := t.read.Address - curBlock.Tag
+		offset := t.read.Address - nextBlock.Tag
 		t.data = data[offset : offset+t.read.AccessByteSize]
 		t.done = true
 	}
 
-	s.removeTransaction(trans)
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
+	s.removeTransaction(trans)
 
 	tracing.EndTask(trans.id, s.cache.comp)
 
@@ -127,17 +124,16 @@ func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
-	data, err := s.cache.storage.Read(curBlock.CacheAddress, uint64(blockSize))
+	data, err := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
 	if err != nil {
 		panic(err)
 	}
 
-	offset := trans.write.Address - curBlock.Tag
+	offset := trans.write.Address - nextBlock.Tag
 
 	for i := 0; i < len(trans.write.Data); i++ {
 		if trans.write.DirtyMask[i] {
@@ -145,33 +141,38 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 		}
 	}
 
-	err = s.cache.storage.Write(curBlock.CacheAddress, data)
+	err = s.cache.storage.Write(nextBlock.CacheAddress, data)
 	if err != nil {
 		panic(err)
 	}
 
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock.DirtyMask = trans.write.DirtyMask
 	nextBlock.IsLocked = false
 
 	s.cache.bankPostBufAdapters[s.bankID].Pop()
 
-	tracing.EndTask(trans.id, s.cache.comp)
+	// Mark that bank processing is complete.
+	trans.bankDone = true
+
+	// If the bottom write response already arrived, clean up the
+	// transaction now. Otherwise it will be cleaned up by processDoneRsp.
+	if trans.bottomWriteDone {
+		s.removeTransaction(trans)
+		tracing.EndTask(trans.id, s.cache.comp)
+	}
 
 	return true
 }
 
 func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	err := s.cache.storage.Write(curBlock.CacheAddress, trans.data)
+	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.data)
 	if err != nil {
 		panic(err)
 	}
 
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock.DirtyMask = trans.writeFetchedDirtyMask
 	nextBlock.IsLocked = false
 

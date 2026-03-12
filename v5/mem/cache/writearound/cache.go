@@ -50,6 +50,10 @@ type pipelineMW struct {
 	topPort    sim.Port
 	bottomPort sim.Port
 
+	// legacyMapper is kept for backward compatibility with code that sets the
+	// mapper's Port field after Build().
+	legacyMapper mem.AddressToPortMapper
+
 	storage *mem.Storage
 
 	// curState holds the A-buffer snapshot for the current tick.
@@ -82,19 +86,34 @@ func (m *pipelineMW) GetSpec() Spec {
 }
 
 // findPort resolves an address to a remote port using data from Spec.
+// Falls back to legacyMapper when the Spec port names are empty.
 func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
 	switch spec.AddressMapperType {
 	case "single":
-		return sim.RemotePort(spec.RemotePortNames[0])
+		if len(spec.RemotePortNames) > 0 {
+			name := spec.RemotePortNames[0]
+			if name != "" {
+				return sim.RemotePort(name)
+			}
+		}
 	case "interleaved":
-		n := uint64(len(spec.RemotePortNames))
-		idx := address / spec.InterleavingSize % n
-		return sim.RemotePort(spec.RemotePortNames[idx])
+		if n := uint64(len(spec.RemotePortNames)); n > 0 {
+			idx := address / spec.InterleavingSize % n
+			name := spec.RemotePortNames[idx]
+			if name != "" {
+				return sim.RemotePort(name)
+			}
+		}
 	}
 
-	panic("unknown address mapper type: " + spec.AddressMapperType)
+	if m.legacyMapper != nil {
+		return m.legacyMapper.Find(address)
+	}
+
+	panic("findPort: no valid address mapping for address; " +
+		"Spec.AddressMapperType=" + spec.AddressMapperType)
 }
 
 // Tick updates the state of the cache pipeline.

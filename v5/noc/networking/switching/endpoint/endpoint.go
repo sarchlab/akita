@@ -65,6 +65,51 @@ type Comp struct {
 	*modeling.Component[Spec, State]
 }
 
+// Tick overrides the default modeling.Component.Tick to avoid the expensive
+// JSON-based deep copy. The endpoint state consists only of value-type slices
+// (no pointers or interfaces), so a shallow copy of slice headers is
+// sufficient and O(1).
+func (c *Comp) Tick() bool {
+	cur := c.GetState()
+	next := shallowCopyState(cur)
+	c.SetNextState(next)
+
+	madeProgress := c.MiddlewareHolder.Tick()
+
+	// Promote next → current without JSON deep copy.
+	c.CommitTick()
+
+	return madeProgress
+}
+
+// shallowCopyState creates an independent copy of the state by duplicating all
+// slice headers. This is O(1) and avoids the O(N) JSON round-trip.
+func shallowCopyState(s State) State {
+	cp := s
+
+	if len(s.MsgOutBuf) > 0 {
+		cp.MsgOutBuf = make([]sim.MsgMeta, len(s.MsgOutBuf))
+		copy(cp.MsgOutBuf, s.MsgOutBuf)
+	}
+
+	if len(s.FlitsToSend) > 0 {
+		cp.FlitsToSend = make([]flitState, len(s.FlitsToSend))
+		copy(cp.FlitsToSend, s.FlitsToSend)
+	}
+
+	if len(s.AssemblingMsgs) > 0 {
+		cp.AssemblingMsgs = make([]assemblingMsgState, len(s.AssemblingMsgs))
+		copy(cp.AssemblingMsgs, s.AssemblingMsgs)
+	}
+
+	if len(s.AssembledMsgs) > 0 {
+		cp.AssembledMsgs = make([]sim.MsgMeta, len(s.AssembledMsgs))
+		copy(cp.AssembledMsgs, s.AssembledMsgs)
+	}
+
+	return cp
+}
+
 // outgoingMW returns the outgoing middleware from the component's middleware list.
 func (c *Comp) outgoingMW() *outgoingMW {
 	return c.Middlewares()[0].(*outgoingMW)
@@ -238,17 +283,28 @@ func (m *outgoingMW) sendFlitOut() bool {
 	return madeProgress
 }
 
+// maxMsgOutBufSize limits the number of messages buffered before flit
+// conversion. This prevents the serialisable state from growing
+// unboundedly and causing slow JSON deep copies.
+const maxMsgOutBufSize = 16
+
 func (m *outgoingMW) prepareMsg() bool {
 	madeProgress := false
+	next := m.comp.GetNextState()
 
 	for i := 0; i < len(m.devicePorts); i++ {
+		// Backpressure: stop accepting new messages when the outgoing
+		// message buffer is already large enough.
+		if len(next.MsgOutBuf) >= maxMsgOutBufSize {
+			break
+		}
+
 		port := m.devicePorts[i]
 		if port.PeekOutgoing() == nil {
 			continue
 		}
 
 		msg := port.RetrieveOutgoing()
-		next := m.comp.GetNextState()
 		next.MsgOutBuf = append(next.MsgOutBuf, *msg.Meta())
 
 		madeProgress = true
@@ -256,6 +312,11 @@ func (m *outgoingMW) prepareMsg() bool {
 
 	return madeProgress
 }
+
+// maxFlitsToBuffer limits the number of flits held in FlitsToSend at once.
+// This prevents the serialisable state from growing unboundedly, which would
+// make the JSON-based deep copy in modeling.Component.Tick() extremely slow.
+const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
@@ -265,6 +326,12 @@ func (m *outgoingMW) prepareFlits() bool {
 
 	for {
 		if len(next.MsgOutBuf) == 0 {
+			return madeProgress
+		}
+
+		// Apply backpressure: don't convert more messages to flits while
+		// the flit send buffer is already large.
+		if len(next.FlitsToSend) >= maxFlitsToBuffer {
 			return madeProgress
 		}
 

@@ -30,7 +30,9 @@ func (b *Builder) resolveLegacyMapper() {
 		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
 
-	b.legacyMapper = nil
+	// NOTE: we intentionally keep b.legacyMapper set so that
+	// buildPipelineMW can attach it to the pipelineMW as a runtime
+	// fallback (needed when the mapper's Port is set after Build).
 }
 
 // A Builder can build writeback caches
@@ -279,6 +281,7 @@ func (b *Builder) buildPipelineMW(
 		comp:         comp,
 		state:        cacheStateRunning,
 		evictingList: make(map[uint64]bool),
+		legacyMapper: b.legacyMapper,
 	}
 
 	b.createPipelinePorts(m, comp)

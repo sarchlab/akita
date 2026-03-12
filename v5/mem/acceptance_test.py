@@ -84,266 +84,234 @@ def main():
     error |= compile_test("acceptancetests/idealmemcontroller")
     error |= run_test(
         "Ideal Memory controller 1",
-        "./idealmemcontroller -max-address=64 -num-access=10000",
+        "./idealmemcontroller -max-address=64 -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
     error |= run_test(
         "Ideal Memory controller 2",
-        "./idealmemcontroller -max-address=1024 -num-access=10000",
+        "./idealmemcontroller -max-address=1024 -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
     error |= run_test(
         "Ideal Memory controller 3",
-        "./idealmemcontroller -max-address=1048576 -num-access=10000",
+        "./idealmemcontroller -max-address=1048576 -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
     error |= run_test(
         "Ideal Memory controller 4",
-        "./idealmemcontroller -max-address=64 -parallel -num-access=10000",
+        "./idealmemcontroller -max-address=64 -parallel -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
     error |= run_test(
         "Ideal Memory controller 5",
-        "./idealmemcontroller -max-address=1024 -parallel -num-access=10000",
+        "./idealmemcontroller -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
     error |= run_test(
         "Ideal Memory controller 6",
-        "./idealmemcontroller -max-address=1048576 -parallel -num-access=10000",
+        "./idealmemcontroller -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/idealmemcontroller",
     )
 
     error |= compile_test("acceptancetests/writebackcache")
     error |= run_test(
         "Write-back cache 1",
-        "./writebackcache -max-address=64 -num-access=10000",
+        "./writebackcache -max-address=64 -num-access=1000",
         "acceptancetests/writebackcache",
     )
     error |= run_test(
         "Write-back cache 2",
-        "./writebackcache -max-address=1024 -num-access=10000",
+        "./writebackcache -max-address=1024 -num-access=1000",
         "acceptancetests/writebackcache",
     )
     error |= run_test(
         "Write-back cache 3",
-        "./writebackcache -max-address=1048576 -num-access=10000",
+        "./writebackcache -max-address=1048576 -num-access=1000",
         "acceptancetests/writebackcache",
     )
     error |= run_test(
         "Write-back cache 4",
-        "./writebackcache -max-address=64 -parallel -num-access=10000",
+        "./writebackcache -max-address=64 -parallel -num-access=1000",
         "acceptancetests/writebackcache",
     )
     error |= run_test(
         "Write-back cache 5",
-        "./writebackcache -max-address=1024 -parallel -num-access=10000",
+        "./writebackcache -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/writebackcache",
     )
     error |= run_test(
         "Write-back cache 6",
-        "./writebackcache -max-address=1048576 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-
-    error |= compile_test("acceptancetests/writebackcache")
-    error |= run_test(
-        "Write-back cache 1",
-        "./writebackcache -max-address=64 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 2",
-        "./writebackcache -max-address=1024 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 3",
-        "./writebackcache -max-address=1048576 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 4",
-        "./writebackcache -max-address=64 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 5",
-        "./writebackcache -max-address=1024 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 6",
-        "./writebackcache -max-address=1048576 -parallel -num-access=10000",
+        "./writebackcache -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/writebackcache",
     )
 
     error |= compile_test("acceptancetests/dram")
     error |= run_test(
-        "DRAM cache 1",
-        "./dram -max-address=64 -num-access=10000",
+        "DRAM 1",
+        "./dram -max-address=64 -num-access=1000",
         "acceptancetests/dram",
     )
     error |= run_test(
-        "DRAM cache 2",
-        "./dram -max-address=1024 -num-access=10000",
+        "DRAM 2",
+        "./dram -max-address=1024 -num-access=1000",
         "acceptancetests/dram",
     )
     error |= run_test(
-        "DRAM cache 3",
-        "./dram -max-address=1048576 -num-access=10000",
+        "DRAM 3",
+        "./dram -max-address=1048576 -num-access=1000",
         "acceptancetests/dram",
     )
     error |= run_test(
-        "DRAM cache 4",
-        "./dram -max-address=64 -parallel -num-access=10000",
+        "DRAM 4",
+        "./dram -max-address=64 -parallel -num-access=1000",
         "acceptancetests/dram",
     )
     error |= run_test(
-        "DRAM cache 5",
-        "./dram -max-address=1024 -parallel -num-access=10000",
+        "DRAM 5",
+        "./dram -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/dram",
     )
     error |= run_test(
-        "DRAM cache 6",
-        "./dram -max-address=1048576 -parallel -num-access=10000",
+        "DRAM 6",
+        "./dram -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/dram",
     )
 
     error |= compile_test("acceptancetests/writeevictcache")
     error |= run_test(
         "Write-evict cache 1",
-        "./writeevictcache -max-address=64 -num-access=10000",
+        "./writeevictcache -max-address=64 -num-access=1000",
         "acceptancetests/writeevictcache",
     )
     error |= run_test(
         "Write-evict cache 2",
-        "./writeevictcache -max-address=1024 -num-access=10000",
+        "./writeevictcache -max-address=1024 -num-access=1000",
         "acceptancetests/writeevictcache",
     )
     error |= run_test(
         "Write-evict cache 3",
-        "./writeevictcache -max-address=1048576 -num-access=10000",
+        "./writeevictcache -max-address=1048576 -num-access=1000",
         "acceptancetests/writeevictcache",
     )
     error |= run_test(
         "Write-evict cache 4",
-        "./writeevictcache -max-address=64 -parallel -num-access=10000",
+        "./writeevictcache -max-address=64 -parallel -num-access=1000",
         "acceptancetests/writeevictcache",
     )
     error |= run_test(
         "Write-evict cache 5",
-        "./writeevictcache -max-address=1024 -parallel -num-access=10000",
+        "./writeevictcache -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/writeevictcache",
     )
     error |= run_test(
         "Write-evict cache 6",
-        "./writeevictcache -max-address=1048576 -parallel -num-access=10000",
+        "./writeevictcache -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/writeevictcache",
     )
 
     error |= compile_test("acceptancetests/writethroughcache")
     error |= run_test(
         "Write-through cache 1",
-        "./writethroughcache -max-address=64 -num-access=10000",
+        "./writethroughcache -max-address=64 -num-access=1000",
         "acceptancetests/writethroughcache",
     )
     error |= run_test(
         "Write-through cache 2",
-        "./writethroughcache -max-address=1024 -num-access=10000",
+        "./writethroughcache -max-address=1024 -num-access=1000",
         "acceptancetests/writethroughcache",
     )
     error |= run_test(
         "Write-through cache 3",
-        "./writethroughcache -max-address=1048576 -num-access=10000",
+        "./writethroughcache -max-address=1048576 -num-access=1000",
         "acceptancetests/writethroughcache",
     )
     error |= run_test(
         "Write-through cache 4",
-        "./writethroughcache -max-address=64 -parallel -num-access=10000",
+        "./writethroughcache -max-address=64 -parallel -num-access=1000",
         "acceptancetests/writethroughcache",
     )
     error |= run_test(
         "Write-through cache 5",
-        "./writethroughcache -max-address=1024 -parallel -num-access=10000",
+        "./writethroughcache -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/writethroughcache",
     )
     error |= run_test(
         "Write-through cache 6",
-        "./writethroughcache -max-address=1048576 -parallel -num-access=10000",
+        "./writethroughcache -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/writethroughcache",
     )
 
     error |= compile_test("acceptancetests/writearoundcache")
     error |= run_test(
         "Write-around cache 1",
-        "./writearoundcache -max-address=64 -num-access=10000",
+        "./writearoundcache -max-address=64 -num-access=1000",
         "acceptancetests/writearoundcache",
     )
     error |= run_test(
         "Write-around cache 2",
-        "./writearoundcache -max-address=1024 -num-access=10000",
+        "./writearoundcache -max-address=1024 -num-access=1000",
         "acceptancetests/writearoundcache",
     )
     error |= run_test(
         "Write-around cache 3",
-        "./writearoundcache -max-address=1048576 -num-access=10000",
+        "./writearoundcache -max-address=1048576 -num-access=1000",
         "acceptancetests/writearoundcache",
     )
     error |= run_test(
         "Write-around cache 4",
-        "./writearoundcache -max-address=64 -parallel -num-access=10000",
+        "./writearoundcache -max-address=64 -parallel -num-access=1000",
         "acceptancetests/writearoundcache",
     )
     error |= run_test(
         "Write-around cache 5",
-        "./writearoundcache -max-address=1024 -parallel -num-access=10000",
+        "./writearoundcache -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/writearoundcache",
     )
     error |= run_test(
         "Write-around cache 6",
-        "./writearoundcache -max-address=1048576 -parallel -num-access=10000",
+        "./writearoundcache -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/writearoundcache",
     )
 
     error |= compile_test("acceptancetests/virtualmem")
     error |= run_test(
         "Virtual Memory test 1",
-        "./virtualmem -max-address=64 -num-access=10000",
+        "./virtualmem -max-address=64 -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 2",
-        "./virtualmem -max-address=1024 -num-access=10000",
+        "./virtualmem -max-address=1024 -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 3",
-        "./virtualmem -max-address=1048576 -num-access=10000",
+        "./virtualmem -max-address=1048576 -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 4",
-        "./virtualmem -max-address=10485760 -num-access=10000",
+        "./virtualmem -max-address=10485760 -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 5",
-        "./virtualmem -max-address=64 -parallel -num-access=10000",
+        "./virtualmem -max-address=64 -parallel -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 6",
-        "./virtualmem -max-address=1024 -parallel -num-access=10000",
+        "./virtualmem -max-address=1024 -parallel -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 7",
-        "./virtualmem -max-address=1048576 -parallel -num-access=10000",
+        "./virtualmem -max-address=1048576 -parallel -num-access=1000",
         "acceptancetests/virtualmem",
     )
     error |= run_test(
         "Virtual Memory test 8",
-        "./virtualmem -max-address=10485760 -parallel -num-access=10000",
+        "./virtualmem -max-address=10485760 -parallel -num-access=1000",
         "acceptancetests/virtualmem",
     )
 

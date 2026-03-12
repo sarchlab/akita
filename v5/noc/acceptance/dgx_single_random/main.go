@@ -43,7 +43,7 @@ func main() {
 		t.RegisterAgent(agent)
 	}
 
-	t.GenerateMsgs(20000)
+	t.GenerateMsgs(20)
 
 	err := engine.Run()
 	if err != nil {

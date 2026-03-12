@@ -145,20 +145,21 @@ func acceptCommand(state *State, cmd *commandState) {
 }
 
 // getCommandToIssue iterates over command queues round-robin and returns
-// the first ready command. Reads from cur, writes removals to next.
+// the first ready command. Operates on next state only (which has already
+// been updated by respondMW).
 // Returns nil if none is ready.
-func getCommandToIssue(spec *Spec, cur *State, next *State) *commandState {
-	numQueues := cur.CommandQueues.NumQueues
+func getCommandToIssue(spec *Spec, next *State) *commandState {
+	numQueues := next.CommandQueues.NumQueues
 	if numQueues == 0 {
 		return nil
 	}
 
+	startIdx := next.CommandQueues.NextQueueIndex
 	for i := 0; i < numQueues; i++ {
-		queueIdx := cur.CommandQueues.NextQueueIndex
+		queueIdx := (startIdx + i) % numQueues
 		next.CommandQueues.NextQueueIndex = (queueIdx + 1) % numQueues
-		cur.CommandQueues.NextQueueIndex = next.CommandQueues.NextQueueIndex
 
-		readyCmd := getFirstReadyInQueue(spec, cur, next, queueIdx)
+		readyCmd := getFirstReadyInQueue(spec, next, queueIdx)
 		if readyCmd != nil {
 			return readyCmd
 		}
@@ -168,22 +169,20 @@ func getCommandToIssue(spec *Spec, cur *State, next *State) *commandState {
 }
 
 // getFirstReadyInQueue finds the first command in a specific queue that
-// can be issued. Reads from cur, writes removals to next.
+// can be issued. Operates on next state only.
 func getFirstReadyInQueue(
 	spec *Spec,
-	cur *State,
 	next *State,
 	queueIdx int,
 ) *commandState {
-	// Collect indices of entries in this queue
-	for i := 0; i < len(cur.CommandQueues.Entries); i++ {
-		e := &cur.CommandQueues.Entries[i]
+	for i := 0; i < len(next.CommandQueues.Entries); i++ {
+		e := &next.CommandQueues.Entries[i]
 		if e.QueueIndex != queueIdx {
 			continue
 		}
 
 		cmd := &e.Command
-		bs := findBankStateByLocation(&cur.BankStates, cmd.Location)
+		bs := findBankStateByLocation(&next.BankStates, cmd.Location)
 		if bs == nil {
 			continue
 		}

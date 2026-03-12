@@ -14,15 +14,13 @@ type parseTopMW struct {
 
 // Tick runs the parseTop stage.
 func (m *parseTopMW) Tick() bool {
-	curVal := m.comp.GetState()
-	cur := &curVal
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
-	return m.parseTop(&spec, cur, next)
+	return m.parseTop(&spec, next)
 }
 
-func (m *parseTopMW) parseTop(spec *Spec, cur *State, next *State) bool {
+func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 	msgI := m.topPort.PeekIncoming()
 	if msgI == nil {
 		return false
@@ -47,7 +45,7 @@ func (m *parseTopMW) parseTop(spec *Spec, cur *State, next *State) bool {
 	transIdx := len(next.Transactions)
 	splitTransaction(spec, &ts, transIdx)
 
-	if !canPushSubTrans(cur, len(ts.SubTransactions),
+	if !canPushSubTrans(next, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {
 		return false
 	}

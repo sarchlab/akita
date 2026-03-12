@@ -128,8 +128,8 @@ func (m *parseTranslateMW) ctrlPort() sim.Port {
 func (m *parseTranslateMW) Tick() bool {
 	madeProgress := false
 
-	state := m.comp.GetState()
-	if !state.IsFlushing {
+	nextState := m.comp.GetNextState()
+	if !nextState.IsFlushing {
 		spec := m.comp.GetSpec()
 		for i := 0; i < spec.NumReqPerCycle; i++ {
 			madeProgress = m.translate() || madeProgress
@@ -305,16 +305,16 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	}
 
 	rsp := rspI.(*vm.TranslationRsp)
-	cur := m.comp.GetState()
-	transIdx := findTransactionByReqID(cur.Transactions, rsp.RspTo)
+	nextState := m.comp.GetNextState()
+	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
 	if transIdx < 0 {
 		m.translationPort().RetrieveIncoming()
 		return true
 	}
 
-	curTrans := &cur.Transactions[transIdx]
-	reqState := curTrans.IncomingReqs[0]
+	nextTrans := &nextState.Transactions[transIdx]
+	reqState := nextTrans.IncomingReqs[0]
 	spec := m.comp.GetSpec()
 	translatedReq := createTranslatedReq(reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(), spec)
@@ -324,8 +324,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 		return false
 	}
 
-	nextState := m.comp.GetNextState()
-	nextTrans := &nextState.Transactions[transIdx]
+	nextTrans = &nextState.Transactions[transIdx]
 	nextTrans.TranslationDone = true
 	nextTrans.Page = rsp.Page
 
@@ -387,7 +386,7 @@ func (m *respondPipelineMW) respond() bool {
 		return false
 	}
 
-	cur := m.comp.GetState()
+	nextState := m.comp.GetNextState()
 
 	var (
 		reqFromTopState reqToBottomState
@@ -398,9 +397,9 @@ func (m *respondPipelineMW) respond() bool {
 
 	switch rsp := rspI.(type) {
 	case *mem.DataReadyRsp:
-		reqInBottom = isReqInBottomByID(cur.InflightReqToBottom, rsp.RspTo)
+		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
-			reqFromTopState = findReqToBottomByID(cur.InflightReqToBottom, rsp.RspTo)
+			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = &mem.DataReadyRsp{
 				Data: rsp.Data,
 			}
@@ -425,9 +424,9 @@ func (m *respondPipelineMW) respond() bool {
 			)
 		}
 	case *mem.WriteDoneRsp:
-		reqInBottom = isReqInBottomByID(cur.InflightReqToBottom, rsp.RspTo)
+		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
-			reqFromTopState = findReqToBottomByID(cur.InflightReqToBottom, rsp.RspTo)
+			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = &mem.WriteDoneRsp{}
 			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
 			rspToTop.Meta().Src = m.topPort().AsRemote()
@@ -473,7 +472,6 @@ func (m *respondPipelineMW) respond() bool {
 			m.comp,
 		)
 
-		nextState := m.comp.GetNextState()
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 

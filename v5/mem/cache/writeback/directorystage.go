@@ -79,7 +79,6 @@ func (ds *directoryStage) processTransaction() bool {
 func (ds *directoryStage) acceptNewTransaction() bool {
 	madeProgress := false
 	spec := ds.cache.comp.GetSpec()
-	cur := ds.cache.comp.GetState()
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -101,7 +100,7 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 			ds.cache.dirStageBuffer.Pop()
 			madeProgress = true
 		} else {
-			if !dirPipelineCanAccept(cur.DirPipelineStages, spec.NumReqPerCycle) {
+			if !dirPipelineCanAccept(next.DirPipelineStages, spec.NumReqPerCycle) {
 				break
 			}
 			dirPipelineAccept(&next.DirPipelineStages, spec.NumReqPerCycle, transIdx)
@@ -506,11 +505,9 @@ func (ds *directoryStage) updateTransForEviction(
 	cacheLineID uint64,
 ) {
 	spec := ds.cache.comp.GetSpec()
-	// Read victim metadata from cur (frozen snapshot from previous tick)
-	// since we need the original block metadata before any within-tick changes.
-	cur := ds.cache.comp.GetState()
+	// Read victim metadata from next so within-tick mutations are visible.
 	next := ds.cache.comp.GetNextState()
-	victim := &cur.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
+	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
 	trans.action = bankEvictAndFetch
 	trans.hasVictim = true

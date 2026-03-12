@@ -53,7 +53,7 @@ var _ = Describe("Directory", func() {
 				NumSets:          16,
 				NumBanks:         1,
 				AddressMapperType: "single",
-				RemotePortNames:   []string{""},
+				RemotePortNames:   []string{"DRAM"},
 			}).
 			Build("Cache")
 

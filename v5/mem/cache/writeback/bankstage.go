@@ -66,11 +66,10 @@ func (s *bankStage) Reset() {
 }
 
 func (s *bankStage) pullFromBuf() bool {
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 	spec := s.cache.comp.GetSpec()
 
-	if !s.canAcceptIntoPipeline(cur) {
+	if !s.canAcceptIntoPipeline(*next) {
 		return false
 	}
 
@@ -194,16 +193,15 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	}
 
 	spec := s.cache.comp.GetSpec()
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
 	read := trans.read
 	addr := read.Address
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	data, err := s.cache.storage.Read(
-		curBlock.CacheAddress+offset, read.AccessByteSize)
+		nextBlock.CacheAddress+offset, read.AccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -213,7 +211,6 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	s.inflightTransCount--
 	s.downwardInflightTransCount--
 
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock.ReadCount--
 
 	dataReady := &mem.DataReadyRsp{}
@@ -237,16 +234,14 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	}
 
 	spec := s.cache.comp.GetSpec()
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
 	write := trans.write
 	addr := write.Address
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	dirtyMask := s.writeData(curBlock, write, offset, spec.Log2BlockSize)
+	dirtyMask := s.writeData(nextBlock, write, offset, spec.Log2BlockSize)
 
 	nextBlock.IsValid = true
 	nextBlock.IsLocked = false
@@ -312,22 +307,17 @@ func (s *bankStage) finalizeBankWriteFetched(
 		return false
 	}
 
-	cur := s.cache.comp.GetState()
 	next := s.cache.comp.GetNextState()
 
-	// Read CacheAddress from cur
-	curBlock := &cur.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
 	// Push the transaction itself to MSHR stage
 	s.cache.mshrStageBuffer.Push(trans)
 
-	err := s.cache.storage.Write(curBlock.CacheAddress, trans.mshrData)
+	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.mshrData)
 	if err != nil {
 		panic(err)
 	}
-
-	// Write modifications to next
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 	nextBlock.IsLocked = false
 	nextBlock.IsValid = true
 

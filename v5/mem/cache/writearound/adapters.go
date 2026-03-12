@@ -35,22 +35,29 @@ func (b *stateTransBuffer) Push(e any) {
 }
 
 // Peek reads from writeItems (next/B state) so it sees mutations from Pop
-// within the same tick.
+// within the same tick. Skips nil entries (transactions already finalized).
 func (b *stateTransBuffer) Peek() any {
-	if len(*b.writeItems) == 0 {
-		return nil
+	for len(*b.writeItems) > 0 {
+		idx := (*b.writeItems)[0]
+		trans := b.mw.postCoalesceTransactions[idx]
+		if trans != nil {
+			return trans
+		}
+		*b.writeItems = (*b.writeItems)[1:]
 	}
-	idx := (*b.writeItems)[0]
-	return b.mw.postCoalesceTransactions[idx]
+	return nil
 }
 
 func (b *stateTransBuffer) Pop() any {
-	if len(*b.writeItems) == 0 {
-		return nil
+	for len(*b.writeItems) > 0 {
+		idx := (*b.writeItems)[0]
+		*b.writeItems = (*b.writeItems)[1:]
+		trans := b.mw.postCoalesceTransactions[idx]
+		if trans != nil {
+			return trans
+		}
 	}
-	idx := (*b.writeItems)[0]
-	*b.writeItems = (*b.writeItems)[1:]
-	return b.mw.postCoalesceTransactions[idx]
+	return nil
 }
 
 func (b *stateTransBuffer) findPostCoalesceIdx(
@@ -150,15 +157,17 @@ func (b *stateBankPostBufAdapter) Push(e any) {
 }
 
 // Peek reads from writeItems (next/B state) so it sees mutations from Pop
-// within the same tick.
+// within the same tick. Skips nil entries (transactions already finalized).
 func (b *stateBankPostBufAdapter) Peek() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
 	idx := (*b.writeItems)[0]
-	return &bankTransaction{
-		transactionState: b.mw.postCoalesceTransactions[idx],
+	trans := b.mw.postCoalesceTransactions[idx]
+	if trans == nil {
+		return nil
 	}
+	return &bankTransaction{transactionState: trans}
 }
 
 func (b *stateBankPostBufAdapter) Pop() any {
@@ -167,9 +176,11 @@ func (b *stateBankPostBufAdapter) Pop() any {
 	}
 	idx := (*b.writeItems)[0]
 	*b.writeItems = (*b.writeItems)[1:]
-	return &bankTransaction{
-		transactionState: b.mw.postCoalesceTransactions[idx],
+	trans := b.mw.postCoalesceTransactions[idx]
+	if trans == nil {
+		return nil
 	}
+	return &bankTransaction{transactionState: trans}
 }
 
 func (b *stateBankPostBufAdapter) findPostCoalesceIdx(

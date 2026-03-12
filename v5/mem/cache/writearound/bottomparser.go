@@ -38,11 +38,16 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 		t.done = true
 	}
 
-	p.removeTransaction(trans)
+	trans.bottomWriteDone = true
+
+	if trans.bankDone {
+		p.removeTransaction(trans)
+		tracing.EndTask(trans.id, p.cache.comp)
+	}
+
 	p.cache.bottomPort.RetrieveIncoming()
 
 	tracing.TraceReqFinalize(trans.writeToBottom, p.cache.comp)
-	tracing.EndTask(trans.id, p.cache.comp)
 
 	return true
 }
@@ -66,16 +71,15 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
-	cur := p.cache.comp.GetState()
 	next := p.cache.comp.GetNextState()
 
-	entryIdx, found := cache.MSHRQuery(&cur.MSHRState, pid, cachelineID)
+	entryIdx, found := cache.MSHRQuery(&next.MSHRState, pid, cachelineID)
 	if !found {
 		panic("MSHR entry not found for data ready response")
 	}
 
-	entry := &cur.MSHRState.Entries[entryIdx]
-	blockTag := cur.DirectoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
+	entry := &next.MSHRState.Entries[entryIdx]
+	blockTag := next.DirectoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
 
 	// Resolve transaction pointers before any removals shift indices
 	entryTrans := p.resolveEntryTransactions(entry)

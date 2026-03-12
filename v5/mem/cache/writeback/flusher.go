@@ -59,8 +59,8 @@ func (f *flusher) existInflightTransaction() bool {
 }
 
 func (f *flusher) prepareBlockToFlushList() {
-	cur := f.pipeline.comp.GetState()
-	for setID, set := range cur.DirectoryState.Sets {
+	next := f.pipeline.comp.GetNextState()
+	for setID, set := range next.DirectoryState.Sets {
 		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
 				panic("all the blocks should be unlocked before flushing")
@@ -79,10 +79,10 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	cur := f.pipeline.comp.GetState()
+	next := f.pipeline.comp.GetNextState()
 	spec := f.pipeline.comp.GetSpec()
 	ref := f.blockToEvict[0]
-	block := &cur.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
+	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
 		spec.WayAssociativity,
