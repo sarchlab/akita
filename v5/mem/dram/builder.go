@@ -785,7 +785,7 @@ func (b *Builder) generateTiming() Timing {
 		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: prechargeToActivate},
 	}
 
-	if b.protocol.isGDDR() || Protocol(b.protocol) == LPDDR4 {
+	if b.protocol.isGDDR() || b.protocol == LPDDR4 {
 		t.OtherBanksInBankGroup[CmdKindPrecharge] = []TimeTableEntry{
 			{NextCmdKind: CmdKindPrecharge, MinCycleInBetween: prechargeToPrecharge},
 		}

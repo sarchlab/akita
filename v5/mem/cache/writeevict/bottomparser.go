@@ -136,14 +136,6 @@ func (p *bottomParser) mergeMSHRData(
 	}
 }
 
-func (p *bottomParser) finalizeMSHRTrans(
-	entryTrans []*transactionState,
-	blockTag uint64,
-	data []byte,
-) {
-	p.finalizeMSHRTransExcept(entryTrans, blockTag, data, nil)
-}
-
 func (p *bottomParser) finalizeMSHRTransExcept(
 	entryTrans []*transactionState,
 	blockTag uint64,

@@ -121,13 +121,6 @@ func cmdKindToString(k CommandKind) string {
 	return fmt.Sprintf("%d", int(k))
 }
 
-// stringToCmdKind converts a string key back to CommandKind.
-func stringToCmdKind(s string) CommandKind {
-	var k int
-	fmt.Sscanf(s, "%d", &k)
-	return CommandKind(k)
-}
-
 // initBankStatesFlat creates initial bank states for all banks (all closed).
 func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 	flat := bankStatesFlat{
