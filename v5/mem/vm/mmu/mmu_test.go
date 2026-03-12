@@ -6,7 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
 )
@@ -437,7 +436,7 @@ var _ = Describe("MMU Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = simengine.NewSerialEngine()
+		engine = sim.NewSerialEngine()
 
 		builder := MakeBuilder().
 			WithEngine(engine).

@@ -1,20 +1,17 @@
-package engine
+package sim
 
 import (
 	"log"
 	"reflect"
 	"sync"
-
-	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/hook"
 )
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
-	hook.HookableBase
+	HookableBase
 
 	timeLock       sync.RWMutex
-	time           sim.VTimeInSec
+	time           VTimeInSec
 	queue          EventQueue
 	secondaryQueue EventQueue
 
@@ -37,7 +34,7 @@ func NewSerialEngine() *SerialEngine {
 }
 
 // Schedule register an event to be happen in the future
-func (e *SerialEngine) Schedule(evt sim.Event) {
+func (e *SerialEngine) Schedule(evt Event) {
 	now := e.readNow()
 	if evt.Time() < now {
 		log.Panic("scheduling an event earlier than current time")
@@ -52,7 +49,7 @@ func (e *SerialEngine) Schedule(evt sim.Event) {
 	e.queue.Push(evt)
 }
 
-func (e *SerialEngine) readNow() sim.VTimeInSec {
+func (e *SerialEngine) readNow() VTimeInSec {
 	e.timeLock.RLock()
 	t := e.time
 	e.timeLock.RUnlock()
@@ -60,7 +57,7 @@ func (e *SerialEngine) readNow() sim.VTimeInSec {
 	return t
 }
 
-func (e *SerialEngine) writeNow(t sim.VTimeInSec) {
+func (e *SerialEngine) writeNow(t VTimeInSec) {
 	e.timeLock.Lock()
 	e.time = t
 	e.timeLock.Unlock()
@@ -90,9 +87,9 @@ func (e *SerialEngine) Run() error {
 
 		e.writeNow(evt.Time())
 
-		hookCtx := hook.HookCtx{
+		hookCtx := HookCtx{
 			Domain: e,
-			Pos:    hook.HookPosBeforeEvent,
+			Pos:    HookPosBeforeEvent,
 			Item:   evt,
 		}
 		e.InvokeHook(hookCtx)
@@ -100,7 +97,7 @@ func (e *SerialEngine) Run() error {
 		handler := evt.Handler()
 		_ = handler.Handle(evt)
 
-		hookCtx.Pos = hook.HookPosAfterEvent
+		hookCtx.Pos = HookPosAfterEvent
 		e.InvokeHook(hookCtx)
 
 		e.pauseLock.Unlock()
@@ -111,7 +108,7 @@ func (e *SerialEngine) noMoreEvent() bool {
 	return e.queue.Len() == 0 && e.secondaryQueue.Len() == 0
 }
 
-func (e *SerialEngine) nextEvent() sim.Event {
+func (e *SerialEngine) nextEvent() Event {
 	if e.queue.Len() == 0 {
 		return e.secondaryQueue.Pop()
 	}
@@ -161,11 +158,11 @@ func (e *SerialEngine) Continue() {
 
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
-func (e *SerialEngine) CurrentTime() sim.VTimeInSec {
+func (e *SerialEngine) CurrentTime() VTimeInSec {
 	return e.readNow()
 }
 
 // SetCurrentTime sets the current time of the engine.
-func (e *SerialEngine) SetCurrentTime(t sim.VTimeInSec) {
+func (e *SerialEngine) SetCurrentTime(t VTimeInSec) {
 	e.writeNow(t)
 }

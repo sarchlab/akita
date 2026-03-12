@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"github.com/tebeka/atexit"
 )
@@ -17,7 +16,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	t := acceptance.NewTest()
 
 	createNetwork(engine, t)

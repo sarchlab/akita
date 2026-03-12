@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
 	"os"
@@ -30,9 +29,9 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	var engine sim.Engine
 	if *parallelFlag {
-		engine = simengine.NewParallelEngine()
+		engine = sim.NewParallelEngine()
 	} else {
-		engine = simengine.NewSerialEngine()
+		engine = sim.NewSerialEngine()
 	}
 
 	conn := directconnection.MakeBuilder().

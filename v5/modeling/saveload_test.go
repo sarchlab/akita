@@ -8,11 +8,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 func makeTestComponent(spec TestSpec, state TestState) *modeling.Component[TestSpec, TestState] {
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -112,7 +111,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 
 	// Create a new component and load the state into it.
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	comp2 := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -136,7 +135,7 @@ func TestLoadStateWithZeroState(t *testing.T) {
 		t.Fatalf("SaveState() error: %v", err)
 	}
 
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	comp2 := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -156,7 +155,7 @@ func TestLoadStateWithZeroState(t *testing.T) {
 }
 
 func TestLoadStateInvalidJSON(t *testing.T) {
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -196,7 +195,7 @@ func (e *errReader) Read([]byte) (int, error) {
 }
 
 func TestLoadStateReadError(t *testing.T) {
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).

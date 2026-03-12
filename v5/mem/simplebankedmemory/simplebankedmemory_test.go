@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -158,7 +157,7 @@ const (
 )
 
 func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq) {
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 	freq := 1 * sim.GHz
 
 	memComp := MakeBuilder().
@@ -220,7 +219,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 	)
 
 	BeforeEach(func() {
-		engine = simengine.NewSerialEngine()
+		engine = sim.NewSerialEngine()
 		memComp = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
