@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (after M20, Cycle 166)
+## Current State (after M21, Cycle 176)
 
 ### Phase 1 COMPLETE: Component Model + A-B State + Comp Elimination + Dependency Inlining
 
@@ -13,20 +13,36 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Save/load works with acceptance test passing
 - A-B state implemented in `modeling.Component` (double-buffered: current/next, deep-copy, swap)
 - DRAM fully transformed: internal packages eliminated, all dependencies inlined as free functions
-- Caches transformed: MSHR/Directory as State + free functions, no Comp wrappers
+- Caches transformed: MSHR/Directory as State + free functions, no Comp wrappers, A-B state applied
 - MMU fully transformed: thin Comp, transactionState canonical, no SaveState/LoadState overrides
 - Switch fully transformed: State canonical, queueing objects eliminated, no conversion layers
-- All builds/tests pass on main
 
-### Phase 1 Summary Statistics
+### M21 COMPLETE: Cache Components — Eliminate Runtime Copies + Inline Dependencies
+- All 4 caches (writearound, writeevict, writethrough, writeback) cleaned up
+- Runtime copies of DirectoryState/MSHRState eliminated
+- queueing.Pipeline/Buffer replaced with State arrays + free functions (adapters.go)
+- addressToPortMapper inlined (legacyMapper resolved at Build time)
+- restoreFromState eliminated
+- A-B state pattern applied (GetState for read, GetNextState for write)
+- PR #46 merged to main
+
+### ⚠️ CI FAILING on main (25 lint errors from M21 merge)
+- **funlen** (12): Functions too long in cache builders, adapters, writeback stages, DRAM builder, MMU test
+- **gocognit** (6): dirPipelineTick/bankPipelineTick too complex in 3 cache adapters
+- **unused** (5): finalizeMSHRTrans in 3 caches, stringToCmdKind in DRAM, flitStateFromFlit in endpoint
+- **lll** (1): Line too long in virtualmem acceptance test
+- **unconvert** (1): Unnecessary conversion in DRAM builder
+
+### Summary Statistics
 
 | Metric | Value |
 |--------|-------|
-| Milestones completed | 20 (M1–M20) |
-| Total cycles used | ~94 (budgeted: ~150) |
-| PRs merged | 45 |
+| Milestones completed | 21 (M1–M21) |
+| Total cycles used | ~100 |
+| PRs merged | 46 |
 | Components ported | 16/16 |
 | Components fully transformed (State canonical) | 16/16 |
+| CI status | ❌ FAILING (lint) |
 
 ### Remaining Gaps (Phase 2 scope)
 
@@ -41,22 +57,26 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ---
 
-## Phase 2: Cache Cleanup + Multi-Middleware Split
+## Phase 2: Cache Cleanup + A-B Pattern + Multi-Middleware Split
 
-### M21: Cache Components — Eliminate Runtime Copies + Inline Dependencies
+### ✅ M21: Cache Components — Eliminate Runtime Copies + Inline Dependencies (DONE)
 
-**Goal:** Make the 4 cache components (writeback, writearound, writeevict, writethrough) fully clean: eliminate all runtime copies, queueing objects, addressToPortMapper dependency, and restoreFromState conversion layers. State becomes the sole canonical representation used directly by middleware.
+**Completed**: All 4 caches cleaned up. Runtime copies eliminated, queueing objects replaced with State arrays + free functions (adapters.go), addressToPortMapper inlined (legacyMapper at Build time), restoreFromState removed, A-B state applied.
+**Budget**: 8 cycles | **Used**: ~6 cycles | **PR**: #46 merged
 
-**What to do:**
-1. **Eliminate runtime copies**: Remove `directoryState` and `mshrState` runtime copies from middleware. Middleware should read/write these directly through `GetState()`/`GetNextState()` (they're already in State).
-2. **Replace queueing.Buffer/Pipeline runtime objects** with State arrays + free functions (following Switch M20 pattern). The data is already in State — just remove the runtime wrapper objects.
-3. **Inline addressToPortMapper**: Store port names and routing config in Spec. Resolve ports via `GetPortByName()`. Inline the routing logic (~15 LOC) directly into middleware.
-4. **Remove restoreFromState**: Since State is canonical and middleware works with it directly, the restore function is unnecessary.
-5. **Fix A-B pattern**: Ensure all reads come from `GetState()` and all writes go to `GetNextState()`.
-6. **Start with writearound** (simplest), then replicate to writeevict, writethrough, writeback.
+### M21.5: Fix CI Lint Failures on Main (URGENT)
 
-**Budget**: 8 cycles
-**Risk**: Medium. The MSHR/Directory free functions already exist. The main work is removing the queueing runtime wrappers and inline the port routing. Pattern established by Switch (M20).
+**Goal:** Fix all 25 lint errors introduced by M21 merge so CI passes again.
+
+**Errors to fix:**
+1. **funlen** (12): Split long functions — cache Build(), buildAdapters(), directorystage fetch(), writeback state.go snapshot/restore, DRAM buildSpec()/buildAddressMapping(), MMU state_test.go
+2. **gocognit** (6): Reduce complexity of dirPipelineTick/bankPipelineTick in writeback/writeevict/writethrough adapters.go — extract helper functions
+3. **unused** (5): Remove finalizeMSHRTrans from writearound/writeevict/writethrough bottomparser.go, stringToCmdKind from DRAM state.go, flitStateFromFlit from endpoint.go
+4. **lll** (1): Shorten long line in virtualmem/test.go
+5. **unconvert** (1): Remove unnecessary Protocol() conversion in DRAM builder.go
+
+**Budget**: 2 cycles
+**Risk**: Low. Mechanical fixes.
 
 ### M22: DRAM + Simple Components — Fix A-B Pattern + Inline Remaining Dependencies
 
@@ -141,15 +161,16 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Phase 2 Summary
 
-| Milestone | Scope | Budget | Dependencies |
-|-----------|-------|--------|-------------|
-| M21 | Cache cleanup (runtime copies, queueing, deps) | 8 | — |
-| M22 | DRAM A-B fix + audit all components | 4 | — |
-| M23 | Multi-MW split — simple components | 6 | M22 |
-| M24 | Multi-MW split — cache components | 8 | M21, M23 |
-| M25 | Multi-MW split — complex components | 6 | M23 |
-| M26 | Final cleanup + docs | 4 | M24, M25 |
-| **Total** | | **36** | |
+| Milestone | Scope | Budget | Status |
+|-----------|-------|--------|--------|
+| M21 | Cache cleanup (runtime copies, queueing, deps) | 8 | ✅ Done (~6 used) |
+| M21.5 | Fix CI lint failures | 2 | ⬅️ NEXT |
+| M22 | DRAM A-B fix + audit all components | 4 | Pending |
+| M23 | Multi-MW split — simple components | 6 | Pending (after M22) |
+| M24 | Multi-MW split — cache components | 8 | Pending (after M21, M23) |
+| M25 | Multi-MW split — complex components | 6 | Pending (after M23) |
+| M26 | Final cleanup + docs | 4 | Pending (after M24, M25) |
+| **Total** | | **38** | |
 
 ---
 
@@ -177,8 +198,10 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M18 | 8 | 3 | DRAM memory controller — Full transformation |
 | M19 | 4 | 2 | MMU — Full transformation (thin Comp, canonical State) |
 | M20 | 4 | 2 | Switch — State canonical, eliminate queueing objects |
+| M21 | 8 | ~6 | Cache components — eliminate runtime copies, inline deps, A-B state |
 
 **Phase 1 totals**: Budget: 150, Used: 94 (37% under budget)
+**Phase 2 so far**: M21: Budget 8, Used ~6
 
 ## Lessons Learned
 
@@ -199,3 +222,5 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - **Multi-middleware split is the next major architectural change** — needs careful planning per component
 - **Reference implementations matter**: establish the pattern on simple components first, then replicate
 - **M21 and M22 can run in parallel** since they affect different components
+- **Always run lint before merging**: M21 introduced 25 lint errors on main. CI-fix milestones waste cycles. Ares must run linter before claiming complete.
+- **CI fix milestones should be tiny** (1-2 cycles): they're mechanical and should never block feature work for long
