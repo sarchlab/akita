@@ -88,11 +88,13 @@ Following the same data/behavior separation as MSHR and Directory:
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods. After Comp elimination and State-as-canonical, snapshot/restore conversion layers disappear.
 
-## Next Phase: Split `sim` Package
+## Open Issues (from human review)
 
-The `sim` package (~3000 lines, 20+ files) currently contains everything from time management to communication to component model. We need to evaluate whether and how to split it into smaller, focused packages.
+1. **Unnecessary Comp wrapper structs**: TLB and mmuCache still have `Comp` wrappers that just embed `*modeling.Component[Spec, State]` with no extra fields or methods. These should be eliminated — the builder should return `*modeling.Component[Spec, State]` directly.
+2. **Middleware boilerplate (Name, AcceptHook, Hooks, etc.)**: Middleware structs currently implement `Name()`, `AcceptHook()`, `Hooks()`, `NumHooks()`, `InvokeHook()` methods that just delegate to the component. This is only needed to satisfy `tracing.NamedHookable`. This boilerplate should be eliminated — either by changing the tracing API to accept the component directly, or by embedding a reference that satisfies the interface without per-middleware methods.
+3. **File naming**: `tlbprotocol.go` contains message types (FlushReq, FlushRsp, RestartReq, RestartRsp) that ARE used, but the filename is misleading. Consider renaming to `messages.go` or similar for clarity.
 
-**Human guidance:** "We need to split the sim package into smaller ones. Say time management as one, communication is another one. Please discuss a plan with me before working on it. Also, discuss if splitting is necessary."
+**Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
 ## How You Consider the Project is Success
 
