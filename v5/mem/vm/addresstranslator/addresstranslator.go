@@ -102,57 +102,57 @@ func findTranslationPort(spec Spec, addr uint64) sim.RemotePort {
 	}
 }
 
-type middleware struct {
+// parseTranslateMW handles incoming requests from topPort and initiates
+// address translation. It also handles control messages (flush/restart).
+type parseTranslateMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *middleware) Name() string {
+func (m *parseTranslateMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *parseTranslateMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *parseTranslateMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *parseTranslateMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *parseTranslateMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
-func (m *middleware) topPort() sim.Port {
+func (m *parseTranslateMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *middleware) bottomPort() sim.Port {
+func (m *parseTranslateMW) bottomPort() sim.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *middleware) translationPort() sim.Port {
+func (m *parseTranslateMW) translationPort() sim.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
-func (m *middleware) ctrlPort() sim.Port {
+func (m *parseTranslateMW) ctrlPort() sim.Port {
 	return m.comp.GetPortByName("Control")
 }
 
-// Tick updates state at each cycle.
-func (m *middleware) Tick() bool {
+// Tick runs the parseTranslate stage: translate (if not flushing) + handleCtrlRequest.
+func (m *parseTranslateMW) Tick() bool {
 	madeProgress := false
 
 	state := m.comp.GetState()
 	if !state.IsFlushing {
-		madeProgress = m.runPipeline()
-	} else {
 		spec := m.comp.GetSpec()
 		for i := 0; i < spec.NumReqPerCycle; i++ {
-			madeProgress = m.parseTranslation() || madeProgress
+			madeProgress = m.translate() || madeProgress
 		}
 	}
 
@@ -161,27 +161,7 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) runPipeline() bool {
-	madeProgress := false
-
-	spec := m.comp.GetSpec()
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.respond() || madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.parseTranslation() || madeProgress
-	}
-
-	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.translate() || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) translate() bool {
+func (m *parseTranslateMW) translate() bool {
 	itemI := m.topPort().PeekIncoming()
 	if itemI == nil {
 		return false
@@ -229,7 +209,140 @@ func (m *middleware) translate() bool {
 	return true
 }
 
-func (m *middleware) parseTranslation() bool {
+func (m *parseTranslateMW) handleCtrlRequest() bool {
+	msgI := m.ctrlPort().PeekIncoming()
+	if msgI == nil {
+		return false
+	}
+
+	msg := msgI.(*mem.ControlMsg)
+
+	if msg.DiscardTransations {
+		return m.handleFlushReq(msg)
+	} else if msg.Restart {
+		return m.handleRestartReq(msg)
+	}
+
+	panic("never")
+}
+
+func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlMsg) bool {
+	rsp := &mem.ControlMsg{
+		NotifyDone: true,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort().AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.ControlMsg"
+
+	err := m.ctrlPort().Send(rsp)
+	if err != nil {
+		return false
+	}
+
+	m.ctrlPort().RetrieveIncoming()
+
+	nextState := m.comp.GetNextState()
+	nextState.Transactions = nil
+	nextState.InflightReqToBottom = nil
+	nextState.IsFlushing = true
+
+	return true
+}
+
+func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlMsg) bool {
+	rsp := &mem.ControlMsg{
+		NotifyDone: true,
+	}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort().AsRemote()
+	rsp.Dst = msg.Src
+	rsp.TrafficBytes = 4
+	rsp.TrafficClass = "mem.ControlMsg"
+
+	err := m.ctrlPort().Send(rsp)
+
+	if err != nil {
+		return false
+	}
+
+	for m.topPort().RetrieveIncoming() != nil {
+	}
+
+	for m.bottomPort().RetrieveIncoming() != nil {
+	}
+
+	for m.translationPort().RetrieveIncoming() != nil {
+	}
+
+	nextState := m.comp.GetNextState()
+	nextState.IsFlushing = false
+
+	m.ctrlPort().RetrieveIncoming()
+
+	return true
+}
+
+// respondPipelineMW handles translation responses and bottom-port responses.
+type respondPipelineMW struct {
+	comp *modeling.Component[Spec, State]
+}
+
+func (m *respondPipelineMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *respondPipelineMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *respondPipelineMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *respondPipelineMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *respondPipelineMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *respondPipelineMW) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *respondPipelineMW) bottomPort() sim.Port {
+	return m.comp.GetPortByName("Bottom")
+}
+
+func (m *respondPipelineMW) translationPort() sim.Port {
+	return m.comp.GetPortByName("Translation")
+}
+
+func (m *respondPipelineMW) ctrlPort() sim.Port {
+	return m.comp.GetPortByName("Control")
+}
+
+// Tick runs the respond pipeline: respond + parseTranslation.
+func (m *respondPipelineMW) Tick() bool {
+	madeProgress := false
+
+	spec := m.comp.GetSpec()
+
+	for i := 0; i < spec.NumReqPerCycle; i++ {
+		madeProgress = m.respond() || madeProgress
+	}
+
+	for i := 0; i < spec.NumReqPerCycle; i++ {
+		madeProgress = m.parseTranslation() || madeProgress
+	}
+
+	return madeProgress
+}
+
+func (m *respondPipelineMW) parseTranslation() bool {
 	rspI := m.translationPort().PeekIncoming()
 	if rspI == nil {
 		return false
@@ -276,26 +389,9 @@ func (m *middleware) parseTranslation() bool {
 	return true
 }
 
-// buildReqToBottom creates a reqToBottomState from the incoming request
-// and the translated outgoing request.
-func buildReqToBottom(
-	reqState incomingReqState, translatedReq sim.Msg,
-) reqToBottomState {
-	return reqToBottomState{
-		ReqFromTopID:    reqState.ID,
-		ReqFromTopSrc:   reqState.Src,
-		ReqFromTopDst:   reqState.Dst,
-		ReqFromTopType:  reqState.Type,
-		ReqToBottomID:   translatedReq.Meta().ID,
-		ReqToBottomSrc:  translatedReq.Meta().Src,
-		ReqToBottomDst:  translatedReq.Meta().Dst,
-		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
-	}
-}
-
 // traceTranslationComplete records tracing milestones for a completed
 // translation and initiates the downstream request trace.
-func (m *middleware) traceTranslationComplete(
+func (m *respondPipelineMW) traceTranslationComplete(
 	trans *transactionState,
 	reqState incomingReqState,
 	translatedReq sim.Msg,
@@ -329,7 +425,7 @@ func (m *middleware) traceTranslationComplete(
 }
 
 //nolint:funlen,gocyclo
-func (m *middleware) respond() bool {
+func (m *respondPipelineMW) respond() bool {
 	rspI := m.bottomPort().PeekIncoming()
 	if rspI == nil {
 		return false
@@ -439,79 +535,21 @@ func (m *middleware) respond() bool {
 	return true
 }
 
-func (m *middleware) handleCtrlRequest() bool {
-	msgI := m.ctrlPort().PeekIncoming()
-	if msgI == nil {
-		return false
+// buildReqToBottom creates a reqToBottomState from the incoming request
+// and the translated outgoing request.
+func buildReqToBottom(
+	reqState incomingReqState, translatedReq sim.Msg,
+) reqToBottomState {
+	return reqToBottomState{
+		ReqFromTopID:    reqState.ID,
+		ReqFromTopSrc:   reqState.Src,
+		ReqFromTopDst:   reqState.Dst,
+		ReqFromTopType:  reqState.Type,
+		ReqToBottomID:   translatedReq.Meta().ID,
+		ReqToBottomSrc:  translatedReq.Meta().Src,
+		ReqToBottomDst:  translatedReq.Meta().Dst,
+		ReqToBottomType: fmt.Sprintf("%T", translatedReq),
 	}
-
-	msg := msgI.(*mem.ControlMsg)
-
-	if msg.DiscardTransations {
-		return m.handleFlushReq(msg)
-	} else if msg.Restart {
-		return m.handleRestartReq(msg)
-	}
-
-	panic("never")
-}
-
-func (m *middleware) handleFlushReq(msg *mem.ControlMsg) bool {
-	rsp := &mem.ControlMsg{
-		NotifyDone: true,
-	}
-	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.ControlMsg"
-
-	err := m.ctrlPort().Send(rsp)
-	if err != nil {
-		return false
-	}
-
-	m.ctrlPort().RetrieveIncoming()
-
-	nextState := m.comp.GetNextState()
-	nextState.Transactions = nil
-	nextState.InflightReqToBottom = nil
-	nextState.IsFlushing = true
-
-	return true
-}
-
-func (m *middleware) handleRestartReq(msg *mem.ControlMsg) bool {
-	rsp := &mem.ControlMsg{
-		NotifyDone: true,
-	}
-	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = m.ctrlPort().AsRemote()
-	rsp.Dst = msg.Src
-	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.ControlMsg"
-
-	err := m.ctrlPort().Send(rsp)
-
-	if err != nil {
-		return false
-	}
-
-	for m.topPort().RetrieveIncoming() != nil {
-	}
-
-	for m.bottomPort().RetrieveIncoming() != nil {
-	}
-
-	for m.translationPort().RetrieveIncoming() != nil {
-	}
-
-	nextState := m.comp.GetNextState()
-	nextState.IsFlushing = false
-
-	m.ctrlPort().RetrieveIncoming()
-
-	return true
 }
 
 // Helper functions
