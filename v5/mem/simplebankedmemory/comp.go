@@ -341,6 +341,7 @@ func (m *middleware) Tick() (madeProgress bool) {
 func (m *middleware) dispatchFromTopPort() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
 
 	for {
 		msgI := m.topPort().PeekIncoming()
@@ -365,7 +366,6 @@ func (m *middleware) dispatchFromTopPort() bool {
 			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
 		}
 
-		next := m.comp.GetNextState()
 		if !pipelineCanAccept(next.Banks[bankID], spec) {
 			break
 		}
@@ -401,9 +401,10 @@ func (m *middleware) msgToItem(msg sim.Msg) bankPipelineItemState {
 
 func (m *middleware) finalizeBanks() bool {
 	madeProgress := false
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	for i := range next.Banks {
+	for i := range cur.Banks {
 		for {
 			progress := m.finalizeSingle(&next.Banks[i])
 			if !progress {
@@ -537,9 +538,10 @@ func (m *middleware) finalizeWrite(
 func (m *middleware) tickPipelines() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	for i := range next.Banks {
+	for i := range cur.Banks {
 		madeProgress = pipelineTick(&next.Banks[i], spec) || madeProgress
 	}
 
