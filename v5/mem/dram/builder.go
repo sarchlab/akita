@@ -400,12 +400,23 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	mw := &middleware{
+	rMW := &respondMW{
 		comp:    modelComp,
 		topPort: b.topPort,
 		storage: storage,
 	}
-	modelComp.AddMiddleware(mw)
+	modelComp.AddMiddleware(rMW)
+
+	btMW := &bankTickMW{
+		comp: modelComp,
+	}
+	modelComp.AddMiddleware(btMW)
+
+	ptMW := &parseTopMW{
+		comp:    modelComp,
+		topPort: b.topPort,
+	}
+	modelComp.AddMiddleware(ptMW)
 
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
