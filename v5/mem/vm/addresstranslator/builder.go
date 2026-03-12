@@ -190,8 +190,11 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithSpec(spec).
 		Build(name)
 
-	mw := &middleware{comp: modelComp}
-	modelComp.AddMiddleware(mw)
+	ptMW := &parseTranslateMW{comp: modelComp}
+	modelComp.AddMiddleware(ptMW)
+
+	rpMW := &respondPipelineMW{comp: modelComp}
+	modelComp.AddMiddleware(rpMW)
 
 	b.createPorts(modelComp, modelComp)
 

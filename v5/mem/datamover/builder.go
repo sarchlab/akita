@@ -118,8 +118,11 @@ func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
 		Build(name)
 	modelComp.SetState(initialState)
 
-	middleware := &dataMoverMiddleware{comp: modelComp}
-	modelComp.AddMiddleware(middleware)
+	ctrlMW := &ctrlParseMW{comp: modelComp}
+	modelComp.AddMiddleware(ctrlMW)
+
+	dataMW := &dataTransferMW{comp: modelComp}
+	modelComp.AddMiddleware(dataMW)
 
 	sdmBuilder.ctrlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", sdmBuilder.ctrlPort)

@@ -58,59 +58,55 @@ type State struct {
 
 // PageTable returns the page table from an MMU component.
 func PageTable(c *modeling.Component[Spec, State]) vm.PageTable {
-	return c.Middlewares()[0].(*middleware).pageTable
+	return c.Middlewares()[0].(*translationMW).pageTable
 }
 
-type middleware struct {
+// translationMW handles translation requests: parsing from top,
+// page table walks, and sending responses for local hits.
+type translationMW struct {
 	comp      *modeling.Component[Spec, State]
 	pageTable vm.PageTable
 }
 
 // NamedHookable delegation methods.
 
-func (m *middleware) Name() string {
+func (m *translationMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *translationMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *translationMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *translationMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *translationMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
 // Port helpers.
 
-func (m *middleware) topPort() sim.Port {
+func (m *translationMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *middleware) migrationPort() sim.Port {
-	return m.comp.GetPortByName("Migration")
-}
-
-// Tick defines how the MMU updates state each cycle.
-func (m *middleware) Tick() bool {
+// Tick runs the translation stages.
+func (m *translationMW) Tick() bool {
 	madeProgress := false
 
-	madeProgress = m.sendMigrationToDriver() || madeProgress
 	madeProgress = m.walkPageTable() || madeProgress
-	madeProgress = m.processMigrationReturn() || madeProgress
 	madeProgress = m.parseFromTop() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) walkPageTable() bool {
+func (m *translationMW) walkPageTable() bool {
 	madeProgress := false
 
 	cur := m.comp.GetState()
@@ -142,7 +138,7 @@ func (m *middleware) walkPageTable() bool {
 	return madeProgress
 }
 
-func (m *middleware) finalizePageWalk(walkingIndex int) bool {
+func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
 	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
@@ -174,7 +170,9 @@ func (m *middleware) finalizePageWalk(walkingIndex int) bool {
 	return m.doPageWalkHit(walkingIndex)
 }
 
-func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
+func (m *translationMW) addTransactionToMigrationQueue(
+	walkingIndex int,
+) bool {
 	spec := m.comp.GetSpec()
 	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
@@ -194,7 +192,9 @@ func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
 	return true
 }
 
-func (m *middleware) pageNeedMigrate(walking transactionState) bool {
+func (m *translationMW) pageNeedMigrate(
+	walking transactionState,
+) bool {
 	if walking.DeviceID == walking.Page.DeviceID {
 		return false
 	}
@@ -210,7 +210,7 @@ func (m *middleware) pageNeedMigrate(walking transactionState) bool {
 	return true
 }
 
-func (m *middleware) doPageWalkHit(walkingIndex int) bool {
+func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -235,7 +235,155 @@ func (m *middleware) doPageWalkHit(walkingIndex int) bool {
 	return true
 }
 
-func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
+func (m *translationMW) parseFromTop() bool {
+	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
+
+	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
+		return false
+	}
+
+	reqI := m.topPort().RetrieveIncoming()
+	if reqI == nil {
+		return false
+	}
+
+	switch req := reqI.(type) {
+	case *vm.TranslationReq:
+		tracing.TraceReqReceive(req, m)
+		m.startWalking(req)
+	default:
+		log.Panicf("MMU canot handle request of type %s",
+			fmt.Sprintf("%T", reqI))
+	}
+
+	return true
+}
+
+func (m *translationMW) startWalking(req *vm.TranslationReq) {
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
+
+	ts := transactionState{
+		ReqID:        req.ID,
+		ReqSrc:       req.Src,
+		ReqDst:       req.Dst,
+		PID:          uint32(req.PID),
+		VAddr:        req.VAddr,
+		DeviceID:     req.DeviceID,
+		TransLatency: req.TransLatency,
+		CycleLeft:    spec.Latency,
+	}
+
+	next.WalkingTranslations = append(next.WalkingTranslations, ts)
+}
+
+func (m *translationMW) toRemove(index int) bool {
+	next := m.comp.GetNextState()
+
+	for i := 0; i < len(next.ToRemoveFromPTW); i++ {
+		remove := next.ToRemoveFromPTW[i]
+		if remove == index {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *translationMW) createDefaultPage(
+	pid vm.PID, vAddr uint64, deviceID uint64,
+) vm.Page {
+	spec := m.comp.GetSpec()
+	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
+	pageSize := uint64(1) << spec.Log2PageSize
+	pAddr := m.allocatePhysicalPage()
+
+	return vm.Page{
+		PID:         pid,
+		VAddr:       alignedVAddr,
+		PAddr:       pAddr,
+		PageSize:    pageSize,
+		Valid:       true,
+		DeviceID:    deviceID,
+		Unified:     true,
+		IsMigrating: false,
+		IsPinned:    false,
+	}
+}
+
+func (m *translationMW) allocatePhysicalPage() uint64 {
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
+	pageSize := uint64(1) << spec.Log2PageSize
+
+	for {
+		candidatePage := (next.NextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
+
+		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
+			next.NextPhysicalPage = candidatePage + pageSize
+			return candidatePage
+		}
+
+		next.NextPhysicalPage += pageSize
+	}
+}
+
+func (m *translationMW) traceReqComplete(reqID string) {
+	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
+	tracing.EndTask(taskID, m)
+}
+
+// migrationMW handles migration: sending migration requests to the driver,
+// processing migration returns, and sending translation responses.
+type migrationMW struct {
+	comp      *modeling.Component[Spec, State]
+	pageTable vm.PageTable
+}
+
+// NamedHookable delegation methods.
+
+func (m *migrationMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *migrationMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *migrationMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *migrationMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *migrationMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Port helpers.
+
+func (m *migrationMW) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *migrationMW) migrationPort() sim.Port {
+	return m.comp.GetPortByName("Migration")
+}
+
+// Tick runs the migration stages.
+func (m *migrationMW) Tick() bool {
+	madeProgress := false
+
+	madeProgress = m.sendMigrationToDriver() || madeProgress
+	madeProgress = m.processMigrationReturn() || madeProgress
+
+	return madeProgress
+}
+
+func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 	cur := m.comp.GetState()
 
 	if len(cur.MigrationQueue) == 0 {
@@ -290,7 +438,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 	return true
 }
 
-func (m *middleware) markPageAsNotMigratingIfNotInTheMigrationQueue(
+func (m *migrationMW) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	page vm.Page,
 ) vm.Page {
 	next := m.comp.GetNextState()
@@ -313,7 +461,7 @@ func (m *middleware) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	return page
 }
 
-func (m *middleware) sendTranslationRsp(
+func (m *migrationMW) sendTranslationRsp(
 	trans transactionState,
 ) (madeProgress bool) {
 	rsp := &vm.TranslationRsp{
@@ -329,7 +477,7 @@ func (m *middleware) sendTranslationRsp(
 	return true
 }
 
-func (m *middleware) processMigrationReturn() bool {
+func (m *migrationMW) processMigrationReturn() bool {
 	item := m.migrationPort().PeekIncoming()
 	if item == nil {
 		return false
@@ -371,116 +519,7 @@ func (m *middleware) processMigrationReturn() bool {
 	return true
 }
 
-func (m *middleware) parseFromTop() bool {
-	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-
-	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
-		return false
-	}
-
-	reqI := m.topPort().RetrieveIncoming()
-	if reqI == nil {
-		return false
-	}
-
-	switch req := reqI.(type) {
-	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, m)
-		m.startWalking(req)
-	default:
-		log.Panicf("MMU canot handle request of type %s",
-			fmt.Sprintf("%T", reqI))
-	}
-
-	return true
-}
-
-func (m *middleware) startWalking(req *vm.TranslationReq) {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
-
-	ts := transactionState{
-		ReqID:        req.ID,
-		ReqSrc:       req.Src,
-		ReqDst:       req.Dst,
-		PID:          uint32(req.PID),
-		VAddr:        req.VAddr,
-		DeviceID:     req.DeviceID,
-		TransLatency: req.TransLatency,
-		CycleLeft:    spec.Latency,
-	}
-
-	next.WalkingTranslations = append(next.WalkingTranslations, ts)
-}
-
-func (m *middleware) toRemove(index int) bool {
-	next := m.comp.GetNextState()
-
-	for i := 0; i < len(next.ToRemoveFromPTW); i++ {
-		remove := next.ToRemoveFromPTW[i]
-		if remove == index {
-			return true
-		}
-	}
-
-	return false
-}
-
-func unique(intSlice []uint64) []uint64 {
-	keys := make(map[int]bool)
-	list := []uint64{}
-
-	for _, entry := range intSlice {
-		if _, value := keys[int(entry)]; !value {
-			keys[int(entry)] = true
-
-			list = append(list, entry)
-		}
-	}
-
-	return list
-}
-
-func (m *middleware) createDefaultPage(
-	pid vm.PID, vAddr uint64, deviceID uint64,
-) vm.Page {
-	spec := m.comp.GetSpec()
-	alignedVAddr := (vAddr >> spec.Log2PageSize) << spec.Log2PageSize
-	pageSize := uint64(1) << spec.Log2PageSize
-	pAddr := m.allocatePhysicalPage()
-
-	return vm.Page{
-		PID:         pid,
-		VAddr:       alignedVAddr,
-		PAddr:       pAddr,
-		PageSize:    pageSize,
-		Valid:       true,
-		DeviceID:    deviceID,
-		Unified:     true,
-		IsMigrating: false,
-		IsPinned:    false,
-	}
-}
-
-func (m *middleware) allocatePhysicalPage() uint64 {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
-	pageSize := uint64(1) << spec.Log2PageSize
-
-	for {
-		candidatePage := (next.NextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
-
-		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
-			next.NextPhysicalPage = candidatePage + pageSize
-			return candidatePage
-		}
-
-		next.NextPhysicalPage += pageSize
-	}
-}
-
-func (m *middleware) createMigrationRequest(
+func (m *migrationMW) createMigrationRequest(
 	trans transactionState,
 	page vm.Page,
 ) *vm.PageMigrationReqToDriver {
@@ -509,12 +548,22 @@ func (m *middleware) createMigrationRequest(
 	return migrationReq
 }
 
-func (m *middleware) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
-	tracing.EndTask(taskID, m)
-}
-
 // Helper functions for devicePageAccess slice.
+
+func unique(intSlice []uint64) []uint64 {
+	keys := make(map[int]bool)
+	list := []uint64{}
+
+	for _, entry := range intSlice {
+		if _, value := keys[int(entry)]; !value {
+			keys[int(entry)] = true
+
+			list = append(list, entry)
+		}
+	}
+
+	return list
+}
 
 func getDeviceIDs(accesses []devicePageAccess, vaddr uint64) []uint64 {
 	for _, a := range accesses {

@@ -115,8 +115,11 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	pt := b.createPageTable()
 
-	mw := &middleware{comp: modelComp, pageTable: pt}
-	modelComp.AddMiddleware(mw)
+	tmw := &translationMW{comp: modelComp, pageTable: pt}
+	modelComp.AddMiddleware(tmw)
+
+	mmw := &migrationMW{comp: modelComp, pageTable: pt}
+	modelComp.AddMiddleware(mmw)
 
 	return modelComp
 }

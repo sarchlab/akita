@@ -61,57 +61,55 @@ type State struct {
 	PageAccessedByDeviceID []devicePageAccess          `json:"page_accessed_by_device_id"`
 }
 
-// middleware provides the Tick method for the GMMU.
-type middleware struct {
+// walkMW handles the top→page-table walk path:
+// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
+// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
+type walkMW struct {
 	comp      *modeling.Component[Spec, State]
 	pageTable vm.PageTable
 }
 
-// Name delegates to the component.
-func (m *middleware) Name() string {
+// NamedHookable delegation methods.
+
+func (m *walkMW) Name() string {
 	return m.comp.Name()
 }
 
-// AcceptHook delegates to the component.
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *walkMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-// Hooks delegates to the component.
-func (m *middleware) Hooks() []sim.Hook {
+func (m *walkMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-// NumHooks delegates to the component.
-func (m *middleware) NumHooks() int {
+func (m *walkMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-// InvokeHook delegates to the component.
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *walkMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
-func (m *middleware) topPort() sim.Port {
+func (m *walkMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *middleware) bottomPort() sim.Port {
+func (m *walkMW) bottomPort() sim.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-// Tick defines how the gmmu updates state each cycle.
-func (m *middleware) Tick() bool {
+// Tick runs the walk stages.
+func (m *walkMW) Tick() bool {
 	madeProgress := false
 
 	madeProgress = m.walkPageTable() || madeProgress
 	madeProgress = m.parseFromTop() || madeProgress
-	madeProgress = m.fetchFromBottom() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) parseFromTop() bool {
+func (m *walkMW) parseFromTop() bool {
 	spec := m.comp.GetSpec()
 	cur := m.comp.GetState()
 
@@ -136,7 +134,7 @@ func (m *middleware) parseFromTop() bool {
 	return true
 }
 
-func (m *middleware) startWalking(req *vm.TranslationReq) {
+func (m *walkMW) startWalking(req *vm.TranslationReq) {
 	spec := m.comp.GetSpec()
 	nextState := m.comp.GetNextState()
 
@@ -154,7 +152,7 @@ func (m *middleware) startWalking(req *vm.TranslationReq) {
 		nextState.WalkingTranslations, ts)
 }
 
-func (m *middleware) walkPageTable() bool {
+func (m *walkMW) walkPageTable() bool {
 	cur := m.comp.GetState()
 
 	if len(cur.WalkingTranslations) == 0 {
@@ -194,7 +192,7 @@ func (m *middleware) walkPageTable() bool {
 	return madeProgress
 }
 
-func (m *middleware) removeCompletedTranslations(state *State) {
+func (m *walkMW) removeCompletedTranslations(state *State) {
 	if len(state.ToRemoveFromPTW) == 0 {
 		return
 	}
@@ -214,7 +212,7 @@ func (m *middleware) removeCompletedTranslations(state *State) {
 	state.ToRemoveFromPTW = nil
 }
 
-func (m *middleware) processRemoteMemReq(
+func (m *walkMW) processRemoteMemReq(
 	state *State,
 	walkingIndex int,
 ) bool {
@@ -243,7 +241,7 @@ func (m *middleware) processRemoteMemReq(
 	return true
 }
 
-func (m *middleware) finalizePageWalk(
+func (m *walkMW) finalizePageWalk(
 	state *State,
 	walkingIndex int,
 ) bool {
@@ -258,7 +256,7 @@ func (m *middleware) finalizePageWalk(
 	return m.doPageWalkHit(state, walkingIndex)
 }
 
-func (m *middleware) doPageWalkHit(
+func (m *walkMW) doPageWalkHit(
 	state *State,
 	walkingIndex int,
 ) bool {
@@ -294,7 +292,48 @@ func (m *middleware) doPageWalkHit(
 	return true
 }
 
-func (m *middleware) fetchFromBottom() bool {
+// respondMW handles the bottom→top response path:
+// fetchFromBottom, handleTranslationRsp.
+type respondMW struct {
+	comp *modeling.Component[Spec, State]
+}
+
+// NamedHookable delegation methods.
+
+func (m *respondMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *respondMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *respondMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *respondMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *respondMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *respondMW) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *respondMW) bottomPort() sim.Port {
+	return m.comp.GetPortByName("Bottom")
+}
+
+// Tick runs the respond stage.
+func (m *respondMW) Tick() bool {
+	return m.fetchFromBottom()
+}
+
+func (m *respondMW) fetchFromBottom() bool {
 	if !m.topPort().CanSend() {
 		return false
 	}
@@ -315,7 +354,7 @@ func (m *middleware) fetchFromBottom() bool {
 	}
 }
 
-func (m *middleware) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
+func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 	cur := m.comp.GetState()
 
 	reqTransaction, exists := cur.RemoteMemReqs[rsp.RspTo]

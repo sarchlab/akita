@@ -20,8 +20,9 @@ var _ = Describe("Address Translator", func() {
 		translationPort *MockPort
 		ctrlPort        *MockPort
 
-		t           *modeling.Component[Spec, State]
-		tMiddleware *middleware
+		t              *modeling.Component[Spec, State]
+		tParseTransMW  *parseTranslateMW
+		tRespondPipeMW *respondPipelineMW
 	)
 
 	BeforeEach(func() {
@@ -78,7 +79,8 @@ var _ = Describe("Address Translator", func() {
 
 		t = builder.Build("AddressTranslator")
 
-		tMiddleware = t.Middlewares()[0].(*middleware)
+		tParseTransMW = t.Middlewares()[0].(*parseTranslateMW)
+		tRespondPipeMW = t.Middlewares()[1].(*respondPipelineMW)
 	})
 
 	AfterEach(func() {
@@ -102,7 +104,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should do nothing if there is no request", func() {
 			topPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tMiddleware.translate()
+			madeProgress := tParseTransMW.translate()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -131,7 +133,7 @@ var _ = Describe("Address Translator", func() {
 					return nil
 				})
 
-			needTick := tMiddleware.translate()
+			needTick := tParseTransMW.translate()
 
 			Expect(needTick).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -146,7 +148,7 @@ var _ = Describe("Address Translator", func() {
 				Send(gomock.Any()).
 				Return(&sim.SendError{})
 
-			needTick := tMiddleware.translate()
+			needTick := tParseTransMW.translate()
 
 			Expect(needTick).To(BeFalse())
 			updatedState := t.GetNextState()
@@ -183,7 +185,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should do nothing if there is no translation return", func() {
 			translationPort.EXPECT().PeekIncoming().Return(nil)
-			needTick := tMiddleware.parseTranslation()
+			needTick := tRespondPipeMW.parseTranslation()
 			Expect(needTick).To(BeFalse())
 		})
 
@@ -221,7 +223,7 @@ var _ = Describe("Address Translator", func() {
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
 
-			madeProgress := tMiddleware.parseTranslation()
+			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeFalse())
 		})
@@ -269,7 +271,7 @@ var _ = Describe("Address Translator", func() {
 				}).
 				Return(nil)
 
-			madeProgress := tMiddleware.parseTranslation()
+			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -331,7 +333,7 @@ var _ = Describe("Address Translator", func() {
 				}).
 				Return(nil)
 
-			madeProgress := tMiddleware.parseTranslation()
+			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -399,7 +401,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should do nothing if there is no response to process", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tMiddleware.respond()
+			madeProgress := tRespondPipeMW.respond()
 			Expect(madeProgress).To(BeFalse())
 		})
 
@@ -419,7 +421,7 @@ var _ = Describe("Address Translator", func() {
 				Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := tMiddleware.respond()
+			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -441,7 +443,7 @@ var _ = Describe("Address Translator", func() {
 				Return(nil)
 			bottomPort.EXPECT().RetrieveIncoming()
 
-			madeProgress := tMiddleware.respond()
+			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -463,7 +465,7 @@ var _ = Describe("Address Translator", func() {
 				}).
 				Return(&sim.SendError{})
 
-			madeProgress := tMiddleware.respond()
+			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeFalse())
 			updatedState := t.GetNextState()
@@ -556,7 +558,7 @@ var _ = Describe("Address Translator", func() {
 			ctrlPort.EXPECT().RetrieveIncoming().Return(flushReq)
 			ctrlPort.EXPECT().Send(gomock.Any()).Return(nil)
 
-			madeProgress := tMiddleware.handleCtrlRequest()
+			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
@@ -572,7 +574,7 @@ var _ = Describe("Address Translator", func() {
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil)
 			translationPort.EXPECT().RetrieveIncoming().Return(nil)
 
-			madeProgress := tMiddleware.handleCtrlRequest()
+			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
 			updatedState := t.GetNextState()
