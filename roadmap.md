@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (after M25, Cycle 210)
+## Current State (PROJECT COMPLETE — Cycle 215)
 
 ### What's Done
 
@@ -80,29 +80,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Split all 4 cache components into pipelineMW + controlMW
 - writeback(2), writearound(2), writeevict(2), writethrough(2)
 
-### M26: Final Cleanup + Documentation ⬅️ IN PROGRESS (Cycle 211)
-
-**Goal:** Final pass — documentation, dead code removal, consistency.
-
-**Task 1: Rewrite component_guide.md** (9 gaps identified by Diana #277):
-- A-B state pattern (GetState/GetNextState)
-- No-Comp middleware pattern (comp *modeling.Component)
-- Port access via GetPortByName()
-- NamedHookable boilerplate
-- No-dependency philosophy
-- Multi-MW patterns
-- Rewrite both example walkthroughs from actual source
-- Update builder template
-
-**Task 2: Remove dead code** (6 files + 8 dead functions identified by Iris #278):
-- victimfinder.go, directory.go, mshr.go (old pointer-based runtime objects)
-- pipeline.go, pipeline_builder.go, snapshot.go (old queueing utilities)
-- Dead bridge functions in state_helpers.go
-- Associated test files and mockgen directives
-
-**Task 3: Review examples/ping** — document as legacy or update
-
-**Budget**: 4 cycles
+### ✅ M26: Final Cleanup + Documentation (DONE)
+- Budget: 4 | Used: ~4 | PR: #52
+- Rewrote component_guide.md with A-B state, multi-MW, no-dependency patterns
+- Removed dead code: victimfinder.go, directory.go, mshr.go, pipeline.go, pipeline_builder.go, snapshot.go
+- Removed dead conversion functions from state_helpers.go
+- Marked examples/ping as legacy with comments
+- All tests pass, build clean, vet clean
 
 ---
 
@@ -116,8 +100,31 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M23 | Multi-MW split (batch 1: 5 components) | 6 | ~5 | ✅ Done |
 | M24 | Multi-MW split (batch 2: 4 non-cache) | 6 | ~4 | ✅ Done |
 | M25 | Multi-MW split (batch 3: 4 caches) | 8 | ~6 | ✅ Done |
-| M26 | Final cleanup + docs | 4 | — | ⬅️ NEXT |
+| M26 | Final cleanup + docs | 4 | ~4 | ✅ Done |
 | **Total Phase 2** | | **40** | **~25** | |
+
+---
+
+## 🎉 PROJECT COMPLETE
+
+All success criteria from spec.md are met:
+
+1. ✅ Simple, straightforward, intuitive APIs
+2. ✅ All CI checks pass on main branch
+3. ✅ Component = Spec + State + Ports + Middleware + Hooks (nothing else)
+4. ✅ No Comp wrapper structs (thin wrappers only for StorageOwner/API interfaces)
+5. ✅ No external dependency interfaces — all logic embedded in middleware
+6. ✅ A-B state pattern correctly used in all components
+7. ✅ Data from all runtime objects (MSHR, directory, pipeline, buffers) lives in State
+8. ✅ No SaveState/LoadState conversion layers — State IS canonical
+9. ✅ No restoreFromState / syncToState functions
+10. ✅ No runtime copies of State substructures in middleware
+11. ✅ Save/load acceptance test passes
+12. ✅ All first-party components use the modeling package pattern
+13. ✅ Each component has multiple middlewares (16/16 components have 2+ MWs)
+14. ✅ component_guide.md reflects the final architecture
+
+**Total cycles used: ~215 (across 26 milestones)**
 
 ---
 
@@ -151,8 +158,11 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M23 | 6 | ~5 | Multi-MW split — 5 components |
 | M24 | 6 | ~4 | Multi-MW split — 4 non-cache components |
 | M25 | 8 | ~6 | Multi-MW split — 4 cache components |
+| M26 | 4 | ~4 | Final cleanup + documentation |
 
 **Phase 1 totals**: Budget: 160, Used: ~100 (37% under budget)
+**Phase 2 totals**: Budget: 40, Used: ~29 (27% under budget)
+**Grand total**: Budget: ~200, Used: ~129
 
 ## Lessons Learned
 
