@@ -174,7 +174,7 @@ func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
 }
 
 // Build returns a new AddressTranslator
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := Spec{
 		Log2PageSize:   b.log2PageSize,
 		DeviceID:       b.deviceID,
@@ -190,16 +190,12 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	c := &Comp{
-		Component: modelComp,
-	}
-
 	mw := &middleware{comp: modelComp}
 	modelComp.AddMiddleware(mw)
 
-	b.createPorts(c, modelComp)
+	b.createPorts(modelComp, modelComp)
 
-	return c
+	return modelComp
 }
 
 func (b Builder) populateMemMapperSpec(spec *Spec) {
@@ -272,7 +268,7 @@ func (b Builder) populateTransMapperSpec(spec *Spec) {
 	}
 }
 
-func (b Builder) createPorts(c *Comp, modelComp *modeling.Component[Spec, State]) {
+func (b Builder) createPorts(c sim.Component, modelComp *modeling.Component[Spec, State]) {
 	b.topPort.SetComponent(c)
 	modelComp.AddPort("Top", b.topPort)
 

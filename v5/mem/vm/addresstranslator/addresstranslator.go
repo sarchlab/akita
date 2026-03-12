@@ -72,12 +72,6 @@ type State struct {
 	InflightReqToBottom []reqToBottomState `json:"inflight_req_to_bottom"`
 }
 
-// Comp is an AddressTranslator that forwards the read/write requests with
-// the address translated from virtual to physical.
-type Comp struct {
-	*modeling.Component[Spec, State]
-}
-
 // findMemoryPort implements the same Find() logic as SinglePortMapper and
 // InterleavedAddressPortMapper, using Spec fields.
 func findMemoryPort(spec Spec, addr uint64) sim.RemotePort {
@@ -242,19 +236,16 @@ func (m *middleware) parseTranslation() bool {
 	}
 
 	rsp := rspI.(*vm.TranslationRsp)
-	nextState := m.comp.GetNextState()
-	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
+	cur := m.comp.GetState()
+	transIdx := findTransactionByReqID(cur.Transactions, rsp.RspTo)
 
 	if transIdx < 0 {
 		m.translationPort().RetrieveIncoming()
 		return true
 	}
 
-	trans := &nextState.Transactions[transIdx]
-	trans.TranslationDone = true
-	trans.Page = rsp.Page
-
-	reqState := trans.IncomingReqs[0]
+	curTrans := &cur.Transactions[transIdx]
+	reqState := curTrans.IncomingReqs[0]
 	spec := m.comp.GetSpec()
 	translatedReq := createTranslatedReq(reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(), spec)
@@ -264,16 +255,21 @@ func (m *middleware) parseTranslation() bool {
 		return false
 	}
 
+	nextState := m.comp.GetNextState()
+	nextTrans := &nextState.Transactions[transIdx]
+	nextTrans.TranslationDone = true
+	nextTrans.Page = rsp.Page
+
 	reqToBot := buildReqToBottom(reqState, translatedReq)
 	nextState.InflightReqToBottom = append(
 		nextState.InflightReqToBottom, reqToBot)
-	trans.IncomingReqs = trans.IncomingReqs[1:]
+	nextTrans.IncomingReqs = nextTrans.IncomingReqs[1:]
 
-	if len(trans.IncomingReqs) == 0 {
+	if len(nextTrans.IncomingReqs) == 0 {
 		removeTransaction(nextState, transIdx)
 	}
 
-	m.traceTranslationComplete(trans, reqState, translatedReq)
+	m.traceTranslationComplete(nextTrans, reqState, translatedReq)
 
 	m.translationPort().RetrieveIncoming()
 
@@ -339,7 +335,7 @@ func (m *middleware) respond() bool {
 		return false
 	}
 
-	nextState := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
 	var (
 		reqFromTopState reqToBottomState
@@ -350,9 +346,9 @@ func (m *middleware) respond() bool {
 
 	switch rsp := rspI.(type) {
 	case *mem.DataReadyRsp:
-		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
+		reqInBottom = isReqInBottomByID(cur.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
-			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
+			reqFromTopState = findReqToBottomByID(cur.InflightReqToBottom, rsp.RspTo)
 			rspToTop = &mem.DataReadyRsp{
 				Data: rsp.Data,
 			}
@@ -377,9 +373,9 @@ func (m *middleware) respond() bool {
 			)
 		}
 	case *mem.WriteDoneRsp:
-		reqInBottom = isReqInBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
+		reqInBottom = isReqInBottomByID(cur.InflightReqToBottom, rsp.RspTo)
 		if reqInBottom {
-			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
+			reqFromTopState = findReqToBottomByID(cur.InflightReqToBottom, rsp.RspTo)
 			rspToTop = &mem.WriteDoneRsp{}
 			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
 			rspToTop.Meta().Src = m.topPort().AsRemote()
@@ -425,6 +421,7 @@ func (m *middleware) respond() bool {
 			m,
 		)
 
+		nextState := m.comp.GetNextState()
 		rspMeta := rspI.Meta()
 		removeReqToBottomByID(nextState, rspMeta.RspTo)
 
