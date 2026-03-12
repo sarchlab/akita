@@ -370,13 +370,16 @@ func isNextStageOccupied(
 // Comp is an Akita component(Switch) that can forward request to destination.
 type Comp struct {
 	*modeling.Component[Spec, State]
+}
 
-	mw *middleware // internal reference for port addition and delegation
+// mw returns the middleware from the component's middleware list.
+func (c *Comp) mw() *middleware {
+	return c.Middlewares()[0].(*middleware)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
-	return c.mw.routingTable
+	return c.mw().routingTable
 }
 
 // --- Middleware ---
@@ -426,9 +429,10 @@ func (m *middleware) addPort(port sim.Port, remotePort sim.RemotePort, pcs portC
 	// Also map the local port's RemotePort so assignFlitOutputBuf can find it
 	m.portIndex[port.AsRemote()] = idx
 
-	// Initialize state
+	// Initialize state in both current and next buffers
 	next := m.comp.GetNextState()
 	next.PortComplexes = append(next.PortComplexes, pcs)
+	m.comp.SetState(*next)
 
 	// Create adapters with dummy slice pointers (will be updated in updateAdapterPointers)
 	sendAdapter := &stateSendOutBuffer{name: pcs.LocalPortName + "SendBuf", capacity: pcs.NumOutputChannel, portIdx: idx}
@@ -439,7 +443,8 @@ func (m *middleware) addPort(port sim.Port, remotePort sim.RemotePort, pcs portC
 	m.forwardBufAdapters = append(m.forwardBufAdapters, fwdAdapter)
 	m.routeBufAdapters = append(m.routeBufAdapters, routeAdapter)
 
-	// Point adapters at current state data
+	// Point adapters at next state data (will be updated per-tick)
+	next = m.comp.GetNextState()
 	fwdAdapter.items = &next.PortComplexes[idx].ForwardBuffer
 	sendAdapter.items = &next.PortComplexes[idx].SendOutBuffer
 	routeAdapter.items = &next.PortComplexes[idx].RouteBuffer
@@ -480,18 +485,21 @@ func (m *middleware) flitTaskID(flit *messaging.Flit) string {
 }
 
 func (m *middleware) startProcessing() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
 	for i, port := range m.ports {
-		pcs := &next.PortComplexes[i]
+		curPcs := cur.PortComplexes[i]
 
-		for j := 0; j < pcs.NumInputChannel; j++ {
+		for j := 0; j < curPcs.NumInputChannel; j++ {
 			itemI := port.PeekIncoming()
 			if itemI == nil {
 				break
 			}
 
-			if !pipelineCanAccept(*pcs) {
+			next := m.comp.GetNextState()
+			nextPcs := &next.PortComplexes[i]
+
+			if !pipelineCanAccept(*nextPcs) {
 				break
 			}
 
@@ -501,7 +509,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 				Flit:   flit.MsgMeta,
 				MsgDst: flit.Msg.Meta().Dst,
 			}
-			pipelineAccept(pcs, item)
+			pipelineAccept(nextPcs, item)
 			port.RetrieveIncoming()
 
 			madeProgress = true
@@ -601,29 +609,35 @@ func (m *middleware) forward() (madeProgress bool) {
 }
 
 func (m *middleware) sendOut() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
 	for i, port := range m.ports {
-		pcs := &next.PortComplexes[i]
+		curPcs := &cur.PortComplexes[i]
+		numSent := 0
 
-		for j := 0; j < pcs.NumOutputChannel; j++ {
-			if len(pcs.SendOutBuffer) == 0 {
+		for j := 0; j < curPcs.NumOutputChannel; j++ {
+			if numSent >= len(curPcs.SendOutBuffer) {
 				break
 			}
 
-			meta := pcs.SendOutBuffer[0]
+			meta := curPcs.SendOutBuffer[numSent]
 			flit := &messaging.Flit{MsgMeta: meta}
 			flit.Src = port.AsRemote()
-			flit.Dst = pcs.RemotePort
+			flit.Dst = curPcs.RemotePort
 
 			err := port.Send(flit)
 			if err == nil {
 				madeProgress = true
-
-				pcs.SendOutBuffer = pcs.SendOutBuffer[1:]
+				numSent++
 
 				tracing.EndTask(m.flitTaskID(flit), m)
 			}
+		}
+
+		if numSent > 0 {
+			next := m.comp.GetNextState()
+			nextPcs := &next.PortComplexes[i]
+			nextPcs.SendOutBuffer = nextPcs.SendOutBuffer[numSent:]
 		}
 	}
 
@@ -694,5 +708,5 @@ func (a SwitchPortAdder) AddPort() {
 		Latency:          a.latency,
 		PipelineWidth:    a.numInputChannel,
 	}
-	a.sw.mw.addPort(a.localPort, a.remotePort.AsRemote(), pcs)
+	a.sw.mw().addPort(a.localPort, a.remotePort.AsRemote(), pcs)
 }

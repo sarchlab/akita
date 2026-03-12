@@ -75,12 +75,12 @@ type Spec struct {
 	DeviceWidth int `json:"device_width"`
 
 	// Bank / rank / channel counts
-	NumChannel  int `json:"num_channel"`
-	NumRank     int `json:"num_rank"`
+	NumChannel   int `json:"num_channel"`
+	NumRank      int `json:"num_rank"`
 	NumBankGroup int `json:"num_bank_group"`
-	NumBank     int `json:"num_bank"`
-	NumRow      int `json:"num_row"`
-	NumCol      int `json:"num_col"`
+	NumBank      int `json:"num_bank"`
+	NumRow       int `json:"num_row"`
+	NumCol       int `json:"num_col"`
 
 	// Queue sizes
 	TransactionQueueSize int `json:"transaction_queue_size"`
@@ -125,36 +125,57 @@ type State struct {
 	BankStates    bankStatesFlat     `json:"bank_states"`
 }
 
-// Comp is a MemController that handles read and write requests.
-type Comp struct {
-	*modeling.Component[Spec, State]
-
+type middleware struct {
+	comp    *modeling.Component[Spec, State]
 	topPort sim.Port
 	storage *mem.Storage
 }
 
-type middleware struct {
-	*Comp
+// Name delegates to the underlying component.
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+// AcceptHook delegates to the underlying component.
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+// Hooks delegates to the underlying component.
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+// NumHooks delegates to the underlying component.
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+// InvokeHook delegates to the underlying component.
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
 }
 
 // Tick updates memory controller's internal state.
 func (m *middleware) Tick() (madeProgress bool) {
-	state := m.Comp.GetNextState()
-	spec := m.Comp.GetSpec()
+	curVal := m.comp.GetState()
+	cur := &curVal
+	next := m.comp.GetNextState()
+	spec := m.comp.GetSpec()
 
 	progress := false
 
-	progress = m.respond(&spec, state) || progress
-	progress = m.respond(&spec, state) || progress
-	progress = tickBanks(&spec, state) || progress
-	progress = m.issue(&spec, state) || progress
-	progress = tickSubTransQueue(&spec, state) || progress
-	progress = m.parseTop(&spec, state) || progress
+	progress = m.respond(&spec, cur, next) || progress
+	progress = m.respond(&spec, cur, next) || progress
+	progress = tickBanks(&spec, next) || progress
+	progress = m.issue(&spec, cur, next) || progress
+	progress = tickSubTransQueue(&spec, next) || progress
+	progress = m.parseTop(&spec, cur, next) || progress
 
 	return progress
 }
 
-func (m *middleware) parseTop(spec *Spec, state *State) bool {
+func (m *middleware) parseTop(spec *Spec, cur *State, next *State) bool {
 	msgI := m.topPort.PeekIncoming()
 	if msgI == nil {
 		return false
@@ -176,28 +197,28 @@ func (m *middleware) parseTop(spec *Spec, state *State) bool {
 	ts.InternalAddress = convertExternalToInternal(spec, globalAddr)
 
 	// Split into sub-transactions
-	transIdx := len(state.Transactions)
+	transIdx := len(next.Transactions)
 	splitTransaction(spec, &ts, transIdx)
 
-	if !canPushSubTrans(state, len(ts.SubTransactions),
+	if !canPushSubTrans(cur, len(ts.SubTransactions),
 		spec.TransactionQueueSize) {
 		return false
 	}
 
-	state.Transactions = append(state.Transactions, ts)
-	pushSubTrans(state, transIdx)
+	next.Transactions = append(next.Transactions, ts)
+	pushSubTrans(next, transIdx)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msgI, m.Comp)
+	tracing.TraceReqReceive(msgI, m)
 
 	for _, st := range ts.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
-			tracing.MsgIDAtReceiver(msgI, m.Comp),
-			m.Comp,
+			tracing.MsgIDAtReceiver(msgI, m),
+			m,
 			"sub-trans",
 			"sub-trans",
-			m.Comp.Name()+".SubTransQueue",
+			m.comp.Name()+".SubTransQueue",
 			nil,
 		)
 	}
@@ -205,28 +226,28 @@ func (m *middleware) parseTop(spec *Spec, state *State) bool {
 	return true
 }
 
-func (m *middleware) issue(spec *Spec, state *State) bool {
-	cmd := getCommandToIssue(spec, state)
+func (m *middleware) issue(spec *Spec, cur *State, next *State) bool {
+	cmd := getCommandToIssue(spec, cur, next)
 	if cmd == nil {
 		return false
 	}
 
-	bs := findBankStateByLocation(&state.BankStates, cmd.Location)
+	bs := findBankStateByLocation(&next.BankStates, cmd.Location)
 	if bs == nil {
 		return false
 	}
 
-	startCommand(spec, state, bs, cmd)
-	updateTiming(spec, state, cmd)
+	startCommand(spec, next, bs, cmd)
+	updateTiming(spec, next, cmd)
 
 	return true
 }
 
-func (m *middleware) respond(spec *Spec, state *State) bool {
-	for i := range state.Transactions {
-		t := &state.Transactions[i]
+func (m *middleware) respond(spec *Spec, cur *State, next *State) bool {
+	for i := range next.Transactions {
+		t := &next.Transactions[i]
 		if isTransactionCompleted(t) {
-			done := m.finalizeTransaction(spec, state, t, i)
+			done := m.finalizeTransaction(spec, next, t, i)
 			if done {
 				return true
 			}
@@ -245,14 +266,14 @@ func (m *middleware) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m.Comp)
+			tracing.TraceReqComplete(&t.WriteMsg, m)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m.Comp)
+		tracing.TraceReqComplete(&t.ReadMsg, m)
 	}
 	return done
 }

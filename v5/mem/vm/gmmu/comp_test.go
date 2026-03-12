@@ -6,6 +6,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -19,7 +20,7 @@ var _ = Describe("Builder", func() {
 		topPort            *MockPort
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
-		gmmuComp           *GMMU
+		gmmuComp           *modeling.Component[Spec, State]
 		mw                 *middleware
 	)
 
@@ -134,6 +135,11 @@ var _ = Describe("Builder", func() {
 				Return(true).
 				AnyTimes()
 
+			bottomPort.EXPECT().
+				RetrieveIncoming().
+				Return(nil).
+				AnyTimes()
+
 			var sentRsp *vm.TranslationRsp
 			topPort.EXPECT().
 				Send(gomock.Any()).
@@ -142,9 +148,14 @@ var _ = Describe("Builder", func() {
 				}).
 				Return(nil)
 
-			mw.parseFromTop()
-			mw.walkPageTable()
-			mw.walkPageTable()
+			// Tick 1: parseFromTop adds translation to next; walkPageTable
+			// sees empty cur. After tick, next becomes cur.
+			gmmuComp.Tick()
+			// Tick 2: walkPageTable sees the translation in cur, decrements
+			// CycleLeft (latency=1 → 0).
+			gmmuComp.Tick()
+			// Tick 3: CycleLeft==0, page walk completes and sends response.
+			gmmuComp.Tick()
 
 			Expect(sentRsp).NotTo(BeNil())
 			Expect(sentRsp.Page).To(Equal(page))
@@ -176,6 +187,10 @@ var _ = Describe("Builder", func() {
 				Return(nil).
 				AnyTimes()
 
+			topPort.EXPECT().CanSend().
+				Return(true).
+				AnyTimes()
+
 			pageTable.EXPECT().
 				Find(vm.PID(1), uint64(0x10000001)).
 				Return(page, true).AnyTimes()
@@ -189,9 +204,17 @@ var _ = Describe("Builder", func() {
 				Send(gomock.Any()).
 				Return(nil)
 
-			mw.parseFromTop()
-			mw.walkPageTable()
-			mw.walkPageTable()
+			bottomPort.EXPECT().
+				RetrieveIncoming().
+				Return(nil).
+				AnyTimes()
+
+			// Tick 1: parseFromTop adds translation to next.
+			gmmuComp.Tick()
+			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
+			gmmuComp.Tick()
+			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
+			gmmuComp.Tick()
 		})
 
 		It("should return response from remote page table", func() {
@@ -241,6 +264,20 @@ var _ = Describe("Builder", func() {
 				}).
 				Return(nil)
 
+			// Before the remote response arrives, return nil.
+			bottomPort.EXPECT().
+				RetrieveIncoming().
+				Return(nil).
+				Times(3)
+
+			// Tick 1: parseFromTop adds translation to next.
+			gmmuComp.Tick()
+			// Tick 2: walkPageTable sees translation, decrements CycleLeft.
+			gmmuComp.Tick()
+			// Tick 3: CycleLeft==0, page is remote, sends request to bottom.
+			gmmuComp.Tick()
+
+			// Now set up the response from the bottom port.
 			bottomPort.EXPECT().
 				RetrieveIncoming().
 				DoAndReturn(func() sim.Msg {
@@ -263,10 +300,8 @@ var _ = Describe("Builder", func() {
 				}).
 				Return(nil)
 
-			mw.parseFromTop()
-			mw.walkPageTable()
-			mw.walkPageTable()
-			mw.fetchFromBottom()
+			// Tick 4: fetchFromBottom receives response, sends to top.
+			gmmuComp.Tick()
 
 			Expect(sentRsp).NotTo(BeNil())
 			Expect(sentRsp.Page).To(Equal(page))

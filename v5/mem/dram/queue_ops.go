@@ -145,18 +145,20 @@ func acceptCommand(state *State, cmd *commandState) {
 }
 
 // getCommandToIssue iterates over command queues round-robin and returns
-// the first ready command. Returns nil if none is ready.
-func getCommandToIssue(spec *Spec, state *State) *commandState {
-	numQueues := state.CommandQueues.NumQueues
+// the first ready command. Reads from cur, writes removals to next.
+// Returns nil if none is ready.
+func getCommandToIssue(spec *Spec, cur *State, next *State) *commandState {
+	numQueues := cur.CommandQueues.NumQueues
 	if numQueues == 0 {
 		return nil
 	}
 
 	for i := 0; i < numQueues; i++ {
-		queueIdx := state.CommandQueues.NextQueueIndex
-		state.CommandQueues.NextQueueIndex = (queueIdx + 1) % numQueues
+		queueIdx := cur.CommandQueues.NextQueueIndex
+		next.CommandQueues.NextQueueIndex = (queueIdx + 1) % numQueues
+		cur.CommandQueues.NextQueueIndex = next.CommandQueues.NextQueueIndex
 
-		readyCmd := getFirstReadyInQueue(spec, state, queueIdx)
+		readyCmd := getFirstReadyInQueue(spec, cur, next, queueIdx)
 		if readyCmd != nil {
 			return readyCmd
 		}
@@ -166,39 +168,51 @@ func getCommandToIssue(spec *Spec, state *State) *commandState {
 }
 
 // getFirstReadyInQueue finds the first command in a specific queue that
-// can be issued.
+// can be issued. Reads from cur, writes removals to next.
 func getFirstReadyInQueue(
 	spec *Spec,
-	state *State,
+	cur *State,
+	next *State,
 	queueIdx int,
 ) *commandState {
 	// Collect indices of entries in this queue
-	for i := 0; i < len(state.CommandQueues.Entries); i++ {
-		e := &state.CommandQueues.Entries[i]
+	for i := 0; i < len(cur.CommandQueues.Entries); i++ {
+		e := &cur.CommandQueues.Entries[i]
 		if e.QueueIndex != queueIdx {
 			continue
 		}
 
 		cmd := &e.Command
-		bs := findBankStateByLocation(&state.BankStates, cmd.Location)
+		bs := findBankStateByLocation(&cur.BankStates, cmd.Location)
 		if bs == nil {
 			continue
 		}
 
 		readyCmd := getReadyCommand(spec, bs, cmd)
 		if readyCmd != nil {
-			// If the ready command kind matches the original, remove from queue
+			// If the ready command kind matches the original, remove from next
 			if cmd.Kind == readyCmd.Kind {
-				state.CommandQueues.Entries = append(
-					state.CommandQueues.Entries[:i],
-					state.CommandQueues.Entries[i+1:]...,
-				)
+				removeCommandFromQueueByID(next, cmd.ID)
 			}
 			return readyCmd
 		}
 	}
 
 	return nil
+}
+
+// removeCommandFromQueueByID removes a command entry with matching ID from
+// next's command queue.
+func removeCommandFromQueueByID(next *State, cmdID string) {
+	for i := 0; i < len(next.CommandQueues.Entries); i++ {
+		if next.CommandQueues.Entries[i].Command.ID == cmdID {
+			next.CommandQueues.Entries = append(
+				next.CommandQueues.Entries[:i],
+				next.CommandQueues.Entries[i+1:]...,
+			)
+			return
+		}
+	}
 }
 
 // findBankStateByLocation finds the bank state for a given Location.

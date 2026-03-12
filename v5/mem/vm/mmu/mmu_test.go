@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
@@ -17,7 +18,7 @@ var _ = Describe("MMU", func() {
 		topPort       *MockPort
 		migrationPort *MockPort
 		pageTable     *MockPageTable
-		mmuComp       *Comp
+		mmuComp       *modeling.Component[Spec, State]
 		mmuMiddleware *middleware
 	)
 
@@ -76,8 +77,9 @@ var _ = Describe("MMU", func() {
 		It("should stall parse from top "+
 			"if MMU is servicing max requests",
 			func() {
-				next := mmuComp.GetNextState()
-				next.WalkingTranslations = make([]transactionState, 16)
+				mmuComp.SetState(State{
+					WalkingTranslations: make([]transactionState, 16),
+				})
 
 				madeProgress := mmuMiddleware.parseFromTop()
 
@@ -87,20 +89,22 @@ var _ = Describe("MMU", func() {
 
 	Context("walk page table", func() {
 		It("should reduce translation cycles", func() {
-			next := mmuComp.GetNextState()
-			next.WalkingTranslations = append(next.WalkingTranslations,
-				transactionState{
-					ReqID:     sim.GetIDGenerator().Generate(),
-					ReqDst:    sim.RemotePort("TopPort"),
-					PID:       1,
-					VAddr:     0x1020,
-					DeviceID:  0,
-					CycleLeft: 10,
-				})
+			mmuComp.SetState(State{
+				WalkingTranslations: []transactionState{
+					{
+						ReqID:     sim.GetIDGenerator().Generate(),
+						ReqDst:    sim.RemotePort("TopPort"),
+						PID:       1,
+						VAddr:     0x1020,
+						DeviceID:  0,
+						CycleLeft: 10,
+					},
+				},
+			})
 
 			madeProgress := mmuMiddleware.walkPageTable()
 
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.WalkingTranslations[0].CycleLeft).To(Equal(9))
 			Expect(madeProgress).To(BeTrue())
 		})
@@ -114,17 +118,19 @@ var _ = Describe("MMU", func() {
 				Valid:    true,
 			}
 
-			next := mmuComp.GetNextState()
-			next.WalkingTranslations = append(next.WalkingTranslations,
-				transactionState{
-					ReqID:     sim.GetIDGenerator().Generate(),
-					ReqSrc:    sim.RemotePort("Agent"),
-					ReqDst:    sim.RemotePort("TopPort"),
-					PID:       1,
-					VAddr:     0x1000,
-					DeviceID:  0,
-					CycleLeft: 0,
-				})
+			mmuComp.SetState(State{
+				WalkingTranslations: []transactionState{
+					{
+						ReqID:     sim.GetIDGenerator().Generate(),
+						ReqSrc:    sim.RemotePort("Agent"),
+						ReqDst:    sim.RemotePort("TopPort"),
+						PID:       1,
+						VAddr:     0x1000,
+						DeviceID:  0,
+						CycleLeft: 0,
+					},
+				},
+			})
 
 			pageTable.EXPECT().
 				Find(vm.PID(1), uint64(0x1000)).
@@ -140,7 +146,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 		})
 
@@ -153,17 +159,19 @@ var _ = Describe("MMU", func() {
 				Valid:    true,
 			}
 
-			next := mmuComp.GetNextState()
-			next.WalkingTranslations = append(next.WalkingTranslations,
-				transactionState{
-					ReqID:     sim.GetIDGenerator().Generate(),
-					ReqSrc:    sim.RemotePort("Agent"),
-					ReqDst:    sim.RemotePort("TopPort"),
-					PID:       1,
-					VAddr:     0x1000,
-					DeviceID:  0,
-					CycleLeft: 0,
-				})
+			mmuComp.SetState(State{
+				WalkingTranslations: []transactionState{
+					{
+						ReqID:     sim.GetIDGenerator().Generate(),
+						ReqSrc:    sim.RemotePort("Agent"),
+						ReqDst:    sim.RemotePort("TopPort"),
+						PID:       1,
+						VAddr:     0x1000,
+						DeviceID:  0,
+						CycleLeft: 0,
+					},
+				},
+			})
 
 			pageTable.EXPECT().
 				Find(vm.PID(1), uint64(0x1000)).
@@ -210,9 +218,9 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should be placed in the migration queue", func() {
-			next := mmuComp.GetNextState()
-			next.WalkingTranslations = append(
-				next.WalkingTranslations, walking)
+			mmuComp.SetState(State{
+				WalkingTranslations: []transactionState{walking},
+			})
 
 			updatedPage := page
 			updatedPage.IsMigrating = true
@@ -221,7 +229,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
@@ -235,16 +243,16 @@ var _ = Describe("MMU", func() {
 				Find(vm.PID(2), uint64(0x1000)).
 				Return(page, true)
 
-			next := mmuComp.GetNextState()
-			next.WalkingTranslations = append(
-				next.WalkingTranslations, walking)
+			mmuComp.SetState(State{
+				WalkingTranslations: []transactionState{walking},
+			})
 
 			pageTable.EXPECT().Update(page)
 
 			madeProgress := mmuMiddleware.walkPageTable()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.WalkingTranslations).To(HaveLen(0))
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
@@ -256,20 +264,22 @@ var _ = Describe("MMU", func() {
 		})
 
 		It("should wait if mmu is waiting for a migration to finish", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
-			next.IsDoingMigration = true
+			mmuComp.SetState(State{
+				MigrationQueue:   []transactionState{walking},
+				IsDoingMigration: true,
+			})
 
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
 
 		It("should stall if send failed", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			migrationPort.EXPECT().
 				Send(gomock.Any()).
@@ -278,13 +288,14 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeFalse())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(1))
 		})
 
 		It("should send migration request", func() {
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			migrationPort.EXPECT().
 				Send(gomock.Any()).
@@ -296,7 +307,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(0))
 			Expect(next.IsDoingMigration).To(BeTrue())
 		})
@@ -304,8 +315,9 @@ var _ = Describe("MMU", func() {
 		It("should reply to the GPU if the page is already on the "+
 			"destination GPU", func() {
 			walking.DeviceID = 2
-			next := mmuComp.GetNextState()
-			next.MigrationQueue = append(next.MigrationQueue, walking)
+			mmuComp.SetState(State{
+				MigrationQueue: []transactionState{walking},
+			})
 
 			updatedPage := page
 			updatedPage.IsMigrating = false
@@ -316,7 +328,7 @@ var _ = Describe("MMU", func() {
 			madeProgress := mmuMiddleware.sendMigrationToDriver()
 
 			Expect(madeProgress).To(BeTrue())
-			next = mmuComp.GetNextState()
+			next := mmuComp.GetNextState()
 			Expect(next.MigrationQueue).To(HaveLen(0))
 			Expect(next.IsDoingMigration).To(BeFalse())
 		})
@@ -355,8 +367,9 @@ var _ = Describe("MMU", func() {
 				DeviceID:  0,
 				CycleLeft: 0,
 			}
-			next := mmuComp.GetNextState()
-			next.CurrentOnDemandMigration = migrating
+			mmuComp.SetState(State{
+				CurrentOnDemandMigration: migrating,
+			})
 
 			migrationDone = vm.NewPageMigrationRspFromDriver(
 				"", "", reqID)
@@ -412,7 +425,7 @@ var _ = Describe("MMU Integration", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		mmuComp    *Comp
+		mmuComp    *modeling.Component[Spec, State]
 		agent      *MockPort
 		connection sim.Connection
 	)
@@ -456,7 +469,7 @@ var _ = Describe("MMU Integration", func() {
 			Valid:    true,
 			DeviceID: 1,
 		}
-		mmuComp.PageTable().Insert(page)
+		PageTable(mmuComp).Insert(page)
 
 		topPort := mmuComp.GetPortByName("Top")
 

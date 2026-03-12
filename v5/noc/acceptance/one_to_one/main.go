@@ -64,16 +64,16 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		WithNetworkPort(sim.NewPort(nil, 4, 4, "EP2.NetworkPort")).
 		Build("EP2")
 
-	ep1.DefaultSwitchDst = ep2.NetworkPort.AsRemote()
-	ep2.DefaultSwitchDst = ep1.NetworkPort.AsRemote()
+	ep1.SetDefaultSwitchDst(ep2.NetworkPort().AsRemote())
+	ep2.SetDefaultSwitchDst(ep1.NetworkPort().AsRemote())
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(freq).
 		Build("Conn")
 
-	conn.PlugIn(ep1.NetworkPort)
-	conn.PlugIn(ep2.NetworkPort)
+	conn.PlugIn(ep1.NetworkPort())
+	conn.PlugIn(ep2.NetworkPort())
 
 	test.RegisterAgent(agents[0])
 	test.RegisterAgent(agents[1])

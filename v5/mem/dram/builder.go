@@ -358,7 +358,7 @@ func (b Builder) WithRFCb(cycle int) Builder {
 }
 
 // Build builds a new MemController.
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.calculateBurstCycle()
 	b.tRL = b.tAL + b.tCL
 	b.tWL = b.tAL + b.tCWL
@@ -389,32 +389,32 @@ func (b Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.SetState(initialState)
 
-	m := &Comp{
-		Component: modelComp,
-	}
-
+	var storage *mem.Storage
 	if b.useGlobalStorage {
-		m.storage = b.storage
+		storage = b.storage
 	} else {
 		devicePerRank := b.busWidth / b.deviceWidth
 		bankSize := b.numCol * b.numRow * b.deviceWidth / 8
 		rankSize := bankSize * b.numBank * devicePerRank
 		totalSize := rankSize * b.numRank * b.numChannel
-		m.storage = mem.NewStorage(uint64(totalSize))
+		storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	m.topPort = b.topPort
-	m.topPort.SetComponent(m)
-	m.AddPort("Top", m.topPort)
+	mw := &middleware{
+		comp:    modelComp,
+		topPort: b.topPort,
+		storage: storage,
+	}
+	modelComp.AddMiddleware(mw)
+
+	b.topPort.SetComponent(modelComp)
+	modelComp.AddPort("Top", b.topPort)
 
 	for _, tracer := range b.tracers {
-		tracing.CollectTrace(m, tracer)
+		tracing.CollectTrace(modelComp, tracer)
 	}
 
-	mw := &middleware{Comp: m}
-	m.AddMiddleware(mw)
-
-	return m
+	return modelComp
 }
 
 func (b Builder) buildSpec() Spec {

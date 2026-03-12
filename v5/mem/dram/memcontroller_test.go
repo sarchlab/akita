@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
@@ -230,7 +231,7 @@ var _ = Describe("Queue Operations", func() {
 var _ = Describe("DRAM Integration", func() {
 	var (
 		engine  sim.Engine
-		memCtrl *Comp
+		memCtrl *modeling.Component[Spec, State]
 	)
 
 	BeforeEach(func() {
@@ -247,7 +248,8 @@ var _ = Describe("DRAM Integration", func() {
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).
 			Build("Conn")
-		conn.PlugIn(memCtrl.topPort)
+		topPort := memCtrl.GetPortByName("Top")
+		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 
 		writeData := []byte{1, 2, 3, 4}
@@ -256,7 +258,7 @@ var _ = Describe("DRAM Integration", func() {
 		write.Address = 0x40
 		write.Data = writeData
 		write.Src = srcPort.AsRemote()
-		write.Dst = memCtrl.topPort.AsRemote()
+		write.Dst = topPort.AsRemote()
 		write.TrafficBytes = len(writeData) + 12
 		write.TrafficClass = "mem.WriteReq"
 
@@ -265,7 +267,7 @@ var _ = Describe("DRAM Integration", func() {
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
-		read.Dst = memCtrl.topPort.AsRemote()
+		read.Dst = topPort.AsRemote()
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
 

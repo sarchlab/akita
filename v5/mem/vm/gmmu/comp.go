@@ -61,11 +61,6 @@ type State struct {
 	PageAccessedByDeviceID []devicePageAccess          `json:"page_accessed_by_device_id"`
 }
 
-// GMMU is the default gmmu implementation. It is also an akita Component.
-type GMMU struct {
-	*modeling.Component[Spec, State]
-}
-
 // middleware provides the Tick method for the GMMU.
 type middleware struct {
 	comp      *modeling.Component[Spec, State]
@@ -118,9 +113,9 @@ func (m *middleware) Tick() bool {
 
 func (m *middleware) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	nextState := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(nextState.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -160,23 +155,24 @@ func (m *middleware) startWalking(req *vm.TranslationReq) {
 }
 
 func (m *middleware) walkPageTable() bool {
-	nextState := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(nextState.WalkingTranslations) == 0 {
+	if len(cur.WalkingTranslations) == 0 {
 		return false
 	}
 
+	next := m.comp.GetNextState()
 	madeProgress := false
 	spec := m.comp.GetSpec()
 
-	for i := 0; i < len(nextState.WalkingTranslations); i++ {
-		if nextState.WalkingTranslations[i].CycleLeft > 0 {
-			nextState.WalkingTranslations[i].CycleLeft--
+	for i := 0; i < len(cur.WalkingTranslations); i++ {
+		if cur.WalkingTranslations[i].CycleLeft > 0 {
+			next.WalkingTranslations[i].CycleLeft = cur.WalkingTranslations[i].CycleLeft - 1
 			madeProgress = true
 			continue
 		}
 
-		ts := nextState.WalkingTranslations[i]
+		ts := cur.WalkingTranslations[i]
 
 		page, found := m.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 		if !found {
@@ -187,13 +183,13 @@ func (m *middleware) walkPageTable() bool {
 		}
 
 		if page.DeviceID == spec.DeviceID {
-			madeProgress = m.finalizePageWalk(nextState, i) || madeProgress
+			madeProgress = m.finalizePageWalk(next, i) || madeProgress
 		} else {
-			madeProgress = m.processRemoteMemReq(nextState, i) || madeProgress
+			madeProgress = m.processRemoteMemReq(next, i) || madeProgress
 		}
 	}
 
-	m.removeCompletedTranslations(nextState)
+	m.removeCompletedTranslations(next)
 
 	return madeProgress
 }
@@ -320,9 +316,9 @@ func (m *middleware) fetchFromBottom() bool {
 }
 
 func (m *middleware) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
-	nextState := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	reqTransaction, exists := nextState.RemoteMemReqs[rsp.RspTo]
+	reqTransaction, exists := cur.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == "" {
 		log.Panicf("Cannot find matching request for response %+v", rsp)
@@ -343,7 +339,8 @@ func (m *middleware) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 
 	m.topPort().Send(rspToTop)
 
-	delete(nextState.RemoteMemReqs, rsp.RspTo)
+	next := m.comp.GetNextState()
+	delete(next.RemoteMemReqs, rsp.RspTo)
 
 	return true
 }

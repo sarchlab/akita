@@ -79,7 +79,7 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		sw.mw.addPort(port1, remote1.AsRemote(), pcs1)
+		sw.mw().addPort(port1, remote1.AsRemote(), pcs1)
 
 		pcs2 := portComplexState{
 			LocalPortName:    "LocalPort2",
@@ -89,7 +89,7 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		sw.mw.addPort(port2, remote2.AsRemote(), pcs2)
+		sw.mw().addPort(port2, remote2.AsRemote(), pcs2)
 
 		swMiddleware = sw.Middlewares()[0].(*middleware)
 	})
@@ -302,6 +302,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
 
@@ -327,6 +328,7 @@ var _ = Describe("Switch", func() {
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 

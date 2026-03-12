@@ -134,7 +134,7 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 }
 
 func buildTranslationHierarchy(engine sim.Engine, s *simulation.Simulation) (
-	*mmu.Comp, *tlb.Comp, *tlb.Comp,
+	*modeling.Component[mmu.Spec, mmu.State], *tlb.Comp, *tlb.Comp,
 ) {
 	pageTable := setupPageTable(*maxAddressFlag)
 

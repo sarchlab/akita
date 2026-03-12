@@ -66,10 +66,9 @@ func (b Builder) Build(name string) *Comp {
 
 	s := &Comp{
 		Component: modelComp,
-		mw:        mw,
 	}
 
-	modelComp.AddMiddleware(mw)
+	s.AddMiddleware(mw)
 
 	return s
 }

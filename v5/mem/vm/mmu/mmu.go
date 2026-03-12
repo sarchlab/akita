@@ -56,13 +56,8 @@ type State struct {
 	ToRemoveFromPTW          []int              `json:"to_remove_from_ptw"`
 }
 
-// Comp is the default mmu implementation. It is also an akita Component.
-type Comp struct {
-	*modeling.Component[Spec, State]
-}
-
-// PageTable returns the page table used by the MMU.
-func (c *Comp) PageTable() vm.PageTable {
+// PageTable returns the page table from an MMU component.
+func PageTable(c *modeling.Component[Spec, State]) vm.PageTable {
 	return c.Middlewares()[0].(*middleware).pageTable
 }
 
@@ -118,11 +113,12 @@ func (m *middleware) Tick() bool {
 func (m *middleware) walkPageTable() bool {
 	madeProgress := false
 
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	for i := 0; i < len(next.WalkingTranslations); i++ {
-		if next.WalkingTranslations[i].CycleLeft > 0 {
-			next.WalkingTranslations[i].CycleLeft--
+	for i := 0; i < len(cur.WalkingTranslations); i++ {
+		if cur.WalkingTranslations[i].CycleLeft > 0 {
+			next.WalkingTranslations[i].CycleLeft = cur.WalkingTranslations[i].CycleLeft - 1
 			madeProgress = true
 
 			continue
@@ -148,8 +144,9 @@ func (m *middleware) walkPageTable() bool {
 
 func (m *middleware) finalizePageWalk(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
-	walking := next.WalkingTranslations[walkingIndex]
+	walking := cur.WalkingTranslations[walkingIndex]
 
 	page, found := m.pageTable.Find(
 		vm.PID(walking.PID), walking.VAddr)
@@ -179,9 +176,10 @@ func (m *middleware) finalizePageWalk(walkingIndex int) bool {
 
 func (m *middleware) addTransactionToMigrationQueue(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
 
-	if len(next.MigrationQueue) >= spec.MigrationQueueSize {
+	if len(cur.MigrationQueue) >= spec.MigrationQueueSize {
 		return false
 	}
 
@@ -238,13 +236,15 @@ func (m *middleware) doPageWalkHit(walkingIndex int) bool {
 }
 
 func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(next.MigrationQueue) == 0 {
+	if len(cur.MigrationQueue) == 0 {
 		return false
 	}
 
-	trans := next.MigrationQueue[0]
+	next := m.comp.GetNextState()
+
+	trans := cur.MigrationQueue[0]
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
 
@@ -266,7 +266,7 @@ func (m *middleware) sendMigrationToDriver() (madeProgress bool) {
 		return true
 	}
 
-	if next.IsDoingMigration {
+	if cur.IsDoingMigration {
 		return false
 	}
 
@@ -339,8 +339,9 @@ func (m *middleware) processMigrationReturn() bool {
 		return false
 	}
 
+	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
-	trans := next.CurrentOnDemandMigration
+	trans := cur.CurrentOnDemandMigration
 
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
@@ -372,9 +373,9 @@ func (m *middleware) processMigrationReturn() bool {
 
 func (m *middleware) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(next.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 

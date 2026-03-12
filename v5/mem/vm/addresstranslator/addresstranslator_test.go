@@ -20,7 +20,7 @@ var _ = Describe("Address Translator", func() {
 		translationPort *MockPort
 		ctrlPort        *MockPort
 
-		t           *Comp
+		t           *modeling.Component[Spec, State]
 		tMiddleware *middleware
 	)
 
@@ -173,11 +173,12 @@ var _ = Describe("Address Translator", func() {
 			transReq2.DeviceID = 1
 			transReq2.TrafficClass = "vm.TranslationReq"
 
-			nextState := t.GetNextState()
-			nextState.Transactions = []transactionState{
-				{TranslationReqID: transReq1.ID},
-				{TranslationReqID: transReq2.ID},
-			}
+			t.SetState(State{
+				Transactions: []transactionState{
+					{TranslationReqID: transReq1.ID},
+					{TranslationReqID: transReq2.ID},
+				},
+			})
 		})
 
 		It("should do nothing if there is no translation return", func() {
@@ -204,11 +205,18 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			nextState := t.GetNextState()
-			nextState.Transactions[0].IncomingReqs = []incomingReqState{
-				msgToIncomingReqState(req),
-			}
-			nextState.Transactions[0].TranslationDone = true
+			t.SetState(State{
+				Transactions: []transactionState{
+					{
+						TranslationReqID: transReq1.ID,
+						IncomingReqs: []incomingReqState{
+							msgToIncomingReqState(req),
+						},
+						TranslationDone: true,
+					},
+					{TranslationReqID: transReq2.ID},
+				},
+			})
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
@@ -236,11 +244,18 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			nextState := t.GetNextState()
-			nextState.Transactions[0].IncomingReqs = []incomingReqState{
-				msgToIncomingReqState(req),
-			}
-			nextState.Transactions[0].TranslationDone = true
+			t.SetState(State{
+				Transactions: []transactionState{
+					{
+						TranslationReqID: transReq1.ID,
+						IncomingReqs: []incomingReqState{
+							msgToIncomingReqState(req),
+						},
+						TranslationDone: true,
+					},
+					{TranslationReqID: transReq2.ID},
+				},
+			})
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
@@ -290,11 +305,18 @@ var _ = Describe("Address Translator", func() {
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			nextState := t.GetNextState()
-			nextState.Transactions[0].IncomingReqs = []incomingReqState{
-				msgToIncomingReqState(write),
-			}
-			nextState.Transactions[0].TranslationDone = true
+			t.SetState(State{
+				Transactions: []transactionState{
+					{
+						TranslationReqID: transReq1.ID,
+						IncomingReqs: []incomingReqState{
+							msgToIncomingReqState(write),
+						},
+						TranslationDone: true,
+					},
+					{TranslationReqID: transReq2.ID},
+				},
+			})
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
@@ -349,29 +371,30 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
 
-			nextState := t.GetNextState()
-			nextState.InflightReqToBottom = []reqToBottomState{
-				{
-					ReqFromTopID:    readFromTop.ID,
-					ReqFromTopSrc:   readFromTop.Src,
-					ReqFromTopDst:   readFromTop.Dst,
-					ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
-					ReqToBottomID:   readToBottom.ID,
-					ReqToBottomSrc:  readToBottom.Src,
-					ReqToBottomDst:  readToBottom.Dst,
-					ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+			t.SetState(State{
+				InflightReqToBottom: []reqToBottomState{
+					{
+						ReqFromTopID:    readFromTop.ID,
+						ReqFromTopSrc:   readFromTop.Src,
+						ReqFromTopDst:   readFromTop.Dst,
+						ReqFromTopType:  fmt.Sprintf("%T", readFromTop),
+						ReqToBottomID:   readToBottom.ID,
+						ReqToBottomSrc:  readToBottom.Src,
+						ReqToBottomDst:  readToBottom.Dst,
+						ReqToBottomType: fmt.Sprintf("%T", readToBottom),
+					},
+					{
+						ReqFromTopID:    writeFromTop.ID,
+						ReqFromTopSrc:   writeFromTop.Src,
+						ReqFromTopDst:   writeFromTop.Dst,
+						ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
+						ReqToBottomID:   writeToBottom.ID,
+						ReqToBottomSrc:  writeToBottom.Src,
+						ReqToBottomDst:  writeToBottom.Dst,
+						ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
+					},
 				},
-				{
-					ReqFromTopID:    writeFromTop.ID,
-					ReqFromTopSrc:   writeFromTop.Src,
-					ReqFromTopDst:   writeFromTop.Dst,
-					ReqFromTopType:  fmt.Sprintf("%T", writeFromTop),
-					ReqToBottomID:   writeToBottom.ID,
-					ReqToBottomSrc:  writeToBottom.Src,
-					ReqToBottomDst:  writeToBottom.Dst,
-					ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
-				},
-			}
+			})
 		})
 
 		It("should do nothing if there is no response to process", func() {

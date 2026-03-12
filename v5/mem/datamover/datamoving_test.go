@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
@@ -14,7 +15,7 @@ var _ = Describe("DataMover", func() {
 	var (
 		mockCtrl   *gomock.Controller
 		engine     sim.Engine
-		dataMover  *Comp
+		dataMover  *modeling.Component[Spec, State]
 		insideMem  *idealmemcontroller.Comp
 		outsideMem *idealmemcontroller.Comp
 		conn       *directconnection.Comp
