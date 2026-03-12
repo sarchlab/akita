@@ -13,6 +13,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/tebeka/atexit"
 )
 
@@ -38,7 +39,7 @@ func main() {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
 			rand.Seed(1)
 
-			engine := sim.NewSerialEngine()
+			engine := simengine.NewSerialEngine()
 			t := acceptance.NewTest()
 
 			agents := createNetwork(engine, t)

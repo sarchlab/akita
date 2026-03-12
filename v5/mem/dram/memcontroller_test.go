@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
@@ -235,7 +236,7 @@ var _ = Describe("DRAM Integration", func() {
 	)
 
 	BeforeEach(func() {
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 		memCtrl = MakeBuilder().
 			WithEngine(engine).
 			WithTopPort(sim.NewPort(nil, 1024, 1024, "MemCtrl.TopPort")).

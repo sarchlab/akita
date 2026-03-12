@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/pcie"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/tebeka/atexit"
 )
 
@@ -19,7 +20,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	// engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	t := acceptance.NewTest()

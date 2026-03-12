@@ -6,11 +6,12 @@ package ping
 
 import (
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
 func Example_pingWithEvents() {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	// agentA := NewPingAgent("AgentA", engine)
 	agentA := MakeBuilder().
 		WithEngine(engine).

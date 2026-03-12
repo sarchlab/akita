@@ -5,6 +5,7 @@ import (
 	// . "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 var _ = Describe("Connector", func() {
@@ -14,7 +15,7 @@ var _ = Describe("Connector", func() {
 	)
 
 	BeforeEach(func() {
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 		connector = mesh.NewConnector().WithEngine(engine)
 		connector.CreateNetwork("Network")
 	})

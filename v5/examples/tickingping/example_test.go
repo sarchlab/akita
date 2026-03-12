@@ -2,11 +2,12 @@ package tickingping
 
 import (
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
 func Example() {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	agentA := MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.Hz).

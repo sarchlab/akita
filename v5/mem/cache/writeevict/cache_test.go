@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
@@ -32,7 +33,7 @@ var _ = Describe("Cache", func() {
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
 		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("cuPort")).AnyTimes()
 
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1 * sim.GHz).

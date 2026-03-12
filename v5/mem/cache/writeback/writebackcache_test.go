@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -65,7 +66,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			Return(sim.RemotePort("ControlAgentPort")).
 			AnyTimes()
 
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).

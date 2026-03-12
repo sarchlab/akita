@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 // --- Test Spec and State types ---
@@ -27,7 +28,7 @@ type TestState struct {
 // --- Component tests ---
 
 func TestComponentGetSpec(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	spec := TestSpec{
 		Frequency: 1.0,
 		BufferLen: 4,
@@ -48,7 +49,7 @@ func TestComponentGetSpec(t *testing.T) {
 }
 
 func TestComponentGetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -61,7 +62,7 @@ func TestComponentGetState(t *testing.T) {
 }
 
 func TestComponentSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -88,7 +89,7 @@ func TestComponentSetState(t *testing.T) {
 }
 
 func TestComponentSpecImmutableAfterCreation(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	spec := TestSpec{
 		Frequency: 2.0,
 		BufferLen: 8,
@@ -178,7 +179,7 @@ func (m *countMiddleware) Tick() bool {
 }
 
 func TestComponentMiddlewareTick(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -210,7 +211,7 @@ func TestComponentMiddlewareTick(t *testing.T) {
 // --- Builder tests ---
 
 func TestBuilderWithSpec(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	spec := TestSpec{Frequency: 5.0, BufferLen: 2, Name: "b", Enabled: true}
 
 	comp := modeling.NewBuilder[TestSpec, TestState]().
@@ -364,7 +365,7 @@ func TestValidateStateInvalid(t *testing.T) {
 // --- A-B double-buffered state tests ---
 
 func TestGetStateReturnsCurrentBuffer(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -382,7 +383,7 @@ func TestGetStateReturnsCurrentBuffer(t *testing.T) {
 }
 
 func TestGetNextStateReturnsWritablePointer(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -405,7 +406,7 @@ func TestGetNextStateReturnsWritablePointer(t *testing.T) {
 }
 
 func TestSetNextStateSetsNextBuffer(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -439,7 +440,7 @@ func (m *stateModifyMiddleware) Tick() bool {
 }
 
 func TestTickPromotesNextToCurrent(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -480,7 +481,7 @@ func (m *currentCheckMiddleware) Tick() bool {
 }
 
 func TestChangesToNextDontAffectCurrentDuringTick(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -510,7 +511,7 @@ func TestChangesToNextDontAffectCurrentDuringTick(t *testing.T) {
 }
 
 func TestDeepCopySliceIndependence(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -542,7 +543,7 @@ func TestDeepCopyMapIndependence(t *testing.T) {
 		Counts map[string]int `json:"counts"`
 	}
 
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, MapState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
@@ -566,7 +567,7 @@ func TestDeepCopyMapIndependence(t *testing.T) {
 }
 
 func TestSetStateSyncsBothBuffers(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).

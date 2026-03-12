@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
 )
@@ -25,7 +26,7 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()

@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 func TestValidateState(t *testing.T) {
@@ -102,7 +103,7 @@ func verifyState(t *testing.T, got State, reqID string) {
 }
 
 func TestGetStateAndSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 	mmu := buildTestMMU(engine, "TestMMU")
 
 	reqID := sim.GetIDGenerator().Generate()
