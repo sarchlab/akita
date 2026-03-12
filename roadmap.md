@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (after M21.5, Cycle 180)
+## Current State (after M22, Cycle 190)
 
 ### What's Done
 
@@ -15,14 +15,16 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Save/Load | ✅ | `simulation.Save/Load` works, acceptance test passes |
 | 16 components ported | ✅ | All use `modeling.Component[Spec, State]` |
 | MSHR/Directory as State + free functions | ✅ | Shared ops in `mem/cache/`, indices instead of pointers |
-| Pipeline/Buffer as State (caches + switch) | ✅ | `queueing.Pipeline/Buffer` eliminated, adapters.go pattern |
+| Pipeline/Buffer as State (caches + switch) | ✅ | `queueing.Pipeline/Buffer` eliminated in caches/switch, adapters.go pattern |
 | Dependencies inlined (DRAM) | ✅ | All internal packages eliminated, logic embedded |
 | Dependencies inlined (caches) | ✅ | legacyMapper resolved at Build time, routing via Spec |
-| CI passing | ✅ | All 25 lint errors from M21 fixed (PR #47) |
+| A-B pattern correct | ✅ | All components use GetState() for reads, GetNextState() for writes |
+| Comp wrapper elimination | ✅ | addresstranslator, datamover, MMU, GMMU, DRAM — Comp removed |
+| CI passing | ✅ | Build, vet, tests all pass (PR #48 merged) |
 
-### What's NOT Done — Per-Component Audit
+### Per-Component Status
 
-| Component | Comp Wrapper? | A-B Correct? | Multi-MW? | Other Issues |
+| Component | Comp Wrapper? | A-B Correct? | Multi-MW? | Notes |
 |-----------|:---:|:---:|:---:|---|
 | idealmemcontroller | thin (StorageOwner) | ✅ | ✅ 2 MW | Reference implementation |
 | writearound cache | none | ✅ | ❌ 1 MW | — |
@@ -31,26 +33,26 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | writeback cache | none | ✅ | ❌ 1 MW | — |
 | TLB | thin | ✅ | ✅ 2 MW | — |
 | mmuCache | thin | ✅ | ✅ 2 MW | — |
-| DRAM | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp has topPort, storage |
-| addresstranslator | ❌ has Comp | needs audit | ❌ 1 MW | Comp is empty wrapper |
-| datamover | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp is empty wrapper |
-| simplebankedmemory | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp has storage |
-| MMU | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp is empty wrapper |
-| GMMU | ❌ has GMMU struct | needs audit | ❌ 1 MW | GMMU wraps Component |
-| endpoint | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp has NetworkPort, etc |
-| switch | ❌ has Comp | ❌ GetNextState for reads | ❌ 1 MW | Comp has mw field |
-| tickingping | thin | needs audit | ❌ 1 MW | Example component |
+| DRAM | none | ✅ | ❌ 1 MW | Comp eliminated, A-B fixed |
+| addresstranslator | none | ✅ | ❌ 1 MW | Comp eliminated |
+| datamover | none | ✅ | ❌ 1 MW | Comp eliminated |
+| simplebankedmemory | thin (StorageOwner) | ✅ | ❌ 1 MW | — |
+| MMU | none | ✅ | ❌ 1 MW | Comp eliminated |
+| GMMU | none | ✅ | ❌ 1 MW | GMMU struct eliminated |
+| endpoint | thin (API) | ✅ | ❌ 1 MW | NetworkPort/DefaultSwitchDst via methods |
+| switch | thin (API) | ✅ | ❌ 1 MW | GetRoutingTable via method |
+| tickingping | none | ✅ | ❌ 1 MW | Example component |
 
 ### Summary of Remaining Gaps
 
-1. **A-B pattern incorrect in ~10 components** — they use `GetNextState()` for both reads and writes instead of `GetState()` for reads
-2. **Comp wrapper structs exist in ~10 components** — need elimination (move storage/external refs to middleware, remove wrapper)
-3. **13/16 components have exactly 1 middleware** — need splitting into multiple stages
-4. **component_guide.md** needs update for final architecture
+1. **13/16 components have exactly 1 middleware** — need splitting into multiple stages
+2. **component_guide.md** needs update for final multi-MW architecture
+3. **VictimFinder interface** still exists (unused in production but not removed)
+4. **queueing.Buffer adapters** still used by switch for arbitration compatibility
 
 ---
 
-## Phase 2: Fix A-B Pattern + Eliminate Comp Wrappers + Multi-MW Split
+## Phase 2: Multi-Middleware Split + Final Cleanup
 
 ### ✅ M21: Cache Components — Eliminate Runtime Copies + Inline Dependencies (DONE)
 - Budget: 8 | Used: ~6 | PR: #46
@@ -58,31 +60,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 ### ✅ M21.5: Fix CI Lint Failures on Main (DONE)
 - Budget: 2 | Used: 1 | PR: #47
 
-### M22: Fix A-B Pattern + Eliminate Comp Wrappers (All Remaining Components)
-
-**Goal:** Two changes across ALL remaining components:
-1. Fix A-B state pattern: change `GetNextState()` reads → `GetState()` reads everywhere
-2. Eliminate Comp wrapper structs: move `*mem.Storage` / external refs to middleware fields, remove Comp type
-
-**Components to fix (grouped by complexity):**
-
-**Simple (Comp is empty wrapper, just A-B fix):**
-- addresstranslator — remove Comp, fix A-B
-- datamover — remove Comp, fix A-B
-- MMU — remove Comp, fix A-B
-- GMMU — remove GMMU struct, fix A-B
-
-**Medium (Comp holds storage or ports, need to move to middleware):**
-- DRAM — move topPort + storage to middleware, remove Comp, fix A-B
-- simplebankedmemory — move storage to middleware, remove Comp, fix A-B  
-- tickingping — fix A-B, slim Comp
-
-**Complex (Comp holds runtime refs + other state):**
-- endpoint — move NetworkPort/DefaultSwitchDst to middleware, remove Comp, fix A-B
-- switch — move mw ref to middleware, remove Comp, fix A-B
-
-**Budget**: 6 cycles
-**Risk**: Medium. Mechanical changes, but need to be careful about external callers that use `Comp` type in their APIs (builders, acceptance tests, etc).
+### ✅ M22: Fix A-B Pattern + Eliminate Comp Wrappers (All Remaining Components) (DONE)
+- Budget: 6 | Used: ~3 | PR: #48
 
 ### M23: Multi-Middleware Split — Simple Components
 
@@ -94,6 +73,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 3. **simplebankedmemory** → 2 MW: control, memory operations
 4. **tickingping** → 2 MW: receive, send
 5. **GMMU** → 2 MW: parse, walk+respond
+6. **MMU** → 2 MW: parse, walk+respond
 
 **Each split must:**
 - Maintain correct A-B state semantics (read current, write next)
@@ -122,7 +102,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - **writeback**: topParser → directory → bank → writeBuffer → mshr → flusher (6 stages)
 
 **Key considerations:**
-- +1 cycle latency per middleware boundary
+- +1 cycle latency per middleware boundary (acceptable per human)
 - Each stage reads from `current`, writes to `next` — stages don't see each other's writes
 - Currently, all stages run within a single middleware's Tick() — the split makes them independent middlewares
 
@@ -151,8 +131,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 |-----------|-------|--------|--------|
 | M21 | Cache cleanup | 8 | ✅ Done (~6 used) |
 | M21.5 | Fix CI lint failures | 2 | ✅ Done (1 used) |
-| M22 | Fix A-B pattern + eliminate Comp wrappers | 6 | ⬅️ NEXT |
-| M23 | Multi-MW split — simple components | 6 | Pending |
+| M22 | Fix A-B + eliminate Comp | 6 | ✅ Done (~3 used) |
+| M23 | Multi-MW split — simple components | 6 | ⬅️ NEXT |
 | M24 | Multi-MW split — DRAM + network | 6 | Pending |
 | M25 | Multi-MW split — cache components | 8 | Pending |
 | M26 | Final cleanup + docs | 4 | Pending |
@@ -186,6 +166,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | M20 | 4 | 2 | Switch — State canonical, eliminate queueing objects |
 | M21 | 8 | ~6 | Cache components — eliminate runtime copies, inline deps, A-B state |
 | M21.5 | 2 | 1 | Fix CI lint failures (25 errors) |
+| M22 | 6 | ~3 | Fix A-B pattern + eliminate Comp wrappers |
 
 **Phase 1 totals**: Budget: 160, Used: ~100 (37% under budget)
 
@@ -206,3 +187,4 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - **Always run lint before merging**: M21 introduced 25 lint errors. CI-fix milestones waste cycles.
 - **A-B pattern was not enforced during earlier milestones** — many components were "ported" but still use GetNextState() for reads. Need explicit audit step in future milestones.
 - **Multi-middleware split is the next major architectural change** — needs careful planning per component
+- **M22 finished well under budget (3 of 6 cycles)** — continue aggressive budgeting
