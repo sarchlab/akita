@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func main() {
 	numMessages := 100
 
 	test := acceptance.NewTest()
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 
 	monitor := monitoring.NewMonitor()
 	monitor.RegisterEngine(engine)

@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"go.uber.org/mock/gomock"
 )
 
@@ -45,7 +46,7 @@ var _ = Describe("Bank Stage", func() {
 			evictingList: make(map[uint64]bool),
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
-			WithEngine(sim.NewSerialEngine()).
+			WithEngine(simengine.NewSerialEngine()).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,

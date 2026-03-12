@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 func TestNetworkconnector(t *testing.T) {
@@ -16,7 +17,7 @@ func TestNetworkconnector(t *testing.T) {
 
 var _ = Describe("Connector", func() {
 	It("should establish route in a simple network", func() {
-		engine := sim.NewSerialEngine()
+		engine := simengine.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
 			WithDefaultFreq(1 * sim.GHz)
@@ -53,7 +54,7 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a small tree", func() {
-		engine := sim.NewSerialEngine()
+		engine := simengine.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
 			WithDefaultFreq(1 * sim.GHz)
@@ -119,7 +120,7 @@ var _ = Describe("Connector", func() {
 	})
 
 	It("should establish route in a large tree", func() {
-		engine := sim.NewSerialEngine()
+		engine := simengine.NewSerialEngine()
 		connector := MakeConnector().
 			WithEngine(engine).
 			WithDefaultFreq(1 * sim.GHz)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 )
 
@@ -157,7 +158,7 @@ func (m *pingMiddleware) sendPing() bool {
 // Example demonstrates building a ping-pong simulation using
 // modeling.Component with Spec and State.
 func Example() {
-	engine := sim.NewSerialEngine()
+	engine := simengine.NewSerialEngine()
 
 	specA := PingSpec{NumPingsToSend: 2}
 	specB := PingSpec{NumPingsToSend: 0}

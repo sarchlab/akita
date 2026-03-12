@@ -9,6 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 )
@@ -121,7 +122,7 @@ func cleanupSim(s *simulation.Simulation) {
 func runEngine(t *testing.T, s *simulation.Simulation, phase string) {
 	t.Helper()
 
-	err := s.GetEngine().(*sim.SerialEngine).Run()
+	err := s.GetEngine().(*simengine.SerialEngine).Run()
 	if err != nil {
 		t.Fatalf("%s run failed: %v", phase, err)
 	}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 // StateSaver is implemented by components that can save their state to a
@@ -194,7 +195,7 @@ func (s *Simulation) loadMetadata(path string) error {
 		return fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
-	se, ok := s.engine.(*sim.SerialEngine)
+	se, ok := s.engine.(*simengine.SerialEngine)
 	if !ok {
 		return fmt.Errorf("Load requires SerialEngine")
 	}

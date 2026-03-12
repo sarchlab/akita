@@ -1,16 +1,9 @@
 package sim
 
 import (
-	"log"
+	"github.com/sarchlab/akita/v5/sim/hook"
 )
 
-// A LogHook is a hook that is resonsible for recording information from the
-// simulation
-type LogHook interface {
-	Hook
-}
-
-// LogHookBase proovides the common logic for all LogHooks
-type LogHookBase struct {
-	*log.Logger
-}
+// Re-exports for backward compatibility.
+type LogHook = hook.LogHook
+type LogHookBase = hook.LogHookBase

@@ -6,6 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
 	"os"
@@ -30,9 +31,9 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	var engine sim.Engine
 	if *parallelFlag {
-		engine = sim.NewParallelEngine()
+		engine = simengine.NewParallelEngine()
 	} else {
-		engine = sim.NewSerialEngine()
+		engine = simengine.NewSerialEngine()
 	}
 
 	engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))

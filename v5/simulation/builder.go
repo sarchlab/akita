@@ -4,7 +4,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/sim"
+	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -92,9 +92,9 @@ func (b Builder) createDataRecorder(s *Simulation) {
 }
 
 func (b Builder) createEngine(s *Simulation) {
-	s.engine = sim.NewSerialEngine()
+	s.engine = simengine.NewSerialEngine()
 	if b.parallelEngine {
-		s.engine = sim.NewParallelEngine()
+		s.engine = simengine.NewParallelEngine()
 	}
 }
 
