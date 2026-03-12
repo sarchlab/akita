@@ -21,7 +21,8 @@ var _ = Describe("Switch", func() {
 		routingTable *MockTable
 		arbiter      *MockArbiter
 		sw           *Comp
-		swMiddleware *middleware
+		rfsMW        *routeForwardSendMW
+		rpMW         *receivePipelineMW
 	)
 
 	BeforeEach(func() {
@@ -79,7 +80,8 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		sw.mw().addPort(port1, remote1.AsRemote(), pcs1)
+		rfsMWLocal := sw.routeForwardSendMiddleware()
+		rfsMWLocal.addPort(port1, remote1.AsRemote(), pcs1, rfsMWLocal.arbiter)
 
 		pcs2 := portComplexState{
 			LocalPortName:    "LocalPort2",
@@ -89,9 +91,10 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		sw.mw().addPort(port2, remote2.AsRemote(), pcs2)
+		rfsMWLocal.addPort(port2, remote2.AsRemote(), pcs2, rfsMWLocal.arbiter)
 
-		swMiddleware = sw.Middlewares()[0].(*middleware)
+		rfsMW = sw.Middlewares()[0].(*routeForwardSendMW)
+		rpMW = sw.Middlewares()[1].(*receivePipelineMW)
 	})
 
 	AfterEach(func() {
@@ -114,8 +117,8 @@ var _ = Describe("Switch", func() {
 		port1.EXPECT().RetrieveIncoming()
 		port2.EXPECT().PeekIncoming().Return(nil)
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.startProcessing()
+		rpMW.updateAdapterPointers()
+		madeProgress := rpMW.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
 		// Verify flit was accepted into pipeline
@@ -139,14 +142,14 @@ var _ = Describe("Switch", func() {
 		// Fill pipeline so it can't accept
 		next := sw.GetNextState()
 		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: sim.MsgMeta{}}},
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: flitMeta{}}},
 		}
 
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.startProcessing()
+		rpMW.updateAdapterPointers()
+		madeProgress := rpMW.startProcessing()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -155,11 +158,11 @@ var _ = Describe("Switch", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := sw.GetNextState()
 		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: sim.MsgMeta{ID: "flit1"}}},
+			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "flit1"}}}},
 		}
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.movePipeline()
+		rpMW.updateAdapterPointers()
+		madeProgress := rpMW.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
 		// For latency=1, the item should have moved to RouteBuffer
@@ -182,15 +185,15 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer for port1
 		next := sw.GetNextState()
 		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
-			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+			{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
 		}
 
 		routingTable.EXPECT().
 			FindPort(dstPort.AsRemote()).
 			Return(port2.AsRemote())
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.route()
+		rfsMW.updateAdapterPointers()
+		madeProgress := rfsMW.route()
 
 		Expect(madeProgress).To(BeTrue())
 		next = sw.GetNextState()
@@ -212,14 +215,14 @@ var _ = Describe("Switch", func() {
 		// Place item in route buffer and fill forward buffer
 		next := sw.GetNextState()
 		next.PortComplexes[0].RouteBuffer = []flitPipelineItemState{
-			{TaskID: "flit", Flit: flit.MsgMeta, MsgDst: dstPort.AsRemote()},
+			{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
 		}
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: sim.MsgMeta{ID: "existing"}, OutputBufIdx: 0},
+			{Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "existing"}}, OutputBufIdx: 0},
 		}
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.route()
+		rfsMW.updateAdapterPointers()
+		madeProgress := rfsMW.route()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -237,19 +240,19 @@ var _ = Describe("Switch", func() {
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := sw.GetNextState()
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+			{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
 		}
 
-		swMiddleware.updateAdapterPointers()
+		rfsMW.updateAdapterPointers()
 
 		arbiter.EXPECT().
 			Arbitrate().
 			Return([]queueing.Buffer{
-				swMiddleware.forwardBufAdapters[0],
-				swMiddleware.forwardBufAdapters[1],
+				rfsMW.forwardBufAdapters[0],
+				rfsMW.forwardBufAdapters[1],
 			})
 
-		madeProgress := swMiddleware.forward()
+		madeProgress := rfsMW.forward()
 
 		Expect(madeProgress).To(BeTrue())
 		next = sw.GetNextState()
@@ -270,20 +273,20 @@ var _ = Describe("Switch", func() {
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := sw.GetNextState()
 		next.PortComplexes[0].ForwardBuffer = []forwardBufferEntry{
-			{Flit: flit.MsgMeta, OutputBufIdx: 1},
+			{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
 		}
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{{ID: "full"}}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{{MsgMeta: sim.MsgMeta{ID: "full"}}}
 
-		swMiddleware.updateAdapterPointers()
+		rfsMW.updateAdapterPointers()
 
 		arbiter.EXPECT().
 			Arbitrate().
 			Return([]queueing.Buffer{
-				swMiddleware.forwardBufAdapters[0],
-				swMiddleware.forwardBufAdapters[1],
+				rfsMW.forwardBufAdapters[0],
+				rfsMW.forwardBufAdapters[1],
 			})
 
-		madeProgress := swMiddleware.forward()
+		madeProgress := rfsMW.forward()
 
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -301,13 +304,13 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{flitMetaFromFlit(flit)}
 		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.sendOut()
+		rfsMW.updateAdapterPointers()
+		madeProgress := rfsMW.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
 		next = sw.GetNextState()
@@ -327,13 +330,13 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = []sim.MsgMeta{flit.MsgMeta}
+		next.PortComplexes[1].SendOutBuffer = []flitMeta{flitMetaFromFlit(flit)}
 		sw.SetState(*next)
 
 		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-		swMiddleware.updateAdapterPointers()
-		madeProgress := swMiddleware.sendOut()
+		rfsMW.updateAdapterPointers()
+		madeProgress := rfsMW.sendOut()
 
 		Expect(madeProgress).To(BeFalse())
 		// Flit should still be in send buffer

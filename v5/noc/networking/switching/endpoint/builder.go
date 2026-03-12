@@ -109,7 +109,12 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	mw := &middleware{
+	outMW := &outgoingMW{
+		comp:        modelComp,
+		networkPort: b.networkPort,
+	}
+
+	inMW := &incomingMW{
 		comp:        modelComp,
 		networkPort: b.networkPort,
 	}
@@ -118,7 +123,8 @@ func (b Builder) Build(name string) *Comp {
 		Component: modelComp,
 	}
 
-	ep.AddMiddleware(mw)
+	ep.AddMiddleware(outMW)
+	ep.AddMiddleware(inMW)
 
 	b.networkPort.SetComponent(ep)
 

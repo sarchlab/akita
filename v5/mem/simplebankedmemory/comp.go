@@ -299,107 +299,44 @@ func convertAddress(spec Spec, addr uint64) uint64 {
 		addr%spec.AddrInterleavingSize
 }
 
-// --- Middleware ---
+// --- tickFinalizeMW ---
 
-type middleware struct {
+type tickFinalizeMW struct {
 	comp    *modeling.Component[Spec, State]
 	storage *mem.Storage
 }
 
-func (m *middleware) Name() string {
+func (m *tickFinalizeMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *tickFinalizeMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *tickFinalizeMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *tickFinalizeMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *tickFinalizeMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
-func (m *middleware) topPort() sim.Port {
+func (m *tickFinalizeMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *middleware) Tick() (madeProgress bool) {
-	madeProgress = m.finalizeBanks() || madeProgress
+func (m *tickFinalizeMW) Tick() bool {
+	madeProgress := m.finalizeBanks()
 	madeProgress = m.tickPipelines() || madeProgress
-	madeProgress = m.dispatchFromTopPort() || madeProgress
-
 	return madeProgress
 }
 
-func (m *middleware) dispatchFromTopPort() bool {
-	madeProgress := false
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
-
-	for {
-		msgI := m.topPort().PeekIncoming()
-		if msgI == nil {
-			break
-		}
-
-		msg, ok := msgI.(mem.AccessReq)
-		if !ok {
-			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
-		}
-
-		if spec.NumBanks == 0 {
-			log.Panic("simplebankedmemory: no banks configured")
-		}
-
-		addr := msg.GetAddress()
-		addr = convertAddress(spec, addr)
-
-		bankID := selectBank(spec, addr)
-		if bankID < 0 || bankID >= spec.NumBanks {
-			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
-		}
-
-		if !pipelineCanAccept(next.Banks[bankID], spec) {
-			break
-		}
-
-		m.topPort().RetrieveIncoming()
-		tracing.TraceReqReceive(msg, m)
-
-		item := m.msgToItem(msg)
-		pipelineAccept(&next.Banks[bankID], spec, item)
-		madeProgress = true
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) msgToItem(msg sim.Msg) bankPipelineItemState {
-	switch r := msg.(type) {
-	case *mem.ReadReq:
-		return bankPipelineItemState{
-			IsRead:  true,
-			ReadMsg: *r,
-		}
-	case *mem.WriteReq:
-		return bankPipelineItemState{
-			IsRead:   false,
-			WriteMsg: *r,
-		}
-	default:
-		log.Panicf("simplebankedmemory: unsupported request type %T", msg)
-		return bankPipelineItemState{}
-	}
-}
-
-func (m *middleware) finalizeBanks() bool {
+func (m *tickFinalizeMW) finalizeBanks() bool {
 	madeProgress := false
 	cur := m.comp.GetState()
 	next := m.comp.GetNextState()
@@ -418,7 +355,7 @@ func (m *middleware) finalizeBanks() bool {
 	return madeProgress
 }
 
-func (m *middleware) finalizeSingle(b *bankState) bool {
+func (m *tickFinalizeMW) finalizeSingle(b *bankState) bool {
 	item, ok := bufferPeek(*b)
 	if !ok {
 		return false
@@ -431,7 +368,7 @@ func (m *middleware) finalizeSingle(b *bankState) bool {
 	return m.finalizeWrite(b, &item)
 }
 
-func (m *middleware) finalizeRead(
+func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
@@ -477,7 +414,7 @@ func (m *middleware) finalizeRead(
 	return true
 }
 
-func (m *middleware) finalizeWrite(
+func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
@@ -535,7 +472,7 @@ func (m *middleware) finalizeWrite(
 	return true
 }
 
-func (m *middleware) tickPipelines() bool {
+func (m *tickFinalizeMW) tickPipelines() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	cur := m.comp.GetState()
@@ -546,4 +483,99 @@ func (m *middleware) tickPipelines() bool {
 	}
 
 	return madeProgress
+}
+
+// --- dispatchMW ---
+
+type dispatchMW struct {
+	comp *modeling.Component[Spec, State]
+}
+
+func (m *dispatchMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *dispatchMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *dispatchMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *dispatchMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *dispatchMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+func (m *dispatchMW) topPort() sim.Port {
+	return m.comp.GetPortByName("Top")
+}
+
+func (m *dispatchMW) Tick() bool {
+	return m.dispatchFromTopPort()
+}
+
+func (m *dispatchMW) dispatchFromTopPort() bool {
+	madeProgress := false
+	spec := m.comp.GetSpec()
+	next := m.comp.GetNextState()
+
+	for {
+		msgI := m.topPort().PeekIncoming()
+		if msgI == nil {
+			break
+		}
+
+		msg, ok := msgI.(mem.AccessReq)
+		if !ok {
+			log.Panicf("simplebankedmemory: unsupported message type %T", msgI)
+		}
+
+		if spec.NumBanks == 0 {
+			log.Panic("simplebankedmemory: no banks configured")
+		}
+
+		addr := msg.GetAddress()
+		addr = convertAddress(spec, addr)
+
+		bankID := selectBank(spec, addr)
+		if bankID < 0 || bankID >= spec.NumBanks {
+			log.Panicf("simplebankedmemory: bank selector returned %d", bankID)
+		}
+
+		if !pipelineCanAccept(next.Banks[bankID], spec) {
+			break
+		}
+
+		m.topPort().RetrieveIncoming()
+		tracing.TraceReqReceive(msg, m)
+
+		item := m.msgToItem(msg)
+		pipelineAccept(&next.Banks[bankID], spec, item)
+		madeProgress = true
+	}
+
+	return madeProgress
+}
+
+func (m *dispatchMW) msgToItem(msg sim.Msg) bankPipelineItemState {
+	switch r := msg.(type) {
+	case *mem.ReadReq:
+		return bankPipelineItemState{
+			IsRead:  true,
+			ReadMsg: *r,
+		}
+	case *mem.WriteReq:
+		return bankPipelineItemState{
+			IsRead:   false,
+			WriteMsg: *r,
+		}
+	default:
+		log.Panicf("simplebankedmemory: unsupported request type %T", msg)
+		return bankPipelineItemState{}
+	}
 }

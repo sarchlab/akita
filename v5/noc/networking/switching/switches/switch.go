@@ -24,17 +24,70 @@ func (f flitPipelineItem) TaskID() string {
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
+// flitMeta is a fully serializable snapshot of a messaging.Flit, including the
+// original message metadata so a downstream endpoint can reconstruct the Msg.
+type flitMeta struct {
+	sim.MsgMeta
+
+	SeqID        int `json:"seq_id"`
+	NumFlitInMsg int `json:"num_flit_in_msg"`
+
+	// Original message metadata.
+	MsgID           string         `json:"msg_id"`
+	MsgSrc          sim.RemotePort `json:"msg_src"`
+	MsgDst          sim.RemotePort `json:"msg_dst_meta"`
+	MsgRspTo        string         `json:"msg_rsp_to"`
+	MsgTrafficClass string         `json:"msg_traffic_class"`
+	MsgTrafficBytes int            `json:"msg_traffic_bytes"`
+}
+
+// flitMetaFromFlit captures all relevant fields of a *messaging.Flit.
+func flitMetaFromFlit(flit *messaging.Flit) flitMeta {
+	fm := flitMeta{
+		MsgMeta:      flit.MsgMeta,
+		SeqID:        flit.SeqID,
+		NumFlitInMsg: flit.NumFlitInMsg,
+	}
+	if flit.Msg != nil {
+		m := flit.Msg.Meta()
+		fm.MsgID = m.ID
+		fm.MsgSrc = m.Src
+		fm.MsgDst = m.Dst
+		fm.MsgRspTo = m.RspTo
+		fm.MsgTrafficClass = m.TrafficClass
+		fm.MsgTrafficBytes = m.TrafficBytes
+	}
+	return fm
+}
+
+// toFlit reconstructs a *messaging.Flit from the serialized flitMeta.
+func (fm flitMeta) toFlit() *messaging.Flit {
+	return &messaging.Flit{
+		MsgMeta:      fm.MsgMeta,
+		SeqID:        fm.SeqID,
+		NumFlitInMsg: fm.NumFlitInMsg,
+		Msg: &sim.MsgMeta{
+			ID:           fm.MsgID,
+			Src:          fm.MsgSrc,
+			Dst:          fm.MsgDst,
+			RspTo:        fm.MsgRspTo,
+			TrafficClass: fm.MsgTrafficClass,
+			TrafficBytes: fm.MsgTrafficBytes,
+		},
+	}
+}
+
 // flitPipelineItemState is a serializable flit pipeline item.
 type flitPipelineItemState struct {
-	TaskID string         `json:"task_id"`
-	Flit   sim.MsgMeta    `json:"flit"`
-	MsgDst sim.RemotePort `json:"msg_dst"` // final destination for routing
+	TaskID  string         `json:"task_id"`
+	Flit    flitMeta       `json:"flit"`
+	RouteTo sim.RemotePort `json:"route_to"` // final destination for routing
 }
 
 // forwardBufferEntry is a flit waiting to be forwarded, with its assigned output.
 type forwardBufferEntry struct {
-	Flit         sim.MsgMeta `json:"flit"`
-	OutputBufIdx int         `json:"output_buf_idx"`
+	Flit         flitMeta `json:"flit"`
+	OutputBufIdx int      `json:"output_buf_idx"`
 }
 
 // pipelineStageState captures one non-nil pipeline slot.
@@ -56,7 +109,7 @@ type portComplexState struct {
 	PipelineStages   []pipelineStageState    `json:"pipeline_stages"`
 	RouteBuffer      []flitPipelineItemState `json:"route_buffer"`
 	ForwardBuffer    []forwardBufferEntry    `json:"forward_buffer"`
-	SendOutBuffer    []sim.MsgMeta           `json:"send_out_buffer"`
+	SendOutBuffer    []flitMeta              `json:"send_out_buffer"`
 }
 
 // State contains mutable runtime data for the switch.
@@ -81,26 +134,26 @@ func (b *stateFlitBuffer) Size() int       { return len(*b.items) }
 func (b *stateFlitBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateFlitBuffer) Clear()          { *b.items = nil }
 
-func (b *stateFlitBuffer) Push(e interface{}) {
+func (b *stateFlitBuffer) Push(e any) {
 	item := e.(flitPipelineItem)
 	*b.items = append(*b.items, flitPipelineItemState{
 		TaskID: item.taskID,
-		Flit:   item.flit.MsgMeta,
+		Flit:   flitMetaFromFlit(item.flit),
 	})
 }
 
-func (b *stateFlitBuffer) Peek() interface{} {
+func (b *stateFlitBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
 	s := (*b.items)[0]
 	return flitPipelineItem{
 		taskID: s.TaskID,
-		flit:   &messaging.Flit{MsgMeta: s.Flit},
+		flit:   s.Flit.toFlit(),
 	}
 }
 
-func (b *stateFlitBuffer) Pop() interface{} {
+func (b *stateFlitBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
@@ -108,7 +161,7 @@ func (b *stateFlitBuffer) Pop() interface{} {
 	*b.items = (*b.items)[1:]
 	return flitPipelineItem{
 		taskID: s.TaskID,
-		flit:   &messaging.Flit{MsgMeta: s.Flit},
+		flit:   s.Flit.toFlit(),
 	}
 }
 
@@ -116,10 +169,10 @@ func (b *stateFlitBuffer) Pop() interface{} {
 // Used for forwardBuffer. Peek/Pop reconstruct a *messaging.Flit with OutputBuf set.
 type stateForwardBuffer struct {
 	sim.HookableBase
-	name       string
-	items      *[]forwardBufferEntry
-	capacity   int
-	mw         *middleware // needed to resolve OutputBufIdx → adapter
+	name     string
+	items    *[]forwardBufferEntry
+	capacity int
+	infra    *switchInfra // needed to resolve OutputBufIdx → adapter
 }
 
 func (b *stateForwardBuffer) Name() string    { return b.name }
@@ -128,10 +181,10 @@ func (b *stateForwardBuffer) Size() int       { return len(*b.items) }
 func (b *stateForwardBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateForwardBuffer) Clear()          { *b.items = nil }
 
-func (b *stateForwardBuffer) Push(e interface{}) {
+func (b *stateForwardBuffer) Push(e any) {
 	flit := e.(*messaging.Flit)
 	entry := forwardBufferEntry{
-		Flit: flit.MsgMeta,
+		Flit: flitMetaFromFlit(flit),
 	}
 	// OutputBuf should be a stateSendOutBuffer; find its index.
 	if sob, ok := flit.OutputBuf.(*stateSendOutBuffer); ok {
@@ -140,33 +193,33 @@ func (b *stateForwardBuffer) Push(e interface{}) {
 	*b.items = append(*b.items, entry)
 }
 
-func (b *stateForwardBuffer) Peek() interface{} {
+func (b *stateForwardBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
 	e := (*b.items)[0]
-	flit := &messaging.Flit{MsgMeta: e.Flit}
-	flit.OutputBuf = b.mw.sendOutBufAdapters[e.OutputBufIdx]
+	flit := e.Flit.toFlit()
+	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
-func (b *stateForwardBuffer) Pop() interface{} {
+func (b *stateForwardBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
 	e := (*b.items)[0]
 	*b.items = (*b.items)[1:]
-	flit := &messaging.Flit{MsgMeta: e.Flit}
-	flit.OutputBuf = b.mw.sendOutBufAdapters[e.OutputBufIdx]
+	flit := e.Flit.toFlit()
+	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
-// stateSendOutBuffer wraps a *[]sim.MsgMeta to satisfy queueing.Buffer.
+// stateSendOutBuffer wraps a *[]flitMeta to satisfy queueing.Buffer.
 // Used for sendOutBuffer.
 type stateSendOutBuffer struct {
 	sim.HookableBase
 	name     string
-	items    *[]sim.MsgMeta
+	items    *[]flitMeta
 	capacity int
 	portIdx  int // index of this port in middleware.ports
 }
@@ -177,25 +230,25 @@ func (b *stateSendOutBuffer) Size() int       { return len(*b.items) }
 func (b *stateSendOutBuffer) CanPush() bool   { return len(*b.items) < b.capacity }
 func (b *stateSendOutBuffer) Clear()          { *b.items = nil }
 
-func (b *stateSendOutBuffer) Push(e interface{}) {
+func (b *stateSendOutBuffer) Push(e any) {
 	flit := e.(*messaging.Flit)
-	*b.items = append(*b.items, flit.MsgMeta)
+	*b.items = append(*b.items, flitMetaFromFlit(flit))
 }
 
-func (b *stateSendOutBuffer) Peek() interface{} {
+func (b *stateSendOutBuffer) Peek() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
-	return &messaging.Flit{MsgMeta: (*b.items)[0]}
+	return (*b.items)[0].toFlit()
 }
 
-func (b *stateSendOutBuffer) Pop() interface{} {
+func (b *stateSendOutBuffer) Pop() any {
 	if len(*b.items) == 0 {
 		return nil
 	}
-	meta := (*b.items)[0]
+	fm := (*b.items)[0]
 	*b.items = (*b.items)[1:]
-	return &messaging.Flit{MsgMeta: meta}
+	return fm.toFlit()
 }
 
 // --- Free functions for pipeline operations ---
@@ -372,23 +425,22 @@ type Comp struct {
 	*modeling.Component[Spec, State]
 }
 
-// mw returns the middleware from the component's middleware list.
-func (c *Comp) mw() *middleware {
-	return c.Middlewares()[0].(*middleware)
+// routeForwardSendMiddleware returns the routeForwardSendMW from the
+// component's middleware list (registered at index 0).
+func (c *Comp) routeForwardSendMiddleware() *routeForwardSendMW {
+	return c.Middlewares()[0].(*routeForwardSendMW)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
-	return c.mw().routingTable
+	return c.routeForwardSendMiddleware().routingTable
 }
 
-// --- Middleware ---
+// --- Shared infrastructure ---
 
-type middleware struct {
-	comp         *modeling.Component[Spec, State]
-	routingTable routing.Table
-	arbiter      arbitration.Arbiter
-
+// switchInfra holds state shared by both middlewares.
+type switchInfra struct {
+	comp      *modeling.Component[Spec, State]
 	ports     []sim.Port
 	portIndex map[sim.RemotePort]int // remotePort → index in State.PortComplexes
 
@@ -398,71 +450,84 @@ type middleware struct {
 	routeBufAdapters   []*stateFlitBuffer
 }
 
-// NamedHookable delegation methods.
-
-func (m *middleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *middleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *middleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *middleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
-// addPort registers a port complex with the middleware.
-func (m *middleware) addPort(port sim.Port, remotePort sim.RemotePort, pcs portComplexState) {
-	idx := len(m.ports)
-	m.ports = append(m.ports, port)
-	m.portIndex[remotePort] = idx
+// addPort registers a port complex with the shared infrastructure.
+func (inf *switchInfra) addPort(
+	port sim.Port,
+	remotePort sim.RemotePort,
+	pcs portComplexState,
+	arbiter arbitration.Arbiter,
+) {
+	idx := len(inf.ports)
+	inf.ports = append(inf.ports, port)
+	inf.portIndex[remotePort] = idx
 
 	// Also map the local port's RemotePort so assignFlitOutputBuf can find it
-	m.portIndex[port.AsRemote()] = idx
+	inf.portIndex[port.AsRemote()] = idx
 
 	// Initialize state in both current and next buffers
-	next := m.comp.GetNextState()
+	next := inf.comp.GetNextState()
 	next.PortComplexes = append(next.PortComplexes, pcs)
-	m.comp.SetState(*next)
+	inf.comp.SetState(*next)
 
 	// Create adapters with dummy slice pointers (will be updated in updateAdapterPointers)
 	sendAdapter := &stateSendOutBuffer{name: pcs.LocalPortName + "SendBuf", capacity: pcs.NumOutputChannel, portIdx: idx}
-	fwdAdapter := &stateForwardBuffer{name: pcs.LocalPortName + "FwdBuf", capacity: pcs.NumInputChannel, mw: m}
+	fwdAdapter := &stateForwardBuffer{name: pcs.LocalPortName + "FwdBuf", capacity: pcs.NumInputChannel, infra: inf}
 	routeAdapter := &stateFlitBuffer{name: pcs.LocalPortName + "RouteBuf", capacity: pcs.NumInputChannel}
 
-	m.sendOutBufAdapters = append(m.sendOutBufAdapters, sendAdapter)
-	m.forwardBufAdapters = append(m.forwardBufAdapters, fwdAdapter)
-	m.routeBufAdapters = append(m.routeBufAdapters, routeAdapter)
+	inf.sendOutBufAdapters = append(inf.sendOutBufAdapters, sendAdapter)
+	inf.forwardBufAdapters = append(inf.forwardBufAdapters, fwdAdapter)
+	inf.routeBufAdapters = append(inf.routeBufAdapters, routeAdapter)
 
 	// Point adapters at next state data (will be updated per-tick)
-	next = m.comp.GetNextState()
+	next = inf.comp.GetNextState()
 	fwdAdapter.items = &next.PortComplexes[idx].ForwardBuffer
 	sendAdapter.items = &next.PortComplexes[idx].SendOutBuffer
 	routeAdapter.items = &next.PortComplexes[idx].RouteBuffer
 
-	m.arbiter.AddBuffer(fwdAdapter)
+	arbiter.AddBuffer(fwdAdapter)
 }
 
-func (m *middleware) updateAdapterPointers() {
-	next := m.comp.GetNextState()
-	for i := range m.ports {
-		m.forwardBufAdapters[i].items = &next.PortComplexes[i].ForwardBuffer
-		m.sendOutBufAdapters[i].items = &next.PortComplexes[i].SendOutBuffer
-		m.routeBufAdapters[i].items = &next.PortComplexes[i].RouteBuffer
+func (inf *switchInfra) updateAdapterPointers() {
+	next := inf.comp.GetNextState()
+	for i := range inf.ports {
+		inf.forwardBufAdapters[i].items = &next.PortComplexes[i].ForwardBuffer
+		inf.sendOutBufAdapters[i].items = &next.PortComplexes[i].SendOutBuffer
+		inf.routeBufAdapters[i].items = &next.PortComplexes[i].RouteBuffer
 	}
 }
 
-// Tick updates the Switch's state.
-func (m *middleware) Tick() bool {
+// --- routeForwardSendMW ---
+
+type routeForwardSendMW struct {
+	*switchInfra
+	routingTable routing.Table
+	arbiter      arbitration.Arbiter
+}
+
+// NamedHookable delegation methods.
+
+func (m *routeForwardSendMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *routeForwardSendMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *routeForwardSendMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *routeForwardSendMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *routeForwardSendMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs sendOut → forward → route.
+func (m *routeForwardSendMW) Tick() bool {
 	m.updateAdapterPointers()
 
 	madeProgress := false
@@ -470,73 +535,15 @@ func (m *middleware) Tick() bool {
 	madeProgress = m.sendOut() || madeProgress
 	madeProgress = m.forward() || madeProgress
 	madeProgress = m.route() || madeProgress
-	madeProgress = m.movePipeline() || madeProgress
-	madeProgress = m.startProcessing() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_e2e"
-}
-
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+func (m *routeForwardSendMW) flitTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_" + m.comp.Name()
 }
 
-func (m *middleware) startProcessing() (madeProgress bool) {
-	cur := m.comp.GetState()
-
-	for i, port := range m.ports {
-		curPcs := cur.PortComplexes[i]
-
-		for j := 0; j < curPcs.NumInputChannel; j++ {
-			itemI := port.PeekIncoming()
-			if itemI == nil {
-				break
-			}
-
-			next := m.comp.GetNextState()
-			nextPcs := &next.PortComplexes[i]
-
-			if !pipelineCanAccept(*nextPcs) {
-				break
-			}
-
-			flit := itemI.(*messaging.Flit)
-			item := flitPipelineItemState{
-				TaskID: m.flitTaskID(flit),
-				Flit:   flit.MsgMeta,
-				MsgDst: flit.Msg.Meta().Dst,
-			}
-			pipelineAccept(nextPcs, item)
-			port.RetrieveIncoming()
-
-			madeProgress = true
-
-			tracing.StartTask(
-				m.flitTaskID(flit),
-				m.flitParentTaskID(flit),
-				m, "flit", "flit_inside_sw",
-				flit,
-			)
-		}
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) movePipeline() (madeProgress bool) {
-	next := m.comp.GetNextState()
-
-	for i := range m.ports {
-		madeProgress = pipelineTick(&next.PortComplexes[i]) || madeProgress
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) route() (madeProgress bool) {
+func (m *routeForwardSendMW) route() (madeProgress bool) {
 	next := m.comp.GetNextState()
 
 	for i := range m.ports {
@@ -552,7 +559,7 @@ func (m *middleware) route() (madeProgress bool) {
 			}
 
 			item := pcs.RouteBuffer[0]
-			outputBufIdx := m.resolveOutputBufIdx(item.MsgDst)
+			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
 
 			pcs.RouteBuffer = pcs.RouteBuffer[1:]
 			pcs.ForwardBuffer = append(pcs.ForwardBuffer, forwardBufferEntry{
@@ -567,7 +574,7 @@ func (m *middleware) route() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) resolveOutputBufIdx(msgDst sim.RemotePort) int {
+func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst sim.RemotePort) int {
 	outPort := m.routingTable.FindPort(msgDst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
@@ -583,7 +590,7 @@ func (m *middleware) resolveOutputBufIdx(msgDst sim.RemotePort) int {
 	return idx
 }
 
-func (m *middleware) forward() (madeProgress bool) {
+func (m *routeForwardSendMW) forward() (madeProgress bool) {
 	inputBuffers := m.arbiter.Arbitrate()
 
 	for _, buf := range inputBuffers {
@@ -608,7 +615,7 @@ func (m *middleware) forward() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) sendOut() (madeProgress bool) {
+func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 	cur := m.comp.GetState()
 
 	for i, port := range m.ports {
@@ -620,8 +627,8 @@ func (m *middleware) sendOut() (madeProgress bool) {
 				break
 			}
 
-			meta := curPcs.SendOutBuffer[numSent]
-			flit := &messaging.Flit{MsgMeta: meta}
+			fm := curPcs.SendOutBuffer[numSent]
+			flit := fm.toFlit()
 			flit.Src = port.AsRemote()
 			flit.Dst = curPcs.RemotePort
 
@@ -644,7 +651,105 @@ func (m *middleware) sendOut() (madeProgress bool) {
 	return madeProgress
 }
 
+// --- receivePipelineMW ---
 
+type receivePipelineMW struct {
+	*switchInfra
+}
+
+// NamedHookable delegation methods.
+
+func (m *receivePipelineMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *receivePipelineMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *receivePipelineMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *receivePipelineMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *receivePipelineMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs movePipeline → startProcessing.
+func (m *receivePipelineMW) Tick() bool {
+	m.updateAdapterPointers()
+
+	madeProgress := false
+
+	madeProgress = m.movePipeline() || madeProgress
+	madeProgress = m.startProcessing() || madeProgress
+
+	return madeProgress
+}
+
+func (m *receivePipelineMW) flitParentTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_e2e"
+}
+
+func (m *receivePipelineMW) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.comp.Name()
+}
+
+func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
+	cur := m.comp.GetState()
+
+	for i, port := range m.ports {
+		curPcs := cur.PortComplexes[i]
+
+		for j := 0; j < curPcs.NumInputChannel; j++ {
+			itemI := port.PeekIncoming()
+			if itemI == nil {
+				break
+			}
+
+			next := m.comp.GetNextState()
+			nextPcs := &next.PortComplexes[i]
+
+			if !pipelineCanAccept(*nextPcs) {
+				break
+			}
+
+			flit := itemI.(*messaging.Flit)
+			item := flitPipelineItemState{
+				TaskID:  m.flitTaskID(flit),
+				Flit:    flitMetaFromFlit(flit),
+				RouteTo: flit.Msg.Meta().Dst,
+			}
+			pipelineAccept(nextPcs, item)
+			port.RetrieveIncoming()
+
+			madeProgress = true
+
+			tracing.StartTask(
+				m.flitTaskID(flit),
+				m.flitParentTaskID(flit),
+				m, "flit", "flit_inside_sw",
+				flit,
+			)
+		}
+	}
+
+	return madeProgress
+}
+
+func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
+	next := m.comp.GetNextState()
+
+	for i := range m.ports {
+		madeProgress = pipelineTick(&next.PortComplexes[i]) || madeProgress
+	}
+
+	return madeProgress
+}
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
@@ -708,5 +813,6 @@ func (a SwitchPortAdder) AddPort() {
 		Latency:          a.latency,
 		PipelineWidth:    a.numInputChannel,
 	}
-	a.sw.mw().addPort(a.localPort, a.remotePort.AsRemote(), pcs)
+	rfsMW := a.sw.routeForwardSendMiddleware()
+	rfsMW.addPort(a.localPort, a.remotePort.AsRemote(), pcs, rfsMW.arbiter)
 }

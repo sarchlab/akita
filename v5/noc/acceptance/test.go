@@ -68,29 +68,19 @@ func (t *Test) registerMsg(msg *TrafficMsg) {
 	t.msgs = append(t.msgs, msg)
 }
 
-// receiveMsg marks that a message is received.
-func (t *Test) receiveMsg(msg *TrafficMsg, recvPort sim.Port) {
-	t.msgMustBeReceivedAtItsDestination(msg, recvPort)
-	t.msgMustNotBeReceivedBefore(msg)
-
-	t.receivedMsgs = append(t.receivedMsgs, msg)
-}
-
-func (t *Test) msgMustBeReceivedAtItsDestination(
-	msg *TrafficMsg,
-	recvPort sim.Port,
-) {
-	if msg.Dst != recvPort.AsRemote() {
+// receiveMsgMeta marks that a message (identified by its MsgMeta) is received.
+func (t *Test) receiveMsgMeta(meta *sim.MsgMeta, recvPort sim.Port) {
+	if meta.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
-}
 
-func (t *Test) msgMustNotBeReceivedBefore(msg *TrafficMsg) {
-	if _, found := t.receivedMsgsTable[msg.ID]; found {
+	if _, found := t.receivedMsgsTable[meta.ID]; found {
 		panic("msg is double delivered")
 	}
+	t.receivedMsgsTable[meta.ID] = true
 
-	t.receivedMsgsTable[msg.ID] = true
+	// Wrap in TrafficMsg so existing bookkeeping works.
+	t.receivedMsgs = append(t.receivedMsgs, &TrafficMsg{MsgMeta: *meta})
 }
 
 // MustHaveReceivedAllMsgs asserts that all the messages sent are received.

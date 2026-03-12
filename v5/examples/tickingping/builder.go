@@ -44,8 +44,8 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		Build(name)
 	comp.SetState(State{})
 
-	mw := &middleware{comp: comp}
-	comp.AddMiddleware(mw)
+	comp.AddMiddleware(&sendMW{comp: comp})
+	comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
 	b.outPort.SetComponent(comp)
 	comp.AddPort("Out", b.outPort)
