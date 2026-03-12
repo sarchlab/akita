@@ -107,7 +107,7 @@ func (sdmBuilder Builder) WithOutsidePort(port sim.Port) Builder {
 }
 
 // Build a new StreamingDataMover
-func (sdmBuilder Builder) Build(name string) *Comp {
+func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := *sdmBuilder.spec
 	initialState := State{}
 
@@ -118,23 +118,19 @@ func (sdmBuilder Builder) Build(name string) *Comp {
 		Build(name)
 	modelComp.SetState(initialState)
 
-	sdm := &Comp{
-		Component: modelComp,
-	}
-
 	middleware := &dataMoverMiddleware{comp: modelComp}
 	modelComp.AddMiddleware(middleware)
 
-	sdmBuilder.ctrlPort.SetComponent(sdm)
+	sdmBuilder.ctrlPort.SetComponent(modelComp)
 	modelComp.AddPort("Control", sdmBuilder.ctrlPort)
 
-	sdmBuilder.insidePort.SetComponent(sdm)
+	sdmBuilder.insidePort.SetComponent(modelComp)
 	modelComp.AddPort("Inside", sdmBuilder.insidePort)
 
-	sdmBuilder.outsidePort.SetComponent(sdm)
+	sdmBuilder.outsidePort.SetComponent(modelComp)
 	modelComp.AddPort("Outside", sdmBuilder.outsidePort)
 
-	return sdm
+	return modelComp
 }
 
 // inlineMapper converts an AddressToPortMapper into serializable Spec fields.
