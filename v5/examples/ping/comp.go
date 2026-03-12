@@ -1,3 +1,7 @@
+// LEGACY: This package uses the old event-driven model (sim.ComponentBase +
+// Handle/NotifyRecv). For the canonical tick-based modeling.Component pattern,
+// see examples/tickingping instead.
+
 package ping
 
 import (

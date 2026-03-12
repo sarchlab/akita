@@ -25,8 +25,8 @@ Every V5 component is built from five orthogonal parts:
 │                                            │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
 │  │   Spec   │  │  State   │  │  Ports   │ │
-│  │(immutable│  │(mutable  │  │(external │ │
-│  │  config) │  │ runtime) │  │  I/O)    │ │
+│  │(immutable│  │(A-B      │  │(external │ │
+│  │  config) │  │ buffered)│  │  I/O)    │ │
 │  └──────────┘  └──────────┘  └──────────┘ │
 │                                            │
 │  ┌──────────────────────────────────────┐  │
@@ -55,19 +55,21 @@ simulation.
 ### 1.2 State (Mutable Runtime Data)
 
 The **State** is a plain struct that captures everything about the component's
-*current runtime condition*. It changes every tick.
+*current runtime condition*. It changes every tick via A-B double buffering
+(see §2.3).
 
 - Holds in-flight transactions, counters, queues, mode flags, etc.
 - Must contain only primitives, **nested structs**, slices/maps of primitives or structs.
 - No pointers, interfaces, functions, or channels.
 - Cross-references between components use **string IDs**, never pointers.
-- Must be JSON-serializable (for checkpoint/restore).
+- Must be JSON-serializable (for checkpoint/restore and for deep-copy).
 
 ### 1.3 Ports
 
 Ports are the component's communication endpoints. In V5, ports are created
 **externally** and injected into the component via the builder. This makes
 wiring explicit and decouples port creation from component construction.
+Ports are accessed at runtime via `comp.GetPortByName("PortName")`.
 
 ### 1.4 Middleware
 
@@ -101,8 +103,9 @@ type Component[S any, T any] struct {
     *sim.TickingComponent
     sim.MiddlewareHolder
 
-    spec  S
-    state T
+    spec    S
+    current T
+    next    T
 }
 ```
 
@@ -118,15 +121,17 @@ Key methods:
 | Method | Description |
 |--------|-------------|
 | `GetSpec() S` | Returns the immutable specification |
-| `GetState() T` | Returns a copy of the current state |
-| `SetState(state T)` | Replaces the component state |
-| `Tick() bool` | Delegates to the middleware pipeline |
+| `GetState() T` | Returns the current (A-buffer) state — **read-only snapshot** |
+| `GetNextState() *T` | Returns a **pointer** to the next (B-buffer) state — **write target** |
+| `SetNextState(state T)` | Replaces the next (B-buffer) state directly |
+| `SetState(state T)` | Sets **both** current and next buffers (for initialization and save/load) |
+| `Tick() bool` | Deep-copies current→next, runs middleware pipeline, swaps next→current |
 | `AddMiddleware(mw)` | Appends a middleware to the pipeline |
 | `AddPort(name, port)` | Registers a port with the component |
 | `Name() string` | Returns the component's name |
 | `CurrentTime()` | Returns the current simulation time |
 | `TickLater()` | Schedules a tick on the next cycle |
-| `SaveState(w)` | Serializes spec + state to JSON |
+| `SaveState(w)` | Serializes spec + current state to JSON |
 | `LoadState(r)` | Deserializes spec + state from JSON |
 | `ResetTick()` | Resets the tick scheduler (for checkpoint restore) |
 | `ResetAndRestartTick()` | Resets tick scheduler and schedules a new tick |
@@ -155,6 +160,36 @@ Builder methods (all return a new `Builder` — immutable value-receiver pattern
 
 The `Build` method creates the underlying `sim.TickingComponent` and wires
 it into the simulation engine.
+
+### 2.3 A-B Double Buffering
+
+`Component[S, T]` uses **A-B double buffering** for state management. There
+are two copies of the State at all times:
+
+- **`current`** (the A-buffer) — the read-only snapshot visible via `GetState()`
+- **`next`** (the B-buffer) — the writable buffer accessible via `GetNextState()`
+
+The `Tick()` method implements the double-buffer cycle:
+
+```go
+// From v5/modeling/component.go
+func (c *Component[S, T]) Tick() bool {
+    c.next = deepCopy(c.current)        // 1. Deep-copy current → next
+    madeProgress := c.MiddlewareHolder.Tick() // 2. Run middleware pipeline
+    c.current = c.next                  // 3. Swap: next → current
+
+    return madeProgress
+}
+```
+
+1. **Before each tick:** `current` is deep-copied into `next` (via JSON round-trip).
+2. **During the tick:** Middlewares read from `GetState()` (the A-buffer) and write to `GetNextState()` (a pointer to the B-buffer).
+3. **After the tick:** `next` becomes the new `current`.
+
+**Critical rules:**
+- **NEVER read from `GetNextState()`** — always read from `GetState()`. The A-buffer is the authoritative snapshot for the current tick.
+- **NEVER write to `GetState()`** — it returns a value copy. Mutations go through `GetNextState()`.
+- The deep copy uses JSON round-trip (`json.Marshal` → `json.Unmarshal`), which is why State types must be JSON-serializable with no pointers, interfaces, functions, or channels.
 
 ---
 
@@ -306,79 +341,159 @@ each registered middleware in order and returns `true` if **any** middleware
 made progress. When progress is made, the component automatically schedules
 another tick on the next cycle.
 
-### 5.2 Middleware Structure
+### 5.2 Middleware Structure — No Comp Wrapper
 
-A middleware is typically a struct that embeds a pointer to the outer component
-(`*Comp`). This gives it access to Spec, State, and Ports:
+The canonical pattern is for each middleware to hold a pointer to
+`*modeling.Component[Spec, State]` **directly**, not to an outer `*Comp`
+wrapper:
 
 ```go
-type memMiddleware struct {
-    *Comp
+// From v5/examples/tickingping/comp.go
+type sendMW struct {
+    comp *modeling.Component[Spec, State]
 }
 ```
 
-### 5.3 Accessing Spec, State, and Ports
+This gives the middleware access to Spec, State, and Ports via the component's
+methods.
 
-Inside a middleware's `Tick()` method:
+### 5.3 Port Access via Helper Functions
+
+Ports are **not** stored as fields on the middleware or on a wrapper struct.
+Instead, use package-level helper functions or methods that call
+`comp.GetPortByName()`:
 
 ```go
-func (m *memMiddleware) Tick() bool {
-    // Read immutable configuration
-    spec := m.Component.GetSpec()
-    width := spec.Width
+// From v5/examples/tickingping/comp.go
+func outPort(comp *modeling.Component[Spec, State]) sim.Port {
+    return comp.GetPortByName("Out")
+}
+```
 
-    // Read/modify mutable state
-    state := m.Component.GetState()
-    state.Counter++
-    m.Component.SetState(state)
+For middlewares with a receiver, a method-style helper also works:
 
-    // Access ports (stored as fields on Comp)
-    msg := m.topPort.PeekIncoming()
-    // ...
+```go
+// From v5/mem/idealmemcontroller/memMiddleware.go
+func (m *memMiddleware) topPort() sim.Port {
+    return m.comp.GetPortByName("Top")
+}
+```
+
+### 5.4 NamedHookable Boilerplate
+
+Each middleware that participates in tracing must implement the
+`tracing.NamedHookable` interface, which combines `sim.Named`,
+`sim.Hookable`, and `InvokeHook`. This is done by delegating five methods
+to the component:
+
+```go
+// From v5/examples/tickingping/comp.go
+func (m *sendMW) Name() string              { return m.comp.Name() }
+func (m *sendMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
+func (m *sendMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
+func (m *sendMW) NumHooks() int              { return m.comp.NumHooks() }
+func (m *sendMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
+```
+
+Every middleware needs these five delegation methods. They allow the tracing
+system (e.g., `tracing.TraceReqReceive`, `tracing.EndTask`) to use the
+middleware as a `NamedHookable` domain, while routing all hook storage and
+invocation through the component itself.
+
+### 5.5 Tick() Logic — GetState/GetNextState Pattern
+
+Inside a middleware's methods, **always read from `GetState()`** and **write
+to `GetNextState()`**:
+
+```go
+// From v5/examples/tickingping/comp.go — sendMW.sendRsp()
+func (m *sendMW) sendRsp() bool {
+    state := m.comp.GetState()   // read-only snapshot (A-buffer)
+
+    if len(state.CurrentTransactions) == 0 {
+        return false
+    }
+
+    trans := state.CurrentTransactions[0]
+    if trans.CycleLeft > 0 {
+        return false
+    }
+
+    rsp := &PingRsp{
+        MsgMeta: sim.MsgMeta{
+            ID:    sim.GetIDGenerator().Generate(),
+            Src:   outPort(m.comp).AsRemote(),
+            Dst:   trans.ReqSrc,
+            RspTo: trans.ReqID,
+        },
+        SeqID: trans.SeqID,
+    }
+
+    err := outPort(m.comp).Send(rsp)
+    if err != nil {
+        return false
+    }
+
+    next := m.comp.GetNextState()                    // writable pointer (B-buffer)
+    next.CurrentTransactions = next.CurrentTransactions[1:]  // mutate next directly
 
     return true
 }
 ```
 
-**Important pattern:** `GetState()` returns a **copy** of the state struct.
-After modifying the copy, you must call `SetState(state)` to write it back.
-
-### 5.4 Tick() Logic Pattern
+**Key pattern:** Read conditions from `GetState()`, then mutate via `GetNextState()`. Never read from `GetNextState()` to make decisions — it is the write target only.
 
 A typical `Tick()` method orchestrates multiple sub-operations:
 
 ```go
-func (m *middleware) Tick() bool {
+// From v5/examples/tickingping/comp.go
+func (m *sendMW) Tick() bool {
     madeProgress := false
 
-    madeProgress = m.sendResponses()  || madeProgress
-    madeProgress = m.processTimers()  || madeProgress
-    madeProgress = m.acceptRequests() || madeProgress
+    madeProgress = m.sendRsp() || madeProgress
+    madeProgress = m.sendPing() || madeProgress
 
     return madeProgress
 }
 ```
 
 Each sub-operation:
-1. Checks if there's work to do (peek at ports, check state)
-2. Does the work (send messages, modify state)
-3. Returns `true` if it did something, `false` otherwise
+1. Reads state via `m.comp.GetState()` to check conditions
+2. Does the work (send messages, etc.)
+3. Writes mutations via `m.comp.GetNextState()`
+4. Returns `true` if it did something, `false` otherwise
 
-### 5.5 Multiple Middlewares
+### 5.6 Multiple Middlewares
 
 A component can have multiple middlewares, each responsible for a different
-concern. The middlewares are called in the order they were added. For example,
-the ideal memory controller has:
+concern. The middlewares are called in the order they were added.
 
-1. **ctrlMiddleware** — handles enable/pause/drain control commands
-2. **memMiddleware** — handles memory read/write requests
+**tickingping** has two middlewares:
+
+1. **`sendMW`** — handles sending responses (`sendRsp`) and ping requests (`sendPing`)
+2. **`receiveProcessMW`** — handles counting down timers (`countDown`) and processing incoming messages (`processInput`)
 
 ```go
-ctrlMiddleware := &ctrlMiddleware{Comp: c}
-c.AddMiddleware(ctrlMiddleware)
-funcMiddleware := &memMiddleware{Comp: c}
-c.AddMiddleware(funcMiddleware)
+// From v5/examples/tickingping/builder.go
+comp.AddMiddleware(&sendMW{comp: comp})
+comp.AddMiddleware(&receiveProcessMW{comp: comp})
 ```
+
+**idealmemcontroller** also has two middlewares:
+
+1. **`ctrlMiddleware`** — handles enable/pause/drain control commands
+2. **`memMiddleware`** — handles memory read/write requests
+
+```go
+// From v5/mem/idealmemcontroller/builder.go
+ctrlMW := &ctrlMiddleware{comp: modelComp}
+modelComp.AddMiddleware(ctrlMW)
+memMW := &memMiddleware{comp: modelComp, storage: c.storage}
+modelComp.AddMiddleware(memMW)
+```
+
+Control middleware runs first, so a drain/pause command takes effect before
+the memory middleware processes new requests in the same tick.
 
 ---
 
@@ -413,49 +528,35 @@ Parameters:
 Component builders expose `WithXxxPort()` methods for each port:
 
 ```go
-type Builder struct {
-    engine  sim.Engine
-    freq    sim.Freq
-    topPort sim.Port
-    ctrlPort sim.Port
-}
-
-func (b Builder) WithTopPort(port sim.Port) Builder {
-    b.topPort = port
-    return b
-}
-
-func (b Builder) WithCtrlPort(port sim.Port) Builder {
-    b.ctrlPort = port
+// From v5/examples/tickingping/builder.go
+func (b Builder) WithOutPort(port sim.Port) Builder {
+    b.outPort = port
     return b
 }
 ```
 
-### 6.4 SetComponent
+### 6.4 SetComponent and AddPort
 
 After building a component, each port must be associated with it via
-`SetComponent`. This is done inside the builder's `Build` method:
+`SetComponent` and registered by name via `AddPort`. This is done inside the
+builder's `Build` method:
 
 ```go
-func (b Builder) Build(name string) *Comp {
-    // ... create the component ...
-
-    c.topPort = b.topPort
-    c.topPort.SetComponent(c)      // Associate port with component
-    c.AddPort("Top", c.topPort)    // Register port by name
-
-    c.ctrlPort = b.ctrlPort
-    c.ctrlPort.SetComponent(c)
-    c.AddPort("Control", c.ctrlPort)
-
-    return c
-}
+// From v5/examples/tickingping/builder.go
+b.outPort.SetComponent(comp)
+comp.AddPort("Out", b.outPort)
 ```
 
 `SetComponent` is critical because:
 - It lets the port call `NotifyRecv` and `NotifyPortFree` on the owning
   component, which triggers the tick-based lifecycle
 - Without it, the component won't wake up when messages arrive
+
+At runtime, middlewares retrieve ports by name:
+
+```go
+port := comp.GetPortByName("Out")
+```
 
 ### 6.5 Connecting Ports
 
@@ -467,8 +568,8 @@ conn := directconnection.MakeBuilder().
     WithFreq(1 * sim.GHz).
     Build("Conn")
 
-conn.PlugIn(agentA.OutPort)
-conn.PlugIn(agentB.OutPort)
+conn.PlugIn(agentA.GetPortByName("Out"))
+conn.PlugIn(agentB.GetPortByName("Out"))
 ```
 
 ### 6.6 Full Wiring Example
@@ -488,7 +589,7 @@ memCtrl := idealmemcontroller.MakeBuilder().
 
 // 3. Connect ports to other components
 conn.PlugIn(topPort)
-conn.PlugIn(otherComponent.SomePort)
+conn.PlugIn(otherComponent.GetPortByName("Top"))
 ```
 
 ---
@@ -503,10 +604,13 @@ serialization of both Spec and State:
 ```go
 // From v5/modeling/saveload.go
 
-// SaveState marshals spec + state as JSON to a writer.
+// SaveState marshals spec + current state as JSON to a writer.
 func (c *Component[S, T]) SaveState(w io.Writer) error
 
 // LoadState reads JSON from a reader and restores spec + state.
+// The loaded state is written to both current and next buffers
+// (via deep copy) so that the component starts in a consistent
+// double-buffered state.
 func (c *Component[S, T]) LoadState(r io.Reader) error
 ```
 
@@ -584,6 +688,10 @@ V5 components use a two-level builder pattern:
 
 ### 8.2 Outer Builder Template
 
+The default pattern returns `*modeling.Component[Spec, State]` directly —
+**no outer Comp wrapper** is needed unless the component must implement
+additional interfaces (see §8.4):
+
 ```go
 package mycomponent
 
@@ -595,72 +703,65 @@ import (
 type Builder struct {
     engine  sim.Engine
     freq    sim.Freq
-    spec    *Spec           // component-specific defaults
-    port    sim.Port        // externally created port
+    port    sim.Port
 }
 
-// MakeBuilder returns a new Builder with sensible defaults.
 func MakeBuilder() Builder {
-    return Builder{
-        freq: 1 * sim.GHz,
-        spec: &Spec{
-            Latency: 100,
-            Width:   1,
-        },
-    }
+    return Builder{}
 }
 
-// WithEngine sets the simulation engine.
 func (b Builder) WithEngine(engine sim.Engine) Builder {
     b.engine = engine
     return b
 }
 
-// WithFreq sets the clock frequency.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
     b.freq = freq
     return b
 }
 
-// WithSpec overrides the full spec.
-func (b Builder) WithSpec(spec Spec) Builder {
-    b.spec = &spec
-    return b
-}
-
-// WithPort injects the port.
 func (b Builder) WithPort(port sim.Port) Builder {
     b.port = port
     return b
 }
 
-// Build creates the component.
-func (b Builder) Build(name string) *Comp {
-    // 1. Use the inner builder to create the modeling.Component
-    modelComp := modeling.NewBuilder[Spec, State]().
+// Build creates the component — returns *modeling.Component directly.
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+    comp := modeling.NewBuilder[Spec, State]().
         WithEngine(b.engine).
         WithFreq(b.freq).
-        WithSpec(*b.spec).
+        WithSpec(Spec{}).
         Build(name)
+    comp.SetState(State{})
 
-    // 2. Set initial state
-    modelComp.SetState(State{})
+    comp.AddMiddleware(&myMiddleware{comp: comp})
 
-    // 3. Create the outer component
-    c := &Comp{
-        Component: modelComp,
-    }
+    b.port.SetComponent(comp)
+    comp.AddPort("Main", b.port)
 
-    // 4. Add middlewares
-    mw := &middleware{Comp: c}
-    c.AddMiddleware(mw)
+    return comp
+}
+```
 
-    // 5. Wire ports
-    c.port = b.port
-    c.port.SetComponent(c)
-    c.AddPort("Main", c.port)
+This pattern is taken directly from the tickingping builder:
 
-    return c
+```go
+// From v5/examples/tickingping/builder.go
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+    comp := modeling.NewBuilder[Spec, State]().
+        WithEngine(b.engine).
+        WithFreq(b.freq).
+        WithSpec(Spec{}).
+        Build(name)
+    comp.SetState(State{})
+
+    comp.AddMiddleware(&sendMW{comp: comp})
+    comp.AddMiddleware(&receiveProcessMW{comp: comp})
+
+    b.outPort.SetComponent(comp)
+    comp.AddPort("Out", b.outPort)
+
+    return comp
 }
 ```
 
@@ -674,22 +775,63 @@ func (b Builder) Build(name string) *Comp {
   lifecycle to the component.
 - **Defaults in `MakeBuilder`** — provide sensible defaults so callers only
   override what they need.
+- **Middlewares hold `comp *modeling.Component[Spec, State]`** — not a wrapper type.
+
+### 8.4 When to Use a Thin Comp Wrapper
+
+Use a thin `Comp` wrapper **only** when the component needs to implement
+additional interfaces (e.g., `StorageOwner`). The wrapper embeds
+`*modeling.Component[Spec, State]` and adds only the extra fields/methods
+needed:
+
+```go
+// From v5/mem/idealmemcontroller/comp.go
+type Comp struct {
+    *modeling.Component[Spec, State]
+
+    storage *mem.Storage
+}
+
+func (c *Comp) GetStorage() *mem.Storage {
+    return c.storage
+}
+
+func (c *Comp) StorageName() string {
+    return c.GetSpec().StorageRef
+}
+```
+
+**Important:** Even when a `Comp` wrapper exists, the middlewares still hold
+`comp *modeling.Component[Spec, State]`, **not** `*Comp`:
+
+```go
+// From v5/mem/idealmemcontroller/memMiddleware.go
+type memMiddleware struct {
+    comp    *modeling.Component[Spec, State]
+    storage *mem.Storage
+}
+```
+
+When the middleware needs access to non-state resources (like `*mem.Storage`),
+those are passed directly to the middleware struct — not accessed through
+a `Comp` wrapper.
 
 ---
 
 ## 9. Complete Walkthroughs
 
-### 9.1 tickingping — Simple Component
+### 9.1 tickingping — Simple Component (No Comp Wrapper)
 
 > Source: `v5/examples/tickingping/`
 
 The `tickingping` component sends ping requests and responds to them. Two
-instances are connected and exchange pings, measuring round-trip time.
+instances are connected and exchange pings, measuring round-trip time. This
+is the canonical example — it uses **no Comp wrapper**.
 
 #### 9.1.1 Messages
 
 ```go
-// comp.go
+// From v5/examples/tickingping/comp.go
 type PingReq struct {
     sim.MsgMeta
     SeqID int
@@ -707,7 +849,7 @@ fields required by the messaging system.
 #### 9.1.2 Spec
 
 ```go
-// comp.go
+// From v5/examples/tickingping/comp.go
 type Spec struct{}
 ```
 
@@ -717,7 +859,7 @@ It still satisfies the Spec constraints (empty struct = valid).
 #### 9.1.3 State
 
 ```go
-// comp.go
+// From v5/examples/tickingping/comp.go
 type pingTransactionState struct {
     SeqID     int            `json:"seq_id"`
     CycleLeft int            `json:"cycle_left"`
@@ -741,34 +883,96 @@ Key design choices:
   in State but not in Spec.
 - `ReqSrc` is also a `RemotePort` string, not a pointer.
 
-#### 9.1.4 Comp (Outer Component)
+#### 9.1.4 Port Helper
+
+There is no Comp wrapper. Ports are accessed via a package-level helper function:
 
 ```go
-// comp.go
-type Comp struct {
-    *modeling.Component[Spec, State]
-
-    OutPort sim.Port
+// From v5/examples/tickingping/comp.go
+func outPort(comp *modeling.Component[Spec, State]) sim.Port {
+    return comp.GetPortByName("Out")
 }
 ```
 
-The outer `Comp` struct embeds `*modeling.Component[Spec, State]` and adds
-the port as a concrete field. Ports are stored on the outer component (not
-in State) because they are live objects that cannot be serialized.
+#### 9.1.5 Middlewares
 
-#### 9.1.5 Middleware
+The component has two middlewares: `sendMW` and `receiveProcessMW`.
+
+**sendMW** — handles sending responses and ping requests:
 
 ```go
-// comp.go
-type middleware struct {
-    *Comp
+// From v5/examples/tickingping/comp.go
+type sendMW struct {
+    comp *modeling.Component[Spec, State]
 }
 
-func (m *middleware) Tick() bool {
+func (m *sendMW) Name() string              { return m.comp.Name() }
+func (m *sendMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
+func (m *sendMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
+func (m *sendMW) NumHooks() int              { return m.comp.NumHooks() }
+func (m *sendMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
+
+func (m *sendMW) Tick() bool {
     madeProgress := false
 
     madeProgress = m.sendRsp() || madeProgress
     madeProgress = m.sendPing() || madeProgress
+
+    return madeProgress
+}
+```
+
+The `sendPing` method demonstrates the GetState/GetNextState pattern:
+
+```go
+// From v5/examples/tickingping/comp.go
+func (m *sendMW) sendPing() bool {
+    state := m.comp.GetState()              // read-only snapshot
+
+    if state.NumPingNeedToSend == 0 {
+        return false
+    }
+
+    pingMsg := &PingReq{
+        MsgMeta: sim.MsgMeta{
+            ID:  sim.GetIDGenerator().Generate(),
+            Src: outPort(m.comp).AsRemote(),
+            Dst: state.PingDst,
+        },
+        SeqID: state.NextSeqID,
+    }
+
+    err := outPort(m.comp).Send(pingMsg)
+    if err != nil {
+        return false
+    }
+
+    next := m.comp.GetNextState()           // writable pointer
+    next.StartTimes = append(next.StartTimes, float64(m.comp.CurrentTime()))
+    next.NumPingNeedToSend--
+    next.NextSeqID++
+
+    return true
+}
+```
+
+**receiveProcessMW** — handles counting down timers and processing incoming messages:
+
+```go
+// From v5/examples/tickingping/comp.go
+type receiveProcessMW struct {
+    comp *modeling.Component[Spec, State]
+}
+
+func (m *receiveProcessMW) Name() string              { return m.comp.Name() }
+func (m *receiveProcessMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
+func (m *receiveProcessMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
+func (m *receiveProcessMW) NumHooks() int              { return m.comp.NumHooks() }
+func (m *receiveProcessMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
+
+func (m *receiveProcessMW) Tick() bool {
+    madeProgress := false
+
     madeProgress = m.countDown() || madeProgress
     madeProgress = m.processInput() || madeProgress
 
@@ -776,43 +980,40 @@ func (m *middleware) Tick() bool {
 }
 ```
 
-The middleware embeds `*Comp`, giving it access to `m.Component.GetSpec()`,
-`m.Component.GetState()`, `m.Component.SetState(...)`, and `m.OutPort`.
-
-Each sub-method follows the pattern:
-1. Read state via `m.Component.GetState()`
-2. Check if there's work to do
-3. Do the work (modify state, send messages)
-4. Write state back via `m.Component.SetState(state)`
-5. Return whether progress was made
-
-Example — processing incoming messages:
+The `processInput` method shows message dispatching with peek-then-retrieve:
 
 ```go
-func (m *middleware) processInput() bool {
-    msgI := m.OutPort.PeekIncoming()
+// From v5/examples/tickingping/comp.go
+func (m *receiveProcessMW) processInput() bool {
+    msgI := outPort(m.comp).PeekIncoming()
     if msgI == nil {
         return false
     }
 
     switch msg := msgI.(type) {
     case *PingReq:
-        state := m.Component.GetState()
-        trans := pingTransactionState{
-            SeqID:     msg.SeqID,
-            CycleLeft: 2,
-            ReqID:     msg.ID,
-            ReqSrc:    msg.Src,
-        }
-        state.CurrentTransactions = append(state.CurrentTransactions, trans)
-        m.Component.SetState(state)
-        m.OutPort.RetrieveIncoming()
+        m.processingPingReq(msg)
     case *PingRsp:
-        // handle response...
-        m.OutPort.RetrieveIncoming()
+        m.processingPingRsp(msg)
+    default:
+        panic("unknown message type")
     }
 
     return true
+}
+
+func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
+    next := m.comp.GetNextState()
+
+    trans := pingTransactionState{
+        SeqID:     msg.SeqID,
+        CycleLeft: 2,
+        ReqID:     msg.ID,
+        ReqSrc:    msg.Src,
+    }
+    next.CurrentTransactions = append(next.CurrentTransactions, trans)
+
+    outPort(m.comp).RetrieveIncoming()
 }
 ```
 
@@ -822,7 +1023,7 @@ consuming; `RetrieveIncoming()` removes the message from the buffer.
 #### 9.1.6 Builder
 
 ```go
-// builder.go
+// From v5/examples/tickingping/builder.go
 type Builder struct {
     engine  sim.Engine
     freq    sim.Freq
@@ -848,68 +1049,63 @@ func (b Builder) WithOutPort(port sim.Port) Builder {
     return b
 }
 
-func (b Builder) Build(name string) *Comp {
-    // Inner builder creates the modeling.Component
-    modelComp := modeling.NewBuilder[Spec, State]().
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
+    comp := modeling.NewBuilder[Spec, State]().
         WithEngine(b.engine).
         WithFreq(b.freq).
         WithSpec(Spec{}).
         Build(name)
-    modelComp.SetState(State{})
+    comp.SetState(State{})
 
-    // Outer component
-    c := &Comp{
-        Component: modelComp,
-    }
+    comp.AddMiddleware(&sendMW{comp: comp})
+    comp.AddMiddleware(&receiveProcessMW{comp: comp})
 
-    // Add middleware
-    mw := &middleware{Comp: c}
-    c.AddMiddleware(mw)
+    b.outPort.SetComponent(comp)
+    comp.AddPort("Out", b.outPort)
 
-    // Wire port
-    c.OutPort = b.outPort
-    c.OutPort.SetComponent(c)
-    c.AddPort("Out", c.OutPort)
-
-    return c
+    return comp
 }
 ```
+
+The builder returns `*modeling.Component[Spec, State]` directly — no
+`Comp` wrapper needed.
 
 #### 9.1.7 Usage
 
 ```go
-// example_test.go
+// From v5/examples/tickingping/example_test.go
 func Example() {
     engine := sim.NewSerialEngine()
-
     agentA := MakeBuilder().
         WithEngine(engine).
         WithFreq(1 * sim.Hz).
         WithOutPort(sim.NewPort(nil, 4, 4, "AgentA.OutPort")).
         Build("AgentA")
-
     agentB := MakeBuilder().
         WithEngine(engine).
         WithFreq(1 * sim.Hz).
         WithOutPort(sim.NewPort(nil, 4, 4, "AgentB.OutPort")).
         Build("AgentB")
-
-    conn := directconnection.MakeBuilder().
+    conn := directconnection.
+        MakeBuilder().
         WithEngine(engine).
         WithFreq(1 * sim.GHz).
         Build("Conn")
-    conn.PlugIn(agentA.OutPort)
-    conn.PlugIn(agentB.OutPort)
 
-    // Initialize state
+    conn.PlugIn(agentA.GetPortByName("Out"))
+    conn.PlugIn(agentB.GetPortByName("Out"))
+
     state := agentA.GetState()
-    state.PingDst = agentB.OutPort.AsRemote()
+    state.PingDst = agentB.GetPortByName("Out").AsRemote()
     state.NumPingNeedToSend = 2
     agentA.SetState(state)
 
-    // Kick off simulation
     agentA.TickLater()
-    engine.Run()
+
+    err := engine.Run()
+    if err != nil {
+        panic(err)
+    }
 
     // Output:
     // Ping 0, 5.00
@@ -917,26 +1113,36 @@ func Example() {
 }
 ```
 
+Note that ports are accessed via `agentA.GetPortByName("Out")`, not via
+a field on a Comp wrapper.
+
 ---
 
-### 9.2 idealmemcontroller — Intermediate Component
+### 9.2 idealmemcontroller — Component with Thin Comp Wrapper
 
 > Source: `v5/mem/idealmemcontroller/`
 
 The ideal memory controller responds to read/write requests with a fixed
 latency and unlimited concurrency. It demonstrates multiple middlewares,
-richer Spec/State, and integration with shared storage.
+richer Spec/State, integration with shared storage, and the **thin Comp
+wrapper** pattern (needed because the component implements the
+`StorageOwner` interface).
 
 #### 9.2.1 Spec
 
 ```go
-// comp.go
+// From v5/mem/idealmemcontroller/comp.go
 type Spec struct {
     Width         int    `json:"width"`
     Latency       int    `json:"latency"`
     CacheLineSize int    `json:"cache_line_size"`
     StorageRef    string `json:"storage_ref"`
     AddrConvKind  string `json:"addr_conv_kind"`
+
+    AddrInterleavingSize    uint64 `json:"addr_interleaving_size"`
+    AddrTotalNumOfElements  int    `json:"addr_total_num_of_elements"`
+    AddrCurrentElementIndex int    `json:"addr_current_element_index"`
+    AddrOffset              uint64 `json:"addr_offset"`
 }
 ```
 
@@ -945,12 +1151,14 @@ Key design choices:
 - `Latency` is the fixed response delay in cycles.
 - `StorageRef` is a **string ID** referencing shared storage — not a pointer.
 - `AddrConvKind` describes the address conversion strategy as a string
-  descriptor, resolved to a concrete implementation in the builder.
+  descriptor. The address conversion parameters (`AddrInterleavingSize`, etc.)
+  are stored as primitives in Spec, resolved from an `AddressConverter`
+  interface in the builder.
 
 #### 9.2.2 State
 
 ```go
-// comp.go
+// From v5/mem/idealmemcontroller/comp.go
 type inflightTransaction struct {
     CycleLeft      int            `json:"cycle_left"`
     Address        uint64         `json:"address"`
@@ -978,86 +1186,163 @@ Key design choices:
 - `CurrentState` is a string enum (`"enable"`, `"pause"`, `"drain"`) rather
   than an iota constant — keeps it human-readable in JSON.
 
-#### 9.2.3 Comp (Outer Component)
+#### 9.2.3 Comp (Thin Wrapper for StorageOwner)
 
 ```go
-// comp.go
+// From v5/mem/idealmemcontroller/comp.go
 type Comp struct {
     *modeling.Component[Spec, State]
 
-    topPort          sim.Port
-    ctrlPort         sim.Port
-    Storage          *mem.Storage
-    addressConverter mem.AddressConverter
+    storage *mem.Storage
+}
+
+func (c *Comp) GetStorage() *mem.Storage {
+    return c.storage
+}
+
+func (c *Comp) StorageName() string {
+    return c.GetSpec().StorageRef
 }
 ```
 
-Note that `Storage` and `addressConverter` are live objects stored on `Comp`,
-**not** in State. They are resolved at build time and cannot be serialized.
-The Spec's `StorageRef` provides the string ID for restoring the storage
-association after a checkpoint load.
+The `Comp` wrapper exists **only** because the component needs to implement
+the `StorageOwner` interface (providing `GetStorage()` and `StorageName()`).
+The `*mem.Storage` is a live object that cannot be serialized — it lives on
+`Comp`, not in State. The Spec's `StorageRef` provides the string ID for
+restoring the storage association after a checkpoint load.
 
 #### 9.2.4 Two Middlewares
+
+Both middlewares hold `comp *modeling.Component[Spec, State]`, **not** `*Comp`.
 
 **ctrlMiddleware** — handles control commands (enable, pause, drain):
 
 ```go
-// ctrlmiddleware.go
+// From v5/mem/idealmemcontroller/ctrlmiddleware.go
 type ctrlMiddleware struct {
-    *Comp
+    comp *modeling.Component[Spec, State]
 }
+
+func (m *ctrlMiddleware) Name() string { return m.comp.Name() }
 
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
     madeProgress = m.handleIncomingCommands() || madeProgress
     madeProgress = m.handleStateUpdate() || madeProgress
     return madeProgress
 }
+
+func (m *ctrlMiddleware) ctrlPort() sim.Port {
+    return m.comp.GetPortByName("Control")
+}
 ```
 
-This middleware reads control messages from `m.ctrlPort`, updates
-`state.CurrentState`, and sends responses back.
-
-**memMiddleware** — handles memory read/write requests:
+The `handleDrainState` method shows reading from `GetState()` and writing
+to `GetNextState()`:
 
 ```go
-// memMiddleware.go
+// From v5/mem/idealmemcontroller/ctrlmiddleware.go
+func (m *ctrlMiddleware) handleDrainState() bool {
+    state := m.comp.GetState()
+    if len(state.InflightTransactions) != 0 {
+        return false
+    }
+
+    rsp := &mem.ControlMsgRsp{}
+    rsp.ID = sim.GetIDGenerator().Generate()
+    rsp.Src = m.ctrlPort().AsRemote()
+    rsp.Dst = state.CurrentCmdSrc
+    rsp.RspTo = state.CurrentCmdID
+    rsp.TrafficClass = "mem.ControlMsgRsp"
+
+    err := m.ctrlPort().Send(rsp)
+    if err != nil {
+        return false
+    }
+
+    nextState := m.comp.GetNextState()
+    nextState.CurrentState = "pause"
+
+    return true
+}
+```
+
+**memMiddleware** — handles memory read/write requests. Note that it holds
+both `comp` and `storage` directly:
+
+```go
+// From v5/mem/idealmemcontroller/memMiddleware.go
 type memMiddleware struct {
-    *Comp
+    comp    *modeling.Component[Spec, State]
+    storage *mem.Storage
+}
+
+func (m *memMiddleware) Name() string              { return m.comp.Name() }
+func (m *memMiddleware) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
+func (m *memMiddleware) Hooks() []sim.Hook          { return m.comp.Hooks() }
+func (m *memMiddleware) NumHooks() int              { return m.comp.NumHooks() }
+func (m *memMiddleware) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
+
+func (m *memMiddleware) topPort() sim.Port {
+    return m.comp.GetPortByName("Top")
 }
 
 func (m *memMiddleware) Tick() bool {
     madeProgress := false
+
     madeProgress = m.takeNewReqs() || madeProgress
     madeProgress = m.processCountdowns() || madeProgress
+
     return madeProgress
 }
 ```
 
 This middleware:
 1. Checks `state.CurrentState` — only accepts new requests when `"enable"`
-2. Reads up to `spec.Width` requests per tick from `m.topPort`
+2. Reads up to `spec.Width` requests per tick from `topPort()`
 3. Converts each request into an `inflightTransaction` with
    `CycleLeft = spec.Latency`
 4. Decrements countdowns each tick
 5. When countdown reaches 0, performs the actual storage read/write and sends
    a response
 
-The two middlewares are registered in order in the builder:
+The `takeNewReqs` method demonstrates using both `GetState()` and
+`GetSpec()` for reads, and `GetNextState()` for writes:
 
 ```go
-ctrlMiddleware := &ctrlMiddleware{Comp: c}
-c.AddMiddleware(ctrlMiddleware)
-funcMiddleware := &memMiddleware{Comp: c}
-c.AddMiddleware(funcMiddleware)
-```
+// From v5/mem/idealmemcontroller/memMiddleware.go
+func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
+    state := m.comp.GetState()
+    if state.CurrentState != "enable" {
+        return false
+    }
 
-Control middleware runs first, so a drain/pause command takes effect before
-the memory middleware processes new requests in the same tick.
+    spec := m.comp.GetSpec()
+
+    for i := 0; i < spec.Width; i++ {
+        msgI := m.topPort().RetrieveIncoming()
+        if msgI == nil {
+            break
+        }
+
+        msg := msgI.(sim.Msg)
+        tracing.TraceReqReceive(msg, m)
+
+        tx := m.msgToInflightTransaction(msg)
+
+        nextState := m.comp.GetNextState()
+        nextState.InflightTransactions = append(
+            nextState.InflightTransactions, tx)
+        madeProgress = true
+    }
+
+    return madeProgress
+}
+```
 
 #### 9.2.5 Builder
 
 ```go
-// builder.go
+// From v5/mem/idealmemcontroller/builder.go
 func MakeBuilder() Builder {
     return Builder{
         freq:       1 * sim.GHz,
@@ -1086,58 +1371,62 @@ func (b Builder) Build(name string) *Comp {
         Build(name)
     modelComp.SetState(initialState)
 
-    c := &Comp{
-        Component:        modelComp,
-        addressConverter: b.addressConverter,
-    }
-
+    var storage *mem.Storage
     if b.storage == nil {
-        c.Storage = mem.NewStorage(b.capacity)
+        storage = mem.NewStorage(b.capacity)
     } else {
-        c.Storage = b.storage
+        storage = b.storage
     }
 
-    ctrlMiddleware := &ctrlMiddleware{Comp: c}
-    c.AddMiddleware(ctrlMiddleware)
-    funcMiddleware := &memMiddleware{Comp: c}
-    c.AddMiddleware(funcMiddleware)
+    c := &Comp{
+        Component: modelComp,
+        storage:   storage,
+    }
 
-    c.topPort = b.topPort
-    c.topPort.SetComponent(c)
-    c.AddPort("Top", c.topPort)
-    c.ctrlPort = b.ctrlPort
-    c.ctrlPort.SetComponent(c)
-    c.AddPort("Control", c.ctrlPort)
+    ctrlMW := &ctrlMiddleware{comp: modelComp}
+    modelComp.AddMiddleware(ctrlMW)
+    memMW := &memMiddleware{comp: modelComp, storage: c.storage}
+    modelComp.AddMiddleware(memMW)
+
+    b.topPort.SetComponent(c)
+    modelComp.AddPort("Top", b.topPort)
+    b.ctrlPort.SetComponent(c)
+    modelComp.AddPort("Control", b.ctrlPort)
 
     return c
 }
 ```
 
 Notable patterns:
+- **`Build` returns `*Comp`** — because the wrapper is needed for `StorageOwner`.
 - **Defaults in `MakeBuilder`**: Latency=100, Width=1, CacheLineSize=64,
   capacity=4GB.
 - **`StorageRef` is set automatically** to the component name.
 - **Storage is created if not provided** — dependency injection with fallback.
 - **Initial state sets `CurrentState: "enable"`** — the component starts in
   the enabled mode.
+- **`SetComponent(c)` uses the `*Comp` wrapper** — so `NotifyRecv`/`NotifyPortFree`
+  go to the right object. But `AddPort` and `AddMiddleware` are called on
+  `modelComp`.
+- **Middlewares receive `modelComp`** (the `*modeling.Component`), not `c`
+  (the `*Comp` wrapper).
 
-#### 9.2.6 Usage
+---
 
-```go
-topPort := sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")
-ctrlPort := sim.NewPort(nil, 4, 4, "MemCtrl.CtrlPort")
+## 10. No-Dependency Philosophy
 
-memCtrl := idealmemcontroller.MakeBuilder().
-    WithEngine(engine).
-    WithFreq(1 * sim.GHz).
-    WithNewStorage(4 * mem.GB).
-    WithTopPort(topPort).
-    WithCtrlPort(ctrlPort).
-    Build("MemCtrl")
+V5 components follow a no-external-dependency philosophy:
 
-// Connect to other components
-conn.PlugIn(topPort)
-```
+- **Inline all logic in middleware** — don't create separate dependency
+  interfaces (no `VictimFinder`, `Directory`, `MSHR` interfaces).
+- **Store port names in Spec** or use string constants — resolve ports via
+  `GetPortByName()`.
+- **Use pure state functions** — address conversion in idealmemcontroller
+  is a package-level function `convertAddress(spec, addr)` that reads
+  parameters from Spec, not from an interface.
+- **Pass non-state resources directly to middleware** — e.g., `*mem.Storage`
+  is a field on `memMiddleware`, not accessed through an interface or wrapper.
+- This keeps components self-contained, testable, and serializable.
 
 ---
 
@@ -1149,17 +1438,21 @@ When creating a new V5 component, follow these steps:
 - [ ] **Define Spec** — flat struct with primitives only; add `json` tags
 - [ ] **Define State** — struct with primitives and nested structs; add `json`
   tags; use string IDs for cross-references
-- [ ] **Define Comp** — struct embedding `*modeling.Component[Spec, State]`
-  with port fields
-- [ ] **Implement middleware(s)** — struct(s) embedding `*Comp`, implementing
-  `Tick() bool`
+- [ ] **Implement middleware(s)** — struct(s) holding
+  `comp *modeling.Component[Spec, State]`, implementing `Tick() bool`
+- [ ] **Add NamedHookable boilerplate** — 5 delegation methods on each middleware
+  (`Name`, `AcceptHook`, `Hooks`, `NumHooks`, `InvokeHook`)
+- [ ] **Add port helper(s)** — package-level functions or methods calling
+  `comp.GetPortByName("...")`
 - [ ] **Implement Builder** — `MakeBuilder()`, `With...()` methods,
   `Build(name)` that:
   - Creates `modeling.Component` via inner builder
-  - Sets initial state
-  - Creates outer Comp
-  - Adds middlewares
+  - Sets initial state via `SetState()`
+  - Adds middlewares (passing `comp` directly)
   - Wires ports (`SetComponent` + `AddPort`)
+  - Returns `*modeling.Component[Spec, State]` by default
+- [ ] **Use thin Comp wrapper only if needed** — when the component must
+  implement extra interfaces (e.g., `StorageOwner`)
 - [ ] **Validate** — optionally call `ValidateSpec`/`ValidateState` in tests
   or builder
 - [ ] **Test** — write unit tests driving behavior via ticks and ports
