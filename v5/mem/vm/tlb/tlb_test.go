@@ -8,7 +8,6 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 	"go.uber.org/mock/gomock"
 )
@@ -471,7 +470,7 @@ var _ = Describe("TLB Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = simengine.NewSerialEngine()
+		engine = sim.NewSerialEngine()
 		lowModule = NewMockPort(mockCtrl)
 		lowModule.EXPECT().
 			AsRemote().

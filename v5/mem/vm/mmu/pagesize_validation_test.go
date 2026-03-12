@@ -5,12 +5,11 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 )
 
 // TestPageSizeValidation tests that the MMU validates page table page size consistency
 func TestPageSizeValidation(t *testing.T) {
-	engine := simengine.NewSerialEngine()
+	engine := sim.NewSerialEngine()
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages

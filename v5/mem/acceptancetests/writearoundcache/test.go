@@ -19,7 +19,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/sim"
-	simengine "github.com/sarchlab/akita/v5/sim/engine"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -57,9 +56,9 @@ func initSeed() {
 
 func buildEnvironment() {
 	if *parallelFlag {
-		engine = simengine.NewParallelEngine()
+		engine = sim.NewParallelEngine()
 	} else {
-		engine = simengine.NewSerialEngine()
+		engine = sim.NewSerialEngine()
 	}
 	//engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 

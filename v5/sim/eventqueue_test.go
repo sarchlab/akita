@@ -1,9 +1,7 @@
-package engine
+package sim
 
 import (
 	"math/rand"
-
-	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -31,12 +29,12 @@ var _ = Describe("EventQueueImpl", func() {
 			event := NewMockEvent(mockCtrl)
 			event.EXPECT().
 				Time().
-				Return(sim.VTimeInSec(rand.Float64() / 1e8)).
+				Return(VTimeInSec(rand.Float64() / 1e8)).
 				AnyTimes()
 			queue.Push(event)
 		}
 
-		now := sim.VTimeInSec(-1)
+		now := VTimeInSec(-1)
 		for i := 0; i < numEvents; i++ {
 			event := queue.Pop()
 			Expect(event.Time() > now).To(BeTrue())
@@ -66,12 +64,12 @@ var _ = Describe("Insertion Queue", func() {
 			event := NewMockEvent(mockCtrl)
 			event.EXPECT().
 				Time().
-				Return(sim.VTimeInSec(rand.Float64() / 1e8)).
+				Return(VTimeInSec(rand.Float64() / 1e8)).
 				AnyTimes()
 			queue.Push(event)
 		}
 
-		now := sim.VTimeInSec(-1)
+		now := VTimeInSec(-1)
 		for i := 0; i < numEvents; i++ {
 			event := queue.Pop()
 			Expect(event.Time() > now).To(BeTrue())
