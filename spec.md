@@ -24,6 +24,8 @@ Each component has TWO state copies: "current" (read-only during tick) and "next
 - `SetState()` → sets both buffers (for initialization/save-load)
 - Serialization saves only `current` state
 
+**Critical rule**: Middleware MUST use `GetState()` for all reads and `GetNextState()` for all writes. Using `GetNextState()` for reads is a bug — it means a middleware sees its own writes and other middlewares' writes from the same tick, breaking the A-B isolation.
+
 ### Multi-Middleware Architecture
 
 All components should have **multiple middlewares**, each responsible for one logical function. This is the target architecture — single-middleware patterns are historical artifacts.
@@ -46,8 +48,8 @@ The following external references may be held as middleware fields — they are 
 
 | Reference | Components | Rationale |
 |-----------|-----------|-----------|
-| `*mem.Storage` | idealmemcontroller, caches, DRAM | Physical memory substrate. Too large to copy, can be shared. |
-| `vm.PageTable` | MMU | Shared OS-level page table. Not component-internal state. |
+| `*mem.Storage` | idealmemcontroller, caches, DRAM, simplebankedmemory | Physical memory substrate. Too large to copy, can be shared. |
+| `vm.PageTable` | MMU, GMMU | Shared OS-level page table. Not component-internal state. |
 | `routing.Table` | Switch | Network routing table. Shared infrastructure. |
 | `arbitration.Arbiter` | Switch | Arbitration policy. External service. |
 
@@ -67,7 +69,7 @@ Runtime objects like MSHR and Directory contain both data and behavior. Followin
 - Block/entry cross-references use **indices** (setID, wayID, transaction index) instead of pointers.
 - Shared free functions in `mem/cache/` reusable across all cache types.
 
-### Pipeline and Buffer as State + Free Functions (NEXT)
+### Pipeline and Buffer as State + Free Functions (DONE in caches + switch)
 
 Following the same data/behavior separation as MSHR and Directory:
 
@@ -86,20 +88,20 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 ## How You Consider the Project is Success
 
-- Simple, straightforward, intuitive APIs
-- All CI checks pass on main branch
-- Component = Spec + State + Ports + Middleware + Hooks (nothing else)
-- No Comp wrapper structs (except thin wrappers for StorageOwner / external service interfaces)
-- No external dependency interfaces — all logic embedded in middleware
-- A-B state pattern correctly used in all components (GetState for read, GetNextState for write)
-- Data from all runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
-- No SaveState/LoadState conversion layers — State IS canonical
-- No restoreFromState / syncToState functions — middleware works directly with State
-- No runtime copies of State substructures in middleware
-- Acceptance test for save/load process passes
-- All first-party components use the modeling package pattern
-- Each component has multiple middlewares (not one monolithic middleware)
-- `component_guide.md` reflects the final architecture
+1. Simple, straightforward, intuitive APIs
+2. All CI checks pass on main branch
+3. Component = Spec + State + Ports + Middleware + Hooks (nothing else)
+4. No Comp wrapper structs (except thin wrappers for StorageOwner / external service interfaces)
+5. No external dependency interfaces — all logic embedded in middleware
+6. A-B state pattern correctly used in all components (GetState for read, GetNextState for write)
+7. Data from all runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
+8. No SaveState/LoadState conversion layers — State IS canonical
+9. No restoreFromState / syncToState functions — middleware works directly with State
+10. No runtime copies of State substructures in middleware
+11. Acceptance test for save/load process passes
+12. All first-party components use the modeling package pattern
+13. Each component has multiple middlewares (not one monolithic middleware)
+14. `component_guide.md` reflects the final architecture
 
 ## Constraints
 
@@ -117,10 +119,10 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 - Diana's A-B state co-design analysis: `workspace/diana/ab_state_comp_elim_codesign.md`
 - Iris's dependency elimination analysis: `workspace/iris/embed_logic_in_middleware_analysis.md`
 - Iris's MSHR decoupling analysis: `workspace/iris/mshr_dependency_analysis.md`
-- Iris's embedded logic analysis: `workspace/iris/embed_logic_in_middleware_analysis.md`
 - Human approvals: Issues #145 (Comp elimination), #150 (A-B state)
 - Reference implementations:
-  - `mem/idealmemcontroller/` — 2 middleware, thin Comp, A-B state
-  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions
-  - `mem/dram/` — inlined dependencies, free functions
+  - `mem/idealmemcontroller/` — 2 middleware, thin Comp, A-B state ✅ correct
+  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions, A-B correct
+  - `mem/cache/writearound/` — A-B correct, legacyMapper resolved at Build time
+  - `mem/dram/` — inlined dependencies, free functions, but A-B pattern needs fix
   - `noc/networking/switching/switches/` — State canonical, pipeline/buffer in State
