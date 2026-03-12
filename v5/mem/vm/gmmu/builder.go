@@ -116,11 +116,16 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		pt = vm.NewPageTable(b.log2PageSize)
 	}
 
-	mw := &middleware{
+	wMW := &walkMW{
 		comp:      modelComp,
 		pageTable: pt,
 	}
-	modelComp.AddMiddleware(mw)
+	modelComp.AddMiddleware(wMW)
+
+	rMW := &respondMW{
+		comp: modelComp,
+	}
+	modelComp.AddMiddleware(rMW)
 
 	b.createPorts(modelComp)
 

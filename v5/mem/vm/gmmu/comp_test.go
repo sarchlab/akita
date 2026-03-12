@@ -21,7 +21,7 @@ var _ = Describe("Builder", func() {
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
 		gmmuComp           *modeling.Component[Spec, State]
-		mw                 *middleware
+		mw                 *walkMW
 	)
 
 	BeforeEach(func() {
@@ -62,7 +62,7 @@ var _ = Describe("Builder", func() {
 			WithBottomPort(bottomPort)
 
 		gmmuComp = builder.Build("MMU")
-		mw = gmmuComp.Middlewares()[0].(*middleware)
+		mw = gmmuComp.Middlewares()[0].(*walkMW)
 	})
 
 	AfterEach(func() {
@@ -92,9 +92,6 @@ var _ = Describe("Builder", func() {
 			topPort.EXPECT().
 				RetrieveIncoming().
 				Return(req)
-
-			topPort.EXPECT().CanSend().
-				Return(false)
 
 			mw.Tick()
 
