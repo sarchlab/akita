@@ -61,11 +61,6 @@ type State struct {
 	PageAccessedByDeviceID []devicePageAccess          `json:"page_accessed_by_device_id"`
 }
 
-// GMMU is the default gmmu implementation. It is also an akita Component.
-type GMMU struct {
-	*modeling.Component[Spec, State]
-}
-
 // middleware provides the Tick method for the GMMU.
 type middleware struct {
 	comp      *modeling.Component[Spec, State]
@@ -118,9 +113,9 @@ func (m *middleware) Tick() bool {
 
 func (m *middleware) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	nextState := m.comp.GetNextState()
+	cur := m.comp.GetState()
 
-	if len(nextState.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 

@@ -6,6 +6,7 @@ import (
 	gomock "go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -19,7 +20,7 @@ var _ = Describe("Builder", func() {
 		topPort            *MockPort
 		bottomPort         *MockPort
 		pageTable          *MockPageTable
-		gmmuComp           *GMMU
+		gmmuComp           *modeling.Component[Spec, State]
 		mw                 *middleware
 	)
 

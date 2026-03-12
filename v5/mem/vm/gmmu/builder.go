@@ -91,7 +91,7 @@ func (b Builder) WithBottomPort(port sim.Port) Builder {
 }
 
 // Build returns a new GMMU
-func (b Builder) Build(name string) *GMMU {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec := Spec{
 		DeviceID:            b.deviceID,
 		Log2PageSize:        b.log2PageSize,
@@ -105,10 +105,6 @@ func (b Builder) Build(name string) *GMMU {
 		WithFreq(b.freq).
 		WithSpec(spec).
 		Build(name)
-
-	c := &GMMU{
-		Component: modelComp,
-	}
 
 	initialState := State{
 		RemoteMemReqs: make(map[string]transactionState),
@@ -126,18 +122,17 @@ func (b Builder) Build(name string) *GMMU {
 	}
 	modelComp.AddMiddleware(mw)
 
-	b.createPorts(c, modelComp)
+	b.createPorts(modelComp)
 
-	return c
+	return modelComp
 }
 
 func (b Builder) createPorts(
-	c *GMMU,
 	modelComp *modeling.Component[Spec, State],
 ) {
-	b.topPort.SetComponent(c)
+	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
 
-	b.bottomPort.SetComponent(c)
+	b.bottomPort.SetComponent(modelComp)
 	modelComp.AddPort("Bottom", b.bottomPort)
 }
