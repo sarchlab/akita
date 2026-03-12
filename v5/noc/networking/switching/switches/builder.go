@@ -57,18 +57,29 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	mw := &middleware{
-		comp:         modelComp,
+	infra := &switchInfra{
+		comp:      modelComp,
+		portIndex: make(map[sim.RemotePort]int),
+	}
+
+	rfsMW := &routeForwardSendMW{
+		switchInfra:  infra,
 		routingTable: b.routingTable,
 		arbiter:      b.arbiter,
-		portIndex:    make(map[sim.RemotePort]int),
+	}
+
+	rpMW := &receivePipelineMW{
+		switchInfra: infra,
 	}
 
 	s := &Comp{
 		Component: modelComp,
 	}
 
-	s.AddMiddleware(mw)
+	// Register routeForwardSendMW first (index 0), receivePipelineMW second (index 1).
+	// This matches the execution order: sendOut → forward → route → movePipeline → startProcessing
+	s.AddMiddleware(rfsMW)
+	s.AddMiddleware(rpMW)
 
 	return s
 }

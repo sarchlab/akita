@@ -116,10 +116,10 @@ func (b *stateFlitBuffer) Pop() interface{} {
 // Used for forwardBuffer. Peek/Pop reconstruct a *messaging.Flit with OutputBuf set.
 type stateForwardBuffer struct {
 	sim.HookableBase
-	name       string
-	items      *[]forwardBufferEntry
-	capacity   int
-	mw         *middleware // needed to resolve OutputBufIdx → adapter
+	name     string
+	items    *[]forwardBufferEntry
+	capacity int
+	infra    *switchInfra // needed to resolve OutputBufIdx → adapter
 }
 
 func (b *stateForwardBuffer) Name() string    { return b.name }
@@ -146,7 +146,7 @@ func (b *stateForwardBuffer) Peek() interface{} {
 	}
 	e := (*b.items)[0]
 	flit := &messaging.Flit{MsgMeta: e.Flit}
-	flit.OutputBuf = b.mw.sendOutBufAdapters[e.OutputBufIdx]
+	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
@@ -157,7 +157,7 @@ func (b *stateForwardBuffer) Pop() interface{} {
 	e := (*b.items)[0]
 	*b.items = (*b.items)[1:]
 	flit := &messaging.Flit{MsgMeta: e.Flit}
-	flit.OutputBuf = b.mw.sendOutBufAdapters[e.OutputBufIdx]
+	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
@@ -372,23 +372,28 @@ type Comp struct {
 	*modeling.Component[Spec, State]
 }
 
-// mw returns the middleware from the component's middleware list.
-func (c *Comp) mw() *middleware {
-	return c.Middlewares()[0].(*middleware)
+// routeForwardSendMiddleware returns the routeForwardSendMW from the
+// component's middleware list (registered at index 0).
+func (c *Comp) routeForwardSendMiddleware() *routeForwardSendMW {
+	return c.Middlewares()[0].(*routeForwardSendMW)
+}
+
+// receivePipelineMiddleware returns the receivePipelineMW from the
+// component's middleware list (registered at index 1).
+func (c *Comp) receivePipelineMiddleware() *receivePipelineMW {
+	return c.Middlewares()[1].(*receivePipelineMW)
 }
 
 // GetRoutingTable returns the routine table used by the switch.
 func (c *Comp) GetRoutingTable() routing.Table {
-	return c.mw().routingTable
+	return c.routeForwardSendMiddleware().routingTable
 }
 
-// --- Middleware ---
+// --- Shared infrastructure ---
 
-type middleware struct {
-	comp         *modeling.Component[Spec, State]
-	routingTable routing.Table
-	arbiter      arbitration.Arbiter
-
+// switchInfra holds state shared by both middlewares.
+type switchInfra struct {
+	comp      *modeling.Component[Spec, State]
 	ports     []sim.Port
 	portIndex map[sim.RemotePort]int // remotePort → index in State.PortComplexes
 
@@ -398,71 +403,84 @@ type middleware struct {
 	routeBufAdapters   []*stateFlitBuffer
 }
 
-// NamedHookable delegation methods.
-
-func (m *middleware) Name() string {
-	return m.comp.Name()
-}
-
-func (m *middleware) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *middleware) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *middleware) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
-// addPort registers a port complex with the middleware.
-func (m *middleware) addPort(port sim.Port, remotePort sim.RemotePort, pcs portComplexState) {
-	idx := len(m.ports)
-	m.ports = append(m.ports, port)
-	m.portIndex[remotePort] = idx
+// addPort registers a port complex with the shared infrastructure.
+func (inf *switchInfra) addPort(
+	port sim.Port,
+	remotePort sim.RemotePort,
+	pcs portComplexState,
+	arbiter arbitration.Arbiter,
+) {
+	idx := len(inf.ports)
+	inf.ports = append(inf.ports, port)
+	inf.portIndex[remotePort] = idx
 
 	// Also map the local port's RemotePort so assignFlitOutputBuf can find it
-	m.portIndex[port.AsRemote()] = idx
+	inf.portIndex[port.AsRemote()] = idx
 
 	// Initialize state in both current and next buffers
-	next := m.comp.GetNextState()
+	next := inf.comp.GetNextState()
 	next.PortComplexes = append(next.PortComplexes, pcs)
-	m.comp.SetState(*next)
+	inf.comp.SetState(*next)
 
 	// Create adapters with dummy slice pointers (will be updated in updateAdapterPointers)
 	sendAdapter := &stateSendOutBuffer{name: pcs.LocalPortName + "SendBuf", capacity: pcs.NumOutputChannel, portIdx: idx}
-	fwdAdapter := &stateForwardBuffer{name: pcs.LocalPortName + "FwdBuf", capacity: pcs.NumInputChannel, mw: m}
+	fwdAdapter := &stateForwardBuffer{name: pcs.LocalPortName + "FwdBuf", capacity: pcs.NumInputChannel, infra: inf}
 	routeAdapter := &stateFlitBuffer{name: pcs.LocalPortName + "RouteBuf", capacity: pcs.NumInputChannel}
 
-	m.sendOutBufAdapters = append(m.sendOutBufAdapters, sendAdapter)
-	m.forwardBufAdapters = append(m.forwardBufAdapters, fwdAdapter)
-	m.routeBufAdapters = append(m.routeBufAdapters, routeAdapter)
+	inf.sendOutBufAdapters = append(inf.sendOutBufAdapters, sendAdapter)
+	inf.forwardBufAdapters = append(inf.forwardBufAdapters, fwdAdapter)
+	inf.routeBufAdapters = append(inf.routeBufAdapters, routeAdapter)
 
 	// Point adapters at next state data (will be updated per-tick)
-	next = m.comp.GetNextState()
+	next = inf.comp.GetNextState()
 	fwdAdapter.items = &next.PortComplexes[idx].ForwardBuffer
 	sendAdapter.items = &next.PortComplexes[idx].SendOutBuffer
 	routeAdapter.items = &next.PortComplexes[idx].RouteBuffer
 
-	m.arbiter.AddBuffer(fwdAdapter)
+	arbiter.AddBuffer(fwdAdapter)
 }
 
-func (m *middleware) updateAdapterPointers() {
-	next := m.comp.GetNextState()
-	for i := range m.ports {
-		m.forwardBufAdapters[i].items = &next.PortComplexes[i].ForwardBuffer
-		m.sendOutBufAdapters[i].items = &next.PortComplexes[i].SendOutBuffer
-		m.routeBufAdapters[i].items = &next.PortComplexes[i].RouteBuffer
+func (inf *switchInfra) updateAdapterPointers() {
+	next := inf.comp.GetNextState()
+	for i := range inf.ports {
+		inf.forwardBufAdapters[i].items = &next.PortComplexes[i].ForwardBuffer
+		inf.sendOutBufAdapters[i].items = &next.PortComplexes[i].SendOutBuffer
+		inf.routeBufAdapters[i].items = &next.PortComplexes[i].RouteBuffer
 	}
 }
 
-// Tick updates the Switch's state.
-func (m *middleware) Tick() bool {
+// --- routeForwardSendMW ---
+
+type routeForwardSendMW struct {
+	*switchInfra
+	routingTable routing.Table
+	arbiter      arbitration.Arbiter
+}
+
+// NamedHookable delegation methods.
+
+func (m *routeForwardSendMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *routeForwardSendMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *routeForwardSendMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *routeForwardSendMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *routeForwardSendMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs sendOut → forward → route.
+func (m *routeForwardSendMW) Tick() bool {
 	m.updateAdapterPointers()
 
 	madeProgress := false
@@ -470,21 +488,175 @@ func (m *middleware) Tick() bool {
 	madeProgress = m.sendOut() || madeProgress
 	madeProgress = m.forward() || madeProgress
 	madeProgress = m.route() || madeProgress
+
+	return madeProgress
+}
+
+func (m *routeForwardSendMW) flitParentTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_e2e"
+}
+
+func (m *routeForwardSendMW) flitTaskID(flit *messaging.Flit) string {
+	return flit.ID + "_" + m.comp.Name()
+}
+
+func (m *routeForwardSendMW) route() (madeProgress bool) {
+	next := m.comp.GetNextState()
+
+	for i := range m.ports {
+		pcs := &next.PortComplexes[i]
+
+		for j := 0; j < pcs.NumInputChannel; j++ {
+			if len(pcs.RouteBuffer) == 0 {
+				break
+			}
+
+			if len(pcs.ForwardBuffer) >= pcs.NumInputChannel {
+				break
+			}
+
+			item := pcs.RouteBuffer[0]
+			outputBufIdx := m.resolveOutputBufIdx(item.MsgDst)
+
+			pcs.RouteBuffer = pcs.RouteBuffer[1:]
+			pcs.ForwardBuffer = append(pcs.ForwardBuffer, forwardBufferEntry{
+				Flit:         item.Flit,
+				OutputBufIdx: outputBufIdx,
+			})
+
+			madeProgress = true
+		}
+	}
+
+	return madeProgress
+}
+
+func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst sim.RemotePort) int {
+	outPort := m.routingTable.FindPort(msgDst)
+	if outPort == "" {
+		panic(fmt.Sprintf("%s: no output port for %s",
+			m.comp.Name(), msgDst))
+	}
+
+	idx, ok := m.portIndex[outPort]
+	if !ok {
+		panic(fmt.Sprintf("%s: no port index for %s",
+			m.comp.Name(), outPort))
+	}
+
+	return idx
+}
+
+func (m *routeForwardSendMW) forward() (madeProgress bool) {
+	inputBuffers := m.arbiter.Arbitrate()
+
+	for _, buf := range inputBuffers {
+		for {
+			item := buf.Peek()
+			if item == nil {
+				break
+			}
+
+			flit := item.(*messaging.Flit)
+			if !flit.OutputBuf.CanPush() {
+				break
+			}
+
+			flit.OutputBuf.Push(flit)
+			buf.Pop()
+
+			madeProgress = true
+		}
+	}
+
+	return madeProgress
+}
+
+func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
+	cur := m.comp.GetState()
+
+	for i, port := range m.ports {
+		curPcs := &cur.PortComplexes[i]
+		numSent := 0
+
+		for j := 0; j < curPcs.NumOutputChannel; j++ {
+			if numSent >= len(curPcs.SendOutBuffer) {
+				break
+			}
+
+			meta := curPcs.SendOutBuffer[numSent]
+			flit := &messaging.Flit{MsgMeta: meta}
+			flit.Src = port.AsRemote()
+			flit.Dst = curPcs.RemotePort
+
+			err := port.Send(flit)
+			if err == nil {
+				madeProgress = true
+				numSent++
+
+				tracing.EndTask(m.flitTaskID(flit), m)
+			}
+		}
+
+		if numSent > 0 {
+			next := m.comp.GetNextState()
+			nextPcs := &next.PortComplexes[i]
+			nextPcs.SendOutBuffer = nextPcs.SendOutBuffer[numSent:]
+		}
+	}
+
+	return madeProgress
+}
+
+// --- receivePipelineMW ---
+
+type receivePipelineMW struct {
+	*switchInfra
+}
+
+// NamedHookable delegation methods.
+
+func (m *receivePipelineMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *receivePipelineMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *receivePipelineMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *receivePipelineMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *receivePipelineMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs movePipeline → startProcessing.
+func (m *receivePipelineMW) Tick() bool {
+	m.updateAdapterPointers()
+
+	madeProgress := false
+
 	madeProgress = m.movePipeline() || madeProgress
 	madeProgress = m.startProcessing() || madeProgress
 
 	return madeProgress
 }
 
-func (m *middleware) flitParentTaskID(flit *messaging.Flit) string {
+func (m *receivePipelineMW) flitParentTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_e2e"
 }
 
-func (m *middleware) flitTaskID(flit *messaging.Flit) string {
+func (m *receivePipelineMW) flitTaskID(flit *messaging.Flit) string {
 	return flit.ID + "_" + m.comp.Name()
 }
 
-func (m *middleware) startProcessing() (madeProgress bool) {
+func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 	cur := m.comp.GetState()
 
 	for i, port := range m.ports {
@@ -526,7 +698,7 @@ func (m *middleware) startProcessing() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) movePipeline() (madeProgress bool) {
+func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
 	next := m.comp.GetNextState()
 
 	for i := range m.ports {
@@ -535,116 +707,6 @@ func (m *middleware) movePipeline() (madeProgress bool) {
 
 	return madeProgress
 }
-
-func (m *middleware) route() (madeProgress bool) {
-	next := m.comp.GetNextState()
-
-	for i := range m.ports {
-		pcs := &next.PortComplexes[i]
-
-		for j := 0; j < pcs.NumInputChannel; j++ {
-			if len(pcs.RouteBuffer) == 0 {
-				break
-			}
-
-			if len(pcs.ForwardBuffer) >= pcs.NumInputChannel {
-				break
-			}
-
-			item := pcs.RouteBuffer[0]
-			outputBufIdx := m.resolveOutputBufIdx(item.MsgDst)
-
-			pcs.RouteBuffer = pcs.RouteBuffer[1:]
-			pcs.ForwardBuffer = append(pcs.ForwardBuffer, forwardBufferEntry{
-				Flit:         item.Flit,
-				OutputBufIdx: outputBufIdx,
-			})
-
-			madeProgress = true
-		}
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) resolveOutputBufIdx(msgDst sim.RemotePort) int {
-	outPort := m.routingTable.FindPort(msgDst)
-	if outPort == "" {
-		panic(fmt.Sprintf("%s: no output port for %s",
-			m.comp.Name(), msgDst))
-	}
-
-	idx, ok := m.portIndex[outPort]
-	if !ok {
-		panic(fmt.Sprintf("%s: no port index for %s",
-			m.comp.Name(), outPort))
-	}
-
-	return idx
-}
-
-func (m *middleware) forward() (madeProgress bool) {
-	inputBuffers := m.arbiter.Arbitrate()
-
-	for _, buf := range inputBuffers {
-		for {
-			item := buf.Peek()
-			if item == nil {
-				break
-			}
-
-			flit := item.(*messaging.Flit)
-			if !flit.OutputBuf.CanPush() {
-				break
-			}
-
-			flit.OutputBuf.Push(flit)
-			buf.Pop()
-
-			madeProgress = true
-		}
-	}
-
-	return madeProgress
-}
-
-func (m *middleware) sendOut() (madeProgress bool) {
-	cur := m.comp.GetState()
-
-	for i, port := range m.ports {
-		curPcs := &cur.PortComplexes[i]
-		numSent := 0
-
-		for j := 0; j < curPcs.NumOutputChannel; j++ {
-			if numSent >= len(curPcs.SendOutBuffer) {
-				break
-			}
-
-			meta := curPcs.SendOutBuffer[numSent]
-			flit := &messaging.Flit{MsgMeta: meta}
-			flit.Src = port.AsRemote()
-			flit.Dst = curPcs.RemotePort
-
-			err := port.Send(flit)
-			if err == nil {
-				madeProgress = true
-				numSent++
-
-				tracing.EndTask(m.flitTaskID(flit), m)
-			}
-		}
-
-		if numSent > 0 {
-			next := m.comp.GetNextState()
-			nextPcs := &next.PortComplexes[i]
-			nextPcs.SendOutBuffer = nextPcs.SendOutBuffer[numSent:]
-		}
-	}
-
-	return madeProgress
-}
-
-
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
@@ -708,5 +770,6 @@ func (a SwitchPortAdder) AddPort() {
 		Latency:          a.latency,
 		PipelineWidth:    a.numInputChannel,
 	}
-	a.sw.mw().addPort(a.localPort, a.remotePort.AsRemote(), pcs)
+	rfsMW := a.sw.routeForwardSendMiddleware()
+	rfsMW.addPort(a.localPort, a.remotePort.AsRemote(), pcs, rfsMW.arbiter)
 }
