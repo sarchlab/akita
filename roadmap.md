@@ -105,7 +105,18 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ---
 
-## 🎉 PROJECT COMPLETE
+---
+
+## Phase 3: Package Restructuring
+
+### M27: Analyze and Plan `sim` Package Split (IN PROGRESS)
+- Budget: 2 | Used: 0
+- Scope: Analyze sim package structure, propose splitting plan, discuss with human
+- Status: Workers analyzing internal dependencies and external usage patterns
+
+---
+
+## 🎉 Phase 1+2 COMPLETE
 
 All success criteria from spec.md are met:
 

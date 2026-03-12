@@ -88,6 +88,12 @@ Following the same data/behavior separation as MSHR and Directory:
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods. After Comp elimination and State-as-canonical, snapshot/restore conversion layers disappear.
 
+## Next Phase: Split `sim` Package
+
+The `sim` package (~3000 lines, 20+ files) currently contains everything from time management to communication to component model. We need to evaluate whether and how to split it into smaller, focused packages.
+
+**Human guidance:** "We need to split the sim package into smaller ones. Say time management as one, communication is another one. Please discuss a plan with me before working on it. Also, discuss if splitting is necessary."
+
 ## How You Consider the Project is Success
 
 1. Simple, straightforward, intuitive APIs
