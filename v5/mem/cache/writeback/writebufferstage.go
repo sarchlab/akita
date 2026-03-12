@@ -9,7 +9,7 @@ import (
 )
 
 type writeBufferStage struct {
-	cache *middleware
+	cache *pipelineMW
 
 	writeBufferCapacity int
 	maxInflightFetch    int

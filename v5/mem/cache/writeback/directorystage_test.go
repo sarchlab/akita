@@ -15,7 +15,7 @@ var _ = Describe("DirectoryStage", func() {
 	var (
 		mockCtrl *gomock.Controller
 		ds       *directoryStage
-		m        *middleware
+		m        *pipelineMW
 	)
 
 	BeforeEach(func() {
@@ -30,7 +30,7 @@ var _ = Describe("DirectoryStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			evictingList: make(map[uint64]bool),
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
@@ -178,7 +178,7 @@ var _ = Describe("DirectoryStage", func() {
 			BeforeEach(func() {
 				next := m.comp.GetNextState()
 				setID := int(0x100 / uint64(64) % uint64(64))
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					block := &next.DirectoryState.Sets[setID].Blocks[i]
 					block.PID = 2
 					block.Tag = uint64(0x200 + i*0x1000)

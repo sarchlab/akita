@@ -12,7 +12,7 @@ import (
 var _ = Describe("WriteBufferStage", func() {
 	var (
 		mockCtrl   *gomock.Controller
-		m          *middleware
+		m          *pipelineMW
 		wb         *writeBufferStage
 		bottomPort *MockPort
 	)
@@ -34,7 +34,7 @@ var _ = Describe("WriteBufferStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			bottomPort:   bottomPort,
 			evictingList: make(map[uint64]bool),
 		}

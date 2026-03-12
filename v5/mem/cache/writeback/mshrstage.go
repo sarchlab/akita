@@ -1,13 +1,15 @@
 package writeback
 
 import (
+	"slices"
+
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type mshrStage struct {
-	cache *middleware
+	cache *pipelineMW
 
 	// The transaction that carries MSHR data/transaction pointers
 	hasProcessingTrans  bool
@@ -129,11 +131,5 @@ func (s *mshrStage) removeTransaction(trans *transactionState) {
 }
 
 func (s *mshrStage) findTransaction(trans *transactionState) bool {
-	for _, t := range s.cache.inFlightTransactions {
-		if trans == t {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(s.cache.inFlightTransactions, trans)
 }

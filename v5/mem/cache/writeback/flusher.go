@@ -15,19 +15,20 @@ type blockRef struct {
 }
 
 type flusher struct {
-	cache *middleware
+	pipeline *pipelineMW
+	ctrlPort sim.Port
 
 	blockToEvict    []blockRef
 	processingFlush *cache.FlushReq
 }
 
 func (f *flusher) Tick() bool {
-	if f.processingFlush != nil && f.cache.state == cacheStatePreFlushing {
+	if f.processingFlush != nil && f.pipeline.state == cacheStatePreFlushing {
 		return f.processPreFlushing()
 	}
 
 	madeProgress := false
-	if f.processingFlush != nil && f.cache.state == cacheStateFlushing {
+	if f.processingFlush != nil && f.pipeline.state == cacheStateFlushing {
 		madeProgress = f.finalizeFlushing() || madeProgress
 		madeProgress = f.processFlush() || madeProgress
 
@@ -43,13 +44,13 @@ func (f *flusher) processPreFlushing() bool {
 	}
 
 	f.prepareBlockToFlushList()
-	f.cache.state = cacheStateFlushing
+	f.pipeline.state = cacheStateFlushing
 
 	return true
 }
 
 func (f *flusher) existInflightTransaction() bool {
-	for _, t := range f.cache.inFlightTransactions {
+	for _, t := range f.pipeline.inFlightTransactions {
 		if t != nil {
 			return true
 		}
@@ -58,7 +59,7 @@ func (f *flusher) existInflightTransaction() bool {
 }
 
 func (f *flusher) prepareBlockToFlushList() {
-	cur := f.cache.comp.GetState()
+	cur := f.pipeline.comp.GetState()
 	for setID, set := range cur.DirectoryState.Sets {
 		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
@@ -78,15 +79,15 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	cur := f.cache.comp.GetState()
-	spec := f.cache.comp.GetSpec()
+	cur := f.pipeline.comp.GetState()
+	spec := f.pipeline.comp.GetSpec()
 	ref := f.blockToEvict[0]
 	block := &cur.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
 		spec.WayAssociativity,
-		len(f.cache.dirToBankBuffers))
-	bankBuf := f.cache.dirToBankBuffers[bankNum]
+		len(f.pipeline.dirToBankBuffers))
+	bankBuf := f.pipeline.dirToBankBuffers[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -107,7 +108,7 @@ func (f *flusher) processFlush() bool {
 	}
 
 	// Add to inFlightTransactions so adapter can find it
-	f.cache.inFlightTransactions = append(f.cache.inFlightTransactions, trans)
+	f.pipeline.inFlightTransactions = append(f.pipeline.inFlightTransactions, trans)
 	bankBuf.Push(trans)
 
 	f.blockToEvict = f.blockToEvict[1:]
@@ -116,7 +117,7 @@ func (f *flusher) processFlush() bool {
 }
 
 func (f *flusher) extractFromPort() bool {
-	msg := f.cache.controlPort.PeekIncoming()
+	msg := f.ctrlPort.PeekIncoming()
 	if msg == nil {
 		return false
 	}
@@ -136,36 +137,36 @@ func (f *flusher) extractFromPort() bool {
 func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
 	f.processingFlush = msg
 	if msg.DiscardInflight {
-		f.cache.discardInflightTransactions()
+		f.pipeline.discardInflightTransactions()
 	}
 
-	f.cache.state = cacheStatePreFlushing
-	f.cache.controlPort.RetrieveIncoming()
+	f.pipeline.state = cacheStatePreFlushing
+	f.ctrlPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msg, f.cache)
+	tracing.TraceReqReceive(msg, f.pipeline)
 
 	return true
 }
 
 func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
-	if !f.cache.controlPort.CanSend() {
+	if !f.ctrlPort.CanSend() {
 		return false
 	}
 
-	clearPort(f.cache.topPort)
-	clearPort(f.cache.bottomPort)
+	clearPort(f.pipeline.topPort)
+	clearPort(f.pipeline.bottomPort)
 
-	f.cache.state = cacheStateRunning
+	f.pipeline.state = cacheStateRunning
 
 	rsp := &cache.RestartRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = f.cache.controlPort.AsRemote()
+	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
 	rsp.TrafficClass = "cache.RestartRsp"
-	f.cache.controlPort.Send(rsp)
+	f.ctrlPort.Send(rsp)
 
-	f.cache.controlPort.RetrieveIncoming()
+	f.ctrlPort.RetrieveIncoming()
 
 	return true
 }
@@ -179,20 +180,20 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	if !f.cache.controlPort.CanSend() {
+	if !f.ctrlPort.CanSend() {
 		return false
 	}
 
-	spec := f.cache.comp.GetSpec()
-	next := f.cache.comp.GetNextState()
+	spec := f.pipeline.comp.GetSpec()
+	next := f.pipeline.comp.GetNextState()
 
 	rsp := &cache.FlushRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
-	rsp.Src = f.cache.controlPort.AsRemote()
+	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = f.processingFlush.Src
 	rsp.RspTo = f.processingFlush.ID
 	rsp.TrafficClass = "cache.FlushRsp"
-	f.cache.controlPort.Send(rsp)
+	f.ctrlPort.Send(rsp)
 
 	// Reset MSHR and directory state
 	next.MSHRState = cache.MSHRState{}
@@ -205,37 +206,37 @@ func (f *flusher) finalizeFlushing() bool {
 	)
 
 	if f.processingFlush.PauseAfterFlushing {
-		f.cache.state = cacheStatePaused
+		f.pipeline.state = cacheStatePaused
 	} else {
-		f.cache.state = cacheStateRunning
+		f.pipeline.state = cacheStateRunning
 	}
 
-	tracing.TraceReqComplete(f.processingFlush, f.cache)
+	tracing.TraceReqComplete(f.processingFlush, f.pipeline)
 	f.processingFlush = nil
 
 	return true
 }
 
 func (f *flusher) flushCompleted() bool {
-	for _, b := range f.cache.dirToBankBuffers {
+	for _, b := range f.pipeline.dirToBankBuffers {
 		if b.Size() > 0 {
 			return false
 		}
 	}
 
-	for _, b := range f.cache.bankStages {
+	for _, b := range f.pipeline.bankStages {
 		if b.inflightTransCount > 0 {
 			return false
 		}
 	}
 
-	if f.cache.writeBufferBuffer.Size() > 0 {
+	if f.pipeline.writeBufferBuffer.Size() > 0 {
 		return false
 	}
 
-	if len(f.cache.writeBuffer.inflightFetch) > 0 ||
-		len(f.cache.writeBuffer.inflightEviction) > 0 ||
-		len(f.cache.writeBuffer.pendingEvictions) > 0 {
+	if len(f.pipeline.writeBuffer.inflightFetch) > 0 ||
+		len(f.pipeline.writeBuffer.inflightEviction) > 0 ||
+		len(f.pipeline.writeBuffer.pendingEvictions) > 0 {
 		return false
 	}
 

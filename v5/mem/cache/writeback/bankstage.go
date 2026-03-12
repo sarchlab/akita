@@ -10,7 +10,7 @@ import (
 )
 
 type bankStage struct {
-	cache  *middleware
+	cache  *pipelineMW
 	bankID int
 
 	pipelineWidth      int

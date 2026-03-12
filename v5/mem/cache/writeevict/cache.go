@@ -41,14 +41,14 @@ type State struct {
 	IsPaused                   bool                    `json:"is_paused"`
 }
 
-// middleware holds all non-serializable infrastructure for the writeevict
-// cache. It implements the Tick method and delegates NamedHookable to comp.
-type middleware struct {
+// pipelineMW holds all non-serializable infrastructure for the writeevict
+// cache data pipeline. It implements the Tick method and delegates
+// NamedHookable to comp.
+type pipelineMW struct {
 	comp *modeling.Component[Spec, State]
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort    sim.Port
+	bottomPort sim.Port
 
 	storage *mem.Storage
 
@@ -69,7 +69,6 @@ type middleware struct {
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
 	respondStage     *respondStage
-	controlStage     *controlStage
 
 	transactions             []*transactionState
 	postCoalesceTransactions []*transactionState
@@ -79,33 +78,33 @@ type middleware struct {
 
 // --- NamedHookable delegation ---
 
-func (m *middleware) Name() string {
+func (m *pipelineMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *pipelineMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *pipelineMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *pipelineMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *pipelineMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
 // GetSpec returns the immutable specification.
-func (m *middleware) GetSpec() Spec {
+func (m *pipelineMW) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
 // findPort resolves an address to a remote port using data from Spec.
-func (m *middleware) findPort(address uint64) sim.RemotePort {
+func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
 	switch spec.AddressMapperType {
@@ -120,8 +119,8 @@ func (m *middleware) findPort(address uint64) sim.RemotePort {
 	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
-// Tick updates the state of the cache.
-func (m *middleware) Tick() bool {
+// Tick updates the state of the cache pipeline.
+func (m *pipelineMW) Tick() bool {
 	m.updateAdapterPointers()
 
 	madeProgress := false
@@ -130,15 +129,13 @@ func (m *middleware) Tick() bool {
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
-	madeProgress = m.controlStage.Tick() || madeProgress
-
 	return madeProgress
 }
 
 // syncForTest synchronizes curState from the next state buffer and updates
 // adapter read pointers. This is only needed in tests where state is set up
 // via GetNextState() without going through the Component.Tick() cycle.
-func (m *middleware) syncForTest() {
+func (m *pipelineMW) syncForTest() {
 	next := m.comp.GetNextState()
 	m.comp.SetState(*next)
 	m.curState = m.comp.GetState()
@@ -167,7 +164,7 @@ func (m *middleware) syncForTest() {
 	}
 }
 
-func (m *middleware) updateAdapterPointers() {
+func (m *pipelineMW) updateAdapterPointers() {
 	m.curState = m.comp.GetState()
 	next := m.comp.GetNextState()
 
@@ -192,7 +189,7 @@ func (m *middleware) updateAdapterPointers() {
 	}
 }
 
-func (m *middleware) runPipeline() bool {
+func (m *pipelineMW) runPipeline() bool {
 	madeProgress := false
 	madeProgress = m.tickRespondStage() || madeProgress
 	madeProgress = m.tickParseBottomStage() || madeProgress
@@ -203,7 +200,7 @@ func (m *middleware) runPipeline() bool {
 	return madeProgress
 }
 
-func (m *middleware) tickRespondStage() bool {
+func (m *pipelineMW) tickRespondStage() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -213,7 +210,7 @@ func (m *middleware) tickRespondStage() bool {
 	return madeProgress
 }
 
-func (m *middleware) tickParseBottomStage() bool {
+func (m *pipelineMW) tickParseBottomStage() bool {
 	madeProgress := false
 
 	spec := m.comp.GetSpec()
@@ -224,7 +221,7 @@ func (m *middleware) tickParseBottomStage() bool {
 	return madeProgress
 }
 
-func (m *middleware) tickBankStage() bool {
+func (m *pipelineMW) tickBankStage() bool {
 	madeProgress := false
 	for _, bs := range m.bankStages {
 		madeProgress = bs.Tick() || madeProgress
@@ -233,11 +230,11 @@ func (m *middleware) tickBankStage() bool {
 	return madeProgress
 }
 
-func (m *middleware) tickDirectoryStage() bool {
+func (m *pipelineMW) tickDirectoryStage() bool {
 	return m.directoryStage.Tick()
 }
 
-func (m *middleware) tickCoalesceState() bool {
+func (m *pipelineMW) tickCoalesceState() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
@@ -248,7 +245,7 @@ func (m *middleware) tickCoalesceState() bool {
 }
 
 // GetState converts runtime mutable data into a serializable State.
-func (m *middleware) GetState() State {
+func (m *pipelineMW) GetState() State {
 	next := m.comp.GetNextState()
 
 	// Compact nil entries from postCoalesceTransactions before snapshot.
@@ -268,7 +265,7 @@ func (m *middleware) GetState() State {
 
 // compactPostCoalesceTransactions removes nil entries from
 // postCoalesceTransactions and remaps all indices in State arrays.
-func (m *middleware) compactPostCoalesceTransactions(next *State) {
+func (m *pipelineMW) compactPostCoalesceTransactions(next *State) {
 	old := m.postCoalesceTransactions
 	remap := make(map[int]int)
 	compacted := make([]*transactionState, 0, len(old))
@@ -328,7 +325,7 @@ func (m *middleware) compactPostCoalesceTransactions(next *State) {
 }
 
 // SetState restores runtime mutable data from a serializable State.
-func (m *middleware) SetState(state State) {
+func (m *pipelineMW) SetState(state State) {
 	m.comp.SetState(state)
 
 	// Restore transactions from state
@@ -337,4 +334,37 @@ func (m *middleware) SetState(state State) {
 	m.transactions = trans
 	m.postCoalesceTransactions = postCoalesce
 	m.isPaused = state.IsPaused
+}
+
+// controlMW runs the control stage (flush/invalidate/restart).
+type controlMW struct {
+	comp         *modeling.Component[Spec, State]
+	controlStage *controlStage
+}
+
+// --- NamedHookable delegation ---
+
+func (m *controlMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *controlMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *controlMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *controlMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *controlMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs the control stage.
+func (m *controlMW) Tick() bool {
+	return m.controlStage.Tick()
 }

@@ -7,7 +7,7 @@ import (
 )
 
 type topParser struct {
-	cache *middleware
+	cache *pipelineMW
 }
 
 func (p *topParser) Tick() bool {

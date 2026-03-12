@@ -17,7 +17,7 @@ var _ = Describe("Bottom Parser", func() {
 		mockCtrl   *gomock.Controller
 		bottomPort *MockPort
 		p          *bottomParser
-		c          *middleware
+		c          *pipelineMW
 	)
 
 	BeforeEach(func() {
@@ -30,7 +30,7 @@ var _ = Describe("Bottom Parser", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
 
-		c = &middleware{
+		c = &pipelineMW{
 			bottomPort: bottomPort,
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().

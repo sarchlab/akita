@@ -16,7 +16,7 @@ var _ = Describe("Bankstage", func() {
 		mockCtrl *gomock.Controller
 		storage  *mem.Storage
 		s        *bankStage
-		c        *middleware
+		c        *pipelineMW
 	)
 
 	BeforeEach(func() {
@@ -29,7 +29,7 @@ var _ = Describe("Bankstage", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
 
-		c = &middleware{
+		c = &pipelineMW{
 			storage: storage,
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().

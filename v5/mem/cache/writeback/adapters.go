@@ -20,7 +20,7 @@ type stateTransBuffer struct {
 	readItems  *[]int // points to cur (A) state - reserved
 	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
-	mw         *middleware // needed to resolve indices to transaction pointers
+	mw         *pipelineMW // needed to resolve indices to transaction pointers
 }
 
 func (b *stateTransBuffer) Name() string  { return b.name }
@@ -29,7 +29,7 @@ func (b *stateTransBuffer) Size() int     { return len(*b.writeItems) }
 func (b *stateTransBuffer) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateTransBuffer) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
-func (b *stateTransBuffer) Push(e interface{}) {
+func (b *stateTransBuffer) Push(e any) {
 	trans := e.(*transactionState)
 	idx := b.findTransIdx(trans)
 	*b.writeItems = append(*b.writeItems, idx)
@@ -37,7 +37,7 @@ func (b *stateTransBuffer) Push(e interface{}) {
 
 // Peek reads from writeItems (next/B state) so it sees mutations from Pop
 // within the same tick.
-func (b *stateTransBuffer) Peek() interface{} {
+func (b *stateTransBuffer) Peek() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -45,7 +45,7 @@ func (b *stateTransBuffer) Peek() interface{} {
 	return b.mw.inFlightTransactions[idx]
 }
 
-func (b *stateTransBuffer) Pop() interface{} {
+func (b *stateTransBuffer) Pop() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -75,7 +75,7 @@ type stateDirPostBufAdapter struct {
 	readItems  *[]int // points to cur (A) state - reserved
 	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
-	mw         *middleware
+	mw         *pipelineMW
 }
 
 func (b *stateDirPostBufAdapter) Name() string  { return b.name }
@@ -84,7 +84,7 @@ func (b *stateDirPostBufAdapter) Size() int     { return len(*b.writeItems) }
 func (b *stateDirPostBufAdapter) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateDirPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
-func (b *stateDirPostBufAdapter) Push(e interface{}) {
+func (b *stateDirPostBufAdapter) Push(e any) {
 	item := e.(dirPipelineItem)
 	idx := b.findTransIdx(item.trans)
 	*b.writeItems = append(*b.writeItems, idx)
@@ -92,7 +92,7 @@ func (b *stateDirPostBufAdapter) Push(e interface{}) {
 
 // Peek reads from writeItems (next/B state) so it sees mutations from Pop
 // within the same tick.
-func (b *stateDirPostBufAdapter) Peek() interface{} {
+func (b *stateDirPostBufAdapter) Peek() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -100,7 +100,7 @@ func (b *stateDirPostBufAdapter) Peek() interface{} {
 	return dirPipelineItem{trans: b.mw.inFlightTransactions[idx]}
 }
 
-func (b *stateDirPostBufAdapter) Pop() interface{} {
+func (b *stateDirPostBufAdapter) Pop() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -130,7 +130,7 @@ type stateBankPostBufAdapter struct {
 	readItems  *[]int // points to cur (A) state - reserved
 	writeItems *[]int // points to next (B) state - all ops use this
 	capacity   int
-	mw         *middleware
+	mw         *pipelineMW
 }
 
 func (b *stateBankPostBufAdapter) Name() string  { return b.name }
@@ -139,7 +139,7 @@ func (b *stateBankPostBufAdapter) Size() int     { return len(*b.writeItems) }
 func (b *stateBankPostBufAdapter) CanPush() bool { return len(*b.writeItems) < b.capacity }
 func (b *stateBankPostBufAdapter) Clear()        { *b.writeItems = (*b.writeItems)[:0] }
 
-func (b *stateBankPostBufAdapter) Push(e interface{}) {
+func (b *stateBankPostBufAdapter) Push(e any) {
 	switch v := e.(type) {
 	case bankPipelineElem:
 		idx := b.findTransIdx(v.trans)
@@ -151,7 +151,7 @@ func (b *stateBankPostBufAdapter) Push(e interface{}) {
 
 // Peek reads from writeItems (next/B state) so it sees mutations from Pop
 // within the same tick.
-func (b *stateBankPostBufAdapter) Peek() interface{} {
+func (b *stateBankPostBufAdapter) Peek() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -161,7 +161,7 @@ func (b *stateBankPostBufAdapter) Peek() interface{} {
 	}
 }
 
-func (b *stateBankPostBufAdapter) Pop() interface{} {
+func (b *stateBankPostBufAdapter) Pop() any {
 	if len(*b.writeItems) == 0 {
 		return nil
 	}
@@ -190,7 +190,7 @@ func dirPipelineCanAccept(
 	stages []dirPipelineStageState,
 	pipelineWidth int,
 ) bool {
-	for lane := 0; lane < pipelineWidth; lane++ {
+	for lane := range pipelineWidth {
 		if !dirPipelineSlotOccupied(stages, lane, 0) {
 			return true
 		}
@@ -215,7 +215,7 @@ func dirPipelineAccept(
 	pipelineWidth int,
 	transIdx int,
 ) {
-	for lane := 0; lane < pipelineWidth; lane++ {
+	for lane := range pipelineWidth {
 		if !dirPipelineSlotOccupied(*stages, lane, 0) {
 			*stages = append(*stages, dirPipelineStageState{
 				Lane:       lane,
@@ -327,7 +327,7 @@ func bankPipelineCanAccept(
 	stages []bankPipelineStageState,
 	pipelineWidth int,
 ) bool {
-	for lane := 0; lane < pipelineWidth; lane++ {
+	for lane := range pipelineWidth {
 		if !bankPipelineSlotOccupied(stages, lane, 0) {
 			return true
 		}
@@ -352,7 +352,7 @@ func bankPipelineAccept(
 	pipelineWidth int,
 	transIdx int,
 ) {
-	for lane := 0; lane < pipelineWidth; lane++ {
+	for lane := range pipelineWidth {
 		if !bankPipelineSlotOccupied(*stages, lane, 0) {
 			*stages = append(*stages, bankPipelineStageState{
 				Lane:       lane,

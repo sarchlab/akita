@@ -15,7 +15,7 @@ var _ = Describe("Flusher", func() {
 		controlPort *MockPort
 		topPort     *MockPort
 		bottomPort  *MockPort
-		m           *middleware
+		m           *pipelineMW
 		f           *flusher
 	)
 
@@ -47,10 +47,9 @@ var _ = Describe("Flusher", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			topPort:      topPort,
 			bottomPort:   bottomPort,
-			controlPort:  controlPort,
 			state:        cacheStateRunning,
 			evictingList: make(map[uint64]bool),
 		}
@@ -135,8 +134,7 @@ var _ = Describe("Flusher", func() {
 			maxInflightEviction: 4,
 		}
 
-		f = &flusher{cache: m}
-		m.flusher = f
+		f = &flusher{pipeline: m, ctrlPort: controlPort}
 	})
 
 	AfterEach(func() {

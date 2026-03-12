@@ -13,7 +13,7 @@ import (
 var _ = Describe("Bank Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		m        *middleware
+		m        *pipelineMW
 		bs       *bankStage
 		storage  *mem.Storage
 		topPort  *MockPort
@@ -39,7 +39,7 @@ var _ = Describe("Bank Stage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			storage:      storage,
 			topPort:      topPort,
 			evictingList: make(map[uint64]bool),

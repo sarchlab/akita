@@ -12,7 +12,7 @@ import (
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *middleware
+		cache    *pipelineMW
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -26,7 +26,7 @@ var _ = Describe("Respond Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		cache = &middleware{
+		cache = &pipelineMW{
 			topPort: topPort,
 		}
 		cache.comp = modeling.NewBuilder[Spec, State]().

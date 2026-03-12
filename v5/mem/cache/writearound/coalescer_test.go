@@ -13,7 +13,7 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		mw       *middleware
+		mw       *pipelineMW
 		topPort  *MockPort
 		co       coalescer
 	)
@@ -28,7 +28,7 @@ var _ = Describe("Coalescer", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
 
-		mw = &middleware{
+		mw = &pipelineMW{
 			topPort: topPort,
 		}
 		mw.comp = modeling.NewBuilder[Spec, State]().

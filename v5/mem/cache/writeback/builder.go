@@ -233,19 +233,11 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	comp.SetState(initialState)
 
-	m := &middleware{
-		comp:         comp,
-		state:        cacheStateRunning,
-		evictingList: make(map[uint64]bool),
-	}
+	pmw := b.buildPipelineMW(comp, laneWidth)
+	cmw := b.buildControlMW(comp, pmw)
 
-	b.createPorts(m, comp)
-	m.storage = mem.NewStorage(b.byteSize)
-
-	b.buildAdapters(m, laneWidth)
-	b.createInternalStages(m, laneWidth)
-
-	comp.AddMiddleware(m)
+	comp.AddMiddleware(pmw) // index 0
+	comp.AddMiddleware(cmw) // index 1
 
 	return comp
 }
@@ -279,7 +271,50 @@ func (b *Builder) buildSpec(numSets int) Spec {
 	return spec
 }
 
-func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, State]) {
+func (b *Builder) buildPipelineMW(
+	comp *modeling.Component[Spec, State],
+	laneWidth int,
+) *pipelineMW {
+	m := &pipelineMW{
+		comp:         comp,
+		state:        cacheStateRunning,
+		evictingList: make(map[uint64]bool),
+	}
+
+	b.createPipelinePorts(m, comp)
+	m.storage = mem.NewStorage(b.byteSize)
+
+	b.buildAdapters(m, laneWidth)
+	b.createInternalStages(m, laneWidth)
+
+	return m
+}
+
+func (b *Builder) buildControlMW(
+	comp *modeling.Component[Spec, State],
+	pmw *pipelineMW,
+) *controlMW {
+	controlPort := b.controlPort
+	controlPort.SetComponent(comp)
+	comp.AddPort("Control", controlPort)
+
+	f := &flusher{
+		pipeline: pmw,
+		ctrlPort: controlPort,
+	}
+
+	cmw := &controlMW{
+		comp:    comp,
+		flusher: f,
+	}
+
+	return cmw
+}
+
+func (b *Builder) createPipelinePorts(
+	m *pipelineMW,
+	comp *modeling.Component[Spec, State],
+) {
 	m.topPort = b.topPort
 	m.topPort.SetComponent(comp)
 	comp.AddPort("Top", m.topPort)
@@ -287,20 +322,16 @@ func (b *Builder) createPorts(m *middleware, comp *modeling.Component[Spec, Stat
 	m.bottomPort = b.bottomPort
 	m.bottomPort.SetComponent(comp)
 	comp.AddPort("Bottom", m.bottomPort)
-
-	m.controlPort = b.controlPort
-	m.controlPort.SetComponent(comp)
-	comp.AddPort("Control", m.controlPort)
 }
 
-func (b *Builder) buildAdapters(m *middleware, laneWidth int) {
+func (b *Builder) buildAdapters(m *pipelineMW, laneWidth int) {
 	next := m.comp.GetNextState()
 
 	b.buildTransBufferAdapters(m, next)
 	b.buildPostBufAdapters(m, next, laneWidth)
 }
 
-func (b *Builder) buildTransBufferAdapters(m *middleware, next *State) {
+func (b *Builder) buildTransBufferAdapters(m *pipelineMW, next *State) {
 	m.dirStageBuffer = &stateTransBuffer{
 		name:       m.comp.Name() + ".DirStageBuffer",
 		readItems:  &next.DirStageBufIndices,
@@ -345,7 +376,7 @@ func (b *Builder) buildTransBufferAdapters(m *middleware, next *State) {
 }
 
 func (b *Builder) buildPostBufAdapters(
-	m *middleware, next *State, laneWidth int,
+	m *pipelineMW, next *State, laneWidth int,
 ) {
 	m.dirPostBufAdapter = &stateDirPostBufAdapter{
 		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
@@ -366,7 +397,7 @@ func (b *Builder) buildPostBufAdapters(
 	}
 }
 
-func (b *Builder) createInternalStages(m *middleware, laneWidth int) {
+func (b *Builder) createInternalStages(m *pipelineMW, laneWidth int) {
 	m.topParser = &topParser{cache: m}
 
 	m.dirStage = &directoryStage{
@@ -381,7 +412,6 @@ func (b *Builder) createInternalStages(m *middleware, laneWidth int) {
 	}
 
 	m.mshrStage = &mshrStage{cache: m}
-	m.flusher = &flusher{cache: m}
 	m.writeBuffer = &writeBufferStage{
 		cache:               m,
 		writeBufferCapacity: b.writeBufferCapacity,

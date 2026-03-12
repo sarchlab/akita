@@ -16,7 +16,7 @@ func (i dirPipelineItem) TaskID() string {
 }
 
 type directory struct {
-	cache *middleware
+	cache *pipelineMW
 }
 
 func (d *directory) Tick() (madeProgress bool) {

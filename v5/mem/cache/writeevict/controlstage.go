@@ -11,7 +11,7 @@ import (
 type controlStage struct {
 	ctrlPort     sim.Port
 	transactions *[]*transactionState
-	cache        *middleware
+	pipeline     *pipelineMW
 	coalescer    *coalescer
 	bankStages   []*bankStage
 
@@ -56,32 +56,32 @@ func (s *controlStage) processCurrentFlush() bool {
 }
 
 func (s *controlStage) hardResetCache() {
-	s.flushPort(s.cache.topPort)
-	s.flushPort(s.cache.bottomPort)
-	s.cache.dirBufAdapter.Clear()
+	s.flushPort(s.pipeline.topPort)
+	s.flushPort(s.pipeline.bottomPort)
+	s.pipeline.dirBufAdapter.Clear()
 
-	for _, bankBuf := range s.cache.bankBufAdapters {
+	for _, bankBuf := range s.pipeline.bankBufAdapters {
 		bankBuf.Clear()
 	}
 
-	next := s.cache.comp.GetNextState()
-	spec := s.cache.GetSpec()
+	next := s.pipeline.comp.GetNextState()
+	spec := s.pipeline.GetSpec()
 	blockSize := int(1 << spec.Log2BlockSize)
 	cache.DirectoryReset(
 		&next.DirectoryState,
 		spec.NumSets, spec.WayAssociativity, blockSize)
 	next.MSHRState = cache.MSHRState{}
-	s.cache.coalesceStage.Reset()
+	s.pipeline.coalesceStage.Reset()
 
-	for _, bankStage := range s.cache.bankStages {
+	for _, bankStage := range s.pipeline.bankStages {
 		bankStage.Reset()
 	}
 
-	s.cache.transactions = nil
-	s.cache.postCoalesceTransactions = nil
+	s.pipeline.transactions = nil
+	s.pipeline.postCoalesceTransactions = nil
 
 	if s.currFlushReq.PauseAfterFlushing {
-		s.cache.isPaused = true
+		s.pipeline.isPaused = true
 	}
 }
 
@@ -122,16 +122,16 @@ func (s *controlStage) startCacheFlush(msg *cache.FlushReq) bool {
 }
 
 func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
-	s.cache.isPaused = false
+	s.pipeline.isPaused = false
 
 	s.ctrlPort.RetrieveIncoming()
 
-	for s.cache.topPort.PeekIncoming() != nil {
-		s.cache.topPort.RetrieveIncoming()
+	for s.pipeline.topPort.PeekIncoming() != nil {
+		s.pipeline.topPort.RetrieveIncoming()
 	}
 
-	for s.cache.bottomPort.PeekIncoming() != nil {
-		s.cache.bottomPort.RetrieveIncoming()
+	for s.pipeline.bottomPort.PeekIncoming() != nil {
+		s.pipeline.bottomPort.RetrieveIncoming()
 	}
 
 	rsp := &cache.RestartRsp{}
@@ -150,5 +150,5 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	return !s.currFlushReq.DiscardInflight && len(s.cache.transactions) != 0
+	return !s.currFlushReq.DiscardInflight && len(s.pipeline.transactions) != 0
 }

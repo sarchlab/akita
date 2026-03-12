@@ -30,7 +30,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		engine              sim.Engine
 		addressToPortMapper *mem.SinglePortMapper
 		cacheComp           *modeling.Component[Spec, State]
-		m                   *middleware
+		m                   *pipelineMW
 		dram                *idealmemcontroller.Comp
 		conn                *directconnection.Comp
 		agentPort           *MockPort
@@ -89,7 +89,7 @@ var _ = Describe("Write-Back Cache Integration", func() {
 			WithBottomPort(sim.NewPort(nil, 8, 8, "Cache.BottomPort")).
 			WithControlPort(sim.NewPort(nil, 8, 8, "Cache.ControlPort")).
 			Build("Cache")
-		m = cacheComp.Middlewares()[0].(*middleware)
+		m = cacheComp.Middlewares()[0].(*pipelineMW)
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).

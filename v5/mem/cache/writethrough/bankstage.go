@@ -13,7 +13,7 @@ func (t *bankTransaction) TaskID() string {
 }
 
 type bankStage struct {
-	cache          *middleware
+	cache          *pipelineMW
 	bankID         int
 	numReqPerCycle int
 }

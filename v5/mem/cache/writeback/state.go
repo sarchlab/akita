@@ -1,6 +1,8 @@
 package writeback
 
 import (
+	"maps"
+
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -375,9 +377,7 @@ func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
 	}
 
 	out := make(map[uint64]bool, len(evictingList))
-	for k, v := range evictingList {
-		out[k] = v
-	}
+	maps.Copy(out, evictingList)
 
 	return out
 }

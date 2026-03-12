@@ -10,7 +10,7 @@ import (
 )
 
 type coalescer struct {
-	cache      *middleware
+	cache      *pipelineMW
 	toCoalesce []*transactionState
 }
 

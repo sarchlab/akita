@@ -12,7 +12,7 @@ import (
 var _ = Describe("TopParser", func() {
 	var (
 		mockCtrl *gomock.Controller
-		m        *middleware
+		m        *pipelineMW
 		parser   *topParser
 		port     *MockPort
 	)
@@ -30,7 +30,7 @@ var _ = Describe("TopParser", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			topPort:      port,
 			state:        cacheStateRunning,
 			evictingList: make(map[uint64]bool),

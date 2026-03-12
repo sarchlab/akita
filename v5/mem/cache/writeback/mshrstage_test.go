@@ -12,7 +12,7 @@ import (
 var _ = Describe("MSHR Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		m        *middleware
+		m        *pipelineMW
 		ms       *mshrStage
 		topPort  *MockPort
 	)
@@ -34,7 +34,7 @@ var _ = Describe("MSHR Stage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &middleware{
+		m = &pipelineMW{
 			topPort:      topPort,
 			evictingList: make(map[uint64]bool),
 		}

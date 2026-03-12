@@ -1,6 +1,8 @@
 package writeback
 
 import (
+	"maps"
+
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -78,14 +80,14 @@ type State struct {
 	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
-// middleware holds all non-serializable infrastructure for the writeback
-// cache. It implements the Tick method and delegates NamedHookable to comp.
-type middleware struct {
+// pipelineMW holds all non-serializable infrastructure for the writeback
+// cache pipeline. It implements the Tick method and delegates NamedHookable
+// to comp.
+type pipelineMW struct {
 	comp *modeling.Component[Spec, State]
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort    sim.Port
+	bottomPort sim.Port
 
 	storage *mem.Storage
 
@@ -112,7 +114,6 @@ type middleware struct {
 	dirStage    *directoryStage
 	bankStages  []*bankStage
 	mshrStage   *mshrStage
-	flusher     *flusher
 
 	state                cacheState
 	inFlightTransactions []*transactionState
@@ -121,33 +122,33 @@ type middleware struct {
 
 // --- NamedHookable delegation ---
 
-func (m *middleware) Name() string {
+func (m *pipelineMW) Name() string {
 	return m.comp.Name()
 }
 
-func (m *middleware) AcceptHook(hook sim.Hook) {
+func (m *pipelineMW) AcceptHook(hook sim.Hook) {
 	m.comp.AcceptHook(hook)
 }
 
-func (m *middleware) Hooks() []sim.Hook {
+func (m *pipelineMW) Hooks() []sim.Hook {
 	return m.comp.Hooks()
 }
 
-func (m *middleware) NumHooks() int {
+func (m *pipelineMW) NumHooks() int {
 	return m.comp.NumHooks()
 }
 
-func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+func (m *pipelineMW) InvokeHook(ctx sim.HookCtx) {
 	m.comp.InvokeHook(ctx)
 }
 
 // GetSpec returns the immutable specification.
-func (m *middleware) GetSpec() Spec {
+func (m *pipelineMW) GetSpec() Spec {
 	return m.comp.GetSpec()
 }
 
 // findPort resolves an address to a remote port using data from Spec.
-func (m *middleware) findPort(address uint64) sim.RemotePort {
+func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
 	switch spec.AddressMapperType {
@@ -162,8 +163,8 @@ func (m *middleware) findPort(address uint64) sim.RemotePort {
 	panic("unknown address mapper type: " + spec.AddressMapperType)
 }
 
-// Tick updates the internal states of the Cache.
-func (m *middleware) Tick() bool {
+// Tick updates the internal states of the Cache pipeline.
+func (m *pipelineMW) Tick() bool {
 	m.updateAdapterPointers()
 
 	madeProgress := false
@@ -172,15 +173,13 @@ func (m *middleware) Tick() bool {
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
-	madeProgress = m.flusher.Tick() || madeProgress
-
 	return madeProgress
 }
 
 // syncForTest synchronizes curState from the next state buffer and updates
 // adapter read pointers. This is only needed in tests where state is set up
 // via GetNextState() without going through the Component.Tick() cycle.
-func (m *middleware) syncForTest() {
+func (m *pipelineMW) syncForTest() {
 	next := m.comp.GetNextState()
 	m.comp.SetState(*next)
 	m.curState = m.comp.GetState()
@@ -223,7 +222,7 @@ func (m *middleware) syncForTest() {
 	}
 }
 
-func (m *middleware) updateAdapterPointers() {
+func (m *pipelineMW) updateAdapterPointers() {
 	m.curState = m.comp.GetState()
 	next := m.comp.GetNextState()
 
@@ -262,7 +261,7 @@ func (m *middleware) updateAdapterPointers() {
 	}
 }
 
-func (m *middleware) runPipeline() bool {
+func (m *pipelineMW) runPipeline() bool {
 	madeProgress := false
 
 	spec := m.comp.GetSpec()
@@ -280,16 +279,16 @@ func (m *middleware) runPipeline() bool {
 	return madeProgress
 }
 
-func (m *middleware) runStage(stage sim.Ticker, n int) bool {
+func (m *pipelineMW) runStage(stage sim.Ticker, n int) bool {
 	madeProgress := false
-	for i := 0; i < n; i++ {
+	for range n {
 		madeProgress = stage.Tick() || madeProgress
 	}
 
 	return madeProgress
 }
 
-func (m *middleware) discardInflightTransactions() {
+func (m *pipelineMW) discardInflightTransactions() {
 	next := m.comp.GetNextState()
 
 	for i := range next.DirectoryState.Sets {
@@ -314,7 +313,7 @@ func (m *middleware) discardInflightTransactions() {
 }
 
 // GetState converts runtime mutable data into a serializable State.
-func (m *middleware) GetState() State {
+func (m *pipelineMW) GetState() State {
 	next := m.comp.GetNextState()
 
 	lookup := buildTransIndex(m.inFlightTransactions)
@@ -338,15 +337,11 @@ func (m *middleware) GetState() State {
 	next.HasProcessingMSHREntry, next.ProcessingMSHREntryIdx =
 		snapshotMSHRStageEntry(m.mshrStage, lookup)
 
-	// Flusher
-	next.FlusherBlockToEvictRefs, next.HasProcessingFlush,
-		next.ProcessingFlush = snapshotFlusherState(m.flusher)
-
 	return *next
 }
 
 // SetState restores runtime mutable data from a serializable State.
-func (m *middleware) SetState(state State) {
+func (m *pipelineMW) SetState(state State) {
 	m.comp.SetState(state)
 
 	m.state = cacheState(state.CacheState)
@@ -356,9 +351,7 @@ func (m *middleware) SetState(state State) {
 
 	// Evicting list
 	m.evictingList = make(map[uint64]bool)
-	for k, v := range state.EvictingList {
-		m.evictingList[k] = v
-	}
+	maps.Copy(m.evictingList, state.EvictingList)
 
 	// Bank counters
 	for i, bs := range m.bankStages {
@@ -389,8 +382,54 @@ func (m *middleware) SetState(state State) {
 		m.mshrStage.processingTransList = trans.mshrTransactions
 		m.mshrStage.processingData = trans.mshrData
 	}
+}
 
-	// Flusher
+// controlMW runs the flusher (flush/invalidate from controlPort,
+// controls cache state).
+type controlMW struct {
+	comp    *modeling.Component[Spec, State]
+	flusher *flusher
+}
+
+// --- NamedHookable delegation ---
+
+func (m *controlMW) Name() string {
+	return m.comp.Name()
+}
+
+func (m *controlMW) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+func (m *controlMW) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+func (m *controlMW) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+func (m *controlMW) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
+}
+
+// Tick runs the flusher.
+func (m *controlMW) Tick() bool {
+	return m.flusher.Tick()
+}
+
+// GetState snapshots flusher state into the next state buffer.
+func (m *controlMW) GetState() State {
+	next := m.comp.GetNextState()
+
+	next.FlusherBlockToEvictRefs, next.HasProcessingFlush,
+		next.ProcessingFlush = snapshotFlusherState(m.flusher)
+
+	return *next
+}
+
+// SetState restores flusher state from a serializable State.
+func (m *controlMW) SetState(state State) {
 	m.flusher.blockToEvict = make([]blockRef, len(state.FlusherBlockToEvictRefs))
 	copy(m.flusher.blockToEvict, state.FlusherBlockToEvictRefs)
 	m.flusher.processingFlush = nil

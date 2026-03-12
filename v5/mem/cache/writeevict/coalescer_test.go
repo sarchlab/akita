@@ -13,7 +13,7 @@ import (
 var _ = Describe("Coalescer", func() {
 	var (
 		mockCtrl *gomock.Controller
-		mw       *middleware
+		mw       *pipelineMW
 		topPort  *MockPort
 		co       coalescer
 	)
@@ -28,7 +28,7 @@ var _ = Describe("Coalescer", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
 		}
 
-		mw = &middleware{
+		mw = &pipelineMW{
 			topPort: topPort,
 		}
 		mw.comp = modeling.NewBuilder[Spec, State]().
@@ -60,6 +60,7 @@ var _ = Describe("Coalescer", func() {
 
 	It("should do nothing if no req", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
+		mw.syncForTest()
 		madeProgress := co.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -111,6 +112,8 @@ var _ = Describe("Coalescer", func() {
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
+				mw.syncForTest()
+
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
@@ -132,6 +135,8 @@ var _ = Describe("Coalescer", func() {
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
+				mw.syncForTest()
+
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
@@ -152,6 +157,8 @@ var _ = Describe("Coalescer", func() {
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
+
+				mw.syncForTest()
 
 				madeProgress := co.Tick()
 
@@ -180,6 +187,8 @@ var _ = Describe("Coalescer", func() {
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
 
+				mw.syncForTest()
+
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
@@ -201,6 +210,8 @@ var _ = Describe("Coalescer", func() {
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
+				mw.syncForTest()
+
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
@@ -221,6 +232,7 @@ var _ = Describe("Coalescer", func() {
 				mw.dirBufAdapter.capacity = 0
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
+				mw.syncForTest()
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
@@ -242,6 +254,8 @@ var _ = Describe("Coalescer", func() {
 					mw.dirBufAdapter.capacity = 1
 
 					topPort.EXPECT().PeekIncoming().Return(read3)
+
+					mw.syncForTest()
 
 					madeProgress := co.Tick()
 
@@ -285,6 +299,8 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
+
+			mw.syncForTest()
 
 			madeProgress := co.Tick()
 			Expect(madeProgress).To(BeTrue())

@@ -20,7 +20,7 @@ var _ = Describe("Control Stage", func() {
 		bottomPort   *MockPort
 		transactions []*transactionState
 		s            *controlStage
-		mw           *middleware
+		pmw          *pipelineMW
 		co           *coalescer
 	)
 
@@ -51,11 +51,11 @@ var _ = Describe("Control Stage", func() {
 			BankPostPipelineBufIndices: []bankPostBufState{},
 		}
 
-		mw = &middleware{
+		pmw = &pipelineMW{
 			topPort:    topPort,
 			bottomPort: bottomPort,
 		}
-		mw.comp = modeling.NewBuilder[Spec, State]().
+		pmw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
@@ -65,30 +65,30 @@ var _ = Describe("Control Stage", func() {
 			}).
 			Build("Cache")
 
-		mw.comp.SetState(initialState)
+		// Initialize directoryState before SetState so both buffers match
+		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		next := mw.comp.GetNextState()
+		pmw.comp.SetState(initialState)
 
-		// Initialize directoryState
-		cache.DirectoryReset(&next.DirectoryState, 16, 4, 64)
+		next := pmw.comp.GetNextState()
 
 		// Create dir buf adapter
-		mw.dirBufAdapter = &stateTransBuffer{
+		pmw.dirBufAdapter = &stateTransBuffer{
 			name:       "Cache.DirBuf",
 			readItems:  &next.DirBufIndices,
 			writeItems: &next.DirBufIndices,
 			capacity:   4,
-			mw:         mw,
+			mw:         pmw,
 		}
-		mw.bankBufAdapters = nil
+		pmw.bankBufAdapters = nil
 
-		co = &coalescer{cache: mw}
-		mw.coalesceStage = co
+		co = &coalescer{cache: pmw}
+		pmw.coalesceStage = co
 
 		s = &controlStage{
 			ctrlPort:     ctrlPort,
 			transactions: &transactions,
-			cache:        mw,
+			pipeline:     pmw,
 		}
 	})
 
@@ -99,6 +99,8 @@ var _ = Describe("Control Stage", func() {
 	It("should do nothing if no request", func() {
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
+		pmw.syncForTest()
+
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -106,7 +108,7 @@ var _ = Describe("Control Stage", func() {
 
 	It("should wait for the cache to finish transactions", func() {
 		transactions = []*transactionState{{}}
-		s.cache.transactions = transactions
+		s.pipeline.transactions = transactions
 		flushReq := &cache2.FlushReq{}
 		flushReq.ID = sim.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
@@ -114,6 +116,8 @@ var _ = Describe("Control Stage", func() {
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		pmw.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -137,6 +141,8 @@ var _ = Describe("Control Stage", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
+
+		pmw.syncForTest()
 
 		madeProgress := s.Tick()
 

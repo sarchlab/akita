@@ -202,16 +202,18 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	comp.SetState(initialState)
 
-	m := b.buildMiddleware(comp)
+	pmw := b.buildPipelineMW(comp)
+	b.buildAdapters(pmw)
+	b.buildStages(pmw)
 
-	b.buildAdapters(m)
-	b.buildStages(m)
+	cmw := b.buildControlMW(comp, pmw)
 
 	if b.visTracer != nil {
-		tracing.CollectTrace(m, b.visTracer)
+		tracing.CollectTrace(pmw, b.visTracer)
 	}
 
-	comp.AddMiddleware(m)
+	comp.AddMiddleware(pmw) // index 0
+	comp.AddMiddleware(cmw) // index 1
 
 	return comp
 }
@@ -243,10 +245,10 @@ func (b *Builder) buildSpec(numSets int) Spec {
 	return spec
 }
 
-func (b *Builder) buildMiddleware(
+func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State],
-) *middleware {
-	m := &middleware{comp: comp}
+) *pipelineMW {
+	m := &pipelineMW{comp: comp}
 
 	m.topPort = b.topPort
 	m.topPort.SetComponent(comp)
@@ -254,16 +256,37 @@ func (b *Builder) buildMiddleware(
 	m.bottomPort = b.bottomPort
 	m.bottomPort.SetComponent(comp)
 	comp.AddPort("Bottom", m.bottomPort)
-	m.controlPort = b.controlPort
-	m.controlPort.SetComponent(comp)
-	comp.AddPort("Control", m.controlPort)
 
 	m.storage = mem.NewStorage(b.totalByteSize)
 
 	return m
 }
 
-func (b *Builder) buildAdapters(m *middleware) {
+func (b *Builder) buildControlMW(
+	comp *modeling.Component[Spec, State],
+	pmw *pipelineMW,
+) *controlMW {
+	controlPort := b.controlPort
+	controlPort.SetComponent(comp)
+	comp.AddPort("Control", controlPort)
+
+	cs := &controlStage{
+		ctrlPort:     controlPort,
+		transactions: &pmw.transactions,
+		pipeline:     pmw,
+		bankStages:   pmw.bankStages,
+		coalescer:    pmw.coalesceStage,
+	}
+
+	cmw := &controlMW{
+		comp:         comp,
+		controlStage: cs,
+	}
+
+	return cmw
+}
+
+func (b *Builder) buildAdapters(m *pipelineMW) {
 	next := m.comp.GetNextState()
 
 	// Dir buf adapter (read/write pointers set by updateAdapterPointers each tick)
@@ -310,23 +333,15 @@ func (b *Builder) buildAdapters(m *middleware) {
 	}
 }
 
-func (b *Builder) buildStages(m *middleware) {
+func (b *Builder) buildStages(m *pipelineMW) {
 	m.coalesceStage = &coalescer{cache: m}
 	m.directoryStage = &directory{cache: m}
 	b.buildBankStages(m)
 	m.parseBottomStage = &bottomParser{cache: m}
 	m.respondStage = &respondStage{cache: m}
-
-	m.controlStage = &controlStage{
-		ctrlPort:     m.controlPort,
-		transactions: &m.transactions,
-		cache:        m,
-		bankStages:   m.bankStages,
-		coalescer:    m.coalesceStage,
-	}
 }
 
-func (b *Builder) buildBankStages(m *middleware) {
+func (b *Builder) buildBankStages(m *pipelineMW) {
 	for i := 0; i < b.numBank; i++ {
 		bs := &bankStage{
 			cache:          m,

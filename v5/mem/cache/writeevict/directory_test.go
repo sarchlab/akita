@@ -17,7 +17,7 @@ var _ = Describe("Directory", func() {
 		mockCtrl   *gomock.Controller
 		bottomPort *MockPort
 		d          *directory
-		c          *middleware
+		c          *pipelineMW
 	)
 
 	BeforeEach(func() {
@@ -29,7 +29,7 @@ var _ = Describe("Directory", func() {
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
 
-		c = &middleware{
+		c = &pipelineMW{
 			bottomPort: bottomPort,
 		}
 
