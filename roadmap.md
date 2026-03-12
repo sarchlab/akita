@@ -120,14 +120,18 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
   - Recommended: Extract engine impls (sim/engine) and hooks (sim/hook)
 - GitHub Issue #53 created for human discussion. Awaiting feedback.
 
-### M28: Implement `sim` Package Split (PENDING HUMAN APPROVAL)
-- Budget: TBD
-- Scope: Implement the agreed-upon sim package split
-- Status: Blocked — waiting for human response to GitHub Issue #53
-- Potential sub-milestones (if recommended approach approved):
-  - M28.1: Extract engine implementations → `sim/engine` (~644 lines)
-  - M28.2: Extract hook system → `sim/hook` (~84 lines)
-  - M28.3: Update all importers + backward-compat re-exports
+### M28: Implement `sim` Package Split — Extract `sim/hook` and `sim/engine`
+- Budget: 8 | Used: 0
+- Scope: Split `sim` package per analysis: extract hook system → `sim/hook`, engine implementations → `sim/engine`
+- Status: IN PROGRESS
+- Human proposal posted on GH #53 (no response after multiple cycles). Proceeding with conservative recommended approach.
+- Sub-tasks:
+  - M28.1: Extract hook types (Hook, Hookable, HookableBase, HookPos, HookCtx, LogHook, LogHookBase) → `sim/hook/`
+  - M28.2: Extract engine implementations (SerialEngine, ParallelEngine, EventQueueImpl, InsertionQueue) → `sim/engine/`
+  - M28.3: Update all ~23-44 importing packages to use new import paths
+  - M28.4: Keep Engine/EventScheduler/TimeTeller interfaces in `sim` (avoid circular deps)
+  - M28.5: Add backward-compatible re-exports in `sim` for gradual migration
+  - M28.6: All tests pass, build clean, vet clean
 
 ---
 
