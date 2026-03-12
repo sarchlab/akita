@@ -69,28 +69,6 @@ type walkMW struct {
 	pageTable vm.PageTable
 }
 
-// NamedHookable delegation methods.
-
-func (m *walkMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *walkMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *walkMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *walkMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *walkMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *walkMW) topPort() sim.Port {
 	return m.comp.GetPortByName("Top")
 }
@@ -124,7 +102,7 @@ func (m *walkMW) parseFromTop() bool {
 
 	switch req := reqI.(type) {
 	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, m)
+		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",
@@ -286,7 +264,7 @@ func (m *walkMW) doPageWalkHit(
 				Dst: walking.ReqDst,
 			},
 		},
-		m,
+		m.comp,
 	)
 
 	return true
@@ -296,28 +274,6 @@ func (m *walkMW) doPageWalkHit(
 // fetchFromBottom, handleTranslationRsp.
 type respondMW struct {
 	comp *modeling.Component[Spec, State]
-}
-
-// NamedHookable delegation methods.
-
-func (m *respondMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *respondMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *respondMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *respondMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *respondMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 func (m *respondMW) topPort() sim.Port {
@@ -345,7 +301,7 @@ func (m *respondMW) fetchFromBottom() bool {
 
 	switch rsp := rspI.(type) {
 	case *vm.TranslationRsp:
-		tracing.TraceReqReceive(rsp, m)
+		tracing.TraceReqReceive(rsp, m.comp)
 		return m.handleTranslationRsp(rsp)
 	default:
 		log.Panicf("gmmu cannot handle request of type %s",

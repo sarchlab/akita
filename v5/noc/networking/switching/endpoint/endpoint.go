@@ -183,28 +183,6 @@ type outgoingMW struct {
 	defaultSwitchDst sim.RemotePort
 }
 
-// NamedHookable delegation methods.
-
-func (m *outgoingMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *outgoingMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *outgoingMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *outgoingMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *outgoingMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // Tick runs the outgoing stages.
 func (m *outgoingMW) Tick() bool {
 	madeProgress := false
@@ -311,7 +289,7 @@ func (m *outgoingMW) logFlitE2ETaskFromState(
 	}
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(fs.ID), m)
+		tracing.EndTask(m.flitTaskID(fs.ID), m.comp)
 		return
 	}
 
@@ -320,7 +298,7 @@ func (m *outgoingMW) logFlitE2ETaskFromState(
 
 	tracing.StartTaskWithSpecificLocation(
 		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
-		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
+		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
 
@@ -330,28 +308,6 @@ type incomingMW struct {
 	comp        *modeling.Component[Spec, State]
 	devicePorts []sim.Port
 	networkPort sim.Port
-}
-
-// NamedHookable delegation methods.
-
-func (m *incomingMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *incomingMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *incomingMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *incomingMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *incomingMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 // Tick runs the incoming stages.
@@ -509,13 +465,13 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit.ID), m)
+		tracing.EndTask(m.flitTaskID(flit.ID), m.comp)
 		return
 	}
 
 	tracing.StartTaskWithSpecificLocation(
 		m.flitTaskID(flit.ID), m.msgTaskID(flit.Msg.Meta().ID),
-		m, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
+		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
 
@@ -537,12 +493,12 @@ func (m *incomingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m)
+		tracing.EndTask(m.msgTaskID(meta.ID), m.comp)
 	} else {
 		tracing.StartTask(
 			m.msgTaskID(meta.ID),
 			meta.ID+"_req_out",
-			m, "msg_e2e", "msg_e2e", msg,
+			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }
@@ -550,12 +506,12 @@ func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 func (m *incomingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m)
+		tracing.EndTask(m.msgTaskID(meta.ID), m.comp)
 	} else {
 		tracing.StartTask(
 			m.msgTaskID(meta.ID),
 			meta.RspTo+"_req_out",
-			m, "msg_e2e", "msg_e2e", msg,
+			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
 }

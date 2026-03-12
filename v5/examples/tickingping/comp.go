@@ -49,26 +49,6 @@ type sendMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *sendMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *sendMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *sendMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *sendMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *sendMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 func (m *sendMW) Tick() bool {
 	madeProgress := false
 
@@ -143,26 +123,6 @@ func (m *sendMW) sendPing() bool {
 // receiveProcessMW handles receiving messages and counting down transactions.
 type receiveProcessMW struct {
 	comp *modeling.Component[Spec, State]
-}
-
-func (m *receiveProcessMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *receiveProcessMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *receiveProcessMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *receiveProcessMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *receiveProcessMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 func (m *receiveProcessMW) Tick() bool {

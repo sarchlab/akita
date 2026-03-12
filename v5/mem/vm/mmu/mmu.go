@@ -68,28 +68,6 @@ type translationMW struct {
 	pageTable vm.PageTable
 }
 
-// NamedHookable delegation methods.
-
-func (m *translationMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *translationMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *translationMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *translationMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *translationMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
-}
-
 // Port helpers.
 
 func (m *translationMW) topPort() sim.Port {
@@ -250,7 +228,7 @@ func (m *translationMW) parseFromTop() bool {
 
 	switch req := reqI.(type) {
 	case *vm.TranslationReq:
-		tracing.TraceReqReceive(req, m)
+		tracing.TraceReqReceive(req, m.comp)
 		m.startWalking(req)
 	default:
 		log.Panicf("MMU canot handle request of type %s",
@@ -330,8 +308,8 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 }
 
 func (m *translationMW) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.Name())
-	tracing.EndTask(taskID, m)
+	taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
+	tracing.EndTask(taskID, m.comp)
 }
 
 // migrationMW handles migration: sending migration requests to the driver,
@@ -339,28 +317,6 @@ func (m *translationMW) traceReqComplete(reqID string) {
 type migrationMW struct {
 	comp      *modeling.Component[Spec, State]
 	pageTable vm.PageTable
-}
-
-// NamedHookable delegation methods.
-
-func (m *migrationMW) Name() string {
-	return m.comp.Name()
-}
-
-func (m *migrationMW) AcceptHook(hook sim.Hook) {
-	m.comp.AcceptHook(hook)
-}
-
-func (m *migrationMW) Hooks() []sim.Hook {
-	return m.comp.Hooks()
-}
-
-func (m *migrationMW) NumHooks() int {
-	return m.comp.NumHooks()
-}
-
-func (m *migrationMW) InvokeHook(ctx sim.HookCtx) {
-	m.comp.InvokeHook(ctx)
 }
 
 // Port helpers.
