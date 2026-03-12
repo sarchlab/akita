@@ -80,17 +80,27 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Split all 4 cache components into pipelineMW + controlMW
 - writeback(2), writearound(2), writeevict(2), writethrough(2)
 
-### M26: Final Cleanup + Documentation ⬅️ NEXT
+### M26: Final Cleanup + Documentation ⬅️ IN PROGRESS (Cycle 211)
 
-**Goal:** Final pass — consistency, documentation, dead code removal.
+**Goal:** Final pass — documentation, dead code removal, consistency.
 
-1. **Update component_guide.md** to reflect the final multi-MW architecture with A-B state patterns
-2. **Remove dead code**: VictimFinder interface, old Directory struct (unused since MSHR/Directory moved to State + free functions)
-3. **Review examples/ping** — update to modeling.Component or document as legacy
-4. **Review directconnection** — determine if it should use modeling.Component or stay as infrastructure
-5. **Ensure all components** follow the identical pattern consistently
-6. **Full test suite pass** + CI green
-7. **Final code review pass**
+**Task 1: Rewrite component_guide.md** (9 gaps identified by Diana #277):
+- A-B state pattern (GetState/GetNextState)
+- No-Comp middleware pattern (comp *modeling.Component)
+- Port access via GetPortByName()
+- NamedHookable boilerplate
+- No-dependency philosophy
+- Multi-MW patterns
+- Rewrite both example walkthroughs from actual source
+- Update builder template
+
+**Task 2: Remove dead code** (6 files + 8 dead functions identified by Iris #278):
+- victimfinder.go, directory.go, mshr.go (old pointer-based runtime objects)
+- pipeline.go, pipeline_builder.go, snapshot.go (old queueing utilities)
+- Dead bridge functions in state_helpers.go
+- Associated test files and mockgen directives
+
+**Task 3: Review examples/ping** — document as legacy or update
 
 **Budget**: 4 cycles
 
