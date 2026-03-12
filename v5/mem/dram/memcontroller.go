@@ -75,12 +75,12 @@ type Spec struct {
 	DeviceWidth int `json:"device_width"`
 
 	// Bank / rank / channel counts
-	NumChannel  int `json:"num_channel"`
-	NumRank     int `json:"num_rank"`
+	NumChannel   int `json:"num_channel"`
+	NumRank      int `json:"num_rank"`
 	NumBankGroup int `json:"num_bank_group"`
-	NumBank     int `json:"num_bank"`
-	NumRow      int `json:"num_row"`
-	NumCol      int `json:"num_col"`
+	NumBank      int `json:"num_bank"`
+	NumRow       int `json:"num_row"`
+	NumCol       int `json:"num_col"`
 
 	// Queue sizes
 	TransactionQueueSize int `json:"transaction_queue_size"`
@@ -125,22 +125,41 @@ type State struct {
 	BankStates    bankStatesFlat     `json:"bank_states"`
 }
 
-// Comp is a MemController that handles read and write requests.
-type Comp struct {
-	*modeling.Component[Spec, State]
-
+type middleware struct {
+	comp    *modeling.Component[Spec, State]
 	topPort sim.Port
 	storage *mem.Storage
 }
 
-type middleware struct {
-	*Comp
+// Name delegates to the underlying component.
+func (m *middleware) Name() string {
+	return m.comp.Name()
+}
+
+// AcceptHook delegates to the underlying component.
+func (m *middleware) AcceptHook(hook sim.Hook) {
+	m.comp.AcceptHook(hook)
+}
+
+// Hooks delegates to the underlying component.
+func (m *middleware) Hooks() []sim.Hook {
+	return m.comp.Hooks()
+}
+
+// NumHooks delegates to the underlying component.
+func (m *middleware) NumHooks() int {
+	return m.comp.NumHooks()
+}
+
+// InvokeHook delegates to the underlying component.
+func (m *middleware) InvokeHook(ctx sim.HookCtx) {
+	m.comp.InvokeHook(ctx)
 }
 
 // Tick updates memory controller's internal state.
 func (m *middleware) Tick() (madeProgress bool) {
-	state := m.Comp.GetNextState()
-	spec := m.Comp.GetSpec()
+	state := m.comp.GetNextState()
+	spec := m.comp.GetSpec()
 
 	progress := false
 
@@ -188,16 +207,16 @@ func (m *middleware) parseTop(spec *Spec, state *State) bool {
 	pushSubTrans(state, transIdx)
 	m.topPort.RetrieveIncoming()
 
-	tracing.TraceReqReceive(msgI, m.Comp)
+	tracing.TraceReqReceive(msgI, m)
 
 	for _, st := range ts.SubTransactions {
 		tracing.StartTaskWithSpecificLocation(
 			st.ID,
-			tracing.MsgIDAtReceiver(msgI, m.Comp),
-			m.Comp,
+			tracing.MsgIDAtReceiver(msgI, m),
+			m,
 			"sub-trans",
 			"sub-trans",
-			m.Comp.Name()+".SubTransQueue",
+			m.comp.Name()+".SubTransQueue",
 			nil,
 		)
 	}
@@ -245,14 +264,14 @@ func (m *middleware) finalizeTransaction(
 	if t.HasWrite {
 		done := m.finalizeWriteTrans(state, t, i)
 		if done {
-			tracing.TraceReqComplete(&t.WriteMsg, m.Comp)
+			tracing.TraceReqComplete(&t.WriteMsg, m)
 		}
 		return done
 	}
 
 	done := m.finalizeReadTrans(state, t, i)
 	if done {
-		tracing.TraceReqComplete(&t.ReadMsg, m.Comp)
+		tracing.TraceReqComplete(&t.ReadMsg, m)
 	}
 	return done
 }
