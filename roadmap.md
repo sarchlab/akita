@@ -109,10 +109,25 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Phase 3: Package Restructuring
 
-### M27: Analyze and Plan `sim` Package Split (IN PROGRESS)
-- Budget: 2 | Used: 0
+### ✅ M27: Analyze and Plan `sim` Package Split (DONE)
+- Budget: 2 | Used: 2
 - Scope: Analyze sim package structure, propose splitting plan, discuss with human
-- Status: Workers analyzing internal dependencies and external usage patterns
+- Status: Complete. Both Diana and Iris independently analyzed the package.
+- Key findings:
+  - Package is ~2,100 LOC — within Go norms
+  - Port ↔ Component circular dep blocks fine-grained comm/component split
+  - 39/57 importers use 3+ clusters simultaneously
+  - Recommended: Extract engine impls (sim/engine) and hooks (sim/hook)
+- GitHub Issue #53 created for human discussion. Awaiting feedback.
+
+### M28: Implement `sim` Package Split (PENDING HUMAN APPROVAL)
+- Budget: TBD
+- Scope: Implement the agreed-upon sim package split
+- Status: Blocked — waiting for human response to GitHub Issue #53
+- Potential sub-milestones (if recommended approach approved):
+  - M28.1: Extract engine implementations → `sim/engine` (~644 lines)
+  - M28.2: Extract hook system → `sim/hook` (~84 lines)
+  - M28.3: Update all importers + backward-compat re-exports
 
 ---
 
