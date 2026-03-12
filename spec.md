@@ -26,13 +26,15 @@ Each component has TWO state copies: "current" (read-only during tick) and "next
 
 **Critical rule**: Middleware MUST use `GetState()` for all reads and `GetNextState()` for all writes. Using `GetNextState()` for reads is a bug — it means a middleware sees its own writes and other middlewares' writes from the same tick, breaking the A-B isolation.
 
-### Multi-Middleware Architecture
+### Multi-Middleware Architecture — IN PROGRESS
 
 All components should have **multiple middlewares**, each responsible for one logical function. This is the target architecture — single-middleware patterns are historical artifacts.
 
 - Under A-B state semantics, each middleware reads from `current` (A buffer) and writes to `next` (B buffer). Middlewares within the same tick do NOT see each other's writes — this matches hardware pipeline register semantics.
 - The +1 cycle latency per middleware boundary is acceptable (per human clarification).
 - Components should be decomposed into natural stage boundaries (e.g., parse → process → respond).
+
+**Current status**: 8/16 components have multiple middlewares. Remaining 8 (addresstranslator, datamover, MMU, GMMU, writeback, writearound, writeevict, writethrough) still have single monolithic middlewares.
 
 ### No Dependencies — Inline All Logic
 
@@ -121,8 +123,11 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 - Iris's MSHR decoupling analysis: `workspace/iris/mshr_dependency_analysis.md`
 - Human approvals: Issues #145 (Comp elimination), #150 (A-B state)
 - Reference implementations:
-  - `mem/idealmemcontroller/` — 2 middleware, thin Comp, A-B state ✅ correct
-  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions, A-B correct
-  - `mem/cache/writearound/` — A-B correct, legacyMapper resolved at Build time
-  - `mem/dram/` — inlined dependencies, free functions, but A-B pattern needs fix
-  - `noc/networking/switching/switches/` — State canonical, pipeline/buffer in State
+  - `mem/idealmemcontroller/` — 2 MW, thin Comp (StorageOwner), A-B correct ✅
+  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions, A-B correct ✅
+  - `mem/cache/writearound/` — A-B correct, legacyMapper resolved at Build time ✅
+  - `mem/dram/` — 3 MW, inlined dependencies, free functions, A-B correct ✅
+  - `noc/networking/switching/switches/` — 2 MW, State canonical, pipeline/buffer in State ✅
+  - `noc/networking/switching/endpoint/` — 2 MW, A-B correct ✅
+  - `mem/simplebankedmemory/` — 2 MW, A-B correct ✅
+  - `examples/tickingping/` — 2 MW, A-B correct ✅
