@@ -1,16 +1,13 @@
 package messaging
 
-import (
-	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
-)
+import "github.com/sarchlab/akita/v5/sim"
 
 // Flit is a concrete message representing the smallest transferring unit on a
 // network.
 type Flit struct {
 	sim.MsgMeta
-	SeqID        int
-	NumFlitInMsg int
-	Msg          sim.Msg
-	OutputBuf    queueing.Buffer // The buffer to route to within a switch
+	SeqID        int         `json:"seq_id"`
+	NumFlitInMsg int         `json:"num_flit_in_msg"`
+	Msg          sim.MsgMeta `json:"msg"`            // carried message metadata
+	OutputBufIdx int         `json:"output_buf_idx"` // output buffer index within a switch
 }

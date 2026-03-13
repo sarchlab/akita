@@ -12,8 +12,8 @@ type PipelineStage[T any] struct {
 // Pipeline is a generic multi-lane, multi-stage pipeline. It is a
 // JSON-serializable value type.
 type Pipeline[T any] struct {
-	Width     int              `json:"width"`
-	NumStages int              `json:"num_stages"`
+	Width     int                `json:"width"`
+	NumStages int                `json:"num_stages"`
 	Stages    []PipelineStage[T] `json:"stages"`
 }
 
@@ -30,19 +30,30 @@ func (p *Pipeline[T]) CanAccept() bool {
 }
 
 // Accept inserts an item into the first stage of the pipeline. It occupies
-// the next free lane. The item starts with CycleLeft equal to NumStages-1
-// (i.e., it needs that many ticks to reach the output).
+// the next free lane. The item starts with CycleLeft=0, meaning it will
+// attempt to advance to the next stage on the very next Tick. The total
+// latency through the pipeline equals NumStages ticks.
 func (p *Pipeline[T]) Accept(item T) {
-	usedLanes := make(map[int]bool)
+	// Use a fixed-size bitset on the stack for small widths,
+	// fall back to a slice for larger ones.
+	var usedSmall [16]bool
+	var used []bool
+
+	if p.Width <= len(usedSmall) {
+		used = usedSmall[:p.Width]
+	} else {
+		used = make([]bool, p.Width)
+	}
+
 	for i := range p.Stages {
 		if p.Stages[i].Stage == 0 {
-			usedLanes[p.Stages[i].Lane] = true
+			used[p.Stages[i].Lane] = true
 		}
 	}
 
 	lane := 0
 	for lane < p.Width {
-		if !usedLanes[lane] {
+		if !used[lane] {
 			break
 		}
 		lane++
@@ -52,7 +63,7 @@ func (p *Pipeline[T]) Accept(item T) {
 		Lane:      lane,
 		Stage:     0,
 		Item:      item,
-		CycleLeft: p.NumStages - 1,
+		CycleLeft: 0,
 	})
 }
 
@@ -76,37 +87,65 @@ func (p *Pipeline[T]) Tick(postBuf *Buffer[T]) bool {
 // function for items that have completed all stages (CycleLeft==0 at last
 // stage). The accept function should return true if it consumed the item.
 //
+// Items are processed from highest stage to lowest to prevent
+// double-advancement within a single tick.
+//
 // Returns true if any item moved.
 func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
+	n := len(p.Stages)
+	if n == 0 {
+		return false
+	}
+
 	moved := false
+	lastStage := p.NumStages - 1
 
-	// Build occupancy map for each stage (stage -> set of lanes occupied).
-	// We process from highest stage to lowest to avoid double-advancement.
-	// First, sort out which stages have which lanes occupied.
-
-	// Try to output items at last stage with CycleLeft == 0.
-	// Process from end of slice so we can remove in-place.
-	for i := len(p.Stages) - 1; i >= 0; i-- {
+	// Phase 1: Try to output items at last stage with CycleLeft == 0.
+	for i := n - 1; i >= 0; i-- {
 		s := &p.Stages[i]
-		if s.Stage == p.NumStages-1 && s.CycleLeft == 0 {
+		if s.Stage == lastStage && s.CycleLeft == 0 {
 			if accept(s.Item) {
-				// Remove this entry.
-				p.Stages = append(p.Stages[:i], p.Stages[i+1:]...)
+				p.Stages[i] = p.Stages[n-1]
+				n--
 				moved = true
 			}
 		}
 	}
 
-	// Decrement CycleLeft for items that are still waiting at their stage.
-	// An item can advance to the next stage when CycleLeft reaches 0.
-	// We process from highest stage to lowest.
+	p.Stages = p.Stages[:n]
 
-	// Build occupancy: stage -> set of lanes.
-	occupancy := p.buildOccupancy()
+	// Phase 2: Advance remaining items from high stage to low.
+	if n > 0 {
+		moved = p.advanceItems() || moved
+	}
 
-	// Process from highest stage to lowest.
-	for stage := p.NumStages - 2; stage >= 0; stage-- {
-		for i := range p.Stages {
+	return moved
+}
+
+// advanceItems processes all pipeline items, advancing them toward higher
+// stages. Items are processed from highest stage to lowest to prevent
+// double-advancement within a single tick.
+func (p *Pipeline[T]) advanceItems() bool {
+	n := len(p.Stages)
+	moved := false
+
+	minStage, maxStage := p.stageRange()
+
+	// Cap maxStage: items at lastStage were already handled in Phase 1.
+	lastStage := p.NumStages - 1
+	if maxStage > lastStage-1 {
+		maxStage = lastStage - 1
+	}
+
+	if maxStage < minStage {
+		return moved
+	}
+
+	occ := p.buildOccupancy(minStage, maxStage+1)
+	occBase := minStage
+
+	for stage := maxStage; stage >= minStage; stage-- {
+		for i := 0; i < n; i++ {
 			s := &p.Stages[i]
 			if s.Stage != stage {
 				continue
@@ -115,19 +154,21 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 			if s.CycleLeft > 0 {
 				s.CycleLeft--
 				moved = true
+
 				continue
 			}
 
-			// CycleLeft == 0, try to advance to next stage.
 			nextStage := stage + 1
-			if p.laneOccupied(occupancy, nextStage, s.Lane) {
+			nextIdx := (nextStage - occBase) * p.Width
+			curIdx := (stage - occBase) * p.Width
+
+			if occ[nextIdx+s.Lane] {
 				continue
 			}
 
-			// Advance.
+			occ[curIdx+s.Lane] = false
 			s.Stage = nextStage
-			s.CycleLeft = 0 // Will be at next stage for one cycle.
-			occupancy[nextStage] = append(occupancy[nextStage], s.Lane)
+			occ[nextIdx+s.Lane] = true
 			moved = true
 		}
 	}
@@ -135,23 +176,47 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 	return moved
 }
 
-func (p *Pipeline[T]) buildOccupancy() map[int][]int {
-	occ := make(map[int][]int)
-	for i := range p.Stages {
-		s := &p.Stages[i]
-		occ[s.Stage] = append(occ[s.Stage], s.Lane)
-	}
-	return occ
-}
+// stageRange returns the minimum and maximum stage numbers among items.
+func (p *Pipeline[T]) stageRange() (int, int) {
+	minStage := p.Stages[0].Stage
+	maxStage := p.Stages[0].Stage
 
-func (p *Pipeline[T]) laneOccupied(
-	occupancy map[int][]int,
-	stage, lane int,
-) bool {
-	for _, l := range occupancy[stage] {
-		if l == lane {
-			return true
+	for i := 1; i < len(p.Stages); i++ {
+		st := p.Stages[i].Stage
+		if st < minStage {
+			minStage = st
+		}
+
+		if st > maxStage {
+			maxStage = st
 		}
 	}
-	return false
+
+	return minStage, maxStage
+}
+
+// buildOccupancy builds a flat bool slice tracking which (stage, lane) slots
+// are occupied, for stages in [minStage, maxStage+1].
+func (p *Pipeline[T]) buildOccupancy(minStage, maxStage int) []bool {
+	occRange := maxStage + 1 - minStage + 1 // +1 for nextStage lookups
+	occSlots := occRange * p.Width
+
+	var occSmall [128]bool
+	var occ []bool
+
+	if occSlots <= len(occSmall) {
+		occ = occSmall[:occSlots]
+		for i := range occ {
+			occ[i] = false
+		}
+	} else {
+		occ = make([]bool, occSlots)
+	}
+
+	for i := 0; i < len(p.Stages); i++ {
+		s := &p.Stages[i]
+		occ[(s.Stage-minStage)*p.Width+s.Lane] = true
+	}
+
+	return occ
 }

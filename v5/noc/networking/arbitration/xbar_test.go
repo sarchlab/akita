@@ -14,10 +14,10 @@ import (
 var _ = Describe("XBar", func() {
 	var (
 		mockCtrl         *gomock.Controller
-		buf1, buf1Remote *MockBuffer
+		buf1             *MockBuffer
 		buf2             *MockBuffer
-		buf3, buf3Remote *MockBuffer
-		buf4, buf4Remote *MockBuffer
+		buf3             *MockBuffer
+		buf4             *MockBuffer
 		xbar             *xbarArbiter
 	)
 
@@ -27,9 +27,6 @@ var _ = Describe("XBar", func() {
 		buf2 = NewMockBuffer(mockCtrl)
 		buf3 = NewMockBuffer(mockCtrl)
 		buf4 = NewMockBuffer(mockCtrl)
-		buf1Remote = NewMockBuffer(mockCtrl)
-		buf3Remote = NewMockBuffer(mockCtrl)
-		buf4Remote = NewMockBuffer(mockCtrl)
 
 		xbar = NewXBarArbiter().(*xbarArbiter)
 		xbar.AddBuffer(buf1)
@@ -43,34 +40,34 @@ var _ = Describe("XBar", func() {
 	})
 
 	It("should arbitrate", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID: sim.GetIDGenerator().Generate(),
 		}
 		flit1 := &messaging.Flit{}
-		flit1.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit1.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.Msg = msg
-		flit1.OutputBuf = buf1Remote
+		flit1.OutputBufIdx = 0
 		flit2 := &messaging.Flit{}
-		flit2.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit2.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit2.TrafficClass = reflect.TypeOf(msg).String()
 		flit2.Msg = msg
-		flit2.OutputBuf = buf1Remote
+		flit2.OutputBufIdx = 0
 		flit3 := &messaging.Flit{}
-		flit3.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit3.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit3.TrafficClass = reflect.TypeOf(msg).String()
 		flit3.Msg = msg
-		flit3.OutputBuf = buf3Remote
+		flit3.OutputBufIdx = 2
 		flit4 := &messaging.Flit{}
-		flit4.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit4.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit4.TrafficClass = reflect.TypeOf(msg).String()
 		flit4.Msg = msg
-		flit4.OutputBuf = buf4Remote
+		flit4.OutputBufIdx = 3
 		flit5 := &messaging.Flit{}
-		flit5.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit5.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit5.TrafficClass = reflect.TypeOf(msg).String()
 		flit5.Msg = msg
-		flit5.OutputBuf = buf1Remote
+		flit5.OutputBufIdx = 0
 
 		buf1.EXPECT().Peek().Return(flit1)
 		buf2.EXPECT().Peek().Return(flit2)

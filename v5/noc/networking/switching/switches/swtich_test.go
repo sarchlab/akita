@@ -7,7 +7,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/messaging"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/stateutil"
 	gomock "go.uber.org/mock/gomock"
@@ -20,7 +19,6 @@ var _ = Describe("Switch", func() {
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
-		arbiter      *MockArbiter
 		sw           *Comp
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
@@ -63,14 +61,11 @@ var _ = Describe("Switch", func() {
 			AnyTimes()
 
 		routingTable = NewMockTable(mockCtrl)
-		arbiter = NewMockArbiter(mockCtrl)
-		arbiter.EXPECT().AddBuffer(gomock.Any()).AnyTimes()
 
 		sw = MakeBuilder().
 			WithEngine(engine).
 			WithFreq(1).
 			WithRoutingTable(routingTable).
-			WithArbiter(arbiter).
 			Build("Switch")
 
 		pcs1 := portComplexState{
@@ -82,7 +77,8 @@ var _ = Describe("Switch", func() {
 			PipelineWidth:    1,
 		}
 		rfsMWLocal := sw.routeForwardSendMiddleware()
-		rfsMWLocal.addPort(port1, remote1.AsRemote(), pcs1, rfsMWLocal.arbiter)
+		addPort(rfsMWLocal.comp, &rfsMWLocal.ports, rfsMWLocal.portIndex,
+			port1, remote1.AsRemote(), pcs1)
 
 		pcs2 := portComplexState{
 			LocalPortName:    "LocalPort2",
@@ -92,7 +88,13 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		rfsMWLocal.addPort(port2, remote2.AsRemote(), pcs2, rfsMWLocal.arbiter)
+		addPort(rfsMWLocal.comp, &rfsMWLocal.ports, rfsMWLocal.portIndex,
+			port2, remote2.AsRemote(), pcs2)
+
+		// Keep rpMW in sync
+		rpMWLocal := sw.Middlewares()[1].(*receivePipelineMW)
+		rpMWLocal.ports = rfsMWLocal.ports
+		rpMWLocal.portIndex = rfsMWLocal.portIndex
 
 		rfsMW = sw.Middlewares()[0].(*routeForwardSendMW)
 		rpMW = sw.Middlewares()[1].(*receivePipelineMW)
@@ -103,13 +105,13 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should start processing", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -123,26 +125,26 @@ var _ = Describe("Switch", func() {
 		Expect(madeProgress).To(BeTrue())
 		// Verify flit was accepted into pipeline
 		next := sw.GetNextState()
-		Expect(next.PortComplexes[0].PipelineStages).To(HaveLen(1))
-		Expect(next.PortComplexes[0].PipelineStages[0].Item.Flit.ID).To(Equal(flit.ID))
+		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(1))
+		Expect(next.PortComplexes[0].Pipeline.Stages[0].Item.Flit.ID).To(Equal(flit.ID))
 	})
 
 	It("should not start processing if pipeline is busy", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
 		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
 		// Fill pipeline so it can't accept
 		next := sw.GetNextState()
-		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t", Flit: flitMeta{}}},
+		next.PortComplexes[0].Pipeline.Stages = []stateutil.PipelineStage[routedFlit]{
+			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: "t"}},
 		}
 
 		port1.EXPECT().PeekIncoming().Return(flit)
@@ -156,8 +158,11 @@ var _ = Describe("Switch", func() {
 	It("should tick the pipelines", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := sw.GetNextState()
-		next.PortComplexes[0].PipelineStages = []pipelineStageState{
-			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "flit1"}}}},
+		next.PortComplexes[0].Pipeline.Stages = []stateutil.PipelineStage[routedFlit]{
+			{Lane: 0, Stage: 0, Item: routedFlit{
+				Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: "flit1"}},
+				TaskID: "t1",
+			}, CycleLeft: 0},
 		}
 
 		madeProgress := rpMW.movePipeline()
@@ -165,28 +170,28 @@ var _ = Describe("Switch", func() {
 		Expect(madeProgress).To(BeTrue())
 		// For latency=1, the item should have moved to RouteBuffer
 		next = sw.GetNextState()
-		Expect(next.PortComplexes[0].PipelineStages).To(HaveLen(0))
+		Expect(next.PortComplexes[0].Pipeline.Stages).To(HaveLen(0))
 		Expect(next.PortComplexes[0].RouteBuffer.Size()).To(Equal(1))
 	})
 
 	It("should route", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
 		// Place item in route buffer for port1
 		next := sw.GetNextState()
-		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[flitPipelineItemState]{
+		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[routedFlit]{
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
-			Elements: []flitPipelineItemState{
-				{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
+			Elements: []routedFlit{
+				{Flit: flit, TaskID: "flit", RouteTo: dstPort.AsRemote()},
 			},
 		}
 
@@ -203,30 +208,30 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should not route if forward buffer is full", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
 		// Place item in route buffer and fill forward buffer
 		next := sw.GetNextState()
-		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[flitPipelineItemState]{
+		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[routedFlit]{
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
-			Elements: []flitPipelineItemState{
-				{TaskID: "flit", Flit: flitMetaFromFlit(flit), RouteTo: dstPort.AsRemote()},
+			Elements: []routedFlit{
+				{Flit: flit, TaskID: "flit", RouteTo: dstPort.AsRemote()},
 			},
 		}
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[forwardBufferEntry]{
+		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
-			Elements: []forwardBufferEntry{
-				{Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "existing"}}, OutputBufIdx: 0},
+			Elements: []routedFlit{
+				{Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: "existing"}}},
 			},
 		}
 
@@ -236,31 +241,26 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should forward", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
+		flit.OutputBufIdx = 1
+
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[forwardBufferEntry]{
+		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
-			Elements: []forwardBufferEntry{
-				{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
+			Elements: []routedFlit{
+				{Flit: flit},
 			},
 		}
-
-		arbiter.EXPECT().
-			Arbitrate().
-			Return([]queueing.Buffer{
-				rfsMW.forwardBufAdapters[0],
-				rfsMW.forwardBufAdapters[1],
-			})
 
 		madeProgress := rfsMW.forward()
 
@@ -271,36 +271,31 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should not forward if the output buffer is busy", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
+		flit.OutputBufIdx = 1
+
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := sw.GetNextState()
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[forwardBufferEntry]{
+		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
-			Elements: []forwardBufferEntry{
-				{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
+			Elements: []routedFlit{
+				{Flit: flit},
 			},
 		}
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[flitMeta]{
+		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
-			Elements:   []flitMeta{{MsgMeta: sim.MsgMeta{ID: "full"}}},
+			Elements:   []messaging.Flit{{MsgMeta: sim.MsgMeta{ID: "full"}}},
 		}
-
-		arbiter.EXPECT().
-			Arbitrate().
-			Return([]queueing.Buffer{
-				rfsMW.forwardBufAdapters[0],
-				rfsMW.forwardBufAdapters[1],
-			})
 
 		madeProgress := rfsMW.forward()
 
@@ -308,22 +303,22 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should send flits out", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[flitMeta]{
+		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
-			Elements:   []flitMeta{flitMetaFromFlit(flit)},
+			Elements:   []messaging.Flit{flit},
 		}
 		sw.SetState(*next)
 
@@ -337,22 +332,22 @@ var _ = Describe("Switch", func() {
 	})
 
 	It("should wait if port is busy sending flits out", func() {
-		msg := &sim.MsgMeta{
+		msg := sim.MsgMeta{
 			ID:  sim.GetIDGenerator().Generate(),
 			Src: dstPort.AsRemote(),
 			Dst: dstPort.AsRemote(),
 		}
-		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit := messaging.Flit{}
+		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[flitMeta]{
+		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
-			Elements:   []flitMeta{flitMetaFromFlit(flit)},
+			Elements:   []messaging.Flit{flit},
 		}
 		sw.SetState(*next)
 

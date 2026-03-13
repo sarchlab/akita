@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarchlab/akita/v5/analysis"
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
@@ -185,13 +184,11 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 	rt routing.Table,
 ) (switchID int) {
 	switchID = len(c.switches)
-	arbiter := arbitration.NewXBarArbiter()
 
 	name := fmt.Sprintf("%s.%s", c.name, swName)
 	sw := switches.MakeBuilder().
 		WithEngine(c.engine).
 		WithFreq(c.defaultFreq).
-		WithArbiter(arbiter).
 		WithRoutingTable(rt).
 		Build(name)
 
