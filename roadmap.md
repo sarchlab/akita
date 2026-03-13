@@ -4,14 +4,17 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 310)
+## Current State (Cycle 315)
 
-### Project Status: IN PROGRESS — Research complete, new human issues on switch simplification
+### Project Status: IN PROGRESS — M41 done, researching repo-wide simplification
 
-**Research results (cycle 309):**
-- **Performance** (Diana): NOC tests 3-12x slower than v4. Root cause: endpoint `shallowCopyState` allocates 278GB/run (123x more than v4), 95% CPU in GC. Switch buffer adapters add 3 levels of indirection.
-- **Event-driven** (Iris): 3 designs proposed. Human rejected timer-based (Design C). Need real event-driven support (Design A or B).
-- **Test sizes** (Elena): Port sizes match but **acceptance_test.py num-access reduced 10x** (10000→1000). Must restore.
+**M41 complete (cycle 314):** Test sizes restored, CI duplication fixed, PR #70 merged. All CI green.
+
+**New human direction (#408):** Go through the whole repo to find opportunities to simplify. Search for residues from double buffering implementation. Many wrappers and indirections after recent refactoring — simplicity is first priority.
+
+**Research in progress (cycle 315):**
+- Iris: Analyzing NOC switch/endpoint simplification (#402-#406) — flitMeta, pipelineStageState, buffer adaptors, Comp wrapper, switchInfra
+- Elena: Auditing entire repo for simplification opportunities and double-buffering residues
 
 **New human issues (cycle 310, #402-#406):** Switch code has too many abstractions — flitMeta, pipelineStageState, buffer adaptors, switchInfra, Comp wrapper all need to be eliminated or drastically simplified.
 
@@ -76,25 +79,25 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Planned Milestones
 
-### M41: Restore test sizes + fix CI duplication (estimated 2 cycles)
-- Restore `acceptance_test.py` num-access from 1000 back to 10000 (upstream value)
-- Restore missing duplicate writeback cache test block from upstream
-- Fix `.github/workflows/akita_test.yml` to only trigger `push` on main branch
-- Quick wins, high confidence
+### M41: Restore test sizes + fix CI duplication (DONE — Cycle 314)
+- Budget: 2 | Used: 2
+- PR #70 merged
+- All test sizes restored to upstream values
+- CI push trigger restricted to main branch
+- All CI green
 
-### M42: Switch simplification (#402-#406) (estimated 5-8 cycles)
-- Eliminate flitMeta — make Flit directly serializable, or simplify the conversion
-- Eliminate pipelineStageState — let Pipeline serialize itself like Buffer
-- Eliminate buffer adaptors — use buffers directly without adapter indirection
-- Eliminate Comp wrapper — use `modeling.Component[Spec, State]` directly
-- Eliminate switchInfra — access state directly
-- Must pass all NOC acceptance tests
-- Should also improve performance (eliminates 3 levels of indirection)
+### M42: Repo-wide simplification (#408, #402-#406) (estimated 8-12 cycles)
+- **Phase 1**: Switch simplification (#402-#406) — eliminate flitMeta, pipelineStageState, buffer adaptors, Comp wrapper, switchInfra
+- **Phase 2**: Endpoint simplification — eliminate flitState, shallowCopyState, custom Tick override
+- **Phase 3**: Remove double-buffering residues across all packages
+- **Phase 4**: Remove unnecessary wrappers, adapters, and indirections repo-wide
+- Must pass ALL acceptance tests and CI
+- Should improve performance as a side effect
 
-### M43: Endpoint + NOC performance optimization (estimated 5-8 cycles)
-- Fix endpoint shallowCopyState (278GB allocation, 95% GC) — the #1 bottleneck
-- Optimize flit object allocation (14.6M heap allocs per test)
+### M43: NOC performance optimization (estimated 5-8 cycles)
+- Verify performance improved from M42 simplification
 - Target: bring NOC tests within 2x of v4 performance
+- Fix remaining allocation bottlenecks
 - Must not regress correctness
 
 ### M44: Event-driven component support (estimated 5-8 cycles)
@@ -147,8 +150,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 ### Upcoming Phases
 | Phase | Milestones | Est. Budget |
 |-------|-----------|-------------|
-| Phase 7 (M41) | Restore test sizes + CI fix | 2 |
-| Phase 8 (M42) | Switch simplification | 5-8 |
+| Phase 7 (M41) | Restore test sizes + CI fix | 2 (done) |
+| Phase 8 (M42) | Repo-wide simplification | 8-12 |
 | Phase 9 (M43) | NOC performance optimization | 5-8 |
 | Phase 10 (M44) | Event-driven components | 5-8 |
 

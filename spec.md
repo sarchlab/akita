@@ -157,6 +157,8 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
     - **#405 Comp wrapper**: Must be removed entirely. Use `modeling.Component[Spec, State]` directly.
     - **#406 switchInfra**: Why not directly use switch's state? Eliminate intermediary.
 
+15. **Repo-wide simplification** (issue #408): The entire repo has accumulated wrappers and indirections from recent refactoring. Simplicity is the first priority. Search for and eliminate all unnecessary complexity. Also search for residues from double buffering implementation.
+
 ### CI Infrastructure
 
 All CI workflow jobs use `self-hosted` runners per human directive (issue #309). GitHub-hosted runners are not an option due to budget constraints. All 5 CI jobs have `timeout-minutes` set to prevent hanging (issue #310). Self-hosted runners may be temporarily unavailable (queued) — wait for them to come online.
