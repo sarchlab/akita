@@ -142,13 +142,20 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 9. ~~**Default spec, rename simplecache → writethroughcache, freq in spec**~~ (issue #384): **DONE in M40.**
 
-10. **Event-driven component support** (issue #389): Some components are not ticking components. They schedule events in the far future and handle events directly. Need a solution within the Spec+State+Middleware model. Under research.
+10. **Event-driven component support** (issue #389): Some components are not ticking components. They schedule events in the far future and handle events directly. Need a solution within the Spec+State+Middleware model. **Human rejected timer/tick-based approaches** — must be real event-driven scheduling for performance. Design A (separate EventComponent) or Design B (unified with event slots) from Iris's research. See TrioSim for real-world need.
 
-11. **Deep performance evaluation** (issue #387): Compare against upstream. Identify current bottlenecks. Under investigation.
+11. **Deep performance evaluation** (issue #387): **FINDINGS**: NOC tests 3-12x slower than upstream v4. Root cause: endpoint `shallowCopyState` allocates 278GB (123x more than v4), causing 95% of CPU in GC. Top bottlenecks: (1) endpoint state copy, (2) flit serialization/deserialization, (3) switch generic state-copy pattern with buffer adapters.
 
-12. **Verify test sizes unchanged** (issue #385): Ensure no acceptance test sizes were reduced from upstream. Under verification.
+12. **Restore test sizes to upstream** (issue #385): `acceptance_test.py` has `num-access=1000` but upstream has `10000` — **10x reduction found**. Also missing a set of 6 duplicate writeback cache tests that exist in upstream. Must restore.
 
 13. **Fix duplicated CI runs** (issue #398): Every PR triggers 2 sets of CI tasks because the workflow triggers on both `push` and `pull_request`. Fix: restrict `push` trigger to `main` branch only.
+
+14. **Switch code simplification** (issues #402-#406): Human reviewed switch code and found multiple unacceptable abstractions:
+    - **#402 flitMeta**: Why can't we just serialize the flit directly? Modify flit definition if needed, but simplicity first.
+    - **#403 pipelineStageState**: Eliminate — let pipeline serialize itself like Buffer does.
+    - **#404 Buffer adaptor**: Unacceptable indirection. Must use buffers directly.
+    - **#405 Comp wrapper**: Must be removed entirely. Use `modeling.Component[Spec, State]` directly.
+    - **#406 switchInfra**: Why not directly use switch's state? Eliminate intermediary.
 
 ### CI Infrastructure
 

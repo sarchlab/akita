@@ -4,18 +4,16 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 309)
+## Current State (Cycle 310)
 
-### Project Status: IN PROGRESS — New human requirements (issues #387, #389, #398)
+### Project Status: IN PROGRESS — Research complete, new human issues on switch simplification
 
-M40 completed (default spec, rename, freq in spec). New human requirements received:
-1. **Event-driven component support** (#389) — need a modeling pattern for components that schedule events in the far future instead of ticking every cycle
-2. **Deep performance evaluation** (#387) — compare against upstream, identify bottlenecks
-3. **Fix duplicated CI runs** (#398) — workflow triggers on both push and pull_request causing double runs
-4. **Verify test sizes unchanged** (#385) — ensure no acceptance test sizes were reduced
+**Research results (cycle 309):**
+- **Performance** (Diana): NOC tests 3-12x slower than v4. Root cause: endpoint `shallowCopyState` allocates 278GB/run (123x more than v4), 95% CPU in GC. Switch buffer adapters add 3 levels of indirection.
+- **Event-driven** (Iris): 3 designs proposed. Human rejected timer-based (Design C). Need real event-driven support (Design A or B).
+- **Test sizes** (Elena): Port sizes match but **acceptance_test.py num-access reduced 10x** (10000→1000). Must restore.
 
-### Investigation Phase (Current)
-Workers researching event-driven patterns, performance benchmarks, and test size verification. Next milestone will be defined based on findings.
+**New human issues (cycle 310, #402-#406):** Switch code has too many abstractions — flitMeta, pipelineStageState, buffer adaptors, switchInfra, Comp wrapper all need to be eliminated or drastically simplified.
 
 ### Recently Completed
 
@@ -78,21 +76,36 @@ Workers researching event-driven patterns, performance benchmarks, and test size
 
 ## Planned Milestones
 
-### M41: Fix CI duplication + verify test sizes (estimated 2 cycles)
+### M41: Restore test sizes + fix CI duplication (estimated 2 cycles)
+- Restore `acceptance_test.py` num-access from 1000 back to 10000 (upstream value)
+- Restore missing duplicate writeback cache test block from upstream
 - Fix `.github/workflows/akita_test.yml` to only trigger `push` on main branch
-- Verify and document that all test sizes match upstream
-- Quick win, high confidence
+- Quick wins, high confidence
 
-### M42: Event-driven component support (estimated 5-8 cycles)
-- Depends on Iris's research findings
-- May involve creating `modeling.EventComponent[S,T]` or similar
-- Must maintain save/load compatibility
-- Scope TBD after research
+### M42: Switch simplification (#402-#406) (estimated 5-8 cycles)
+- Eliminate flitMeta — make Flit directly serializable, or simplify the conversion
+- Eliminate pipelineStageState — let Pipeline serialize itself like Buffer
+- Eliminate buffer adaptors — use buffers directly without adapter indirection
+- Eliminate Comp wrapper — use `modeling.Component[Spec, State]` directly
+- Eliminate switchInfra — access state directly
+- Must pass all NOC acceptance tests
+- Should also improve performance (eliminates 3 levels of indirection)
 
-### M43: Performance optimization (estimated 5-8 cycles)
-- Depends on Diana's benchmarking findings
-- Address any bottlenecks identified
+### M43: Endpoint + NOC performance optimization (estimated 5-8 cycles)
+- Fix endpoint shallowCopyState (278GB allocation, 95% GC) — the #1 bottleneck
+- Optimize flit object allocation (14.6M heap allocs per test)
+- Target: bring NOC tests within 2x of v4 performance
 - Must not regress correctness
+
+### M44: Event-driven component support (estimated 5-8 cycles)
+- Design A or B from Iris's research (NOT timer-based — human rejected)
+- Create `modeling.EventComponent[S,T]` or extend Component with event slots
+- Must support save/load of pending events
+- Must support TrioSim-style use cases
+
+### M45: Global state manager (deferred, estimated 3-5 cycles)
+- Single-call save/load of entire simulation state
+- Depends on all components being fully standardized
 
 ---
 
@@ -131,6 +144,14 @@ Workers researching event-driven patterns, performance benchmarks, and test size
 | Phase 6 (M40) | Default spec, rename, freq | 8 | ~4 |
 | **Total** | **40 milestones** | **~264** | **~169** |
 
+### Upcoming Phases
+| Phase | Milestones | Est. Budget |
+|-------|-----------|-------------|
+| Phase 7 (M41) | Restore test sizes + CI fix | 2 |
+| Phase 8 (M42) | Switch simplification | 5-8 |
+| Phase 9 (M43) | NOC performance optimization | 5-8 |
+| Phase 10 (M44) | Event-driven components | 5-8 |
+
 ---
 
 ## Lessons Learned
@@ -145,3 +166,6 @@ Workers researching event-driven patterns, performance benchmarks, and test size
 - Transaction serialization (M38) was the last major piece — flattening pointer fields eliminated all conversion layers
 - Documentation verification caught fabricated code — always verify code snippets against actual source files
 - Event-driven components represent a new architectural challenge — different from tick-driven model
+- Elena's audit missed acceptance_test.py changes — auditing only Go source files is insufficient; must check test runners (Python scripts) too
+- Human's switch feedback (#402-#406) shows we over-engineered the serialization layer — simplicity beats correctness of abstraction
+- Performance research showed the copy-per-tick pattern is a fundamental bottleneck when state contains large slices — need architectural fix, not optimization
