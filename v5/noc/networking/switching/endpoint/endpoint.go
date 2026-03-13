@@ -181,13 +181,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 			break
 		}
 
-		fs := cur.FlitsToSend[numSent]
-		flit := &messaging.Flit{
-			MsgMeta:      fs.MsgMeta,
-			SeqID:        fs.SeqID,
-			NumFlitInMsg: fs.NumFlitInMsg,
-			Msg:          fs.Msg,
-		}
+		flit := &cur.FlitsToSend[numSent]
 
 		err := m.networkPort.Send(flit)
 		if err == nil {
@@ -377,13 +371,23 @@ func (m *incomingMW) recv() bool {
 func (m *incomingMW) assemble() bool {
 	madeProgress := false
 	cur := m.comp.GetState()
+
+	if len(cur.AssemblingMsgs) == 0 {
+		return false
+	}
+
 	next := m.comp.GetNextState()
 
-	remaining := make([]assemblingMsgState, 0, len(cur.AssemblingMsgs))
+	// Compact in-place: move incomplete entries to the front.
+	writeIdx := 0
 
-	for _, a := range cur.AssemblingMsgs {
+	for i := range next.AssemblingMsgs {
+		a := &next.AssemblingMsgs[i]
 		if a.NumFlitArrived < a.NumFlitRequired {
-			remaining = append(remaining, a)
+			if writeIdx != i {
+				next.AssemblingMsgs[writeIdx] = *a
+			}
+			writeIdx++
 			continue
 		}
 
@@ -399,7 +403,7 @@ func (m *incomingMW) assemble() bool {
 		madeProgress = true
 	}
 
-	next.AssemblingMsgs = remaining
+	next.AssemblingMsgs = next.AssemblingMsgs[:writeIdx]
 
 	return madeProgress
 }
