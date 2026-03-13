@@ -36,14 +36,12 @@ func (p *Pipeline[T]) Accept(item T) {
 	// Use a fixed-size bitset on the stack for small widths,
 	// fall back to a slice for larger ones.
 	var usedSmall [16]bool
-	var usedLarge []bool
-	used := usedSmall[:0]
+	var used []bool
 
 	if p.Width <= len(usedSmall) {
 		used = usedSmall[:p.Width]
 	} else {
-		usedLarge = make([]bool, p.Width)
-		used = usedLarge
+		used = make([]bool, p.Width)
 	}
 
 	for i := range p.Stages {
