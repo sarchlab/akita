@@ -12,6 +12,7 @@ import (
 
 // Spec contains immutable configuration for the MMU.
 type Spec struct {
+	Freq                     sim.Freq       `json:"freq"`
 	Latency                  int            `json:"latency"`
 	MaxRequestsInFlight      int            `json:"max_requests_in_flight"`
 	MigrationQueueSize       int            `json:"migration_queue_size"`

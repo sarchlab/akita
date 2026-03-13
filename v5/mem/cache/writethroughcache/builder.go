@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	"fmt"
@@ -11,10 +11,25 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// A Builder can build a simplecache cache
+// DefaultSpec provides default configuration for the writethroughcache.
+var DefaultSpec = Spec{
+	Freq:                  1 * sim.GHz,
+	NumReqPerCycle:        4,
+	Log2BlockSize:         6,
+	BankLatency:           20,
+	WayAssociativity:      4,
+	MaxNumConcurrentTrans: 16,
+	NumBanks:              1,
+	NumMSHREntry:          4,
+	TotalByteSize:         4 * mem.KB,
+	DirLatency:            2,
+	InterleavingSize:      4096,
+}
+
+// A Builder can build a writethroughcache cache
 type Builder struct {
 	engine                sim.Engine
-	freq                  sim.Freq
+	spec                  Spec
 	log2BlockSize         uint64
 	totalByteSize         uint64
 	wayAssociativity      int
@@ -40,17 +55,17 @@ type Builder struct {
 // The default write policy is WritearoundPolicy.
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                  1 * sim.GHz,
-		log2BlockSize:         6,
-		totalByteSize:         4 * mem.KB,
-		wayAssociativity:      4,
-		numMSHREntry:          4,
-		numBank:               1,
-		numReqPerCycle:        4,
-		maxNumConcurrentTrans: 16,
-		dirLatency:            2,
-		bankLatency:           20,
-		interleavingSize:      4096,
+		spec:                  DefaultSpec,
+		log2BlockSize:         DefaultSpec.Log2BlockSize,
+		totalByteSize:         DefaultSpec.TotalByteSize,
+		wayAssociativity:      DefaultSpec.WayAssociativity,
+		numMSHREntry:          DefaultSpec.NumMSHREntry,
+		numBank:               DefaultSpec.NumBanks,
+		numReqPerCycle:        DefaultSpec.NumReqPerCycle,
+		maxNumConcurrentTrans: DefaultSpec.MaxNumConcurrentTrans,
+		dirLatency:            DefaultSpec.DirLatency,
+		bankLatency:           DefaultSpec.BankLatency,
+		interleavingSize:      DefaultSpec.InterleavingSize,
 		writePolicy:           &WritearoundPolicy{},
 	}
 }
@@ -63,7 +78,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency that the cache works at
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -199,7 +214,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -274,6 +289,7 @@ func (b *Builder) buildInitialState(
 
 func (b *Builder) buildSpec(numSets int) Spec {
 	spec := Spec{
+		Freq:                  b.spec.Freq,
 		NumReqPerCycle:        b.numReqPerCycle,
 		Log2BlockSize:         b.log2BlockSize,
 		BankLatency:           b.bankLatency,

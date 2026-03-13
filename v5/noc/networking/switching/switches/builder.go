@@ -7,16 +7,23 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for switch components.
+var DefaultSpec = Spec{
+	Freq: 1 * sim.GHz,
+}
+
 // Builder can help building switches
 type Builder struct {
 	engine       sim.Engine
-	freq         sim.Freq
+	spec         Spec
 	routingTable routing.Table
 	arbiter      arbitration.Arbiter
 }
 
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{
+		spec: DefaultSpec,
+	}
 }
 
 // WithEngine sets the engine that the switch to build uses.
@@ -27,7 +34,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency that the switch to build works at.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -50,10 +57,10 @@ func (b Builder) Build(name string) *Comp {
 	b.routingTableMustBeGiven()
 	b.arbiterMustBeGiven()
 
-	spec := Spec{}
+	spec := b.spec
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -91,7 +98,7 @@ func (b Builder) engineMustBeGiven() {
 }
 
 func (b Builder) freqMustNotBeZero() {
-	if b.freq == 0 {
+	if b.spec.Freq == 0 {
 		panic("switch frequency cannot be 0")
 	}
 }

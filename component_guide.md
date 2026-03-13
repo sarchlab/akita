@@ -379,7 +379,7 @@ Embed `Buffer[T]` and `Pipeline[T]` directly in your State struct with JSON
 tags, just like any other nested struct:
 
 ```go
-// From v5/mem/cache/simplecache/cache.go
+// From v5/mem/cache/writethroughcache/cache.go
 type State struct {
     // ...
     DirBuf        stateutil.Buffer[int]     `json:"dir_buf"`
@@ -503,7 +503,7 @@ data needed. Use a `bool` flag to indicate whether the field is populated:
 
 ```go
 // ✅ New pattern — flat fields, fully JSON-serializable
-// From v5/mem/cache/simplecache/transaction.go
+// From v5/mem/cache/writethroughcache/transaction.go
 type transactionState struct {
     ID string `json:"id"`
 
@@ -539,7 +539,7 @@ type transactionState struct {
    in State:
 
     ```go
-    // From v5/mem/cache/simplecache/transaction.go
+    // From v5/mem/cache/writethroughcache/transaction.go
     PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
     ```
 
@@ -582,7 +582,7 @@ type transaction struct {
 **After (flat — ✅ fully serializable):**
 
 ```go
-// From v5/mem/cache/simplecache/transaction.go
+// From v5/mem/cache/writethroughcache/transaction.go
 type transactionState struct {
     HasRead            bool        `json:"has_read"`
     ReadMeta           sim.MsgMeta `json:"read_meta"`

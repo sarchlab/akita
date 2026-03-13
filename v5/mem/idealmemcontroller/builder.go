@@ -6,10 +6,17 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides default configuration for the ideal memory controller.
+var DefaultSpec = Spec{
+	Freq:          1 * sim.GHz,
+	Latency:       100,
+	Width:         1,
+	CacheLineSize: 64,
+}
+
 // Builder builds ideal memory controller components.
 type Builder struct {
-	spec       *Spec
-	freq       sim.Freq
+	spec       Spec
 	capacity   uint64
 	engine     sim.Engine
 	topBufSize int
@@ -21,26 +28,26 @@ type Builder struct {
 // MakeBuilder returns a new Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:       1 * sim.GHz,
+		spec:       DefaultSpec,
 		capacity:   4 * mem.GB,
 		topBufSize: 16,
-		spec: &Spec{
-			Latency:       100,
-			Width:         1,
-			CacheLineSize: 64,
-		},
 	}
 }
 
-// WithSpec sets the spec of the memory controller
+// WithSpec sets the spec of the memory controller. If the provided spec has
+// a zero Freq, the builder's current Freq is preserved.
 func (b Builder) WithSpec(spec Spec) Builder {
-	b.spec = &spec
+	prevFreq := b.spec.Freq
+	b.spec = spec
+	if b.spec.Freq == 0 {
+		b.spec.Freq = prevFreq
+	}
 	return b
 }
 
 // WithFreq sets the frequency of the memory controller
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -99,7 +106,7 @@ func (b Builder) WithCtrlPort(port sim.Port) Builder {
 func (b Builder) Build(
 	name string,
 ) *Comp {
-	spec := *b.spec
+	spec := b.spec
 	spec.StorageRef = name
 
 	initialState := State{
@@ -108,7 +115,7 @@ func (b Builder) Build(
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)

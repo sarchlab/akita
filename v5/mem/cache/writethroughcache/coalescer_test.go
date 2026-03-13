@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	. "github.com/onsi/ginkgo/v2"

@@ -119,7 +119,7 @@ Every builder file should define a **default Spec struct** at the beginning (e.g
 
 ### Rename simple cache to write-through cache (issue #384)
 
-The `simplecache` package (`v5/mem/cache/simplecache/`) should be renamed to reflect its write-through nature. The package name, directory, doc comments, and all external references should use the new name.
+The `simplecache` package was renamed to `writethroughcache` to reflect its write-through nature. The package name, directory, doc comments, and all external references should use the new name.
 
 ## Open Issues (from human review)
 
@@ -140,7 +140,7 @@ The `simplecache` package (`v5/mem/cache/simplecache/`) should be renamed to ref
 
 8. **Global state manager** (issue #326): Long-term direction. Deferred.
 
-9. **Default spec, rename simplecache, freq in spec** (issue #384): See sections above.
+9. **Default spec, rename simplecache → writethroughcache, freq in spec** (issue #384): See sections above.
 
 ### CI Infrastructure
 

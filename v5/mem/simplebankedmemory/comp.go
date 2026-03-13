@@ -11,7 +11,8 @@ import (
 
 // Spec contains immutable configuration for the simple banked memory.
 type Spec struct {
-	NumBanks                       int    `json:"num_banks"`
+	Freq                           sim.Freq `json:"freq"`
+	NumBanks                       int      `json:"num_banks"`
 	BankPipelineWidth              int    `json:"bank_pipeline_width"`
 	BankPipelineDepth              int    `json:"bank_pipeline_depth"`
 	StageLatency                   int    `json:"stage_latency"`

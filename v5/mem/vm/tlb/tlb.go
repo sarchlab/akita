@@ -13,6 +13,7 @@ const (
 
 // Spec contains immutable configuration for the TLB.
 type Spec struct {
+	Freq                       sim.Freq         `json:"freq"`
 	NumSets                    int              `json:"num_sets"`
 	NumWays                    int              `json:"num_ways"`
 	PageSize                   uint64           `json:"page_size"`

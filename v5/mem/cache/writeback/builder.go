@@ -36,10 +36,26 @@ func (b *Builder) resolveLegacyMapper() {
 	// fallback (needed when the mapper's Port is set after Build).
 }
 
+// DefaultSpec provides default configuration for the writeback cache.
+var DefaultSpec = Spec{
+	Freq:                1 * sim.GHz,
+	NumReqPerCycle:      1,
+	Log2BlockSize:       6,
+	BankLatency:         10,
+	WayAssociativity:    4,
+	NumBanks:            1,
+	NumMSHREntry:        16,
+	TotalByteSize:       512 * mem.KB,
+	WriteBufferCapacity: 1024,
+	MaxInflightFetch:    128,
+	MaxInflightEviction: 128,
+	InterleavingSize:    4096,
+}
+
 // A Builder can build writeback caches
 type Builder struct {
 	engine           sim.Engine
-	freq             sim.Freq
+	spec             Spec
 	legacyMapper     mem.AddressToPortMapper
 	wayAssociativity int
 	log2BlockSize    uint64
@@ -66,17 +82,17 @@ type Builder struct {
 // MakeBuilder creates a new builder with default configurations.
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                1 * sim.GHz,
-		wayAssociativity:    4,
-		log2BlockSize:       6,
-		byteSize:            512 * mem.KB,
-		numMSHREntry:        16,
-		numReqPerCycle:      1,
-		writeBufferCapacity: 1024,
-		maxInflightFetch:    128,
-		maxInflightEviction: 128,
-		bankLatency:         10,
-		interleavingSize:    4096,
+		spec:                DefaultSpec,
+		wayAssociativity:    DefaultSpec.WayAssociativity,
+		log2BlockSize:       DefaultSpec.Log2BlockSize,
+		byteSize:            DefaultSpec.TotalByteSize,
+		numMSHREntry:        DefaultSpec.NumMSHREntry,
+		numReqPerCycle:      DefaultSpec.NumReqPerCycle,
+		writeBufferCapacity: DefaultSpec.WriteBufferCapacity,
+		maxInflightFetch:    DefaultSpec.MaxInflightFetch,
+		maxInflightEviction: DefaultSpec.MaxInflightEviction,
+		bankLatency:         DefaultSpec.BankLatency,
+		interleavingSize:    DefaultSpec.InterleavingSize,
 	}
 }
 
@@ -88,7 +104,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency to be used by the caches.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -219,7 +235,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -290,6 +306,7 @@ func (b Builder) buildInitialState(
 
 func (b *Builder) buildSpec(numSets int) Spec {
 	spec := Spec{
+		Freq:                b.spec.Freq,
 		NumReqPerCycle:      b.numReqPerCycle,
 		Log2BlockSize:       b.log2BlockSize,
 		BankLatency:         b.bankLatency,

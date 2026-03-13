@@ -13,6 +13,7 @@ const (
 
 // Spec contains immutable configuration for the mmuCache.
 type Spec struct {
+	Freq            sim.Freq       `json:"freq"`
 	NumBlocks       int            `json:"num_blocks"`
 	NumLevels       int            `json:"num_levels"`
 	PageSize        uint64         `json:"page_size"`

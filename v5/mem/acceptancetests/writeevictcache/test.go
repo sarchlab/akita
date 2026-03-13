@@ -12,7 +12,7 @@ import (
 	"os"
 
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/cache/simplecache"
+	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
@@ -76,8 +76,8 @@ func buildEnvironment() {
 		Build("MemAccessAgent")
 
 	addressToPortMapper := new(mem.SinglePortMapper)
-	builder := simplecache.MakeBuilder().
-		WithWritePolicy(&simplecache.WriteevictPolicy{}).
+	builder := writethroughcache.MakeBuilder().
+		WithWritePolicy(&writethroughcache.WriteevictPolicy{}).
 		WithEngine(engine).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).

@@ -20,7 +20,9 @@ type PingRsp struct {
 }
 
 // Spec contains immutable configuration for the tickingping component.
-type Spec struct{}
+type Spec struct {
+	Freq sim.Freq `json:"freq"`
+}
 
 // pingTransactionState tracks an in-progress ping request with a countdown.
 type pingTransactionState struct {

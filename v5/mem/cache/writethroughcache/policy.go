@@ -1,5 +1,5 @@
 // WritePolicy defines the strategy for handling write operations in the cache.
-package simplecache
+package writethroughcache
 
 // WritePolicy defines the strategy for handling write operations in the cache.
 type WritePolicy interface {

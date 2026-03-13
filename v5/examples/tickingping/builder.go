@@ -5,16 +5,23 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides default configuration for the tickingping component.
+var DefaultSpec = Spec{
+	Freq: 1 * sim.GHz,
+}
+
 // Builder builds tickingping components.
 type Builder struct {
 	engine  sim.Engine
-	freq    sim.Freq
+	spec    Spec
 	outPort sim.Port
 }
 
 // MakeBuilder returns a new Builder.
 func MakeBuilder() Builder {
-	return Builder{}
+	return Builder{
+		spec: DefaultSpec,
+	}
 }
 
 // WithEngine sets the engine.
@@ -25,7 +32,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -39,8 +46,8 @@ func (b Builder) WithOutPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithSpec(Spec{}).
+		WithFreq(b.spec.Freq).
+		WithSpec(b.spec).
 		Build(name)
 	comp.SetState(State{})
 

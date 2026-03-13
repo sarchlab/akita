@@ -14,7 +14,9 @@ import (
 )
 
 // Spec contains immutable configuration for the switch.
-type Spec struct{}
+type Spec struct {
+	Freq sim.Freq `json:"freq"`
+}
 
 // flitMeta is a fully serializable snapshot of a messaging.Flit, including the
 // original message metadata so a downstream endpoint can reconstruct the Msg.
