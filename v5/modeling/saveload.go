@@ -13,8 +13,8 @@ type componentSnapshot[S any, T any] struct {
 }
 
 // SaveState marshals the component's spec and current state as JSON and writes
-// it to w. Only the current (A-buffer) state is serialized. Both S and T must
-// be JSON-serializable (which is guaranteed by the Spec/State constraints).
+// it to w. Both S and T must be JSON-serializable (which is guaranteed by the
+// Spec/State constraints).
 func (c *Component[S, T]) SaveState(w io.Writer) error {
 	snap := componentSnapshot[S, T]{
 		Spec:  c.spec,
@@ -32,8 +32,7 @@ func (c *Component[S, T]) SaveState(w io.Writer) error {
 }
 
 // LoadState reads JSON from r and restores the component's spec and state.
-// The loaded state is written to both current and next buffers (via deep copy)
-// so that the component starts in a consistent double-buffered state.
+// The loaded state is written to both current and next.
 func (c *Component[S, T]) LoadState(r io.Reader) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -47,7 +46,7 @@ func (c *Component[S, T]) LoadState(r io.Reader) error {
 
 	c.spec = snap.Spec
 	c.current = snap.State
-	c.next = deepCopy(snap.State)
+	c.next = snap.State
 
 	return nil
 }

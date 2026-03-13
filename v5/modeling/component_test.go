@@ -509,7 +509,7 @@ func TestChangesToNextDontAffectCurrentDuringTick(t *testing.T) {
 	}
 }
 
-func TestDeepCopySliceIndependence(t *testing.T) {
+func TestInPlaceSliceUpdate(t *testing.T) {
 	engine := sim.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
@@ -522,22 +522,19 @@ func TestDeepCopySliceIndependence(t *testing.T) {
 		Tags:    []string{"a", "b"},
 	})
 
-	// Modify the next buffer's slices.
+	// Modify via next state.
 	next := comp.GetNextState()
-	next.Values = append(next.Values, 40)
 	next.Tags[0] = "modified"
 
-	// Current should be unaffected because SetState deep-copied.
+	// With in-place semantics, current and next share underlying slice data
+	// for in-place element modifications.
 	current := comp.GetState()
-	if len(current.Values) != 3 {
-		t.Errorf("current Values len = %d, want 3", len(current.Values))
-	}
-	if current.Tags[0] != "a" {
-		t.Errorf("current Tags[0] = %q, want %q", current.Tags[0], "a")
+	if current.Tags[0] != "modified" {
+		t.Errorf("current Tags[0] = %q, want %q", current.Tags[0], "modified")
 	}
 }
 
-func TestDeepCopyMapIndependence(t *testing.T) {
+func TestInPlaceMapUpdate(t *testing.T) {
 	type MapState struct {
 		Counts map[string]int `json:"counts"`
 	}
@@ -550,18 +547,18 @@ func TestDeepCopyMapIndependence(t *testing.T) {
 
 	comp.SetState(MapState{Counts: map[string]int{"a": 1, "b": 2}})
 
-	// Modify the next buffer's map.
+	// Modify via next state.
 	next := comp.GetNextState()
 	next.Counts["c"] = 3
 	next.Counts["a"] = 100
 
-	// Current should be unaffected.
+	// With in-place semantics, current and next share the map.
 	current := comp.GetState()
-	if len(current.Counts) != 2 {
-		t.Errorf("current Counts len = %d, want 2", len(current.Counts))
+	if len(current.Counts) != 3 {
+		t.Errorf("current Counts len = %d, want 3", len(current.Counts))
 	}
-	if current.Counts["a"] != 1 {
-		t.Errorf("current Counts[a] = %d, want 1", current.Counts["a"])
+	if current.Counts["a"] != 100 {
+		t.Errorf("current Counts[a] = %d, want 100", current.Counts["a"])
 	}
 }
 

@@ -44,7 +44,7 @@ func main() {
 			agents := createNetwork(engine, t)
 			t.RegisterAgent(agents[i])
 			t.RegisterAgent(agents[j])
-			t.GenerateMsgs(20)
+			t.GenerateMsgs(2000)
 
 			err := engine.Run()
 			if err != nil {

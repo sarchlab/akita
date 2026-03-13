@@ -19,7 +19,7 @@ func main() {
 	t := acceptance.NewTest()
 
 	createNetwork(engine, t)
-	t.GenerateMsgs(100)
+	t.GenerateMsgs(1000)
 
 	err := engine.Run()
 	if err != nil {

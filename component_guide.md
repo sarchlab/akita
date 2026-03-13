@@ -25,8 +25,8 @@ Every V5 component is built from five orthogonal parts:
 │                                            │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
 │  │   Spec   │  │  State   │  │  Ports   │ │
-│  │(immutable│  │(A-B      │  │(external │ │
-│  │  config) │  │ buffered)│  │  I/O)    │ │
+│  │(immutable│  │(in-place │  │(external │ │
+│  │  config) │  │ updated) │  │  I/O)    │ │
 │  └──────────┘  └──────────┘  └──────────┘ │
 │                                            │
 │  ┌──────────────────────────────────────┐  │
@@ -55,14 +55,13 @@ simulation.
 ### 1.2 State (Mutable Runtime Data)
 
 The **State** is a plain struct that captures everything about the component's
-*current runtime condition*. It changes every tick via A-B double buffering
-(see §2.3).
+*current runtime condition*. It is updated in-place each tick (see §2.3).
 
 - Holds in-flight transactions, counters, queues, mode flags, etc.
 - Must contain only primitives, **nested structs**, slices/maps of primitives or structs.
 - No pointers, interfaces, functions, or channels.
 - Cross-references between components use **string IDs**, never pointers.
-- Must be JSON-serializable (for checkpoint/restore and for deep-copy).
+- Must be JSON-serializable (for checkpoint/restore).
 
 ### 1.3 Ports
 
@@ -121,11 +120,11 @@ Key methods:
 | Method | Description |
 |--------|-------------|
 | `GetSpec() S` | Returns the immutable specification |
-| `GetState() T` | Returns the current (A-buffer) state — **read-only snapshot** |
-| `GetNextState() *T` | Returns a **pointer** to the next (B-buffer) state — **write target** |
-| `SetNextState(state T)` | Replaces the next (B-buffer) state directly |
-| `SetState(state T)` | Sets **both** current and next buffers (for initialization and save/load) |
-| `Tick() bool` | Deep-copies current→next, runs middleware pipeline, swaps next→current |
+| `GetState() T` | Returns the current state |
+| `GetNextState() *T` | Returns a **pointer** to the next state — **write target** |
+| `SetNextState(state T)` | Replaces the next state directly |
+| `SetState(state T)` | Sets **both** current and next (for initialization and save/load) |
+| `Tick() bool` | Assigns current→next, runs middleware pipeline, assigns next→current |
 | `AddMiddleware(mw)` | Appends a middleware to the pipeline |
 | `AddPort(name, port)` | Registers a port with the component |
 | `Name() string` | Returns the component's name |
@@ -161,35 +160,39 @@ Builder methods (all return a new `Builder` — immutable value-receiver pattern
 The `Build` method creates the underlying `sim.TickingComponent` and wires
 it into the simulation engine.
 
-### 2.3 A-B Double Buffering
+### 2.3 In-Place State Update
 
-`Component[S, T]` uses **A-B double buffering** for state management. There
-are two copies of the State at all times:
+`Component[S, T]` uses **in-place state update**. The `current` and `next`
+fields hold the same state value during a tick:
 
-- **`current`** (the A-buffer) — the read-only snapshot visible via `GetState()`
-- **`next`** (the B-buffer) — the writable buffer accessible via `GetNextState()`
+- **`current`** — the state visible via `GetState()`
+- **`next`** — the state accessible via `GetNextState()` (a pointer for mutation)
 
-The `Tick()` method implements the double-buffer cycle:
+The `Tick()` method implements the update cycle:
 
 ```go
 // From v5/modeling/component.go
 func (c *Component[S, T]) Tick() bool {
-    c.next = deepCopy(c.current)        // 1. Deep-copy current → next
+    c.next = c.current                        // 1. Assign current → next
     madeProgress := c.MiddlewareHolder.Tick() // 2. Run middleware pipeline
-    c.current = c.next                  // 3. Swap: next → current
+    c.current = c.next                        // 3. Assign next → current
 
     return madeProgress
 }
 ```
 
-1. **Before each tick:** `current` is deep-copied into `next` (via JSON round-trip).
-2. **During the tick:** Middlewares read from `GetState()` (the A-buffer) and write to `GetNextState()` (a pointer to the B-buffer).
-3. **After the tick:** `next` becomes the new `current`.
+1. **Before each tick:** `current` is assigned to `next` (shallow copy).
+2. **During the tick:** Middlewares read from `GetState()` and write to
+   `GetNextState()`. Since both refer to the same underlying data, reads
+   and writes are interchangeable.
+3. **After the tick:** `next` is assigned back to `current`.
 
-**Critical rules:**
-- **NEVER read from `GetNextState()`** — always read from `GetState()`. The A-buffer is the authoritative snapshot for the current tick.
-- **NEVER write to `GetState()`** — it returns a value copy. Mutations go through `GetNextState()`.
-- The deep copy uses JSON round-trip (`json.Marshal` → `json.Unmarshal`), which is why State types must be JSON-serializable with no pointers, interfaces, functions, or channels.
+**Key rules:**
+- **Write through `GetNextState()`** — it returns a pointer, enabling direct
+  mutation. `GetState()` returns a value copy of the struct (but slices and
+  maps inside share underlying data).
+- State types must be JSON-serializable (for checkpoint/restore) with no
+  pointers, interfaces, functions, or channels.
 
 ---
 
@@ -402,13 +405,14 @@ invocation through the component itself.
 
 ### 5.5 Tick() Logic — GetState/GetNextState Pattern
 
-Inside a middleware's methods, **always read from `GetState()`** and **write
-to `GetNextState()`**:
+Inside a middleware's methods, read from `GetState()` and write to
+`GetNextState()`. With in-place update semantics both refer to the same
+underlying data, but the convention keeps code readable:
 
 ```go
 // From v5/examples/tickingping/comp.go — sendMW.sendRsp()
 func (m *sendMW) sendRsp() bool {
-    state := m.comp.GetState()   // read-only snapshot (A-buffer)
+    state := m.comp.GetState()   // current state
 
     if len(state.CurrentTransactions) == 0 {
         return false
@@ -434,14 +438,14 @@ func (m *sendMW) sendRsp() bool {
         return false
     }
 
-    next := m.comp.GetNextState()                    // writable pointer (B-buffer)
-    next.CurrentTransactions = next.CurrentTransactions[1:]  // mutate next directly
+    next := m.comp.GetNextState()                    // writable pointer
+    next.CurrentTransactions = next.CurrentTransactions[1:]  // mutate state directly
 
     return true
 }
 ```
 
-**Key pattern:** Read conditions from `GetState()`, then mutate via `GetNextState()`. Never read from `GetNextState()` to make decisions — it is the write target only.
+**Key pattern:** Read conditions from `GetState()`, then mutate via `GetNextState()`. Both refer to the same underlying data with in-place update semantics.
 
 A typical `Tick()` method orchestrates multiple sub-operations:
 
@@ -608,9 +612,7 @@ serialization of both Spec and State:
 func (c *Component[S, T]) SaveState(w io.Writer) error
 
 // LoadState reads JSON from a reader and restores spec + state.
-// The loaded state is written to both current and next buffers
-// (via deep copy) so that the component starts in a consistent
-// double-buffered state.
+// The loaded state is written to both current and next.
 func (c *Component[S, T]) LoadState(r io.Reader) error
 ```
 
@@ -927,7 +929,7 @@ The `sendPing` method demonstrates the GetState/GetNextState pattern:
 ```go
 // From v5/examples/tickingping/comp.go
 func (m *sendMW) sendPing() bool {
-    state := m.comp.GetState()              // read-only snapshot
+    state := m.comp.GetState()              // current state
 
     if state.NumPingNeedToSend == 0 {
         return false
@@ -947,7 +949,7 @@ func (m *sendMW) sendPing() bool {
         return false
     }
 
-    next := m.comp.GetNextState()           // writable pointer
+    next := m.comp.GetNextState()           // writable pointer (same data)
     next.StartTimes = append(next.StartTimes, float64(m.comp.CurrentTime()))
     next.NumPingNeedToSend--
     next.NextSeqID++

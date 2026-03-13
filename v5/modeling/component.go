@@ -1,9 +1,6 @@
 package modeling
 
 import (
-	"reflect"
-	"sync"
-
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -13,10 +10,11 @@ import (
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
 //
-// Component uses A-B double buffering for state: 'current' is the read-only
-// state visible via [GetState], and 'next' is the writable buffer for the
-// upcoming tick. During [Tick], current is deep-copied into next before the
-// middleware pipeline runs; after the pipeline completes, next becomes current.
+// Component uses in-place state update: 'current' and 'next' refer to the
+// same state value. During [Tick], current is assigned to next before the
+// middleware pipeline runs; after the pipeline completes, next is assigned
+// back to current. Because both point to the same value, middlewares can
+// read from [GetState] or [GetNextState] interchangeably.
 //
 // Component embeds [sim.TickingComponent] for tick-based lifecycle management
 // and [sim.MiddlewareHolder] for the middleware pipeline.
@@ -34,44 +32,46 @@ func (c *Component[S, T]) GetSpec() S {
 	return c.spec
 }
 
-// GetState returns the current (A-buffer) state. This is the read-only
-// snapshot for the current tick.
+// GetState returns the current state. With in-place update semantics,
+// this is the same underlying data that [GetNextState] points to.
 func (c *Component[S, T]) GetState() T {
 	return c.current
 }
 
-// GetNextState returns a pointer to the next (B-buffer) state, allowing
-// direct mutation of the state that will become current after the tick.
+// GetNextState returns a pointer to the next state, allowing direct
+// mutation. With in-place update semantics, this modifies the same
+// underlying data visible through [GetState] after assignment.
 func (c *Component[S, T]) GetNextState() *T {
 	return &c.next
 }
 
-// SetNextState sets the next (B-buffer) state directly.
+// SetNextState sets the next state directly.
 func (c *Component[S, T]) SetNextState(state T) {
 	c.next = state
 }
 
-// SetState sets both current and next buffers. This is used for
-// initialization and save/load scenarios where both buffers must agree.
+// SetState sets both current and next to the given state. This is used for
+// initialization and save/load scenarios where both must agree.
 func (c *Component[S, T]) SetState(state T) {
 	c.current = state
-	c.next = deepCopy(state)
+	c.next = state
 }
 
-// Tick performs the double-buffer cycle:
-//  1. Deep-copy current into next.
-//  2. Run the middleware pipeline (which may modify next via GetNextState/SetNextState or SetState).
-//  3. Swap: current = next.
+// Tick performs the in-place state update cycle:
+//  1. Assign current to next (shallow copy).
+//  2. Run the middleware pipeline (which may modify next via
+//     GetNextState/SetNextState or SetState).
+//  3. Assign next back to current.
 func (c *Component[S, T]) Tick() bool {
-	c.next = deepCopy(c.current)
+	c.next = c.current
 	madeProgress := c.MiddlewareHolder.Tick()
 	c.current = c.next
 
 	return madeProgress
 }
 
-// CommitTick promotes next to current without a deep copy. This is used by
-// components that implement their own Tick method with a custom copy strategy.
+// CommitTick promotes next to current. This is used by components that
+// implement their own Tick method with a custom update strategy.
 func (c *Component[S, T]) CommitTick() {
 	c.current = c.next
 }
@@ -88,150 +88,4 @@ func (c *Component[S, T]) ResetTick() {
 func (c *Component[S, T]) ResetAndRestartTick() {
 	c.TickScheduler.Reset()
 	c.TickLater()
-}
-
-// deepCopy creates a deep copy of a value using reflection-based traversal.
-// It handles structs, slices, maps, arrays, and primitive types. It panics
-// on pointer, interface, channel, or func types, which should never appear
-// in State structs per the modeling spec.
-func deepCopy[T any](src T) T {
-	srcVal := reflect.ValueOf(&src).Elem()
-	dstVal := reflectDeepCopy(srcVal)
-	return dstVal.Interface().(T)
-}
-
-// typeNeedsDeepCopy reports whether a type contains slices or maps that
-// require deep copying. Types that are purely value types (primitives,
-// strings, arrays of primitives, structs of primitives) can be copied
-// with a simple Set/Copy. This result is cached in a sync.Map for
-// performance.
-var typeNeedsDeepCopyCache sync.Map // map[reflect.Type]bool
-
-func typeNeedsDeepCopy(t reflect.Type) bool {
-	if cached, ok := typeNeedsDeepCopyCache.Load(t); ok {
-		return cached.(bool)
-	}
-
-	// Temporarily store false to handle recursive types (shouldn't happen
-	// per spec, but guards against infinite loops).
-	typeNeedsDeepCopyCache.Store(t, false)
-
-	result := computeNeedsDeepCopy(t)
-	typeNeedsDeepCopyCache.Store(t, result)
-
-	return result
-}
-
-func computeNeedsDeepCopy(t reflect.Type) bool {
-	switch t.Kind() {
-	case reflect.Slice, reflect.Map:
-		return true
-	case reflect.Struct:
-		for i := 0; i < t.NumField(); i++ {
-			if typeNeedsDeepCopy(t.Field(i).Type) {
-				return true
-			}
-		}
-		return false
-	case reflect.Array:
-		return typeNeedsDeepCopy(t.Elem())
-	default:
-		return false
-	}
-}
-
-func reflectDeepCopy(src reflect.Value) reflect.Value {
-	switch src.Kind() {
-	case reflect.Struct:
-		return deepCopyStruct(src)
-	case reflect.Slice:
-		return deepCopySlice(src)
-	case reflect.Map:
-		return deepCopyMap(src)
-	case reflect.Array:
-		return deepCopyArray(src)
-	default:
-		return src
-	}
-}
-
-func deepCopyStruct(src reflect.Value) reflect.Value {
-	dst := reflect.New(src.Type()).Elem()
-	numFields := src.NumField()
-
-	for i := 0; i < numFields; i++ {
-		sf := src.Field(i)
-		if typeNeedsDeepCopy(sf.Type()) {
-			dst.Field(i).Set(reflectDeepCopy(sf))
-		} else {
-			dst.Field(i).Set(sf)
-		}
-	}
-
-	return dst
-}
-
-func deepCopySlice(src reflect.Value) reflect.Value {
-	if src.IsNil() {
-		return reflect.Zero(src.Type())
-	}
-
-	n := src.Len()
-	dst := reflect.MakeSlice(src.Type(), n, n)
-
-	if n == 0 {
-		return dst
-	}
-
-	if !typeNeedsDeepCopy(src.Type().Elem()) {
-		reflect.Copy(dst, src)
-	} else {
-		for i := 0; i < n; i++ {
-			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
-		}
-	}
-
-	return dst
-}
-
-func deepCopyMap(src reflect.Value) reflect.Value {
-	if src.IsNil() {
-		return reflect.Zero(src.Type())
-	}
-
-	dst := reflect.MakeMapWithSize(src.Type(), src.Len())
-	iter := src.MapRange()
-	keyNeedsCopy := typeNeedsDeepCopy(src.Type().Key())
-	valNeedsCopy := typeNeedsDeepCopy(src.Type().Elem())
-
-	for iter.Next() {
-		k := iter.Key()
-		v := iter.Value()
-
-		if keyNeedsCopy {
-			k = reflectDeepCopy(k)
-		}
-
-		if valNeedsCopy {
-			v = reflectDeepCopy(v)
-		}
-
-		dst.SetMapIndex(k, v)
-	}
-
-	return dst
-}
-
-func deepCopyArray(src reflect.Value) reflect.Value {
-	dst := reflect.New(src.Type()).Elem()
-
-	if !typeNeedsDeepCopy(src.Type().Elem()) {
-		dst.Set(src)
-	} else {
-		for i := 0; i < src.Len(); i++ {
-			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
-		}
-	}
-
-	return dst
 }
