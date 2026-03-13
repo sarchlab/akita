@@ -86,8 +86,8 @@ func (f *flusher) processFlush() bool {
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
 		spec.WayAssociativity,
-		len(f.pipeline.dirToBankBuffers))
-	bankBuf := f.pipeline.dirToBankBuffers[bankNum]
+		len(next.DirToBankBufs))
+	bankBuf := &next.DirToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -107,9 +107,9 @@ func (f *flusher) processFlush() bool {
 		hasBlock:           true,
 	}
 
-	// Add to inFlightTransactions so adapter can find it
 	f.pipeline.inFlightTransactions = append(f.pipeline.inFlightTransactions, trans)
-	bankBuf.Push(trans)
+	transIdx := len(f.pipeline.inFlightTransactions) - 1
+	bankBuf.PushTyped(transIdx)
 
 	f.blockToEvict = f.blockToEvict[1:]
 
@@ -218,8 +218,10 @@ func (f *flusher) finalizeFlushing() bool {
 }
 
 func (f *flusher) flushCompleted() bool {
-	for _, b := range f.pipeline.dirToBankBuffers {
-		if b.Size() > 0 {
+	next := f.pipeline.comp.GetNextState()
+
+	for i := range next.DirToBankBufs {
+		if next.DirToBankBufs[i].Size() > 0 {
 			return false
 		}
 	}
@@ -230,7 +232,7 @@ func (f *flusher) flushCompleted() bool {
 		}
 	}
 
-	if f.pipeline.writeBufferBuffer.Size() > 0 {
+	if next.WriteBufferBuf.Size() > 0 {
 		return false
 	}
 

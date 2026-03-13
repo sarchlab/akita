@@ -23,12 +23,16 @@ func (s *mshrStage) Tick() bool {
 		return s.processOneReq()
 	}
 
-	item := s.cache.mshrStageBuffer.Pop()
+	next := s.cache.comp.GetNextState()
+	mshrBuf := &next.MSHRStageBuf
+
+	item := mshrBuf.Pop()
 	if item == nil {
 		return false
 	}
 
-	trans := item.(*transactionState)
+	transIdx := item.(int)
+	trans := s.cache.inFlightTransactions[transIdx]
 	s.hasProcessingTrans = true
 	s.processingTrans = trans
 	s.processingTransList = trans.mshrTransactions
@@ -42,7 +46,8 @@ func (s *mshrStage) Reset() {
 	s.processingTrans = nil
 	s.processingTransList = nil
 	s.processingData = nil
-	s.cache.mshrStageBuffer.Clear()
+	next := s.cache.comp.GetNextState()
+	next.MSHRStageBuf.Clear()
 }
 
 func (s *mshrStage) processOneReq() bool {

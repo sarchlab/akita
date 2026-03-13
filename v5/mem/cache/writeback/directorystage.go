@@ -10,14 +10,6 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-type dirPipelineItem struct {
-	trans *transactionState
-}
-
-func (i dirPipelineItem) TaskID() string {
-	return i.trans.id + "_dir_pipeline"
-}
-
 type directoryStage struct {
 	cache *pipelineMW
 }
@@ -34,28 +26,20 @@ func (ds *directoryStage) Tick() (madeProgress bool) {
 
 func (ds *directoryStage) tickPipeline() bool {
 	next := ds.cache.comp.GetNextState()
-	spec := ds.cache.comp.GetSpec()
-	return dirPipelineTick(
-		&next.DirPipelineStages,
-		&next.DirPostPipelineBufIndices,
-		spec.NumReqPerCycle,
-		spec.DirLatency,
-	)
+	return next.DirPipeline.Tick(&next.DirPostPipelineBuf)
 }
 
 func (ds *directoryStage) processTransaction() bool {
 	madeProgress := false
 	spec := ds.cache.comp.GetSpec()
-	// We use next because processTransaction is called in a loop and
-	// popDirPostBuf modifies next — subsequent iterations need to see removals.
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if len(next.DirPostPipelineBufIndices) == 0 {
+		if len(next.DirPostPipelineBuf.Elements) == 0 {
 			break
 		}
 
-		idx := next.DirPostPipelineBufIndices[0]
+		idx := next.DirPostPipelineBuf.Elements[0]
 		trans := ds.cache.inFlightTransactions[idx]
 
 		addr := trans.accessReq().GetAddress()
@@ -82,29 +66,27 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		item := ds.cache.dirStageBuffer.Peek()
+		item := next.DirStageBuf.Peek()
 		if item == nil {
 			break
 		}
 
-		trans := item.(*transactionState)
-		transIdx := ds.findTransIndex(trans)
+		transIdx := item.(int)
 
 		if spec.DirLatency == 0 {
 			// Bypass pipeline: put directly in post-pipeline buffer
-			if len(next.DirPostPipelineBufIndices) >= spec.NumReqPerCycle {
+			if !next.DirPostPipelineBuf.CanPush() {
 				break
 			}
-			next.DirPostPipelineBufIndices = append(
-				next.DirPostPipelineBufIndices, transIdx)
-			ds.cache.dirStageBuffer.Pop()
+			next.DirPostPipelineBuf.PushTyped(transIdx)
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		} else {
-			if !dirPipelineCanAccept(next.DirPipelineStages, spec.NumReqPerCycle) {
+			if !next.DirPipeline.CanAccept() {
 				break
 			}
-			dirPipelineAccept(&next.DirPipelineStages, spec.NumReqPerCycle, transIdx)
-			ds.cache.dirStageBuffer.Pop()
+			next.DirPipeline.Accept(transIdx)
+			next.DirStageBuf.Pop()
 			madeProgress = true
 		}
 	}
@@ -114,16 +96,14 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 
 func (ds *directoryStage) Reset() {
 	next := ds.cache.comp.GetNextState()
-	next.DirPipelineStages = next.DirPipelineStages[:0]
-	next.DirPostPipelineBufIndices = next.DirPostPipelineBufIndices[:0]
-	ds.cache.dirStageBuffer.Clear()
+	next.DirPipeline.Stages = nil
+	next.DirPostPipelineBuf.Clear()
+	next.DirStageBuf.Clear()
 }
 
 func (ds *directoryStage) doRead(trans *transactionState) bool {
 	read := trans.read
 	spec := ds.cache.comp.GetSpec()
-	// Use next for MSHRQuery and DirectoryLookup because multiple
-	// transactions are processed per tick and need to see within-tick mutations.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
 
@@ -171,8 +151,6 @@ func (ds *directoryStage) handleReadHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
-	// Use next for block state check since within-tick mutations
-	// (blocks locked by previous transactions) must be visible.
 	next := ds.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
@@ -191,8 +169,6 @@ func (ds *directoryStage) handleReadHit(
 func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 	read := trans.read
 	spec := ds.cache.comp.GetSpec()
-	// Use next for MSHRIsFull and DirectoryFindVictim since within-tick
-	// mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cacheLineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
 
@@ -239,8 +215,6 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
-	// Use next for MSHRQuery and DirectoryLookup since within-tick
-	// mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -306,7 +280,6 @@ func (ds *directoryStage) doWriteHit(
 	trans *transactionState,
 	setID, wayID int,
 ) bool {
-	// Use next for block state check since within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
@@ -328,8 +301,6 @@ func (ds *directoryStage) doWriteMiss(trans *transactionState) bool {
 func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
-	// Use next for DirectoryFindVictim and block state checks since
-	// within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -354,8 +325,6 @@ func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 func (ds *directoryStage) writePartialLineMiss(trans *transactionState) bool {
 	write := trans.write
 	spec := ds.cache.comp.GetSpec()
-	// Use next for MSHRIsFull, DirectoryFindVictim, and block state checks
-	// since within-tick mutations must be visible.
 	next := ds.cache.comp.GetNextState()
 	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
 
@@ -387,9 +356,9 @@ func (ds *directoryStage) readFromBank(
 ) bool {
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	numBanks := len(ds.cache.dirToBankBuffers)
+	numBanks := len(next.DirToBankBufs)
 	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
-	bankBuf := ds.cache.dirToBankBuffers[bank]
+	bankBuf := &next.DirToBankBufs[bank]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -404,8 +373,9 @@ func (ds *directoryStage) readFromBank(
 	trans.hasBlock = true
 	trans.action = bankReadHit
 
+	transIdx := ds.findTransIndex(trans)
 	ds.popDirPostBuf()
-	bankBuf.Push(trans)
+	bankBuf.PushTyped(transIdx)
 
 	return true
 }
@@ -416,9 +386,9 @@ func (ds *directoryStage) writeToBank(
 ) bool {
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	numBanks := len(ds.cache.dirToBankBuffers)
+	numBanks := len(next.DirToBankBufs)
 	bank := bankID(setID, wayID, spec.WayAssociativity, numBanks)
-	bankBuf := ds.cache.dirToBankBuffers[bank]
+	bankBuf := &next.DirToBankBufs[bank]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -439,8 +409,9 @@ func (ds *directoryStage) writeToBank(
 	trans.hasBlock = true
 	trans.action = bankWriteHit
 
+	transIdx := ds.findTransIndex(trans)
 	ds.popDirPostBuf()
-	bankBuf.Push(trans)
+	bankBuf.PushTyped(transIdx)
 
 	return true
 }
@@ -450,9 +421,10 @@ func (ds *directoryStage) evict(
 	victimSetID, victimWayID int,
 ) bool {
 	spec := ds.cache.comp.GetSpec()
+	next := ds.cache.comp.GetNextState()
 	bankNum := bankID(victimSetID, victimWayID,
-		spec.WayAssociativity, len(ds.cache.dirToBankBuffers))
-	bankBuf := ds.cache.dirToBankBuffers[bankNum]
+		spec.WayAssociativity, len(next.DirToBankBufs))
+	bankBuf := &next.DirToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -476,8 +448,9 @@ func (ds *directoryStage) evict(
 	ds.updateTransForEviction(trans, victimSetID, victimWayID, pid, cacheLineID)
 	ds.updateVictimBlockMetaData(victimSetID, victimWayID, cacheLineID, pid)
 
+	transIdx := ds.findTransIndex(trans)
 	ds.popDirPostBuf()
-	bankBuf.Push(trans)
+	bankBuf.PushTyped(transIdx)
 
 	ds.cache.evictingList[trans.victimTag] = true
 
@@ -505,7 +478,6 @@ func (ds *directoryStage) updateTransForEviction(
 	cacheLineID uint64,
 ) {
 	spec := ds.cache.comp.GetSpec()
-	// Read victim metadata from next so within-tick mutations are visible.
 	next := ds.cache.comp.GetNextState()
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
@@ -569,8 +541,8 @@ func (ds *directoryStage) fetch(
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	bankNum := bankID(setID, wayID,
-		spec.WayAssociativity, len(ds.cache.dirToBankBuffers))
-	bankBuf := ds.cache.dirToBankBuffers[bankNum]
+		spec.WayAssociativity, len(next.DirToBankBufs))
+	bankBuf := &next.DirToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -600,7 +572,8 @@ func (ds *directoryStage) fetch(
 	trans.action = writeBufferFetch
 	trans.fetchPID = pid
 	trans.fetchAddress = cacheLineID
-	bankBuf.Push(trans)
+	transIdx := ds.findTransIndex(trans)
+	bankBuf.PushTyped(transIdx)
 
 	ds.addMSHREntryBlock(next, mshrIdx, setID, wayID, trans)
 
@@ -675,7 +648,7 @@ func (ds *directoryStage) findTransIndex(trans *transactionState) int {
 // popDirPostBuf removes the first element from the directory post-pipeline buffer.
 func (ds *directoryStage) popDirPostBuf() {
 	next := ds.cache.comp.GetNextState()
-	if len(next.DirPostPipelineBufIndices) > 0 {
-		next.DirPostPipelineBufIndices = next.DirPostPipelineBufIndices[1:]
+	if len(next.DirPostPipelineBuf.Elements) > 0 {
+		next.DirPostPipelineBuf.Elements = next.DirPostPipelineBuf.Elements[1:]
 	}
 }

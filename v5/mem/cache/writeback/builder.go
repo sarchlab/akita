@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 )
 
 // resolveLegacyMapper converts a legacy AddressToPortMapper set via
@@ -214,18 +215,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		laneWidth = 2
 	}
 
-	initialState := State{
-		DirToBankBufIndices:             make([]bankBufState, 1),
-		WriteBufferToBankBufIndices:     make([]bankBufState, 1),
-		BankPipelineStages:              make([]bankPipelineState, 1),
-		BankPostPipelineBufIndices:      make([]bankPostBufState, 1),
-		BankInflightTransCounts:         make([]int, 1),
-		BankDownwardInflightTransCounts: make([]int, 1),
-	}
-
-	// Initialize directory state
-	cache.DirectoryReset(
-		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+	initialState := b.buildInitialState(name, laneWidth, numSets)
 
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
@@ -242,6 +232,58 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp.AddMiddleware(cmw) // index 1
 
 	return comp
+}
+
+func (b Builder) buildInitialState(
+	name string, laneWidth, numSets int,
+) State {
+	blockSize := 1 << b.log2BlockSize
+
+	s := State{
+		DirStageBuf: stateutil.Buffer[int]{
+			BufferName: name + ".DirStageBuf",
+			Cap:        b.numReqPerCycle,
+		},
+		DirToBankBufs: []stateutil.Buffer[int]{{
+			BufferName: name + ".DirToBankBuf",
+			Cap:        b.numReqPerCycle,
+		}},
+		WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+			BufferName: name + ".WriteBufferToBankBuf",
+			Cap:        b.numReqPerCycle,
+		}},
+		MSHRStageBuf: stateutil.Buffer[int]{
+			BufferName: name + ".MSHRStageBuf",
+			Cap:        b.numReqPerCycle,
+		},
+		WriteBufferBuf: stateutil.Buffer[int]{
+			BufferName: name + ".WriteBufferBuf",
+			Cap:        b.numReqPerCycle,
+		},
+		DirPipeline: stateutil.Pipeline[int]{
+			Width:     laneWidth,
+			NumStages: b.dirLatency,
+		},
+		DirPostPipelineBuf: stateutil.Buffer[int]{
+			BufferName: name + ".DirPostPipelineBuf",
+			Cap:        b.numReqPerCycle,
+		},
+		BankPipelines: []stateutil.Pipeline[int]{{
+			Width:     laneWidth,
+			NumStages: b.bankLatency,
+		}},
+		BankPostPipelineBufs: []stateutil.Buffer[int]{{
+			BufferName: name + ".BankPostPipelineBuf",
+			Cap:        laneWidth,
+		}},
+		BankInflightTransCounts:         make([]int, 1),
+		BankDownwardInflightTransCounts: make([]int, 1),
+	}
+
+	cache.DirectoryReset(
+		&s.DirectoryState, numSets, b.wayAssociativity, blockSize)
+
+	return s
 }
 
 func (b *Builder) buildSpec(numSets int) Spec {
@@ -287,7 +329,6 @@ func (b *Builder) buildPipelineMW(
 	b.createPipelinePorts(m, comp)
 	m.storage = mem.NewStorage(b.byteSize)
 
-	b.buildAdapters(m, laneWidth)
 	b.createInternalStages(m, laneWidth)
 
 	return m
@@ -325,79 +366,6 @@ func (b *Builder) createPipelinePorts(
 	m.bottomPort = b.bottomPort
 	m.bottomPort.SetComponent(comp)
 	comp.AddPort("Bottom", m.bottomPort)
-}
-
-func (b *Builder) buildAdapters(m *pipelineMW, laneWidth int) {
-	next := m.comp.GetNextState()
-
-	b.buildTransBufferAdapters(m, next)
-	b.buildPostBufAdapters(m, next, laneWidth)
-}
-
-func (b *Builder) buildTransBufferAdapters(m *pipelineMW, next *State) {
-	m.dirStageBuffer = &stateTransBuffer{
-		name:       m.comp.Name() + ".DirStageBuffer",
-		readItems:  &next.DirStageBufIndices,
-		writeItems: &next.DirStageBufIndices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	m.dirToBankBuffers = make([]*stateTransBuffer, 1)
-	m.dirToBankBuffers[0] = &stateTransBuffer{
-		name:       m.comp.Name() + ".DirToBankBuffer",
-		readItems:  &next.DirToBankBufIndices[0].Indices,
-		writeItems: &next.DirToBankBufIndices[0].Indices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	m.writeBufferToBankBuffers = make([]*stateTransBuffer, 1)
-	m.writeBufferToBankBuffers[0] = &stateTransBuffer{
-		name:       m.comp.Name() + ".WriteBufferToBankBuffer",
-		readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
-		writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	m.mshrStageBuffer = &stateTransBuffer{
-		name:       m.comp.Name() + ".MSHRStageBuffer",
-		readItems:  &next.MSHRStageBufEntries,
-		writeItems: &next.MSHRStageBufEntries,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	m.writeBufferBuffer = &stateTransBuffer{
-		name:       m.comp.Name() + ".WriteBufferBuffer",
-		readItems:  &next.WriteBufferBufIndices,
-		writeItems: &next.WriteBufferBufIndices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-}
-
-func (b *Builder) buildPostBufAdapters(
-	m *pipelineMW, next *State, laneWidth int,
-) {
-	m.dirPostBufAdapter = &stateDirPostBufAdapter{
-		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
-		readItems:  &next.DirPostPipelineBufIndices,
-		writeItems: &next.DirPostPipelineBufIndices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	m.bankPostBufAdapters = make([]*stateBankPostBufAdapter, 1)
-	m.bankPostBufAdapters[0] = &stateBankPostBufAdapter{
-		name: fmt.Sprintf(
-			"%s.Bank.PostPipelineBuffer", m.comp.Name()),
-		readItems:  &next.BankPostPipelineBufIndices[0].Indices,
-		writeItems: &next.BankPostPipelineBufIndices[0].Indices,
-		capacity:   laneWidth,
-		mw:         m,
-	}
 }
 
 func (b *Builder) createInternalStages(m *pipelineMW, laneWidth int) {

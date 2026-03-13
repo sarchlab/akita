@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -22,10 +23,29 @@ var _ = Describe("TopParser", func() {
 		port = NewMockPort(mockCtrl)
 
 		initialState := State{
-			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
-			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
-			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			DirStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirStageBuf", Cap: 4,
+			},
+			DirToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.DirToBankBuf", Cap: 4,
+			}},
+			WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.WBToBankBuf", Cap: 4,
+			}},
+			MSHRStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.MSHRStageBuf", Cap: 4,
+			},
+			WriteBufferBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.WriteBufferBuf", Cap: 4,
+			},
+			DirPipeline: stateutil.Pipeline[int]{Width: 4, NumStages: 0},
+			DirPostPipelineBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf", Cap: 4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{{Width: 4, NumStages: 10}},
+			BankPostPipelineBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.BankPostBuf", Cap: 4,
+			}},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
@@ -45,15 +65,6 @@ var _ = Describe("TopParser", func() {
 			Build("Cache")
 
 		m.comp.SetState(initialState)
-		next := m.comp.GetNextState()
-
-		m.dirStageBuffer = &stateTransBuffer{
-			name:     "Cache.DirStageBuf",
-			readItems:  &next.DirStageBufIndices,
-			writeItems: &next.DirStageBufIndices,
-			capacity: 4,
-			mw:       m,
-		}
 
 		parser = &topParser{
 			cache: m,

@@ -20,7 +20,8 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	if !p.cache.dirStageBuffer.CanPush() {
+	next := p.cache.comp.GetNextState()
+	if !next.DirStageBuf.CanPush() {
 		return false
 	}
 
@@ -37,7 +38,8 @@ func (p *topParser) Tick() bool {
 
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)
 
-	p.cache.dirStageBuffer.Push(trans)
+	idx := len(p.cache.inFlightTransactions) - 1
+	next.DirStageBuf.PushTyped(idx)
 
 	tracing.TraceReqReceive(msg, p.cache.comp)
 

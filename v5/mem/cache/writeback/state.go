@@ -47,37 +47,6 @@ type transactionSnapshot struct {
 	MSHRTransactionIndices []int       `json:"mshr_transaction_indices"`
 }
 
-// dirPipelineStageState captures one directory pipeline slot.
-type dirPipelineStageState struct {
-	Lane       int `json:"lane"`
-	Stage      int `json:"stage"`
-	TransIndex int `json:"trans_index"`
-	CycleLeft  int `json:"cycle_left"`
-}
-
-// bankPipelineStageState captures one bank pipeline slot.
-type bankPipelineStageState struct {
-	Lane       int `json:"lane"`
-	Stage      int `json:"stage"`
-	TransIndex int `json:"trans_index"`
-	CycleLeft  int `json:"cycle_left"`
-}
-
-// bankBufState wraps per-bank buffer indices to avoid nested slices.
-type bankBufState struct {
-	Indices []int `json:"indices"`
-}
-
-// bankPipelineState wraps per-bank pipeline stage states.
-type bankPipelineState struct {
-	Stages []bankPipelineStageState `json:"stages"`
-}
-
-// bankPostBufState wraps per-bank post-pipeline buffer indices.
-type bankPostBufState struct {
-	Indices []int `json:"indices"`
-}
-
 // flushReqState is a serializable representation of a cache.FlushReq.
 type flushReqState struct {
 	MsgMeta                 sim.MsgMeta `json:"msg_meta"`
