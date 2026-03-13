@@ -4,33 +4,55 @@
 
 We are evolving the Akita V5 simulation framework toward a clean, minimal component model inspired by digital circuit semantics.
 
+### Ultimate Goal (from human, issue #342)
+
+1. **Single simulation-level save and load support** — one call saves/loads the entire simulation state.
+2. **No per-component custom save/load functions** — serialization must be fully automatic.
+3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
+4. **No compromise in performance** — must match original akita repo performance.
+
 ### Core Component Model
 
 A component is exactly 5 things: **Spec, State, Ports, Middleware, Hooks**. Nothing else.
 
 - **Spec**: Immutable configuration. Primitive/JSON-friendly values. Set once by builder. Includes algorithm parameters (e.g., interleaving sizes, capacities, timing tables, port names for routing) that previously lived in dependency objects.
-- **State**: ALL mutable data. Plain serializable structs only (no pointers, interfaces, channels). This is the single source of truth during tick. Data previously held by runtime objects (MSHR entries, directory sets, pipeline stages, bank states, buffers) must be represented as pure data in State. Behavior from former runtime objects (MSHR.Query, Directory.Lookup, Buffer.Push, Pipeline.Tick) becomes **free functions** operating on `*State` and `*Spec`.
+- **State**: ALL mutable data. Must be serializable. Can include:
+  - Plain structs with primitive fields
+  - Buffers (implementing a Serialize interface)
+  - Pipelines (implementing a Serialize interface)
+  - Any object that implements a serialization interface
+  
+  Data previously held by runtime objects (MSHR entries, directory sets, pipeline stages, bank states, buffers) must be represented as pure data in State. Behavior from former runtime objects (MSHR.Query, Directory.Lookup, Buffer.Push, Pipeline.Tick) becomes **free functions** operating on `*State` and `*Spec`.
 - **Ports**: Communication channels. Accessed via `GetPortByName()`. Port names stored as strings in Spec for routing.
-- **Middleware**: Tick logic. Each middleware is a self-contained stage. Reads current State + Spec, writes next State, sends/receives through Ports, may invoke Hooks. Each middleware is independent — no shared mutable objects between middlewares. May hold `*mem.Storage` (or similar physical substrate references) as the sole external reference.
+- **Middleware**: Tick logic. Each middleware is a self-contained stage. Reads/writes State, sends/receives through Ports, may invoke Hooks. Each middleware is independent — no shared mutable objects between middlewares. May hold `*mem.Storage` (or similar physical substrate references) as the sole external reference.
 - **Hooks**: Extension points for monitoring/instrumentation.
 
-### A-B State (Double-Buffered) — IMPLEMENTED in modeling.Component
+### In-Place State Update — IMPLEMENTED in modeling.Component (M34)
 
-Each component has TWO state copies: "current" (read-only during tick) and "next" (write-only during tick). Before middleware runs, `current` is deep-copied to `next`. After all middleware finishes, `next` becomes `current`. This matches digital circuit semantics where registers read old values and write new values in the same clock cycle.
+Component uses in-place state update: `current` and `next` refer to the same state value. During Tick, `current` is assigned to `next` before the middleware pipeline runs; after the pipeline completes, `next` is assigned back to `current`. Because both point to the same value, middlewares can read from GetState or GetNextState interchangeably.
 
-- `GetState()` → returns current (A buffer, read-only)
-- `GetNextState()` → returns pointer to next (B buffer, write-only)
-- `SetNextState()` → sets next buffer directly
-- `SetState()` → sets both buffers (for initialization/save-load)
+- `GetState()` → returns current state
+- `GetNextState()` → returns pointer to next state (same underlying data)
+- `SetNextState()` → sets next state directly
+- `SetState()` → sets both current and next (for initialization/save-load)
 - Serialization saves only `current` state
+- No deep copy overhead (0µs per tick)
 
-**Critical rule**: Middleware MUST use `GetState()` for all reads and `GetNextState()` for all writes. Using `GetNextState()` for reads is a bug — it means a middleware sees its own writes and other middlewares' writes from the same tick, breaking the A-B isolation.
+### Serializable State (issue #343)
+
+State can contain buffers, pipelines, and any other object that implements a serialization interface. This allows:
+- Buffers as first-class state members (not adapter wrappers)
+- Pipelines as first-class state members
+- Any serializable type as a state member
+- Automatic save/load without per-component custom code
+
+**Discussion needed**: How to handle pipelines in state. What serialization interface to use.
 
 ### Multi-Middleware Architecture — DONE
 
 All components have **multiple middlewares**, each responsible for one logical function. Single-middleware patterns are eliminated.
 
-- Under A-B state semantics, each middleware reads from `current` (A buffer) and writes to `next` (B buffer). Middlewares within the same tick do NOT see each other's writes — this matches hardware pipeline register semantics.
+- With in-place state update, middlewares within the same tick CAN see each other's writes. This is by design — it matches the read-own-writes pattern used by all components.
 - The +1 cycle latency per middleware boundary is acceptable (per human clarification).
 - Components are decomposed into natural stage boundaries (e.g., pipeline + control, parse + respond).
 
@@ -41,7 +63,6 @@ All components have **multiple middlewares**, each responsible for one logical f
 **"A little duplication is better than a little dependency."** (Rob Pike)
 
 - **Eliminate ALL external dependency interfaces** (AddressToPortMapper, VictimFinder, AddressConverter, SubTransSplitter, CommandQueue, etc.). Inline the logic directly into middleware.
-- Dependencies create problems with A-B state (e.g., port routing must happen immediately, breaking next-cycle-visibility). Embedding logic in middleware avoids this entirely.
 - Store port *names* (strings) in Spec, resolve via `GetPortByName()` at runtime. Port routing reads Spec (immutable), `Send()` is a side-effect on the network — not internal state.
 
 ### Allowed External References
@@ -80,6 +101,8 @@ Following the same data/behavior separation as MSHR and Directory:
 - This eliminates `queueing.Pipeline` and `queueing.Buffer` runtime objects from middleware.
 - The `restoreFromState` conversion layers disappear — State IS the canonical representation.
 
+**Future direction** (issue #343): Buffers and pipelines should implement a serialization interface so they can be embedded directly in State as first-class objects, without needing adapter wrappers or manual state conversion.
+
 ### Messages as Concrete Types (DONE)
 
 `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types embedding `sim.MsgMeta`. No builders, no msgRef types. Components type-switch on concrete types.
@@ -91,25 +114,21 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 ## Open Issues (from human review)
 
 ### Resolved
-1. ~~**Unnecessary Comp wrapper structs**~~: Fixed in M29 — TLB and mmuCache wrappers removed.
-2. ~~**Middleware boilerplate**~~: Fixed in M29 — ~160 delegation methods eliminated.
-3. ~~**File naming**~~: Fixed in M29 — tlbprotocol.go → messages.go.
+1. ~~**Unnecessary Comp wrapper structs**~~: Fixed in M29.
+2. ~~**Middleware boilerplate**~~: Fixed in M29.
+3. ~~**File naming**~~: Fixed in M29.
+4. ~~**Simulation performance regression**~~: Fixed in M34 — eliminated deep copy entirely (in-place state update, 0µs overhead).
+5. ~~**NOC test size revert**~~: Fixed in M34 — reverted to original upstream values.
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
 ### Active
 
-4. **Simulation performance regression** (issues #317, #319): The mem acceptance tests must complete in similar time to the original akita repo (<5 min). M33 switched deep copy from gob to reflect (16x speedup, ~19µs/tick), but the original akita repo has 0µs overhead (no A-B state). Re-measurement needed with reflect copy. The human is now questioning whether A-B is needed at all.
+6. **Cache unification** (issues #321, #336): Merge 3 simpler caches (writearound, writeevict, writethrough) into one cache with WritePolicy strategy. **Human approved for implementation** (issue #336 comment: "Let's go with merging the 3 simpler caches"). Writeback stays separate.
 
-5. **Cache unification** (issue #321): Explore having a single cache component with different write-control middlewares instead of 4 separate cache packages (writeback, writearound, writeevict, writethrough). Currently ~21K lines with ~90% code overlap. Discussion only — no coding until design is approved.
+7. **Buffers and pipelines in state** (issue #343): Allow buffers and anything serializable as part of state by implementing a serialize interface. Discuss how to handle pipelines. This connects to the ultimate goal of automatic save/load without per-component custom code.
 
-6. **A-B state architecture reconsideration** (issues #324, #326): The human is exploring two major directions:
-   - **Eliminate double buffering**: Use in-place update instead. Analysis shows A-B isolation is not actually used by any current middleware — all use GetNextState() for both reads and writes. The deep copy is wasted overhead.
-   - **Global state manager**: Register all state centrally with string-based identifiers. State as nested maps/slices, eliminating typed state structs. Components hold references to their state in the global manager. Mutations committed at cycle end (or immediately via "back door" for caches that need read-own-writes).
-   - Human's ordering idea: read-calculate-write → 1 cycle, write-calculate-read → 3 cycles.
-   - **This is discuss-only. No implementation until design is approved.**
-
-7. **NOC test size revert** (issue #325): Must revert to original upstream message counts. Blocked on performance — at original sizes with gob copy, tests took 6-12 hours. With reflect copy, need re-measurement.
+8. **Global state manager** (issue #326): Long-term direction. Register all state centrally with string-based identifiers. Deferred due to performance concerns (map access 75× slower than struct fields). May revisit as optional overlay for tooling/debugging.
 
 ### CI Infrastructure
 
@@ -122,39 +141,43 @@ All CI workflow jobs use `self-hosted` runners per human directive (issue #309).
 3. Component = Spec + State + Ports + Middleware + Hooks (nothing else)
 4. No Comp wrapper structs (except thin wrappers for StorageOwner / external service interfaces)
 5. No external dependency interfaces — all logic embedded in middleware
-6. A-B state pattern correctly used in all components (GetState for read, GetNextState for write)
-7. Data from all runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
-8. No SaveState/LoadState conversion layers — State IS canonical
-9. No restoreFromState / syncToState functions — middleware works directly with State
-10. No runtime copies of State substructures in middleware
-11. Acceptance test for save/load process passes
-12. All first-party components use the modeling package pattern
-13. Each component has multiple middlewares (not one monolithic middleware)
-14. `component_guide.md` reflects the final architecture
+6. Single simulation-level save/load (no per-component custom save/load)
+7. Developers only need to implement middleware Tick functions
+8. Data from all runtime objects (MSHR, directory, pipeline, buffers) lives in State as pure data
+9. No SaveState/LoadState conversion layers — State IS canonical
+10. No restoreFromState / syncToState functions — middleware works directly with State
+11. No runtime copies of State substructures in middleware
+12. Acceptance test for save/load process passes
+13. All first-party components use the modeling package pattern
+14. Each component has multiple middlewares (not one monolithic middleware)
+15. `component_guide.md` reflects the final architecture
+16. Performance matches original akita repo (no compromise)
 
 ## Constraints
 
-- Keep State pure and serializable (no pointers, live handles, functions, channels)
+- State must be serializable (can include types implementing serialize interface)
 - Keep Spec primitive and JSON-friendly
 - Use tick-driven patterns; prefer countdowns over scheduled events
-- Middleware reads current State (read-only) and writes next State (write-only)
+- In-place state update: middlewares read/write the same state within a tick
 - A little duplication is better than a little dependency
 - `*mem.Storage`, `vm.PageTable`, `routing.Table`, `arbitration.Arbiter` are the only allowed external references held by middleware
-- Deep copy uses gob round-trip by default; components may override Tick() with custom shallow copy for performance (see endpoint pattern)
-- 1-cycle delay from A-B buffering is acceptable for multi-middleware components
+- No per-component custom save/load functions
+- No compromise in performance
 
 ## Resources
 
 - Diana's A-B state co-design analysis: `workspace/diana/ab_state_comp_elim_codesign.md`
 - Iris's dependency elimination analysis: `workspace/iris/embed_logic_in_middleware_analysis.md`
 - Iris's MSHR decoupling analysis: `workspace/iris/mshr_dependency_analysis.md`
-- Human approvals: Issues #145 (Comp elimination), #150 (A-B state)
+- Iris's cache unification design: `workspace/iris/note.md` (issue #336)
+- Diana's in-place update analysis: `workspace/diana/note.md` (issue #335)
+- Human approvals: Issues #145 (Comp elimination), #150 (A-B state), #336 (cache unification)
 - Reference implementations:
-  - `mem/idealmemcontroller/` — 2 MW, thin Comp (StorageOwner), A-B correct ✅
-  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions, A-B correct ✅
-  - `mem/cache/writearound/` — A-B correct, legacyMapper resolved at Build time ✅
-  - `mem/dram/` — 3 MW, inlined dependencies, free functions, A-B correct ✅
-  - `noc/networking/switching/switches/` — 2 MW, State canonical, pipeline/buffer in State ✅
-  - `noc/networking/switching/endpoint/` — 2 MW, A-B correct ✅
-  - `mem/simplebankedmemory/` — 2 MW, A-B correct ✅
-  - `examples/tickingping/` — 2 MW, A-B correct ✅
+  - `mem/idealmemcontroller/` — 2 MW, thin Comp (StorageOwner)
+  - `mem/cache/writeback/` — State canonical for MSHR/Directory, free functions
+  - `mem/cache/writearound/` — legacyMapper resolved at Build time
+  - `mem/dram/` — 3 MW, inlined dependencies, free functions
+  - `noc/networking/switching/switches/` — 2 MW, State canonical, pipeline/buffer in State
+  - `noc/networking/switching/endpoint/` — 2 MW
+  - `mem/simplebankedmemory/` — 2 MW
+  - `examples/tickingping/` — 2 MW
