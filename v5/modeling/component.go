@@ -1,8 +1,7 @@
 package modeling
 
 import (
-	"bytes"
-	"encoding/gob"
+	"reflect"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -90,19 +89,55 @@ func (c *Component[S, T]) ResetAndRestartTick() {
 	c.TickLater()
 }
 
-// deepCopy creates a deep copy of a value using gob round-trip encoding.
-// This is ~8x faster than JSON for typical State structs while supporting
-// the same set of types (no pointers, interfaces, channels, or functions).
+// deepCopy creates a deep copy of a value using reflection-based traversal.
+// It handles structs, slices, maps, arrays, and primitive types. It panics
+// on pointer, interface, channel, or func types, which should never appear
+// in State structs per the modeling spec.
 func deepCopy[T any](src T) T {
-	var buf bytes.Buffer
-	if err := gob.NewEncoder(&buf).Encode(&src); err != nil {
-		panic("modeling.deepCopy: encode failed: " + err.Error())
-	}
+	srcVal := reflect.ValueOf(&src).Elem()
+	dstVal := reflectDeepCopy(srcVal)
+	return dstVal.Interface().(T)
+}
 
-	var dst T
-	if err := gob.NewDecoder(&buf).Decode(&dst); err != nil {
-		panic("modeling.deepCopy: decode failed: " + err.Error())
+func reflectDeepCopy(src reflect.Value) reflect.Value {
+	switch src.Kind() {
+	case reflect.Struct:
+		dst := reflect.New(src.Type()).Elem()
+		for i := 0; i < src.NumField(); i++ {
+			dst.Field(i).Set(reflectDeepCopy(src.Field(i)))
+		}
+		return dst
+	case reflect.Slice:
+		if src.IsNil() {
+			return reflect.Zero(src.Type())
+		}
+		dst := reflect.MakeSlice(src.Type(), src.Len(), src.Len())
+		for i := 0; i < src.Len(); i++ {
+			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		}
+		return dst
+	case reflect.Map:
+		if src.IsNil() {
+			return reflect.Zero(src.Type())
+		}
+		dst := reflect.MakeMapWithSize(src.Type(), src.Len())
+		iter := src.MapRange()
+		for iter.Next() {
+			dst.SetMapIndex(
+				reflectDeepCopy(iter.Key()),
+				reflectDeepCopy(iter.Value()),
+			)
+		}
+		return dst
+	case reflect.Array:
+		dst := reflect.New(src.Type()).Elem()
+		for i := 0; i < src.Len(); i++ {
+			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		}
+		return dst
+	default:
+		// Primitive types (int, uint, float, bool, string, etc.)
+		// These are value types — just return a copy
+		return src
 	}
-
-	return dst
 }
