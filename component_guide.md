@@ -266,10 +266,13 @@ type BadSpec3 struct {
 1. The State must be a **plain Go struct**.
 2. All Spec-allowed types are also allowed in State.
 3. Additionally, **nested structs** are allowed (and slices/maps of structs).
-4. Nested structs must themselves follow the same rules recursively — no
+4. `stateutil.Buffer[T]` and `stateutil.Pipeline[T]` are allowed — they are
+   concrete value types with exported JSON-tagged fields, so they behave like
+   nested structs and serialize automatically (see §4A).
+5. Nested structs must themselves follow the same rules recursively — no
    pointers, interfaces, functions, or channels at any nesting depth.
-5. Cross-references to other components must use **string IDs**, not pointers.
-6. All fields should have `json:"..."` tags for serialization.
+6. Cross-references to other components must use **string IDs**, not pointers.
+7. All fields should have `json:"..."` tags for serialization.
 
 ### Validation
 
@@ -318,10 +321,297 @@ type BadState2 struct {
 | Maps (string keys, primitive values) | ✅ | ✅ |
 | Nested structs | ❌ | ✅ |
 | Slices/maps of structs | ❌ | ✅ |
+| `stateutil.Buffer[T]` / `Pipeline[T]` | ❌ | ✅ |
 | Pointers | ❌ | ❌ |
 | Interfaces | ❌ | ❌ |
 | Functions | ❌ | ❌ |
 | Channels | ❌ | ❌ |
+
+---
+
+## 4A. State Primitives: `stateutil.Buffer[T]` and `Pipeline[T]`
+
+> Source: `v5/stateutil/buffer.go`, `v5/stateutil/pipeline.go`
+
+### What stateutil Provides
+
+The `stateutil` package provides two generic, JSON-serializable container types
+designed for use inside State structs:
+
+- **`stateutil.Buffer[T]`** — a generic FIFO queue that satisfies the
+  `queueing.Buffer` interface. It is a concrete value type (not an interface)
+  with exported, JSON-tagged fields.
+- **`stateutil.Pipeline[T]`** — a generic multi-lane, multi-stage pipeline.
+  It is also a concrete value type with exported, JSON-tagged fields.
+
+Both types serialize automatically as part of State JSON marshaling — **no
+custom `GetState`/`SetState` is needed**.
+
+### Why `Buffer[T]`, Not the Old `queueing.Buffer`
+
+In earlier versions of Akita, queues were typically `queueing.Buffer` — an
+**interface** type. Interfaces are not JSON-serializable and cannot be stored
+in State (they violate the "no interfaces, no pointers" rule).
+
+`stateutil.Buffer[T]` solves this by being a **concrete value type** with
+exported fields:
+
+```go
+// From v5/stateutil/buffer.go
+type Buffer[T any] struct {
+    sim.HookableBase `json:"-"`
+
+    BufferName string `json:"buffer_name"`
+    Cap        int    `json:"cap"`
+    Elements   []T    `json:"elements"`
+}
+```
+
+- `HookableBase` is excluded from JSON via `json:"-"`.
+- `BufferName`, `Cap`, and `Elements` are exported with JSON tags —
+  they serialize automatically.
+- The type parameter `T` must itself be JSON-serializable (primitives,
+  structs, slices — no pointers or interfaces).
+
+### Embedding in State Structs
+
+Embed `Buffer[T]` and `Pipeline[T]` directly in your State struct with JSON
+tags, just like any other nested struct:
+
+```go
+// From v5/mem/cache/simplecache/cache.go
+type State struct {
+    // ...
+    DirBuf        stateutil.Buffer[int]     `json:"dir_buf"`
+    BankBufs      []stateutil.Buffer[int]   `json:"bank_bufs"`
+    DirPipeline   stateutil.Pipeline[int]   `json:"dir_pipeline"`
+    DirPostBuf    stateutil.Buffer[int]     `json:"dir_post_buf"`
+    BankPipelines []stateutil.Pipeline[int] `json:"bank_pipelines"`
+    BankPostBufs  []stateutil.Buffer[int]   `json:"bank_post_bufs"`
+    // ...
+}
+```
+
+Slices of buffers and pipelines are also valid (e.g., `[]stateutil.Buffer[int]`
+for per-bank queues).
+
+The writeback cache uses the same pattern with more buffers:
+
+```go
+// From v5/mem/cache/writeback/writebackcache.go
+type State struct {
+    // ...
+    DirStageBuf           stateutil.Buffer[int]     `json:"dir_stage_buf"`
+    DirToBankBufs         []stateutil.Buffer[int]   `json:"dir_to_bank_bufs"`
+    WriteBufferToBankBufs []stateutil.Buffer[int]   `json:"write_buffer_to_bank_bufs"`
+    MSHRStageBuf          stateutil.Buffer[int]     `json:"mshr_stage_buf"`
+    WriteBufferBuf        stateutil.Buffer[int]     `json:"write_buffer_buf"`
+
+    DirPipeline        stateutil.Pipeline[int] `json:"dir_pipeline"`
+    DirPostPipelineBuf stateutil.Buffer[int]   `json:"dir_post_pipeline_buf"`
+
+    BankPipelines        []stateutil.Pipeline[int] `json:"bank_pipelines"`
+    BankPostPipelineBufs []stateutil.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+    // ...
+}
+```
+
+**Note:** The type parameter is typically `int` — representing an index into a
+transaction slice in State (see §4B for the flat transaction pattern).
+
+### `Buffer[T]` Key Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `CanPush` | `() bool` | Returns `true` if the buffer has room |
+| `Push` | `(e interface{})` | Adds an element (satisfies `queueing.Buffer`) |
+| `PushTyped` | `(e T)` | Adds an element with the concrete type |
+| `Pop` | `() interface{}` | Removes and returns the front element |
+| `PopTyped` | `() (T, bool)` | Removes and returns the front element with concrete type |
+| `Peek` | `() interface{}` | Returns the front element without removing |
+| `Clear` | `()` | Removes all elements |
+| `Size` | `() int` | Returns the number of elements |
+| `Capacity` | `() int` | Returns the buffer's capacity |
+| `Name` | `() string` | Returns the buffer's name |
+
+### `Pipeline[T]` Structure
+
+```go
+// From v5/stateutil/pipeline.go
+type PipelineStage[T any] struct {
+    Lane      int `json:"lane"`
+    Stage     int `json:"stage"`
+    Item      T   `json:"item"`
+    CycleLeft int `json:"cycle_left"`
+}
+
+type Pipeline[T any] struct {
+    Width     int                `json:"width"`
+    NumStages int                `json:"num_stages"`
+    Stages    []PipelineStage[T] `json:"stages"`
+}
+```
+
+- `Width` — the number of lanes (items that can be at the same stage
+  simultaneously).
+- `NumStages` — the total number of stages. An item starts at stage 0 with
+  `CycleLeft = NumStages - 1`.
+- `Stages` — a flat slice of all active items in the pipeline. Each
+  `PipelineStage` records the item's current lane, stage, and remaining
+  cycles.
+
+### `Pipeline[T]` Key Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `CanAccept` | `() bool` | Returns `true` if there is a free lane at stage 0 |
+| `Accept` | `(item T)` | Inserts an item into the first stage |
+| `Tick` | `(postBuf *Buffer[T]) bool` | Advances the pipeline by one cycle; completed items are pushed into `postBuf` |
+| `TickFunc` | `(accept func(T) bool) bool` | Like `Tick`, but uses a custom accept function for completed items |
+
+---
+
+## 4B. Flat Transaction Pattern
+
+### The Problem
+
+Messages like `*mem.ReadReq` and `*mem.WriteReq` are pointer types. Storing
+them in State violates the "no pointers, no interfaces" rule and breaks
+JSON serialization. In pre-V5 code, transaction structs commonly held fields
+like:
+
+```go
+// ❌ Old pattern — pointer fields, NOT serializable
+type transaction struct {
+    Read          *mem.ReadReq
+    Write         *mem.WriteReq
+    ReadToBottom  *mem.ReadReq
+    WriteToBottom *mem.WriteReq
+    PreCoalesce   []*transaction
+}
+```
+
+This cannot be stored in State because:
+- `*mem.ReadReq` and `*mem.WriteReq` are pointers
+- `[]*transaction` is a slice of pointers
+- None of these types are JSON-serializable
+
+### The Solution: Flat Value Fields
+
+Replace each pointer field with flat value fields that capture exactly the
+data needed. Use a `bool` flag to indicate whether the field is populated:
+
+```go
+// ✅ New pattern — flat fields, fully JSON-serializable
+// From v5/mem/cache/simplecache/transaction.go
+type transactionState struct {
+    ID string `json:"id"`
+
+    // Read request fields (flattened from *mem.ReadReq)
+    HasRead            bool        `json:"has_read"`
+    ReadMeta           sim.MsgMeta `json:"read_meta"`
+    ReadAddress        uint64      `json:"read_address"`
+    ReadAccessByteSize uint64      `json:"read_access_byte_size"`
+    ReadPID            vm.PID      `json:"read_pid"`
+
+    // Write request fields (flattened from *mem.WriteReq)
+    HasWrite       bool        `json:"has_write"`
+    WriteMeta      sim.MsgMeta `json:"write_meta"`
+    WriteAddress   uint64      `json:"write_address"`
+    WriteData      []byte      `json:"write_data"`
+    WriteDirtyMask []bool      `json:"write_dirty_mask"`
+    WritePID       vm.PID      `json:"write_pid"`
+
+    // Pre-coalesce transaction indices (replaces []*transaction)
+    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
+
+    // ... additional flat fields ...
+}
+```
+
+### Key Principles
+
+1. **`Has*` booleans replace nil checks.** Instead of `if t.Read != nil`,
+   use `if t.HasRead`.
+
+2. **Cross-references use indices, not pointers.** Instead of
+   `[]*transactionState`, use `[]int` — indices into the transaction slice
+   in State:
+
+    ```go
+    // From v5/mem/cache/simplecache/transaction.go
+    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
+    ```
+
+    ```go
+    // From v5/mem/cache/writeback/transaction.go
+    MSHRTransactionIndices []int `json:"mshr_transaction_indices"`
+    ```
+
+3. **Messages are reconstructed at send boundaries.** Concrete message types
+   (`ReadReq`, `WriteReq`, etc.) are built fresh from flat fields when they
+   need to be sent over a port — they are never stored in State:
+
+    ```go
+    // Example: reconstructing a ReadReq from flat fields at send time
+    req := &mem.ReadReq{}
+    req.MsgMeta = trans.ReadToBottomMeta
+    req.Address = trans.ReadAddress
+    req.AccessByteSize = trans.ReadAccessByteSize
+    req.PID = trans.ReadToBottomPID
+    err := bottomPort.Send(req)
+    ```
+
+4. **`sim.MsgMeta` is a value type**, not a pointer — it is safe to store
+   directly in State. It holds `ID`, `Src`, `Dst`, `RspTo`, and other
+   routing metadata as string-typed fields.
+
+### Before and After Comparison
+
+**Before (pointer-based — ❌ cannot go in State):**
+
+```go
+type transaction struct {
+    Read          *mem.ReadReq          // pointer — not serializable
+    Write         *mem.WriteReq         // pointer — not serializable
+    PreCoalesce   []*transaction        // pointer slice — not serializable
+    Block         *cache.Block          // pointer — not serializable
+}
+```
+
+**After (flat — ✅ fully serializable):**
+
+```go
+// From v5/mem/cache/simplecache/transaction.go
+type transactionState struct {
+    HasRead            bool        `json:"has_read"`
+    ReadMeta           sim.MsgMeta `json:"read_meta"`
+    ReadAddress        uint64      `json:"read_address"`
+    ReadAccessByteSize uint64      `json:"read_access_byte_size"`
+    ReadPID            vm.PID      `json:"read_pid"`
+
+    HasWrite       bool        `json:"has_write"`
+    WriteMeta      sim.MsgMeta `json:"write_meta"`
+    WriteAddress   uint64      `json:"write_address"`
+    WriteData      []byte      `json:"write_data"`
+    WriteDirtyMask []bool      `json:"write_dirty_mask"`
+    WritePID       vm.PID      `json:"write_pid"`
+
+    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
+
+    BlockSetID int  `json:"block_set_id"`
+    BlockWayID int  `json:"block_way_id"`
+    HasBlock   bool `json:"has_block"`
+}
+```
+
+### Result
+
+With flat transactions and stateutil containers, **no custom
+`GetState`/`SetState` logic is needed on middlewares.** The
+`modeling.Component` handles serialization automatically — `SaveState` and
+`LoadState` marshal/unmarshal the entire State (including all transactions,
+buffers, and pipelines) via standard JSON.
 
 ---
 
@@ -1440,6 +1730,12 @@ When creating a new V5 component, follow these steps:
 - [ ] **Define Spec** — flat struct with primitives only; add `json` tags
 - [ ] **Define State** — struct with primitives and nested structs; add `json`
   tags; use string IDs for cross-references
+- [ ] **Use `stateutil.Buffer[T]` and `Pipeline[T]`** for queues and pipelines
+  in State — they are JSON-serializable value types (see §4A); use `int`
+  indices as the type parameter to reference transactions in a flat slice
+- [ ] **Flatten transaction structs** — replace pointer-to-message fields with
+  flat value fields (`Has*` booleans + individual primitive/struct fields);
+  use `[]int` indices instead of pointer slices (see §4B)
 - [ ] **Implement middleware(s)** — struct(s) holding
   `comp *modeling.Component[Spec, State]`, implementing `Tick() bool`
 - [ ] **Add NamedHookable boilerplate** — 5 delegation methods on each middleware
