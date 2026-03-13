@@ -4,23 +4,49 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (Cycle 253)
+## Current State (Cycle 255)
 
-### M33: Replace gob deep copy with reflect-based deep copy (IN PROGRESS)
-- Budget: 3 | Used: 0
-- Goal: Replace the gob encode/decode deep copy in modeling/component.go with a reflection-based deep copy
-- This is architecture-preserving: keeps A-B double buffering, no per-component custom code
-- Expected ~10-50x speedup over gob (no serialization, direct memory traversal)
-- State types are constrained: no pointers, interfaces, channels — just structs, slices, maps, primitives
-- Should bring mem acceptance test from ~12 min closer to <5 min target
-- NOC switch performance should also improve significantly
-- Does NOT change the A-B API — just makes the copy faster
+### M33: Replace gob deep copy with reflect-based deep copy (DONE — Cycle 255)
+- Budget: 3 | Used: 2
+- PR #61 merged: Quinn implemented reflect-based deepCopy, Ares optimized with type caching
+- 16x speedup over gob (~19µs vs ~322µs for writeback cache state)
+- PR #62 merged: Fixed lint (gocognit) by breaking reflectDeepCopy into smaller functions
+- CI: lint fix verified, acceptance tests need re-measurement
+- **Lesson: Reflect-based copy with type caching is a big win. But human is questioning whether A-B buffering is needed at all.**
 
-### Pending Design Discussions (no implementation until human approves)
-- **Global State Manager** (#326): Human asked about registering state centrally with mutation commands. Design proposal in tbc-db issue #329.
-- **Cache Unification** (#321): Iris analysis complete (#323) — 3 of 4 caches can merge. Human: "Discuss. No coding."
-- **Transaction System** (#324): Diana analysis complete (#327) — found read-own-writes pattern conflicts with deferred apply.
-- **NOC Test Revert** (#325): Iris analysis (#328) — cannot revert until deep copy is fixed. At original sizes, tests would take 6-12 hours.
+### Active Design Discussions (no implementation until human approves)
+
+#### 1. Eliminate or Redesign A-B Buffering (#324, #326)
+- Human's latest direction: "I would either remove double buffering or use string-based identifier with global state management"
+- Human asks: "Can we achieve something similar to double buffering with in-place update?"
+- Human suggests: read-calculate-write order = 1 cycle, write-calculate-read = 3 cycles
+- Diana's analysis (#327): A-B isolation is **NOT actually used** by any current middleware. Deep copy is wasted overhead.
+- **Key question**: Can middleware ordering provide the same guarantees as double buffering?
+- tbc-db issue #335: In-depth analysis assigned to Diana
+
+#### 2. Global State Manager with Maps/Slices (#326)
+- Human asks: "Can we implement all states as nested maps and slices? Eliminate state structs entirely."
+- Human wants: state registered centrally, string-based identifiers, references from components
+- Each component has at most a reference to their state in the global manager
+- **Big architectural pivot** — would change how every component interacts with state
+- Needs thorough analysis of performance (map access vs struct fields) and type safety
+
+#### 3. Cache Unification (#321)
+- Iris analysis complete (#323) — 3 of 4 caches can merge (writearound/writeevict/writethrough)
+- Write-policy-specific middleware selected by builder
+- Human: "Discuss. No coding."
+- tbc-db issue #336: Updated design analysis assigned to Iris
+
+#### 4. NOC Test Size Revert (#325)
+- Cannot revert until performance is good enough
+- With reflect copy (16x faster), need to re-measure at original sizes
+- Iris analysis (#328): at original sizes with gob copy, 6-12 hours. With reflect, maybe 30-60 min?
+- **Blocked on**: measuring actual performance with reflect copy at original sizes
+
+#### 5. Performance Target (#317, #319)
+- mem acceptance tests must complete in <5 min (currently ~12 min with gob, needs re-measurement with reflect)
+- Original akita repo: <5 min (no A-B, no deep copy)
+- If A-B buffering is eliminated, this target is trivially met
 
 ### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
 - Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
