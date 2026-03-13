@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -26,14 +26,13 @@ func (d *directory) Tick() (madeProgress bool) {
 			break
 		}
 
-		item := dirBuf.Peek()
-		if item == nil {
+		if dirBuf.Size() == 0 {
 			break
 		}
 
-		transIdx := item.(int)
+		transIdx := dirBuf.Elements[0]
 		dirPipeline.Accept(transIdx)
-		dirBuf.Pop()
+		dirBuf.Elements = dirBuf.Elements[1:]
 
 		madeProgress = true
 	}
@@ -43,12 +42,11 @@ func (d *directory) Tick() (madeProgress bool) {
 
 	// Process items from post-pipeline buffer
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		item := dirPostBuf.Peek()
-		if item == nil {
+		if dirPostBuf.Size() == 0 {
 			break
 		}
 
-		transIdx := item.(int)
+		transIdx := dirPostBuf.Elements[0]
 		trans := next.postCoalesceTrans(transIdx)
 
 		var processed bool
@@ -110,7 +108,7 @@ func (d *directory) processMSHRHit(
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
 	return true
 }
@@ -143,7 +141,7 @@ func (d *directory) processReadHit(
 	bankBuf.PushTyped(postCoalesceIdx)
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-hit")
 
 	return true
@@ -172,7 +170,7 @@ func (d *directory) processReadMiss(trans *transactionState, postCoalesceIdx int
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "read-miss")
 
 	return true
@@ -295,7 +293,7 @@ func (d *directory) fetchFromBottom(
 	return true
 }
 
-func (d *directory) getBankBuf(setID, wayID int) *stateutil.Buffer[int] {
+func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
 	next := d.cache.comp.GetNextState()
 	numWaysPerSet := d.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID

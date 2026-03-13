@@ -13,7 +13,7 @@ type BufferAnalyzer struct {
 	PerfLogger
 	sim.TimeTeller
 
-	buf       queueing.Buffer
+	buf       queueing.BufferState
 	usePeriod bool
 	period    sim.VTimeInSec
 
@@ -25,7 +25,7 @@ type BufferAnalyzer struct {
 // Func is a function that records buffer level change.
 func (b *BufferAnalyzer) Func(ctx sim.HookCtx) {
 	now := b.CurrentTime()
-	buf := ctx.Domain.(queueing.Buffer)
+	buf := ctx.Domain.(queueing.BufferState)
 	currLevel := buf.Size()
 
 	if b.usePeriod {
@@ -128,7 +128,7 @@ type BufferAnalyzerBuilder struct {
 	timeTeller sim.TimeTeller
 	usePeriod  bool
 	period     sim.VTimeInSec
-	buffer     queueing.Buffer
+	buffer     queueing.BufferState
 }
 
 // MakeBufferAnalyzerBuilder creates a BufferAnalyzerBuilder.
@@ -169,7 +169,7 @@ func (b BufferAnalyzerBuilder) WithPeriod(
 
 // WithBuffer sets the buffer to use.
 func (b BufferAnalyzerBuilder) WithBuffer(
-	buffer queueing.Buffer,
+	buffer queueing.BufferState,
 ) BufferAnalyzerBuilder {
 	b.buffer = buffer
 	return b

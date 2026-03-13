@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 )
 
 // resolveLegacyMapper converts a legacy AddressToPortMapper set via
@@ -258,39 +258,39 @@ func (b Builder) buildInitialState(
 	s := State{
 		CacheState:   int(cacheStateRunning),
 		EvictingList: make(map[uint64]bool),
-		DirStageBuf: stateutil.Buffer[int]{
+		DirStageBuf: queueing.Buffer[int]{
 			BufferName: name + ".DirStageBuf",
 			Cap:        b.numReqPerCycle,
 		},
-		DirToBankBufs: []stateutil.Buffer[int]{{
+		DirToBankBufs: []queueing.Buffer[int]{{
 			BufferName: name + ".DirToBankBuf",
 			Cap:        b.numReqPerCycle,
 		}},
-		WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+		WriteBufferToBankBufs: []queueing.Buffer[int]{{
 			BufferName: name + ".WriteBufferToBankBuf",
 			Cap:        b.numReqPerCycle,
 		}},
-		MSHRStageBuf: stateutil.Buffer[int]{
+		MSHRStageBuf: queueing.Buffer[int]{
 			BufferName: name + ".MSHRStageBuf",
 			Cap:        b.numReqPerCycle,
 		},
-		WriteBufferBuf: stateutil.Buffer[int]{
+		WriteBufferBuf: queueing.Buffer[int]{
 			BufferName: name + ".WriteBufferBuf",
 			Cap:        b.numReqPerCycle,
 		},
-		DirPipeline: stateutil.Pipeline[int]{
+		DirPipeline: queueing.Pipeline[int]{
 			Width:     laneWidth,
 			NumStages: b.dirLatency,
 		},
-		DirPostPipelineBuf: stateutil.Buffer[int]{
+		DirPostPipelineBuf: queueing.Buffer[int]{
 			BufferName: name + ".DirPostPipelineBuf",
 			Cap:        b.numReqPerCycle,
 		},
-		BankPipelines: []stateutil.Pipeline[int]{{
+		BankPipelines: []queueing.Pipeline[int]{{
 			Width:     laneWidth,
 			NumStages: b.bankLatency,
 		}},
-		BankPostPipelineBufs: []stateutil.Buffer[int]{{
+		BankPostPipelineBufs: []queueing.Buffer[int]{{
 			BufferName: name + ".BankPostPipelineBuf",
 			Cap:        laneWidth,
 		}},

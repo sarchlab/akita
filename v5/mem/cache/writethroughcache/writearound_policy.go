@@ -57,7 +57,7 @@ func (p *WritearoundPolicy) HandleWriteHit(
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
 	return true
 }
@@ -73,7 +73,7 @@ func (p *WritearoundPolicy) HandleWriteMiss(
 
 		next := d.cache.comp.GetNextState()
 		dirPostBuf := &next.DirPostBuf
-		dirPostBuf.Pop()
+		dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
 		return true
 	}

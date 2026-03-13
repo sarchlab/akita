@@ -8,7 +8,7 @@ import (
 )
 
 //go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim TimeTeller,Port
-//go:generate mockgen -destination "mock_queueing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/queueing Buffer
+//go:generate mockgen -destination "mock_queueing_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/queueing BufferState
 //go:generate mockgen -destination "mock_analysis_test.go" -package $GOPACKAGE -write_package_comment=false -source=perf_analyzer.go PerfLogger
 
 func TestAnalysis(t *testing.T) {

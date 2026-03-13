@@ -3,6 +3,7 @@ package tlb
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -186,9 +187,12 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	spec.AddrMapperInterleavingSize = addrMapperInterleavingSize
 
 	initialState := State{
-		TLBState:          tlbStateEnable,
-		Sets:              initSets(b.spec.NumSets, b.spec.NumWays),
-		PipelineNumStages: b.spec.Latency,
+		TLBState: tlbStateEnable,
+		Sets:     initSets(b.spec.NumSets, b.spec.NumWays),
+		Pipeline: queueing.Pipeline[pipelineTLBReqState]{
+			Width:     spec.PipelineWidth,
+			NumStages: b.spec.Latency,
+		},
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().

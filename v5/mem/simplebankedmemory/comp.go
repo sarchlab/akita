@@ -5,6 +5,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -36,18 +37,10 @@ type bankPipelineItemState struct {
 	ReadData  []byte       `json:"read_data"`
 }
 
-// bankPipelineStageState captures one non-nil pipeline slot.
-type bankPipelineStageState struct {
-	Lane      int                   `json:"lane"`
-	Stage     int                   `json:"stage"`
-	Item      bankPipelineItemState `json:"item"`
-	CycleLeft int                   `json:"cycle_left"`
-}
-
 // bankState captures one bank pipeline + buffer contents.
 type bankState struct {
-	PipelineStages  []bankPipelineStageState `json:"pipeline_stages"`
-	PostPipelineBuf []bankPipelineItemState  `json:"post_pipeline_buf"`
+	Pipeline        queueing.Pipeline[bankPipelineItemState] `json:"pipeline"`
+	PostPipelineBuf []bankPipelineItemState                  `json:"post_pipeline_buf"`
 }
 
 // State contains mutable runtime data for the simple banked memory.
@@ -79,23 +72,7 @@ func pipelineCanAccept(bank bankState, spec Spec) bool {
 		return len(bank.PostPipelineBuf) < spec.PostPipelineBufSize
 	}
 
-	for lane := 0; lane < spec.BankPipelineWidth; lane++ {
-		if !pipelineSlotOccupied(bank, lane, 0) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func pipelineSlotOccupied(bank bankState, lane, stage int) bool {
-	for _, s := range bank.PipelineStages {
-		if s.Lane == lane && s.Stage == stage {
-			return true
-		}
-	}
-
-	return false
+	return bank.Pipeline.CanAccept()
 }
 
 func pipelineAccept(
@@ -108,149 +85,18 @@ func pipelineAccept(
 		return
 	}
 
-	for lane := 0; lane < spec.BankPipelineWidth; lane++ {
-		if !pipelineSlotOccupied(*bank, lane, 0) {
-			bank.PipelineStages = append(bank.PipelineStages,
-				bankPipelineStageState{
-					Lane:      lane,
-					Stage:     0,
-					Item:      item,
-					CycleLeft: spec.StageLatency - 1,
-				})
-			return
-		}
-	}
-
-	panic("pipeline is full, call pipelineCanAccept first")
+	bank.Pipeline.Accept(item)
 }
 
-// pipelineAction describes what happened to a pipeline stage item.
-type pipelineAction int
-
-const (
-	pipelineActionKeep pipelineAction = iota
-	pipelineActionAdvanced
-	pipelineActionMoveToBuffer
-)
-
-// processStageItem processes a single pipeline stage item and returns
-// the resulting action and whether progress was made.
-func processStageItem(
-	s *bankPipelineStageState,
-	stageNum, lastStage int,
-	bank *bankState,
-	spec Spec,
-	newStages []bankPipelineStageState,
-	actions []pipelineAction,
-) (pipelineAction, bool) {
-	if s.CycleLeft > 0 {
-		s.CycleLeft--
-		return pipelineActionKeep, true
-	}
-
-	if stageNum == lastStage {
-		return tryMoveToBuffer(s, bank, spec)
-	}
-
-	return tryAdvanceStage(s, stageNum, spec, newStages, actions)
-}
-
-// tryMoveToBuffer attempts to move an item from the last stage into the
-// post-pipeline buffer.
-func tryMoveToBuffer(
-	s *bankPipelineStageState,
-	bank *bankState,
-	spec Spec,
-) (pipelineAction, bool) {
-	if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
-		bank.PostPipelineBuf = append(bank.PostPipelineBuf, s.Item)
-		return pipelineActionMoveToBuffer, true
-	}
-
-	return pipelineActionKeep, false
-}
-
-// tryAdvanceStage attempts to advance an item to the next pipeline stage.
-func tryAdvanceStage(
-	s *bankPipelineStageState,
-	stageNum int,
-	spec Spec,
-	newStages []bankPipelineStageState,
-	actions []pipelineAction,
-) (pipelineAction, bool) {
-	nextStageNum := stageNum + 1
-
-	if isNextStageOccupied(s.Lane, nextStageNum, newStages, actions) {
-		return pipelineActionKeep, false
-	}
-
-	s.Stage = nextStageNum
-	s.CycleLeft = spec.StageLatency - 1
-
-	return pipelineActionAdvanced, true
-}
-
-// isNextStageOccupied checks whether the given lane/stage is already occupied
-// by an active (non-processed) item.
-func isNextStageOccupied(
-	lane, stage int,
-	stages []bankPipelineStageState,
-	actions []pipelineAction,
-) bool {
-	for j := range stages {
-		if actions[j] != pipelineActionKeep {
-			continue
-		}
-
-		if stages[j].Lane == lane && stages[j].Stage == stage {
+func pipelineTick(bank *bankState, spec Spec) bool {
+	return bank.Pipeline.TickFunc(func(item bankPipelineItemState) bool {
+		if len(bank.PostPipelineBuf) < spec.PostPipelineBufSize {
+			bank.PostPipelineBuf = append(bank.PostPipelineBuf, item)
 			return true
 		}
-	}
 
-	return false
-}
-
-// pipelineTick advances items through the pipeline stages.
-// Items enter at stage 0 and advance towards stage (depth-1).
-// When an item finishes at the last stage, it moves to PostPipelineBuf.
-func pipelineTick(bank *bankState, spec Spec) bool {
-	madeProgress := false
-	lastStage := spec.BankPipelineDepth - 1
-
-	actions := make([]pipelineAction, len(bank.PipelineStages))
-	newStages := make([]bankPipelineStageState, len(bank.PipelineStages))
-	copy(newStages, bank.PipelineStages)
-
-	for stageNum := lastStage; stageNum >= 0; stageNum-- {
-		for i := range newStages {
-			if actions[i] != pipelineActionKeep {
-				continue
-			}
-
-			if newStages[i].Stage != stageNum {
-				continue
-			}
-
-			act, progress := processStageItem(
-				&newStages[i], stageNum, lastStage,
-				bank, spec, newStages, actions,
-			)
-			actions[i] = act
-			madeProgress = madeProgress || progress
-		}
-	}
-
-	remaining := make([]bankPipelineStageState, 0, len(newStages))
-
-	for i, a := range actions {
-		if a != pipelineActionMoveToBuffer {
-			remaining = append(remaining, newStages[i])
-		}
-	}
-
-	bank.PipelineStages = remaining
-
-	return madeProgress
+		return false
+	})
 }
 
 func bufferPeek(bank bankState) (bankPipelineItemState, bool) {

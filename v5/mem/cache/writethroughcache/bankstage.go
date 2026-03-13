@@ -44,8 +44,7 @@ func (s *bankStage) extractFromBuf() bool {
 	next := s.cache.comp.GetNextState()
 	bankBuf := &next.BankBufs[s.bankID]
 
-	item := bankBuf.Peek()
-	if item == nil {
+	if bankBuf.Size() == 0 {
 		return false
 	}
 
@@ -54,9 +53,9 @@ func (s *bankStage) extractFromBuf() bool {
 		return false
 	}
 
-	transIdx := item.(int)
+	transIdx := bankBuf.Elements[0]
 	bankPipeline.Accept(transIdx)
-	bankBuf.Pop()
+	bankBuf.Elements = bankBuf.Elements[1:]
 
 	return true
 }
@@ -65,12 +64,11 @@ func (s *bankStage) finalizeTrans() bool {
 	next := s.cache.comp.GetNextState()
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 
-	item := bankPostBuf.Peek()
-	if item == nil {
+	if bankPostBuf.Size() == 0 {
 		return false
 	}
 
-	transIdx := item.(int)
+	transIdx := bankPostBuf.Elements[0]
 	trans := next.postCoalesceTrans(transIdx)
 
 	switch trans.BankAction {
@@ -107,7 +105,7 @@ func (s *bankStage) finalizeReadHitTrans(
 	}
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Pop()
+	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 	s.removeTransaction(trans)
 
 	tracing.EndTask(trans.ID, s.cache.comp)
@@ -144,7 +142,7 @@ func (s *bankStage) finalizeWriteTrans(
 	nextBlock.IsLocked = false
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Pop()
+	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 
 	if s.cache.writePolicy.NeedsDualCompletion() {
 		trans.BankDone = true
@@ -173,7 +171,7 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	nextBlock.IsLocked = false
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
-	bankPostBuf.Pop()
+	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 
 	return true
 }

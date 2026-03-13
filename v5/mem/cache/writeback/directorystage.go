@@ -65,12 +65,11 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 	next := ds.cache.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		item := next.DirStageBuf.Peek()
-		if item == nil {
+		if next.DirStageBuf.Size() == 0 {
 			break
 		}
 
-		transIdx := item.(int)
+		transIdx := next.DirStageBuf.Elements[0]
 
 		if spec.DirLatency == 0 {
 			// Bypass pipeline: put directly in post-pipeline buffer
@@ -78,14 +77,14 @@ func (ds *directoryStage) acceptNewTransaction() bool {
 				break
 			}
 			next.DirPostPipelineBuf.PushTyped(transIdx)
-			next.DirStageBuf.Pop()
+			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
 			madeProgress = true
 		} else {
 			if !next.DirPipeline.CanAccept() {
 				break
 			}
 			next.DirPipeline.Accept(transIdx)
-			next.DirStageBuf.Pop()
+			next.DirStageBuf.Elements = next.DirStageBuf.Elements[1:]
 			madeProgress = true
 		}
 	}

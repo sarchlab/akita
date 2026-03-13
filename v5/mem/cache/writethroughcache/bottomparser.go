@@ -4,7 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -227,7 +227,7 @@ func (p *bottomParser) removeTransaction(trans *transactionState) {
 
 func (p *bottomParser) getBankBuf(
 	setID, wayID int,
-) *stateutil.Buffer[int] {
+) *queueing.Buffer[int] {
 	next := p.cache.comp.GetNextState()
 	numWaysPerSet := p.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID

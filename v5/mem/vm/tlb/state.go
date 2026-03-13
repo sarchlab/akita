@@ -38,14 +38,6 @@ type pipelineTLBReqState struct {
 	Msg vm.TranslationReq `json:"msg"`
 }
 
-// pipelineStageState captures one non-nil pipeline slot.
-type pipelineStageState struct {
-	Lane      int                 `json:"lane"`
-	Stage     int                 `json:"stage"`
-	Item      pipelineTLBReqState `json:"item"`
-	CycleLeft int                 `json:"cycle_left"`
-}
-
 // --- Free functions for Set operations ---
 
 func setKeyString(pid vm.PID, vAddr uint64) string {
@@ -173,74 +165,6 @@ func mshrIsEmpty(entries []mshrEntryState) bool {
 func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool {
 	_, found := mshrGetEntry(entries, pid, vAddr)
 	return found
-}
-
-// --- Free functions for Pipeline operations ---
-
-func pipelineCanAccept(stages []pipelineStageState, width int, numStages int) bool {
-	// Check if the last stage has room
-	lastStage := numStages - 1
-	count := 0
-	for _, s := range stages {
-		if s.Stage == lastStage {
-			count++
-		}
-	}
-	return count < width
-}
-
-func pipelineAccept(
-	stages []pipelineStageState, width int, numStages int,
-	item pipelineTLBReqState,
-) []pipelineStageState {
-	// Find an empty lane at the last stage
-	lastStage := numStages - 1
-	usedLanes := make(map[int]bool)
-	for _, s := range stages {
-		if s.Stage == lastStage {
-			usedLanes[s.Lane] = true
-		}
-	}
-	lane := 0
-	for usedLanes[lane] {
-		lane++
-	}
-	stages = append(stages, pipelineStageState{
-		Lane:      lane,
-		Stage:     lastStage,
-		Item:      item,
-		CycleLeft: 1,
-	})
-	return stages
-}
-
-func pipelineTick(stages []pipelineStageState, buffer *[]pipelineTLBReqState) ([]pipelineStageState, bool) {
-	madeProgress := false
-	remaining := make([]pipelineStageState, 0, len(stages))
-
-	for i := range stages {
-		s := stages[i]
-		if s.CycleLeft > 0 {
-			s.CycleLeft--
-			madeProgress = true
-		}
-		if s.CycleLeft == 0 {
-			if s.Stage == 0 {
-				// Item exits pipeline into buffer
-				*buffer = append(*buffer, s.Item)
-				madeProgress = true
-				continue // don't keep in stages
-			}
-			// Move to next stage
-			s.Stage--
-			s.CycleLeft = 1
-			madeProgress = true
-		}
-		remaining = append(remaining, s)
-	}
-
-	stages = remaining
-	return stages, madeProgress
 }
 
 // --- Free function for address mapping ---

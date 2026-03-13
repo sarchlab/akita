@@ -6,7 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,27 +29,27 @@ var _ = Describe("MSHR Stage", func() {
 		initialState := State{
 			CacheState:   int(cacheStateRunning),
 			EvictingList: make(map[uint64]bool),
-			DirStageBuf: stateutil.Buffer[int]{
+			DirStageBuf: queueing.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
-			DirToBankBufs: []stateutil.Buffer[int]{{
+			DirToBankBufs: []queueing.Buffer[int]{{
 				BufferName: "Cache.DirToBankBuf", Cap: 4,
 			}},
-			WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+			WriteBufferToBankBufs: []queueing.Buffer[int]{{
 				BufferName: "Cache.WBToBankBuf", Cap: 4,
 			}},
-			MSHRStageBuf: stateutil.Buffer[int]{
+			MSHRStageBuf: queueing.Buffer[int]{
 				BufferName: "Cache.MSHRStageBuf", Cap: 4,
 			},
-			WriteBufferBuf: stateutil.Buffer[int]{
+			WriteBufferBuf: queueing.Buffer[int]{
 				BufferName: "Cache.WriteBufferBuf", Cap: 4,
 			},
-			DirPipeline: stateutil.Pipeline[int]{Width: 4, NumStages: 0},
-			DirPostPipelineBuf: stateutil.Buffer[int]{
+			DirPipeline: queueing.Pipeline[int]{Width: 4, NumStages: 0},
+			DirPostPipelineBuf: queueing.Buffer[int]{
 				BufferName: "Cache.DirPostBuf", Cap: 4,
 			},
-			BankPipelines: []stateutil.Pipeline[int]{{Width: 4, NumStages: 10}},
-			BankPostPipelineBufs: []stateutil.Buffer[int]{{
+			BankPipelines: []queueing.Pipeline[int]{{Width: 4, NumStages: 10}},
+			BankPostPipelineBufs: []queueing.Buffer[int]{{
 				BufferName: "Cache.BankPostBuf", Cap: 4,
 			}},
 			BankInflightTransCounts:         []int{0},

@@ -20,7 +20,7 @@ type sampleStruct struct {
 type sampleComponent struct {
 	*sim.ComponentBase
 
-	buffer queueing.Buffer
+	buffer queueing.BufferState
 }
 
 func (c *sampleComponent) Handle(_ sim.Event) error {
@@ -38,7 +38,7 @@ func (c *sampleComponent) NotifyPortFree(_ sim.Port) {
 func newSampleComponent() *sampleComponent {
 	c := &sampleComponent{
 		ComponentBase: sim.NewComponentBase("Comp"),
-		buffer:        queueing.NewBuffer("Comp.Buf", 10),
+		buffer:        &queueing.Buffer[int]{BufferName: "Comp.Buf", Cap: 10},
 	}
 
 	c.AddPort("Port1", sim.NewPort(c, 2, 2, "Comp.Port1"))

@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -32,10 +32,10 @@ type portComplexState struct {
 	NumOutputChannel int                              `json:"num_output_channel"`
 	Latency          int                              `json:"latency"`
 	PipelineWidth    int                              `json:"pipeline_width"`
-	Pipeline         stateutil.Pipeline[routedFlit]   `json:"pipeline"`
-	RouteBuffer      stateutil.Buffer[routedFlit]     `json:"route_buffer"`
-	ForwardBuffer    stateutil.Buffer[routedFlit]     `json:"forward_buffer"`
-	SendOutBuffer    stateutil.Buffer[messaging.Flit] `json:"send_out_buffer"`
+	Pipeline         queueing.Pipeline[routedFlit]   `json:"pipeline"`
+	RouteBuffer      queueing.Buffer[routedFlit]     `json:"route_buffer"`
+	ForwardBuffer    queueing.Buffer[routedFlit]     `json:"forward_buffer"`
+	SendOutBuffer    queueing.Buffer[messaging.Flit] `json:"send_out_buffer"`
 }
 
 // State contains mutable runtime data for the switch.
@@ -101,7 +101,8 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 				break
 			}
 
-			item, _ := pcs.RouteBuffer.PopTyped()
+			item := pcs.RouteBuffer.Elements[0]
+			pcs.RouteBuffer.Elements = pcs.RouteBuffer.Elements[1:]
 			outputBufIdx := m.resolveOutputBufIdx(item.RouteTo)
 			item.Flit.OutputBufIdx = outputBufIdx
 
@@ -151,7 +152,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 				break
 			}
 
-			pcs.ForwardBuffer.PopTyped()
+			pcs.ForwardBuffer.Elements = pcs.ForwardBuffer.Elements[1:]
 			sendBuf.PushTyped(item.Flit)
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true

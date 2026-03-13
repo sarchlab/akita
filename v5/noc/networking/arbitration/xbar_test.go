@@ -13,20 +13,20 @@ import (
 
 var _ = Describe("XBar", func() {
 	var (
-		mockCtrl         *gomock.Controller
-		buf1             *MockBuffer
-		buf2             *MockBuffer
-		buf3             *MockBuffer
-		buf4             *MockBuffer
-		xbar             *xbarArbiter
+		mockCtrl *gomock.Controller
+		buf1     *MockFlitBuffer
+		buf2     *MockFlitBuffer
+		buf3     *MockFlitBuffer
+		buf4     *MockFlitBuffer
+		xbar     *xbarArbiter
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		buf1 = NewMockBuffer(mockCtrl)
-		buf2 = NewMockBuffer(mockCtrl)
-		buf3 = NewMockBuffer(mockCtrl)
-		buf4 = NewMockBuffer(mockCtrl)
+		buf1 = NewMockFlitBuffer(mockCtrl)
+		buf2 = NewMockFlitBuffer(mockCtrl)
+		buf3 = NewMockFlitBuffer(mockCtrl)
+		buf4 = NewMockFlitBuffer(mockCtrl)
 
 		xbar = NewXBarArbiter().(*xbarArbiter)
 		xbar.AddBuffer(buf1)
@@ -69,10 +69,14 @@ var _ = Describe("XBar", func() {
 		flit5.Msg = msg
 		flit5.OutputBufIdx = 0
 
-		buf1.EXPECT().Peek().Return(flit1)
-		buf2.EXPECT().Peek().Return(flit2)
-		buf3.EXPECT().Peek().Return(flit3)
-		buf4.EXPECT().Peek().Return(flit4)
+		buf1.EXPECT().Size().Return(1)
+		buf1.EXPECT().PeekFlit().Return(flit1)
+		buf2.EXPECT().Size().Return(1)
+		buf2.EXPECT().PeekFlit().Return(flit2)
+		buf3.EXPECT().Size().Return(1)
+		buf3.EXPECT().PeekFlit().Return(flit3)
+		buf4.EXPECT().Size().Return(1)
+		buf4.EXPECT().PeekFlit().Return(flit4)
 
 		bufs := xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(3))
@@ -80,10 +84,12 @@ var _ = Describe("XBar", func() {
 		Expect(bufs[1]).To(BeIdenticalTo(buf3))
 		Expect(bufs[2]).To(BeIdenticalTo(buf4))
 
-		buf1.EXPECT().Peek().Return(flit5)
-		buf2.EXPECT().Peek().Return(flit2)
-		buf3.EXPECT().Peek().Return(nil)
-		buf4.EXPECT().Peek().Return(nil)
+		buf1.EXPECT().Size().Return(1)
+		buf1.EXPECT().PeekFlit().Return(flit5)
+		buf2.EXPECT().Size().Return(1)
+		buf2.EXPECT().PeekFlit().Return(flit2)
+		buf3.EXPECT().Size().Return(0)
+		buf4.EXPECT().Size().Return(0)
 
 		bufs = xbar.Arbitrate()
 		Expect(bufs).To(HaveLen(1))

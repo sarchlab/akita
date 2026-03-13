@@ -66,20 +66,20 @@ func (b *PerfAnalyzer) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.BufferState)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(queueing.Buffer)
+			).Elem().Interface().(queueing.BufferState)
 
 			b.RegisterBuffer(fieldRef)
 		}
 	}
 }
 
-func (b *PerfAnalyzer) RegisterBuffer(buf queueing.Buffer) {
+func (b *PerfAnalyzer) RegisterBuffer(buf queueing.BufferState) {
 	bufferAnalyzerBuilder := MakeBufferAnalyzerBuilder().
 		WithTimeTeller(b.engine).
 		WithPerfLogger(b).

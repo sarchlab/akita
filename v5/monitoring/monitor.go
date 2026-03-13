@@ -37,7 +37,7 @@ import (
 type Monitor struct {
 	engine       sim.Engine
 	components   []sim.Component
-	buffers      []queueing.Buffer
+	buffers      []queueing.BufferState
 	portNumber   int
 	userSetPort  bool
 	perfAnalyzer *analysis.PerfAnalyzer
@@ -105,13 +105,13 @@ func (m *Monitor) registerComponentOrPortBuffers(c any) {
 		field := v.Field(i)
 
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*queueing.Buffer)(nil)).Elem()
+		bufferType := reflect.TypeOf((*queueing.BufferState)(nil)).Elem()
 
 		if fieldType == bufferType {
 			fieledRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(queueing.Buffer)
+			).Elem().Interface().(queueing.BufferState)
 			m.buffers = append(m.buffers, fieledRef)
 		}
 	}
@@ -404,15 +404,15 @@ func (*Monitor) buffersParseParams(
 	return sortMethod, limitNumber, offsetNumber, nil
 }
 
-func bufferPercent(b queueing.Buffer) float64 {
+func bufferPercent(b queueing.BufferState) float64 {
 	return float64(b.Size()) / float64(b.Capacity())
 }
 
 func (m *Monitor) sortAndSelectBuffers(
 	sortMethod string,
 	limit, offset int,
-) []queueing.Buffer {
-	sortedBuffers := make([]queueing.Buffer, len(m.buffers))
+) []queueing.BufferState {
+	sortedBuffers := make([]queueing.BufferState, len(m.buffers))
 	copy(sortedBuffers, m.buffers)
 
 	if sortMethod == "level" {
@@ -450,7 +450,7 @@ func (m *Monitor) sortAndSelectBuffers(
 	}
 
 	if offset >= len(sortedBuffers) {
-		return []queueing.Buffer{}
+		return []queueing.BufferState{}
 	}
 
 	if offset+limit > len(sortedBuffers) {

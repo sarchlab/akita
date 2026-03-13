@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -143,7 +143,7 @@ var _ = Describe("Switch", func() {
 
 		// Fill pipeline so it can't accept
 		next := sw.GetNextState()
-		next.PortComplexes[0].Pipeline.Stages = []stateutil.PipelineStage[routedFlit]{
+		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
 			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: "t"}},
 		}
 
@@ -158,7 +158,7 @@ var _ = Describe("Switch", func() {
 	It("should tick the pipelines", func() {
 		// Place an item in pipeline stage 0 for port1
 		next := sw.GetNextState()
-		next.PortComplexes[0].Pipeline.Stages = []stateutil.PipelineStage[routedFlit]{
+		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
 			{Lane: 0, Stage: 0, Item: routedFlit{
 				Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: "flit1"}},
 				TaskID: "t1",
@@ -187,7 +187,7 @@ var _ = Describe("Switch", func() {
 
 		// Place item in route buffer for port1
 		next := sw.GetNextState()
-		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[routedFlit]{
+		next.PortComplexes[0].RouteBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
 			Elements: []routedFlit{
@@ -220,14 +220,14 @@ var _ = Describe("Switch", func() {
 
 		// Place item in route buffer and fill forward buffer
 		next := sw.GetNextState()
-		next.PortComplexes[0].RouteBuffer = stateutil.Buffer[routedFlit]{
+		next.PortComplexes[0].RouteBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
 			Elements: []routedFlit{
 				{Flit: flit, TaskID: "flit", RouteTo: dstPort.AsRemote()},
 			},
 		}
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
+		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
 			Elements: []routedFlit{
@@ -254,7 +254,7 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in forward buffer of port1, targeting sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
+		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
 			Elements: []routedFlit{
@@ -284,14 +284,14 @@ var _ = Describe("Switch", func() {
 
 		// Fill sendOut buffer to capacity, forward buffer targets port2
 		next := sw.GetNextState()
-		next.PortComplexes[0].ForwardBuffer = stateutil.Buffer[routedFlit]{
+		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
 			Elements: []routedFlit{
 				{Flit: flit},
 			},
 		}
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
+		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
 			Elements:   []messaging.Flit{{MsgMeta: sim.MsgMeta{ID: "full"}}},
@@ -315,7 +315,7 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
+		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
 			Elements:   []messaging.Flit{flit},
@@ -344,7 +344,7 @@ var _ = Describe("Switch", func() {
 
 		// Place flit in sendOutBuffer of port2
 		next := sw.GetNextState()
-		next.PortComplexes[1].SendOutBuffer = stateutil.Buffer[messaging.Flit]{
+		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
 			Elements:   []messaging.Flit{flit},

@@ -6,7 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -28,7 +28,7 @@ func (c *coalescer) Tick() bool {
 	return c.processReq(msgI)
 }
 
-func (c *coalescer) getDirBuf() *stateutil.Buffer[int] {
+func (c *coalescer) getDirBuf() *queueing.Buffer[int] {
 	next := c.cache.comp.GetNextState()
 	return &next.DirBuf
 }

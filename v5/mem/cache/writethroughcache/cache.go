@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 )
 
 // Spec contains immutable configuration for the writethroughcache.
@@ -39,12 +39,12 @@ type State struct {
 	Transactions    []transactionState `json:"transactions"`
 	NumTransactions int                `json:"num_transactions"`
 
-	DirBuf        stateutil.Buffer[int]     `json:"dir_buf"`
-	BankBufs      []stateutil.Buffer[int]   `json:"bank_bufs"`
-	DirPipeline   stateutil.Pipeline[int]   `json:"dir_pipeline"`
-	DirPostBuf    stateutil.Buffer[int]     `json:"dir_post_buf"`
-	BankPipelines []stateutil.Pipeline[int] `json:"bank_pipelines"`
-	BankPostBufs  []stateutil.Buffer[int]   `json:"bank_post_bufs"`
+	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
+	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
+	DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
+	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
+	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
 
 	IsPaused bool `json:"is_paused"`
 }

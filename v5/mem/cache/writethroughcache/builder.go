@@ -7,7 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -239,41 +239,41 @@ func (b *Builder) buildInitialState(
 	name string,
 	numSets, blockSize int,
 ) State {
-	bankBufs := make([]stateutil.Buffer[int], b.numBank)
+	bankBufs := make([]queueing.Buffer[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankBufs[i] = stateutil.Buffer[int]{
+		bankBufs[i] = queueing.Buffer[int]{
 			BufferName: fmt.Sprintf("%s.Bank%d.Buffer", name, i),
 			Cap:        b.numReqPerCycle,
 		}
 	}
 
-	bankPipelines := make([]stateutil.Pipeline[int], b.numBank)
+	bankPipelines := make([]queueing.Pipeline[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankPipelines[i] = stateutil.Pipeline[int]{
+		bankPipelines[i] = queueing.Pipeline[int]{
 			Width:     b.numReqPerCycle,
 			NumStages: b.bankLatency,
 		}
 	}
 
-	bankPostBufs := make([]stateutil.Buffer[int], b.numBank)
+	bankPostBufs := make([]queueing.Buffer[int], b.numBank)
 	for i := 0; i < b.numBank; i++ {
-		bankPostBufs[i] = stateutil.Buffer[int]{
+		bankPostBufs[i] = queueing.Buffer[int]{
 			BufferName: fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
 			Cap:        b.numReqPerCycle,
 		}
 	}
 
 	initialState := State{
-		DirBuf: stateutil.Buffer[int]{
+		DirBuf: queueing.Buffer[int]{
 			BufferName: name + ".DirectoryBuffer",
 			Cap:        b.numReqPerCycle,
 		},
 		BankBufs: bankBufs,
-		DirPipeline: stateutil.Pipeline[int]{
+		DirPipeline: queueing.Pipeline[int]{
 			Width:     b.numReqPerCycle,
 			NumStages: b.dirLatency,
 		},
-		DirPostBuf: stateutil.Buffer[int]{
+		DirPostBuf: queueing.Buffer[int]{
 			BufferName: name + ".DirectoryStage.PostPipelineBuffer",
 			Cap:        b.numReqPerCycle,
 		},

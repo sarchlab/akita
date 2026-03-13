@@ -19,12 +19,12 @@ func (s *mshrStage) Tick() bool {
 
 	mshrBuf := &next.MSHRStageBuf
 
-	item := mshrBuf.Pop()
-	if item == nil {
+	if mshrBuf.Size() == 0 {
 		return false
 	}
 
-	transIdx := item.(int)
+	transIdx := mshrBuf.Elements[0]
+	mshrBuf.Elements = mshrBuf.Elements[1:]
 	trans := &next.Transactions[transIdx]
 	next.HasProcessingMSHREntry = true
 	next.ProcessingMSHREntryIdx = transIdx

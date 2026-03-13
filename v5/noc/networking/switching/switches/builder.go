@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 )
 
 // DefaultSpec provides the default configuration for switch components.
@@ -116,20 +116,20 @@ func addPort(
 	// Also map the local port's RemotePort so route resolution works
 	portIndex[port.AsRemote()] = idx
 
-	// Initialize stateutil.Buffer fields
-	pcs.RouteBuffer = stateutil.Buffer[routedFlit]{
+	// Initialize queueing.Buffer fields
+	pcs.RouteBuffer = queueing.Buffer[routedFlit]{
 		BufferName: pcs.LocalPortName + "RouteBuf",
 		Cap:        pcs.NumInputChannel,
 	}
-	pcs.ForwardBuffer = stateutil.Buffer[routedFlit]{
+	pcs.ForwardBuffer = queueing.Buffer[routedFlit]{
 		BufferName: pcs.LocalPortName + "FwdBuf",
 		Cap:        pcs.NumInputChannel,
 	}
-	pcs.SendOutBuffer = stateutil.Buffer[messaging.Flit]{
+	pcs.SendOutBuffer = queueing.Buffer[messaging.Flit]{
 		BufferName: pcs.LocalPortName + "SendBuf",
 		Cap:        pcs.NumOutputChannel,
 	}
-	pcs.Pipeline = stateutil.Pipeline[routedFlit]{
+	pcs.Pipeline = queueing.Pipeline[routedFlit]{
 		Width:     pcs.PipelineWidth,
 		NumStages: pcs.Latency,
 	}

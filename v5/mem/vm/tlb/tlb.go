@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -33,11 +34,10 @@ type State struct {
 	MSHREntries         []mshrEntryState      `json:"mshr_entries"`
 	HasRespondingMSHR   bool                  `json:"has_responding_mshr"`
 	RespondingMSHRData  mshrEntryState        `json:"responding_mshr_data"`
-	PipelineStages      []pipelineStageState  `json:"pipeline_stages"`
-	BufferItems         []pipelineTLBReqState `json:"buffer_items"`
-	HasInflightFlushReq bool                  `json:"has_inflight_flush_req"`
-	InflightFlushReqMsg FlushReq              `json:"inflight_flush_req_msg"`
-	PipelineNumStages   int                   `json:"pipeline_num_stages"`
+	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
+	BufferItems         []pipelineTLBReqState                  `json:"buffer_items"`
+	HasInflightFlushReq bool                                   `json:"has_inflight_flush_req"`
+	InflightFlushReqMsg FlushReq                               `json:"inflight_flush_req_msg"`
 }
 
 

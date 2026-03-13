@@ -1,4 +1,4 @@
-package stateutil
+package queueing
 
 // PipelineStage represents a single item occupying a lane and stage in a
 // pipeline. It is JSON-serializable.

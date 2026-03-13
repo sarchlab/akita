@@ -1,4 +1,4 @@
-package stateutil
+package queueing
 
 import (
 	"encoding/json"
@@ -59,20 +59,15 @@ func TestPipelineTickAdvancesToPostBuf(t *testing.T) {
 	assert.True(t, moved)
 	assert.Equal(t, 0, len(p.Stages))
 	assert.Equal(t, 1, postBuf.Size())
-
-	v, ok := postBuf.PopTyped()
-	assert.True(t, ok)
-	assert.Equal(t, 100, v)
+	assert.Equal(t, 100, postBuf.Elements[0])
 }
 
 func TestPipelineTickMultiStage(t *testing.T) {
 	// 1 lane, 3 stages. Item should take 3 ticks to reach output.
-	// With CycleLeft=0, each tick advances one stage.
 	p := newPipeline(1, 3)
 	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
 
 	p.Accept(42)
-	// Stage=0, CycleLeft=0
 
 	// Tick 1: advance to stage 1.
 	moved := p.Tick(postBuf)
@@ -199,9 +194,7 @@ func TestPipelineBlockedThenUnblocked(t *testing.T) {
 	assert.Equal(t, 1, p.Stages[0].Stage)
 	assert.Equal(t, 10, p.Stages[0].Item)
 	assert.Equal(t, 1, postBuf.Size())
-
-	v, _ := postBuf.PopTyped()
-	assert.Equal(t, 20, v)
+	assert.Equal(t, 20, postBuf.Elements[0])
 }
 
 func TestPipelineJSONRoundTrip(t *testing.T) {
@@ -254,19 +247,15 @@ func TestPipelineJSONRoundTripStruct(t *testing.T) {
 }
 
 func TestPipelineStreamOfItems(t *testing.T) {
-	// Verify a stream of items flows through correctly.
-	// 1 lane, 2 stages. With CycleLeft=0, each item takes 2 ticks.
 	p := newPipeline(1, 2)
 	postBuf := &Buffer[int]{BufferName: "post", Cap: 10}
 
-	// Accept item 1.
 	p.Accept(1)
 
 	// Tick 1: item 1 advances to stage 1.
 	p.Tick(postBuf)
 	assert.Equal(t, 1, p.Stages[0].Stage)
 
-	// Accept item 2 into stage 0.
 	p.Accept(2)
 
 	// Tick 2: Item 1 outputs. Item 2 advances to stage 1.
@@ -278,14 +267,11 @@ func TestPipelineStreamOfItems(t *testing.T) {
 	p.Tick(postBuf)
 	assert.Equal(t, 2, postBuf.Size())
 
-	v1, _ := postBuf.PopTyped()
-	v2, _ := postBuf.PopTyped()
-	assert.Equal(t, 1, v1)
-	assert.Equal(t, 2, v2)
+	assert.Equal(t, 1, postBuf.Elements[0])
+	assert.Equal(t, 2, postBuf.Elements[1])
 }
 
 func TestPipelineCycleLeftDecrement(t *testing.T) {
-	// Test that CycleLeft > 0 prevents advancement.
 	p := &Pipeline[int]{
 		Width:     1,
 		NumStages: 2,

@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,24 +25,24 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
-			DirBuf: stateutil.Buffer[int]{
+			DirBuf: queueing.Buffer[int]{
 				BufferName: "Cache.DirBuf",
 				Cap:        4,
 			},
-			BankBufs: []stateutil.Buffer[int]{
+			BankBufs: []queueing.Buffer[int]{
 				{BufferName: "Cache.BankBuf0", Cap: 1},
 			},
-			DirPipeline: stateutil.Pipeline[int]{
+			DirPipeline: queueing.Pipeline[int]{
 				Width: 1, NumStages: 2,
 			},
-			DirPostBuf: stateutil.Buffer[int]{
+			DirPostBuf: queueing.Buffer[int]{
 				BufferName: "Cache.DirPostBuf",
 				Cap:        4,
 			},
-			BankPipelines: []stateutil.Pipeline[int]{
+			BankPipelines: []queueing.Pipeline[int]{
 				{Width: 1, NumStages: 10},
 			},
-			BankPostBufs: []stateutil.Buffer[int]{
+			BankPostBufs: []queueing.Buffer[int]{
 				{BufferName: "Cache.BankPostBuf0", Cap: 1},
 			},
 		}

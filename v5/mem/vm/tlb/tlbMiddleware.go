@@ -52,9 +52,10 @@ func (m *tlbMiddleware) processPipeline() bool {
 
 func (m *tlbMiddleware) tickPipeline() bool {
 	next := m.comp.GetNextState()
-	stages, progress := pipelineTick(next.PipelineStages, &next.BufferItems)
-	next.PipelineStages = stages
-	return progress
+	return next.Pipeline.TickFunc(func(item pipelineTLBReqState) bool {
+		next.BufferItems = append(next.BufferItems, item)
+		return true
+	})
 }
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
@@ -63,7 +64,7 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 	next := m.comp.GetNextState()
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if !pipelineCanAccept(next.PipelineStages, spec.PipelineWidth, next.PipelineNumStages) {
+		if !next.Pipeline.CanAccept() {
 			break
 		}
 
@@ -73,10 +74,11 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 		}
 
 		msg := msgI.(*vm.TranslationReq)
-		next.PipelineStages = pipelineAccept(
-			next.PipelineStages, spec.PipelineWidth, next.PipelineNumStages,
-			pipelineTLBReqState{Msg: *msg},
-		)
+		next.Pipeline.Accept(pipelineTLBReqState{Msg: *msg})
+
+		// Set CycleLeft=1 on the newly accepted entry to preserve the
+		// same per-stage latency as the original hand-coded pipeline.
+		next.Pipeline.Stages[len(next.Pipeline.Stages)-1].CycleLeft = 1
 
 		madeProgress = true
 	}

@@ -5,7 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 )
 
 type cacheState int
@@ -49,19 +49,19 @@ type State struct {
 	EvictingList   map[uint64]bool      `json:"evicting_list"`
 
 	// Buffers (transaction indices stored as int)
-	DirStageBuf           stateutil.Buffer[int]   `json:"dir_stage_buf"`
-	DirToBankBufs         []stateutil.Buffer[int] `json:"dir_to_bank_bufs"`
-	WriteBufferToBankBufs []stateutil.Buffer[int] `json:"write_buffer_to_bank_bufs"`
-	MSHRStageBuf          stateutil.Buffer[int]   `json:"mshr_stage_buf"`
-	WriteBufferBuf        stateutil.Buffer[int]   `json:"write_buffer_buf"`
+	DirStageBuf           queueing.Buffer[int]   `json:"dir_stage_buf"`
+	DirToBankBufs         []queueing.Buffer[int] `json:"dir_to_bank_bufs"`
+	WriteBufferToBankBufs []queueing.Buffer[int] `json:"write_buffer_to_bank_bufs"`
+	MSHRStageBuf          queueing.Buffer[int]   `json:"mshr_stage_buf"`
+	WriteBufferBuf        queueing.Buffer[int]   `json:"write_buffer_buf"`
 
 	// Directory pipeline + post-buf
-	DirPipeline        stateutil.Pipeline[int] `json:"dir_pipeline"`
-	DirPostPipelineBuf stateutil.Buffer[int]   `json:"dir_post_pipeline_buf"`
+	DirPipeline        queueing.Pipeline[int] `json:"dir_pipeline"`
+	DirPostPipelineBuf queueing.Buffer[int]   `json:"dir_post_pipeline_buf"`
 
 	// Bank pipeline + post-buf + counters
-	BankPipelines                   []stateutil.Pipeline[int] `json:"bank_pipelines"`
-	BankPostPipelineBufs            []stateutil.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+	BankPipelines                   []queueing.Pipeline[int] `json:"bank_pipelines"`
+	BankPostPipelineBufs            []queueing.Buffer[int]   `json:"bank_post_pipeline_bufs"`
 	BankInflightTransCounts         []int                     `json:"bank_inflight_trans_counts"`
 	BankDownwardInflightTransCounts []int                     `json:"bank_downward_inflight_trans_counts"`
 

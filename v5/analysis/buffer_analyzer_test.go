@@ -14,7 +14,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		mockCtrl       *gomock.Controller
 		timeTeller     *MockTimeTeller
 		logger         *MockPerfLogger
-		buffer         *MockBuffer
+		buffer         *MockBufferState
 		bufferAnalyzer *BufferAnalyzer
 	)
 
@@ -22,7 +22,7 @@ var _ = Describe("BufferAnalyzer", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		timeTeller = NewMockTimeTeller(mockCtrl)
 		logger = NewMockPerfLogger(mockCtrl)
-		buffer = NewMockBuffer(mockCtrl)
+		buffer = NewMockBufferState(mockCtrl)
 		buffer.EXPECT().Name().Return("Buffer").AnyTimes()
 
 		bufferAnalyzer = MakeBufferAnalyzerBuilder().

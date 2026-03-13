@@ -56,7 +56,8 @@ func (s *bankStage) pullFromBuf() bool {
 	// Check write buffer to bank buffer first
 	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
 	if len(wbBuf.Elements) > 0 {
-		transIdx, _ := wbBuf.PopTyped()
+		transIdx := wbBuf.Elements[0]
+		wbBuf.Elements = wbBuf.Elements[1:]
 		s.acceptIntoPipeline(next, spec, transIdx)
 		next.BankInflightTransCounts[s.bankID]++
 		return true
@@ -92,7 +93,8 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 		return false
 	}
 
-	transIdx, _ := dirBuf.PopTyped()
+	transIdx := dirBuf.Elements[0]
+	dirBuf.Elements = dirBuf.Elements[1:]
 	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {

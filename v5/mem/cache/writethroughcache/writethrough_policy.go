@@ -57,7 +57,7 @@ func (p *WritethroughPolicy) HandleWriteHit(
 	bankBuf.PushTyped(postCoalesceIdx)
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
 	return true
 }
@@ -149,7 +149,7 @@ func (p *WritethroughPolicy) partialWriteMiss(
 	}
 
 	dirPostBuf := &next.DirPostBuf
-	dirPostBuf.Pop()
+	dirPostBuf.Elements = dirPostBuf.Elements[1:]
 	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
 	return true

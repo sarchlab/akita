@@ -5,7 +5,7 @@ import (
 	cache2 "github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/stateutil"
+	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -44,15 +44,15 @@ var _ = Describe("Control Stage", func() {
 			AnyTimes()
 
 		initialState := State{
-			DirBuf: stateutil.Buffer[int]{
+			DirBuf: queueing.Buffer[int]{
 				BufferName: "Cache.DirBuf",
 				Cap:        4,
 			},
-			BankBufs:      []stateutil.Buffer[int]{},
-			DirPipeline:   stateutil.Pipeline[int]{Width: 4, NumStages: 2},
-			DirPostBuf:    stateutil.Buffer[int]{BufferName: "Cache.DirPostBuf", Cap: 4},
-			BankPipelines: []stateutil.Pipeline[int]{},
-			BankPostBufs:  []stateutil.Buffer[int]{},
+			BankBufs:      []queueing.Buffer[int]{},
+			DirPipeline:   queueing.Pipeline[int]{Width: 4, NumStages: 2},
+			DirPostBuf:    queueing.Buffer[int]{BufferName: "Cache.DirPostBuf", Cap: 4},
+			BankPipelines: []queueing.Pipeline[int]{},
+			BankPostBufs:  []queueing.Buffer[int]{},
 		}
 
 		pmw = &pipelineMW{

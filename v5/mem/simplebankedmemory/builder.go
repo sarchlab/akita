@@ -3,6 +3,7 @@ package simplebankedmemory
 import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -159,40 +160,9 @@ func (b Builder) WithTopPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *Comp {
 	b.configurationMustBeValid()
 
-	var storage *mem.Storage
-	if b.storage != nil {
-		storage = b.storage
-	} else {
-		storage = mem.NewStorage(b.capacity)
-	}
-
-	spec := Spec{
-		Freq:                           b.spec.Freq,
-		NumBanks:                       b.numBanks,
-		BankPipelineWidth:              b.bankPipelineWidth,
-		BankPipelineDepth:              b.bankPipelineDepth,
-		StageLatency:                   b.stageLatency,
-		PostPipelineBufSize:            b.postPipelineBufSize,
-		BankSelectorKind:               b.bankSelectorKind,
-		BankSelectorLog2InterleaveSize: b.log2InterleaveSize,
-		AddrConvKind:                   b.addrConvKind,
-		AddrInterleavingSize:           b.addrInterleavingSize,
-		AddrTotalNumOfElements:         b.addrTotalNumOfElements,
-		AddrCurrentElementIndex:        b.addrCurrentElementIndex,
-		AddrOffset:                     b.addrOffset,
-		StorageRef:                     name,
-	}
-
-	initialState := State{
-		Banks: make([]bankState, b.numBanks),
-	}
-
-	for i := range initialState.Banks {
-		initialState.Banks[i] = bankState{
-			PipelineStages:  nil,
-			PostPipelineBuf: nil,
-		}
-	}
+	storage := b.resolveStorage()
+	spec := b.buildSpec(name)
+	initialState := b.buildInitialState(spec)
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
@@ -215,6 +185,51 @@ func (b Builder) Build(name string) *Comp {
 	modelComp.AddMiddleware(dMW)
 
 	return c
+}
+
+func (b Builder) resolveStorage() *mem.Storage {
+	if b.storage != nil {
+		return b.storage
+	}
+
+	return mem.NewStorage(b.capacity)
+}
+
+func (b Builder) buildSpec(name string) Spec {
+	return Spec{
+		Freq:                           b.spec.Freq,
+		NumBanks:                       b.numBanks,
+		BankPipelineWidth:              b.bankPipelineWidth,
+		BankPipelineDepth:              b.bankPipelineDepth,
+		StageLatency:                   b.stageLatency,
+		PostPipelineBufSize:            b.postPipelineBufSize,
+		BankSelectorKind:               b.bankSelectorKind,
+		BankSelectorLog2InterleaveSize: b.log2InterleaveSize,
+		AddrConvKind:                   b.addrConvKind,
+		AddrInterleavingSize:           b.addrInterleavingSize,
+		AddrTotalNumOfElements:         b.addrTotalNumOfElements,
+		AddrCurrentElementIndex:        b.addrCurrentElementIndex,
+		AddrOffset:                     b.addrOffset,
+		StorageRef:                     name,
+	}
+}
+
+func (b Builder) buildInitialState(spec Spec) State {
+	state := State{
+		Banks: make([]bankState, spec.NumBanks),
+	}
+
+	for i := range state.Banks {
+		state.Banks[i] = bankState{
+			Pipeline: queueing.Pipeline[bankPipelineItemState]{
+				Width:     spec.BankPipelineWidth,
+				NumStages: spec.BankPipelineDepth * spec.StageLatency,
+			},
+			PostPipelineBuf: nil,
+		}
+	}
+
+	return state
 }
 
 func (b Builder) configurationMustBeValid() {
