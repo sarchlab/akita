@@ -4,11 +4,14 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 299)
+## Current State (Cycle 300)
 
-### Project Status: ✅ COMPLETE
+### Project Status: IN PROGRESS — New human requirements (issue #384)
 
-All core architectural goals achieved. All 39 milestones completed. All PRs merged (including PR #68 doc fix). CI 5/5 green on main. All 16 success criteria verified. All human issues closed.
+All core architectural goals from M1-M39 achieved. New human requirements received:
+1. Default spec struct at beginning of builder files
+2. Rename simplecache to writethroughcache
+3. Frequency should be part of Spec
 
 ### Recently Completed
 
@@ -62,6 +65,15 @@ All core architectural goals achieved. All 39 milestones completed. All PRs merg
 ---
 
 ## Next Milestones
+
+### M40: Rename simplecache to writethroughcache, add default Spec, move Freq to Spec
+- **Source**: Human issue #384
+- **Scope**:
+  1. Rename `v5/mem/cache/simplecache/` directory → `v5/mem/cache/writethroughcache/`, update package name, all imports, references in acceptance tests, docs
+  2. Add a `var DefaultSpec = Spec{...}` at the top of every builder file, with all current default values. Builder MakeBuilder() initializes from DefaultSpec.
+  3. Move `freq` (sim.Freq) into each component's Spec struct. Update `modeling.Builder` to read Freq from Spec instead of a separate field. Update all builders.
+- **Budget**: 8 cycles
+- **Acceptance**: CI passes, all tests pass, `simplecache` string gone from codebase (except git history)
 
 ### ✅ M39.1: Merge PR #68 (doc fix) and final verification — DONE
 - PR #68 merged, CI 5/5 green, all 16 success criteria verified

@@ -111,6 +111,16 @@ Following the same data/behavior separation as MSHR and Directory:
 
 The `simulation` package has `Save(filename)` and `Load(filename)` methods. After Comp elimination and State-as-canonical, snapshot/restore conversion layers disappear.
 
+### Default Spec and Builder Conventions (issue #384)
+
+Every builder file should define a **default Spec struct** at the beginning (e.g., `var DefaultSpec = Spec{...}`). The builder uses this default and allows callers to override individual fields. This makes the default configuration explicit and discoverable.
+
+**Frequency belongs in Spec.** Currently `freq` lives on the Builder and is passed to `modeling.NewBuilder().WithFreq()`. It should be a field in each component's Spec struct, making it part of the serializable configuration.
+
+### Rename simple cache to write-through cache (issue #384)
+
+The `simplecache` package (`v5/mem/cache/simplecache/`) should be renamed to reflect its write-through nature. The package name, directory, doc comments, and all external references should use the new name.
+
 ## Open Issues (from human review)
 
 ### Resolved
@@ -124,11 +134,13 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 ### Active
 
-6. **Cache unification** (issues #321, #336): Merge 3 simpler caches (writearound, writeevict, writethrough) into one cache with WritePolicy strategy. **Human approved for implementation** (issue #336 comment: "Let's go with merging the 3 simpler caches"). Writeback stays separate.
+6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
 
-7. **Buffers and pipelines in state** (issue #343): Allow buffers and anything serializable as part of state by implementing a serialize interface. Discuss how to handle pipelines. This connects to the ultimate goal of automatic save/load without per-component custom code.
+7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
 
-8. **Global state manager** (issue #326): Long-term direction. Register all state centrally with string-based identifiers. Deferred due to performance concerns (map access 75× slower than struct fields). May revisit as optional overlay for tooling/debugging.
+8. **Global state manager** (issue #326): Long-term direction. Deferred.
+
+9. **Default spec, rename simplecache, freq in spec** (issue #384): See sections above.
 
 ### CI Infrastructure
 
