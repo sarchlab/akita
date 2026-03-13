@@ -4,49 +4,68 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (Cycle 255)
+## Current State (Cycle 256)
 
 ### M33: Replace gob deep copy with reflect-based deep copy (DONE — Cycle 255)
 - Budget: 3 | Used: 2
 - PR #61 merged: Quinn implemented reflect-based deepCopy, Ares optimized with type caching
 - 16x speedup over gob (~19µs vs ~322µs for writeback cache state)
 - PR #62 merged: Fixed lint (gocognit) by breaking reflectDeepCopy into smaller functions
-- CI: lint fix verified, acceptance tests need re-measurement
+- CI: All 5 jobs GREEN on main
+- **Issue #334**: PR #61 was merged with failing lint check. Process fix: require all CI green before merge.
 - **Lesson: Reflect-based copy with type caching is a big win. But human is questioning whether A-B buffering is needed at all.**
 
-### Active Design Discussions (no implementation until human approves)
+### Design Discussion Results (Cycle 255-256)
 
-#### 1. Eliminate or Redesign A-B Buffering (#324, #326)
-- Human's latest direction: "I would either remove double buffering or use string-based identifier with global state management"
-- Human asks: "Can we achieve something similar to double buffering with in-place update?"
-- Human suggests: read-calculate-write order = 1 cycle, write-calculate-read = 3 cycles
-- Diana's analysis (#327): A-B isolation is **NOT actually used** by any current middleware. Deep copy is wasted overhead.
-- **Key question**: Can middleware ordering provide the same guarantees as double buffering?
-- tbc-db issue #335: In-depth analysis assigned to Diana
+#### A-B Buffering: ELIMINATE (decision ready)
+- Diana's analysis (#335): A-B isolation is **NOT used by ANY component**. All use read-own-writes pattern.
+- Elena (#338): Independent verification in progress.
+- Human (#326): "I would either remove a double buffering approach or use a string based identifier with global state management"
+- **Recommendation**: Eliminate A-B deep copy → switch to in-place update (~10 lines changed, 19µs→0µs/tick)
 
-#### 2. Global State Manager with Maps/Slices (#326)
-- Human asks: "Can we implement all states as nested maps and slices? Eliminate state structs entirely."
-- Human wants: state registered centrally, string-based identifiers, references from components
-- Each component has at most a reference to their state in the global manager
-- **Big architectural pivot** — would change how every component interacts with state
-- Needs thorough analysis of performance (map access vs struct fields) and type safety
+#### Global State Manager: DEFERRED (performance concern)
+- Diana benchmark (#335): Map-based state access is **75× slower** than struct fields
+- Human wants it but performance cost is prohibitive as primary access path
+- Can add later as optional overlay for tooling/debugging
+- **Status**: Discussed, not blocking. Pursue after performance is resolved.
 
-#### 3. Cache Unification (#321)
-- Iris analysis complete (#323) — 3 of 4 caches can merge (writearound/writeevict/writethrough)
-- Write-policy-specific middleware selected by builder
-- Human: "Discuss. No coding."
-- tbc-db issue #336: Updated design analysis assigned to Iris
+#### Cache Unification: READY for implementation after A-B elimination
+- Iris analysis (#336): 3 simple caches share ~93% code, unifiable with WritePolicy strategy
+- Writeback stays separate (architecturally distinct)
+- ~5,300 lines eliminated
+- **Status**: Design complete, awaiting human approval to code. Independent of A-B changes.
 
-#### 4. NOC Test Size Revert (#325)
-- Cannot revert until performance is good enough
-- With reflect copy (16x faster), need to re-measure at original sizes
-- Iris analysis (#328): at original sizes with gob copy, 6-12 hours. With reflect, maybe 30-60 min?
-- **Blocked on**: measuring actual performance with reflect copy at original sizes
+#### NOC Test Size Revert: INCLUDED in M34
+- Per human directive #325: must use original upstream sizes
+- With A-B elimination (0µs overhead), tests should complete in reasonable time
 
-#### 5. Performance Target (#317, #319)
-- mem acceptance tests must complete in <5 min (currently ~12 min with gob, needs re-measurement with reflect)
-- Original akita repo: <5 min (no A-B, no deep copy)
-- If A-B buffering is eliminated, this target is trivially met
+#### Performance Target: SOLVED by A-B elimination
+- mem acceptance tests currently ~12 min with reflect copy
+- Original akita: <5 min (no deep copy)
+- Eliminating deep copy entirely → should match original akita performance
+
+### ➡️ M34: Eliminate A-B deep copy + revert NOC test sizes (NEXT)
+- **Goal**: Switch from double-buffered state to in-place update. Remove all deep copy overhead. Revert NOC test sizes to upstream values.
+- **Budget**: 4 cycles
+- **Key changes**: 
+  - Remove deepCopy in Tick() → shallow copy only
+  - Remove all reflectDeepCopy helper functions
+  - Update docs (component_guide.md, comments)
+  - Revert NOC test sizes to original upstream values
+- **Risk**: LOW — Diana + Elena verified no component uses A-B isolation
+- **Expected outcome**: Performance parity with original akita repo
+
+### Future Milestones (tentative)
+
+#### M35: Cache unification — merge 3 simple caches (PENDING human approval)
+- Merge writearound/writeevict/writethrough into single cache with WritePolicy strategy
+- Estimated: 3-4 cycles
+- Requires explicit human approval (#321: "Discuss. No coding.")
+
+#### M36: Global state manager — optional overlay (LONG TERM)
+- String-based state registry for tooling/debugging
+- NOT as primary access path (75× performance penalty)
+- Depends on human direction
 
 ### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
 - Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
