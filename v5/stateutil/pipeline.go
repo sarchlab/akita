@@ -101,7 +101,6 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 	lastStage := p.NumStages - 1
 
 	// Phase 1: Try to output items at last stage with CycleLeft == 0.
-	// Process from end so we can swap-remove without skipping.
 	for i := n - 1; i >= 0; i-- {
 		s := &p.Stages[i]
 		if s.Stage == lastStage && s.CycleLeft == 0 {
@@ -115,20 +114,74 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 
 	p.Stages = p.Stages[:n]
 
-	if n == 0 {
+	// Phase 2: Advance remaining items from high stage to low.
+	if n > 0 {
+		moved = p.advanceItems() || moved
+	}
+
+	return moved
+}
+
+// advanceItems processes all pipeline items, advancing them toward higher
+// stages. Items are processed from highest stage to lowest to prevent
+// double-advancement within a single tick.
+func (p *Pipeline[T]) advanceItems() bool {
+	n := len(p.Stages)
+	moved := false
+
+	minStage, maxStage := p.stageRange()
+
+	// Cap maxStage: items at lastStage were already handled in Phase 1.
+	lastStage := p.NumStages - 1
+	if maxStage > lastStage-1 {
+		maxStage = lastStage - 1
+	}
+
+	if maxStage < minStage {
 		return moved
 	}
 
-	// Phase 2: Advance remaining items from high stage to low.
-	// We iterate by stage number (high to low), but only visit items
-	// at each stage. To avoid O(NumStages * N), we first find which
-	// stages have items, then only iterate those stages.
+	occ := p.buildOccupancy(minStage, maxStage+1)
+	occBase := minStage
 
-	// Find min and max stage among items.
+	for stage := maxStage; stage >= minStage; stage-- {
+		for i := 0; i < n; i++ {
+			s := &p.Stages[i]
+			if s.Stage != stage {
+				continue
+			}
+
+			if s.CycleLeft > 0 {
+				s.CycleLeft--
+				moved = true
+
+				continue
+			}
+
+			nextStage := stage + 1
+			nextIdx := (nextStage - occBase) * p.Width
+			curIdx := (stage - occBase) * p.Width
+
+			if occ[nextIdx+s.Lane] {
+				continue
+			}
+
+			occ[curIdx+s.Lane] = false
+			s.Stage = nextStage
+			occ[nextIdx+s.Lane] = true
+			moved = true
+		}
+	}
+
+	return moved
+}
+
+// stageRange returns the minimum and maximum stage numbers among items.
+func (p *Pipeline[T]) stageRange() (int, int) {
 	minStage := p.Stages[0].Stage
 	maxStage := p.Stages[0].Stage
 
-	for i := 1; i < n; i++ {
+	for i := 1; i < len(p.Stages); i++ {
 		st := p.Stages[i].Stage
 		if st < minStage {
 			minStage = st
@@ -139,17 +192,13 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 		}
 	}
 
-	// Cap maxStage at lastStage-1 since items at lastStage were already
-	// handled (output) in Phase 1.
-	if maxStage > lastStage-1 {
-		maxStage = lastStage - 1
-	}
+	return minStage, maxStage
+}
 
-	// Build per-lane occupancy only for the stages that have items.
-	// We use a flat array indexed by stage*width+lane.
-	// Only need occupancy for stages minStage..maxStage+1 (nextStage).
-	occBase := minStage
-	occRange := maxStage + 2 - occBase // +2 because we check nextStage=maxStage+1
+// buildOccupancy builds a flat bool slice tracking which (stage, lane) slots
+// are occupied, for stages in [minStage, maxStage+1].
+func (p *Pipeline[T]) buildOccupancy(minStage, maxStage int) []bool {
+	occRange := maxStage + 1 - minStage + 1 // +1 for nextStage lookups
 	occSlots := occRange * p.Width
 
 	var occSmall [128]bool
@@ -164,41 +213,10 @@ func (p *Pipeline[T]) TickFunc(accept func(T) bool) bool {
 		occ = make([]bool, occSlots)
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < len(p.Stages); i++ {
 		s := &p.Stages[i]
-		occ[(s.Stage-occBase)*p.Width+s.Lane] = true
+		occ[(s.Stage-minStage)*p.Width+s.Lane] = true
 	}
 
-	// Process from highest stage to lowest.
-	for stage := maxStage; stage >= minStage; stage-- {
-		for i := 0; i < n; i++ {
-			s := &p.Stages[i]
-			if s.Stage != stage {
-				continue
-			}
-
-			if s.CycleLeft > 0 {
-				s.CycleLeft--
-				moved = true
-				continue
-			}
-
-			// CycleLeft == 0, try to advance to next stage.
-			nextStage := stage + 1
-			nextIdx := (nextStage - occBase) * p.Width
-			curIdx := (stage - occBase) * p.Width
-
-			if occ[nextIdx+s.Lane] {
-				continue
-			}
-
-			// Advance.
-			occ[curIdx+s.Lane] = false
-			s.Stage = nextStage
-			occ[nextIdx+s.Lane] = true
-			moved = true
-		}
-	}
-
-	return moved
+	return occ
 }
