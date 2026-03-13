@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -25,9 +26,26 @@ var _ = Describe("Bottom Parser", func() {
 		bottomPort = NewMockPort(mockCtrl)
 
 		initialState := State{
-			BankBufIndices:             []bankBufState{{Indices: nil}},
-			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
+			DirBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirBuf",
+				Cap:        4,
+			},
+			BankBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankBuf0", Cap: 4},
+			},
+			DirPipeline: stateutil.Pipeline[int]{
+				Width: 4, NumStages: 2,
+			},
+			DirPostBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf",
+				Cap:        4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{
+				{Width: 4, NumStages: 10},
+			},
+			BankPostBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankPostBuf0", Cap: 4},
+			},
 		}
 
 		c = &pipelineMW{
@@ -51,19 +69,6 @@ var _ = Describe("Bottom Parser", func() {
 
 		c.comp.SetState(initialState)
 
-		next := c.comp.GetNextState()
-
-		// Create adapters
-		c.bankBufAdapters = []*stateTransBuffer{
-			{
-				name:       "Cache.BankBuf0",
-				readItems:  &next.BankBufIndices[0].Indices,
-				writeItems: &next.BankBufIndices[0].Indices,
-				capacity:   4,
-				mw:         c,
-			},
-		}
-
 		p = &bottomParser{cache: c}
 	})
 
@@ -73,7 +78,6 @@ var _ = Describe("Bottom Parser", func() {
 
 	It("should do nothing if no respond", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
-		c.syncForTest()
 		madeProgress := p.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -118,8 +122,6 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			bottomPort.EXPECT().RetrieveIncoming()
-
-			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -270,11 +272,10 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should stall if bank is busy", func() {
-			c.bankBufAdapters[0].capacity = 0
+			next := c.comp.GetNextState()
+			next.BankBufs[0].Cap = 0
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
-
-			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -287,8 +288,6 @@ var _ = Describe("Bottom Parser", func() {
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
 
-			c.syncForTest()
-
 			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
@@ -297,7 +296,7 @@ var _ = Describe("Bottom Parser", func() {
 			Expect(preCTrans2.done).To(BeTrue())
 			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
 			// Bank buf should have a write-fetched transaction
-			Expect(next.BankBufIndices[0].Indices).To(HaveLen(1))
+			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
 			// Fetcher trans should have bankAction set
 			Expect(postCTrans1.bankAction).To(Equal(bankActionWriteFetched))
 		})
@@ -314,8 +313,6 @@ var _ = Describe("Bottom Parser", func() {
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
-
-			c.syncForTest()
 
 			madeProgress := p.Tick()
 
@@ -339,7 +336,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}))
 			// Bank buf should have the fetcher transaction
-			Expect(next.BankBufIndices[0].Indices).To(HaveLen(1))
+			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
 		})
 	})
 

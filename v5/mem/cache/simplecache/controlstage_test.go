@@ -5,6 +5,7 @@ import (
 	cache2 "github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -46,9 +47,15 @@ var _ = Describe("Control Stage", func() {
 		transactions = nil
 
 		initialState := State{
-			BankBufIndices:             []bankBufState{},
-			BankPipelineStages:         []bankPipelineState{},
-			BankPostPipelineBufIndices: []bankPostBufState{},
+			DirBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirBuf",
+				Cap:        4,
+			},
+			BankBufs:      []stateutil.Buffer[int]{},
+			DirPipeline:   stateutil.Pipeline[int]{Width: 4, NumStages: 2},
+			DirPostBuf:    stateutil.Buffer[int]{BufferName: "Cache.DirPostBuf", Cap: 4},
+			BankPipelines: []stateutil.Pipeline[int]{},
+			BankPostBufs:  []stateutil.Buffer[int]{},
 		}
 
 		pmw = &pipelineMW{
@@ -70,18 +77,6 @@ var _ = Describe("Control Stage", func() {
 
 		pmw.comp.SetState(initialState)
 
-		next := pmw.comp.GetNextState()
-
-		// Create dir buf adapter
-		pmw.dirBufAdapter = &stateTransBuffer{
-			name:       "Cache.DirBuf",
-			readItems:  &next.DirBufIndices,
-			writeItems: &next.DirBufIndices,
-			capacity:   4,
-			mw:         pmw,
-		}
-		pmw.bankBufAdapters = nil
-
 		co = &coalescer{cache: pmw}
 		pmw.coalesceStage = co
 
@@ -99,8 +94,6 @@ var _ = Describe("Control Stage", func() {
 	It("should do nothing if no request", func() {
 		ctrlPort.EXPECT().PeekIncoming().Return(nil)
 
-		pmw.syncForTest()
-
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -116,8 +109,6 @@ var _ = Describe("Control Stage", func() {
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
-
-		pmw.syncForTest()
 
 		madeProgress := s.Tick()
 
@@ -141,8 +132,6 @@ var _ = Describe("Control Stage", func() {
 		bottomPort.EXPECT().PeekIncoming().Return(nil)
 
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
-
-		pmw.syncForTest()
 
 		madeProgress := s.Tick()
 

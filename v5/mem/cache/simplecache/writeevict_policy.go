@@ -38,7 +38,9 @@ func (p *WriteevictPolicy) HandleWriteHit(
 	nextBlock.IsValid = false
 
 	tracing.AddTaskStep(trans.id, d.cache.comp, "write-hit")
-	d.cache.dirPostBufAdapter.Pop()
+
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -50,7 +52,10 @@ func (p *WriteevictPolicy) HandleWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
-		d.cache.dirPostBufAdapter.Pop()
+
+		next := d.cache.comp.GetNextState()
+		dirPostBuf := &next.DirPostBuf
+		dirPostBuf.Pop()
 
 		return true
 	}

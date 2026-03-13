@@ -53,9 +53,12 @@ func (p *WritethroughPolicy) HandleWriteHit(
 	trans.blockSetID = setID
 	trans.blockWayID = wayID
 	trans.hasBlock = true
-	bankBuf.Push(trans)
 
-	d.cache.dirPostBufAdapter.Pop()
+	transIdx := d.findPostCoalesceTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
+
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -144,7 +147,8 @@ func (p *WritethroughPolicy) partialWriteMiss(
 		return sentThisCycle
 	}
 
-	d.cache.dirPostBufAdapter.Pop()
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
 
 	return true
@@ -162,6 +166,8 @@ func (p *WritethroughPolicy) fullLineWriteMiss(
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
+
+	_ = next // suppress unused warning
 
 	return p.HandleWriteHit(d, trans, victimSetID, victimWayID)
 }

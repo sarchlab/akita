@@ -4,16 +4,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"github.com/sarchlab/akita/v5/tracing"
 )
-
-type dirPipelineItem struct {
-	trans *transactionState
-}
-
-func (i dirPipelineItem) TaskID() string {
-	return i.trans.id + "_dir_pipeline"
-}
 
 type directory struct {
 	cache       *pipelineMW
@@ -23,44 +16,40 @@ type directory struct {
 func (d *directory) Tick() (madeProgress bool) {
 	spec := d.cache.GetSpec()
 	next := d.cache.comp.GetNextState()
+	dirBuf := &next.DirBuf
+	dirPipeline := &next.DirPipeline
+	dirPostBuf := &next.DirPostBuf
 
 	// Accept from dirBuf into pipeline
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		if !dirPipelineCanAccept(
-			next.DirPipelineStages, spec.NumReqPerCycle) {
+		if !dirPipeline.CanAccept() {
 			break
 		}
 
-		item := d.cache.dirBufAdapter.Peek()
+		item := dirBuf.Peek()
 		if item == nil {
 			break
 		}
 
-		trans := item.(*transactionState)
-		transIdx := d.findPostCoalesceTransIdx(trans)
-		dirPipelineAccept(
-			&next.DirPipelineStages, spec.NumReqPerCycle, transIdx)
-		d.cache.dirBufAdapter.Pop()
+		transIdx := item.(int)
+		dirPipeline.Accept(transIdx)
+		dirBuf.Pop()
 
 		madeProgress = true
 	}
 
 	// Tick pipeline
-	madeProgress = dirPipelineTick(
-		&next.DirPipelineStages,
-		&next.DirPostPipelineBufIndices,
-		spec.NumReqPerCycle,
-		spec.DirLatency,
-	) || madeProgress
+	madeProgress = dirPipeline.Tick(dirPostBuf) || madeProgress
 
 	// Process items from post-pipeline buffer
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		item := d.cache.dirPostBufAdapter.Peek()
+		item := dirPostBuf.Peek()
 		if item == nil {
 			break
 		}
 
-		trans := item.(dirPipelineItem).trans
+		transIdx := item.(int)
+		trans := d.cache.postCoalesceTransactions[transIdx]
 
 		var processed bool
 		if trans.read != nil {
@@ -119,7 +108,8 @@ func (d *directory) processMSHRHit(
 		tracing.AddTaskStep(trans.id, d.cache.comp, "write-mshr-hit")
 	}
 
-	d.cache.dirPostBufAdapter.Pop()
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -147,9 +137,12 @@ func (d *directory) processReadHit(
 	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	nextBlock.ReadCount++
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
-	bankBuf.Push(trans)
 
-	d.cache.dirPostBufAdapter.Pop()
+	transIdx := d.findPostCoalesceTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
+
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.id, d.cache.comp, "read-hit")
 
 	return true
@@ -177,9 +170,8 @@ func (d *directory) processReadMiss(trans *transactionState) bool {
 		return false
 	}
 
-	_ = next // writes done in fetchFromBottom
-
-	d.cache.dirPostBufAdapter.Pop()
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 	tracing.AddTaskStep(trans.id, d.cache.comp, "read-miss")
 
 	return true
@@ -294,12 +286,13 @@ func (d *directory) fetchFromBottom(
 	return true
 }
 
-func (d *directory) getBankBuf(setID, wayID int) *stateTransBuffer {
+func (d *directory) getBankBuf(setID, wayID int) *stateutil.Buffer[int] {
+	next := d.cache.comp.GetNextState()
 	numWaysPerSet := d.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
-	bankID := blockID % len(d.cache.bankBufAdapters)
+	bankID := blockID % len(next.BankBufs)
 
-	return d.cache.bankBufAdapters[bankID]
+	return &next.BankBufs[bankID]
 }
 
 // findPostCoalesceTransIdx returns the index of trans in

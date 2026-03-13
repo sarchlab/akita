@@ -58,13 +58,15 @@ func (s *controlStage) processCurrentFlush() bool {
 func (s *controlStage) hardResetCache() {
 	s.flushPort(s.pipeline.topPort)
 	s.flushPort(s.pipeline.bottomPort)
-	s.pipeline.dirBufAdapter.Clear()
-
-	for _, bankBuf := range s.pipeline.bankBufAdapters {
-		bankBuf.Clear()
-	}
 
 	next := s.pipeline.comp.GetNextState()
+
+	// Clear buffers directly
+	next.DirBuf.Clear()
+	for i := range next.BankBufs {
+		next.BankBufs[i].Clear()
+	}
+
 	spec := s.pipeline.GetSpec()
 	blockSize := int(1 << spec.Log2BlockSize)
 	cache.DirectoryReset(

@@ -1,8 +1,10 @@
 package simplecache
 
 import (
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 )
 
 // transactionSnapshot is the serializable representation of a transactionState.
@@ -27,37 +29,6 @@ type transactionSnapshot struct {
 	Done                  bool        `json:"done"`
 	BottomWriteDone       bool        `json:"bottom_write_done"`
 	BankDone              bool        `json:"bank_done"`
-}
-
-// dirPipelineStageState captures one directory pipeline slot.
-type dirPipelineStageState struct {
-	Lane       int `json:"lane"`
-	Stage      int `json:"stage"`
-	TransIndex int `json:"trans_index"`
-	CycleLeft  int `json:"cycle_left"`
-}
-
-// bankPipelineStageState captures one bank pipeline slot.
-type bankPipelineStageState struct {
-	Lane       int `json:"lane"`
-	Stage      int `json:"stage"`
-	TransIndex int `json:"trans_index"`
-	CycleLeft  int `json:"cycle_left"`
-}
-
-// bankBufState wraps per-bank buffer indices to avoid nested slices.
-type bankBufState struct {
-	Indices []int `json:"indices"`
-}
-
-// bankPipelineState wraps per-bank pipeline stage states.
-type bankPipelineState struct {
-	Stages []bankPipelineStageState `json:"stages"`
-}
-
-// bankPostBufState wraps per-bank post-pipeline buffer indices.
-type bankPostBufState struct {
-	Indices []int `json:"indices"`
 }
 
 func buildTransIndex(
@@ -85,8 +56,8 @@ func snapshotTransaction(
 	lookup map[*transactionState]int,
 ) transactionSnapshot {
 	s := transactionSnapshot{
-		ID:            t.id,
-		BankAction:    int(t.bankAction),
+		ID:              t.id,
+		BankAction:      int(t.bankAction),
 		FetchAndWrite:   t.fetchAndWrite,
 		Done:            t.done,
 		BottomWriteDone: t.bottomWriteDone,
@@ -195,8 +166,8 @@ func restoreTransactionCore(
 	s transactionSnapshot,
 ) *transactionState {
 	t := &transactionState{
-		id:            s.ID,
-		bankAction:    bankActionType(s.BankAction),
+		id:              s.ID,
+		bankAction:      bankActionType(s.BankAction),
 		fetchAndWrite:   s.FetchAndWrite,
 		done:            s.Done,
 		bottomWriteDone: s.BottomWriteDone,
@@ -268,4 +239,40 @@ func wirePreCoalesce(
 
 		allTrans[i].preCoalesceTransactions = refs
 	}
+}
+
+// Spec contains immutable configuration for the simplecache.
+type Spec struct {
+	NumReqPerCycle        int    `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64 `json:"log2_block_size"`
+	BankLatency           int    `json:"bank_latency"`
+	WayAssociativity      int    `json:"way_associativity"`
+	MaxNumConcurrentTrans int    `json:"max_num_concurrent_trans"`
+	NumBanks              int    `json:"num_banks"`
+	NumMSHREntry          int    `json:"num_mshr_entry"`
+	NumSets               int    `json:"num_sets"`
+	TotalByteSize         uint64 `json:"total_byte_size"`
+	DirLatency            int    `json:"dir_latency"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
+}
+
+// State contains mutable runtime data for the simplecache.
+type State struct {
+	DirectoryState  cache.DirectoryState  `json:"directory_state"`
+	MSHRState       cache.MSHRState       `json:"mshr_state"`
+	Transactions    []transactionSnapshot `json:"transactions"`
+	NumTransactions int                   `json:"num_transactions"`
+
+	DirBuf       stateutil.Buffer[int]     `json:"dir_buf"`
+	BankBufs     []stateutil.Buffer[int]   `json:"bank_bufs"`
+	DirPipeline  stateutil.Pipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf   stateutil.Buffer[int]     `json:"dir_post_buf"`
+	BankPipelines []stateutil.Pipeline[int] `json:"bank_pipelines"`
+	BankPostBufs []stateutil.Buffer[int]   `json:"bank_post_bufs"`
+
+	IsPaused bool `json:"is_paused"`
 }

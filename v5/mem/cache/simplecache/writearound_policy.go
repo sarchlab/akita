@@ -50,10 +50,14 @@ func (p *WritearoundPolicy) HandleWriteHit(
 	trans.blockSetID = setID
 	trans.blockWayID = wayID
 	trans.hasBlock = true
-	bankBuf.Push(trans)
+
+	transIdx := d.findPostCoalesceTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
 
 	tracing.AddTaskStep(trans.id, d.cache.comp, "write-hit")
-	d.cache.dirPostBufAdapter.Pop()
+
+	dirPostBuf := &next.DirPostBuf
+	dirPostBuf.Pop()
 
 	return true
 }
@@ -65,7 +69,10 @@ func (p *WritearoundPolicy) HandleWriteMiss(
 ) bool {
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
-		d.cache.dirPostBufAdapter.Pop()
+
+		next := d.cache.comp.GetNextState()
+		dirPostBuf := &next.DirPostBuf
+		dirPostBuf.Pop()
 
 		return true
 	}

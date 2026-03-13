@@ -4,14 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-type bankTransaction struct {
-	*transactionState
-}
-
-func (t *bankTransaction) TaskID() string {
-	return t.transactionState.id
-}
-
 type bankStage struct {
 	cache          *pipelineMW
 	bankID         int
@@ -20,8 +12,8 @@ type bankStage struct {
 
 func (s *bankStage) Reset() {
 	next := s.cache.comp.GetNextState()
-	next.BankPostPipelineBufIndices[s.bankID].Indices = nil
-	next.BankPipelineStages[s.bankID].Stages = nil
+	next.BankPostBufs[s.bankID].Elements = nil
+	next.BankPipelines[s.bankID].Stages = nil
 }
 
 func (s *bankStage) Tick() bool {
@@ -42,48 +34,44 @@ func (s *bankStage) Tick() bool {
 
 func (s *bankStage) tickPipeline() bool {
 	next := s.cache.comp.GetNextState()
-	spec := s.cache.GetSpec()
+	bankPipeline := &next.BankPipelines[s.bankID]
+	bankPostBuf := &next.BankPostBufs[s.bankID]
 
-	return bankPipelineTick(
-		&next.BankPipelineStages[s.bankID].Stages,
-		&next.BankPostPipelineBufIndices[s.bankID].Indices,
-		s.numReqPerCycle,
-		spec.BankLatency,
-	)
+	return bankPipeline.Tick(bankPostBuf)
 }
 
 func (s *bankStage) extractFromBuf() bool {
-	item := s.cache.bankBufAdapters[s.bankID].Peek()
+	next := s.cache.comp.GetNextState()
+	bankBuf := &next.BankBufs[s.bankID]
+
+	item := bankBuf.Peek()
 	if item == nil {
 		return false
 	}
 
-	next := s.cache.comp.GetNextState()
-	stages := next.BankPipelineStages[s.bankID].Stages
-
-	if !bankPipelineCanAccept(stages, s.numReqPerCycle) {
+	bankPipeline := &next.BankPipelines[s.bankID]
+	if !bankPipeline.CanAccept() {
 		return false
 	}
 
-	trans := item.(*transactionState)
-	transIdx := s.findPostCoalesceIdx(trans)
-	bankPipelineAccept(
-		&next.BankPipelineStages[s.bankID].Stages,
-		s.numReqPerCycle,
-		transIdx,
-	)
-	s.cache.bankBufAdapters[s.bankID].Pop()
+	transIdx := item.(int)
+	bankPipeline.Accept(transIdx)
+	bankBuf.Pop()
 
 	return true
 }
 
 func (s *bankStage) finalizeTrans() bool {
-	item := s.cache.bankPostBufAdapters[s.bankID].Peek()
+	next := s.cache.comp.GetNextState()
+	bankPostBuf := &next.BankPostBufs[s.bankID]
+
+	item := bankPostBuf.Peek()
 	if item == nil {
 		return false
 	}
 
-	trans := item.(*bankTransaction).transactionState
+	transIdx := item.(int)
+	trans := s.cache.postCoalesceTransactions[transIdx]
 
 	switch trans.bankAction {
 	case bankActionReadHit:
@@ -115,7 +103,8 @@ func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
 		t.done = true
 	}
 
-	s.cache.bankPostBufAdapters[s.bankID].Pop()
+	bankPostBuf := &next.BankPostBufs[s.bankID]
+	bankPostBuf.Pop()
 	s.removeTransaction(trans)
 
 	tracing.EndTask(trans.id, s.cache.comp)
@@ -149,7 +138,8 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 	nextBlock.DirtyMask = trans.write.DirtyMask
 	nextBlock.IsLocked = false
 
-	s.cache.bankPostBufAdapters[s.bankID].Pop()
+	bankPostBuf := &next.BankPostBufs[s.bankID]
+	bankPostBuf.Pop()
 
 	if s.cache.writePolicy.NeedsDualCompletion() {
 		trans.bankDone = true
@@ -177,7 +167,8 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	nextBlock.DirtyMask = trans.writeFetchedDirtyMask
 	nextBlock.IsLocked = false
 
-	s.cache.bankPostBufAdapters[s.bankID].Pop()
+	bankPostBuf := &next.BankPostBufs[s.bankID]
+	bankPostBuf.Pop()
 
 	return true
 }

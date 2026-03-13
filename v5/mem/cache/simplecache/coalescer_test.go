@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -23,9 +24,26 @@ var _ = Describe("Coalescer", func() {
 		topPort = NewMockPort(mockCtrl)
 
 		initialState := State{
-			BankBufIndices:             []bankBufState{{Indices: nil}},
-			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
+			DirBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirBuf",
+				Cap:        4,
+			},
+			BankBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankBuf0", Cap: 4},
+			},
+			DirPipeline: stateutil.Pipeline[int]{
+				Width: 4, NumStages: 2,
+			},
+			DirPostBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf",
+				Cap:        4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{
+				{Width: 4, NumStages: 10},
+			},
+			BankPostBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankPostBuf0", Cap: 4},
+			},
 		}
 
 		mw = &pipelineMW{
@@ -42,15 +60,6 @@ var _ = Describe("Coalescer", func() {
 
 		mw.comp.SetState(initialState)
 
-		next := mw.comp.GetNextState()
-		mw.dirBufAdapter = &stateTransBuffer{
-			name:       "Cache.DirBuf",
-			readItems:  &next.DirBufIndices,
-			writeItems: &next.DirBufIndices,
-			capacity:   4,
-			mw:         mw,
-		}
-
 		co = coalescer{cache: mw}
 	})
 
@@ -60,7 +69,6 @@ var _ = Describe("Coalescer", func() {
 
 	It("should do nothing if no req", func() {
 		topPort.EXPECT().PeekIncoming().Return(nil)
-		mw.syncForTest()
 		madeProgress := co.Tick()
 		Expect(madeProgress).To(BeFalse())
 	})
@@ -112,8 +120,6 @@ var _ = Describe("Coalescer", func() {
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
-				mw.syncForTest()
-
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
@@ -131,11 +137,11 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				mw.dirBufAdapter.capacity = 0
+				// Set DirBuf capacity to 0
+				next := mw.comp.GetNextState()
+				next.DirBuf.Cap = 0
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
-
-				mw.syncForTest()
 
 				madeProgress := co.Tick()
 
@@ -157,8 +163,6 @@ var _ = Describe("Coalescer", func() {
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
-
-				mw.syncForTest()
 
 				madeProgress := co.Tick()
 
@@ -183,11 +187,10 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				mw.dirBufAdapter.capacity = 0
+				next := mw.comp.GetNextState()
+				next.DirBuf.Cap = 0
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
-
-				mw.syncForTest()
 
 				madeProgress := co.Tick()
 
@@ -210,8 +213,6 @@ var _ = Describe("Coalescer", func() {
 				topPort.EXPECT().PeekIncoming().Return(read3)
 				topPort.EXPECT().RetrieveIncoming()
 
-				mw.syncForTest()
-
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeTrue())
@@ -229,10 +230,10 @@ var _ = Describe("Coalescer", func() {
 				read3.TrafficBytes = 12
 				read3.TrafficClass = "req"
 
-				mw.dirBufAdapter.capacity = 0
+				next := mw.comp.GetNextState()
+				next.DirBuf.Cap = 0
 
 				topPort.EXPECT().PeekIncoming().Return(read3)
-				mw.syncForTest()
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
@@ -251,11 +252,10 @@ var _ = Describe("Coalescer", func() {
 					read3.TrafficClass = "req"
 
 					// Allow first push, then fill buffer
-					mw.dirBufAdapter.capacity = 1
+					next := mw.comp.GetNextState()
+					next.DirBuf.Cap = 1
 
 					topPort.EXPECT().PeekIncoming().Return(read3)
-
-					mw.syncForTest()
 
 					madeProgress := co.Tick()
 
@@ -299,8 +299,6 @@ var _ = Describe("Coalescer", func() {
 			topPort.EXPECT().PeekIncoming().Return(write1)
 			topPort.EXPECT().PeekIncoming().Return(write2)
 			topPort.EXPECT().RetrieveIncoming().Times(2)
-
-			mw.syncForTest()
 
 			madeProgress := co.Tick()
 			Expect(madeProgress).To(BeTrue())
