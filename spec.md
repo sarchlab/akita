@@ -99,9 +99,17 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 ### Active
 
-4. **Simulation performance regression** (issues #317, #319): The mem acceptance tests must complete in similar time to the original akita repo (<5 min). Currently they take ~12 min after switching deep copy from JSON to gob. The original akita repo does not use A-B state double buffering. We cannot reduce test requirements — must match the same tests with similar performance. Possible approaches: custom shallow copy per component (like endpoint already does), reducing copy frequency, or structural optimizations.
+4. **Simulation performance regression** (issues #317, #319): The mem acceptance tests must complete in similar time to the original akita repo (<5 min). M33 switched deep copy from gob to reflect (16x speedup, ~19µs/tick), but the original akita repo has 0µs overhead (no A-B state). Re-measurement needed with reflect copy. The human is now questioning whether A-B is needed at all.
 
-5. **Cache unification** (issue #321): Explore having a single cache component with different write-control middlewares instead of 4 separate cache packages (writeback, writearound, writeevict, writethrough). Currently ~21K lines with ~90% code overlap. The idea: shared Spec/State/common middlewares, with write-policy-specific middleware selected by the builder. Discussion only — no coding until design is approved.
+5. **Cache unification** (issue #321): Explore having a single cache component with different write-control middlewares instead of 4 separate cache packages (writeback, writearound, writeevict, writethrough). Currently ~21K lines with ~90% code overlap. Discussion only — no coding until design is approved.
+
+6. **A-B state architecture reconsideration** (issues #324, #326): The human is exploring two major directions:
+   - **Eliminate double buffering**: Use in-place update instead. Analysis shows A-B isolation is not actually used by any current middleware — all use GetNextState() for both reads and writes. The deep copy is wasted overhead.
+   - **Global state manager**: Register all state centrally with string-based identifiers. State as nested maps/slices, eliminating typed state structs. Components hold references to their state in the global manager. Mutations committed at cycle end (or immediately via "back door" for caches that need read-own-writes).
+   - Human's ordering idea: read-calculate-write → 1 cycle, write-calculate-read → 3 cycles.
+   - **This is discuss-only. No implementation until design is approved.**
+
+7. **NOC test size revert** (issue #325): Must revert to original upstream message counts. Blocked on performance — at original sizes with gob copy, tests took 6-12 hours. With reflect copy, need re-measurement.
 
 ### CI Infrastructure
 
