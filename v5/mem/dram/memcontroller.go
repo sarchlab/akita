@@ -1,5 +1,7 @@
 package dram
 
+import "github.com/sarchlab/akita/v5/sim"
+
 // Protocol defines the category of the memory controller.
 type Protocol int
 
@@ -28,6 +30,9 @@ func (p Protocol) isHBM() bool {
 
 // Spec contains immutable configuration for the DRAM memory controller.
 type Spec struct {
+	// Frequency
+	Freq sim.Freq `json:"freq"`
+
 	// Protocol
 	Protocol int `json:"protocol"`
 

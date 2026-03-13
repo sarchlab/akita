@@ -8,7 +8,8 @@ import (
 
 // Spec contains immutable configuration for the data mover.
 type Spec struct {
-	BufferSize             uint64 `json:"buffer_size"`
+	Freq                   sim.Freq `json:"freq"`
+	BufferSize             uint64   `json:"buffer_size"`
 	InsideByteGranularity  uint64 `json:"inside_byte_granularity"`
 	OutsideByteGranularity uint64 `json:"outside_byte_granularity"`
 

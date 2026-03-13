@@ -7,10 +7,50 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
+// DefaultSpec provides default configuration for the DRAM memory controller.
+var DefaultSpec = Spec{
+	Freq:                 1600 * sim.MHz,
+	Protocol:             int(DDR3),
+	TAL:                  0,
+	TCL:                  11,
+	TCWL:                 8,
+	TRCD:                 11,
+	TRP:                  11,
+	TRAS:                 28,
+	TCCDL:                4,
+	TCCDS:                4,
+	TRTRS:                1,
+	TRTP:                 6,
+	TWTRL:                6,
+	TWTRS:                6,
+	TWR:                  12,
+	TPPD:                 0,
+	TRRDL:                5,
+	TRRDS:                5,
+	TRCDRD:               24,
+	TRCDWR:               20,
+	TREFI:                6240,
+	TRFC:                 208,
+	TRFCb:                1950,
+	TCKESR:               5,
+	TXS:                  216,
+	BusWidth:             64,
+	BurstLength:          8,
+	DeviceWidth:          16,
+	NumChannel:           1,
+	NumRank:              2,
+	NumBankGroup:         1,
+	NumBank:              8,
+	NumRow:               32768,
+	NumCol:               1024,
+	TransactionQueueSize: 32,
+	CommandQueueCapacity: 8,
+}
+
 // Builder can build new memory controllers.
 type Builder struct {
 	engine           sim.Engine
-	freq             sim.Freq
+	spec             Spec
 	useGlobalStorage bool
 	storage          *mem.Storage
 
@@ -70,7 +110,7 @@ type Builder struct {
 // MakeBuilder creates a builder with default configuration.
 func MakeBuilder() Builder {
 	b := Builder{
-		freq:                 1600 * sim.MHz,
+		spec:                 DefaultSpec,
 		protocol:             DDR3,
 		transactionQueueSize: 32,
 		commandQueueSize:     8,
@@ -120,7 +160,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency of the builder.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -384,7 +424,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)
@@ -468,6 +508,7 @@ func (b Builder) buildSpec() Spec {
 
 func (b Builder) buildTimingSpec() Spec {
 	return Spec{
+		Freq:       b.spec.Freq,
 		Protocol:   int(b.protocol),
 		TAL:        b.tAL,
 		TCL:        b.tCL,

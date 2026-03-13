@@ -6,21 +6,24 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides default configuration for the data mover.
+var DefaultSpec = Spec{
+	Freq: 1 * sim.GHz,
+}
+
 // A Builder for StreamingDataMover
 type Builder struct {
 	engine      sim.Engine
-	freq        sim.Freq
 	ctrlPort    sim.Port
 	insidePort  sim.Port
 	outsidePort sim.Port
-	spec        *Spec
+	spec        Spec
 }
 
 // MakeBuilder creates a new Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq: 1 * sim.GHz,
-		spec: &Spec{},
+		spec: DefaultSpec,
 	}
 }
 
@@ -34,7 +37,7 @@ func (sdmBuilder Builder) WithEngine(
 
 // WithFreq sets the frequency of StreamingDataMover
 func (sdmBuilder Builder) WithFreq(freq sim.Freq) Builder {
-	sdmBuilder.freq = freq
+	sdmBuilder.spec.Freq = freq
 	return sdmBuilder
 }
 
@@ -108,12 +111,12 @@ func (sdmBuilder Builder) WithOutsidePort(port sim.Port) Builder {
 
 // Build a new StreamingDataMover
 func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
-	spec := *sdmBuilder.spec
+	spec := sdmBuilder.spec
 	initialState := State{}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(sdmBuilder.engine).
-		WithFreq(sdmBuilder.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)

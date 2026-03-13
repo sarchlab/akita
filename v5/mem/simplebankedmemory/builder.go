@@ -6,10 +6,22 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides default configuration for the simple banked memory.
+var DefaultSpec = Spec{
+	Freq:                           1 * sim.GHz,
+	NumBanks:                       4,
+	BankPipelineWidth:              1,
+	BankPipelineDepth:              1,
+	StageLatency:                   10,
+	PostPipelineBufSize:            1,
+	BankSelectorKind:               "interleaved",
+	BankSelectorLog2InterleaveSize: 6,
+}
+
 // Builder constructs SimpleBankedMemory components.
 type Builder struct {
 	engine sim.Engine
-	freq   sim.Freq
+	spec   Spec
 
 	numBanks            int
 	bankPipelineWidth   int
@@ -21,11 +33,11 @@ type Builder struct {
 	bankSelectorKind   string
 	log2InterleaveSize uint64
 
-	addrConvKind           string
-	addrInterleavingSize   uint64
-	addrTotalNumOfElements int
+	addrConvKind            string
+	addrInterleavingSize    uint64
+	addrTotalNumOfElements  int
 	addrCurrentElementIndex int
-	addrOffset             uint64
+	addrOffset              uint64
 
 	capacity uint64
 	storage  *mem.Storage
@@ -35,15 +47,15 @@ type Builder struct {
 // MakeBuilder creates a builder with reasonable defaults.
 func MakeBuilder() Builder {
 	return Builder{
-		freq:                1 * sim.GHz,
-		numBanks:            4,
-		bankPipelineWidth:   1,
-		bankPipelineDepth:   1,
-		stageLatency:        10,
+		spec:                DefaultSpec,
+		numBanks:            DefaultSpec.NumBanks,
+		bankPipelineWidth:   DefaultSpec.BankPipelineWidth,
+		bankPipelineDepth:   DefaultSpec.BankPipelineDepth,
+		stageLatency:        DefaultSpec.StageLatency,
 		topPortBufferSize:   16,
-		postPipelineBufSize: 1,
-		bankSelectorKind:    "interleaved",
-		log2InterleaveSize:  6,
+		postPipelineBufSize: DefaultSpec.PostPipelineBufSize,
+		bankSelectorKind:    DefaultSpec.BankSelectorKind,
+		log2InterleaveSize:  DefaultSpec.BankSelectorLog2InterleaveSize,
 		capacity:            4 * mem.GB,
 	}
 }
@@ -56,7 +68,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the component frequency.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
@@ -155,6 +167,7 @@ func (b Builder) Build(name string) *Comp {
 	}
 
 	spec := Spec{
+		Freq:                           b.spec.Freq,
 		NumBanks:                       b.numBanks,
 		BankPipelineWidth:              b.bankPipelineWidth,
 		BankPipelineDepth:              b.bankPipelineDepth,
@@ -183,7 +196,7 @@ func (b Builder) Build(name string) *Comp {
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)

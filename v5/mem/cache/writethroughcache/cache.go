@@ -10,7 +10,8 @@ import (
 
 // Spec contains immutable configuration for the writethroughcache.
 type Spec struct {
-	NumReqPerCycle        int    `json:"num_req_per_cycle"`
+	Freq                  sim.Freq `json:"freq"`
+	NumReqPerCycle        int      `json:"num_req_per_cycle"`
 	Log2BlockSize         uint64 `json:"log2_block_size"`
 	BankLatency           int    `json:"bank_latency"`
 	WayAssociativity      int    `json:"way_associativity"`
