@@ -103,6 +103,12 @@ Following the same data/behavior separation as MSHR and Directory:
 
 **Future direction** (issue #343): Buffers and pipelines should implement a serialization interface so they can be embedded directly in State as first-class objects, without needing adapter wrappers or manual state conversion.
 
+### Consolidate stateutil into queueing (issue #414)
+
+Buffer and Pipeline are duplicated in `stateutil` and `queueing` packages. **Remove `stateutil` entirely.** Move the generic `Buffer[T]` and `Pipeline[T]` into the `queueing` package. The `queueing` package is the single home for buffer and pipeline types.
+
+Also remove `Pop` and `PopTyped` from Buffer — consumers should access `Elements` directly for typed access, avoiding unnecessary interface{}/type-assertion overhead.
+
 ### Messages as Concrete Types (DONE)
 
 `sim.Msg` is an interface with `Meta() *MsgMeta`. Each package defines concrete, serializable message types embedding `sim.MsgMeta`. No builders, no msgRef types. Components type-switch on concrete types.
@@ -150,14 +156,11 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 13. **Fix duplicated CI runs** (issue #398): Every PR triggers 2 sets of CI tasks because the workflow triggers on both `push` and `pull_request`. Fix: restrict `push` trigger to `main` branch only.
 
-14. **Switch code simplification** (issues #402-#406): Human reviewed switch code and found multiple unacceptable abstractions:
-    - **#402 flitMeta**: Why can't we just serialize the flit directly? Modify flit definition if needed, but simplicity first.
-    - **#403 pipelineStageState**: Eliminate — let pipeline serialize itself like Buffer does.
-    - **#404 Buffer adaptor**: Unacceptable indirection. Must use buffers directly.
-    - **#405 Comp wrapper**: Must be removed entirely. Use `modeling.Component[Spec, State]` directly.
-    - **#406 switchInfra**: Why not directly use switch's state? Eliminate intermediary.
+14. ~~**Switch code simplification**~~ (issues #402-#406): **DONE in M42.** All 6 steps complete, PR #71 merged.
 
 15. **Repo-wide simplification** (issue #408): The entire repo has accumulated wrappers and indirections from recent refactoring. Simplicity is the first priority. Search for and eliminate all unnecessary complexity. Also search for residues from double buffering implementation.
+
+16. **Consolidate stateutil into queueing** (issue #414): Buffer and Pipeline are duplicated in `stateutil` and `queueing`. Remove `stateutil` package entirely, move generic `Buffer[T]` and `Pipeline[T]` into `queueing`. Also remove `Pop` and `PopTyped` methods — consumers access `Elements` directly.
 
 ### CI Infrastructure
 

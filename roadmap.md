@@ -4,17 +4,15 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 316)
+## Current State (Cycle 328)
 
-### Project Status: IN PROGRESS — Research complete, M42 defined (switch/endpoint simplification)
+### Project Status: IN PROGRESS — M42 complete, M43 defined (consolidate stateutil into queueing + pipeline migration)
 
-**M41 complete (cycle 314):** Test sizes restored, CI duplication fixed, PR #70 merged. All CI green.
+**M42 complete (cycle ~326):** Switch and endpoint simplification done. PR #71 merged. Switch reduced from 735→290 lines, endpoint from 585→519. All human issues #402-#406 resolved. CI green.
 
-**Research complete (cycle 315-316):**
-- **Iris**: Comprehensive switch/endpoint analysis done. Clear dependency chain: (1) make Flit concrete, (2) replace hand-coded pipeline with stateutil.Pipeline, (3) delete buffer adapters, (4) delete switchInfra, (5) simplify Comp wrappers, (6) simplify endpoint. Estimated ~455 lines removable.
-- **Elena**: Full repo audit done. Found 18 simplification items across all packages. Priority 1: duplicate pipeline logic in 3 packages (~426 lines), duplicate convertAddress (~40 lines), duplicate flit serialization types (~40 lines), duplicate Flush/Restart messages (~58 lines).
+**New human directive #414:** Remove `stateutil` package, consolidate `Buffer[T]` and `Pipeline[T]` into `queueing`. Remove `Pop` and `PopTyped` methods.
 
-**M42 defined:** Switch and endpoint simplification (#402-#406). Budget: 10 cycles. See tbc-db issue #412.
+**M43 defined:** Consolidate stateutil → queueing, remove Pop/PopTyped, migrate simplebankedmemory + TLB pipelines. See tbc-db issue #420.
 
 ### Recently Completed
 
@@ -84,31 +82,40 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - CI push trigger restricted to main branch
 - All CI green
 
-### M42: Switch and endpoint simplification (#402-#406) (Budget: 10 cycles)
-- Make Flit concrete (Msg→MsgMeta, OutputBuf→OutputBufIdx)
-- Replace hand-coded pipeline with stateutil.Pipeline
-- Delete buffer adapters, switchInfra, Comp wrappers
-- Simplify endpoint (delete flitState, shallowCopyState, custom Tick)
-- Target: switch ~735→~300 lines, endpoint ~585→~500 lines
+### M42: Switch and endpoint simplification (#402-#406) (DONE — Cycle ~326)
+- Budget: 10 | Used: ~10
+- PR #71 merged
+- Switch 735→290 lines, endpoint 585→519 lines
+- All human issues #402-#406 resolved
+- CI green
 
-### M43: Repo-wide simplification — remaining items (estimated 6-8 cycles)
-- Migrate simplebankedmemory and TLB to stateutil.Pipeline
-- Extract shared convertAddress, MSHR ops, LRU set ops
+### M43: Consolidate stateutil into queueing + pipeline migration (Budget: 8 cycles)
+- Move Buffer[T] and Pipeline[T] from stateutil → queueing
+- Remove Pop and PopTyped from Buffer (#414)
+- Remove old queueing.Buffer interface and bufferImpl
+- Delete stateutil package entirely
+- Migrate simplebankedmemory hand-coded pipeline → queueing.Pipeline[T]
+- Migrate TLB hand-coded pipeline → queueing.Pipeline[T]
+- Update all imports
+
+### M44: Repo-wide simplification — remaining items (estimated 5-8 cycles)
+- Extract shared convertAddress
 - Unify Flush/Restart message types
-- Remove dead code (Domain, MsgBuffer, TransferEvent, LogHook)
-- Remove queueing.bufferImpl (superseded by stateutil.Buffer)
+- Extract shared MSHR and LRU set ops
+- Remove dead code
+- Address remaining #408 items
 
-### M44: NOC performance optimization (estimated 5-8 cycles)
-- Verify performance improved from M42/M43 simplification
+### M45: NOC performance optimization (estimated 5-8 cycles)
+- Verify performance improved from M42/M43/M44 simplification
 - Target: bring NOC tests within 2x of v4 performance
 - Fix remaining allocation bottlenecks
 
-### M45: Event-driven component support (estimated 5-8 cycles)
+### M46: Event-driven component support (estimated 5-8 cycles)
 - Design A or B from Iris's research (NOT timer-based — human rejected)
 - Create `modeling.EventComponent[S,T]` or extend Component with event slots
 - Must support save/load of pending events
 
-### M46: Global state manager (deferred, estimated 3-5 cycles)
+### M47: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
 - Depends on all components being fully standardized
 
@@ -153,9 +160,11 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Phase | Milestones | Est. Budget |
 |-------|-----------|-------------|
 | Phase 7 (M41) | Restore test sizes + CI fix | 2 (done) |
-| Phase 8 (M42) | Repo-wide simplification | 8-12 |
-| Phase 9 (M43) | NOC performance optimization | 5-8 |
-| Phase 10 (M44) | Event-driven components | 5-8 |
+| Phase 8 (M42) | Switch/endpoint simplification | 10 (done) |
+| Phase 9 (M43) | Consolidate stateutil→queueing + pipeline migration | 8 |
+| Phase 10 (M44) | Repo-wide simplification remaining | 5-8 |
+| Phase 11 (M45) | Performance optimization | 5-8 |
+| Phase 12 (M46) | Event-driven components | 5-8 |
 
 ---
 
