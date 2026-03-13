@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/stateutil"
 )
 
-// Spec contains immutable configuration for the simplecache.
+// Spec contains immutable configuration for the writethroughcache.
 type Spec struct {
 	NumReqPerCycle        int    `json:"num_req_per_cycle"`
 	Log2BlockSize         uint64 `json:"log2_block_size"`
@@ -27,7 +27,7 @@ type Spec struct {
 	InterleavingSize  uint64   `json:"interleaving_size"`
 }
 
-// State contains mutable runtime data for the simplecache.
+// State contains mutable runtime data for the writethroughcache.
 type State struct {
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`

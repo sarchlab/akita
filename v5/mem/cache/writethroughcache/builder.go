@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-// A Builder can build a simplecache cache
+// A Builder can build a writethroughcache cache
 type Builder struct {
 	engine                sim.Engine
 	freq                  sim.Freq

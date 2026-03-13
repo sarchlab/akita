@@ -10,7 +10,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 All core architectural goals from M1-M39 achieved. New human requirements received:
 1. Default spec struct at beginning of builder files
-2. Rename simplecache to writethroughcache
+2. Rename writethroughcache to writethroughcache
 3. Frequency should be part of Spec
 
 ### Recently Completed
@@ -29,7 +29,7 @@ All core architectural goals from M1-M39 achieved. New human requirements receiv
 #### M38: Eliminate transaction conversion layers in caches (DONE — Cycle 288)
 - Budget: 8 | Used: ~5
 - Merged directly to main (commits bc7f98e..83ced5d)
-- simplecache: transactionState flattened, state.go deleted (278 lines removed)
+- writethroughcache: transactionState flattened, state.go deleted (278 lines removed)
 - writeback: transactionState flattened, state.go deleted (391 lines removed)
 - All custom GetState/SetState on middleware deleted
 
@@ -66,14 +66,14 @@ All core architectural goals from M1-M39 achieved. New human requirements receiv
 
 ## Next Milestones
 
-### M40: Rename simplecache to writethroughcache, add default Spec, move Freq to Spec
+### M40: Rename writethroughcache to writethroughcache, add default Spec, move Freq to Spec
 - **Source**: Human issue #384
 - **Scope**:
-  1. Rename `v5/mem/cache/simplecache/` directory → `v5/mem/cache/writethroughcache/`, update package name, all imports, references in acceptance tests, docs
+  1. Rename `v5/mem/cache/writethroughcache/` directory → `v5/mem/cache/writethroughcache/`, update package name, all imports, references in acceptance tests, docs
   2. Add a `var DefaultSpec = Spec{...}` at the top of every builder file, with all current default values. Builder MakeBuilder() initializes from DefaultSpec.
   3. Move `freq` (sim.Freq) into each component's Spec struct. Update `modeling.Builder` to read Freq from Spec instead of a separate field. Update all builders.
 - **Budget**: 8 cycles
-- **Acceptance**: CI passes, all tests pass, `simplecache` string gone from codebase (except git history)
+- **Acceptance**: CI passes, all tests pass, `writethroughcache` string gone from codebase (except git history)
 
 ### ✅ M39.1: Merge PR #68 (doc fix) and final verification — DONE
 - PR #68 merged, CI 5/5 green, all 16 success criteria verified

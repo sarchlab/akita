@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
@@ -14,7 +14,7 @@ const (
 	bankActionWriteFetched
 )
 
-// transactionState is the canonical transaction type for the simplecache.
+// transactionState is the canonical transaction type for the writethroughcache.
 // All fields are directly JSON-serializable (no pointers to message types).
 type transactionState struct {
 	ID string `json:"id"`

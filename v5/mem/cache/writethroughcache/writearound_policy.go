@@ -1,4 +1,4 @@
-package simplecache
+package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
