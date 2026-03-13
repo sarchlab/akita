@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (Cycle 248)
+## Current State (Cycle 249)
 
 ### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
 - Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
@@ -166,18 +166,37 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ---
 
-## Phase 4: Performance + Architecture (human issues #317, #319, #321)
+## Phase 4: Performance + Architecture (human issues #317, #319, #321, #324, #325)
 
-### M33: Performance — Optimize deep copy for simulation speed (PLANNING)
+### M33: Revert NOC test sizes to upstream + Fix NOC performance (PLANNING)
+- Goal: Revert NOC acceptance test message counts to original upstream values (issue #325)
+- Original values: dgx_single_p2p=1000, dgx_single_p2p_all=2000, dgx_single_random=20000, pcie_p2p=1000, pcie_random=10000
+- Must pass within CI 60-min timeout
+- Status: Iris investigating (issue #328)
+
+### M34: Performance — Design new state mutation approach (DISCUSSION/DESIGN)
+- Goal: Replace gob-based deep copy with a more efficient approach that doesn't require per-component custom code
+- **Human rejects per-component custom shallow copy** (issue #324 comment): adds difficulty for new component development
+- **Human proposes transaction system**: Record what needs to change, apply at end of tick. Use string-based "state locator" to identify values.
+- Approach: Explore transaction-based, COW, dirty-tracking, or structural-sharing alternatives
+- Status: Diana investigating (issue #327)
+- **No implementation until design is approved by human**
+
+### M35: Performance — Implement approved state mutation approach
 - Goal: Reduce mem acceptance test time from ~12 min to <5 min to match original akita repo
-- Approach: Implement custom shallow copy (like endpoint already does) for all hot-path components (caches, DRAM, etc.)
-- Status: Diana analyzing performance gap (issue #322)
+- Depends on M34 design approval
 
-### M34: Cache Unification — Single cache component with write-policy middlewares (PLANNING)
+### M36: Cache Unification — Single cache component with write-policy middlewares
 - Goal: Replace 4 separate cache packages (~21K lines, ~90% overlap) with 1 unified cache component
 - Approach: Shared Spec/State/common middlewares, write-policy middleware selected by builder
-- Status: Iris analyzing design (issue #323); human issue #321 requests discussion first
-- **Depends on M33** — performance optimizations should land first to avoid compounding changes
+- Status: Iris analysis complete (issue #323); human issue #321 requests discussion first
+- **Depends on M35** — performance optimizations should land first to avoid compounding changes
+
+### Lessons from M32 deadline miss
+- M32 was actually completed but exhausted its 3-cycle budget
+- The work was done correctly (CI green on main)
+- Budget was too tight given CI runner unavailability
+- **Human direction changed**: Custom shallow copy rejected in favor of transaction system exploration
 
 ---
 
