@@ -4,79 +4,95 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 300)
+## Current State (Cycle 309)
 
-### Project Status: IN PROGRESS — New human requirements (issue #384)
+### Project Status: IN PROGRESS — New human requirements (issues #387, #389, #398)
 
-All core architectural goals from M1-M39 achieved. New human requirements received:
-1. Default spec struct at beginning of builder files
-2. Rename simplecache to writethroughcache
-3. Frequency should be part of Spec
+M40 completed (default spec, rename, freq in spec). New human requirements received:
+1. **Event-driven component support** (#389) — need a modeling pattern for components that schedule events in the far future instead of ticking every cycle
+2. **Deep performance evaluation** (#387) — compare against upstream, identify bottlenecks
+3. **Fix duplicated CI runs** (#398) — workflow triggers on both push and pull_request causing double runs
+4. **Verify test sizes unchanged** (#385) — ensure no acceptance test sizes were reduced
+
+### Investigation Phase (Current)
+Workers researching event-driven patterns, performance benchmarks, and test size verification. Next milestone will be defined based on findings.
 
 ### Recently Completed
 
+#### M40: Rename simplecache, DefaultSpec, Freq in Spec (DONE — Cycle 309)
+- Budget: 8 | Used: ~4
+- PR #69 merged
+- simplecache renamed to writethroughcache
+- DefaultSpec added to all 13 builder files
+- Freq moved into each component's Spec struct
+- CI passing
+
 #### M39.1: Merge PR #68 and final verification (DONE — Cycle 299)
-- PR #68 merged (fix 4 fabricated code sections in component_guide.md)
-- CI 5/5 green on main
-- All 16 success criteria verified
+- PR #68 merged, CI 5/5 green, all 16 success criteria verified
 
 #### M39: Final cleanup and documentation update (DONE — Cycle 294)
-- Budget: 3 | Used: 4 (deadline missed on verification fix round)
-- PR #67 merged (stateutil section, flat transaction pattern)
-- PR #68 merged (fix 4 fabricated code sections found during verification)
-- component_guide.md now reflects final architecture
+- Budget: 3 | Used: 4
 
 #### M38: Eliminate transaction conversion layers in caches (DONE — Cycle 288)
 - Budget: 8 | Used: ~5
-- Merged directly to main (commits bc7f98e..83ced5d)
-- simplecache: transactionState flattened, state.go deleted (278 lines removed)
-- writeback: transactionState flattened, state.go deleted (391 lines removed)
-- All custom GetState/SetState on middleware deleted
 
 #### M37: Migrate writeback cache and switch to stateutil (DONE — Cycle 279)
 - Budget: 5 | Used: 4
-- PR #66 merged
 
 #### M36: Create stateutil package with generic Buffer[T] and Pipeline[T] (DONE — Cycle 271)
 - Budget: 5 | Used: 3
-- PR #65 merged
 
 #### M35: Cache unification — merge 3 simple caches (DONE — Cycle 265)
 - Budget: 5 | Used: 3
-- PR #64 merged
 
 ### Human Directions — Status
 
 #### Ultimate Goal (issue #342)
 1. Single simulation-level save and load ✅
-2. No per-component custom save/load functions ✅ (state.go conversion layers deleted)
-3. Developers only implement middleware Tick functions ✅ (no custom GetState/SetState)
-4. No performance compromise ✅ (in-place update, 0µs overhead)
+2. No per-component custom save/load functions ✅
+3. Developers only implement middleware Tick functions ✅
+4. No performance compromise — under verification (#387)
 
 #### Serializable Buffers/Pipelines (issue #343) — DONE
-- stateutil.Buffer[T] and Pipeline[T] created and used everywhere
-- Transaction types fully serializable (flat fields, no pointers)
-- No snapshot/restore layers remain
 
 #### Global State Manager (issue #326) — DEFERRED
-- Not practical as primary access path (75× perf penalty)
-- May revisit as optional overlay for tooling/debugging
+
+#### Default Spec / Rename / Freq (issue #384) — DONE in M40
+
+#### Event-Driven Components (issue #389) — UNDER RESEARCH
+- Some components schedule events rather than ticking
+- Need design for modeling.Component variant or alternative pattern
+- Iris researching approaches
+
+#### Performance Evaluation (issue #387) — UNDER INVESTIGATION
+- Diana benchmarking current vs original v4
+
+#### Test Size Verification (issue #385) — UNDER AUDIT
+- Elena verifying all acceptance test sizes match upstream
+
+#### Duplicated CI Runs (issue #398) — READY TO FIX
+- CI workflow triggers on both `push` and `pull_request`
+- Fix: restrict `push` to `branches: [main]` only
 
 ---
 
-## Next Milestones
+## Planned Milestones
 
-### M40: Rename simplecache to writethroughcache, add default Spec, move Freq to Spec
-- **Source**: Human issue #384
-- **Scope**:
-  1. Rename `v5/mem/cache/simplecache/` directory → `v5/mem/cache/writethroughcache/`, update package name, all imports, references in acceptance tests, docs
-  2. Add a `var DefaultSpec = Spec{...}` at the top of every builder file, with all current default values. Builder MakeBuilder() initializes from DefaultSpec.
-  3. Move `freq` (sim.Freq) into each component's Spec struct. Update `modeling.Builder` to read Freq from Spec instead of a separate field. Update all builders.
-- **Budget**: 8 cycles
-- **Acceptance**: CI passes, all tests pass, `simplecache` string gone from codebase (except git history)
+### M41: Fix CI duplication + verify test sizes (estimated 2 cycles)
+- Fix `.github/workflows/akita_test.yml` to only trigger `push` on main branch
+- Verify and document that all test sizes match upstream
+- Quick win, high confidence
 
-### ✅ M39.1: Merge PR #68 (doc fix) and final verification — DONE
-- PR #68 merged, CI 5/5 green, all 16 success criteria verified
+### M42: Event-driven component support (estimated 5-8 cycles)
+- Depends on Iris's research findings
+- May involve creating `modeling.EventComponent[S,T]` or similar
+- Must maintain save/load compatibility
+- Scope TBD after research
+
+### M43: Performance optimization (estimated 5-8 cycles)
+- Depends on Diana's benchmarking findings
+- Address any bottlenecks identified
+- Must not regress correctness
 
 ---
 
@@ -98,8 +114,8 @@ All core architectural goals from M1-M39 achieved. New human requirements receiv
 | 12 | Save/load acceptance test passes | ✅ |
 | 13 | All components use modeling package | ✅ |
 | 14 | Each component has multiple MWs | ✅ (2-4 each) |
-| 15 | component_guide.md reflects final arch | ✅ (PR #67 merged + PR #68 pending) |
-| 16 | Performance matches original | ✅ |
+| 15 | component_guide.md reflects final arch | ✅ |
+| 16 | Performance matches original | Under verification (#387) |
 
 ---
 
@@ -111,9 +127,9 @@ All core architectural goals from M1-M39 achieved. New human requirements receiv
 | Phase 2 (M21-M26) | Cleanup, multi-MW, docs | ~40 | ~29 |
 | Phase 3 (M27-M29) | Code quality | ~16 | ~6 |
 | Phase 4 (M30-M38) | CI, performance, cache unification, stateutil, serialization | ~35 | ~25 |
-| Phase 5 (M39) | Documentation final cleanup | 3 | 4 |
-| Phase 6 (M39.1) | Final merge and verification | 2 | 1 |
-| **Total** | **39+ milestones** | **~256** | **~165** |
+| Phase 5 (M39-M39.1) | Documentation | 5 | 5 |
+| Phase 6 (M40) | Default spec, rename, freq | 8 | ~4 |
+| **Total** | **40 milestones** | **~264** | **~169** |
 
 ---
 
@@ -126,7 +142,6 @@ All core architectural goals from M1-M39 achieved. New human requirements receiv
 - In-place state update is simpler AND faster
 - Cache adapter wrappers are complex boilerplate — generic types eliminated them
 - Performance is non-negotiable — every change must be measured
-- Transaction serialization (M38) was the last major piece — flattening pointer fields to value fields eliminated all conversion layers
-- Project is approaching completion after 288 cycles — documentation update is the final step
+- Transaction serialization (M38) was the last major piece — flattening pointer fields eliminated all conversion layers
 - Documentation verification caught fabricated code — always verify code snippets against actual source files
-- M39 deadline missed because verification found issues that required a fix round — budget for verification fixes
+- Event-driven components represent a new architectural challenge — different from tick-driven model

@@ -140,7 +140,15 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 8. **Global state manager** (issue #326): Long-term direction. Deferred.
 
-9. **Default spec, rename simplecache → writethroughcache, freq in spec** (issue #384): See sections above.
+9. ~~**Default spec, rename simplecache → writethroughcache, freq in spec**~~ (issue #384): **DONE in M40.**
+
+10. **Event-driven component support** (issue #389): Some components are not ticking components. They schedule events in the far future and handle events directly. Need a solution within the Spec+State+Middleware model. Under research.
+
+11. **Deep performance evaluation** (issue #387): Compare against upstream. Identify current bottlenecks. Under investigation.
+
+12. **Verify test sizes unchanged** (issue #385): Ensure no acceptance test sizes were reduced from upstream. Under verification.
+
+13. **Fix duplicated CI runs** (issue #398): Every PR triggers 2 sets of CI tasks because the workflow triggers on both `push` and `pull_request`. Fix: restrict `push` trigger to `main` branch only.
 
 ### CI Infrastructure
 
