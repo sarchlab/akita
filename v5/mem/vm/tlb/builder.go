@@ -6,17 +6,22 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for TLB components.
+var DefaultSpec = Spec{
+	Freq:           1 * sim.GHz,
+	NumReqPerCycle: 4,
+	NumSets:        1,
+	NumWays:        32,
+	PageSize:       4096,
+	MSHRSize:       4,
+	Latency:        4,
+}
+
 // A Builder can build TLBs
 type Builder struct {
 	engine            sim.Engine
-	freq              sim.Freq
-	numReqPerCycle    int
-	numSets           int
-	numWays           int
+	spec              Spec
 	log2PageSize      uint64
-	pageSize          uint64
-	numMSHREntry      int
-	latency           int
 	addressMapperType string
 	remotePorts       []sim.RemotePort
 	topPort           sim.Port
@@ -30,13 +35,7 @@ type Builder struct {
 // MakeBuilder returns a Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:           1 * sim.GHz,
-		numReqPerCycle: 4,
-		numSets:        1,
-		numWays:        32,
-		pageSize:       4096,
-		numMSHREntry:   4,
-		latency:        4,
+		spec: DefaultSpec,
 	}
 }
 
@@ -48,28 +47,28 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the freq the TLBs use
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithNumSets sets the number of sets in a TLB. Use 1 for fully associated
 // TLBs.
 func (b Builder) WithNumSets(n int) Builder {
-	b.numSets = n
+	b.spec.NumSets = n
 	return b
 }
 
 // WithNumWays sets the number of ways in a TLB. Set this field to the number
 // of TLB entries for all the functions.
 func (b Builder) WithNumWays(n int) Builder {
-	b.numWays = n
+	b.spec.NumWays = n
 	return b
 }
 
 // WithLog2PageSize sets the page size as a power of 2
 func (b Builder) WithLog2PageSize(n uint64) Builder {
 	b.log2PageSize = n
-	b.pageSize = 1 << n
+	b.spec.PageSize = 1 << n
 	return b
 }
 
@@ -91,7 +90,7 @@ func (b Builder) WithPageSize(n uint64) Builder {
 	}
 
 	b.log2PageSize = uint64(log2 - 1) // Subtract 1 because we count one extra iteration
-	b.pageSize = 1 << b.log2PageSize
+	b.spec.PageSize = 1 << b.log2PageSize
 
 	return b
 }
@@ -99,7 +98,7 @@ func (b Builder) WithPageSize(n uint64) Builder {
 // WithNumReqPerCycle sets the number of requests per cycle can be processed by
 // a TLB
 func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.numReqPerCycle = n
+	b.spec.NumReqPerCycle = n
 	return b
 }
 
@@ -116,14 +115,14 @@ func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
 
 // WithNumMSHREntry sets the number of mshr entry
 func (b Builder) WithNumMSHREntry(num int) Builder {
-	b.numMSHREntry = num
+	b.spec.MSHRSize = num
 	return b
 }
 
 // WithLatency sets the latency of the TLB lookup. The latency is counted in
 // both hit and miss cases.
 func (b Builder) WithLatency(cycles int) Builder {
-	b.latency = cycles
+	b.spec.Latency = cycles
 	return b
 }
 
@@ -180,28 +179,21 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	addrMapperKind, addrMapperPorts, addrMapperInterleavingSize := b.resolveAddressMapper()
 
-	spec := Spec{
-		NumSets:                    b.numSets,
-		NumWays:                    b.numWays,
-		PageSize:                   b.pageSize,
-		NumReqPerCycle:             b.numReqPerCycle,
-		MSHRSize:                   b.numMSHREntry,
-		Latency:                    b.latency,
-		PipelineWidth:              b.numReqPerCycle,
-		AddrMapperKind:             addrMapperKind,
-		AddrMapperPorts:            addrMapperPorts,
-		AddrMapperInterleavingSize: addrMapperInterleavingSize,
-	}
+	spec := b.spec
+	spec.PipelineWidth = b.spec.NumReqPerCycle
+	spec.AddrMapperKind = addrMapperKind
+	spec.AddrMapperPorts = addrMapperPorts
+	spec.AddrMapperInterleavingSize = addrMapperInterleavingSize
 
 	initialState := State{
 		TLBState:          tlbStateEnable,
-		Sets:              initSets(b.numSets, b.numWays),
-		PipelineNumStages: b.latency,
+		Sets:              initSets(b.spec.NumSets, b.spec.NumWays),
+		PipelineNumStages: b.spec.Latency,
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)
@@ -238,7 +230,7 @@ func (b Builder) resolveAddressMapper() (string, []sim.RemotePort, uint64) {
 		}
 	}
 
-	interleavingSize := b.pageSize
+	interleavingSize := b.spec.PageSize
 	if interleavingSize == 0 {
 		interleavingSize = 4096
 	}

@@ -5,14 +5,19 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for endpoint components.
+var DefaultSpec = Spec{
+	Freq:              1 * sim.GHz,
+	NumInputChannels:  1,
+	NumOutputChannels: 1,
+	FlitByteSize:      32,
+	EncodingOverhead:  0.25,
+}
+
 // Builder can help building End Points.
 type Builder struct {
 	engine                   sim.Engine
-	freq                     sim.Freq
-	numInputChannels         int
-	numOutputChannels        int
-	flitByteSize             int
-	encodingOverhead         float64
+	spec                     Spec
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
 	devicePorts              []sim.Port
@@ -23,13 +28,9 @@ type Builder struct {
 // configurations.
 func MakeBuilder() Builder {
 	return Builder{
-		flitByteSize:             32,
+		spec:                     DefaultSpec,
 		flitAssemblingBufferSize: 64,
 		networkPortBufferSize:    4,
-		freq:                     1 * sim.GHz,
-		numInputChannels:         1,
-		numOutputChannels:        1,
-		encodingOverhead:         0.25,
 	}
 }
 
@@ -41,33 +42,33 @@ func (b Builder) WithEngine(e sim.Engine) Builder {
 
 // WithFreq sets the frequency of the End Point to built.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithNumInputChannels sets the number of input channels of the End Point
 // to build.
 func (b Builder) WithNumInputChannels(num int) Builder {
-	b.numInputChannels = num
+	b.spec.NumInputChannels = num
 	return b
 }
 
 // WithNumOutputChannels sets the number of output channels of the End Point
 // to build.
 func (b Builder) WithNumOutputChannels(num int) Builder {
-	b.numOutputChannels = num
+	b.spec.NumOutputChannels = num
 	return b
 }
 
 // WithFlitByteSize sets the flit byte size that the End Point supports.
 func (b Builder) WithFlitByteSize(n int) Builder {
-	b.flitByteSize = n
+	b.spec.FlitByteSize = n
 	return b
 }
 
 // WithEncodingOverhead sets the encoding overhead.
 func (b Builder) WithEncodingOverhead(o float64) Builder {
-	b.encodingOverhead = o
+	b.spec.EncodingOverhead = o
 	return b
 }
 
@@ -96,16 +97,11 @@ func (b Builder) Build(name string) *Comp {
 	b.freqMustBeGiven()
 	b.flitByteSizeMustBeGiven()
 
-	spec := Spec{
-		NumInputChannels:  b.numInputChannels,
-		NumOutputChannels: b.numOutputChannels,
-		FlitByteSize:      b.flitByteSize,
-		EncodingOverhead:  b.encodingOverhead,
-	}
+	spec := b.spec
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -146,13 +142,13 @@ func (b Builder) engineMustBeGiven() {
 }
 
 func (b Builder) freqMustBeGiven() {
-	if b.freq == 0 {
+	if b.spec.Freq == 0 {
 		panic("freq must be given")
 	}
 }
 
 func (b Builder) flitByteSizeMustBeGiven() {
-	if b.flitByteSize == 0 {
+	if b.spec.FlitByteSize == 0 {
 		panic("flit byte size must be given")
 	}
 }

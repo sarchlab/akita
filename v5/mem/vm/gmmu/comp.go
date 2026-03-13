@@ -12,6 +12,7 @@ import (
 
 // Spec contains immutable configuration for the GMMU.
 type Spec struct {
+	Freq                sim.Freq       `json:"freq"`
 	DeviceID            uint64         `json:"device_id"`
 	Log2PageSize        uint64         `json:"log2_page_size"`
 	Latency             int            `json:"latency"`

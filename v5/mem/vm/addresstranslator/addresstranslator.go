@@ -13,9 +13,10 @@ import (
 
 // Spec contains immutable configuration for the AddressTranslator.
 type Spec struct {
-	Log2PageSize   uint64 `json:"log2_page_size"`
-	DeviceID       uint64 `json:"device_id"`
-	NumReqPerCycle int    `json:"num_req_per_cycle"`
+	Freq           sim.Freq `json:"freq"`
+	Log2PageSize   uint64   `json:"log2_page_size"`
+	DeviceID       uint64   `json:"device_id"`
+	NumReqPerCycle int      `json:"num_req_per_cycle"`
 
 	MemMapperKind             string           `json:"mem_mapper_kind"`
 	MemMapperPorts            []sim.RemotePort `json:"mem_mapper_ports"`

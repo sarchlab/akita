@@ -13,6 +13,7 @@ import (
 
 // Spec contains immutable configuration for the endpoint.
 type Spec struct {
+	Freq              sim.Freq       `json:"freq"`
 	NumInputChannels  int            `json:"num_input_channels"`
 	NumOutputChannels int            `json:"num_output_channels"`
 	FlitByteSize      int            `json:"flit_byte_size"`

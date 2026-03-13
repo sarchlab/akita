@@ -6,16 +6,19 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for GMMU components.
+var DefaultSpec = Spec{
+	Freq:                1 * sim.GHz,
+	Log2PageSize:        12,
+	MaxRequestsInFlight: 16,
+}
+
 // A Builder can build GMMU component
 type Builder struct {
 	engine             sim.Engine
-	freq               sim.Freq
-	log2PageSize       uint64
+	spec               Spec
 	pageTable          vm.PageTable
-	maxNumReqInFlight  int
 	pageWalkingLatency int
-	deviceID           uint64
-	lowModule          sim.RemotePort
 	topPort            sim.Port
 	bottomPort         sim.Port
 }
@@ -23,9 +26,7 @@ type Builder struct {
 // MakeBuilder creates a new builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:              1 * sim.GHz,
-		log2PageSize:      12,
-		maxNumReqInFlight: 16,
+		spec: DefaultSpec,
 	}
 }
 
@@ -37,13 +38,13 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency at which the GMMU works.
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithLog2PageSize sets the page size that the GMMU supports.
 func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
-	b.log2PageSize = log2PageSize
+	b.spec.Log2PageSize = log2PageSize
 	return b
 }
 
@@ -56,7 +57,7 @@ func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 // WithMaxNumReqInFlight sets the number of requests can be concurrently
 // processed by the GMMU.
 func (b Builder) WithMaxNumReqInFlight(maxNumReqInFlight int) Builder {
-	b.maxNumReqInFlight = maxNumReqInFlight
+	b.spec.MaxRequestsInFlight = maxNumReqInFlight
 	return b
 }
 
@@ -68,13 +69,13 @@ func (b Builder) WithPageWalkingLatency(pageWalkingLatency int) Builder {
 
 // WithDeviceID sets the device ID of the GMMU
 func (b Builder) WithDeviceID(deviceID uint64) Builder {
-	b.deviceID = deviceID
+	b.spec.DeviceID = deviceID
 	return b
 }
 
 // WithLowModule sets the low module of the GMMU
 func (b Builder) WithLowModule(p sim.RemotePort) Builder {
-	b.lowModule = p
+	b.spec.LowModule = p
 	return b
 }
 
@@ -92,17 +93,12 @@ func (b Builder) WithBottomPort(port sim.Port) Builder {
 
 // Build returns a new GMMU
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	spec := Spec{
-		DeviceID:            b.deviceID,
-		Log2PageSize:        b.log2PageSize,
-		Latency:             b.pageWalkingLatency,
-		MaxRequestsInFlight: b.maxNumReqInFlight,
-		LowModule:           b.lowModule,
-	}
+	spec := b.spec
+	spec.Latency = b.pageWalkingLatency
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -113,7 +109,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	pt := b.pageTable
 	if pt == nil {
-		pt = vm.NewPageTable(b.log2PageSize)
+		pt = vm.NewPageTable(b.spec.Log2PageSize)
 	}
 
 	wMW := &walkMW{

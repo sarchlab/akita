@@ -5,18 +5,21 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for mmuCache components.
+var DefaultSpec = Spec{
+	Freq:            1 * sim.GHz,
+	NumReqPerCycle:  4,
+	NumLevels:       5,
+	NumBlocks:       1,
+	PageSize:        4096,
+	LatencyPerLevel: 100,
+	Log2PageSize:    12,
+}
+
 // A Builder can build mmuCache
 type Builder struct {
-	engine          sim.Engine
-	freq            sim.Freq
-	numReqPerCycle  int
-	numLevels       int
-	numBlocks       int
-	pageSize        uint64
-	lowModule       sim.RemotePort
-	upModule        sim.RemotePort
-	latencyPerLevel uint64
-	log2PageSize    uint64
+	engine sim.Engine
+	spec   Spec
 
 	topPort     sim.Port
 	bottomPort  sim.Port
@@ -26,31 +29,25 @@ type Builder struct {
 // MakeBuilder returns a Builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:            1 * sim.GHz,
-		numReqPerCycle:  4,
-		numLevels:       5,
-		numBlocks:       1,
-		pageSize:        4096,
-		latencyPerLevel: 100,
-		log2PageSize:    12,
+		spec: DefaultSpec,
 	}
 }
 
 // WithLatencyPerLevel sets the latency per level
 func (b Builder) WithLatencyPerLevel(latency uint64) Builder {
-	b.latencyPerLevel = latency
+	b.spec.LatencyPerLevel = latency
 	return b
 }
 
 // WithUpperModule sets the upper module remote port
 func (b Builder) WithUpperModule(m sim.RemotePort) Builder {
-	b.upModule = m
+	b.spec.UpModulePort = m
 	return b
 }
 
 // WithNumLevels sets the number of levels in the mmuCache
 func (b Builder) WithNumLevels(n int) Builder {
-	b.numLevels = n
+	b.spec.NumLevels = n
 	return b
 }
 
@@ -62,33 +59,33 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the freq the mmuCache use
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithNumBlocks sets the number of blocks in a mmuCache.
 func (b Builder) WithNumBlocks(n int) Builder {
-	b.numBlocks = n
+	b.spec.NumBlocks = n
 	return b
 }
 
 // WithPageSize sets the page size that the mmuCache works with.
 func (b Builder) WithPageSize(n uint64) Builder {
-	b.pageSize = n
+	b.spec.PageSize = n
 	return b
 }
 
 // WithNumReqPerCycle sets the number of requests per cycle can be processed by
 // a mmuCache
 func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.numReqPerCycle = n
+	b.spec.NumReqPerCycle = n
 	return b
 }
 
 // WithLowModule sets the port that can provide the address translation in case
 // of mmuCache miss.
 func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
-	b.lowModule = lowModule
+	b.spec.LowModulePort = lowModule
 	return b
 }
 
@@ -112,29 +109,20 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 
 // Build creates a new mmuCache
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	if b.numBlocks <= 0 {
+	if b.spec.NumBlocks <= 0 {
 		panic("mmuCache.Builder: numBlocks must be > 0")
 	}
 
-	spec := Spec{
-		NumBlocks:       b.numBlocks,
-		NumLevels:       b.numLevels,
-		PageSize:        b.pageSize,
-		Log2PageSize:    b.log2PageSize,
-		NumReqPerCycle:  b.numReqPerCycle,
-		LatencyPerLevel: b.latencyPerLevel,
-		LowModulePort:   b.lowModule,
-		UpModulePort:    b.upModule,
-	}
+	spec := b.spec
 
 	initialState := State{
 		CurrentState: mmuCacheStateEnable,
-		Table:        initSets(b.numLevels, b.numBlocks),
+		Table:        initSets(b.spec.NumLevels, b.spec.NumBlocks),
 	}
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 	modelComp.SetState(initialState)

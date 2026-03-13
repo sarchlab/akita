@@ -6,18 +6,23 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for address translators.
+var DefaultSpec = Spec{
+	Freq:           1 * sim.GHz,
+	NumReqPerCycle: 4,
+	Log2PageSize:   12,
+	DeviceID:       1,
+}
+
 // A Builder can create address translators
 type Builder struct {
-	engine          sim.Engine
-	freq            sim.Freq
-	topPort         sim.Port
+	engine sim.Engine
+	spec   Spec
+
+	topPort sim.Port
 	bottomPort      sim.Port
 	translationPort sim.Port
 	ctrlPort        sim.Port
-
-	numReqPerCycle int
-	log2PageSize   uint64
-	deviceID       uint64
 
 	memPortMapper             mem.AddressToPortMapper
 	memPortMapperType         string
@@ -30,10 +35,7 @@ type Builder struct {
 // MakeBuilder creates a new builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:           1 * sim.GHz,
-		numReqPerCycle: 4,
-		log2PageSize:   12,
-		deviceID:       1,
+		spec: DefaultSpec,
 	}
 }
 
@@ -45,26 +47,26 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency of the address translators
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithNumReqPerCycle sets the number of request the address translators can
 // process in each cycle.
 func (b Builder) WithNumReqPerCycle(n int) Builder {
-	b.numReqPerCycle = n
+	b.spec.NumReqPerCycle = n
 	return b
 }
 
 // WithLog2PageSize sets the page size as a power of 2
 func (b Builder) WithLog2PageSize(n uint64) Builder {
-	b.log2PageSize = n
+	b.spec.Log2PageSize = n
 	return b
 }
 
 // WithDeviceID sets the GPU ID that the address translator belongs to
 func (b Builder) WithDeviceID(n uint64) Builder {
-	b.deviceID = n
+	b.spec.DeviceID = n
 	return b
 }
 
@@ -175,18 +177,14 @@ func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
 
 // Build returns a new AddressTranslator
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	spec := Spec{
-		Log2PageSize:   b.log2PageSize,
-		DeviceID:       b.deviceID,
-		NumReqPerCycle: b.numReqPerCycle,
-	}
+	spec := b.spec
 
 	b.populateMemMapperSpec(&spec)
 	b.populateTransMapperSpec(&spec)
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -230,7 +228,7 @@ func (b Builder) populateMemMapperSpec(spec *Spec) {
 		}
 		spec.MemMapperKind = "interleaved"
 		spec.MemMapperPorts = b.memRemotePorts
-		spec.MemMapperInterleavingSize = 1 << b.log2PageSize
+		spec.MemMapperInterleavingSize = 1 << b.spec.Log2PageSize
 	default:
 		panic("invalid address mapper type: " + b.memPortMapperType)
 	}
@@ -265,7 +263,7 @@ func (b Builder) populateTransMapperSpec(spec *Spec) {
 		}
 		spec.TransMapperKind = "interleaved"
 		spec.TransMapperPorts = b.translationRemotePorts
-		spec.TransMapperInterleavingSize = 1 << b.log2PageSize
+		spec.TransMapperInterleavingSize = 1 << b.spec.Log2PageSize
 	default:
 		panic("invalid translation mapper type: " + b.translationPortMapperType)
 	}

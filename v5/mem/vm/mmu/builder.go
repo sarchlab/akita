@@ -6,26 +6,27 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// DefaultSpec provides the default configuration for MMU components.
+var DefaultSpec = Spec{
+	Freq:                1 * sim.GHz,
+	Log2PageSize:        12,
+	MaxRequestsInFlight: 16,
+}
+
 // A Builder can build MMU component
 type Builder struct {
-	engine                   sim.Engine
-	freq                     sim.Freq
-	log2PageSize             uint64
-	pageTable                vm.PageTable
-	migrationServiceProvider sim.RemotePort
-	maxNumReqInFlight        int
-	pageWalkingLatency       int
-	autoPageAllocation       bool
-	topPort                  sim.Port
-	migrationPort            sim.Port
+	engine             sim.Engine
+	spec               Spec
+	pageTable          vm.PageTable
+	pageWalkingLatency int
+	topPort            sim.Port
+	migrationPort      sim.Port
 }
 
 // MakeBuilder creates a new builder
 func MakeBuilder() Builder {
 	return Builder{
-		freq:              1 * sim.GHz,
-		log2PageSize:      12,
-		maxNumReqInFlight: 16,
+		spec: DefaultSpec,
 	}
 }
 
@@ -37,13 +38,13 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 
 // WithFreq sets the frequency that the MMU to work at
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
 // WithLog2PageSize sets the page size that the mmu support.
 func (b Builder) WithLog2PageSize(log2PageSize uint64) Builder {
-	b.log2PageSize = log2PageSize
+	b.spec.Log2PageSize = log2PageSize
 	return b
 }
 
@@ -56,14 +57,14 @@ func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 // WithMigrationServiceProvider sets the destination port that can perform
 // page migration.
 func (b Builder) WithMigrationServiceProvider(p sim.RemotePort) Builder {
-	b.migrationServiceProvider = p
+	b.spec.MigrationServiceProvider = p
 	return b
 }
 
 // WithMaxNumReqInFlight sets the number of requests can be concurrently
 // processed by the MMU.
 func (b Builder) WithMaxNumReqInFlight(n int) Builder {
-	b.maxNumReqInFlight = n
+	b.spec.MaxRequestsInFlight = n
 	return b
 }
 
@@ -78,7 +79,7 @@ func (b Builder) WithPageWalkingLatency(n int) Builder {
 // When enabled, the MMU will automatically create page table entries for
 // virtual addresses that don't exist, instead of panicking.
 func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
-	b.autoPageAllocation = enabled
+	b.spec.AutoPageAllocation = enabled
 	return b
 }
 
@@ -96,18 +97,13 @@ func (b Builder) WithMigrationPort(port sim.Port) Builder {
 
 // Build returns a newly created MMU component
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
-	spec := Spec{
-		Latency:                  b.pageWalkingLatency,
-		MaxRequestsInFlight:      b.maxNumReqInFlight,
-		MigrationQueueSize:       4096,
-		AutoPageAllocation:       b.autoPageAllocation,
-		Log2PageSize:             b.log2PageSize,
-		MigrationServiceProvider: b.migrationServiceProvider,
-	}
+	spec := b.spec
+	spec.Latency = b.pageWalkingLatency
+	spec.MigrationQueueSize = 4096
 
 	modelComp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
-		WithFreq(b.freq).
+		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
 
@@ -130,7 +126,7 @@ func (b Builder) createPageTable() vm.PageTable {
 		return b.pageTable
 	}
 
-	return vm.NewPageTable(b.log2PageSize)
+	return vm.NewPageTable(b.spec.Log2PageSize)
 }
 
 // validatePageTablePageSize checks if the provided page table's page size
@@ -138,7 +134,7 @@ func (b Builder) createPageTable() vm.PageTable {
 func (b Builder) validatePageTablePageSize() {
 	if pageTableInterface, ok := b.pageTable.(pageTable); ok {
 		pageTableLog2PageSize := pageTableInterface.GetLog2PageSize()
-		if pageTableLog2PageSize != b.log2PageSize {
+		if pageTableLog2PageSize != b.spec.Log2PageSize {
 			panic("page table page size does not match MMU page size")
 		}
 	}
