@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (Cycle 234)
+## Current State (Cycle 248)
 
 ### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
 - Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
@@ -13,6 +13,14 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - PR #59 merged: akitartm_compile(10), daisen_compile(10), akita_build_lint_test(30), noc_acceptance_test(20), mem_acceptance_test(20)
 - Self-hosted runners kept per human directive. Runs may be queued while runners are offline.
 - **Lesson: Always check human constraints before defining milestone scope. M31 was blocked from the start because it violated human issue #309.**
+
+### M32: Ensure CI passes on main (DONE — Cycle 248)
+- Budget: 3 | Used: 3 (deadline missed, but all work completed)
+- PR #60 merged: Fixed DRAM index panic, cache findPort, endpoint deepCopy performance
+- Additional fixes by Ares on same branch: state pattern bugs, gob deepCopy (~8x faster), bottomparser unit tests
+- CI run 23029506495: All 5 jobs GREEN on main
+- mem_acceptance_test: ~12 min (down from 4+ hours, but still above <5 min target)
+- **Lesson: Budget should have been higher given CI runner unavailability. The team did good work but needed more cycles for the iterative fix-test-fix loop.**
 
 ### Previous Milestones Complete (through Cycle 232)
 
@@ -155,6 +163,21 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
   - No `type Comp struct` in TLB or mmuCache
   - All `CollectTrace` calls pass component (not middleware) as the domain
 - Status: ✅ DONE — verified by Apollo, merged via PR #56
+
+---
+
+## Phase 4: Performance + Architecture (human issues #317, #319, #321)
+
+### M33: Performance — Optimize deep copy for simulation speed (PLANNING)
+- Goal: Reduce mem acceptance test time from ~12 min to <5 min to match original akita repo
+- Approach: Implement custom shallow copy (like endpoint already does) for all hot-path components (caches, DRAM, etc.)
+- Status: Diana analyzing performance gap (issue #322)
+
+### M34: Cache Unification — Single cache component with write-policy middlewares (PLANNING)
+- Goal: Replace 4 separate cache packages (~21K lines, ~90% overlap) with 1 unified cache component
+- Approach: Shared Spec/State/common middlewares, write-policy middleware selected by builder
+- Status: Iris analyzing design (issue #323); human issue #321 requests discussion first
+- **Depends on M33** — performance optimizations should land first to avoid compounding changes
 
 ---
 

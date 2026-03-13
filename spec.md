@@ -90,11 +90,18 @@ The `simulation` package has `Save(filename)` and `Load(filename)` methods. Afte
 
 ## Open Issues (from human review)
 
-1. **Unnecessary Comp wrapper structs**: TLB and mmuCache still have `Comp` wrappers that just embed `*modeling.Component[Spec, State]` with no extra fields or methods. These should be eliminated — the builder should return `*modeling.Component[Spec, State]` directly.
-2. **Middleware boilerplate (Name, AcceptHook, Hooks, etc.)**: Middleware structs currently implement `Name()`, `AcceptHook()`, `Hooks()`, `NumHooks()`, `InvokeHook()` methods that just delegate to the component. This is only needed to satisfy `tracing.NamedHookable`. This boilerplate should be eliminated — either by changing the tracing API to accept the component directly, or by embedding a reference that satisfies the interface without per-middleware methods.
-3. **File naming**: `tlbprotocol.go` contains message types (FlushReq, FlushRsp, RestartReq, RestartRsp) that ARE used, but the filename is misleading. Consider renaming to `messages.go` or similar for clarity.
+### Resolved
+1. ~~**Unnecessary Comp wrapper structs**~~: Fixed in M29 — TLB and mmuCache wrappers removed.
+2. ~~**Middleware boilerplate**~~: Fixed in M29 — ~160 delegation methods eliminated.
+3. ~~**File naming**~~: Fixed in M29 — tlbprotocol.go → messages.go.
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
+
+### Active
+
+4. **Simulation performance regression** (issues #317, #319): The mem acceptance tests must complete in similar time to the original akita repo (<5 min). Currently they take ~12 min after switching deep copy from JSON to gob. The original akita repo does not use A-B state double buffering. We cannot reduce test requirements — must match the same tests with similar performance. Possible approaches: custom shallow copy per component (like endpoint already does), reducing copy frequency, or structural optimizations.
+
+5. **Cache unification** (issue #321): Explore having a single cache component with different write-control middlewares instead of 4 separate cache packages (writeback, writearound, writeevict, writethrough). Currently ~21K lines with ~90% code overlap. The idea: shared Spec/State/common middlewares, with write-policy-specific middleware selected by the builder. Discussion only — no coding until design is approved.
 
 ### CI Infrastructure
 
@@ -125,7 +132,7 @@ All CI workflow jobs use `self-hosted` runners per human directive (issue #309).
 - Middleware reads current State (read-only) and writes next State (write-only)
 - A little duplication is better than a little dependency
 - `*mem.Storage`, `vm.PageTable`, `routing.Table`, `arbitration.Arbiter` are the only allowed external references held by middleware
-- Deep copy uses JSON round-trip (validated by ValidateState — no pointers)
+- Deep copy uses gob round-trip by default; components may override Tick() with custom shallow copy for performance (see endpoint pattern)
 - 1-cycle delay from A-B buffering is acceptable for multi-middleware components
 
 ## Resources
