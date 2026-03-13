@@ -672,26 +672,32 @@ func (m *memMiddleware) topPort() sim.Port {
 }
 ```
 
-### 5.4 NamedHookable Boilerplate
+### 5.4 Tracing Pattern
 
-Each middleware that participates in tracing must implement the
-`tracing.NamedHookable` interface, which combines `sim.Named`,
-`sim.Hookable`, and `InvokeHook`. This is done by delegating five methods
-to the component:
+Middlewares do **not** implement `NamedHookable` themselves. Instead,
+middlewares pass `m.comp` directly to tracing functions. The component
+itself is the `NamedHookable` — it already implements the interface via
+`sim.ComponentBase`.
 
 ```go
-// From v5/examples/tickingping/comp.go
-func (m *sendMW) Name() string              { return m.comp.Name() }
-func (m *sendMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
-func (m *sendMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
-func (m *sendMW) NumHooks() int              { return m.comp.NumHooks() }
-func (m *sendMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
+// From v5/mem/idealmemcontroller/memMiddleware.go
+tracing.TraceReqReceive(msg, m.comp)
 ```
 
-Every middleware needs these five delegation methods. They allow the tracing
-system (e.g., `tracing.TraceReqReceive`, `tracing.EndTask`) to use the
-middleware as a `NamedHookable` domain, while routing all hook storage and
-invocation through the component itself.
+When completing a traced request, the middleware constructs the task ID and
+calls `tracing.EndTask` with `m.comp`:
+
+```go
+// From v5/mem/idealmemcontroller/memMiddleware.go
+func (m *memMiddleware) traceReqComplete(reqID string) {
+    taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
+    tracing.EndTask(taskID, m.comp)
+}
+```
+
+This keeps tracing simple: the component is the hook domain, and
+middlewares just forward `m.comp` to any tracing call that needs a
+`NamedHookable`.
 
 ### 5.5 Tick() Logic — GetState/GetNextState Pattern
 
@@ -1198,12 +1204,6 @@ type sendMW struct {
     comp *modeling.Component[Spec, State]
 }
 
-func (m *sendMW) Name() string              { return m.comp.Name() }
-func (m *sendMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
-func (m *sendMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
-func (m *sendMW) NumHooks() int              { return m.comp.NumHooks() }
-func (m *sendMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
-
 func (m *sendMW) Tick() bool {
     madeProgress := false
 
@@ -1255,12 +1255,6 @@ func (m *sendMW) sendPing() bool {
 type receiveProcessMW struct {
     comp *modeling.Component[Spec, State]
 }
-
-func (m *receiveProcessMW) Name() string              { return m.comp.Name() }
-func (m *receiveProcessMW) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
-func (m *receiveProcessMW) Hooks() []sim.Hook          { return m.comp.Hooks() }
-func (m *receiveProcessMW) NumHooks() int              { return m.comp.NumHooks() }
-func (m *receiveProcessMW) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
 
 func (m *receiveProcessMW) Tick() bool {
     madeProgress := false
@@ -1515,8 +1509,6 @@ type ctrlMiddleware struct {
     comp *modeling.Component[Spec, State]
 }
 
-func (m *ctrlMiddleware) Name() string { return m.comp.Name() }
-
 func (m *ctrlMiddleware) Tick() (madeProgress bool) {
     madeProgress = m.handleIncomingCommands() || madeProgress
     madeProgress = m.handleStateUpdate() || madeProgress
@@ -1568,12 +1560,6 @@ type memMiddleware struct {
     storage *mem.Storage
 }
 
-func (m *memMiddleware) Name() string              { return m.comp.Name() }
-func (m *memMiddleware) AcceptHook(hook sim.Hook)   { m.comp.AcceptHook(hook) }
-func (m *memMiddleware) Hooks() []sim.Hook          { return m.comp.Hooks() }
-func (m *memMiddleware) NumHooks() int              { return m.comp.NumHooks() }
-func (m *memMiddleware) InvokeHook(ctx sim.HookCtx) { m.comp.InvokeHook(ctx) }
-
 func (m *memMiddleware) topPort() sim.Port {
     return m.comp.GetPortByName("Top")
 }
@@ -1617,7 +1603,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
         }
 
         msg := msgI.(sim.Msg)
-        tracing.TraceReqReceive(msg, m)
+        tracing.TraceReqReceive(msg, m.comp)
 
         tx := m.msgToInflightTransaction(msg)
 
@@ -1738,8 +1724,9 @@ When creating a new V5 component, follow these steps:
   use `[]int` indices instead of pointer slices (see §4B)
 - [ ] **Implement middleware(s)** — struct(s) holding
   `comp *modeling.Component[Spec, State]`, implementing `Tick() bool`
-- [ ] **Add NamedHookable boilerplate** — 5 delegation methods on each middleware
-  (`Name`, `AcceptHook`, `Hooks`, `NumHooks`, `InvokeHook`)
+- [ ] **For tracing, pass `m.comp` to tracing functions** (e.g.
+  `tracing.TraceReqReceive`, `tracing.EndTask`) — middlewares do not
+  implement NamedHookable themselves
 - [ ] **Add port helper(s)** — package-level functions or methods calling
   `comp.GetPortByName("...")`
 - [ ] **Implement Builder** — `MakeBuilder()`, `With...()` methods,
