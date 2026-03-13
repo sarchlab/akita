@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
-	"github.com/sarchlab/akita/v5/mem/cache/writethrough"
+	"github.com/sarchlab/akita/v5/mem/cache/simplecache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/trace"
@@ -92,7 +92,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 }
 
 func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
-	*modeling.Component[writethrough.Spec, writethrough.State],
+	*modeling.Component[simplecache.Spec, simplecache.State],
 	*modeling.Component[writeback.Spec, writeback.State],
 	*idealmemcontroller.Comp,
 ) {
@@ -118,7 +118,8 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 		Build("L2Cache")
 	s.RegisterComponent(L2Cache)
 
-	L1Cache := writethrough.MakeBuilder().
+	L1Cache := simplecache.MakeBuilder().
+		WithWritePolicy(&simplecache.WritethroughPolicy{}).
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
 		WithWayAssociativity(2).
