@@ -26,14 +26,23 @@ func (p *topParser) Tick() bool {
 	}
 
 	trans := &transactionState{
-		id: sim.GetIDGenerator().Generate(),
+		ID: sim.GetIDGenerator().Generate(),
 	}
 
 	switch msg := msg.(type) {
 	case *mem.ReadReq:
-		trans.read = msg
+		trans.HasRead = true
+		trans.ReadMeta = msg.MsgMeta
+		trans.ReadAddress = msg.Address
+		trans.ReadAccessByteSize = msg.AccessByteSize
+		trans.ReadPID = msg.PID
 	case *mem.WriteReq:
-		trans.write = msg
+		trans.HasWrite = true
+		trans.WriteMeta = msg.MsgMeta
+		trans.WriteAddress = msg.Address
+		trans.WriteData = msg.Data
+		trans.WriteDirtyMask = msg.DirtyMask
+		trans.WritePID = msg.PID
 	}
 
 	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)

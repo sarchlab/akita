@@ -108,7 +108,9 @@ var _ = Describe("TopParser", func() {
 		parser.Tick()
 
 		Expect(m.inFlightTransactions).To(HaveLen(1))
-		Expect(m.inFlightTransactions[0].read).To(BeIdenticalTo(read))
+		Expect(m.inFlightTransactions[0].HasRead).To(BeTrue())
+		Expect(m.inFlightTransactions[0].ReadAddress).To(Equal(uint64(0x100)))
+		Expect(m.inFlightTransactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
 	})
 
 	It("should parse write from top", func() {
@@ -126,6 +128,7 @@ var _ = Describe("TopParser", func() {
 		parser.Tick()
 
 		Expect(m.inFlightTransactions).To(HaveLen(1))
-		Expect(m.inFlightTransactions[0].write).To(BeIdenticalTo(write))
+		Expect(m.inFlightTransactions[0].HasWrite).To(BeTrue())
+		Expect(m.inFlightTransactions[0].WriteAddress).To(Equal(uint64(0x100)))
 	})
 })

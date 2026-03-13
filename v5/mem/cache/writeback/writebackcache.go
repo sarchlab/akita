@@ -46,7 +46,7 @@ type State struct {
 	CacheState     int                  `json:"cache_state"`
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
-	Transactions   []transactionSnapshot `json:"transactions"`
+	Transactions   []transactionState   `json:"transactions"`
 	EvictingList   map[uint64]bool      `json:"evicting_list"`
 
 	// Buffers (transaction indices stored as int)
@@ -76,9 +76,17 @@ type State struct {
 	ProcessingMSHREntryIdx int  `json:"processing_mshr_entry_idx"`
 
 	// Flusher
-	FlusherBlockToEvictRefs []blockRef    `json:"flusher_block_to_evict_refs"`
-	HasProcessingFlush      bool          `json:"has_processing_flush"`
-	ProcessingFlush         flushReqState `json:"processing_flush"`
+	FlusherBlockToEvictRefs []blockRef      `json:"flusher_block_to_evict_refs"`
+	HasProcessingFlush      bool            `json:"has_processing_flush"`
+	ProcessingFlush         flushReqState   `json:"processing_flush"`
+}
+
+// flushReqState is a serializable representation of a cache.FlushReq.
+type flushReqState struct {
+	MsgMeta                 sim.MsgMeta `json:"msg_meta"`
+	InvalidateAllCachelines bool        `json:"invalidate_all_cachelines"`
+	DiscardInflight         bool        `json:"discard_inflight"`
+	PauseAfterFlushing      bool        `json:"pause_after_flushing"`
 }
 
 // pipelineMW holds all non-serializable infrastructure for the writeback
@@ -238,9 +246,15 @@ func (m *pipelineMW) discardInflightTransactions() {
 func (m *pipelineMW) GetState() State {
 	next := m.comp.GetNextState()
 
-	lookup := buildTransIndex(m.inFlightTransactions)
-	next.Transactions = snapshotAllTransactions(
-		m.inFlightTransactions, lookup)
+	// Store transactions directly (they are now JSON-serializable)
+	txns := make([]transactionState, len(m.inFlightTransactions))
+	for i, t := range m.inFlightTransactions {
+		if t != nil {
+			txns[i] = *t
+		}
+	}
+	next.Transactions = txns
+
 	next.CacheState = int(m.state)
 	next.EvictingList = snapshotEvictingList(m.evictingList)
 
@@ -251,13 +265,13 @@ func (m *pipelineMW) GetState() State {
 	}
 
 	// Write buffer stage
-	next.PendingEvictionIndices = snapshotTransList(m.writeBuffer.pendingEvictions, lookup)
-	next.InflightFetchIndices = snapshotTransList(m.writeBuffer.inflightFetch, lookup)
-	next.InflightEvictionIndices = snapshotTransList(m.writeBuffer.inflightEviction, lookup)
+	next.PendingEvictionIndices = snapshotTransList(m.writeBuffer.pendingEvictions, m.inFlightTransactions)
+	next.InflightFetchIndices = snapshotTransList(m.writeBuffer.inflightFetch, m.inFlightTransactions)
+	next.InflightEvictionIndices = snapshotTransList(m.writeBuffer.inflightEviction, m.inFlightTransactions)
 
 	// MSHR stage
 	next.HasProcessingMSHREntry, next.ProcessingMSHREntryIdx =
-		snapshotMSHRStageEntry(m.mshrStage, lookup)
+		snapshotMSHRStageEntry(m.mshrStage, m.inFlightTransactions)
 
 	return *next
 }
@@ -268,7 +282,12 @@ func (m *pipelineMW) SetState(state State) {
 
 	m.state = cacheState(state.CacheState)
 
-	allTrans := restoreAllTransactions(state.Transactions)
+	// Restore transactions (they are directly stored now)
+	allTrans := make([]*transactionState, len(state.Transactions))
+	for i := range state.Transactions {
+		t := state.Transactions[i]
+		allTrans[i] = &t
+	}
 	m.inFlightTransactions = allTrans
 
 	// Evicting list
@@ -301,8 +320,8 @@ func (m *pipelineMW) SetState(state State) {
 		state.ProcessingMSHREntryIdx < len(allTrans) {
 		trans := allTrans[state.ProcessingMSHREntryIdx]
 		m.mshrStage.processingTrans = trans
-		m.mshrStage.processingTransList = trans.mshrTransactions
-		m.mshrStage.processingData = trans.mshrData
+		m.mshrStage.processingTransIndices = trans.MSHRTransactionIndices
+		m.mshrStage.processingData = trans.MSHRData
 	}
 }
 
@@ -341,5 +360,86 @@ func (m *controlMW) SetState(state State) {
 			DiscardInflight:         state.ProcessingFlush.DiscardInflight,
 			PauseAfterFlushing:      state.ProcessingFlush.PauseAfterFlushing,
 		}
+	}
+}
+
+// --- Helper functions for serialization ---
+
+func snapshotTransList(
+	list []*transactionState,
+	allTrans []*transactionState,
+) []int {
+	lookup := make(map[*transactionState]int, len(allTrans))
+	for i, t := range allTrans {
+		if t != nil {
+			lookup[t] = i
+		}
+	}
+
+	indices := make([]int, len(list))
+	for i, t := range list {
+		indices[i] = lookup[t]
+	}
+
+	return indices
+}
+
+func restoreTransList(
+	indices []int,
+	allTrans []*transactionState,
+) []*transactionState {
+	list := make([]*transactionState, len(indices))
+	for i, idx := range indices {
+		list[i] = allTrans[idx]
+	}
+
+	return list
+}
+
+func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
+	if len(evictingList) == 0 {
+		return nil
+	}
+
+	out := make(map[uint64]bool, len(evictingList))
+	maps.Copy(out, evictingList)
+
+	return out
+}
+
+func snapshotMSHRStageEntry(
+	ms *mshrStage,
+	allTrans []*transactionState,
+) (bool, int) {
+	if !ms.hasProcessingTrans {
+		return false, 0
+	}
+
+	if ms.processingTrans != nil {
+		for i, t := range allTrans {
+			if t == ms.processingTrans {
+				return true, i
+			}
+		}
+	}
+
+	return true, 0
+}
+
+func snapshotFlusherState(
+	f *flusher,
+) ([]blockRef, bool, flushReqState) {
+	refs := make([]blockRef, len(f.blockToEvict))
+	copy(refs, f.blockToEvict)
+
+	if f.processingFlush == nil {
+		return refs, false, flushReqState{}
+	}
+
+	return refs, true, flushReqState{
+		MsgMeta:                 f.processingFlush.MsgMeta,
+		InvalidateAllCachelines: f.processingFlush.InvalidateAllCachelines,
+		DiscardInflight:         f.processingFlush.DiscardInflight,
+		PauseAfterFlushing:      f.processingFlush.PauseAfterFlushing,
 	}
 }

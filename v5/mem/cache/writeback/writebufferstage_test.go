@@ -103,13 +103,15 @@ var _ = Describe("WriteBufferStage", func() {
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
-				action:       writeBufferFetch,
-				fetchAddress: 0x100,
-				fetchPID:     1,
-				blockSetID:   0,
-				blockWayID:   0,
-				hasBlock:     true,
-				read:         read,
+				Action:       writeBufferFetch,
+				FetchAddress: 0x100,
+				FetchPID:     1,
+				BlockSetID:   0,
+				BlockWayID:   0,
+				HasBlock:     true,
+				HasRead:      true,
+				ReadMeta:     read.MsgMeta,
+				ReadAddress:  0x100,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
@@ -135,9 +137,11 @@ var _ = Describe("WriteBufferStage", func() {
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
-				action:       writeBufferFetch,
-				fetchAddress: 0x100,
-				read:         read,
+				Action:       writeBufferFetch,
+				FetchAddress: 0x100,
+				HasRead:      true,
+				ReadMeta:     read.MsgMeta,
+				ReadAddress:  0x100,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
@@ -160,10 +164,12 @@ var _ = Describe("WriteBufferStage", func() {
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
-				evictingAddr: 0x200,
-				evictingPID:  2,
-				evictingData: make([]byte, 64),
-				read:         read,
+				EvictingAddr: 0x200,
+				EvictingPID:  2,
+				EvictingData: make([]byte, 64),
+				HasRead:      true,
+				ReadMeta:     read.MsgMeta,
+				ReadAddress:  0x200,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			wb.pendingEvictions = []*transactionState{trans}
@@ -205,8 +211,11 @@ var _ = Describe("WriteBufferStage", func() {
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
 			trans := &transactionState{
-				evictionWriteReq: evictWrite,
-				read:             read,
+				HasEvictionWriteReq:  true,
+				EvictionWriteReqMeta: evictWrite.MsgMeta,
+				HasRead:              true,
+				ReadMeta:             read.MsgMeta,
+				ReadAddress:          0,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			wb.inflightEviction = []*transactionState{trans}

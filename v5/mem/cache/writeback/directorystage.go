@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -42,14 +41,14 @@ func (ds *directoryStage) processTransaction() bool {
 		idx := next.DirPostPipelineBuf.Elements[0]
 		trans := ds.cache.inFlightTransactions[idx]
 
-		addr := trans.accessReq().GetAddress()
+		addr := trans.accessReqAddress()
 		cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 		if _, evicting := ds.cache.evictingList[cacheLineID]; evicting {
 			break
 		}
 
-		if trans.read != nil {
+		if trans.HasRead {
 			madeProgress = ds.doRead(trans) || madeProgress
 			continue
 		}
@@ -102,13 +101,12 @@ func (ds *directoryStage) Reset() {
 }
 
 func (ds *directoryStage) doRead(trans *transactionState) bool {
-	read := trans.read
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	cachelineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
+	cachelineID, _ := getCacheLineID(trans.ReadAddress, spec.Log2BlockSize)
 
 	mshrIdx, found := cache.MSHRQuery(
-		&next.MSHRState, read.PID, cachelineID)
+		&next.MSHRState, trans.ReadPID, cachelineID)
 	if found {
 		return ds.handleReadMSHRHit(trans, mshrIdx)
 	}
@@ -116,7 +114,7 @@ func (ds *directoryStage) doRead(trans *transactionState) bool {
 	setID, wayID, blockFound := cache.DirectoryLookup(
 		&next.DirectoryState,
 		spec.NumSets, 1<<spec.Log2BlockSize,
-		read.PID, cachelineID)
+		trans.ReadPID, cachelineID)
 	if blockFound {
 		return ds.handleReadHit(trans, setID, wayID)
 	}
@@ -130,8 +128,8 @@ func (ds *directoryStage) handleReadMSHRHit(
 ) bool {
 	next := ds.cache.comp.GetNextState()
 
-	trans.mshrEntryIndex = mshrIdx
-	trans.hasMSHREntry = true
+	trans.MSHREntryIndex = mshrIdx
+	trans.HasMSHREntry = true
 	next.MSHRState.Entries[mshrIdx].TransactionIndices = append(
 		next.MSHRState.Entries[mshrIdx].TransactionIndices,
 		ds.findTransIndex(trans))
@@ -139,7 +137,7 @@ func (ds *directoryStage) handleReadMSHRHit(
 	ds.popDirPostBuf()
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+		tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
 		ds.cache.comp,
 		"read-mshr-hit",
 	)
@@ -158,7 +156,7 @@ func (ds *directoryStage) handleReadHit(
 	}
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+		tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
 		ds.cache.comp,
 		"read-hit",
 	)
@@ -167,10 +165,9 @@ func (ds *directoryStage) handleReadHit(
 }
 
 func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
-	read := trans.read
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	cacheLineID, _ := getCacheLineID(read.Address, spec.Log2BlockSize)
+	cacheLineID, _ := getCacheLineID(trans.ReadAddress, spec.Log2BlockSize)
 
 	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
 		return false
@@ -191,7 +188,7 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 		ok := ds.evict(trans, victimSetID, victimWayID)
 		if ok {
 			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+				tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
 				ds.cache.comp,
 				"read-miss",
 			)
@@ -203,7 +200,7 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 	ok := ds.fetch(trans, victimSetID, victimWayID)
 	if ok {
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.read, ds.cache.comp),
+			tracing.MsgIDAtReceiver(&trans.ReadMeta, ds.cache.comp),
 			ds.cache.comp,
 			"read-miss",
 		)
@@ -213,17 +210,16 @@ func (ds *directoryStage) handleReadMiss(trans *transactionState) bool {
 }
 
 func (ds *directoryStage) doWrite(trans *transactionState) bool {
-	write := trans.write
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
+	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
 	mshrIdx, found := cache.MSHRQuery(
-		&next.MSHRState, write.PID, cachelineID)
+		&next.MSHRState, trans.WritePID, cachelineID)
 	if found {
 		ok := ds.doWriteMSHRHit(trans, mshrIdx)
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+			tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
 			ds.cache.comp,
 			"write-mshr-hit",
 		)
@@ -234,12 +230,12 @@ func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	setID, wayID, blockFound := cache.DirectoryLookup(
 		&next.DirectoryState,
 		spec.NumSets, 1<<spec.Log2BlockSize,
-		write.PID, cachelineID)
+		trans.WritePID, cachelineID)
 	if blockFound {
 		ok := ds.doWriteHit(trans, setID, wayID)
 		if ok {
 			tracing.AddTaskStep(
-				tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+				tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
 				ds.cache.comp,
 				"write-hit",
 			)
@@ -251,7 +247,7 @@ func (ds *directoryStage) doWrite(trans *transactionState) bool {
 	ok := ds.doWriteMiss(trans)
 	if ok {
 		tracing.AddTaskStep(
-			tracing.MsgIDAtReceiver(trans.write, ds.cache.comp),
+			tracing.MsgIDAtReceiver(&trans.WriteMeta, ds.cache.comp),
 			ds.cache.comp,
 			"write-miss",
 		)
@@ -265,8 +261,8 @@ func (ds *directoryStage) doWriteMSHRHit(
 	mshrIdx int,
 ) bool {
 	next := ds.cache.comp.GetNextState()
-	trans.mshrEntryIndex = mshrIdx
-	trans.hasMSHREntry = true
+	trans.MSHREntryIndex = mshrIdx
+	trans.HasMSHREntry = true
 	next.MSHRState.Entries[mshrIdx].TransactionIndices = append(
 		next.MSHRState.Entries[mshrIdx].TransactionIndices,
 		ds.findTransIndex(trans))
@@ -291,7 +287,7 @@ func (ds *directoryStage) doWriteHit(
 
 func (ds *directoryStage) doWriteMiss(trans *transactionState) bool {
 	spec := ds.cache.comp.GetSpec()
-	if ds.isWritingFullLine(trans.write, spec.Log2BlockSize) {
+	if ds.isWritingFullLine(trans, spec.Log2BlockSize) {
 		return ds.writeFullLineMiss(trans)
 	}
 
@@ -299,10 +295,9 @@ func (ds *directoryStage) doWriteMiss(trans *transactionState) bool {
 }
 
 func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
-	write := trans.write
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
+	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
 	blockSize := 1 << spec.Log2BlockSize
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
@@ -323,10 +318,9 @@ func (ds *directoryStage) writeFullLineMiss(trans *transactionState) bool {
 }
 
 func (ds *directoryStage) writePartialLineMiss(trans *transactionState) bool {
-	write := trans.write
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
-	cachelineID, _ := getCacheLineID(write.Address, spec.Log2BlockSize)
+	cachelineID, _ := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
 	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
 		return false
@@ -368,10 +362,10 @@ func (ds *directoryStage) readFromBank(
 
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	block.ReadCount++
-	trans.blockSetID = setID
-	trans.blockWayID = wayID
-	trans.hasBlock = true
-	trans.action = bankReadHit
+	trans.BlockSetID = setID
+	trans.BlockWayID = wayID
+	trans.HasBlock = true
+	trans.Action = bankReadHit
 
 	transIdx := ds.findTransIndex(trans)
 	ds.popDirPostBuf()
@@ -394,8 +388,7 @@ func (ds *directoryStage) writeToBank(
 		return false
 	}
 
-	write := trans.write
-	addr := write.Address
+	addr := trans.WriteAddress
 	cachelineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
@@ -403,11 +396,11 @@ func (ds *directoryStage) writeToBank(
 	block.IsLocked = true
 	block.Tag = cachelineID
 	block.IsValid = true
-	block.PID = uint32(write.PID)
-	trans.blockSetID = setID
-	trans.blockWayID = wayID
-	trans.hasBlock = true
-	trans.action = bankWriteHit
+	block.PID = uint32(trans.WritePID)
+	trans.BlockSetID = setID
+	trans.BlockWayID = wayID
+	trans.HasBlock = true
+	trans.Action = bankWriteHit
 
 	transIdx := ds.findTransIndex(trans)
 	ds.popDirPostBuf()
@@ -435,12 +428,12 @@ func (ds *directoryStage) evict(
 		pid  vm.PID
 	)
 
-	if trans.read != nil {
-		addr = trans.read.Address
-		pid = trans.read.PID
+	if trans.HasRead {
+		addr = trans.ReadAddress
+		pid = trans.ReadPID
 	} else {
-		addr = trans.write.Address
-		pid = trans.write.PID
+		addr = trans.WriteAddress
+		pid = trans.WritePID
 	}
 
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
@@ -452,7 +445,7 @@ func (ds *directoryStage) evict(
 	ds.popDirPostBuf()
 	bankBuf.PushTyped(transIdx)
 
-	ds.cache.evictingList[trans.victimTag] = true
+	ds.cache.evictingList[trans.VictimTag] = true
 
 	return true
 }
@@ -481,22 +474,22 @@ func (ds *directoryStage) updateTransForEviction(
 	next := ds.cache.comp.GetNextState()
 	victim := &next.DirectoryState.Sets[victimSetID].Blocks[victimWayID]
 
-	trans.action = bankEvictAndFetch
-	trans.hasVictim = true
-	trans.victimPID = vm.PID(victim.PID)
-	trans.victimTag = victim.Tag
-	trans.victimCacheAddress = victim.CacheAddress
+	trans.Action = bankEvictAndFetch
+	trans.HasVictim = true
+	trans.VictimPID = vm.PID(victim.PID)
+	trans.VictimTag = victim.Tag
+	trans.VictimCacheAddress = victim.CacheAddress
 	if victim.DirtyMask != nil {
-		trans.victimDirtyMask = make([]bool, len(victim.DirtyMask))
-		copy(trans.victimDirtyMask, victim.DirtyMask)
+		trans.VictimDirtyMask = make([]bool, len(victim.DirtyMask))
+		copy(trans.VictimDirtyMask, victim.DirtyMask)
 	}
 
-	trans.blockSetID = victimSetID
-	trans.blockWayID = victimWayID
-	trans.hasBlock = true
-	trans.evictingPID = trans.victimPID
-	trans.evictingAddr = trans.victimTag
-	trans.evictingDirtyMask = trans.victimDirtyMask
+	trans.BlockSetID = victimSetID
+	trans.BlockWayID = victimWayID
+	trans.HasBlock = true
+	trans.EvictingPID = trans.VictimPID
+	trans.EvictingAddr = trans.VictimTag
+	trans.EvictingDirtyMask = trans.VictimDirtyMask
 
 	if ds.evictionNeedFetch(trans, spec.Log2BlockSize) {
 		mshrIdx := cache.MSHRAdd(
@@ -508,22 +501,22 @@ func (ds *directoryStage) updateTransForEviction(
 		entry.HasBlock = true
 		entry.TransactionIndices = append(
 			entry.TransactionIndices, ds.findTransIndex(trans))
-		trans.mshrEntryIndex = mshrIdx
-		trans.hasMSHREntry = true
-		trans.fetchPID = pid
-		trans.fetchAddress = cacheLineID
-		trans.action = bankEvictAndFetch
+		trans.MSHREntryIndex = mshrIdx
+		trans.HasMSHREntry = true
+		trans.FetchPID = pid
+		trans.FetchAddress = cacheLineID
+		trans.Action = bankEvictAndFetch
 	} else {
-		trans.action = bankEvictAndWrite
+		trans.Action = bankEvictAndWrite
 	}
 }
 
 func (ds *directoryStage) evictionNeedFetch(t *transactionState, log2BlockSize uint64) bool {
-	if t.write == nil {
+	if !t.HasWrite {
 		return true
 	}
 
-	if ds.isWritingFullLine(t.write, log2BlockSize) {
+	if ds.isWritingFullLine(t, log2BlockSize) {
 		return false
 	}
 
@@ -537,7 +530,7 @@ func (ds *directoryStage) fetch(
 	spec := ds.cache.comp.GetSpec()
 	next := ds.cache.comp.GetNextState()
 
-	addr, pid, req := ds.transAddrPIDReq(trans)
+	addr, pid, reqMeta := ds.transAddrPIDReqMeta(trans)
 	cacheLineID, _ := getCacheLineID(addr, spec.Log2BlockSize)
 
 	bankNum := bankID(setID, wayID,
@@ -551,16 +544,16 @@ func (ds *directoryStage) fetch(
 	mshrIdx := cache.MSHRAdd(
 		&next.MSHRState, spec.NumMSHREntry,
 		pid, cacheLineID)
-	trans.mshrEntryIndex = mshrIdx
-	trans.hasMSHREntry = true
-	trans.blockSetID = setID
-	trans.blockWayID = wayID
-	trans.hasBlock = true
+	trans.MSHREntryIndex = mshrIdx
+	trans.HasMSHREntry = true
+	trans.BlockSetID = setID
+	trans.BlockWayID = wayID
+	trans.HasBlock = true
 
 	ds.updateBlockForFetch(next, setID, wayID, cacheLineID, pid)
 
 	tracing.AddTaskStep(
-		tracing.MsgIDAtReceiver(req, ds.cache.comp),
+		tracing.MsgIDAtReceiver(reqMeta, ds.cache.comp),
 		ds.cache.comp,
 		fmt.Sprintf("add-mshr-entry-0x%x-0x%x",
 			next.MSHRState.Entries[mshrIdx].Address,
@@ -569,9 +562,9 @@ func (ds *directoryStage) fetch(
 
 	ds.popDirPostBuf()
 
-	trans.action = writeBufferFetch
-	trans.fetchPID = pid
-	trans.fetchAddress = cacheLineID
+	trans.Action = writeBufferFetch
+	trans.FetchPID = pid
+	trans.FetchAddress = cacheLineID
 	transIdx := ds.findTransIndex(trans)
 	bankBuf.PushTyped(transIdx)
 
@@ -580,14 +573,14 @@ func (ds *directoryStage) fetch(
 	return true
 }
 
-func (ds *directoryStage) transAddrPIDReq(
+func (ds *directoryStage) transAddrPIDReqMeta(
 	trans *transactionState,
 ) (uint64, vm.PID, sim.Msg) {
-	if trans.read != nil {
-		return trans.read.Address, trans.read.PID, trans.read
+	if trans.HasRead {
+		return trans.ReadAddress, trans.ReadPID, &trans.ReadMeta
 	}
 
-	return trans.write.Address, trans.write.PID, trans.write
+	return trans.WriteAddress, trans.WritePID, &trans.WriteMeta
 }
 
 func (ds *directoryStage) updateBlockForFetch(
@@ -614,13 +607,13 @@ func (ds *directoryStage) addMSHREntryBlock(
 		entry.TransactionIndices, ds.findTransIndex(trans))
 }
 
-func (ds *directoryStage) isWritingFullLine(write *mem.WriteReq, log2BlockSize uint64) bool {
-	if len(write.Data) != (1 << log2BlockSize) {
+func (ds *directoryStage) isWritingFullLine(trans *transactionState, log2BlockSize uint64) bool {
+	if len(trans.WriteData) != (1 << log2BlockSize) {
 		return false
 	}
 
-	if write.DirtyMask != nil {
-		for _, dirty := range write.DirtyMask {
+	if trans.WriteDirtyMask != nil {
+		for _, dirty := range trans.WriteDirtyMask {
 			if !dirty {
 				return false
 			}

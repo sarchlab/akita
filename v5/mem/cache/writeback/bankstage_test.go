@@ -96,7 +96,6 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a read hit transaction", func() {
 		var (
-			read  *mem.ReadReq
 			trans *transactionState
 		)
 
@@ -108,18 +107,22 @@ var _ = Describe("Bank Stage", func() {
 
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
-			read = &mem.ReadReq{}
+			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.Address = 0x104
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
 			read.TrafficClass = "mem.ReadReq"
 			trans = &transactionState{
-				read:       read,
-				blockSetID: 0,
-				blockWayID: 0,
-				hasBlock:   true,
-				action:     bankReadHit,
+				HasRead:            true,
+				ReadMeta:           read.MsgMeta,
+				ReadAddress:        read.Address,
+				ReadAccessByteSize: read.AccessByteSize,
+				ReadPID:            read.PID,
+				BlockSetID:         0,
+				BlockWayID:         0,
+				HasBlock:           true,
+				Action:             bankReadHit,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
@@ -144,7 +147,7 @@ var _ = Describe("Bank Stage", func() {
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.Meta().RspTo).To(Equal(read.ID))
+					Expect(dr.Meta().RspTo).To(Equal(trans.ReadMeta.ID))
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
 
@@ -164,7 +167,6 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a write-hit transaction", func() {
 		var (
-			write *mem.WriteReq
 			trans *transactionState
 		)
 
@@ -175,18 +177,22 @@ var _ = Describe("Bank Stage", func() {
 			block.ReadCount = 1
 			block.IsLocked = true
 
-			write = &mem.WriteReq{}
+			write := &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
 			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
 			write.TrafficClass = "mem.WriteReq"
 			trans = &transactionState{
-				write:      write,
-				blockSetID: 0,
-				blockWayID: 0,
-				hasBlock:   true,
-				action:     bankWriteHit,
+				HasWrite:     true,
+				WriteMeta:    write.MsgMeta,
+				WriteAddress: write.Address,
+				WriteData:    write.Data,
+				WritePID:     write.PID,
+				BlockSetID:   0,
+				BlockWayID:   0,
+				HasBlock:     true,
+				Action:       bankWriteHit,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			next.BankPostPipelineBufs[0].Elements = []int{0}
@@ -208,7 +214,7 @@ var _ = Describe("Bank Stage", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(write.ID))
+					Expect(msg.Meta().RspTo).To(Equal(trans.WriteMeta.ID))
 				})
 
 			m.syncForTest()
@@ -252,12 +258,12 @@ var _ = Describe("Bank Stage", func() {
 			}
 
 			trans = &transactionState{
-				blockSetID:       0,
-				blockWayID:       0,
-				hasBlock:         true,
-				mshrData:         fetchedData,
-				mshrTransactions: []*transactionState{},
-				action:           bankWriteFetched,
+				BlockSetID:               0,
+				BlockWayID:               0,
+				HasBlock:                 true,
+				MSHRData:                 fetchedData,
+				MSHRTransactionIndices:   []int{},
+				Action:                   bankWriteFetched,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			next.BankPostPipelineBufs[0].Elements = []int{0}
@@ -271,7 +277,7 @@ var _ = Describe("Bank Stage", func() {
 
 			Expect(ret).To(BeTrue())
 			writtenData, _ := storage.Read(0x40, 64)
-			Expect(writtenData).To(Equal(trans.mshrData))
+			Expect(writtenData).To(Equal(trans.MSHRData))
 			next := m.comp.GetNextState()
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())
@@ -287,10 +293,10 @@ var _ = Describe("Bank Stage", func() {
 
 		BeforeEach(func() {
 			trans = &transactionState{
-				hasVictim:          true,
-				victimTag:          0x200,
-				victimCacheAddress: 0x300,
-				victimDirtyMask: []bool{
+				HasVictim:          true,
+				VictimTag:          0x200,
+				VictimCacheAddress: 0x300,
+				VictimDirtyMask: []bool{
 					true, true, true, true, false, false, false, false,
 					true, true, true, true, false, false, false, false,
 					true, true, true, true, false, false, false, false,
@@ -300,8 +306,8 @@ var _ = Describe("Bank Stage", func() {
 					true, true, true, true, false, false, false, false,
 					true, true, true, true, false, false, false, false,
 				},
-				action:       bankEvictAndFetch,
-				evictingAddr: 0x200,
+				Action:       bankEvictAndFetch,
+				EvictingAddr: 0x200,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			next := m.comp.GetNextState()
@@ -327,8 +333,8 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(trans.action).To(Equal(writeBufferEvictAndFetch))
-			Expect(trans.evictingData).To(Equal(data))
+			Expect(trans.Action).To(Equal(writeBufferEvictAndFetch))
+			Expect(trans.EvictingData).To(Equal(data))
 			Expect(bs.inflightTransCount).To(Equal(0))
 		})
 	})
