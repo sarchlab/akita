@@ -4,7 +4,23 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Implement A-B state, eliminate Comp wrappers, eliminate external dependencies, embed all logic in middleware, make State canonical (no runtime copies), split monolithic middlewares into multiple stages.
 
-## Current State (Cycle 249)
+## Current State (Cycle 253)
+
+### M33: Replace gob deep copy with reflect-based deep copy (IN PROGRESS)
+- Budget: 3 | Used: 0
+- Goal: Replace the gob encode/decode deep copy in modeling/component.go with a reflection-based deep copy
+- This is architecture-preserving: keeps A-B double buffering, no per-component custom code
+- Expected ~10-50x speedup over gob (no serialization, direct memory traversal)
+- State types are constrained: no pointers, interfaces, channels — just structs, slices, maps, primitives
+- Should bring mem acceptance test from ~12 min closer to <5 min target
+- NOC switch performance should also improve significantly
+- Does NOT change the A-B API — just makes the copy faster
+
+### Pending Design Discussions (no implementation until human approves)
+- **Global State Manager** (#326): Human asked about registering state centrally with mutation commands. Design proposal in tbc-db issue #329.
+- **Cache Unification** (#321): Iris analysis complete (#323) — 3 of 4 caches can merge. Human: "Discuss. No coding."
+- **Transaction System** (#324): Diana analysis complete (#327) — found read-own-writes pattern conflicts with deferred apply.
+- **NOC Test Revert** (#325): Iris analysis (#328) — cannot revert until deep copy is fixed. At original sizes, tests would take 6-12 hours.
 
 ### M31: Fix CI — Add timeouts to CI jobs (DONE — Cycle 237)
 - Budget: 3 | Used: 3 (deadline missed, but work completed during planning phase)
@@ -168,35 +184,29 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Phase 4: Performance + Architecture (human issues #317, #319, #321, #324, #325)
 
-### M33: Revert NOC test sizes to upstream + Fix NOC performance (PLANNING)
+### M34: NOC test size revert (BLOCKED on M33)
 - Goal: Revert NOC acceptance test message counts to original upstream values (issue #325)
 - Original values: dgx_single_p2p=1000, dgx_single_p2p_all=2000, dgx_single_random=20000, pcie_p2p=1000, pcie_random=10000
 - Must pass within CI 60-min timeout
-- Status: Iris investigating (issue #328)
+- **Blocked**: At original sizes with gob deep copy, tests take 6-12 hours (Iris analysis #328)
+- After M33 (reflect copy), need to re-measure and determine if sizes are feasible
 
-### M34: Performance — Design new state mutation approach (DISCUSSION/DESIGN)
-- Goal: Replace gob-based deep copy with a more efficient approach that doesn't require per-component custom code
-- **Human rejects per-component custom shallow copy** (issue #324 comment): adds difficulty for new component development
-- **Human proposes transaction system**: Record what needs to change, apply at end of tick. Use string-based "state locator" to identify values.
-- Approach: Explore transaction-based, COW, dirty-tracking, or structural-sharing alternatives
-- Status: Diana investigating (issue #327)
-- **No implementation until design is approved by human**
+### M35: Global State Manager — Design + Prototype (PENDING human approval)
+- Goal: Design the global state manager per human's vision (#326)
+- Depends on human feedback on design proposal (#329)
+- Only discuss/prototype until human approves implementation
 
-### M35: Performance — Implement approved state mutation approach
-- Goal: Reduce mem acceptance test time from ~12 min to <5 min to match original akita repo
-- Depends on M34 design approval
+### M36: Cache Unification Phase 1 — Merge 3 similar caches (PENDING human approval)
+- Goal: Merge writearound/writeevict/writethrough into single cache with WritePolicy enum
+- Analysis complete (Iris #323): ~5,400 lines eliminated, only 3 files differ semantically
+- **Pending**: Human said "Discuss. No coding" (#321)
 
-### M36: Cache Unification — Single cache component with write-policy middlewares
-- Goal: Replace 4 separate cache packages (~21K lines, ~90% overlap) with 1 unified cache component
-- Approach: Shared Spec/State/common middlewares, write-policy middleware selected by builder
-- Status: Iris analysis complete (issue #323); human issue #321 requests discussion first
-- **Depends on M35** — performance optimizations should land first to avoid compounding changes
-
-### Lessons from M32 deadline miss
-- M32 was actually completed but exhausted its 3-cycle budget
-- The work was done correctly (CI green on main)
-- Budget was too tight given CI runner unavailability
-- **Human direction changed**: Custom shallow copy rejected in favor of transaction system exploration
+### Lessons Learned (Phase 4)
+- M32 completed but exhausted 3-cycle budget — work was correct, budget too tight
+- Human direction pivoted: rejected custom shallow copy, proposed global state manager
+- Analysis revealed two A-B patterns: correct isolation (datamover/MMU/etc.) vs read-own-writes (caches)
+- Must present designs to human before implementing — several "discuss only" directives
+- **Performance optimization can be decoupled from architecture change**: faster copy is an intermediate step
 
 ---
 
