@@ -175,13 +175,7 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 				break
 			}
 
-			fm := curPcs.SendOutBuffer.Elements[numSent]
-			flit := messaging.Flit{
-				MsgMeta:      fm.MsgMeta,
-				SeqID:        fm.SeqID,
-				NumFlitInMsg: fm.NumFlitInMsg,
-				Msg:          fm.Msg,
-			}
+			flit := curPcs.SendOutBuffer.Elements[numSent]
 			flit.Src = port.AsRemote()
 			flit.Dst = curPcs.RemotePort
 
