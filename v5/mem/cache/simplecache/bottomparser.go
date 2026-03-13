@@ -29,55 +29,71 @@ func (p *bottomParser) Tick() bool {
 }
 
 func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
-	trans := p.findTransactionByWriteToBottomID(msg.Meta().RspTo)
-	if trans == nil || trans.fetchAndWrite {
+	next := p.cache.comp.GetNextState()
+	transIdx := p.findTransactionByWriteToBottomID(msg.Meta().RspTo)
+	if transIdx < 0 {
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 
-	for _, t := range trans.preCoalesceTransactions {
-		t.done = true
+	trans := next.postCoalesceTrans(transIdx)
+	if trans.FetchAndWrite {
+		p.cache.bottomPort.RetrieveIncoming()
+		return true
+	}
+
+	for _, preIdx := range trans.PreCoalesceTransIdxs {
+		next.Transactions[preIdx].Done = true
 	}
 
 	if p.cache.writePolicy.NeedsDualCompletion() {
-		trans.bottomWriteDone = true
+		trans.BottomWriteDone = true
 
-		if trans.bankDone {
+		if trans.BankDone {
 			p.removeTransaction(trans)
-			tracing.EndTask(trans.id, p.cache.comp)
+			tracing.EndTask(trans.ID, p.cache.comp)
 		}
 	} else {
 		p.removeTransaction(trans)
-		tracing.EndTask(trans.id, p.cache.comp)
+		tracing.EndTask(trans.ID, p.cache.comp)
 	}
 
 	p.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.writeToBottom, p.cache.comp)
+	// Reconstruct writeToBottom for tracing
+	writeToBottom := &mem.WriteReq{
+		MsgMeta:   trans.WriteToBottomMeta,
+		Data:      trans.WriteToBottomData,
+		DirtyMask: trans.WriteToBottomDirtyMask,
+		PID:       trans.WriteToBottomPID,
+	}
+	tracing.TraceReqFinalize(writeToBottom, p.cache.comp)
 
 	return true
 }
 
 func (p *bottomParser) processDataReady(msg sim.Msg) bool {
-	trans := p.findTransactionByReadToBottomID(msg.Meta().RspTo)
-	if trans == nil {
+	next := p.cache.comp.GetNextState()
+	transIdx := p.findTransactionByReadToBottomID(msg.Meta().RspTo)
+	if transIdx < 0 {
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 
-	bankBuf := p.getBankBuf(trans.blockSetID, trans.blockWayID)
+	trans := next.postCoalesceTrans(transIdx)
+
+	bankBuf := p.getBankBuf(trans.BlockSetID, trans.BlockWayID)
 	if !bankBuf.CanPush() {
 		return false
 	}
 
-	pid := trans.readToBottom.PID
+	pid := trans.ReadToBottomPID
 	addr := trans.Address()
 	spec := p.cache.GetSpec()
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
 	dirtyMask := make([]bool, 1<<spec.Log2BlockSize)
-	next := p.cache.comp.GetNextState()
 
 	entryIdx, found := cache.MSHRQuery(&next.MSHRState, pid, cachelineID)
 	if !found {
@@ -87,60 +103,53 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	entry := &next.MSHRState.Entries[entryIdx]
 	blockTag := next.DirectoryState.Sets[entry.BlockSetID].Blocks[entry.BlockWayID].Tag
 
-	// Resolve transaction pointers before any removals shift indices
-	entryTrans := p.resolveEntryTransactions(entry)
-	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
+	// Resolve entry transactions before any removals
+	entryTransIdxs := append([]int(nil), entry.TransactionIndices...)
+	p.mergeMSHRData(next, entryTransIdxs, blockTag, data, dirtyMask)
 
 	// Set up trans for bank processing and push BEFORE any removals
-	trans.bankAction = bankActionWriteFetched
-	trans.data = data
-	trans.writeFetchedDirtyMask = dirtyMask
+	trans.BankAction = bankActionWriteFetched
+	trans.Data = data
+	trans.WriteFetchedDirtyMask = dirtyMask
 
-	transIdx := p.findPostCoalesceIdx(trans)
 	bankBuf.PushTyped(transIdx)
 
 	// Finalize MSHR transactions (marks pre-coalesce as done, removes
 	// from postCoalesceTransactions). Skip the fetcher trans — it's been
 	// pushed to the bank buffer and will be removed after bank processing.
-	p.finalizeMSHRTransExcept(entryTrans, blockTag, data, trans)
+	p.finalizeMSHRTransExcept(next, entryTransIdxs, blockTag, data, transIdx)
 	cache.MSHRRemove(&next.MSHRState, pid, cachelineID)
 
 	p.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.readToBottom, p.cache.comp)
+	// Reconstruct readToBottom for tracing
+	readToBottom := &mem.ReadReq{
+		MsgMeta: trans.ReadToBottomMeta,
+		PID:     trans.ReadToBottomPID,
+	}
+	tracing.TraceReqFinalize(readToBottom, p.cache.comp)
 
 	return true
 }
 
-// resolveEntryTransactions collects the actual transaction pointers from
-// the MSHR entry's TransactionIndices. This must be done before any
-// removeTransaction calls, since those shift the slice indices.
-func (p *bottomParser) resolveEntryTransactions(
-	entry *cache.MSHREntryState,
-) []*transactionState {
-	result := make([]*transactionState, len(entry.TransactionIndices))
-	for i, transIdx := range entry.TransactionIndices {
-		result[i] = p.cache.postCoalesceTransactions[transIdx]
-	}
-	return result
-}
-
 func (p *bottomParser) mergeMSHRData(
-	entryTrans []*transactionState,
+	next *State,
+	entryTransIdxs []int,
 	blockTag uint64,
 	data []byte,
 	dirtyMask []bool,
 ) {
-	for _, trans := range entryTrans {
-		if trans.write == nil {
+	for _, pcIdx := range entryTransIdxs {
+		trans := next.postCoalesceTrans(pcIdx)
+		if !trans.HasWrite {
 			continue
 		}
 
-		offset := trans.write.Address - blockTag
+		offset := trans.WriteAddress - blockTag
 
-		for i := 0; i < len(trans.write.Data); i++ {
-			if trans.write.DirtyMask[i] {
-				data[offset+uint64(i)] = trans.write.Data[i]
+		for i := 0; i < len(trans.WriteData); i++ {
+			if trans.WriteDirtyMask[i] {
+				data[offset+uint64(i)] = trans.WriteData[i]
 				dirtyMask[offset+uint64(i)] = true
 			}
 		}
@@ -148,75 +157,72 @@ func (p *bottomParser) mergeMSHRData(
 }
 
 func (p *bottomParser) finalizeMSHRTransExcept(
-	entryTrans []*transactionState,
+	next *State,
+	entryTransIdxs []int,
 	blockTag uint64,
 	data []byte,
-	except *transactionState,
+	exceptIdx int,
 ) {
-	for _, trans := range entryTrans {
-		if trans.read != nil {
-			for _, preCTrans := range trans.preCoalesceTransactions {
-				offset := preCTrans.read.Address - blockTag
-				preCTrans.data = data[offset : offset+preCTrans.read.AccessByteSize]
-				preCTrans.done = true
+	for _, pcIdx := range entryTransIdxs {
+		trans := next.postCoalesceTrans(pcIdx)
+
+		if trans.HasRead {
+			for _, preIdx := range trans.PreCoalesceTransIdxs {
+				preCTrans := &next.Transactions[preIdx]
+				offset := preCTrans.ReadAddress - blockTag
+				preCTrans.Data = data[offset : offset+preCTrans.ReadAccessByteSize]
+				preCTrans.Done = true
 			}
 		} else {
-			for _, preCTrans := range trans.preCoalesceTransactions {
-				preCTrans.done = true
+			for _, preIdx := range trans.PreCoalesceTransIdxs {
+				next.Transactions[preIdx].Done = true
 			}
 		}
 
-		if trans != except {
+		if pcIdx != exceptIdx {
 			p.removeTransaction(trans)
 		}
 
-		tracing.EndTask(trans.id, p.cache.comp)
+		tracing.EndTask(trans.ID, p.cache.comp)
 	}
 }
 
 func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
-) *transactionState {
-	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans != nil && trans.writeToBottom != nil && trans.writeToBottom.ID == id {
-			return trans
+) int {
+	next := p.cache.comp.GetNextState()
+	numPost := next.numPostCoalesce()
+
+	for i := 0; i < numPost; i++ {
+		trans := next.postCoalesceTrans(i)
+		if !trans.Removed && trans.HasWriteToBottom &&
+			trans.WriteToBottomMeta.ID == id {
+			return i
 		}
 	}
 
-	return nil
+	return -1
 }
 
 func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
-) *transactionState {
-	for _, trans := range p.cache.postCoalesceTransactions {
-		if trans != nil && trans.readToBottom != nil && trans.readToBottom.ID == id {
-			return trans
-		}
-	}
-
-	return nil
-}
-
-func (p *bottomParser) removeTransaction(trans *transactionState) {
-	for i, t := range p.cache.postCoalesceTransactions {
-		if t == trans {
-			p.cache.postCoalesceTransactions[i] = nil
-
-			return
-		}
-	}
-}
-
-func (p *bottomParser) findPostCoalesceIdx(
-	trans *transactionState,
 ) int {
-	for i, t := range p.cache.postCoalesceTransactions {
-		if t != nil && t == trans {
+	next := p.cache.comp.GetNextState()
+	numPost := next.numPostCoalesce()
+
+	for i := 0; i < numPost; i++ {
+		trans := next.postCoalesceTrans(i)
+		if !trans.Removed && trans.HasReadToBottom &&
+			trans.ReadToBottomMeta.ID == id {
 			return i
 		}
 	}
-	panic("transaction not found in postCoalesceTransactions")
+
+	return -1
+}
+
+func (p *bottomParser) removeTransaction(trans *transactionState) {
+	trans.Removed = true
 }
 
 func (p *bottomParser) getBankBuf(

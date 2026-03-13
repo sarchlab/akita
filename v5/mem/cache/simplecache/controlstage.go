@@ -9,11 +9,10 @@ import (
 )
 
 type controlStage struct {
-	ctrlPort     sim.Port
-	transactions *[]*transactionState
-	pipeline     *pipelineMW
-	coalescer    *coalescer
-	bankStages   []*bankStage
+	ctrlPort   sim.Port
+	pipeline   *pipelineMW
+	coalescer  *coalescer
+	bankStages []*bankStage
 
 	currFlushReq *cache.FlushReq
 }
@@ -79,11 +78,12 @@ func (s *controlStage) hardResetCache() {
 		bankStage.Reset()
 	}
 
-	s.pipeline.transactions = nil
-	s.pipeline.postCoalesceTransactions = nil
+	// Clear all transactions
+	next.Transactions = nil
+	next.NumTransactions = 0
 
 	if s.currFlushReq.PauseAfterFlushing {
-		s.pipeline.isPaused = true
+		next.IsPaused = true
 	}
 }
 
@@ -124,7 +124,8 @@ func (s *controlStage) startCacheFlush(msg *cache.FlushReq) bool {
 }
 
 func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
-	s.pipeline.isPaused = false
+	next := s.pipeline.comp.GetNextState()
+	next.IsPaused = false
 
 	s.ctrlPort.RetrieveIncoming()
 
@@ -152,5 +153,6 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	return !s.currFlushReq.DiscardInflight && len(s.pipeline.transactions) != 0
+	next := s.pipeline.comp.GetNextState()
+	return !s.currFlushReq.DiscardInflight && next.NumTransactions != 0
 }

@@ -15,6 +15,7 @@ func (p *WriteevictPolicy) HandleWriteHit(
 	d *directory,
 	trans *transactionState,
 	setID, wayID int,
+	postCoalesceIdx int,
 ) bool {
 	next := d.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
@@ -27,7 +28,7 @@ func (p *WriteevictPolicy) HandleWriteHit(
 		return false
 	}
 
-	if trans.writeToBottom == nil {
+	if !trans.HasWriteToBottom {
 		ok := d.writeBottom(trans)
 		if !ok {
 			return false
@@ -37,7 +38,7 @@ func (p *WriteevictPolicy) HandleWriteHit(
 	nextBlock := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	nextBlock.IsValid = false
 
-	tracing.AddTaskStep(trans.id, d.cache.comp, "write-hit")
+	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -49,9 +50,10 @@ func (p *WriteevictPolicy) HandleWriteHit(
 func (p *WriteevictPolicy) HandleWriteMiss(
 	d *directory,
 	trans *transactionState,
+	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
+		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
 		next := d.cache.comp.GetNextState()
 		dirPostBuf := &next.DirPostBuf

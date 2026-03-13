@@ -89,8 +89,8 @@ var _ = Describe("Bankstage", func() {
 	It("should insert transactions into pipeline", func() {
 		next := c.comp.GetNextState()
 
-		trans := &transactionState{}
-		c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
+		// Add a post-coalesce transaction
+		next.Transactions = append(next.Transactions, transactionState{})
 		next.BankBufs[0].Elements = append(next.BankBufs[0].Elements, 0)
 
 		madeProgress := s.Tick()
@@ -101,9 +101,8 @@ var _ = Describe("Bankstage", func() {
 
 	Context("read hit", func() {
 		var (
-			preCRead1, preCRead2, postCRead    *mem.ReadReq
-			preCTrans1, preCTrans2, postCTrans *transactionState
-			blockSetID, blockWayID             int
+			preCRead1Meta, preCRead2Meta sim.MsgMeta
+			blockSetID, blockWayID       int
 		)
 
 		BeforeEach(func() {
@@ -129,40 +128,55 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			preCRead1 = &mem.ReadReq{}
-			preCRead1.ID = sim.GetIDGenerator().Generate()
-			preCRead1.Address = 0x104
-			preCRead1.AccessByteSize = 4
-			preCRead1.TrafficBytes = 12
-			preCRead1.TrafficClass = "req"
-
-			preCRead2 = &mem.ReadReq{}
-			preCRead2.ID = sim.GetIDGenerator().Generate()
-			preCRead2.Address = 0x108
-			preCRead2.AccessByteSize = 8
-			preCRead2.TrafficBytes = 12
-			preCRead2.TrafficClass = "req"
-
-			postCRead = &mem.ReadReq{}
-			postCRead.ID = sim.GetIDGenerator().Generate()
-			postCRead.Address = 0x100
-			postCRead.AccessByteSize = 64
-			postCRead.TrafficBytes = 12
-			postCRead.TrafficClass = "req"
-			preCTrans1 = &transactionState{read: preCRead1}
-			preCTrans2 = &transactionState{read: preCRead2}
-			postCTrans = &transactionState{
-				read:       postCRead,
-				blockSetID: blockSetID,
-				blockWayID: blockWayID,
-				hasBlock:   true,
-				bankAction: bankActionReadHit,
-				preCoalesceTransactions: []*transactionState{
-					preCTrans1, preCTrans2,
-				},
+			preCRead1Meta = sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
 			}
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, postCTrans)
+
+			preCRead2Meta = sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			// Pre-coalesce transactions (indices 0, 1)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           preCRead1Meta,
+					ReadAddress:        0x104,
+					ReadAccessByteSize: 4,
+				},
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           preCRead2Meta,
+					ReadAddress:        0x108,
+					ReadAccessByteSize: 8,
+				},
+			)
+			next.NumTransactions = 2
+
+			postCReadMeta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			// Post-coalesce transaction (index 2, post-coalesce idx 0)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:              true,
+					ReadMeta:             postCReadMeta,
+					ReadAddress:          0x100,
+					ReadAccessByteSize:   64,
+					BlockSetID:           blockSetID,
+					BlockWayID:           blockWayID,
+					HasBlock:             true,
+					BankAction:           bankActionReadHit,
+					PreCoalesceTransIdxs: []int{0, 1},
+				},
+			)
 
 			// Put in post-pipeline buffer
 			next.BankPostBufs[0].Elements = append(
@@ -175,19 +189,21 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(preCTrans1.data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(preCTrans1.done).To(BeTrue())
-			Expect(preCTrans2.data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
-			Expect(preCTrans2.done).To(BeTrue())
+			preCTrans1 := &next.Transactions[0]
+			preCTrans2 := &next.Transactions[1]
+			Expect(preCTrans1.Data).To(Equal([]byte{5, 6, 7, 8}))
+			Expect(preCTrans1.Done).To(BeTrue())
+			Expect(preCTrans2.Data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
+			Expect(preCTrans2.Done).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
-			Expect(c.postCoalesceTransactions).NotTo(ContainElement(postCTrans))
+			// Post-coalesce transaction should be marked removed
+			postCTrans := next.postCoalesceTrans(0)
+			Expect(postCTrans.Removed).To(BeTrue())
 		})
 	})
 
 	Context("write", func() {
 		var (
-			write                      *mem.WriteReq
-			trans                      *transactionState
 			blockSetID, blockWayID int
 		)
 
@@ -202,10 +218,13 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			write = &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
-			write.Address = 0x100
-			write.Data = []byte{
+			writeMeta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 64 + 12,
+				TrafficClass: "req",
+			}
+
+			writeData := []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -215,7 +234,7 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			write.DirtyMask = []bool{
+			writeDirtyMask := []bool{
 				false, false, false, false, false, false, false, false,
 				true, true, true, true, true, true, true, true,
 				false, false, false, false, false, false, false, false,
@@ -225,18 +244,22 @@ var _ = Describe("Bankstage", func() {
 				false, false, false, false, false, false, false, false,
 				false, false, false, false, false, false, false, false,
 			}
-			write.TrafficBytes = 64 + 12
-			write.TrafficClass = "req"
-			trans = &transactionState{
-				write:      write,
-				blockSetID: blockSetID,
-				blockWayID: blockWayID,
-				hasBlock:   true,
-				bankAction: bankActionWrite,
-			}
 
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, trans)
+			// Post-coalesce transaction (no pre-coalesce, index 0)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:       true,
+					WriteMeta:      writeMeta,
+					WriteAddress:   0x100,
+					WriteData:      writeData,
+					WriteDirtyMask: writeDirtyMask,
+					BlockSetID:     blockSetID,
+					BlockWayID:     blockWayID,
+					HasBlock:       true,
+					BankAction:     bankActionWrite,
+				},
+			)
+
 			next.BankPostBufs[0].Elements = append(
 				next.BankPostBufs[0].Elements, 0)
 		})
@@ -264,7 +287,6 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write fetched", func() {
 		var (
-			trans                      *transactionState
 			blockSetID, blockWayID int
 		)
 
@@ -279,13 +301,7 @@ var _ = Describe("Bankstage", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			trans = &transactionState{
-				blockSetID: blockSetID,
-				blockWayID: blockWayID,
-				hasBlock:   true,
-				bankAction: bankActionWriteFetched,
-			}
-			trans.data = []byte{
+			transData := []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -295,10 +311,19 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
-			trans.writeFetchedDirtyMask = make([]bool, 64)
 
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, trans)
+			// Post-coalesce transaction (no pre-coalesce, index 0)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					BlockSetID:            blockSetID,
+					BlockWayID:            blockWayID,
+					HasBlock:              true,
+					BankAction:            bankActionWriteFetched,
+					Data:                  transData,
+					WriteFetchedDirtyMask: make([]bool, 64),
+				},
+			)
+
 			next.BankPostBufs[0].Elements = append(
 				next.BankPostBufs[0].Elements, 0)
 		})
@@ -310,8 +335,9 @@ var _ = Describe("Bankstage", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
+			trans := next.postCoalesceTrans(0)
 			data, _ := storage.Read(0x400, 64)
-			Expect(data).To(Equal(trans.data))
+			Expect(data).To(Equal(trans.Data))
 		})
 	})
 })

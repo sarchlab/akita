@@ -12,7 +12,7 @@ import (
 
 type coalescer struct {
 	cache      *pipelineMW
-	toCoalesce []*transactionState
+	toCoalesce []int // absolute indices into State.Transactions
 }
 
 func (c *coalescer) Reset() {
@@ -34,7 +34,8 @@ func (c *coalescer) getDirBuf() *stateutil.Buffer[int] {
 }
 
 func (c *coalescer) processReq(msg sim.Msg) bool {
-	if len(c.cache.transactions) >= c.cache.GetSpec().MaxNumConcurrentTrans {
+	next := c.cache.comp.GetNextState()
+	if next.NumTransactions >= c.cache.GetSpec().MaxNumConcurrentTrans {
 		return false
 	}
 
@@ -54,9 +55,8 @@ func (c *coalescer) processReq(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqCoalescable(msg sim.Msg) bool {
-	trans := c.createTransaction(msg)
-	c.toCoalesce = append(c.toCoalesce, trans)
-	c.cache.transactions = append(c.cache.transactions, trans)
+	transIdx := c.createTransaction(msg)
+	c.toCoalesce = append(c.toCoalesce, transIdx)
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, c.cache.comp)
@@ -72,9 +72,8 @@ func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
 
 	c.coalesceAndSend()
 
-	trans := c.createTransaction(msg)
-	c.toCoalesce = append(c.toCoalesce, trans)
-	c.cache.transactions = append(c.cache.transactions, trans)
+	transIdx := c.createTransaction(msg)
+	c.toCoalesce = append(c.toCoalesce, transIdx)
 	c.cache.topPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, c.cache.comp)
@@ -88,9 +87,8 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
 		return false
 	}
 
-	trans := c.createTransaction(msg)
-	c.toCoalesce = append(c.toCoalesce, trans)
-	c.cache.transactions = append(c.cache.transactions, trans)
+	transIdx := c.createTransaction(msg)
+	c.toCoalesce = append(c.toCoalesce, transIdx)
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
@@ -111,9 +109,8 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
 		return true
 	}
 
-	trans := c.createTransaction(msg)
-	c.toCoalesce = append(c.toCoalesce, trans)
-	c.cache.transactions = append(c.cache.transactions, trans)
+	transIdx := c.createTransaction(msg)
+	c.toCoalesce = append(c.toCoalesce, transIdx)
 	c.coalesceAndSend()
 	c.cache.topPort.RetrieveIncoming()
 
@@ -122,25 +119,37 @@ func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
 	return true
 }
 
-func (c *coalescer) createTransaction(msg sim.Msg) *transactionState {
+// createTransaction creates a new pre-coalesce transaction in State and
+// returns its absolute index in State.Transactions.
+func (c *coalescer) createTransaction(msg sim.Msg) int {
+	next := c.cache.comp.GetNextState()
+
+	var t transactionState
 	switch m := msg.(type) {
 	case *mem.ReadReq:
-		t := &transactionState{
-			read: m,
+		t = transactionState{
+			HasRead:            true,
+			ReadMeta:           m.MsgMeta,
+			ReadAddress:        m.Address,
+			ReadAccessByteSize: m.AccessByteSize,
+			ReadPID:            m.PID,
 		}
-
-		return t
 	case *mem.WriteReq:
-		t := &transactionState{
-			write: m,
+		t = transactionState{
+			HasWrite:       true,
+			WriteMeta:      m.MsgMeta,
+			WriteAddress:   m.Address,
+			WriteData:      m.Data,
+			WriteDirtyMask: m.DirtyMask,
+			WritePID:       m.PID,
 		}
-
-		return t
 	default:
 		log.Panicf("cannot process request of type %s\n",
 			reflect.TypeOf(msg))
-		return nil
+		return -1
 	}
+
+	return next.addPreCoalesceTrans(t)
 }
 
 func (c *coalescer) isReqLastInWave(msg sim.Msg) bool {
@@ -155,89 +164,128 @@ func (c *coalescer) isReqLastInWave(msg sim.Msg) bool {
 }
 
 func (c *coalescer) canReqCoalesce(msg sim.Msg) bool {
+	next := c.cache.comp.GetNextState()
 	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
 	accessReq := msg.(mem.AccessReq)
-	return accessReq.GetAddress()/blockSize == c.toCoalesce[0].Address()/blockSize
+	firstTrans := &next.Transactions[c.toCoalesce[0]]
+	return accessReq.GetAddress()/blockSize == firstTrans.Address()/blockSize
 }
 
 func (c *coalescer) coalesceAndSend() bool {
-	var trans *transactionState
-	if c.toCoalesce[0].read != nil {
-		trans = c.coalesceRead()
-		tracing.StartTaskWithSpecificLocation(trans.id,
-			tracing.MsgIDAtReceiver(c.toCoalesce[0].read, c.cache.comp),
+	next := c.cache.comp.GetNextState()
+	firstTrans := &next.Transactions[c.toCoalesce[0]]
+
+	var postCoalesceTrans transactionState
+	if firstTrans.HasRead {
+		postCoalesceTrans = c.coalesceRead()
+		tracing.StartTaskWithSpecificLocation(postCoalesceTrans.ID,
+			tracing.MsgIDAtReceiver(
+				c.readReqFromTrans(firstTrans), c.cache.comp),
 			c.cache.comp, "cache_transaction", "read",
 			c.cache.comp.Name()+".Local",
 			nil)
 	} else {
-		trans = c.coalesceWrite()
-		tracing.StartTaskWithSpecificLocation(trans.id,
-			tracing.MsgIDAtReceiver(c.toCoalesce[0].write, c.cache.comp),
+		postCoalesceTrans = c.coalesceWrite()
+		tracing.StartTaskWithSpecificLocation(postCoalesceTrans.ID,
+			tracing.MsgIDAtReceiver(
+				c.writeReqFromTrans(firstTrans), c.cache.comp),
 			c.cache.comp, "cache_transaction", "write",
 			c.cache.comp.Name()+".Local",
 			nil)
 	}
 
-	// Add to postCoalesceTransactions BEFORE pushing to buffer
-	c.cache.postCoalesceTransactions =
-		append(c.cache.postCoalesceTransactions, trans)
+	// Append to post-coalesce section (end of Transactions)
+	postIdx := next.addPostCoalesceTrans(postCoalesceTrans)
 
-	// Push the index into the DirBuf
-	idx := len(c.cache.postCoalesceTransactions) - 1
+	// Push the post-coalesce index into the DirBuf
 	dirBuf := c.getDirBuf()
-	dirBuf.PushTyped(idx)
+	dirBuf.PushTyped(postIdx)
 
 	c.toCoalesce = nil
 
 	return true
 }
 
-func (c *coalescer) coalesceRead() *transactionState {
-	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
-	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
-	coalescedRead := &mem.ReadReq{}
-	coalescedRead.ID = sim.GetIDGenerator().Generate()
-	coalescedRead.Address = cachelineID
-	coalescedRead.AccessByteSize = blockSize
-	coalescedRead.PID = c.toCoalesce[0].PID()
-	coalescedRead.TrafficBytes = 12
-	coalescedRead.TrafficClass = "req"
-
-	return &transactionState{
-		id:                      sim.GetIDGenerator().Generate(),
-		read:                    coalescedRead,
-		preCoalesceTransactions: c.toCoalesce,
+// readReqFromTrans reconstructs a *mem.ReadReq at a send/trace boundary.
+func (c *coalescer) readReqFromTrans(t *transactionState) *mem.ReadReq {
+	return &mem.ReadReq{
+		MsgMeta:        t.ReadMeta,
+		Address:        t.ReadAddress,
+		AccessByteSize: t.ReadAccessByteSize,
+		PID:            t.ReadPID,
 	}
 }
 
-func (c *coalescer) coalesceWrite() *transactionState {
+// writeReqFromTrans reconstructs a *mem.WriteReq at a send/trace boundary.
+func (c *coalescer) writeReqFromTrans(t *transactionState) *mem.WriteReq {
+	return &mem.WriteReq{
+		MsgMeta:   t.WriteMeta,
+		Address:   t.WriteAddress,
+		Data:      t.WriteData,
+		DirtyMask: t.WriteDirtyMask,
+		PID:       t.WritePID,
+	}
+}
+
+func (c *coalescer) coalesceRead() transactionState {
+	next := c.cache.comp.GetNextState()
 	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
-	cachelineID := c.toCoalesce[0].Address() / blockSize * blockSize
+	firstTrans := &next.Transactions[c.toCoalesce[0]]
+	cachelineID := firstTrans.Address() / blockSize * blockSize
+
+	readID := sim.GetIDGenerator().Generate()
+	readMeta := sim.MsgMeta{
+		ID:           readID,
+		TrafficBytes: 12,
+		TrafficClass: "req",
+	}
+
+	return transactionState{
+		ID:                   sim.GetIDGenerator().Generate(),
+		HasRead:              true,
+		ReadMeta:             readMeta,
+		ReadAddress:          cachelineID,
+		ReadAccessByteSize:   blockSize,
+		ReadPID:              firstTrans.PID(),
+		PreCoalesceTransIdxs: append([]int(nil), c.toCoalesce...),
+	}
+}
+
+func (c *coalescer) coalesceWrite() transactionState {
+	next := c.cache.comp.GetNextState()
+	blockSize := uint64(1 << c.cache.GetSpec().Log2BlockSize)
+	firstTrans := &next.Transactions[c.toCoalesce[0]]
+	cachelineID := firstTrans.Address() / blockSize * blockSize
 	writeData := make([]byte, blockSize)
 	writeDirtyMask := make([]bool, blockSize)
-	coalescedWrite := &mem.WriteReq{}
-	coalescedWrite.ID = sim.GetIDGenerator().Generate()
-	coalescedWrite.Address = cachelineID
-	coalescedWrite.PID = c.toCoalesce[0].PID()
-	coalescedWrite.Data = writeData
-	coalescedWrite.DirtyMask = writeDirtyMask
-	coalescedWrite.TrafficBytes = len(writeData) + 12
-	coalescedWrite.TrafficClass = "req"
 
-	for _, t := range c.toCoalesce {
-		offset := int(t.write.Address - cachelineID)
+	writeID := sim.GetIDGenerator().Generate()
+	writeMeta := sim.MsgMeta{
+		ID:           writeID,
+		TrafficBytes: len(writeData) + 12,
+		TrafficClass: "req",
+	}
 
-		for i := 0; i < len(t.write.Data); i++ {
-			if t.write.DirtyMask == nil || t.write.DirtyMask[i] {
-				coalescedWrite.Data[i+offset] = t.write.Data[i]
-				coalescedWrite.DirtyMask[i+offset] = true
+	for _, tIdx := range c.toCoalesce {
+		t := &next.Transactions[tIdx]
+		offset := int(t.WriteAddress - cachelineID)
+
+		for i := 0; i < len(t.WriteData); i++ {
+			if t.WriteDirtyMask == nil || t.WriteDirtyMask[i] {
+				writeData[i+offset] = t.WriteData[i]
+				writeDirtyMask[i+offset] = true
 			}
 		}
 	}
 
-	return &transactionState{
-		id:                      sim.GetIDGenerator().Generate(),
-		write:                   coalescedWrite,
-		preCoalesceTransactions: c.toCoalesce,
+	return transactionState{
+		ID:                   sim.GetIDGenerator().Generate(),
+		HasWrite:             true,
+		WriteMeta:            writeMeta,
+		WriteAddress:         cachelineID,
+		WriteData:            writeData,
+		WriteDirtyMask:       writeDirtyMask,
+		WritePID:             firstTrans.PID(),
+		PreCoalesceTransIdxs: append([]int(nil), c.toCoalesce...),
 	}
 }

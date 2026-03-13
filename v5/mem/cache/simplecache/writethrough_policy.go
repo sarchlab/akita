@@ -2,7 +2,6 @@ package simplecache
 
 import (
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -19,6 +18,7 @@ func (p *WritethroughPolicy) HandleWriteHit(
 	d *directory,
 	trans *transactionState,
 	setID, wayID int,
+	postCoalesceIdx int,
 ) bool {
 	next := d.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
@@ -31,14 +31,14 @@ func (p *WritethroughPolicy) HandleWriteHit(
 		return false
 	}
 
-	if trans.writeToBottom == nil {
+	if !trans.HasWriteToBottom {
 		ok := d.writeBottom(trans)
 		if !ok {
 			return false
 		}
 	}
 
-	addr := trans.write.Address
+	addr := trans.WriteAddress
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
@@ -49,13 +49,12 @@ func (p *WritethroughPolicy) HandleWriteHit(
 	nextBlock.Tag = cacheLineID
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
-	trans.bankAction = bankActionWrite
-	trans.blockSetID = setID
-	trans.blockWayID = wayID
-	trans.hasBlock = true
+	trans.BankAction = bankActionWrite
+	trans.BlockSetID = setID
+	trans.BlockWayID = wayID
+	trans.HasBlock = true
 
-	transIdx := d.findPostCoalesceTransIdx(trans)
-	bankBuf.PushTyped(transIdx)
+	bankBuf.PushTyped(postCoalesceIdx)
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -69,14 +68,15 @@ func (p *WritethroughPolicy) HandleWriteHit(
 func (p *WritethroughPolicy) HandleWriteMiss(
 	d *directory,
 	trans *transactionState,
+	postCoalesceIdx int,
 ) bool {
-	if p.isPartialWrite(d, trans.write) {
-		return p.partialWriteMiss(d, trans)
+	if p.isPartialWrite(d, trans) {
+		return p.partialWriteMiss(d, trans, postCoalesceIdx)
 	}
 
-	ok := p.fullLineWriteMiss(d, trans)
+	ok := p.fullLineWriteMiss(d, trans, postCoalesceIdx)
 	if ok {
-		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
+		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 	}
 
 	return ok
@@ -90,15 +90,15 @@ func (p *WritethroughPolicy) NeedsDualCompletion() bool {
 
 func (p *WritethroughPolicy) isPartialWrite(
 	d *directory,
-	writeMsg *mem.WriteReq,
+	trans *transactionState,
 ) bool {
 	spec := d.cache.GetSpec()
-	if len(writeMsg.Data) < (1 << spec.Log2BlockSize) {
+	if len(trans.WriteData) < (1 << spec.Log2BlockSize) {
 		return true
 	}
 
-	if writeMsg.DirtyMask != nil {
-		for _, byteDirty := range writeMsg.DirtyMask {
+	if trans.WriteDirtyMask != nil {
+		for _, byteDirty := range trans.WriteDirtyMask {
 			if !byteDirty {
 				return true
 			}
@@ -111,12 +111,13 @@ func (p *WritethroughPolicy) isPartialWrite(
 func (p *WritethroughPolicy) partialWriteMiss(
 	d *directory,
 	trans *transactionState,
+	postCoalesceIdx int,
 ) bool {
-	addr := trans.write.Address
+	addr := trans.WriteAddress
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	trans.fetchAndWrite = true
+	trans.FetchAndWrite = true
 
 	next := d.cache.comp.GetNextState()
 
@@ -133,7 +134,7 @@ func (p *WritethroughPolicy) partialWriteMiss(
 
 	sentThisCycle := false
 
-	if trans.writeToBottom == nil {
+	if !trans.HasWriteToBottom {
 		ok := d.writeBottom(trans)
 		if !ok {
 			return false
@@ -142,14 +143,14 @@ func (p *WritethroughPolicy) partialWriteMiss(
 		sentThisCycle = true
 	}
 
-	ok := d.fetchFromBottom(trans, victimSetID, victimWayID)
+	ok := d.fetchFromBottom(trans, victimSetID, victimWayID, postCoalesceIdx)
 	if !ok {
 		return sentThisCycle
 	}
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
-	tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
+	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
 	return true
 }
@@ -157,8 +158,9 @@ func (p *WritethroughPolicy) partialWriteMiss(
 func (p *WritethroughPolicy) fullLineWriteMiss(
 	d *directory,
 	trans *transactionState,
+	postCoalesceIdx int,
 ) bool {
-	addr := trans.write.Address
+	addr := trans.WriteAddress
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
@@ -169,5 +171,5 @@ func (p *WritethroughPolicy) fullLineWriteMiss(
 
 	_ = next // suppress unused warning
 
-	return p.HandleWriteHit(d, trans, victimSetID, victimWayID)
+	return p.HandleWriteHit(d, trans, victimSetID, victimWayID, postCoalesceIdx)
 }

@@ -1,10 +1,82 @@
 package simplecache
 
 import (
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 )
+
+// Spec contains immutable configuration for the simplecache.
+type Spec struct {
+	NumReqPerCycle        int    `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64 `json:"log2_block_size"`
+	BankLatency           int    `json:"bank_latency"`
+	WayAssociativity      int    `json:"way_associativity"`
+	MaxNumConcurrentTrans int    `json:"max_num_concurrent_trans"`
+	NumBanks              int    `json:"num_banks"`
+	NumMSHREntry          int    `json:"num_mshr_entry"`
+	NumSets               int    `json:"num_sets"`
+	TotalByteSize         uint64 `json:"total_byte_size"`
+	DirLatency            int    `json:"dir_latency"`
+
+	// Address mapper configuration (inlined from interface)
+	AddressMapperType string   `json:"address_mapper_type"`
+	RemotePortNames   []string `json:"remote_port_names"`
+	InterleavingSize  uint64   `json:"interleaving_size"`
+}
+
+// State contains mutable runtime data for the simplecache.
+type State struct {
+	DirectoryState cache.DirectoryState `json:"directory_state"`
+	MSHRState      cache.MSHRState      `json:"mshr_state"`
+
+	// Transactions stores all transaction states directly as values.
+	// The first NumTransactions entries are pre-coalesce transactions;
+	// the remaining entries are post-coalesce transactions.
+	Transactions    []transactionState `json:"transactions"`
+	NumTransactions int                `json:"num_transactions"`
+
+	DirBuf        stateutil.Buffer[int]     `json:"dir_buf"`
+	BankBufs      []stateutil.Buffer[int]   `json:"bank_bufs"`
+	DirPipeline   stateutil.Pipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf    stateutil.Buffer[int]     `json:"dir_post_buf"`
+	BankPipelines []stateutil.Pipeline[int] `json:"bank_pipelines"`
+	BankPostBufs  []stateutil.Buffer[int]   `json:"bank_post_bufs"`
+
+	IsPaused bool `json:"is_paused"`
+}
+
+// postCoalesceTrans returns a pointer to the post-coalesce transaction
+// at the given post-coalesce index (0-based relative to post-coalesce section).
+func (s *State) postCoalesceTrans(idx int) *transactionState {
+	return &s.Transactions[s.NumTransactions+idx]
+}
+
+// numPostCoalesce returns the number of post-coalesce transactions.
+func (s *State) numPostCoalesce() int {
+	return len(s.Transactions) - s.NumTransactions
+}
+
+// addPreCoalesceTrans appends a pre-coalesce transaction and returns its
+// absolute index in State.Transactions.
+func (s *State) addPreCoalesceTrans(t transactionState) int {
+	postStart := s.NumTransactions
+	// Insert before post-coalesce section
+	s.Transactions = append(s.Transactions, transactionState{})
+	copy(s.Transactions[postStart+1:], s.Transactions[postStart:len(s.Transactions)-1])
+	s.Transactions[postStart] = t
+	s.NumTransactions++
+	return postStart
+}
+
+// addPostCoalesceTrans appends a post-coalesce transaction and returns its
+// post-coalesce index (0-based).
+func (s *State) addPostCoalesceTrans(t transactionState) int {
+	s.Transactions = append(s.Transactions, t)
+	return len(s.Transactions) - s.NumTransactions - 1
+}
 
 // pipelineMW holds all non-serializable infrastructure for the cache data
 // pipeline. It implements the Tick method and delegates NamedHookable to comp.
@@ -27,11 +99,6 @@ type pipelineMW struct {
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
 	respondStage     *respondStage
-
-	transactions             []*transactionState
-	postCoalesceTransactions []*transactionState
-
-	isPaused bool
 }
 
 // GetSpec returns the immutable specification.
@@ -72,9 +139,10 @@ func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 
 // Tick updates the state of the cache pipeline.
 func (m *pipelineMW) Tick() bool {
+	next := m.comp.GetNextState()
 	madeProgress := false
 
-	if !m.isPaused {
+	if !next.IsPaused {
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
@@ -134,95 +202,6 @@ func (m *pipelineMW) tickCoalesceState() bool {
 	}
 
 	return madeProgress
-}
-
-// GetState converts runtime mutable data into a serializable State.
-func (m *pipelineMW) GetState() State {
-	next := m.comp.GetNextState()
-
-	// Compact nil entries from postCoalesceTransactions before snapshot.
-	m.compactPostCoalesceTransactions(next)
-
-	// Snapshot transactions into the state
-	lookup := buildTransIndex(m.transactions, m.postCoalesceTransactions)
-	next.Transactions = snapshotAllTransactions(
-		m.transactions, m.postCoalesceTransactions, lookup)
-	next.NumTransactions = len(m.transactions)
-	next.IsPaused = m.isPaused
-
-	return *next
-}
-
-// compactPostCoalesceTransactions removes nil entries from
-// postCoalesceTransactions and remaps all indices in State buffers/pipelines.
-func (m *pipelineMW) compactPostCoalesceTransactions(next *State) {
-	old := m.postCoalesceTransactions
-	remap := make(map[int]int)
-	compacted := make([]*transactionState, 0, len(old))
-
-	for i, t := range old {
-		if t != nil {
-			remap[i] = len(compacted)
-			compacted = append(compacted, t)
-		}
-	}
-
-	if len(compacted) == len(old) {
-		return // nothing to compact
-	}
-
-	m.postCoalesceTransactions = compacted
-
-	// Remap all index arrays in State
-	remapIndices := func(indices []int) []int {
-		result := make([]int, 0, len(indices))
-		for _, idx := range indices {
-			if newIdx, ok := remap[idx]; ok {
-				result = append(result, newIdx)
-			}
-		}
-		return result
-	}
-
-	next.DirBuf.Elements = remapIndices(next.DirBuf.Elements)
-	for i := range next.BankBufs {
-		next.BankBufs[i].Elements = remapIndices(next.BankBufs[i].Elements)
-	}
-	next.DirPostBuf.Elements = remapIndices(next.DirPostBuf.Elements)
-	for i := range next.BankPostBufs {
-		next.BankPostBufs[i].Elements = remapIndices(next.BankPostBufs[i].Elements)
-	}
-	for i := range next.DirPipeline.Stages {
-		if newIdx, ok := remap[next.DirPipeline.Stages[i].Item]; ok {
-			next.DirPipeline.Stages[i].Item = newIdx
-		}
-	}
-	for i := range next.BankPipelines {
-		for j := range next.BankPipelines[i].Stages {
-			if newIdx, ok := remap[next.BankPipelines[i].Stages[j].Item]; ok {
-				next.BankPipelines[i].Stages[j].Item = newIdx
-			}
-		}
-	}
-	// Also remap MSHR TransactionIndices
-	for i := range next.MSHRState.Entries {
-		entry := &next.MSHRState.Entries[i]
-		if len(entry.TransactionIndices) > 0 {
-			entry.TransactionIndices = remapIndices(entry.TransactionIndices)
-		}
-	}
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (m *pipelineMW) SetState(state State) {
-	m.comp.SetState(state)
-
-	// Restore transactions from state
-	trans, postCoalesce := restoreAllTransactions(
-		state.Transactions, state.NumTransactions)
-	m.transactions = trans
-	m.postCoalesceTransactions = postCoalesce
-	m.isPaused = state.IsPaused
 }
 
 // controlMW runs the control stage (flush/invalidate/restart).

@@ -122,10 +122,11 @@ var _ = Describe("Coalescer", func() {
 
 				madeProgress := co.Tick()
 
+				next := mw.comp.GetNextState()
 				Expect(madeProgress).To(BeTrue())
-				Expect(mw.transactions).To(HaveLen(3))
+				Expect(next.NumTransactions).To(Equal(3))
 				Expect(co.toCoalesce).To(HaveLen(1))
-				Expect(mw.postCoalesceTransactions).To(HaveLen(1))
+				Expect(next.numPostCoalesce()).To(Equal(1))
 			})
 
 			It("should stall if cannot send to dir", func() {
@@ -146,7 +147,7 @@ var _ = Describe("Coalescer", func() {
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(mw.transactions).To(HaveLen(2))
+				Expect(next.NumTransactions).To(Equal(2))
 				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 		})
@@ -166,16 +167,17 @@ var _ = Describe("Coalescer", func() {
 
 				madeProgress := co.Tick()
 
+				next := mw.comp.GetNextState()
 				Expect(madeProgress).To(BeTrue())
-				Expect(mw.transactions).To(HaveLen(3))
+				Expect(next.NumTransactions).To(Equal(3))
 				Expect(co.toCoalesce).To(HaveLen(0))
-				Expect(mw.postCoalesceTransactions).To(HaveLen(1))
+				Expect(next.numPostCoalesce()).To(Equal(1))
 				// Check the coalesced transaction
-				pt := mw.postCoalesceTransactions[0]
-				Expect(pt.preCoalesceTransactions).To(HaveLen(3))
-				Expect(pt.read.Address).To(Equal(uint64(0x100)))
-				Expect(pt.read.PID).To(Equal(vm.PID(1)))
-				Expect(pt.read.AccessByteSize).To(Equal(uint64(64)))
+				pt := next.postCoalesceTrans(0)
+				Expect(pt.PreCoalesceTransIdxs).To(HaveLen(3))
+				Expect(pt.ReadAddress).To(Equal(uint64(0x100)))
+				Expect(pt.ReadPID).To(Equal(vm.PID(1)))
+				Expect(pt.ReadAccessByteSize).To(Equal(uint64(64)))
 			})
 
 			It("should stall if cannot send", func() {
@@ -195,7 +197,7 @@ var _ = Describe("Coalescer", func() {
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(mw.transactions).To(HaveLen(2))
+				Expect(next.NumTransactions).To(Equal(2))
 				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 		})
@@ -215,10 +217,11 @@ var _ = Describe("Coalescer", func() {
 
 				madeProgress := co.Tick()
 
+				next := mw.comp.GetNextState()
 				Expect(madeProgress).To(BeTrue())
-				Expect(mw.transactions).To(HaveLen(3))
+				Expect(next.NumTransactions).To(Equal(3))
 				Expect(co.toCoalesce).To(HaveLen(0))
-				Expect(mw.postCoalesceTransactions).To(HaveLen(2))
+				Expect(next.numPostCoalesce()).To(Equal(2))
 			})
 
 			It("should stall is cannot send to dir stage", func() {
@@ -237,7 +240,7 @@ var _ = Describe("Coalescer", func() {
 				madeProgress := co.Tick()
 
 				Expect(madeProgress).To(BeFalse())
-				Expect(mw.transactions).To(HaveLen(2))
+				Expect(next.NumTransactions).To(Equal(2))
 				Expect(co.toCoalesce).To(HaveLen(2))
 			})
 
@@ -260,9 +263,9 @@ var _ = Describe("Coalescer", func() {
 					madeProgress := co.Tick()
 
 					Expect(madeProgress).To(BeTrue())
-					Expect(mw.transactions).To(HaveLen(2))
+					Expect(next.NumTransactions).To(Equal(2))
 					Expect(co.toCoalesce).To(HaveLen(0))
-					Expect(mw.postCoalesceTransactions).To(HaveLen(1))
+					Expect(next.numPostCoalesce()).To(Equal(1))
 				})
 		})
 	})
@@ -306,11 +309,12 @@ var _ = Describe("Coalescer", func() {
 			madeProgress = co.Tick()
 			Expect(madeProgress).To(BeTrue())
 
-			Expect(mw.postCoalesceTransactions).To(HaveLen(1))
-			pt := mw.postCoalesceTransactions[0]
-			Expect(pt.write.Address).To(Equal(uint64(0x100)))
-			Expect(pt.write.PID).To(Equal(vm.PID(1)))
-			Expect(pt.write.Data).To(Equal([]byte{
+			next := mw.comp.GetNextState()
+			Expect(next.numPostCoalesce()).To(Equal(1))
+			pt := next.postCoalesceTrans(0)
+			Expect(pt.WriteAddress).To(Equal(uint64(0x100)))
+			Expect(pt.WritePID).To(Equal(vm.PID(1)))
+			Expect(pt.WriteData).To(Equal([]byte{
 				0, 0, 0, 0,
 				1, 2, 3, 4,
 				1, 2, 3, 4,
@@ -322,7 +326,7 @@ var _ = Describe("Coalescer", func() {
 				0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0,
 			}))
-			Expect(pt.write.DirtyMask).To(Equal([]bool{
+			Expect(pt.WriteDirtyMask).To(Equal([]bool{
 				false, false, false, false, true, true, true, true,
 				true, true, true, true, true, true, true, true,
 				false, false, false, false, false, false, false, false,

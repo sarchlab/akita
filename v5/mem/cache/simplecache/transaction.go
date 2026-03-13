@@ -1,8 +1,8 @@
 package simplecache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 type bankActionType int
@@ -15,45 +15,69 @@ const (
 )
 
 // transactionState is the canonical transaction type for the simplecache.
-// All stages work with *transactionState directly. The snapshot/restore layer
-// in state.go converts between transactionState (runtime) and
-// transactionSnapshot (serializable) for persistence.
+// All fields are directly JSON-serializable (no pointers to message types).
 type transactionState struct {
-	id string
+	ID string `json:"id"`
 
-	read         *mem.ReadReq
-	readToBottom *mem.ReadReq
+	// Read request fields (flattened from *mem.ReadReq)
+	HasRead            bool        `json:"has_read"`
+	ReadMeta           sim.MsgMeta `json:"read_meta"`
+	ReadAddress        uint64      `json:"read_address"`
+	ReadAccessByteSize uint64      `json:"read_access_byte_size"`
+	ReadPID            vm.PID      `json:"read_pid"`
 
-	write         *mem.WriteReq
-	writeToBottom *mem.WriteReq
+	// ReadToBottom fields (flattened from *mem.ReadReq)
+	HasReadToBottom  bool        `json:"has_read_to_bottom"`
+	ReadToBottomMeta sim.MsgMeta `json:"read_to_bottom_meta"`
+	ReadToBottomPID  vm.PID      `json:"read_to_bottom_pid"`
 
-	preCoalesceTransactions []*transactionState
+	// Write request fields (flattened from *mem.WriteReq)
+	HasWrite       bool        `json:"has_write"`
+	WriteMeta      sim.MsgMeta `json:"write_meta"`
+	WriteAddress   uint64      `json:"write_address"`
+	WriteData      []byte      `json:"write_data"`
+	WriteDirtyMask []bool      `json:"write_dirty_mask"`
+	WritePID       vm.PID      `json:"write_pid"`
 
-	bankAction            bankActionType
-	blockSetID            int
-	blockWayID            int
-	hasBlock              bool
-	data                  []byte
-	writeFetchedDirtyMask []bool
+	// WriteToBottom fields (flattened from *mem.WriteReq)
+	HasWriteToBottom       bool        `json:"has_write_to_bottom"`
+	WriteToBottomMeta      sim.MsgMeta `json:"write_to_bottom_meta"`
+	WriteToBottomPID       vm.PID      `json:"write_to_bottom_pid"`
+	WriteToBottomData      []byte      `json:"write_to_bottom_data"`
+	WriteToBottomDirtyMask []bool      `json:"write_to_bottom_dirty_mask"`
 
-	fetchAndWrite   bool
-	done            bool
-	bottomWriteDone bool
-	bankDone        bool
+	// Pre-coalesce transaction indices (absolute indices into State.Transactions)
+	PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
+
+	BankAction            bankActionType `json:"bank_action"`
+	BlockSetID            int            `json:"block_set_id"`
+	BlockWayID            int            `json:"block_way_id"`
+	HasBlock              bool           `json:"has_block"`
+	Data                  []byte         `json:"data"`
+	WriteFetchedDirtyMask []bool         `json:"write_fetched_dirty_mask"`
+
+	FetchAndWrite   bool `json:"fetch_and_write"`
+	Done            bool `json:"done"`
+	BottomWriteDone bool `json:"bottom_write_done"`
+	BankDone        bool `json:"bank_done"`
+
+	// Removed marks a post-coalesce transaction that has been completed
+	// and removed from active processing.
+	Removed bool `json:"removed"`
 }
 
 func (t *transactionState) Address() uint64 {
-	if t.read != nil {
-		return t.read.Address
+	if t.HasRead {
+		return t.ReadAddress
 	}
 
-	return t.write.Address
+	return t.WriteAddress
 }
 
 func (t *transactionState) PID() vm.PID {
-	if t.read != nil {
-		return t.read.PID
+	if t.HasRead {
+		return t.ReadPID
 	}
 
-	return t.write.PID
+	return t.WritePID
 }

@@ -16,6 +16,7 @@ func (p *WritearoundPolicy) HandleWriteHit(
 	d *directory,
 	trans *transactionState,
 	setID, wayID int,
+	postCoalesceIdx int,
 ) bool {
 	next := d.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
@@ -28,14 +29,14 @@ func (p *WritearoundPolicy) HandleWriteHit(
 		return false
 	}
 
-	if trans.writeToBottom == nil {
+	if !trans.HasWriteToBottom {
 		ok := d.writeBottom(trans)
 		if !ok {
 			return false
 		}
 	}
 
-	addr := trans.write.Address
+	addr := trans.WriteAddress
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
@@ -46,15 +47,14 @@ func (p *WritearoundPolicy) HandleWriteHit(
 	nextBlock.Tag = cacheLineID
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
-	trans.bankAction = bankActionWrite
-	trans.blockSetID = setID
-	trans.blockWayID = wayID
-	trans.hasBlock = true
+	trans.BankAction = bankActionWrite
+	trans.BlockSetID = setID
+	trans.BlockWayID = wayID
+	trans.HasBlock = true
 
-	transIdx := d.findPostCoalesceTransIdx(trans)
-	bankBuf.PushTyped(transIdx)
+	bankBuf.PushTyped(postCoalesceIdx)
 
-	tracing.AddTaskStep(trans.id, d.cache.comp, "write-hit")
+	tracing.AddTaskStep(trans.ID, d.cache.comp, "write-hit")
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Pop()
@@ -66,9 +66,10 @@ func (p *WritearoundPolicy) HandleWriteHit(
 func (p *WritearoundPolicy) HandleWriteMiss(
 	d *directory,
 	trans *transactionState,
+	postCoalesceIdx int,
 ) bool {
 	if ok := d.writeBottom(trans); ok {
-		tracing.AddTaskStep(trans.id, d.cache.comp, "write-miss")
+		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
 		next := d.cache.comp.GetNextState()
 		dirPostBuf := &next.DirPostBuf

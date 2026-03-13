@@ -329,11 +329,10 @@ func (b *Builder) buildControlMW(
 	comp.AddPort("Control", controlPort)
 
 	cs := &controlStage{
-		ctrlPort:     controlPort,
-		transactions: &pmw.transactions,
-		pipeline:     pmw,
-		bankStages:   pmw.bankStages,
-		coalescer:    pmw.coalesceStage,
+		ctrlPort:   controlPort,
+		pipeline:   pmw,
+		bankStages: pmw.bankStages,
+		coalescer:  pmw.coalesceStage,
 	}
 
 	cmw := &controlMW{

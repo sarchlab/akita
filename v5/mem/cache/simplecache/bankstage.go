@@ -71,13 +71,13 @@ func (s *bankStage) finalizeTrans() bool {
 	}
 
 	transIdx := item.(int)
-	trans := s.cache.postCoalesceTransactions[transIdx]
+	trans := next.postCoalesceTrans(transIdx)
 
-	switch trans.bankAction {
+	switch trans.BankAction {
 	case bankActionReadHit:
-		return s.finalizeReadHitTrans(trans)
+		return s.finalizeReadHitTrans(trans, transIdx)
 	case bankActionWrite:
-		return s.finalizeWriteTrans(trans)
+		return s.finalizeWriteTrans(trans, transIdx)
 	case bankActionWriteFetched:
 		return s.finalizeWriteFetchedTrans(trans)
 	default:
@@ -85,36 +85,41 @@ func (s *bankStage) finalizeTrans() bool {
 	}
 }
 
-func (s *bankStage) finalizeReadHitTrans(trans *transactionState) bool {
+func (s *bankStage) finalizeReadHitTrans(
+	trans *transactionState, postCoalesceIdx int,
+) bool {
 	next := s.cache.comp.GetNextState()
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
 	data, err := s.cache.storage.Read(
-		nextBlock.CacheAddress, trans.read.AccessByteSize)
+		nextBlock.CacheAddress, trans.ReadAccessByteSize)
 	if err != nil {
 		panic(err)
 	}
 
 	nextBlock.ReadCount--
 
-	for _, t := range trans.preCoalesceTransactions {
-		offset := t.read.Address - nextBlock.Tag
-		t.data = data[offset : offset+t.read.AccessByteSize]
-		t.done = true
+	for _, preIdx := range trans.PreCoalesceTransIdxs {
+		t := &next.Transactions[preIdx]
+		offset := t.ReadAddress - nextBlock.Tag
+		t.Data = data[offset : offset+t.ReadAccessByteSize]
+		t.Done = true
 	}
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 	s.removeTransaction(trans)
 
-	tracing.EndTask(trans.id, s.cache.comp)
+	tracing.EndTask(trans.ID, s.cache.comp)
 
 	return true
 }
 
-func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
+func (s *bankStage) finalizeWriteTrans(
+	trans *transactionState, postCoalesceIdx int,
+) bool {
 	next := s.cache.comp.GetNextState()
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
 
 	data, err := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
@@ -122,11 +127,11 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 		panic(err)
 	}
 
-	offset := trans.write.Address - nextBlock.Tag
+	offset := trans.WriteAddress - nextBlock.Tag
 
-	for i := 0; i < len(trans.write.Data); i++ {
-		if trans.write.DirtyMask[i] {
-			data[offset+uint64(i)] = trans.write.Data[i]
+	for i := 0; i < len(trans.WriteData); i++ {
+		if trans.WriteDirtyMask[i] {
+			data[offset+uint64(i)] = trans.WriteData[i]
 		}
 	}
 
@@ -135,21 +140,21 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 		panic(err)
 	}
 
-	nextBlock.DirtyMask = trans.write.DirtyMask
+	nextBlock.DirtyMask = trans.WriteDirtyMask
 	nextBlock.IsLocked = false
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Pop()
 
 	if s.cache.writePolicy.NeedsDualCompletion() {
-		trans.bankDone = true
+		trans.BankDone = true
 
-		if trans.bottomWriteDone {
+		if trans.BottomWriteDone {
 			s.removeTransaction(trans)
-			tracing.EndTask(trans.id, s.cache.comp)
+			tracing.EndTask(trans.ID, s.cache.comp)
 		}
 	} else {
-		tracing.EndTask(trans.id, s.cache.comp)
+		tracing.EndTask(trans.ID, s.cache.comp)
 	}
 
 	return true
@@ -157,14 +162,14 @@ func (s *bankStage) finalizeWriteTrans(trans *transactionState) bool {
 
 func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	next := s.cache.comp.GetNextState()
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.data)
+	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.Data)
 	if err != nil {
 		panic(err)
 	}
 
-	nextBlock.DirtyMask = trans.writeFetchedDirtyMask
+	nextBlock.DirtyMask = trans.WriteFetchedDirtyMask
 	nextBlock.IsLocked = false
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
@@ -174,12 +179,5 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 }
 
 func (s *bankStage) removeTransaction(trans *transactionState) {
-	for i, t := range s.cache.postCoalesceTransactions {
-		if t == trans {
-			s.cache.postCoalesceTransactions[i] = nil
-
-			return
-		}
-	}
+	trans.Removed = true
 }
-

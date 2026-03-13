@@ -12,7 +12,7 @@ import (
 var _ = Describe("Respond Stage", func() {
 	var (
 		mockCtrl *gomock.Controller
-		cache    *pipelineMW
+		mw       *pipelineMW
 		topPort  *MockPort
 		s        *respondStage
 	)
@@ -26,16 +26,16 @@ var _ = Describe("Respond Stage", func() {
 			Return(sim.RemotePort("TopPort")).
 			AnyTimes()
 
-		cache = &pipelineMW{
+		mw = &pipelineMW{
 			topPort: topPort,
 		}
-		cache.comp = modeling.NewBuilder[Spec, State]().
+		mw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{}).
 			Build("Cache")
 
-		s = &respondStage{cache: cache}
+		s = &respondStage{cache: mw}
 	})
 
 	AfterEach(func() {
@@ -43,26 +43,34 @@ var _ = Describe("Respond Stage", func() {
 	})
 
 	Context("read", func() {
-		var (
-			read  *mem.ReadReq
-			trans *transactionState
-		)
+		var readMeta sim.MsgMeta
 
 		BeforeEach(func() {
-			read = &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
-			read.Address = 0x100
-			read.PID = 1
-			read.AccessByteSize = 4
-			read.TrafficBytes = 12
-			read.TrafficClass = "req"
-			trans = &transactionState{read: read}
-			cache.transactions = append(cache.transactions, trans)
+			next := mw.comp.GetNextState()
+
+			readMeta = sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				Src:          "SomeSrc",
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           readMeta,
+					ReadAddress:        0x100,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+				},
+			)
+			next.NumTransactions = 1
 		})
 
 		It("should stall if cannot send to top", func() {
-			trans.data = []byte{1, 2, 3, 4}
-			trans.done = true
+			next := mw.comp.GetNextState()
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
 			madeProgress := s.Tick()
@@ -71,41 +79,50 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should send data ready to top", func() {
-			trans.data = []byte{1, 2, 3, 4}
-			trans.done = true
+			next := mw.comp.GetNextState()
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.RspTo).To(Equal(read.ID))
+					Expect(dr.RspTo).To(Equal(readMeta.ID))
 					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 				})
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(cache.transactions).NotTo(ContainElement((trans)))
+			Expect(next.NumTransactions).To(Equal(0))
 		})
 	})
 
 	Context("write", func() {
-		var (
-			write *mem.WriteReq
-			trans *transactionState
-		)
+		var writeMeta sim.MsgMeta
 
 		BeforeEach(func() {
-			write = &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
-			write.Address = 0x100
-			write.PID = 1
-			write.TrafficBytes = 12
-			write.TrafficClass = "req"
-			trans = &transactionState{write: write}
-			cache.transactions = append(cache.transactions, trans)
+			next := mw.comp.GetNextState()
+
+			writeMeta = sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				Src:          "SomeSrc",
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    writeMeta,
+					WriteAddress: 0x100,
+					WritePID:     1,
+				},
+			)
+			next.NumTransactions = 1
 		})
 
 		It("should stall if cannot send to top", func() {
-			trans.done = true
+			next := mw.comp.GetNextState()
+			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
 			madeProgress := s.Tick()
@@ -114,17 +131,18 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should send data ready to top", func() {
-			trans.data = []byte{1, 2, 3, 4}
-			trans.done = true
+			next := mw.comp.GetNextState()
+			next.Transactions[0].Data = []byte{1, 2, 3, 4}
+			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(write.ID))
+					Expect(msg.Meta().RspTo).To(Equal(writeMeta.ID))
 				})
 
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(cache.transactions).NotTo(ContainElement((trans)))
+			Expect(next.NumTransactions).To(Equal(0))
 		})
 	})
 

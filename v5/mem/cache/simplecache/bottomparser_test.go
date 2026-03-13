@@ -84,39 +84,55 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("write done", func() {
 		It("should handle write done", func() {
-			write1 := &mem.WriteReq{}
-			write1.ID = sim.GetIDGenerator().Generate()
-			write1.Address = 0x100
-			write1.PID = 1
-			write1.TrafficBytes = 12
-			write1.TrafficClass = "req"
-			preCTrans1 := &transactionState{
-				write: write1,
+			next := c.comp.GetNextState()
+
+			write1Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
 			}
-			write2 := &mem.WriteReq{}
-			write2.ID = sim.GetIDGenerator().Generate()
-			write2.Address = 0x104
-			write2.PID = 1
-			write2.TrafficBytes = 12
-			write2.TrafficClass = "req"
-			preCTrans2 := &transactionState{
-				write: write2,
+			write2Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
 			}
-			writeToBottom := &mem.WriteReq{}
-			writeToBottom.ID = sim.GetIDGenerator().Generate()
-			writeToBottom.Address = 0x100
-			writeToBottom.PID = 1
-			writeToBottom.TrafficBytes = 12
-			writeToBottom.TrafficClass = "req"
-			postCTrans := &transactionState{
-				writeToBottom:           writeToBottom,
-				preCoalesceTransactions: []*transactionState{preCTrans1, preCTrans2},
+
+			// Pre-coalesce transactions (indices 0, 1)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    write1Meta,
+					WriteAddress: 0x100,
+					WritePID:     1,
+				},
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    write2Meta,
+					WriteAddress: 0x104,
+					WritePID:     1,
+				},
+			)
+			next.NumTransactions = 2
+
+			writeToBottomMeta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
 			}
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, postCTrans)
+
+			// Post-coalesce transaction (index 2, post-coalesce idx 0)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWriteToBottom:  true,
+					WriteToBottomMeta: writeToBottomMeta,
+					WriteToBottomPID:  1,
+					PreCoalesceTransIdxs: []int{0, 1},
+				},
+			)
+
 			done := &mem.WriteDoneRsp{}
 			done.ID = sim.GetIDGenerator().Generate()
-			done.RspTo = writeToBottom.ID
+			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
 
@@ -126,81 +142,85 @@ var _ = Describe("Bottom Parser", func() {
 			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(preCTrans1.done).To(BeTrue())
-			Expect(preCTrans2.done).To(BeTrue())
+			Expect(next.Transactions[0].Done).To(BeTrue())
+			Expect(next.Transactions[1].Done).To(BeTrue())
 			// Transaction stays until bankDone is also true.
-			Expect(postCTrans.bottomWriteDone).To(BeTrue())
-			Expect(c.postCoalesceTransactions).To(ContainElement(postCTrans))
+			postCTrans := next.postCoalesceTrans(0)
+			Expect(postCTrans.BottomWriteDone).To(BeTrue())
+			Expect(postCTrans.Removed).To(BeFalse())
 		})
 	})
 
 	Context("data ready", func() {
 		var (
-			read1, read2             *mem.ReadReq
-			write1, write2           *mem.WriteReq
-			preCTrans1, preCTrans2   *transactionState
-			preCTrans3, preCTrans4   *transactionState
-			postCRead                *mem.ReadReq
-			postCWrite               *mem.WriteReq
-			readToBottom             *mem.ReadReq
-			postCTrans1, postCTrans2 *transactionState
-			dataReady                *mem.DataReadyRsp
-			blockSetID, blockWayID   int
+			readToBottomMeta       sim.MsgMeta
+			dataReady              *mem.DataReadyRsp
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			read1 = &mem.ReadReq{}
-			read1.ID = sim.GetIDGenerator().Generate()
-			read1.Address = 0x100
-			read1.PID = 1
-			read1.AccessByteSize = 4
-			read1.TrafficBytes = 12
-			read1.TrafficClass = "req"
+			next := c.comp.GetNextState()
 
-			read2 = &mem.ReadReq{}
-			read2.ID = sim.GetIDGenerator().Generate()
-			read2.Address = 0x104
-			read2.PID = 1
-			read2.AccessByteSize = 4
-			read2.TrafficBytes = 12
-			read2.TrafficClass = "req"
+			// Pre-coalesce read transactions (indices 0, 1)
+			read1Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			read2Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
+			// Pre-coalesce write transactions (indices 2, 3)
+			write1Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 4 + 12,
+				TrafficClass: "req",
+			}
+			write2Meta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 4 + 12,
+				TrafficClass: "req",
+			}
 
-			write1 = &mem.WriteReq{}
-			write1.ID = sim.GetIDGenerator().Generate()
-			write1.Address = 0x108
-			write1.PID = 1
-			write1.Data = []byte{9, 9, 9, 9}
-			write1.TrafficBytes = 4 + 12
-			write1.TrafficClass = "req"
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           read1Meta,
+					ReadAddress:        0x100,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+				},
+				transactionState{
+					HasRead:            true,
+					ReadMeta:           read2Meta,
+					ReadAddress:        0x104,
+					ReadAccessByteSize: 4,
+					ReadPID:            1,
+				},
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    write1Meta,
+					WriteAddress: 0x108,
+					WriteData:    []byte{9, 9, 9, 9},
+					WritePID:     1,
+				},
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    write2Meta,
+					WriteAddress: 0x10C,
+					WriteData:    []byte{9, 9, 9, 9},
+					WritePID:     1,
+				},
+			)
+			next.NumTransactions = 4
 
-			write2 = &mem.WriteReq{}
-			write2.ID = sim.GetIDGenerator().Generate()
-			write2.Address = 0x10C
-			write2.PID = 1
-			write2.Data = []byte{9, 9, 9, 9}
-			write2.TrafficBytes = 4 + 12
-			write2.TrafficClass = "req"
-
-			preCTrans1 = &transactionState{read: read1}
-			preCTrans2 = &transactionState{read: read2}
-			preCTrans3 = &transactionState{write: write1}
-			preCTrans4 = &transactionState{write: write2}
-
-			postCRead = &mem.ReadReq{}
-			postCRead.ID = sim.GetIDGenerator().Generate()
-			postCRead.Address = 0x100
-			postCRead.PID = 1
-			postCRead.AccessByteSize = 64
-			postCRead.TrafficBytes = 12
-			postCRead.TrafficClass = "req"
-
-			readToBottom = &mem.ReadReq{}
-			readToBottom.ID = sim.GetIDGenerator().Generate()
-			readToBottom.Address = 0x100
-			readToBottom.PID = 1
-			readToBottom.AccessByteSize = 64
-			readToBottom.TrafficBytes = 12
-			readToBottom.TrafficClass = "req"
+			readToBottomMeta = sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
+			}
 
 			drData := []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -214,7 +234,7 @@ var _ = Describe("Bottom Parser", func() {
 			}
 			dataReady = &mem.DataReadyRsp{}
 			dataReady.ID = sim.GetIDGenerator().Generate()
-			dataReady.RspTo = readToBottom.ID
+			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
 			dataReady.TrafficClass = "rsp"
@@ -222,45 +242,33 @@ var _ = Describe("Bottom Parser", func() {
 			blockSetID = 4
 			blockWayID = 0
 
-			next := c.comp.GetNextState()
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].PID = 1
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			postCTrans1 = &transactionState{
-				blockSetID:   blockSetID,
-				blockWayID:   blockWayID,
-				hasBlock:     true,
-				read:         postCRead,
-				readToBottom: readToBottom,
-				preCoalesceTransactions: []*transactionState{
-					preCTrans1,
-					preCTrans2,
-				},
+			postCReadMeta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 12,
+				TrafficClass: "req",
 			}
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, postCTrans1)
 
-			postCWrite = &mem.WriteReq{}
-			postCWrite.ID = sim.GetIDGenerator().Generate()
-			postCWrite.Address = 0x100
-			postCWrite.PID = 1
-			postCWrite.Data = []byte{
-				0, 0, 0, 0, 0, 0, 0, 0,
-				9, 9, 9, 9, 9, 9, 9, 9,
-			}
-			postCWrite.DirtyMask = []bool{
-				false, false, false, false, false, false, false, false,
-				true, true, true, true, true, true, true, true,
-			}
-			postCWrite.TrafficBytes = 16 + 12
-			postCWrite.TrafficClass = "req"
-			postCTrans2 = &transactionState{
-				write: postCWrite,
-				preCoalesceTransactions: []*transactionState{
-					preCTrans3, preCTrans4,
+			// Post-coalesce transaction 1 (read, post-coalesce idx 0)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					BlockSetID:           blockSetID,
+					BlockWayID:           blockWayID,
+					HasBlock:             true,
+					HasRead:              true,
+					ReadMeta:             postCReadMeta,
+					ReadAddress:          0x100,
+					ReadAccessByteSize:   64,
+					ReadPID:              1,
+					HasReadToBottom:      true,
+					ReadToBottomMeta:     readToBottomMeta,
+					ReadToBottomPID:      1,
+					PreCoalesceTransIdxs: []int{0, 1},
 				},
-			}
+			)
 
 			// Set up MSHR entry with block reference and postCTrans1
 			entryIdx := cache.MSHRAdd(&next.MSHRState, 4, vm.PID(1), uint64(0x100))
@@ -291,22 +299,45 @@ var _ = Describe("Bottom Parser", func() {
 			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(preCTrans1.done).To(BeTrue())
-			Expect(preCTrans1.data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(preCTrans2.done).To(BeTrue())
-			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
+			Expect(next.Transactions[0].Done).To(BeTrue())
+			Expect(next.Transactions[0].Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(next.Transactions[1].Done).To(BeTrue())
+			Expect(next.Transactions[1].Data).To(Equal([]byte{5, 6, 7, 8}))
 			// Bank buf should have a write-fetched transaction
 			Expect(next.BankBufs[0].Elements).To(HaveLen(1))
 			// Fetcher trans should have bankAction set
-			Expect(postCTrans1.bankAction).To(Equal(bankActionWriteFetched))
+			postCTrans1 := next.postCoalesceTrans(0)
+			Expect(postCTrans1.BankAction).To(Equal(bankActionWriteFetched))
 		})
 
 		It("should combine write", func() {
 			next := c.comp.GetNextState()
 
-			// Add postCTrans2 as another MSHR request
-			c.postCoalesceTransactions = append(
-				c.postCoalesceTransactions, postCTrans2)
+			postCWriteMeta := sim.MsgMeta{
+				ID:           sim.GetIDGenerator().Generate(),
+				TrafficBytes: 16 + 12,
+				TrafficClass: "req",
+			}
+
+			// Add postCTrans2 as another MSHR request (post-coalesce idx 1)
+			next.Transactions = append(next.Transactions,
+				transactionState{
+					HasWrite:     true,
+					WriteMeta:    postCWriteMeta,
+					WriteAddress: 0x100,
+					WritePID:     1,
+					WriteData: []byte{
+						0, 0, 0, 0, 0, 0, 0, 0,
+						9, 9, 9, 9, 9, 9, 9, 9,
+					},
+					WriteDirtyMask: []bool{
+						false, false, false, false, false, false, false, false,
+						true, true, true, true, true, true, true, true,
+					},
+					PreCoalesceTransIdxs: []int{2, 3},
+				},
+			)
+
 			entryIdx, _ := cache.MSHRQuery(&next.MSHRState, vm.PID(1), uint64(0x100))
 			next.MSHRState.Entries[entryIdx].TransactionIndices = append(
 				next.MSHRState.Entries[entryIdx].TransactionIndices, 1) // postCTrans2 idx
@@ -317,15 +348,16 @@ var _ = Describe("Bottom Parser", func() {
 			madeProgress := p.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(preCTrans1.done).To(BeTrue())
-			Expect(preCTrans1.data).To(Equal([]byte{1, 2, 3, 4}))
-			Expect(preCTrans2.done).To(BeTrue())
-			Expect(preCTrans2.data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(preCTrans3.done).To(BeTrue())
-			Expect(preCTrans4.done).To(BeTrue())
-			// postCTrans2 is nil'd out (removed); postCTrans1 stays (in bank buf)
-			Expect(postCTrans1.bankAction).To(Equal(bankActionWriteFetched))
-			Expect(postCTrans1.data).To(Equal([]byte{
+			Expect(next.Transactions[0].Done).To(BeTrue())
+			Expect(next.Transactions[0].Data).To(Equal([]byte{1, 2, 3, 4}))
+			Expect(next.Transactions[1].Done).To(BeTrue())
+			Expect(next.Transactions[1].Data).To(Equal([]byte{5, 6, 7, 8}))
+			Expect(next.Transactions[2].Done).To(BeTrue())
+			Expect(next.Transactions[3].Done).To(BeTrue())
+			// postCTrans1 stays (in bank buf), postCTrans2 is removed
+			postCTrans1 := next.postCoalesceTrans(0)
+			Expect(postCTrans1.BankAction).To(Equal(bankActionWriteFetched))
+			Expect(postCTrans1.Data).To(Equal([]byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				9, 9, 9, 9, 9, 9, 9, 9,
 				1, 2, 3, 4, 5, 6, 7, 8,

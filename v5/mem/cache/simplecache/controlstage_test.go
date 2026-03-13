@@ -15,14 +15,13 @@ import (
 var _ = Describe("Control Stage", func() {
 
 	var (
-		mockCtrl     *gomock.Controller
-		ctrlPort     *MockPort
-		topPort      *MockPort
-		bottomPort   *MockPort
-		transactions []*transactionState
-		s            *controlStage
-		pmw          *pipelineMW
-		co           *coalescer
+		mockCtrl   *gomock.Controller
+		ctrlPort   *MockPort
+		topPort    *MockPort
+		bottomPort *MockPort
+		s          *controlStage
+		pmw        *pipelineMW
+		co         *coalescer
 	)
 
 	BeforeEach(func() {
@@ -43,8 +42,6 @@ var _ = Describe("Control Stage", func() {
 			AsRemote().
 			Return(sim.RemotePort("BottomPort")).
 			AnyTimes()
-
-		transactions = nil
 
 		initialState := State{
 			DirBuf: stateutil.Buffer[int]{
@@ -81,9 +78,9 @@ var _ = Describe("Control Stage", func() {
 		pmw.coalesceStage = co
 
 		s = &controlStage{
-			ctrlPort:     ctrlPort,
-			transactions: &transactions,
-			pipeline:     pmw,
+			ctrlPort:  ctrlPort,
+			pipeline:  pmw,
+			coalescer: co,
 		}
 	})
 
@@ -100,8 +97,10 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should wait for the cache to finish transactions", func() {
-		transactions = []*transactionState{{}}
-		s.pipeline.transactions = transactions
+		next := pmw.comp.GetNextState()
+		next.Transactions = append(next.Transactions, transactionState{})
+		next.NumTransactions = 1
+
 		flushReq := &cache2.FlushReq{}
 		flushReq.ID = sim.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
