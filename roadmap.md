@@ -4,16 +4,21 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 266)
+## Current State (Cycle 271)
 
 ### Completed This Session
+
+#### M36: Create stateutil package with generic Buffer[T] and Pipeline[T] (DONE — Cycle 271)
+- Budget: 5 | Used: 3
+- PR #65 merged: stateutil package created, simplecache migrated
+- ~470 lines adapter code eliminated from simplecache
+- Buffer[T] and Pipeline[T] are JSON-serializable value types
+- Verified by Apollo, all tests pass
 
 #### M35: Cache unification — merge 3 simple caches (DONE — Cycle 265)
 - Budget: 5 | Used: 3
 - PR #64 merged: writearound/writeevict/writethrough → unified simplecache with WritePolicy strategy
 - ~9,500 lines eliminated
-- WritePolicy interface with 3 implementations: WritearoundPolicy, WriteevictPolicy, WritethroughPolicy
-- Verified by Apollo, all tests pass
 
 ### Active Human Directions
 
@@ -24,43 +29,43 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 4. No performance compromise
 
 #### Serializable Buffers/Pipelines (issue #343)
-- Human wants buffers implementing serialize interface as state members
-- Iris completed thorough design analysis (#348)
-- Proposed: generic `Buffer[T]` and `Pipeline[T]` in `stateutil` package
-- Key insight: no serialize interface needed — value types with JSON tags serialize automatically
+- stateutil package now provides Buffer[T] and Pipeline[T]
+- Simplecache fully migrated (M36)
+- Writeback and switch still use legacy adapters — M37 will migrate them
 
 #### Global State Manager (issue #326) — DEFERRED
 - String-based state registry for tooling/debugging
 - Not practical as primary access path (75× perf penalty)
-- Depends on future direction
+- May revisit after core migration complete
 
 ---
 
 ## Next Milestones
 
-### ➡️ M36: Create stateutil package with generic Buffer[T] and Pipeline[T] (READY)
-- **Goal**: Create `stateutil` package and migrate simplecache to use it (eliminating adapter boilerplate)
-- **Human direction**: issue #343 (serializable buffers/pipelines)
-- **Design**: Iris's analysis (issue #348, workspace/iris/note.md)
+### ➡️ M37: Migrate writeback cache and switch to stateutil (READY)
+- **Goal**: Eliminate all remaining adapter boilerplate by migrating writeback and switch to stateutil.Buffer[T] / Pipeline[T]
+- **Issue**: #358
 - **Scope**:
-  1. Create `v5/stateutil/` package with `Buffer[T]` and `Pipeline[T]` generic types
-  2. Migrate simplecache to use `stateutil.Buffer[T]` and `stateutil.Pipeline[T]` — delete adapters.go
-  3. All tests must pass, CI green
+  - Writeback: Delete adapters.go (453 lines), replace pipeline free functions (~350 lines) with stateutil.Pipeline[int], update all middleware call sites
+  - Switch: Replace stateFlitBuffer with stateutil.Buffer[flitPipelineItemState], handle ForwardBuffer/SendOutBuffer resolution
+  - Delete all updateAdapterPointers() functions
+  - All tests + CI green
 - **Budget**: 5 cycles
-- **Expected outcome**: ~470 lines adapter code eliminated from simplecache, stateutil reusable for writeback + switch
-
-### M37: Migrate writeback cache and switch to stateutil
-- Migrate writeback adapters.go (~453 lines) → stateutil.Buffer[T] / Pipeline[T]
-- Migrate switch adapter code (~130 lines) → stateutil types
-- Delete updateAdapterPointers from all components
-- Budget: 5 cycles
+- **Expected outcome**: Zero adapter types remain in entire codebase
 
 ### M38: Final cleanup — eliminate all custom save/load boilerplate
-- Verify save/load acceptance test works with new stateutil types
-- Remove any remaining snapshot/restore conversion code that stateutil obsoletes
+- Verify save/load acceptance test works end-to-end with stateutil types
+- Remove any remaining snapshot/restore conversion code
 - Ensure no component needs custom save/load beyond modeling.Component's SaveState/LoadState
-- Update component_guide.md
+- Update component_guide.md to reflect final architecture
 - Budget: 3 cycles
+
+### M39: Project completion verification
+- Full audit: every component uses only Spec + State + Ports + Middleware + Hooks
+- No boilerplate beyond middleware Tick functions
+- Save/load works for entire simulation automatically
+- Performance benchmarks match original akita
+- Budget: 2 cycles
 
 ---
 
@@ -73,7 +78,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Save/Load | ✅ | `simulation.Save/Load` works, acceptance test passes |
 | 16 components ported | ✅ | All use `modeling.Component[Spec, State]` |
 | MSHR/Directory as State + free functions | ✅ | Shared ops in `mem/cache/`, indices instead of pointers |
-| Pipeline/Buffer as State (caches + switch) | ✅ | Adapters pattern — to be replaced by stateutil |
+| stateutil package | ✅ | Generic Buffer[T] and Pipeline[T], JSON-serializable |
+| simplecache uses stateutil | ✅ | No adapters, direct stateutil types in State (M36) |
 | Dependencies inlined | ✅ | All internal packages eliminated |
 | In-place state update | ✅ | No A-B deep copy, 0µs overhead (M34) |
 | Comp wrapper elimination | ✅ | Only thin wrappers remain for StorageOwner/API |
@@ -81,6 +87,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Cache unification | ✅ | 3 simple caches → simplecache with WritePolicy (M35) |
 | CI passing | ✅ | All jobs pass |
 | Performance parity | ✅ | 0µs overhead vs original akita |
+
+### Remaining Adapter Code
+| Package | Adapter Lines | Status |
+|---------|--------------|--------|
+| simplecache | 0 | ✅ Migrated (M36) |
+| writeback | ~800 | ⬜ M37 |
+| switch | ~130 | ⬜ M37 |
 
 ---
 
@@ -91,8 +104,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Phase 1 (M1-M20) | Core model, porting, A-B state | ~160 | ~100 |
 | Phase 2 (M21-M26) | Cleanup, multi-MW, docs | ~40 | ~29 |
 | Phase 3 (M27-M29) | Code quality | ~16 | ~6 |
-| Phase 4 (M30-M35) | CI, performance, cache unification | ~17 | ~13 |
-| **Total** | **35 milestones** | **~233** | **~148** |
+| Phase 4 (M30-M36) | CI, performance, cache unification, stateutil | ~22 | ~16 |
+| **Total** | **36 milestones** | **~238** | **~151** |
 
 ---
 
@@ -107,3 +120,4 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Performance is non-negotiable — every change must be measured
 - Human prefers discussion before coding for architectural decisions
 - Cache unification (M35) went smoothly because design was thoroughly analyzed first
+- stateutil migration (M36) completed quickly because simplecache was fresh from M35 unification
