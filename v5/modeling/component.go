@@ -2,6 +2,7 @@ package modeling
 
 import (
 	"reflect"
+	"sync"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -99,21 +100,75 @@ func deepCopy[T any](src T) T {
 	return dstVal.Interface().(T)
 }
 
+// typeNeedsDeepCopy reports whether a type contains slices or maps that
+// require deep copying. Types that are purely value types (primitives,
+// strings, arrays of primitives, structs of primitives) can be copied
+// with a simple Set/Copy. This result is cached in a sync.Map for
+// performance.
+var typeNeedsDeepCopyCache sync.Map // map[reflect.Type]bool
+
+func typeNeedsDeepCopy(t reflect.Type) bool {
+	if cached, ok := typeNeedsDeepCopyCache.Load(t); ok {
+		return cached.(bool)
+	}
+
+	// Temporarily store false to handle recursive types (shouldn't happen
+	// per spec, but guards against infinite loops).
+	typeNeedsDeepCopyCache.Store(t, false)
+
+	result := computeNeedsDeepCopy(t)
+	typeNeedsDeepCopyCache.Store(t, result)
+
+	return result
+}
+
+func computeNeedsDeepCopy(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Slice, reflect.Map:
+		return true
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if typeNeedsDeepCopy(t.Field(i).Type) {
+				return true
+			}
+		}
+		return false
+	case reflect.Array:
+		return typeNeedsDeepCopy(t.Elem())
+	default:
+		return false
+	}
+}
+
 func reflectDeepCopy(src reflect.Value) reflect.Value {
 	switch src.Kind() {
 	case reflect.Struct:
 		dst := reflect.New(src.Type()).Elem()
-		for i := 0; i < src.NumField(); i++ {
-			dst.Field(i).Set(reflectDeepCopy(src.Field(i)))
+		numFields := src.NumField()
+		for i := 0; i < numFields; i++ {
+			sf := src.Field(i)
+			if typeNeedsDeepCopy(sf.Type()) {
+				dst.Field(i).Set(reflectDeepCopy(sf))
+			} else {
+				dst.Field(i).Set(sf)
+			}
 		}
 		return dst
 	case reflect.Slice:
 		if src.IsNil() {
 			return reflect.Zero(src.Type())
 		}
-		dst := reflect.MakeSlice(src.Type(), src.Len(), src.Len())
-		for i := 0; i < src.Len(); i++ {
-			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		n := src.Len()
+		dst := reflect.MakeSlice(src.Type(), n, n)
+		if n == 0 {
+			return dst
+		}
+		if !typeNeedsDeepCopy(src.Type().Elem()) {
+			reflect.Copy(dst, src)
+		} else {
+			for i := 0; i < n; i++ {
+				dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+			}
 		}
 		return dst
 	case reflect.Map:
@@ -122,22 +177,32 @@ func reflectDeepCopy(src reflect.Value) reflect.Value {
 		}
 		dst := reflect.MakeMapWithSize(src.Type(), src.Len())
 		iter := src.MapRange()
+		keyNeedsCopy := typeNeedsDeepCopy(src.Type().Key())
+		valNeedsCopy := typeNeedsDeepCopy(src.Type().Elem())
 		for iter.Next() {
-			dst.SetMapIndex(
-				reflectDeepCopy(iter.Key()),
-				reflectDeepCopy(iter.Value()),
-			)
+			k := iter.Key()
+			v := iter.Value()
+			if keyNeedsCopy {
+				k = reflectDeepCopy(k)
+			}
+			if valNeedsCopy {
+				v = reflectDeepCopy(v)
+			}
+			dst.SetMapIndex(k, v)
 		}
 		return dst
 	case reflect.Array:
 		dst := reflect.New(src.Type()).Elem()
-		for i := 0; i < src.Len(); i++ {
-			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		if !typeNeedsDeepCopy(src.Type().Elem()) {
+			dst.Set(src) // value copy for arrays of primitives
+		} else {
+			for i := 0; i < src.Len(); i++ {
+				dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+			}
 		}
 		return dst
 	default:
 		// Primitive types (int, uint, float, bool, string, etc.)
-		// These are value types — just return a copy
 		return src
 	}
 }
