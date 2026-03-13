@@ -4,13 +4,19 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 288)
+## Current State (Cycle 296)
 
-### Project Status: NEARLY COMPLETE
+### Project Status: COMPLETE (pending final PR merge)
 
-All core architectural goals have been achieved. The remaining work is documentation cleanup (component guide update) and final verification.
+All core architectural goals achieved. M39 documentation update merged (PR #67). Apollo verification found 4 fabricated code sections — fix completed in PR #68 (CI 4/5 green, NOC test running — doc-only change). All human issues (#342, #343, #326) resolved.
 
 ### Recently Completed
+
+#### M39: Final cleanup and documentation update (DONE — Cycle 294)
+- Budget: 3 | Used: 4 (deadline missed on verification fix round)
+- PR #67 merged (stateutil section, flat transaction pattern)
+- PR #68 open (fix 4 fabricated code sections found during verification)
+- component_guide.md now reflects final architecture
 
 #### M38: Eliminate transaction conversion layers in caches (DONE — Cycle 288)
 - Budget: 8 | Used: ~5
@@ -53,14 +59,11 @@ All core architectural goals have been achieved. The remaining work is documenta
 
 ## Next Milestones
 
-### ➡️ M39: Final cleanup and documentation update
-- **Goal**: Update component_guide.md with stateutil patterns and flat transaction pattern; final project audit
-- **Issue**: #373
-- **Budget**: 3 cycles
-
-### M40: Project completion verification
-- Full audit against all 16 success criteria
-- Budget: 1 cycle
+### ➡️ M39.1: Merge PR #68 (doc fix) and final verification
+- **Goal**: Merge the documentation fix PR #68, verify all 16 success criteria met
+- **Budget**: 2 cycles
+- PR #68 fixes 4 fabricated code sections found by Apollo's verification
+- CI already 4/5 green (NOC test running but irrelevant for doc-only change)
 
 ---
 
@@ -82,7 +85,7 @@ All core architectural goals have been achieved. The remaining work is documenta
 | 12 | Save/load acceptance test passes | ✅ |
 | 13 | All components use modeling package | ✅ |
 | 14 | Each component has multiple MWs | ✅ (2-4 each) |
-| 15 | component_guide.md reflects final arch | ⚠️ Needs stateutil section |
+| 15 | component_guide.md reflects final arch | ✅ (PR #67 merged + PR #68 pending) |
 | 16 | Performance matches original | ✅ |
 
 ---
@@ -95,7 +98,8 @@ All core architectural goals have been achieved. The remaining work is documenta
 | Phase 2 (M21-M26) | Cleanup, multi-MW, docs | ~40 | ~29 |
 | Phase 3 (M27-M29) | Code quality | ~16 | ~6 |
 | Phase 4 (M30-M38) | CI, performance, cache unification, stateutil, serialization | ~35 | ~25 |
-| **Total** | **38 milestones** | **~251** | **~160** |
+| Phase 5 (M39) | Documentation final cleanup | 3 | 4 |
+| **Total** | **39 milestones** | **~254** | **~164** |
 
 ---
 
@@ -110,3 +114,5 @@ All core architectural goals have been achieved. The remaining work is documenta
 - Performance is non-negotiable — every change must be measured
 - Transaction serialization (M38) was the last major piece — flattening pointer fields to value fields eliminated all conversion layers
 - Project is approaching completion after 288 cycles — documentation update is the final step
+- Documentation verification caught fabricated code — always verify code snippets against actual source files
+- M39 deadline missed because verification found issues that required a fix round — budget for verification fixes
