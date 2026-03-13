@@ -118,7 +118,6 @@ var _ = Describe("Switch", func() {
 		port1.EXPECT().RetrieveIncoming()
 		port2.EXPECT().PeekIncoming().Return(nil)
 
-		rpMW.updateAdapterPointers()
 		madeProgress := rpMW.startProcessing()
 
 		Expect(madeProgress).To(BeTrue())
@@ -149,7 +148,6 @@ var _ = Describe("Switch", func() {
 		port1.EXPECT().PeekIncoming().Return(flit)
 		port2.EXPECT().PeekIncoming().Return(nil)
 
-		rpMW.updateAdapterPointers()
 		madeProgress := rpMW.startProcessing()
 
 		Expect(madeProgress).To(BeFalse())
@@ -162,7 +160,6 @@ var _ = Describe("Switch", func() {
 			{Lane: 0, Stage: 0, Item: flitPipelineItemState{TaskID: "t1", Flit: flitMeta{MsgMeta: sim.MsgMeta{ID: "flit1"}}}},
 		}
 
-		rpMW.updateAdapterPointers()
 		madeProgress := rpMW.movePipeline()
 
 		Expect(madeProgress).To(BeTrue())
@@ -197,7 +194,6 @@ var _ = Describe("Switch", func() {
 			FindPort(dstPort.AsRemote()).
 			Return(port2.AsRemote())
 
-		rfsMW.updateAdapterPointers()
 		madeProgress := rfsMW.route()
 
 		Expect(madeProgress).To(BeTrue())
@@ -234,7 +230,6 @@ var _ = Describe("Switch", func() {
 			},
 		}
 
-		rfsMW.updateAdapterPointers()
 		madeProgress := rfsMW.route()
 
 		Expect(madeProgress).To(BeFalse())
@@ -259,8 +254,6 @@ var _ = Describe("Switch", func() {
 				{Flit: flitMetaFromFlit(flit), OutputBufIdx: 1},
 			},
 		}
-
-		rfsMW.updateAdapterPointers()
 
 		arbiter.EXPECT().
 			Arbitrate().
@@ -302,8 +295,6 @@ var _ = Describe("Switch", func() {
 			Elements:   []flitMeta{{MsgMeta: sim.MsgMeta{ID: "full"}}},
 		}
 
-		rfsMW.updateAdapterPointers()
-
 		arbiter.EXPECT().
 			Arbitrate().
 			Return([]queueing.Buffer{
@@ -338,7 +329,6 @@ var _ = Describe("Switch", func() {
 
 		port2.EXPECT().Send(gomock.Any()).Return(nil)
 
-		rfsMW.updateAdapterPointers()
 		madeProgress := rfsMW.sendOut()
 
 		Expect(madeProgress).To(BeTrue())
@@ -368,7 +358,6 @@ var _ = Describe("Switch", func() {
 
 		port2.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
 
-		rfsMW.updateAdapterPointers()
 		madeProgress := rfsMW.sendOut()
 
 		Expect(madeProgress).To(BeFalse())

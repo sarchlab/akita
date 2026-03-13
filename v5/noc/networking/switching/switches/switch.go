@@ -13,15 +13,6 @@ import (
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
-type flitPipelineItem struct {
-	taskID string
-	flit   *messaging.Flit
-}
-
-func (f flitPipelineItem) TaskID() string {
-	return f.taskID
-}
-
 // Spec contains immutable configuration for the switch.
 type Spec struct{}
 
@@ -126,16 +117,21 @@ type State struct {
 // OutputBufIdx → sendOutBufAdapter on Peek/Pop.
 type forwardBufAdapter struct {
 	sim.HookableBase
-	name  string
-	buf   *stateutil.Buffer[forwardBufferEntry]
-	infra *switchInfra
+	name    string
+	portIdx int
+	infra   *switchInfra
+}
+
+func (b *forwardBufAdapter) buf() *stateutil.Buffer[forwardBufferEntry] {
+	next := b.infra.comp.GetNextState()
+	return &next.PortComplexes[b.portIdx].ForwardBuffer
 }
 
 func (b *forwardBufAdapter) Name() string  { return b.name }
-func (b *forwardBufAdapter) Capacity() int { return b.buf.Capacity() }
-func (b *forwardBufAdapter) Size() int     { return b.buf.Size() }
-func (b *forwardBufAdapter) CanPush() bool { return b.buf.CanPush() }
-func (b *forwardBufAdapter) Clear()        { b.buf.Clear() }
+func (b *forwardBufAdapter) Capacity() int { return b.buf().Capacity() }
+func (b *forwardBufAdapter) Size() int     { return b.buf().Size() }
+func (b *forwardBufAdapter) CanPush() bool { return b.buf().CanPush() }
+func (b *forwardBufAdapter) Clear()        { b.buf().Clear() }
 
 func (b *forwardBufAdapter) Push(e any) {
 	flit := e.(*messaging.Flit)
@@ -146,24 +142,26 @@ func (b *forwardBufAdapter) Push(e any) {
 	if sob, ok := flit.OutputBuf.(*sendOutBufAdapter); ok {
 		entry.OutputBufIdx = sob.portIdx
 	}
-	b.buf.PushTyped(entry)
+	b.buf().PushTyped(entry)
 }
 
 func (b *forwardBufAdapter) Peek() any {
-	if b.buf.Size() == 0 {
+	buf := b.buf()
+	if buf.Size() == 0 {
 		return nil
 	}
-	e := b.buf.Elements[0]
+	e := buf.Elements[0]
 	flit := e.Flit.toFlit()
 	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
 }
 
 func (b *forwardBufAdapter) Pop() any {
-	if b.buf.Size() == 0 {
+	buf := b.buf()
+	if buf.Size() == 0 {
 		return nil
 	}
-	e, _ := b.buf.PopTyped()
+	e, _ := buf.PopTyped()
 	flit := e.Flit.toFlit()
 	flit.OutputBuf = b.infra.sendOutBufAdapters[e.OutputBufIdx]
 	return flit
@@ -174,33 +172,40 @@ func (b *forwardBufAdapter) Pop() any {
 type sendOutBufAdapter struct {
 	sim.HookableBase
 	name    string
-	buf     *stateutil.Buffer[flitMeta]
 	portIdx int
+	infra   *switchInfra
+}
+
+func (b *sendOutBufAdapter) buf() *stateutil.Buffer[flitMeta] {
+	next := b.infra.comp.GetNextState()
+	return &next.PortComplexes[b.portIdx].SendOutBuffer
 }
 
 func (b *sendOutBufAdapter) Name() string  { return b.name }
-func (b *sendOutBufAdapter) Capacity() int { return b.buf.Capacity() }
-func (b *sendOutBufAdapter) Size() int     { return b.buf.Size() }
-func (b *sendOutBufAdapter) CanPush() bool { return b.buf.CanPush() }
-func (b *sendOutBufAdapter) Clear()        { b.buf.Clear() }
+func (b *sendOutBufAdapter) Capacity() int { return b.buf().Capacity() }
+func (b *sendOutBufAdapter) Size() int     { return b.buf().Size() }
+func (b *sendOutBufAdapter) CanPush() bool { return b.buf().CanPush() }
+func (b *sendOutBufAdapter) Clear()        { b.buf().Clear() }
 
 func (b *sendOutBufAdapter) Push(e any) {
 	flit := e.(*messaging.Flit)
-	b.buf.PushTyped(flitMetaFromFlit(flit))
+	b.buf().PushTyped(flitMetaFromFlit(flit))
 }
 
 func (b *sendOutBufAdapter) Peek() any {
-	if b.buf.Size() == 0 {
+	buf := b.buf()
+	if buf.Size() == 0 {
 		return nil
 	}
-	return b.buf.Elements[0].toFlit()
+	return buf.Elements[0].toFlit()
 }
 
 func (b *sendOutBufAdapter) Pop() any {
-	if b.buf.Size() == 0 {
+	buf := b.buf()
+	if buf.Size() == 0 {
 		return nil
 	}
-	fm, _ := b.buf.PopTyped()
+	fm, _ := buf.PopTyped()
 	return fm.toFlit()
 }
 
@@ -397,7 +402,7 @@ type switchInfra struct {
 	ports     []sim.Port
 	portIndex map[sim.RemotePort]int // remotePort → index in State.PortComplexes
 
-	// Thin buffer adapters (created once, pointers updated per-tick)
+	// Thin buffer adapters (created once, access buffers dynamically)
 	forwardBufAdapters []*forwardBufAdapter
 	sendOutBufAdapters []*sendOutBufAdapter
 }
@@ -439,29 +444,18 @@ func (inf *switchInfra) addPort(
 	sendAdapter := &sendOutBufAdapter{
 		name:    pcs.LocalPortName + "SendBuf",
 		portIdx: idx,
+		infra:   inf,
 	}
 	fwdAdapter := &forwardBufAdapter{
-		name:  pcs.LocalPortName + "FwdBuf",
-		infra: inf,
+		name:    pcs.LocalPortName + "FwdBuf",
+		portIdx: idx,
+		infra:   inf,
 	}
 
 	inf.sendOutBufAdapters = append(inf.sendOutBufAdapters, sendAdapter)
 	inf.forwardBufAdapters = append(inf.forwardBufAdapters, fwdAdapter)
 
-	// Point adapters at next state data (will be updated per-tick)
-	next = inf.comp.GetNextState()
-	fwdAdapter.buf = &next.PortComplexes[idx].ForwardBuffer
-	sendAdapter.buf = &next.PortComplexes[idx].SendOutBuffer
-
 	arbiter.AddBuffer(fwdAdapter)
-}
-
-func (inf *switchInfra) updateAdapterPointers() {
-	next := inf.comp.GetNextState()
-	for i := range inf.ports {
-		inf.forwardBufAdapters[i].buf = &next.PortComplexes[i].ForwardBuffer
-		inf.sendOutBufAdapters[i].buf = &next.PortComplexes[i].SendOutBuffer
-	}
 }
 
 // --- routeForwardSendMW ---
@@ -474,8 +468,6 @@ type routeForwardSendMW struct {
 
 // Tick runs sendOut → forward → route.
 func (m *routeForwardSendMW) Tick() bool {
-	m.updateAdapterPointers()
-
 	madeProgress := false
 
 	madeProgress = m.sendOut() || madeProgress
@@ -605,8 +597,6 @@ type receivePipelineMW struct {
 
 // Tick runs movePipeline → startProcessing.
 func (m *receivePipelineMW) Tick() bool {
-	m.updateAdapterPointers()
-
 	madeProgress := false
 
 	madeProgress = m.movePipeline() || madeProgress

@@ -215,7 +215,31 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		laneWidth = 2
 	}
 
-	initialState := State{
+	initialState := b.buildInitialState(name, laneWidth, numSets)
+
+	comp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.freq).
+		WithSpec(spec).
+		Build(name)
+
+	comp.SetState(initialState)
+
+	pmw := b.buildPipelineMW(comp, laneWidth)
+	cmw := b.buildControlMW(comp, pmw)
+
+	comp.AddMiddleware(pmw) // index 0
+	comp.AddMiddleware(cmw) // index 1
+
+	return comp
+}
+
+func (b Builder) buildInitialState(
+	name string, laneWidth, numSets int,
+) State {
+	blockSize := 1 << b.log2BlockSize
+
+	s := State{
 		DirStageBuf: stateutil.Buffer[int]{
 			BufferName: name + ".DirStageBuf",
 			Cap:        b.numReqPerCycle,
@@ -256,25 +280,10 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		BankDownwardInflightTransCounts: make([]int, 1),
 	}
 
-	// Initialize directory state
 	cache.DirectoryReset(
-		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+		&s.DirectoryState, numSets, b.wayAssociativity, blockSize)
 
-	comp := modeling.NewBuilder[Spec, State]().
-		WithEngine(b.engine).
-		WithFreq(b.freq).
-		WithSpec(spec).
-		Build(name)
-
-	comp.SetState(initialState)
-
-	pmw := b.buildPipelineMW(comp, laneWidth)
-	cmw := b.buildControlMW(comp, pmw)
-
-	comp.AddMiddleware(pmw) // index 0
-	comp.AddMiddleware(cmw) // index 1
-
-	return comp
+	return s
 }
 
 func (b *Builder) buildSpec(numSets int) Spec {
