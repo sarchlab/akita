@@ -102,16 +102,6 @@ func (t *transactionState) accessReqAddress() uint64 {
 	panic("no access request")
 }
 
-// accessReqPID returns the PID of the access request.
-func (t *transactionState) accessReqPID() vm.PID {
-	if t.HasRead {
-		return t.ReadPID
-	}
-	if t.HasWrite {
-		return t.WritePID
-	}
-	panic("no access request")
-}
 
 // reqMeta returns the MsgMeta of the primary request.
 func (t *transactionState) reqMeta() sim.MsgMeta {

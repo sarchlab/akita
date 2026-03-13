@@ -250,15 +250,15 @@ func (d *directory) fetchFromBottom(
 	next := d.cache.comp.GetNextState()
 
 	bottomModule := d.cache.findPort(cacheLineID)
-	readToBottom := &mem.ReadReq{}
+	readToBottom := &mem.ReadReq{
+		Address:        cacheLineID,
+		PID:            pid,
+		AccessByteSize: blockSize,
+	}
 	readToBottom.ID = sim.GetIDGenerator().Generate()
 	readToBottom.Src = d.cache.bottomPort.AsRemote()
 	readToBottom.Dst = bottomModule
-	readToBottom.Address = cacheLineID
-	readToBottom.PID = pid
-	readToBottom.AccessByteSize = blockSize
-	readToBottom.TrafficBytes = 12
-	readToBottom.TrafficClass = "req"
+	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
 
 	err := d.cache.bottomPort.Send(readToBottom)
 	if err != nil {

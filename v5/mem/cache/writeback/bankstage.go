@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"fmt"
-
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
@@ -332,18 +330,3 @@ func (s *bankStage) finalizeBankEviction(
 	return true
 }
 
-func (s *bankStage) removeTransaction(transIdx int, trans *transactionState) {
-	next := s.cache.comp.GetNextState()
-	if transIdx >= 0 && transIdx < len(next.Transactions) &&
-		&next.Transactions[transIdx] == trans {
-		next.Transactions[transIdx].Removed = true
-		return
-	}
-
-	now := s.cache.comp.Engine.CurrentTime()
-
-	fmt.Printf("%.10f, %s, Transaction %s not found\n",
-		now, s.cache.comp.Name(), trans.ID)
-
-	panic("transaction not found")
-}
