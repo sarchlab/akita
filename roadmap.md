@@ -4,19 +4,17 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 315)
+## Current State (Cycle 316)
 
-### Project Status: IN PROGRESS — M41 done, researching repo-wide simplification
+### Project Status: IN PROGRESS — Research complete, M42 defined (switch/endpoint simplification)
 
 **M41 complete (cycle 314):** Test sizes restored, CI duplication fixed, PR #70 merged. All CI green.
 
-**New human direction (#408):** Go through the whole repo to find opportunities to simplify. Search for residues from double buffering implementation. Many wrappers and indirections after recent refactoring — simplicity is first priority.
+**Research complete (cycle 315-316):**
+- **Iris**: Comprehensive switch/endpoint analysis done. Clear dependency chain: (1) make Flit concrete, (2) replace hand-coded pipeline with stateutil.Pipeline, (3) delete buffer adapters, (4) delete switchInfra, (5) simplify Comp wrappers, (6) simplify endpoint. Estimated ~455 lines removable.
+- **Elena**: Full repo audit done. Found 18 simplification items across all packages. Priority 1: duplicate pipeline logic in 3 packages (~426 lines), duplicate convertAddress (~40 lines), duplicate flit serialization types (~40 lines), duplicate Flush/Restart messages (~58 lines).
 
-**Research in progress (cycle 315):**
-- Iris: Analyzing NOC switch/endpoint simplification (#402-#406) — flitMeta, pipelineStageState, buffer adaptors, Comp wrapper, switchInfra
-- Elena: Auditing entire repo for simplification opportunities and double-buffering residues
-
-**New human issues (cycle 310, #402-#406):** Switch code has too many abstractions — flitMeta, pipelineStageState, buffer adaptors, switchInfra, Comp wrapper all need to be eliminated or drastically simplified.
+**M42 defined:** Switch and endpoint simplification (#402-#406). Budget: 10 cycles. See tbc-db issue #412.
 
 ### Recently Completed
 
@@ -86,27 +84,31 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - CI push trigger restricted to main branch
 - All CI green
 
-### M42: Repo-wide simplification (#408, #402-#406) (estimated 8-12 cycles)
-- **Phase 1**: Switch simplification (#402-#406) — eliminate flitMeta, pipelineStageState, buffer adaptors, Comp wrapper, switchInfra
-- **Phase 2**: Endpoint simplification — eliminate flitState, shallowCopyState, custom Tick override
-- **Phase 3**: Remove double-buffering residues across all packages
-- **Phase 4**: Remove unnecessary wrappers, adapters, and indirections repo-wide
-- Must pass ALL acceptance tests and CI
-- Should improve performance as a side effect
+### M42: Switch and endpoint simplification (#402-#406) (Budget: 10 cycles)
+- Make Flit concrete (Msg→MsgMeta, OutputBuf→OutputBufIdx)
+- Replace hand-coded pipeline with stateutil.Pipeline
+- Delete buffer adapters, switchInfra, Comp wrappers
+- Simplify endpoint (delete flitState, shallowCopyState, custom Tick)
+- Target: switch ~735→~300 lines, endpoint ~585→~500 lines
 
-### M43: NOC performance optimization (estimated 5-8 cycles)
-- Verify performance improved from M42 simplification
+### M43: Repo-wide simplification — remaining items (estimated 6-8 cycles)
+- Migrate simplebankedmemory and TLB to stateutil.Pipeline
+- Extract shared convertAddress, MSHR ops, LRU set ops
+- Unify Flush/Restart message types
+- Remove dead code (Domain, MsgBuffer, TransferEvent, LogHook)
+- Remove queueing.bufferImpl (superseded by stateutil.Buffer)
+
+### M44: NOC performance optimization (estimated 5-8 cycles)
+- Verify performance improved from M42/M43 simplification
 - Target: bring NOC tests within 2x of v4 performance
 - Fix remaining allocation bottlenecks
-- Must not regress correctness
 
-### M44: Event-driven component support (estimated 5-8 cycles)
+### M45: Event-driven component support (estimated 5-8 cycles)
 - Design A or B from Iris's research (NOT timer-based — human rejected)
 - Create `modeling.EventComponent[S,T]` or extend Component with event slots
 - Must support save/load of pending events
-- Must support TrioSim-style use cases
 
-### M45: Global state manager (deferred, estimated 3-5 cycles)
+### M46: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
 - Depends on all components being fully standardized
 
