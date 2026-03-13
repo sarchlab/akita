@@ -93,11 +93,17 @@ var _ = Describe("MSHR Stage", func() {
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		trans := &transactionState{read: read}
+		trans := &transactionState{
+			HasRead:            true,
+			ReadMeta:           read.MsgMeta,
+			ReadAddress:        read.Address,
+			ReadAccessByteSize: read.AccessByteSize,
+			ReadPID:            read.PID,
+		}
 
 		mshrTrans := &transactionState{
-			mshrTransactions: []*transactionState{trans},
-			mshrData: []byte{
+			MSHRTransactionIndices: []int{0},
+			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -132,11 +138,17 @@ var _ = Describe("MSHR Stage", func() {
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		trans := &transactionState{read: read}
+		trans := &transactionState{
+			HasRead:            true,
+			ReadMeta:           read.MsgMeta,
+			ReadAddress:        read.Address,
+			ReadAccessByteSize: read.AccessByteSize,
+			ReadPID:            read.PID,
+		}
 
 		mshrTrans := &transactionState{
-			mshrTransactions: []*transactionState{trans},
-			mshrData: []byte{
+			MSHRTransactionIndices: []int{0},
+			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -169,11 +181,9 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
-		staleTrans := &transactionState{}
-
 		mshrTrans := &transactionState{
-			mshrTransactions: []*transactionState{staleTrans},
-			mshrData: []byte{
+			MSHRTransactionIndices: []int{99}, // index that doesn't exist or is nil
+			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,

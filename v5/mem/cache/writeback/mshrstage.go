@@ -11,11 +11,11 @@ import (
 type mshrStage struct {
 	cache *pipelineMW
 
-	// The transaction that carries MSHR data/transaction pointers
-	hasProcessingTrans  bool
-	processingTrans     *transactionState
-	processingTransList []*transactionState
-	processingData      []byte
+	// The transaction that carries MSHR data/transaction indices
+	hasProcessingTrans       bool
+	processingTrans          *transactionState
+	processingTransIndices   []int
+	processingData           []byte
 }
 
 func (s *mshrStage) Tick() bool {
@@ -35,8 +35,8 @@ func (s *mshrStage) Tick() bool {
 	trans := s.cache.inFlightTransactions[transIdx]
 	s.hasProcessingTrans = true
 	s.processingTrans = trans
-	s.processingTransList = trans.mshrTransactions
-	s.processingData = trans.mshrData
+	s.processingTransIndices = trans.MSHRTransactionIndices
+	s.processingData = trans.MSHRData
 
 	return s.processOneReq()
 }
@@ -44,7 +44,7 @@ func (s *mshrStage) Tick() bool {
 func (s *mshrStage) Reset() {
 	s.hasProcessingTrans = false
 	s.processingTrans = nil
-	s.processingTransList = nil
+	s.processingTransIndices = nil
 	s.processingData = nil
 	next := s.cache.comp.GetNextState()
 	next.MSHRStageBuf.Clear()
@@ -55,36 +55,42 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	if len(s.processingTransList) == 0 {
+	if len(s.processingTransIndices) == 0 {
 		s.hasProcessingTrans = false
 		return true
 	}
 
-	trans := s.processingTransList[0]
+	transIdx := s.processingTransIndices[0]
 
-	transactionPresent := s.findTransaction(trans)
+	// Verify the transaction is still in the inflight list
+	var trans *transactionState
+	if transIdx >= 0 && transIdx < len(s.cache.inFlightTransactions) {
+		trans = s.cache.inFlightTransactions[transIdx]
+	}
+
+	transactionPresent := trans != nil && s.findTransaction(trans)
 
 	spec := s.cache.comp.GetSpec()
 
 	if transactionPresent {
 		s.removeTransaction(trans)
 
-		if trans.read != nil {
-			s.respondRead(trans.read, s.processingData, spec.Log2BlockSize)
+		if trans.HasRead {
+			s.respondRead(trans, s.processingData, spec.Log2BlockSize)
 		} else {
-			s.respondWrite(trans.write)
+			s.respondWrite(trans)
 		}
 
-		s.processingTransList = s.processingTransList[1:]
-		if len(s.processingTransList) == 0 {
+		s.processingTransIndices = s.processingTransIndices[1:]
+		if len(s.processingTransIndices) == 0 {
 			s.hasProcessingTrans = false
 		}
 
 		return true
 	}
 
-	s.processingTransList = s.processingTransList[1:]
-	if len(s.processingTransList) == 0 {
+	s.processingTransIndices = s.processingTransIndices[1:]
+	if len(s.processingTransIndices) == 0 {
 		s.hasProcessingTrans = false
 	}
 
@@ -92,36 +98,36 @@ func (s *mshrStage) processOneReq() bool {
 }
 
 func (s *mshrStage) respondRead(
-	read *mem.ReadReq,
+	trans *transactionState,
 	data []byte,
 	log2BlockSize uint64,
 ) {
-	_, offset := getCacheLineID(read.Address, log2BlockSize)
-	respondData := data[offset : offset+read.AccessByteSize]
+	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
+	respondData := data[offset : offset+trans.ReadAccessByteSize]
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
-	dataReady.Dst = read.Src
-	dataReady.RspTo = read.ID
+	dataReady.Dst = trans.ReadMeta.Src
+	dataReady.RspTo = trans.ReadMeta.ID
 	dataReady.Data = respondData
 	dataReady.TrafficBytes = len(respondData) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(read, s.cache.comp)
+	tracing.TraceReqComplete(&trans.ReadMeta, s.cache.comp)
 }
 
-func (s *mshrStage) respondWrite(write *mem.WriteReq) {
+func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp := &mem.WriteDoneRsp{}
 	writeDoneRsp.ID = sim.GetIDGenerator().Generate()
 	writeDoneRsp.Src = s.cache.topPort.AsRemote()
-	writeDoneRsp.Dst = write.Src
-	writeDoneRsp.RspTo = write.ID
+	writeDoneRsp.Dst = trans.WriteMeta.Src
+	writeDoneRsp.RspTo = trans.WriteMeta.ID
 	writeDoneRsp.TrafficBytes = 4
 	writeDoneRsp.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(writeDoneRsp)
 
-	tracing.TraceReqComplete(write, s.cache.comp)
+	tracing.TraceReqComplete(&trans.WriteMeta, s.cache.comp)
 }
 
 func (s *mshrStage) removeTransaction(trans *transactionState) {

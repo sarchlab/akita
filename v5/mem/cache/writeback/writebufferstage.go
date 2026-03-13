@@ -42,7 +42,7 @@ func (wb *writeBufferStage) processNewTransaction() bool {
 	transIdx := item.(int)
 	trans := wb.cache.inFlightTransactions[transIdx]
 
-	switch trans.action {
+	switch trans.Action {
 	case writeBufferFetch:
 		return wb.processWriteBufferFetch(trans)
 	case writeBufferEvictAndWrite:
@@ -68,15 +68,15 @@ func (wb *writeBufferStage) processWriteBufferFetch(
 
 func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
 	for _, e := range wb.inflightEviction {
-		if e.evictingAddr == trans.fetchAddress {
-			trans.fetchedData = e.evictingData
+		if e.EvictingAddr == trans.FetchAddress {
+			trans.FetchedData = e.EvictingData
 			return true
 		}
 	}
 
 	for _, e := range wb.pendingEvictions {
-		if e.evictingAddr == trans.fetchAddress {
-			trans.fetchedData = e.evictingData
+		if e.EvictingAddr == trans.FetchAddress {
+			trans.FetchedData = e.EvictingData
 			return true
 		}
 	}
@@ -89,30 +89,30 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 ) bool {
 	spec := wb.cache.comp.GetSpec()
 	next := wb.cache.comp.GetNextState()
-	bankNum := bankID(trans.blockSetID, trans.blockWayID,
+	bankNum := bankID(trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
 		len(next.WriteBufferToBankBufs))
 	bankBuf := &next.WriteBufferToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
-		trans.fetchedData = nil
+		trans.FetchedData = nil
 		return false
 	}
 
-	if !trans.hasMSHREntry {
+	if !trans.HasMSHREntry {
 		panic("sendFetchedDataToBank without MSHR entry")
 	}
 
 	mshrIdx := wb.lookupMSHRIndex(trans)
 	mshrEntry := &next.MSHRState.Entries[mshrIdx]
-	mshrEntry.Data = trans.fetchedData
-	trans.action = bankWriteFetched
+	mshrEntry.Data = trans.FetchedData
+	trans.Action = bankWriteFetched
 	wb.combineData(mshrIdx)
 
 	// Resolve MSHR transaction pointers before removal
-	trans.mshrData = make([]byte, len(mshrEntry.Data))
-	copy(trans.mshrData, mshrEntry.Data)
-	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+	trans.MSHRData = make([]byte, len(mshrEntry.Data))
+	copy(trans.MSHRData, mshrEntry.Data)
+	trans.MSHRTransactionIndices = wb.resolveEntryTransactionIndices(mshrEntry)
 
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
@@ -137,26 +137,28 @@ func (wb *writeBufferStage) fetchFromBottom(
 	}
 
 	spec := wb.cache.comp.GetSpec()
-	lowModulePort := wb.cache.findPort(trans.fetchAddress)
+	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := &mem.ReadReq{}
 	read.ID = sim.GetIDGenerator().Generate()
 	read.Src = wb.cache.bottomPort.AsRemote()
 	read.Dst = lowModulePort
-	read.PID = trans.fetchPID
-	read.Address = trans.fetchAddress
+	read.PID = trans.FetchPID
+	read.Address = trans.FetchAddress
 	read.AccessByteSize = 1 << spec.Log2BlockSize
 	read.TrafficBytes = 12
 	read.TrafficClass = "mem.ReadReq"
 	wb.cache.bottomPort.Send(read)
 
-	trans.fetchReadReq = read
+	trans.HasFetchReadReq = true
+	trans.FetchReadReqMeta = read.MsgMeta
 	wb.inflightFetch = append(wb.inflightFetch, trans)
 
 	next := wb.cache.comp.GetNextState()
 	next.WriteBufferBuf.Pop()
 
+	reqMeta := trans.reqMeta()
 	tracing.TraceReqInitiate(read, wb.cache.comp,
-		tracing.MsgIDAtReceiver(trans.req(), wb.cache.comp))
+		tracing.MsgIDAtReceiver(&reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -171,7 +173,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	spec := wb.cache.comp.GetSpec()
 	next := wb.cache.comp.GetNextState()
 	bankNum := bankID(
-		trans.blockSetID, trans.blockWayID,
+		trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
 		len(next.WriteBufferToBankBufs),
 	)
@@ -181,7 +183,7 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 		return false
 	}
 
-	trans.action = bankWriteHit
+	trans.Action = bankWriteHit
 	transIdx := wb.findTransIdx(trans)
 	bankBuf.PushTyped(transIdx)
 
@@ -196,7 +198,7 @@ func (wb *writeBufferStage) processWriteBufferFetchAndEvict(
 ) bool {
 	ok := wb.processWriteBufferFlush(trans, false)
 	if ok {
-		trans.action = writeBufferFetch
+		trans.Action = writeBufferFetch
 		return true
 	}
 
@@ -236,25 +238,27 @@ func (wb *writeBufferStage) write() bool {
 		return false
 	}
 
-	lowModulePort := wb.cache.findPort(trans.evictingAddr)
+	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := &mem.WriteReq{}
 	write.ID = sim.GetIDGenerator().Generate()
 	write.Src = wb.cache.bottomPort.AsRemote()
 	write.Dst = lowModulePort
-	write.PID = trans.evictingPID
-	write.Address = trans.evictingAddr
-	write.Data = trans.evictingData
-	write.DirtyMask = trans.evictingDirtyMask
-	write.TrafficBytes = len(trans.evictingData) + 12
+	write.PID = trans.EvictingPID
+	write.Address = trans.EvictingAddr
+	write.Data = trans.EvictingData
+	write.DirtyMask = trans.EvictingDirtyMask
+	write.TrafficBytes = len(trans.EvictingData) + 12
 	write.TrafficClass = "mem.WriteReq"
 	wb.cache.bottomPort.Send(write)
 
-	trans.evictionWriteReq = write
+	trans.HasEvictionWriteReq = true
+	trans.EvictionWriteReqMeta = write.MsgMeta
 	wb.pendingEvictions = wb.pendingEvictions[1:]
 	wb.inflightEviction = append(wb.inflightEviction, trans)
 
+	reqMeta := trans.reqMeta()
 	tracing.TraceReqInitiate(write, wb.cache.comp,
-		tracing.MsgIDAtReceiver(trans.req(), wb.cache.comp))
+		tracing.MsgIDAtReceiver(&reqMeta, wb.cache.comp))
 
 	return true
 }
@@ -283,7 +287,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 
 	trans := wb.findInflightFetchByFetchReadReqID(msg.RspTo)
 	bankIndex := bankID(
-		trans.blockSetID, trans.blockWayID,
+		trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
 		len(next.WriteBufferToBankBufs),
 	)
@@ -293,21 +297,21 @@ func (wb *writeBufferStage) processDataReadyRsp(
 		return false
 	}
 
-	if !trans.hasMSHREntry {
+	if !trans.HasMSHREntry {
 		panic("processDataReadyRsp without MSHR entry")
 	}
 
 	mshrIdx := wb.lookupMSHRIndex(trans)
-	trans.fetchedData = msg.Data
-	trans.action = bankWriteFetched
+	trans.FetchedData = msg.Data
+	trans.Action = bankWriteFetched
 	mshrEntry := &next.MSHRState.Entries[mshrIdx]
 	mshrEntry.Data = msg.Data
 	wb.combineData(mshrIdx)
 
 	// Resolve MSHR transaction pointers before removal
-	trans.mshrData = make([]byte, len(mshrEntry.Data))
-	copy(trans.mshrData, mshrEntry.Data)
-	trans.mshrTransactions = wb.resolveEntryTransactions(mshrEntry)
+	trans.MSHRData = make([]byte, len(mshrEntry.Data))
+	copy(trans.MSHRData, mshrEntry.Data)
+	trans.MSHRTransactionIndices = wb.resolveEntryTransactionIndices(mshrEntry)
 
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
@@ -318,7 +322,7 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	wb.removeInflightFetch(trans)
 	wb.cache.bottomPort.RetrieveIncoming()
 
-	tracing.TraceReqFinalize(trans.fetchReadReq, wb.cache.comp)
+	tracing.TraceReqFinalize(&trans.FetchReadReqMeta, wb.cache.comp)
 
 	return true
 }
@@ -337,18 +341,17 @@ func (wb *writeBufferStage) combineData(mshrIdx int) {
 		}
 
 		trans := wb.cache.inFlightTransactions[transIdx]
-		if trans.read != nil {
+		if trans.HasRead {
 			continue
 		}
 
 		block.IsDirty = true
-		write := trans.write
-		_, offset := getCacheLineID(write.Address, spec.Log2BlockSize)
+		_, offset := getCacheLineID(trans.WriteAddress, spec.Log2BlockSize)
 
-		for i := 0; i < len(write.Data); i++ {
-			if write.DirtyMask == nil || write.DirtyMask[i] {
+		for i := 0; i < len(trans.WriteData); i++ {
+			if trans.WriteDirtyMask == nil || trans.WriteDirtyMask[i] {
 				index := offset + uint64(i)
-				mshrEntry.Data[index] = write.Data[i]
+				mshrEntry.Data[index] = trans.WriteData[i]
 				block.DirtyMask[index] = true
 			}
 		}
@@ -359,7 +362,7 @@ func (wb *writeBufferStage) findInflightFetchByFetchReadReqID(
 	id string,
 ) *transactionState {
 	for _, t := range wb.inflightFetch {
-		if t.fetchReadReq.ID == id {
+		if t.FetchReadReqMeta.ID == id {
 			return t
 		}
 	}
@@ -387,13 +390,13 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 ) bool {
 	for i := len(wb.inflightEviction) - 1; i >= 0; i-- {
 		e := wb.inflightEviction[i]
-		if e.evictionWriteReq.ID == msg.RspTo {
+		if e.EvictionWriteReqMeta.ID == msg.RspTo {
 			wb.inflightEviction = append(
 				wb.inflightEviction[:i],
 				wb.inflightEviction[i+1:]...,
 			)
 			wb.cache.bottomPort.RetrieveIncoming()
-			tracing.TraceReqFinalize(e.evictionWriteReq, wb.cache.comp)
+			tracing.TraceReqFinalize(&e.EvictionWriteReqMeta, wb.cache.comp)
 
 			return true
 		}
@@ -421,26 +424,26 @@ func (wb *writeBufferStage) Reset() {
 }
 
 // lookupMSHRIndex finds the current index of the MSHR entry for this
-// transaction.  The stored mshrEntryIndex may be stale because MSHRRemove
+// transaction.  The stored MSHREntryIndex may be stale because MSHRRemove
 // shifts entries, so we re-query by PID+Address.
 func (wb *writeBufferStage) lookupMSHRIndex(trans *transactionState) int {
 	next := wb.cache.comp.GetNextState()
-	idx, found := cache.MSHRQuery(&next.MSHRState, trans.fetchPID, trans.fetchAddress)
+	idx, found := cache.MSHRQuery(&next.MSHRState, trans.FetchPID, trans.FetchAddress)
 	if !found {
 		panic("lookupMSHRIndex: MSHR entry not found")
 	}
 	return idx
 }
 
-// resolveEntryTransactions collects the actual transaction pointers from
+// resolveEntryTransactionIndices collects the transaction indices from
 // the MSHR entry's TransactionIndices.
-func (wb *writeBufferStage) resolveEntryTransactions(
+func (wb *writeBufferStage) resolveEntryTransactionIndices(
 	entry *cache.MSHREntryState,
-) []*transactionState {
-	result := make([]*transactionState, 0, len(entry.TransactionIndices))
+) []int {
+	result := make([]int, 0, len(entry.TransactionIndices))
 	for _, transIdx := range entry.TransactionIndices {
 		if transIdx >= 0 && transIdx < len(wb.cache.inFlightTransactions) {
-			result = append(result, wb.cache.inFlightTransactions[transIdx])
+			result = append(result, transIdx)
 		}
 	}
 	return result

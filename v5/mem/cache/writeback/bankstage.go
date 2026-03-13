@@ -101,7 +101,7 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	transIdx, _ := dirBuf.PopTyped()
 	t := s.cache.inFlightTransactions[transIdx]
 
-	if t.action == writeBufferFetch {
+	if t.Action == writeBufferFetch {
 		next.WriteBufferBuf.PushTyped(transIdx)
 		return true
 	}
@@ -109,7 +109,7 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	s.acceptIntoPipeline(next, spec, transIdx)
 	s.inflightTransCount++
 
-	switch t.action {
+	switch t.Action {
 	case bankEvict, bankEvictAndFetch, bankEvictAndWrite:
 		s.downwardInflightTransCount++
 	}
@@ -135,7 +135,7 @@ func (s *bankStage) finalizeTrans() bool {
 
 		done := false
 
-		switch trans.action {
+		switch trans.Action {
 		case bankReadHit:
 			done = s.finalizeReadHit(trans)
 		case bankWriteHit:
@@ -165,13 +165,12 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	spec := s.cache.comp.GetSpec()
 	next := s.cache.comp.GetNextState()
 
-	read := trans.read
-	addr := read.Address
+	addr := trans.ReadAddress
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
 	data, err := s.cache.storage.Read(
-		nextBlock.CacheAddress+offset, read.AccessByteSize)
+		nextBlock.CacheAddress+offset, trans.ReadAccessByteSize)
 	if err != nil {
 		panic(err)
 	}
@@ -186,14 +185,14 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	dataReady := &mem.DataReadyRsp{}
 	dataReady.ID = sim.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
-	dataReady.Dst = read.Src
-	dataReady.RspTo = read.ID
+	dataReady.Dst = trans.ReadMeta.Src
+	dataReady.RspTo = trans.ReadMeta.ID
 	dataReady.Data = data
 	dataReady.TrafficBytes = len(data) + 4
 	dataReady.TrafficClass = "mem.DataReadyRsp"
 	s.cache.topPort.Send(dataReady)
 
-	tracing.TraceReqComplete(read, s.cache.comp)
+	tracing.TraceReqComplete(&trans.ReadMeta, s.cache.comp)
 
 	return true
 }
@@ -206,12 +205,11 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	spec := s.cache.comp.GetSpec()
 	next := s.cache.comp.GetNextState()
 
-	write := trans.write
-	addr := write.Address
+	addr := trans.WriteAddress
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	dirtyMask := s.writeData(nextBlock, write, offset, spec.Log2BlockSize)
+	dirtyMask := s.writeData(nextBlock, trans, offset, spec.Log2BlockSize)
 
 	nextBlock.IsValid = true
 	nextBlock.IsLocked = false
@@ -226,20 +224,20 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	done := &mem.WriteDoneRsp{}
 	done.ID = sim.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort.AsRemote()
-	done.Dst = trans.write.Src
-	done.RspTo = trans.write.ID
+	done.Dst = trans.WriteMeta.Src
+	done.RspTo = trans.WriteMeta.ID
 	done.TrafficBytes = 4
 	done.TrafficClass = "mem.WriteDoneRsp"
 	s.cache.topPort.Send(done)
 
-	tracing.TraceReqComplete(trans.write, s.cache.comp)
+	tracing.TraceReqComplete(&trans.WriteMeta, s.cache.comp)
 
 	return true
 }
 
 func (s *bankStage) writeData(
 	block *cache.BlockState,
-	write *mem.WriteReq,
+	trans *transactionState,
 	offset uint64,
 	log2BlockSize uint64,
 ) []bool {
@@ -254,10 +252,10 @@ func (s *bankStage) writeData(
 		dirtyMask = make([]bool, 1<<log2BlockSize)
 	}
 
-	for i := 0; i < len(write.Data); i++ {
-		if write.DirtyMask == nil || write.DirtyMask[i] {
+	for i := 0; i < len(trans.WriteData); i++ {
+		if trans.WriteDirtyMask == nil || trans.WriteDirtyMask[i] {
 			index := offset + uint64(i)
-			data[index] = write.Data[i]
+			data[index] = trans.WriteData[i]
 			dirtyMask[index] = true
 		}
 	}
@@ -280,13 +278,13 @@ func (s *bankStage) finalizeBankWriteFetched(
 		return false
 	}
 
-	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
+	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
 	// Push the transaction index to MSHR stage
 	transIdx := s.findTransIdx(trans)
 	mshrBuf.PushTyped(transIdx)
 
-	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.mshrData)
+	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
 	if err != nil {
 		panic(err)
 	}
@@ -309,7 +307,7 @@ func (s *bankStage) removeTransaction(trans *transactionState) {
 	now := s.cache.comp.Engine.CurrentTime()
 
 	fmt.Printf("%.10f, %s, Transaction %s not found\n",
-		now, s.cache.comp.Name(), trans.id)
+		now, s.cache.comp.Name(), trans.ID)
 
 	panic("transaction not found")
 }
@@ -326,25 +324,25 @@ func (s *bankStage) finalizeBankEviction(
 	}
 
 	data, err := s.cache.storage.Read(
-		trans.victimCacheAddress, 1<<spec.Log2BlockSize)
+		trans.VictimCacheAddress, 1<<spec.Log2BlockSize)
 	if err != nil {
 		panic(err)
 	}
 
-	trans.evictingData = data
+	trans.EvictingData = data
 
-	switch trans.action {
+	switch trans.Action {
 	case bankEvict:
-		trans.action = writeBufferFlush
+		trans.Action = writeBufferFlush
 	case bankEvictAndFetch:
-		trans.action = writeBufferEvictAndFetch
+		trans.Action = writeBufferEvictAndFetch
 	case bankEvictAndWrite:
-		trans.action = writeBufferEvictAndWrite
+		trans.Action = writeBufferEvictAndWrite
 	default:
 		panic("unsupported action")
 	}
 
-	delete(s.cache.evictingList, trans.evictingAddr)
+	delete(s.cache.evictingList, trans.EvictingAddr)
 
 	transIdx := s.findTransIdx(trans)
 	wbBuf.PushTyped(transIdx)

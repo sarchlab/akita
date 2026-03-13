@@ -83,12 +83,11 @@ var _ = Describe("DirectoryStage", func() {
 
 	Context("read", func() {
 		var (
-			read  *mem.ReadReq
 			trans *transactionState
 		)
 
 		BeforeEach(func() {
-			read = &mem.ReadReq{}
+			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.Address = 0x100
 			read.PID = 1
@@ -96,7 +95,11 @@ var _ = Describe("DirectoryStage", func() {
 			read.TrafficBytes = 12
 			read.TrafficClass = "mem.ReadReq"
 			trans = &transactionState{
-				read: read,
+				HasRead:            true,
+				ReadMeta:           read.MsgMeta,
+				ReadAddress:        read.Address,
+				ReadAccessByteSize: read.AccessByteSize,
+				ReadPID:            read.PID,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
@@ -142,7 +145,7 @@ var _ = Describe("DirectoryStage", func() {
 				setID := int(0x100 / uint64(64) % uint64(64))
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
-				Expect(trans.action).To(Equal(bankReadHit))
+				Expect(trans.Action).To(Equal(bankReadHit))
 			})
 		})
 
@@ -178,26 +181,28 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.action).To(Equal(bankEvictAndFetch))
+				Expect(trans.Action).To(Equal(bankEvictAndFetch))
 			})
 		})
 	})
 
 	Context("write", func() {
 		var (
-			write *mem.WriteReq
 			trans *transactionState
 		)
 
 		BeforeEach(func() {
-			write = &mem.WriteReq{}
+			write := &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12
 			write.TrafficClass = "mem.WriteReq"
 			trans = &transactionState{
-				write: write,
+				HasWrite:     true,
+				WriteMeta:    write.MsgMeta,
+				WriteAddress: write.Address,
+				WritePID:     write.PID,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 
@@ -221,13 +226,13 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.action).To(Equal(bankWriteHit))
+				Expect(trans.Action).To(Equal(bankWriteHit))
 			})
 		})
 
 		Context("miss, write full line, no eviction", func() {
 			BeforeEach(func() {
-				write.Data = make([]byte, 64)
+				trans.WriteData = make([]byte, 64)
 			})
 
 			It("should send to bank", func() {
@@ -236,7 +241,7 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.action).To(Equal(bankWriteHit))
+				Expect(trans.Action).To(Equal(bankWriteHit))
 			})
 		})
 	})

@@ -94,17 +94,21 @@ func (f *flusher) processFlush() bool {
 	}
 
 	trans := &transactionState{
-		flush:              f.processingFlush,
-		hasVictim:          true,
-		victimPID:          0,
-		victimTag:          block.Tag,
-		victimCacheAddress: block.CacheAddress,
-		action:             bankEvict,
-		evictingAddr:       block.Tag,
-		evictingDirtyMask:  block.DirtyMask,
-		blockSetID:         ref.SetID,
-		blockWayID:         ref.WayID,
-		hasBlock:           true,
+		HasFlush:             true,
+		FlushMeta:            f.processingFlush.MsgMeta,
+		FlushInvalidateAll:   f.processingFlush.InvalidateAllCachelines,
+		FlushDiscardInflight: f.processingFlush.DiscardInflight,
+		FlushPauseAfter:      f.processingFlush.PauseAfterFlushing,
+		HasVictim:            true,
+		VictimPID:            0,
+		VictimTag:            block.Tag,
+		VictimCacheAddress:   block.CacheAddress,
+		Action:               bankEvict,
+		EvictingAddr:         block.Tag,
+		EvictingDirtyMask:    block.DirtyMask,
+		BlockSetID:           ref.SetID,
+		BlockWayID:           ref.WayID,
+		HasBlock:             true,
 	}
 
 	f.pipeline.inFlightTransactions = append(f.pipeline.inFlightTransactions, trans)
