@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"go.uber.org/mock/gomock"
 )
 
@@ -31,10 +32,29 @@ var _ = Describe("Bank Stage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
-			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
-			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
-			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			DirStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirStageBuf", Cap: 4,
+			},
+			DirToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.DirToBankBuf", Cap: 4,
+			}},
+			WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.WBToBankBuf", Cap: 4,
+			}},
+			MSHRStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.MSHRStageBuf", Cap: 4,
+			},
+			WriteBufferBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.WriteBufferBuf", Cap: 4,
+			},
+			DirPipeline: stateutil.Pipeline[int]{Width: 4, NumStages: 0},
+			DirPostPipelineBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf", Cap: 4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{{Width: 4, NumStages: 10}},
+			BankPostPipelineBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.BankPostBuf", Cap: 4,
+			}},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
@@ -61,42 +81,6 @@ var _ = Describe("Bank Stage", func() {
 		next := m.comp.GetNextState()
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
-
-		m.dirToBankBuffers = []*stateTransBuffer{{
-			name:     "Cache.DirToBankBuf0",
-			readItems:  &next.DirToBankBufIndices[0].Indices,
-			writeItems: &next.DirToBankBufIndices[0].Indices,
-			capacity: 4,
-			mw:       m,
-		}}
-		m.writeBufferToBankBuffers = []*stateTransBuffer{{
-			name:     "Cache.WBToBankBuf0",
-			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
-			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
-			capacity: 4,
-			mw:       m,
-		}}
-		m.mshrStageBuffer = &stateTransBuffer{
-			name:     "Cache.MSHRStageBuf",
-			readItems:  &next.MSHRStageBufEntries,
-			writeItems: &next.MSHRStageBufEntries,
-			capacity: 4,
-			mw:       m,
-		}
-		m.writeBufferBuffer = &stateTransBuffer{
-			name:     "Cache.WriteBufferBuf",
-			readItems:  &next.WriteBufferBufIndices,
-			writeItems: &next.WriteBufferBufIndices,
-			capacity: 4,
-			mw:       m,
-		}
-		m.bankPostBufAdapters = []*stateBankPostBufAdapter{{
-			name:     "Cache.BankPostBuf0",
-			readItems:  &next.BankPostPipelineBufIndices[0].Indices,
-			writeItems: &next.BankPostPipelineBufIndices[0].Indices,
-			capacity: 4,
-			mw:       m,
-		}}
 
 		bs = &bankStage{
 			cache:         m,
@@ -140,7 +124,7 @@ var _ = Describe("Bank Stage", func() {
 			m.inFlightTransactions = []*transactionState{trans}
 
 			// Put transaction in bank post-pipeline buffer
-			next.BankPostPipelineBufIndices[0].Indices = []int{0}
+			next.BankPostPipelineBufs[0].Elements = []int{0}
 			bs.inflightTransCount = 1
 		})
 
@@ -205,7 +189,7 @@ var _ = Describe("Bank Stage", func() {
 				action:     bankWriteHit,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
-			next.BankPostPipelineBufIndices[0].Indices = []int{0}
+			next.BankPostPipelineBufs[0].Elements = []int{0}
 			bs.inflightTransCount = 1
 		})
 
@@ -276,7 +260,7 @@ var _ = Describe("Bank Stage", func() {
 				action:           bankWriteFetched,
 			}
 			m.inFlightTransactions = []*transactionState{trans}
-			next.BankPostPipelineBufIndices[0].Indices = []int{0}
+			next.BankPostPipelineBufs[0].Elements = []int{0}
 			bs.inflightTransCount = 1
 		})
 
@@ -321,7 +305,7 @@ var _ = Describe("Bank Stage", func() {
 			}
 			m.inFlightTransactions = []*transactionState{trans}
 			next := m.comp.GetNextState()
-			next.BankPostPipelineBufIndices[0].Indices = []int{0}
+			next.BankPostPipelineBufs[0].Elements = []int{0}
 			bs.inflightTransCount = 1
 		})
 

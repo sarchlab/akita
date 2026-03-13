@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 )
 
 type cacheState int
@@ -48,22 +49,22 @@ type State struct {
 	Transactions   []transactionSnapshot `json:"transactions"`
 	EvictingList   map[uint64]bool      `json:"evicting_list"`
 
-	// 5 buffer snapshots (transaction indices)
-	DirStageBufIndices          []int          `json:"dir_stage_buf_indices"`
-	DirToBankBufIndices         []bankBufState `json:"dir_to_bank_buf_indices"`
-	WriteBufferToBankBufIndices []bankBufState `json:"write_buffer_to_bank_buf_indices"`
-	MSHRStageBufEntries         []int          `json:"mshr_stage_buf_entries"`
-	WriteBufferBufIndices       []int          `json:"write_buffer_buf_indices"`
+	// Buffers (transaction indices stored as int)
+	DirStageBuf           stateutil.Buffer[int]   `json:"dir_stage_buf"`
+	DirToBankBufs         []stateutil.Buffer[int] `json:"dir_to_bank_bufs"`
+	WriteBufferToBankBufs []stateutil.Buffer[int] `json:"write_buffer_to_bank_bufs"`
+	MSHRStageBuf          stateutil.Buffer[int]   `json:"mshr_stage_buf"`
+	WriteBufferBuf        stateutil.Buffer[int]   `json:"write_buffer_buf"`
 
 	// Directory pipeline + post-buf
-	DirPipelineStages         []dirPipelineStageState `json:"dir_pipeline_stages"`
-	DirPostPipelineBufIndices []int                   `json:"dir_post_pipeline_buf_indices"`
+	DirPipeline        stateutil.Pipeline[int] `json:"dir_pipeline"`
+	DirPostPipelineBuf stateutil.Buffer[int]   `json:"dir_post_pipeline_buf"`
 
 	// Bank pipeline + post-buf + counters
-	BankPipelineStages              []bankPipelineState `json:"bank_pipeline_stages"`
-	BankPostPipelineBufIndices      []bankPostBufState  `json:"bank_post_pipeline_buf_indices"`
-	BankInflightTransCounts         []int               `json:"bank_inflight_trans_counts"`
-	BankDownwardInflightTransCounts []int               `json:"bank_downward_inflight_trans_counts"`
+	BankPipelines                   []stateutil.Pipeline[int] `json:"bank_pipelines"`
+	BankPostPipelineBufs            []stateutil.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+	BankInflightTransCounts         []int                     `json:"bank_inflight_trans_counts"`
+	BankDownwardInflightTransCounts []int                     `json:"bank_downward_inflight_trans_counts"`
 
 	// Write buffer stage
 	PendingEvictionIndices  []int `json:"pending_eviction_indices"`
@@ -95,24 +96,6 @@ type pipelineMW struct {
 	legacyMapper mem.AddressToPortMapper
 
 	storage *mem.Storage
-
-	// curState holds the A-buffer snapshot for the current tick.
-	// Stored here so adapter read pointers remain valid for the tick duration.
-	// In production, set by updateAdapterPointers() from comp.GetState().
-	curState State
-
-	// Thin buffer adapters (created once, pointers updated per-tick)
-	dirStageBuffer           *stateTransBuffer
-	dirToBankBuffers         []*stateTransBuffer
-	writeBufferToBankBuffers []*stateTransBuffer
-	mshrStageBuffer          *stateTransBuffer
-	writeBufferBuffer        *stateTransBuffer
-
-	// Dir pipeline/post-buf adapters
-	dirPostBufAdapter *stateDirPostBufAdapter
-
-	// Bank pipeline/post-buf adapters
-	bankPostBufAdapters []*stateBankPostBufAdapter
 
 	topParser   *topParser
 	writeBuffer *writeBufferStage
@@ -166,8 +149,6 @@ func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 
 // Tick updates the internal states of the Cache pipeline.
 func (m *pipelineMW) Tick() bool {
-	m.updateAdapterPointers()
-
 	madeProgress := false
 
 	if m.state != cacheStatePaused {
@@ -177,89 +158,12 @@ func (m *pipelineMW) Tick() bool {
 	return madeProgress
 }
 
-// syncForTest synchronizes curState from the next state buffer and updates
-// adapter read pointers. This is only needed in tests where state is set up
-// via GetNextState() without going through the Component.Tick() cycle.
+// syncForTest synchronizes state so that GetNextState reflects prior mutations.
+// In tests, state is set up via GetNextState() without going through
+// Component.Tick(), so we commit and re-derive.
 func (m *pipelineMW) syncForTest() {
 	next := m.comp.GetNextState()
 	m.comp.SetState(*next)
-	m.curState = m.comp.GetState()
-	next = m.comp.GetNextState()
-
-	// Update adapter read pointers to curState, write pointers to next
-	if m.dirStageBuffer != nil {
-		m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
-		m.dirStageBuffer.writeItems = &next.DirStageBufIndices
-	}
-	for i := range m.dirToBankBuffers {
-		if m.dirToBankBuffers[i] != nil {
-			m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
-			m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
-		}
-	}
-	for i := range m.writeBufferToBankBuffers {
-		if m.writeBufferToBankBuffers[i] != nil {
-			m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
-			m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
-		}
-	}
-	if m.mshrStageBuffer != nil {
-		m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
-		m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
-	}
-	if m.writeBufferBuffer != nil {
-		m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
-		m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
-	}
-	if m.dirPostBufAdapter != nil {
-		m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
-		m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
-	}
-	for i := range m.bankPostBufAdapters {
-		if m.bankPostBufAdapters[i] != nil {
-			m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
-			m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
-		}
-	}
-}
-
-func (m *pipelineMW) updateAdapterPointers() {
-	m.curState = m.comp.GetState()
-	next := m.comp.GetNextState()
-
-	// Dir stage buffer adapter
-	m.dirStageBuffer.readItems = &m.curState.DirStageBufIndices
-	m.dirStageBuffer.writeItems = &next.DirStageBufIndices
-
-	// Dir to bank buffer adapters
-	for i := range m.dirToBankBuffers {
-		m.dirToBankBuffers[i].readItems = &m.curState.DirToBankBufIndices[i].Indices
-		m.dirToBankBuffers[i].writeItems = &next.DirToBankBufIndices[i].Indices
-	}
-
-	// Write buffer to bank buffer adapters
-	for i := range m.writeBufferToBankBuffers {
-		m.writeBufferToBankBuffers[i].readItems = &m.curState.WriteBufferToBankBufIndices[i].Indices
-		m.writeBufferToBankBuffers[i].writeItems = &next.WriteBufferToBankBufIndices[i].Indices
-	}
-
-	// MSHR stage buffer adapter
-	m.mshrStageBuffer.readItems = &m.curState.MSHRStageBufEntries
-	m.mshrStageBuffer.writeItems = &next.MSHRStageBufEntries
-
-	// Write buffer buffer adapter
-	m.writeBufferBuffer.readItems = &m.curState.WriteBufferBufIndices
-	m.writeBufferBuffer.writeItems = &next.WriteBufferBufIndices
-
-	// Dir post pipeline buf adapter
-	m.dirPostBufAdapter.readItems = &m.curState.DirPostPipelineBufIndices
-	m.dirPostBufAdapter.writeItems = &next.DirPostPipelineBufIndices
-
-	// Bank post pipeline buf adapters
-	for i := range m.bankPostBufAdapters {
-		m.bankPostBufAdapters[i].readItems = &m.curState.BankPostPipelineBufIndices[i].Indices
-		m.bankPostBufAdapters[i].writeItems = &next.BankPostPipelineBufIndices[i].Indices
-	}
 }
 
 func (m *pipelineMW) runPipeline() bool {
@@ -299,10 +203,27 @@ func (m *pipelineMW) discardInflightTransactions() {
 		}
 	}
 
-	m.dirStage.Reset()
+	// Clear all buffers and pipelines
+	next.DirStageBuf.Clear()
+	next.DirPipeline.Stages = nil
+	next.DirPostPipelineBuf.Clear()
+	for i := range next.DirToBankBufs {
+		next.DirToBankBufs[i].Clear()
+	}
+	for i := range next.WriteBufferToBankBufs {
+		next.WriteBufferToBankBufs[i].Clear()
+	}
+	for i := range next.BankPipelines {
+		next.BankPipelines[i].Stages = nil
+	}
+	for i := range next.BankPostPipelineBufs {
+		next.BankPostPipelineBufs[i].Clear()
+	}
+	next.MSHRStageBuf.Clear()
+	next.WriteBufferBuf.Clear()
 
 	for _, bs := range m.bankStages {
-		bs.Reset()
+		bs.inflightTransCount = 0
 	}
 
 	m.mshrStage.Reset()

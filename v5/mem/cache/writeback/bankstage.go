@@ -20,14 +20,6 @@ type bankStage struct {
 	downwardInflightTransCount int
 }
 
-type bankPipelineElem struct {
-	trans *transactionState
-}
-
-func (e bankPipelineElem) TaskID() string {
-	return e.trans.req().Meta().ID + "_write_back_bank_pipeline"
-}
-
 func (s *bankStage) Tick() (madeProgress bool) {
 	spec := s.cache.comp.GetSpec()
 
@@ -46,22 +38,16 @@ func (s *bankStage) Tick() (madeProgress bool) {
 
 func (s *bankStage) tickPipeline() bool {
 	next := s.cache.comp.GetNextState()
-	spec := s.cache.comp.GetSpec()
-	return bankPipelineTick(
-		&next.BankPipelineStages[s.bankID].Stages,
-		&next.BankPostPipelineBufIndices[s.bankID].Indices,
-		s.pipelineWidth,
-		spec.BankLatency,
-	)
+	bankPipeline := &next.BankPipelines[s.bankID]
+	bankPostBuf := &next.BankPostPipelineBufs[s.bankID]
+	return bankPipeline.Tick(bankPostBuf)
 }
 
 func (s *bankStage) Reset() {
 	next := s.cache.comp.GetNextState()
-	s.cache.dirToBankBuffers[s.bankID].Clear()
-	next.BankPipelineStages[s.bankID].Stages =
-		next.BankPipelineStages[s.bankID].Stages[:0]
-	next.BankPostPipelineBufIndices[s.bankID].Indices =
-		next.BankPostPipelineBufIndices[s.bankID].Indices[:0]
+	next.DirToBankBufs[s.bankID].Clear()
+	next.BankPipelines[s.bankID].Stages = nil
+	next.BankPostPipelineBufs[s.bankID].Clear()
 	s.inflightTransCount = 0
 }
 
@@ -73,20 +59,17 @@ func (s *bankStage) pullFromBuf() bool {
 		return false
 	}
 
-	inBuf := s.cache.writeBufferToBankBuffers[s.bankID]
-
-	trans := inBuf.Pop()
-	if trans != nil {
-		t := trans.(*transactionState)
-		transIdx := s.findTransIdx(t)
+	// Check write buffer to bank buffer first
+	wbBuf := &next.WriteBufferToBankBufs[s.bankID]
+	if len(wbBuf.Elements) > 0 {
+		transIdx, _ := wbBuf.PopTyped()
 		s.acceptIntoPipeline(next, spec, transIdx)
 		s.inflightTransCount++
-
 		return true
 	}
 
 	// Do not jam the writeBufferBuffer
-	if !s.cache.writeBufferBuffer.CanPush() {
+	if !next.WriteBufferBuf.CanPush() {
 		return false
 	}
 
@@ -102,65 +85,52 @@ func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
 	spec := s.cache.comp.GetSpec()
 
 	if spec.BankLatency > 0 {
-		return bankPipelineCanAccept(
-			cur.BankPipelineStages[s.bankID].Stages,
-			s.pipelineWidth,
-		)
+		return cur.BankPipelines[s.bankID].CanAccept()
 	}
 
 	// No pipeline - check post-buf capacity
-	return len(cur.BankPostPipelineBufIndices[s.bankID].Indices) < s.pipelineWidth
+	return cur.BankPostPipelineBufs[s.bankID].CanPush()
 }
 
 func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
-	inBuf := s.cache.dirToBankBuffers[s.bankID]
-	trans := inBuf.Pop()
+	dirBuf := &next.DirToBankBufs[s.bankID]
+	if len(dirBuf.Elements) == 0 {
+		return false
+	}
 
-	if trans != nil {
-		t := trans.(*transactionState)
+	transIdx, _ := dirBuf.PopTyped()
+	t := s.cache.inFlightTransactions[transIdx]
 
-		if t.action == writeBufferFetch {
-			s.cache.writeBufferBuffer.Push(trans)
-			return true
-		}
-
-		transIdx := s.findTransIdx(t)
-		s.acceptIntoPipeline(next, spec, transIdx)
-		s.inflightTransCount++
-
-		switch t.action {
-		case bankEvict, bankEvictAndFetch, bankEvictAndWrite:
-			s.downwardInflightTransCount++
-		}
-
+	if t.action == writeBufferFetch {
+		next.WriteBufferBuf.PushTyped(transIdx)
 		return true
 	}
 
-	return false
+	s.acceptIntoPipeline(next, spec, transIdx)
+	s.inflightTransCount++
+
+	switch t.action {
+	case bankEvict, bankEvictAndFetch, bankEvictAndWrite:
+		s.downwardInflightTransCount++
+	}
+
+	return true
 }
 
 func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 	if spec.BankLatency > 0 {
-		bankPipelineAccept(
-			&next.BankPipelineStages[s.bankID].Stages,
-			s.pipelineWidth,
-			transIdx,
-		)
+		next.BankPipelines[s.bankID].Accept(transIdx)
 	} else {
 		// Bypass pipeline: put directly in post-pipeline buffer
-		next.BankPostPipelineBufIndices[s.bankID].Indices = append(
-			next.BankPostPipelineBufIndices[s.bankID].Indices, transIdx)
+		next.BankPostPipelineBufs[s.bankID].PushTyped(transIdx)
 	}
 }
 
 func (s *bankStage) finalizeTrans() bool {
-	// NOTE: We use next for both reading and writing the postBuf indices here
-	// because finalizeTrans is called multiple times per tick, and each call
-	// must see the removals made by previous calls within the same tick.
 	next := s.cache.comp.GetNextState()
-	postBuf := &next.BankPostPipelineBufIndices[s.bankID].Indices
+	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
-	for i, idx := range *postBuf {
+	for i, idx := range postBuf.Elements {
 		trans := s.cache.inFlightTransactions[idx]
 
 		done := false
@@ -179,7 +149,7 @@ func (s *bankStage) finalizeTrans() bool {
 		}
 
 		if done {
-			*postBuf = append((*postBuf)[:i], (*postBuf)[i+1:]...)
+			postBuf.Elements = append(postBuf.Elements[:i], postBuf.Elements[i+1:]...)
 			return true
 		}
 	}
@@ -303,16 +273,18 @@ func (s *bankStage) writeData(
 func (s *bankStage) finalizeBankWriteFetched(
 	trans *transactionState,
 ) bool {
-	if !s.cache.mshrStageBuffer.CanPush() {
+	next := s.cache.comp.GetNextState()
+	mshrBuf := &next.MSHRStageBuf
+
+	if !mshrBuf.CanPush() {
 		return false
 	}
 
-	next := s.cache.comp.GetNextState()
-
 	nextBlock := &next.DirectoryState.Sets[trans.blockSetID].Blocks[trans.blockWayID]
 
-	// Push the transaction itself to MSHR stage
-	s.cache.mshrStageBuffer.Push(trans)
+	// Push the transaction index to MSHR stage
+	transIdx := s.findTransIdx(trans)
+	mshrBuf.PushTyped(transIdx)
 
 	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.mshrData)
 	if err != nil {
@@ -346,8 +318,10 @@ func (s *bankStage) finalizeBankEviction(
 	trans *transactionState,
 ) bool {
 	spec := s.cache.comp.GetSpec()
+	next := s.cache.comp.GetNextState()
+	wbBuf := &next.WriteBufferBuf
 
-	if !s.cache.writeBufferBuffer.CanPush() {
+	if !wbBuf.CanPush() {
 		return false
 	}
 
@@ -371,7 +345,9 @@ func (s *bankStage) finalizeBankEviction(
 	}
 
 	delete(s.cache.evictingList, trans.evictingAddr)
-	s.cache.writeBufferBuffer.Push(trans)
+
+	transIdx := s.findTransIdx(trans)
+	wbBuf.PushTyped(transIdx)
 
 	s.inflightTransCount--
 	s.downwardInflightTransCount--

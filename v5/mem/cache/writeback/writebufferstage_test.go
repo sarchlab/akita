@@ -6,6 +6,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,10 +27,29 @@ var _ = Describe("WriteBufferStage", func() {
 			AnyTimes()
 
 		initialState := State{
-			DirToBankBufIndices:             []bankBufState{{Indices: nil}},
-			WriteBufferToBankBufIndices:     []bankBufState{{Indices: nil}},
-			BankPipelineStages:              []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices:      []bankPostBufState{{Indices: nil}},
+			DirStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirStageBuf", Cap: 4,
+			},
+			DirToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.DirToBankBuf", Cap: 4,
+			}},
+			WriteBufferToBankBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.WBToBankBuf", Cap: 4,
+			}},
+			MSHRStageBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.MSHRStageBuf", Cap: 4,
+			},
+			WriteBufferBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.WriteBufferBuf", Cap: 4,
+			},
+			DirPipeline: stateutil.Pipeline[int]{Width: 4, NumStages: 0},
+			DirPostPipelineBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf", Cap: 4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{{Width: 4, NumStages: 10}},
+			BankPostPipelineBufs: []stateutil.Buffer[int]{{
+				BufferName: "Cache.BankPostBuf", Cap: 4,
+			}},
 			BankInflightTransCounts:         []int{0},
 			BankDownwardInflightTransCounts: []int{0},
 		}
@@ -42,40 +62,17 @@ var _ = Describe("WriteBufferStage", func() {
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
-				Log2BlockSize:    6,
-				NumReqPerCycle:   4,
-				WayAssociativity: 4,
-				NumSets:          64,
-				NumBanks:         1,
+				Log2BlockSize:     6,
+				NumReqPerCycle:    4,
+				WayAssociativity:  4,
+				NumSets:           64,
+				NumBanks:          1,
 				AddressMapperType: "single",
 				RemotePortNames:   []string{"DRAM"},
 			}).
 			Build("Cache")
 
 		m.comp.SetState(initialState)
-		next := m.comp.GetNextState()
-
-		m.writeBufferBuffer = &stateTransBuffer{
-			name:     "Cache.WriteBufferBuf",
-			readItems:  &next.WriteBufferBufIndices,
-			writeItems: &next.WriteBufferBufIndices,
-			capacity: 4,
-			mw:       m,
-		}
-		m.writeBufferToBankBuffers = []*stateTransBuffer{{
-			name:     "Cache.WBToBankBuf0",
-			readItems:  &next.WriteBufferToBankBufIndices[0].Indices,
-			writeItems: &next.WriteBufferToBankBufIndices[0].Indices,
-			capacity: 4,
-			mw:       m,
-		}}
-		m.dirToBankBuffers = []*stateTransBuffer{{
-			name:     "Cache.DirToBankBuf0",
-			readItems:  &next.DirToBankBufIndices[0].Indices,
-			writeItems: &next.DirToBankBufIndices[0].Indices,
-			capacity: 4,
-			mw:       m,
-		}}
 
 		wb = &writeBufferStage{
 			cache:               m,
@@ -117,7 +114,7 @@ var _ = Describe("WriteBufferStage", func() {
 			m.inFlightTransactions = []*transactionState{trans}
 
 			next := m.comp.GetNextState()
-			next.WriteBufferBufIndices = []int{0}
+			next.WriteBufferBuf.Elements = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 			bottomPort.EXPECT().CanSend().Return(true)
@@ -145,7 +142,7 @@ var _ = Describe("WriteBufferStage", func() {
 			m.inFlightTransactions = []*transactionState{trans}
 
 			next := m.comp.GetNextState()
-			next.WriteBufferBufIndices = []int{0}
+			next.WriteBufferBuf.Elements = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 

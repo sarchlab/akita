@@ -31,12 +31,17 @@ func (wb *writeBufferStage) Tick() bool {
 }
 
 func (wb *writeBufferStage) processNewTransaction() bool {
-	item := wb.cache.writeBufferBuffer.Peek()
+	next := wb.cache.comp.GetNextState()
+	wbBuf := &next.WriteBufferBuf
+
+	item := wbBuf.Peek()
 	if item == nil {
 		return false
 	}
 
-	trans := item.(*transactionState)
+	transIdx := item.(int)
+	trans := wb.cache.inFlightTransactions[transIdx]
+
 	switch trans.action {
 	case writeBufferFetch:
 		return wb.processWriteBufferFetch(trans)
@@ -86,8 +91,8 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	next := wb.cache.comp.GetNextState()
 	bankNum := bankID(trans.blockSetID, trans.blockWayID,
 		spec.WayAssociativity,
-		len(wb.cache.dirToBankBuffers))
-	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
+		len(next.WriteBufferToBankBufs))
+	bankBuf := &next.WriteBufferToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
 		trans.fetchedData = nil
@@ -112,9 +117,10 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.Push(trans)
+	transIdx := wb.findTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
 
-	wb.cache.writeBufferBuffer.Pop()
+	next.WriteBufferBuf.Pop()
 
 	return true
 }
@@ -145,7 +151,9 @@ func (wb *writeBufferStage) fetchFromBottom(
 
 	trans.fetchReadReq = read
 	wb.inflightFetch = append(wb.inflightFetch, trans)
-	wb.cache.writeBufferBuffer.Pop()
+
+	next := wb.cache.comp.GetNextState()
+	next.WriteBufferBuf.Pop()
 
 	tracing.TraceReqInitiate(read, wb.cache.comp,
 		tracing.MsgIDAtReceiver(trans.req(), wb.cache.comp))
@@ -161,22 +169,24 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 	}
 
 	spec := wb.cache.comp.GetSpec()
+	next := wb.cache.comp.GetNextState()
 	bankNum := bankID(
 		trans.blockSetID, trans.blockWayID,
 		spec.WayAssociativity,
-		len(wb.cache.dirToBankBuffers),
+		len(next.WriteBufferToBankBufs),
 	)
-	bankBuf := wb.cache.writeBufferToBankBuffers[bankNum]
+	bankBuf := &next.WriteBufferToBankBufs[bankNum]
 
 	if !bankBuf.CanPush() {
 		return false
 	}
 
 	trans.action = bankWriteHit
-	bankBuf.Push(trans)
+	transIdx := wb.findTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
 
 	wb.pendingEvictions = append(wb.pendingEvictions, trans)
-	wb.cache.writeBufferBuffer.Pop()
+	next.WriteBufferBuf.Pop()
 
 	return true
 }
@@ -204,7 +214,8 @@ func (wb *writeBufferStage) processWriteBufferFlush(
 	wb.pendingEvictions = append(wb.pendingEvictions, trans)
 
 	if popAfterDone {
-		wb.cache.writeBufferBuffer.Pop()
+		next := wb.cache.comp.GetNextState()
+		next.WriteBufferBuf.Pop()
 	}
 
 	return true
@@ -274,9 +285,9 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	bankIndex := bankID(
 		trans.blockSetID, trans.blockWayID,
 		spec.WayAssociativity,
-		len(wb.cache.dirToBankBuffers),
+		len(next.WriteBufferToBankBufs),
 	)
-	bankBuf := wb.cache.writeBufferToBankBuffers[bankIndex]
+	bankBuf := &next.WriteBufferToBankBufs[bankIndex]
 
 	if !bankBuf.CanPush() {
 		return false
@@ -301,7 +312,8 @@ func (wb *writeBufferStage) processDataReadyRsp(
 	cache.MSHRRemove(&next.MSHRState,
 		vm.PID(mshrEntry.PID), mshrEntry.Address)
 
-	bankBuf.Push(trans)
+	transIdx := wb.findTransIdx(trans)
+	bankBuf.PushTyped(transIdx)
 
 	wb.removeInflightFetch(trans)
 	wb.cache.bottomPort.RetrieveIncoming()
@@ -404,7 +416,8 @@ func (wb *writeBufferStage) tooManyInflightEvictions() bool {
 }
 
 func (wb *writeBufferStage) Reset() {
-	wb.cache.writeBufferBuffer.Clear()
+	next := wb.cache.comp.GetNextState()
+	next.WriteBufferBuf.Clear()
 }
 
 // lookupMSHRIndex finds the current index of the MSHR entry for this
@@ -431,4 +444,14 @@ func (wb *writeBufferStage) resolveEntryTransactions(
 		}
 	}
 	return result
+}
+
+// findTransIdx finds the index of trans in the inFlightTransactions list.
+func (wb *writeBufferStage) findTransIdx(trans *transactionState) int {
+	for i, t := range wb.cache.inFlightTransactions {
+		if t == trans {
+			return i
+		}
+	}
+	panic("transaction not found in inFlightTransactions")
 }
