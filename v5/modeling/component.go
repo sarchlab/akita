@@ -143,66 +143,95 @@ func computeNeedsDeepCopy(t reflect.Type) bool {
 func reflectDeepCopy(src reflect.Value) reflect.Value {
 	switch src.Kind() {
 	case reflect.Struct:
-		dst := reflect.New(src.Type()).Elem()
-		numFields := src.NumField()
-		for i := 0; i < numFields; i++ {
-			sf := src.Field(i)
-			if typeNeedsDeepCopy(sf.Type()) {
-				dst.Field(i).Set(reflectDeepCopy(sf))
-			} else {
-				dst.Field(i).Set(sf)
-			}
-		}
-		return dst
+		return deepCopyStruct(src)
 	case reflect.Slice:
-		if src.IsNil() {
-			return reflect.Zero(src.Type())
-		}
-		n := src.Len()
-		dst := reflect.MakeSlice(src.Type(), n, n)
-		if n == 0 {
-			return dst
-		}
-		if !typeNeedsDeepCopy(src.Type().Elem()) {
-			reflect.Copy(dst, src)
-		} else {
-			for i := 0; i < n; i++ {
-				dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
-			}
-		}
-		return dst
+		return deepCopySlice(src)
 	case reflect.Map:
-		if src.IsNil() {
-			return reflect.Zero(src.Type())
-		}
-		dst := reflect.MakeMapWithSize(src.Type(), src.Len())
-		iter := src.MapRange()
-		keyNeedsCopy := typeNeedsDeepCopy(src.Type().Key())
-		valNeedsCopy := typeNeedsDeepCopy(src.Type().Elem())
-		for iter.Next() {
-			k := iter.Key()
-			v := iter.Value()
-			if keyNeedsCopy {
-				k = reflectDeepCopy(k)
-			}
-			if valNeedsCopy {
-				v = reflectDeepCopy(v)
-			}
-			dst.SetMapIndex(k, v)
-		}
-		return dst
+		return deepCopyMap(src)
 	case reflect.Array:
-		dst := reflect.New(src.Type()).Elem()
-		if !typeNeedsDeepCopy(src.Type().Elem()) {
-			dst.Set(src) // value copy for arrays of primitives
-		} else {
-			for i := 0; i < src.Len(); i++ {
-				dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
-			}
-		}
-		return dst
+		return deepCopyArray(src)
 	default:
-		// Primitive types (int, uint, float, bool, string, etc.)
 		return src
 	}
+}
+
+func deepCopyStruct(src reflect.Value) reflect.Value {
+	dst := reflect.New(src.Type()).Elem()
+	numFields := src.NumField()
+
+	for i := 0; i < numFields; i++ {
+		sf := src.Field(i)
+		if typeNeedsDeepCopy(sf.Type()) {
+			dst.Field(i).Set(reflectDeepCopy(sf))
+		} else {
+			dst.Field(i).Set(sf)
+		}
+	}
+
+	return dst
+}
+
+func deepCopySlice(src reflect.Value) reflect.Value {
+	if src.IsNil() {
+		return reflect.Zero(src.Type())
+	}
+
+	n := src.Len()
+	dst := reflect.MakeSlice(src.Type(), n, n)
+
+	if n == 0 {
+		return dst
+	}
+
+	if !typeNeedsDeepCopy(src.Type().Elem()) {
+		reflect.Copy(dst, src)
+	} else {
+		for i := 0; i < n; i++ {
+			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		}
+	}
+
+	return dst
+}
+
+func deepCopyMap(src reflect.Value) reflect.Value {
+	if src.IsNil() {
+		return reflect.Zero(src.Type())
+	}
+
+	dst := reflect.MakeMapWithSize(src.Type(), src.Len())
+	iter := src.MapRange()
+	keyNeedsCopy := typeNeedsDeepCopy(src.Type().Key())
+	valNeedsCopy := typeNeedsDeepCopy(src.Type().Elem())
+
+	for iter.Next() {
+		k := iter.Key()
+		v := iter.Value()
+
+		if keyNeedsCopy {
+			k = reflectDeepCopy(k)
+		}
+
+		if valNeedsCopy {
+			v = reflectDeepCopy(v)
+		}
+
+		dst.SetMapIndex(k, v)
+	}
+
+	return dst
+}
+
+func deepCopyArray(src reflect.Value) reflect.Value {
+	dst := reflect.New(src.Type()).Elem()
+
+	if !typeNeedsDeepCopy(src.Type().Elem()) {
+		dst.Set(src)
+	} else {
+		for i := 0; i < src.Len(); i++ {
+			dst.Index(i).Set(reflectDeepCopy(src.Index(i)))
+		}
+	}
+
+	return dst
 }
