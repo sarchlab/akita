@@ -183,13 +183,3 @@ func (s *bankStage) removeTransaction(trans *transactionState) {
 	}
 }
 
-func (s *bankStage) findPostCoalesceIdx(
-	trans *transactionState,
-) int {
-	for i, t := range s.cache.postCoalesceTransactions {
-		if t != nil && t == trans {
-			return i
-		}
-	}
-	panic("transaction not found in postCoalesceTransactions")
-}
