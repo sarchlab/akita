@@ -22,7 +22,7 @@ func (a *xbarArbiter) AddBuffer(buf queueing.Buffer) {
 func (a *xbarArbiter) Arbitrate() []queueing.Buffer {
 	startingPortID := a.nextPortID
 	selectedPort := make([]queueing.Buffer, 0)
-	occupiedOutputPort := make(map[queueing.Buffer]bool)
+	occupiedOutputPort := make(map[int]bool)
 
 	for i := 0; i < len(a.buffers); i++ {
 		currPortID := (startingPortID + i) % len(a.buffers)
@@ -34,12 +34,12 @@ func (a *xbarArbiter) Arbitrate() []queueing.Buffer {
 		}
 
 		flit := item.(*messaging.Flit)
-		if _, ok := occupiedOutputPort[flit.OutputBuf]; ok {
+		if occupiedOutputPort[flit.OutputBufIdx] {
 			continue
 		}
 
 		selectedPort = append(selectedPort, buf)
-		occupiedOutputPort[flit.OutputBuf] = true
+		occupiedOutputPort[flit.OutputBufIdx] = true
 	}
 
 	a.nextPortID = (a.nextPortID + 1) % len(a.buffers)

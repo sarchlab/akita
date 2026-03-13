@@ -2,7 +2,6 @@ package switches
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/networking/arbitration"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -17,7 +16,6 @@ type Builder struct {
 	engine       sim.Engine
 	spec         Spec
 	routingTable routing.Table
-	arbiter      arbitration.Arbiter
 }
 
 func MakeBuilder() Builder {
@@ -38,12 +36,6 @@ func (b Builder) WithFreq(freq sim.Freq) Builder {
 	return b
 }
 
-// WithArbiter sets the arbiter to be used by the switch to build.
-func (b Builder) WithArbiter(arbiter arbitration.Arbiter) Builder {
-	b.arbiter = arbiter
-	return b
-}
-
 // WithRoutingTable sets the routing table to be used by the switch to build.
 func (b Builder) WithRoutingTable(rt routing.Table) Builder {
 	b.routingTable = rt
@@ -55,7 +47,6 @@ func (b Builder) Build(name string) *Comp {
 	b.engineMustBeGiven()
 	b.freqMustNotBeZero()
 	b.routingTableMustBeGiven()
-	b.arbiterMustBeGiven()
 
 	spec := b.spec
 	modelComp := modeling.NewBuilder[Spec, State]().
@@ -64,19 +55,17 @@ func (b Builder) Build(name string) *Comp {
 		WithSpec(spec).
 		Build(name)
 
-	infra := &switchInfra{
-		comp:      modelComp,
-		portIndex: make(map[sim.RemotePort]int),
-	}
+	portIndex := make(map[sim.RemotePort]int)
 
 	rfsMW := &routeForwardSendMW{
-		switchInfra:  infra,
+		comp:         modelComp,
+		portIndex:    portIndex,
 		routingTable: b.routingTable,
-		arbiter:      b.arbiter,
 	}
 
 	rpMW := &receivePipelineMW{
-		switchInfra: infra,
+		comp:      modelComp,
+		portIndex: portIndex,
 	}
 
 	s := &Comp{
@@ -106,11 +95,5 @@ func (b Builder) freqMustNotBeZero() {
 func (b Builder) routingTableMustBeGiven() {
 	if b.routingTable == nil {
 		panic("switch requires a routing table to operate")
-	}
-}
-
-func (b Builder) arbiterMustBeGiven() {
-	if b.arbiter == nil {
-		panic("switch requires an arbiter to operate")
 	}
 }

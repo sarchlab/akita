@@ -21,24 +21,6 @@ type Spec struct {
 	DefaultSwitchDst  sim.RemotePort `json:"default_switch_dst"`
 }
 
-// flitState is a serializable representation of a *messaging.Flit.
-type flitState struct {
-	ID            string         `json:"id"`
-	Src           sim.RemotePort `json:"src"`
-	Dst           sim.RemotePort `json:"dst"`
-	SeqID         int            `json:"seq_id"`
-	NumFlitInMsg  int            `json:"num_flit_in_msg"`
-	OriginalMsgID string         `json:"original_msg_id"`
-
-	// Original message metadata (carried so that the receiving endpoint
-	// can reconstruct the full Msg when assembling flits).
-	MsgSrc          sim.RemotePort `json:"msg_src"`
-	MsgDst          sim.RemotePort `json:"msg_dst"`
-	MsgRspTo        string         `json:"msg_rsp_to"`
-	MsgTrafficClass string         `json:"msg_traffic_class"`
-	MsgTrafficBytes int            `json:"msg_traffic_bytes"`
-}
-
 // assemblingMsgState is a serializable representation of a message being
 // assembled from flits.
 type assemblingMsgState struct {
@@ -55,7 +37,7 @@ type assemblingMsgState struct {
 // State contains mutable runtime data for the endpoint.
 type State struct {
 	MsgOutBuf      []sim.MsgMeta        `json:"msg_out_buf"`
-	FlitsToSend    []flitState          `json:"flits_to_send"`
+	FlitsToSend    []messaging.Flit     `json:"flits_to_send"`
 	AssemblingMsgs []assemblingMsgState `json:"assembling_msgs"`
 	AssembledMsgs  []sim.MsgMeta        `json:"assembled_msgs"`
 }
@@ -64,51 +46,6 @@ type State struct {
 // actions of a few ports.
 type Comp struct {
 	*modeling.Component[Spec, State]
-}
-
-// Tick overrides the default modeling.Component.Tick to avoid the expensive
-// JSON-based deep copy. The endpoint state consists only of value-type slices
-// (no pointers or interfaces), so a shallow copy of slice headers is
-// sufficient and O(1).
-func (c *Comp) Tick() bool {
-	cur := c.GetState()
-	next := shallowCopyState(cur)
-	c.SetNextState(next)
-
-	madeProgress := c.MiddlewareHolder.Tick()
-
-	// Promote next → current without JSON deep copy.
-	c.CommitTick()
-
-	return madeProgress
-}
-
-// shallowCopyState creates an independent copy of the state by duplicating all
-// slice headers. This is O(1) and avoids the O(N) JSON round-trip.
-func shallowCopyState(s State) State {
-	cp := s
-
-	if len(s.MsgOutBuf) > 0 {
-		cp.MsgOutBuf = make([]sim.MsgMeta, len(s.MsgOutBuf))
-		copy(cp.MsgOutBuf, s.MsgOutBuf)
-	}
-
-	if len(s.FlitsToSend) > 0 {
-		cp.FlitsToSend = make([]flitState, len(s.FlitsToSend))
-		copy(cp.FlitsToSend, s.FlitsToSend)
-	}
-
-	if len(s.AssemblingMsgs) > 0 {
-		cp.AssemblingMsgs = make([]assemblingMsgState, len(s.AssemblingMsgs))
-		copy(cp.AssemblingMsgs, s.AssemblingMsgs)
-	}
-
-	if len(s.AssembledMsgs) > 0 {
-		cp.AssembledMsgs = make([]sim.MsgMeta, len(s.AssembledMsgs))
-		copy(cp.AssembledMsgs, s.AssembledMsgs)
-	}
-
-	return cp
 }
 
 // outgoingMW returns the outgoing middleware from the component's middleware list.
@@ -165,33 +102,13 @@ func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
-func flitFromFlitState(fs flitState) *messaging.Flit {
-	return &messaging.Flit{
-		MsgMeta: sim.MsgMeta{
-			ID:  fs.ID,
-			Src: fs.Src,
-			Dst: fs.Dst,
-		},
-		SeqID:        fs.SeqID,
-		NumFlitInMsg: fs.NumFlitInMsg,
-		Msg: &sim.MsgMeta{
-			ID:           fs.OriginalMsgID,
-			Src:          fs.MsgSrc,
-			Dst:          fs.MsgDst,
-			RspTo:        fs.MsgRspTo,
-			TrafficClass: fs.MsgTrafficClass,
-			TrafficBytes: fs.MsgTrafficBytes,
-		},
-	}
-}
-
-// msgMetaToFlitStates converts a MsgMeta into a slice of flitState entries.
-func msgMetaToFlitStates(
+// msgMetaToFlits converts a MsgMeta into a slice of messaging.Flit entries.
+func msgMetaToFlits(
 	meta sim.MsgMeta,
 	spec Spec,
 	networkPortRemote sim.RemotePort,
 	defaultSwitchDst sim.RemotePort,
-) []flitState {
+) []messaging.Flit {
 	numFlit := 1
 	if meta.TrafficBytes > 0 {
 		trafficByte := meta.TrafficBytes
@@ -200,20 +117,24 @@ func msgMetaToFlitStates(
 		numFlit = (trafficByte-1)/spec.FlitByteSize + 1
 	}
 
-	flits := make([]flitState, numFlit)
+	flits := make([]messaging.Flit, numFlit)
 	for i := 0; i < numFlit; i++ {
-		flits[i] = flitState{
-			ID:              fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
-			Src:             networkPortRemote,
-			Dst:             defaultSwitchDst,
-			SeqID:           i,
-			NumFlitInMsg:    numFlit,
-			OriginalMsgID:   meta.ID,
-			MsgSrc:          meta.Src,
-			MsgDst:          meta.Dst,
-			MsgRspTo:        meta.RspTo,
-			MsgTrafficClass: meta.TrafficClass,
-			MsgTrafficBytes: meta.TrafficBytes,
+		flits[i] = messaging.Flit{
+			MsgMeta: sim.MsgMeta{
+				ID:  fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
+				Src: networkPortRemote,
+				Dst: defaultSwitchDst,
+			},
+			SeqID:        i,
+			NumFlitInMsg: numFlit,
+			Msg: sim.MsgMeta{
+				ID:           meta.ID,
+				Src:          meta.Src,
+				Dst:          meta.Dst,
+				RspTo:        meta.RspTo,
+				TrafficClass: meta.TrafficClass,
+				TrafficBytes: meta.TrafficBytes,
+			},
 		}
 	}
 
@@ -261,7 +182,12 @@ func (m *outgoingMW) sendFlitOut() bool {
 		}
 
 		fs := cur.FlitsToSend[numSent]
-		flit := flitFromFlitState(fs)
+		flit := &messaging.Flit{
+			MsgMeta:      fs.MsgMeta,
+			SeqID:        fs.SeqID,
+			NumFlitInMsg: fs.NumFlitInMsg,
+			Msg:          fs.Msg,
+		}
 
 		err := m.networkPort.Send(flit)
 		if err == nil {
@@ -338,19 +264,19 @@ func (m *outgoingMW) prepareFlits() bool {
 
 		meta := next.MsgOutBuf[0]
 		next.MsgOutBuf = next.MsgOutBuf[1:]
-		flitStates := msgMetaToFlitStates(meta, spec, networkPortRemote, m.defaultSwitchDst)
-		next.FlitsToSend = append(next.FlitsToSend, flitStates...)
+		flits := msgMetaToFlits(meta, spec, networkPortRemote, m.defaultSwitchDst)
+		next.FlitsToSend = append(next.FlitsToSend, flits...)
 
-		for _, fs := range flitStates {
-			m.logFlitE2ETaskFromState(fs, false, &meta)
+		for _, fs := range flits {
+			m.logFlitE2ETask(fs, false, &meta)
 		}
 
 		madeProgress = true
 	}
 }
 
-func (m *outgoingMW) logFlitE2ETaskFromState(
-	fs flitState, isEnd bool, meta *sim.MsgMeta,
+func (m *outgoingMW) logFlitE2ETask(
+	fs messaging.Flit, isEnd bool, meta *sim.MsgMeta,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
@@ -361,8 +287,12 @@ func (m *outgoingMW) logFlitE2ETaskFromState(
 		return
 	}
 
-	flit := flitFromFlitState(fs)
-	flit.Msg = meta
+	flit := &messaging.Flit{
+		MsgMeta:      fs.MsgMeta,
+		SeqID:        fs.SeqID,
+		NumFlitInMsg: fs.NumFlitInMsg,
+		Msg:          *meta,
+	}
 
 	tracing.StartTaskWithSpecificLocation(
 		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
@@ -409,11 +339,11 @@ func (m *incomingMW) recv() bool {
 		}
 
 		flit := receivedI.(*messaging.Flit)
-		msg := flit.Msg
+		msg := &flit.Msg
 
 		var assemblingIdx int = -1
 		for j, a := range next.AssemblingMsgs {
-			if a.MsgID == msg.Meta().ID {
+			if a.MsgID == msg.ID {
 				assemblingIdx = j
 				break
 			}
@@ -421,12 +351,12 @@ func (m *incomingMW) recv() bool {
 
 		if assemblingIdx < 0 {
 			next.AssemblingMsgs = append(next.AssemblingMsgs, assemblingMsgState{
-				MsgID:           msg.Meta().ID,
-				Src:             msg.Meta().Src,
-				Dst:             msg.Meta().Dst,
-				RspTo:           msg.Meta().RspTo,
-				TrafficClass:    msg.Meta().TrafficClass,
-				TrafficBytes:    msg.Meta().TrafficBytes,
+				MsgID:           msg.ID,
+				Src:             msg.Src,
+				Dst:             msg.Dst,
+				RspTo:           msg.RspTo,
+				TrafficClass:    msg.TrafficClass,
+				TrafficBytes:    msg.TrafficBytes,
 				NumFlitRequired: flit.NumFlitInMsg,
 				NumFlitArrived:  1,
 			})
@@ -538,7 +468,7 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit.ID), m.msgTaskID(flit.Msg.Meta().ID),
+		m.flitTaskID(flit.ID), m.msgTaskID(flit.Msg.ID),
 		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
