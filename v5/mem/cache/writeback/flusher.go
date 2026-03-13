@@ -17,18 +17,17 @@ type blockRef struct {
 type flusher struct {
 	pipeline *pipelineMW
 	ctrlPort sim.Port
-
-	blockToEvict    []blockRef
-	processingFlush *cache.FlushReq
 }
 
 func (f *flusher) Tick() bool {
-	if f.processingFlush != nil && f.pipeline.state == cacheStatePreFlushing {
+	next := f.pipeline.comp.GetNextState()
+
+	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStatePreFlushing {
 		return f.processPreFlushing()
 	}
 
 	madeProgress := false
-	if f.processingFlush != nil && f.pipeline.state == cacheStateFlushing {
+	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStateFlushing {
 		madeProgress = f.finalizeFlushing() || madeProgress
 		madeProgress = f.processFlush() || madeProgress
 
@@ -44,14 +43,16 @@ func (f *flusher) processPreFlushing() bool {
 	}
 
 	f.prepareBlockToFlushList()
-	f.pipeline.state = cacheStateFlushing
+	next := f.pipeline.comp.GetNextState()
+	next.CacheState = int(cacheStateFlushing)
 
 	return true
 }
 
 func (f *flusher) existInflightTransaction() bool {
-	for _, t := range f.pipeline.inFlightTransactions {
-		if t != nil {
+	next := f.pipeline.comp.GetNextState()
+	for _, t := range next.Transactions {
+		if !t.Removed {
 			return true
 		}
 	}
@@ -67,7 +68,7 @@ func (f *flusher) prepareBlockToFlushList() {
 			}
 
 			if block.IsValid && block.IsDirty {
-				f.blockToEvict = append(f.blockToEvict,
+				next.FlusherBlockToEvictRefs = append(next.FlusherBlockToEvictRefs,
 					blockRef{SetID: setID, WayID: wayID})
 			}
 		}
@@ -75,13 +76,14 @@ func (f *flusher) prepareBlockToFlushList() {
 }
 
 func (f *flusher) processFlush() bool {
-	if len(f.blockToEvict) == 0 {
+	next := f.pipeline.comp.GetNextState()
+
+	if len(next.FlusherBlockToEvictRefs) == 0 {
 		return false
 	}
 
-	next := f.pipeline.comp.GetNextState()
 	spec := f.pipeline.comp.GetSpec()
-	ref := f.blockToEvict[0]
+	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
 		ref.SetID, ref.WayID,
@@ -93,12 +95,12 @@ func (f *flusher) processFlush() bool {
 		return false
 	}
 
-	trans := &transactionState{
+	trans := transactionState{
 		HasFlush:             true,
-		FlushMeta:            f.processingFlush.MsgMeta,
-		FlushInvalidateAll:   f.processingFlush.InvalidateAllCachelines,
-		FlushDiscardInflight: f.processingFlush.DiscardInflight,
-		FlushPauseAfter:      f.processingFlush.PauseAfterFlushing,
+		FlushMeta:            next.ProcessingFlush.MsgMeta,
+		FlushInvalidateAll:   next.ProcessingFlush.InvalidateAllCachelines,
+		FlushDiscardInflight: next.ProcessingFlush.DiscardInflight,
+		FlushPauseAfter:      next.ProcessingFlush.PauseAfterFlushing,
 		HasVictim:            true,
 		VictimPID:            0,
 		VictimTag:            block.Tag,
@@ -111,11 +113,11 @@ func (f *flusher) processFlush() bool {
 		HasBlock:             true,
 	}
 
-	f.pipeline.inFlightTransactions = append(f.pipeline.inFlightTransactions, trans)
-	transIdx := len(f.pipeline.inFlightTransactions) - 1
+	next.Transactions = append(next.Transactions, trans)
+	transIdx := len(next.Transactions) - 1
 	bankBuf.PushTyped(transIdx)
 
-	f.blockToEvict = f.blockToEvict[1:]
+	next.FlusherBlockToEvictRefs = next.FlusherBlockToEvictRefs[1:]
 
 	return true
 }
@@ -139,12 +141,21 @@ func (f *flusher) extractFromPort() bool {
 }
 
 func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
-	f.processingFlush = msg
+	next := f.pipeline.comp.GetNextState()
+
+	next.HasProcessingFlush = true
+	next.ProcessingFlush = flushReqState{
+		MsgMeta:                 msg.MsgMeta,
+		InvalidateAllCachelines: msg.InvalidateAllCachelines,
+		DiscardInflight:         msg.DiscardInflight,
+		PauseAfterFlushing:      msg.PauseAfterFlushing,
+	}
+
 	if msg.DiscardInflight {
 		f.pipeline.discardInflightTransactions()
 	}
 
-	f.pipeline.state = cacheStatePreFlushing
+	next.CacheState = int(cacheStatePreFlushing)
 	f.ctrlPort.RetrieveIncoming()
 
 	tracing.TraceReqReceive(msg, f.pipeline.comp)
@@ -160,7 +171,8 @@ func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
 	clearPort(f.pipeline.topPort)
 	clearPort(f.pipeline.bottomPort)
 
-	f.pipeline.state = cacheStateRunning
+	next := f.pipeline.comp.GetNextState()
+	next.CacheState = int(cacheStateRunning)
 
 	rsp := &cache.RestartRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
@@ -176,7 +188,9 @@ func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
 }
 
 func (f *flusher) finalizeFlushing() bool {
-	if len(f.blockToEvict) > 0 {
+	next := f.pipeline.comp.GetNextState()
+
+	if len(next.FlusherBlockToEvictRefs) > 0 {
 		return false
 	}
 
@@ -189,13 +203,12 @@ func (f *flusher) finalizeFlushing() bool {
 	}
 
 	spec := f.pipeline.comp.GetSpec()
-	next := f.pipeline.comp.GetNextState()
 
 	rsp := &cache.FlushRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
-	rsp.Dst = f.processingFlush.Src
-	rsp.RspTo = f.processingFlush.ID
+	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
+	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
 	rsp.TrafficClass = "cache.FlushRsp"
 	f.ctrlPort.Send(rsp)
 
@@ -209,14 +222,15 @@ func (f *flusher) finalizeFlushing() bool {
 		blockSize,
 	)
 
-	if f.processingFlush.PauseAfterFlushing {
-		f.pipeline.state = cacheStatePaused
+	if next.ProcessingFlush.PauseAfterFlushing {
+		next.CacheState = int(cacheStatePaused)
 	} else {
-		f.pipeline.state = cacheStateRunning
+		next.CacheState = int(cacheStateRunning)
 	}
 
-	tracing.TraceReqComplete(f.processingFlush, f.pipeline.comp)
-	f.processingFlush = nil
+	tracing.TraceReqComplete(&next.ProcessingFlush.MsgMeta, f.pipeline.comp)
+	next.HasProcessingFlush = false
+	next.ProcessingFlush = flushReqState{}
 
 	return true
 }
@@ -230,8 +244,8 @@ func (f *flusher) flushCompleted() bool {
 		}
 	}
 
-	for _, b := range f.pipeline.bankStages {
-		if b.inflightTransCount > 0 {
+	for i := range next.BankInflightTransCounts {
+		if next.BankInflightTransCounts[i] > 0 {
 			return false
 		}
 	}
@@ -240,9 +254,9 @@ func (f *flusher) flushCompleted() bool {
 		return false
 	}
 
-	if len(f.pipeline.writeBuffer.inflightFetch) > 0 ||
-		len(f.pipeline.writeBuffer.inflightEviction) > 0 ||
-		len(f.pipeline.writeBuffer.pendingEvictions) > 0 {
+	if len(next.InflightFetchIndices) > 0 ||
+		len(next.InflightEvictionIndices) > 0 ||
+		len(next.PendingEvictionIndices) > 0 {
 		return false
 	}
 

@@ -86,6 +86,9 @@ type transactionState struct {
 	// Data saved from MSHR entry before removal (for bank/mshr stage)
 	MSHRData                 []byte `json:"mshr_data"`
 	MSHRTransactionIndices   []int  `json:"mshr_transaction_indices"`
+
+	// Removed marks this transaction slot as logically deleted.
+	Removed bool `json:"removed"`
 }
 
 // accessReqAddress returns the address of the access request.

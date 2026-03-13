@@ -240,6 +240,8 @@ func (b Builder) buildInitialState(
 	blockSize := 1 << b.log2BlockSize
 
 	s := State{
+		CacheState:   int(cacheStateRunning),
+		EvictingList: make(map[uint64]bool),
 		DirStageBuf: stateutil.Buffer[int]{
 			BufferName: name + ".DirStageBuf",
 			Cap:        b.numReqPerCycle,
@@ -321,8 +323,6 @@ func (b *Builder) buildPipelineMW(
 ) *pipelineMW {
 	m := &pipelineMW{
 		comp:         comp,
-		state:        cacheStateRunning,
-		evictingList: make(map[uint64]bool),
 		legacyMapper: b.legacyMapper,
 	}
 
@@ -384,9 +384,6 @@ func (b *Builder) createInternalStages(m *pipelineMW, laneWidth int) {
 
 	m.mshrStage = &mshrStage{cache: m}
 	m.writeBuffer = &writeBufferStage{
-		cache:               m,
-		writeBufferCapacity: b.writeBufferCapacity,
-		maxInflightFetch:    b.maxInflightFetch,
-		maxInflightEviction: b.maxInflightEviction,
+		cache: m,
 	}
 }

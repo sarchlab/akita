@@ -13,11 +13,7 @@ type bankStage struct {
 	cache  *pipelineMW
 	bankID int
 
-	pipelineWidth      int
-	inflightTransCount int
-
-	// Count the trans that needs to be sent to the write buffer.
-	downwardInflightTransCount int
+	pipelineWidth int
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
@@ -48,7 +44,7 @@ func (s *bankStage) Reset() {
 	next.DirToBankBufs[s.bankID].Clear()
 	next.BankPipelines[s.bankID].Stages = nil
 	next.BankPostPipelineBufs[s.bankID].Clear()
-	s.inflightTransCount = 0
+	next.BankInflightTransCounts[s.bankID] = 0
 }
 
 func (s *bankStage) pullFromBuf() bool {
@@ -64,7 +60,7 @@ func (s *bankStage) pullFromBuf() bool {
 	if len(wbBuf.Elements) > 0 {
 		transIdx, _ := wbBuf.PopTyped()
 		s.acceptIntoPipeline(next, spec, transIdx)
-		s.inflightTransCount++
+		next.BankInflightTransCounts[s.bankID]++
 		return true
 	}
 
@@ -74,7 +70,7 @@ func (s *bankStage) pullFromBuf() bool {
 	}
 
 	// Always reserve one lane for up-going transactions
-	if s.downwardInflightTransCount >= s.pipelineWidth-1 {
+	if next.BankDownwardInflightTransCounts[s.bankID] >= s.pipelineWidth-1 {
 		return false
 	}
 
@@ -99,7 +95,7 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	}
 
 	transIdx, _ := dirBuf.PopTyped()
-	t := s.cache.inFlightTransactions[transIdx]
+	t := &next.Transactions[transIdx]
 
 	if t.Action == writeBufferFetch {
 		next.WriteBufferBuf.PushTyped(transIdx)
@@ -107,11 +103,11 @@ func (s *bankStage) pullFromDirBuffer(next *State, spec Spec) bool {
 	}
 
 	s.acceptIntoPipeline(next, spec, transIdx)
-	s.inflightTransCount++
+	next.BankInflightTransCounts[s.bankID]++
 
 	switch t.Action {
 	case bankEvict, bankEvictAndFetch, bankEvictAndWrite:
-		s.downwardInflightTransCount++
+		next.BankDownwardInflightTransCounts[s.bankID]++
 	}
 
 	return true
@@ -131,19 +127,19 @@ func (s *bankStage) finalizeTrans() bool {
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
 	for i, idx := range postBuf.Elements {
-		trans := s.cache.inFlightTransactions[idx]
+		trans := &next.Transactions[idx]
 
 		done := false
 
 		switch trans.Action {
 		case bankReadHit:
-			done = s.finalizeReadHit(trans)
+			done = s.finalizeReadHit(idx, trans)
 		case bankWriteHit:
-			done = s.finalizeWriteHit(trans)
+			done = s.finalizeWriteHit(idx, trans)
 		case bankWriteFetched:
-			done = s.finalizeBankWriteFetched(trans)
+			done = s.finalizeBankWriteFetched(idx, trans)
 		case bankEvictAndFetch, bankEvictAndWrite, bankEvict:
-			done = s.finalizeBankEviction(trans)
+			done = s.finalizeBankEviction(idx, trans)
 		default:
 			panic("bank action not supported")
 		}
@@ -157,7 +153,7 @@ func (s *bankStage) finalizeTrans() bool {
 	return false
 }
 
-func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
+func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool {
 	if !s.cache.topPort.CanSend() {
 		return false
 	}
@@ -175,10 +171,10 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 		panic(err)
 	}
 
-	s.removeTransaction(trans)
+	trans.Removed = true
 
-	s.inflightTransCount--
-	s.downwardInflightTransCount--
+	next.BankInflightTransCounts[s.bankID]--
+	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	nextBlock.ReadCount--
 
@@ -197,7 +193,7 @@ func (s *bankStage) finalizeReadHit(trans *transactionState) bool {
 	return true
 }
 
-func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
+func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool {
 	if !s.cache.topPort.CanSend() {
 		return false
 	}
@@ -216,10 +212,10 @@ func (s *bankStage) finalizeWriteHit(trans *transactionState) bool {
 	nextBlock.IsDirty = true
 	nextBlock.DirtyMask = dirtyMask
 
-	s.removeTransaction(trans)
+	trans.Removed = true
 
-	s.inflightTransCount--
-	s.downwardInflightTransCount--
+	next.BankInflightTransCounts[s.bankID]--
+	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	done := &mem.WriteDoneRsp{}
 	done.ID = sim.GetIDGenerator().Generate()
@@ -269,6 +265,7 @@ func (s *bankStage) writeData(
 }
 
 func (s *bankStage) finalizeBankWriteFetched(
+	transIdx int,
 	trans *transactionState,
 ) bool {
 	next := s.cache.comp.GetNextState()
@@ -280,8 +277,6 @@ func (s *bankStage) finalizeBankWriteFetched(
 
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
-	// Push the transaction index to MSHR stage
-	transIdx := s.findTransIdx(trans)
 	mshrBuf.PushTyped(transIdx)
 
 	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.MSHRData)
@@ -291,28 +286,13 @@ func (s *bankStage) finalizeBankWriteFetched(
 	nextBlock.IsLocked = false
 	nextBlock.IsValid = true
 
-	s.inflightTransCount--
+	next.BankInflightTransCounts[s.bankID]--
 
 	return true
 }
 
-func (s *bankStage) removeTransaction(trans *transactionState) {
-	for i, t := range s.cache.inFlightTransactions {
-		if trans == t {
-			s.cache.inFlightTransactions[i] = nil
-			return
-		}
-	}
-
-	now := s.cache.comp.Engine.CurrentTime()
-
-	fmt.Printf("%.10f, %s, Transaction %s not found\n",
-		now, s.cache.comp.Name(), trans.ID)
-
-	panic("transaction not found")
-}
-
 func (s *bankStage) finalizeBankEviction(
+	transIdx int,
 	trans *transactionState,
 ) bool {
 	spec := s.cache.comp.GetSpec()
@@ -342,22 +322,28 @@ func (s *bankStage) finalizeBankEviction(
 		panic("unsupported action")
 	}
 
-	delete(s.cache.evictingList, trans.EvictingAddr)
+	delete(next.EvictingList, trans.EvictingAddr)
 
-	transIdx := s.findTransIdx(trans)
 	wbBuf.PushTyped(transIdx)
 
-	s.inflightTransCount--
-	s.downwardInflightTransCount--
+	next.BankInflightTransCounts[s.bankID]--
+	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	return true
 }
 
-func (s *bankStage) findTransIdx(trans *transactionState) int {
-	for i, t := range s.cache.inFlightTransactions {
-		if t == trans {
-			return i
-		}
+func (s *bankStage) removeTransaction(transIdx int, trans *transactionState) {
+	next := s.cache.comp.GetNextState()
+	if transIdx >= 0 && transIdx < len(next.Transactions) &&
+		&next.Transactions[transIdx] == trans {
+		next.Transactions[transIdx].Removed = true
+		return
 	}
-	panic("transaction not found in inFlightTransactions")
+
+	now := s.cache.comp.Engine.CurrentTime()
+
+	fmt.Printf("%.10f, %s, Transaction %s not found\n",
+		now, s.cache.comp.Name(), trans.ID)
+
+	panic("transaction not found")
 }

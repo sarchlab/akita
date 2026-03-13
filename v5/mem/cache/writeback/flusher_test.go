@@ -40,6 +40,8 @@ var _ = Describe("Flusher", func() {
 			AnyTimes()
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -68,10 +70,8 @@ var _ = Describe("Flusher", func() {
 		}
 
 		m = &pipelineMW{
-			topPort:      topPort,
-			bottomPort:   bottomPort,
-			state:        cacheStateRunning,
-			evictingList: make(map[uint64]bool),
+			topPort:    topPort,
+			bottomPort: bottomPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -98,10 +98,7 @@ var _ = Describe("Flusher", func() {
 			pipelineWidth: 4,
 		}}
 		m.writeBuffer = &writeBufferStage{
-			cache:               m,
-			writeBufferCapacity: 16,
-			maxInflightFetch:    4,
-			maxInflightEviction: 4,
+			cache: m,
 		}
 
 		f = &flusher{pipeline: m, ctrlPort: controlPort}
@@ -132,18 +129,22 @@ var _ = Describe("Flusher", func() {
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(f.processingFlush).To(BeIdenticalTo(req))
-			Expect(m.state).To(Equal(cacheStatePreFlushing))
+			next := m.comp.GetNextState()
+			Expect(next.HasProcessingFlush).To(BeTrue())
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
 		})
 
 		It("should do nothing if there is inflight transaction", func() {
-			m.state = cacheStatePreFlushing
-			m.inFlightTransactions = append(
-				m.inFlightTransactions, &transactionState{})
-			req := &cache.FlushReq{}
-			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.FlushReq"
-			f.processingFlush = req
+			next := m.comp.GetNextState()
+			next.CacheState = int(cacheStatePreFlushing)
+			next.Transactions = append(
+				next.Transactions, transactionState{})
+			next.HasProcessingFlush = true
+			next.ProcessingFlush = flushReqState{
+				MsgMeta: sim.MsgMeta{
+					ID: sim.GetIDGenerator().Generate(),
+				},
+			}
 
 			m.syncForTest()
 
@@ -153,15 +154,16 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should move to flush stage if no inflight transaction", func() {
-			m.state = cacheStatePreFlushing
-			m.inFlightTransactions = nil
-			req := &cache.FlushReq{}
-			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.FlushReq"
-			f.processingFlush = req
+			next := m.comp.GetNextState()
+			next.CacheState = int(cacheStatePreFlushing)
+			next.HasProcessingFlush = true
+			next.ProcessingFlush = flushReqState{
+				MsgMeta: sim.MsgMeta{
+					ID: sim.GetIDGenerator().Generate(),
+				},
+			}
 
 			// Set up directory with one dirty valid block
-			next := m.comp.GetNextState()
 			cache.DirectoryReset(&next.DirectoryState, 2, 2, 64)
 			next.DirectoryState.Sets[0].Blocks[0].IsDirty = true
 			next.DirectoryState.Sets[0].Blocks[0].IsValid = true
@@ -171,22 +173,26 @@ var _ = Describe("Flusher", func() {
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(m.state).To(Equal(cacheStateFlushing))
-			Expect(f.blockToEvict).To(HaveLen(1))
+			next = m.comp.GetNextState()
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStateFlushing))
+			Expect(next.FlusherBlockToEvictRefs).To(HaveLen(1))
 		})
 
 		It("should send response if all the blocks are evicted", func() {
-			m.state = cacheStateFlushing
-			req := &cache.FlushReq{}
-			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.FlushReq"
-			f.processingFlush = req
-			f.blockToEvict = []blockRef{}
+			next := m.comp.GetNextState()
+			next.CacheState = int(cacheStateFlushing)
+			next.HasProcessingFlush = true
+			next.ProcessingFlush = flushReqState{
+				MsgMeta: sim.MsgMeta{
+					ID: sim.GetIDGenerator().Generate(),
+				},
+			}
+			next.FlusherBlockToEvictRefs = []blockRef{}
 
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(req.ID))
+					Expect(msg.Meta().RspTo).To(Equal(next.ProcessingFlush.MsgMeta.ID))
 				})
 
 			m.syncForTest()
@@ -194,8 +200,9 @@ var _ = Describe("Flusher", func() {
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(f.processingFlush).To(BeNil())
-			Expect(m.state).To(Equal(cacheStateRunning))
+			next = m.comp.GetNextState()
+			Expect(next.HasProcessingFlush).To(BeFalse())
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
 		})
 	})
 
@@ -215,8 +222,9 @@ var _ = Describe("Flusher", func() {
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(f.processingFlush).To(BeIdenticalTo(req))
-			Expect(m.state).To(Equal(cacheStatePreFlushing))
+			next := m.comp.GetNextState()
+			Expect(next.HasProcessingFlush).To(BeTrue())
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
 		})
 	})
 
@@ -251,7 +259,8 @@ var _ = Describe("Flusher", func() {
 			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(m.state).To(Equal(cacheStateRunning))
+			next := m.comp.GetNextState()
+			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
 		})
 	})
 })

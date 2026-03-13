@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"maps"
-
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -76,9 +74,9 @@ type State struct {
 	ProcessingMSHREntryIdx int  `json:"processing_mshr_entry_idx"`
 
 	// Flusher
-	FlusherBlockToEvictRefs []blockRef      `json:"flusher_block_to_evict_refs"`
-	HasProcessingFlush      bool            `json:"has_processing_flush"`
-	ProcessingFlush         flushReqState   `json:"processing_flush"`
+	FlusherBlockToEvictRefs []blockRef    `json:"flusher_block_to_evict_refs"`
+	HasProcessingFlush      bool          `json:"has_processing_flush"`
+	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
 // flushReqState is a serializable representation of a cache.FlushReq.
@@ -91,7 +89,7 @@ type flushReqState struct {
 
 // pipelineMW holds all non-serializable infrastructure for the writeback
 // cache pipeline. It implements the Tick method and delegates NamedHookable
-// to comp.
+// to comp. All mutable state is in State, accessed via comp.GetNextState().
 type pipelineMW struct {
 	comp *modeling.Component[Spec, State]
 
@@ -110,10 +108,6 @@ type pipelineMW struct {
 	dirStage    *directoryStage
 	bankStages  []*bankStage
 	mshrStage   *mshrStage
-
-	state                cacheState
-	inFlightTransactions []*transactionState
-	evictingList         map[uint64]bool
 }
 
 // GetSpec returns the immutable specification.
@@ -157,9 +151,10 @@ func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 
 // Tick updates the internal states of the Cache pipeline.
 func (m *pipelineMW) Tick() bool {
+	next := m.comp.GetNextState()
 	madeProgress := false
 
-	if m.state != cacheStatePaused {
+	if cacheState(next.CacheState) != cacheStatePaused {
 		madeProgress = m.runPipeline() || madeProgress
 	}
 
@@ -230,99 +225,23 @@ func (m *pipelineMW) discardInflightTransactions() {
 	next.MSHRStageBuf.Clear()
 	next.WriteBufferBuf.Clear()
 
-	for _, bs := range m.bankStages {
-		bs.inflightTransCount = 0
+	for i := range next.BankInflightTransCounts {
+		next.BankInflightTransCounts[i] = 0
+		next.BankDownwardInflightTransCounts[i] = 0
 	}
 
-	m.mshrStage.Reset()
-	m.writeBuffer.Reset()
+	// Clear MSHR stage state
+	next.HasProcessingMSHREntry = false
+	next.ProcessingMSHREntryIdx = 0
+
+	// Clear write buffer stage state
+	next.PendingEvictionIndices = nil
+	next.InflightFetchIndices = nil
+	next.InflightEvictionIndices = nil
 
 	clearPort(m.topPort)
 
-	m.inFlightTransactions = nil
-}
-
-// GetState converts runtime mutable data into a serializable State.
-func (m *pipelineMW) GetState() State {
-	next := m.comp.GetNextState()
-
-	// Store transactions directly (they are now JSON-serializable)
-	txns := make([]transactionState, len(m.inFlightTransactions))
-	for i, t := range m.inFlightTransactions {
-		if t != nil {
-			txns[i] = *t
-		}
-	}
-	next.Transactions = txns
-
-	next.CacheState = int(m.state)
-	next.EvictingList = snapshotEvictingList(m.evictingList)
-
-	// Bank counters
-	for i, bs := range m.bankStages {
-		next.BankInflightTransCounts[i] = bs.inflightTransCount
-		next.BankDownwardInflightTransCounts[i] = bs.downwardInflightTransCount
-	}
-
-	// Write buffer stage
-	next.PendingEvictionIndices = snapshotTransList(m.writeBuffer.pendingEvictions, m.inFlightTransactions)
-	next.InflightFetchIndices = snapshotTransList(m.writeBuffer.inflightFetch, m.inFlightTransactions)
-	next.InflightEvictionIndices = snapshotTransList(m.writeBuffer.inflightEviction, m.inFlightTransactions)
-
-	// MSHR stage
-	next.HasProcessingMSHREntry, next.ProcessingMSHREntryIdx =
-		snapshotMSHRStageEntry(m.mshrStage, m.inFlightTransactions)
-
-	return *next
-}
-
-// SetState restores runtime mutable data from a serializable State.
-func (m *pipelineMW) SetState(state State) {
-	m.comp.SetState(state)
-
-	m.state = cacheState(state.CacheState)
-
-	// Restore transactions (they are directly stored now)
-	allTrans := make([]*transactionState, len(state.Transactions))
-	for i := range state.Transactions {
-		t := state.Transactions[i]
-		allTrans[i] = &t
-	}
-	m.inFlightTransactions = allTrans
-
-	// Evicting list
-	m.evictingList = make(map[uint64]bool)
-	maps.Copy(m.evictingList, state.EvictingList)
-
-	// Bank counters
-	for i, bs := range m.bankStages {
-		if i < len(state.BankInflightTransCounts) {
-			bs.inflightTransCount = state.BankInflightTransCounts[i]
-		}
-		if i < len(state.BankDownwardInflightTransCounts) {
-			bs.downwardInflightTransCount =
-				state.BankDownwardInflightTransCounts[i]
-		}
-	}
-
-	// Write buffer stage
-	m.writeBuffer.pendingEvictions = restoreTransList(
-		state.PendingEvictionIndices, allTrans)
-	m.writeBuffer.inflightFetch = restoreTransList(
-		state.InflightFetchIndices, allTrans)
-	m.writeBuffer.inflightEviction = restoreTransList(
-		state.InflightEvictionIndices, allTrans)
-
-	// MSHR stage
-	m.mshrStage.hasProcessingTrans = state.HasProcessingMSHREntry
-	if state.HasProcessingMSHREntry &&
-		state.ProcessingMSHREntryIdx >= 0 &&
-		state.ProcessingMSHREntryIdx < len(allTrans) {
-		trans := allTrans[state.ProcessingMSHREntryIdx]
-		m.mshrStage.processingTrans = trans
-		m.mshrStage.processingTransIndices = trans.MSHRTransactionIndices
-		m.mshrStage.processingData = trans.MSHRData
-	}
+	next.Transactions = nil
 }
 
 // controlMW runs the flusher (flush/invalidate from controlPort,
@@ -335,111 +254,4 @@ type controlMW struct {
 // Tick runs the flusher.
 func (m *controlMW) Tick() bool {
 	return m.flusher.Tick()
-}
-
-// GetState snapshots flusher state into the next state buffer.
-func (m *controlMW) GetState() State {
-	next := m.comp.GetNextState()
-
-	next.FlusherBlockToEvictRefs, next.HasProcessingFlush,
-		next.ProcessingFlush = snapshotFlusherState(m.flusher)
-
-	return *next
-}
-
-// SetState restores flusher state from a serializable State.
-func (m *controlMW) SetState(state State) {
-	m.flusher.blockToEvict = make([]blockRef, len(state.FlusherBlockToEvictRefs))
-	copy(m.flusher.blockToEvict, state.FlusherBlockToEvictRefs)
-	m.flusher.processingFlush = nil
-
-	if state.HasProcessingFlush {
-		m.flusher.processingFlush = &cache.FlushReq{
-			MsgMeta:                 state.ProcessingFlush.MsgMeta,
-			InvalidateAllCachelines: state.ProcessingFlush.InvalidateAllCachelines,
-			DiscardInflight:         state.ProcessingFlush.DiscardInflight,
-			PauseAfterFlushing:      state.ProcessingFlush.PauseAfterFlushing,
-		}
-	}
-}
-
-// --- Helper functions for serialization ---
-
-func snapshotTransList(
-	list []*transactionState,
-	allTrans []*transactionState,
-) []int {
-	lookup := make(map[*transactionState]int, len(allTrans))
-	for i, t := range allTrans {
-		if t != nil {
-			lookup[t] = i
-		}
-	}
-
-	indices := make([]int, len(list))
-	for i, t := range list {
-		indices[i] = lookup[t]
-	}
-
-	return indices
-}
-
-func restoreTransList(
-	indices []int,
-	allTrans []*transactionState,
-) []*transactionState {
-	list := make([]*transactionState, len(indices))
-	for i, idx := range indices {
-		list[i] = allTrans[idx]
-	}
-
-	return list
-}
-
-func snapshotEvictingList(evictingList map[uint64]bool) map[uint64]bool {
-	if len(evictingList) == 0 {
-		return nil
-	}
-
-	out := make(map[uint64]bool, len(evictingList))
-	maps.Copy(out, evictingList)
-
-	return out
-}
-
-func snapshotMSHRStageEntry(
-	ms *mshrStage,
-	allTrans []*transactionState,
-) (bool, int) {
-	if !ms.hasProcessingTrans {
-		return false, 0
-	}
-
-	if ms.processingTrans != nil {
-		for i, t := range allTrans {
-			if t == ms.processingTrans {
-				return true, i
-			}
-		}
-	}
-
-	return true, 0
-}
-
-func snapshotFlusherState(
-	f *flusher,
-) ([]blockRef, bool, flushReqState) {
-	refs := make([]blockRef, len(f.blockToEvict))
-	copy(refs, f.blockToEvict)
-
-	if f.processingFlush == nil {
-		return refs, false, flushReqState{}
-	}
-
-	return refs, true, flushReqState{
-		MsgMeta:                 f.processingFlush.MsgMeta,
-		InvalidateAllCachelines: f.processingFlush.InvalidateAllCachelines,
-		DiscardInflight:         f.processingFlush.DiscardInflight,
-		PauseAfterFlushing:      f.processingFlush.PauseAfterFlushing,
-	}
 }

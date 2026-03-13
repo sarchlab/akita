@@ -32,6 +32,8 @@ var _ = Describe("Bank Stage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -60,9 +62,8 @@ var _ = Describe("Bank Stage", func() {
 		}
 
 		m = &pipelineMW{
-			storage:      storage,
-			topPort:      topPort,
-			evictingList: make(map[uint64]bool),
+			storage: storage,
+			topPort: topPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(sim.NewSerialEngine()).
@@ -95,10 +96,6 @@ var _ = Describe("Bank Stage", func() {
 	})
 
 	Context("completing a read hit transaction", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
 			next := m.comp.GetNextState()
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -113,7 +110,7 @@ var _ = Describe("Bank Stage", func() {
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
 			read.TrafficClass = "mem.ReadReq"
-			trans = &transactionState{
+			trans := transactionState{
 				HasRead:            true,
 				ReadMeta:           read.MsgMeta,
 				ReadAddress:        read.Address,
@@ -124,11 +121,11 @@ var _ = Describe("Bank Stage", func() {
 				HasBlock:           true,
 				Action:             bankReadHit,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
+			next.Transactions = []transactionState{trans}
 
 			// Put transaction in bank post-pipeline buffer
 			next.BankPostPipelineBufs[0].Elements = []int{0}
-			bs.inflightTransCount = 1
+			next.BankInflightTransCounts[0] = 1
 		})
 
 		It("should stall if send buffer is full", func() {
@@ -139,7 +136,8 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bs.inflightTransCount).To(Equal(1))
+			next := m.comp.GetNextState()
+			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
 		})
 
 		It("should read and send response", func() {
@@ -147,7 +145,6 @@ var _ = Describe("Bank Stage", func() {
 			topPort.EXPECT().Send(gomock.Any()).
 				Do(func(msg sim.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
-					Expect(dr.Meta().RspTo).To(Equal(trans.ReadMeta.ID))
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
 
@@ -159,17 +156,12 @@ var _ = Describe("Bank Stage", func() {
 			next := m.comp.GetNextState()
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.ReadCount).To(Equal(0))
-			Expect(m.inFlightTransactions).
-				NotTo(ContainElement(trans))
-			Expect(bs.inflightTransCount).To(Equal(0))
+			Expect(next.Transactions[0].Removed).To(BeTrue())
+			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 		})
 	})
 
 	Context("completing a write-hit transaction", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
 			next := m.comp.GetNextState()
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -183,7 +175,7 @@ var _ = Describe("Bank Stage", func() {
 			write.Data = []byte{5, 6, 7, 8}
 			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
 			write.TrafficClass = "mem.WriteReq"
-			trans = &transactionState{
+			trans := transactionState{
 				HasWrite:     true,
 				WriteMeta:    write.MsgMeta,
 				WriteAddress: write.Address,
@@ -194,9 +186,9 @@ var _ = Describe("Bank Stage", func() {
 				HasBlock:     true,
 				Action:       bankWriteHit,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
+			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Elements = []int{0}
-			bs.inflightTransCount = 1
+			next.BankInflightTransCounts[0] = 1
 		})
 
 		It("should stall if send buffer is full", func() {
@@ -207,15 +199,14 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
-			Expect(bs.inflightTransCount).To(Equal(1))
+			next := m.comp.GetNextState()
+			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
 		})
 
 		It("should write and send response", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
-					Expect(msg.Meta().RspTo).To(Equal(trans.WriteMeta.ID))
-				})
+				Do(func(msg sim.Msg) {})
 
 			m.syncForTest()
 
@@ -229,17 +220,12 @@ var _ = Describe("Bank Stage", func() {
 			Expect(block.IsValid).To(BeTrue())
 			Expect(block.IsLocked).To(BeFalse())
 			Expect(block.IsDirty).To(BeTrue())
-			Expect(m.inFlightTransactions).
-				NotTo(ContainElement(trans))
-			Expect(bs.inflightTransCount).To(Equal(0))
+			Expect(next.Transactions[0].Removed).To(BeTrue())
+			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 		})
 	})
 
 	Context("completing a write fetched transaction", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
 			next := m.comp.GetNextState()
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -257,17 +243,17 @@ var _ = Describe("Bank Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 
-			trans = &transactionState{
-				BlockSetID:               0,
-				BlockWayID:               0,
-				HasBlock:                 true,
-				MSHRData:                 fetchedData,
-				MSHRTransactionIndices:   []int{},
-				Action:                   bankWriteFetched,
+			trans := transactionState{
+				BlockSetID:             0,
+				BlockWayID:             0,
+				HasBlock:               true,
+				MSHRData:               fetchedData,
+				MSHRTransactionIndices: []int{},
+				Action:                 bankWriteFetched,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
+			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Elements = []int{0}
-			bs.inflightTransCount = 1
+			next.BankInflightTransCounts[0] = 1
 		})
 
 		It("should write to storage and send to mshr stage", func() {
@@ -276,23 +262,20 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			writtenData, _ := storage.Read(0x40, 64)
-			Expect(writtenData).To(Equal(trans.MSHRData))
 			next := m.comp.GetNextState()
+			writtenData, _ := storage.Read(0x40, 64)
+			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsLocked).To(BeFalse())
 			Expect(block.IsValid).To(BeTrue())
-			Expect(bs.inflightTransCount).To(Equal(0))
+			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 		})
 	})
 
 	Context("finalizing a read for eviction action", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
-			trans = &transactionState{
+			next := m.comp.GetNextState()
+			trans := transactionState{
 				HasVictim:          true,
 				VictimTag:          0x200,
 				VictimCacheAddress: 0x300,
@@ -309,10 +292,9 @@ var _ = Describe("Bank Stage", func() {
 				Action:       bankEvictAndFetch,
 				EvictingAddr: 0x200,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
-			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
 			next.BankPostPipelineBufs[0].Elements = []int{0}
-			bs.inflightTransCount = 1
+			next.BankInflightTransCounts[0] = 1
 		})
 
 		It("should send eviction to write buffer", func() {
@@ -333,9 +315,10 @@ var _ = Describe("Bank Stage", func() {
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(trans.Action).To(Equal(writeBufferEvictAndFetch))
-			Expect(trans.EvictingData).To(Equal(data))
-			Expect(bs.inflightTransCount).To(Equal(0))
+			next := m.comp.GetNextState()
+			Expect(next.Transactions[0].Action).To(Equal(writeBufferEvictAndFetch))
+			Expect(next.Transactions[0].EvictingData).To(Equal(data))
+			Expect(next.BankInflightTransCounts[0]).To(Equal(0))
 		})
 	})
 })

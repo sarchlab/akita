@@ -27,6 +27,8 @@ var _ = Describe("WriteBufferStage", func() {
 			AnyTimes()
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -55,30 +57,29 @@ var _ = Describe("WriteBufferStage", func() {
 		}
 
 		m = &pipelineMW{
-			bottomPort:   bottomPort,
-			evictingList: make(map[uint64]bool),
+			bottomPort: bottomPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
 			WithSpec(Spec{
-				Log2BlockSize:     6,
-				NumReqPerCycle:    4,
-				WayAssociativity:  4,
-				NumSets:           64,
-				NumBanks:          1,
-				AddressMapperType: "single",
-				RemotePortNames:   []string{"DRAM"},
+				Log2BlockSize:       6,
+				NumReqPerCycle:      4,
+				WayAssociativity:    4,
+				NumSets:             64,
+				NumBanks:            1,
+				AddressMapperType:   "single",
+				RemotePortNames:     []string{"DRAM"},
+				WriteBufferCapacity: 16,
+				MaxInflightFetch:    4,
+				MaxInflightEviction: 4,
 			}).
 			Build("Cache")
 
 		m.comp.SetState(initialState)
 
 		wb = &writeBufferStage{
-			cache:               m,
-			writeBufferCapacity: 16,
-			maxInflightFetch:    4,
-			maxInflightEviction: 4,
+			cache: m,
 		}
 		m.writeBuffer = wb
 	})
@@ -102,7 +103,7 @@ var _ = Describe("WriteBufferStage", func() {
 			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
-			trans := &transactionState{
+			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
 				FetchPID:     1,
@@ -113,9 +114,9 @@ var _ = Describe("WriteBufferStage", func() {
 				ReadMeta:     read.MsgMeta,
 				ReadAddress:  0x100,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
 
 			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Elements = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
@@ -127,25 +128,25 @@ var _ = Describe("WriteBufferStage", func() {
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(wb.inflightFetch).To(HaveLen(1))
+			next = m.comp.GetNextState()
+			Expect(next.InflightFetchIndices).To(HaveLen(1))
 		})
 
 		It("should stall fetch if too many inflight fetches", func() {
-			wb.inflightFetch = make([]*transactionState, 4)
+			next := m.comp.GetNextState()
+			next.InflightFetchIndices = []int{10, 11, 12, 13}
 
 			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
-			trans := &transactionState{
+			trans := transactionState{
 				Action:       writeBufferFetch,
 				FetchAddress: 0x100,
 				HasRead:      true,
 				ReadMeta:     read.MsgMeta,
 				ReadAddress:  0x100,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
-
-			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
 			next.WriteBufferBuf.Elements = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
@@ -163,7 +164,7 @@ var _ = Describe("WriteBufferStage", func() {
 			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
-			trans := &transactionState{
+			trans := transactionState{
 				EvictingAddr: 0x200,
 				EvictingPID:  2,
 				EvictingData: make([]byte, 64),
@@ -171,8 +172,10 @@ var _ = Describe("WriteBufferStage", func() {
 				ReadMeta:     read.MsgMeta,
 				ReadAddress:  0x200,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
-			wb.pendingEvictions = []*transactionState{trans}
+
+			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
+			next.PendingEvictionIndices = []int{0}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 			bottomPort.EXPECT().CanSend().Return(true)
@@ -183,13 +186,16 @@ var _ = Describe("WriteBufferStage", func() {
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(wb.pendingEvictions).To(HaveLen(0))
-			Expect(wb.inflightEviction).To(HaveLen(1))
+			next = m.comp.GetNextState()
+			Expect(next.PendingEvictionIndices).To(HaveLen(0))
+			Expect(next.InflightEvictionIndices).To(HaveLen(1))
 		})
 
 		It("should stall if too many inflight evictions", func() {
-			wb.inflightEviction = make([]*transactionState, 4)
-			wb.pendingEvictions = []*transactionState{{}}
+			next := m.comp.GetNextState()
+			next.InflightEvictionIndices = []int{10, 11, 12, 13}
+			next.PendingEvictionIndices = []int{0}
+			next.Transactions = []transactionState{{}}
 
 			bottomPort.EXPECT().PeekIncoming().Return(nil)
 
@@ -210,15 +216,17 @@ var _ = Describe("WriteBufferStage", func() {
 			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
 			read.TrafficClass = "mem.ReadReq"
-			trans := &transactionState{
+			trans := transactionState{
 				HasEvictionWriteReq:  true,
 				EvictionWriteReqMeta: evictWrite.MsgMeta,
 				HasRead:              true,
 				ReadMeta:             read.MsgMeta,
 				ReadAddress:          0,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
-			wb.inflightEviction = []*transactionState{trans}
+
+			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
+			next.InflightEvictionIndices = []int{0}
 
 			rsp := &mem.WriteDoneRsp{}
 			rsp.RspTo = "write-1"
@@ -232,7 +240,8 @@ var _ = Describe("WriteBufferStage", func() {
 			ret := wb.Tick()
 
 			Expect(ret).To(BeTrue())
-			Expect(wb.inflightEviction).To(HaveLen(0))
+			next = m.comp.GetNextState()
+			Expect(next.InflightEvictionIndices).To(HaveLen(0))
 		})
 	})
 })

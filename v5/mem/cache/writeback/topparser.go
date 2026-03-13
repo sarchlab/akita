@@ -11,7 +11,9 @@ type topParser struct {
 }
 
 func (p *topParser) Tick() bool {
-	if p.cache.state != cacheStateRunning {
+	next := p.cache.comp.GetNextState()
+
+	if cacheState(next.CacheState) != cacheStateRunning {
 		return false
 	}
 
@@ -20,12 +22,11 @@ func (p *topParser) Tick() bool {
 		return false
 	}
 
-	next := p.cache.comp.GetNextState()
 	if !next.DirStageBuf.CanPush() {
 		return false
 	}
 
-	trans := &transactionState{
+	trans := transactionState{
 		ID: sim.GetIDGenerator().Generate(),
 	}
 
@@ -45,9 +46,9 @@ func (p *topParser) Tick() bool {
 		trans.WritePID = msg.PID
 	}
 
-	p.cache.inFlightTransactions = append(p.cache.inFlightTransactions, trans)
+	next.Transactions = append(next.Transactions, trans)
 
-	idx := len(p.cache.inFlightTransactions) - 1
+	idx := len(next.Transactions) - 1
 	next.DirStageBuf.PushTyped(idx)
 
 	tracing.TraceReqReceive(msg, p.cache.comp)

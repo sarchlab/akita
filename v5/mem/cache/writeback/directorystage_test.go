@@ -23,6 +23,8 @@ var _ = Describe("DirectoryStage", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -50,9 +52,7 @@ var _ = Describe("DirectoryStage", func() {
 			BankDownwardInflightTransCounts: []int{0},
 		}
 
-		m = &pipelineMW{
-			evictingList: make(map[uint64]bool),
-		}
+		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
 			WithFreq(1 * sim.GHz).
@@ -82,10 +82,6 @@ var _ = Describe("DirectoryStage", func() {
 	})
 
 	Context("read", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
 			read := &mem.ReadReq{}
 			read.ID = sim.GetIDGenerator().Generate()
@@ -94,17 +90,16 @@ var _ = Describe("DirectoryStage", func() {
 			read.AccessByteSize = 64
 			read.TrafficBytes = 12
 			read.TrafficClass = "mem.ReadReq"
-			trans = &transactionState{
+			trans := transactionState{
 				HasRead:            true,
 				ReadMeta:           read.MsgMeta,
 				ReadAddress:        read.Address,
 				ReadAccessByteSize: read.AccessByteSize,
 				ReadPID:            read.PID,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
 
-			// Put trans in dir post pipeline buf
 			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Elements = []int{0}
 		})
 
@@ -145,7 +140,7 @@ var _ = Describe("DirectoryStage", func() {
 				setID := int(0x100 / uint64(64) % uint64(64))
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
-				Expect(trans.Action).To(Equal(bankReadHit))
+				Expect(next.Transactions[0].Action).To(Equal(bankReadHit))
 			})
 		})
 
@@ -181,16 +176,13 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.Action).To(Equal(bankEvictAndFetch))
+				next := m.comp.GetNextState()
+				Expect(next.Transactions[0].Action).To(Equal(bankEvictAndFetch))
 			})
 		})
 	})
 
 	Context("write", func() {
-		var (
-			trans *transactionState
-		)
-
 		BeforeEach(func() {
 			write := &mem.WriteReq{}
 			write.ID = sim.GetIDGenerator().Generate()
@@ -198,15 +190,15 @@ var _ = Describe("DirectoryStage", func() {
 			write.PID = 1
 			write.TrafficBytes = 12
 			write.TrafficClass = "mem.WriteReq"
-			trans = &transactionState{
+			trans := transactionState{
 				HasWrite:     true,
 				WriteMeta:    write.MsgMeta,
 				WriteAddress: write.Address,
 				WritePID:     write.PID,
 			}
-			m.inFlightTransactions = []*transactionState{trans}
 
 			next := m.comp.GetNextState()
+			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Elements = []int{0}
 		})
 
@@ -226,13 +218,15 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.Action).To(Equal(bankWriteHit))
+				next := m.comp.GetNextState()
+				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
 			})
 		})
 
 		Context("miss, write full line, no eviction", func() {
 			BeforeEach(func() {
-				trans.WriteData = make([]byte, 64)
+				next := m.comp.GetNextState()
+				next.Transactions[0].WriteData = make([]byte, 64)
 			})
 
 			It("should send to bank", func() {
@@ -241,7 +235,8 @@ var _ = Describe("DirectoryStage", func() {
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				Expect(trans.Action).To(Equal(bankWriteHit))
+				next := m.comp.GetNextState()
+				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
 			})
 		})
 	})

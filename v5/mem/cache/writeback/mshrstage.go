@@ -1,8 +1,6 @@
 package writeback
 
 import (
-	"slices"
-
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -10,20 +8,15 @@ import (
 
 type mshrStage struct {
 	cache *pipelineMW
-
-	// The transaction that carries MSHR data/transaction indices
-	hasProcessingTrans       bool
-	processingTrans          *transactionState
-	processingTransIndices   []int
-	processingData           []byte
 }
 
 func (s *mshrStage) Tick() bool {
-	if s.hasProcessingTrans {
+	next := s.cache.comp.GetNextState()
+
+	if next.HasProcessingMSHREntry {
 		return s.processOneReq()
 	}
 
-	next := s.cache.comp.GetNextState()
 	mshrBuf := &next.MSHRStageBuf
 
 	item := mshrBuf.Pop()
@@ -32,21 +25,20 @@ func (s *mshrStage) Tick() bool {
 	}
 
 	transIdx := item.(int)
-	trans := s.cache.inFlightTransactions[transIdx]
-	s.hasProcessingTrans = true
-	s.processingTrans = trans
-	s.processingTransIndices = trans.MSHRTransactionIndices
-	s.processingData = trans.MSHRData
+	trans := &next.Transactions[transIdx]
+	next.HasProcessingMSHREntry = true
+	next.ProcessingMSHREntryIdx = transIdx
+
+	// Copy data into local state fields for processing
+	_ = trans
 
 	return s.processOneReq()
 }
 
 func (s *mshrStage) Reset() {
-	s.hasProcessingTrans = false
-	s.processingTrans = nil
-	s.processingTransIndices = nil
-	s.processingData = nil
 	next := s.cache.comp.GetNextState()
+	next.HasProcessingMSHREntry = false
+	next.ProcessingMSHREntryIdx = 0
 	next.MSHRStageBuf.Clear()
 }
 
@@ -55,43 +47,49 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	if len(s.processingTransIndices) == 0 {
-		s.hasProcessingTrans = false
+	next := s.cache.comp.GetNextState()
+	processingTrans := &next.Transactions[next.ProcessingMSHREntryIdx]
+
+	if len(processingTrans.MSHRTransactionIndices) == 0 {
+		next.HasProcessingMSHREntry = false
 		return true
 	}
 
-	transIdx := s.processingTransIndices[0]
+	transIdx := processingTrans.MSHRTransactionIndices[0]
 
-	// Verify the transaction is still in the inflight list
+	// Verify the transaction is still in the transaction list and not removed
 	var trans *transactionState
-	if transIdx >= 0 && transIdx < len(s.cache.inFlightTransactions) {
-		trans = s.cache.inFlightTransactions[transIdx]
+	if transIdx >= 0 && transIdx < len(next.Transactions) {
+		t := &next.Transactions[transIdx]
+		if !t.Removed {
+			trans = t
+		}
 	}
 
-	transactionPresent := trans != nil && s.findTransaction(trans)
+	transactionPresent := trans != nil && s.findTransaction(transIdx)
 
 	spec := s.cache.comp.GetSpec()
 
 	if transactionPresent {
-		s.removeTransaction(trans)
+		next.Transactions[transIdx].Removed = true
 
 		if trans.HasRead {
-			s.respondRead(trans, s.processingData, spec.Log2BlockSize)
+			s.respondRead(trans, processingTrans.MSHRData, spec.Log2BlockSize)
 		} else {
 			s.respondWrite(trans)
 		}
 
-		s.processingTransIndices = s.processingTransIndices[1:]
-		if len(s.processingTransIndices) == 0 {
-			s.hasProcessingTrans = false
+		processingTrans.MSHRTransactionIndices = processingTrans.MSHRTransactionIndices[1:]
+		if len(processingTrans.MSHRTransactionIndices) == 0 {
+			next.HasProcessingMSHREntry = false
 		}
 
 		return true
 	}
 
-	s.processingTransIndices = s.processingTransIndices[1:]
-	if len(s.processingTransIndices) == 0 {
-		s.hasProcessingTrans = false
+	processingTrans.MSHRTransactionIndices = processingTrans.MSHRTransactionIndices[1:]
+	if len(processingTrans.MSHRTransactionIndices) == 0 {
+		next.HasProcessingMSHREntry = false
 	}
 
 	return true
@@ -130,17 +128,10 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 	tracing.TraceReqComplete(&trans.WriteMeta, s.cache.comp)
 }
 
-func (s *mshrStage) removeTransaction(trans *transactionState) {
-	for i, t := range s.cache.inFlightTransactions {
-		if trans == t {
-			s.cache.inFlightTransactions[i] = nil
-			return
-		}
+func (s *mshrStage) findTransaction(transIdx int) bool {
+	next := s.cache.comp.GetNextState()
+	if transIdx < 0 || transIdx >= len(next.Transactions) {
+		return false
 	}
-
-	panic("transaction not found")
-}
-
-func (s *mshrStage) findTransaction(trans *transactionState) bool {
-	return slices.Contains(s.cache.inFlightTransactions, trans)
+	return !next.Transactions[transIdx].Removed
 }

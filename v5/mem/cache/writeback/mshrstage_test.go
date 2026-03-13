@@ -27,6 +27,8 @@ var _ = Describe("MSHR Stage", func() {
 			AnyTimes()
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -55,8 +57,7 @@ var _ = Describe("MSHR Stage", func() {
 		}
 
 		m = &pipelineMW{
-			topPort:      topPort,
-			evictingList: make(map[uint64]bool),
+			topPort: topPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -68,7 +69,6 @@ var _ = Describe("MSHR Stage", func() {
 			Build("Cache")
 
 		m.comp.SetState(initialState)
-		m.inFlightTransactions = nil
 
 		ms = &mshrStage{
 			cache: m,
@@ -93,7 +93,7 @@ var _ = Describe("MSHR Stage", func() {
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		trans := &transactionState{
+		trans := transactionState{
 			HasRead:            true,
 			ReadMeta:           read.MsgMeta,
 			ReadAddress:        read.Address,
@@ -101,7 +101,7 @@ var _ = Describe("MSHR Stage", func() {
 			ReadPID:            read.PID,
 		}
 
-		mshrTrans := &transactionState{
+		mshrTrans := transactionState{
 			MSHRTransactionIndices: []int{0},
 			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -115,10 +115,10 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		m.inFlightTransactions = []*transactionState{trans, mshrTrans}
+		next := m.comp.GetNextState()
+		next.Transactions = []transactionState{trans, mshrTrans}
 
 		// Push mshrTrans to the MSHR stage buffer
-		next := m.comp.GetNextState()
 		next.MSHRStageBuf.Elements = []int{1}
 
 		topPort.EXPECT().CanSend().Return(false)
@@ -128,7 +128,8 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeFalse())
-		Expect(ms.hasProcessingTrans).To(BeTrue())
+		next = m.comp.GetNextState()
+		Expect(next.HasProcessingMSHREntry).To(BeTrue())
 	})
 
 	It("should send data ready to top", func() {
@@ -138,7 +139,7 @@ var _ = Describe("MSHR Stage", func() {
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
 		read.TrafficClass = "mem.ReadReq"
-		trans := &transactionState{
+		trans := transactionState{
 			HasRead:            true,
 			ReadMeta:           read.MsgMeta,
 			ReadAddress:        read.Address,
@@ -146,7 +147,7 @@ var _ = Describe("MSHR Stage", func() {
 			ReadPID:            read.PID,
 		}
 
-		mshrTrans := &transactionState{
+		mshrTrans := transactionState{
 			MSHRTransactionIndices: []int{0},
 			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -159,9 +160,9 @@ var _ = Describe("MSHR Stage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			},
 		}
-		m.inFlightTransactions = []*transactionState{trans, mshrTrans}
 
 		next := m.comp.GetNextState()
+		next.Transactions = []transactionState{trans, mshrTrans}
 		next.MSHRStageBuf.Elements = []int{1}
 
 		topPort.EXPECT().CanSend().Return(true)
@@ -176,13 +177,14 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingTrans).To(BeFalse())
-		Expect(m.inFlightTransactions).NotTo(ContainElement(trans))
+		next = m.comp.GetNextState()
+		Expect(next.HasProcessingMSHREntry).To(BeFalse())
+		Expect(next.Transactions[0].Removed).To(BeTrue())
 	})
 
 	It("should discard the request if it is no longer inflight", func() {
-		mshrTrans := &transactionState{
-			MSHRTransactionIndices: []int{99}, // index that doesn't exist or is nil
+		mshrTrans := transactionState{
+			MSHRTransactionIndices: []int{99}, // index that doesn't exist
 			MSHRData: []byte{
 				1, 2, 3, 4, 5, 6, 7, 8,
 				1, 2, 3, 4, 5, 6, 7, 8,
@@ -195,9 +197,8 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		m.inFlightTransactions = []*transactionState{mshrTrans}
-
 		next := m.comp.GetNextState()
+		next.Transactions = []transactionState{mshrTrans}
 		next.MSHRStageBuf.Elements = []int{0}
 
 		topPort.EXPECT().CanSend().Return(true)
@@ -207,6 +208,7 @@ var _ = Describe("MSHR Stage", func() {
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		Expect(ms.hasProcessingTrans).To(BeFalse())
+		next = m.comp.GetNextState()
+		Expect(next.HasProcessingMSHREntry).To(BeFalse())
 	})
 })

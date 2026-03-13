@@ -23,6 +23,8 @@ var _ = Describe("TopParser", func() {
 		port = NewMockPort(mockCtrl)
 
 		initialState := State{
+			CacheState:   int(cacheStateRunning),
+			EvictingList: make(map[uint64]bool),
 			DirStageBuf: stateutil.Buffer[int]{
 				BufferName: "Cache.DirStageBuf", Cap: 4,
 			},
@@ -51,9 +53,7 @@ var _ = Describe("TopParser", func() {
 		}
 
 		m = &pipelineMW{
-			topPort:      port,
-			state:        cacheStateRunning,
-			evictingList: make(map[uint64]bool),
+			topPort: port,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -69,7 +69,6 @@ var _ = Describe("TopParser", func() {
 		parser = &topParser{
 			cache: m,
 		}
-		m.inFlightTransactions = nil
 	})
 
 	AfterEach(func() {
@@ -85,7 +84,8 @@ var _ = Describe("TopParser", func() {
 	})
 
 	It("should return if the cache is not in running stage", func() {
-		m.state = cacheStateFlushing
+		next := m.comp.GetNextState()
+		next.CacheState = int(cacheStateFlushing)
 		m.syncForTest()
 
 		ret := parser.Tick()
@@ -107,10 +107,11 @@ var _ = Describe("TopParser", func() {
 
 		parser.Tick()
 
-		Expect(m.inFlightTransactions).To(HaveLen(1))
-		Expect(m.inFlightTransactions[0].HasRead).To(BeTrue())
-		Expect(m.inFlightTransactions[0].ReadAddress).To(Equal(uint64(0x100)))
-		Expect(m.inFlightTransactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
+		next := m.comp.GetNextState()
+		Expect(next.Transactions).To(HaveLen(1))
+		Expect(next.Transactions[0].HasRead).To(BeTrue())
+		Expect(next.Transactions[0].ReadAddress).To(Equal(uint64(0x100)))
+		Expect(next.Transactions[0].ReadAccessByteSize).To(Equal(uint64(64)))
 	})
 
 	It("should parse write from top", func() {
@@ -127,8 +128,9 @@ var _ = Describe("TopParser", func() {
 
 		parser.Tick()
 
-		Expect(m.inFlightTransactions).To(HaveLen(1))
-		Expect(m.inFlightTransactions[0].HasWrite).To(BeTrue())
-		Expect(m.inFlightTransactions[0].WriteAddress).To(Equal(uint64(0x100)))
+		next := m.comp.GetNextState()
+		Expect(next.Transactions).To(HaveLen(1))
+		Expect(next.Transactions[0].HasWrite).To(BeTrue())
+		Expect(next.Transactions[0].WriteAddress).To(Equal(uint64(0x100)))
 	})
 })
