@@ -5,6 +5,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -24,9 +25,26 @@ var _ = Describe("Bankstage", func() {
 		storage = mem.NewStorage(4 * mem.KB)
 
 		initialState := State{
-			BankBufIndices:             []bankBufState{{Indices: nil}},
-			BankPipelineStages:         []bankPipelineState{{Stages: nil}},
-			BankPostPipelineBufIndices: []bankPostBufState{{Indices: nil}},
+			DirBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirBuf",
+				Cap:        4,
+			},
+			BankBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankBuf0", Cap: 1},
+			},
+			DirPipeline: stateutil.Pipeline[int]{
+				Width: 1, NumStages: 2,
+			},
+			DirPostBuf: stateutil.Buffer[int]{
+				BufferName: "Cache.DirPostBuf",
+				Cap:        4,
+			},
+			BankPipelines: []stateutil.Pipeline[int]{
+				{Width: 1, NumStages: 10},
+			},
+			BankPostBufs: []stateutil.Buffer[int]{
+				{BufferName: "Cache.BankPostBuf0", Cap: 1},
+			},
 		}
 
 		c = &pipelineMW{
@@ -51,28 +69,6 @@ var _ = Describe("Bankstage", func() {
 
 		c.comp.SetState(initialState)
 
-		next := c.comp.GetNextState()
-
-		// Create adapters
-		c.bankBufAdapters = []*stateTransBuffer{
-			{
-				name:       "Cache.BankBuf0",
-				readItems:  &next.BankBufIndices[0].Indices,
-				writeItems: &next.BankBufIndices[0].Indices,
-				capacity:   1,
-				mw:         c,
-			},
-		}
-		c.bankPostBufAdapters = []*stateBankPostBufAdapter{
-			{
-				name:       "Cache.BankPostBuf0",
-				readItems:  &next.BankPostPipelineBufIndices[0].Indices,
-				writeItems: &next.BankPostPipelineBufIndices[0].Indices,
-				capacity:   1,
-				mw:         c,
-			},
-		}
-
 		s = &bankStage{
 			cache:          c,
 			bankID:         0,
@@ -85,7 +81,6 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should do nothing if no request", func() {
-		c.syncForTest()
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeFalse())
@@ -96,14 +91,12 @@ var _ = Describe("Bankstage", func() {
 
 		trans := &transactionState{}
 		c.postCoalesceTransactions = append(c.postCoalesceTransactions, trans)
-		next.BankBufIndices[0].Indices = append(next.BankBufIndices[0].Indices, 0)
-
-		c.syncForTest()
+		next.BankBufs[0].Elements = append(next.BankBufs[0].Elements, 0)
 
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(next.BankPipelineStages[0].Stages).To(HaveLen(1))
+		Expect(next.BankPipelines[0].Stages).To(HaveLen(1))
 	})
 
 	Context("read hit", func() {
@@ -172,14 +165,12 @@ var _ = Describe("Bankstage", func() {
 				c.postCoalesceTransactions, postCTrans)
 
 			// Put in post-pipeline buffer
-			next.BankPostPipelineBufIndices[0].Indices = append(
-				next.BankPostPipelineBufIndices[0].Indices, 0)
+			next.BankPostBufs[0].Elements = append(
+				next.BankPostBufs[0].Elements, 0)
 		})
 
 		It("should read", func() {
 			next := c.comp.GetNextState()
-
-			c.syncForTest()
 
 			madeProgress := s.Tick()
 
@@ -195,8 +186,8 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write", func() {
 		var (
-			write              *mem.WriteReq
-			trans              *transactionState
+			write                      *mem.WriteReq
+			trans                      *transactionState
 			blockSetID, blockWayID int
 		)
 
@@ -246,14 +237,12 @@ var _ = Describe("Bankstage", func() {
 
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, trans)
-			next.BankPostPipelineBufIndices[0].Indices = append(
-				next.BankPostPipelineBufIndices[0].Indices, 0)
+			next.BankPostBufs[0].Elements = append(
+				next.BankPostBufs[0].Elements, 0)
 		})
 
 		It("should write", func() {
 			next := c.comp.GetNextState()
-
-			c.syncForTest()
 
 			madeProgress := s.Tick()
 
@@ -275,7 +264,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("write fetched", func() {
 		var (
-			trans              *transactionState
+			trans                      *transactionState
 			blockSetID, blockWayID int
 		)
 
@@ -310,14 +299,12 @@ var _ = Describe("Bankstage", func() {
 
 			c.postCoalesceTransactions = append(
 				c.postCoalesceTransactions, trans)
-			next.BankPostPipelineBufIndices[0].Indices = append(
-				next.BankPostPipelineBufIndices[0].Indices, 0)
+			next.BankPostBufs[0].Elements = append(
+				next.BankPostBufs[0].Elements, 0)
 		})
 
 		It("should write fetched", func() {
 			next := c.comp.GetNextState()
-
-			c.syncForTest()
 
 			madeProgress := s.Tick()
 

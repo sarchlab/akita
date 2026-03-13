@@ -7,6 +7,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -194,14 +195,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	spec := b.buildSpec(numSets)
 
-	initialState := State{
-		BankBufIndices:             make([]bankBufState, b.numBank),
-		BankPipelineStages:         make([]bankPipelineState, b.numBank),
-		BankPostPipelineBufIndices: make([]bankPostBufState, b.numBank),
-	}
-
-	cache.DirectoryReset(
-		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+	initialState := b.buildInitialState(name, numSets, blockSize)
 
 	comp := modeling.NewBuilder[Spec, State]().
 		WithEngine(b.engine).
@@ -212,7 +206,6 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp.SetState(initialState)
 
 	pmw := b.buildPipelineMW(comp)
-	b.buildAdapters(pmw)
 	b.buildStages(pmw)
 
 	cmw := b.buildControlMW(comp, pmw)
@@ -225,6 +218,58 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	comp.AddMiddleware(cmw) // index 1
 
 	return comp
+}
+
+func (b *Builder) buildInitialState(
+	name string,
+	numSets, blockSize int,
+) State {
+	bankBufs := make([]stateutil.Buffer[int], b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		bankBufs[i] = stateutil.Buffer[int]{
+			BufferName: fmt.Sprintf("%s.Bank%d.Buffer", name, i),
+			Cap:        b.numReqPerCycle,
+		}
+	}
+
+	bankPipelines := make([]stateutil.Pipeline[int], b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		bankPipelines[i] = stateutil.Pipeline[int]{
+			Width:     b.numReqPerCycle,
+			NumStages: b.bankLatency,
+		}
+	}
+
+	bankPostBufs := make([]stateutil.Buffer[int], b.numBank)
+	for i := 0; i < b.numBank; i++ {
+		bankPostBufs[i] = stateutil.Buffer[int]{
+			BufferName: fmt.Sprintf("%s.Bank[%d].PostPipelineBuffer", name, i),
+			Cap:        b.numReqPerCycle,
+		}
+	}
+
+	initialState := State{
+		DirBuf: stateutil.Buffer[int]{
+			BufferName: name + ".DirectoryBuffer",
+			Cap:        b.numReqPerCycle,
+		},
+		BankBufs: bankBufs,
+		DirPipeline: stateutil.Pipeline[int]{
+			Width:     b.numReqPerCycle,
+			NumStages: b.dirLatency,
+		},
+		DirPostBuf: stateutil.Buffer[int]{
+			BufferName: name + ".DirectoryStage.PostPipelineBuffer",
+			Cap:        b.numReqPerCycle,
+		},
+		BankPipelines: bankPipelines,
+		BankPostBufs:  bankPostBufs,
+	}
+
+	cache.DirectoryReset(
+		&initialState.DirectoryState, numSets, b.wayAssociativity, blockSize)
+
+	return initialState
 }
 
 func (b *Builder) buildSpec(numSets int) Spec {
@@ -297,53 +342,6 @@ func (b *Builder) buildControlMW(
 	}
 
 	return cmw
-}
-
-func (b *Builder) buildAdapters(m *pipelineMW) {
-	next := m.comp.GetNextState()
-
-	// Dir buf adapter (read/write pointers set by updateAdapterPointers each tick)
-	m.dirBufAdapter = &stateTransBuffer{
-		name:       m.comp.Name() + ".DirectoryBuffer",
-		readItems:  &next.DirBufIndices,
-		writeItems: &next.DirBufIndices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	// Bank buf adapters
-	m.bankBufAdapters = make([]*stateTransBuffer, b.numBank)
-	for i := 0; i < b.numBank; i++ {
-		m.bankBufAdapters[i] = &stateTransBuffer{
-			name:       fmt.Sprintf("%s.Bank%d.Buffer", m.comp.Name(), i),
-			readItems:  &next.BankBufIndices[i].Indices,
-			writeItems: &next.BankBufIndices[i].Indices,
-			capacity:   b.numReqPerCycle,
-			mw:         m,
-		}
-	}
-
-	// Dir post pipeline buf adapter
-	m.dirPostBufAdapter = &stateDirPostBufAdapter{
-		name:       m.comp.Name() + ".DirectoryStage.PostPipelineBuffer",
-		readItems:  &next.DirPostPipelineBufIndices,
-		writeItems: &next.DirPostPipelineBufIndices,
-		capacity:   b.numReqPerCycle,
-		mw:         m,
-	}
-
-	// Bank post pipeline buf adapters
-	m.bankPostBufAdapters = make([]*stateBankPostBufAdapter, b.numBank)
-	for i := 0; i < b.numBank; i++ {
-		m.bankPostBufAdapters[i] = &stateBankPostBufAdapter{
-			name: fmt.Sprintf(
-				"%s.Bank[%d].PostPipelineBuffer", m.comp.Name(), i),
-			readItems:  &next.BankPostPipelineBufIndices[i].Indices,
-			writeItems: &next.BankPostPipelineBufIndices[i].Indices,
-			capacity:   b.numReqPerCycle,
-			mw:         m,
-		}
-	}
 }
 
 func (b *Builder) buildStages(m *pipelineMW) {

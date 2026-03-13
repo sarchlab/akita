@@ -6,6 +6,7 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -25,6 +26,11 @@ func (c *coalescer) Tick() bool {
 	}
 
 	return c.processReq(msgI)
+}
+
+func (c *coalescer) getDirBuf() *stateutil.Buffer[int] {
+	next := c.cache.comp.GetNextState()
+	return &next.DirBuf
 }
 
 func (c *coalescer) processReq(msg sim.Msg) bool {
@@ -59,7 +65,8 @@ func (c *coalescer) processReqCoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBufAdapter.CanPush() {
+	dirBuf := c.getDirBuf()
+	if !dirBuf.CanPush() {
 		return false
 	}
 
@@ -76,7 +83,8 @@ func (c *coalescer) processReqNoncoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBufAdapter.CanPush() {
+	dirBuf := c.getDirBuf()
+	if !dirBuf.CanPush() {
 		return false
 	}
 
@@ -92,13 +100,14 @@ func (c *coalescer) processReqLastInWaveCoalescable(msg sim.Msg) bool {
 }
 
 func (c *coalescer) processReqLastInWaveNoncoalescable(msg sim.Msg) bool {
-	if !c.cache.dirBufAdapter.CanPush() {
+	dirBuf := c.getDirBuf()
+	if !dirBuf.CanPush() {
 		return false
 	}
 
 	c.coalesceAndSend()
 
-	if !c.cache.dirBufAdapter.CanPush() {
+	if !dirBuf.CanPush() {
 		return true
 	}
 
@@ -170,10 +179,14 @@ func (c *coalescer) coalesceAndSend() bool {
 	}
 
 	// Add to postCoalesceTransactions BEFORE pushing to buffer
-	// (Push needs to find the index)
 	c.cache.postCoalesceTransactions =
 		append(c.cache.postCoalesceTransactions, trans)
-	c.cache.dirBufAdapter.Push(trans)
+
+	// Push the index into the DirBuf
+	idx := len(c.cache.postCoalesceTransactions) - 1
+	dirBuf := c.getDirBuf()
+	dirBuf.PushTyped(idx)
+
 	c.toCoalesce = nil
 
 	return true

@@ -4,6 +4,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/stateutil"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -91,11 +92,12 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 	p.mergeMSHRData(entryTrans, blockTag, data, dirtyMask)
 
 	// Set up trans for bank processing and push BEFORE any removals
-	// (adapter needs to find trans in postCoalesceTransactions by pointer)
 	trans.bankAction = bankActionWriteFetched
 	trans.data = data
 	trans.writeFetchedDirtyMask = dirtyMask
-	bankBuf.Push(trans)
+
+	transIdx := p.findPostCoalesceIdx(trans)
+	bankBuf.PushTyped(transIdx)
 
 	// Finalize MSHR transactions (marks pre-coalesce as done, removes
 	// from postCoalesceTransactions). Skip the fetcher trans — it's been
@@ -206,12 +208,24 @@ func (p *bottomParser) removeTransaction(trans *transactionState) {
 	}
 }
 
+func (p *bottomParser) findPostCoalesceIdx(
+	trans *transactionState,
+) int {
+	for i, t := range p.cache.postCoalesceTransactions {
+		if t != nil && t == trans {
+			return i
+		}
+	}
+	panic("transaction not found in postCoalesceTransactions")
+}
+
 func (p *bottomParser) getBankBuf(
 	setID, wayID int,
-) *stateTransBuffer {
+) *stateutil.Buffer[int] {
+	next := p.cache.comp.GetNextState()
 	numWaysPerSet := p.cache.GetSpec().WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
-	bankID := blockID % len(p.cache.bankBufAdapters)
+	bankID := blockID % len(next.BankBufs)
 
-	return p.cache.bankBufAdapters[bankID]
+	return &next.BankBufs[bankID]
 }
