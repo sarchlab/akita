@@ -4,64 +4,42 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 350)
+## Current State (Cycle 351)
 
-### Project Status: IN PROGRESS — Investigating M45.2 + M46 design
+### Project Status: IN PROGRESS — Defining M45.2 (file paradigm standardization)
 
 **M45.1 complete:** Analysis package removed, WriteThroughCache coalescer removed and transaction model flattened. PR #74 merged.
 
+**Investigation complete (cycle 350):**
+- Elena completed full audit of all 14 component packages → workspace/elena/note.md
+- Iris completed event-driven component architecture design → workspace/iris/note.md (recommends Design B: State-Encoded Timers)
+
 **Remaining human issues:**
-- #439: Standardize component file paradigm (state.go, spec.go, one file per MW)
-- #440: sim.Component vs modeling.Component consolidation
-- #408: Repo-wide simplification (find wrappers, indirections, residues)
-- #389: Event-driven component support (high priority, complex)
-
-**Investigation in progress (cycle 350):**
-- Elena auditing all 14 component packages for file paradigm + simplification
-- Iris designing event-driven component architecture (studying TrioSim)
-
-### Recently Completed
-
-#### M45.1: Remove analysis package + WriteThroughCache coalescer (DONE — Cycle 350)
-- Budget: 8 | Used: ~4
-- PR #74 merged
-- analysis/ directory deleted, no analysis imports remain
-- Coalescer removed from WriteThroughCache, transaction model flattened (-698 lines)
-- Issues #432, #434 resolved
-
-#### M44: Repo-wide cleanup — delete dead code and packages (DONE — Cycle ~342)
-- Budget: 6 | Used: ~4
-- PR #73 merged
-
-#### M43: Consolidate stateutil into queueing (DONE — Cycle ~334)
-- Budget: 8 | Used: ~6
-- PR #72 merged
+- #439: Standardize component file paradigm (state.go, spec.go, one file per MW) → **M45.2**
+- #440: sim.Component vs modeling.Component consolidation → deferred (sim.Component is load-bearing)
+- #408: Repo-wide simplification → addressed via M45.2 file cleanup + Comp elimination
+- #389: Event-driven component support → **M46** (Iris's Design B)
 
 ---
 
-## Planned Milestones
+## Active/Planned Milestones
 
-### M45.2: Component file paradigm standardization (PLANNED — estimated 8 cycles)
-- **Component file paradigm** (human issue #439): Standardize file organization:
-  - `spec.go` — Spec struct and all sub-structs
-  - `state.go` — State struct and all sub-structs
-  - One file per middleware (named after the middleware)
-  - `builder.go` — builder
-  - `doc.go` — package documentation
-- Rename/move files across all 14 component packages
-- **sim.Component question** (human issue #440): Keep sim.Component (load-bearing for ports), keep modeling.Component in modeling package
-- **Simplification** (human issue #408): Remove any remaining wrappers, Comp structs, residues found by Elena's audit
+### M45.2: Component file paradigm standardization (ACTIVE — 10 cycles)
+- Standardize all 14 component packages to: `spec.go`, `state.go`, one lowercase file per middleware, `builder.go`, `doc.go`
+- Split monolithic files (endpoint 518 lines, addresstranslator 590+, simplebankedmemory 378, switches 291)
+- Rename camelCase MW files to lowercase
+- Eliminate switches Comp wrapper (zero extra fields)
+- Fix typos (DateMovePort → DataMovePort)
+- Verify mmuCache/mmucache directory situation
+- Issues: #439, #408 (partial), #450
 
-### M46: Event-driven component support (estimated 8-12 cycles)
-- Design event-driven component pattern that:
-  - Follows Spec+State model
-  - Supports save/load (serializable events)
-  - No tick overhead — real event scheduling
-  - Coexists with tick-based components
-- Implement in modeling package
-- Port examples/ping to new pattern
+### M46: Event-driven component support (estimated 8-10 cycles)
+- Implement `EventDrivenComponent[S, T]` in modeling package (Design B from Iris)
+- Single event type (TimerFiredEvent), EventProcessor interface
+- State-encoded timers for save/load compatibility
+- ScheduleWakeAt/ScheduleWakeNow for dedup'd event scheduling
+- Port examples/ping to new pattern as proof-of-concept
 - Address issue #389
-- See TrioSim for real-world need
 
 ### M47: Minor performance optimizations (estimated 4-6 cycles)
 - Buffer ring buffer pattern
@@ -70,29 +48,6 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ### M48: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
-
----
-
-## Success Criteria Checklist
-
-| # | Criterion | Status |
-|---|-----------|--------|
-| 1 | Simple, intuitive APIs | ✅ |
-| 2 | All CI checks pass on main | ✅ |
-| 3 | Component = Spec + State + Ports + MW + Hooks | ✅ |
-| 4 | No Comp wrappers (except StorageOwner) | ✅ |
-| 5 | No external dependency interfaces | ✅ |
-| 6 | Single sim-level save/load | ✅ |
-| 7 | Developers only implement MW Tick | ✅ |
-| 8 | All runtime data in State | ✅ |
-| 9 | No SaveState/LoadState conversion layers | ✅ |
-| 10 | No restoreFromState/syncToState | ✅ |
-| 11 | No runtime copies of State in MW | ✅ |
-| 12 | Save/load acceptance test passes | ✅ |
-| 13 | All components use modeling package | ✅ |
-| 14 | Each component has multiple MWs | ✅ |
-| 15 | component_guide.md reflects final arch | ✅ |
-| 16 | Performance matches original | Under evaluation |
 
 ---
 
@@ -123,3 +78,5 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Event-driven components represent a fundamental architectural challenge — different from tick-driven model
 - Coalescer removal was less risky than expected — good analysis upfront paid off
 - Always verify what's merged to main before defining next milestone
+- Using investigator agents (Elena, Iris) to audit/design before coding milestones works well — invest in research upfront
+- Large mechanical refactorings benefit from parallelizing across multiple workers
