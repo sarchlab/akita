@@ -4,13 +4,15 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 336)
+## Current State (Cycle 337)
 
-### Project Status: IN PROGRESS — M43 complete, evaluating next milestone
+### Project Status: IN PROGRESS — M44 defined (repo cleanup)
 
-**M43 complete (cycle ~334):** Consolidated stateutil into queueing. PR #72 merged. stateutil package deleted, Buffer[T]/Pipeline[T] in queueing, Pop/PopTyped removed, hand-coded pipelines in simplebankedmemory and TLB replaced with queueing.Pipeline[T]. Issue #414 closed.
+**Performance resolved:** Diana's benchmarks confirm NOC is at v4 wall-clock parity (0.99x-1.2x) with 43-79x less peak memory after M42/M43. Issue #387 closed.
 
-**Evaluating next milestone:** Dispatching workers to re-audit codebase (Elena) and assess performance state (Diana) before defining M44.
+**Elena's audit complete:** Found 3 dead packages (~570 lines), 4 dead files (~78 lines), duplicated utilities, stale comments. All confirmed with zero imports.
+
+**M44 defined:** Delete dead packages (arbitration, wiring, standalone), dead files, stale comments, and extract shared utilities (convertAddress, Flush/Restart msgs, LRU set ops, MSHR ops). See issue #431.
 
 ### Recently Completed
 
@@ -75,24 +77,29 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 
 ## Planned Milestones
 
-### M44: Repo-wide simplification — remaining items (estimated 5-8 cycles)
+### M44: Repo-wide cleanup — delete dead code and packages (estimated 6 cycles)
+- Delete dead packages: arbitration/, wiring/ (+ 154 sqlite3 files), standalone/
+- Delete dead files: domain.go, requestbuffer.go, transferevent.go, trafficcounter.go
+- Delete dead types: LogHook interface, ConvertInternalToExternal panic method
+- Fix stale comment in endpoint about JSON deep copy
 - Extract shared convertAddress (F1)
 - Unify Flush/Restart message types (F3)
 - Extract shared LRU set ops (F5)
 - Extract shared MSHR ops (F6)
-- Remove dead code, double-buffering residues
-- Address remaining #408 items
+- Issue #431
 
-### M45: NOC performance optimization (estimated 5-8 cycles)
-- Re-benchmark after M42/M43 changes
-- Target: bring NOC tests within 2x of v4 performance
-- Fix remaining allocation bottlenecks
-
-### M46: Event-driven component support (estimated 5-8 cycles)
-- Design not timer-based (human rejected)
+### M45: Event-driven component support (estimated 8-12 cycles)
+- Design not timer-based (human rejected tick-based)
 - Create modeling variant or alternative pattern
 - Must support save/load of pending events
 - See TrioSim for real-world need
+- Issue #389
+
+### M46: Minor performance optimizations (estimated 4-6 cycles)
+- Buffer ring buffer pattern (replace sliding-window FIFO)
+- Tracing guards (NumHooks check before string allocation)
+- Switch sendOut flit heap escape fix
+- Endpoint linear search → O(1) lookup
 
 ### M47: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
