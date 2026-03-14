@@ -4,15 +4,19 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 376)
+## Current State (Cycle 377)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
 All 50 milestones from the original component model refactoring are complete. All 16 success criteria met. CI green on main.
 
-### Current Phase: Research & Discussion — ✅ RESEARCH COMPLETE
+### Research Phase: ✅ RESEARCH COMPLETE
 
-All 13 human topics have been researched. Findings summarized below. **Awaiting human authorization before any implementation.**
+All 13 human topics have been researched. Findings summarized below.
+
+### Current Phase: Phase 2 Implementation — Starting
+
+Beginning with M51: Double buffering residue cleanup (#483). This was explicitly flagged by human as incorrect code. 17 files use both GetState()/GetNextState() patterns from the old double-buffering era, which is misleading since in-place state update makes them identical.
 
 ---
 
@@ -81,6 +85,34 @@ Based on dependency analysis and impact:
 
 ### Not recommended for implementation:
 - Merging concrete simulators (#481) — Keep separate repos
+
+---
+
+## Phase 2: Implementation (Starting Cycle 377)
+
+### M51: Double buffering residue cleanup (#483)
+- **Status**: Starting
+- **Budget**: 3 cycles
+- **Scope**: Clean up 17 middleware files that use both GetState() and GetNextState() — unify to single state access pattern
+- **Risk**: Very low — naming-only change, no logic changes
+
+### M52: Component-engine decoupling (#478)
+- **Status**: Planned
+- **Budget**: 4 cycles
+- **Scope**: Replace Engine fields with EventScheduler interface in all components
+
+### M53: /mem/mem flattening (#486)
+- **Status**: Planned
+- **Budget**: 3 cycles
+- **Scope**: Move files from mem/mem/ to mem/, update 43 import paths
+
+### M54: Move directconnection to noc (#477)
+- **Status**: Planned
+- **Budget**: 3 cycles
+- **Scope**: Move directconnection package into noc/, update 10 import paths
+
+### M55+: Remaining topics (integer time, event serialization, unified protocol, DRAM)
+- **Status**: Planned — details to be refined after M51-M54
 
 ---
 
