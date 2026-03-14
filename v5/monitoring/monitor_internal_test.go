@@ -1,7 +1,10 @@
 package monitoring
 
 import (
+	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
@@ -145,3 +148,45 @@ var _ = Describe("Monitor", func() {
 		Expect(elem.Int()).To(Equal(int64(1)))
 	})
 })
+
+type fieldFormatError struct {
+}
+
+func (e fieldFormatError) Error() string {
+	return "fieldFormatError"
+}
+
+func (m *Monitor) walkFields(
+	comp interface{},
+	fields string,
+) (reflect.Value, error) {
+	elem := reflect.ValueOf(comp)
+
+	fieldNames := strings.Split(fields, ".")
+
+	for len(fieldNames) > 0 {
+		switch elem.Kind() {
+		case reflect.Ptr, reflect.Interface:
+			elem = elem.Elem()
+		case reflect.Struct:
+			elem = elem.FieldByName(fieldNames[0])
+			fieldNames = fieldNames[1:]
+		case reflect.Slice:
+			index, err := strconv.Atoi(fieldNames[0])
+			if err != nil {
+				return elem, fieldFormatError{}
+			}
+
+			elem = elem.Index(index)
+			fieldNames = fieldNames[1:]
+		default:
+			panic(fmt.Sprintf("kind %d not supported", elem.Kind()))
+		}
+	}
+
+	if elem.Kind() == reflect.Ptr {
+		elem = elem.Elem()
+	}
+
+	return elem, nil
+}

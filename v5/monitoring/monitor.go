@@ -454,47 +454,6 @@ func (m *Monitor) sortAndSelectBuffers(
 	return sortedBuffers
 }
 
-type fieldFormatError struct {
-}
-
-func (e fieldFormatError) Error() string {
-	return "fieldFormatError"
-}
-
-func (m *Monitor) walkFields(
-	comp interface{},
-	fields string,
-) (reflect.Value, error) {
-	elem := reflect.ValueOf(comp)
-
-	fieldNames := strings.Split(fields, ".")
-
-	for len(fieldNames) > 0 {
-		switch elem.Kind() {
-		case reflect.Ptr, reflect.Interface:
-			elem = elem.Elem()
-		case reflect.Struct:
-			elem = elem.FieldByName(fieldNames[0])
-			fieldNames = fieldNames[1:]
-		case reflect.Slice:
-			index, err := strconv.Atoi(fieldNames[0])
-			if err != nil {
-				return elem, fieldFormatError{}
-			}
-
-			elem = elem.Index(index)
-			fieldNames = fieldNames[1:]
-		default:
-			panic(fmt.Sprintf("kind %d not supported", elem.Kind()))
-		}
-	}
-
-	if elem.Kind() == reflect.Ptr {
-		elem = elem.Elem()
-	}
-
-	return elem, nil
-}
 
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
