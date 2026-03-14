@@ -142,6 +142,14 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
 
+17. **Remove analysis package** (issue #432): Human suggests `/v5/analysis` can be removed. Used by monitoring, mesh, and networkconnector. Assess and remove.
+
+18. **WriteThroughCache coalescer removal** (issue #434): WriteThroughCache does not need the coalescer stage. Remove it.
+
+19. **Component development paradigm** (issue #439): Need a standardized file organization for component packages: `state.go`, `spec.go`, one file per middleware. Consistent naming and structure.
+
+20. **sim.Component consolidation** (issue #440): `sim.Component` interface still exists alongside `modeling.Component`. Consider whether `modeling.Component` should move back into the `sim` package, or whether `sim.Component` should be removed/simplified.
+
 7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
 
 8. **Global state manager** (issue #326): Long-term direction. Deferred.
