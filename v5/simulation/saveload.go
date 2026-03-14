@@ -39,6 +39,12 @@ type TickResetter interface {
 	ResetTick()
 }
 
+// WakeupResetter is implemented by event-driven components that need to
+// reset their pending wakeup guard after loading state from a checkpoint.
+type WakeupResetter interface {
+	ResetWakeup()
+}
+
 // checkpointMetadata is the top-level metadata saved with a checkpoint.
 type checkpointMetadata struct {
 	EngineTime      sim.VTimeInSec `json:"engine_time"`
@@ -275,6 +281,10 @@ func (s *Simulation) resetTickSchedulers() {
 	for _, comp := range s.components {
 		if resetter, ok := comp.(TickResetter); ok {
 			resetter.ResetTick()
+		}
+
+		if resetter, ok := comp.(WakeupResetter); ok {
+			resetter.ResetWakeup()
 		}
 	}
 }
