@@ -32,3 +32,4 @@ mock_*_test.go
 *.sqlite3
 .history
 akitav5-lint
+writebackcache
