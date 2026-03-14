@@ -26,12 +26,11 @@ func (m *tickFinalizeMW) Tick() bool {
 
 func (m *tickFinalizeMW) finalizeBanks() bool {
 	madeProgress := false
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
-	for i := range cur.Banks {
+	for i := range state.Banks {
 		for {
-			progress := m.finalizeSingle(&next.Banks[i])
+			progress := m.finalizeSingle(&state.Banks[i])
 			if !progress {
 				break
 			}
@@ -171,11 +170,10 @@ func (m *tickFinalizeMW) finalizeWrite(
 func (m *tickFinalizeMW) tickPipelines() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
-	for i := range cur.Banks {
-		madeProgress = pipelineTick(&next.Banks[i], spec) || madeProgress
+	for i := range state.Banks {
+		madeProgress = pipelineTick(&state.Banks[i], spec) || madeProgress
 	}
 
 	return madeProgress

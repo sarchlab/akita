@@ -38,9 +38,9 @@ func (m *walkMW) Tick() bool {
 
 func (m *walkMW) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -63,7 +63,7 @@ func (m *walkMW) parseFromTop() bool {
 
 func (m *walkMW) startWalking(req *vm.TranslationReq) {
 	spec := m.comp.GetSpec()
-	nextState := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	ts := transactionState{
 		ReqID:     req.ID,
@@ -75,29 +75,28 @@ func (m *walkMW) startWalking(req *vm.TranslationReq) {
 		CycleLeft: spec.Latency,
 	}
 
-	nextState.WalkingTranslations = append(
-		nextState.WalkingTranslations, ts)
+	state.WalkingTranslations = append(
+		state.WalkingTranslations, ts)
 }
 
 func (m *walkMW) walkPageTable() bool {
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	if len(cur.WalkingTranslations) == 0 {
+	if len(state.WalkingTranslations) == 0 {
 		return false
 	}
 
-	next := m.comp.GetNextState()
 	madeProgress := false
 	spec := m.comp.GetSpec()
 
-	for i := 0; i < len(cur.WalkingTranslations); i++ {
-		if cur.WalkingTranslations[i].CycleLeft > 0 {
-			next.WalkingTranslations[i].CycleLeft = cur.WalkingTranslations[i].CycleLeft - 1
+	for i := 0; i < len(state.WalkingTranslations); i++ {
+		if state.WalkingTranslations[i].CycleLeft > 0 {
+			state.WalkingTranslations[i].CycleLeft--
 			madeProgress = true
 			continue
 		}
 
-		ts := cur.WalkingTranslations[i]
+		ts := state.WalkingTranslations[i]
 
 		page, found := m.pageTable.Find(vm.PID(ts.PID), ts.VAddr)
 		if !found {
@@ -108,13 +107,13 @@ func (m *walkMW) walkPageTable() bool {
 		}
 
 		if page.DeviceID == spec.DeviceID {
-			madeProgress = m.finalizePageWalk(next, i) || madeProgress
+			madeProgress = m.finalizePageWalk(state, i) || madeProgress
 		} else {
-			madeProgress = m.processRemoteMemReq(next, i) || madeProgress
+			madeProgress = m.processRemoteMemReq(state, i) || madeProgress
 		}
 	}
 
-	m.removeCompletedTranslations(next)
+	m.removeCompletedTranslations(state)
 
 	return madeProgress
 }

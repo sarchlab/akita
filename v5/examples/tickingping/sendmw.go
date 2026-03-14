@@ -25,7 +25,7 @@ func (m *sendMW) Tick() bool {
 }
 
 func (m *sendMW) sendRsp() bool {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	if len(state.CurrentTransactions) == 0 {
 		return false
@@ -51,14 +51,13 @@ func (m *sendMW) sendRsp() bool {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-	next.CurrentTransactions = next.CurrentTransactions[1:]
+	state.CurrentTransactions = state.CurrentTransactions[1:]
 
 	return true
 }
 
 func (m *sendMW) sendPing() bool {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	if state.NumPingNeedToSend == 0 {
 		return false
@@ -78,10 +77,9 @@ func (m *sendMW) sendPing() bool {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-	next.StartTimes = append(next.StartTimes, float64(m.comp.CurrentTime()))
-	next.NumPingNeedToSend--
-	next.NextSeqID++
+	state.StartTimes = append(state.StartTimes, float64(m.comp.CurrentTime()))
+	state.NumPingNeedToSend--
+	state.NextSeqID++
 
 	return true
 }

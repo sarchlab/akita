@@ -63,7 +63,7 @@ func (m *ctrlMiddleware) handleControlMsg(
 }
 
 func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(msg *mem.ControlMsg) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	switch s := state.CurrentState; s {
 	case mmuCacheStateEnable:
 		if msg.Enable {
@@ -99,14 +99,14 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	}
 
 	msg := itemI.(*mem.ControlMsg)
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	if msg.Enable {
-		next.CurrentState = mmuCacheStateEnable
+		state.CurrentState = mmuCacheStateEnable
 	} else if msg.Drain {
-		next.CurrentState = mmuCacheStateDrain
+		state.CurrentState = mmuCacheStateDrain
 	} else if msg.Pause {
-		next.CurrentState = mmuCacheStatePause
+		state.CurrentState = mmuCacheStatePause
 	}
 
 	m.controlPort().RetrieveIncoming()
@@ -124,18 +124,18 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 func (m *ctrlMiddleware) handleMMUCacheFlush(msg *tlb.FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 
-	next := m.comp.GetNextState()
-	next.InflightFlushReqActive = true
-	next.InflightFlushReqID = msg.ID
-	next.InflightFlushReqSrc = msg.Src
+	state := m.comp.GetNextState()
+	state.InflightFlushReqActive = true
+	state.InflightFlushReqID = msg.ID
+	state.InflightFlushReqSrc = msg.Src
 	m.controlPort().RetrieveIncoming()
-	next.CurrentState = mmuCacheStateFlush
+	state.CurrentState = mmuCacheStateFlush
 
 	return true
 }
 
 func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	switch s := state.CurrentState; s {
 	case mmuCacheStateEnable:
 		// valid
@@ -169,8 +169,8 @@ func (m *ctrlMiddleware) handleMMUCacheRestart(msg *tlb.RestartReq) bool {
 		m.comp,
 	)
 
-	next := m.comp.GetNextState()
-	next.CurrentState = mmuCacheStateEnable
+	state := m.comp.GetNextState()
+	state.CurrentState = mmuCacheStateEnable
 
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()

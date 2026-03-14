@@ -39,7 +39,7 @@ func (m *incomingMW) flitTaskID(flitID string) string {
 func (m *incomingMW) recv() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	for i := 0; i < spec.NumInputChannels; i++ {
 		receivedI := m.networkPort.PeekIncoming()
@@ -51,7 +51,7 @@ func (m *incomingMW) recv() bool {
 		msg := &flit.Msg
 
 		var assemblingIdx int = -1
-		for j, a := range next.AssemblingMsgs {
+		for j, a := range state.AssemblingMsgs {
 			if a.MsgID == msg.ID {
 				assemblingIdx = j
 				break
@@ -59,7 +59,7 @@ func (m *incomingMW) recv() bool {
 		}
 
 		if assemblingIdx < 0 {
-			next.AssemblingMsgs = append(next.AssemblingMsgs, assemblingMsgState{
+			state.AssemblingMsgs = append(state.AssemblingMsgs, assemblingMsgState{
 				MsgID:           msg.ID,
 				Src:             msg.Src,
 				Dst:             msg.Dst,
@@ -70,7 +70,7 @@ func (m *incomingMW) recv() bool {
 				NumFlitArrived:  1,
 			})
 		} else {
-			next.AssemblingMsgs[assemblingIdx].NumFlitArrived++
+			state.AssemblingMsgs[assemblingIdx].NumFlitArrived++
 		}
 
 		m.networkPort.RetrieveIncoming()
@@ -85,22 +85,20 @@ func (m *incomingMW) recv() bool {
 
 func (m *incomingMW) assemble() bool {
 	madeProgress := false
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	if len(cur.AssemblingMsgs) == 0 {
+	if len(state.AssemblingMsgs) == 0 {
 		return false
 	}
-
-	next := m.comp.GetNextState()
 
 	// Compact in-place: move incomplete entries to the front.
 	writeIdx := 0
 
-	for i := range next.AssemblingMsgs {
-		a := &next.AssemblingMsgs[i]
+	for i := range state.AssemblingMsgs {
+		a := &state.AssemblingMsgs[i]
 		if a.NumFlitArrived < a.NumFlitRequired {
 			if writeIdx != i {
-				next.AssemblingMsgs[writeIdx] = *a
+				state.AssemblingMsgs[writeIdx] = *a
 			}
 			writeIdx++
 			continue
@@ -114,23 +112,23 @@ func (m *incomingMW) assemble() bool {
 			TrafficClass: a.TrafficClass,
 			TrafficBytes: a.TrafficBytes,
 		}
-		next.AssembledMsgs = append(next.AssembledMsgs, assembled)
+		state.AssembledMsgs = append(state.AssembledMsgs, assembled)
 		madeProgress = true
 	}
 
-	next.AssemblingMsgs = next.AssemblingMsgs[:writeIdx]
+	state.AssemblingMsgs = state.AssemblingMsgs[:writeIdx]
 
 	return madeProgress
 }
 
 func (m *incomingMW) tryDeliver() bool {
 	madeProgress := false
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	numDelivered := 0
 
-	for i := 0; i < len(cur.AssembledMsgs); i++ {
-		meta := cur.AssembledMsgs[i]
+	for i := 0; i < len(state.AssembledMsgs); i++ {
+		meta := state.AssembledMsgs[i]
 		dst := meta.Dst
 
 		var dstPort sim.Port
@@ -167,8 +165,7 @@ func (m *incomingMW) tryDeliver() bool {
 	}
 
 	if numDelivered > 0 {
-		next := m.comp.GetNextState()
-		next.AssembledMsgs = next.AssembledMsgs[numDelivered:]
+		state.AssembledMsgs = state.AssembledMsgs[numDelivered:]
 	}
 
 	return madeProgress

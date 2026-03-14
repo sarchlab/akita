@@ -24,8 +24,8 @@ func (m *dataTransferMW) outsidePort() sim.Port {
 }
 
 func (m *dataTransferMW) srcPort() sim.Port {
-	cur := m.comp.GetState()
-	switch cur.SrcSide {
+	state := m.comp.GetNextState()
+	switch state.SrcSide {
 	case "inside":
 		return m.insidePort()
 	case "outside":
@@ -36,8 +36,8 @@ func (m *dataTransferMW) srcPort() sim.Port {
 }
 
 func (m *dataTransferMW) dstPort() sim.Port {
-	cur := m.comp.GetState()
-	switch cur.DstSide {
+	state := m.comp.GetNextState()
+	switch state.DstSide {
 	case "inside":
 		return m.insidePort()
 	case "outside":
@@ -49,8 +49,8 @@ func (m *dataTransferMW) dstPort() sim.Port {
 
 func (m *dataTransferMW) findSrcPort(addr uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-	switch cur.SrcSide {
+	state := m.comp.GetNextState()
+	switch state.SrcSide {
 	case "inside":
 		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
 			spec.InsideMapperInterleavingSize, addr)
@@ -58,15 +58,15 @@ func (m *dataTransferMW) findSrcPort(addr uint64) sim.RemotePort {
 		return findPort(spec.OutsideMapperKind, spec.OutsideMapperPorts,
 			spec.OutsideMapperInterleavingSize, addr)
 	default:
-		log.Panicf("unknown src side %q", cur.SrcSide)
+		log.Panicf("unknown src side %q", state.SrcSide)
 		return ""
 	}
 }
 
 func (m *dataTransferMW) findDstPort(addr uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-	switch cur.DstSide {
+	state := m.comp.GetNextState()
+	switch state.DstSide {
 	case "inside":
 		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
 			spec.InsideMapperInterleavingSize, addr)
@@ -74,7 +74,7 @@ func (m *dataTransferMW) findDstPort(addr uint64) sim.RemotePort {
 		return findPort(spec.OutsideMapperKind, spec.OutsideMapperPorts,
 			spec.OutsideMapperInterleavingSize, addr)
 	default:
-		log.Panicf("unknown dst side %q", cur.DstSide)
+		log.Panicf("unknown dst side %q", state.DstSide)
 		return ""
 	}
 }
@@ -93,21 +93,21 @@ func (m *dataTransferMW) Tick() bool {
 
 // readFromSrc reads data from source.
 func (m *dataTransferMW) readFromSrc() bool {
-	cur := m.comp.GetState()
-	if !cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if !state.CurrentTransaction.Active {
 		return false
 	}
 
-	curTrans := &cur.CurrentTransaction
-	addr := alignAddress(curTrans.NextReadAddr, cur.SrcByteGranularity)
+	trans := &state.CurrentTransaction
+	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
 
 	spec := m.comp.GetSpec()
-	bufEndAddr := cur.Buffer.Offset + spec.BufferSize
+	bufEndAddr := state.Buffer.Offset + spec.BufferSize
 	if addr >= bufEndAddr {
 		return false
 	}
 
-	transEndAddr := curTrans.SrcAddress + curTrans.ByteSize
+	transEndAddr := trans.SrcAddress + trans.ByteSize
 	if addr >= transEndAddr {
 		return false
 	}
@@ -119,7 +119,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	req.Address = addr
 	req.Src = srcP.AsRemote()
 	req.Dst = m.findSrcPort(addr)
-	req.AccessByteSize = cur.SrcByteGranularity
+	req.AccessByteSize = state.SrcByteGranularity
 	req.PID = 0
 	req.TrafficBytes = 12
 	req.TrafficClass = "mem.ReadReq"
@@ -129,10 +129,8 @@ func (m *dataTransferMW) readFromSrc() bool {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-	nextTrans := &next.CurrentTransaction
-	nextTrans.NextReadAddr += cur.SrcByteGranularity
-	nextTrans.PendingRead[req.ID] = pendingReadState{
+	trans.NextReadAddr += state.SrcByteGranularity
+	trans.PendingRead[req.ID] = pendingReadState{
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
@@ -140,15 +138,15 @@ func (m *dataTransferMW) readFromSrc() bool {
 	}
 
 	tracing.TraceReqInitiate(req, m.comp,
-		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m.comp))
+		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
 }
 
 // processDataReadyFromSrc processes data ready from source.
 func (m *dataTransferMW) processDataReadyFromSrc() bool {
-	cur := m.comp.GetState()
-	if !cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if !state.CurrentTransaction.Active {
 		return false
 	}
 
@@ -164,18 +162,16 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 		return false
 	}
 
-	curTrans := &cur.CurrentTransaction
-	originalReq, ok := curTrans.PendingRead[rsp.RspTo]
+	trans := &state.CurrentTransaction
+	originalReq, ok := trans.PendingRead[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s", rsp.RspTo)
 	}
 
-	next := m.comp.GetNextState()
-	nextTrans := &next.CurrentTransaction
-	offset := originalReq.Address - curTrans.SrcAddress
-	bufferAddData(&next.Buffer, offset, rsp.Data)
+	offset := originalReq.Address - trans.SrcAddress
+	bufferAddData(&state.Buffer, offset, rsp.Data)
 
-	delete(nextTrans.PendingRead, rsp.RspTo)
+	delete(trans.PendingRead, rsp.RspTo)
 	srcP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing
@@ -190,14 +186,14 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 
 // writeToDst sends data to destination.
 func (m *dataTransferMW) writeToDst() bool {
-	cur := m.comp.GetState()
-	if !cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if !state.CurrentTransaction.Active {
 		return false
 	}
 
-	curTrans := &cur.CurrentTransaction
-	offset := curTrans.NextWriteAddr - curTrans.DstAddress
-	data, ok := bufferExtractData(&cur.Buffer, offset, cur.DstByteGranularity)
+	trans := &state.CurrentTransaction
+	offset := trans.NextWriteAddr - trans.DstAddress
+	data, ok := bufferExtractData(&state.Buffer, offset, state.DstByteGranularity)
 
 	if !ok {
 		return false
@@ -207,10 +203,10 @@ func (m *dataTransferMW) writeToDst() bool {
 
 	req := &mem.WriteReq{}
 	req.ID = sim.GetIDGenerator().Generate()
-	req.Address = curTrans.NextWriteAddr
+	req.Address = trans.NextWriteAddr
 	req.Data = data
 	req.Src = dstP.AsRemote()
-	req.Dst = m.findDstPort(curTrans.NextWriteAddr)
+	req.Dst = m.findDstPort(trans.NextWriteAddr)
 	req.PID = 0
 	req.TrafficBytes = len(data) + 12
 	req.TrafficClass = "mem.WriteReq"
@@ -220,28 +216,26 @@ func (m *dataTransferMW) writeToDst() bool {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-	nextTrans := &next.CurrentTransaction
-	nextTrans.NextWriteAddr += cur.DstByteGranularity
-	nextTrans.PendingWrite[req.ID] = pendingWriteState{
+	trans.NextWriteAddr += state.DstByteGranularity
+	trans.PendingWrite[req.ID] = pendingWriteState{
 		ID:      req.ID,
 		Src:     req.Src,
 		Dst:     req.Dst,
 		Address: req.Address,
 		Data:    data,
 	}
-	bufferMoveOffsetForwardTo(&next.Buffer, nextTrans.NextWriteAddr-curTrans.DstAddress)
+	bufferMoveOffsetForwardTo(&state.Buffer, trans.NextWriteAddr-trans.DstAddress)
 
 	tracing.TraceReqInitiate(req, m.comp,
-		tracing.MsgIDAtReceiver(transactionAsMsg(nextTrans), m.comp))
+		tracing.MsgIDAtReceiver(transactionAsMsg(trans), m.comp))
 
 	return true
 }
 
 // processWriteDoneFromDst processes write done from destination.
 func (m *dataTransferMW) processWriteDoneFromDst() bool {
-	cur := m.comp.GetState()
-	if !cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if !state.CurrentTransaction.Active {
 		return false
 	}
 
@@ -256,15 +250,13 @@ func (m *dataTransferMW) processWriteDoneFromDst() bool {
 		return false
 	}
 
-	curTrans := &cur.CurrentTransaction
-	originalReq, ok := curTrans.PendingWrite[rsp.RspTo]
+	trans := &state.CurrentTransaction
+	originalReq, ok := trans.PendingWrite[rsp.RspTo]
 	if !ok {
 		log.Panicf("can't find original request for response %s", rsp.RspTo)
 	}
 
-	next := m.comp.GetNextState()
-	nextTrans := &next.CurrentTransaction
-	delete(nextTrans.PendingWrite, rsp.RspTo)
+	delete(trans.PendingWrite, rsp.RspTo)
 	dstP.RetrieveIncoming()
 
 	// Create a temporary msg for tracing

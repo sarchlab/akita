@@ -63,7 +63,7 @@ func (m *ctrlMiddleware) handleControlMsg(msg *mem.ControlMsg) bool {
 func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
 	ctrlMsg *mem.ControlMsg,
 ) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	switch s := state.TLBState; s {
 	case tlbStateEnable:
 		if ctrlMsg.Enable {
@@ -99,14 +99,14 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	}
 
 	item := itemI.(*mem.ControlMsg)
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	if item.Enable {
-		next.TLBState = tlbStateEnable
+		state.TLBState = tlbStateEnable
 	} else if item.Drain {
-		next.TLBState = tlbStateDrain
+		state.TLBState = tlbStateDrain
 	} else if item.Pause {
-		next.TLBState = tlbStatePause
+		state.TLBState = tlbStatePause
 	}
 
 	m.controlPort().RetrieveIncoming()
@@ -124,17 +124,17 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 func (m *ctrlMiddleware) handleTLBFlush(msg *FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 
-	next := m.comp.GetNextState()
-	next.HasInflightFlushReq = true
-	next.InflightFlushReqMsg = *msg
+	state := m.comp.GetNextState()
+	state.HasInflightFlushReq = true
+	state.InflightFlushReqMsg = *msg
 	m.controlPort().RetrieveIncoming()
-	next.TLBState = tlbStateFlush
+	state.TLBState = tlbStateFlush
 
 	return true
 }
 
 func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	switch s := state.TLBState; s {
 	case tlbStateEnable:
 		// valid
@@ -168,8 +168,8 @@ func (m *ctrlMiddleware) handleTLBRestart(msg *RestartReq) bool {
 		m.comp,
 	)
 
-	next := m.comp.GetNextState()
-	next.TLBState = tlbStateEnable
+	state := m.comp.GetNextState()
+	state.TLBState = tlbStateEnable
 
 	for m.topPort().PeekIncoming() != nil {
 		m.topPort().RetrieveIncoming()

@@ -51,12 +51,11 @@ func (m *translationMW) Tick() bool {
 func (m *translationMW) walkPageTable() bool {
 	madeProgress := false
 
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
-	for i := 0; i < len(cur.WalkingTranslations); i++ {
-		if cur.WalkingTranslations[i].CycleLeft > 0 {
-			next.WalkingTranslations[i].CycleLeft = cur.WalkingTranslations[i].CycleLeft - 1
+	for i := 0; i < len(state.WalkingTranslations); i++ {
+		if state.WalkingTranslations[i].CycleLeft > 0 {
+			state.WalkingTranslations[i].CycleLeft--
 			madeProgress = true
 
 			continue
@@ -65,26 +64,24 @@ func (m *translationMW) walkPageTable() bool {
 		madeProgress = m.finalizePageWalk(i) || madeProgress
 	}
 
-	next = m.comp.GetNextState()
-	tmp := next.WalkingTranslations[:0]
+	tmp := state.WalkingTranslations[:0]
 
-	for i := 0; i < len(next.WalkingTranslations); i++ {
+	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if !m.toRemove(i) {
-			tmp = append(tmp, next.WalkingTranslations[i])
+			tmp = append(tmp, state.WalkingTranslations[i])
 		}
 	}
 
-	next.WalkingTranslations = tmp
-	next.ToRemoveFromPTW = nil
+	state.WalkingTranslations = tmp
+	state.ToRemoveFromPTW = nil
 
 	return madeProgress
 }
 
 func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
-	walking := cur.WalkingTranslations[walkingIndex]
+	state := m.comp.GetNextState()
+	walking := state.WalkingTranslations[walkingIndex]
 
 	page, found := m.pageTable.Find(
 		vm.PID(walking.PID), walking.VAddr)
@@ -99,13 +96,13 @@ func (m *translationMW) finalizePageWalk(walkingIndex int) bool {
 		}
 	}
 
-	next.WalkingTranslations[walkingIndex].Page = page
+	state.WalkingTranslations[walkingIndex].Page = page
 
 	if page.IsMigrating {
 		return m.addTransactionToMigrationQueue(walkingIndex)
 	}
 
-	if m.pageNeedMigrate(next.WalkingTranslations[walkingIndex]) {
+	if m.pageNeedMigrate(state.WalkingTranslations[walkingIndex]) {
 		return m.addTransactionToMigrationQueue(walkingIndex)
 	}
 
@@ -116,18 +113,17 @@ func (m *translationMW) addTransactionToMigrationQueue(
 	walkingIndex int,
 ) bool {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
-	if len(cur.MigrationQueue) >= spec.MigrationQueueSize {
+	if len(state.MigrationQueue) >= spec.MigrationQueueSize {
 		return false
 	}
 
-	next.ToRemoveFromPTW = append(next.ToRemoveFromPTW, walkingIndex)
-	next.MigrationQueue = append(next.MigrationQueue,
-		next.WalkingTranslations[walkingIndex])
+	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
+	state.MigrationQueue = append(state.MigrationQueue,
+		state.WalkingTranslations[walkingIndex])
 
-	page := next.WalkingTranslations[walkingIndex].Page
+	page := state.WalkingTranslations[walkingIndex].Page
 	page.IsMigrating = true
 	m.pageTable.Update(page)
 
@@ -157,8 +153,8 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-	walking := next.WalkingTranslations[walkingIndex]
+	state := m.comp.GetNextState()
+	walking := state.WalkingTranslations[walkingIndex]
 
 	rsp := &vm.TranslationRsp{
 		Page: walking.Page,
@@ -170,7 +166,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	rsp.TrafficClass = "vm.TranslationRsp"
 
 	m.topPort().Send(rsp)
-	next.ToRemoveFromPTW = append(next.ToRemoveFromPTW, walkingIndex)
+	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
 	m.traceReqComplete(walking.ReqID)
 
@@ -179,9 +175,9 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 
 func (m *translationMW) parseFromTop() bool {
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	if len(cur.WalkingTranslations) >= spec.MaxRequestsInFlight {
+	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
 	}
 
@@ -204,7 +200,7 @@ func (m *translationMW) parseFromTop() bool {
 
 func (m *translationMW) startWalking(req *vm.TranslationReq) {
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	ts := transactionState{
 		ReqID:        req.ID,
@@ -217,14 +213,14 @@ func (m *translationMW) startWalking(req *vm.TranslationReq) {
 		CycleLeft:    spec.Latency,
 	}
 
-	next.WalkingTranslations = append(next.WalkingTranslations, ts)
+	state.WalkingTranslations = append(state.WalkingTranslations, ts)
 }
 
 func (m *translationMW) toRemove(index int) bool {
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
-	for i := 0; i < len(next.ToRemoveFromPTW); i++ {
-		remove := next.ToRemoveFromPTW[i]
+	for i := 0; i < len(state.ToRemoveFromPTW); i++ {
+		remove := state.ToRemoveFromPTW[i]
 		if remove == index {
 			return true
 		}
@@ -256,18 +252,18 @@ func (m *translationMW) createDefaultPage(
 
 func (m *translationMW) allocatePhysicalPage() uint64 {
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 	pageSize := uint64(1) << spec.Log2PageSize
 
 	for {
-		candidatePage := (next.NextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
+		candidatePage := (state.NextPhysicalPage >> spec.Log2PageSize) << spec.Log2PageSize
 
 		if _, found := m.pageTable.ReverseLookup(candidatePage); !found {
-			next.NextPhysicalPage = candidatePage + pageSize
+			state.NextPhysicalPage = candidatePage + pageSize
 			return candidatePage
 		}
 
-		next.NextPhysicalPage += pageSize
+		state.NextPhysicalPage += pageSize
 	}
 }
 

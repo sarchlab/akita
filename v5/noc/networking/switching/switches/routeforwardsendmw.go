@@ -47,10 +47,10 @@ func (m *routeForwardSendMW) flitTaskID(flit *messaging.Flit) string {
 }
 
 func (m *routeForwardSendMW) route() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	for i := range m.ports {
-		pcs := &next.PortComplexes[i]
+		pcs := &state.PortComplexes[i]
 
 		for j := 0; j < pcs.NumInputChannel; j++ {
 			if pcs.RouteBuffer.Size() == 0 {
@@ -92,12 +92,12 @@ func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst sim.RemotePort) int {
 }
 
 func (m *routeForwardSendMW) forward() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 	occupiedOutputPort := make([]bool, len(m.ports))
 
 	for offset := 0; offset < len(m.ports); offset++ {
 		i := (m.nextArbPort + offset) % len(m.ports)
-		pcs := &next.PortComplexes[i]
+		pcs := &state.PortComplexes[i]
 
 		for pcs.ForwardBuffer.Size() > 0 {
 			item := pcs.ForwardBuffer.Elements[0]
@@ -107,7 +107,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 				break
 			}
 
-			sendBuf := &next.PortComplexes[outIdx].SendOutBuffer
+			sendBuf := &state.PortComplexes[outIdx].SendOutBuffer
 			if !sendBuf.CanPush() {
 				break
 			}
@@ -125,20 +125,20 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 }
 
 func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	for i, port := range m.ports {
-		curPcs := &cur.PortComplexes[i]
+		pcs := &state.PortComplexes[i]
 		numSent := 0
 
-		for j := 0; j < curPcs.NumOutputChannel; j++ {
-			if numSent >= curPcs.SendOutBuffer.Size() {
+		for j := 0; j < pcs.NumOutputChannel; j++ {
+			if numSent >= pcs.SendOutBuffer.Size() {
 				break
 			}
 
-			flit := curPcs.SendOutBuffer.Elements[numSent]
+			flit := pcs.SendOutBuffer.Elements[numSent]
 			flit.Src = port.AsRemote()
-			flit.Dst = curPcs.RemotePort
+			flit.Dst = pcs.RemotePort
 
 			err := port.Send(&flit)
 			if err == nil {
@@ -150,10 +150,8 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 		}
 
 		if numSent > 0 {
-			next := m.comp.GetNextState()
-			nextPcs := &next.PortComplexes[i]
-			nextPcs.SendOutBuffer.Elements =
-				nextPcs.SendOutBuffer.Elements[numSent:]
+			pcs.SendOutBuffer.Elements =
+				pcs.SendOutBuffer.Elements[numSent:]
 		}
 	}
 

@@ -80,16 +80,16 @@ func (m *outgoingMW) flitTaskID(flitID string) string {
 func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	numSent := 0
 
 	for i := 0; i < spec.NumOutputChannels; i++ {
-		if numSent >= len(cur.FlitsToSend) {
+		if numSent >= len(state.FlitsToSend) {
 			break
 		}
 
-		flit := &cur.FlitsToSend[numSent]
+		flit := &state.FlitsToSend[numSent]
 
 		err := m.networkPort.Send(flit)
 		if err == nil {
@@ -99,10 +99,9 @@ func (m *outgoingMW) sendFlitOut() bool {
 	}
 
 	if numSent > 0 {
-		next := m.comp.GetNextState()
-		next.FlitsToSend = next.FlitsToSend[numSent:]
+		state.FlitsToSend = state.FlitsToSend[numSent:]
 
-		if len(next.FlitsToSend) == 0 {
+		if len(state.FlitsToSend) == 0 {
 			for _, p := range m.devicePorts {
 				p.NotifyAvailable()
 			}
@@ -119,12 +118,12 @@ const maxMsgOutBufSize = 16
 
 func (m *outgoingMW) prepareMsg() bool {
 	madeProgress := false
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	for i := 0; i < len(m.devicePorts); i++ {
 		// Backpressure: stop accepting new messages when the outgoing
 		// message buffer is already large enough.
-		if len(next.MsgOutBuf) >= maxMsgOutBufSize {
+		if len(state.MsgOutBuf) >= maxMsgOutBufSize {
 			break
 		}
 
@@ -134,7 +133,7 @@ func (m *outgoingMW) prepareMsg() bool {
 		}
 
 		msg := port.RetrieveOutgoing()
-		next.MsgOutBuf = append(next.MsgOutBuf, *msg.Meta())
+		state.MsgOutBuf = append(state.MsgOutBuf, *msg.Meta())
 
 		madeProgress = true
 	}
@@ -149,24 +148,24 @@ const maxFlitsToBuffer = 64
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 	networkPortRemote := m.networkPort.AsRemote()
 
 	for {
-		if len(next.MsgOutBuf) == 0 {
+		if len(state.MsgOutBuf) == 0 {
 			return madeProgress
 		}
 
 		// Apply backpressure: don't convert more messages to flits while
 		// the flit send buffer is already large.
-		if len(next.FlitsToSend) >= maxFlitsToBuffer {
+		if len(state.FlitsToSend) >= maxFlitsToBuffer {
 			return madeProgress
 		}
 
-		meta := next.MsgOutBuf[0]
-		next.MsgOutBuf = next.MsgOutBuf[1:]
+		meta := state.MsgOutBuf[0]
+		state.MsgOutBuf = state.MsgOutBuf[1:]
 		flits := msgMetaToFlits(meta, spec, networkPortRemote, m.defaultSwitchDst)
-		next.FlitsToSend = append(next.FlitsToSend, flits...)
+		state.FlitsToSend = append(state.FlitsToSend, flits...)
 
 		for _, fs := range flits {
 			m.logFlitE2ETask(fs, false, &meta)

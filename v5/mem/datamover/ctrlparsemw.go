@@ -40,8 +40,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
 
-	cur := m.comp.GetState()
-	if cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if state.CurrentTransaction.Active {
 		return false
 	}
 
@@ -53,13 +53,12 @@ func (m *ctrlParseMW) parseFromCP() bool {
 	dstByteGranularity := resolveByteGranularity(spec, req.DstSide)
 	addressMustBeAligned(req.DstAddress, dstByteGranularity)
 
-	next := m.comp.GetNextState()
-	next.SrcSide = string(req.SrcSide)
-	next.DstSide = string(req.DstSide)
-	next.SrcByteGranularity = srcByteGranularity
-	next.DstByteGranularity = dstByteGranularity
+	state.SrcSide = string(req.SrcSide)
+	state.DstSide = string(req.DstSide)
+	state.SrcByteGranularity = srcByteGranularity
+	state.DstByteGranularity = dstByteGranularity
 
-	next.CurrentTransaction = dataMoverTransactionState{
+	state.CurrentTransaction = dataMoverTransactionState{
 		Active:        true,
 		ReqID:         req.ID,
 		ReqSrc:        req.Src,
@@ -75,7 +74,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		PendingWrite:  make(map[string]pendingWriteState),
 	}
 
-	next.Buffer = bufferState{
+	state.Buffer = bufferState{
 		Granularity: srcByteGranularity,
 	}
 
@@ -86,23 +85,23 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 // finishTransaction finishes the current transaction.
 func (m *ctrlParseMW) finishTransaction() bool {
-	cur := m.comp.GetState()
-	if !cur.CurrentTransaction.Active {
+	state := m.comp.GetNextState()
+	if !state.CurrentTransaction.Active {
 		return false
 	}
 
-	curTrans := &cur.CurrentTransaction
+	trans := &state.CurrentTransaction
 
-	if curTrans.NextWriteAddr < curTrans.DstAddress+curTrans.ByteSize {
+	if trans.NextWriteAddr < trans.DstAddress+trans.ByteSize {
 		return false
 	}
 
 	rsp := &DataMoveResponse{
 		MsgMeta: sim.MsgMeta{
 			ID:    sim.GetIDGenerator().Generate(),
-			Src:   curTrans.ReqDst,
-			Dst:   curTrans.ReqSrc,
-			RspTo: curTrans.ReqID,
+			Src:   trans.ReqDst,
+			Dst:   trans.ReqSrc,
+			RspTo: trans.ReqID,
 		},
 	}
 
@@ -112,14 +111,13 @@ func (m *ctrlParseMW) finishTransaction() bool {
 	}
 
 	// Reset transaction
-	next := m.comp.GetNextState()
-	next.CurrentTransaction = dataMoverTransactionState{
+	state.CurrentTransaction = dataMoverTransactionState{
 		PendingRead:  make(map[string]pendingReadState),
 		PendingWrite: make(map[string]pendingWriteState),
 	}
-	next.Buffer = bufferState{
-		Offset:      alignAddress(curTrans.SrcAddress, cur.SrcByteGranularity),
-		Granularity: cur.SrcByteGranularity,
+	state.Buffer = bufferState{
+		Offset:      alignAddress(trans.SrcAddress, state.SrcByteGranularity),
+		Granularity: state.SrcByteGranularity,
 	}
 
 	tracing.TraceReqComplete(rsp, m.comp)

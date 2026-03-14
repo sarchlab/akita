@@ -34,15 +34,13 @@ func (m *migrationMW) Tick() bool {
 }
 
 func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	if len(cur.MigrationQueue) == 0 {
+	if len(state.MigrationQueue) == 0 {
 		return false
 	}
 
-	next := m.comp.GetNextState()
-
-	trans := cur.MigrationQueue[0]
+	trans := state.MigrationQueue[0]
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
 
@@ -58,13 +56,13 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 		}
 
 		m.sendTranslationRsp(trans)
-		next.MigrationQueue = next.MigrationQueue[1:]
+		state.MigrationQueue = state.MigrationQueue[1:]
 		m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 
 		return true
 	}
 
-	if cur.IsDoingMigration {
+	if state.IsDoingMigration {
 		return false
 	}
 
@@ -81,9 +79,9 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 	trans.MigrationReqID = migrationReq.ID
 	trans.MigrationReqSrc = migrationReq.Src
 	trans.MigrationReqDst = migrationReq.Dst
-	next.IsDoingMigration = true
-	next.CurrentOnDemandMigration = trans
-	next.MigrationQueue = next.MigrationQueue[1:]
+	state.IsDoingMigration = true
+	state.CurrentOnDemandMigration = trans
+	state.MigrationQueue = state.MigrationQueue[1:]
 
 	return true
 }
@@ -91,10 +89,10 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 func (m *migrationMW) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	page vm.Page,
 ) vm.Page {
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 	inQueue := false
 
-	for _, t := range next.MigrationQueue {
+	for _, t := range state.MigrationQueue {
 		if page.PAddr == t.Page.PAddr {
 			inQueue = true
 			break
@@ -137,9 +135,8 @@ func (m *migrationMW) processMigrationReturn() bool {
 		return false
 	}
 
-	cur := m.comp.GetState()
-	next := m.comp.GetNextState()
-	trans := cur.CurrentOnDemandMigration
+	state := m.comp.GetNextState()
+	trans := state.CurrentOnDemandMigration
 
 	page, found := m.pageTable.Find(
 		vm.PID(trans.PID), trans.VAddr)
@@ -158,7 +155,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 	rsp.TrafficClass = "vm.TranslationRsp"
 	m.topPort().Send(rsp)
 
-	next.IsDoingMigration = false
+	state.IsDoingMigration = false
 
 	page = m.markPageAsNotMigratingIfNotInTheMigrationQueue(page)
 	page.IsPinned = true
@@ -174,7 +171,7 @@ func (m *migrationMW) createMigrationRequest(
 	page vm.Page,
 ) *vm.PageMigrationReqToDriver {
 	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)
@@ -182,8 +179,8 @@ func (m *migrationMW) createMigrationRequest(
 		append(migrationInfo.GPUReqToVAddrMap[trans.DeviceID],
 			trans.VAddr)
 
-	next.PageAccessedByDeviceID = appendDeviceID(
-		next.PageAccessedByDeviceID, page.VAddr, page.DeviceID)
+	state.PageAccessedByDeviceID = appendDeviceID(
+		state.PageAccessedByDeviceID, page.VAddr, page.DeviceID)
 
 	migrationReq := vm.NewPageMigrationReqToDriver(
 		m.migrationPort().AsRemote(), spec.MigrationServiceProvider)
@@ -192,7 +189,7 @@ func (m *migrationMW) createMigrationRequest(
 	migrationReq.CurrPageHostGPU = page.DeviceID
 	migrationReq.MigrationInfo = migrationInfo
 	migrationReq.CurrAccessingGPUs = unique(
-		getDeviceIDs(next.PageAccessedByDeviceID, page.VAddr))
+		getDeviceIDs(state.PageAccessedByDeviceID, page.VAddr))
 	migrationReq.RespondToTop = true
 
 	return migrationReq

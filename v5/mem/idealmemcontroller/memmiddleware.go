@@ -29,7 +29,7 @@ func (m *memMiddleware) Tick() bool {
 }
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	if state.CurrentState != "enable" {
 		return false
 	}
@@ -47,9 +47,8 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
 		tx := m.msgToInflightTransaction(msg)
 
-		nextState := m.comp.GetNextState()
-		nextState.InflightTransactions = append(
-			nextState.InflightTransactions, tx)
+		state.InflightTransactions = append(
+			state.InflightTransactions, tx)
 		madeProgress = true
 	}
 
@@ -87,16 +86,16 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 }
 
 func (m *memMiddleware) processCountdowns() bool {
-	nextState := m.comp.GetNextState()
-	if nextState.CurrentState == "pause" {
+	state := m.comp.GetNextState()
+	if state.CurrentState == "pause" {
 		return false
 	}
 
 	madeProgress := false
-	remaining := make([]inflightTransaction, 0, len(nextState.InflightTransactions))
+	remaining := make([]inflightTransaction, 0, len(state.InflightTransactions))
 
-	for i := range nextState.InflightTransactions {
-		tx := nextState.InflightTransactions[i]
+	for i := range state.InflightTransactions {
+		tx := state.InflightTransactions[i]
 
 		if tx.CycleLeft > 0 {
 			tx.CycleLeft--
@@ -114,7 +113,7 @@ func (m *memMiddleware) processCountdowns() bool {
 		remaining = append(remaining, tx)
 	}
 
-	nextState.InflightTransactions = remaining
+	state.InflightTransactions = remaining
 
 	return madeProgress
 }

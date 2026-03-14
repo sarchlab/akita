@@ -21,7 +21,7 @@ func (m *ctrlMiddleware) ctrlPort() sim.Port {
 }
 
 func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	if state.CurrentState == "drain" {
 		madeProgress = m.handleDrainState() || madeProgress
 	}
@@ -30,7 +30,7 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleDrainState() bool {
-	state := m.comp.GetState()
+	state := m.comp.GetNextState()
 	if len(state.InflightTransactions) != 0 {
 		return false
 	}
@@ -47,8 +47,7 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	nextState := m.comp.GetNextState()
-	nextState.CurrentState = "pause"
+	state.CurrentState = "pause"
 
 	return true
 }
@@ -74,8 +73,8 @@ func (m *ctrlMiddleware) handleEnable(
 	msg *mem.ControlMsg,
 ) bool {
 	if msg.Enable {
-		nextState := m.comp.GetNextState()
-		nextState.CurrentState = "enable"
+		state := m.comp.GetNextState()
+		state.CurrentState = "enable"
 
 		rsp := &mem.ControlMsgRsp{}
 		rsp.ID = sim.GetIDGenerator().Generate()
@@ -101,8 +100,8 @@ func (m *ctrlMiddleware) handlePause(
 	msg *mem.ControlMsg,
 ) bool {
 	if !msg.Enable && !msg.Drain {
-		nextState := m.comp.GetNextState()
-		nextState.CurrentState = "pause"
+		state := m.comp.GetNextState()
+		state.CurrentState = "pause"
 
 		rsp := &mem.ControlMsgRsp{}
 		rsp.ID = sim.GetIDGenerator().Generate()
@@ -128,10 +127,10 @@ func (m *ctrlMiddleware) handleDrain(
 	msg *mem.ControlMsg,
 ) bool {
 	if !msg.Enable && msg.Drain {
-		nextState := m.comp.GetNextState()
-		nextState.CurrentState = "drain"
-		nextState.CurrentCmdID = msg.ID
-		nextState.CurrentCmdSrc = msg.Src
+		state := m.comp.GetNextState()
+		state.CurrentState = "drain"
+		state.CurrentCmdID = msg.ID
+		state.CurrentCmdSrc = msg.Src
 
 		m.ctrlPort().RetrieveIncoming()
 		return true

@@ -51,9 +51,9 @@ func (m *respondMW) fetchFromBottom() bool {
 }
 
 func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
-	reqTransaction, exists := cur.RemoteMemReqs[rsp.RspTo]
+	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
 	if !exists || reqTransaction.ReqID == "" {
 		log.Panicf("Cannot find matching request for response %+v", rsp)
@@ -74,8 +74,7 @@ func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 
 	m.topPort().Send(rspToTop)
 
-	next := m.comp.GetNextState()
-	delete(next.RemoteMemReqs, rsp.RspTo)
+	delete(state.RemoteMemReqs, rsp.RspTo)
 
 	return true
 }

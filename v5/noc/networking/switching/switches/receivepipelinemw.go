@@ -32,19 +32,16 @@ func (m *receivePipelineMW) flitTaskID(flit *messaging.Flit) string {
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
-	cur := m.comp.GetState()
+	state := m.comp.GetNextState()
 
 	for i, port := range m.ports {
-		curPcs := cur.PortComplexes[i]
+		pcs := &state.PortComplexes[i]
 
-		for j := 0; j < curPcs.NumInputChannel; j++ {
+		for j := 0; j < pcs.NumInputChannel; j++ {
 			itemI := port.PeekIncoming()
 			if itemI == nil {
 				break
 			}
-
-			next := m.comp.GetNextState()
-			nextPcs := &next.PortComplexes[i]
 
 			flit := itemI.(*messaging.Flit)
 			item := routedFlit{
@@ -53,16 +50,16 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				RouteTo: flit.Msg.Dst,
 			}
 
-			if nextPcs.Latency == 0 {
-				if !nextPcs.RouteBuffer.CanPush() {
+			if pcs.Latency == 0 {
+				if !pcs.RouteBuffer.CanPush() {
 					break
 				}
-				nextPcs.RouteBuffer.PushTyped(item)
+				pcs.RouteBuffer.PushTyped(item)
 			} else {
-				if !nextPcs.Pipeline.CanAccept() {
+				if !pcs.Pipeline.CanAccept() {
 					break
 				}
-				nextPcs.Pipeline.Accept(item)
+				pcs.Pipeline.Accept(item)
 			}
 
 			port.RetrieveIncoming()
@@ -82,10 +79,10 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 }
 
 func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
-	next := m.comp.GetNextState()
+	state := m.comp.GetNextState()
 
 	for i := range m.ports {
-		pcs := &next.PortComplexes[i]
+		pcs := &state.PortComplexes[i]
 		if pcs.Latency == 0 {
 			continue
 		}
