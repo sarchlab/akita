@@ -4,9 +4,9 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 337)
+## Current State (Cycle 346)
 
-### Project Status: IN PROGRESS — M44 done, evaluating M45
+### Project Status: IN PROGRESS — M45.1 starting
 
 **M44 complete:** All dead packages deleted, shared utilities extracted, PR #73 merged.
 
@@ -16,7 +16,13 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - #439: Standardize component file paradigm
 - #440: Consolidate sim.Component vs modeling.Component
 
-**Currently investigating** these new human directions with Elena and Iris before defining M45.
+**Investigation complete (cycle 346):** Elena and Iris provided thorough analyses.
+- sim.Component interface is load-bearing (required by port system) — cannot be removed
+- modeling.Component should stay in modeling package (clean concern separation)
+- Analysis removal is safe and straightforward (3 callers, all optional)
+- Coalescer removal is feasible but medium-high effort (touches all pipeline stages, eliminates two-level transaction model)
+- File paradigm: 8/14 packages need structural changes, 5 need naming changes
+- Breaking M45 into sub-milestones: M45.1 (deletions), M45.2 (file paradigm)
 
 ### Recently Completed
 
@@ -87,11 +93,16 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Shared utilities extracted (convertAddress, Flush/Restart, LRU set, MSHR ops)
 - PR #73 merged
 
-### M45: Architecture cleanup and standardization (NEXT — estimated 8 cycles)
+### M45.1: Remove analysis package + WriteThroughCache coalescer (IN PROGRESS — 8 cycles)
 - **Remove /v5/analysis package** (human issue #432): Delete analysis package, update 3 callers (monitoring, mesh, networkconnector)
-- **Remove WriteThroughCache coalescer** (human issue #434): Write-through cache doesn't need coalescing
-- **sim.Component consolidation** (human issue #440): Evaluate whether modeling.Component should move to sim package
+- **Remove WriteThroughCache coalescer** (human issue #434): Eliminate coalescer stage and two-level transaction model, flatten to single transaction list, update all pipeline stages and tests
+- Tracker: issue #445
+
+### M45.2: Component file paradigm standardization (PLANNED — estimated 8 cycles)
 - **Component file paradigm** (human issue #439): Standardize file organization (state.go, spec.go, one file per middleware)
+- 8 packages need structural changes (extract middlewares to separate files)
+- 5 packages need naming changes (rename middleware files to consistent pattern)
+- **sim.Component question** (human issue #440): Investigation shows sim.Component must stay (load-bearing for ports). modeling.Component should stay in modeling package. Rewrite examples/ping to use modeling.Component.
 - Addresses human issue #408 (repo-wide simplification)
 
 ### M46: Event-driven component support (estimated 8-12 cycles)
