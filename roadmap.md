@@ -4,45 +4,83 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 375)
+## Current State (Cycle 376)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
 All 50 milestones from the original component model refactoring are complete. All 16 success criteria met. CI green on main.
 
-### New Phase: Discussion & Research
+### Current Phase: Research & Discussion — ✅ RESEARCH COMPLETE
 
-The human has raised 13 discussion/research topics (issues #477-#489) with explicit instruction: **no implementation without authorization**. We are in a research-only phase.
+All 13 human topics have been researched. Findings summarized below. **Awaiting human authorization before any implementation.**
 
 ---
 
-## Phase 2: Research & Discussion (Current)
+## Phase 2: Research Findings & Recommendations
 
-### Human Topics to Discuss
+### Topic 1: Move directconnection to noc? (#477)
+**Recommendation: YES** — `noc/networkconnector` already type-asserts on `*directconnection.Comp`. Moving it is organizational improvement. 10 files need import updates. No circular dependency risk.
 
-| Issue | Topic | Research Assignee | Status |
-|-------|-------|-------------------|--------|
-| #477 | Move directconnection to noc? | Elena (#492) | 🔄 In Progress |
-| #478 | Component-engine decoupling (event scheduler) | Iris (#491) | 🔄 In Progress |
-| #479 | Event serialization | Iris (#491) | 🔄 In Progress |
-| #480 | Integer time representation (uint64 vs float64) | Iris (#490) | 🔄 In Progress |
-| #481 | Merge concrete simulators into Akita? | Otto (#499) | 🔄 In Progress |
-| #482 | Merge AkitaRTM and Daisen? | Mara (#496) | 🔄 In Progress |
-| #483 | Double buffering residue | Diana (#495) | 🔄 In Progress |
-| #484 | Improve DRAM controller modeling | Diana (#494) | 🔄 In Progress |
-| #485 | Remove idealmemcontroller? | Elena (#493) | 🔄 In Progress |
-| #486 | /mem/mem → /mem folder flattening | Elena (#493) | 🔄 In Progress |
-| #487 | Unified memory control protocol | Otto (#498) | 🔄 In Progress |
-| #488 | Rewrite Daisen/AkitaRTM with React | Mara (#497) | 🔄 In Progress |
-| #489 | Meta: No implementation yet | — | Noted |
+### Topic 2: Component-engine decoupling (#478)
+**Recommendation: YES** — `EventScheduler` interface already exists. Components only use `Schedule()` and `CurrentTime()`, never `Run()`/`Pause()`. Change is mechanical: replace `Engine` fields with `EventScheduler`.
 
-### Next Steps
+### Topic 3: Event serialization (#479)
+**Recommendation: Replace `Handler()` with `HandlerID() string` + `HandlerRegistry`** — Events store handler name instead of pointer. Engine looks up handler at dispatch. Enables arbitrary checkpoint/restore without quiescence.
 
-1. ✅ Assign research workers to all 13 topics
-2. ⬜ Collect research findings
-3. ⬜ Synthesize findings into recommendations
-4. ⬜ Present recommendations to human for authorization
-5. ⬜ Define implementation milestones based on human decisions
+### Topic 4: Integer time representation (#480)
+**Recommendation: YES, uint64 picoseconds** — Every major simulator uses integer time. `Freq` methods currently use `math.Round` hacks as precision workarounds. 1 GHz = 1000 ps (exact). Migration scope: ~21 core files, compiler catches all breakage.
+
+### Topic 5: Merge concrete simulators into Akita? (#481)
+**Recommendation: NO** — Keep separate repos. Simulators are domain-independent (AMD GPU, Apple CPU, NVIDIA, Tenstorrent). MGPUSim alone is 72K LoC vs Akita's 52K. Use `go.work` for development coordination.
+
+### Topic 6: Merge AkitaRTM and Daisen? (#482)
+**Recommendation: PARTIAL MERGE** — Full merge not recommended (different runtime models: embedded library vs standalone binary). Recommended: unified frontend with live/replay modes, shared Go infrastructure, seamless handoff from monitoring to visualization.
+
+### Topic 7: Double buffering residue (#483)
+**Recommendation: CLEAN UP** — 17 non-test files still use `GetState()`/`GetNextState()` split pattern from old double-buffering. Code is correct but misleading. Worst offenders: datamover (8 functions), mmu/translationmw.go (counter decrement pattern), noc/switching (4 files). Human specifically flagged tlbmiddleware.go line 28 (actually clean; the residue is in ctrlmiddleware.go same package).
+
+### Topic 8: DRAM controller improvements (#484)
+**Recommendation: Hybrid approach** — Build timing/scheduling natively in Go (preserves save/load). Parse DRAMSim3 .ini / Ramulator2 YAML for parameters. Critical gaps: no open-page policy, no FR-FCFS scheduling, no DDR5/HBM3, no power modeling. 4-phase roadmap proposed.
+
+### Topic 9: Remove idealmemcontroller? (#485)
+**Recommendation: NO, keep it** — simplebankedmemory lacks control port and unlimited concurrency. idealmemcontroller is only ~350 LOC and used by 6 acceptance tests. Low maintenance burden.
+
+### Topic 10: /mem/mem → /mem flattening (#486)
+**Recommendation: YES** — Parent `mem/` has zero Go source files. `mem/mem` stutters. 43 files need mechanical import change. Standard Go convention supports files alongside subdirectories.
+
+### Topic 11: Unified memory control protocol (#487)
+**Recommendation: YES** — 3 incompatible patterns exist (bitfield ControlMsg, cache FlushReq/RestartReq, TLB-specific). Replace with single `ControlReq`/`ControlRsp` using enum commands. DRAM and simplebankedmemory currently have NO control interface. Affects 10 internal packages.
+
+### Topic 12: Rewrite Daisen/AkitaRTM with React (#488)
+**Recommendation: YES, React** — Current frontends use vanilla TS+D3 with manual DOM manipulation (~12,700 LOC). React brings component reusability, ecosystem, maintainability. **Critical: merge frontends first (Topic 6), then rewrite.** Vue is reasonable alternative.
+
+### Topic 13: No implementation without authorization (#489)
+**Status: Acknowledged.** All work has been research-only.
+
+---
+
+## Proposed Implementation Order (Pending Human Authorization)
+
+Based on dependency analysis and impact:
+
+### Tier 1: Foundational changes (should be done first)
+1. **Double buffering cleanup** (#483) — Small, low-risk, removes confusion
+2. **Component-engine decoupling** (#478) — Enables event serialization
+3. **Integer time** (#480) — Fundamental type change, should be done before other refactors
+4. **Event serialization** (#479) — Depends on #478 and #480
+5. **/mem/mem flattening** (#486) — Mechanical, breaks many import paths (do early)
+
+### Tier 2: Architecture improvements
+6. **Move directconnection to noc** (#477) — Small organizational change
+7. **Unified control protocol** (#487) — Depends on understanding from Tier 1 work
+8. **DRAM controller improvements** (#484) — Large, can be phased
+
+### Tier 3: Frontend/tooling (independent track)
+9. **Partial merge AkitaRTM/Daisen** (#482) — Can proceed independently
+10. **React rewrite** (#488) — Depends on #482
+
+### Not recommended for implementation:
+- Merging concrete simulators (#481) — Keep separate repos
 
 ---
 
@@ -58,7 +96,7 @@ The human has raised 13 discussion/research topics (issues #477-#489) with expli
 | Phase 3 (M27-M29) | Code quality | ~16 | ~6 |
 | Phase 4 (M30-M38) | CI, performance, cache unification, stateutil | ~35 | ~25 |
 | Phase 5 (M39-M39.1) | Documentation | 5 | 5 |
-| Phase 6 (M40) | Default spec, rename, freq | 8 | ~4 |
+| Phase 6 (M40) | Default spec, rename, freq in spec | 8 | ~4 |
 | Phase 7 (M41) | Restore test sizes + CI fix | 2 | 2 |
 | Phase 8 (M42) | Switch/endpoint simplification | 10 | ~10 |
 | Phase 9 (M43) | Consolidate stateutil→queueing | 8 | ~6 |
@@ -81,3 +119,4 @@ The human has raised 13 discussion/research topics (issues #477-#489) with expli
 - Budget honestly — track actual vs estimated cycles
 - Investigation cycles before implementation prevent scope misjudgments
 - All 16 original success criteria were met with systematic execution
+- Research across 13 topics completed efficiently in 1 cycle with 5 parallel workers
