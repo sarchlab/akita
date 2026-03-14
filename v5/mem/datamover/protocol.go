@@ -4,13 +4,13 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// DateMovePort is the port name that either serves as a source or destination.
+// DataMovePort is the port name that either serves as a source or destination.
 // It can be either inside or outside.
-type DateMovePort string
+type DataMovePort string
 
 const (
-	InsidePort  DateMovePort = "inside"
-	OutsidePort DateMovePort = "outside"
+	InsidePort  DataMovePort = "inside"
+	OutsidePort DataMovePort = "outside"
 )
 
 // DataMoveResponse is sent when a data move operation completes.
@@ -24,6 +24,6 @@ type DataMoveRequest struct {
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64
-	SrcSide    DateMovePort
-	DstSide    DateMovePort
+	SrcSide    DataMovePort
+	DstSide    DataMovePort
 }

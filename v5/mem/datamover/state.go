@@ -6,22 +6,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-// Spec contains immutable configuration for the data mover.
-type Spec struct {
-	Freq                   sim.Freq `json:"freq"`
-	BufferSize             uint64   `json:"buffer_size"`
-	InsideByteGranularity  uint64 `json:"inside_byte_granularity"`
-	OutsideByteGranularity uint64 `json:"outside_byte_granularity"`
-
-	InsideMapperKind             string           `json:"inside_mapper_kind"`
-	InsideMapperPorts            []sim.RemotePort `json:"inside_mapper_ports"`
-	InsideMapperInterleavingSize uint64           `json:"inside_mapper_interleaving_size"`
-
-	OutsideMapperKind             string           `json:"outside_mapper_kind"`
-	OutsideMapperPorts            []sim.RemotePort `json:"outside_mapper_ports"`
-	OutsideMapperInterleavingSize uint64           `json:"outside_mapper_interleaving_size"`
-}
-
 // dataChunk wraps a single []byte slot. This avoids [][]byte which fails
 // ValidateState. Valid distinguishes a nil slot from an empty one.
 type dataChunk struct {
@@ -174,7 +158,7 @@ func bufferMoveOffsetForwardTo(bs *bufferState, newOffset uint64) {
 }
 
 // resolveByteGranularity returns the byte granularity for a given port side.
-func resolveByteGranularity(spec Spec, side DateMovePort) uint64 {
+func resolveByteGranularity(spec Spec, side DataMovePort) uint64 {
 	switch side {
 	case "inside":
 		return spec.InsideByteGranularity
@@ -194,8 +178,8 @@ func transactionAsMsg(
 		SrcAddress: trans.SrcAddress,
 		DstAddress: trans.DstAddress,
 		ByteSize:   trans.ByteSize,
-		SrcSide:    DateMovePort(trans.SrcSide),
-		DstSide:    DateMovePort(trans.DstSide),
+		SrcSide:    DataMovePort(trans.SrcSide),
+		DstSide:    DataMovePort(trans.DstSide),
 	}
 	req.ID = trans.ReqID
 	req.Src = trans.ReqSrc
