@@ -9,10 +9,14 @@ type Named interface {
 	Name() string
 }
 
-// A Component is a element that is being simulated in Akita.
+// A Component is an element being simulated in Akita.
+//
+// Component is the unifying interface for all simulation elements that
+// own ports and can be notified of port activity. Event handling
+// (Handler interface) is intentionally NOT part of Component —
+// event dispatch is handled by the Engine via Event.Handler().
 type Component interface {
 	Named
-	Handler
 	Hookable
 	PortOwner
 
