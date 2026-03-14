@@ -81,6 +81,13 @@ func (s *intake) createTransaction(msg sim.Msg) int {
 			WritePID:       m.PID,
 		}
 
+		if t.WriteDirtyMask == nil {
+			t.WriteDirtyMask = make([]bool, len(m.Data))
+			for i := range t.WriteDirtyMask {
+				t.WriteDirtyMask[i] = true
+			}
+		}
+
 		tracing.StartTaskWithSpecificLocation(t.ID,
 			tracing.MsgIDAtReceiver(m, s.cache.comp),
 			s.cache.comp, "cache_transaction", "write",
