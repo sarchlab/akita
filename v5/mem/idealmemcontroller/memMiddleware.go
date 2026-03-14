@@ -129,7 +129,11 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	spec := m.comp.GetSpec()
-	addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, tx.Address)
+	addr := mem.ConvertAddress(
+		spec.AddrConvKind, spec.AddrOffset,
+		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+		spec.AddrCurrentElementIndex, tx.Address,
+	)
 
 	data, err := m.storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
@@ -170,7 +174,11 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	}
 
 	spec := m.comp.GetSpec()
-	addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, tx.Address)
+	addr := mem.ConvertAddress(
+		spec.AddrConvKind, spec.AddrOffset,
+		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+		spec.AddrCurrentElementIndex, tx.Address,
+	)
 
 	if tx.DirtyMask == nil {
 		err := m.storage.Write(addr, tx.Data)

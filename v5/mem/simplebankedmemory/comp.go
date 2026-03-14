@@ -181,7 +181,11 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, readReq.Address)
+		addr := mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, readReq.Address,
+		)
 
 		data, err := m.storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
@@ -227,7 +231,11 @@ func (m *tickFinalizeMW) finalizeWrite(
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
-		addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, writeReq.Address)
+		addr := mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, writeReq.Address,
+		)
 
 		if writeReq.DirtyMask == nil {
 			if err := m.storage.Write(addr, writeReq.Data); err != nil {
@@ -325,7 +333,11 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		}
 
 		addr := msg.GetAddress()
-		addr = mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, addr)
+		addr = mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, addr,
+		)
 
 		bankID := selectBank(spec, addr)
 		if bankID < 0 || bankID >= spec.NumBanks {
