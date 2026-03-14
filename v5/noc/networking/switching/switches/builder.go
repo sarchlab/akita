@@ -15,7 +15,7 @@ var DefaultSpec = Spec{
 
 // Builder can help building switches
 type Builder struct {
-	engine       sim.Engine
+	engine       sim.EventScheduler
 	spec         Spec
 	routingTable routing.Table
 }
@@ -27,7 +27,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the switch to build uses.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

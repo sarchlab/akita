@@ -31,7 +31,7 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine sim.Engine, test *acceptance.Test) {
+func createNetwork(engine sim.EventScheduler, test *acceptance.Test) {
 	freq := 1.0 * sim.GHz
 
 	var agents []*acceptance.Agent

@@ -49,7 +49,7 @@ func NewConnector() *Connector {
 }
 
 // WithEngine sets the engine to be used.
-func (c *Connector) WithEngine(e sim.Engine) *Connector {
+func (c *Connector) WithEngine(e sim.EventScheduler) *Connector {
 	c.connector = c.connector.WithEngine(e)
 	return c
 }

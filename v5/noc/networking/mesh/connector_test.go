@@ -9,7 +9,7 @@ import (
 
 var _ = Describe("Connector", func() {
 	var (
-		engine    sim.Engine
+		engine    sim.EventScheduler
 		connector *mesh.Connector
 	)
 

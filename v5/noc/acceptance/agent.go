@@ -19,7 +19,7 @@ type Agent struct {
 
 // NewAgent creates a new agent.
 func NewAgent(
-	engine sim.Engine,
+	engine sim.EventScheduler,
 	freq sim.Freq,
 	name string,
 	ports []sim.Port,
