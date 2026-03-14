@@ -2,35 +2,54 @@
 
 ## Project Goal
 
-Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
+Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 374)
+## Current State (Cycle 375)
 
-### Project Status: ✅ COMPLETE
+### Previous Phase: ✅ COMPLETE (M1-M50)
 
-All 50 milestones completed. All 16 success criteria met. CI green on main (all 5 jobs pass). No open PRs. No open human issues.
+All 50 milestones from the original component model refactoring are complete. All 16 success criteria met. CI green on main.
 
-**Success criteria status:**
-1-16: ✅ All met
+### New Phase: Discussion & Research
 
-**Final milestone M50 completed:** Documentation polish, repo hygiene, and all remaining fixes verified by Apollo.
-
----
-
-## Final Assessment Milestone
-
-### M50: Final documentation polish and repo hygiene (✅ COMPLETE — budget 4, used ~2)
-Fix all documentation issues found in final review:
-1. **component_guide.md**: Replace all 29 `stateutil` references with `queueing`, add EventDrivenComponent section, fix stale file paths, fix Spec struct / builder discrepancies, remove Pop/PopTyped references
-2. **README.md**: Fix broken `migration_guide.md` link → `migration.md`  
-3. **migration.md**: Fix `WithSimulation` API reference to actual builder API
-4. **Repo hygiene**: Remove tracked `writebackcache` binary, fix gmmu mock_port.go (rename to `_test.go` pattern)
-5. **doc.go**: Fix 3 typos (memoy, fix→fixed, infrascturctures), add doc.go for `queueing/` and `simulation/`
-6. **spec.md**: Move completed items from Active to Resolved
+The human has raised 13 discussion/research topics (issues #477-#489) with explicit instruction: **no implementation without authorization**. We are in a research-only phase.
 
 ---
 
-## Completed Milestones Summary
+## Phase 2: Research & Discussion (Current)
+
+### Human Topics to Discuss
+
+| Issue | Topic | Research Assignee | Status |
+|-------|-------|-------------------|--------|
+| #477 | Move directconnection to noc? | Elena (#492) | 🔄 In Progress |
+| #478 | Component-engine decoupling (event scheduler) | Iris (#491) | 🔄 In Progress |
+| #479 | Event serialization | Iris (#491) | 🔄 In Progress |
+| #480 | Integer time representation (uint64 vs float64) | Iris (#490) | 🔄 In Progress |
+| #481 | Merge concrete simulators into Akita? | Otto (#499) | 🔄 In Progress |
+| #482 | Merge AkitaRTM and Daisen? | Mara (#496) | 🔄 In Progress |
+| #483 | Double buffering residue | Diana (#495) | 🔄 In Progress |
+| #484 | Improve DRAM controller modeling | Diana (#494) | 🔄 In Progress |
+| #485 | Remove idealmemcontroller? | Elena (#493) | 🔄 In Progress |
+| #486 | /mem/mem → /mem folder flattening | Elena (#493) | 🔄 In Progress |
+| #487 | Unified memory control protocol | Otto (#498) | 🔄 In Progress |
+| #488 | Rewrite Daisen/AkitaRTM with React | Mara (#497) | 🔄 In Progress |
+| #489 | Meta: No implementation yet | — | Noted |
+
+### Next Steps
+
+1. ✅ Assign research workers to all 13 topics
+2. ⬜ Collect research findings
+3. ⬜ Synthesize findings into recommendations
+4. ⬜ Present recommendations to human for authorization
+5. ⬜ Define implementation milestones based on human decisions
+
+---
+
+## Phase 1: Component Model Refactoring (COMPLETE)
+
+<details>
+<summary>50 milestones completed across ~212 cycles</summary>
 
 | Phase | Milestones | Budget | Used |
 |-------|-----------|--------|------|
@@ -50,19 +69,15 @@ Fix all documentation issues found in final review:
 | Phase 14 (M47) | Fix nil WriteDirtyMask CI regression | 3 | ~2 |
 | Phase 15 (M48) | Investigation: sim.Component + simplification | 1 | 1 |
 | Phase 16 (M49) | sim.Component cleanup + repo hygiene | 4 | ~2 |
-| **Total** | **49 milestones** | **~324** | **~212** |
+| Phase 17 (M50) | Final documentation polish | 4 | ~2 |
+</details>
 
 ---
 
 ## Lessons Learned
 
-- Budget estimates improving: most milestones finish well under budget
-- **CRITICAL LESSON (recurring):** Agents must NEVER merge PRs when any CI job is failing. This has happened TWICE now. All 5 CI jobs must be GREEN before merge.
-- Human direction can pivot rapidly — stay responsive, don't over-plan
-- In-place state update is simpler AND faster than deep copy
-- Event-driven components represent a fundamental architectural challenge — different from tick-driven model
-- Using investigator agents (Elena, Iris, Diana) to audit/design before coding milestones works well
-- Large mechanical refactorings benefit from parallelizing across multiple workers
-- Coalescer removal broke MSHR merge because DirtyMask was previously normalized by the coalescer
-- Investigation cycles (scheduling auditor agents before defining milestones) prevent scope misjudgments
-- All 16 success criteria can be met with systematic milestone-by-milestone execution
+- Research phases need clear scope per worker — one worker, one focused topic
+- Human direction can pivot rapidly — stay responsive
+- Budget honestly — track actual vs estimated cycles
+- Investigation cycles before implementation prevent scope misjudgments
+- All 16 original success criteria were met with systematic execution
