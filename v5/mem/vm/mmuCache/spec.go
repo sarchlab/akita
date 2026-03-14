@@ -4,13 +4,6 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-const (
-	mmuCacheStateEnable = "enable"
-	mmuCacheStatePause  = "pause"
-	mmuCacheStateDrain  = "drain"
-	mmuCacheStateFlush  = "flush"
-)
-
 // Spec contains immutable configuration for the mmuCache.
 type Spec struct {
 	Freq            sim.Freq       `json:"freq"`
@@ -23,14 +16,3 @@ type Spec struct {
 	LowModulePort   sim.RemotePort `json:"low_module_port"`
 	UpModulePort    sim.RemotePort `json:"up_module_port"`
 }
-
-// State contains mutable runtime data for the mmuCache.
-type State struct {
-	CurrentState           string   `json:"current_state"`
-	Table                  []setState `json:"table"`
-	InflightFlushReqID     string         `json:"inflight_flush_req_id"`
-	InflightFlushReqSrc    sim.RemotePort `json:"inflight_flush_req_src"`
-	InflightFlushReqActive bool           `json:"inflight_flush_req_active"`
-}
-
-
