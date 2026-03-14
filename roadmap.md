@@ -4,36 +4,37 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 364)
+## Current State (Cycle 365)
 
-### Project Status: CI GREEN — M47 complete
+### Project Status: CI GREEN — M48 investigation complete
 
-CI is green on main (all 5 jobs pass). M47 (fix nil WriteDirtyMask panic) is merged (PR #76).
+CI is green on main (all 5 jobs pass). M48 investigation cycle complete — Iris analyzed sim.Component consolidation (#466), Elena audited repo simplification opportunities (#467).
 
-**Completed recently:**
-- M46: EventDrivenComponent support (PR #75) — modeling.EventDrivenComponent[S,T] with Design B (state-encoded timers)
-- M47: Fix CI regression from coalescer removal (PR #76) — normalized nil DirtyMask in writethroughcache intake
-- M45.2: File paradigm standardization — all 14 component packages now have spec.go + state.go + per-middleware files
+**Investigation findings (M48):**
+- Iris: sim.Component interface cannot be eliminated (used by ports, simulation, monitoring). Recommends Design 2: remove Handler from interface + add modeling/doc.go. Low risk, ~20 lines.
+- Elena: File paradigm 100% done. No double-buffering residues. Remaining cleanup: untrack mock_port.go, fix swtich_test.go typo, fix monitoring dead code, clean artifacts.
+- Remaining Comp wrappers (idealmemcontroller, simplebankedmemory, endpoint) all justified — no further action.
 
-**Key remaining human issues:**
-- #462: PR merged with red CI — process reflection (addressed by enforcing all-5-CI-green rule)
-- #440: sim.Component still exists alongside modeling.Component — consolidation needed
-- #439: Component file paradigm (mostly done in M45.2)
-- #408: Repo-wide simplification — wrappers, indirections, residues from old patterns
-- #389: Event-driven components (done in M46)
+**Human issues status:**
+- #462: PR merged with red CI — process fixed, CI now green
+- #440: sim.Component — investigation done, Design 2 selected for M49
+- #439: Component file paradigm — DONE in M45.2
+- #408: Repo simplification — audit done, actionable items in M49
+- #389: Event-driven components — DONE in M46
 
 ---
 
 ## Active/Planned Milestones
 
-### M48: Investigate sim.Component consolidation + repo simplification (current — investigation cycle)
-- Iris analyzing feasibility of consolidating sim.Component with modeling.Component (#466)
-- Elena auditing remaining simplification opportunities (#467)
-- Will define concrete implementation milestone after investigation
+### M48: Investigate sim.Component consolidation + repo simplification ✅ (1 cycle)
+- Iris: Design 2 recommended — slim interface + docs (issue #466)
+- Elena: Full audit complete, actionable items identified (issue #467)
 
-### M49: [TBD — based on M48 investigation] (estimated 4-8 cycles)
-- Likely: sim.Component consolidation + cleanup of leftover artifacts
-- Address #440, #408
+### M49: sim.Component cleanup + repo hygiene (current — estimated 4 cycles)
+- Remove Handler from sim.Component interface
+- Add modeling/doc.go explaining sim/modeling split
+- Untrack mock_port.go, fix filename typo, fix monitoring dead code
+- Addresses human issues #440 and #408
 
 ### M50: Performance optimizations (estimated 4-6 cycles)
 - Ring buffer for queueing.Buffer (-36% allocations)
@@ -64,7 +65,8 @@ CI is green on main (all 5 jobs pass). M47 (fix nil WriteDirtyMask panic) is mer
 | Phase 12 (M45.2) | File paradigm standardization | 10 | ~8 |
 | Phase 13 (M46) | Event-driven component support | 8 | ~4 |
 | Phase 14 (M47) | Fix nil WriteDirtyMask CI regression | 3 | ~2 |
-| **Total** | **47 milestones** | **~319** | **~209** |
+| Phase 15 (M48) | Investigation: sim.Component + simplification | 1 | 1 |
+| **Total** | **48 milestones** | **~320** | **~210** |
 
 ---
 
