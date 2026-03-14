@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 377)
+## Current State (Cycle 380)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -12,11 +12,15 @@ All 50 milestones from the original component model refactoring are complete. Al
 
 ### Research Phase: ✅ RESEARCH COMPLETE
 
-All 13 human topics have been researched. Findings summarized below.
+All 13 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487.
 
-### Current Phase: Phase 2 Implementation — Starting
+### New Topic: Integer ID (#501)
+Human raised new discussion topic: replace string-based IDs with integer-based IDs to reduce GC/allocation overhead. Research assigned to Iris.
 
-Beginning with M51: Double buffering residue cleanup (#483). This was explicitly flagged by human as incorrect code. 17 files use both GetState()/GetNextState() patterns from the old double-buffering era, which is misleading since in-place state update makes them identical.
+### Current Phase: Phase 2 Implementation
+
+**M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
+**M52**: 🔄 NEXT — Component-engine decoupling (#478)
 
 ---
 
@@ -61,6 +65,9 @@ Beginning with M51: Double buffering residue cleanup (#483). This was explicitly
 ### Topic 13: No implementation without authorization (#489)
 **Status: Acknowledged.** All work has been research-only.
 
+### Topic 14: Integer ID representation (#501) — NEW
+**Status: RESEARCHING** — Human asks about replacing string IDs with uint64 to reduce GC/allocation cost. Sequential generator already uses uint64 internally but converts to string. Research in progress.
+
 ---
 
 ## Proposed Implementation Order (Pending Human Authorization)
@@ -90,16 +97,16 @@ Based on dependency analysis and impact:
 
 ## Phase 2: Implementation (Starting Cycle 377)
 
-### M51: Double buffering residue cleanup (#483)
-- **Status**: Starting
-- **Budget**: 3 cycles
-- **Scope**: Clean up 17 middleware files that use both GetState() and GetNextState() — unify to single state access pattern
-- **Risk**: Very low — naming-only change, no logic changes
+### M51: Double buffering residue cleanup (#483) ✅
+- **Status**: COMPLETE (cycle 377-380)
+- **Budget**: 3 cycles (used: 3)
+- **Scope**: Cleaned 17 middleware files — unified to GetNextState() only
+- **PR**: #85, merged
 
 ### M52: Component-engine decoupling (#478)
-- **Status**: Planned
+- **Status**: NEXT
 - **Budget**: 4 cycles
-- **Scope**: Replace Engine fields with EventScheduler interface in all components
+- **Scope**: Replace sim.Engine with sim.EventScheduler in all component builders and middleware fields. ~47 non-test files. Components only need Schedule() and CurrentTime().
 
 ### M53: /mem/mem flattening (#486)
 - **Status**: Planned

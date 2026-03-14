@@ -144,6 +144,8 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 ### Active
 
+21. **Integer-based IDs** (issue #501): String-based IDs cost allocation and GC time. Consider switching to integer (uint64) IDs for MsgMeta.ID, EventBase.ID, and RspTo matching. Discussion needed.
+
 6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
 
 7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
