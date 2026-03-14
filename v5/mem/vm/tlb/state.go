@@ -4,8 +4,29 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
+
+const (
+	tlbStateEnable = "enable"
+	tlbStatePause  = "pause"
+	tlbStateDrain  = "drain"
+	tlbStateFlush  = "flush"
+)
+
+// State contains mutable runtime data for the TLB.
+type State struct {
+	TLBState            string                             `json:"tlb_state"`
+	Sets                []setState                         `json:"sets"`
+	MSHREntries         []mshrEntryState                   `json:"mshr_entries"`
+	HasRespondingMSHR   bool                               `json:"has_responding_mshr"`
+	RespondingMSHRData  mshrEntryState                     `json:"responding_mshr_data"`
+	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
+	BufferItems         []pipelineTLBReqState              `json:"buffer_items"`
+	HasInflightFlushReq bool                               `json:"has_inflight_flush_req"`
+	InflightFlushReqMsg FlushReq                           `json:"inflight_flush_req_msg"`
+}
 
 // blockState is a serializable representation of an internal block.
 type blockState struct {
