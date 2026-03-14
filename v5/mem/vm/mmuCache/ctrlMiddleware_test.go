@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
@@ -71,7 +72,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := &RestartReq{}
+		req := &tlb.RestartReq{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = sim.RemotePort("Requester")
 		req.TrafficClass = "mmuCache.RestartReq"
@@ -90,7 +91,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
-			rsp := sent.(*RestartRsp)
+			rsp := sent.(*tlb.RestartRsp)
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)
@@ -119,7 +120,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		})
 
-		req := &FlushReq{}
+		req := &tlb.FlushReq{}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = sim.RemotePort("Requester")
 		req.TrafficClass = "mmuCache.FlushReq"

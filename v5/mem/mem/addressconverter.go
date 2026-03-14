@@ -5,7 +5,6 @@ import "log"
 // AddressConverter can translate the address between two domains
 type AddressConverter interface {
 	ConvertExternalToInternal(external uint64) uint64
-	ConvertInternalToExternal(internal uint64) uint64
 }
 
 // InterleavingConverter is an address converter that can converts the address
@@ -45,9 +44,4 @@ func (c InterleavingConverter) ConvertExternalToInternal(
 	return internal
 }
 
-// ConvertInternalToExternal converts from internal address to external address
-func (c InterleavingConverter) ConvertInternalToExternal(
-	internal uint64,
-) uint64 {
-	panic("this function should never be called")
-}
+

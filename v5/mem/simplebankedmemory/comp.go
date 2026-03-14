@@ -124,28 +124,6 @@ func selectBank(spec Spec, addr uint64) int {
 	return int((addr / interleaveSize) % uint64(spec.NumBanks))
 }
 
-func convertAddress(spec Spec, addr uint64) uint64 {
-	if spec.AddrConvKind == "" {
-		return addr
-	}
-
-	if addr < spec.AddrOffset {
-		log.Panic("address is smaller than offset")
-	}
-
-	a := addr - spec.AddrOffset
-	roundSize := spec.AddrInterleavingSize * uint64(spec.AddrTotalNumOfElements)
-	belongsTo := int(a % roundSize / spec.AddrInterleavingSize)
-
-	if belongsTo != spec.AddrCurrentElementIndex {
-		log.Panicf("address 0x%x does not belong to current element %d",
-			addr, spec.AddrCurrentElementIndex)
-	}
-
-	return a/roundSize*spec.AddrInterleavingSize +
-		addr%spec.AddrInterleavingSize
-}
-
 // --- tickFinalizeMW ---
 
 type tickFinalizeMW struct {
@@ -203,7 +181,11 @@ func (m *tickFinalizeMW) finalizeRead(
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
-		addr := convertAddress(spec, readReq.Address)
+		addr := mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, readReq.Address,
+		)
 
 		data, err := m.storage.Read(addr, readReq.AccessByteSize)
 		if err != nil {
@@ -249,7 +231,11 @@ func (m *tickFinalizeMW) finalizeWrite(
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
-		addr := convertAddress(spec, writeReq.Address)
+		addr := mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, writeReq.Address,
+		)
 
 		if writeReq.DirtyMask == nil {
 			if err := m.storage.Write(addr, writeReq.Data); err != nil {
@@ -347,7 +333,11 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 		}
 
 		addr := msg.GetAddress()
-		addr = convertAddress(spec, addr)
+		addr = mem.ConvertAddress(
+			spec.AddrConvKind, spec.AddrOffset,
+			spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
+			spec.AddrCurrentElementIndex, addr,
+		)
 
 		bankID := selectBank(spec, addr)
 		if bankID < 0 || bankID >= spec.NumBanks {

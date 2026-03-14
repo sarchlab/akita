@@ -44,6 +44,12 @@ type MSHREntryState struct {
 	Data               []byte `json:"data"`
 }
 
+// GetPID returns the PID of the MSHR entry.
+func (e MSHREntryState) GetPID() uint32 { return e.PID }
+
+// GetAddress returns the address of the MSHR entry.
+func (e MSHREntryState) GetAddress() uint64 { return e.Address }
+
 // MSHRState is a serializable representation of an mshrImpl.
 type MSHRState struct {
 	Entries []MSHREntryState `json:"entries"`

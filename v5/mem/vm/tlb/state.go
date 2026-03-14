@@ -1,26 +1,22 @@
 package tlb
 
 import (
-	"fmt"
-	"sort"
-
+	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
 // blockState is a serializable representation of an internal block.
 type blockState struct {
-	Page      vm.Page `json:"page"`
-	WayID     int     `json:"way_id"`
-	LastVisit uint64  `json:"last_visit"`
+	Page  vm.Page `json:"page"`
+	WayID int     `json:"way_id"`
 }
 
 // setState is the serializable representation of one TLB set.
 type setState struct {
-	Blocks     []blockState   `json:"blocks"`
-	VisitList  []int          `json:"visit_list"`
-	VisitCount uint64         `json:"visit_count"`
-	VAddrMap   map[string]int `json:"vaddr_map"` // "pid+vaddr" -> wayID
+	Blocks []blockState `json:"blocks"`
+	LRU    lruset.Set   `json:"lru"`
 }
 
 // mshrEntryState is a serializable representation of an mshrEntry.
@@ -33,20 +29,22 @@ type mshrEntryState struct {
 	Page           vm.Page             `json:"page"`
 }
 
+// GetPID returns the PID of the MSHR entry.
+func (e mshrEntryState) GetPID() uint32 { return e.PID }
+
+// GetAddress returns the virtual address of the MSHR entry.
+func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
+
 // pipelineTLBReqState is a serializable pipeline item.
 type pipelineTLBReqState struct {
 	Msg vm.TranslationReq `json:"msg"`
 }
 
-// --- Free functions for Set operations ---
-
-func setKeyString(pid vm.PID, vAddr uint64) string {
-	return fmt.Sprintf("%d%016x", pid, vAddr)
-}
+// --- Free functions for Set operations (delegating to lruset) ---
 
 func setLookup(s *setState, pid vm.PID, vAddr uint64) (wayID int, page vm.Page, found bool) {
-	key := setKeyString(pid, vAddr)
-	wayID, ok := s.VAddrMap[key]
+	key := lruset.KeyString(uint64(pid), vAddr)
+	wayID, ok := lruset.Lookup(&s.LRU, key)
 	if !ok {
 		return 0, vm.Page{}, false
 	}
@@ -56,115 +54,74 @@ func setLookup(s *setState, pid vm.PID, vAddr uint64) (wayID int, page vm.Page, 
 
 func setUpdate(s *setState, wayID int, page vm.Page) {
 	block := &s.Blocks[wayID]
-	// Remove old mapping
-	oldKey := setKeyString(block.Page.PID, block.Page.VAddr)
-	delete(s.VAddrMap, oldKey)
-	// Update block
+	oldKey := lruset.KeyString(uint64(block.Page.PID), block.Page.VAddr)
 	block.Page = page
-	// Add new mapping
-	newKey := setKeyString(page.PID, page.VAddr)
-	s.VAddrMap[newKey] = wayID
+	newKey := lruset.KeyString(uint64(page.PID), page.VAddr)
+	lruset.UpdateKey(&s.LRU, wayID, oldKey, newKey)
 }
 
 func setEvict(s *setState) (wayID int, ok bool) {
-	if len(s.VisitList) == 0 {
-		return 0, false
-	}
-	wayID = s.VisitList[0]
-	s.VisitList = s.VisitList[1:]
-	return wayID, true
+	return lruset.Evict(&s.LRU)
 }
 
 func setVisit(s *setState, wayID int) {
-	// Remove wayID from visit list if present
-	for i, w := range s.VisitList {
-		if w == wayID {
-			s.VisitList = append(s.VisitList[:i], s.VisitList[i+1:]...)
-			break
-		}
-	}
-	s.VisitCount++
-	s.Blocks[wayID].LastVisit = s.VisitCount
-
-	// Insert in sorted position by lastVisit
-	targetVisit := s.VisitCount
-	index := sort.Search(len(s.VisitList), func(i int) bool {
-		return s.Blocks[s.VisitList[i]].LastVisit > targetVisit
-	})
-	s.VisitList = append(s.VisitList, 0)
-	copy(s.VisitList[index+1:], s.VisitList[index:])
-	s.VisitList[index] = wayID
+	lruset.Visit(&s.LRU, wayID)
 }
 
 func initSets(numSets, numWays int) []setState {
 	sets := make([]setState, numSets)
 	for i := 0; i < numSets; i++ {
 		s := setState{
-			Blocks:   make([]blockState, numWays),
-			VAddrMap: make(map[string]int),
+			Blocks: make([]blockState, numWays),
+			LRU:    lruset.NewSet(numWays),
 		}
 		for j := 0; j < numWays; j++ {
 			s.Blocks[j] = blockState{WayID: j}
-			// Initialize visitList with all ways visited in order
-		}
-		// Visit each way to populate visitList (LRU initialization)
-		s.VisitList = make([]int, 0, numWays)
-		for j := 0; j < numWays; j++ {
-			setVisit(&s, j)
 		}
 		sets[i] = s
 	}
 	return sets
 }
 
-// --- Free functions for MSHR operations ---
+// --- Free functions for MSHR operations (delegating to shared mshr package) ---
 
 func mshrGetEntry(entries []mshrEntryState, pid vm.PID, vAddr uint64) (int, bool) {
-	for i, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			return i, true
-		}
-	}
-	return -1, false
+	return mshr.Find(entries, pid, vAddr)
 }
 
 func mshrAdd(entries []mshrEntryState, capacity int, pid vm.PID, vAddr uint64) ([]mshrEntryState, int) {
-	for _, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			panic("entry already in mshr")
-		}
+	if mshr.IsPresent(entries, pid, vAddr) {
+		panic("entry already in mshr")
 	}
-	if len(entries) >= capacity {
+
+	if mshr.IsFull(entries, capacity) {
 		panic("MSHR is full")
 	}
+
 	entry := mshrEntryState{
 		PID:   uint32(pid),
 		VAddr: vAddr,
 	}
+
 	entries = append(entries, entry)
+
 	return entries, len(entries) - 1
 }
 
 func mshrRemove(entries []mshrEntryState, pid vm.PID, vAddr uint64) []mshrEntryState {
-	for i, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			return append(entries[:i], entries[i+1:]...)
-		}
-	}
-	panic("trying to remove a non-exist entry")
+	return mshr.Remove(entries, pid, vAddr)
 }
 
 func mshrIsFull(entries []mshrEntryState, capacity int) bool {
-	return len(entries) >= capacity
+	return mshr.IsFull(entries, capacity)
 }
 
 func mshrIsEmpty(entries []mshrEntryState) bool {
-	return len(entries) == 0
+	return mshr.IsEmpty(entries)
 }
 
 func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool {
-	_, found := mshrGetEntry(entries, pid, vAddr)
-	return found
+	return mshr.IsPresent(entries, pid, vAddr)
 }
 
 // --- Free function for address mapping ---

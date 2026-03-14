@@ -4,6 +4,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
@@ -173,7 +174,7 @@ var _ = Describe("MMUCacheMiddleware", func() {
 		next.CurrentState = mmuCacheStateFlush
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
-			rsp := sent.(*FlushRsp)
+			rsp := sent.(*tlb.FlushRsp)
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)
