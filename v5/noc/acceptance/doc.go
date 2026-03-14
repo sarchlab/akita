@@ -1,3 +1,3 @@
-// Package acceptance provides infrascturctures for acceptance testing networks
+// Package acceptance provides infrastructures for acceptance testing networks
 // implementations.
 package acceptance

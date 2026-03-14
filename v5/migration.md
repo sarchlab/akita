@@ -103,7 +103,7 @@ V5 unifies how components are modeled and wired. Each component is a single stru
 ### Build and Wire (two stages)
 
 1. Build from Spec
-   - `Builder.WithSpec(spec).WithSimulation(sim).Build(name)` constructs the component with defaults and resolved strategies.
+   - `Builder.WithSpec(spec).WithEngine(engine).WithFreq(freq).Build(name)` constructs the component with defaults and resolved strategies.
    - Do not create or connect ports here.
 
 2. Wire topology
