@@ -6,6 +6,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -19,7 +20,7 @@ var _ = Describe("Switch", func() {
 		port1, port2 *MockPort
 		dstPort      *MockPort
 		routingTable *MockTable
-		sw           *Comp
+		sw           *modeling.Component[Spec, State]
 		rfsMW        *routeForwardSendMW
 		rpMW         *receivePipelineMW
 	)
@@ -76,7 +77,7 @@ var _ = Describe("Switch", func() {
 			Latency:          1,
 			PipelineWidth:    1,
 		}
-		rfsMWLocal := sw.routeForwardSendMiddleware()
+		rfsMWLocal := routeForwardSendMiddleware(sw)
 		addPort(rfsMWLocal.comp, &rfsMWLocal.ports, rfsMWLocal.portIndex,
 			port1, remote1.AsRemote(), pcs1)
 

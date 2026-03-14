@@ -4,8 +4,8 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/sim"
 )
 
 // DefaultSpec provides the default configuration for switch components.
@@ -45,7 +45,7 @@ func (b Builder) WithRoutingTable(rt routing.Table) Builder {
 }
 
 // Build creates a new switch
-func (b Builder) Build(name string) *Comp {
+func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	b.engineMustBeGiven()
 	b.freqMustNotBeZero()
 	b.routingTableMustBeGiven()
@@ -70,16 +70,12 @@ func (b Builder) Build(name string) *Comp {
 		portIndex: portIndex,
 	}
 
-	s := &Comp{
-		Component: modelComp,
-	}
-
 	// Register routeForwardSendMW first (index 0), receivePipelineMW second (index 1).
 	// This matches the execution order: sendOut → forward → route → movePipeline → startProcessing
-	s.AddMiddleware(rfsMW)
-	s.AddMiddleware(rpMW)
+	modelComp.AddMiddleware(rfsMW)
+	modelComp.AddMiddleware(rpMW)
 
-	return s
+	return modelComp
 }
 
 func (b Builder) engineMustBeGiven() {
@@ -142,7 +138,7 @@ func addPort(
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
-	sw               *Comp
+	sw               *modeling.Component[Spec, State]
 	localPort        sim.Port
 	remotePort       sim.Port
 	latency          int
@@ -152,7 +148,7 @@ type SwitchPortAdder struct {
 
 // MakeSwitchPortAdder creates a SwitchPortAdder that can add ports for the
 // provided switch.
-func MakeSwitchPortAdder(sw *Comp) SwitchPortAdder {
+func MakeSwitchPortAdder(sw *modeling.Component[Spec, State]) SwitchPortAdder {
 	return SwitchPortAdder{
 		sw:               sw,
 		numInputChannel:  1,
@@ -202,7 +198,7 @@ func (a SwitchPortAdder) AddPort() {
 		Latency:          a.latency,
 		PipelineWidth:    a.numInputChannel,
 	}
-	rfsMW := a.sw.routeForwardSendMiddleware()
+	rfsMW := routeForwardSendMiddleware(a.sw)
 	addPort(rfsMW.comp, &rfsMW.ports, rfsMW.portIndex,
 		a.localPort, a.remotePort.AsRemote(), pcs)
 

@@ -3,6 +3,7 @@ package networkconnector
 import (
 	"math"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
@@ -41,7 +42,7 @@ type Node interface {
 }
 
 type switchNode struct {
-	sw      *switches.Comp
+	sw      *modeling.Component[switches.Spec, switches.State]
 	remotes []Remote
 }
 
@@ -54,7 +55,7 @@ func (sn *switchNode) Name() string {
 }
 
 func (sn *switchNode) Table() routing.Table {
-	return sn.sw.GetRoutingTable()
+	return switches.GetRoutingTable(sn.sw)
 }
 
 type deviceNode struct {
