@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -43,9 +44,9 @@ func (m *ctrlMiddleware) handleIncomingCommands() bool {
 	switch msg := msgI.(type) {
 	case *mem.ControlMsg:
 		madeProgress = m.handleControlMsg(msg) || madeProgress
-	case *FlushReq:
+	case *tlb.FlushReq:
 		madeProgress = m.handleMMUCacheFlush(msg) || madeProgress
-	case *RestartReq:
+	case *tlb.RestartReq:
 		madeProgress = m.handleMMUCacheRestart(msg) || madeProgress
 	default:
 		panic("Unhandled message")
@@ -120,7 +121,7 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleMMUCacheFlush(msg *FlushReq) bool {
+func (m *ctrlMiddleware) handleMMUCacheFlush(msg *tlb.FlushReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 
 	next := m.comp.GetNextState()
@@ -149,8 +150,8 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
 	}
 }
 
-func (m *ctrlMiddleware) handleMMUCacheRestart(msg *RestartReq) bool {
-	rsp := &RestartRsp{}
+func (m *ctrlMiddleware) handleMMUCacheRestart(msg *tlb.RestartReq) bool {
+	rsp := &tlb.RestartRsp{}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src
