@@ -290,7 +290,7 @@ func (a *MemAccessAgent) addKnownValue(address uint64, data uint32) {
 }
 
 // NewMemAccessAgent creates a new MemAccessAgent.
-func NewMemAccessAgent(engine sim.Engine) *MemAccessAgent {
+func NewMemAccessAgent(engine sim.EventScheduler) *MemAccessAgent {
 	agent := new(MemAccessAgent)
 	agent.TickingComponent = sim.NewTickingComponent(
 		"Agent", engine, 1*sim.GHz, agent)

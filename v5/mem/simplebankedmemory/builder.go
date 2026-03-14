@@ -21,7 +21,7 @@ var DefaultSpec = Spec{
 
 // Builder constructs SimpleBankedMemory components.
 type Builder struct {
-	engine sim.Engine
+	engine sim.EventScheduler
 	spec   Spec
 
 	numBanks            int
@@ -62,7 +62,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

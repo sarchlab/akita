@@ -13,7 +13,7 @@ var DefaultSpec = Spec{
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	engine      sim.Engine
+	engine      sim.EventScheduler
 	ctrlPort    sim.Port
 	insidePort  sim.Port
 	outsidePort sim.Port
@@ -29,7 +29,7 @@ func MakeBuilder() Builder {
 
 // WithEngine sets StreamingDataMover's engine
 func (sdmBuilder Builder) WithEngine(
-	inputEngine sim.Engine,
+	inputEngine sim.EventScheduler,
 ) Builder {
 	sdmBuilder.engine = inputEngine
 	return sdmBuilder

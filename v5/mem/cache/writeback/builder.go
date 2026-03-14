@@ -54,7 +54,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build writeback caches
 type Builder struct {
-	engine           sim.Engine
+	engine           sim.EventScheduler
 	spec             Spec
 	legacyMapper     mem.AddressToPortMapper
 	wayAssociativity int
@@ -97,7 +97,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the caches.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

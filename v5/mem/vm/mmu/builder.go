@@ -15,7 +15,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build MMU component
 type Builder struct {
-	engine             sim.Engine
+	engine             sim.EventScheduler
 	spec               Spec
 	pageTable          vm.PageTable
 	pageWalkingLatency int
@@ -31,7 +31,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used with the MMU
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

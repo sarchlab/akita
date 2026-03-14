@@ -18,7 +18,7 @@ var DefaultSpec = Spec{
 type Builder struct {
 	spec       Spec
 	capacity   uint64
-	engine     sim.Engine
+	engine     sim.EventScheduler
 	topBufSize int
 	storage    *mem.Storage
 	topPort    sim.Port
@@ -58,7 +58,7 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 }
 
 // WithEngine sets the engine of the memory controller
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
