@@ -64,7 +64,6 @@ var _ = Describe("Respond Stage", func() {
 					ReadPID:            1,
 				},
 			)
-			next.NumTransactions = 1
 		})
 
 		It("should stall if cannot send to top", func() {
@@ -92,7 +91,7 @@ var _ = Describe("Respond Stage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(next.NumTransactions).To(Equal(0))
+			Expect(next.Transactions[0].Removed).To(BeTrue())
 		})
 	})
 
@@ -117,7 +116,6 @@ var _ = Describe("Respond Stage", func() {
 					WritePID:     1,
 				},
 			)
-			next.NumTransactions = 1
 		})
 
 		It("should stall if cannot send to top", func() {
@@ -142,7 +140,7 @@ var _ = Describe("Respond Stage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			Expect(next.NumTransactions).To(Equal(0))
+			Expect(next.Transactions[0].Removed).To(BeTrue())
 		})
 	})
 

@@ -348,7 +348,6 @@ func (b *Builder) buildControlMW(
 		ctrlPort:   controlPort,
 		pipeline:   pmw,
 		bankStages: pmw.bankStages,
-		coalescer:  pmw.coalesceStage,
 	}
 
 	cmw := &controlMW{
@@ -360,7 +359,7 @@ func (b *Builder) buildControlMW(
 }
 
 func (b *Builder) buildStages(m *pipelineMW) {
-	m.coalesceStage = &coalescer{cache: m}
+	m.intakeStage = &intake{cache: m}
 	m.directoryStage = &directory{
 		cache:       m,
 		writePolicy: b.writePolicy,

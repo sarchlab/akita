@@ -105,7 +105,7 @@ var _ = Describe("Directory", func() {
 				TrafficClass: "req",
 			}
 
-			// Post-coalesce transaction (no pre-coalesce needed, idx 0)
+			// Transaction (idx 0)
 			next.Transactions = append(next.Transactions,
 				transactionState{
 					HasRead:            true,
@@ -140,7 +140,7 @@ var _ = Describe("Directory", func() {
 				TrafficClass: "req",
 			}
 
-			// Post-coalesce transaction (idx 0)
+			// Transaction (idx 0)
 			next.Transactions = append(next.Transactions,
 				transactionState{
 					HasRead:            true,
@@ -162,7 +162,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.HasBlock).To(BeTrue())
 			Expect(trans.BlockSetID).To(Equal(setID))
@@ -284,7 +284,7 @@ var _ = Describe("Directory", func() {
 			Expect(block.Tag).To(Equal(uint64(0x100)))
 			Expect(block.IsLocked).To(BeTrue())
 			Expect(block.IsValid).To(BeTrue())
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			Expect(trans.HasReadToBottom).To(BeTrue())
 			Expect(trans.HasBlock).To(BeTrue())
 		})
@@ -435,7 +435,7 @@ var _ = Describe("Directory", func() {
 			Expect(madeProgress).To(BeTrue())
 			entry := next.MSHRState.Entries[entryIdx]
 			Expect(entry.TransactionIndices).To(ContainElement(0))
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			Expect(trans.HasWriteToBottom).To(BeTrue())
 		})
 	})
@@ -478,7 +478,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[setID].Blocks[wayID].IsLocked).To(BeTrue())
 			Expect(trans.HasWriteToBottom).To(BeTrue())
@@ -647,7 +647,7 @@ var _ = Describe("Directory", func() {
 
 			madeProgress := d.Tick()
 
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			Expect(madeProgress).To(BeTrue())
 			Expect(trans.HasWriteToBottom).To(BeTrue())
 		})
