@@ -69,7 +69,7 @@ func (s *bankStage) finalizeTrans() bool {
 	}
 
 	transIdx := bankPostBuf.Elements[0]
-	trans := next.postCoalesceTrans(transIdx)
+	trans := &next.Transactions[transIdx]
 
 	switch trans.BankAction {
 	case bankActionReadHit:
@@ -84,29 +84,26 @@ func (s *bankStage) finalizeTrans() bool {
 }
 
 func (s *bankStage) finalizeReadHitTrans(
-	trans *transactionState, postCoalesceIdx int,
+	trans *transactionState, transIdx int,
 ) bool {
 	next := s.cache.comp.GetNextState()
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
+	blockSize := uint64(1 << s.cache.GetSpec().Log2BlockSize)
 
 	data, err := s.cache.storage.Read(
-		nextBlock.CacheAddress, trans.ReadAccessByteSize)
+		nextBlock.CacheAddress, blockSize)
 	if err != nil {
 		panic(err)
 	}
 
 	nextBlock.ReadCount--
 
-	for _, preIdx := range trans.PreCoalesceTransIdxs {
-		t := &next.Transactions[preIdx]
-		offset := t.ReadAddress - nextBlock.Tag
-		t.Data = data[offset : offset+t.ReadAccessByteSize]
-		t.Done = true
-	}
+	offset := trans.ReadAddress - nextBlock.Tag
+	trans.Data = data[offset : offset+trans.ReadAccessByteSize]
+	trans.Done = true
 
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Elements = bankPostBuf.Elements[1:]
-	s.removeTransaction(trans)
 
 	tracing.EndTask(trans.ID, s.cache.comp)
 
@@ -114,7 +111,7 @@ func (s *bankStage) finalizeReadHitTrans(
 }
 
 func (s *bankStage) finalizeWriteTrans(
-	trans *transactionState, postCoalesceIdx int,
+	trans *transactionState, transIdx int,
 ) bool {
 	next := s.cache.comp.GetNextState()
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
@@ -148,7 +145,6 @@ func (s *bankStage) finalizeWriteTrans(
 		trans.BankDone = true
 
 		if trans.BottomWriteDone {
-			s.removeTransaction(trans)
 			tracing.EndTask(trans.ID, s.cache.comp)
 		}
 	} else {
@@ -170,12 +166,21 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 	nextBlock.DirtyMask = trans.WriteFetchedDirtyMask
 	nextBlock.IsLocked = false
 
+	// If this transaction was a read, restore the correct read data slice
+	// (Data was temporarily set to the full block for writing to storage)
+	// and mark Done so the respond stage picks it up.
+	if trans.HasRead {
+		offset := trans.ReadAddress - nextBlock.Tag
+		trans.Data = trans.Data[offset : offset+trans.ReadAccessByteSize]
+	}
+
+	// Mark transaction Done — the respond stage will send the response.
+	trans.Done = true
+
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 
 	return true
 }
 
-func (s *bankStage) removeTransaction(trans *transactionState) {
-	trans.Removed = true
-}
+

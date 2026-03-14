@@ -36,25 +36,21 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 		return true
 	}
 
-	trans := next.postCoalesceTrans(transIdx)
+	trans := &next.Transactions[transIdx]
 	if trans.FetchAndWrite {
 		p.cache.bottomPort.RetrieveIncoming()
 		return true
 	}
 
-	for _, preIdx := range trans.PreCoalesceTransIdxs {
-		next.Transactions[preIdx].Done = true
-	}
+	trans.Done = true
 
 	if p.cache.writePolicy.NeedsDualCompletion() {
 		trans.BottomWriteDone = true
 
 		if trans.BankDone {
-			p.removeTransaction(trans)
 			tracing.EndTask(trans.ID, p.cache.comp)
 		}
 	} else {
-		p.removeTransaction(trans)
 		tracing.EndTask(trans.ID, p.cache.comp)
 	}
 
@@ -80,7 +76,7 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 		return true
 	}
 
-	trans := next.postCoalesceTrans(transIdx)
+	trans := &next.Transactions[transIdx]
 
 	bankBuf := p.getBankBuf(trans.BlockSetID, trans.BlockWayID)
 	if !bankBuf.CanPush() {
@@ -114,8 +110,8 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 
 	bankBuf.PushTyped(transIdx)
 
-	// Finalize MSHR transactions (marks pre-coalesce as done, removes
-	// from postCoalesceTransactions). Skip the fetcher trans — it's been
+	// Finalize MSHR transactions (marks transactions as done, removes
+	// from active processing). Skip the fetcher trans — it's been
 	// pushed to the bank buffer and will be removed after bank processing.
 	p.finalizeMSHRTransExcept(next, entryTransIdxs, blockTag, data, transIdx)
 	cache.MSHRRemove(&next.MSHRState, pid, cachelineID)
@@ -139,8 +135,8 @@ func (p *bottomParser) mergeMSHRData(
 	data []byte,
 	dirtyMask []bool,
 ) {
-	for _, pcIdx := range entryTransIdxs {
-		trans := next.postCoalesceTrans(pcIdx)
+	for _, idx := range entryTransIdxs {
+		trans := &next.Transactions[idx]
 		if !trans.HasWrite {
 			continue
 		}
@@ -163,24 +159,20 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 	data []byte,
 	exceptIdx int,
 ) {
-	for _, pcIdx := range entryTransIdxs {
-		trans := next.postCoalesceTrans(pcIdx)
+	for _, idx := range entryTransIdxs {
+		trans := &next.Transactions[idx]
 
-		if trans.HasRead {
-			for _, preIdx := range trans.PreCoalesceTransIdxs {
-				preCTrans := &next.Transactions[preIdx]
-				offset := preCTrans.ReadAddress - blockTag
-				preCTrans.Data = data[offset : offset+preCTrans.ReadAccessByteSize]
-				preCTrans.Done = true
-			}
+		if idx == exceptIdx {
+			// The fetcher transaction — don't overwrite Data (the bank
+			// stage needs the full block data) and don't mark Done yet.
+			// The bank stage will restore the correct read slice and mark
+			// Done after writing to storage.
+		} else if trans.HasRead {
+			offset := trans.ReadAddress - blockTag
+			trans.Data = data[offset : offset+trans.ReadAccessByteSize]
+			trans.Done = true
 		} else {
-			for _, preIdx := range trans.PreCoalesceTransIdxs {
-				next.Transactions[preIdx].Done = true
-			}
-		}
-
-		if pcIdx != exceptIdx {
-			p.removeTransaction(trans)
+			trans.Done = true
 		}
 
 		tracing.EndTask(trans.ID, p.cache.comp)
@@ -191,10 +183,9 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 	id string,
 ) int {
 	next := p.cache.comp.GetNextState()
-	numPost := next.numPostCoalesce()
 
-	for i := 0; i < numPost; i++ {
-		trans := next.postCoalesceTrans(i)
+	for i := 0; i < len(next.Transactions); i++ {
+		trans := &next.Transactions[i]
 		if !trans.Removed && trans.HasWriteToBottom &&
 			trans.WriteToBottomMeta.ID == id {
 			return i
@@ -208,10 +199,9 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	id string,
 ) int {
 	next := p.cache.comp.GetNextState()
-	numPost := next.numPostCoalesce()
 
-	for i := 0; i < numPost; i++ {
-		trans := next.postCoalesceTrans(i)
+	for i := 0; i < len(next.Transactions); i++ {
+		trans := &next.Transactions[i]
 		if !trans.Removed && trans.HasReadToBottom &&
 			trans.ReadToBottomMeta.ID == id {
 			return i
@@ -219,10 +209,6 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 	}
 
 	return -1
-}
-
-func (p *bottomParser) removeTransaction(trans *transactionState) {
-	trans.Removed = true
 }
 
 func (p *bottomParser) getBankBuf(

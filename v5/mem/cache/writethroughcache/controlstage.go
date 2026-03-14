@@ -11,7 +11,6 @@ import (
 type controlStage struct {
 	ctrlPort   sim.Port
 	pipeline   *pipelineMW
-	coalescer  *coalescer
 	bankStages []*bankStage
 
 	currFlushReq *cache.FlushReq
@@ -72,7 +71,6 @@ func (s *controlStage) hardResetCache() {
 		&next.DirectoryState,
 		spec.NumSets, spec.WayAssociativity, blockSize)
 	next.MSHRState = cache.MSHRState{}
-	s.pipeline.coalesceStage.Reset()
 
 	for _, bankStage := range s.pipeline.bankStages {
 		bankStage.Reset()
@@ -80,7 +78,6 @@ func (s *controlStage) hardResetCache() {
 
 	// Clear all transactions
 	next.Transactions = nil
-	next.NumTransactions = 0
 
 	if s.currFlushReq.PauseAfterFlushing {
 		next.IsPaused = true
@@ -154,5 +151,13 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
 	next := s.pipeline.comp.GetNextState()
-	return !s.currFlushReq.DiscardInflight && next.NumTransactions != 0
+	if s.currFlushReq.DiscardInflight {
+		return false
+	}
+	for i := range next.Transactions {
+		if !next.Transactions[i].Removed {
+			return true
+		}
+	}
+	return false
 }

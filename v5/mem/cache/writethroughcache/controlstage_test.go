@@ -21,7 +21,6 @@ var _ = Describe("Control Stage", func() {
 		bottomPort *MockPort
 		s          *controlStage
 		pmw        *pipelineMW
-		co         *coalescer
 	)
 
 	BeforeEach(func() {
@@ -74,13 +73,9 @@ var _ = Describe("Control Stage", func() {
 
 		pmw.comp.SetState(initialState)
 
-		co = &coalescer{cache: pmw}
-		pmw.coalesceStage = co
-
 		s = &controlStage{
-			ctrlPort:  ctrlPort,
-			pipeline:  pmw,
-			coalescer: co,
+			ctrlPort: ctrlPort,
+			pipeline: pmw,
 		}
 	})
 
@@ -99,7 +94,6 @@ var _ = Describe("Control Stage", func() {
 	It("should wait for the cache to finish transactions", func() {
 		next := pmw.comp.GetNextState()
 		next.Transactions = append(next.Transactions, transactionState{})
-		next.NumTransactions = 1
 
 		flushReq := &cache2.FlushReq{}
 		flushReq.ID = sim.GetIDGenerator().Generate()

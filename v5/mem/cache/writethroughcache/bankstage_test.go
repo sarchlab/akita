@@ -89,7 +89,7 @@ var _ = Describe("Bankstage", func() {
 	It("should insert transactions into pipeline", func() {
 		next := c.comp.GetNextState()
 
-		// Add a post-coalesce transaction
+		// Add a transaction
 		next.Transactions = append(next.Transactions, transactionState{})
 		next.BankBufs[0].Elements = append(next.BankBufs[0].Elements, 0)
 
@@ -101,8 +101,7 @@ var _ = Describe("Bankstage", func() {
 
 	Context("read hit", func() {
 		var (
-			preCRead1Meta, preCRead2Meta sim.MsgMeta
-			blockSetID, blockWayID       int
+			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
@@ -128,53 +127,23 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			preCRead1Meta = sim.MsgMeta{
+			readMeta := sim.MsgMeta{
 				ID:           sim.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
-			preCRead2Meta = sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
-				TrafficBytes: 12,
-				TrafficClass: "req",
-			}
-
-			// Pre-coalesce transactions (indices 0, 1)
+			// Transaction (index 0)
 			next.Transactions = append(next.Transactions,
 				transactionState{
 					HasRead:            true,
-					ReadMeta:           preCRead1Meta,
+					ReadMeta:           readMeta,
 					ReadAddress:        0x104,
 					ReadAccessByteSize: 4,
-				},
-				transactionState{
-					HasRead:            true,
-					ReadMeta:           preCRead2Meta,
-					ReadAddress:        0x108,
-					ReadAccessByteSize: 8,
-				},
-			)
-			next.NumTransactions = 2
-
-			postCReadMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
-				TrafficBytes: 12,
-				TrafficClass: "req",
-			}
-
-			// Post-coalesce transaction (index 2, post-coalesce idx 0)
-			next.Transactions = append(next.Transactions,
-				transactionState{
-					HasRead:              true,
-					ReadMeta:             postCReadMeta,
-					ReadAddress:          0x100,
-					ReadAccessByteSize:   64,
-					BlockSetID:           blockSetID,
-					BlockWayID:           blockWayID,
-					HasBlock:             true,
-					BankAction:           bankActionReadHit,
-					PreCoalesceTransIdxs: []int{0, 1},
+					BlockSetID:         blockSetID,
+					BlockWayID:         blockWayID,
+					HasBlock:           true,
+					BankAction:         bankActionReadHit,
 				},
 			)
 
@@ -189,16 +158,10 @@ var _ = Describe("Bankstage", func() {
 			madeProgress := s.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			preCTrans1 := &next.Transactions[0]
-			preCTrans2 := &next.Transactions[1]
-			Expect(preCTrans1.Data).To(Equal([]byte{5, 6, 7, 8}))
-			Expect(preCTrans1.Done).To(BeTrue())
-			Expect(preCTrans2.Data).To(Equal([]byte{1, 2, 3, 4, 5, 6, 7, 8}))
-			Expect(preCTrans2.Done).To(BeTrue())
+			trans := &next.Transactions[0]
+			Expect(trans.Data).To(Equal([]byte{5, 6, 7, 8}))
+			Expect(trans.Done).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].ReadCount).To(Equal(0))
-			// Post-coalesce transaction should be marked removed
-			postCTrans := next.postCoalesceTrans(0)
-			Expect(postCTrans.Removed).To(BeTrue())
 		})
 	})
 
@@ -245,7 +208,7 @@ var _ = Describe("Bankstage", func() {
 				false, false, false, false, false, false, false, false,
 			}
 
-			// Post-coalesce transaction (no pre-coalesce, index 0)
+			// Transaction (index 0)
 			next.Transactions = append(next.Transactions,
 				transactionState{
 					HasWrite:       true,
@@ -312,7 +275,7 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 
-			// Post-coalesce transaction (no pre-coalesce, index 0)
+			// Transaction (index 0)
 			next.Transactions = append(next.Transactions,
 				transactionState{
 					BlockSetID:            blockSetID,
@@ -335,7 +298,7 @@ var _ = Describe("Bankstage", func() {
 
 			Expect(madeProgress).To(BeTrue())
 			Expect(next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked).To(BeFalse())
-			trans := next.postCoalesceTrans(0)
+			trans := &next.Transactions[0]
 			data, _ := storage.Read(0x400, 64)
 			Expect(data).To(Equal(trans.Data))
 		})

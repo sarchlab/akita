@@ -47,7 +47,7 @@ func (d *directory) Tick() (madeProgress bool) {
 		}
 
 		transIdx := dirPostBuf.Elements[0]
-		trans := next.postCoalesceTrans(transIdx)
+		trans := &next.Transactions[transIdx]
 
 		var processed bool
 		if trans.HasRead {
@@ -66,7 +66,7 @@ func (d *directory) Tick() (madeProgress bool) {
 	return madeProgress
 }
 
-func (d *directory) processRead(trans *transactionState, postCoalesceIdx int) bool {
+func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
 	pid := trans.ReadPID
 	spec := d.cache.GetSpec()
@@ -77,29 +77,29 @@ func (d *directory) processRead(trans *transactionState, postCoalesceIdx int) bo
 	entryIdx, mshrFound := cache.MSHRQuery(
 		&next.MSHRState, pid, cacheLineID)
 	if mshrFound {
-		return d.processMSHRHit(trans, entryIdx, postCoalesceIdx)
+		return d.processMSHRHit(trans, entryIdx, transIdx)
 	}
 
 	setID, wayID, found := cache.DirectoryLookup(
 		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
-		return d.processReadHit(trans, setID, wayID, postCoalesceIdx)
+		return d.processReadHit(trans, setID, wayID, transIdx)
 	}
 
-	return d.processReadMiss(trans, postCoalesceIdx)
+	return d.processReadMiss(trans, transIdx)
 }
 
 func (d *directory) processMSHRHit(
 	trans *transactionState,
 	entryIdx int,
-	postCoalesceIdx int,
+	transIdx int,
 ) bool {
 	next := d.cache.comp.GetNextState()
 
 	next.MSHRState.Entries[entryIdx].TransactionIndices =
 		append(next.MSHRState.Entries[entryIdx].TransactionIndices,
-			postCoalesceIdx)
+			transIdx)
 
 	if trans.HasRead {
 		tracing.AddTaskStep(trans.ID, d.cache.comp, "read-mshr-hit")
@@ -116,7 +116,7 @@ func (d *directory) processMSHRHit(
 func (d *directory) processReadHit(
 	trans *transactionState,
 	setID, wayID int,
-	postCoalesceIdx int,
+	transIdx int,
 ) bool {
 	next := d.cache.comp.GetNextState()
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
@@ -138,7 +138,7 @@ func (d *directory) processReadHit(
 	nextBlock.ReadCount++
 	cache.DirectoryVisit(&next.DirectoryState, setID, wayID)
 
-	bankBuf.PushTyped(postCoalesceIdx)
+	bankBuf.PushTyped(transIdx)
 
 	dirPostBuf := &next.DirPostBuf
 	dirPostBuf.Elements = dirPostBuf.Elements[1:]
@@ -147,7 +147,7 @@ func (d *directory) processReadHit(
 	return true
 }
 
-func (d *directory) processReadMiss(trans *transactionState, postCoalesceIdx int) bool {
+func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
 	spec := d.cache.GetSpec()
 	blockSize := uint64(1 << spec.Log2BlockSize)
@@ -165,7 +165,7 @@ func (d *directory) processReadMiss(trans *transactionState, postCoalesceIdx int
 		return false
 	}
 
-	if !d.fetchFromBottom(trans, victimSetID, victimWayID, postCoalesceIdx) {
+	if !d.fetchFromBottom(trans, victimSetID, victimWayID, transIdx) {
 		return false
 	}
 
@@ -176,7 +176,7 @@ func (d *directory) processReadMiss(trans *transactionState, postCoalesceIdx int
 	return true
 }
 
-func (d *directory) processWrite(trans *transactionState, postCoalesceIdx int) bool {
+func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	addr := trans.WriteAddress
 	pid := trans.WritePID
 	spec := d.cache.GetSpec()
@@ -189,7 +189,7 @@ func (d *directory) processWrite(trans *transactionState, postCoalesceIdx int) b
 	if mshrFound {
 		ok := d.writeBottom(trans)
 		if ok {
-			return d.processMSHRHit(trans, entryIdx, postCoalesceIdx)
+			return d.processMSHRHit(trans, entryIdx, transIdx)
 		}
 
 		return false
@@ -199,10 +199,10 @@ func (d *directory) processWrite(trans *transactionState, postCoalesceIdx int) b
 		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
-		return d.writePolicy.HandleWriteHit(d, trans, setID, wayID, postCoalesceIdx)
+		return d.writePolicy.HandleWriteHit(d, trans, setID, wayID, transIdx)
 	}
 
-	return d.writePolicy.HandleWriteMiss(d, trans, postCoalesceIdx)
+	return d.writePolicy.HandleWriteMiss(d, trans, transIdx)
 }
 
 func (d *directory) writeBottom(trans *transactionState) bool {
@@ -238,7 +238,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 func (d *directory) fetchFromBottom(
 	trans *transactionState,
 	victimSetID, victimWayID int,
-	postCoalesceIdx int,
+	transIdx int,
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
@@ -276,7 +276,7 @@ func (d *directory) fetchFromBottom(
 		&next.MSHRState, spec.NumMSHREntry, pid, cacheLineID)
 	entry := &next.MSHRState.Entries[entryIdx]
 	entry.TransactionIndices = append(entry.TransactionIndices,
-		postCoalesceIdx)
+		transIdx)
 	entry.HasReadReq = true
 	entry.ReadReq = readToBottom.MsgMeta
 	entry.HasBlock = true

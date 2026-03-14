@@ -46,9 +46,6 @@ type transactionState struct {
 	WriteToBottomData      []byte      `json:"write_to_bottom_data"`
 	WriteToBottomDirtyMask []bool      `json:"write_to_bottom_dirty_mask"`
 
-	// Pre-coalesce transaction indices (absolute indices into State.Transactions)
-	PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
-
 	BankAction            bankActionType `json:"bank_action"`
 	BlockSetID            int            `json:"block_set_id"`
 	BlockWayID            int            `json:"block_way_id"`
@@ -61,7 +58,7 @@ type transactionState struct {
 	BottomWriteDone bool `json:"bottom_write_done"`
 	BankDone        bool `json:"bank_done"`
 
-	// Removed marks a post-coalesce transaction that has been completed
+	// Removed marks a transaction that has been completed
 	// and removed from active processing.
 	Removed bool `json:"removed"`
 }

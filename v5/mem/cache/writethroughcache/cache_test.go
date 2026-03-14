@@ -110,18 +110,24 @@ var _ = Describe("Cache", func() {
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 
+		// Without coalescing, the MSHR-hit transaction (read2) may be
+		// finalized before the fetcher (read1). Accept responses in
+		// any order as long as both data values are received.
+		received := make(map[string]bool)
 		cuPort.EXPECT().Deliver(gomock.Any()).
 			Do(func(msg sim.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
-			})
-		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
-				dr := msg.(*mem.DataReadyRsp)
-				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
-			})
+				if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
+					received["1234"] = true
+				} else if string(dr.Data) == string([]byte{5, 6, 7, 8}) {
+					received["5678"] = true
+				}
+			}).Times(2)
 
 		engine.Run()
+
+		Expect(received["1234"]).To(BeTrue())
+		Expect(received["5678"]).To(BeTrue())
 	})
 
 	It("should do read hit", func() {

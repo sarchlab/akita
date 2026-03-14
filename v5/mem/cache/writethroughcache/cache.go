@@ -33,11 +33,8 @@ type State struct {
 	DirectoryState cache.DirectoryState `json:"directory_state"`
 	MSHRState      cache.MSHRState      `json:"mshr_state"`
 
-	// Transactions stores all transaction states directly as values.
-	// The first NumTransactions entries are pre-coalesce transactions;
-	// the remaining entries are post-coalesce transactions.
-	Transactions    []transactionState `json:"transactions"`
-	NumTransactions int                `json:"num_transactions"`
+	// Transactions stores all transaction states as a flat list.
+	Transactions []transactionState `json:"transactions"`
 
 	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
 	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
@@ -47,36 +44,6 @@ type State struct {
 	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
 
 	IsPaused bool `json:"is_paused"`
-}
-
-// postCoalesceTrans returns a pointer to the post-coalesce transaction
-// at the given post-coalesce index (0-based relative to post-coalesce section).
-func (s *State) postCoalesceTrans(idx int) *transactionState {
-	return &s.Transactions[s.NumTransactions+idx]
-}
-
-// numPostCoalesce returns the number of post-coalesce transactions.
-func (s *State) numPostCoalesce() int {
-	return len(s.Transactions) - s.NumTransactions
-}
-
-// addPreCoalesceTrans appends a pre-coalesce transaction and returns its
-// absolute index in State.Transactions.
-func (s *State) addPreCoalesceTrans(t transactionState) int {
-	postStart := s.NumTransactions
-	// Insert before post-coalesce section
-	s.Transactions = append(s.Transactions, transactionState{})
-	copy(s.Transactions[postStart+1:], s.Transactions[postStart:len(s.Transactions)-1])
-	s.Transactions[postStart] = t
-	s.NumTransactions++
-	return postStart
-}
-
-// addPostCoalesceTrans appends a post-coalesce transaction and returns its
-// post-coalesce index (0-based).
-func (s *State) addPostCoalesceTrans(t transactionState) int {
-	s.Transactions = append(s.Transactions, t)
-	return len(s.Transactions) - s.NumTransactions - 1
 }
 
 // pipelineMW holds all non-serializable infrastructure for the cache data
@@ -95,7 +62,7 @@ type pipelineMW struct {
 
 	storage *mem.Storage
 
-	coalesceStage    *coalescer
+	intakeStage      *intake
 	directoryStage   *directory
 	bankStages       []*bankStage
 	parseBottomStage *bottomParser
@@ -156,7 +123,7 @@ func (m *pipelineMW) runPipeline() bool {
 	madeProgress = m.tickParseBottomStage() || madeProgress
 	madeProgress = m.tickBankStage() || madeProgress
 	madeProgress = m.tickDirectoryStage() || madeProgress
-	madeProgress = m.tickCoalesceState() || madeProgress
+	madeProgress = m.tickIntakeStage() || madeProgress
 
 	return madeProgress
 }
@@ -195,11 +162,11 @@ func (m *pipelineMW) tickDirectoryStage() bool {
 	return m.directoryStage.Tick()
 }
 
-func (m *pipelineMW) tickCoalesceState() bool {
+func (m *pipelineMW) tickIntakeStage() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
 	for i := 0; i < spec.NumReqPerCycle; i++ {
-		madeProgress = m.coalesceStage.Tick() || madeProgress
+		madeProgress = m.intakeStage.Tick() || madeProgress
 	}
 
 	return madeProgress
