@@ -169,7 +169,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
 	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
 	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
-	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
+
 	r.PathPrefix("/").Handler(fServer)
 
 	var listener net.Listener
@@ -454,47 +454,6 @@ func (m *Monitor) sortAndSelectBuffers(
 	return sortedBuffers
 }
 
-type fieldFormatError struct {
-}
-
-func (e fieldFormatError) Error() string {
-	return "fieldFormatError"
-}
-
-func (m *Monitor) walkFields(
-	comp interface{},
-	fields string,
-) (reflect.Value, error) {
-	elem := reflect.ValueOf(comp)
-
-	fieldNames := strings.Split(fields, ".")
-
-	for len(fieldNames) > 0 {
-		switch elem.Kind() {
-		case reflect.Ptr, reflect.Interface:
-			elem = elem.Elem()
-		case reflect.Struct:
-			elem = elem.FieldByName(fieldNames[0])
-			fieldNames = fieldNames[1:]
-		case reflect.Slice:
-			index, err := strconv.Atoi(fieldNames[0])
-			if err != nil {
-				return elem, fieldFormatError{}
-			}
-
-			elem = elem.Index(index)
-			fieldNames = fieldNames[1:]
-		default:
-			panic(fmt.Sprintf("kind %d not supported", elem.Kind()))
-		}
-	}
-
-	if elem.Kind() == reflect.Ptr {
-		elem = elem.Elem()
-	}
-
-	return elem, nil
-}
 
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
@@ -624,7 +583,3 @@ func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(200)
-	w.Write([]byte(`{"file_size":123456}`))
-}
