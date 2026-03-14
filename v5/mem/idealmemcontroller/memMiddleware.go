@@ -129,7 +129,7 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	spec := m.comp.GetSpec()
-	addr := convertAddress(spec, tx.Address)
+	addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, tx.Address)
 
 	data, err := m.storage.Read(addr, tx.AccessByteSize)
 	if err != nil {
@@ -170,7 +170,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	}
 
 	spec := m.comp.GetSpec()
-	addr := convertAddress(spec, tx.Address)
+	addr := mem.ConvertAddress(spec.AddrConvKind, spec.AddrOffset, spec.AddrInterleavingSize, spec.AddrTotalNumOfElements, spec.AddrCurrentElementIndex, tx.Address)
 
 	if tx.DirtyMask == nil {
 		err := m.storage.Write(addr, tx.Data)
@@ -205,23 +205,3 @@ func (m *memMiddleware) traceReqComplete(reqID string) {
 	tracing.EndTask(taskID, m.comp)
 }
 
-func convertAddress(spec Spec, addr uint64) uint64 {
-	if spec.AddrConvKind == "" {
-		return addr
-	}
-
-	if addr < spec.AddrOffset {
-		log.Panic("address is smaller than offset")
-	}
-
-	a := addr - spec.AddrOffset
-	roundSize := spec.AddrInterleavingSize * uint64(spec.AddrTotalNumOfElements)
-	belongsTo := int(a % roundSize / spec.AddrInterleavingSize)
-
-	if belongsTo != spec.AddrCurrentElementIndex {
-		log.Panicf("address 0x%x does not belong to current element %d",
-			addr, spec.AddrCurrentElementIndex)
-	}
-
-	return a/roundSize*spec.AddrInterleavingSize + addr%spec.AddrInterleavingSize
-}
