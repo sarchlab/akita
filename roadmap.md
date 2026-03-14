@@ -4,29 +4,24 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 369)
+## Current State (Cycle 370)
 
-### Project Status: All human issues closed. All success criteria met.
+### Project Status: Final documentation polish needed (M50)
 
-CI is green on main (last run all 5 jobs passed; latest push in progress). M49 merged — sim.Component slimmed (Handler removed), repo hygiene complete.
+CI is green on main (all 5 jobs pass). M49 merged. All 16 success criteria are functionally met, but criterion #15 (component_guide.md reflects architecture) has documentation accuracy issues that need fixing before declaring project complete.
 
-**All 16 success criteria from spec.md are satisfied:**
-1. ✅ Simple, intuitive APIs (modeling.Component[S,T])
-2. ✅ CI green on main
-3. ✅ Component = Spec + State + Ports + Middleware + Hooks
-4. ✅ No unnecessary Comp wrappers (4 justified remain)
-5. ✅ No external dependency interfaces
-6. ✅ Single simulation-level save/load
-7. ✅ Developers only implement middleware Tick
-8. ✅ All runtime data in State
-9. ✅ No conversion layers
-10. ✅ No restoreFromState/syncToState
-11. ✅ No runtime copies of State
-12. ✅ Save/load acceptance tests pass
-13. ✅ All first-party components use modeling pattern
-14. ✅ All components have multiple middlewares
-15. ✅ component_guide.md exists (needs EventDrivenComponent update)
-16. ✅ Performance at v4 parity (Diana's benchmarks)
+**Success criteria status:**
+1-14, 16: ✅ All met
+15: ⚠️ component_guide.md exists but has stale `stateutil` references (29 occurrences, should be `queueing`) and missing EventDrivenComponent section
+
+**Remaining issues found by final review (Iris #471, Elena #472):**
+- component_guide.md: 29 stale `stateutil` → `queueing` references, missing EventDrivenComponent section, stale file paths
+- README.md: broken link (`migration_guide.md` → `migration.md`)
+- migration.md: references nonexistent `WithSimulation` API
+- writebackcache binary (9.4MB) tracked in git
+- gmmu mock_port.go deleted but needed locally (CI passes via go generate)
+- 3 doc.go typos, missing doc.go for queueing/ and simulation/
+- spec.md active issues list stale
 
 **All human issues closed:** #389, #408, #439, #440, #462
 
@@ -39,11 +34,14 @@ CI is green on main (last run all 5 jobs passed; latest push in progress). M49 m
 
 ## Final Assessment Milestone
 
-### M50: Final review and documentation polish (current — estimated 2 cycles)
-- Update component_guide.md with EventDrivenComponent
-- Update spec.md to reflect completed items
-- Clean up any remaining minor issues
-- Final CI verification
+### M50: Final documentation polish and repo hygiene (IN PROGRESS — budget 4 cycles)
+Fix all documentation issues found in final review:
+1. **component_guide.md**: Replace all 29 `stateutil` references with `queueing`, add EventDrivenComponent section, fix stale file paths, fix Spec struct / builder discrepancies, remove Pop/PopTyped references
+2. **README.md**: Fix broken `migration_guide.md` link → `migration.md`  
+3. **migration.md**: Fix `WithSimulation` API reference to actual builder API
+4. **Repo hygiene**: Remove tracked `writebackcache` binary, fix gmmu mock_port.go (rename to `_test.go` pattern)
+5. **doc.go**: Fix 3 typos (memoy, fix→fixed, infrascturctures), add doc.go for `queueing/` and `simulation/`
+6. **spec.md**: Move completed items from Active to Resolved
 
 ---
 
