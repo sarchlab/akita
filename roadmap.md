@@ -4,49 +4,42 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 351)
+## Current State (Cycle 356)
 
-### Project Status: IN PROGRESS — Defining M45.2 (file paradigm standardization)
+### Project Status: IN PROGRESS — Defining M46 (event-driven component support)
 
-**M45.1 complete:** Analysis package removed, WriteThroughCache coalescer removed and transaction model flattened. PR #74 merged.
-
-**Investigation complete (cycle 350):**
-- Elena completed full audit of all 14 component packages → workspace/elena/note.md
-- Iris completed event-driven component architecture design → workspace/iris/note.md (recommends Design B: State-Encoded Timers)
+**M45.2 complete and merged to main:** All 14 component packages standardized to spec.go/state.go/mwname.go paradigm. Monolithic files split, MW filenames lowercase, switches Comp wrapper eliminated, DateMovePort→DataMovePort typo fixed.
 
 **Remaining human issues:**
-- #439: Standardize component file paradigm (state.go, spec.go, one file per MW) → **M45.2**
-- #440: sim.Component vs modeling.Component consolidation → deferred (sim.Component is load-bearing)
-- #408: Repo-wide simplification → addressed via M45.2 file cleanup + Comp elimination
-- #389: Event-driven component support → **M46** (Iris's Design B)
+- #389: Event-driven component support → **M46** (next)
+- #440: sim.Component vs modeling.Component consolidation → deferred until after M46
+- #408: Repo-wide simplification → ongoing, largely addressed by M45.x
 
 ---
 
 ## Active/Planned Milestones
 
-### M45.2: Component file paradigm standardization (ACTIVE — 10 cycles)
-- Standardize all 14 component packages to: `spec.go`, `state.go`, one lowercase file per middleware, `builder.go`, `doc.go`
-- Split monolithic files (endpoint 518 lines, addresstranslator 590+, simplebankedmemory 378, switches 291)
-- Rename camelCase MW files to lowercase
-- Eliminate switches Comp wrapper (zero extra fields)
-- Fix typos (DateMovePort → DataMovePort)
-- Verify mmuCache/mmucache directory situation
-- Issues: #439, #408 (partial), #450
-
-### M46: Event-driven component support (estimated 8-10 cycles)
-- Implement `EventDrivenComponent[S, T]` in modeling package (Design B from Iris)
+### M46: Event-driven component support (NEXT — estimated 8 cycles)
+- Implement `EventDrivenComponent[S, T]` in modeling package using Design B (State-Encoded Timers)
 - Single event type (TimerFiredEvent), EventProcessor interface
 - State-encoded timers for save/load compatibility
 - ScheduleWakeAt/ScheduleWakeNow for dedup'd event scheduling
 - Port examples/ping to new pattern as proof-of-concept
+- Integrate with simulation save/load (WakeupResetter)
+- File paradigm: eventdriven.go, eventdriven_builder.go in modeling/
 - Address issue #389
 
-### M47: Minor performance optimizations (estimated 4-6 cycles)
+### M47: sim.Component consolidation (estimated 4-6 cycles)
+- Evaluate whether modeling.Component should move into sim package
+- Simplify sim.Component interface if possible
+- Address issue #440
+
+### M48: Performance optimizations (estimated 4-6 cycles)
 - Buffer ring buffer pattern
 - Tracing guards
 - Switch/endpoint performance
 
-### M48: Global state manager (deferred, estimated 3-5 cycles)
+### M49: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
 
 ---
@@ -66,7 +59,8 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Phase 9 (M43) | Consolidate stateutil→queueing | 8 | ~6 |
 | Phase 10 (M44) | Repo-wide cleanup: dead code, shared utils | 6 | ~4 |
 | Phase 11 (M45.1) | Remove analysis + coalescer | 8 | ~4 |
-| **Total** | **45.1 milestones** | **~298** | **~195** |
+| Phase 12 (M45.2) | File paradigm standardization | 10 | ~8 |
+| **Total** | **45.2 milestones** | **~308** | **~203** |
 
 ---
 
@@ -76,7 +70,7 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 - Human direction can pivot rapidly — stay responsive, don't over-plan
 - In-place state update is simpler AND faster than deep copy
 - Event-driven components represent a fundamental architectural challenge — different from tick-driven model
-- Coalescer removal was less risky than expected — good analysis upfront paid off
-- Always verify what's merged to main before defining next milestone
-- Using investigator agents (Elena, Iris) to audit/design before coding milestones works well — invest in research upfront
+- Using investigator agents (Elena, Iris) to audit/design before coding milestones works well
 - Large mechanical refactorings benefit from parallelizing across multiple workers
+- Iris's Design B (State-Encoded Timers) is recommended for event-driven components
+- Always merge verified branches to main before moving on
