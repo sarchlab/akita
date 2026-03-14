@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
 	"github.com/sarchlab/akita/v5/sim"
@@ -27,6 +28,12 @@ type mshrEntryState struct {
 	ReqToBottom    vm.TranslationReq   `json:"req_to_bottom"`
 	Page           vm.Page             `json:"page"`
 }
+
+// GetPID returns the PID of the MSHR entry.
+func (e mshrEntryState) GetPID() uint32 { return e.PID }
+
+// GetAddress returns the virtual address of the MSHR entry.
+func (e mshrEntryState) GetAddress() uint64 { return e.VAddr }
 
 // pipelineTLBReqState is a serializable pipeline item.
 type pipelineTLBReqState struct {
@@ -76,54 +83,45 @@ func initSets(numSets, numWays int) []setState {
 	return sets
 }
 
-// --- Free functions for MSHR operations ---
+// --- Free functions for MSHR operations (delegating to shared mshr package) ---
 
 func mshrGetEntry(entries []mshrEntryState, pid vm.PID, vAddr uint64) (int, bool) {
-	for i, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			return i, true
-		}
-	}
-	return -1, false
+	return mshr.Find(entries, pid, vAddr)
 }
 
 func mshrAdd(entries []mshrEntryState, capacity int, pid vm.PID, vAddr uint64) ([]mshrEntryState, int) {
-	for _, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			panic("entry already in mshr")
-		}
+	if mshr.IsPresent(entries, pid, vAddr) {
+		panic("entry already in mshr")
 	}
-	if len(entries) >= capacity {
+
+	if mshr.IsFull(entries, capacity) {
 		panic("MSHR is full")
 	}
+
 	entry := mshrEntryState{
 		PID:   uint32(pid),
 		VAddr: vAddr,
 	}
+
 	entries = append(entries, entry)
+
 	return entries, len(entries) - 1
 }
 
 func mshrRemove(entries []mshrEntryState, pid vm.PID, vAddr uint64) []mshrEntryState {
-	for i, e := range entries {
-		if vm.PID(e.PID) == pid && e.VAddr == vAddr {
-			return append(entries[:i], entries[i+1:]...)
-		}
-	}
-	panic("trying to remove a non-exist entry")
+	return mshr.Remove(entries, pid, vAddr)
 }
 
 func mshrIsFull(entries []mshrEntryState, capacity int) bool {
-	return len(entries) >= capacity
+	return mshr.IsFull(entries, capacity)
 }
 
 func mshrIsEmpty(entries []mshrEntryState) bool {
-	return len(entries) == 0
+	return mshr.IsEmpty(entries)
 }
 
 func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool {
-	_, found := mshrGetEntry(entries, pid, vAddr)
-	return found
+	return mshr.IsPresent(entries, pid, vAddr)
 }
 
 // --- Free function for address mapping ---
