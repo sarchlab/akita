@@ -3,7 +3,6 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/analysis"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
@@ -74,9 +73,8 @@ type Connector struct {
 	flitSize     int
 	router       Router
 	visTracer    tracing.Tracer
-	nocTracer    tracing.Tracer
-	perfAnalyzer *analysis.PerfAnalyzer
-	portFactory  PortFactory
+	nocTracer   tracing.Tracer
+	portFactory PortFactory
 
 	switches        []*switchNode
 	devices         []*deviceNode
@@ -140,15 +138,6 @@ func (c Connector) WithNoCTracer(t tracing.Tracer) Connector {
 	return c
 }
 
-// WithPerfAnalyzer sets the buffer analyzer that can record the buffer levels
-// in the network.
-func (c Connector) WithPerfAnalyzer(
-	a *analysis.PerfAnalyzer,
-) Connector {
-	c.perfAnalyzer = a
-	return c
-}
-
 // WithPortFactory sets the factory function used to create ports.
 func (c Connector) WithPortFactory(f PortFactory) Connector {
 	c.portFactory = f
@@ -198,10 +187,6 @@ func (c *Connector) AddSwitchWithNameAndRoutingTable(
 
 	if c.visTracer != nil {
 		tracing.CollectTrace(sw, c.visTracer)
-	}
-
-	if c.perfAnalyzer != nil {
-		c.perfAnalyzer.RegisterComponent(sw)
 	}
 
 	node := &switchNode{
@@ -386,11 +371,6 @@ func (c *Connector) connectPorts(
 
 	if c.nocTracer != nil {
 		tracing.CollectTrace(conn.(tracing.NamedHookable), c.nocTracer)
-	}
-
-	if c.perfAnalyzer != nil {
-		c.perfAnalyzer.RegisterPort(left)
-		c.perfAnalyzer.RegisterPort(right)
 	}
 
 	return conn

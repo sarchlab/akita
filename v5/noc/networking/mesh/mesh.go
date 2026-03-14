@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/analysis"
 	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v5/sim"
@@ -101,15 +100,6 @@ func (c *Connector) WithFlitSize(size int) *Connector {
 // components in the network.
 func (c *Connector) WithMonitor(monitor *monitoring.Monitor) *Connector {
 	c.connector = c.connector.WithMonitor(monitor)
-	return c
-}
-
-// WithPerfAnalyzer sets that buffer analyzer that can be used to record the
-// buffer level in the mesh.
-func (c *Connector) WithPerfAnalyzer(
-	analyzer *analysis.PerfAnalyzer,
-) *Connector {
-	c.connector = c.connector.WithPerfAnalyzer(analyzer)
 	return c
 }
 
