@@ -6,6 +6,14 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mem"
 )
 
+// State contains mutable runtime data for the DRAM memory controller.
+type State struct {
+	Transactions  []transactionState `json:"transactions"`
+	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
+	CommandQueues commandQueueState  `json:"command_queues"`
+	BankStates    bankStatesFlat     `json:"bank_states"`
+}
+
 // subTransRef identifies a SubTransaction by its parent transaction index
 // and its position within that transaction's SubTransactions slice.
 type subTransRef struct {
