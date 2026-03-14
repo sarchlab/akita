@@ -135,20 +135,16 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 3. ~~**File naming**~~: Fixed in M29.
 4. ~~**Simulation performance regression**~~: Fixed in M34 — eliminated deep copy entirely (in-place state update, 0µs overhead).
 5. ~~**NOC test size revert**~~: Fixed in M34 — reverted to original upstream values.
+17. ~~**Remove analysis package**~~ (issue #432): DONE in M43.
+18. ~~**WriteThroughCache coalescer removal**~~ (issue #434): DONE in M44.
+19. ~~**Component development paradigm**~~ (issue #439): DONE in M45.
+20. ~~**sim.Component consolidation**~~ (issue #440): DONE in M49.
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
 ### Active
 
 6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
-
-17. **Remove analysis package** (issue #432): Human suggests `/v5/analysis` can be removed. Used by monitoring, mesh, and networkconnector. Assess and remove.
-
-18. **WriteThroughCache coalescer removal** (issue #434): WriteThroughCache does not need the coalescer stage. Remove it.
-
-19. **Component development paradigm** (issue #439): Need a standardized file organization for component packages: `state.go`, `spec.go`, one file per middleware. Consistent naming and structure.
-
-20. **sim.Component consolidation** (issue #440): `sim.Component` interface still exists alongside `modeling.Component`. Consider whether `modeling.Component` should move back into the `sim` package, or whether `sim.Component` should be removed/simplified.
 
 7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
 
