@@ -169,7 +169,7 @@ func (m *Monitor) StartServer() {
 	r.HandleFunc("/api/trace/start", m.apiTraceStart).Methods("POST") //
 	r.HandleFunc("/api/trace/end", m.apiTraceEnd).Methods("POST")     //
 	r.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)        //
-	r.HandleFunc("/api/trace/file_size", m.apiTraceFileSize)          //
+
 	r.PathPrefix("/").Handler(fServer)
 
 	var listener net.Listener
@@ -583,7 +583,3 @@ func (m *Monitor) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (m *Monitor) apiTraceFileSize(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(200)
-	w.Write([]byte(`{"file_size":123456}`))
-}
