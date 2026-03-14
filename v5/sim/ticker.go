@@ -31,7 +31,7 @@ type TickScheduler struct {
 	lock      sync.Mutex
 	handler   Handler
 	Freq      Freq
-	Engine    Engine
+	Engine    EventScheduler
 	secondary bool
 
 	nextTickTime VTimeInSec
@@ -40,7 +40,7 @@ type TickScheduler struct {
 // NewTickScheduler creates a scheduler for tick events.
 func NewTickScheduler(
 	handler Handler,
-	engine Engine,
+	engine EventScheduler,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
@@ -57,7 +57,7 @@ func NewTickScheduler(
 // tick events.
 func NewSecondaryTickScheduler(
 	handler Handler,
-	engine Engine,
+	engine EventScheduler,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
@@ -166,7 +166,7 @@ func (c *TickingComponent) Handle(e Event) error {
 // NewTickingComponent creates a new ticking component
 func NewTickingComponent(
 	name string,
-	engine Engine,
+	engine EventScheduler,
 	freq Freq,
 	ticker Ticker,
 ) *TickingComponent {
@@ -181,7 +181,7 @@ func NewTickingComponent(
 // NewSecondaryTickingComponent creates a new ticking component
 func NewSecondaryTickingComponent(
 	name string,
-	engine Engine,
+	engine EventScheduler,
 	freq Freq,
 	ticker Ticker,
 ) *TickingComponent {

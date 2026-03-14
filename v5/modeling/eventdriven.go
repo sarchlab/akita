@@ -31,7 +31,7 @@ type TimerFiredEvent struct {
 type EventDrivenComponent[S any, T any] struct {
 	*sim.ComponentBase
 
-	Engine    sim.Engine
+	Engine    sim.EventScheduler
 	spec      S
 	current   T
 	processor EventProcessor[S, T]

@@ -7,7 +7,7 @@ import "github.com/sarchlab/akita/v5/sim"
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
 type Builder[S any, T any] struct {
-	engine sim.Engine
+	engine sim.EventScheduler
 	freq   sim.Freq
 	spec   S
 }
@@ -18,7 +18,7 @@ func NewBuilder[S any, T any]() Builder[S, T] {
 }
 
 // WithEngine sets the simulation engine.
-func (b Builder[S, T]) WithEngine(engine sim.Engine) Builder[S, T] {
+func (b Builder[S, T]) WithEngine(engine sim.EventScheduler) Builder[S, T] {
 	b.engine = engine
 	return b
 }

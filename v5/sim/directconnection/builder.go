@@ -4,7 +4,7 @@ import "github.com/sarchlab/akita/v5/sim"
 
 // Builder can help building directconnection.
 type Builder struct {
-	engine sim.Engine
+	engine sim.EventScheduler
 	freq   sim.Freq
 }
 
@@ -12,7 +12,7 @@ func MakeBuilder() Builder {
 	return Builder{}
 }
 
-func (b Builder) WithEngine(e sim.Engine) Builder {
+func (b Builder) WithEngine(e sim.EventScheduler) Builder {
 	b.engine = e
 	return b
 }
