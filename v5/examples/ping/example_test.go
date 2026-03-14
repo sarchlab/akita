@@ -1,7 +1,3 @@
-// LEGACY: This package uses the old event-driven model (sim.ComponentBase +
-// Handle/NotifyRecv). For the canonical tick-based modeling.Component pattern,
-// see examples/tickingping instead.
-
 package ping
 
 import (
@@ -11,35 +7,27 @@ import (
 
 func Example_pingWithEvents() {
 	engine := sim.NewSerialEngine()
-	// agentA := NewPingAgent("AgentA", engine)
+
 	agentA := MakeBuilder().
 		WithEngine(engine).
 		WithOutPort(sim.NewPort(nil, 4, 4, "AgentA.OutPort")).
 		Build("AgentA")
-	// agentB := NewPingAgent("AgentB", engine)
+
 	agentB := MakeBuilder().
 		WithEngine(engine).
 		WithOutPort(sim.NewPort(nil, 4, 4, "AgentB.OutPort")).
 		Build("AgentB")
+
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
 		Build("Conn")
 
-	conn.PlugIn(agentA.OutPort)
-	conn.PlugIn(agentB.OutPort)
+	conn.PlugIn(agentA.GetSpec().OutPort)
+	conn.PlugIn(agentB.GetSpec().OutPort)
 
-	e1 := StartPingEvent{
-		EventBase: sim.NewEventBase(1, agentA),
-		Dst:       agentB.OutPort.AsRemote(),
-	}
-	e2 := StartPingEvent{
-		EventBase: sim.NewEventBase(3, agentA),
-		Dst:       agentB.OutPort.AsRemote(),
-	}
-
-	engine.Schedule(e1)
-	engine.Schedule(e2)
+	SchedulePing(agentA, 1, agentB.GetSpec().OutPort.AsRemote())
+	SchedulePing(agentA, 3, agentB.GetSpec().OutPort.AsRemote())
 
 	engine.Run()
 	// Output:

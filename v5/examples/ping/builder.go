@@ -1,36 +1,60 @@
-// LEGACY: This package uses the old event-driven model (sim.ComponentBase +
-// Handle/NotifyRecv). For the canonical tick-based modeling.Component pattern,
-// see examples/tickingping instead.
-
 package ping
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/sim"
+)
 
+// Comp is the ping component built on EventDrivenComponent.
+type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
+
+// Builder builds ping components.
 type Builder struct {
-	Engine  sim.Engine
+	engine  sim.Engine
 	outPort sim.Port
 }
 
+// MakeBuilder creates a new Builder.
 func MakeBuilder() Builder {
 	return Builder{}
 }
 
+// WithEngine sets the simulation engine.
 func (b Builder) WithEngine(engine sim.Engine) Builder {
-	b.Engine = engine
+	b.engine = engine
 	return b
 }
 
+// WithOutPort sets the output port.
 func (b Builder) WithOutPort(port sim.Port) Builder {
 	b.outPort = port
 	return b
 }
 
+// Build creates a new ping component with the given name.
 func (b Builder) Build(name string) *Comp {
-	pingAgent := &Comp{}
-	pingAgent.ComponentBase = sim.NewComponentBase(name)
-	pingAgent.OutPort = b.outPort
-	pingAgent.OutPort.SetComponent(pingAgent)
-	pingAgent.Engine = b.Engine
+	comp := modeling.NewEventDrivenBuilder[PingSpec, PingState]().
+		WithEngine(b.engine).
+		WithSpec(PingSpec{OutPort: b.outPort}).
+		WithProcessor(&PingProcessor{}).
+		Build(name)
 
-	return pingAgent
+	b.outPort.SetComponent(comp)
+
+	return comp
+}
+
+// SchedulePing schedules a ping to be sent at the given time to the given
+// destination.
+func SchedulePing(
+	comp *Comp,
+	sendAt sim.VTimeInSec,
+	dst sim.RemotePort,
+) {
+	state := comp.GetStatePtr()
+	state.ScheduledPings = append(state.ScheduledPings, ScheduledPing{
+		SendAt: sendAt,
+		Dst:    dst,
+	})
+	comp.ScheduleWakeAt(sendAt)
 }
