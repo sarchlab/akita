@@ -4,42 +4,39 @@
 
 Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports + Middleware + Hooks. Single simulation-level save/load. No per-component custom code. No performance compromise. Developers focus only on middleware Tick logic.
 
-## Current State (Cycle 356)
+## Current State (Cycle 360)
 
-### Project Status: IN PROGRESS — Defining M46 (event-driven component support)
+### Project Status: CRITICAL — CI RED on main since PR #74
 
-**M45.2 complete and merged to main:** All 14 component packages standardized to spec.go/state.go/mwname.go paradigm. Monolithic files split, MW filenames lowercase, switches Comp wrapper eliminated, DateMovePort→DataMovePort typo fixed.
+**Regression:** PR #74 (M45.1: coalescer removal) introduced a panic in `writethroughcache/bottomparser.go` — `WriteDirtyMask` is nil when accessed during MSHR merge. All writeevict, writethrough, writearound, and virtualmem acceptance tests crash. This has been red for ~8 commits.
 
-**Remaining human issues:**
-- #389: Event-driven component support → **M46** (next)
-- #440: sim.Component vs modeling.Component consolidation → deferred until after M46
-- #408: Repo-wide simplification → ongoing, largely addressed by M45.x
+**Process failure:** PR #75 (M46: EventDrivenComponent) was merged on top of red CI. Human issue #462 escalates this — "Same problem happened again. Please reflect." This is the second time agents merged a PR without CI green.
+
+**Root cause:** The intake stage copies `WriteReq.DirtyMask` as-is (nil when not set by caller). The old coalescer normalized this; the new flat transaction model does not. When `mergeMSHRData` accesses `trans.WriteDirtyMask[i]` for a write transaction with nil DirtyMask, it panics.
+
+**M46 (event-driven components) was implemented and merged** (PR #75), building on the broken foundation. The event-driven code itself appears functional.
 
 ---
 
 ## Active/Planned Milestones
 
-### M46: Event-driven component support (NEXT — estimated 8 cycles)
-- Implement `EventDrivenComponent[S, T]` in modeling package using Design B (State-Encoded Timers)
-- Single event type (TimerFiredEvent), EventProcessor interface
-- State-encoded timers for save/load compatibility
-- ScheduleWakeAt/ScheduleWakeNow for dedup'd event scheduling
-- Port examples/ping to new pattern as proof-of-concept
-- Integrate with simulation save/load (WakeupResetter)
-- File paradigm: eventdriven.go, eventdriven_builder.go in modeling/
-- Address issue #389
+### M47: Fix mem_acceptance_test regression (IMMEDIATE — estimated 3 cycles)
+- Fix nil WriteDirtyMask panic in writethroughcache
+- Normalize DirtyMask in intake stage: when nil, create all-true mask matching Data length
+- Verify all 8 acceptance test groups pass (idealmem, writeback x2, dram, writeevict, writethrough, writearound, virtualmem)
+- Add process guard: teach agents to NEVER merge PRs when CI jobs fail
 
-### M47: sim.Component consolidation (estimated 4-6 cycles)
+### M48: sim.Component consolidation (estimated 4-6 cycles)
 - Evaluate whether modeling.Component should move into sim package
 - Simplify sim.Component interface if possible
 - Address issue #440
 
-### M48: Performance optimizations (estimated 4-6 cycles)
+### M49: Performance optimizations (estimated 4-6 cycles)
+- Address Diana's findings: endpoint state copy, flit serialization
 - Buffer ring buffer pattern
 - Tracing guards
-- Switch/endpoint performance
 
-### M49: Global state manager (deferred, estimated 3-5 cycles)
+### M50: Global state manager (deferred, estimated 3-5 cycles)
 - Single-call save/load of entire simulation state
 
 ---
@@ -60,17 +57,19 @@ Evolve Akita V5 toward a clean component model: Component = Spec + State + Ports
 | Phase 10 (M44) | Repo-wide cleanup: dead code, shared utils | 6 | ~4 |
 | Phase 11 (M45.1) | Remove analysis + coalescer | 8 | ~4 |
 | Phase 12 (M45.2) | File paradigm standardization | 10 | ~8 |
-| **Total** | **45.2 milestones** | **~308** | **~203** |
+| Phase 13 (M46) | Event-driven component support | 8 | ~4 |
+| **Total** | **46 milestones** | **~316** | **~207** |
 
 ---
 
 ## Lessons Learned
 
 - Budget estimates improving: most milestones finish well under budget
+- **CRITICAL LESSON (recurring):** Agents must NEVER merge PRs when any CI job is failing. mem_acceptance_test failure was missed because agents only checked unit tests, not the full CI pipeline. This has happened TWICE now.
+- **Process fix needed:** Ares/Apollo must verify ALL CI jobs green before claiming milestone complete or merging PR. The `mem_acceptance_test` job was failing but was ignored.
 - Human direction can pivot rapidly — stay responsive, don't over-plan
 - In-place state update is simpler AND faster than deep copy
 - Event-driven components represent a fundamental architectural challenge — different from tick-driven model
 - Using investigator agents (Elena, Iris) to audit/design before coding milestones works well
 - Large mechanical refactorings benefit from parallelizing across multiple workers
-- Iris's Design B (State-Encoded Timers) is recommended for event-driven components
-- Always merge verified branches to main before moving on
+- Coalescer removal broke MSHR merge because DirtyMask was previously normalized by the coalescer
