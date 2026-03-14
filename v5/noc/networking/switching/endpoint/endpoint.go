@@ -206,7 +206,7 @@ func (m *outgoingMW) sendFlitOut() bool {
 
 // maxMsgOutBufSize limits the number of messages buffered before flit
 // conversion. This prevents the serialisable state from growing
-// unboundedly and causing slow JSON deep copies.
+// unboundedly and causing slow deep copies.
 const maxMsgOutBufSize = 16
 
 func (m *outgoingMW) prepareMsg() bool {
@@ -236,7 +236,7 @@ func (m *outgoingMW) prepareMsg() bool {
 
 // maxFlitsToBuffer limits the number of flits held in FlitsToSend at once.
 // This prevents the serialisable state from growing unboundedly, which would
-// make the JSON-based deep copy in modeling.Component.Tick() extremely slow.
+// make the deep copy in modeling.Component.Tick() extremely slow.
 const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
