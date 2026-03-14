@@ -8,8 +8,9 @@ to complete worked examples.
 >
 > | Package | Path | Description |
 > |---------|------|-------------|
-> | `modeling` | `v5/modeling/` | Generic `Component[S, T]`, `Builder`, validation, save/load |
-> | `tickingping` | `v5/examples/tickingping/` | Simplest complete component |
+> | `modeling` | `v5/modeling/` | Generic `Component[S, T]`, `EventDrivenComponent[S, T]`, builders, validation, save/load |
+> | `tickingping` | `v5/examples/tickingping/` | Simplest tick-based component (spec.go, state.go, sendmw.go, receiveprocessmw.go, builder.go) |
+> | `ping` | `v5/examples/ping/` | Simplest event-driven component (spec.go, state.go, processor.go, builder.go) |
 > | `idealmemcontroller` | `v5/mem/idealmemcontroller/` | Intermediate component with two middlewares |
 > | Migration guide | `v5/migration.md` | V4 → V5 changes |
 
@@ -266,7 +267,7 @@ type BadSpec3 struct {
 1. The State must be a **plain Go struct**.
 2. All Spec-allowed types are also allowed in State.
 3. Additionally, **nested structs** are allowed (and slices/maps of structs).
-4. `stateutil.Buffer[T]` and `stateutil.Pipeline[T]` are allowed — they are
+4. `queueing.Buffer[T]` and `queueing.Pipeline[T]` are allowed — they are
    concrete value types with exported JSON-tagged fields, so they behave like
    nested structs and serialize automatically (see §4A).
 5. Nested structs must themselves follow the same rules recursively — no
@@ -321,7 +322,7 @@ type BadState2 struct {
 | Maps (string keys, primitive values) | ✅ | ✅ |
 | Nested structs | ❌ | ✅ |
 | Slices/maps of structs | ❌ | ✅ |
-| `stateutil.Buffer[T]` / `Pipeline[T]` | ❌ | ✅ |
+| `queueing.Buffer[T]` / `Pipeline[T]` | ❌ | ✅ |
 | Pointers | ❌ | ❌ |
 | Interfaces | ❌ | ❌ |
 | Functions | ❌ | ❌ |
@@ -329,35 +330,35 @@ type BadState2 struct {
 
 ---
 
-## 4A. State Primitives: `stateutil.Buffer[T]` and `Pipeline[T]`
+## 4A. State Primitives: `queueing.Buffer[T]` and `Pipeline[T]`
 
-> Source: `v5/stateutil/buffer.go`, `v5/stateutil/pipeline.go`
+> Source: `v5/queueing/buffer.go`, `v5/queueing/pipeline.go`
 
-### What stateutil Provides
+### What queueing Provides
 
-The `stateutil` package provides two generic, JSON-serializable container types
+The `queueing` package provides two generic, JSON-serializable container types
 designed for use inside State structs:
 
-- **`stateutil.Buffer[T]`** — a generic FIFO queue that satisfies the
-  `queueing.Buffer` interface. It is a concrete value type (not an interface)
-  with exported, JSON-tagged fields.
-- **`stateutil.Pipeline[T]`** — a generic multi-lane, multi-stage pipeline.
+- **`queueing.Buffer[T]`** — a generic FIFO queue that satisfies the
+  `queueing.BufferState` interface. It is a concrete value type (not an
+  interface) with exported, JSON-tagged fields.
+- **`queueing.Pipeline[T]`** — a generic multi-lane, multi-stage pipeline.
   It is also a concrete value type with exported, JSON-tagged fields.
 
 Both types serialize automatically as part of State JSON marshaling — **no
 custom `GetState`/`SetState` is needed**.
 
-### Why `Buffer[T]`, Not the Old `queueing.Buffer`
+### Why `Buffer[T]`, Not an Interface
 
-In earlier versions of Akita, queues were typically `queueing.Buffer` — an
-**interface** type. Interfaces are not JSON-serializable and cannot be stored
-in State (they violate the "no interfaces, no pointers" rule).
+In earlier versions of Akita, queues were typically an **interface** type.
+Interfaces are not JSON-serializable and cannot be stored in State (they
+violate the "no interfaces, no pointers" rule).
 
-`stateutil.Buffer[T]` solves this by being a **concrete value type** with
+`queueing.Buffer[T]` solves this by being a **concrete value type** with
 exported fields:
 
 ```go
-// From v5/stateutil/buffer.go
+// From v5/queueing/buffer.go
 type Buffer[T any] struct {
     sim.HookableBase `json:"-"`
 
@@ -382,17 +383,17 @@ tags, just like any other nested struct:
 // From v5/mem/cache/writethroughcache/cache.go
 type State struct {
     // ...
-    DirBuf        stateutil.Buffer[int]     `json:"dir_buf"`
-    BankBufs      []stateutil.Buffer[int]   `json:"bank_bufs"`
-    DirPipeline   stateutil.Pipeline[int]   `json:"dir_pipeline"`
-    DirPostBuf    stateutil.Buffer[int]     `json:"dir_post_buf"`
-    BankPipelines []stateutil.Pipeline[int] `json:"bank_pipelines"`
-    BankPostBufs  []stateutil.Buffer[int]   `json:"bank_post_bufs"`
+    DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
+    BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
+    DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
+    DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
+    BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
+    BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
     // ...
 }
 ```
 
-Slices of buffers and pipelines are also valid (e.g., `[]stateutil.Buffer[int]`
+Slices of buffers and pipelines are also valid (e.g., `[]queueing.Buffer[int]`
 for per-bank queues).
 
 The writeback cache uses the same pattern with more buffers:
@@ -401,17 +402,17 @@ The writeback cache uses the same pattern with more buffers:
 // From v5/mem/cache/writeback/writebackcache.go
 type State struct {
     // ...
-    DirStageBuf           stateutil.Buffer[int]     `json:"dir_stage_buf"`
-    DirToBankBufs         []stateutil.Buffer[int]   `json:"dir_to_bank_bufs"`
-    WriteBufferToBankBufs []stateutil.Buffer[int]   `json:"write_buffer_to_bank_bufs"`
-    MSHRStageBuf          stateutil.Buffer[int]     `json:"mshr_stage_buf"`
-    WriteBufferBuf        stateutil.Buffer[int]     `json:"write_buffer_buf"`
+    DirStageBuf           queueing.Buffer[int]     `json:"dir_stage_buf"`
+    DirToBankBufs         []queueing.Buffer[int]   `json:"dir_to_bank_bufs"`
+    WriteBufferToBankBufs []queueing.Buffer[int]   `json:"write_buffer_to_bank_bufs"`
+    MSHRStageBuf          queueing.Buffer[int]     `json:"mshr_stage_buf"`
+    WriteBufferBuf        queueing.Buffer[int]     `json:"write_buffer_buf"`
 
-    DirPipeline        stateutil.Pipeline[int] `json:"dir_pipeline"`
-    DirPostPipelineBuf stateutil.Buffer[int]   `json:"dir_post_pipeline_buf"`
+    DirPipeline        queueing.Pipeline[int] `json:"dir_pipeline"`
+    DirPostPipelineBuf queueing.Buffer[int]   `json:"dir_post_pipeline_buf"`
 
-    BankPipelines        []stateutil.Pipeline[int] `json:"bank_pipelines"`
-    BankPostPipelineBufs []stateutil.Buffer[int]   `json:"bank_post_pipeline_bufs"`
+    BankPipelines        []queueing.Pipeline[int] `json:"bank_pipelines"`
+    BankPostPipelineBufs []queueing.Buffer[int]   `json:"bank_post_pipeline_bufs"`
     // ...
 }
 ```
@@ -424,20 +425,22 @@ transaction slice in State (see §4B for the flat transaction pattern).
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `CanPush` | `() bool` | Returns `true` if the buffer has room |
-| `Push` | `(e interface{})` | Adds an element (satisfies `queueing.Buffer`) |
+| `Push` | `(e interface{})` | Adds an element (accepts `interface{}`, casts internally) |
 | `PushTyped` | `(e T)` | Adds an element with the concrete type |
-| `Pop` | `() interface{}` | Removes and returns the front element |
-| `PopTyped` | `() (T, bool)` | Removes and returns the front element with concrete type |
-| `Peek` | `() interface{}` | Returns the front element without removing |
 | `Clear` | `()` | Removes all elements |
 | `Size` | `() int` | Returns the number of elements |
 | `Capacity` | `() int` | Returns the buffer's capacity |
 | `Name` | `() string` | Returns the buffer's name |
 
+Consumers access elements directly via the `Elements` field (e.g.,
+`buf.Elements[0]` for the front, or iterating over `buf.Elements`). There are
+no Pop or Peek methods — elements are managed by reading and rewriting the
+`Elements` slice.
+
 ### `Pipeline[T]` Structure
 
 ```go
-// From v5/stateutil/pipeline.go
+// From v5/queueing/pipeline.go
 type PipelineStage[T any] struct {
     Lane      int `json:"lane"`
     Stage     int `json:"stage"`
@@ -607,7 +610,7 @@ type transactionState struct {
 
 ### Result
 
-With flat transactions and stateutil containers, **no custom
+With flat transactions and queueing containers, **no custom
 `GetState`/`SetState` logic is needed on middlewares.** The
 `modeling.Component` handles serialization automatically — `SaveState` and
 `LoadState` marshal/unmarshal the entire State (including all transactions,
@@ -641,7 +644,7 @@ The canonical pattern is for each middleware to hold a pointer to
 wrapper:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 type sendMW struct {
     comp *modeling.Component[Spec, State]
 }
@@ -657,7 +660,7 @@ Instead, use package-level helper functions or methods that call
 `comp.GetPortByName()`:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 func outPort(comp *modeling.Component[Spec, State]) sim.Port {
     return comp.GetPortByName("Out")
 }
@@ -706,7 +709,7 @@ Inside a middleware's methods, read from `GetState()` and write to
 underlying data, but the convention keeps code readable:
 
 ```go
-// From v5/examples/tickingping/comp.go — sendMW.sendRsp()
+// From v5/examples/tickingping/sendmw.go — sendMW.sendRsp()
 func (m *sendMW) sendRsp() bool {
     state := m.comp.GetState()   // current state
 
@@ -746,7 +749,7 @@ func (m *sendMW) sendRsp() bool {
 A typical `Tick()` method orchestrates multiple sub-operations:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 func (m *sendMW) Tick() bool {
     madeProgress := false
 
@@ -1048,8 +1051,8 @@ This pattern is taken directly from the tickingping builder:
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
     comp := modeling.NewBuilder[Spec, State]().
         WithEngine(b.engine).
-        WithFreq(b.freq).
-        WithSpec(Spec{}).
+        WithFreq(b.spec.Freq).
+        WithSpec(b.spec).
         Build(name)
     comp.SetState(State{})
 
@@ -1129,7 +1132,7 @@ is the canonical example — it uses **no Comp wrapper**.
 #### 9.1.1 Messages
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/spec.go
 type PingReq struct {
     sim.MsgMeta
     SeqID int
@@ -1147,17 +1150,19 @@ fields required by the messaging system.
 #### 9.1.2 Spec
 
 ```go
-// From v5/examples/tickingping/comp.go
-type Spec struct{}
+// From v5/examples/tickingping/spec.go
+type Spec struct {
+    Freq sim.Freq `json:"freq"`
+}
 ```
 
-This component has no configurable parameters, so the Spec is an empty struct.
-It still satisfies the Spec constraints (empty struct = valid).
+The Spec holds the component's frequency. A `DefaultSpec` is provided in
+the builder file for convenient defaults.
 
 #### 9.1.3 State
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/state.go
 type pingTransactionState struct {
     SeqID     int            `json:"seq_id"`
     CycleLeft int            `json:"cycle_left"`
@@ -1186,7 +1191,7 @@ Key design choices:
 There is no Comp wrapper. Ports are accessed via a package-level helper function:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 func outPort(comp *modeling.Component[Spec, State]) sim.Port {
     return comp.GetPortByName("Out")
 }
@@ -1199,7 +1204,7 @@ The component has two middlewares: `sendMW` and `receiveProcessMW`.
 **sendMW** — handles sending responses and ping requests:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 type sendMW struct {
     comp *modeling.Component[Spec, State]
 }
@@ -1217,7 +1222,7 @@ func (m *sendMW) Tick() bool {
 The `sendPing` method demonstrates the GetState/GetNextState pattern:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/sendmw.go
 func (m *sendMW) sendPing() bool {
     state := m.comp.GetState()              // current state
 
@@ -1251,7 +1256,7 @@ func (m *sendMW) sendPing() bool {
 **receiveProcessMW** — handles counting down timers and processing incoming messages:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/receiveprocessmw.go
 type receiveProcessMW struct {
     comp *modeling.Component[Spec, State]
 }
@@ -1269,7 +1274,7 @@ func (m *receiveProcessMW) Tick() bool {
 The `processInput` method shows message dispatching with peek-then-retrieve:
 
 ```go
-// From v5/examples/tickingping/comp.go
+// From v5/examples/tickingping/receiveprocessmw.go
 func (m *receiveProcessMW) processInput() bool {
     msgI := outPort(m.comp).PeekIncoming()
     if msgI == nil {
@@ -1310,14 +1315,20 @@ consuming; `RetrieveIncoming()` removes the message from the buffer.
 
 ```go
 // From v5/examples/tickingping/builder.go
+var DefaultSpec = Spec{
+    Freq: 1 * sim.GHz,
+}
+
 type Builder struct {
     engine  sim.Engine
-    freq    sim.Freq
+    spec    Spec
     outPort sim.Port
 }
 
 func MakeBuilder() Builder {
-    return Builder{}
+    return Builder{
+        spec: DefaultSpec,
+    }
 }
 
 func (b Builder) WithEngine(engine sim.Engine) Builder {
@@ -1326,7 +1337,7 @@ func (b Builder) WithEngine(engine sim.Engine) Builder {
 }
 
 func (b Builder) WithFreq(freq sim.Freq) Builder {
-    b.freq = freq
+    b.spec.Freq = freq
     return b
 }
 
@@ -1338,8 +1349,8 @@ func (b Builder) WithOutPort(port sim.Port) Builder {
 func (b Builder) Build(name string) *modeling.Component[Spec, State] {
     comp := modeling.NewBuilder[Spec, State]().
         WithEngine(b.engine).
-        WithFreq(b.freq).
-        WithSpec(Spec{}).
+        WithFreq(b.spec.Freq).
+        WithSpec(b.spec).
         Build(name)
     comp.SetState(State{})
 
@@ -1353,8 +1364,13 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 }
 ```
 
-The builder returns `*modeling.Component[Spec, State]` directly — no
-`Comp` wrapper needed.
+Key patterns:
+- `DefaultSpec` provides sensible defaults (including `Freq`).
+- `MakeBuilder()` initializes the builder with `DefaultSpec`.
+- `WithFreq` updates `b.spec.Freq` so the Spec and the inner builder stay
+  in sync.
+- The builder returns `*modeling.Component[Spec, State]` directly — no
+  `Comp` wrapper needed.
 
 #### 9.1.7 Usage
 
@@ -1404,7 +1420,190 @@ a field on a Comp wrapper.
 
 ---
 
-### 9.2 idealmemcontroller — Component with Thin Comp Wrapper
+### 9.2 ping — Event-Driven Component
+
+> Source: `v5/examples/ping/`
+
+The `ping` component uses `modeling.EventDrivenComponent[S, T]` instead of
+the tick-based `modeling.Component[S, T]`. Event-driven components do not
+tick at a fixed frequency. Instead, they schedule wakeup events via
+`ScheduleWakeAt` or `ScheduleWakeNow` and react to incoming messages and
+timer firings.
+
+#### 9.2.1 `EventDrivenComponent[S, T]`
+
+```go
+// From v5/modeling/eventdriven.go
+type EventDrivenComponent[S any, T any] struct {
+    *sim.ComponentBase
+
+    Engine    sim.Engine
+    spec      S
+    current   T
+    processor EventProcessor[S, T]
+
+    pendingWakeup sim.VTimeInSec
+}
+```
+
+Key differences from `Component[S, T]`:
+- No `sim.TickingComponent` — no fixed-frequency ticking.
+- No `MiddlewareHolder` — behavior is defined by an `EventProcessor`.
+- State is accessed via `GetState()`, `SetState()`, and `GetStatePtr()`
+  (pointer for direct mutation). There is no `GetNextState()`.
+- Scheduling uses `ScheduleWakeAt(t)` and `ScheduleWakeNow()` with a dedup
+  guard (`pendingWakeup`) to prevent redundant events.
+
+Key methods:
+
+| Method | Description |
+|--------|-------------|
+| `GetSpec() S` | Returns the immutable specification |
+| `GetState() T` | Returns the current state (value copy) |
+| `SetState(s T)` | Sets the current state |
+| `GetStatePtr() *T` | Returns a pointer to the current state for direct mutation |
+| `ScheduleWakeAt(t)` | Schedules a wakeup at time `t` (dedup guard prevents redundancy) |
+| `ScheduleWakeNow()` | Schedules a wakeup at the current engine time |
+| `Handle(e)` | Handles an event — resets dedup guard and calls the processor |
+| `NotifyRecv(port)` | Called when a port receives a message — schedules immediate wakeup |
+| `NotifyPortFree(port)` | Called when a port becomes free — schedules immediate wakeup |
+| `ResetWakeup()` | Resets the dedup guard (for checkpoint restore) |
+| `SaveState(w)` / `LoadState(r)` | JSON checkpoint support |
+
+#### 9.2.2 `EventProcessor[S, T]` Interface
+
+```go
+// From v5/modeling/eventdriven.go
+type EventProcessor[S any, T any] interface {
+    Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+}
+```
+
+The `Process` method is called whenever the component wakes up (message
+arrival, port free, or scheduled timer). It receives the component and the
+current simulation time. It returns `true` if progress was made.
+
+#### 9.2.3 `EventDrivenBuilder[S, T]`
+
+```go
+// From v5/modeling/eventdriven_builder.go
+modeling.NewEventDrivenBuilder[S, T]().
+    WithEngine(engine).
+    WithSpec(spec).
+    WithProcessor(processor).
+    Build(name)
+```
+
+| Method | Description |
+|--------|-------------|
+| `WithEngine(engine)` | Sets the simulation engine |
+| `WithSpec(spec)` | Sets the immutable Spec |
+| `WithProcessor(proc)` | Sets the `EventProcessor` implementation |
+| `Build(name)` | Constructs the `*EventDrivenComponent[S, T]` |
+
+Note: There is no `WithFreq` — event-driven components have no fixed
+frequency.
+
+#### 9.2.4 ping Spec and State
+
+```go
+// From v5/examples/ping/spec.go
+type PingSpec struct {
+    OutPort sim.Port
+}
+```
+
+```go
+// From v5/examples/ping/state.go
+type PingState struct {
+    StartTimes       []sim.VTimeInSec
+    NextSeqID        int
+    PendingResponses []PendingResponse
+    ScheduledPings   []ScheduledPing
+}
+```
+
+Note: `PingSpec.OutPort` is a `sim.Port` (interface), which is not
+JSON-serializable. For this example, checkpoint support is not required.
+Production components should use serializable Spec fields.
+
+#### 9.2.5 ping Processor
+
+```go
+// From v5/examples/ping/processor.go
+type PingProcessor struct{}
+
+func (p *PingProcessor) Process(
+    comp *modeling.EventDrivenComponent[PingSpec, PingState],
+    now sim.VTimeInSec,
+) bool {
+    progress := false
+    state := comp.GetStatePtr()
+    spec := comp.GetSpec()
+
+    progress = p.sendScheduledPings(comp, state, spec, now) || progress
+    progress = p.deliverPendingResponses(comp, state, spec, now) || progress
+    progress = p.processIncoming(comp, state, spec, now) || progress
+
+    return progress
+}
+```
+
+Key patterns:
+- `GetStatePtr()` returns a pointer for direct mutation (no `GetNextState`).
+- The processor handles all logic: sending pings, delivering responses, and
+  processing incoming messages.
+- Future wakeups are scheduled with `comp.ScheduleWakeAt(time)`.
+
+#### 9.2.6 ping Builder
+
+```go
+// From v5/examples/ping/builder.go
+type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
+
+type Builder struct {
+    engine  sim.Engine
+    outPort sim.Port
+}
+
+func (b Builder) Build(name string) *Comp {
+    comp := modeling.NewEventDrivenBuilder[PingSpec, PingState]().
+        WithEngine(b.engine).
+        WithSpec(PingSpec{OutPort: b.outPort}).
+        WithProcessor(&PingProcessor{}).
+        Build(name)
+
+    b.outPort.SetComponent(comp)
+
+    return comp
+}
+```
+
+Key differences from the tick-based builder:
+- Uses `NewEventDrivenBuilder` instead of `NewBuilder`.
+- No `WithFreq` — event-driven components are not frequency-bound.
+- Uses `WithProcessor` to set the `EventProcessor` instead of adding
+  middlewares.
+- A type alias (`Comp = modeling.EventDrivenComponent[...]`) is used for
+  convenience.
+
+#### 9.2.7 When to Use EventDrivenComponent
+
+Use `EventDrivenComponent` when:
+- The component reacts to **discrete events** (messages, timers) rather than
+  performing work every cycle.
+- There is no natural fixed-frequency clock driving the component.
+- You want to avoid empty ticks and improve simulation performance for
+  sparse-activity components.
+
+Use `Component` (tick-based) when:
+- The component performs work every cycle (e.g., pipeline advancement,
+  cycle-accurate modeling).
+- A fixed-frequency clock is a natural part of the design.
+
+---
+
+### 9.3 idealmemcontroller — Component with Thin Comp Wrapper
 
 > Source: `v5/mem/idealmemcontroller/`
 
@@ -1414,7 +1613,7 @@ richer Spec/State, integration with shared storage, and the **thin Comp
 wrapper** pattern (needed because the component implements the
 `StorageOwner` interface).
 
-#### 9.2.1 Spec
+#### 9.3.1 Spec
 
 ```go
 // From v5/mem/idealmemcontroller/comp.go
@@ -1441,7 +1640,7 @@ Key design choices:
   are stored as primitives in Spec, resolved from an `AddressConverter`
   interface in the builder.
 
-#### 9.2.2 State
+#### 9.3.2 State
 
 ```go
 // From v5/mem/idealmemcontroller/comp.go
@@ -1472,7 +1671,7 @@ Key design choices:
 - `CurrentState` is a string enum (`"enable"`, `"pause"`, `"drain"`) rather
   than an iota constant — keeps it human-readable in JSON.
 
-#### 9.2.3 Comp (Thin Wrapper for StorageOwner)
+#### 9.3.3 Comp (Thin Wrapper for StorageOwner)
 
 ```go
 // From v5/mem/idealmemcontroller/comp.go
@@ -1497,7 +1696,7 @@ The `*mem.Storage` is a live object that cannot be serialized — it lives on
 `Comp`, not in State. The Spec's `StorageRef` provides the string ID for
 restoring the storage association after a checkpoint load.
 
-#### 9.2.4 Two Middlewares
+#### 9.3.4 Two Middlewares
 
 Both middlewares hold `comp *modeling.Component[Spec, State]`, **not** `*Comp`.
 
@@ -1617,7 +1816,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 }
 ```
 
-#### 9.2.5 Builder
+#### 9.3.5 Builder
 
 ```go
 // From v5/mem/idealmemcontroller/builder.go
@@ -1716,9 +1915,9 @@ When creating a new V5 component, follow these steps:
 - [ ] **Define Spec** — flat struct with primitives only; add `json` tags
 - [ ] **Define State** — struct with primitives and nested structs; add `json`
   tags; use string IDs for cross-references
-- [ ] **Use `stateutil.Buffer[T]` and `Pipeline[T]`** for queues and pipelines
-  in State — they are JSON-serializable value types (see §4A); use `int`
-  indices as the type parameter to reference transactions in a flat slice
+- [ ] **Use `queueing.Buffer[T]` and `queueing.Pipeline[T]`** for queues and
+  pipelines in State — they are JSON-serializable value types (see §4A); use
+  `int` indices as the type parameter to reference transactions in a flat slice
 - [ ] **Flatten transaction structs** — replace pointer-to-message fields with
   flat value fields (`Has*` booleans + individual primitive/struct fields);
   use `[]int` indices instead of pointer slices (see §4B)
