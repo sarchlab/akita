@@ -1,50 +1,10 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/queueing"
 )
-
-// Spec contains immutable configuration for the writethroughcache.
-type Spec struct {
-	Freq                  sim.Freq `json:"freq"`
-	NumReqPerCycle        int      `json:"num_req_per_cycle"`
-	Log2BlockSize         uint64 `json:"log2_block_size"`
-	BankLatency           int    `json:"bank_latency"`
-	WayAssociativity      int    `json:"way_associativity"`
-	MaxNumConcurrentTrans int    `json:"max_num_concurrent_trans"`
-	NumBanks              int    `json:"num_banks"`
-	NumMSHREntry          int    `json:"num_mshr_entry"`
-	NumSets               int    `json:"num_sets"`
-	TotalByteSize         uint64 `json:"total_byte_size"`
-	DirLatency            int    `json:"dir_latency"`
-
-	// Address mapper configuration (inlined from interface)
-	AddressMapperType string   `json:"address_mapper_type"`
-	RemotePortNames   []string `json:"remote_port_names"`
-	InterleavingSize  uint64   `json:"interleaving_size"`
-}
-
-// State contains mutable runtime data for the writethroughcache.
-type State struct {
-	DirectoryState cache.DirectoryState `json:"directory_state"`
-	MSHRState      cache.MSHRState      `json:"mshr_state"`
-
-	// Transactions stores all transaction states as a flat list.
-	Transactions []transactionState `json:"transactions"`
-
-	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
-	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
-	DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
-	DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
-	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
-	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
-
-	IsPaused bool `json:"is_paused"`
-}
 
 // pipelineMW holds all non-serializable infrastructure for the cache data
 // pipeline. It implements the Tick method and delegates NamedHookable to comp.
@@ -170,15 +130,4 @@ func (m *pipelineMW) tickIntakeStage() bool {
 	}
 
 	return madeProgress
-}
-
-// controlMW runs the control stage (flush/invalidate/restart).
-type controlMW struct {
-	comp         *modeling.Component[Spec, State]
-	controlStage *controlStage
-}
-
-// Tick runs the control stage.
-func (m *controlMW) Tick() bool {
-	return m.controlStage.Tick()
 }

@@ -1,9 +1,29 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 )
+
+// State contains mutable runtime data for the writethroughcache.
+type State struct {
+	DirectoryState cache.DirectoryState `json:"directory_state"`
+	MSHRState      cache.MSHRState      `json:"mshr_state"`
+
+	// Transactions stores all transaction states as a flat list.
+	Transactions []transactionState `json:"transactions"`
+
+	DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
+	BankBufs      []queueing.Buffer[int]   `json:"bank_bufs"`
+	DirPipeline   queueing.Pipeline[int]   `json:"dir_pipeline"`
+	DirPostBuf    queueing.Buffer[int]     `json:"dir_post_buf"`
+	BankPipelines []queueing.Pipeline[int] `json:"bank_pipelines"`
+	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
+
+	IsPaused bool `json:"is_paused"`
+}
 
 type bankActionType int
 
