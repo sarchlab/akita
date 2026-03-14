@@ -4,7 +4,7 @@ import (
 	"log"
 )
 
-// LogHookBase proovides the common logic for all LogHooks
+// LogHookBase provides the common logic for all LogHooks
 type LogHookBase struct {
 	*log.Logger
 }
