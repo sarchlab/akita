@@ -319,9 +319,8 @@ func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State],
 ) *pipelineMW {
 	m := &pipelineMW{
-		comp:         comp,
-		legacyMapper: b.legacyMapper,
-		writePolicy:  b.writePolicy,
+		comp:        comp,
+		writePolicy: b.writePolicy,
 	}
 
 	m.topPort = b.topPort
@@ -397,7 +396,6 @@ func (b *Builder) resolveLegacyMapper() {
 		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
 
-	// NOTE: keep b.legacyMapper set for runtime fallback in pipelineMW.
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

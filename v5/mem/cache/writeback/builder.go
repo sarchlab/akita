@@ -13,7 +13,7 @@ import (
 // resolveLegacyMapper converts a legacy AddressToPortMapper set via
 // WithAddressToPortMapper into the builder's addressMapperType/remotePorts/
 // interleavingSize fields. This allows Build() to always populate Spec from
-// the builder, matching the writearound pattern.
+// the builder.
 func (b *Builder) resolveLegacyMapper() {
 	if b.legacyMapper == nil {
 		return
@@ -30,10 +30,6 @@ func (b *Builder) resolveLegacyMapper() {
 	default:
 		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
-
-	// NOTE: we intentionally keep b.legacyMapper set so that
-	// buildPipelineMW can attach it to the pipelineMW as a runtime
-	// fallback (needed when the mapper's Port is set after Build).
 }
 
 // DefaultSpec provides default configuration for the writeback cache.
@@ -339,8 +335,7 @@ func (b *Builder) buildPipelineMW(
 	laneWidth int,
 ) *pipelineMW {
 	m := &pipelineMW{
-		comp:         comp,
-		legacyMapper: b.legacyMapper,
+		comp: comp,
 	}
 
 	b.createPipelinePorts(m, comp)
