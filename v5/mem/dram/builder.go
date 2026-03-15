@@ -953,16 +953,12 @@ func (b *Builder) generateTiming() Timing {
 
 	// REFRESH_BANK
 	t.SameRank[CmdKindRefreshBank] = []TimeTableEntry{
-		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivateBank},
+		{NextCmdKind: CmdKindActivate, MinCycleInBetween: max(refreshToActivateBank, refreshToActivate)},
 		{NextCmdKind: CmdKindRefresh, MinCycleInBetween: refreshToActivateBank},
-		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToActivateBank},
+		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: max(refreshToActivateBank, refreshToRefresh)},
 		{NextCmdKind: CmdKindSRefEnter, MinCycleInBetween: refreshToActivateBank},
 	}
 	t.OtherBanksInBankGroup[CmdKindRefreshBank] = []TimeTableEntry{
-		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivate},
-		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
-	}
-	t.SameRank[CmdKindRefreshBank] = []TimeTableEntry{
 		{NextCmdKind: CmdKindActivate, MinCycleInBetween: refreshToActivate},
 		{NextCmdKind: CmdKindRefreshBank, MinCycleInBetween: refreshToRefresh},
 	}
