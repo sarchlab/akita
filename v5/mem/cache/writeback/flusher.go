@@ -3,6 +3,7 @@ package writeback
 import (
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -98,9 +99,9 @@ func (f *flusher) processFlush() bool {
 	trans := transactionState{
 		HasFlush:             true,
 		FlushMeta:            next.ProcessingFlush.MsgMeta,
-		FlushInvalidateAll:   next.ProcessingFlush.InvalidateAllCachelines,
+		FlushInvalidateAfter: next.ProcessingFlush.InvalidateAfter,
 		FlushDiscardInflight: next.ProcessingFlush.DiscardInflight,
-		FlushPauseAfter:      next.ProcessingFlush.PauseAfterFlushing,
+		FlushPauseAfter:      next.ProcessingFlush.PauseAfter,
 		HasVictim:            true,
 		VictimPID:            0,
 		VictimTag:            block.Tag,
@@ -129,10 +130,15 @@ func (f *flusher) extractFromPort() bool {
 	}
 
 	switch msg := msg.(type) {
-	case *cache.FlushReq:
-		return f.startProcessingFlush(msg)
-	case *cache.RestartReq:
-		return f.handleCacheRestart(msg)
+	case *mem.ControlReq:
+		switch msg.Command {
+		case mem.CmdFlush:
+			return f.startProcessingFlush(msg)
+		case mem.CmdEnable:
+			return f.handleCacheRestart(msg)
+		default:
+			log.Panicf("Cannot process control command %d", msg.Command)
+		}
 	default:
 		log.Panicf("Cannot process request of type %T", msg)
 	}
@@ -140,15 +146,15 @@ func (f *flusher) extractFromPort() bool {
 	return true
 }
 
-func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
+func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
 	next := f.pipeline.comp.GetNextState()
 
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
-		MsgMeta:                 msg.MsgMeta,
-		InvalidateAllCachelines: msg.InvalidateAllCachelines,
-		DiscardInflight:         msg.DiscardInflight,
-		PauseAfterFlushing:      msg.PauseAfterFlushing,
+		MsgMeta:         msg.MsgMeta,
+		InvalidateAfter: msg.InvalidateAfter,
+		DiscardInflight: msg.DiscardInflight,
+		PauseAfter:      msg.PauseAfter,
 	}
 
 	if msg.DiscardInflight {
@@ -163,7 +169,7 @@ func (f *flusher) startProcessingFlush(msg *cache.FlushReq) bool {
 	return true
 }
 
-func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
+func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
 	if !f.ctrlPort.CanSend() {
 		return false
 	}
@@ -174,12 +180,12 @@ func (f *flusher) handleCacheRestart(msg *cache.RestartReq) bool {
 	next := f.pipeline.comp.GetNextState()
 	next.CacheState = int(cacheStateRunning)
 
-	rsp := &cache.RestartRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
-	rsp.TrafficClass = "cache.RestartRsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 	f.ctrlPort.Send(rsp)
 
 	f.ctrlPort.RetrieveIncoming()
@@ -204,12 +210,12 @@ func (f *flusher) finalizeFlushing() bool {
 
 	spec := f.pipeline.comp.GetSpec()
 
-	rsp := &cache.FlushRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
-	rsp.TrafficClass = "cache.FlushRsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 	f.ctrlPort.Send(rsp)
 
 	// Reset MSHR and directory state
@@ -222,7 +228,7 @@ func (f *flusher) finalizeFlushing() bool {
 		blockSize,
 	)
 
-	if next.ProcessingFlush.PauseAfterFlushing {
+	if next.ProcessingFlush.PauseAfter {
 		next.CacheState = int(cacheStatePaused)
 	} else {
 		next.CacheState = int(cacheStateRunning)

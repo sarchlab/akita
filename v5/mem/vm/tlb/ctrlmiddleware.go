@@ -1,9 +1,6 @@
 package tlb
 
 import (
-	"log"
-	"reflect"
-
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
@@ -33,85 +30,39 @@ func (m *ctrlMiddleware) Tick() bool {
 }
 
 func (m *ctrlMiddleware) handleIncomingCommands() bool {
-	madeProgress := false
 	msg := m.controlPort().PeekIncoming()
-
 	if msg == nil {
 		return false
 	}
 
-	switch msg.(type) {
-	case *mem.ControlMsg:
-		madeProgress = m.handleControlMsg(msg.(*mem.ControlMsg)) || madeProgress
-	case *FlushReq:
-		madeProgress = m.handleTLBFlush(msg.(*FlushReq)) || madeProgress
-	case *RestartReq:
-		madeProgress = m.handleTLBRestart(msg.(*RestartReq)) || madeProgress
-	default:
+	ctrlReq, ok := msg.(*mem.ControlReq)
+	if !ok {
 		panic("Unhandled message")
 	}
 
-	return madeProgress
-}
-
-func (m *ctrlMiddleware) handleControlMsg(msg *mem.ControlMsg) bool {
-	m.ctrlMsgMustBeValidInCurrentStage(msg)
-
-	return m.performCtrlReq()
-}
-
-func (m *ctrlMiddleware) ctrlMsgMustBeValidInCurrentStage(
-	ctrlMsg *mem.ControlMsg,
-) {
-	state := m.comp.GetNextState()
-	switch s := state.TLBState; s {
-	case tlbStateEnable:
-		if ctrlMsg.Enable {
-			log.Panic("TLB is already enabled")
-		}
-	case tlbStatePause:
-		if ctrlMsg.Pause {
-			log.Panic("TLB is already paused")
-		}
-		if ctrlMsg.Drain {
-			log.Panic("Cannot drain when TLB is paused")
-		}
-	case tlbStateDrain:
-		if ctrlMsg.Drain {
-			log.Panic("TLB is already draining")
-		}
-		if ctrlMsg.Pause || ctrlMsg.Enable {
-			log.Panic("Cannot pause/enable when TLB is draining")
-		}
-	case tlbStateFlush:
-		if ctrlMsg.Drain || ctrlMsg.Enable || ctrlMsg.Pause {
-			log.Panic("Cannot pause/enable/drain when TLB is flushing")
-		}
+	switch ctrlReq.Command {
+	case mem.CmdEnable:
+		return m.performCtrlEnable(ctrlReq)
+	case mem.CmdDrain:
+		return m.performCtrlDrain(ctrlReq)
+	case mem.CmdPause:
+		return m.performCtrlPause(ctrlReq)
+	case mem.CmdFlush:
+		return m.handleTLBFlush(ctrlReq)
+	case mem.CmdReset:
+		return m.handleTLBRestart(ctrlReq)
 	default:
-		log.Panic("Unknown TLB state")
+		panic("Unhandled control command")
 	}
 }
 
-func (m *ctrlMiddleware) performCtrlReq() bool {
-	itemI := m.controlPort().PeekIncoming()
-	if itemI == nil {
-		return false
-	}
-
-	item := itemI.(*mem.ControlMsg)
+func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
 	state := m.comp.GetNextState()
-
-	if item.Enable {
-		state.TLBState = tlbStateEnable
-	} else if item.Drain {
-		state.TLBState = tlbStateDrain
-	} else if item.Pause {
-		state.TLBState = tlbStatePause
-	}
+	state.TLBState = tlbStateEnable
 
 	m.controlPort().RetrieveIncoming()
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(item, m.comp),
+		tracing.MsgIDAtReceiver(msg, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
@@ -121,40 +72,58 @@ func (m *ctrlMiddleware) performCtrlReq() bool {
 	return true
 }
 
-func (m *ctrlMiddleware) handleTLBFlush(msg *FlushReq) bool {
-	m.flushMsgMustBeValidInCurrentStage(msg)
+func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
+	state := m.comp.GetNextState()
+	state.TLBState = tlbStateDrain
 
+	m.controlPort().RetrieveIncoming()
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(msg, m.comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.controlPort().Name(),
+		m.comp.Name(),
+		m.comp,
+	)
+
+	return true
+}
+
+func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
+	state := m.comp.GetNextState()
+	state.TLBState = tlbStatePause
+
+	m.controlPort().RetrieveIncoming()
+	tracing.AddMilestone(
+		tracing.MsgIDAtReceiver(msg, m.comp),
+		tracing.MilestoneKindNetworkBusy,
+		m.controlPort().Name(),
+		m.comp.Name(),
+		m.comp,
+	)
+
+	return true
+}
+
+func (m *ctrlMiddleware) handleTLBFlush(msg *mem.ControlReq) bool {
 	state := m.comp.GetNextState()
 	state.HasInflightFlushReq = true
-	state.InflightFlushReqMsg = *msg
+	state.InflightFlush = inflightFlushState{
+		VAddr: msg.Addresses,
+		PID:   msg.PID,
+		Meta:  msg.MsgMeta,
+	}
 	m.controlPort().RetrieveIncoming()
 	state.TLBState = tlbStateFlush
 
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
-	state := m.comp.GetNextState()
-	switch s := state.TLBState; s {
-	case tlbStateEnable:
-		// valid
-	case tlbStatePause:
-		log.Panic("Cannot flush when TLB is paused")
-	case tlbStateDrain:
-		log.Panic("Cannot flush when TLB is draining")
-	case tlbStateFlush:
-		log.Panic("TLB is already flushing")
-	default:
-		log.Panicf("Unknown TLB state: %s, msg: %s", s, reflect.TypeOf(msg))
-	}
-}
-
-func (m *ctrlMiddleware) handleTLBRestart(msg *RestartReq) bool {
-	rsp := &RestartRsp{}
+func (m *ctrlMiddleware) handleTLBRestart(msg *mem.ControlReq) bool {
+	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src
-	rsp.TrafficClass = "tlb.RestartRsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.controlPort().Send(rsp)
 	if err != nil {

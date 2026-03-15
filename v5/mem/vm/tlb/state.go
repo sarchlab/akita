@@ -8,6 +8,13 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// inflightFlushState stores the flat fields needed during a TLB flush.
+type inflightFlushState struct {
+	VAddr []uint64        `json:"vaddr"`
+	PID   vm.PID          `json:"pid"`
+	Meta  sim.MsgMeta     `json:"meta"`
+}
+
 const (
 	tlbStateEnable = "enable"
 	tlbStatePause  = "pause"
@@ -25,7 +32,7 @@ type State struct {
 	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
 	BufferItems         []pipelineTLBReqState              `json:"buffer_items"`
 	HasInflightFlushReq bool                               `json:"has_inflight_flush_req"`
-	InflightFlushReqMsg FlushReq                           `json:"inflight_flush_req_msg"`
+	InflightFlush       inflightFlushState                 `json:"inflight_flush"`
 }
 
 // blockState is a serializable representation of an internal block.

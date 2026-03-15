@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -263,11 +263,11 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
-	rsp := &tlb.FlushRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = next.InflightFlushReqSrc
-	rsp.TrafficClass = "mmuCache.FlushRsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.controlPort().Send(rsp)
 	if err != nil {

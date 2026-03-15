@@ -298,19 +298,20 @@ var _ = Describe("TLB", func() {
 
 		It("should do nothing if no req", func() {
 			controlPort.EXPECT().PeekIncoming().Return(nil)
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 			Expect(madeProgress).To(BeFalse())
 		})
 
 		It("should handle flush request", func() {
-			flushReq := &FlushReq{
-				VAddr: []uint64{0x1000},
-				PID:   1,
+			flushReq := &mem.ControlReq{
+				Command:   mem.CmdFlush,
+				Addresses: []uint64{0x1000},
+				PID:       1,
 			}
 			flushReq.ID = sim.GetIDGenerator().Generate()
 			flushReq.Src = sim.RemotePort("")
 			flushReq.Dst = controlPort.AsRemote()
-			flushReq.TrafficClass = "tlb.FlushReq"
+			flushReq.TrafficClass = "mem.ControlReq"
 
 			// Set up a page in the TLB
 			next := tlbComp.GetNextState()
@@ -337,11 +338,11 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle restart request", func() {
-			restartReq := &RestartReq{}
+			restartReq := &mem.ControlReq{Command: mem.CmdReset}
 			restartReq.ID = sim.GetIDGenerator().Generate()
 			restartReq.Src = sim.RemotePort("")
 			restartReq.Dst = controlPort.AsRemote()
-			restartReq.TrafficClass = "tlb.RestartReq"
+			restartReq.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().
 				Return(restartReq)
 			controlPort.EXPECT().RetrieveIncoming().
@@ -358,21 +359,21 @@ var _ = Describe("TLB", func() {
 
 	Context("other control signals", func() {
 		It("should handle pause ctrl msg", func() {
-			pauseMsg := &mem.ControlMsg{
-				Pause: true,
+			pauseMsg := &mem.ControlReq{
+				Command: mem.CmdPause,
 			}
 			pauseMsg.ID = sim.GetIDGenerator().Generate()
 			pauseMsg.Src = sim.RemotePort("")
 			pauseMsg.Dst = controlPort.AsRemote()
 			pauseMsg.TrafficBytes = 4
-			pauseMsg.TrafficClass = "mem.ControlMsg"
+			pauseMsg.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(pauseMsg)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pauseMsg)
 
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := tlbComp.GetNextState()
@@ -380,21 +381,21 @@ var _ = Describe("TLB", func() {
 		})
 
 		It("should handle enable ctrl msg after pause", func() {
-			pause := &mem.ControlMsg{
-				Pause: true,
+			pause := &mem.ControlReq{
+				Command: mem.CmdPause,
 			}
 			pause.ID = sim.GetIDGenerator().Generate()
 			pause.Src = sim.RemotePort("")
 			pause.Dst = controlPort.AsRemote()
 			pause.TrafficBytes = 4
-			pause.TrafficClass = "mem.ControlMsg"
+			pause.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(pause)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(pause)
 
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := tlbComp.GetNextState()
@@ -403,42 +404,42 @@ var _ = Describe("TLB", func() {
 			// Commit the state change
 			tlbComp.SetState(*nextState)
 
-			enable := &mem.ControlMsg{
-				Enable: true,
+			enable := &mem.ControlReq{
+				Command: mem.CmdEnable,
 			}
 			enable.ID = sim.GetIDGenerator().Generate()
 			enable.Src = sim.RemotePort("")
 			enable.Dst = controlPort.AsRemote()
 			enable.TrafficBytes = 4
-			enable.TrafficClass = "mem.ControlMsg"
+			enable.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(enable)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(enable)
 
-			madeProgress = tlbCtrlMW.performCtrlReq()
+			madeProgress = tlbCtrlMW.handleIncomingCommands()
 			Expect(madeProgress).To(BeTrue())
 			nextState = tlbComp.GetNextState()
 			Expect(nextState.TLBState).To(Equal(tlbStateEnable))
 		})
 
 		It("should handle drain ctrl msg", func() {
-			drainMsg := &mem.ControlMsg{
-				Drain: true,
+			drainMsg := &mem.ControlReq{
+				Command: mem.CmdDrain,
 			}
 			drainMsg.ID = sim.GetIDGenerator().Generate()
 			drainMsg.Src = sim.RemotePort("")
 			drainMsg.Dst = controlPort.AsRemote()
 			drainMsg.TrafficBytes = 4
-			drainMsg.TrafficClass = "mem.ControlMsg"
+			drainMsg.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().
 				Return(drainMsg)
 			controlPort.EXPECT().RetrieveIncoming().
 				Return(drainMsg)
 
-			madeProgress := tlbCtrlMW.performCtrlReq()
+			madeProgress := tlbCtrlMW.handleIncomingCommands()
 
 			Expect(madeProgress).To(BeTrue())
 			nextState := tlbComp.GetNextState()

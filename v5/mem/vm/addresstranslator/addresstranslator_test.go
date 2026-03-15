@@ -486,8 +486,8 @@ var _ = Describe("Address Translator", func() {
 			writeFromTop  *mem.WriteReq
 			readToBottom  *mem.ReadReq
 			writeToBottom *mem.WriteReq
-			flushReq      *mem.ControlMsg
-			restartReq    *mem.ControlMsg
+			flushReq      *mem.ControlReq
+			restartReq    *mem.ControlReq
 		)
 
 		BeforeEach(func() {
@@ -513,20 +513,20 @@ var _ = Describe("Address Translator", func() {
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
-			flushReq = &mem.ControlMsg{
-				DiscardTransations: true,
+			flushReq = &mem.ControlReq{
+				Command: mem.CmdFlush,
 			}
 			flushReq.ID = sim.GetIDGenerator().Generate()
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
-			flushReq.TrafficClass = "mem.ControlMsg"
-			restartReq = &mem.ControlMsg{
-				Restart: true,
+			flushReq.TrafficClass = "mem.ControlReq"
+			restartReq = &mem.ControlReq{
+				Command: mem.CmdReset,
 			}
 			restartReq.ID = sim.GetIDGenerator().Generate()
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
-			restartReq.TrafficClass = "mem.ControlMsg"
+			restartReq.TrafficClass = "mem.ControlReq"
 
 			nextState := t.GetNextState()
 			nextState.InflightReqToBottom = []reqToBottomState{

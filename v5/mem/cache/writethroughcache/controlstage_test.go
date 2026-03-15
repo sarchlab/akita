@@ -1,8 +1,8 @@
 package writethroughcache
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	cache2 "github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/queueing"
@@ -95,10 +95,10 @@ var _ = Describe("Control Stage", func() {
 		next := pmw.comp.GetNextState()
 		next.Transactions = append(next.Transactions, transactionState{})
 
-		flushReq := &cache2.FlushReq{}
+		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
 		flushReq.ID = sim.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
-		flushReq.TrafficClass = "ctrl"
+		flushReq.TrafficClass = "mem.ControlReq"
 		flushReq.DiscardInflight = false
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
@@ -109,13 +109,13 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should reset directory", func() {
-		flushReq := &cache2.FlushReq{}
+		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
 		flushReq.ID = sim.GetIDGenerator().Generate()
-		flushReq.InvalidateAllCachelines = true
+		flushReq.InvalidateAfter = true
 		flushReq.DiscardInflight = true
-		flushReq.PauseAfterFlushing = true
+		flushReq.PauseAfter = true
 		flushReq.TrafficBytes = 0
-		flushReq.TrafficClass = "ctrl"
+		flushReq.TrafficClass = "mem.ControlReq"
 		s.currFlushReq = flushReq
 		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
 			Expect(msg.Meta().RspTo).To(Equal(flushReq.ID))

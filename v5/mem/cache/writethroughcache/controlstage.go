@@ -4,6 +4,7 @@ import (
 	"log"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -13,7 +14,7 @@ type controlStage struct {
 	pipeline   *pipelineMW
 	bankStages []*bankStage
 
-	currFlushReq *cache.FlushReq
+	currFlushReq *mem.ControlReq
 }
 
 func (s *controlStage) Tick() bool {
@@ -34,13 +35,13 @@ func (s *controlStage) processCurrentFlush() bool {
 		return false
 	}
 
-	rsp := &cache.FlushRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = s.currFlushReq.Src
 	rsp.RspTo = s.currFlushReq.ID
 	rsp.TrafficBytes = 0
-	rsp.TrafficClass = "ctrl-rsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {
@@ -79,7 +80,7 @@ func (s *controlStage) hardResetCache() {
 	// Clear all transactions
 	next.Transactions = nil
 
-	if s.currFlushReq.PauseAfterFlushing {
+	if s.currFlushReq.PauseAfter {
 		next.IsPaused = true
 	}
 }
@@ -97,10 +98,15 @@ func (s *controlStage) processNewRequest() bool {
 	}
 
 	switch msg := msgI.(type) {
-	case *cache.FlushReq:
-		return s.startCacheFlush(msg)
-	case *cache.RestartReq:
-		return s.doCacheRestart(msg)
+	case *mem.ControlReq:
+		switch msg.Command {
+		case mem.CmdFlush:
+			return s.startCacheFlush(msg)
+		case mem.CmdEnable:
+			return s.doCacheRestart(msg)
+		default:
+			log.Panicf("cannot handle control command %d", msg.Command)
+		}
 	default:
 		log.Panicf("cannot handle request of type %s ",
 			reflect.TypeOf(msgI))
@@ -109,7 +115,7 @@ func (s *controlStage) processNewRequest() bool {
 	panic("never")
 }
 
-func (s *controlStage) startCacheFlush(msg *cache.FlushReq) bool {
+func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
 	if s.currFlushReq != nil {
 		return false
 	}
@@ -120,7 +126,7 @@ func (s *controlStage) startCacheFlush(msg *cache.FlushReq) bool {
 	return true
 }
 
-func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
+func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
 	next := s.pipeline.comp.GetNextState()
 	next.IsPaused = false
 
@@ -134,12 +140,12 @@ func (s *controlStage) doCacheRestart(msg *cache.RestartReq) bool {
 		s.pipeline.bottomPort.RetrieveIncoming()
 	}
 
-	rsp := &cache.RestartRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 0
-	rsp.TrafficClass = "ctrl-rsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := s.ctrlPort.Send(rsp)
 	if err != nil {
