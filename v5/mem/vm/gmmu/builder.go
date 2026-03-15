@@ -103,7 +103,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		Build(name)
 
 	initialState := State{
-		RemoteMemReqs: make(map[string]transactionState),
+		RemoteMemReqs: make(map[uint64]transactionState),
 	}
 	modelComp.SetState(initialState)
 

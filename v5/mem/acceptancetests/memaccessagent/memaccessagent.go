@@ -25,8 +25,8 @@ type MemAccessAgent struct {
 	WriteLeft       int
 	ReadLeft        int
 	KnownMemValue   map[uint64][]uint32
-	PendingReadReq  map[string]*mem.ReadReq
-	PendingWriteReq map[string]*mem.WriteReq
+	PendingReadReq  map[uint64]*mem.ReadReq
+	PendingWriteReq map[uint64]*mem.WriteReq
 
 	memPort           sim.Port
 	UseVirtualAddress bool
@@ -298,8 +298,8 @@ func NewMemAccessAgent(engine sim.EventScheduler) *MemAccessAgent {
 	agent.ReadLeft = 10000
 	agent.WriteLeft = 10000
 	agent.KnownMemValue = make(map[uint64][]uint32)
-	agent.PendingWriteReq = make(map[string]*mem.WriteReq)
-	agent.PendingReadReq = make(map[string]*mem.ReadReq)
+	agent.PendingWriteReq = make(map[uint64]*mem.WriteReq)
+	agent.PendingReadReq = make(map[uint64]*mem.ReadReq)
 
 	return agent
 }

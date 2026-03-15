@@ -9,7 +9,8 @@ type inflightTransaction struct {
 	CycleLeft      int            `json:"cycle_left"`
 	Address        uint64         `json:"address"`
 	AccessByteSize uint64         `json:"access_byte_size"`
-	ReqID          string         `json:"req_id"`
+	ReqID          uint64         `json:"req_id"`
+	RecvTaskID     uint64         `json:"recv_task_id"`
 	IsRead         bool           `json:"is_read"`
 	Data           []byte         `json:"data,omitempty"`
 	DirtyMask      []bool         `json:"dirty_mask,omitempty"`
@@ -20,6 +21,6 @@ type inflightTransaction struct {
 type State struct {
 	InflightTransactions []inflightTransaction `json:"inflight_transactions"`
 	CurrentState         string                `json:"current_state"`
-	CurrentCmdID         string                `json:"current_cmd_id"`
+	CurrentCmdID         uint64                `json:"current_cmd_id"`
 	CurrentCmdSrc        sim.RemotePort        `json:"current_cmd_src"`
 }

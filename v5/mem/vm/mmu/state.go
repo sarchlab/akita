@@ -7,7 +7,8 @@ import (
 
 // transactionState is the canonical transaction representation.
 type transactionState struct {
-	ReqID        string         `json:"req_id"`
+	ReqID        uint64         `json:"req_id"`
+	RecvTaskID   uint64         `json:"recv_task_id"`
 	ReqSrc       sim.RemotePort `json:"req_src"`
 	ReqDst       sim.RemotePort `json:"req_dst"`
 	PID          uint32         `json:"pid"`
@@ -17,7 +18,7 @@ type transactionState struct {
 	Page         vm.Page        `json:"page"`
 	CycleLeft    int            `json:"cycle_left"`
 
-	MigrationReqID  string         `json:"migration_req_id"`
+	MigrationReqID  uint64         `json:"migration_req_id"`
 	MigrationReqSrc sim.RemotePort `json:"migration_req_src"`
 	MigrationReqDst sim.RemotePort `json:"migration_req_dst"`
 	HasMigration    bool           `json:"has_migration"`

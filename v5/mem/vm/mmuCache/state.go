@@ -17,7 +17,7 @@ const (
 type State struct {
 	CurrentState           string         `json:"current_state"`
 	Table                  []setState     `json:"table"`
-	InflightFlushReqID     string         `json:"inflight_flush_req_id"`
+	InflightFlushReqID     uint64         `json:"inflight_flush_req_id"`
 	InflightFlushReqSrc    sim.RemotePort `json:"inflight_flush_req_src"`
 	InflightFlushReqActive bool           `json:"inflight_flush_req_active"`
 }

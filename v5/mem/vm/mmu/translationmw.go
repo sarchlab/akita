@@ -168,7 +168,7 @@ func (m *translationMW) doPageWalkHit(walkingIndex int) bool {
 	m.topPort().Send(rsp)
 	state.ToRemoveFromPTW = append(state.ToRemoveFromPTW, walkingIndex)
 
-	m.traceReqComplete(walking.ReqID)
+	m.traceReqComplete(walking.RecvTaskID)
 
 	return true
 }
@@ -204,6 +204,7 @@ func (m *translationMW) startWalking(req *vm.TranslationReq) {
 
 	ts := transactionState{
 		ReqID:        req.ID,
+		RecvTaskID:   req.RecvTaskID,
 		ReqSrc:       req.Src,
 		ReqDst:       req.Dst,
 		PID:          uint32(req.PID),
@@ -267,7 +268,6 @@ func (m *translationMW) allocatePhysicalPage() uint64 {
 	}
 }
 
-func (m *translationMW) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
-	tracing.EndTask(taskID, m.comp)
+func (m *translationMW) traceReqComplete(recvTaskID uint64) {
+	tracing.EndTask(recvTaskID, m.comp)
 }

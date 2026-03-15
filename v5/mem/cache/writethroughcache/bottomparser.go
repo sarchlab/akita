@@ -181,7 +181,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 }
 
 func (p *bottomParser) findTransactionByWriteToBottomID(
-	id string,
+	id uint64,
 ) int {
 	next := p.cache.comp.GetNextState()
 
@@ -197,7 +197,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 }
 
 func (p *bottomParser) findTransactionByReadToBottomID(
-	id string,
+	id uint64,
 ) int {
 	next := p.cache.comp.GetNextState()
 

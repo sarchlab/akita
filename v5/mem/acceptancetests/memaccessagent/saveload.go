@@ -50,8 +50,8 @@ func (a *MemAccessAgent) LoadState(r io.Reader) error {
 	a.ReadLeft = snap.ReadLeft
 	a.MaxAddress = snap.MaxAddress
 	a.KnownMemValue = snap.KnownMemValue
-	a.PendingReadReq = make(map[string]*mem.ReadReq)
-	a.PendingWriteReq = make(map[string]*mem.WriteReq)
+	a.PendingReadReq = make(map[uint64]*mem.ReadReq)
+	a.PendingWriteReq = make(map[uint64]*mem.WriteReq)
 
 	return nil
 }

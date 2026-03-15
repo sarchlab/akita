@@ -63,7 +63,7 @@ type PageMigrationRspFromDriver struct {
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
 	src, dst sim.RemotePort,
-	originalReqID string,
+	originalReqID uint64,
 ) *PageMigrationRspFromDriver {
 	r := &PageMigrationRspFromDriver{}
 	r.ID = sim.GetIDGenerator().Generate()

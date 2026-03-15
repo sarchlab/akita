@@ -107,7 +107,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 	)
 
 	fakeFromTop := restoreMemMsg(reqState.ID, reqState.Src, reqState.Dst,
-		reqState.RspTo, reqState.Type)
+		reqState.RspTo, reqState.SendTaskID, reqState.RecvTaskID, reqState.Type)
 
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
@@ -119,6 +119,7 @@ func (m *respondPipelineMW) traceTranslationComplete(
 
 	fakeTransReq := &vm.TranslationReq{}
 	fakeTransReq.ID = trans.TranslationReqID
+	fakeTransReq.SendTaskID = trans.TranslationReqSendTaskID
 	fakeTransReq.Src = trans.TranslationReqSrc
 	fakeTransReq.Dst = trans.TranslationReqDst
 	tracing.TraceReqFinalize(fakeTransReq, m.comp)
@@ -161,7 +162,9 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopID,
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
-				"", reqFromTopState.ReqFromTopType)
+				0, reqFromTopState.ReqFromTopSendTaskID,
+				reqFromTopState.ReqFromTopRecvTaskID,
+				reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 				tracing.MilestoneKindData,
@@ -186,7 +189,9 @@ func (m *respondPipelineMW) respond() bool {
 				reqFromTopState.ReqFromTopID,
 				reqFromTopState.ReqFromTopSrc,
 				reqFromTopState.ReqFromTopDst,
-				"", reqFromTopState.ReqFromTopType)
+				0, reqFromTopState.ReqFromTopSendTaskID,
+				reqFromTopState.ReqFromTopRecvTaskID,
+				reqFromTopState.ReqFromTopType)
 			tracing.AddMilestone(
 				tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
 				tracing.MilestoneKindSubTask,
@@ -209,7 +214,9 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqFromTopID,
 			reqFromTopState.ReqFromTopSrc,
 			reqFromTopState.ReqFromTopDst,
-			"", reqFromTopState.ReqFromTopType)
+			0, reqFromTopState.ReqFromTopSendTaskID,
+			reqFromTopState.ReqFromTopRecvTaskID,
+			reqFromTopState.ReqFromTopType)
 
 		tracing.AddMilestone(
 			tracing.MsgIDAtReceiver(fakeFromTop, m.comp),
@@ -226,7 +233,8 @@ func (m *respondPipelineMW) respond() bool {
 			reqFromTopState.ReqToBottomID,
 			reqFromTopState.ReqToBottomSrc,
 			reqFromTopState.ReqToBottomDst,
-			"", reqFromTopState.ReqToBottomType)
+			0, reqFromTopState.ReqToBottomSendTaskID, 0,
+			reqFromTopState.ReqToBottomType)
 		tracing.TraceReqFinalize(fakeReqToBottom, m.comp)
 		tracing.TraceReqComplete(fakeFromTop, m.comp)
 	}

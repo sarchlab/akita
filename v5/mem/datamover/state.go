@@ -22,7 +22,7 @@ type bufferState struct {
 
 // pendingReadState captures the serializable fields of a pending read request.
 type pendingReadState struct {
-	ID      string         `json:"id"`
+	ID      uint64         `json:"id"`
 	Src     sim.RemotePort `json:"src"`
 	Dst     sim.RemotePort `json:"dst"`
 	Address uint64         `json:"address"`
@@ -30,7 +30,7 @@ type pendingReadState struct {
 
 // pendingWriteState captures the serializable fields of a pending write request.
 type pendingWriteState struct {
-	ID      string         `json:"id"`
+	ID      uint64         `json:"id"`
 	Src     sim.RemotePort `json:"src"`
 	Dst     sim.RemotePort `json:"dst"`
 	Address uint64         `json:"address"`
@@ -40,7 +40,7 @@ type pendingWriteState struct {
 // dataMoverTransactionState is the serializable representation of a
 // dataMoverTransaction.
 type dataMoverTransactionState struct {
-	ReqID         string                       `json:"req_id"`
+	ReqID         uint64                        `json:"req_id"`
 	ReqSrc        sim.RemotePort               `json:"req_src"`
 	ReqDst        sim.RemotePort               `json:"req_dst"`
 	SrcAddress    uint64                       `json:"src_address"`
@@ -50,8 +50,8 @@ type dataMoverTransactionState struct {
 	DstSide       string                       `json:"dst_side"`
 	NextReadAddr  uint64                       `json:"next_read_addr"`
 	NextWriteAddr uint64                       `json:"next_write_addr"`
-	PendingRead   map[string]pendingReadState  `json:"pending_read"`
-	PendingWrite  map[string]pendingWriteState `json:"pending_write"`
+	PendingRead   map[uint64]pendingReadState  `json:"pending_read"`
+	PendingWrite  map[uint64]pendingWriteState `json:"pending_write"`
 	Active        bool                         `json:"active"`
 }
 
