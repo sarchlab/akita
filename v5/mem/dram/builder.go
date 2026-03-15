@@ -152,6 +152,49 @@ func MakeBuilder() Builder {
 	return b
 }
 
+// WithSpec sets the builder's spec and copies all relevant fields from
+// the spec into the builder's individual fields.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	b.protocol = Protocol(spec.Protocol)
+	b.transactionQueueSize = spec.TransactionQueueSize
+	b.commandQueueSize = spec.CommandQueueCapacity
+	b.busWidth = spec.BusWidth
+	b.burstLength = spec.BurstLength
+	b.deviceWidth = spec.DeviceWidth
+	b.numChannel = spec.NumChannel
+	b.numRank = spec.NumRank
+	b.numBankGroup = spec.NumBankGroup
+	b.numBank = spec.NumBank
+	b.numRow = spec.NumRow
+	b.numCol = spec.NumCol
+	b.tAL = spec.TAL
+	b.tCL = spec.TCL
+	b.tCWL = spec.TCWL
+	b.tRCD = spec.TRCD
+	b.tRP = spec.TRP
+	b.tRAS = spec.TRAS
+	b.tCCDL = spec.TCCDL
+	b.tCCDS = spec.TCCDS
+	b.tRTRS = spec.TRTRS
+	b.tRTP = spec.TRTP
+	b.tWTRL = spec.TWTRL
+	b.tWTRS = spec.TWTRS
+	b.tWR = spec.TWR
+	b.tPPD = spec.TPPD
+	b.tRRDL = spec.TRRDL
+	b.tRRDS = spec.TRRDS
+	b.tRCDRD = spec.TRCDRD
+	b.tRCDWR = spec.TRCDWR
+	b.tREFI = spec.TREFI
+	b.tRFC = spec.TRFC
+	b.tRFCb = spec.TRFCb
+	b.tCKESR = spec.TCKESR
+	b.tXS = spec.TXS
+
+	return b
+}
+
 // WithEngine sets the engine that the builder uses.
 func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
@@ -184,6 +227,12 @@ func (b Builder) WithInterleavingAddrConversion(
 	b.totalNumOfElements = numTotalUnit
 	b.currentElementIndex = currentUnitIndex
 	b.offset = lowerBound
+	return b
+}
+
+// WithPagePolicy sets the page policy of the memory controller.
+func (b Builder) WithPagePolicy(p PagePolicy) Builder {
+	b.spec.PagePolicy = p
 	return b
 }
 
@@ -256,6 +305,30 @@ func (b Builder) WithNumRow(n int) Builder {
 // WithNumCol sets the number of columns.
 func (b Builder) WithNumCol(n int) Builder {
 	b.numCol = n
+	return b
+}
+
+// WithReadQueueSize sets the read queue size for R/W queue separation.
+func (b Builder) WithReadQueueSize(n int) Builder {
+	b.spec.ReadQueueSize = n
+	return b
+}
+
+// WithWriteQueueSize sets the write queue size for R/W queue separation.
+func (b Builder) WithWriteQueueSize(n int) Builder {
+	b.spec.WriteQueueSize = n
+	return b
+}
+
+// WithWriteHighWatermark sets the write high watermark for drain mode.
+func (b Builder) WithWriteHighWatermark(n int) Builder {
+	b.spec.WriteHighWatermark = n
+	return b
+}
+
+// WithWriteLowWatermark sets the write low watermark for drain mode.
+func (b Builder) WithWriteLowWatermark(n int) Builder {
+	b.spec.WriteLowWatermark = n
 	return b
 }
 
@@ -481,6 +554,7 @@ func (b Builder) buildSpec() Spec {
 	cmdCycles := b.buildCmdCycles()
 
 	spec := b.buildTimingSpec()
+	spec.PagePolicy = b.spec.PagePolicy
 	spec.BusWidth = b.busWidth
 	spec.BurstLength = b.burstLength
 	spec.DeviceWidth = b.deviceWidth
@@ -492,6 +566,10 @@ func (b Builder) buildSpec() Spec {
 	spec.NumCol = b.numCol
 	spec.TransactionQueueSize = b.transactionQueueSize
 	spec.CommandQueueCapacity = b.commandQueueSize
+	spec.ReadQueueSize = b.spec.ReadQueueSize
+	spec.WriteQueueSize = b.spec.WriteQueueSize
+	spec.WriteHighWatermark = b.spec.WriteHighWatermark
+	spec.WriteLowWatermark = b.spec.WriteLowWatermark
 	spec.HasAddrConverter = b.hasAddrConverter
 	spec.InterleavingSize = b.interleavingSize
 	spec.TotalNumOfElements = b.totalNumOfElements

@@ -18,6 +18,10 @@ const (
 	HBM
 	HBM2
 	HMC
+	DDR5
+	HBM3
+	LPDDR5
+	HBM3E
 )
 
 func (p Protocol) isGDDR() bool {
@@ -25,8 +29,17 @@ func (p Protocol) isGDDR() bool {
 }
 
 func (p Protocol) isHBM() bool {
-	return p == HBM || p == HBM2
+	return p == HBM || p == HBM2 || p == HBM3 || p == HBM3E
 }
+
+// PagePolicy defines the page management policy for the DRAM controller.
+type PagePolicy int
+
+// A list of supported page policies.
+const (
+	PagePolicyClose PagePolicy = 0
+	PagePolicyOpen  PagePolicy = 1
+)
 
 // Spec contains immutable configuration for the DRAM memory controller.
 type Spec struct {
@@ -35,6 +48,9 @@ type Spec struct {
 
 	// Protocol
 	Protocol int `json:"protocol"`
+
+	// Page policy
+	PagePolicy PagePolicy `json:"page_policy"`
 
 	// Timing params
 	TAL        int `json:"t_al"`
@@ -83,6 +99,12 @@ type Spec struct {
 	// Queue sizes
 	TransactionQueueSize int `json:"transaction_queue_size"`
 	CommandQueueCapacity int `json:"command_queue_capacity"`
+
+	// Read/Write queue separation
+	ReadQueueSize      int `json:"read_queue_size"`
+	WriteQueueSize     int `json:"write_queue_size"`
+	WriteHighWatermark int `json:"write_high_watermark"`
+	WriteLowWatermark  int `json:"write_low_watermark"`
 
 	// Address converter params
 	HasAddrConverter    bool   `json:"has_addr_converter"`
