@@ -1,7 +1,6 @@
 package tracing
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/sim"
@@ -25,8 +24,8 @@ var (
 // StartTask notifies the hooks that hook to the domain about the start of a
 // task.
 func StartTask(
-	id string,
-	parentID string,
+	id uint64,
+	parentID uint64,
 	domain NamedHookable,
 	kind string,
 	what string,
@@ -44,12 +43,12 @@ func StartTask(
 }
 
 func allRequiredFieldsMustBeNotEmpty(
-	id string,
+	id uint64,
 	domain NamedHookable,
 	kind string,
 	what string,
 ) {
-	if id == "" {
+	if id == 0 {
 		panic("id must not be empty")
 	}
 
@@ -76,8 +75,8 @@ func domainMustHaveName(domain NamedHookable) {
 // about the start of a task, and is able to customize `where` field of a task,
 // especially for network tracing.
 func StartTaskWithSpecificLocation(
-	id string,
-	parentID string,
+	id uint64,
+	parentID uint64,
 	domain NamedHookable,
 	kind string,
 	what string,
@@ -109,7 +108,7 @@ func StartTaskWithSpecificLocation(
 
 // AddTaskStep marks that a milestone has been reached when processing a task.
 func AddTaskStep(
-	id string,
+	id uint64,
 	domain NamedHookable,
 	what string,
 ) {
@@ -134,7 +133,7 @@ func AddTaskStep(
 
 // AddMilestone records the time that that a blocking reason is resolved.
 func AddMilestone(
-	taskID string,
+	taskID uint64,
 	kind MilestoneKind,
 	what string,
 	location string,
@@ -158,7 +157,7 @@ func AddMilestone(
 
 // EndTask notifies the hooks about the end of a task.
 func EndTask(
-	id string,
+	id uint64,
 	domain NamedHookable,
 ) {
 	if domain.NumHooks() == 0 {
@@ -176,10 +175,12 @@ func EndTask(
 	domain.InvokeHook(ctx)
 }
 
-// MsgIDAtReceiver generates a standard ID for the message task at the
-// message receiver.
-func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) string {
-	return fmt.Sprintf("%s@%s", msg.Meta().ID, domain.Name())
+// MsgIDAtReceiver returns the RecvTaskID for the message, generating one if needed.
+func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) uint64 {
+	if msg.Meta().RecvTaskID == 0 {
+		msg.Meta().RecvTaskID = sim.GetIDGenerator().Generate()
+	}
+	return msg.Meta().RecvTaskID
 }
 
 // TraceReqInitiate generates a new task. The new task has Type="req_out",
@@ -188,10 +189,13 @@ func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) string {
 func TraceReqInitiate(
 	msg sim.Msg,
 	domain NamedHookable,
-	taskParentID string,
+	taskParentID uint64,
 ) {
+	if msg.Meta().SendTaskID == 0 {
+		msg.Meta().SendTaskID = sim.GetIDGenerator().Generate()
+	}
 	StartTask(
-		msg.Meta().ID+"_req_out",
+		msg.Meta().SendTaskID,
 		taskParentID,
 		domain,
 		"req_out",
@@ -208,7 +212,7 @@ func TraceReqReceive(
 ) {
 	StartTask(
 		MsgIDAtReceiver(msg, domain),
-		msg.Meta().ID+"_req_out",
+		msg.Meta().SendTaskID,
 		domain,
 		"req_in",
 		reflect.TypeOf(msg).Elem().Name(),
@@ -230,5 +234,5 @@ func TraceReqFinalize(
 	msg sim.Msg,
 	domain NamedHookable,
 ) {
-	EndTask(msg.Meta().ID+"_req_out", domain)
+	EndTask(msg.Meta().SendTaskID, domain)
 }

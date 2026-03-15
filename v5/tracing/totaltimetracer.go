@@ -14,7 +14,7 @@ type TotalTimeTracer struct {
 	filter        TaskFilter
 	lock          sync.Mutex
 	totalTime     sim.VTimeInSec
-	inflightTasks map[string]Task
+	inflightTasks map[uint64]Task
 }
 
 // NewTotalTimeTracer creates a new TotalTimeTracer
@@ -25,7 +25,7 @@ func NewTotalTimeTracer(
 	t := &TotalTimeTracer{
 		timeTeller:    timeTeller,
 		filter:        filter,
-		inflightTasks: make(map[string]Task),
+		inflightTasks: make(map[uint64]Task),
 	}
 
 	return t

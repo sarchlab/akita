@@ -20,7 +20,7 @@ func (p *defaultTaskPrinter) Print(task Task) {
 // BackTraceTracer can record tasks incomplete tasks
 type BackTraceTracer struct {
 	printer      TaskPrinter
-	tracingTasks map[string]Task
+	tracingTasks map[uint64]Task
 	lock         sync.Mutex
 }
 
@@ -28,7 +28,7 @@ type BackTraceTracer struct {
 func NewBackTraceTracer(printer TaskPrinter) *BackTraceTracer {
 	t := &BackTraceTracer{
 		printer:      printer,
-		tracingTasks: make(map[string]Task),
+		tracingTasks: make(map[uint64]Task),
 	}
 
 	if t.printer == nil {
@@ -64,7 +64,7 @@ func (t *BackTraceTracer) EndTask(task Task) {
 func (t *BackTraceTracer) DumpBackTrace(task Task) {
 	t.printer.Print(task)
 
-	if task.ParentID == "" {
+	if task.ParentID == 0 {
 		return
 	}
 

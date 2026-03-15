@@ -25,8 +25,8 @@ const (
 // Milestone represents a point in time where a task's blocking status is
 // resolved.
 type Milestone struct {
-	ID       string         `json:"id"`
-	TaskID   string         `json:"task_id"`
+	ID       uint64         `json:"id"`
+	TaskID   uint64         `json:"task_id"`
 	Time     sim.VTimeInSec `json:"time"`
 	Kind     MilestoneKind  `json:"kind"`
 	What     string         `json:"what"`
@@ -35,8 +35,8 @@ type Milestone struct {
 
 // A Task is a task
 type Task struct {
-	ID         string         `json:"id"`
-	ParentID   string         `json:"parent_id"`
+	ID         uint64         `json:"id"`
+	ParentID   uint64         `json:"parent_id"`
 	Kind       string         `json:"kind"`
 	What       string         `json:"what"`
 	Location   string         `json:"location"`
