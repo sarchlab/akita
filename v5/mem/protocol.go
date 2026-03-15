@@ -81,26 +81,32 @@ type WriteDoneRsp struct {
 	sim.MsgMeta
 }
 
-// ControlMsg is a control message used for managing components on the memory
-// hierarchy.
-type ControlMsg struct {
+// ControlCommand enumerates control operations for memory components.
+type ControlCommand int
+
+const (
+	CmdFlush      ControlCommand = iota // Write back dirty data
+	CmdInvalidate                       // Invalidate entries without writeback
+	CmdDrain                            // Wait for in-flight ops to complete
+	CmdReset                            // Soft reset
+	CmdPause                            // Disable further processing
+	CmdEnable                           // Re-enable processing
+)
+
+// ControlReq is a unified control request for all memory components.
+type ControlReq struct {
 	sim.MsgMeta
-	DiscardTransations bool
-	Restart            bool
-	NotifyDone         bool
-	Enable             bool
-	Drain              bool
-	Flush              bool
-	Pause              bool
-	Invalid            bool
+	Command         ControlCommand
+	DiscardInflight bool     // For Flush: discard vs wait for in-flight
+	InvalidateAfter bool     // For Flush: invalidate lines after writeback
+	PauseAfter      bool     // For Flush/Drain: pause after completion
+	Addresses       []uint64 // For Invalidate: specific addresses (empty = all)
+	PID             vm.PID   // For Invalidate: process filter
 }
 
-// ControlMsgRsp is a response to a control message.
-type ControlMsgRsp struct {
+// ControlRsp is the unified response to a ControlReq.
+type ControlRsp struct {
 	sim.MsgMeta
-	Enable  bool
-	Drain   bool
-	Flush   bool
-	Pause   bool
-	Invalid bool
+	Command ControlCommand
+	Success bool
 }

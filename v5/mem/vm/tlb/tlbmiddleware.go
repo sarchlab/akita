@@ -1,6 +1,7 @@
 package tlb
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
@@ -444,35 +445,35 @@ func (m *tlbMiddleware) handleFlush() bool {
 func (m *tlbMiddleware) processTLBFlush() bool {
 	spec := m.comp.GetSpec()
 	next := m.comp.GetNextState()
-	req := next.InflightFlushReqMsg
+	flush := next.InflightFlush
 
-	rsp := &FlushRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
-	rsp.Dst = req.Src
-	rsp.TrafficClass = "tlb.FlushRsp"
+	rsp.Dst = flush.Meta.Src
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.controlPort().Send(rsp)
 	if err != nil {
 		return false
 	}
 	tracing.AddMilestone(
-		tracing.MsgIDAtReceiver(&req, m.comp),
+		tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
 		m.comp,
 	)
 
-	for _, vAddr := range req.VAddr {
+	for _, vAddr := range flush.VAddr {
 		setID := vAddrToSetID(vAddr, spec)
-		wayID, page, found := setLookup(&next.Sets[setID], req.PID, vAddr)
+		wayID, page, found := setLookup(&next.Sets[setID], flush.PID, vAddr)
 
 		if !found {
 			continue
 		}
 		tracing.AddMilestone(
-			tracing.MsgIDAtReceiver(&req, m.comp),
+			tracing.MsgIDAtReceiver(&flush.Meta, m.comp),
 			tracing.MilestoneKindDependency,
 			m.comp.Name()+".Sets",
 			m.comp.Name(),

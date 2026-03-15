@@ -35,12 +35,12 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 		return false
 	}
 
-	rsp := &mem.ControlMsgRsp{}
+	rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = state.CurrentCmdSrc
 	rsp.RspTo = state.CurrentCmdID
-	rsp.TrafficClass = "mem.ControlMsgRsp"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.ctrlPort().Send(rsp)
 	if err != nil {
@@ -58,113 +58,76 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlMsg)
+	msg := msgI.(*mem.ControlReq)
 
-	m.ctrlMsgMustBeValid(msg)
-
-	madeProgress = m.handleEnable(msg) || madeProgress
-	madeProgress = m.handlePause(msg) || madeProgress
-	madeProgress = m.handleDrain(msg) || madeProgress
+	switch msg.Command {
+	case mem.CmdEnable:
+		madeProgress = m.handleEnable(msg) || madeProgress
+	case mem.CmdPause:
+		madeProgress = m.handlePause(msg) || madeProgress
+	case mem.CmdDrain:
+		madeProgress = m.handleDrain(msg) || madeProgress
+	default:
+		// Immediate ack for unhandled commands
+		m.ctrlPort().RetrieveIncoming()
+		madeProgress = true
+	}
 
 	return madeProgress
 }
 
 func (m *ctrlMiddleware) handleEnable(
-	msg *mem.ControlMsg,
+	msg *mem.ControlReq,
 ) bool {
-	if msg.Enable {
-		state := m.comp.GetNextState()
-		state.CurrentState = "enable"
+	state := m.comp.GetNextState()
+	state.CurrentState = "enable"
 
-		rsp := &mem.ControlMsgRsp{}
-		rsp.ID = sim.GetIDGenerator().Generate()
-		rsp.Src = m.ctrlPort().AsRemote()
-		rsp.Dst = msg.Src
-		rsp.RspTo = msg.ID
-		rsp.Enable = true
-		rsp.TrafficClass = "mem.ControlMsgRsp"
+	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort().AsRemote()
+	rsp.Dst = msg.Src
+	rsp.RspTo = msg.ID
+	rsp.TrafficClass = "mem.ControlRsp"
 
-		err := m.ctrlPort().Send(rsp)
-		if err != nil {
-			return false
-		}
-
-		m.ctrlPort().RetrieveIncoming()
-		return true
+	err := m.ctrlPort().Send(rsp)
+	if err != nil {
+		return false
 	}
 
-	return false
+	m.ctrlPort().RetrieveIncoming()
+	return true
 }
 
 func (m *ctrlMiddleware) handlePause(
-	msg *mem.ControlMsg,
+	msg *mem.ControlReq,
 ) bool {
-	if !msg.Enable && !msg.Drain {
-		state := m.comp.GetNextState()
-		state.CurrentState = "pause"
+	state := m.comp.GetNextState()
+	state.CurrentState = "pause"
 
-		rsp := &mem.ControlMsgRsp{}
-		rsp.ID = sim.GetIDGenerator().Generate()
-		rsp.Src = m.ctrlPort().AsRemote()
-		rsp.Dst = msg.Src
-		rsp.RspTo = msg.ID
-		rsp.Pause = true
-		rsp.TrafficClass = "mem.ControlMsgRsp"
+	rsp := &mem.ControlRsp{Command: mem.CmdPause, Success: true}
+	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.Src = m.ctrlPort().AsRemote()
+	rsp.Dst = msg.Src
+	rsp.RspTo = msg.ID
+	rsp.TrafficClass = "mem.ControlRsp"
 
-		err := m.ctrlPort().Send(rsp)
-		if err != nil {
-			return false
-		}
-
-		m.ctrlPort().RetrieveIncoming()
-		return true
+	err := m.ctrlPort().Send(rsp)
+	if err != nil {
+		return false
 	}
 
-	return false
+	m.ctrlPort().RetrieveIncoming()
+	return true
 }
 
 func (m *ctrlMiddleware) handleDrain(
-	msg *mem.ControlMsg,
+	msg *mem.ControlReq,
 ) bool {
-	if !msg.Enable && msg.Drain {
-		state := m.comp.GetNextState()
-		state.CurrentState = "drain"
-		state.CurrentCmdID = msg.ID
-		state.CurrentCmdSrc = msg.Src
+	state := m.comp.GetNextState()
+	state.CurrentState = "drain"
+	state.CurrentCmdID = msg.ID
+	state.CurrentCmdSrc = msg.Src
 
-		m.ctrlPort().RetrieveIncoming()
-		return true
-	}
-
-	return false
-}
-
-func (m *ctrlMiddleware) ctrlMsgMustBeValid(msg *mem.ControlMsg) {
-	if msg.Enable {
-		if msg.Drain {
-			panic("Enable and Drain should not be set at the same time")
-		}
-
-		if msg.Invalid {
-			panic("Enable and Invalid should not be set at the same time")
-		}
-
-		if msg.Flush {
-			panic("Enable and Flush should not be set at the same time")
-		}
-	}
-
-	if !msg.Enable {
-		m.drainSignalMustNotInvalidate(msg)
-	}
-}
-
-func (m *ctrlMiddleware) drainSignalMustNotInvalidate(msg *mem.ControlMsg) {
-	if msg.Drain && msg.Invalid {
-		panic("Drain and Invalid should not be set at the same time")
-	}
-
-	if msg.Drain && msg.Flush {
-		panic("Drain and Flush should not be set at the same time")
-	}
+	m.ctrlPort().RetrieveIncoming()
+	return true
 }

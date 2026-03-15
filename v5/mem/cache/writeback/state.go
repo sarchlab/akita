@@ -47,12 +47,12 @@ type State struct {
 	ProcessingFlush         flushReqState `json:"processing_flush"`
 }
 
-// flushReqState is a serializable representation of a cache.FlushReq.
+// flushReqState is a serializable representation of a flush control request.
 type flushReqState struct {
-	MsgMeta                 sim.MsgMeta `json:"msg_meta"`
-	InvalidateAllCachelines bool        `json:"invalidate_all_cachelines"`
-	DiscardInflight         bool        `json:"discard_inflight"`
-	PauseAfterFlushing      bool        `json:"pause_after_flushing"`
+	MsgMeta         sim.MsgMeta `json:"msg_meta"`
+	InvalidateAfter bool        `json:"invalidate_after"`
+	DiscardInflight bool        `json:"discard_inflight"`
+	PauseAfter      bool        `json:"pause_after"`
 }
 
 type action int
@@ -93,12 +93,12 @@ type transactionState struct {
 	WriteDirtyMask []bool   `json:"write_dirty_mask"`
 	WritePID       vm.PID   `json:"write_pid"`
 
-	// Flush request fields (flat, replaces *cache.FlushReq)
-	HasFlush             bool        `json:"has_flush"`
-	FlushMeta            sim.MsgMeta `json:"flush_meta"`
-	FlushInvalidateAll   bool        `json:"flush_invalidate_all"`
-	FlushDiscardInflight bool        `json:"flush_discard_inflight"`
-	FlushPauseAfter      bool        `json:"flush_pause_after"`
+	// Flush request fields (flat)
+	HasFlush              bool        `json:"has_flush"`
+	FlushMeta             sim.MsgMeta `json:"flush_meta"`
+	FlushInvalidateAfter  bool        `json:"flush_invalidate_after"`
+	FlushDiscardInflight  bool        `json:"flush_discard_inflight"`
+	FlushPauseAfter       bool        `json:"flush_pause_after"`
 
 	// Block reference (into directoryState)
 	BlockSetID int  `json:"block_set_id"`

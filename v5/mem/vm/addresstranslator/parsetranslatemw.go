@@ -101,26 +101,25 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 		return false
 	}
 
-	msg := msgI.(*mem.ControlMsg)
+	msg := msgI.(*mem.ControlReq)
 
-	if msg.DiscardTransations {
+	switch msg.Command {
+	case mem.CmdFlush:
 		return m.handleFlushReq(msg)
-	} else if msg.Restart {
+	case mem.CmdReset:
 		return m.handleRestartReq(msg)
+	default:
+		panic("unhandled control command")
 	}
-
-	panic("never")
 }
 
-func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlMsg) bool {
-	rsp := &mem.ControlMsg{
-		NotifyDone: true,
-	}
+func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
+	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.ControlMsg"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.ctrlPort().Send(rsp)
 	if err != nil {
@@ -137,15 +136,13 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlMsg) bool {
 	return true
 }
 
-func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlMsg) bool {
-	rsp := &mem.ControlMsg{
-		NotifyDone: true,
-	}
+func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
+	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
-	rsp.TrafficClass = "mem.ControlMsg"
+	rsp.TrafficClass = "mem.ControlRsp"
 
 	err := m.ctrlPort().Send(rsp)
 
