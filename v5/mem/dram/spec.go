@@ -32,6 +32,15 @@ func (p Protocol) isHBM() bool {
 	return p == HBM || p == HBM2 || p == HBM3 || p == HBM3E
 }
 
+// PagePolicy defines the page management policy for the DRAM controller.
+type PagePolicy int
+
+// A list of supported page policies.
+const (
+	PagePolicyClose PagePolicy = 0
+	PagePolicyOpen  PagePolicy = 1
+)
+
 // Spec contains immutable configuration for the DRAM memory controller.
 type Spec struct {
 	// Frequency
@@ -39,6 +48,9 @@ type Spec struct {
 
 	// Protocol
 	Protocol int `json:"protocol"`
+
+	// Page policy
+	PagePolicy PagePolicy `json:"page_policy"`
 
 	// Timing params
 	TAL        int `json:"t_al"`

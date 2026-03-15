@@ -65,7 +65,12 @@ func pushSubTrans(state *State, transIdx int) {
 // the command queue. Returns true if progress was made.
 func tickSubTransQueue(spec *Spec, state *State) bool {
 	for i, ref := range state.SubTransQueue.Entries {
-		cmd := createClosePageCommand(spec, state, ref)
+		var cmd *commandState
+		if spec.PagePolicy == PagePolicyOpen {
+			cmd = createOpenPageCommand(spec, state, ref)
+		} else {
+			cmd = createClosePageCommand(spec, state, ref)
+		}
 
 		if canAcceptCommand(state, cmd, spec.CommandQueueCapacity) {
 			acceptCommand(state, cmd)
@@ -113,6 +118,39 @@ func createClosePageCommand(
 	return cmd
 }
 
+// createOpenPageCommand creates a command for a sub-transaction using
+// open-page policy. Unlike close-page, it uses plain Read/Write commands
+// (not ReadPrecharge/WritePrecharge), leaving the row buffer open.
+func createOpenPageCommand(
+	spec *Spec,
+	state *State,
+	ref subTransRef,
+) *commandState {
+	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
+
+	cmd := &commandState{
+		ID:      sim.GetIDGenerator().Generate(),
+		Address: st.Address,
+		SubTransRef: subTransRef{
+			TransIndex: ref.TransIndex,
+			SubIndex:   ref.SubIndex,
+		},
+	}
+
+	// Open-page: read => Read, write => Write (no auto-precharge)
+	trans := &state.Transactions[ref.TransIndex]
+	if isTransactionRead(trans) {
+		cmd.Kind = int(CmdKindRead)
+	} else {
+		cmd.Kind = int(CmdKindWrite)
+	}
+
+	loc := mapAddress(spec, st.Address)
+	cmd.Location = loc
+
+	return cmd
+}
+
 // getQueueIndex returns the command queue index for a command (by rank).
 func getQueueIndex(cmd *commandState) int {
 	return int(cmd.Location.Rank)
@@ -144,23 +182,56 @@ func acceptCommand(state *State, cmd *commandState) {
 	)
 }
 
-// getCommandToIssue iterates over command queues round-robin and returns
-// the first ready command. Operates on next state only (which has already
-// been updated by respondMW).
-// Returns nil if none is ready.
+// getCommandToIssue uses FR-FCFS (First-Ready First-Come-First-Served)
+// scheduling. It prioritises row-buffer hits (bank is open, matching row,
+// and the command is ready) over other ready commands. Among commands of
+// equal priority, the oldest (earliest in the queue) wins.
 func getCommandToIssue(spec *Spec, next *State) *commandState {
-	numQueues := next.CommandQueues.NumQueues
-	if numQueues == 0 {
-		return nil
+	// Priority 1: Find a row-buffer hit (bank is open, matching row, command is ready)
+	var oldestHit *commandState
+	oldestHitIdx := -1
+
+	for i := range next.CommandQueues.Entries {
+		e := &next.CommandQueues.Entries[i]
+		cmd := &e.Command
+		bs := findBankStateByLocation(&next.BankStates, cmd.Location)
+		if bs == nil {
+			continue
+		}
+		// Check if this would be a row-buffer hit
+		if BankStateKind(bs.State) == BankStateOpen && bs.OpenRow == cmd.Location.Row {
+			readyCmd := getReadyCommand(spec, bs, cmd)
+			if readyCmd != nil {
+				if oldestHit == nil {
+					oldestHit = readyCmd
+					oldestHitIdx = i
+				}
+				// First found is oldest (entries are in insertion order)
+				break
+			}
+		}
 	}
 
-	startIdx := next.CommandQueues.NextQueueIndex
-	for i := 0; i < numQueues; i++ {
-		queueIdx := (startIdx + i) % numQueues
-		next.CommandQueues.NextQueueIndex = (queueIdx + 1) % numQueues
+	if oldestHit != nil {
+		if oldestHit.Kind == next.CommandQueues.Entries[oldestHitIdx].Command.Kind {
+			removeCommandFromQueueByIndex(next, oldestHitIdx)
+		}
+		return oldestHit
+	}
 
-		readyCmd := getFirstReadyInQueue(spec, next, queueIdx)
+	// Priority 2: FCFS — oldest ready command (any)
+	for i := range next.CommandQueues.Entries {
+		e := &next.CommandQueues.Entries[i]
+		cmd := &e.Command
+		bs := findBankStateByLocation(&next.BankStates, cmd.Location)
+		if bs == nil {
+			continue
+		}
+		readyCmd := getReadyCommand(spec, bs, cmd)
 		if readyCmd != nil {
+			if readyCmd.Kind == cmd.Kind {
+				removeCommandFromQueueByIndex(next, i)
+			}
 			return readyCmd
 		}
 	}
@@ -168,36 +239,13 @@ func getCommandToIssue(spec *Spec, next *State) *commandState {
 	return nil
 }
 
-// getFirstReadyInQueue finds the first command in a specific queue that
-// can be issued. Operates on next state only.
-func getFirstReadyInQueue(
-	spec *Spec,
-	next *State,
-	queueIdx int,
-) *commandState {
-	for i := 0; i < len(next.CommandQueues.Entries); i++ {
-		e := &next.CommandQueues.Entries[i]
-		if e.QueueIndex != queueIdx {
-			continue
-		}
-
-		cmd := &e.Command
-		bs := findBankStateByLocation(&next.BankStates, cmd.Location)
-		if bs == nil {
-			continue
-		}
-
-		readyCmd := getReadyCommand(spec, bs, cmd)
-		if readyCmd != nil {
-			// If the ready command kind matches the original, remove from next
-			if cmd.Kind == readyCmd.Kind {
-				removeCommandFromQueueByID(next, cmd.ID)
-			}
-			return readyCmd
-		}
-	}
-
-	return nil
+// removeCommandFromQueueByIndex removes a command entry at the given index
+// from the command queue.
+func removeCommandFromQueueByIndex(next *State, idx int) {
+	next.CommandQueues.Entries = append(
+		next.CommandQueues.Entries[:idx],
+		next.CommandQueues.Entries[idx+1:]...,
+	)
 }
 
 // removeCommandFromQueueByID removes a command entry with matching ID from
