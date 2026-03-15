@@ -160,20 +160,21 @@ Based on dependency analysis and human authorization (green light on: #477, #478
   5. Acceptance test build-order fix for DRAM
 - **Final**: 84 DRAM tests passing, all CI green on main
 
-### M61: Integer ID Migration — Phase 1: Core Types + ID Generator (IN PROGRESS)
-- **Status**: PLANNING (cycle 431)
-- **Scope**: Change MsgMeta.ID, MsgMeta.RspTo, EventBase.ID from string to uint64. Update sequentialIDGenerator to return uint64 directly. Update IsRsp() to check RspTo != 0. Update all map[string] keyed by IDs to map[uint64].
-- **Budget**: 8 cycles
-- **Human authorization**: "Green light" on issue #501
+### M61: Integer ID Migration ✅
+- **Status**: COMPLETE (cycle 432-436, ~5 cycles)
+- **PR**: #94, merged
+- **Scope**: Migrated ALL entity IDs from string to uint64 across all 7 subsystems in one pass: core types (MsgMeta, EventBase), ID generator, tracing (Task, Milestone), NOC, memory subsystem, Daisen, examples. 66 files changed.
+- **Budget**: 8 cycles (used ~5)
 
-### M62: Integer ID Migration — Phase 2: Tracing + NOC + Memory Subsystem (PLANNED)
-- **Scope**: Update tracing Task.ID/ParentID/Milestone.ID to uint64. Replace string concat derived IDs with fresh uint64 generation. Update NOC flit IDs, assembling state. Update all memory subsystem state ID fields and maps. Update Daisen queries.
-- **Budget**: 8 cycles
+### M62: DRAM Cross-Validation against DRAMSim3/Ramulator2 (NEXT)
+- **Status**: RESEARCH PHASE (cycle 436)
+- **Scope**: Cross-validate Akita's DRAM timing model against DRAMSim3 and Ramulator2 reference implementations. Produce tests comparing latency, bandwidth, and timing accuracy for DDR4, DDR5, HBM2 configurations.
+- **Budget**: TBD (pending research)
+- **Human authorization**: "Yes. Cross validation is needed." on issue #484
 
 ### Awaiting Human Authorization
 - **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Phased implementation plan ready (see issue #574). Awaiting explicit green light.
 - **React rewrite (#488)** — Depends on #482 merge. Awaiting green light.
-- **DRAM cross-validation (#484)** — Implementation complete (M58+M60). Further validation against DRAMSim3/Ramulator2 possible if desired.
 
 ### Housekeeping (Cycle 431)
 - Human gave "Green light" on Integer ID (#501)

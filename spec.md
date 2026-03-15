@@ -144,7 +144,11 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 ### Active (Authorized)
 
-21. **Integer-based IDs** (issue #501): **AUTHORIZED (human: "Green light").** Switch all string-based IDs (MsgMeta.ID, EventBase.ID, RspTo, state ID fields, tracing Task.ID/Milestone.ID) to uint64. Use fresh uint64 generation for derived IDs instead of string concatenation. Zero sentinel replaces empty string. ~50 files affected.
+24. **DRAM cross-validation** (issue #484): **AUTHORIZED (human: "Yes. Cross validation is needed.").** Cross-validate Akita's DRAM timing model against DRAMSim3 and Ramulator2 reference implementations.
+
+### Resolved
+
+21. ~~**Integer-based IDs**~~ (issue #501): **DONE in M61.** All entity IDs migrated from string to uint64 across all 7 subsystems (66 files).
 
 ### Active (Awaiting Human Authorization)
 
