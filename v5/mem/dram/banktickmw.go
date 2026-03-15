@@ -5,7 +5,9 @@ import (
 )
 
 type bankTickMW struct {
-	comp *modeling.Component[Spec, State]
+	comp      *modeling.Component[Spec, State]
+	Timing    Timing
+	CmdCycles map[CommandKind]int
 }
 
 // Tick runs tickBanks, issue, and tickSubTransQueue.
@@ -13,7 +15,7 @@ func (m *bankTickMW) Tick() bool {
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 
-	progress := tickBanks(&spec, next)
+	progress := tickBanks(&spec, m.CmdCycles, next)
 	progress = m.issue(&spec, next) || progress
 	progress = tickSubTransQueue(&spec, next) || progress
 
@@ -31,8 +33,8 @@ func (m *bankTickMW) issue(spec *Spec, next *State) bool {
 		return false
 	}
 
-	startCommand(spec, next, bs, cmd)
-	updateTiming(spec, next, cmd)
+	startCommand(m.CmdCycles, next, bs, cmd)
+	updateTiming(m.Timing, next, cmd)
 
 	return true
 }

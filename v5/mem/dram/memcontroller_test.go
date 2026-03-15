@@ -119,10 +119,9 @@ var _ = Describe("Bank Operations", func() {
 	})
 
 	It("should tick banks and count down", func() {
-		spec := &Spec{
-			CmdCycles: map[CommandKind]int{
-				CmdKindActivate: 5,
-			},
+		spec := &Spec{}
+		cmdCycles := map[CommandKind]int{
+			CmdKindActivate: 5,
 		}
 		state := &State{
 			BankStates: bankStatesFlat{
@@ -148,7 +147,8 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		progress := tickBanks(spec, state)
+		_ = cmdCycles // cmdCycles used by startCommand, not tickBanks
+		progress := tickBanks(spec, cmdCycles, state)
 		Expect(progress).To(BeTrue())
 		bs := &state.BankStates.Entries[0].Data
 		Expect(bs.CurrentCmd.CycleLeft).To(Equal(1))
@@ -187,8 +187,9 @@ var _ = Describe("Bank Operations", func() {
 			},
 		}
 
-		spec := &Spec{CmdCycles: map[CommandKind]int{}}
-		tickBanks(spec, state)
+		spec := &Spec{}
+		cmdCycles := map[CommandKind]int{}
+		tickBanks(spec, cmdCycles, state)
 
 		Expect(state.BankStates.Entries[0].Data.HasCurrentCmd).To(BeFalse())
 		Expect(state.Transactions[0].SubTransactions[0].Completed).To(BeTrue())
@@ -583,11 +584,11 @@ var _ = Describe("Open Page Policy", func() {
 			Location: Location{Row: 5, Rank: 0, BankGroup: 0, Bank: 0},
 		}
 
-		spec.CmdCycles = map[CommandKind]int{
+		cmdCycles := map[CommandKind]int{
 			CmdKindRead: 10,
 		}
 
-		startCommand(spec, state, bs, cmd)
+		startCommand(cmdCycles, state, bs, cmd)
 
 		// Bank should remain open
 		Expect(BankStateKind(bs.State)).To(Equal(BankStateOpen))
@@ -604,11 +605,11 @@ var _ = Describe("Open Page Policy", func() {
 			Location: Location{Row: 7, Rank: 0, BankGroup: 0, Bank: 0},
 		}
 
-		spec.CmdCycles = map[CommandKind]int{
+		cmdCycles := map[CommandKind]int{
 			CmdKindWrite: 10,
 		}
 
-		startCommand(spec, state, bs, cmd)
+		startCommand(cmdCycles, state, bs, cmd)
 
 		// Bank should remain open
 		Expect(BankStateKind(bs.State)).To(Equal(BankStateOpen))
@@ -625,11 +626,11 @@ var _ = Describe("Open Page Policy", func() {
 			Location: Location{Row: 5, Rank: 0, BankGroup: 0, Bank: 0},
 		}
 
-		spec.CmdCycles = map[CommandKind]int{
+		cmdCycles := map[CommandKind]int{
 			CmdKindReadPrecharge: 10,
 		}
 
-		startCommand(spec, state, bs, cmd)
+		startCommand(cmdCycles, state, bs, cmd)
 
 		// Bank should be closed
 		Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
@@ -645,11 +646,11 @@ var _ = Describe("Open Page Policy", func() {
 			Location: Location{Row: 5, Rank: 0, BankGroup: 0, Bank: 0},
 		}
 
-		spec.CmdCycles = map[CommandKind]int{
+		cmdCycles := map[CommandKind]int{
 			CmdKindWritePrecharge: 10,
 		}
 
-		startCommand(spec, state, bs, cmd)
+		startCommand(cmdCycles, state, bs, cmd)
 
 		// Bank should be closed
 		Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
@@ -727,12 +728,6 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 			NumBankGroup:         1,
 			NumBank:              2,
 			CommandQueueCapacity: 16,
-			CmdCycles: map[CommandKind]int{
-				CmdKindRead:          10,
-				CmdKindReadPrecharge: 10,
-				CmdKindActivate:      5,
-				CmdKindPrecharge:     5,
-			},
 		}
 		state = &State{
 			CommandQueues: commandQueueState{
@@ -862,14 +857,6 @@ var _ = Describe("Read/Write Queue Separation", func() {
 			WriteQueueSize:       4,
 			WriteHighWatermark:   4,
 			WriteLowWatermark:    2,
-			CmdCycles: map[CommandKind]int{
-				CmdKindRead:           10,
-				CmdKindReadPrecharge:  10,
-				CmdKindWrite:          10,
-				CmdKindWritePrecharge: 10,
-				CmdKindActivate:       5,
-				CmdKindPrecharge:      5,
-			},
 		}
 		state = &State{
 			CommandQueues: commandQueueState{

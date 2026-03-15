@@ -481,7 +481,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 
 	spec := b.buildSpec()
 	timing := b.generateTiming()
-	spec.Timing = timing
+	cmdCycles := b.buildCmdCycles()
 
 	initialState := State{
 		SubTransQueue: subTransQueueState{
@@ -513,7 +513,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		storage = mem.NewStorage(uint64(totalSize))
 	}
 
-	b.addMiddlewares(modelComp, storage)
+	b.addMiddlewares(modelComp, storage, timing, cmdCycles)
 
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
@@ -528,6 +528,8 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 func (b Builder) addMiddlewares(
 	modelComp *modeling.Component[Spec, State],
 	storage *mem.Storage,
+	timing Timing,
+	cmdCycles map[CommandKind]int,
 ) {
 	rMW := &respondMW{
 		comp:    modelComp,
@@ -537,7 +539,9 @@ func (b Builder) addMiddlewares(
 	modelComp.AddMiddleware(rMW)
 
 	btMW := &bankTickMW{
-		comp: modelComp,
+		comp:      modelComp,
+		Timing:    timing,
+		CmdCycles: cmdCycles,
 	}
 	modelComp.AddMiddleware(btMW)
 
@@ -551,7 +555,6 @@ func (b Builder) addMiddlewares(
 func (b Builder) buildSpec() Spec {
 	numAccessUnitBit, _ := log2(uint64(b.busWidth / 8 * b.burstLength))
 	addrMapping := b.buildAddressMapping()
-	cmdCycles := b.buildCmdCycles()
 
 	spec := b.buildTimingSpec()
 	spec.PagePolicy = b.spec.PagePolicy
@@ -579,7 +582,6 @@ func (b Builder) buildSpec() Spec {
 	b.applyAddrMapping(&spec, addrMapping)
 
 	spec.Log2AccessUnitSize = numAccessUnitBit
-	spec.CmdCycles = cmdCycles
 
 	return spec
 }
