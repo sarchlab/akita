@@ -141,7 +141,10 @@ func createTranslatedReq(
 }
 
 // restoreMemMsg reconstructs a concrete mem message from saved metadata.
-func restoreMemMsg(id uint64, src, dst sim.RemotePort, rspTo uint64, sendTaskID, recvTaskID uint64, typ string) sim.Msg {
+func restoreMemMsg(
+	id uint64, src, dst sim.RemotePort, rspTo uint64,
+	sendTaskID, recvTaskID uint64, typ string,
+) sim.Msg {
 	switch typ {
 	case "*mem.WriteReq":
 		m := &mem.WriteReq{}
