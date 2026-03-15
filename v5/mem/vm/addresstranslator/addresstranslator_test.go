@@ -278,7 +278,7 @@ var _ = Describe("Address Translator", func() {
 			Expect(updatedState.Transactions).NotTo(
 				ContainElement(
 					WithTransform(
-						func(ts transactionState) string { return ts.TranslationReqID },
+						func(ts transactionState) uint64 { return ts.TranslationReqID },
 						Equal(transReq1.ID),
 					),
 				),

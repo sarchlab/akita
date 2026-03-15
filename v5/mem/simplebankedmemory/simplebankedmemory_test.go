@@ -117,7 +117,7 @@ type bandwidthAgent struct {
 
 	port         sim.Port
 	completed    int
-	completedIDs []string
+	completedIDs []uint64
 }
 
 func newBandwidthAgent(name string) *bandwidthAgent {
@@ -194,7 +194,7 @@ func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
 
 func collectLatency(
 	agent *bandwidthAgent,
-	startCycles map[string]int,
+	startCycles map[uint64]int,
 	currentCycle int,
 	processed *int,
 ) float64 {
@@ -385,7 +385,7 @@ func Example() {
 	srcRemote := agent.port.AsRemote()
 	dstRemote := topPort.AsRemote()
 
-	startCycles := make(map[string]int)
+	startCycles := make(map[uint64]int)
 	var pendingReq *mem.ReadReq
 	requestsSent := 0
 	cycles := 0

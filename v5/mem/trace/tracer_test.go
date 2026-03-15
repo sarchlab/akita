@@ -92,7 +92,7 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 
 	// Create a task
 	task := tracing.Task{
-		ID:       "test_task_1",
+		ID:       1,
 		Location: "test_location",
 		What:     "read",
 		Detail:   req,
@@ -165,7 +165,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 
 	// Create a task with a step
 	task := tracing.Task{
-		ID:       "test_task_2",
+		ID:       2,
 		Location: "test_location",
 		What:     "write",
 		Detail:   req,
@@ -215,7 +215,7 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 
 	// Create a task
 	task := tracing.Task{
-		ID:       "test_task_3",
+		ID:       3,
 		Location: "memory_controller",
 		What:     "read",
 		Detail:   req,
@@ -294,7 +294,7 @@ func (suite *TracerTestSuite) verifyCompleteStep(task tracing.Task) {
 func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 	// Create a task without AccessReq detail
 	task := tracing.Task{
-		ID:       "test_task_4",
+		ID:       4,
 		Location: "test_location",
 		What:     "non_memory",
 		Detail:   "not_an_access_req",
@@ -328,8 +328,8 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 func (suite *TracerTestSuite) TestAddMilestone() {
 	// AddMilestone should do nothing for memory tracer
 	milestone := tracing.Milestone{
-		ID:       "milestone_1",
-		TaskID:   "task_1",
+		ID:       10,
+		TaskID:   11,
 		Kind:     tracing.MilestoneKindHardwareResource,
 		What:     "resource_acquired",
 		Location: "test_location",
@@ -367,7 +367,7 @@ func TestLoggerTracerStillWorks(t *testing.T) {
 
 	// Test that the logger tracer still works
 	task := tracing.Task{
-		ID:       "logger_test",
+		ID:       20,
 		Location: "test_loc",
 		What:     "test_what",
 		Detail:   req,
@@ -387,8 +387,8 @@ func TestLoggerTracerStillWorks(t *testing.T) {
 
 	// Add milestone (should do nothing)
 	milestone := tracing.Milestone{
-		ID:       "test_milestone",
-		TaskID:   "logger_test",
+		ID:       30,
+		TaskID:   20,
 		Kind:     tracing.MilestoneKindOther,
 		What:     "test",
 		Location: "test_loc",

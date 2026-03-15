@@ -24,7 +24,7 @@ func buildTestMMU(engine sim.EventScheduler, name string) *modeling.Component[Sp
 		Build(name)
 }
 
-func makeTestState(reqID string) State {
+func makeTestState(reqID uint64) State {
 	return State{
 		WalkingTranslations: []transactionState{
 			{
@@ -65,7 +65,7 @@ func makeTestState(reqID string) State {
 	}
 }
 
-func verifyState(t *testing.T, got State, reqID string) {
+func verifyState(t *testing.T, got State, reqID uint64) {
 	t.Helper()
 
 	if len(got.WalkingTranslations) != 1 {
@@ -73,7 +73,7 @@ func verifyState(t *testing.T, got State, reqID string) {
 			len(got.WalkingTranslations))
 	}
 	if got.WalkingTranslations[0].ReqID != reqID {
-		t.Errorf("expected req ID %s, got %s",
+		t.Errorf("expected req ID %d, got %d",
 			reqID, got.WalkingTranslations[0].ReqID)
 	}
 	if got.WalkingTranslations[0].CycleLeft != 5 {

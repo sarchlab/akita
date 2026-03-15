@@ -109,13 +109,13 @@ var _ = Describe("End Point", func() {
 		}
 
 		flit0 := &messaging.Flit{}
-		flit0.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit0.ID = sim.GetIDGenerator().Generate()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = *msg
 		flit1 := &messaging.Flit{}
-		flit1.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 1, msg.Meta().ID, sim.GetIDGenerator().Generate())
+		flit1.ID = sim.GetIDGenerator().Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2

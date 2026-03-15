@@ -112,7 +112,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -137,7 +137,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := &messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.Dst = port1.AsRemote()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
@@ -145,7 +145,7 @@ var _ = Describe("Switch", func() {
 		// Fill pipeline so it can't accept
 		next := sw.GetNextState()
 		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
-			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: "t"}},
+			{Lane: 0, Stage: 0, Item: routedFlit{TaskID: 1}},
 		}
 
 		port1.EXPECT().PeekIncoming().Return(flit)
@@ -161,8 +161,8 @@ var _ = Describe("Switch", func() {
 		next := sw.GetNextState()
 		next.PortComplexes[0].Pipeline.Stages = []queueing.PipelineStage[routedFlit]{
 			{Lane: 0, Stage: 0, Item: routedFlit{
-				Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: "flit1"}},
-				TaskID: "t1",
+				Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: 100}},
+				TaskID: 101,
 			}, CycleLeft: 0},
 		}
 
@@ -182,7 +182,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -192,7 +192,7 @@ var _ = Describe("Switch", func() {
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
 			Elements: []routedFlit{
-				{Flit: flit, TaskID: "flit", RouteTo: dstPort.AsRemote()},
+				{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()},
 			},
 		}
 
@@ -215,7 +215,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -225,14 +225,14 @@ var _ = Describe("Switch", func() {
 			BufferName: "LocalPort1RouteBuf",
 			Cap:        1,
 			Elements: []routedFlit{
-				{Flit: flit, TaskID: "flit", RouteTo: dstPort.AsRemote()},
+				{Flit: flit, TaskID: 200, RouteTo: dstPort.AsRemote()},
 			},
 		}
 		next.PortComplexes[0].ForwardBuffer = queueing.Buffer[routedFlit]{
 			BufferName: "LocalPort1FwdBuf",
 			Cap:        1,
 			Elements: []routedFlit{
-				{Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: "existing"}}},
+				{Flit: messaging.Flit{MsgMeta: sim.MsgMeta{ID: 300}}},
 			},
 		}
 
@@ -248,7 +248,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		flit.OutputBufIdx = 1
@@ -278,7 +278,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 		flit.OutputBufIdx = 1
@@ -295,7 +295,7 @@ var _ = Describe("Switch", func() {
 		next.PortComplexes[1].SendOutBuffer = queueing.Buffer[messaging.Flit]{
 			BufferName: "LocalPort2SendBuf",
 			Cap:        1,
-			Elements:   []messaging.Flit{{MsgMeta: sim.MsgMeta{ID: "full"}}},
+			Elements:   []messaging.Flit{{MsgMeta: sim.MsgMeta{ID: 400}}},
 		}
 
 		madeProgress := rfsMW.forward()
@@ -310,7 +310,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 
@@ -339,7 +339,7 @@ var _ = Describe("Switch", func() {
 			Dst: dstPort.AsRemote(),
 		}
 		flit := messaging.Flit{}
-		flit.ID = fmt.Sprintf("flit-%d-msg-%s-%s", 0, msg.ID, sim.GetIDGenerator().Generate())
+		flit.ID = sim.GetIDGenerator().Generate()
 		flit.TrafficClass = reflect.TypeOf(msg).String()
 		flit.Msg = msg
 

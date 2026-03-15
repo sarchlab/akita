@@ -210,7 +210,7 @@ var _ = Describe("WriteBufferStage", func() {
 	Context("processing responses", func() {
 		It("should process write done response", func() {
 			evictWrite := &mem.WriteReq{}
-			evictWrite.ID = "write-1"
+			evictWrite.ID = 9001
 			evictWrite.TrafficClass = "mem.WriteReq"
 
 			read := &mem.ReadReq{}
@@ -229,7 +229,7 @@ var _ = Describe("WriteBufferStage", func() {
 			next.InflightEvictionIndices = []int{0}
 
 			rsp := &mem.WriteDoneRsp{}
-			rsp.RspTo = "write-1"
+			rsp.RspTo = 9001
 			rsp.TrafficClass = "mem.WriteDoneRsp"
 
 			bottomPort.EXPECT().PeekIncoming().Return(rsp)
