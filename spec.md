@@ -142,31 +142,30 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
-### Active
+### Active (Awaiting Human Authorization)
 
-21. **Integer-based IDs** (issue #501): String-based IDs cost allocation and GC time. Consider switching to integer (uint64) IDs for MsgMeta.ID, EventBase.ID, and RspTo matching. Discussion needed.
+21. **Integer-based IDs** (issue #501): String-based IDs cost allocation and GC time. Consider switching to integer (uint64) IDs for MsgMeta.ID, EventBase.ID, and RspTo matching. Research complete, awaiting green light.
 
-6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
+22. **Merge AkitaRTM and Daisen** (issue #482): Full merge into unified frontend with live/replay modes, single SQLite interface. Human conceptually agrees, awaiting explicit authorization.
 
-7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
+23. **React rewrite** (issue #488): Rewrite merged frontend with React. Depends on #482. Awaiting authorization.
+
+### Deferred
 
 8. **Global state manager** (issue #326): Long-term direction. Deferred.
 
+### Resolved
+
+6. ~~**Cache unification**~~ (issues #321, #336): **DONE in M35.**
+7. ~~**Buffers and pipelines in state**~~ (issue #343): **DONE in M36-M38.**
 9. ~~**Default spec, rename simplecache → writethroughcache, freq in spec**~~ (issue #384): **DONE in M40.**
-
-10. **Event-driven component support** (issue #389): Some components are not ticking components. They schedule events in the far future and handle events directly. Need a solution within the Spec+State+Middleware model. **Human rejected timer/tick-based approaches** — must be real event-driven scheduling for performance. Design A (separate EventComponent) or Design B (unified with event slots) from Iris's research. See TrioSim for real-world need.
-
-11. **Deep performance evaluation** (issue #387): **FINDINGS**: NOC tests 3-12x slower than upstream v4. Root cause: endpoint `shallowCopyState` allocates 278GB (123x more than v4), causing 95% of CPU in GC. Top bottlenecks: (1) endpoint state copy, (2) flit serialization/deserialization, (3) switch generic state-copy pattern with buffer adapters.
-
-12. **Restore test sizes to upstream** (issue #385): `acceptance_test.py` has `num-access=1000` but upstream has `10000` — **10x reduction found**. Also missing a set of 6 duplicate writeback cache tests that exist in upstream. Must restore.
-
-13. **Fix duplicated CI runs** (issue #398): Every PR triggers 2 sets of CI tasks because the workflow triggers on both `push` and `pull_request`. Fix: restrict `push` trigger to `main` branch only.
-
-14. ~~**Switch code simplification**~~ (issues #402-#406): **DONE in M42.** All 6 steps complete, PR #71 merged.
-
-15. **Repo-wide simplification** (issue #408): The entire repo has accumulated wrappers and indirections from recent refactoring. Simplicity is the first priority. Search for and eliminate all unnecessary complexity. Also search for residues from double buffering implementation.
-
-16. **Consolidate stateutil into queueing** (issue #414): Buffer and Pipeline are duplicated in `stateutil` and `queueing`. Remove `stateutil` package entirely, move generic `Buffer[T]` and `Pipeline[T]` into `queueing`. Also remove `Pop` and `PopTyped` methods — consumers access `Elements` directly.
+10. ~~**Event-driven component support**~~ (issue #389): **DONE in M46.**
+11. ~~**Deep performance evaluation**~~ (issue #387): **RESOLVED — NOC at v4 parity.** Peak memory 43-79x better than v4. Total allocations down from 283.7 GB to 5.63 GB.
+12. ~~**Restore test sizes to upstream**~~ (issue #385): **DONE in M41.**
+13. ~~**Fix duplicated CI runs**~~ (issue #398): **DONE in M41.**
+14. ~~**Switch code simplification**~~ (issues #402-#406): **DONE in M42.**
+15. ~~**Repo-wide simplification**~~ (issue #408): **DONE in M44.**
+16. ~~**Consolidate stateutil into queueing**~~ (issue #414): **DONE in M43.**
 
 ### CI Infrastructure
 
