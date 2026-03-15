@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 385)
+## Current State (Cycle 389)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -21,7 +21,8 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
-**M53**: 🔄 NEXT — /mem/mem flattening (#486)
+**M53**: ✅ COMPLETE — /mem/mem flattening (4 cycles budgeted, ~4 used)
+**M54**: 🔄 NEXT — Move directconnection to noc (#477)
 
 ---
 
@@ -103,15 +104,15 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Status**: COMPLETE (cycle 381-385, ~4 cycles)
 - **PR**: #86, merged
 
-### M53: /mem/mem flattening (#486)
-- **Status**: NEXT
-- **Budget**: 4 cycles
-- **Scope**: Move Go files from `v5/mem/mem/` to `v5/mem/`, update ~63 import paths. Remove empty `mem/mem/` directory. All tests must pass. CI must pass.
+### M53: /mem/mem flattening (#486) ✅
+- **Status**: COMPLETE (cycle 385-389, ~4 cycles)
+- **PR**: #87, merged
+- **Scope**: Moved 12 Go files from `v5/mem/mem/` to `v5/mem/`, updated 65 import paths
 
 ### M54: Move directconnection to noc (#477)
-- **Status**: Planned
+- **Status**: NEXT
 - **Budget**: 3 cycles
-- **Scope**: Move `v5/sim/directconnection/` to `v5/noc/directconnection/`, update ~20 import paths
+- **Scope**: Move `v5/sim/directconnection/` to `v5/noc/directconnection/`, update ~22 import paths. Pure mechanical refactor.
 
 ### M55: Integer time (#480)
 - **Status**: Planned
