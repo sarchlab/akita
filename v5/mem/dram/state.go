@@ -78,6 +78,7 @@ type bankStatesFlat struct {
 type queueEntry struct {
 	QueueIndex int          `json:"queue_index"`
 	Command    commandState `json:"command"`
+	IsWrite    bool         `json:"is_write"`
 }
 
 // commandQueueState is a serializable representation of CommandQueues.
@@ -85,6 +86,7 @@ type commandQueueState struct {
 	NumQueues      int          `json:"num_queues"`
 	Entries        []queueEntry `json:"entries"`
 	NextQueueIndex int          `json:"next_queue_index"`
+	WriteDrainMode bool         `json:"write_drain_mode"`
 }
 
 // subTransQueueState is a list of sub-transaction references.

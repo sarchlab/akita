@@ -308,6 +308,30 @@ func (b Builder) WithNumCol(n int) Builder {
 	return b
 }
 
+// WithReadQueueSize sets the read queue size for R/W queue separation.
+func (b Builder) WithReadQueueSize(n int) Builder {
+	b.spec.ReadQueueSize = n
+	return b
+}
+
+// WithWriteQueueSize sets the write queue size for R/W queue separation.
+func (b Builder) WithWriteQueueSize(n int) Builder {
+	b.spec.WriteQueueSize = n
+	return b
+}
+
+// WithWriteHighWatermark sets the write high watermark for drain mode.
+func (b Builder) WithWriteHighWatermark(n int) Builder {
+	b.spec.WriteHighWatermark = n
+	return b
+}
+
+// WithWriteLowWatermark sets the write low watermark for drain mode.
+func (b Builder) WithWriteLowWatermark(n int) Builder {
+	b.spec.WriteLowWatermark = n
+	return b
+}
+
 // WithTopPort sets the top port.
 func (b Builder) WithTopPort(port sim.Port) Builder {
 	b.topPort = port
@@ -542,6 +566,10 @@ func (b Builder) buildSpec() Spec {
 	spec.NumCol = b.numCol
 	spec.TransactionQueueSize = b.transactionQueueSize
 	spec.CommandQueueCapacity = b.commandQueueSize
+	spec.ReadQueueSize = b.spec.ReadQueueSize
+	spec.WriteQueueSize = b.spec.WriteQueueSize
+	spec.WriteHighWatermark = b.spec.WriteHighWatermark
+	spec.WriteLowWatermark = b.spec.WriteLowWatermark
 	spec.HasAddrConverter = b.hasAddrConverter
 	spec.InterleavingSize = b.interleavingSize
 	spec.TotalNumOfElements = b.totalNumOfElements
