@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 403)
+## Current State (Cycle 409)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -25,7 +25,8 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 **M54**: ✅ COMPLETE — Move directconnection to noc (#477) (3 cycles budgeted, ~3 used)
 **M55**: ✅ COMPLETE — Integer time representation (#480) (6 cycles budgeted, ~4 used)
 **M56**: ✅ COMPLETE — Event serialization (#479) (6 cycles budgeted, ~4 used)
-**M57**: 🔄 NEXT — Unified control protocol (#487)
+**M57**: ✅ COMPLETE — Unified control protocol (#487) (6 cycles budgeted, ~4 used)
+**M58**: 🔄 NEXT — DRAM improvements phase 1: predefined specs, open-page policy, FR-FCFS scheduling (#484)
 
 ---
 
@@ -127,15 +128,27 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **PR**: #90, merged
 - **Scope**: Replaced Handler() with HandlerID() string + HandlerRegistry. Made EventBase fully JSON-serializable. All event-creating code uses handler name strings. SerialEngine and ParallelEngine dispatch via registry lookup.
 
-### M57: Unified control protocol (#487)
-- **Status**: Planned
-- **Budget**: 6 cycles
-- **Scope**: Define single ControlReq/ControlRsp with enum commands for all memory components.
+### M57: Unified control protocol (#487) ✅
+- **Status**: COMPLETE (cycle 404-408, ~4 cycles)
+- **PR**: #91, merged
+- **Scope**: Replaced 3 incompatible control patterns (ControlMsg/ControlMsgRsp, cache.FlushReq/FlushRsp/RestartReq/RestartRsp, tlb.FlushReq/FlushRsp/RestartReq/RestartRsp) with single ControlReq/ControlRsp + ControlCommand enum.
 
-### M58: DRAM controller improvements (#484)
-- **Status**: Planned
-- **Budget**: TBD (large)
-- **Scope**: Support wider range of DRAM types (HBM2, HBM3, GDDR6, DDR4/5). Use spec structs per human direction.
+### M58: DRAM improvements — predefined specs + open-page + FR-FCFS (#484)
+- **Status**: NEXT
+- **Budget**: 8 cycles
+- **Scope**:
+  1. Add predefined Spec structs for DDR4, HBM2, HBM3, GDDR6 with accurate timing parameters (from JEDEC/datasheet references)
+  2. Add `PagePolicy` field to Spec (ClosePage/OpenPage), implement open-page command creation
+  3. Implement FR-FCFS (First-Ready First-Come-First-Served) scheduling to replace round-robin
+  4. Add read/write queue separation with configurable drain watermarks
+  5. Add DDR5, HBM3E protocol enum + specs
+  6. Update tests to cover new page policies and scheduling
+- **Human constraint**: Use spec structs, NOT config files
+
+### M59: DRAM improvements — validation + advanced features (#484)
+- **Status**: Future
+- **Budget**: TBD
+- **Scope**: Validation against DRAMSim3/Ramulator2 traces, statistics output, per-bank refresh, multiple address mappings
 
 ### Future topics
 - Integer ID (#501) — pending human authorization
