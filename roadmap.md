@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 409)
+## Current State (Cycle 413)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -26,7 +26,7 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 **M55**: ✅ COMPLETE — Integer time representation (#480) (6 cycles budgeted, ~4 used)
 **M56**: ✅ COMPLETE — Event serialization (#479) (6 cycles budgeted, ~4 used)
 **M57**: ✅ COMPLETE — Unified control protocol (#487) (6 cycles budgeted, ~4 used)
-**M58**: 🔄 NEXT — DRAM improvements phase 1: predefined specs, open-page policy, FR-FCFS scheduling (#484)
+**M58**: ✅ COMPLETE — DRAM improvements phase 1: predefined specs, open-page policy, FR-FCFS scheduling (#484) (8 cycles budgeted, ~4 used)
 
 ---
 
@@ -133,17 +133,17 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **PR**: #91, merged
 - **Scope**: Replaced 3 incompatible control patterns (ControlMsg/ControlMsgRsp, cache.FlushReq/FlushRsp/RestartReq/RestartRsp, tlb.FlushReq/FlushRsp/RestartReq/RestartRsp) with single ControlReq/ControlRsp + ControlCommand enum.
 
-### M58: DRAM improvements — predefined specs + open-page + FR-FCFS (#484)
-- **Status**: NEXT
-- **Budget**: 8 cycles
+### M58: DRAM improvements — predefined specs + open-page + FR-FCFS (#484) ✅
+- **Status**: COMPLETE (cycle 409-413, ~4 cycles)
+- **PR**: Merged to main (tara/dram-tests)
 - **Scope**:
-  1. Add predefined Spec structs for DDR4, HBM2, HBM3, GDDR6 with accurate timing parameters (from JEDEC/datasheet references)
-  2. Add `PagePolicy` field to Spec (ClosePage/OpenPage), implement open-page command creation
-  3. Implement FR-FCFS (First-Ready First-Come-First-Served) scheduling to replace round-robin
-  4. Add read/write queue separation with configurable drain watermarks
-  5. Add DDR5, HBM3E protocol enum + specs
-  6. Update tests to cover new page policies and scheduling
-- **Human constraint**: Use spec structs, NOT config files
+  1. Added predefined Spec structs for DDR4, DDR5, HBM2, HBM3, GDDR6 with timing parameters
+  2. Added `PagePolicy` field to Spec (ClosePage/OpenPage), implemented open-page command creation
+  3. Implemented FR-FCFS scheduling (row-buffer hit priority, then FCFS)
+  4. Added read/write queue separation with configurable drain watermarks
+  5. Added DDR5, HBM3, LPDDR5, HBM3E protocol enums
+  6. 63 tests passing (46 new)
+- **Human constraint**: Used spec structs, NOT config files
 
 ### M59: DRAM improvements — validation + advanced features (#484)
 - **Status**: Future
