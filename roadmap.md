@@ -167,9 +167,9 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Budget**: 8 cycles (used ~5)
 
 ### M62: DRAM Cross-Validation against DRAMSim3/Ramulator2 (NEXT)
-- **Status**: RESEARCH PHASE (cycle 436)
-- **Scope**: Cross-validate Akita's DRAM timing model against DRAMSim3 and Ramulator2 reference implementations. Produce tests comparing latency, bandwidth, and timing accuracy for DDR4, DDR5, HBM2 configurations.
-- **Budget**: TBD (pending research)
+- **Status**: READY FOR IMPLEMENTATION (cycle 437)
+- **Scope**: Add `timing_crossvalidation_test.go` with 4-tier validation: (1) timing formula verification against DRAMSim3/Ramulator2 formulas for DDR4/DDR5/HBM2, (2) single-request latency tests, (3) multi-request behavioral tests, (4) bandwidth sanity tests. Pure Go, no external dependencies. Details in tbc-db issue #582.
+- **Budget**: 6 cycles
 - **Human authorization**: "Yes. Cross validation is needed." on issue #484
 
 ### Awaiting Human Authorization
