@@ -1,7 +1,6 @@
 package endpoint
 
 import (
-	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"

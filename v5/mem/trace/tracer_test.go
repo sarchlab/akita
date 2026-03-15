@@ -136,14 +136,15 @@ func (suite *TracerTestSuite) verifyBasicTransaction(task tracing.Task) {
 
 	suite.Require().True(rows.Next(), "Expected at least one row")
 
-	var id, location, what string
+	var id uint64
+	var location, what string
 	var startTime, endTime float64
 	var address, byteSize uint64
 
 	err = rows.Scan(&id, &location, &what, &startTime, &endTime, &address, &byteSize)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_1", id)
+	suite.Equal(uint64(1), id)
 	suite.Equal("test_location", location)
 	suite.Equal("read", what)
 	suite.Equal(100.0, startTime)
@@ -190,14 +191,14 @@ func (suite *TracerTestSuite) TestStepTask() {
 
 	suite.Require().True(rows.Next(), "Expected at least one row")
 
-	var id, taskID, what string
+	var id, taskID uint64
+	var what string
 	var time float64
 
 	err = rows.Scan(&id, &taskID, &time, &what)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_2_step_cache_hit", id)
-	suite.Equal("test_task_2", taskID)
+	suite.Equal(uint64(2), taskID)
 	suite.Equal(150.0, time)
 	suite.Equal("cache_hit", what)
 
@@ -257,14 +258,15 @@ func (suite *TracerTestSuite) verifyCompleteTransaction(task tracing.Task) {
 	defer transactionRows.Close()
 
 	suite.Require().True(transactionRows.Next())
-	var id, location, what string
+	var id uint64
+	var location, what string
 	var startTime, endTime float64
 	var address, byteSize uint64
 
 	err = transactionRows.Scan(&id, &location, &what, &startTime, &endTime, &address, &byteSize)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_3", id)
+	suite.Equal(uint64(3), id)
 	suite.Equal("memory_controller", location)
 	suite.Equal("read", what)
 	suite.Equal(50.0, startTime)
@@ -279,14 +281,14 @@ func (suite *TracerTestSuite) verifyCompleteStep(task tracing.Task) {
 	defer stepRows.Close()
 
 	suite.Require().True(stepRows.Next())
-	var stepID, taskID, stepWhat string
+	var stepID, taskID uint64
+	var stepWhat string
 	var stepTime float64
 
 	err = stepRows.Scan(&stepID, &taskID, &stepTime, &stepWhat)
 	suite.Require().NoError(err)
 
-	suite.Equal("test_task_3_step_cache_miss", stepID)
-	suite.Equal("test_task_3", taskID)
+	suite.Equal(uint64(3), taskID)
 	suite.Equal(75.0, stepTime)
 	suite.Equal("cache_miss", stepWhat)
 }

@@ -1,7 +1,6 @@
 package switches
 
 import (
-	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
