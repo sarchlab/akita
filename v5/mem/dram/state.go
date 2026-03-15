@@ -35,6 +35,8 @@ type State struct {
 	TotalWriteLatencyCycles uint64 `json:"total_write_latency_cycles"`
 	CompletedReads          uint64 `json:"completed_reads"`
 	CompletedWrites         uint64 `json:"completed_writes"`
+	BytesRead               uint64 `json:"bytes_read"`
+	BytesWritten            uint64 `json:"bytes_written"`
 }
 
 // subTransRef identifies a SubTransaction by its parent transaction index
@@ -60,6 +62,7 @@ type transactionState struct {
 	WriteMsg        mem.WriteReq    `json:"write_msg"`
 	InternalAddress uint64          `json:"internal_address"`
 	SubTransactions []subTransState `json:"sub_transactions"`
+	ArrivalTick     uint64          `json:"arrival_tick"`
 }
 
 // commandState is a serializable representation of a Command.

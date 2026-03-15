@@ -79,6 +79,8 @@ func (m *respondMW) finalizeWriteTrans(
 
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
+		state.TotalWriteLatencyCycles += state.TickCount - t.ArrivalTick
+		state.BytesWritten += uint64(len(t.WriteMsg.Data))
 		state.CompletedWrites++
 		m.removeTransaction(state, i)
 		return true
@@ -109,6 +111,8 @@ func (m *respondMW) finalizeReadTrans(
 
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
+		state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
+		state.BytesRead += uint64(t.ReadMsg.AccessByteSize)
 		state.CompletedReads++
 		m.removeTransaction(state, i)
 		return true

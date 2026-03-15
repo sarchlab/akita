@@ -24,3 +24,19 @@ func AverageWriteLatency(s *State) float64 {
 	}
 	return float64(s.TotalWriteLatencyCycles) / float64(s.CompletedWrites)
 }
+
+// ReadBandwidth returns the read bandwidth in bytes per cycle.
+func ReadBandwidth(s *State) float64 {
+	if s.TotalCycles == 0 {
+		return 0
+	}
+	return float64(s.BytesRead) / float64(s.TotalCycles)
+}
+
+// WriteBandwidth returns the write bandwidth in bytes per cycle.
+func WriteBandwidth(s *State) float64 {
+	if s.TotalCycles == 0 {
+		return 0
+	}
+	return float64(s.BytesWritten) / float64(s.TotalCycles)
+}
