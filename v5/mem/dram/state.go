@@ -12,6 +12,31 @@ type State struct {
 	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
 	CommandQueues commandQueueState  `json:"command_queues"`
 	BankStates    bankStatesFlat     `json:"bank_states"`
+
+	// TickCount tracks the global cycle counter for tFAW enforcement.
+	TickCount uint64 `json:"tick_count"`
+
+	// RefreshCycleCounter counts cycles since last refresh.
+	RefreshCycleCounter int `json:"refresh_cycle_counter"`
+	// RefreshInProgress is true when a refresh is currently blocking.
+	RefreshInProgress bool `json:"refresh_in_progress"`
+	// RefreshCyclesRemaining counts remaining cycles of the current refresh.
+	RefreshCyclesRemaining int `json:"refresh_cycles_remaining"`
+
+	// Statistics
+	TotalReadCommands       uint64 `json:"total_read_commands"`
+	TotalWriteCommands      uint64 `json:"total_write_commands"`
+	TotalActivates          uint64 `json:"total_activates"`
+	TotalPrecharges         uint64 `json:"total_precharges"`
+	RowBufferHits           uint64 `json:"row_buffer_hits"`
+	RowBufferMisses         uint64 `json:"row_buffer_misses"`
+	TotalCycles             uint64 `json:"total_cycles"`
+	TotalReadLatencyCycles  uint64 `json:"total_read_latency_cycles"`
+	TotalWriteLatencyCycles uint64 `json:"total_write_latency_cycles"`
+	CompletedReads          uint64 `json:"completed_reads"`
+	CompletedWrites         uint64 `json:"completed_writes"`
+	BytesRead               uint64 `json:"bytes_read"`
+	BytesWritten            uint64 `json:"bytes_written"`
 }
 
 // subTransRef identifies a SubTransaction by its parent transaction index
@@ -37,6 +62,7 @@ type transactionState struct {
 	WriteMsg        mem.WriteReq    `json:"write_msg"`
 	InternalAddress uint64          `json:"internal_address"`
 	SubTransactions []subTransState `json:"sub_transactions"`
+	ArrivalTick     uint64          `json:"arrival_tick"`
 }
 
 // commandState is a serializable representation of a Command.
@@ -66,12 +92,19 @@ type bankState struct {
 	CyclesToCmdAvailable map[string]int `json:"cycles_to_cmd_available"`
 }
 
+// rankActivateHistory stores the last 4 activate timestamps for a rank.
+type rankActivateHistory struct {
+	Rank       int    `json:"rank"`
+	Timestamps []uint64 `json:"timestamps"`
+}
+
 // bankStatesFlat is a flattened representation of the 3D bank array.
 type bankStatesFlat struct {
-	NumRanks      int         `json:"num_ranks"`
-	NumBankGroups int         `json:"num_bank_groups"`
-	NumBanks      int         `json:"num_banks"`
-	Entries       []bankEntry `json:"entries"`
+	NumRanks           int                    `json:"num_ranks"`
+	NumBankGroups      int                    `json:"num_bank_groups"`
+	NumBanks           int                    `json:"num_banks"`
+	Entries            []bankEntry            `json:"entries"`
+	ActivateHistories  []rankActivateHistory  `json:"activate_histories"`
 }
 
 // queueEntry is a command state tagged with its queue index.
@@ -133,16 +166,22 @@ func cmdKindToString(k CommandKind) string {
 
 // initBankStatesFlat creates initial bank states for all banks (all closed).
 func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
-	flat := bankStatesFlat{
-		NumRanks:      numRanks,
-		NumBankGroups: numBankGroups,
-		NumBanks:      numBanks,
-		Entries:       make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
+	histories := make([]rankActivateHistory, numRanks)
+	for i := range numRanks {
+		histories[i] = rankActivateHistory{Rank: i}
 	}
 
-	for i := 0; i < numRanks; i++ {
-		for j := 0; j < numBankGroups; j++ {
-			for k := 0; k < numBanks; k++ {
+	flat := bankStatesFlat{
+		NumRanks:          numRanks,
+		NumBankGroups:     numBankGroups,
+		NumBanks:          numBanks,
+		Entries:           make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
+		ActivateHistories: histories,
+	}
+
+	for i := range numRanks {
+		for j := range numBankGroups {
+			for k := range numBanks {
 				flat.Entries = append(flat.Entries, bankEntry{
 					Rank:      i,
 					BankGroup: j,

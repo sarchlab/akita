@@ -77,7 +77,16 @@ func buildEnvironment() {
 		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 
+	dram := idealmemcontroller.MakeBuilder().
+		WithEngine(engine).
+		WithNewStorage(4 * mem.GB).
+		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
+		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		Build("DRAM")
+
 	addressToPortMapper := new(mem.SinglePortMapper)
+	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
+
 	builder := writeback.MakeBuilder().
 		WithEngine(engine).
 		WithAddressToPortMapper(addressToPortMapper).
@@ -92,14 +101,6 @@ func buildEnvironment() {
 	writeBackCache := builder.Build("Cache")
 
 	setupTracing(writeBackCache)
-
-	dram := idealmemcontroller.MakeBuilder().
-		WithEngine(engine).
-		WithNewStorage(4 * mem.GB).
-		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
-		Build("DRAM")
-	addressToPortMapper.Port = dram.GetPortByName("Top").AsRemote()
 
 	agent.LowModule = writeBackCache.GetPortByName("Top")
 

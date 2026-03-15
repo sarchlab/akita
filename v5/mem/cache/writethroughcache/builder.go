@@ -398,7 +398,6 @@ func (b *Builder) resolveLegacyMapper() {
 	default:
 		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
-
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

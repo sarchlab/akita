@@ -50,6 +50,7 @@ func (m *parseTopMW) parseTop(spec *Spec, next *State) bool {
 		return false
 	}
 
+	ts.ArrivalTick = next.TickCount
 	next.Transactions = append(next.Transactions, ts)
 	pushSubTrans(next, transIdx)
 	m.topPort.RetrieveIncoming()

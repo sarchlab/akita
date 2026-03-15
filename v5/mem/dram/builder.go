@@ -95,6 +95,7 @@ type Builder struct {
 	tRC        int
 	tRRDL      int
 	tRRDS      int
+	tFAW       int
 	tRCDRD     int
 	tRCDWR     int
 	tREFI      int
@@ -184,6 +185,7 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	b.tPPD = spec.TPPD
 	b.tRRDL = spec.TRRDL
 	b.tRRDS = spec.TRRDS
+	b.tFAW = spec.TFAW
 	b.tRCDRD = spec.TRCDRD
 	b.tRCDWR = spec.TRCDWR
 	b.tREFI = spec.TREFI
@@ -611,6 +613,7 @@ func (b Builder) buildTimingSpec() Spec {
 		TRC:        b.tRC,
 		TRRDS:      b.tRRDS,
 		TRRDL:      b.tRRDL,
+		TFAW:       b.tFAW,
 		TRCDRD:     b.tRCDRD,
 		TRCDWR:     b.tRCDWR,
 		TREFI:      b.tREFI,
@@ -1015,7 +1018,7 @@ func log2(n uint64) (uint64, bool) {
 	oneCount := 0
 	onePos := uint64(0)
 
-	for i := uint64(0); i < 64; i++ {
+	for i := range uint64(64) {
 		if n&(1<<i) > 0 {
 			onePos = i
 			oneCount++
@@ -1025,9 +1028,3 @@ func log2(n uint64) (uint64, bool) {
 	return onePos, oneCount == 1
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
