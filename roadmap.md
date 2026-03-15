@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 419)
+## Current State (Cycle 429)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -12,12 +12,9 @@ All 50 milestones from the original component model refactoring are complete. Al
 
 ### Research Phase: ✅ RESEARCH COMPLETE
 
-All 13 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484.
+All 14 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484.
 
-### New Topic: Integer ID (#501)
-Human raised new discussion topic: replace string-based IDs with integer-based IDs to reduce GC/allocation overhead. Research complete — feasible, ~30-40 files, no blockers. No authorization to implement yet.
-
-### Current Phase: Phase 2 Implementation
+### Phase 2 Implementation: ✅ ALL AUTHORIZED WORK COMPLETE
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
@@ -27,6 +24,8 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 **M56**: ✅ COMPLETE — Event serialization (#479) (6 cycles budgeted, ~4 used)
 **M57**: ✅ COMPLETE — Unified control protocol (#487) (6 cycles budgeted, ~4 used)
 **M58**: ✅ COMPLETE — DRAM improvements phase 1: predefined specs, open-page policy, FR-FCFS scheduling (#484) (8 cycles budgeted, ~4 used)
+**M59**: ✅ COMPLETE — Quality cleanup: serialization bug, spec validation, repo hygiene (4 cycles)
+**M60**: ✅ COMPLETE — Fix CI lint + DRAM phase 2: validation, refresh, tFAW, statistics (4 cycles)
 
 ---
 
@@ -149,22 +148,23 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Status**: COMPLETE (cycle 415-418, ~4 cycles)
 - **PR**: #92, merged
 - **Scope**: All 7 issues fixed — flush pointer flattened, DRAM timing moved to middleware, binaries gitignored, duplicate test removed, legacyMapper removed, WritePolicy replaced with string+switch, SameRank bug fixed
-- **Note**: CI still failing on main after merge — 3 lint issues remain (trailing newline, unused func, cognitive complexity)
 
-### M60: Fix CI lint + DRAM improvements phase 2 — validation + refresh + tFAW (#484)
-- **Status**: NEXT
-- **Budget**: 8 cycles
+### M60: Fix CI lint + DRAM improvements phase 2 — validation + refresh + tFAW (#484) ✅
+- **Status**: COMPLETE (cycle 420-428, ~8 cycles)
+- **PR**: #93, merged
 - **Scope**:
-  1. Fix 3 CI lint errors on main (trailing newline in writethroughcache/builder.go, unused removeCommandFromQueueByID in dram/queue_ops.go, high cognitive complexity in getCommandToIssue)
-  2. Analytical validation tests with exact cycle-count verification against known DRAM timing
-  3. Periodic refresh scheduling (REFab/REFpb)
-  4. tFAW (four-activate window) constraint enforcement
-  5. Basic DRAM statistics (bandwidth, latency tracking)
+  1. Fixed all 6 CI lint errors (trailing newline, unused func, cognitive complexity, range-over-int, user-defined max)
+  2. Analytical validation tests with exact cycle-count verification (309 lines)
+  3. Periodic refresh scheduling and tFAW constraint enforcement (242 lines of tests)
+  4. Basic DRAM statistics — bandwidth, latency tracking, row-buffer hit rate (42+134 lines)
+  5. Acceptance test build-order fix for DRAM
+- **Final**: 84 DRAM tests passing, all CI green on main
 
-### Future topics
-- Integer ID (#501) — pending human authorization
-- Merge AkitaRTM/Daisen (#482) — human clarification addressed, awaiting authorization
-- React rewrite (#488) — pending authorization
+### Awaiting Human Authorization
+- **Integer ID (#501)** — Research posted. Feasible, ~30-40 files, uint64 internally. Awaiting green light.
+- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Awaiting green light.
+- **React rewrite (#488)** — Depends on #482 merge. Awaiting green light.
+- **DRAM cross-validation (#484)** — Implementation complete. Further validation against DRAMSim3/Ramulator2 possible if desired.
 
 ---
 
