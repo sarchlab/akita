@@ -145,38 +145,6 @@ def main():
         "acceptancetests/writebackcache",
     )
 
-    error |= compile_test("acceptancetests/writebackcache")
-    error |= run_test(
-        "Write-back cache 1",
-        "./writebackcache -max-address=64 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 2",
-        "./writebackcache -max-address=1024 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 3",
-        "./writebackcache -max-address=1048576 -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 4",
-        "./writebackcache -max-address=64 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 5",
-        "./writebackcache -max-address=1024 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-    error |= run_test(
-        "Write-back cache 6",
-        "./writebackcache -max-address=1048576 -parallel -num-access=10000",
-        "acceptancetests/writebackcache",
-    )
-
     error |= compile_test("acceptancetests/dram")
     error |= run_test(
         "DRAM cache 1",
