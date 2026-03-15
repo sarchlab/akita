@@ -73,7 +73,7 @@ func (c *Connector) WithMonitor(m *monitoring.Monitor) *Connector {
 
 // WithEngine sets the event-driven simulation engine that the PCIe connection
 // uses.
-func (c *Connector) WithEngine(engine sim.Engine) *Connector {
+func (c *Connector) WithEngine(engine sim.EventScheduler) *Connector {
 	c.connector = c.connector.WithEngine(engine)
 	return c
 }

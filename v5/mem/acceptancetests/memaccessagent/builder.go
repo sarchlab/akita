@@ -7,7 +7,7 @@ import (
 
 type Builder struct {
 	name              string
-	engine            sim.Engine
+	engine            sim.EventScheduler
 	freq              sim.Freq
 	maxAddress        uint64
 	writeLeft         int
@@ -27,7 +27,7 @@ func MakeBuilder() *Builder {
 	}
 }
 
-func (b *Builder) WithEngine(engine sim.Engine) *Builder {
+func (b *Builder) WithEngine(engine sim.EventScheduler) *Builder {
 	b.engine = engine
 	return b
 }

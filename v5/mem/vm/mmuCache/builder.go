@@ -18,7 +18,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build mmuCache
 type Builder struct {
-	engine sim.Engine
+	engine sim.EventScheduler
 	spec   Spec
 
 	topPort     sim.Port
@@ -52,7 +52,7 @@ func (b Builder) WithNumLevels(n int) Builder {
 }
 
 // WithEngine sets the engine that the mmuCache to use
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

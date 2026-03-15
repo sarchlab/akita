@@ -91,7 +91,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	return engine, agent
 }
 
-func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
+func buildMemoryHierarchy(engine sim.EventScheduler, s *simulation.Simulation) (
 	*modeling.Component[writethroughcache.Spec, writethroughcache.State],
 	*modeling.Component[writeback.Spec, writeback.State],
 	*idealmemcontroller.Comp,
@@ -135,7 +135,7 @@ func buildMemoryHierarchy(engine sim.Engine, s *simulation.Simulation) (
 }
 
 func buildTranslationHierarchy(
-	engine sim.Engine, s *simulation.Simulation,
+	engine sim.EventScheduler, s *simulation.Simulation,
 ) (
 	*modeling.Component[mmu.Spec, mmu.State],
 	*modeling.Component[tlb.Spec, tlb.State],
@@ -217,14 +217,14 @@ func setupPageTable(maxAddress uint64) vm.PageTable {
 	return pageTable
 }
 
-func connect(engine sim.Engine, name string, p1, p2 sim.Port) {
+func connect(engine sim.EventScheduler, name string, p1, p2 sim.Port) {
 	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	engine sim.Engine,
+	engine sim.EventScheduler,
 	agent *memaccessagent.MemAccessAgent,
 	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl sim.Component,
 ) {
@@ -258,7 +258,7 @@ func setupConnection(
 	)
 }
 
-func setupTracing(engine sim.Engine, memCtrl *idealmemcontroller.Comp) {
+func setupTracing(engine sim.EventScheduler, memCtrl *idealmemcontroller.Comp) {
 	if *traceFileFlag == "" {
 		return
 	}

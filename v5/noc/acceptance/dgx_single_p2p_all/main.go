@@ -60,7 +60,7 @@ func main() {
 }
 
 func createNetwork(
-	engine sim.Engine,
+	engine sim.EventScheduler,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	// visTracer := tracing.NewMySQLTracer()
@@ -81,7 +81,7 @@ func createNetwork(
 }
 
 func createAgents(
-	engine sim.Engine,
+	engine sim.EventScheduler,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	freq := 1.0 * sim.GHz

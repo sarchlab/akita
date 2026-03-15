@@ -16,7 +16,7 @@ var DefaultSpec = Spec{
 
 // A Builder can create address translators
 type Builder struct {
-	engine sim.Engine
+	engine sim.EventScheduler
 	spec   Spec
 
 	topPort sim.Port
@@ -40,7 +40,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the address translators
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

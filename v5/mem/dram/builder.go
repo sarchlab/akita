@@ -49,7 +49,7 @@ var DefaultSpec = Spec{
 
 // Builder can build new memory controllers.
 type Builder struct {
-	engine           sim.Engine
+	engine           sim.EventScheduler
 	spec             Spec
 	useGlobalStorage bool
 	storage          *mem.Storage
@@ -153,7 +153,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the builder uses.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

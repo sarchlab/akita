@@ -67,7 +67,7 @@ type PortFactory func(
 // Connector can build complex network topologies.
 type Connector struct {
 	name         string
-	engine       sim.Engine
+	engine       sim.EventScheduler
 	monitor      *monitoring.Monitor
 	defaultFreq  sim.Freq
 	flitSize     int
@@ -93,7 +93,7 @@ func MakeConnector() Connector {
 
 // WithEngine sets the engine to be used by all the components in the
 // connection.
-func (c Connector) WithEngine(e sim.Engine) Connector {
+func (c Connector) WithEngine(e sim.EventScheduler) Connector {
 	c.engine = e
 	return c
 }

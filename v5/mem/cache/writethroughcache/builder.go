@@ -28,7 +28,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build a writethroughcache cache
 type Builder struct {
-	engine                sim.Engine
+	engine                sim.EventScheduler
 	spec                  Spec
 	log2BlockSize         uint64
 	totalByteSize         uint64
@@ -71,7 +71,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the event driven simulation engine that the cache uses
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

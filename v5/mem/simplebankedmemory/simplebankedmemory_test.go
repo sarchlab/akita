@@ -212,7 +212,7 @@ func collectLatency(
 
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
-		engine  sim.Engine
+		engine  sim.EventScheduler
 		memComp *Comp
 		agent   *testAgent
 		conn    *loopbackConnection

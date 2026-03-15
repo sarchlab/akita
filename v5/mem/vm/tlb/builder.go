@@ -20,7 +20,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build TLBs
 type Builder struct {
-	engine            sim.Engine
+	engine            sim.EventScheduler
 	spec              Spec
 	log2PageSize      uint64
 	addressMapperType string
@@ -41,7 +41,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the TLBs to use
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

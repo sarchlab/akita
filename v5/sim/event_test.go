@@ -26,7 +26,7 @@ func (e SplitEvent) IsSecondary() bool {
 
 type SplitHandler struct {
 	total  int
-	engine sim.Engine
+	engine sim.EventScheduler
 }
 
 func (h *SplitHandler) Handle(evt sim.Event) error {

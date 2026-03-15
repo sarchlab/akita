@@ -102,7 +102,7 @@ type agent struct {
 	OutPort sim.Port
 }
 
-func newAgent(engine sim.Engine, freq sim.Freq, name string, outPort sim.Port) *agent {
+func newAgent(engine sim.EventScheduler, freq sim.Freq, name string, outPort sim.Port) *agent {
 	a := new(agent)
 	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
 	a.OutPort = outPort

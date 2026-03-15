@@ -16,7 +16,7 @@ var DefaultSpec = Spec{
 
 // Builder can help building End Points.
 type Builder struct {
-	engine                   sim.Engine
+	engine                   sim.EventScheduler
 	spec                     Spec
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
@@ -35,7 +35,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine of the End Point to build.
-func (b Builder) WithEngine(e sim.Engine) Builder {
+func (b Builder) WithEngine(e sim.EventScheduler) Builder {
 	b.engine = e
 	return b
 }

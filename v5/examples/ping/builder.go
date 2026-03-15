@@ -10,7 +10,7 @@ type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
 
 // Builder builds ping components.
 type Builder struct {
-	engine  sim.Engine
+	engine  sim.EventScheduler
 	outPort sim.Port
 }
 
@@ -20,7 +20,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }

@@ -12,7 +12,7 @@ var DefaultSpec = Spec{
 
 // Builder builds tickingping components.
 type Builder struct {
-	engine  sim.Engine
+	engine  sim.EventScheduler
 	spec    Spec
 	outPort sim.Port
 }
@@ -25,7 +25,7 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine.
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
