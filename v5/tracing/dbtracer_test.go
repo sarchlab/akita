@@ -46,7 +46,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 	Context("AddMilestone with same timestamp", func() {
 		It("should only record the first milestone when multiple milestones occur at the same time", func() {
 			tracer.StartTracing()
-			timeTeller.SetCurrentTime(100.0)
+			timeTeller.SetCurrentTime(100)
 
 			milestone1 := Milestone{
 				ID:       "milestone1",
@@ -79,12 +79,12 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 			task := tracer.tracingTasks["task1"]
 			Expect(task.Milestones).To(HaveLen(1), "Only first milestone should be recorded at same time")
 			Expect(task.Milestones[0].ID).To(Equal("milestone1"))
-			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100.0)))
+			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100)))
 		})
 
 		It("should allow milestones for different tasks at the same time", func() {
 			tracer.StartTracing()
-			timeTeller.SetCurrentTime(100.0)
+			timeTeller.SetCurrentTime(100)
 
 			milestone1 := Milestone{
 				ID:       "milestone1",
@@ -115,7 +115,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 		It("should allow milestones for same task at different times", func() {
 			tracer.StartTracing()
-			timeTeller.SetCurrentTime(100.0)
+			timeTeller.SetCurrentTime(100)
 
 			milestone1 := Milestone{
 				ID:       "milestone1",
@@ -127,7 +127,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 			tracer.AddMilestone(milestone1)
 
-			timeTeller.SetCurrentTime(200.0)
+			timeTeller.SetCurrentTime(200)
 
 			milestone2 := Milestone{
 				ID:       "milestone2",
@@ -141,13 +141,13 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 			task := tracer.tracingTasks["task1"]
 			Expect(task.Milestones).To(HaveLen(2))
-			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100.0)))
-			Expect(task.Milestones[1].Time).To(Equal(sim.VTimeInSec(200.0)))
+			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100)))
+			Expect(task.Milestones[1].Time).To(Equal(sim.VTimeInSec(200)))
 		})
 
 		It("should still prevent identical milestones from being recorded twice", func() {
 			tracer.StartTracing()
-			timeTeller.SetCurrentTime(100.0)
+			timeTeller.SetCurrentTime(100)
 
 			milestone := Milestone{
 				ID:       "milestone1",

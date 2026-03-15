@@ -1,6 +1,10 @@
 package modeling
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"math"
+
+	"github.com/sarchlab/akita/v5/sim"
+)
 
 // EventDrivenBuilder constructs [EventDrivenComponent] instances.
 //
@@ -44,7 +48,7 @@ func (b EventDrivenBuilder[S, T]) Build(name string) *EventDrivenComponent[S, T]
 		Engine:        b.engine,
 		spec:          b.spec,
 		processor:     b.processor,
-		pendingWakeup: -1,
+		pendingWakeup: math.MaxUint64,
 	}
 
 	return comp

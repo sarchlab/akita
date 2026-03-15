@@ -77,7 +77,7 @@ func (m *sendMW) sendPing() bool {
 		return false
 	}
 
-	state.StartTimes = append(state.StartTimes, float64(m.comp.CurrentTime()))
+	state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
 	state.NumPingNeedToSend--
 	state.NextSeqID++
 

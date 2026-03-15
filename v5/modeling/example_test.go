@@ -77,7 +77,7 @@ func (m *pingMiddleware) processInput() bool {
 		currentTime := m.comp.CurrentTime()
 		duration := currentTime - startTime
 
-		fmt.Printf("Ping %d, %.2f\n", seqID, duration)
+		fmt.Printf("Ping %d, %d\n", seqID, duration)
 		m.comp.SetState(state)
 		m.outPort.RetrieveIncoming()
 	default:
@@ -215,6 +215,6 @@ func Example() {
 	}
 
 	// Output:
-	// Ping 0, 5.00
-	// Ping 1, 5.00
+	// Ping 0, 5000000000000
+	// Ping 1, 5000000000000
 }

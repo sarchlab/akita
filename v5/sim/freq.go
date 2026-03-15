@@ -1,14 +1,11 @@
 package sim
 
-import (
-	"log"
-	"math"
-)
+import "log"
 
-// Freq defines the type of frequency
-type Freq float64
+// Freq defines the type of frequency in Hz.
+type Freq uint64
 
-// Defines the unit of frequency
+// Defines the unit of frequency.
 const (
 	Hz  Freq = 1
 	KHz Freq = 1e3
@@ -16,83 +13,50 @@ const (
 	GHz Freq = 1e9
 )
 
-// Period returns the time between two consecutive ticks
+// psPerSecond is the number of picoseconds in one second.
+const psPerSecond uint64 = 1_000_000_000_000
+
+// Period returns the time between two consecutive ticks in picoseconds.
 func (f Freq) Period() VTimeInSec {
 	if f == 0 {
 		log.Panic("frequency cannot be 0")
 	}
-
-	return VTimeInSec(1.0 / f)
+	return VTimeInSec(psPerSecond / uint64(f))
 }
 
 // Cycle converts a time to the number of cycles passed since time 0.
 func (f Freq) Cycle(time VTimeInSec) uint64 {
-	return uint64(math.Round(float64(time) * float64(f)))
+	return uint64(time) / (psPerSecond / uint64(f))
 }
 
-// ThisTick returns the current tick time
-//
-//	           Input
-//	           (          ]
-//	|----------|----------|----------|----->
-//	                      |
-//	                      Output
+// ThisTick returns the current tick time — ceil to nearest tick boundary.
 func (f Freq) ThisTick(now VTimeInSec) VTimeInSec {
-	if math.IsNaN(float64(now)) {
-		log.Panic("invalid time")
-	}
-
-	count := math.Ceil(math.Round(float64(now)*10*float64(f)) / 10)
-
-	return VTimeInSec(count / float64(f))
+	period := uint64(f.Period())
+	n := uint64(now)
+	return VTimeInSec(((n + period - 1) / period) * period)
 }
 
-// NextTick returns the next tick time.
-//
-//	           Input
-//	           [          )
-//	|----------|----------|----------|----->
-//	                      |
-//	                      Output
+// NextTick returns the next tick time after now.
 func (f Freq) NextTick(now VTimeInSec) VTimeInSec {
-	if math.IsNaN(float64(now)) {
-		log.Panic("invalid time")
-	}
-
-	count := math.Floor(math.Round(float64(now)*10*float64(f)) / 10)
-
-	return VTimeInSec((count + 1) / float64(f))
+	period := uint64(f.Period())
+	n := uint64(now)
+	return VTimeInSec((n/period + 1) * period)
 }
 
-// NCyclesLater returns the time after N cycles
-//
-// This function will always return a time of an integer number of cycles
+// NCyclesLater returns the time after N cycles from the current tick.
 func (f Freq) NCyclesLater(n int, now VTimeInSec) VTimeInSec {
-	if math.IsNaN(float64(now)) {
-		log.Panic("invalid time")
-	}
-
-	return f.ThisTick(now + VTimeInSec(Freq(n)/f))
+	period := uint64(f.Period())
+	base := uint64(f.ThisTick(now))
+	return VTimeInSec(base + uint64(n)*period)
 }
 
-// NoEarlierThan returns the tick time that is at or right after the given time
+// NoEarlierThan returns the tick time that is at or right after the given time.
+// This is equivalent to ThisTick.
 func (f Freq) NoEarlierThan(t VTimeInSec) VTimeInSec {
-	if math.IsNaN(float64(t)) {
-		log.Panic("invalid time")
-	}
-
-	count := t / f.Period()
-
-	return VTimeInSec(math.Ceil(float64(count))) * f.Period()
+	return f.ThisTick(t)
 }
 
-// HalfTick returns the time in middle of two ticks
-//
-//	           Input
-//	           (          ]
-//	|----------|----------|----------|----->
-//	                           |
-//	                           Output
+// HalfTick returns the time in middle of two ticks.
 func (f Freq) HalfTick(t VTimeInSec) VTimeInSec {
 	return f.ThisTick(t) + f.Period()/2
 }

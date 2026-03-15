@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // receiveProcessMW handles receiving messages and counting down transactions.
@@ -58,10 +57,10 @@ func (m *receiveProcessMW) processingPingRsp(msg *PingRsp) {
 
 	seqID := msg.SeqID
 	startTime := state.StartTimes[seqID]
-	currentTime := m.comp.CurrentTime()
-	duration := currentTime - sim.VTimeInSec(startTime)
+	currentTime := uint64(m.comp.CurrentTime())
+	duration := currentTime - startTime
 
-	fmt.Printf("Ping %d, %.2f\n", seqID, duration)
+	fmt.Printf("Ping %d, %d ps\n", seqID, duration)
 	outPort(m.comp).RetrieveIncoming()
 }
 

@@ -200,9 +200,9 @@ func TestEventDrivenResetWakeup(t *testing.T) {
 
 	// After build, pendingWakeup is -1, so scheduling should work.
 	// Schedule a wakeup, then reset and schedule again — no panic.
-	comp.ScheduleWakeAt(1.0)
+	comp.ScheduleWakeAt(10)
 	comp.ResetWakeup()
-	comp.ScheduleWakeAt(0.5) // Should succeed since we reset.
+	comp.ScheduleWakeAt(5) // Should succeed since we reset.
 }
 
 // --- NotifyRecv and NotifyPortFree ---
@@ -245,11 +245,11 @@ func TestEventDrivenScheduleWakeAtDedup(t *testing.T) {
 		Build("EDComp")
 
 	// First schedule should work.
-	comp.ScheduleWakeAt(5.0)
+	comp.ScheduleWakeAt(50)
 
 	// Scheduling at a later time should be a no-op (dedup).
-	comp.ScheduleWakeAt(10.0)
+	comp.ScheduleWakeAt(100)
 
 	// Scheduling at an earlier time should replace.
-	comp.ScheduleWakeAt(2.0)
+	comp.ScheduleWakeAt(20)
 }

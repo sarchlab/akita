@@ -127,19 +127,19 @@ func (p *PingProcessor) processIncoming(
 		case *PingReq:
 			state.PendingResponses = append(state.PendingResponses,
 				PendingResponse{
-					DeliverAt: now + 2,
+					DeliverAt: now + 2_000_000_000_000,
 					Dst:       m.Src,
 					OrigMsgID: m.Meta().ID,
 					SeqID:     m.SeqID,
 				})
-			comp.ScheduleWakeAt(now + 2)
+			comp.ScheduleWakeAt(now + 2_000_000_000_000)
 			progress = true
 		case *PingRsp:
 			seqID := m.SeqID
 			startTime := state.StartTimes[seqID]
 			duration := now - startTime
 
-			fmt.Printf("Ping %d, %.2f\n", seqID, duration)
+			fmt.Printf("Ping %d, %d ps\n", seqID, duration)
 			progress = true
 		}
 	}

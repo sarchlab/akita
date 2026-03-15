@@ -101,7 +101,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 	case *mem.WriteDoneRsp:
 		if dumpLog {
 			write := a.PendingWriteReq[msg.RspTo]
-			log.Printf("%.10f, agent, write complete, 0x%X\n",
+			log.Printf("%d, agent, write complete, 0x%X\n",
 				a.CurrentTime(), write.Address)
 		}
 
@@ -113,7 +113,7 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 		delete(a.PendingReadReq, msg.RspTo)
 
 		if dumpLog {
-			log.Printf("%.10f, agent, read complete, 0x%X, %v\n",
+			log.Printf("%d, agent, read complete, 0x%X, %v\n",
 				a.CurrentTime(), req.Address, msg.Data)
 		}
 
@@ -189,7 +189,7 @@ func (a *MemAccessAgent) doRead() bool {
 		a.ReadLeft--
 
 		if dumpLog {
-			log.Printf("%.10f, agent, read, 0x%X\n", a.CurrentTime(), address)
+			log.Printf("%d, agent, read, 0x%X\n", a.CurrentTime(), address)
 		}
 
 		return true
@@ -268,7 +268,7 @@ func (a *MemAccessAgent) doWrite() bool {
 		a.PendingWriteReq[writeReq.ID] = writeReq
 
 		if dumpLog {
-			log.Printf("%.10f, agent, write, 0x%X, %v\n",
+			log.Printf("%d, agent, write, 0x%X, %v\n",
 				a.CurrentTime(), address, writeReq.Data)
 		}
 

@@ -265,7 +265,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time:     sim.VTimeInSec(time),
+				Time:     sim.VTimeInSec(uint64(time)),
 				What:     what,
 				Kind:     kind,
 			}
@@ -292,8 +292,8 @@ func (r *SQLiteTraceReader) scanTaskFromRow(
 
 func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
-
 	var ptStartTime, ptEndTime sql.NullFloat64
+	var startTime, endTime float64
 
 	err := rows.Scan(
 		&t.ID,
@@ -301,8 +301,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		&t.Kind,
 		&t.What,
 		&t.Location,
-		&t.StartTime,
-		&t.EndTime,
+		&startTime,
+		&endTime,
 		&ptID,
 		&ptParentID,
 		&ptKind,
@@ -315,30 +315,38 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
+	t.StartTime = sim.VTimeInSec(uint64(startTime))
+	t.EndTime = sim.VTimeInSec(uint64(endTime))
+
 	if ptID.Valid {
 		t.ParentTask.ID = ptID.String
 		t.ParentTask.ParentID = ptParentID.String
 		t.ParentTask.Kind = ptKind.String
 		t.ParentTask.What = ptWhat.String
 		t.ParentTask.Location = ptLocation.String
-		t.ParentTask.StartTime = sim.VTimeInSec(ptStartTime.Float64)
-		t.ParentTask.EndTime = sim.VTimeInSec(ptEndTime.Float64)
+		t.ParentTask.StartTime = sim.VTimeInSec(uint64(ptStartTime.Float64))
+		t.ParentTask.EndTime = sim.VTimeInSec(uint64(ptEndTime.Float64))
 	}
 }
 
 func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
+	var startTime, endTime float64
+
 	err := rows.Scan(
 		&t.ID,
 		&t.ParentID,
 		&t.Kind,
 		&t.What,
 		&t.Location,
-		&t.StartTime,
-		&t.EndTime,
+		&startTime,
+		&endTime,
 	)
 	if err != nil {
 		panic(err)
 	}
+
+	t.StartTime = sim.VTimeInSec(uint64(startTime))
+	t.EndTime = sim.VTimeInSec(uint64(endTime))
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {

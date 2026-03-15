@@ -54,7 +54,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 	}
 
 	t.logger.Printf(
-		"start, %.12f, %s, %s, %s, 0x%x, %d\n",
+		"start, %d, %s, %s, %s, 0x%x, %d\n",
 		task.StartTime,
 		task.Location,
 		task.ID,
@@ -68,7 +68,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 func (t *tracer) StepTask(task tracing.Task) {
 	task.Steps[0].Time = t.timeTeller.CurrentTime()
 
-	t.logger.Printf("step, %.12f, %s, %s\n",
+	t.logger.Printf("step, %d, %s, %s\n",
 		task.Steps[0].Time,
 		task.ID,
 		task.Steps[0].What)
@@ -83,7 +83,7 @@ func (t *tracer) AddMilestone(milestone tracing.Milestone) {
 func (t *tracer) EndTask(task tracing.Task) {
 	task.EndTime = t.timeTeller.CurrentTime()
 
-	t.logger.Printf("end, %.12f, %s\n", task.EndTime, task.ID)
+	t.logger.Printf("end, %d, %s\n", task.EndTime, task.ID)
 }
 
 // NewTracer creates a new Tracer.

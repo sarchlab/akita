@@ -34,7 +34,8 @@ type TickScheduler struct {
 	Engine    EventScheduler
 	secondary bool
 
-	nextTickTime VTimeInSec
+	nextTickTime     VTimeInSec
+	hasScheduledTick bool
 }
 
 // NewTickScheduler creates a scheduler for tick events.
@@ -48,7 +49,7 @@ func NewTickScheduler(
 	ticker.handler = handler
 	ticker.Engine = engine
 	ticker.Freq = freq
-	ticker.nextTickTime = -1 // This will make sure the first tick is scheduled
+	ticker.hasScheduledTick = false
 
 	return ticker
 }
@@ -66,7 +67,7 @@ func NewSecondaryTickScheduler(
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.secondary = true
-	ticker.nextTickTime = -1 // This will make sure the first tick is scheduled
+	ticker.hasScheduledTick = false
 
 	return ticker
 }
@@ -76,12 +77,13 @@ func (t *TickScheduler) TickNow() {
 	t.lock.Lock()
 	time := t.CurrentTime()
 
-	if t.nextTickTime >= time {
+	if t.hasScheduledTick && t.nextTickTime >= time {
 		t.lock.Unlock()
 		return
 	}
 
 	t.nextTickTime = t.Freq.ThisTick(time)
+	t.hasScheduledTick = true
 	tick := MakeTickEvent(t.handler, t.nextTickTime)
 
 	if t.secondary {
@@ -97,12 +99,13 @@ func (t *TickScheduler) TickLater() {
 	t.lock.Lock()
 	time := t.Freq.NextTick(t.CurrentTime())
 
-	if t.nextTickTime >= time {
+	if t.hasScheduledTick && t.nextTickTime >= time {
 		t.lock.Unlock()
 		return
 	}
 
 	t.nextTickTime = time
+	t.hasScheduledTick = true
 	tick := MakeTickEvent(t.handler, t.nextTickTime)
 
 	if t.secondary {
@@ -116,7 +119,7 @@ func (t *TickScheduler) TickLater() {
 // Reset resets the TickScheduler so that TickLater can schedule new events
 // after a restore.
 func (t *TickScheduler) Reset() {
-	t.nextTickTime = -1
+	t.hasScheduledTick = false
 }
 
 func (t *TickScheduler) CurrentTime() VTimeInSec {

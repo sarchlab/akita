@@ -109,7 +109,7 @@ func (e *ParallelEngine) Schedule(evt Event) {
 	now := e.readNow()
 	if evt.Time() < now {
 		log.Panicf(
-			"cannot schedule event in the past, evt %s @ %.10f, now %.10f",
+			"cannot schedule event in the past, evt %s @ %d, now %d",
 			reflect.TypeOf(evt), evt.Time(), now)
 	}
 
@@ -161,7 +161,7 @@ func (e *ParallelEngine) determineWhatToRun() {
 func (e *ParallelEngine) earliestTimeInQueueGroup(
 	queues []EventQueue,
 ) VTimeInSec {
-	earliestTime := VTimeInSec(math.MaxFloat64)
+	earliestTime := VTimeInSec(math.MaxUint64)
 
 	for _, q := range queues {
 		if q.Len() == 0 {
@@ -243,7 +243,7 @@ func (e *ParallelEngine) runEventsUntilConflict(
 				e.runEventWithTempWorker(evt)
 			} else if evt.Time() < now {
 				log.Panicf(
-					"cannot run event in the past, evt %s @ %.10f, now %.10f",
+					"cannot run event in the past, evt %s @ %d, now %d",
 					reflect.TypeOf(evt), evt.Time(), now)
 			} else {
 				break

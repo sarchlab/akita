@@ -45,7 +45,7 @@ var _ = Describe("DirectConnection", func() {
 		engine = NewMockEngine(mockCtrl)
 		connection = MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1).
+			WithFreq(1 * sim.GHz).
 			Build("Direct")
 
 		port1.EXPECT().SetConnection(connection)
@@ -60,9 +60,9 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10))
+		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10000))
 
-		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10))
+		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10000))
 
 		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
@@ -85,7 +85,7 @@ var _ = Describe("DirectConnection", func() {
 		engine.EXPECT().
 			Schedule(gomock.Any()).
 			Do(func(evt sim.TickEvent) {
-				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11)))
+				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11000)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
 
@@ -144,10 +144,10 @@ var _ = Describe("Direct Connection Integration", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = sim.NewSerialEngine()
-		connection = MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
+		connection = MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
-			a := newAgent(engine, 1, fmt.Sprintf("Agent[%d]", i),
+			a := newAgent(engine, 1*sim.GHz, fmt.Sprintf("Agent[%d]", i),
 				sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent[%d].OutPort", i)))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
@@ -199,11 +199,11 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 	numAgents := 100
 	numMsgsPerAgent := 1000
 	engine := sim.NewSerialEngine()
-	connection := MakeBuilder().WithEngine(engine).WithFreq(1).Build("Conn")
+	connection := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {
-		a := newAgent(engine, 1, fmt.Sprintf("Agent%d", i),
+		a := newAgent(engine, 1*sim.GHz, fmt.Sprintf("Agent%d", i),
 			sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent%d.OutPort", i)))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)

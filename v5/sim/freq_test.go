@@ -8,65 +8,71 @@ import (
 var _ = Describe("Freq", func() {
 	It("should get period", func() {
 		var f = 1 * GHz
-		Expect(f.Period()).To(BeNumerically("==", 1e-9))
+		// 1 GHz → period = 1e12 / 1e9 = 1000 ps
+		Expect(f.Period()).To(Equal(VTimeInSec(1000)))
 	})
 
 	It("should get this tick", func() {
 		var f = 1 * Hz
-		Expect(f.ThisTick(1)).To(BeNumerically("~", 1, 1e-12))
+		// 1 Hz → period = 1e12 ps
+		// ThisTick(1) = ceil(1/1e12)*1e12 = 1e12
+		Expect(f.ThisTick(1)).To(Equal(VTimeInSec(1000000000000)))
 	})
 
 	It("should get the next tick", func() {
 		var f = 1 * GHz
-		Expect(f.NextTick(102.000000001)).
-			To(BeNumerically("~", 102.000000002, 1e-12))
+		// period = 1000 ps
+		// NextTick(102000) = (102000/1000 + 1)*1000 = 103000
+		Expect(f.NextTick(102000)).To(Equal(VTimeInSec(103000)))
 	})
 
 	It("should get the next tick 2", func() {
 		var f = 1 * GHz
-		Expect(f.NextTick(0.000000031)).
-			To(BeNumerically("~", 0.000000032, 1e-12))
+		// NextTick(31000) = (31000/1000 + 1)*1000 = 32000
+		Expect(f.NextTick(31000)).To(Equal(VTimeInSec(32000)))
 	})
 
 	It("should get the next tick 3", func() {
 		var f = 1 * GHz
-		Expect(f.NextTick(0.000000017)).
-			To(BeNumerically("~", 0.000000018, 1e-12))
+		// NextTick(17000) = (17000/1000 + 1)*1000 = 18000
+		Expect(f.NextTick(17000)).To(Equal(VTimeInSec(18000)))
 	})
 
-	It("should get the next tick 3", func() {
+	It("should get the next tick from on-boundary time", func() {
 		var f = 1 * GHz
-		Expect(f.NextTick(16)).To(BeNumerically("~", 16.000000001, 1e-12))
+		// NextTick(16000) = (16000/1000 + 1)*1000 = 17000
+		Expect(f.NextTick(16000)).To(Equal(VTimeInSec(17000)))
 	})
 
 	It("should get the next tick, if currTime is not on a tick", func() {
 		var f = 1 * GHz
-		Expect(f.NextTick(102.0000000011)).
-			To(BeNumerically("~", 102.000000002, 1e-12))
+		// NextTick(102011) = (102011/1000 + 1)*1000 = 103000
+		Expect(f.NextTick(102011)).To(Equal(VTimeInSec(103000)))
 	})
 
 	It("should get the n cycles later", func() {
 		var f = 1 * GHz
-		Expect(f.NCyclesLater(12, 102.000000001)).To(
-			BeNumerically("~", 102.000000013, 1e-12))
+		// NCyclesLater(12, 102000): ThisTick(102000)=102000, + 12*1000 = 114000
+		Expect(f.NCyclesLater(12, 102000)).To(Equal(VTimeInSec(114000)))
 	})
 
 	It("should get the n cycles later, "+
 		"if current time is not on a tick", func() {
 		var f = 1 * GHz
-		Expect(f.NCyclesLater(12, 102.0000000011)).To(
-			BeNumerically("~", 102.000000014, 1e-12))
+		// NCyclesLater(12, 102011): ThisTick(102011)=103000, + 12*1000 = 115000
+		Expect(f.NCyclesLater(12, 102011)).To(Equal(VTimeInSec(115000)))
 	})
 
 	It("should get the no-earlier-than time, on tick", func() {
 		var f = 1 * GHz
-		Expect(f.NoEarlierThan(102.00)).To(BeNumerically("~", 102.00, 1e-12))
+		// NoEarlierThan(102000) = ThisTick(102000) = 102000
+		Expect(f.NoEarlierThan(102000)).To(Equal(VTimeInSec(102000)))
 	})
 
 	It("should get the no-earlier-than time, off tick", func() {
 		var f = 1 * GHz
-		Expect(f.NoEarlierThan(102.0000000011)).
-			To(BeNumerically("~", 102.000000002, 1e-12))
+		// NoEarlierThan(102011) = ThisTick(102011) = 103000
+		Expect(f.NoEarlierThan(102011)).To(Equal(VTimeInSec(103000)))
 	})
 
 })
