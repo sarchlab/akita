@@ -129,12 +129,6 @@ type Spec struct {
 
 	// Sub-transaction splitting
 	Log2AccessUnitSize uint64 `json:"log2_access_unit_size"`
-
-	// CmdCycles: cycles per command kind
-	CmdCycles map[CommandKind]int `json:"cmd_cycles"`
-
-	// The entire Timing structure (computed once in builder)
-	Timing Timing `json:"timing"`
 }
 
 // CommandKind represents the kind of the command.

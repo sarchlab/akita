@@ -40,7 +40,6 @@ type Builder struct {
 	numReqPerCycle        int
 	maxNumConcurrentTrans int
 	visTracer             tracing.Tracer
-	writePolicy           WritePolicy
 
 	addressMapperType string
 	remotePorts       []sim.RemotePort
@@ -52,7 +51,7 @@ type Builder struct {
 }
 
 // MakeBuilder creates a builder with default parameter setting.
-// The default write policy is WritearoundPolicy.
+// The default write policy type is "write-around".
 func MakeBuilder() Builder {
 	return Builder{
 		spec:                  DefaultSpec,
@@ -66,7 +65,6 @@ func MakeBuilder() Builder {
 		dirLatency:            DefaultSpec.DirLatency,
 		bankLatency:           DefaultSpec.BankLatency,
 		interleavingSize:      DefaultSpec.InterleavingSize,
-		writePolicy:           &WritearoundPolicy{},
 	}
 }
 
@@ -183,9 +181,10 @@ func (b Builder) WithControlPort(port sim.Port) Builder {
 	return b
 }
 
-// WithWritePolicy sets the write policy for the cache.
-func (b Builder) WithWritePolicy(policy WritePolicy) Builder {
-	b.writePolicy = policy
+// WithWritePolicyType sets the write policy type for the cache.
+// Valid values: "write-around" (default), "write-evict", "write-through".
+func (b Builder) WithWritePolicyType(policyType string) Builder {
+	b.spec.WritePolicyType = policyType
 	return b
 }
 
@@ -288,6 +287,11 @@ func (b *Builder) buildInitialState(
 }
 
 func (b *Builder) buildSpec(numSets int) Spec {
+	writePolicyType := b.spec.WritePolicyType
+	if writePolicyType == "" {
+		writePolicyType = "write-around"
+	}
+
 	spec := Spec{
 		Freq:                  b.spec.Freq,
 		NumReqPerCycle:        b.numReqPerCycle,
@@ -300,6 +304,7 @@ func (b *Builder) buildSpec(numSets int) Spec {
 		NumSets:               numSets,
 		TotalByteSize:         b.totalByteSize,
 		DirLatency:            b.dirLatency,
+		WritePolicyType:       writePolicyType,
 	}
 
 	if b.addressMapperType != "" {
@@ -319,9 +324,7 @@ func (b *Builder) buildPipelineMW(
 	comp *modeling.Component[Spec, State],
 ) *pipelineMW {
 	m := &pipelineMW{
-		comp:         comp,
-		legacyMapper: b.legacyMapper,
-		writePolicy:  b.writePolicy,
+		comp: comp,
 	}
 
 	m.topPort = b.topPort
@@ -361,8 +364,7 @@ func (b *Builder) buildControlMW(
 func (b *Builder) buildStages(m *pipelineMW) {
 	m.intakeStage = &intake{cache: m}
 	m.directoryStage = &directory{
-		cache:       m,
-		writePolicy: b.writePolicy,
+		cache: m,
 	}
 	b.buildBankStages(m)
 	m.parseBottomStage = &bottomParser{cache: m}
@@ -397,7 +399,6 @@ func (b *Builder) resolveLegacyMapper() {
 		panic(fmt.Sprintf("unsupported address mapper type: %T", b.legacyMapper))
 	}
 
-	// NOTE: keep b.legacyMapper set for runtime fallback in pipelineMW.
 }
 
 func (b *Builder) assertAllRequiredInformationIsAvailable() {

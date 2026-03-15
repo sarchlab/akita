@@ -9,8 +9,7 @@ import (
 )
 
 type directory struct {
-	cache       *pipelineMW
-	writePolicy WritePolicy
+	cache *pipelineMW
 }
 
 func (d *directory) Tick() (madeProgress bool) {
@@ -199,10 +198,10 @@ func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 		&next.DirectoryState, spec.NumSets, int(blockSize),
 		pid, cacheLineID)
 	if found && next.DirectoryState.Sets[setID].Blocks[wayID].IsValid {
-		return d.writePolicy.HandleWriteHit(d, trans, setID, wayID, transIdx)
+		return d.handleWriteHit(trans, setID, wayID, transIdx)
 	}
 
-	return d.writePolicy.HandleWriteMiss(d, trans, transIdx)
+	return d.handleWriteMiss(trans, transIdx)
 }
 
 func (d *directory) writeBottom(trans *transactionState) bool {

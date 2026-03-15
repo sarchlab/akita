@@ -2,19 +2,19 @@ package dram
 
 // tickBanks updates all bank states: counts down timers and completes commands.
 // Returns true if any progress was made.
-func tickBanks(spec *Spec, state *State) bool {
+func tickBanks(spec *Spec, cmdCycles map[CommandKind]int, state *State) bool {
 	madeProgress := false
 
 	for i := range state.BankStates.Entries {
 		bs := &state.BankStates.Entries[i].Data
-		madeProgress = tickBank(spec, state, bs) || madeProgress
+		madeProgress = tickBank(state, bs) || madeProgress
 	}
 
 	return madeProgress
 }
 
 // tickBank updates a single bank's state.
-func tickBank(spec *Spec, state *State, bs *bankState) bool {
+func tickBank(state *State, bs *bankState) bool {
 	madeProgress := false
 
 	// Count down current command
@@ -117,7 +117,7 @@ func getRequiredCommandKind(bs *bankState, cmd *commandState) CommandKind {
 }
 
 // startCommand starts a command on a bank.
-func startCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) {
+func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cmd *commandState) {
 	if bs.HasCurrentCmd {
 		panic("previous cmd is not completed")
 	}
@@ -126,7 +126,7 @@ func startCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) {
 	bs.CurrentCmd = *cmd
 
 	kind := CommandKind(cmd.Kind)
-	cycles, ok := spec.CmdCycles[kind]
+	cycles, ok := cmdCycles[kind]
 	if ok {
 		bs.CurrentCmd.CycleLeft = cycles
 	}
@@ -155,7 +155,7 @@ func startCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) {
 
 // updateTiming updates timing constraints across all banks after a command
 // is issued.
-func updateTiming(spec *Spec, state *State, cmd *commandState) {
+func updateTiming(timing Timing, state *State, cmd *commandState) {
 	kind := CommandKind(cmd.Kind)
 
 	switch kind {
@@ -163,12 +163,12 @@ func updateTiming(spec *Spec, state *State, cmd *commandState) {
 		CmdKindRead, CmdKindReadPrecharge,
 		CmdKindWrite, CmdKindWritePrecharge,
 		CmdKindPrecharge, CmdKindRefreshBank:
-		updateAllBankTiming(spec, state, cmd)
+		updateAllBankTiming(timing, state, cmd)
 	}
 }
 
 // updateAllBankTiming iterates over all banks and applies timing constraints.
-func updateAllBankTiming(spec *Spec, state *State, cmd *commandState) {
+func updateAllBankTiming(timing Timing, state *State, cmd *commandState) {
 	kind := CommandKind(cmd.Kind)
 	flat := &state.BankStates
 
@@ -182,15 +182,15 @@ func updateAllBankTiming(spec *Spec, state *State, cmd *commandState) {
 		if cmd.Location.Rank == rank {
 			if cmd.Location.BankGroup == bankGroup {
 				if cmd.Location.Bank == bank {
-					timingTable = spec.Timing.SameBank
+					timingTable = timing.SameBank
 				} else {
-					timingTable = spec.Timing.OtherBanksInBankGroup
+					timingTable = timing.OtherBanksInBankGroup
 				}
 			} else {
-				timingTable = spec.Timing.SameRank
+				timingTable = timing.SameRank
 			}
 		} else {
-			timingTable = spec.Timing.OtherRanks
+			timingTable = timing.OtherRanks
 		}
 
 		if int(kind) < len(timingTable) {

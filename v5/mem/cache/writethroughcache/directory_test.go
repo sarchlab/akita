@@ -72,16 +72,14 @@ var _ = Describe("Directory", func() {
 				NumBanks:          1,
 				AddressMapperType: "single",
 				RemotePortNames:   []string{"DRAM"},
+				WritePolicyType:   "write-around",
 			}).
 			Build("Cache")
 
 		c.comp.SetState(initialState)
 
-		c.writePolicy = &WritearoundPolicy{}
-
 		d = &directory{
-			cache:       c,
-			writePolicy: &WritearoundPolicy{},
+			cache: c,
 		}
 	})
 

@@ -44,7 +44,8 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 
 	trans.Done = true
 
-	if p.cache.writePolicy.NeedsDualCompletion() {
+	spec := p.cache.GetSpec()
+	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BottomWriteDone = true
 
 		if trans.BankDone {

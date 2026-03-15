@@ -77,7 +77,7 @@ func buildEnvironment() {
 
 	addressToPortMapper := new(mem.SinglePortMapper)
 	builder := writethroughcache.MakeBuilder().
-		WithWritePolicy(&writethroughcache.WritearoundPolicy{}).
+		WithWritePolicyType("write-around").
 		WithEngine(engine).
 		WithAddressToPortMapper(addressToPortMapper).
 		WithLog2BlockSize(6).

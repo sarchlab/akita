@@ -15,11 +15,6 @@ type pipelineMW struct {
 	topPort    sim.Port
 	bottomPort sim.Port
 
-	// legacyMapper is kept for backward compatibility with code that sets the
-	// mapper's Port field after Build(). When Spec.AddressMapperType is empty,
-	// findPort falls back to this runtime mapper.
-	legacyMapper mem.AddressToPortMapper
-
 	storage *mem.Storage
 
 	topParser   *topParser
@@ -35,9 +30,6 @@ func (m *pipelineMW) GetSpec() Spec {
 }
 
 // findPort resolves an address to a remote port using data from Spec.
-// If the Spec does not contain address mapper configuration (e.g. because
-// the port was set after Build via a legacy AddressToPortMapper), it falls
-// back to the runtime legacyMapper.
 func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 	spec := m.comp.GetSpec()
 
@@ -57,11 +49,6 @@ func (m *pipelineMW) findPort(address uint64) sim.RemotePort {
 				return sim.RemotePort(name)
 			}
 		}
-	}
-
-	// Fall back to legacy runtime mapper if available.
-	if m.legacyMapper != nil {
-		return m.legacyMapper.Find(address)
 	}
 
 	panic("findPort: no valid address mapping for address; " +

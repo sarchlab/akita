@@ -49,8 +49,7 @@ var _ = Describe("Bottom Parser", func() {
 		}
 
 		c = &pipelineMW{
-			bottomPort:  bottomPort,
-			writePolicy: &WritearoundPolicy{},
+			bottomPort: bottomPort,
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -61,6 +60,7 @@ var _ = Describe("Bottom Parser", func() {
 				NumMSHREntry:     4,
 				NumSets:          16,
 				NumBanks:         1,
+				WritePolicyType:  "write-around",
 			}).
 			Build("Cache")
 

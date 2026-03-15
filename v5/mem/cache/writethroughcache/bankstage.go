@@ -141,7 +141,8 @@ func (s *bankStage) finalizeWriteTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 
-	if s.cache.writePolicy.NeedsDualCompletion() {
+	spec := s.cache.GetSpec()
+	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BankDone = true
 
 		if trans.BottomWriteDone {
