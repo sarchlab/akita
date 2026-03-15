@@ -22,6 +22,19 @@ type State struct {
 	RefreshInProgress bool `json:"refresh_in_progress"`
 	// RefreshCyclesRemaining counts remaining cycles of the current refresh.
 	RefreshCyclesRemaining int `json:"refresh_cycles_remaining"`
+
+	// Statistics
+	TotalReadCommands       uint64 `json:"total_read_commands"`
+	TotalWriteCommands      uint64 `json:"total_write_commands"`
+	TotalActivates          uint64 `json:"total_activates"`
+	TotalPrecharges         uint64 `json:"total_precharges"`
+	RowBufferHits           uint64 `json:"row_buffer_hits"`
+	RowBufferMisses         uint64 `json:"row_buffer_misses"`
+	TotalCycles             uint64 `json:"total_cycles"`
+	TotalReadLatencyCycles  uint64 `json:"total_read_latency_cycles"`
+	TotalWriteLatencyCycles uint64 `json:"total_write_latency_cycles"`
+	CompletedReads          uint64 `json:"completed_reads"`
+	CompletedWrites         uint64 `json:"completed_writes"`
 }
 
 // subTransRef identifies a SubTransaction by its parent transaction index

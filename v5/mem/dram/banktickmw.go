@@ -15,6 +15,7 @@ func (m *bankTickMW) Tick() bool {
 	next := m.comp.GetNextState()
 	spec := m.comp.GetSpec()
 	next.TickCount++
+	next.TotalCycles++
 
 	progress := tickBanks(&spec, m.CmdCycles, next)
 

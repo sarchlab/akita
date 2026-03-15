@@ -79,6 +79,7 @@ func (m *respondMW) finalizeWriteTrans(
 
 	sendErr := m.topPort.Send(writeDone)
 	if sendErr == nil {
+		state.CompletedWrites++
 		m.removeTransaction(state, i)
 		return true
 	}
@@ -108,6 +109,7 @@ func (m *respondMW) finalizeReadTrans(
 
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
+		state.CompletedReads++
 		m.removeTransaction(state, i)
 		return true
 	}

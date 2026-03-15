@@ -164,6 +164,18 @@ func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cm
 		bs.CurrentCmd.CycleLeft = cycles
 	}
 
+	// Track statistics
+	switch kind {
+	case CmdKindRead, CmdKindReadPrecharge:
+		state.TotalReadCommands++
+	case CmdKindWrite, CmdKindWritePrecharge:
+		state.TotalWriteCommands++
+	case CmdKindActivate:
+		state.TotalActivates++
+	case CmdKindPrecharge:
+		state.TotalPrecharges++
+	}
+
 	// Update bank state based on the command
 	bankSt := BankStateKind(bs.State)
 

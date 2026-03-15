@@ -241,11 +241,18 @@ func getCommandToIssue(spec *Spec, next *State) *commandState {
 	// Priority 1: Find a row-buffer hit (bank is open, matching row, command is ready)
 	hit := findRowBufferHitCommand(spec, next)
 	if hit != nil {
+		next.RowBufferHits++
 		return hit
 	}
 
 	// Priority 2: FCFS — oldest ready command (any)
-	return findOldestReadyCommand(spec, next)
+	miss := findOldestReadyCommand(spec, next)
+	if miss != nil {
+		next.RowBufferMisses++
+		return miss
+	}
+
+	return nil
 }
 
 // findRowBufferHitCommand scans the command queue for a row-buffer hit
