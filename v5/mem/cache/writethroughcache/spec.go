@@ -18,6 +18,10 @@ type Spec struct {
 	TotalByteSize         uint64 `json:"total_byte_size"`
 	DirLatency            int    `json:"dir_latency"`
 
+	// WritePolicyType selects the write-policy strategy.
+	// Valid values: "write-around" (default), "write-evict", "write-through".
+	WritePolicyType string `json:"write_policy_type"`
+
 	// Address mapper configuration (inlined from interface)
 	AddressMapperType string   `json:"address_mapper_type"`
 	RemotePortNames   []string `json:"remote_port_names"`

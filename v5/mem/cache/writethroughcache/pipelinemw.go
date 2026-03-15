@@ -14,8 +14,6 @@ type pipelineMW struct {
 	topPort    sim.Port
 	bottomPort sim.Port
 
-	writePolicy WritePolicy
-
 	storage *mem.Storage
 
 	intakeStage      *intake

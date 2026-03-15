@@ -119,7 +119,7 @@ func buildMemoryHierarchy(engine sim.EventScheduler, s *simulation.Simulation) (
 	s.RegisterComponent(L2Cache)
 
 	L1Cache := writethroughcache.MakeBuilder().
-		WithWritePolicy(&writethroughcache.WritethroughPolicy{}).
+		WithWritePolicyType("write-through").
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
 		WithWayAssociativity(2).

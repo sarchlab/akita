@@ -48,8 +48,7 @@ var _ = Describe("Bankstage", func() {
 		}
 
 		c = &pipelineMW{
-			storage:     storage,
-			writePolicy: &WritearoundPolicy{},
+			storage: storage,
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
@@ -61,6 +60,7 @@ var _ = Describe("Bankstage", func() {
 				NumSets:          16,
 				NumBanks:         1,
 				NumReqPerCycle:   1,
+				WritePolicyType:  "write-around",
 			}).
 			Build("Cache")
 
