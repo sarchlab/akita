@@ -11,7 +11,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"go.uber.org/mock/gomock"
 )
@@ -384,11 +383,11 @@ var _ = Describe("Write-Back Cache Integration", func() {
 		write2.TrafficClass = "mem.WriteReq"
 		cacheComp.GetPortByName("Top").Deliver(write2)
 
-		flush := &cache.FlushReq{}
+		flush := &mem.ControlReq{Command: mem.CmdFlush}
 		flush.ID = sim.GetIDGenerator().Generate()
 		flush.Src = controlAgentPort.AsRemote()
 		flush.Dst = cacheComp.GetPortByName("Control").AsRemote()
-		flush.TrafficClass = "cache.FlushReq"
+		flush.TrafficClass = "mem.ControlReq"
 		cacheComp.GetPortByName("Control").Deliver(flush)
 
 		agentPort.EXPECT().Deliver(gomock.Any()).AnyTimes()

@@ -5,7 +5,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 	"go.uber.org/mock/gomock"
@@ -72,10 +71,10 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 	})
 
 	It("should restart and drain ports", func() {
-		req := &tlb.RestartReq{}
+		req := &mem.ControlReq{Command: mem.CmdReset}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = sim.RemotePort("Requester")
-		req.TrafficClass = "mmuCache.RestartReq"
+		req.TrafficClass = "mem.ControlReq"
 
 		topMsg := &vm.TranslationReq{}
 		topMsg.ID = sim.GetIDGenerator().Generate()
@@ -91,7 +90,9 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
 
 		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
-			rsp := sent.(*tlb.RestartRsp)
+			rsp := sent.(*mem.ControlRsp)
+			Expect(rsp.Command).To(Equal(mem.CmdReset))
+			Expect(rsp.Success).To(BeTrue())
 			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
 			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
 		}).Return(nil)
@@ -120,10 +121,10 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		})
 
-		req := &tlb.FlushReq{}
+		req := &mem.ControlReq{Command: mem.CmdFlush}
 		req.ID = sim.GetIDGenerator().Generate()
 		req.Src = sim.RemotePort("Requester")
-		req.TrafficClass = "mmuCache.FlushReq"
+		req.TrafficClass = "mem.ControlReq"
 		controlPort.EXPECT().RetrieveIncoming()
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
@@ -144,15 +145,14 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
 		})
 
-		msg := &mem.ControlMsg{
-			Pause: true,
+		msg := &mem.ControlReq{
+			Command: mem.CmdPause,
 		}
 		msg.ID = sim.GetIDGenerator().Generate()
 		msg.Dst = sim.RemotePort("ControlPort")
 		msg.TrafficBytes = 4
-		msg.TrafficClass = "mem.ControlMsg"
+		msg.TrafficClass = "mem.ControlReq"
 
-		controlPort.EXPECT().PeekIncoming().Return(msg)
 		controlPort.EXPECT().PeekIncoming().Return(msg)
 		controlPort.EXPECT().RetrieveIncoming().Return(msg)
 

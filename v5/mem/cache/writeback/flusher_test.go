@@ -3,6 +3,7 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
@@ -118,9 +119,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
-			req := &cache.FlushReq{}
+			req := &mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.FlushReq"
+			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
@@ -208,10 +209,10 @@ var _ = Describe("Flusher", func() {
 
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
-			req := &cache.FlushReq{}
+			req := &mem.ControlReq{Command: mem.CmdFlush}
 			req.ID = sim.GetIDGenerator().Generate()
 			req.DiscardInflight = true
-			req.TrafficClass = "cache.FlushReq"
+			req.TrafficClass = "mem.ControlReq"
 
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
@@ -230,9 +231,9 @@ var _ = Describe("Flusher", func() {
 
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
-			req := &cache.RestartReq{}
+			req := &mem.ControlReq{Command: mem.CmdEnable}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.RestartReq"
+			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().CanSend().Return(false)
 
@@ -244,9 +245,9 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should restart", func() {
-			req := &cache.RestartReq{}
+			req := &mem.ControlReq{Command: mem.CmdEnable}
 			req.ID = sim.GetIDGenerator().Generate()
-			req.TrafficClass = "cache.RestartReq"
+			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			controlPort.EXPECT().CanSend().Return(true)
