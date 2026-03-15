@@ -152,6 +152,49 @@ func MakeBuilder() Builder {
 	return b
 }
 
+// WithSpec sets the builder's spec and copies all relevant fields from
+// the spec into the builder's individual fields.
+func (b Builder) WithSpec(spec Spec) Builder {
+	b.spec = spec
+	b.protocol = Protocol(spec.Protocol)
+	b.transactionQueueSize = spec.TransactionQueueSize
+	b.commandQueueSize = spec.CommandQueueCapacity
+	b.busWidth = spec.BusWidth
+	b.burstLength = spec.BurstLength
+	b.deviceWidth = spec.DeviceWidth
+	b.numChannel = spec.NumChannel
+	b.numRank = spec.NumRank
+	b.numBankGroup = spec.NumBankGroup
+	b.numBank = spec.NumBank
+	b.numRow = spec.NumRow
+	b.numCol = spec.NumCol
+	b.tAL = spec.TAL
+	b.tCL = spec.TCL
+	b.tCWL = spec.TCWL
+	b.tRCD = spec.TRCD
+	b.tRP = spec.TRP
+	b.tRAS = spec.TRAS
+	b.tCCDL = spec.TCCDL
+	b.tCCDS = spec.TCCDS
+	b.tRTRS = spec.TRTRS
+	b.tRTP = spec.TRTP
+	b.tWTRL = spec.TWTRL
+	b.tWTRS = spec.TWTRS
+	b.tWR = spec.TWR
+	b.tPPD = spec.TPPD
+	b.tRRDL = spec.TRRDL
+	b.tRRDS = spec.TRRDS
+	b.tRCDRD = spec.TRCDRD
+	b.tRCDWR = spec.TRCDWR
+	b.tREFI = spec.TREFI
+	b.tRFC = spec.TRFC
+	b.tRFCb = spec.TRFCb
+	b.tCKESR = spec.TCKESR
+	b.tXS = spec.TXS
+
+	return b
+}
+
 // WithEngine sets the engine that the builder uses.
 func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
 	b.engine = engine

@@ -18,6 +18,10 @@ const (
 	HBM
 	HBM2
 	HMC
+	DDR5
+	HBM3
+	LPDDR5
+	HBM3E
 )
 
 func (p Protocol) isGDDR() bool {
@@ -25,7 +29,7 @@ func (p Protocol) isGDDR() bool {
 }
 
 func (p Protocol) isHBM() bool {
-	return p == HBM || p == HBM2
+	return p == HBM || p == HBM2 || p == HBM3 || p == HBM3E
 }
 
 // Spec contains immutable configuration for the DRAM memory controller.
