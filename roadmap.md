@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 414)
+## Current State (Cycle 419)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -145,22 +145,21 @@ Based on dependency analysis and human authorization (green light on: #477, #478
   6. 63 tests passing (46 new)
 - **Human constraint**: Used spec structs, NOT config files
 
-### M59: Quality cleanup — serialization bug, spec validation, repo hygiene
-- **Status**: NEXT
-- **Budget**: 6 cycles
-- **Scope**:
-  1. CRITICAL: writethroughcache controlStage.currFlushReq stores *mem.ControlReq pointer outside State — flatten into State like writeback does
-  2. DRAM Spec has nested Timing struct and non-string map keys — flatten or adjust validation
-  3. Remove 14 .test binaries + 28 .sqlite3 files from v5/ root, update .gitignore
-  4. Remove duplicated writeback cache test block in mem/acceptance_test.py
-  5. Eliminate legacyMapper runtime interface from writeback/writethroughcache — inline from Spec
-  6. Replace WritePolicy interface in writethroughcache with Spec field + switch
-  7. Fix DRAM SameRank[RefreshBank] timing table bug (builder.go double-assignment)
+### M59: Quality cleanup — serialization bug, spec validation, repo hygiene ✅
+- **Status**: COMPLETE (cycle 415-418, ~4 cycles)
+- **PR**: #92, merged
+- **Scope**: All 7 issues fixed — flush pointer flattened, DRAM timing moved to middleware, binaries gitignored, duplicate test removed, legacyMapper removed, WritePolicy replaced with string+switch, SameRank bug fixed
+- **Note**: CI still failing on main after merge — 3 lint issues remain (trailing newline, unused func, cognitive complexity)
 
-### M60: DRAM improvements phase 2 — validation + refresh + tFAW (#484)
-- **Status**: Future
-- **Budget**: TBD
-- **Scope**: Analytical validation tests (exact cycle counts), periodic refresh scheduling, tFAW constraint, basic statistics
+### M60: Fix CI lint + DRAM improvements phase 2 — validation + refresh + tFAW (#484)
+- **Status**: NEXT
+- **Budget**: 8 cycles
+- **Scope**:
+  1. Fix 3 CI lint errors on main (trailing newline in writethroughcache/builder.go, unused removeCommandFromQueueByID in dram/queue_ops.go, high cognitive complexity in getCommandToIssue)
+  2. Analytical validation tests with exact cycle-count verification against known DRAM timing
+  3. Periodic refresh scheduling (REFab/REFpb)
+  4. tFAW (four-activate window) constraint enforcement
+  5. Basic DRAM statistics (bandwidth, latency tracking)
 
 ### Future topics
 - Integer ID (#501) — pending human authorization
