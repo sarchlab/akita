@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 429)
+## Current State (Cycle 430)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -161,10 +161,15 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Final**: 84 DRAM tests passing, all CI green on main
 
 ### Awaiting Human Authorization
-- **Integer ID (#501)** — Research posted. Feasible, ~30-40 files, uint64 internally. Awaiting green light.
-- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Awaiting green light.
+- **Integer ID (#501)** — Research posted. Feasible, ~30-40 files, uint64 internally. Detailed implementation plan being drafted. Awaiting green light.
+- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Phased implementation plan being drafted. Awaiting explicit green light.
 - **React rewrite (#488)** — Depends on #482 merge. Awaiting green light.
-- **DRAM cross-validation (#484)** — Implementation complete. Further validation against DRAMSim3/Ramulator2 possible if desired.
+- **DRAM cross-validation (#484)** — Implementation complete (M58+M60). Further validation against DRAMSim3/Ramulator2 possible if desired.
+
+### Housekeeping (Cycle 430)
+- Cleaned up spec.md: moved 8 resolved items out of Active section
+- All tests passing, CI green, 30k lines Go code
+- spec.md now accurately reflects project state
 
 ---
 
