@@ -149,11 +149,15 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 21. ~~**Integer-based IDs**~~ (issue #501): **DONE in M61.** All entity IDs migrated from string to uint64 across all 7 subsystems (66 files).
 24. ~~**DRAM cross-validation**~~ (issue #484): **DONE in M62.** 4-tier cross-validation against DRAMSim3/Ramulator2 timing formulas. 158 total DRAM tests passing.
 
-### Active (Awaiting Human Authorization)
+### Active (Authorized)
 
-22. **Merge AkitaRTM and Daisen** (issue #482): Full merge into unified frontend with live/replay modes, single SQLite interface. Human conceptually agrees, awaiting explicit authorization.
+22. **Merge AkitaRTM and Daisen** (issue #482): Full merge into unified frontend with live/replay modes, single SQLite interface. **Human authorized** (green light on issue #586).
 
-23. **React rewrite** (issue #488): Rewrite merged frontend with React. Depends on #482. Awaiting authorization.
+23. **React rewrite** (issue #488): Rewrite merged frontend with React. Part of #482 merge effort. **Authorized** as part of Daisen merge.
+
+25. **Comprehensive documentation** (issue #588): (a) Extensive documentation for framework core with outline, subsections, and examples for writing simulators with Akita v5. (b) README.md for every component explaining how it works. **Authorized.**
+
+26. **Migration guide update** (issue #587): Update migration.md to reflect all V4→V5 changes including recent milestones (integer time, uint64 IDs, unified control protocol, etc.). **Authorized.**
 
 ### Deferred
 

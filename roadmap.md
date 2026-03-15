@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 443)
+## Current State (Cycle 444)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -174,12 +174,26 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Scope**: Added `timing_crossvalidation_test.go` with 4-tier validation: (1) 66 timing formula cross-validation tests across DDR4/DDR5/HBM2, (2) 4 single-request latency tests, (3) 4 multi-request behavioral tests including tFAW, (4) 3 bandwidth sanity checks. Pure Go, Ginkgo/Gomega framework. 158 total DRAM tests (84 existing + 74 new).
 - **Budget**: 6 cycles (used ~4)
 
-### Awaiting Human Authorization
-- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). One Go server, one React frontend, one SQLite DB. Human conceptually agrees but hasn't given explicit "green light" yet. Phased implementation plan ready (see issue #574).
-- **React rewrite (#488)** — Depends on #482 merge. Awaiting green light. Would be part of the merge effort.
+### Newly Authorized (Cycle 444)
+- **Merge AkitaRTM/Daisen (#482)** — Full merge authorized. Green light from human (issue #586 comment). One Go server, one React frontend, one SQLite DB. Mara's implementation plan ready (~17 cycles, 3 phases).
+- **React rewrite (#488)** — Part of Daisen merge effort. Authorized.
+- **Comprehensive documentation (#588)** — Human requests: (a) extensive core framework docs with examples, (b) README.md per component. New issue.
+- **Migration guide update (#587)** — Human requests migration.md to be updated.
 
-### Completed (All Authorized)
-All authorized milestones (M51-M62) are complete. 62 milestones total across the project. CI green on main. Awaiting human direction for next steps.
+### Implementation Plan (Cycle 444+)
+
+**M63: Documentation overhaul** (target: 8 cycles)
+- Update `component_guide.md` for M55 (integer time) and M61 (uint64 IDs) — fixes success criteria #15
+- Update `migration.md` with all V4→V5 changes
+- Write comprehensive framework documentation with examples
+- Add README.md to every component package
+- Status: NEXT
+
+**M64+: Daisen/AkitaRTM merge** (target: ~17 cycles across sub-milestones)
+- Phase 1: Backend merge (combine Go servers) — ~4 cycles
+- Phase 2: React frontend (replace vanilla TS) — ~10 cycles
+- Phase 3: Unified features (live+replay) — ~3 cycles
+- Status: After M63
 
 ### Housekeeping (Cycle 431)
 - Human gave "Green light" on Integer ID (#501)
