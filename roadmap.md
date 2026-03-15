@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 398)
+## Current State (Cycle 403)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -24,7 +24,8 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 **M53**: ✅ COMPLETE — /mem/mem flattening (4 cycles budgeted, ~4 used)
 **M54**: ✅ COMPLETE — Move directconnection to noc (#477) (3 cycles budgeted, ~3 used)
 **M55**: ✅ COMPLETE — Integer time representation (#480) (6 cycles budgeted, ~4 used)
-**M56**: 🔄 NEXT — Event serialization (#479)
+**M56**: ✅ COMPLETE — Event serialization (#479) (6 cycles budgeted, ~4 used)
+**M57**: 🔄 NEXT — Unified control protocol (#487)
 
 ---
 
@@ -121,10 +122,10 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **PR**: #89, merged
 - **Scope**: Replaced float64 `VTimeInSec` with uint64 picoseconds, `Freq` with uint64 Hz. Rewrote freq.go with integer arithmetic, eliminated all math.Round/Ceil/Floor hacks.
 
-### M56: Event serialization (#479)
-- **Status**: Planned
-- **Budget**: 6 cycles
-- **Scope**: Replace Handler() with HandlerID() string + HandlerRegistry. Make EventBase JSON-serializable. Enable event queue checkpoint/restore.
+### M56: Event serialization (#479) ✅
+- **Status**: COMPLETE (cycle 399-402, ~4 cycles)
+- **PR**: #90, merged
+- **Scope**: Replaced Handler() with HandlerID() string + HandlerRegistry. Made EventBase fully JSON-serializable. All event-creating code uses handler name strings. SerialEngine and ParallelEngine dispatch via registry lookup.
 
 ### M57: Unified control protocol (#487)
 - **Status**: Planned
