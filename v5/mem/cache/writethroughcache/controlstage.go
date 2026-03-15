@@ -13,8 +13,6 @@ type controlStage struct {
 	ctrlPort   sim.Port
 	pipeline   *pipelineMW
 	bankStages []*bankStage
-
-	currFlushReq *mem.ControlReq
 }
 
 func (s *controlStage) Tick() bool {
@@ -27,7 +25,8 @@ func (s *controlStage) Tick() bool {
 }
 
 func (s *controlStage) processCurrentFlush() bool {
-	if s.currFlushReq == nil {
+	next := s.pipeline.comp.GetNextState()
+	if !next.HasProcessingFlush {
 		return false
 	}
 
@@ -38,8 +37,8 @@ func (s *controlStage) processCurrentFlush() bool {
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
 	rsp.ID = sim.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
-	rsp.Dst = s.currFlushReq.Src
-	rsp.RspTo = s.currFlushReq.ID
+	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
+	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
 	rsp.TrafficBytes = 0
 	rsp.TrafficClass = "mem.ControlRsp"
 
@@ -49,7 +48,8 @@ func (s *controlStage) processCurrentFlush() bool {
 	}
 
 	s.hardResetCache()
-	s.currFlushReq = nil
+	next.HasProcessingFlush = false
+	next.ProcessingFlush = flushReqState{}
 
 	return true
 }
@@ -80,7 +80,7 @@ func (s *controlStage) hardResetCache() {
 	// Clear all transactions
 	next.Transactions = nil
 
-	if s.currFlushReq.PauseAfter {
+	if next.ProcessingFlush.PauseAfter {
 		next.IsPaused = true
 	}
 }
@@ -116,11 +116,18 @@ func (s *controlStage) processNewRequest() bool {
 }
 
 func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
-	if s.currFlushReq != nil {
+	next := s.pipeline.comp.GetNextState()
+	if next.HasProcessingFlush {
 		return false
 	}
 
-	s.currFlushReq = msg
+	next.HasProcessingFlush = true
+	next.ProcessingFlush = flushReqState{
+		MsgMeta:         msg.MsgMeta,
+		DiscardInflight: msg.DiscardInflight,
+		PauseAfter:      msg.PauseAfter,
+	}
+
 	s.ctrlPort.RetrieveIncoming()
 
 	return true
@@ -157,7 +164,7 @@ func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
 	next := s.pipeline.comp.GetNextState()
-	if s.currFlushReq.DiscardInflight {
+	if next.ProcessingFlush.DiscardInflight {
 		return false
 	}
 	for i := range next.Transactions {

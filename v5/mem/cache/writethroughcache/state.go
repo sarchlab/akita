@@ -23,6 +23,17 @@ type State struct {
 	BankPostBufs  []queueing.Buffer[int]   `json:"bank_post_bufs"`
 
 	IsPaused bool `json:"is_paused"`
+
+	// Flush request fields (flattened from *mem.ControlReq for serialization)
+	HasProcessingFlush bool          `json:"has_processing_flush"`
+	ProcessingFlush    flushReqState `json:"processing_flush"`
+}
+
+// flushReqState is a serializable representation of a flush control request.
+type flushReqState struct {
+	MsgMeta         sim.MsgMeta `json:"msg_meta"`
+	DiscardInflight bool        `json:"discard_inflight"`
+	PauseAfter      bool        `json:"pause_after"`
 }
 
 type bankActionType int

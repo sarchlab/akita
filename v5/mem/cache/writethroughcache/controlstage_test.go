@@ -100,7 +100,15 @@ var _ = Describe("Control Stage", func() {
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
 		flushReq.DiscardInflight = false
-		s.currFlushReq = flushReq
+
+		// Store flush request in State instead of controlStage field
+		next.HasProcessingFlush = true
+		next.ProcessingFlush = flushReqState{
+			MsgMeta:         flushReq.MsgMeta,
+			DiscardInflight: flushReq.DiscardInflight,
+			PauseAfter:      flushReq.PauseAfter,
+		}
+
 		ctrlPort.EXPECT().PeekIncoming().Return(flushReq)
 
 		madeProgress := s.Tick()
@@ -116,7 +124,16 @@ var _ = Describe("Control Stage", func() {
 		flushReq.PauseAfter = true
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
-		s.currFlushReq = flushReq
+
+		// Store flush request in State instead of controlStage field
+		next := pmw.comp.GetNextState()
+		next.HasProcessingFlush = true
+		next.ProcessingFlush = flushReqState{
+			MsgMeta:         flushReq.MsgMeta,
+			DiscardInflight: flushReq.DiscardInflight,
+			PauseAfter:      flushReq.PauseAfter,
+		}
+
 		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
 			Expect(msg.Meta().RspTo).To(Equal(flushReq.ID))
 		})
@@ -129,7 +146,8 @@ var _ = Describe("Control Stage", func() {
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		Expect(s.currFlushReq).To(BeNil())
+		next = pmw.comp.GetNextState()
+		Expect(next.HasProcessingFlush).To(BeFalse())
 	})
 
 })
