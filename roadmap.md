@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 394)
+## Current State (Cycle 398)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -12,7 +12,7 @@ All 50 milestones from the original component model refactoring are complete. Al
 
 ### Research Phase: ✅ RESEARCH COMPLETE
 
-All 13 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487.
+All 13 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484.
 
 ### New Topic: Integer ID (#501)
 Human raised new discussion topic: replace string-based IDs with integer-based IDs to reduce GC/allocation overhead. Research complete — feasible, ~30-40 files, no blockers. No authorization to implement yet.
@@ -23,7 +23,8 @@ Human raised new discussion topic: replace string-based IDs with integer-based I
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
 **M53**: ✅ COMPLETE — /mem/mem flattening (4 cycles budgeted, ~4 used)
 **M54**: ✅ COMPLETE — Move directconnection to noc (#477) (3 cycles budgeted, ~3 used)
-**M55**: 🔄 NEXT — Integer time representation (#480)
+**M55**: ✅ COMPLETE — Integer time representation (#480) (6 cycles budgeted, ~4 used)
+**M56**: 🔄 NEXT — Event serialization (#479)
 
 ---
 
@@ -115,18 +116,30 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **PR**: #88, merged
 - **Scope**: Moved `v5/sim/directconnection/` to `v5/noc/directconnection/`, updated 22 import paths. Pure mechanical refactor.
 
-### M55: Integer time (#480)
-- **Status**: Planned
-- **Budget**: 6 cycles
-- **Scope**: Replace float64 `sim.VTimeInSec` with uint64 picoseconds. ~21 core files + downstream.
+### M55: Integer time (#480) ✅
+- **Status**: COMPLETE (cycle 395-398, ~4 cycles)
+- **PR**: #89, merged
+- **Scope**: Replaced float64 `VTimeInSec` with uint64 picoseconds, `Freq` with uint64 Hz. Rewrote freq.go with integer arithmetic, eliminated all math.Round/Ceil/Floor hacks.
 
 ### M56: Event serialization (#479)
 - **Status**: Planned
-- **Budget**: 5 cycles
-- **Scope**: Replace Handler() with HandlerID() + HandlerRegistry
+- **Budget**: 6 cycles
+- **Scope**: Replace Handler() with HandlerID() string + HandlerRegistry. Make EventBase JSON-serializable. Enable event queue checkpoint/restore.
 
-### M57+: Remaining topics (unified control protocol, DRAM, etc.)
-- **Status**: Planned — details to be refined
+### M57: Unified control protocol (#487)
+- **Status**: Planned
+- **Budget**: 6 cycles
+- **Scope**: Define single ControlReq/ControlRsp with enum commands for all memory components.
+
+### M58: DRAM controller improvements (#484)
+- **Status**: Planned
+- **Budget**: TBD (large)
+- **Scope**: Support wider range of DRAM types (HBM2, HBM3, GDDR6, DDR4/5). Use spec structs per human direction.
+
+### Future topics
+- Integer ID (#501) — pending human authorization
+- Merge AkitaRTM/Daisen (#482) — human clarification addressed, awaiting authorization
+- React rewrite (#488) — pending authorization
 
 ---
 
