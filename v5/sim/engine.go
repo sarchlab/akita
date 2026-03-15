@@ -12,6 +12,11 @@ type EventScheduler interface {
 	Schedule(e Event)
 }
 
+// HandlerRegistrar allows registering named handlers for event dispatch.
+type HandlerRegistrar interface {
+	RegisterHandler(name string, handler Handler)
+}
+
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
 	Hookable

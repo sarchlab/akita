@@ -51,5 +51,9 @@ func (b EventDrivenBuilder[S, T]) Build(name string) *EventDrivenComponent[S, T]
 		pendingWakeup: math.MaxUint64,
 	}
 
+	if registrar, ok := b.engine.(sim.HandlerRegistrar); ok {
+		registrar.RegisterHandler(name, comp)
+	}
+
 	return comp
 }

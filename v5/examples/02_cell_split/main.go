@@ -14,17 +14,17 @@ var randGen *rand.Rand
 
 // splitEvent is an event that splits a cell into two cells.
 type splitEvent struct {
-	time    sim.VTimeInSec
-	handler sim.Handler
-	id      int
+	time      sim.VTimeInSec
+	handlerID string
+	id        int
 }
 
 func (e splitEvent) Time() sim.VTimeInSec {
 	return e.time
 }
 
-func (e splitEvent) Handler() sim.Handler {
-	return e.handler
+func (e splitEvent) HandlerID() string {
+	return e.handlerID
 }
 
 func (e splitEvent) IsSecondary() bool {
@@ -51,9 +51,9 @@ func (h *handler) Handle(e sim.Event) error {
 func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec, id int) {
 	timeUntilNextSplit := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	nextEvt := splitEvent{
-		time:    now + timeUntilNextSplit,
-		handler: h,
-		id:      id,
+		time:      now + timeUntilNextSplit,
+		handlerID: "splitter",
+		id:        id,
 	}
 
 	if nextEvt.time < endTime {
@@ -70,11 +70,15 @@ func main() {
 		count: 1,
 	}
 
+	if registrar, ok := engine.(sim.HandlerRegistrar); ok {
+		registrar.RegisterHandler("splitter", &h)
+	}
+
 	firstEvtTime := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	firstEvt := splitEvent{
-		time:    firstEvtTime,
-		handler: &h,
-		id:      0,
+		time:      firstEvtTime,
+		handlerID: "splitter",
+		id:        0,
 	}
 
 	engine.Schedule(firstEvt)

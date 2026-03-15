@@ -27,6 +27,8 @@ type ParallelEngine struct {
 	queueChan          chan EventQueue
 	secondaryQueues    []EventQueue
 	secondaryQueueChan chan EventQueue
+
+	registry map[string]Handler
 }
 
 // NewParallelEngine creates a ParallelEngine
@@ -37,6 +39,8 @@ func NewParallelEngine() *ParallelEngine {
 
 	e.maxGoRoutine = runtime.GOMAXPROCS(0)
 	numQueues := runtime.GOMAXPROCS(0)
+
+	e.registry = make(map[string]Handler)
 
 	// e.spawnWorkers()
 	e.queues = make([]EventQueue, 0, numQueues)
@@ -60,6 +64,11 @@ func NewParallelEngine() *ParallelEngine {
 	return e
 }
 
+// RegisterHandler registers a handler with the given name.
+func (e *ParallelEngine) RegisterHandler(name string, handler Handler) {
+	e.registry[name] = handler
+}
+
 // func (e *ParallelEngine) spawnWorkers() {
 // 	for i := 0; i < e.maxGoRoutine; i++ {
 // 		go e.worker()
@@ -78,7 +87,7 @@ func NewParallelEngine() *ParallelEngine {
 // 		}
 // 		e.InvokeHook(&hookCtx)
 
-// 		handler := evt.Handler()
+// 		handler := e.registry[evt.HandlerID()]
 // 		_ = handler.Handle(evt)
 
 // 		hookCtx.Pos = HookPosAfterEvent
@@ -280,7 +289,7 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 	}
 	e.InvokeHook(hookCtx)
 
-	handler := evt.Handler()
+	handler := e.registry[evt.HandlerID()]
 	_ = handler.Handle(evt)
 
 	hookCtx.Pos = HookPosAfterEvent

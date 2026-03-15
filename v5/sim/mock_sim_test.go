@@ -434,18 +434,18 @@ func (m *MockEvent) EXPECT() *MockEventMockRecorder {
 	return m.recorder
 }
 
-// Handler mocks base method.
-func (m *MockEvent) Handler() Handler {
+// HandlerID mocks base method.
+func (m *MockEvent) HandlerID() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handler")
-	ret0, _ := ret[0].(Handler)
+	ret := m.ctrl.Call(m, "HandlerID")
+	ret0, _ := ret[0].(string)
 	return ret0
 }
 
-// Handler indicates an expected call of Handler.
-func (mr *MockEventMockRecorder) Handler() *gomock.Call {
+// HandlerID indicates an expected call of HandlerID.
+func (mr *MockEventMockRecorder) HandlerID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handler", reflect.TypeOf((*MockEvent)(nil).Handler))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandlerID", reflect.TypeOf((*MockEvent)(nil).HandlerID))
 }
 
 // IsSecondary mocks base method.

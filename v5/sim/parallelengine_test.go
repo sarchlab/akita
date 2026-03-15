@@ -32,17 +32,20 @@ var _ = Describe("ParallelEngine", func() {
 		evt3 := NewMockEvent(mockCtrl)
 		evt4 := NewMockEvent(mockCtrl)
 
+		engine.RegisterHandler("handler1", handler1)
+		engine.RegisterHandler("handler2", handler2)
+
 		evt1.EXPECT().Time().Return(VTimeInSec(4)).AnyTimes()
-		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt1.EXPECT().HandlerID().Return("handler1").AnyTimes()
 		evt1.EXPECT().IsSecondary().Return(false).AnyTimes()
 		evt2.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
-		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
+		evt2.EXPECT().HandlerID().Return("handler2").AnyTimes()
 		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
 		evt3.EXPECT().Time().Return(VTimeInSec(3)).AnyTimes()
-		evt3.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt3.EXPECT().HandlerID().Return("handler1").AnyTimes()
 		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
 		evt4.EXPECT().Time().Return(VTimeInSec(5)).AnyTimes()
-		evt4.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt4.EXPECT().HandlerID().Return("handler1").AnyTimes()
 		evt4.EXPECT().IsSecondary().Return(false).AnyTimes()
 		handleEvt2 := handler2.EXPECT().Handle(evt2).Do(func(e Event) {
 			engine.Schedule(evt3)
@@ -69,14 +72,18 @@ var _ = Describe("ParallelEngine", func() {
 		evt2 := NewMockEvent(mockCtrl)
 		evt3 := NewMockEvent(mockCtrl)
 
+		engine.RegisterHandler("handler1", handler1)
+		engine.RegisterHandler("handler2", handler2)
+		engine.RegisterHandler("handler3", handler3)
+
 		evt1.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
-		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
+		evt1.EXPECT().HandlerID().Return("handler1").AnyTimes()
 		evt1.EXPECT().IsSecondary().Return(true).AnyTimes()
 		evt2.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
-		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
+		evt2.EXPECT().HandlerID().Return("handler2").AnyTimes()
 		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
 		evt3.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
-		evt3.EXPECT().Handler().Return(handler3).AnyTimes()
+		evt3.EXPECT().HandlerID().Return("handler3").AnyTimes()
 		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
 
 		handleEvt2 := handler2.EXPECT().Handle(evt2)
@@ -103,11 +110,13 @@ var _ = Describe("ParallelEngine", func() {
 				time.Sleep(time.Duration(rand.Uint64()%10) * time.Millisecond)
 			}).AnyTimes()
 
+			engine.RegisterHandler("handler", handler)
+
 			for i := 0; i < 10000; i++ {
 				evt := NewMockEvent(mockCtrl)
 				time := VTimeInSec(rand.Uint64() % 10000)
 				evt.EXPECT().Time().Return(time).AnyTimes()
-				evt.EXPECT().Handler().Return(handler).AnyTimes()
+				evt.EXPECT().HandlerID().Return("handler").AnyTimes()
 				evt.EXPECT().IsSecondary().Return(false).AnyTimes()
 				engine.Schedule(evt)
 			}

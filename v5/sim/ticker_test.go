@@ -51,7 +51,7 @@ var _ = Describe("Ticking Component", func() {
 			})
 		ticker.EXPECT().Tick().Return(true)
 		engine.EXPECT().CurrentTime().Return(VTimeInSec(10000))
-		tc.Handle(MakeTickEvent(tc, VTimeInSec(10000)))
+		tc.Handle(MakeTickEvent(tc.Name(), VTimeInSec(10000)))
 	})
 
 	It("should not tick if there is another tick scheduled in the future",
@@ -63,7 +63,7 @@ var _ = Describe("Ticking Component", func() {
 
 			ticker.EXPECT().Tick().Return(true)
 			engine.EXPECT().CurrentTime().Return(VTimeInSec(10000))
-			tc.Handle(MakeTickEvent(tc, VTimeInSec(10000)))
+			tc.Handle(MakeTickEvent(tc.Name(), VTimeInSec(10000)))
 
 			engine.EXPECT().CurrentTime().Return(VTimeInSec(10000))
 			tc.TickNow()
@@ -71,7 +71,7 @@ var _ = Describe("Ticking Component", func() {
 
 	It("should stop ticking if no progress is made", func() {
 		ticker.EXPECT().Tick().Return(false)
-		tc.Handle(MakeTickEvent(tc, VTimeInSec(10000)))
+		tc.Handle(MakeTickEvent(tc.Name(), VTimeInSec(10000)))
 		engine.EXPECT().Schedule(gomock.Any()).Times(0)
 	})
 
@@ -82,14 +82,12 @@ var _ = Describe("TickScheduler Reset", func() {
 		mockCtrl  *gomock.Controller
 		engine    *MockEngine
 		scheduler *TickScheduler
-		handler   *MockHandler
 	)
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		engine = NewMockEngine(mockCtrl)
-		handler = NewMockHandler(mockCtrl)
-		scheduler = NewTickScheduler(handler, engine, 1*GHz)
+		scheduler = NewTickScheduler("testHandler", engine, 1*GHz)
 	})
 
 	AfterEach(func() {

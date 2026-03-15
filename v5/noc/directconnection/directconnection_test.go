@@ -62,7 +62,7 @@ var _ = Describe("DirectConnection", func() {
 	It("should forward when handling tick event", func() {
 		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10000))
 
-		tick := sim.MakeTickEvent(connection, sim.VTimeInSec(10000))
+		tick := sim.MakeTickEvent(connection.Name(), sim.VTimeInSec(10000))
 
 		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()

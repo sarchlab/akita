@@ -11,12 +11,12 @@ type TickEvent struct {
 }
 
 // MakeTickEvent creates a new TickEvent
-func MakeTickEvent(handler Handler, time VTimeInSec) TickEvent {
+func MakeTickEvent(handlerID string, time VTimeInSec) TickEvent {
 	evt := TickEvent{}
 	evt.ID = GetIDGenerator().Generate()
-	evt.handler = handler
-	evt.time = time
-	evt.secondary = false
+	evt.HandlerID_ = handlerID
+	evt.Time_ = time
+	evt.Secondary = false
 
 	return evt
 }
@@ -29,7 +29,7 @@ type Ticker interface {
 // TickScheduler can help schedule tick events.
 type TickScheduler struct {
 	lock      sync.Mutex
-	handler   Handler
+	handlerID string
 	Freq      Freq
 	Engine    EventScheduler
 	secondary bool
@@ -40,13 +40,13 @@ type TickScheduler struct {
 
 // NewTickScheduler creates a scheduler for tick events.
 func NewTickScheduler(
-	handler Handler,
+	handlerID string,
 	engine EventScheduler,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
-	ticker.handler = handler
+	ticker.handlerID = handlerID
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.hasScheduledTick = false
@@ -57,13 +57,13 @@ func NewTickScheduler(
 // NewSecondaryTickScheduler creates a scheduler that always schedule secondary
 // tick events.
 func NewSecondaryTickScheduler(
-	handler Handler,
+	handlerID string,
 	engine EventScheduler,
 	freq Freq,
 ) *TickScheduler {
 	ticker := new(TickScheduler)
 
-	ticker.handler = handler
+	ticker.handlerID = handlerID
 	ticker.Engine = engine
 	ticker.Freq = freq
 	ticker.secondary = true
@@ -84,10 +84,10 @@ func (t *TickScheduler) TickNow() {
 
 	t.nextTickTime = t.Freq.ThisTick(time)
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handler, t.nextTickTime)
+	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
 
 	if t.secondary {
-		tick.secondary = true
+		tick.Secondary = true
 	}
 
 	t.Engine.Schedule(tick)
@@ -106,10 +106,10 @@ func (t *TickScheduler) TickLater() {
 
 	t.nextTickTime = time
 	t.hasScheduledTick = true
-	tick := MakeTickEvent(t.handler, t.nextTickTime)
+	tick := MakeTickEvent(t.handlerID, t.nextTickTime)
 
 	if t.secondary {
-		tick.secondary = true
+		tick.Secondary = true
 	}
 
 	t.Engine.Schedule(tick)
@@ -174,9 +174,13 @@ func NewTickingComponent(
 	ticker Ticker,
 ) *TickingComponent {
 	tc := new(TickingComponent)
-	tc.TickScheduler = NewTickScheduler(tc, engine, freq)
+	tc.TickScheduler = NewTickScheduler(name, engine, freq)
 	tc.ComponentBase = NewComponentBase(name)
 	tc.ticker = ticker
+
+	if registrar, ok := engine.(HandlerRegistrar); ok {
+		registrar.RegisterHandler(name, tc)
+	}
 
 	return tc
 }
@@ -189,9 +193,13 @@ func NewSecondaryTickingComponent(
 	ticker Ticker,
 ) *TickingComponent {
 	tc := new(TickingComponent)
-	tc.TickScheduler = NewSecondaryTickScheduler(tc, engine, freq)
+	tc.TickScheduler = NewSecondaryTickScheduler(name, engine, freq)
 	tc.ComponentBase = NewComponentBase(name)
 	tc.ticker = ticker
+
+	if registrar, ok := engine.(HandlerRegistrar); ok {
+		registrar.RegisterHandler(name, tc)
+	}
 
 	return tc
 }

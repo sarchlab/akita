@@ -10,15 +10,15 @@ import (
 var r = rand.New(rand.NewSource(1))
 
 type SplitEvent struct {
-	time    sim.VTimeInSec
-	handler sim.Handler
+	time      sim.VTimeInSec
+	handlerID string
 }
 
 func (e SplitEvent) Time() sim.VTimeInSec {
 	return e.time
 }
-func (e SplitEvent) Handler() sim.Handler {
-	return e.handler
+func (e SplitEvent) HandlerID() string {
+	return e.handlerID
 }
 func (e SplitEvent) IsSecondary() bool {
 	return false
@@ -36,8 +36,8 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 
 	if nextTime < 10000 {
 		nextEvt := SplitEvent{
-			time:    nextTime,
-			handler: h,
+			time:      nextTime,
+			handlerID: "splitter",
 		}
 		h.engine.Schedule(nextEvt)
 	}
@@ -45,8 +45,8 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 	nextTime = now + sim.VTimeInSec(r.Uint64()%2000+500)
 	if nextTime < 10000 {
 		nextEvt := SplitEvent{
-			time:    nextTime,
-			handler: h,
+			time:      nextTime,
+			handlerID: "splitter",
 		}
 		h.engine.Schedule(nextEvt)
 	}
@@ -61,9 +61,10 @@ func ExampleEvent() {
 		total:  0,
 		engine: engine,
 	}
+	engine.RegisterHandler("splitter", &splitHandler)
 	engine.Schedule(SplitEvent{
-		time:    0,
-		handler: &splitHandler,
+		time:      0,
+		handlerID: "splitter",
 	})
 	engine.Run()
 	fmt.Printf("Total number at time 10000: %d\n", splitHandler.total)
