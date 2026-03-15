@@ -29,15 +29,15 @@ var _ = Describe("EventQueueImpl", func() {
 			event := NewMockEvent(mockCtrl)
 			event.EXPECT().
 				Time().
-				Return(VTimeInSec(rand.Float64() / 1e8)).
+				Return(VTimeInSec(rand.Uint64() % 100000)).
 				AnyTimes()
 			queue.Push(event)
 		}
 
-		now := VTimeInSec(-1)
+		now := VTimeInSec(0)
 		for i := 0; i < numEvents; i++ {
 			event := queue.Pop()
-			Expect(event.Time() > now).To(BeTrue())
+			Expect(event.Time() >= now).To(BeTrue())
 			now = event.Time()
 		}
 	})
@@ -64,15 +64,15 @@ var _ = Describe("Insertion Queue", func() {
 			event := NewMockEvent(mockCtrl)
 			event.EXPECT().
 				Time().
-				Return(VTimeInSec(rand.Float64() / 1e8)).
+				Return(VTimeInSec(rand.Uint64() % 100000)).
 				AnyTimes()
 			queue.Push(event)
 		}
 
-		now := VTimeInSec(-1)
+		now := VTimeInSec(0)
 		for i := 0; i < numEvents; i++ {
 			event := queue.Pop()
-			Expect(event.Time() > now).To(BeTrue())
+			Expect(event.Time() >= now).To(BeTrue())
 			now = event.Time()
 		}
 	})

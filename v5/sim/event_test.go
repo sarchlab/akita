@@ -32,9 +32,9 @@ type SplitHandler struct {
 func (h *SplitHandler) Handle(evt sim.Event) error {
 	h.total++
 	now := evt.Time()
-	nextTime := now + sim.VTimeInSec(r.Float64()*2+0.5)
+	nextTime := now + sim.VTimeInSec(r.Uint64()%2000+500)
 
-	if nextTime < 10.0 {
+	if nextTime < 10000 {
 		nextEvt := SplitEvent{
 			time:    nextTime,
 			handler: h,
@@ -42,8 +42,8 @@ func (h *SplitHandler) Handle(evt sim.Event) error {
 		h.engine.Schedule(nextEvt)
 	}
 
-	nextTime = now + sim.VTimeInSec(r.Float64()*2+0.5)
-	if nextTime < 10.0 {
+	nextTime = now + sim.VTimeInSec(r.Uint64()%2000+500)
+	if nextTime < 10000 {
 		nextEvt := SplitEvent{
 			time:    nextTime,
 			handler: h,
@@ -66,6 +66,6 @@ func ExampleEvent() {
 		handler: &splitHandler,
 	})
 	engine.Run()
-	fmt.Printf("Total number at time 10: %d\n", splitHandler.total)
-	// Output: Total number at time 10: 185
+	fmt.Printf("Total number at time 10000: %d\n", splitHandler.total)
+	// Output: Total number at time 10000: 90
 }

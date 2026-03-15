@@ -31,6 +31,6 @@ func Example_pingWithEvents() {
 
 	engine.Run()
 	// Output:
-	// Ping 0, 2.00
-	// Ping 1, 2.00
+	// Ping 0, 2000000000999 ps
+	// Ping 1, 2000000000997 ps
 }

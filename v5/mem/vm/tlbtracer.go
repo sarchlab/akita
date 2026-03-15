@@ -30,7 +30,7 @@ func (t *TLBTracer) Func(ctx *sim.HookCtx) {
 	}
 
 	_, err := fmt.Fprintf(t.writer,
-		"%.12f,%s,%s,{}\n",
+		"%d,%s,%s,{}\n",
 		t.timeTeller.CurrentTime(),
 		ctx.Domain.(sim.Component).Name(),
 		what)

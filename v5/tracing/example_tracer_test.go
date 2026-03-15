@@ -70,19 +70,19 @@ func ExampleTracer() {
 	tracing.CollectTrace(domain, busyTimeTracer)
 	tracing.CollectTrace(domain, avgTimeTracer)
 
-	timeTeller.time = 1
+	timeTeller.time = 10
 
 	domain.Start()
 
-	timeTeller.time = 1.5
+	timeTeller.time = 15
 
 	domain.Start()
 
-	timeTeller.time = 2
+	timeTeller.time = 20
 
 	domain.End()
 
-	timeTeller.time = 3
+	timeTeller.time = 30
 
 	domain.End()
 
@@ -91,7 +91,7 @@ func ExampleTracer() {
 	fmt.Println(avgTimeTracer.AverageTime())
 
 	// Output:
-	// 2.5
-	// 2
-	// 1.25
+	// 25
+	// 20
+	// 12
 }

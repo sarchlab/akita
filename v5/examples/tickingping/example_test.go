@@ -39,6 +39,6 @@ func Example() {
 	}
 
 	// Output:
-	// Ping 0, 5.00
-	// Ping 1, 5.00
+	// Ping 0, 5000000000000 ps
+	// Ping 1, 5000000000000 ps
 }

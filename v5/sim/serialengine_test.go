@@ -33,16 +33,16 @@ var _ = Describe("SerialEngine", func() {
 		evt3 := NewMockEvent(mockCtrl)
 		evt4 := NewMockEvent(mockCtrl)
 
-		evt1.EXPECT().Time().Return(VTimeInSec(4.0)).AnyTimes()
+		evt1.EXPECT().Time().Return(VTimeInSec(4)).AnyTimes()
 		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
 		evt1.EXPECT().IsSecondary().Return(false).AnyTimes()
-		evt2.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt2.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
 		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
 		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
-		evt3.EXPECT().Time().Return(VTimeInSec(3.0)).AnyTimes()
+		evt3.EXPECT().Time().Return(VTimeInSec(3)).AnyTimes()
 		evt3.EXPECT().Handler().Return(handler1).AnyTimes()
 		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
-		evt4.EXPECT().Time().Return(VTimeInSec(5.0)).AnyTimes()
+		evt4.EXPECT().Time().Return(VTimeInSec(5)).AnyTimes()
 		evt4.EXPECT().Handler().Return(handler1).AnyTimes()
 		evt4.EXPECT().IsSecondary().Return(false).AnyTimes()
 		handleEvt2 := handler2.EXPECT().Handle(evt2).Do(func(e Event) {
@@ -70,13 +70,13 @@ var _ = Describe("SerialEngine", func() {
 		evt2 := NewMockEvent(mockCtrl)
 		evt3 := NewMockEvent(mockCtrl)
 
-		evt1.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt1.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
 		evt1.EXPECT().Handler().Return(handler1).AnyTimes()
 		evt1.EXPECT().IsSecondary().Return(true).AnyTimes()
-		evt2.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt2.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
 		evt2.EXPECT().Handler().Return(handler2).AnyTimes()
 		evt2.EXPECT().IsSecondary().Return(false).AnyTimes()
-		evt3.EXPECT().Time().Return(VTimeInSec(2.0)).AnyTimes()
+		evt3.EXPECT().Time().Return(VTimeInSec(2)).AnyTimes()
 		evt3.EXPECT().Handler().Return(handler3).AnyTimes()
 		evt3.EXPECT().IsSecondary().Return(false).AnyTimes()
 
@@ -95,8 +95,8 @@ var _ = Describe("SerialEngine", func() {
 	})
 
 	It("should set current time", func() {
-		engine.SetCurrentTime(VTimeInSec(42.5))
-		Expect(engine.CurrentTime()).To(Equal(VTimeInSec(42.5)))
+		engine.SetCurrentTime(VTimeInSec(42))
+		Expect(engine.CurrentTime()).To(Equal(VTimeInSec(42)))
 	})
 
 	It("measure triggering speed", func() {
@@ -111,7 +111,7 @@ var _ = Describe("SerialEngine", func() {
 
 			for i := 0; i < 10000; i++ {
 				evt := NewMockEvent(mockCtrl)
-				time := VTimeInSec(float64(rand.Uint64()%10) * 0.01)
+				time := VTimeInSec(rand.Uint64() % 10000)
 				evt.EXPECT().Time().Return(time).AnyTimes()
 				evt.EXPECT().Handler().Return(handler).AnyTimes()
 				evt.EXPECT().IsSecondary().
