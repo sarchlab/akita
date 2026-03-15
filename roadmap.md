@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 430)
+## Current State (Cycle 443)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -12,7 +12,7 @@ All 50 milestones from the original component model refactoring are complete. Al
 
 ### Research Phase: ✅ RESEARCH COMPLETE
 
-All 14 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484.
+All 14 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484, #501.
 
 ### Phase 2 Implementation: ✅ ALL AUTHORIZED WORK COMPLETE
 
@@ -26,6 +26,8 @@ All 14 human topics have been researched. Findings summarized below. Human gave 
 **M58**: ✅ COMPLETE — DRAM improvements phase 1: predefined specs, open-page policy, FR-FCFS scheduling (#484) (8 cycles budgeted, ~4 used)
 **M59**: ✅ COMPLETE — Quality cleanup: serialization bug, spec validation, repo hygiene (4 cycles)
 **M60**: ✅ COMPLETE — Fix CI lint + DRAM phase 2: validation, refresh, tFAW, statistics (4 cycles)
+**M61**: ✅ COMPLETE — Integer ID migration: all entity IDs from string to uint64 (8 budgeted, ~5 used)
+**M62**: ✅ COMPLETE — DRAM cross-validation against DRAMSim3/Ramulator2 (6 budgeted, ~4 used)
 
 ---
 
@@ -47,7 +49,7 @@ All 14 human topics have been researched. Findings summarized below. Human gave 
 **Recommendation: NO** — Keep separate repos.
 
 ### Topic 6: Merge AkitaRTM and Daisen? (#482)
-**Recommendation: PARTIAL MERGE** — Unified frontend with live/replay modes.
+**Recommendation: FULL MERGE** — One Go server, one React frontend, one SQLite database. Live mode = simulation writes + frontend polls. Replay mode = read completed file. Human conceptually agrees.
 
 ### Topic 7: Double buffering residue (#483) ✅ DONE (M51)
 
@@ -166,15 +168,18 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Scope**: Migrated ALL entity IDs from string to uint64 across all 7 subsystems in one pass: core types (MsgMeta, EventBase), ID generator, tracing (Task, Milestone), NOC, memory subsystem, Daisen, examples. 66 files changed.
 - **Budget**: 8 cycles (used ~5)
 
-### M62: DRAM Cross-Validation against DRAMSim3/Ramulator2 (NEXT)
-- **Status**: READY FOR IMPLEMENTATION (cycle 437)
-- **Scope**: Add `timing_crossvalidation_test.go` with 4-tier validation: (1) timing formula verification against DRAMSim3/Ramulator2 formulas for DDR4/DDR5/HBM2, (2) single-request latency tests, (3) multi-request behavioral tests, (4) bandwidth sanity tests. Pure Go, no external dependencies. Details in tbc-db issue #582.
-- **Budget**: 6 cycles
-- **Human authorization**: "Yes. Cross validation is needed." on issue #484
+### M62: DRAM Cross-Validation against DRAMSim3/Ramulator2 ✅
+- **Status**: COMPLETE (cycle 438-442, ~4 cycles)
+- **PR**: #95, merged
+- **Scope**: Added `timing_crossvalidation_test.go` with 4-tier validation: (1) 66 timing formula cross-validation tests across DDR4/DDR5/HBM2, (2) 4 single-request latency tests, (3) 4 multi-request behavioral tests including tFAW, (4) 3 bandwidth sanity checks. Pure Go, Ginkgo/Gomega framework. 158 total DRAM tests (84 existing + 74 new).
+- **Budget**: 6 cycles (used ~4)
 
 ### Awaiting Human Authorization
-- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Phased implementation plan ready (see issue #574). Awaiting explicit green light.
-- **React rewrite (#488)** — Depends on #482 merge. Awaiting green light.
+- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). One Go server, one React frontend, one SQLite DB. Human conceptually agrees but hasn't given explicit "green light" yet. Phased implementation plan ready (see issue #574).
+- **React rewrite (#488)** — Depends on #482 merge. Awaiting green light. Would be part of the merge effort.
+
+### Completed (All Authorized)
+All authorized milestones (M51-M62) are complete. 62 milestones total across the project. CI green on main. Awaiting human direction for next steps.
 
 ### Housekeeping (Cycle 431)
 - Human gave "Green light" on Integer ID (#501)

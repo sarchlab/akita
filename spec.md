@@ -144,11 +144,10 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 ### Active (Authorized)
 
-24. **DRAM cross-validation** (issue #484): **AUTHORIZED (human: "Yes. Cross validation is needed.").** Cross-validate Akita's DRAM timing model against DRAMSim3 and Ramulator2 reference implementations.
-
 ### Resolved
 
 21. ~~**Integer-based IDs**~~ (issue #501): **DONE in M61.** All entity IDs migrated from string to uint64 across all 7 subsystems (66 files).
+24. ~~**DRAM cross-validation**~~ (issue #484): **DONE in M62.** 4-tier cross-validation against DRAMSim3/Ramulator2 timing formulas. 158 total DRAM tests passing.
 
 ### Active (Awaiting Human Authorization)
 
