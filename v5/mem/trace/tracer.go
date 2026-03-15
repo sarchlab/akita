@@ -12,7 +12,7 @@ import (
 
 // memoryTransactionEntry represents a memory transaction in the database
 type memoryTransactionEntry struct {
-	ID        string  `json:"id" akita_data:"unique"`
+	ID        uint64  `json:"id" akita_data:"unique"`
 	Location  string  `json:"location" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
 	StartTime float64 `json:"start_time" akita_data:"index"`
@@ -23,8 +23,8 @@ type memoryTransactionEntry struct {
 
 // memoryStepEntry represents a memory transaction step in the database
 type memoryStepEntry struct {
-	ID     string  `json:"id" akita_data:"unique"`
-	TaskID string  `json:"task_id" akita_data:"index"`
+	ID     uint64  `json:"id" akita_data:"unique"`
+	TaskID uint64  `json:"task_id" akita_data:"index"`
 	Time   float64 `json:"time" akita_data:"index"`
 	What   string  `json:"what" akita_data:"index"`
 }
@@ -41,7 +41,7 @@ type tracer struct {
 type dbTracer struct {
 	timeTeller         sim.TimeTeller
 	dataRecorder       datarecording.DataRecorder
-	pendingTransactions map[string]*memoryTransactionEntry
+	pendingTransactions map[uint64]*memoryTransactionEntry
 }
 
 // StartTask marks the start of a memory transaction
@@ -54,7 +54,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 	}
 
 	t.logger.Printf(
-		"start, %d, %s, %s, %s, 0x%x, %d\n",
+		"start, %d, %s, %d, %s, 0x%x, %d\n",
 		task.StartTime,
 		task.Location,
 		task.ID,
@@ -68,7 +68,7 @@ func (t *tracer) StartTask(task tracing.Task) {
 func (t *tracer) StepTask(task tracing.Task) {
 	task.Steps[0].Time = t.timeTeller.CurrentTime()
 
-	t.logger.Printf("step, %d, %s, %s\n",
+	t.logger.Printf("step, %d, %d, %s\n",
 		task.Steps[0].Time,
 		task.ID,
 		task.Steps[0].What)
@@ -83,7 +83,7 @@ func (t *tracer) AddMilestone(milestone tracing.Milestone) {
 func (t *tracer) EndTask(task tracing.Task) {
 	task.EndTime = t.timeTeller.CurrentTime()
 
-	t.logger.Printf("end, %d, %s\n", task.EndTime, task.ID)
+	t.logger.Printf("end, %d, %d\n", task.EndTime, task.ID)
 }
 
 // NewTracer creates a new Tracer.
@@ -101,7 +101,7 @@ func NewDBTracer(dataRecorder datarecording.DataRecorder, timeTeller sim.TimeTel
 	t := &dbTracer{
 		timeTeller:          timeTeller,
 		dataRecorder:        dataRecorder,
-		pendingTransactions: make(map[string]*memoryTransactionEntry),
+		pendingTransactions: make(map[uint64]*memoryTransactionEntry),
 	}
 
 	// Create tables for memory transactions and steps
@@ -142,7 +142,7 @@ func (t *dbTracer) StepTask(task tracing.Task) {
 	task.Steps[0].Time = t.timeTeller.CurrentTime()
 
 	entry := memoryStepEntry{
-		ID:     task.ID + "_step_" + task.Steps[0].What,
+		ID:     sim.GetIDGenerator().Generate(),
 		TaskID: task.ID,
 		Time:   float64(task.Steps[0].Time),
 		What:   task.Steps[0].What,

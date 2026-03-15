@@ -39,9 +39,18 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var queryID uint64
+	if idStr := r.FormValue("id"); idStr != "" {
+		queryID, _ = strconv.ParseUint(idStr, 10, 64)
+	}
+	var queryParentID uint64
+	if pidStr := r.FormValue("parentid"); pidStr != "" {
+		queryParentID, _ = strconv.ParseUint(pidStr, 10, 64)
+	}
+
 	query := TaskQuery{
-		ID:               r.FormValue("id"),
-		ParentID:         r.FormValue("parentid"),
+		ID:               queryID,
+		ParentID:         queryParentID,
 		Kind:             r.FormValue("kind"),
 		Where:            r.FormValue("where"),
 		StartTime:        startTime,
@@ -63,10 +72,10 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 // be set. If the fields are empty, the criteria is ignored.
 type TaskQuery struct {
 	// Use ID to select a single task by its ID.
-	ID string
+	ID uint64
 
 	// Use ParentID to select all the tasks that are children of a task.
-	ParentID string
+	ParentID uint64
 
 	// Use Kind to select all the tasks that are of a kind.
 	Kind string
@@ -92,16 +101,16 @@ type TaskStep struct {
 }
 
 type Task struct {
-	ID        string         `json:"id"`
-	ParentID  string         `json:"parent_id"`
-	Kind      string         `json:"kind"`
-	What      string         `json:"what"`
-	Location  string         `json:"location"`
-	StartTime sim.VTimeInSec `json:"start_time"`
-	EndTime   sim.VTimeInSec `json:"end_time"`
+	ID         uint64         `json:"id"`
+	ParentID   uint64         `json:"parent_id"`
+	Kind       string         `json:"kind"`
+	What       string         `json:"what"`
+	Location   string         `json:"location"`
+	StartTime  sim.VTimeInSec `json:"start_time"`
+	EndTime    sim.VTimeInSec `json:"end_time"`
 	Steps      []TaskStep     `json:"steps"`
-	Detail     interface{} `json:"-"`
-	ParentTask *Task       `json:"-"`
+	Detail     interface{}    `json:"-"`
+	ParentTask *Task          `json:"-"`
 }
 
 // TraceReader can parse a trace file.
@@ -229,7 +238,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 	}
 
 	// Build a map for quick task lookup
-	taskMap := make(map[string]*Task)
+	taskMap := make(map[uint64]*Task)
 	taskIDs := make([]interface{}, 0, len(tasks))
 	for i := range tasks {
 		taskMap[tasks[i].ID] = &tasks[i]
@@ -255,7 +264,8 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var taskID, kind, what, location string
+		var taskID uint64
+		var kind, what, location string
 		var time float64
 
 		err := rows.Scan(&taskID, &time, &kind, &what, &location)
@@ -265,9 +275,9 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time:     sim.VTimeInSec(uint64(time)),
-				What:     what,
-				Kind:     kind,
+				Time: sim.VTimeInSec(uint64(time)),
+				What: what,
+				Kind: kind,
 			}
 			task.Steps = append(task.Steps, step)
 		}
@@ -291,7 +301,8 @@ func (r *SQLiteTraceReader) scanTaskFromRow(
 }
 
 func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
-	var ptID, ptParentID, ptKind, ptWhat, ptLocation sql.NullString
+	var ptID, ptParentID sql.NullInt64
+	var ptKind, ptWhat, ptLocation sql.NullString
 	var ptStartTime, ptEndTime sql.NullFloat64
 	var startTime, endTime float64
 
@@ -319,8 +330,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 	t.EndTime = sim.VTimeInSec(uint64(endTime))
 
 	if ptID.Valid {
-		t.ParentTask.ID = ptID.String
-		t.ParentTask.ParentID = ptParentID.String
+		t.ParentTask.ID = uint64(ptID.Int64)
+		t.ParentTask.ParentID = uint64(ptParentID.Int64)
 		t.ParentTask.Kind = ptKind.String
 		t.ParentTask.What = ptWhat.String
 		t.ParentTask.Location = ptLocation.String
@@ -397,15 +408,15 @@ func (*SQLiteTraceReader) addQueryConditionsToQueryStr(
 		WHERE 1=1
 	`
 
-	if query.ID != "" {
+	if query.ID != 0 {
 		sqlStr += `
-			AND t.ID = '` + query.ID + `'
+			AND t.ID = ` + strconv.FormatUint(query.ID, 10) + `
 		`
 	}
 
-	if query.ParentID != "" {
+	if query.ParentID != 0 {
 		sqlStr += `
-			AND t.ParentID = '` + query.ParentID + `'
+			AND t.ParentID = ` + strconv.FormatUint(query.ParentID, 10) + `
 		`
 	}
 

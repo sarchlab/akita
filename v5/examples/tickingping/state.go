@@ -8,7 +8,7 @@ import (
 type pingTransactionState struct {
 	SeqID     int            `json:"seq_id"`
 	CycleLeft int            `json:"cycle_left"`
-	ReqID     string         `json:"req_id"`
+	ReqID     uint64         `json:"req_id"`
 	ReqSrc    sim.RemotePort `json:"req_src"`
 }
 
