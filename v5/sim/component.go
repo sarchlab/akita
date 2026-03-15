@@ -14,7 +14,7 @@ type Named interface {
 // Component is the unifying interface for all simulation elements that
 // own ports and can be notified of port activity. Event handling
 // (Handler interface) is intentionally NOT part of Component —
-// event dispatch is handled by the Engine via Event.Handler().
+// event dispatch is handled by the Engine via Event.HandlerID().
 type Component interface {
 	Named
 	Hookable

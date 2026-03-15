@@ -20,9 +20,14 @@ func main() {
 	s := simulation.MakeBuilder().Build()
 
 	handler := &EventPrinter{}
-	evt := sim.NewEventBase(1, handler)
-
 	engine := s.GetEngine()
+
+	if registrar, ok := engine.(sim.HandlerRegistrar); ok {
+		registrar.RegisterHandler("printer", handler)
+	}
+
+	evt := sim.NewEventBase(1, "printer")
+
 	engine.Schedule(evt)
 
 	err := engine.Run()

@@ -20,6 +20,8 @@ type SerialEngine struct {
 	pauseLock    sync.Mutex
 
 	singleRunLock sync.Mutex
+
+	registry map[string]Handler
 }
 
 // NewSerialEngine creates a SerialEngine
@@ -28,9 +30,15 @@ func NewSerialEngine() *SerialEngine {
 
 	e.queue = NewEventQueue()
 	e.secondaryQueue = NewEventQueue()
+	e.registry = make(map[string]Handler)
 	//e.queue = NewInsertionQueue()
 
 	return e
+}
+
+// RegisterHandler registers a handler with the given name.
+func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
+	e.registry[name] = handler
 }
 
 // Schedule register an event to be happen in the future
@@ -94,7 +102,7 @@ func (e *SerialEngine) Run() error {
 		}
 		e.InvokeHook(hookCtx)
 
-		handler := evt.Handler()
+		handler := e.registry[evt.HandlerID()]
 		_ = handler.Handle(evt)
 
 		hookCtx.Pos = HookPosAfterEvent

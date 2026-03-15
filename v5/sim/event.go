@@ -8,8 +8,8 @@ type Event interface {
 	// Return the time that the event should happen
 	Time() VTimeInSec
 
-	// Returns the handler that can handle the event
-	Handler() Handler
+	// Returns the handler ID that can handle the event
+	HandlerID() string
 
 	// IsSecondary tells if the event is a secondary event. Secondary event are
 	// handled after all same-time primary events are handled.
@@ -18,36 +18,36 @@ type Event interface {
 
 // EventBase provides the basic fields and getters for other events
 type EventBase struct {
-	ID        string
-	time      VTimeInSec
-	handler   Handler
-	secondary bool
+	ID         string     `json:"id"`
+	Time_      VTimeInSec `json:"time"`
+	HandlerID_ string     `json:"handler_id"`
+	Secondary  bool       `json:"secondary"`
 }
 
 // NewEventBase creates a new EventBase
-func NewEventBase(t VTimeInSec, handler Handler) *EventBase {
+func NewEventBase(t VTimeInSec, handlerID string) *EventBase {
 	e := new(EventBase)
 	e.ID = GetIDGenerator().Generate()
-	e.time = t
-	e.handler = handler
-	e.secondary = false
+	e.Time_ = t
+	e.HandlerID_ = handlerID
+	e.Secondary = false
 
 	return e
 }
 
 // Time return the time that the event is going to happen
 func (e EventBase) Time() VTimeInSec {
-	return e.time
+	return e.Time_
 }
 
-// Handler returns the handler to handle the event.
-func (e EventBase) Handler() Handler {
-	return e.handler
+// HandlerID returns the handler ID to handle the event.
+func (e EventBase) HandlerID() string {
+	return e.HandlerID_
 }
 
 // IsSecondary returns true if the event is a secondary event.
 func (e EventBase) IsSecondary() bool {
-	return e.secondary
+	return e.Secondary
 }
 
 // A Handler defines a domain for the events.

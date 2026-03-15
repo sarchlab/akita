@@ -70,7 +70,7 @@ func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t sim.VTimeInSec) {
 	c.pendingWakeup = t
 
 	evt := &TimerFiredEvent{
-		EventBase: sim.NewEventBase(t, c),
+		EventBase: sim.NewEventBase(t, c.Name()),
 	}
 	c.Engine.Schedule(evt)
 }

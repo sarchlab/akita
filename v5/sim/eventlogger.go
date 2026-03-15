@@ -29,11 +29,6 @@ func (h *EventLogger) Func(ctx HookCtx) {
 		return
 	}
 
-	comp, ok := evt.Handler().(Component)
-	if ok {
-		h.Logger.Printf("%d, %s -> %s",
-			evt.Time(), reflect.TypeOf(evt), comp.Name())
-	} else {
-		h.Logger.Printf("%d, %s", evt.Time(), reflect.TypeOf(evt))
-	}
+	h.Logger.Printf("%d, %s -> %s",
+		evt.Time(), reflect.TypeOf(evt), evt.HandlerID())
 }
