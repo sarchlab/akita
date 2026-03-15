@@ -85,9 +85,8 @@ func (t *AverageTimeTracer) EndTask(task Task) {
 	}
 
 	taskTime := task.EndTime - originalTask.StartTime
-	t.averageTime = sim.VTimeInSec(
-		(float64(t.averageTime)*float64(t.taskCount) + float64(taskTime)) /
-			float64(t.taskCount+1))
+	t.averageTime = (t.averageTime*sim.VTimeInSec(t.taskCount) + taskTime) /
+		sim.VTimeInSec(t.taskCount+1)
 
 	delete(t.inflightTasks, task.ID)
 

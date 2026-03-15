@@ -11,7 +11,7 @@ type EventPrinter struct {
 }
 
 func (e *EventPrinter) Handle(event sim.Event) error {
-	fmt.Printf("Event: %.10f\n", event.Time())
+	fmt.Printf("Event: %d\n", event.Time())
 
 	return nil
 }

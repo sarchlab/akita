@@ -155,7 +155,7 @@ func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
 func (t *BusyTimeTracer) taskBusyTime(
 	tasks []*taskTimeStartEnd,
 ) sim.VTimeInSec {
-	busyTime := sim.VTimeInSec(0.0)
+	busyTime := sim.VTimeInSec(0)
 	coveredMask := make(map[int]bool)
 
 	for i, t1 := range tasks {

@@ -234,7 +234,7 @@ func (m *Monitor) continueEngine(w http.ResponseWriter, _ *http.Request) {
 
 func (m *Monitor) now(w http.ResponseWriter, _ *http.Request) {
 	now := m.engine.CurrentTime()
-	fmt.Fprintf(w, "{\"now\":%.10f}", now)
+	fmt.Fprintf(w, "{\"now\":%d}", now)
 }
 
 func (m *Monitor) run(_ http.ResponseWriter, _ *http.Request) {

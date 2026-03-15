@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/simulation"
 )
 
-var endTime = sim.VTimeInSec(10)
+var endTime = sim.VTimeInSec(10_000_000_000_000) // 10 seconds in picoseconds
 var engine sim.Engine
 var randGen *rand.Rand
 
@@ -39,7 +39,7 @@ func (h *handler) Handle(e sim.Event) error {
 	h.count += 1
 
 	evt := e.(splitEvent)
-	fmt.Printf("Cell %d split at %.10f, current count: %d\n",
+	fmt.Printf("Cell %d split at %d ps, current count: %d\n",
 		evt.id, evt.Time(), h.count)
 
 	h.scheduleNextSplitEvent(evt.Time(), evt.id)
@@ -49,7 +49,7 @@ func (h *handler) Handle(e sim.Event) error {
 }
 
 func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec, id int) {
-	timeUntilNextSplit := sim.VTimeInSec(randGen.Float64() + 1)
+	timeUntilNextSplit := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	nextEvt := splitEvent{
 		time:    now + timeUntilNextSplit,
 		handler: h,
@@ -70,7 +70,7 @@ func main() {
 		count: 1,
 	}
 
-	firstEvtTime := sim.VTimeInSec(randGen.Float64() + 1)
+	firstEvtTime := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	firstEvt := splitEvent{
 		time:    firstEvtTime,
 		handler: &h,
@@ -86,5 +86,5 @@ func main() {
 
 	s.Terminate()
 
-	fmt.Printf("Cell count at time %.0f: %d\n", endTime, h.count)
+	fmt.Printf("Cell count at time %d ps: %d\n", endTime, h.count)
 }

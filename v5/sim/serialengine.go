@@ -80,7 +80,7 @@ func (e *SerialEngine) Run() error {
 
 		if evt.Time() < now {
 			log.Panicf(
-				"cannot run event in the past, evt %s @ %.10f, now %.10f",
+				"cannot run event in the past, evt %s @ %d, now %d",
 				reflect.TypeOf(evt), evt.Time(), now,
 			)
 		}

@@ -1,7 +1,7 @@
 package sim
 
-// VTimeInSec defines the time in the simulated space in the unit of second
-type VTimeInSec float64
+// VTimeInSec defines the time in the simulated space in the unit of picosecond
+type VTimeInSec uint64
 
 // An Event is something going to happen in the future.
 type Event interface {

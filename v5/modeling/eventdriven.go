@@ -3,6 +3,7 @@ package modeling
 import (
 	"encoding/json"
 	"io"
+	"math"
 
 	"github.com/sarchlab/akita/v5/sim"
 )
@@ -62,7 +63,7 @@ func (c *EventDrivenComponent[S, T]) GetStatePtr() *T {
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
 func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t sim.VTimeInSec) {
-	if c.pendingWakeup >= 0 && c.pendingWakeup <= t {
+	if c.pendingWakeup != math.MaxUint64 && c.pendingWakeup <= t {
 		return
 	}
 
@@ -85,7 +86,7 @@ func (c *EventDrivenComponent[S, T]) Handle(e sim.Event) error {
 	c.Lock()
 	defer c.Unlock()
 
-	c.pendingWakeup = -1
+	c.pendingWakeup = math.MaxUint64
 	c.processor.Process(c, e.Time())
 
 	return nil
@@ -103,10 +104,11 @@ func (c *EventDrivenComponent[S, T]) NotifyPortFree(port sim.Port) {
 	c.ScheduleWakeNow()
 }
 
-// ResetWakeup resets the pending wakeup guard to -1, allowing new wakeup
-// events to be scheduled. This is used after loading state from a checkpoint.
+// ResetWakeup resets the pending wakeup guard to math.MaxUint64, allowing new
+// wakeup events to be scheduled. This is used after loading state from a
+// checkpoint.
 func (c *EventDrivenComponent[S, T]) ResetWakeup() {
-	c.pendingWakeup = -1
+	c.pendingWakeup = math.MaxUint64
 }
 
 // SaveState marshals the component's spec and current state as JSON and writes

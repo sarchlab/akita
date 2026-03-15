@@ -14,7 +14,7 @@ type pingTransactionState struct {
 
 // State contains mutable runtime data for the tickingping component.
 type State struct {
-	StartTimes          []float64              `json:"start_times"`
+	StartTimes          []uint64               `json:"start_times"`
 	NextSeqID           int                    `json:"next_seq_id"`
 	NumPingNeedToSend   int                    `json:"num_ping_need_to_send"`
 	PingDst             sim.RemotePort         `json:"ping_dst"`
