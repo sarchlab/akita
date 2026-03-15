@@ -96,6 +96,12 @@ type Spec struct {
 	TransactionQueueSize int `json:"transaction_queue_size"`
 	CommandQueueCapacity int `json:"command_queue_capacity"`
 
+	// Read/Write queue separation
+	ReadQueueSize      int `json:"read_queue_size"`
+	WriteQueueSize     int `json:"write_queue_size"`
+	WriteHighWatermark int `json:"write_high_watermark"`
+	WriteLowWatermark  int `json:"write_low_watermark"`
+
 	// Address converter params
 	HasAddrConverter    bool   `json:"has_addr_converter"`
 	InterleavingSize    uint64 `json:"interleaving_size"`
