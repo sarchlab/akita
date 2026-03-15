@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 389)
+## Current State (Cycle 394)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -15,14 +15,15 @@ All 50 milestones from the original component model refactoring are complete. Al
 All 13 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487.
 
 ### New Topic: Integer ID (#501)
-Human raised new discussion topic: replace string-based IDs with integer-based IDs to reduce GC/allocation overhead. Research complete — feasible, ~30-40 files, no blockers.
+Human raised new discussion topic: replace string-based IDs with integer-based IDs to reduce GC/allocation overhead. Research complete — feasible, ~30-40 files, no blockers. No authorization to implement yet.
 
 ### Current Phase: Phase 2 Implementation
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
 **M53**: ✅ COMPLETE — /mem/mem flattening (4 cycles budgeted, ~4 used)
-**M54**: 🔄 NEXT — Move directconnection to noc (#477)
+**M54**: ✅ COMPLETE — Move directconnection to noc (#477) (3 cycles budgeted, ~3 used)
+**M55**: 🔄 NEXT — Integer time representation (#480)
 
 ---
 
@@ -109,10 +110,10 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **PR**: #87, merged
 - **Scope**: Moved 12 Go files from `v5/mem/mem/` to `v5/mem/`, updated 65 import paths
 
-### M54: Move directconnection to noc (#477)
-- **Status**: NEXT
-- **Budget**: 3 cycles
-- **Scope**: Move `v5/sim/directconnection/` to `v5/noc/directconnection/`, update ~22 import paths. Pure mechanical refactor.
+### M54: Move directconnection to noc (#477) ✅
+- **Status**: COMPLETE (cycle 390-394, ~3 cycles)
+- **PR**: #88, merged
+- **Scope**: Moved `v5/sim/directconnection/` to `v5/noc/directconnection/`, updated 22 import paths. Pure mechanical refactor.
 
 ### M55: Integer time (#480)
 - **Status**: Planned
