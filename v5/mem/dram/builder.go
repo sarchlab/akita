@@ -95,6 +95,7 @@ type Builder struct {
 	tRC        int
 	tRRDL      int
 	tRRDS      int
+	tFAW       int
 	tRCDRD     int
 	tRCDWR     int
 	tREFI      int
@@ -184,6 +185,7 @@ func (b Builder) WithSpec(spec Spec) Builder {
 	b.tPPD = spec.TPPD
 	b.tRRDL = spec.TRRDL
 	b.tRRDS = spec.TRRDS
+	b.tFAW = spec.TFAW
 	b.tRCDRD = spec.TRCDRD
 	b.tRCDWR = spec.TRCDWR
 	b.tREFI = spec.TREFI
@@ -611,6 +613,7 @@ func (b Builder) buildTimingSpec() Spec {
 		TRC:        b.tRC,
 		TRRDS:      b.tRRDS,
 		TRRDL:      b.tRRDL,
+		TFAW:       b.tFAW,
 		TRCDRD:     b.tRCDRD,
 		TRCDWR:     b.tRCDWR,
 		TREFI:      b.tREFI,

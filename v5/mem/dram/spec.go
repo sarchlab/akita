@@ -74,6 +74,7 @@ type Spec struct {
 	TRC        int `json:"t_rc"`
 	TRRDS      int `json:"t_rrds"`
 	TRRDL      int `json:"t_rrdl"`
+	TFAW       int `json:"t_faw"`
 	TRCDRD     int `json:"t_rcdrd"`
 	TRCDWR     int `json:"t_rcdwr"`
 	TREFI      int `json:"t_refi"`

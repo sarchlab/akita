@@ -12,6 +12,16 @@ type State struct {
 	SubTransQueue subTransQueueState `json:"sub_trans_queue"`
 	CommandQueues commandQueueState  `json:"command_queues"`
 	BankStates    bankStatesFlat     `json:"bank_states"`
+
+	// TickCount tracks the global cycle counter for tFAW enforcement.
+	TickCount uint64 `json:"tick_count"`
+
+	// RefreshCycleCounter counts cycles since last refresh.
+	RefreshCycleCounter int `json:"refresh_cycle_counter"`
+	// RefreshInProgress is true when a refresh is currently blocking.
+	RefreshInProgress bool `json:"refresh_in_progress"`
+	// RefreshCyclesRemaining counts remaining cycles of the current refresh.
+	RefreshCyclesRemaining int `json:"refresh_cycles_remaining"`
 }
 
 // subTransRef identifies a SubTransaction by its parent transaction index
@@ -66,12 +76,19 @@ type bankState struct {
 	CyclesToCmdAvailable map[string]int `json:"cycles_to_cmd_available"`
 }
 
+// rankActivateHistory stores the last 4 activate timestamps for a rank.
+type rankActivateHistory struct {
+	Rank       int    `json:"rank"`
+	Timestamps []uint64 `json:"timestamps"`
+}
+
 // bankStatesFlat is a flattened representation of the 3D bank array.
 type bankStatesFlat struct {
-	NumRanks      int         `json:"num_ranks"`
-	NumBankGroups int         `json:"num_bank_groups"`
-	NumBanks      int         `json:"num_banks"`
-	Entries       []bankEntry `json:"entries"`
+	NumRanks           int                    `json:"num_ranks"`
+	NumBankGroups      int                    `json:"num_bank_groups"`
+	NumBanks           int                    `json:"num_banks"`
+	Entries            []bankEntry            `json:"entries"`
+	ActivateHistories  []rankActivateHistory  `json:"activate_histories"`
 }
 
 // queueEntry is a command state tagged with its queue index.
@@ -133,11 +150,17 @@ func cmdKindToString(k CommandKind) string {
 
 // initBankStatesFlat creates initial bank states for all banks (all closed).
 func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
+	histories := make([]rankActivateHistory, numRanks)
+	for i := range numRanks {
+		histories[i] = rankActivateHistory{Rank: i}
+	}
+
 	flat := bankStatesFlat{
-		NumRanks:      numRanks,
-		NumBankGroups: numBankGroups,
-		NumBanks:      numBanks,
-		Entries:       make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
+		NumRanks:          numRanks,
+		NumBankGroups:     numBankGroups,
+		NumBanks:          numBanks,
+		Entries:           make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
+		ActivateHistories: histories,
 	}
 
 	for i := range numRanks {

@@ -260,7 +260,7 @@ func findRowBufferHitCommand(spec *Spec, next *State) *commandState {
 			continue
 		}
 		if BankStateKind(bs.State) == BankStateOpen && bs.OpenRow == cmd.Location.Row {
-			readyCmd := getReadyCommand(spec, bs, cmd)
+			readyCmd := getReadyCommand(spec, next, bs, cmd)
 			if readyCmd != nil {
 				if readyCmd.Kind == cmd.Kind {
 					removeCommandFromQueueByIndex(next, i)
@@ -283,7 +283,7 @@ func findOldestReadyCommand(spec *Spec, next *State) *commandState {
 		if bs == nil {
 			continue
 		}
-		readyCmd := getReadyCommand(spec, bs, cmd)
+		readyCmd := getReadyCommand(spec, next, bs, cmd)
 		if readyCmd != nil {
 			if readyCmd.Kind == cmd.Kind {
 				removeCommandFromQueueByIndex(next, i)
@@ -338,7 +338,7 @@ func getFirstReadyWrite(spec *Spec, next *State) *commandState {
 		}
 		if BankStateKind(bs.State) == BankStateOpen &&
 			bs.OpenRow == cmd.Location.Row {
-			readyCmd := getReadyCommand(spec, bs, cmd)
+			readyCmd := getReadyCommand(spec, next, bs, cmd)
 			if readyCmd != nil {
 				if readyCmd.Kind == cmd.Kind {
 					removeCommandFromQueueByIndex(next, i)
@@ -359,7 +359,7 @@ func getFirstReadyWrite(spec *Spec, next *State) *commandState {
 		if bs == nil {
 			continue
 		}
-		readyCmd := getReadyCommand(spec, bs, cmd)
+		readyCmd := getReadyCommand(spec, next, bs, cmd)
 		if readyCmd != nil {
 			if readyCmd.Kind == cmd.Kind {
 				removeCommandFromQueueByIndex(next, i)

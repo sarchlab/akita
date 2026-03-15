@@ -118,7 +118,7 @@ var _ = Describe("Timing Validation", func() {
 					Row:       100,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, bs, readCmd)
+			ready := getReadyCommand(&DDR4Spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindRead))
 		})
@@ -223,7 +223,7 @@ var _ = Describe("Timing Validation", func() {
 					Row:       10,
 				},
 			}
-			ready := getReadyCommand(&DDR4Spec, bs, readCmd)
+			ready := getReadyCommand(&DDR4Spec, state, bs, readCmd)
 			Expect(ready).NotTo(BeNil())
 			Expect(CommandKind(ready.Kind)).To(Equal(CmdKindActivate))
 		})

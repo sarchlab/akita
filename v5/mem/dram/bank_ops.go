@@ -68,7 +68,7 @@ func isReadOrWrite(kind CommandKind) bool {
 
 // getReadyCommand checks if a command can be issued to the bank.
 // It returns a copy of the command with the required kind, or nil.
-func getReadyCommand(spec *Spec, bs *bankState, cmd *commandState) *commandState {
+func getReadyCommand(spec *Spec, state *State, bs *bankState, cmd *commandState) *commandState {
 	requiredKind := getRequiredCommandKind(bs, cmd)
 	if requiredKind == NumCmdKind {
 		return nil
@@ -76,11 +76,44 @@ func getReadyCommand(spec *Spec, bs *bankState, cmd *commandState) *commandState
 
 	key := cmdKindToString(requiredKind)
 	if bs.CyclesToCmdAvailable[key] == 0 {
+		// Check tFAW for activate commands
+		if requiredKind == CmdKindActivate && spec.TFAW > 0 {
+			if !canActivateUnderTFAW(spec, state, int(cmd.Location.Rank)) {
+				return nil
+			}
+		}
 		readyCmd := cloneCommand(cmd)
 		readyCmd.Kind = int(requiredKind)
 		return readyCmd
 	}
 
+	return nil
+}
+
+// canActivateUnderTFAW checks whether issuing an activate on the given rank
+// would violate the tFAW constraint.
+func canActivateUnderTFAW(spec *Spec, state *State, rank int) bool {
+	history := findActivateHistory(&state.BankStates, rank)
+	if history == nil {
+		return true
+	}
+	stamps := history.Timestamps
+	if len(stamps) < 4 {
+		return true
+	}
+	// Check if the oldest of the last 4 activates is more than tFAW ago
+	oldest := stamps[len(stamps)-4]
+	return state.TickCount-oldest >= uint64(spec.TFAW)
+}
+
+// findActivateHistory returns a pointer to the rankActivateHistory for the
+// given rank, or nil if not found.
+func findActivateHistory(flat *bankStatesFlat, rank int) *rankActivateHistory {
+	for i := range flat.ActivateHistories {
+		if flat.ActivateHistories[i].Rank == rank {
+			return &flat.ActivateHistories[i]
+		}
+	}
 	return nil
 }
 
@@ -143,6 +176,7 @@ func startCommand(cmdCycles map[CommandKind]int, state *State, bs *bankState, cm
 	case key{BankStateClosed, CmdKindActivate}:
 		bs.OpenRow = cmd.Location.Row
 		bs.State = int(BankStateOpen)
+		recordActivateTimestamp(state, int(cmd.Location.Rank))
 	case key{BankStateOpen, CmdKindPrecharge},
 		key{BankStateOpen, CmdKindReadPrecharge},
 		key{BankStateOpen, CmdKindWritePrecharge}:
@@ -204,6 +238,25 @@ func updateAllBankTiming(timing Timing, state *State, cmd *commandState) {
 				}
 			}
 		}
+	}
+}
+
+// recordActivateTimestamp records the current tick as an activate timestamp
+// for the given rank and keeps only the last 4.
+func recordActivateTimestamp(state *State, rank int) {
+	history := findActivateHistory(&state.BankStates, rank)
+	if history == nil {
+		// Extend the histories slice if needed
+		state.BankStates.ActivateHistories = append(
+			state.BankStates.ActivateHistories,
+			rankActivateHistory{Rank: rank},
+		)
+		history = &state.BankStates.ActivateHistories[len(state.BankStates.ActivateHistories)-1]
+	}
+	history.Timestamps = append(history.Timestamps, state.TickCount)
+	// Keep only the last 4
+	if len(history.Timestamps) > 4 {
+		history.Timestamps = history.Timestamps[len(history.Timestamps)-4:]
 	}
 }
 
