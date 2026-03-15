@@ -25,7 +25,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
-	"github.com/sarchlab/akita/v5/sim/directconnection"
+	"github.com/sarchlab/akita/v5/noc/directconnection"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")

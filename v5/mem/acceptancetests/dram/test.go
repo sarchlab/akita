@@ -8,7 +8,7 @@ import (
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/sim/directconnection"
+	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"os"
 	"time"
