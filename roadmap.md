@@ -160,16 +160,26 @@ Based on dependency analysis and human authorization (green light on: #477, #478
   5. Acceptance test build-order fix for DRAM
 - **Final**: 84 DRAM tests passing, all CI green on main
 
+### M61: Integer ID Migration — Phase 1: Core Types + ID Generator (IN PROGRESS)
+- **Status**: PLANNING (cycle 431)
+- **Scope**: Change MsgMeta.ID, MsgMeta.RspTo, EventBase.ID from string to uint64. Update sequentialIDGenerator to return uint64 directly. Update IsRsp() to check RspTo != 0. Update all map[string] keyed by IDs to map[uint64].
+- **Budget**: 8 cycles
+- **Human authorization**: "Green light" on issue #501
+
+### M62: Integer ID Migration — Phase 2: Tracing + NOC + Memory Subsystem (PLANNED)
+- **Scope**: Update tracing Task.ID/ParentID/Milestone.ID to uint64. Replace string concat derived IDs with fresh uint64 generation. Update NOC flit IDs, assembling state. Update all memory subsystem state ID fields and maps. Update Daisen queries.
+- **Budget**: 8 cycles
+
 ### Awaiting Human Authorization
-- **Integer ID (#501)** — Research posted. Feasible, ~30-40 files, uint64 internally. Detailed implementation plan being drafted. Awaiting green light.
-- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Phased implementation plan being drafted. Awaiting explicit green light.
+- **Merge AkitaRTM/Daisen (#482)** — Full merge recommended (agreed with human). Phased implementation plan ready (see issue #574). Awaiting explicit green light.
 - **React rewrite (#488)** — Depends on #482 merge. Awaiting green light.
 - **DRAM cross-validation (#484)** — Implementation complete (M58+M60). Further validation against DRAMSim3/Ramulator2 possible if desired.
 
-### Housekeeping (Cycle 430)
-- Cleaned up spec.md: moved 8 resolved items out of Active section
-- All tests passing, CI green, 30k lines Go code
-- spec.md now accurately reflects project state
+### Housekeeping (Cycle 431)
+- Human gave "Green light" on Integer ID (#501)
+- Integer ID migration split into 2 phases: core types first, then tracing/NOC/memory
+- Diana's detailed analysis (issue #573) identifies ~50-55 files, 7 subsystems
+- Iris's Daisen/AkitaRTM merge plan (issue #574) ready for when human authorizes
 
 ---
 

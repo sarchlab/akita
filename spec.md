@@ -142,9 +142,11 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
-### Active (Awaiting Human Authorization)
+### Active (Authorized)
 
-21. **Integer-based IDs** (issue #501): String-based IDs cost allocation and GC time. Consider switching to integer (uint64) IDs for MsgMeta.ID, EventBase.ID, and RspTo matching. Research complete, awaiting green light.
+21. **Integer-based IDs** (issue #501): **AUTHORIZED (human: "Green light").** Switch all string-based IDs (MsgMeta.ID, EventBase.ID, RspTo, state ID fields, tracing Task.ID/Milestone.ID) to uint64. Use fresh uint64 generation for derived IDs instead of string concatenation. Zero sentinel replaces empty string. ~50 files affected.
+
+### Active (Awaiting Human Authorization)
 
 22. **Merge AkitaRTM and Daisen** (issue #482): Full merge into unified frontend with live/replay modes, single SQLite interface. Human conceptually agrees, awaiting explicit authorization.
 
