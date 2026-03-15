@@ -96,7 +96,7 @@ func runExampleTrace(memTracer tracing.Tracer, timeTeller *SimpleTimeTeller) {
 
 	// Create a memory task
 	task := tracing.Task{
-		ID:       "mem_read_001",
+		ID:       1,
 		Location: "L1_cache",
 		What:     "read",
 		Detail:   readReq,

@@ -8,10 +8,10 @@ import (
 // assemblingMsgState is a serializable representation of a message being
 // assembled from flits.
 type assemblingMsgState struct {
-	MsgID           string         `json:"msg_id"`
+	MsgID           uint64         `json:"msg_id"`
 	Src             sim.RemotePort `json:"src"`
 	Dst             sim.RemotePort `json:"dst"`
-	RspTo           string         `json:"rsp_to"`
+	RspTo           uint64         `json:"rsp_to"`
 	TrafficClass    string         `json:"traffic_class"`
 	TrafficBytes    int            `json:"traffic_bytes"`
 	NumFlitRequired int            `json:"num_flit_required"`

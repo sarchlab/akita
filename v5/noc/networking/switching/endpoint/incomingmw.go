@@ -28,14 +28,6 @@ func (m *incomingMW) Tick() bool {
 	return madeProgress
 }
 
-func (m *incomingMW) msgTaskID(msgID string) string {
-	return fmt.Sprintf("msg_%s_e2e", msgID)
-}
-
-func (m *incomingMW) flitTaskID(flitID string) string {
-	return fmt.Sprintf("%s_e2e", flitID)
-}
-
 func (m *incomingMW) recv() bool {
 	madeProgress := false
 	spec := m.comp.GetSpec()
@@ -179,12 +171,12 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	}
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(flit.ID), m.comp)
+		tracing.EndTask(flit.MsgMeta.SendTaskID, m.comp)
 		return
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(flit.ID), m.msgTaskID(flit.Msg.ID),
+		flit.MsgMeta.SendTaskID, flit.Msg.SendTaskID,
 		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }
@@ -206,12 +198,15 @@ func (m *incomingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 
 func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
+	if meta.RecvTaskID == 0 {
+		meta.RecvTaskID = sim.GetIDGenerator().Generate()
+	}
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m.comp)
+		tracing.EndTask(meta.RecvTaskID, m.comp)
 	} else {
 		tracing.StartTask(
-			m.msgTaskID(meta.ID),
-			meta.ID+"_req_out",
+			meta.RecvTaskID,
+			meta.SendTaskID,
 			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}
@@ -219,12 +214,15 @@ func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 
 func (m *incomingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
 	meta := msg.Meta()
+	if meta.RecvTaskID == 0 {
+		meta.RecvTaskID = sim.GetIDGenerator().Generate()
+	}
 	if isEnd {
-		tracing.EndTask(m.msgTaskID(meta.ID), m.comp)
+		tracing.EndTask(meta.RecvTaskID, m.comp)
 	} else {
 		tracing.StartTask(
-			m.msgTaskID(meta.ID),
-			meta.RspTo+"_req_out",
+			meta.RecvTaskID,
+			meta.SendTaskID,
 			m.comp, "msg_e2e", "msg_e2e", msg,
 		)
 	}

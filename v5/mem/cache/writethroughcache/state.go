@@ -48,7 +48,7 @@ const (
 // transactionState is the canonical transaction type for the writethroughcache.
 // All fields are directly JSON-serializable (no pointers to message types).
 type transactionState struct {
-	ID string `json:"id"`
+	ID uint64 `json:"id"`
 
 	// Read request fields (flattened from *mem.ReadReq)
 	HasRead            bool        `json:"has_read"`

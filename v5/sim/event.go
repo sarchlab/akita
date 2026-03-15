@@ -18,7 +18,7 @@ type Event interface {
 
 // EventBase provides the basic fields and getters for other events
 type EventBase struct {
-	ID         string     `json:"id"`
+	ID         uint64     `json:"id"`
 	Time_      VTimeInSec `json:"time"`
 	HandlerID_ string     `json:"handler_id"`
 	Secondary  bool       `json:"secondary"`

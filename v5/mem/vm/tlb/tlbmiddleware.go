@@ -145,7 +145,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
 		tracing.AddMilestone(
-			m.comp.Name()+".drain",
+			sim.GetIDGenerator().Generate(),
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".MSHR",
 			m.comp.Name(),

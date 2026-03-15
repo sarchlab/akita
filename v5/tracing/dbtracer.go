@@ -26,8 +26,8 @@ type runningTask struct {
 // taskTableEntry is the table structure for storing task information.
 // All tasks are stored in a single "trace" table.
 type taskTableEntry struct {
-	ID        string  `json:"id" akita_data:"unique"`
-	ParentID  string  `json:"parent_id" akita_data:"index"`
+	ID        uint64  `json:"id" akita_data:"unique"`
+	ParentID  uint64  `json:"parent_id" akita_data:"index"`
 	Kind      string  `json:"kind" akita_data:"index"`
 	What      string  `json:"what" akita_data:"index"`
 	Location  string  `json:"location" akita_data:"index"`
@@ -38,8 +38,8 @@ type taskTableEntry struct {
 // milestoneTableEntry is the table structure for storing milestone information.
 // All milestones are stored in a single "milestone" table.
 type milestoneTableEntry struct {
-	ID       string  `json:"id" akita_data:"unique"`
-	TaskID   string  `json:"task_id" akita_data:"index"`
+	ID       uint64  `json:"id" akita_data:"unique"`
+	TaskID   uint64  `json:"task_id" akita_data:"index"`
 	Time     float64 `json:"time" akita_data:"index"`
 	Kind     string  `json:"kind" akita_data:"index"`
 	What     string  `json:"what" akita_data:"index"`
@@ -61,7 +61,7 @@ type DBTracer struct {
 	timeTeller sim.TimeTeller
 	backend    datarecording.DataRecorder
 
-	tracingTasks     map[string]*runningTask
+	tracingTasks     map[uint64]*runningTask
 	isTracing        bool
 	tracingStartTime sim.VTimeInSec
 
@@ -105,7 +105,7 @@ func (t *DBTracer) StartTask(task Task) {
 }
 
 func (t *DBTracer) startingTaskMustBeValid(task Task) {
-	if task.ID == "" {
+	if task.ID == 0 {
 		panic("task ID must be set")
 	}
 
@@ -288,7 +288,7 @@ func NewDBTracer(
 	t := &DBTracer{
 		timeTeller:   timeTeller,
 		backend:      dataRecorder,
-		tracingTasks: make(map[string]*runningTask),
+		tracingTasks: make(map[uint64]*runningTask),
 	}
 
 	return t

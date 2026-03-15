@@ -17,7 +17,7 @@ type taskTimeStartEnd struct {
 type BusyTimeTracer struct {
 	timeTeller    sim.TimeTeller
 	filter        TaskFilter
-	inflightTasks map[string]*list.Element
+	inflightTasks map[uint64]*list.Element
 	taskTimes     *list.List
 	busyTime      sim.VTimeInSec
 }
@@ -30,7 +30,7 @@ func NewBusyTimeTracer(
 	t := &BusyTimeTracer{
 		timeTeller:    timeTeller,
 		filter:        filter,
-		inflightTasks: make(map[string]*list.Element),
+		inflightTasks: make(map[uint64]*list.Element),
 		taskTimes:     list.New(),
 	}
 

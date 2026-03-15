@@ -48,7 +48,7 @@ type subTransRef struct {
 
 // subTransState is a serializable representation of a SubTransaction.
 type subTransState struct {
-	ID               string `json:"id"`
+	ID               uint64 `json:"id"`
 	Address          uint64 `json:"address"`
 	Completed        bool   `json:"completed"`
 	TransactionIndex int    `json:"transaction_index"`
@@ -67,7 +67,7 @@ type transactionState struct {
 
 // commandState is a serializable representation of a Command.
 type commandState struct {
-	ID          string      `json:"id"`
+	ID          uint64      `json:"id"`
 	Kind        int         `json:"kind"`
 	Address     uint64      `json:"address"`
 	CycleLeft   int         `json:"cycle_left"`

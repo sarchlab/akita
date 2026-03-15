@@ -7,15 +7,17 @@ type Msg interface {
 
 // MsgMeta contains routing and identification metadata.
 type MsgMeta struct {
-	ID           string
+	ID           uint64
 	Src, Dst     RemotePort
 	TrafficClass string
 	TrafficBytes int
-	RspTo        string
+	RspTo        uint64
+	SendTaskID   uint64 `json:"send_task_id"`
+	RecvTaskID   uint64 `json:"recv_task_id"`
 }
 
 // Meta returns the message metadata.
 func (m *MsgMeta) Meta() *MsgMeta { return m }
 
 // IsRsp returns true if this message is a response to another message.
-func (m *MsgMeta) IsRsp() bool { return m.RspTo != "" }
+func (m *MsgMeta) IsRsp() bool { return m.RspTo != 0 }

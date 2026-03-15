@@ -8,7 +8,7 @@ import (
 type StepCountTracer struct {
 	filter            TaskFilter
 	lock              sync.Mutex
-	inflightTasks     map[string]Task
+	inflightTasks     map[uint64]Task
 	stepNames         []string
 	stepCount         map[string]uint64
 	taskWithStepCount map[string]uint64
@@ -18,7 +18,7 @@ type StepCountTracer struct {
 func NewStepCountTracer(filter TaskFilter) *StepCountTracer {
 	t := &StepCountTracer{
 		filter:            filter,
-		inflightTasks:     make(map[string]Task),
+		inflightTasks:     make(map[uint64]Task),
 		stepCount:         make(map[string]uint64),
 		taskWithStepCount: make(map[string]uint64),
 	}

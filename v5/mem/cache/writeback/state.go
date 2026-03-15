@@ -76,7 +76,7 @@ const (
 type transactionState struct {
 	Action action `json:"action"`
 
-	ID string `json:"id"`
+	ID uint64 `json:"id"`
 
 	// Read request fields (flat, replaces *mem.ReadReq)
 	HasRead          bool         `json:"has_read"`

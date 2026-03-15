@@ -14,7 +14,7 @@ type AverageTimeTracer struct {
 	filter        TaskFilter
 	lock          sync.Mutex
 	averageTime   sim.VTimeInSec
-	inflightTasks map[string]Task
+	inflightTasks map[uint64]Task
 	taskCount     uint64
 }
 
@@ -26,7 +26,7 @@ func NewAverageTimeTracer(
 	t := &AverageTimeTracer{
 		timeTeller:    timeTeller,
 		filter:        filter,
-		inflightTasks: make(map[string]Task),
+		inflightTasks: make(map[uint64]Task),
 	}
 
 	return t

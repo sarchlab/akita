@@ -55,7 +55,7 @@ func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
-	if !exists || reqTransaction.ReqID == "" {
+	if !exists || reqTransaction.ReqID == 0 {
 		log.Panicf("Cannot find matching request for response %+v", rsp)
 	}
 

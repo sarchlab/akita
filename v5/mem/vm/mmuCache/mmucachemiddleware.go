@@ -51,7 +51,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 		next := m.comp.GetNextState()
 		next.CurrentState = mmuCacheStatePause
 		tracing.AddMilestone(
-			m.comp.Name()+".drain",
+			sim.GetIDGenerator().Generate(),
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".",
 			m.comp.Name(),
@@ -274,7 +274,7 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 		return false
 	}
 	tracing.AddMilestone(
-		next.InflightFlushReqID+"@"+m.comp.Name(),
+		next.InflightFlushReqID,
 		tracing.MilestoneKindNetworkBusy,
 		m.controlPort().Name(),
 		m.comp.Name(),
@@ -285,7 +285,7 @@ func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
 	next.Table = initSets(spec.NumLevels, spec.NumBlocks)
 
 	next.InflightFlushReqActive = false
-	next.InflightFlushReqID = ""
+	next.InflightFlushReqID = 0
 	next.InflightFlushReqSrc = ""
 	next.CurrentState = mmuCacheStatePause
 

@@ -12,7 +12,7 @@ type ScheduledPing struct {
 type PendingResponse struct {
 	DeliverAt sim.VTimeInSec
 	Dst       sim.RemotePort
-	OrigMsgID string
+	OrigMsgID uint64
 	SeqID     int
 }
 

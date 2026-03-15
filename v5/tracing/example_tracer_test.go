@@ -19,8 +19,8 @@ type SampleDomain struct {
 	*sim.HookableBase
 
 	timeTeller sim.TimeTeller
-	taskIDs    []int
-	nextID     int
+	taskIDs    []uint64
+	nextID     uint64
 }
 
 func (d *SampleDomain) Name() string {
@@ -28,9 +28,11 @@ func (d *SampleDomain) Name() string {
 }
 
 func (d *SampleDomain) Start() {
+	d.nextID++
+
 	tracing.StartTask(
-		fmt.Sprintf("%d", d.nextID),
-		"",
+		d.nextID,
+		0,
 		d,
 		"sampleTaskKind",
 		"something",
@@ -38,13 +40,11 @@ func (d *SampleDomain) Start() {
 	)
 
 	d.taskIDs = append(d.taskIDs, d.nextID)
-
-	d.nextID++
 }
 
 func (d *SampleDomain) End() {
 	tracing.EndTask(
-		fmt.Sprintf("%d", d.taskIDs[0]),
+		d.taskIDs[0],
 		d,
 	)
 

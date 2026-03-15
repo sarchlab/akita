@@ -29,7 +29,7 @@ func (h *PortMsgLogger) Func(ctx HookCtx) {
 		return
 	}
 
-	h.Logger.Printf("%d,%s,%s,%s,%s,%s\n",
+	h.Logger.Printf("%d,%s,%s,%s,%s,%d\n",
 		h.CurrentTime(),
 		ctx.Domain.(Port).Name(),
 		ctx.Pos.Name,

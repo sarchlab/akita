@@ -17,13 +17,13 @@ type Test struct {
 	agents            []*Agent
 	msgs              []*TrafficMsg
 	receivedMsgs      []*TrafficMsg
-	receivedMsgsTable map[string]bool
+	receivedMsgsTable map[uint64]bool
 }
 
 // NewTest creates a new test.
 func NewTest() *Test {
 	t := &Test{}
-	t.receivedMsgsTable = make(map[string]bool)
+	t.receivedMsgsTable = make(map[uint64]bool)
 
 	return t
 }
@@ -91,7 +91,7 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 
 	for _, sentMsg := range t.msgs {
 		if _, found := t.receivedMsgsTable[sentMsg.ID]; !found {
-			log.Printf("msg %s expected, but not received\n", sentMsg.ID)
+			log.Printf("msg %d expected, but not received\n", sentMsg.ID)
 		}
 	}
 

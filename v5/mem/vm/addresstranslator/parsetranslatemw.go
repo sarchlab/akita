@@ -75,13 +75,6 @@ func (m *parseTranslateMW) translate() bool {
 	incoming := msgToIncomingReqState(itemI)
 
 	nextState := m.comp.GetNextState()
-	trans := transactionState{
-		IncomingReqs:      []incomingReqState{incoming},
-		TranslationReqID:  transReq.ID,
-		TranslationReqSrc: transReq.Src,
-		TranslationReqDst: transReq.Dst,
-	}
-	nextState.Transactions = append(nextState.Transactions, trans)
 
 	tracing.TraceReqReceive(itemI, m.comp)
 	tracing.TraceReqInitiate(
@@ -89,6 +82,18 @@ func (m *parseTranslateMW) translate() bool {
 		m.comp,
 		tracing.MsgIDAtReceiver(itemI, m.comp),
 	)
+
+	// Update incoming state with recv task ID after tracing
+	incoming.RecvTaskID = itemI.(sim.Msg).Meta().RecvTaskID
+
+	trans := transactionState{
+		IncomingReqs:              []incomingReqState{incoming},
+		TranslationReqID:         transReq.ID,
+		TranslationReqSendTaskID: transReq.SendTaskID,
+		TranslationReqSrc:        transReq.Src,
+		TranslationReqDst:        transReq.Dst,
+	}
+	nextState.Transactions = append(nextState.Transactions, trans)
 
 	m.topPort().RetrieveIncoming()
 

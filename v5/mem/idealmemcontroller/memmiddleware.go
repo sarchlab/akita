@@ -1,7 +1,6 @@
 package idealmemcontroller
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -65,6 +64,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 			Address:        payload.Address,
 			AccessByteSize: payload.AccessByteSize,
 			ReqID:          payload.ID,
+			RecvTaskID:     payload.RecvTaskID,
 			IsRead:         true,
 			Src:            payload.Src,
 		}
@@ -74,6 +74,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 			Address:        payload.Address,
 			AccessByteSize: uint64(len(payload.Data)),
 			ReqID:          payload.ID,
+			RecvTaskID:     payload.RecvTaskID,
 			IsRead:         false,
 			Data:           payload.Data,
 			DirtyMask:      payload.DirtyMask,
@@ -153,7 +154,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 		return false
 	}
 
-	m.traceReqComplete(tx.ReqID)
+	m.traceReqComplete(tx.RecvTaskID)
 
 	return true
 }
@@ -202,13 +203,12 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		}
 	}
 
-	m.traceReqComplete(tx.ReqID)
+	m.traceReqComplete(tx.RecvTaskID)
 
 	return true
 }
 
-func (m *memMiddleware) traceReqComplete(reqID string) {
-	taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
-	tracing.EndTask(taskID, m.comp)
+func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
+	tracing.EndTask(recvTaskID, m.comp)
 }
 

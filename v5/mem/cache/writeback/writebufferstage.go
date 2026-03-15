@@ -362,7 +362,7 @@ func (wb *writeBufferStage) combineData(mshrIdx int) {
 }
 
 func (wb *writeBufferStage) findInflightFetchIdxByFetchReadReqID(
-	id string,
+	id uint64,
 ) int {
 	next := wb.cache.comp.GetNextState()
 

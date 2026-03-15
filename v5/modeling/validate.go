@@ -70,8 +70,11 @@ func validateFieldType(t reflect.Type, path string, allowNestedStructs bool) err
 		return validateSliceElement(t.Elem(), path, allowNestedStructs)
 
 	case reflect.Map:
-		if t.Key().Kind() != reflect.String {
-			return fmt.Errorf("%s: map key must be string, got %s", path, t.Key().Kind())
+		k := t.Key().Kind()
+		if k != reflect.String &&
+			k != reflect.Uint64 && k != reflect.Uint && k != reflect.Uint32 &&
+			k != reflect.Int64 && k != reflect.Int && k != reflect.Int32 {
+			return fmt.Errorf("%s: map key must be string or integer, got %s", path, k)
 		}
 
 		return validateMapValue(t.Elem(), path, allowNestedStructs)

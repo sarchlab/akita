@@ -2,11 +2,8 @@ package sim
 
 import (
 	"log"
-	"strconv"
 	"sync"
 	"sync/atomic"
-
-	"github.com/rs/xid"
 )
 
 var idGeneratorMutex sync.Mutex
@@ -16,7 +13,7 @@ var idGenerator IDGenerator
 // IDGenerator can generate IDs
 type IDGenerator interface {
 	// Generate an ID
-	Generate() string
+	Generate() uint64
 }
 
 // UseSequentialIDGenerator configures the ID generator to generate IDs in
@@ -82,11 +79,8 @@ type sequentialIDGenerator struct {
 	nextID uint64
 }
 
-func (g *sequentialIDGenerator) Generate() string {
-	idNumber := atomic.AddUint64(&g.nextID, 1)
-	id := strconv.FormatUint(idNumber, 10)
-
-	return id
+func (g *sequentialIDGenerator) Generate() uint64 {
+	return atomic.AddUint64(&g.nextID, 1)
 }
 
 // GetIDGeneratorNextID returns the current nextID from the sequential ID
@@ -110,8 +104,9 @@ func ResetIDGenerator() {
 }
 
 type parallelIDGenerator struct {
+	nextID uint64
 }
 
-func (g parallelIDGenerator) Generate() string {
-	return xid.New().String()
+func (g *parallelIDGenerator) Generate() uint64 {
+	return atomic.AddUint64(&g.nextID, 1)
 }

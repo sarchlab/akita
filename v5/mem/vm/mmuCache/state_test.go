@@ -30,7 +30,7 @@ func TestStateWithTable(t *testing.T) {
 		CurrentState:           mmuCacheStateEnable,
 		Table:                  table,
 		InflightFlushReqActive: true,
-		InflightFlushReqID:     "flush-123",
+		InflightFlushReqID:     123,
 		InflightFlushReqSrc:    sim.RemotePort("ctrl.port"),
 	}
 
@@ -44,8 +44,8 @@ func TestStateWithTable(t *testing.T) {
 	if !s.InflightFlushReqActive {
 		t.Error("InflightFlushReqActive = false, want true")
 	}
-	if s.InflightFlushReqID != "flush-123" {
-		t.Errorf("InflightFlushReqID = %q, want %q", s.InflightFlushReqID, "flush-123")
+	if s.InflightFlushReqID != 123 {
+		t.Errorf("InflightFlushReqID = %d, want %d", s.InflightFlushReqID, 123)
 	}
 	if s.InflightFlushReqSrc != sim.RemotePort("ctrl.port") {
 		t.Errorf("InflightFlushReqSrc = %q, want %q", s.InflightFlushReqSrc, "ctrl.port")

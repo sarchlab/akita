@@ -70,8 +70,8 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		DstSide:       string(req.DstSide),
 		NextReadAddr:  req.SrcAddress,
 		NextWriteAddr: req.DstAddress,
-		PendingRead:   make(map[string]pendingReadState),
-		PendingWrite:  make(map[string]pendingWriteState),
+		PendingRead:   make(map[uint64]pendingReadState),
+		PendingWrite:  make(map[uint64]pendingWriteState),
 	}
 
 	state.Buffer = bufferState{
@@ -112,8 +112,8 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	// Reset transaction
 	state.CurrentTransaction = dataMoverTransactionState{
-		PendingRead:  make(map[string]pendingReadState),
-		PendingWrite: make(map[string]pendingWriteState),
+		PendingRead:  make(map[uint64]pendingReadState),
+		PendingWrite: make(map[uint64]pendingWriteState),
 	}
 	state.Buffer = bufferState{
 		Offset:      alignAddress(trans.SrcAddress, state.SrcByteGranularity),

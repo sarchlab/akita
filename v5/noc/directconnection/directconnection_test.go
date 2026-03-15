@@ -167,8 +167,7 @@ var _ = Describe("Direct Connection Integration", func() {
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
-				msg.ID = fmt.Sprintf("%s(%d)->%s",
-					agent.Name(), i, msg.Dst)
+				msg.ID = sim.GetIDGenerator().Generate()
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater()
@@ -219,8 +218,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 				msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 			}
 
-			msg.ID = fmt.Sprintf("%s(%d)->%s",
-				agent.Name(), i, msg.Dst)
+			msg.ID = sim.GetIDGenerator().Generate()
 
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}

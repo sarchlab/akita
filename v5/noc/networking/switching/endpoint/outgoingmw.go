@@ -1,7 +1,6 @@
 package endpoint
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/sarchlab/akita/v5/modeling"
@@ -29,7 +28,7 @@ func msgMetaToFlits(
 	for i := 0; i < numFlit; i++ {
 		flits[i] = messaging.Flit{
 			MsgMeta: sim.MsgMeta{
-				ID:  fmt.Sprintf("flit-%d-msg-%s-%s", i, meta.ID, sim.GetIDGenerator().Generate()),
+				ID:  sim.GetIDGenerator().Generate(),
 				Src: networkPortRemote,
 				Dst: defaultSwitchDst,
 			},
@@ -42,6 +41,8 @@ func msgMetaToFlits(
 				RspTo:        meta.RspTo,
 				TrafficClass: meta.TrafficClass,
 				TrafficBytes: meta.TrafficBytes,
+				SendTaskID:   meta.SendTaskID,
+				RecvTaskID:   meta.RecvTaskID,
 			},
 		}
 	}
@@ -67,14 +68,6 @@ func (m *outgoingMW) Tick() bool {
 	madeProgress = m.prepareFlits() || madeProgress
 
 	return madeProgress
-}
-
-func (m *outgoingMW) msgTaskID(msgID string) string {
-	return fmt.Sprintf("msg_%s_e2e", msgID)
-}
-
-func (m *outgoingMW) flitTaskID(flitID string) string {
-	return fmt.Sprintf("%s_e2e", flitID)
 }
 
 func (m *outgoingMW) sendFlitOut() bool {
@@ -165,10 +158,17 @@ func (m *outgoingMW) prepareFlits() bool {
 		meta := state.MsgOutBuf[0]
 		state.MsgOutBuf = state.MsgOutBuf[1:]
 		flits := msgMetaToFlits(meta, spec, networkPortRemote, m.defaultSwitchDst)
+
+		msgE2ETaskID := sim.GetIDGenerator().Generate()
+		for i := range flits {
+			flits[i].MsgMeta.SendTaskID = sim.GetIDGenerator().Generate()
+			flits[i].Msg.SendTaskID = msgE2ETaskID
+		}
+
 		state.FlitsToSend = append(state.FlitsToSend, flits...)
 
 		for _, fs := range flits {
-			m.logFlitE2ETask(fs, false, &meta)
+			m.logFlitE2ETask(fs, false, &meta, msgE2ETaskID)
 		}
 
 		madeProgress = true
@@ -176,14 +176,14 @@ func (m *outgoingMW) prepareFlits() bool {
 }
 
 func (m *outgoingMW) logFlitE2ETask(
-	fs messaging.Flit, isEnd bool, meta *sim.MsgMeta,
+	fs messaging.Flit, isEnd bool, meta *sim.MsgMeta, msgE2ETaskID uint64,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
 
 	if isEnd {
-		tracing.EndTask(m.flitTaskID(fs.ID), m.comp)
+		tracing.EndTask(fs.MsgMeta.SendTaskID, m.comp)
 		return
 	}
 
@@ -195,7 +195,7 @@ func (m *outgoingMW) logFlitE2ETask(
 	}
 
 	tracing.StartTaskWithSpecificLocation(
-		m.flitTaskID(fs.ID), m.msgTaskID(meta.ID),
+		fs.MsgMeta.SendTaskID, msgE2ETaskID,
 		m.comp, "flit_e2e", "flit_e2e", m.comp.Name()+".FlitBuf", flit,
 	)
 }

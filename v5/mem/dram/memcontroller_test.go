@@ -162,7 +162,7 @@ var _ = Describe("Bank Operations", func() {
 				{
 					HasRead: true,
 					SubTransactions: []subTransState{
-						{ID: "st1", Completed: false},
+						{ID: 1, Completed: false},
 					},
 				},
 			},
@@ -212,8 +212,8 @@ var _ = Describe("Queue Operations", func() {
 			Transactions: []transactionState{
 				{
 					SubTransactions: []subTransState{
-						{ID: "st0"},
-						{ID: "st1"},
+						{ID: 2},
+						{ID: 1},
 					},
 				},
 			},
@@ -503,7 +503,7 @@ var _ = Describe("Open Page Policy", func() {
 					ReadMsg: mem.ReadReq{},
 					SubTransactions: []subTransState{
 						{
-							ID:               "st-read-0",
+							ID: 10,
 							Address:          0x0,
 							Completed:        false,
 							TransactionIndex: 0,
@@ -515,7 +515,7 @@ var _ = Describe("Open Page Policy", func() {
 					WriteMsg: mem.WriteReq{},
 					SubTransactions: []subTransState{
 						{
-							ID:               "st-write-0",
+							ID: 20,
 							Address:          0x0,
 							Completed:        false,
 							TransactionIndex: 1,
@@ -747,7 +747,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 
 		// Command A: targets row 10 on bank 0 (miss — needs precharge)
 		cmdA := commandState{
-			ID:   "cmd-miss",
+			ID: 100,
 			Kind: int(CmdKindReadPrecharge),
 			Location: Location{
 				Rank: 0, BankGroup: 0, Bank: 0, Row: 10,
@@ -755,7 +755,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 		// Command B: targets row 5 on bank 0 (hit — matching row)
 		cmdB := commandState{
-			ID:   "cmd-hit",
+			ID: 101,
 			Kind: int(CmdKindReadPrecharge),
 			Location: Location{
 				Rank: 0, BankGroup: 0, Bank: 0, Row: 5,
@@ -782,14 +782,14 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		bs1.CyclesToCmdAvailable = make(map[string]int)
 
 		cmdA := commandState{
-			ID:   "cmd-older",
+			ID: 102,
 			Kind: int(CmdKindReadPrecharge),
 			Location: Location{
 				Rank: 0, BankGroup: 0, Bank: 0, Row: 10,
 			},
 		}
 		cmdB := commandState{
-			ID:   "cmd-newer",
+			ID: 103,
 			Kind: int(CmdKindReadPrecharge),
 			Location: Location{
 				Rank: 0, BankGroup: 0, Bank: 1, Row: 20,
@@ -826,7 +826,7 @@ var _ = Describe("FR-FCFS Scheduling", func() {
 		}
 
 		cmd := commandState{
-			ID:   "cmd-blocked",
+			ID: 104,
 			Kind: int(CmdKindReadPrecharge),
 			Location: Location{
 				Rank: 0, BankGroup: 0, Bank: 0, Row: 10,
