@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )

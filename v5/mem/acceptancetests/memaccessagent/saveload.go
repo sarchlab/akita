@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 )
 
 // agentSnapshot is the serializable representation of a MemAccessAgent.

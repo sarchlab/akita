@@ -2,7 +2,7 @@ package idealmemcontroller
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v5/sim"

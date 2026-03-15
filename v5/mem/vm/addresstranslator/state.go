@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/sim"
 )

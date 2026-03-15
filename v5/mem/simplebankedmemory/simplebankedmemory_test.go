@@ -3,7 +3,7 @@ package simplebankedmemory
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"

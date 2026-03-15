@@ -6,7 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim/directconnection"
 
 	"github.com/sarchlab/akita/v5/sim"

@@ -1,7 +1,7 @@
 package simplebankedmemory
 
 import (
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
 )
 

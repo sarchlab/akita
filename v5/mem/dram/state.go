@@ -3,7 +3,7 @@ package dram
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/mem/mem"
+	"github.com/sarchlab/akita/v5/mem"
 )
 
 // State contains mutable runtime data for the DRAM memory controller.
