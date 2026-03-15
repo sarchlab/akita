@@ -112,7 +112,7 @@ func (m *respondMW) finalizeReadTrans(
 	sendErr := m.topPort.Send(dataReady)
 	if sendErr == nil {
 		state.TotalReadLatencyCycles += state.TickCount - t.ArrivalTick
-		state.BytesRead += uint64(t.ReadMsg.AccessByteSize)
+		state.BytesRead += t.ReadMsg.AccessByteSize
 		state.CompletedReads++
 		m.removeTransaction(state, i)
 		return true
