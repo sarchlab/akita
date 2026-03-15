@@ -187,6 +187,12 @@ func (b Builder) WithInterleavingAddrConversion(
 	return b
 }
 
+// WithPagePolicy sets the page policy of the memory controller.
+func (b Builder) WithPagePolicy(p PagePolicy) Builder {
+	b.spec.PagePolicy = p
+	return b
+}
+
 // WithProtocol sets the protocol of the memory controller.
 func (b Builder) WithProtocol(protocol Protocol) Builder {
 	b.protocol = protocol
@@ -481,6 +487,7 @@ func (b Builder) buildSpec() Spec {
 	cmdCycles := b.buildCmdCycles()
 
 	spec := b.buildTimingSpec()
+	spec.PagePolicy = b.spec.PagePolicy
 	spec.BusWidth = b.busWidth
 	spec.BurstLength = b.burstLength
 	spec.DeviceWidth = b.deviceWidth
