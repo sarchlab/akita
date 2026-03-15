@@ -887,7 +887,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 	It("should enter drain mode at high watermark", func() {
 		// Set up 4 open banks, each with a write command that's a row hit
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			bs := findBankState(&state.BankStates, 0, 0, i)
 			bs.State = int(BankStateOpen)
 			bs.OpenRow = uint64(i)
@@ -895,7 +895,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		}
 
 		// Add 4 write commands (hits high watermark of 4)
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			state.CommandQueues.Entries = append(
 				state.CommandQueues.Entries,
 				queueEntry{
@@ -961,7 +961,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 	It("should respect separate read/write queue capacities", func() {
 		// Fill write queue to capacity (4)
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			cmd := &commandState{
 				ID:       sim.GetIDGenerator().Generate(),
 				Kind:     int(CmdKindWritePrecharge),
@@ -990,7 +990,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 
 	It("should respect separate read queue capacity", func() {
 		// Fill read queue to capacity (4)
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			cmd := &commandState{
 				ID:       sim.GetIDGenerator().Generate(),
 				Kind:     int(CmdKindReadPrecharge),
@@ -1023,7 +1023,7 @@ var _ = Describe("Read/Write Queue Separation", func() {
 		spec.CommandQueueCapacity = 4
 
 		// Fill unified queue to capacity
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			cmd := &commandState{
 				ID:       sim.GetIDGenerator().Generate(),
 				Kind:     int(CmdKindReadPrecharge),

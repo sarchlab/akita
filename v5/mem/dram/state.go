@@ -140,9 +140,9 @@ func initBankStatesFlat(numRanks, numBankGroups, numBanks int) bankStatesFlat {
 		Entries:       make([]bankEntry, 0, numRanks*numBankGroups*numBanks),
 	}
 
-	for i := 0; i < numRanks; i++ {
-		for j := 0; j < numBankGroups; j++ {
-			for k := 0; k < numBanks; k++ {
+	for i := range numRanks {
+		for j := range numBankGroups {
+			for k := range numBanks {
 				flat.Entries = append(flat.Entries, bankEntry{
 					Rank:      i,
 					BankGroup: j,

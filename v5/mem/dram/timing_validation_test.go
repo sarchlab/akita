@@ -98,7 +98,7 @@ var _ = Describe("Timing Validation", func() {
 			Expect(bs.CyclesToCmdAvailable[readKey]).To(Equal(16))
 
 			// Tick 16 cycles to drain the timing constraint.
-			for i := 0; i < 16; i++ {
+			for range 16 {
 				tickBank(state, bs)
 			}
 
@@ -141,7 +141,7 @@ var _ = Describe("Timing Validation", func() {
 			updateTiming(timing, state, activateCmd)
 
 			// Tick until Activate completes.
-			for i := 0; i < 16; i++ {
+			for range 16 {
 				tickBanks(&DDR4Spec, cmdCycles, state)
 			}
 
@@ -204,7 +204,7 @@ var _ = Describe("Timing Validation", func() {
 			Expect(BankStateKind(bs.State)).To(Equal(BankStateClosed))
 
 			// Tick 16 cycles to drain the constraint.
-			for i := 0; i < 16; i++ {
+			for range 16 {
 				tickBanks(&DDR4Spec, cmdCycles, state)
 			}
 
@@ -247,7 +247,7 @@ var _ = Describe("Timing Validation", func() {
 			updateTiming(timing, state, activateCmd)
 
 			// Complete the Activate.
-			for i := 0; i < 16; i++ {
+			for range 16 {
 				tickBanks(&DDR4Spec, cmdCycles, state)
 			}
 

@@ -239,9 +239,19 @@ func getCommandToIssue(spec *Spec, next *State) *commandState {
 	}
 
 	// Priority 1: Find a row-buffer hit (bank is open, matching row, command is ready)
-	var oldestHit *commandState
-	oldestHitIdx := -1
+	hit := findRowBufferHitCommand(spec, next)
+	if hit != nil {
+		return hit
+	}
 
+	// Priority 2: FCFS — oldest ready command (any)
+	return findOldestReadyCommand(spec, next)
+}
+
+// findRowBufferHitCommand scans the command queue for a row-buffer hit
+// (bank is open, matching row, and the command is ready). Returns the first
+// (oldest) such command, or nil if none found.
+func findRowBufferHitCommand(spec *Spec, next *State) *commandState {
 	for i := range next.CommandQueues.Entries {
 		e := &next.CommandQueues.Entries[i]
 		cmd := &e.Command
@@ -249,28 +259,23 @@ func getCommandToIssue(spec *Spec, next *State) *commandState {
 		if bs == nil {
 			continue
 		}
-		// Check if this would be a row-buffer hit
 		if BankStateKind(bs.State) == BankStateOpen && bs.OpenRow == cmd.Location.Row {
 			readyCmd := getReadyCommand(spec, bs, cmd)
 			if readyCmd != nil {
-				if oldestHit == nil {
-					oldestHit = readyCmd
-					oldestHitIdx = i
+				if readyCmd.Kind == cmd.Kind {
+					removeCommandFromQueueByIndex(next, i)
 				}
-				// First found is oldest (entries are in insertion order)
-				break
+				return readyCmd
 			}
 		}
 	}
 
-	if oldestHit != nil {
-		if oldestHit.Kind == next.CommandQueues.Entries[oldestHitIdx].Command.Kind {
-			removeCommandFromQueueByIndex(next, oldestHitIdx)
-		}
-		return oldestHit
-	}
+	return nil
+}
 
-	// Priority 2: FCFS — oldest ready command (any)
+// findOldestReadyCommand scans the command queue for the oldest ready command
+// regardless of row-buffer state. Returns the first ready command, or nil.
+func findOldestReadyCommand(spec *Spec, next *State) *commandState {
 	for i := range next.CommandQueues.Entries {
 		e := &next.CommandQueues.Entries[i]
 		cmd := &e.Command
@@ -297,20 +302,6 @@ func removeCommandFromQueueByIndex(next *State, idx int) {
 		next.CommandQueues.Entries[:idx],
 		next.CommandQueues.Entries[idx+1:]...,
 	)
-}
-
-// removeCommandFromQueueByID removes a command entry with matching ID from
-// next's command queue.
-func removeCommandFromQueueByID(next *State, cmdID string) {
-	for i := 0; i < len(next.CommandQueues.Entries); i++ {
-		if next.CommandQueues.Entries[i].Command.ID == cmdID {
-			next.CommandQueues.Entries = append(
-				next.CommandQueues.Entries[:i],
-				next.CommandQueues.Entries[i+1:]...,
-			)
-			return
-		}
-	}
 }
 
 // findBankStateByLocation finds the bank state for a given Location.

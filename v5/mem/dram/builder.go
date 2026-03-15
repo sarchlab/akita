@@ -1015,7 +1015,7 @@ func log2(n uint64) (uint64, bool) {
 	oneCount := 0
 	onePos := uint64(0)
 
-	for i := uint64(0); i < 64; i++ {
+	for i := range uint64(64) {
 		if n&(1<<i) > 0 {
 			onePos = i
 			oneCount++
@@ -1025,9 +1025,3 @@ func log2(n uint64) (uint64, bool) {
 	return onePos, oneCount == 1
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
