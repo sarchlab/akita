@@ -9,7 +9,7 @@ import (
 // routedFlit is a flit that has been received and assigned a route destination.
 type routedFlit struct {
 	messaging.Flit
-	TaskID  string         `json:"task_id"`
+	TaskID  uint64         `json:"task_id"`
 	RouteTo sim.RemotePort `json:"route_to"`
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -40,10 +39,6 @@ func (m *routeForwardSendMW) Tick() bool {
 	madeProgress = m.route() || madeProgress
 
 	return madeProgress
-}
-
-func (m *routeForwardSendMW) flitTaskID(flit *messaging.Flit) string {
-	return flit.ID + "_" + m.comp.Name()
 }
 
 func (m *routeForwardSendMW) route() (madeProgress bool) {
@@ -114,6 +109,9 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 
 			pcs.ForwardBuffer.Elements = pcs.ForwardBuffer.Elements[1:]
 			sendBuf.PushTyped(item.Flit)
+
+			tracing.EndTask(item.TaskID, m.comp)
+
 			occupiedOutputPort[outIdx] = true
 			madeProgress = true
 		}
@@ -144,8 +142,6 @@ func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
 			if err == nil {
 				madeProgress = true
 				numSent++
-
-				tracing.EndTask(m.flitTaskID(&flit), m.comp)
 			}
 		}
 
