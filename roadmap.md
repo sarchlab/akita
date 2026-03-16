@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 444)
+## Current State (Cycle 474)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -179,27 +179,40 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Scope**: component_guide.md updated, migration.md (876 lines), docs.md (874 lines), 20 README.md files
 - **Human issues addressed**: #587 (migration guide), #588 (comprehensive docs)
 
-### New Human Requests (Cycle 472)
+### Human Requests Status (Cycle 474)
 
-- **Merge hooking and tracing** (#595): Human asks to discuss merging into one package or removing tracing entirely. RESEARCH NEEDED — no implementation without authorization.
+- **Hook/tracing merge (#595)**: Research COMPLETE. Two independent researchers (Iris, Diana) both recommend: keep separate, clean up dead code. Recommendation posted to human. Awaiting response — NO implementation until authorized.
+- **Merge AkitaRTM/Daisen (#482)** — Full merge **AUTHORIZED** (green light on #586). One Go server, one React frontend, one SQLite DB.
+- **React rewrite (#488)** — **AUTHORIZED** as part of Daisen merge effort.
 
-### Pending Authorized Work
+### Daisen/AkitaRTM Merge — Implementation Plan
 
-- **Merge AkitaRTM/Daisen (#482)** — Full merge authorized. One Go server, one React frontend, one SQLite DB.
-- **React rewrite (#488)** — Part of Daisen merge effort. Authorized.
+Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 
-### Implementation Plan (Cycle 472+)
+**M64: Backend Merge — Combine Go servers** (~6 cycles)
+- Convert `v5/daisen` from `package main` to library package
+- Move CLI entry point to `v5/daisen/cmd/main.go`
+- Merge AkitaRTM (monitoring) API endpoints into unified Daisen server
+- Fix milestone table naming mismatch (DBTracer writes "milestone", Daisen reads "trace_milestones")
+- Replace gorilla/mux with stdlib net/http
+- Add live mode: open read-only SQLite connection to active simulation DB (WAL mode)
+- Update `simulation/builder.go` to use unified Daisen server instead of separate Monitor
+- Deprecate `v5/monitoring/` package (mark as deprecated, keep temporarily for backward compat)
+- Status: NEXT
 
-**M64: Research — Hook/tracing merge + Daisen/AkitaRTM merge planning** (research cycle)
-- Research #595 (hook/tracing code merge) — produce detailed analysis and recommendation
-- Finalize Daisen/AkitaRTM merge plan details
-- Status: CURRENT
+**M65-M67: React Frontend** (~12 cycles across sub-milestones)
+- Scaffold React app with Vite + TypeScript
+- Migrate trace visualization components (task chart, dashboard, component view)
+- Migrate live monitoring components (engine control, progress, resource monitoring, hang detector)
+- Unify navigation (live + replay modes)
+- Replace D3.js where possible, keep for complex Gantt chart via useRef
+- Build chatbot panel in React
 
-**M65+: Daisen/AkitaRTM merge** (target: ~17 cycles across sub-milestones)
-- Phase 1: Backend merge (combine Go servers) — ~4 cycles
-- Phase 2: React frontend (replace vanilla TS) — ~10 cycles
-- Phase 3: Unified features (live+replay) — ~3 cycles
-- Status: After research complete and human authorization for #595
+**M68: Unified Features + Cleanup** (~4 cycles)
+- Live trace streaming (view traces while simulation runs)
+- Seamless mode transitions
+- Remove deprecated `v5/monitoring/` package
+- Final cleanup and testing
 
 ---
 
