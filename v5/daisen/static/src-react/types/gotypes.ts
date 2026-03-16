@@ -62,3 +62,24 @@ export function isDirectKind(kind: VarKind): boolean {
     VarKind.UnsafePointer,
   ].includes(kind);
 }
+
+/** Kinds that can be monitored (numeric types, chan, map, slice). */
+export function isMonitorableKind(kind: VarKind): boolean {
+  return [
+    VarKind.Int,
+    VarKind.Int8,
+    VarKind.Int16,
+    VarKind.Int32,
+    VarKind.Int64,
+    VarKind.Uint,
+    VarKind.Uint8,
+    VarKind.Uint16,
+    VarKind.Uint32,
+    VarKind.Uint64,
+    VarKind.Float32,
+    VarKind.Float64,
+    VarKind.Chan,
+    VarKind.Map,
+    VarKind.Slice,
+  ].includes(kind);
+}

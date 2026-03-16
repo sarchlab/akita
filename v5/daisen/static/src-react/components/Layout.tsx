@@ -27,6 +27,13 @@ export default function Layout() {
               Components
             </NavLink>
           </li>
+          {mode === "live" && (
+            <li className="nav-item">
+              <NavLink className="nav-link" to="/live/components">
+                Inspector
+              </NavLink>
+            </li>
+          )}
         </ul>
 
         {/* Live-mode controls */}
