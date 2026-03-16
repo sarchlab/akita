@@ -61,7 +61,7 @@ The **State** is a plain struct that captures everything about the component's
 - Holds in-flight transactions, counters, queues, mode flags, etc.
 - Must contain only primitives, **nested structs**, slices/maps of primitives or structs.
 - No pointers, interfaces, functions, or channels.
-- Cross-references between components use **string IDs**, never pointers.
+- Cross-references between components use **uint64 IDs**, never pointers.
 - Must be JSON-serializable (for checkpoint/restore).
 
 ### 1.3 Ports
@@ -143,7 +143,7 @@ Key methods:
 ```go
 // From v5/modeling/builder.go
 type Builder[S any, T any] struct {
-    engine sim.Engine
+    engine sim.EventScheduler
     freq   sim.Freq
     spec   S
 }
@@ -272,7 +272,7 @@ type BadSpec3 struct {
    nested structs and serialize automatically (see §4A).
 5. Nested structs must themselves follow the same rules recursively — no
    pointers, interfaces, functions, or channels at any nesting depth.
-6. Cross-references to other components must use **string IDs**, not pointers.
+6. Cross-references to other components must use **uint64 IDs**, not pointers.
 7. All fields should have `json:"..."` tags for serialization.
 
 ### Validation
@@ -292,7 +292,7 @@ if err := modeling.ValidateState(state); err != nil {
 // ✅ Valid State — primitives + nested structs
 type Transaction struct {
     CycleLeft int    `json:"cycle_left"`
-    ReqID     string `json:"req_id"`
+    ReqID     uint64 `json:"req_id"`
     IsRead    bool   `json:"is_read"`
 }
 
@@ -380,7 +380,7 @@ Embed `Buffer[T]` and `Pipeline[T]` directly in your State struct with JSON
 tags, just like any other nested struct:
 
 ```go
-// From v5/mem/cache/writethroughcache/cache.go
+// From v5/mem/cache/writethroughcache/state.go
 type State struct {
     // ...
     DirBuf        queueing.Buffer[int]     `json:"dir_buf"`
@@ -399,7 +399,7 @@ for per-bank queues).
 The writeback cache uses the same pattern with more buffers:
 
 ```go
-// From v5/mem/cache/writeback/writebackcache.go
+// From v5/mem/cache/writeback/state.go
 type State struct {
     // ...
     DirStageBuf           queueing.Buffer[int]     `json:"dir_stage_buf"`
@@ -506,9 +506,9 @@ data needed. Use a `bool` flag to indicate whether the field is populated:
 
 ```go
 // ✅ New pattern — flat fields, fully JSON-serializable
-// From v5/mem/cache/writethroughcache/transaction.go
+// From v5/mem/cache/writethroughcache/state.go
 type transactionState struct {
-    ID string `json:"id"`
+    ID uint64 `json:"id"`
 
     // Read request fields (flattened from *mem.ReadReq)
     HasRead            bool        `json:"has_read"`
@@ -525,9 +525,6 @@ type transactionState struct {
     WriteDirtyMask []bool      `json:"write_dirty_mask"`
     WritePID       vm.PID      `json:"write_pid"`
 
-    // Pre-coalesce transaction indices (replaces []*transaction)
-    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
-
     // ... additional flat fields ...
 }
 ```
@@ -542,12 +539,7 @@ type transactionState struct {
    in State:
 
     ```go
-    // From v5/mem/cache/writethroughcache/transaction.go
-    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
-    ```
-
-    ```go
-    // From v5/mem/cache/writeback/transaction.go
+    // From v5/mem/cache/writeback/state.go
     MSHRTransactionIndices []int `json:"mshr_transaction_indices"`
     ```
 
@@ -567,7 +559,7 @@ type transactionState struct {
 
 4. **`sim.MsgMeta` is a value type**, not a pointer — it is safe to store
    directly in State. It holds `ID`, `Src`, `Dst`, `RspTo`, and other
-   routing metadata as string-typed fields.
+   routing metadata as uint64-typed ID fields.
 
 ### Before and After Comparison
 
@@ -585,7 +577,7 @@ type transaction struct {
 **After (flat — ✅ fully serializable):**
 
 ```go
-// From v5/mem/cache/writethroughcache/transaction.go
+// From v5/mem/cache/writethroughcache/state.go
 type transactionState struct {
     HasRead            bool        `json:"has_read"`
     ReadMeta           sim.MsgMeta `json:"read_meta"`
@@ -599,8 +591,6 @@ type transactionState struct {
     WriteData      []byte      `json:"write_data"`
     WriteDirtyMask []bool      `json:"write_dirty_mask"`
     WritePID       vm.PID      `json:"write_pid"`
-
-    PreCoalesceTransIdxs []int `json:"pre_coalesce_trans_idxs"`
 
     BlockSetID int  `json:"block_set_id"`
     BlockWayID int  `json:"block_way_id"`
@@ -669,7 +659,7 @@ func outPort(comp *modeling.Component[Spec, State]) sim.Port {
 For middlewares with a receiver, a method-style helper also works:
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
+// From v5/mem/idealmemcontroller/memmiddleware.go
 func (m *memMiddleware) topPort() sim.Port {
     return m.comp.GetPortByName("Top")
 }
@@ -683,18 +673,17 @@ itself is the `NamedHookable` — it already implements the interface via
 `sim.ComponentBase`.
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
+// From v5/mem/idealmemcontroller/memmiddleware.go
 tracing.TraceReqReceive(msg, m.comp)
 ```
 
-When completing a traced request, the middleware constructs the task ID and
+When completing a traced request, the middleware passes the `recvTaskID` and
 calls `tracing.EndTask` with `m.comp`:
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
-func (m *memMiddleware) traceReqComplete(reqID string) {
-    taskID := fmt.Sprintf("%s@%s", reqID, m.comp.Name())
-    tracing.EndTask(taskID, m.comp)
+// From v5/mem/idealmemcontroller/memmiddleware.go
+func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
+    tracing.EndTask(recvTaskID, m.comp)
 }
 ```
 
@@ -704,14 +693,14 @@ middlewares just forward `m.comp` to any tracing call that needs a
 
 ### 5.5 Tick() Logic — GetState/GetNextState Pattern
 
-Inside a middleware's methods, read from `GetState()` and write to
-`GetNextState()`. With in-place update semantics both refer to the same
-underlying data, but the convention keeps code readable:
+Inside a middleware's methods, use `GetNextState()` to read and write state.
+With in-place update semantics `GetState()` and `GetNextState()` refer to the
+same underlying data, so either can be used for reading:
 
 ```go
 // From v5/examples/tickingping/sendmw.go — sendMW.sendRsp()
 func (m *sendMW) sendRsp() bool {
-    state := m.comp.GetState()   // current state
+    state := m.comp.GetNextState()
 
     if len(state.CurrentTransactions) == 0 {
         return false
@@ -737,14 +726,13 @@ func (m *sendMW) sendRsp() bool {
         return false
     }
 
-    next := m.comp.GetNextState()                    // writable pointer
-    next.CurrentTransactions = next.CurrentTransactions[1:]  // mutate state directly
+    state.CurrentTransactions = state.CurrentTransactions[1:]
 
     return true
 }
 ```
 
-**Key pattern:** Read conditions from `GetState()`, then mutate via `GetNextState()`. Both refer to the same underlying data with in-place update semantics.
+**Key pattern:** Use `GetNextState()` to read and mutate state within a middleware method. With in-place update semantics, `GetState()` and `GetNextState()` refer to the same underlying data.
 
 A typical `Tick()` method orchestrates multiple sub-operations:
 
@@ -761,9 +749,9 @@ func (m *sendMW) Tick() bool {
 ```
 
 Each sub-operation:
-1. Reads state via `m.comp.GetState()` to check conditions
-2. Does the work (send messages, etc.)
-3. Writes mutations via `m.comp.GetNextState()`
+1. Gets the state pointer via `m.comp.GetNextState()`
+2. Reads conditions and does the work (send messages, etc.)
+3. Mutates state through the same pointer
 4. Returns `true` if it did something, `false` otherwise
 
 ### 5.6 Multiple Middlewares
@@ -1002,7 +990,7 @@ import (
 )
 
 type Builder struct {
-    engine  sim.Engine
+    engine  sim.EventScheduler
     freq    sim.Freq
     port    sim.Port
 }
@@ -1011,7 +999,7 @@ func MakeBuilder() Builder {
     return Builder{}
 }
 
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
     b.engine = engine
     return b
 }
@@ -1106,7 +1094,7 @@ func (c *Comp) StorageName() string {
 `comp *modeling.Component[Spec, State]`, **not** `*Comp`:
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
+// From v5/mem/idealmemcontroller/memmiddleware.go
 type memMiddleware struct {
     comp    *modeling.Component[Spec, State]
     storage *mem.Storage
@@ -1166,12 +1154,12 @@ the builder file for convenient defaults.
 type pingTransactionState struct {
     SeqID     int            `json:"seq_id"`
     CycleLeft int            `json:"cycle_left"`
-    ReqID     string         `json:"req_id"`
+    ReqID     uint64         `json:"req_id"`
     ReqSrc    sim.RemotePort `json:"req_src"`
 }
 
 type State struct {
-    StartTimes          []float64              `json:"start_times"`
+    StartTimes          []uint64               `json:"start_times"`
     NextSeqID           int                    `json:"next_seq_id"`
     NumPingNeedToSend   int                    `json:"num_ping_need_to_send"`
     PingDst             sim.RemotePort         `json:"ping_dst"`
@@ -1219,12 +1207,12 @@ func (m *sendMW) Tick() bool {
 }
 ```
 
-The `sendPing` method demonstrates the GetState/GetNextState pattern:
+The `sendPing` method demonstrates the state mutation pattern:
 
 ```go
 // From v5/examples/tickingping/sendmw.go
 func (m *sendMW) sendPing() bool {
-    state := m.comp.GetState()              // current state
+    state := m.comp.GetNextState()
 
     if state.NumPingNeedToSend == 0 {
         return false
@@ -1244,10 +1232,9 @@ func (m *sendMW) sendPing() bool {
         return false
     }
 
-    next := m.comp.GetNextState()           // writable pointer (same data)
-    next.StartTimes = append(next.StartTimes, float64(m.comp.CurrentTime()))
-    next.NumPingNeedToSend--
-    next.NextSeqID++
+    state.StartTimes = append(state.StartTimes, uint64(m.comp.CurrentTime()))
+    state.NumPingNeedToSend--
+    state.NextSeqID++
 
     return true
 }
@@ -1320,7 +1307,7 @@ var DefaultSpec = Spec{
 }
 
 type Builder struct {
-    engine  sim.Engine
+    engine  sim.EventScheduler
     spec    Spec
     outPort sim.Port
 }
@@ -1331,7 +1318,7 @@ func MakeBuilder() Builder {
     }
 }
 
-func (b Builder) WithEngine(engine sim.Engine) Builder {
+func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
     b.engine = engine
     return b
 }
@@ -1410,8 +1397,8 @@ func Example() {
     }
 
     // Output:
-    // Ping 0, 5.00
-    // Ping 1, 5.00
+    // Ping 0, 5000000000000 ps
+    // Ping 1, 5000000000000 ps
 }
 ```
 
@@ -1437,7 +1424,7 @@ timer firings.
 type EventDrivenComponent[S any, T any] struct {
     *sim.ComponentBase
 
-    Engine    sim.Engine
+    Engine    sim.EventScheduler
     spec      S
     current   T
     processor EventProcessor[S, T]
@@ -1562,7 +1549,7 @@ Key patterns:
 type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
 
 type Builder struct {
-    engine  sim.Engine
+    engine  sim.EventScheduler
     outPort sim.Port
 }
 
@@ -1616,10 +1603,11 @@ wrapper** pattern (needed because the component implements the
 #### 9.3.1 Spec
 
 ```go
-// From v5/mem/idealmemcontroller/comp.go
+// From v5/mem/idealmemcontroller/spec.go
 type Spec struct {
-    Width         int    `json:"width"`
-    Latency       int    `json:"latency"`
+    Freq          sim.Freq `json:"freq"`
+    Width         int      `json:"width"`
+    Latency       int      `json:"latency"`
     CacheLineSize int    `json:"cache_line_size"`
     StorageRef    string `json:"storage_ref"`
     AddrConvKind  string `json:"addr_conv_kind"`
@@ -1643,12 +1631,13 @@ Key design choices:
 #### 9.3.2 State
 
 ```go
-// From v5/mem/idealmemcontroller/comp.go
+// From v5/mem/idealmemcontroller/state.go
 type inflightTransaction struct {
     CycleLeft      int            `json:"cycle_left"`
     Address        uint64         `json:"address"`
     AccessByteSize uint64         `json:"access_byte_size"`
-    ReqID          string         `json:"req_id"`
+    ReqID          uint64         `json:"req_id"`
+    RecvTaskID     uint64         `json:"recv_task_id"`
     IsRead         bool           `json:"is_read"`
     Data           []byte         `json:"data,omitempty"`
     DirtyMask      []bool         `json:"dirty_mask,omitempty"`
@@ -1658,7 +1647,7 @@ type inflightTransaction struct {
 type State struct {
     InflightTransactions []inflightTransaction `json:"inflight_transactions"`
     CurrentState         string                `json:"current_state"`
-    CurrentCmdID         string                `json:"current_cmd_id"`
+    CurrentCmdID         uint64                `json:"current_cmd_id"`
     CurrentCmdSrc        sim.RemotePort        `json:"current_cmd_src"`
 }
 ```
@@ -1719,31 +1708,30 @@ func (m *ctrlMiddleware) ctrlPort() sim.Port {
 }
 ```
 
-The `handleDrainState` method shows reading from `GetState()` and writing
-to `GetNextState()`:
+The `handleDrainState` method shows using `GetNextState()` for both reading
+and writing state:
 
 ```go
 // From v5/mem/idealmemcontroller/ctrlmiddleware.go
 func (m *ctrlMiddleware) handleDrainState() bool {
-    state := m.comp.GetState()
+    state := m.comp.GetNextState()
     if len(state.InflightTransactions) != 0 {
         return false
     }
 
-    rsp := &mem.ControlMsgRsp{}
+    rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
     rsp.ID = sim.GetIDGenerator().Generate()
     rsp.Src = m.ctrlPort().AsRemote()
     rsp.Dst = state.CurrentCmdSrc
     rsp.RspTo = state.CurrentCmdID
-    rsp.TrafficClass = "mem.ControlMsgRsp"
+    rsp.TrafficClass = "mem.ControlRsp"
 
     err := m.ctrlPort().Send(rsp)
     if err != nil {
         return false
     }
 
-    nextState := m.comp.GetNextState()
-    nextState.CurrentState = "pause"
+    state.CurrentState = "pause"
 
     return true
 }
@@ -1753,7 +1741,7 @@ func (m *ctrlMiddleware) handleDrainState() bool {
 both `comp` and `storage` directly:
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
+// From v5/mem/idealmemcontroller/memmiddleware.go
 type memMiddleware struct {
     comp    *modeling.Component[Spec, State]
     storage *mem.Storage
@@ -1782,13 +1770,13 @@ This middleware:
 5. When countdown reaches 0, performs the actual storage read/write and sends
    a response
 
-The `takeNewReqs` method demonstrates using both `GetState()` and
-`GetSpec()` for reads, and `GetNextState()` for writes:
+The `takeNewReqs` method demonstrates using `GetNextState()` and
+`GetSpec()`:
 
 ```go
-// From v5/mem/idealmemcontroller/memMiddleware.go
+// From v5/mem/idealmemcontroller/memmiddleware.go
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-    state := m.comp.GetState()
+    state := m.comp.GetNextState()
     if state.CurrentState != "enable" {
         return false
     }
@@ -1806,9 +1794,8 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 
         tx := m.msgToInflightTransaction(msg)
 
-        nextState := m.comp.GetNextState()
-        nextState.InflightTransactions = append(
-            nextState.InflightTransactions, tx)
+        state.InflightTransactions = append(
+            state.InflightTransactions, tx)
         madeProgress = true
     }
 
@@ -1822,19 +1809,14 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 // From v5/mem/idealmemcontroller/builder.go
 func MakeBuilder() Builder {
     return Builder{
-        freq:       1 * sim.GHz,
+        spec:       DefaultSpec,
         capacity:   4 * mem.GB,
         topBufSize: 16,
-        spec: &Spec{
-            Latency:       100,
-            Width:         1,
-            CacheLineSize: 64,
-        },
     }
 }
 
 func (b Builder) Build(name string) *Comp {
-    spec := *b.spec
+    spec := b.spec
     spec.StorageRef = name
 
     initialState := State{
@@ -1843,7 +1825,7 @@ func (b Builder) Build(name string) *Comp {
 
     modelComp := modeling.NewBuilder[Spec, State]().
         WithEngine(b.engine).
-        WithFreq(b.freq).
+        WithFreq(spec.Freq).
         WithSpec(spec).
         Build(name)
     modelComp.SetState(initialState)
@@ -1876,8 +1858,8 @@ func (b Builder) Build(name string) *Comp {
 
 Notable patterns:
 - **`Build` returns `*Comp`** — because the wrapper is needed for `StorageOwner`.
-- **Defaults in `MakeBuilder`**: Latency=100, Width=1, CacheLineSize=64,
-  capacity=4GB.
+- **Defaults in `MakeBuilder`**: Uses `DefaultSpec` (Freq=1GHz, Latency=100,
+  Width=1, CacheLineSize=64), capacity=4GB.
 - **`StorageRef` is set automatically** to the component name.
 - **Storage is created if not provided** — dependency injection with fallback.
 - **Initial state sets `CurrentState: "enable"`** — the component starts in
@@ -1914,7 +1896,7 @@ When creating a new V5 component, follow these steps:
 - [ ] **Define messages** — structs embedding `sim.MsgMeta`
 - [ ] **Define Spec** — flat struct with primitives only; add `json` tags
 - [ ] **Define State** — struct with primitives and nested structs; add `json`
-  tags; use string IDs for cross-references
+  tags; use uint64 IDs for cross-references
 - [ ] **Use `queueing.Buffer[T]` and `queueing.Pipeline[T]`** for queues and
   pipelines in State — they are JSON-serializable value types (see §4A); use
   `int` indices as the type parameter to reference transactions in a flat slice
