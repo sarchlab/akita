@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import { useMode } from "../hooks/useMode";
+import EngineControlPanel from "./live/EngineControlPanel";
+import TracingControls from "./live/TracingControls";
 
 export default function Layout() {
   const { mode, loading } = useMode();
@@ -26,6 +28,14 @@ export default function Layout() {
             </NavLink>
           </li>
         </ul>
+
+        {/* Live-mode controls */}
+        {mode === "live" && (
+          <div className="d-flex align-items-center gap-3 me-3">
+            <EngineControlPanel />
+            <TracingControls />
+          </div>
+        )}
 
         <span className="navbar-text">
           {loading ? "loading…" : `Mode: ${mode ?? "unknown"}`}
