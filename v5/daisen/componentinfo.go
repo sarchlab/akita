@@ -48,6 +48,11 @@ type StackedComponentInfo struct {
 }
 
 func (s *Server) httpComponentNames(w http.ResponseWriter, r *http.Request) {
+	if s.traceReader == nil {
+		http.Error(w, "trace data not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	componentNames := s.traceReader.ListComponents(r.Context())
 
 	rsp, err := json.Marshal(componentNames)
@@ -58,6 +63,11 @@ func (s *Server) httpComponentNames(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
+	if s.traceReader == nil {
+		http.Error(w, "trace data not available", http.StatusServiceUnavailable)
+		return
+	}
+
 	compName := r.FormValue("where")
 	infoType := r.FormValue("info_type")
 
@@ -517,6 +527,10 @@ func isTaskOverlapsWithBin(
 
 // buildAkitaTraceHeader builds a CSV header from trace data for GPT context.
 func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
+	if traceReader == nil {
+		return ""
+	}
+
 	selected, _ := traceInfo["selected"].(float64)
 	if selected == 0 {
 		return ""

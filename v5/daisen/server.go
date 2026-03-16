@@ -142,6 +142,15 @@ func (s *Server) RegisterVisTracer(tr *tracing.DBTracer) {
 	s.tracer = tr
 }
 
+// SetTraceDBPath opens a read-only SQLite connection to the trace database.
+// In live mode, this allows the server to serve trace endpoints while the
+// DBTracer is actively writing data. Uses WAL mode for concurrent access.
+func (s *Server) SetTraceDBPath(dbPath string) {
+	reader := NewSQLiteTraceReader(dbPath)
+	reader.InitReadOnly()
+	s.traceReader = reader
+}
+
 // CreateProgressBar creates a new progress bar (live mode only).
 func (s *Server) CreateProgressBar(name string, total uint64) *ProgressBar {
 	bar := &ProgressBar{
@@ -224,7 +233,25 @@ func (s *Server) setupRoutes() *http.ServeMux {
 	mux.HandleFunc("/api/githubisavailable", s.httpGithubIsAvailableProxy)
 	mux.HandleFunc("/api/checkenv", s.httpCheckEnvFile)
 
-	// Live mode endpoints
+	// Monitoring/live-mode endpoints
+	monitoringPaths := []string{
+		"/api/pause",
+		"/api/continue",
+		"/api/now",
+		"/api/run",
+		"/api/tick/",
+		"/api/list_components",
+		"/api/component/",
+		"/api/field/",
+		"/api/hangdetector/buffers",
+		"/api/progress",
+		"/api/resource",
+		"/api/profile",
+		"/api/trace/start",
+		"/api/trace/end",
+		"/api/trace/is_tracing",
+	}
+
 	if s.mode == "live" {
 		mux.HandleFunc("/api/pause", s.pauseEngine)
 		mux.HandleFunc("/api/continue", s.continueEngine)
@@ -241,6 +268,11 @@ func (s *Server) setupRoutes() *http.ServeMux {
 		mux.HandleFunc("/api/trace/start", s.apiTraceStart)
 		mux.HandleFunc("/api/trace/end", s.apiTraceEnd)
 		mux.HandleFunc("/api/trace/is_tracing", s.apiTraceIsTracing)
+	} else {
+		// In replay mode, register monitoring endpoints with 503 response
+		for _, path := range monitoringPaths {
+			mux.HandleFunc(path, liveOnlyHandler)
+		}
 	}
 
 	// Static assets / SPA fallback
@@ -675,6 +707,13 @@ func (s *Server) apiTraceIsTracing(w http.ResponseWriter, _ *http.Request) {
 		log.Printf("Error encoding JSON response: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// liveOnlyHandler returns 503 Service Unavailable for monitoring endpoints
+// that are only available in live mode.
+func liveOnlyHandler(w http.ResponseWriter, _ *http.Request) {
+	http.Error(w, "endpoint only available in live mode",
+		http.StatusServiceUnavailable)
 }
 
 func dieOnErr(err error) {

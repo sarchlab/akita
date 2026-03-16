@@ -90,6 +90,7 @@ func (b Builder) createDataRecorder(s *Simulation) {
 	if outputPath == "" {
 		outputPath = "akita_sim_" + s.id
 	}
+	s.outputPath = outputPath
 	s.dataRecorder = datarecording.NewDataRecorder(outputPath)
 }
 
@@ -124,5 +125,6 @@ func (b Builder) createServer(s *Simulation) {
 	}
 	s.server.RegisterEngine(s.engine)
 	s.server.RegisterVisTracer(s.visTracer)
+	s.server.SetTraceDBPath(s.outputPath + ".sqlite3")
 	s.server.StartServer()
 }

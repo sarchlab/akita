@@ -10,6 +10,7 @@ import (
 // A Simulation provides the service requires to define a simulation.
 type Simulation struct {
 	id           string
+	outputPath   string
 	engine       sim.Engine
 	dataRecorder datarecording.DataRecorder
 	server       *daisen.Server
