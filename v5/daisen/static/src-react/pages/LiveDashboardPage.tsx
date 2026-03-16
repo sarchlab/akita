@@ -1,6 +1,8 @@
 import { useMode } from "../hooks/useMode";
 import ProgressBars from "../components/live/ProgressBars";
 import HangAnalyzer from "../components/live/HangAnalyzer";
+import ResourceMonitor from "../components/live/ResourceMonitor";
+import MonitorPanel from "../components/live/MonitorPanel";
 
 /**
  * Live Dashboard — shows progress bars and hang analyzer.
@@ -46,6 +48,20 @@ export default function LiveDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Resource monitor section */}
+      <div className="row">
+        <div className="col-12 mb-3">
+          <div className="card">
+            <div className="card-body">
+              <ResourceMonitor />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Field monitor widgets */}
+      <MonitorPanel />
     </div>
   );
 }
