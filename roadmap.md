@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 474)
+## Current State (Cycle 481)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -189,30 +189,36 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 
 Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 
-**M64: Backend Merge — Combine Go servers** (~6 cycles)
-- Convert `v5/daisen` from `package main` to library package
-- Move CLI entry point to `v5/daisen/cmd/main.go`
-- Merge AkitaRTM (monitoring) API endpoints into unified Daisen server
-- Fix milestone table naming mismatch (DBTracer writes "milestone", Daisen reads "trace_milestones")
-- Replace gorilla/mux with stdlib net/http
-- Add live mode: open read-only SQLite connection to active simulation DB (WAL mode)
-- Update `simulation/builder.go` to use unified Daisen server instead of separate Monitor
-- Deprecate `v5/monitoring/` package (mark as deprecated, keep temporarily for backward compat)
-- Status: NEXT
+**M64: Backend Merge — Combine Go servers** ✅ COMPLETE (~6 budgeted, ~5 used)
+- Converted `v5/daisen` from `package main` to library package
+- Moved CLI entry point to `v5/daisen/cmd/main.go`
+- Merged AkitaRTM (monitoring) API endpoints into unified Daisen server
+- Fixed milestone table naming mismatch
+- Replaced gorilla/mux with stdlib net/http
+- Added live mode with WAL-mode SQLite reader
+- Updated `simulation/builder.go` to use unified Daisen server
+- Live mode: monitoring + trace endpoints active; Replay mode: trace endpoints active, monitoring returns 503
+- Merged to main (commit a326110)
 
-**M65-M67: React Frontend** (~12 cycles across sub-milestones)
-- Scaffold React app with Vite + TypeScript
-- Migrate trace visualization components (task chart, dashboard, component view)
-- Migrate live monitoring components (engine control, progress, resource monitoring, hang detector)
-- Unify navigation (live + replay modes)
-- Replace D3.js where possible, keep for complex Gantt chart via useRef
-- Build chatbot panel in React
+**M65: React Frontend — Scaffold + Trace Visualization** (~8 cycles) — NEXT
+- Scaffold React app with Vite + TypeScript in `v5/daisen/static/`
+- Replace the old vanilla TS frontend
+- Implement mode-aware navigation (live/replay)
+- Migrate trace visualization: task chart (D3-based Gantt), task list, dashboard
+- Migrate component view with analytics
+- Update `go:embed` to serve the new React build
 
-**M68: Unified Features + Cleanup** (~4 cycles)
+**M66: React Frontend — Live Monitoring + Chatbot** (~6 cycles)
+- Migrate engine control panel (pause/continue/run/tick)
+- Migrate progress bars, resource monitor, hang detector
+- Migrate AI chatbot panel
+- Unify live + replay navigation
+
+**M67: Cleanup + Polish** (~4 cycles)
+- Remove deprecated `v5/monitoring/` package entirely
+- Remove old vanilla TS frontend code
 - Live trace streaming (view traces while simulation runs)
-- Seamless mode transitions
-- Remove deprecated `v5/monitoring/` package
-- Final cleanup and testing
+- Final testing and polish
 
 ---
 
