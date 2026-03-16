@@ -1,8 +1,8 @@
 package simulation
 
 import (
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -12,7 +12,7 @@ type Simulation struct {
 	id           string
 	engine       sim.Engine
 	dataRecorder datarecording.DataRecorder
-	monitor      *monitoring.Monitor
+	server       *daisen.Server
 	visTracer    *tracing.DBTracer
 
 	components    []sim.Component
@@ -37,9 +37,9 @@ func (s *Simulation) GetDataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
-// GetMonitor returns the monitor used in the simulation.
-func (s *Simulation) GetMonitor() *monitoring.Monitor {
-	return s.monitor
+// GetServer returns the daisen server used in the simulation.
+func (s *Simulation) GetServer() *daisen.Server {
+	return s.server
 }
 
 // GetVisTracer returns the tracer used in the simulation.
@@ -63,8 +63,8 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
 
-	if s.monitor != nil {
-		s.monitor.RegisterComponent(c)
+	if s.server != nil {
+		s.server.RegisterComponent(c)
 	}
 
 	if hookable, ok := c.(tracing.NamedHookable); ok {
@@ -99,8 +99,8 @@ func (s *Simulation) GetPortByName(name string) sim.Port {
 
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
-	if s.monitor != nil {
-		s.monitor.StopServer()
+	if s.server != nil {
+		s.server.StopServer()
 	}
 
 	if s.visTracer != nil {

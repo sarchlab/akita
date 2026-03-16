@@ -1,20 +1,22 @@
 package simulation
 
 import (
+	"strconv"
+
 	"github.com/rs/xid"
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 // Builder can be used to build a simulation.
 type Builder struct {
-	parallelEngine     bool
-	monitorOn          bool
-	monitorPort        int
-	outputFileName     string
-	visTracingOnStart  bool
+	parallelEngine    bool
+	monitorOn         bool
+	monitorPort       int
+	outputFileName    string
+	visTracingOnStart bool
 }
 
 // MakeBuilder creates a new builder.
@@ -70,7 +72,7 @@ func (b Builder) Build() *Simulation {
 	b.createDataRecorder(s)
 	b.createEngine(s)
 	b.createVisTracer(s)
-	b.createMonitor(s)
+	b.createServer(s)
 
 	return s
 }
@@ -106,16 +108,21 @@ func (b Builder) createVisTracer(s *Simulation) {
 	}
 }
 
-func (b Builder) createMonitor(s *Simulation) {
+func (b Builder) createServer(s *Simulation) {
 	if !b.monitorOn {
 		return
 	}
 
-	s.monitor = monitoring.NewMonitor()
+	addr := "localhost:0"
 	if b.monitorPort > 0 {
-		s.monitor.WithPortNumber(b.monitorPort)
+		addr = "localhost:" + strconv.Itoa(b.monitorPort)
 	}
-	s.monitor.RegisterEngine(s.engine)
-	s.monitor.RegisterVisTracer(s.visTracer)
-	s.monitor.StartServer()
+
+	s.server = daisen.NewLiveServer(s.engine, addr)
+	if b.monitorPort > 0 {
+		s.server.WithPortNumber(b.monitorPort)
+	}
+	s.server.RegisterEngine(s.engine)
+	s.server.RegisterVisTracer(s.visTracer)
+	s.server.StartServer()
 }

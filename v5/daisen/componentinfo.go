@@ -1,4 +1,4 @@
-package main
+package daisen
 
 import (
 	"bytes"
@@ -16,11 +16,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// TimeValue represents a data point with a time and a value.
 type TimeValue struct {
 	Time  float64 `json:"time"`
 	Value float64 `json:"value"`
 }
 
+// ComponentInfo contains time-series info for a component.
 type ComponentInfo struct {
 	Name      string      `json:"name"`
 	InfoType  string      `json:"info_type"`
@@ -29,11 +31,13 @@ type ComponentInfo struct {
 	Data      []TimeValue `json:"data"`
 }
 
+// StackedTimeValue represents a data point with per-kind values.
 type StackedTimeValue struct {
 	Time   float64            `json:"time"`
 	Values map[string]float64 `json:"values"` // key: milestone kind, value: count
 }
 
+// StackedComponentInfo contains stacked time-series info for a component.
 type StackedComponentInfo struct {
 	Name      string             `json:"name"`
 	InfoType  string             `json:"info_type"`
@@ -43,8 +47,8 @@ type StackedComponentInfo struct {
 	Kinds     []string           `json:"kinds"` // list of all milestone kinds
 }
 
-func httpComponentNames(w http.ResponseWriter, r *http.Request) {
-	componentNames := traceReader.ListComponents(r.Context())
+func (s *Server) httpComponentNames(w http.ResponseWriter, r *http.Request) {
+	componentNames := s.traceReader.ListComponents(r.Context())
 
 	rsp, err := json.Marshal(componentNames)
 	dieOnErr(err)
@@ -53,7 +57,7 @@ func httpComponentNames(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	compName := r.FormValue("where")
 	infoType := r.FormValue("info_type")
 
@@ -70,19 +74,19 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 
 	switch infoType {
 	case "ReqInCount":
-		compInfo = calculateReqIn(
+		compInfo = s.calculateReqIn(
 			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ReqCompleteCount":
-		compInfo = calculateReqComplete(
+		compInfo = s.calculateReqComplete(
 			r.Context(), compName, startTime, endTime, int(numDots))
 	case "AvgLatency":
-		compInfo = calculateAvgLatency(
+		compInfo = s.calculateAvgLatency(
 			r.Context(), compName, startTime, endTime, int(numDots))
 	case "ConcurrentTask":
-		compInfo = calculateConcurrentTask(
+		compInfo = s.calculateConcurrentTask(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "ConcurrentTaskMilestones":
-		stackedInfo := calculateConcurrentTaskMilestones(
+		stackedInfo := s.calculateConcurrentTaskMilestones(
 			r.Context(), compName, infoType, startTime, endTime, int(numDots))
 		rsp, err := json.Marshal(stackedInfo)
 		dieOnErr(err)
@@ -90,10 +94,10 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 		dieOnErr(err)
 		return
 	case "BufferPressure":
-		compInfo = calculateBufferPressure(
+		compInfo = s.calculateBufferPressure(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	case "PendingReqOut":
-		compInfo = calculatePendingReqOut(
+		compInfo = s.calculatePendingReqOut(
 			r.Context(), compInfo, compName, infoType, startTime, endTime, numDots)
 	default:
 		log.Panicf("unknown info_type %s\n", infoType)
@@ -106,14 +110,14 @@ func httpComponentInfo(w http.ResponseWriter, r *http.Request) {
 	dieOnErr(err)
 }
 
-func calculateConcurrentTask(
+func (s *Server) calculateConcurrentTask(
 	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = calculateTimeWeightedTaskCount(
+	compInfo = s.calculateTimeWeightedTaskCount(
 		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return true },
@@ -124,14 +128,14 @@ func calculateConcurrentTask(
 	return compInfo
 }
 
-func calculateBufferPressure(
+func (s *Server) calculateBufferPressure(
 	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = calculateTimeWeightedTaskCount(
+	compInfo = s.calculateTimeWeightedTaskCount(
 		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		taskIsReqIn,
@@ -146,14 +150,14 @@ func calculateBufferPressure(
 	return compInfo
 }
 
-func calculatePendingReqOut(
+func (s *Server) calculatePendingReqOut(
 	ctx context.Context,
 	compInfo *ComponentInfo,
 	compName, infoType string,
 	startTime, endTime float64,
 	numDots int64,
 ) *ComponentInfo {
-	compInfo = calculateTimeWeightedTaskCount(
+	compInfo = s.calculateTimeWeightedTaskCount(
 		ctx, compName, infoType,
 		startTime, endTime, int(numDots),
 		func(t Task) bool { return t.Kind == "req_out" },
@@ -168,7 +172,7 @@ func taskIsReqIn(t Task) bool {
 	return t.Kind == "req_in" && t.ParentTask != nil
 }
 
-func calculateReqIn(
+func (s *Server) calculateReqIn(
 	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
@@ -189,7 +193,7 @@ func calculateReqIn(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(ctx, query)
+	reqs := s.traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -218,7 +222,7 @@ func calculateReqIn(
 	return info
 }
 
-func calculateReqComplete(
+func (s *Server) calculateReqComplete(
 	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
@@ -239,7 +243,7 @@ func calculateReqComplete(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(ctx, query)
+	reqs := s.traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -268,7 +272,7 @@ func calculateReqComplete(
 	return info
 }
 
-func calculateAvgLatency(
+func (s *Server) calculateAvgLatency(
 	ctx context.Context,
 	compName string,
 	startTime, endTime float64,
@@ -289,7 +293,7 @@ func calculateAvgLatency(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	reqs := traceReader.ListTasks(ctx, query)
+	reqs := s.traceReader.ListTasks(ctx, query)
 
 	totalDuration := endTime - startTime
 	binDuration := totalDuration / float64(numDots)
@@ -347,7 +351,7 @@ func (ts timestamps) Swap(i, j int) {
 type taskFilter func(t Task) bool
 type taskTime func(t Task) float64
 
-func calculateTimeWeightedTaskCount(
+func (s *Server) calculateTimeWeightedTaskCount(
 	ctx context.Context,
 	compName, infoType string,
 	startTime, endTime float64,
@@ -369,7 +373,7 @@ func calculateTimeWeightedTaskCount(
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	tasks := traceReader.ListTasks(ctx, query)
+	tasks := s.traceReader.ListTasks(ctx, query)
 	tasks = filterTask(tasks, filter)
 
 	totalDuration := endTime - startTime
@@ -511,7 +515,7 @@ func isTaskOverlapsWithBin(
 	return true
 }
 
-// Add this helper function outside buildOpenAIPayload:
+// buildAkitaTraceHeader builds a CSV header from trace data for GPT context.
 func buildAkitaTraceHeader(traceReader *SQLiteTraceReader, traceInfo map[string]interface{}) string {
 	selected, _ := traceInfo["selected"].(float64)
 	if selected == 0 {
@@ -645,6 +649,7 @@ func buildOpenAIPayload(
 	messages []map[string]interface{},
 	traceInfo map[string]interface{},
 	selectedGitHubRoutineKeys []string,
+	traceReader *SQLiteTraceReader,
 ) ([]byte, error) {
 	combinedTraceHeader := buildAkitaTraceHeader(traceReader, traceInfo)
 	routineFile := "componentgithubroutine.json"
@@ -714,7 +719,7 @@ func httpGithubRaw(ctx context.Context, url string) string {
 	}
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != 200 {
-		log.Printf("Failed to fetch raw GitHub file: %s, status: %d, err: %v\n", url, resp.StatusCode, err)
+		log.Printf("Failed to fetch raw GitHub file: %s, err: %v\n", url, err)
 		return ""
 	}
 	defer resp.Body.Close()
@@ -726,7 +731,7 @@ func httpGithubRaw(ctx context.Context, url string) string {
 	return string(body)
 }
 
-func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	_ = godotenv.Load(".env")
 	openaiApiKey := os.Getenv("OPENAI_API_KEY")
 	openaiURL := os.Getenv("OPENAI_URL")
@@ -757,7 +762,8 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	payloadBytes, err := buildOpenAIPayload(
-		r.Context(), openaiModel, req.Messages, req.TraceInfo, req.SelectedGitHubRoutineKeys)
+		r.Context(), openaiModel, req.Messages, req.TraceInfo,
+		req.SelectedGitHubRoutineKeys, s.traceReader)
 	if err != nil {
 		http.Error(w, "Failed to marshal payload: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -779,7 +785,7 @@ func httpGPTProxy(w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 	_ = godotenv.Load(".env")
 	githubPAT := os.Getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
 	if githubPAT == "" {
@@ -818,6 +824,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Failed to encode JSON: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+		return
 	}
 	defer resp.Body.Close()
 	routineKeys := []string{}
@@ -842,7 +849,7 @@ func httpGithubIsAvailableProxy(w http.ResponseWriter, r *http.Request) {
 }
 
 // httpCheckEnvFile handles the API endpoint to check if .env file exists
-func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
+func (s *Server) httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
@@ -873,7 +880,7 @@ func httpCheckEnvFile(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
+func (s *Server) fetchTasksForMilestones(ctx context.Context, compName string, startTime, endTime float64) []Task {
 	query := TaskQuery{
 		Where:            compName,
 		EnableTimeRange:  true,
@@ -881,7 +888,7 @@ func fetchTasksForMilestones(ctx context.Context, compName string, startTime, en
 		EndTime:          endTime,
 		EnableParentTask: true,
 	}
-	return traceReader.ListTasks(ctx, query)
+	return s.traceReader.ListTasks(ctx, query)
 }
 
 func collectMilestoneKinds(tasks []Task) []string {
@@ -969,7 +976,7 @@ func findTaskMilestoneKind(task Task, binStartTime float64) string {
 	return currentKind
 }
 
-func calculateConcurrentTaskMilestones(
+func (s *Server) calculateConcurrentTaskMilestones(
 	ctx context.Context,
 	compName, infoType string,
 	startTime, endTime float64,
@@ -983,7 +990,7 @@ func calculateConcurrentTaskMilestones(
 		Kinds:     []string{},
 	}
 
-	tasks := fetchTasksForMilestones(ctx, compName, startTime, endTime)
+	tasks := s.fetchTasksForMilestones(ctx, compName, startTime, endTime)
 	info.Kinds = collectMilestoneKinds(tasks)
 	info.Data = generateStackedTimeData(tasks, info.Kinds, startTime, endTime, numDots)
 

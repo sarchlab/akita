@@ -1,4 +1,4 @@
-package main
+package daisen
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/sarchlab/akita/v5/sim"
 )
 
-func httpTrace(w http.ResponseWriter, r *http.Request) {
+func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
 	useTimeRange := true
 	if r.FormValue("starttime") == "" || r.FormValue("endtime") == "" {
 		useTimeRange = false
@@ -59,7 +59,7 @@ func httpTrace(w http.ResponseWriter, r *http.Request) {
 		EnableParentTask: false,
 	}
 
-	tasks := traceReader.ListTasks(r.Context(), query)
+	tasks := s.traceReader.ListTasks(r.Context(), query)
 
 	rsp, err := json.Marshal(tasks)
 	dieOnErr(err)
@@ -93,13 +93,14 @@ type TaskQuery struct {
 	EnableParentTask bool
 }
 
-// A Task is a task
+// TaskStep represents a milestone/step in a task.
 type TaskStep struct {
 	Time sim.VTimeInSec `json:"time"`
 	What string         `json:"what"`
 	Kind string         `json:"kind"`
 }
 
+// Task represents a traced task.
 type Task struct {
 	ID         uint64         `json:"id"`
 	ParentID   uint64         `json:"parent_id"`
@@ -202,8 +203,6 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 		return naturalLess(components[i], components[j])
 	})
 
-	// fmt.Printf("%v\n", components)
-
 	return components
 }
 
@@ -231,7 +230,7 @@ func (r *SQLiteTraceReader) ListTasks(ctx context.Context, query TaskQuery) []Ta
 	return tasks
 }
 
-// loadMilestonesForTasks loads milestones for the given tasks from the database
+// loadMilestonesForTasks loads milestones for the given tasks from the database.
 func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 	if len(tasks) == 0 {
 		return
@@ -250,15 +249,17 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 	if len(placeholders) > 0 {
 		placeholders = placeholders[:len(placeholders)-1] // remove trailing comma
 	}
+
+	// Fixed: read from "milestone" table (matching what DBTracer writes)
 	sqlStr := fmt.Sprintf(`
 		SELECT TaskID, Time, Kind, What, Location 
-		FROM trace_milestones 
+		FROM milestone 
 		WHERE TaskID IN (%s)
 		ORDER BY TaskID, Time`, placeholders)
 
 	rows, err := r.Query(sqlStr, taskIDs...)
 	if err != nil {
-		// If trace_milestones table doesn't exist, just return without error
+		// If milestone table doesn't exist, just return without error
 		return
 	}
 	defer rows.Close()
@@ -498,8 +499,8 @@ func (r *SQLiteTraceReader) ListSegments(ctx context.Context) SegmentsResponse {
 	return response
 }
 
-func httpSegments(w http.ResponseWriter, r *http.Request) {
-	segments := traceReader.ListSegments(r.Context())
+func (s *Server) httpSegments(w http.ResponseWriter, r *http.Request) {
+	segments := s.traceReader.ListSegments(r.Context())
 
 	rsp, err := json.Marshal(segments)
 	dieOnErr(err)
