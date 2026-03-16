@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 481)
+## Current State (Cycle 485)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -200,24 +200,30 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Live mode: monitoring + trace endpoints active; Replay mode: trace endpoints active, monitoring returns 503
 - Merged to main (commit a326110)
 
-**M65: React Frontend — Scaffold + Trace Visualization** (~8 cycles) — NEXT
-- Scaffold React app with Vite + TypeScript in `v5/daisen/static/`
-- Replace the old vanilla TS frontend
-- Implement mode-aware navigation (live/replay)
-- Migrate trace visualization: task chart (D3-based Gantt), task list, dashboard
-- Migrate component view with analytics
-- Update `go:embed` to serve the new React build
+**M65: React Frontend — Scaffold + Trace Visualization** ✅ COMPLETE (~8 budgeted, ~4 used)
+- Scaffolded React + Vite + TypeScript app in `v5/daisen/static/src-react/`
+- Replaced old vanilla TS frontend with React build in dist/
+- Implemented mode-aware routing via `/api/mode`
+- Task Chart page with D3 Gantt visualization (GanttChart.tsx, 538 lines)
+- Dashboard page with component list, segment selector, line charts
+- Component Analytics page with multi-metric visualization
+- Custom hooks: useMode, useTraceData, useSegments, useCompInfo, useComponentNames
+- PR #97 merged (commit c3d95f1)
 
-**M66: React Frontend — Live Monitoring + Chatbot** (~6 cycles)
-- Migrate engine control panel (pause/continue/run/tick)
-- Migrate progress bars, resource monitor, hang detector
-- Migrate AI chatbot panel
-- Unify live + replay navigation
+**M66: React Frontend — Live Monitoring + Engine Control + Chat** (~8 cycles) — NEXT
+- Port engine control panel (pause/continue/run/tick) from monitoring/web/src/engine_control.ts
+- Port component tree inspector from monitoring/web/src/component.ts + component_tree.ts
+- Port progress bars from monitoring/web/src/progress_bar.ts
+- Port hang analyzer from monitoring/web/src/hang_analyzer.ts
+- Port resource monitor (D3 network graph) from monitoring/web/src/resource.ts
+- Port field monitoring widgets from monitoring/web/src/monitor.ts
+- Port tracing controls from monitoring/web/src/tracing.ts
+- Port chat panel from daisen/static/src/chatpanel.ts (2,722 lines — decompose into React components)
+- Port UI layout/panel management from monitoring/web/src/ui_manager.ts
 
 **M67: Cleanup + Polish** (~4 cycles)
 - Remove deprecated `v5/monitoring/` package entirely
-- Remove old vanilla TS frontend code
-- Live trace streaming (view traces while simulation runs)
+- Remove old vanilla TS frontend code in `v5/daisen/static/src/`
 - Final testing and polish
 
 ---
