@@ -1,3 +1,4 @@
 v5/virtualmem
 *.test
 *.sqlite3
+v5/cmd
