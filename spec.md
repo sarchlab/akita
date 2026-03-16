@@ -155,9 +155,13 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 23. **React rewrite** (issue #488): Rewrite merged frontend with React. Part of #482 merge effort. **Authorized** as part of Daisen merge.
 
-25. **Comprehensive documentation** (issue #588): (a) Extensive documentation for framework core with outline, subsections, and examples for writing simulators with Akita v5. (b) README.md for every component explaining how it works. **Authorized.**
+25. ~~**Comprehensive documentation**~~ (issue #588): **DONE in M63.** Extensive framework docs (docs.md, 874 lines), component_guide.md updated, 20 README.md files.
 
-26. **Migration guide update** (issue #587): Update migration.md to reflect all V4→V5 changes including recent milestones (integer time, uint64 IDs, unified control protocol, etc.). **Authorized.**
+26. ~~**Migration guide update**~~ (issue #587): **DONE in M63.** migration.md covers all V4→V5 changes (876 lines, 11 sections).
+
+### Discussion (No Implementation Yet)
+
+27. **Merge hooking and tracing code** (issue #595): Human asks to discuss merging into one package or fully removing tracing and relying on hooking. Research needed.
 
 ### Deferred
 

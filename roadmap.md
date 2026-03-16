@@ -174,32 +174,32 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Scope**: Added `timing_crossvalidation_test.go` with 4-tier validation: (1) 66 timing formula cross-validation tests across DDR4/DDR5/HBM2, (2) 4 single-request latency tests, (3) 4 multi-request behavioral tests including tFAW, (4) 3 bandwidth sanity checks. Pure Go, Ginkgo/Gomega framework. 158 total DRAM tests (84 existing + 74 new).
 - **Budget**: 6 cycles (used ~4)
 
-### Newly Authorized (Cycle 444)
-- **Merge AkitaRTM/Daisen (#482)** — Full merge authorized. Green light from human (issue #586 comment). One Go server, one React frontend, one SQLite DB. Mara's implementation plan ready (~17 cycles, 3 phases).
+### M63: Documentation overhaul ✅
+- **Status**: COMPLETE (cycle 445-472, PR #96 merged)
+- **Scope**: component_guide.md updated, migration.md (876 lines), docs.md (874 lines), 20 README.md files
+- **Human issues addressed**: #587 (migration guide), #588 (comprehensive docs)
+
+### New Human Requests (Cycle 472)
+
+- **Merge hooking and tracing** (#595): Human asks to discuss merging into one package or removing tracing entirely. RESEARCH NEEDED — no implementation without authorization.
+
+### Pending Authorized Work
+
+- **Merge AkitaRTM/Daisen (#482)** — Full merge authorized. One Go server, one React frontend, one SQLite DB.
 - **React rewrite (#488)** — Part of Daisen merge effort. Authorized.
-- **Comprehensive documentation (#588)** — Human requests: (a) extensive core framework docs with examples, (b) README.md per component. New issue.
-- **Migration guide update (#587)** — Human requests migration.md to be updated.
 
-### Implementation Plan (Cycle 444+)
+### Implementation Plan (Cycle 472+)
 
-**M63: Documentation overhaul** (target: 8 cycles)
-- Update `component_guide.md` for M55 (integer time) and M61 (uint64 IDs) — fixes success criteria #15
-- Update `migration.md` with all V4→V5 changes
-- Write comprehensive framework documentation with examples
-- Add README.md to every component package
-- Status: NEXT
+**M64: Research — Hook/tracing merge + Daisen/AkitaRTM merge planning** (research cycle)
+- Research #595 (hook/tracing code merge) — produce detailed analysis and recommendation
+- Finalize Daisen/AkitaRTM merge plan details
+- Status: CURRENT
 
-**M64+: Daisen/AkitaRTM merge** (target: ~17 cycles across sub-milestones)
+**M65+: Daisen/AkitaRTM merge** (target: ~17 cycles across sub-milestones)
 - Phase 1: Backend merge (combine Go servers) — ~4 cycles
 - Phase 2: React frontend (replace vanilla TS) — ~10 cycles
 - Phase 3: Unified features (live+replay) — ~3 cycles
-- Status: After M63
-
-### Housekeeping (Cycle 431)
-- Human gave "Green light" on Integer ID (#501)
-- Integer ID migration split into 2 phases: core types first, then tracing/NOC/memory
-- Diana's detailed analysis (issue #573) identifies ~50-55 files, 7 subsystems
-- Iris's Daisen/AkitaRTM merge plan (issue #574) ready for when human authorizes
+- Status: After research complete and human authorization for #595
 
 ---
 
