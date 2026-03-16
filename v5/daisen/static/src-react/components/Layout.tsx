@@ -29,6 +29,13 @@ export default function Layout() {
           </li>
           {mode === "live" && (
             <li className="nav-item">
+              <NavLink className="nav-link" to="/live/dashboard">
+                Live
+              </NavLink>
+            </li>
+          )}
+          {mode === "live" && (
+            <li className="nav-item">
               <NavLink className="nav-link" to="/live/components">
                 Inspector
               </NavLink>
