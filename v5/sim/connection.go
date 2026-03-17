@@ -23,14 +23,4 @@ type Connection interface {
 	NotifySend()
 }
 
-// HookPosConnStartSend marks a connection accept to send a message.
-var HookPosConnStartSend = &HookPos{Name: "Conn Start Send"}
 
-// HookPosConnStartTrans marks a connection start to transmit a message.
-var HookPosConnStartTrans = &HookPos{Name: "Conn Start Trans"}
-
-// HookPosConnDoneTrans marks a connection complete transmitting a message.
-var HookPosConnDoneTrans = &HookPos{Name: "Conn Done Trans"}
-
-// HookPosConnDeliver marks a connection delivered a message.
-var HookPosConnDeliver = &HookPos{Name: "Conn Deliver"}

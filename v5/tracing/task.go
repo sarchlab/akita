@@ -48,6 +48,3 @@ type Task struct {
 	ParentTask *Task          `json:"-"`
 }
 
-// TaskFilter is a function that can filter interesting tasks. If this function
-// returns true, the task is considered useful.
-type TaskFilter func(t Task) bool

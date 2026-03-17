@@ -63,8 +63,6 @@ func createNetwork(
 	engine sim.EventScheduler,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
-	// visTracer := tracing.NewMySQLTracer()
-	// visTracer.Init()
 	agents := createAgents(engine, test)
 
 	connector := nvlink.NewConnector().
