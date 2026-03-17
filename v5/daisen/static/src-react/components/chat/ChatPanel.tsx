@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { UnitContent } from "../../types/chat";
+import type { TraceInformation, UnitContent } from "../../types/chat";
 import { useChat } from "../../hooks/useChat";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
@@ -23,9 +23,13 @@ export default function ChatPanel() {
     clearUploadedFiles,
   } = useChat();
 
-  const handleSend = async (content: UnitContent[]) => {
+  const handleSend = async (
+    content: UnitContent[],
+    traceInfo: TraceInformation,
+    selectedGitHubRoutineKeys: string[],
+  ) => {
     try {
-      await sendMessage(content);
+      await sendMessage(content, traceInfo, selectedGitHubRoutineKeys);
       clearUploadedFiles();
     } catch {
       // Error state is managed in useChat.
