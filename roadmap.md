@@ -240,11 +240,13 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Fixed CI/lint fallout from restore and re-merged with all checks green.
 - Resolves the compatibility correction required by human directive #595.
 
-**M70: MGPUSim V5 porting plan (human issue #649)** — NEXT
-- Write a concrete phased migration plan for `sarchlab/mgpusim` and `sarchlab/mgpusim-dev` to Akita V5.
-- Include explicit recommendation on whether porting should use a subfolder in this repository.
-- Base the document on iris's completed research (`workspace/iris/mgpusim_v5_migration_plan.md`) but publish a cleaned, repo-committed plan.
-- Planning only; no implementation changes.
+**M70: MGPUSim V5 porting plan (human issue #649)** ✅ COMPLETE (PR #104 merged, commit 854bd5f)
+- `mgpusim_v5_migration_plan.md` committed at repo root.
+- 6-phase plan, 10 breaking-change categories, separate-repo recommendation.
+
+**M71: DRAM validation README follow-up (issue #484)** — NEXT (issue #662)
+- Update DRAM README with explicit cross-validation coverage and observed match/limits vs DRAMSim3 and Ramulator2.
+- Keep content user-facing and release-ready.
 
 **M69.1: Introduce dedicated `hooking` package (Stage 0 — additive only)** — PLANNED
 - Create `v5/hooking` package with core generic hook primitives (HookPos, HookCtx, Hook, Hookable, HookableBase, NewHookableBase).
@@ -256,11 +258,7 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Move `v5/` content to repo root, update all import paths.
 - Create `v5` branch on upstream `sarchlab/akita`.
 - Cut beta release from V5 code.
-- Prerequisite: M68.1 and release-readiness docs complete (M70 + DRAM validation README follow-up).
-
-**M71: DRAM validation README follow-up (issue #484)** — PLANNED
-- Update DRAM README with explicit cross-validation coverage and observed match/limits vs DRAMSim3 and Ramulator2.
-- Keep content user-facing and release-ready.
+- Prerequisite: M71 + M69.1 complete (release-readiness docs + hooking package).
 
 ---
 
