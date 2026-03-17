@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 486)
+## Current State (Cycle 488)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -221,12 +221,28 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Port chat panel from daisen/static/src/chatpanel.ts (2,722 lines — decompose into React components)
 - Port UI layout/panel management from monitoring/web/src/ui_manager.ts
 
-**M67: Cleanup + Polish** (~4 cycles) — NEXT
-- Fix CI test: `web_suite_test.go` expects `<!DOCTYPE html>` but Vite outputs `<!doctype html>`
-- Migrate NOC packages from `monitoring.Monitor` to `daisen.Server`
-- Remove deprecated `v5/monitoring/` package entirely
-- Remove old vanilla TS frontend code in `v5/daisen/static/src/` and `monitoring/web/src/`
-- Final testing and CI green
+**M67: Cleanup + Polish** ✅ COMPLETE (~4 cycles, PR #98 merged)
+- Fixed CI test for `<!doctype html>`
+- Migrated NOC packages to `daisen.Server`
+- Removed deprecated `v5/monitoring/` package
+- Removed old vanilla TS frontend code
+- CI green
+
+**M68: Tracing Dead Code Removal + Repo Hygiene** (~3 cycles) — NEXT
+- Delete `v5/mem/vm/tlbtracer.go` (broken signature, zero consumers)
+- Remove 4 dead `HookPosConn*` values from `v5/sim/connection.go`
+- Delete 5 unused tracer implementations (BusyTimeTracer, AverageTimeTracer, TotalTimeTracer, StepCountTracer, BackTraceTracer)
+- Remove deprecated `mem/trace.NewTracer`
+- Fix GanttChart prop mutation, dead smartValue.ts check
+- Remove dead NewMySQLTracer comments from NOC acceptance tests
+- Remove deprecated builder methods in vm/tlb, vm/addresstranslator
+- Addresses human issue #595 (hook/tracing dead code)
+- CI green
+
+**M69: Release Preparation** (~3 cycles) — PLANNED (human issue #645)
+- Move v5/ content to repo root (flatten directory structure)
+- Create `v5` branch on upstream sarchlab/akita repo
+- Make beta release from v5 code
 
 ---
 
