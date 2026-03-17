@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 485)
+## Current State (Cycle 486)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -210,7 +210,7 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Custom hooks: useMode, useTraceData, useSegments, useCompInfo, useComponentNames
 - PR #97 merged (commit c3d95f1)
 
-**M66: React Frontend — Live Monitoring + Engine Control + Chat** (~8 cycles) — NEXT
+**M66: React Frontend — Live Monitoring + Engine Control + Chat** (~8 cycles) ✅ COMPLETE
 - Port engine control panel (pause/continue/run/tick) from monitoring/web/src/engine_control.ts
 - Port component tree inspector from monitoring/web/src/component.ts + component_tree.ts
 - Port progress bars from monitoring/web/src/progress_bar.ts
@@ -221,10 +221,12 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Port chat panel from daisen/static/src/chatpanel.ts (2,722 lines — decompose into React components)
 - Port UI layout/panel management from monitoring/web/src/ui_manager.ts
 
-**M67: Cleanup + Polish** (~4 cycles)
+**M67: Cleanup + Polish** (~4 cycles) — NEXT
+- Fix CI test: `web_suite_test.go` expects `<!DOCTYPE html>` but Vite outputs `<!doctype html>`
+- Migrate NOC packages from `monitoring.Monitor` to `daisen.Server`
 - Remove deprecated `v5/monitoring/` package entirely
-- Remove old vanilla TS frontend code in `v5/daisen/static/src/`
-- Final testing and polish
+- Remove old vanilla TS frontend code in `v5/daisen/static/src/` and `monitoring/web/src/`
+- Final testing and CI green
 
 ---
 
