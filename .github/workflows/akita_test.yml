@@ -16,10 +16,10 @@ jobs:
         with:
           node-version: 18.20.7
       - name: npm install
-        working-directory: ./v5/daisen/static
+        working-directory: ./daisen/static
         run: npm install
       - name: npm run build
-        working-directory: ./v5/daisen/static
+        working-directory: ./daisen/static
         run: npm run build
 
   akita_build_lint_test:
@@ -36,17 +36,16 @@ jobs:
       - name: Install ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
       - name: Generate mocks
-        run: cd v5 && go generate ./...
+        run: go generate ./...
       - name: Build
-        run: cd v5 && go build ./...
+        run: go build ./...
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.4.0
-          working-directory: v5
           args: --timeout=10m
       - name: Run tests
-        run: cd v5 && ginkgo -r
+        run: ginkgo -r
 
   noc_acceptance_test:
     runs-on: self-hosted
@@ -63,11 +62,11 @@ jobs:
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
       - name: Generate mocks
-        run: cd v5 && go generate ./...
+        run: go generate ./...
       - name: Build
-        run: cd v5 && go build ./...
+        run: go build ./...
       - name: Run acceptance test
-        working-directory: ./v5/noc/acceptance
+        working-directory: ./noc/acceptance
         run: python3 acceptance_test.py
 
   mem_acceptance_test:
@@ -85,9 +84,9 @@ jobs:
       - name: Install mockgen
         run: go install go.uber.org/mock/mockgen@v0.6.0
       - name: Generate mocks
-        run: cd v5 && go generate ./...
+        run: go generate ./...
       - name: Build
-        run: cd v5 && go build ./...
+        run: go build ./...
       - name: Run acceptance test
-        working-directory: ./v5/mem/
+        working-directory: ./mem/
         run: python3 acceptance_test.py
