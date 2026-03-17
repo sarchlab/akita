@@ -1,6 +1,11 @@
 import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
 import type { UploadedFile } from "../../types/chat";
+import {
+  FILE_UPLOAD_ACCEPT,
+  IMAGE_UPLOAD_ACCEPT,
+  isImageUploadCandidate,
+} from "../../utils/uploadValidation";
 
 interface FileUploadAreaProps {
   loading: boolean;
@@ -25,8 +30,8 @@ export default function FileUploadArea({
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const addDroppedFiles = async (files: File[]) => {
-    const imageFiles = files.filter((file) => file.type.startsWith("image/"));
-    const otherFiles = files.filter((file) => !file.type.startsWith("image/"));
+    const imageFiles = files.filter((file) => isImageUploadCandidate(file));
+    const otherFiles = files.filter((file) => !isImageUploadCandidate(file));
 
     if (otherFiles.length > 0) {
       await onAddFiles(otherFiles, "file");
@@ -133,13 +138,14 @@ export default function FileUploadArea({
 
       <input
         ref={fileInputRef}
+        accept={FILE_UPLOAD_ACCEPT}
         className="d-none"
         onChange={(event) => void handleSelectFiles(event, "file")}
         type="file"
       />
       <input
         ref={imageInputRef}
-        accept="image/*"
+        accept={IMAGE_UPLOAD_ACCEPT}
         className="d-none"
         onChange={(event) => void handleSelectFiles(event, "image")}
         type="file"

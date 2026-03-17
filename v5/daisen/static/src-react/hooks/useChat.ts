@@ -8,6 +8,7 @@ import type {
   UnitContent,
   UploadedFile,
 } from "../types/chat";
+import { validateUploadedFile } from "../utils/uploadValidation";
 
 const DEFAULT_TRACE_INFO: TraceInformation = {
   selected: 0,
@@ -237,15 +238,37 @@ export function useChat(): UseChatResult {
       const fileList = Array.from(files as ArrayLike<File>);
       if (fileList.length === 0) return;
 
-      const nextFiles = await Promise.all(
-        fileList.map((file) => {
-          const nextId = nextFileIdRef.current;
-          nextFileIdRef.current += 1;
-          return toUploadedFile(file, nextId, type);
-        }),
-      );
+      const validFiles: File[] = [];
+      const validationErrors: string[] = [];
 
-      setUploadedFiles((prev) => [...prev, ...nextFiles]);
+      for (const file of fileList) {
+        const validation = validateUploadedFile(file, type);
+        if (validation.valid) {
+          validFiles.push(file);
+          continue;
+        }
+
+        const message = validation.error ?? "Invalid file upload.";
+        validationErrors.push(fileList.length === 1 ? message : `${file.name}: ${message}`);
+      }
+
+      if (validFiles.length > 0) {
+        const nextFiles = await Promise.all(
+          validFiles.map((file) => {
+            const nextId = nextFileIdRef.current;
+            nextFileIdRef.current += 1;
+            return toUploadedFile(file, nextId, type);
+          }),
+        );
+
+        setUploadedFiles((prev) => [...prev, ...nextFiles]);
+      }
+
+      if (validationErrors.length > 0) {
+        setError(validationErrors.join(" "));
+      } else {
+        setError(null);
+      }
     },
     [],
   );
