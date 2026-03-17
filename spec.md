@@ -176,11 +176,11 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 ### Active (Authorized)
 
-28. **V5 release preparation** (issue #645): move `v5/` to repo root, create upstream `v5` branch, and make a beta release. [M69.2 planned]
+28. **V5 release preparation** (issue #645): move `v5/` to repo root, create upstream `v5` branch, and make a beta release. [M69.2 — NEXT]
 
 29. ~~**MGPUSim V5 porting plan** (issue #649)~~: **DONE in M70** — `mgpusim_v5_migration_plan.md` committed to repo root.
 
-30. **Dedicated hooking package** (issue #595): create `v5/hooking` with generic hook primitives; keep `sim` compatibility shims (no breakage). [M69.1 — IN PROGRESS]
+30. ~~**Dedicated hooking package** (issue #595)~~: **DONE in M69.1** — `v5/hooking` created with generic hook primitives; `sim` compatibility aliases/shims in place (PR #106 merged).
 
 ### Discussion (No Implementation Yet)
 
