@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation } from "react-router";
 import { useMode } from "../hooks/useMode";
 import EngineControlPanel from "./live/EngineControlPanel";
 import TracingControls from "./live/TracingControls";
+import ChatPanel from "./chat/ChatPanel";
 
 /**
  * Layout — root layout component with navbar.
@@ -83,6 +84,8 @@ export default function Layout() {
           <Outlet />
         </main>
       )}
+
+      <ChatPanel />
     </div>
   );
 }
