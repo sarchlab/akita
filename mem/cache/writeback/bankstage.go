@@ -258,7 +258,7 @@ func (s *bankStage) finalizeReadHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(read, s.cache)
 
-	// log.Printf("%.10f, %s, bank read hit finalize，"+
+	// log.Printf("%.10f, %s, bank read hit finalize�?+
 	// " %s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, s.cache.Name(),
 	// 	trans.read.ID,
@@ -301,7 +301,7 @@ func (s *bankStage) finalizeWriteHit(trans *transaction) bool {
 
 	tracing.TraceReqComplete(write, s.cache)
 
-	// log.Printf("%.10f, %s, bank write hit finalize， "+
+	// log.Printf("%.10f, %s, bank write hit finalize�?"+
 	// "%s, %04X, %04X, (%d, %d), %v\n",
 	// 	now, s.cache.Name(),
 	// 	trans.write.ID,
@@ -430,7 +430,7 @@ func (s *bankStage) finalizeBankEviction(
 	}
 
 	// if trans.accessReq() != nil {
-	// 	log.Printf("%.10f, %s, bank read for eviction， "+
+	// 	log.Printf("%.10f, %s, bank read for eviction�?"+
 	// 		"%s, %04X, %04X, (%d, %d), %v\n",
 	// 		now, s.cache.Name(),
 	// 		trans.accessReq().Meta().ID,

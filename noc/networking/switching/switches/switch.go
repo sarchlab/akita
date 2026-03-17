@@ -3,6 +3,7 @@ package switches
 
 import (
 	"fmt"
+	"hash/fnv"
 
 	"github.com/sarchlab/akita/v4/noc/messaging"
 	"github.com/sarchlab/akita/v4/noc/networking/arbitration"
@@ -38,10 +39,10 @@ type portComplex struct {
 	routeBuffer sim.Buffer
 
 	// The flits here are buffered to wait to be forwarded to the output buffer.
-	forwardBuffer sim.Buffer
+	forwardBuffer []sim.Buffer
 
 	// The flits here are waiting to be sent to the next hop.
-	sendOutBuffer sim.Buffer
+	sendOutBuffer []sim.Buffer
 
 	// NumInputChannel is the number of flits that can stream into the
 	// switch from the port. The RouteBuffer and the ForwardBuffer should
@@ -52,6 +53,9 @@ type portComplex struct {
 	// switch to the port. The SendOutBuffer should have the capacity of this
 	// number.
 	numOutputChannel int
+
+	// numVC is the number of virtual channels
+	numVC int
 }
 
 // Comp is an Akita component(Switch) that can forward request to destination.
@@ -69,7 +73,9 @@ type Comp struct {
 func (c *Comp) addPort(complex portComplex) {
 	c.ports = append(c.ports, complex.localPort)
 	c.portToComplexMapping[complex.localPort.AsRemote()] = complex
-	c.arbiter.AddBuffer(complex.forwardBuffer)
+	for i := 0; i < len(complex.forwardBuffer); i++ {
+		c.arbiter.AddBuffer(complex.forwardBuffer[i])
+	}
 }
 
 // GetRoutingTable returns the routine table used by the switch.
@@ -165,15 +171,19 @@ func (m *middleware) route() (madeProgress bool) {
 				break
 			}
 
-			if !forwardBuf.CanPush() {
+			pipelineItem := item.(flitPipelineItem)
+			flit := pipelineItem.flit
+
+			vcID := m.assignVCID(flit, pc.numVC)
+			forwardChannel := forwardBuf[vcID]
+
+			if !forwardChannel.CanPush() {
 				break
 			}
 
-			pipelineItem := item.(flitPipelineItem)
-			flit := pipelineItem.flit
-			m.assignFlitOutputBuf(flit)
+			m.assignFlitOutputBuf(flit, vcID)
 			routeBuf.Pop()
-			forwardBuf.Push(flit)
+			forwardChannel.Push(flit)
 
 			// fmt.Printf("%.10f, %s, switch route flit, %s\n",
 			// 	c.Engine.CurrentTime(), c.Name(), flit.ID)
@@ -216,28 +226,30 @@ func (m *middleware) forward() (madeProgress bool) {
 func (m *middleware) sendOut() (madeProgress bool) {
 	for _, port := range m.ports {
 		pc := m.portToComplexMapping[port.AsRemote()]
-		sendOutBuf := pc.sendOutBuffer
+		for vcID := 0; vcID < len(pc.sendOutBuffer); vcID++ {
+			sendOutBuf := pc.sendOutBuffer[vcID]
 
-		for i := 0; i < pc.numOutputChannel; i++ {
-			item := sendOutBuf.Peek()
-			if item == nil {
-				break
-			}
+			for i := 0; i < pc.numOutputChannel; i++ {
+				item := sendOutBuf.Peek()
+				if item == nil {
+					break
+				}
 
-			flit := item.(*messaging.Flit)
-			flit.Meta().Src = pc.localPort.AsRemote()
-			flit.Meta().Dst = pc.remotePort
+				flit := item.(*messaging.Flit)
+				flit.Meta().Src = pc.localPort.AsRemote()
+				flit.Meta().Dst = pc.remotePort
 
-			err := pc.localPort.Send(flit)
-			if err == nil {
-				madeProgress = true
+				err := pc.localPort.Send(flit)
+				if err == nil {
+					madeProgress = true
 
-				sendOutBuf.Pop()
+					sendOutBuf.Pop()
 
-				// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
-				// 	now, c.Name(), flit.ID)
+					// fmt.Printf("%.10f, %s, switch send flit out, %s\n",
+					// 	now, c.Name(), flit.ID)
 
-				tracing.EndTask(m.flitTaskID(flit), m.Comp)
+					tracing.EndTask(m.flitTaskID(flit), m.Comp)
+				}
 			}
 		}
 	}
@@ -245,7 +257,10 @@ func (m *middleware) sendOut() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
+func (m *middleware) assignFlitOutputBuf(
+	f *messaging.Flit,
+	vcID int,
+) {
 	outPort := m.routingTable.FindPort(f.Msg.Meta().Dst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
@@ -254,11 +269,21 @@ func (m *middleware) assignFlitOutputBuf(f *messaging.Flit) {
 
 	pc := m.portToComplexMapping[outPort]
 
-	f.OutputBuf = pc.sendOutBuffer
+	f.OutputBuf = pc.sendOutBuffer[vcID]
 	if f.OutputBuf == nil {
 		panic(fmt.Sprintf("%s: no output buffer for %s",
 			m.Comp.Name(), f.Msg.Meta().Dst))
 	}
+}
+
+func (m *middleware) assignVCID(flit *messaging.Flit, numVC int) int {
+	originMsg := flit.Msg
+	originID := originMsg.Meta().ID
+
+	hasher := fnv.New32a()
+	hasher.Write([]byte(originID))
+
+	return int(hasher.Sum32()) % numVC
 }
 
 // SwitchPortAdder can add a port to a switch.
@@ -269,6 +294,7 @@ type SwitchPortAdder struct {
 	latency          int
 	numInputChannel  int
 	numOutputChannel int
+	numVC            int
 }
 
 // MakeSwitchPortAdder creates a SwitchPortAdder that can add ports for the
@@ -313,13 +339,28 @@ func (a SwitchPortAdder) WithNumOutputChannel(num int) SwitchPortAdder {
 	return a
 }
 
+func (a SwitchPortAdder) WithNumVC(num int) SwitchPortAdder {
+	a.numVC = num
+	return a
+}
+
 // AddPort adds the port to the switch.
 func (a SwitchPortAdder) AddPort() {
 	complexID := len(a.sw.ports)
 	complexName := fmt.Sprintf("%s.PortComplex%d", a.sw.Name(), complexID)
 
-	sendOutBuf := sim.NewBuffer(complexName+"SendOutBuf", a.numOutputChannel)
-	forwardBuf := sim.NewBuffer(complexName+"ForwardBuf", a.numInputChannel)
+	numVC := a.numVC
+	sendOutBuf := make([]sim.Buffer, numVC)
+	forwardBuf := make([]sim.Buffer, numVC)
+
+	for i := 0; i < a.numVC; i++ {
+		sendOutName := fmt.Sprintf("SendOuBuf.VC%d", i)
+		sendOutBuf[i] = sim.NewBuffer(complexName+sendOutName, a.numOutputChannel)
+
+		forwardName := fmt.Sprintf("ForwardBuf.VC%d", i)
+		forwardBuf[i] = sim.NewBuffer(complexName+forwardName, a.numInputChannel)
+	}
+
 	routeBuf := sim.NewBuffer(complexName+"RouteBuf", a.numInputChannel)
 	pipeline := pipelining.MakeBuilder().
 		WithNumStage(a.latency).
@@ -337,6 +378,7 @@ func (a SwitchPortAdder) AddPort() {
 		sendOutBuffer:    sendOutBuf,
 		numInputChannel:  a.numInputChannel,
 		numOutputChannel: a.numOutputChannel,
+		numVC:            a.numVC,
 	}
 
 	a.sw.addPort(pc)
