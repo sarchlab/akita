@@ -70,7 +70,7 @@ var _ = Describe("TLB", func() {
 			WithEngine(engine).
 			WithNumSets(1).
 			WithNumWays(32).
-			WithPageSize(4096).
+			WithLog2PageSize(12).
 			WithTranslationProviderMapperType("single").
 			WithTranslationProviders(sim.RemotePort("RemotePort")).
 			WithTopPort(topPort).

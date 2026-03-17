@@ -73,44 +73,10 @@ func (b Builder) WithLog2PageSize(n uint64) Builder {
 	return b
 }
 
-// WithPageSize sets the page size that the TLB works with.
-//
-// Deprecated: Use `WithLog2PageSize` instead.
-func (b Builder) WithPageSize(n uint64) Builder {
-	// Check if n is a power of 2 by counting the number of 1s in binary
-	if n == 0 || (n&(n-1)) != 0 {
-		panic("page size must be a power of 2")
-	}
-
-	log2 := 0
-	temp := n
-
-	for temp > 0 {
-		temp >>= 1
-		log2++
-	}
-
-	b.log2PageSize = uint64(log2 - 1) // Subtract 1 because we count one extra iteration
-	b.spec.PageSize = 1 << b.log2PageSize
-
-	return b
-}
-
 // WithNumReqPerCycle sets the number of requests per cycle can be processed by
 // a TLB
 func (b Builder) WithNumReqPerCycle(n int) Builder {
 	b.spec.NumReqPerCycle = n
-	return b
-}
-
-// WithLowModule sets the port that can provide the address translation in case
-// of tlb miss.
-//
-// Deprecated: Use `WithTranslationProviderMapper` instead.
-func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
-	b.legacyMapper = &mem.SinglePortMapper{
-		Port: lowModule,
-	}
 	return b
 }
 

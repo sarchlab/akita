@@ -94,15 +94,6 @@ func (b Builder) WithCtrlPort(p sim.Port) Builder {
 	return b
 }
 
-// WithAddressToPortMapper sets the low modules finder that can tell the address
-// translators where to send the memory access request to.
-//
-// Deprecated: Use `WithMemoryProviderMapper` instead.
-func (b Builder) WithAddressToPortMapper(f mem.AddressToPortMapper) Builder {
-	b.memPortMapper = f
-	return b
-}
-
 // WithMemoryProviderMapper sets the low modules finder that can tell the
 // address translators where to send the memory access request to.
 func (b Builder) WithMemoryProviderMapper(f mem.AddressToPortMapper) Builder {
@@ -136,20 +127,6 @@ func (b Builder) WithTranslationProviderMapper(
 	table mem.AddressToPortMapper,
 ) Builder {
 	b.translationPortMapper = table
-	return b
-}
-
-// WithTranslationProvider sets the port that can provide the translation
-// service. The port must be a port on a TLB or an MMU.
-//
-// Deprecated: Use `WithTranslationProviderMapper`, or use
-// `WithTranslatorProviderMapperType` and `WithTranslationProviders` in
-// combination instead.
-func (b Builder) WithTranslationProvider(p sim.RemotePort) Builder {
-	b.translationPortMapper = &mem.SinglePortMapper{
-		Port: p,
-	}
-
 	return b
 }
 
