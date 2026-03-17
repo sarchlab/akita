@@ -244,21 +244,21 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - `mgpusim_v5_migration_plan.md` committed at repo root.
 - 6-phase plan, 10 breaking-change categories, separate-repo recommendation.
 
-**M71: DRAM validation README follow-up (issue #484)** — NEXT (issue #662)
-- Update DRAM README with explicit cross-validation coverage and observed match/limits vs DRAMSim3 and Ramulator2.
-- Keep content user-facing and release-ready.
+**M71: DRAM validation README follow-up (issue #484)** ✅ COMPLETE (PR #105 merged, commit 22f5e56)
+- Added 175-line Validation section to `v5/mem/dram/README.md`.
+- 66 timing formula checks (DDR4/DDR5/HBM2 vs DRAMSim3/Ramulator2), single-request latency, multi-request behavioral tests (tFAW), bandwidth sanity.
 
-**M69.1: Introduce dedicated `hooking` package (Stage 0 — additive only)** — PLANNED
+**M69.1: Introduce dedicated `hooking` package (Stage 0 — additive only)** — NEXT (issue #663)
 - Create `v5/hooking` package with core generic hook primitives (HookPos, HookCtx, Hook, Hookable, HookableBase, NewHookableBase).
 - Keep all existing `sim` hook symbols as compatibility aliases/re-exports (no breakage).
-- Add no-cycle-violation test and package docs.
-- Based on diana's Option B analysis (staged extraction with sim shims).
+- No import cycles, additive only, CI green.
+- Based on diana's Option B analysis (staged extraction with sim shims). Addresses human request in issue #595.
 
 **M69.2: Release preparation — move v5/ to repo root** — PLANNED
 - Move `v5/` content to repo root, update all import paths.
 - Create `v5` branch on upstream `sarchlab/akita`.
 - Cut beta release from V5 code.
-- Prerequisite: M71 + M69.1 complete (release-readiness docs + hooking package).
+- Prerequisite: M69.1 complete (hooking package). Addresses human request in issue #645.
 
 ---
 
