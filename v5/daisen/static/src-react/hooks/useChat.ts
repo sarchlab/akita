@@ -145,11 +145,13 @@ export function useChat(): UseChatResult {
         const responseType = response.headers.get("content-type") ?? "";
 
         if (responseType.includes("application/json")) {
-          const data = (await response.json()) as GPTResponse | { content?: unknown } | string;
+          const data = (await response.json()) as GPTResponse | { content?: unknown; choices?: Array<{ message?: { content?: unknown } }> } | string;
           if (typeof data === "string") {
             assistantText = data;
           } else if (typeof data.content === "string") {
             assistantText = data.content;
+          } else if (Array.isArray((data as { choices?: unknown }).choices) && typeof (data as { choices: Array<{ message?: { content?: unknown } }> }).choices[0]?.message?.content === "string") {
+            assistantText = (data as { choices: Array<{ message: { content: string } }> }).choices[0].message.content;
           } else {
             assistantText = JSON.stringify(data);
           }
