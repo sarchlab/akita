@@ -22,9 +22,5 @@ export function smartString(val: number): string {
     }
   }
 
-  if (val == undefined) {
-    return "undefined";
-  }
-
   return val.toExponential(10);
 }

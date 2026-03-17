@@ -99,14 +99,10 @@ export default function GanttChart({
   /* ---------- Derive data ------------------------------------------ */
   const allTasks: Task[] = [];
   if (parentTask) {
-    parentTask.isParentTask = true;
-    parentTask.isMainTask = false;
-    allTasks.push(parentTask);
+    allTasks.push({ ...parentTask, isParentTask: true, isMainTask: false });
   }
   if (mainTask) {
-    mainTask.isMainTask = true;
-    mainTask.isParentTask = false;
-    allTasks.push(mainTask);
+    allTasks.push({ ...mainTask, isMainTask: true, isParentTask: false });
   }
   const subs = subTasks.filter((t) => t && t.id);
   const maxYIndex = subs.length > 0 ? assignYIndices(subs) : 0;
