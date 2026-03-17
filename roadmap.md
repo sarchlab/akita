@@ -16,7 +16,7 @@ All 14 human topics have been researched. Findings summarized below. Human gave 
 
 ### Phase 2 Implementation: ✅ Core authorized work complete
 
-Latest update: M68 merged, but human requested preserving library-facing tracer APIs; release-prep work is now re-scoped into smaller compatibility-first milestones after a missed 5-cycle implementation deadline.
+Latest update (2026-03-17): M68 fully merged (all 8 items done, PRs #99–#102). However M68 incorrectly deleted 5 tracer implementations (BusyTimeTracer, AverageTimeTracer, TotalTimeTracer, StepCountTracer, BackTraceTracer) in violation of human directive #595 to keep library-compatible APIs. These must be restored in M68.1. Also: research completed for hooking package design (diana) and MGPUSim migration plan (iris).
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
@@ -233,32 +233,34 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 
 **M68: Tracing cleanup + frontend hygiene** ✅ COMPLETE (PRs #99-#102 merged)
 - Completed code cleanup and React quality fixes on main
-- **Post-merge human direction changed**: keep library-compatible tracer APIs and avoid dead-code-driven API removals for external users
-- Follow-up compatibility milestone required before release prep
+- **Correction needed**: M68 deleted 5 library tracers (BusyTime, AverageTime, TotalTime, StepCount, BackTrace) in violation of human directive to keep library-compatible APIs. These must be restored in M68.1.
 
-**M69.1: Library compatibility restore (deadline missed at 5/5 cycles)** — RE-SCOPING
-- Original scope was too broad for one short milestone; now decomposing compatibility + release work into smaller deliverables.
-- Active research tasks: #655 (dedicated hooking package with backward compatibility), #656 (release prep decomposition), #654 (MGPUSim plan prerequisites).
+**M68.1: Restore deleted tracer APIs for library compatibility** — NEXT
+- Restore `BusyTimeTracer`, `AverageTimeTracer`, `TotalTimeTracer`, `StepCountTracer`, `BackTraceTracer` from tracing package.
+- Restore `TaskFilter` type (used by tracers as filter callback).
+- Restore `example_tracer_test.go` and `busytimetracer_test.go`, `backtracetracer_test.go` test files.
+- Update time types to use `sim.VTimeInSec` (uint64 picoseconds, already the correct type in V5).
+- All CI checks must pass.
+- Addresses human directive #595 (preserve library APIs).
+- Also satisfies MGPUSim migration prerequisite: BusyTimeTracer/AverageTimeTracer are heavily used by mgpusim performance reporting.
 
-**M69.1a: Compatibility design + API inventory** — NEXT
-- Produce explicit list of public tracing/hooking APIs that must remain stable for library users.
-- Decide compatibility strategy: dedicated `hooking` package with aliases/shims vs. staged migration.
-- Define acceptance criteria and downstream-facing compatibility notes before implementation.
+**M69.1: Introduce dedicated `hooking` package (Stage 0 — additive only)** — PLANNED
+- Create `v5/hooking` package with core generic hook primitives (HookPos, HookCtx, Hook, Hookable, HookableBase, NewHookableBase).
+- Keep all existing `sim` hook symbols as compatibility aliases/re-exports (no breakage).
+- Add no-cycle-violation test. Add package docs.
+- Based on diana's Option B analysis (staged extraction with sim shims).
 
-**M69.1b: Compatibility implementation (small, testable slice)** — PLANNED
-- Implement only the agreed compatibility mechanism from M69.1a.
-- Add focused tests/docs proving no user-facing API breakage for selected surface.
-
-**M69.2: Release preparation (human issue #645)** — PLANNED
-- Move `v5/` content to repo root (flatten directory structure) in incremental steps.
+**M69.2: Release preparation — move v5/ to repo root** — PLANNED
+- Move `v5/` content to repo root, update all import paths.
 - Create `v5` branch on upstream `sarchlab/akita`.
-- Cut beta release from V5 code after compatibility is settled.
+- Cut beta release from V5 code.
+- Prerequisite: M68.1 and M69.1 complete.
 
-**M70: MGPUSim V5 porting plan (human issue #649, planning only)** — PLANNED
-- Analyze `sarchlab/mgpusim` and `sarchlab/mgpusim-dev`.
-- Produce phased migration plan to Akita V5.
-- Decide whether to add a subfolder in this repo during porting.
-- **No implementation in this milestone.**
+**M70: MGPUSim V5 porting plan (human issue #649)** — PLANNED
+- Write concrete phased migration plan for `sarchlab/mgpusim` and `sarchlab/mgpusim-dev` to Akita V5.
+- Based on iris's research in `workspace/iris/mgpusim_v5_migration_plan.md`.
+- Commit the plan as a document to the repo.
+- No implementation in this milestone.
 
 ---
 
@@ -300,3 +302,6 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Research across 13 topics completed efficiently in 1 cycle with 5 parallel workers
 - M52 completed smoothly in ~4 cycles — mechanical refactors are predictable
 - Release engineering + compatibility work should be split into sub-milestones with explicit API inventories; 5-cycle bundles are too large and risky
+- **Never delete library APIs based solely on internal-repo dead-code analysis.** When Akita is used as a library, "unused in this repo" ≠ "unused by downstream users". Always check human directives before removing public APIs.
+- **Milestone scope discipline**: When the human updates direction mid-milestone, adjust the scope immediately — don't defer the correction to a later milestone.
+- **Research workers with large context**: Otto hit context-length errors on the release-prep decomposition task. For large research tasks, break them into smaller sub-questions or use a high-tier model.
