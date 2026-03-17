@@ -236,21 +236,29 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - **Post-merge human direction changed**: keep library-compatible tracer APIs and avoid dead-code-driven API removals for external users
 - Follow-up compatibility milestone required before release prep
 
-**M69.1: Library compatibility restore (missed deadline in prior 5-cycle run)** — NEXT
-- Restore externally consumable tracing APIs removed in M68 where needed for backward compatibility (per human comments on #595/#645)
-- Verify public API surface is preserved (or formally documented) before release work
-- Produce compatibility notes for downstream users
+**M69.1: Library compatibility restore (deadline missed at 5/5 cycles)** — RE-SCOPING
+- Original scope was too broad for one short milestone; now decomposing compatibility + release work into smaller deliverables.
+- Active research tasks: #655 (dedicated hooking package with backward compatibility), #656 (release prep decomposition), #654 (MGPUSim plan prerequisites).
+
+**M69.1a: Compatibility design + API inventory** — NEXT
+- Produce explicit list of public tracing/hooking APIs that must remain stable for library users.
+- Decide compatibility strategy: dedicated `hooking` package with aliases/shims vs. staged migration.
+- Define acceptance criteria and downstream-facing compatibility notes before implementation.
+
+**M69.1b: Compatibility implementation (small, testable slice)** — PLANNED
+- Implement only the agreed compatibility mechanism from M69.1a.
+- Add focused tests/docs proving no user-facing API breakage for selected surface.
 
 **M69.2: Release preparation (human issue #645)** — PLANNED
-- Move `v5/` content to repo root (flatten directory structure)
-- Create `v5` branch on upstream `sarchlab/akita`
-- Cut beta release from V5 code after compatibility is settled
+- Move `v5/` content to repo root (flatten directory structure) in incremental steps.
+- Create `v5` branch on upstream `sarchlab/akita`.
+- Cut beta release from V5 code after compatibility is settled.
 
 **M70: MGPUSim V5 porting plan (human issue #649, planning only)** — PLANNED
-- Analyze `sarchlab/mgpusim` and `sarchlab/mgpusim-dev`
-- Produce phased migration plan to Akita V5
-- Decide whether to add a subfolder in this repo during porting
-- **No implementation in this milestone**
+- Analyze `sarchlab/mgpusim` and `sarchlab/mgpusim-dev`.
+- Produce phased migration plan to Akita V5.
+- Decide whether to add a subfolder in this repo during porting.
+- **No implementation in this milestone.**
 
 ---
 
@@ -291,3 +299,4 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - All 16 original success criteria were met with systematic execution
 - Research across 13 topics completed efficiently in 1 cycle with 5 parallel workers
 - M52 completed smoothly in ~4 cycles — mechanical refactors are predictable
+- Release engineering + compatibility work should be split into sub-milestones with explicit API inventories; 5-cycle bundles are too large and risky
