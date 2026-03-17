@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring"
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -98,7 +98,7 @@ func (c *Connector) WithFlitSize(size int) *Connector {
 
 // WithMonitor sets a monitor that can inspect the internal states of the
 // components in the network.
-func (c *Connector) WithMonitor(monitor *monitoring.Monitor) *Connector {
+func (c *Connector) WithMonitor(monitor *daisen.Server) *Connector {
 	c.connector = c.connector.WithMonitor(monitor)
 	return c
 }

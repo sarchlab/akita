@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/pcie"
 	"github.com/sarchlab/akita/v5/sim"
@@ -37,10 +36,6 @@ func main() {
 }
 
 func createNetwork(engine sim.Engine, test *acceptance.Test) {
-	monitor := monitoring.NewMonitor()
-	monitor.RegisterEngine(engine)
-	monitor.StartServer()
-
 	freq := 1.0 * sim.GHz
 
 	var agents []*acceptance.Agent
@@ -56,14 +51,12 @@ func createNetwork(engine sim.Engine, test *acceptance.Test) {
 		agent.TickLater()
 		agents = append(agents, agent)
 		test.RegisterAgent(agent)
-		monitor.RegisterComponent(agent)
 	}
 
 	pcieConnector := pcie.NewConnector()
 	pcieConnector = pcieConnector.
 		WithEngine(engine).
 		WithFrequency(freq).
-		WithMonitor(monitor).
 		WithVersion(4, 16)
 
 	pcieConnector.CreateNetwork("PCIe")

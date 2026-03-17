@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
 	"github.com/sarchlab/akita/v5/sim"
@@ -30,12 +29,8 @@ func main() {
 	test := acceptance.NewTest()
 	engine := sim.NewSerialEngine()
 
-	monitor := monitoring.NewMonitor()
-	monitor.RegisterEngine(engine)
-
 	freq := 1 * sim.GHz
 	connector := mesh.NewConnector().
-		WithMonitor(monitor).
 		WithEngine(engine).
 		WithFreq(freq)
 
@@ -50,8 +45,6 @@ func main() {
 			agent := acceptance.NewAgent(engine, freq, name, ports, test)
 			agent.TickLater()
 
-			monitor.RegisterComponent(agent)
-
 			connector.AddTile([3]int{x, y, 0}, agent.AgentPorts)
 			test.RegisterAgent(agent)
 		}
@@ -60,8 +53,6 @@ func main() {
 	connector.EstablishNetwork()
 
 	test.GenerateMsgs(uint64(numMessages))
-
-	monitor.StartServer()
 
 	err := engine.Run()
 	if err != nil {

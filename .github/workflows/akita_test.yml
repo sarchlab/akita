@@ -6,22 +6,6 @@ on:
   pull_request:
 
 jobs:
-  akitartm_compile:
-    runs-on: self-hosted
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v1
-        with:
-          node-version: 18.20.7
-      - name: npm install
-        working-directory: ./v5/monitoring/web
-        run: npm install
-      - name: npm run build
-        working-directory: ./v5/monitoring/web
-        run: npm run build
-
   daisen_compile:
     runs-on: self-hosted
     timeout-minutes: 10

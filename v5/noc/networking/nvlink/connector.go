@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring"
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -66,7 +66,7 @@ func NewConnector() *Connector {
 }
 
 // WithMonitor sets the monitor that monitors the components in the connection.
-func (c *Connector) WithMonitor(m *monitoring.Monitor) *Connector {
+func (c *Connector) WithMonitor(m *daisen.Server) *Connector {
 	c.connector = c.connector.WithMonitor(m)
 	return c
 }

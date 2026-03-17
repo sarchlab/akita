@@ -4,7 +4,7 @@ package pcie
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/monitoring"
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/noc/networking/networkconnector"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -51,7 +51,7 @@ func (c *Connector) WithFrequency(freq sim.Freq) *Connector {
 
 // WithMonitor sets the monitor that inspects the states of the component
 // associated with the connection.
-func (c *Connector) WithMonitor(m *monitoring.Monitor) *Connector {
+func (c *Connector) WithMonitor(m *daisen.Server) *Connector {
 	c.connector = c.connector.WithMonitor(m)
 	return c
 }
