@@ -3,7 +3,6 @@ module github.com/sarchlab/akita/v5
 require (
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/google/pprof v0.0.0-20250820193118-f64d9cf942d6
-	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/onsi/ginkgo/v2 v2.25.1
 	github.com/onsi/gomega v1.38.1
