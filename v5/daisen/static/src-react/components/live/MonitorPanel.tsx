@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMode } from "../../hooks/useMode";
 import MonitorWidget from "./MonitorWidget";
 
@@ -33,15 +33,31 @@ export default function MonitorPanel() {
     );
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const monitorWindow = window as unknown as Record<string, unknown>;
+
+    if (mode !== "live") {
+      monitorWindow.__addMonitorWidget = undefined;
+      monitorWindow.__removeMonitorWidget = undefined;
+      return;
+    }
+
+    monitorWindow.__addMonitorWidget = addWidget;
+    monitorWindow.__removeMonitorWidget = removeWidget;
+
+    return () => {
+      if (monitorWindow.__addMonitorWidget === addWidget) {
+        monitorWindow.__addMonitorWidget = undefined;
+      }
+      if (monitorWindow.__removeMonitorWidget === removeWidget) {
+        monitorWindow.__removeMonitorWidget = undefined;
+      }
+    };
+  }, [mode, addWidget, removeWidget]);
+
   if (mode !== "live") return null;
-
-  // Expose addWidget on the window for external callers
-  // (e.g. ComponentDetailView may call window.__addMonitorWidget)
-  if (typeof window !== "undefined") {
-    (window as unknown as Record<string, unknown>).__addMonitorWidget =
-      addWidget;
-  }
-
   if (widgets.length === 0) return null;
 
   return (

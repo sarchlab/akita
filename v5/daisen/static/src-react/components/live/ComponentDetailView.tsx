@@ -33,7 +33,11 @@ interface ApiResponse {
 
 interface ComponentDetailViewProps {
   componentName: string;
-  onMonitor?: (componentName: string, keyChain: string) => void;
+  onMonitor?: (
+    componentName: string,
+    keyChain: string,
+    selected: boolean,
+  ) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -55,7 +59,11 @@ function FieldRow({
   componentName: string;
   keyChain: string;
   fieldPrefix: string;
-  onMonitor?: (componentName: string, keyChain: string) => void;
+  onMonitor?: (
+    componentName: string,
+    keyChain: string,
+    selected: boolean,
+  ) => void;
 }) {
   const entry = dict[refKey];
   if (!entry) return null;
@@ -116,7 +124,7 @@ function FieldRow({
       const next = !flagged;
       setFlagged(next);
       if (onMonitor) {
-        onMonitor(componentName, childKeyChain);
+        onMonitor(componentName, childKeyChain, next);
       }
     },
     [flagged, onMonitor, componentName, childKeyChain],
@@ -212,7 +220,11 @@ function ContentView({
   componentName: string;
   keyChain: string;
   fieldPrefix: string;
-  onMonitor?: (componentName: string, keyChain: string) => void;
+  onMonitor?: (
+    componentName: string,
+    keyChain: string,
+    selected: boolean,
+  ) => void;
 }) {
   const kind = entry.k;
   const value = entry.v;

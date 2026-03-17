@@ -27,14 +27,14 @@ export default function LivePage() {
   }, []);
 
   const handleMonitor = useCallback(
-    (componentName: string, keyChain: string) => {
-      console.log("Monitor toggle:", componentName, keyChain);
-      // Integrate with MonitorPanel via window.__addMonitorWidget
-      const addFn = (
-        window as unknown as Record<string, unknown>
-      ).__addMonitorWidget;
-      if (typeof addFn === "function") {
-        (addFn as (c: string, f: string) => void)(componentName, keyChain);
+    (componentName: string, keyChain: string, selected: boolean) => {
+      const monitorWindow = window as unknown as Record<string, unknown>;
+      const action = selected
+        ? monitorWindow.__addMonitorWidget
+        : monitorWindow.__removeMonitorWidget;
+
+      if (typeof action === "function") {
+        (action as (c: string, f: string) => void)(componentName, keyChain);
       }
     },
     [],

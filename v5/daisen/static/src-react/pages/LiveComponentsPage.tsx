@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { useMode } from "../hooks/useMode";
 import ComponentTree from "../components/live/ComponentTree";
 import ComponentDetailView from "../components/live/ComponentDetailView";
+import MonitorPanel from "../components/live/MonitorPanel";
 
 /**
  * Live Components page — two-pane layout:
@@ -19,9 +20,15 @@ export default function LiveComponentsPage() {
   }, []);
 
   const handleMonitor = useCallback(
-    (componentName: string, keyChain: string) => {
-      console.log("Monitor toggle:", componentName, keyChain);
-      // Future: integrate with a monitor widget system
+    (componentName: string, keyChain: string, selected: boolean) => {
+      const monitorWindow = window as unknown as Record<string, unknown>;
+      const action = selected
+        ? monitorWindow.__addMonitorWidget
+        : monitorWindow.__removeMonitorWidget;
+
+      if (typeof action === "function") {
+        (action as (c: string, f: string) => void)(componentName, keyChain);
+      }
     },
     [],
   );
@@ -48,29 +55,35 @@ export default function LiveComponentsPage() {
   }
 
   return (
-    <div className="d-flex" style={{ height: "calc(100vh - 70px)" }}>
-      {/* Left pane — tree */}
-      <div
-        className="border-end overflow-auto p-2"
-        style={{ width: 320, minWidth: 220, flexShrink: 0 }}
-      >
-        <h6 className="text-muted mb-2">Components</h6>
-        <ComponentTree onSelectComponent={handleSelect} />
+    <div className="d-flex flex-column" style={{ height: "calc(100vh - 70px)" }}>
+      <div className="d-flex flex-grow-1 overflow-hidden">
+        {/* Left pane — tree */}
+        <div
+          className="border-end overflow-auto p-2"
+          style={{ width: 320, minWidth: 220, flexShrink: 0 }}
+        >
+          <h6 className="text-muted mb-2">Components</h6>
+          <ComponentTree onSelectComponent={handleSelect} />
+        </div>
+
+        {/* Right pane — detail */}
+        <div className="flex-grow-1 overflow-auto p-3">
+          {selected ? (
+            <ComponentDetailView
+              componentName={selected}
+              onMonitor={handleMonitor}
+            />
+          ) : (
+            <div className="text-muted mt-4 text-center">
+              <i className="fas fa-arrow-left me-2" />
+              Select a component from the tree to inspect it.
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Right pane — detail */}
-      <div className="flex-grow-1 overflow-auto p-3">
-        {selected ? (
-          <ComponentDetailView
-            componentName={selected}
-            onMonitor={handleMonitor}
-          />
-        ) : (
-          <div className="text-muted mt-4 text-center">
-            <i className="fas fa-arrow-left me-2" />
-            Select a component from the tree to inspect it.
-          </div>
-        )}
+      <div className="px-3">
+        <MonitorPanel />
       </div>
     </div>
   );
