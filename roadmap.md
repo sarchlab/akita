@@ -16,7 +16,7 @@ All 14 human topics have been researched. Findings summarized below. Human gave 
 
 ### Phase 2 Implementation: ✅ Core authorized work complete
 
-Latest update (2026-03-17): M68 fully merged (all 8 items done, PRs #99–#102). However M68 incorrectly deleted 5 tracer implementations (BusyTimeTracer, AverageTimeTracer, TotalTimeTracer, StepCountTracer, BackTraceTracer) in violation of human directive #595 to keep library-compatible APIs. These must be restored in M68.1. Also: research completed for hooking package design (diana) and MGPUSim migration plan (iris).
+Latest update (2026-03-17): M68.1 is complete (PR #103 merged) and deleted tracer APIs were restored for library compatibility per human directive #595. Research inputs are ready for next planning work: dedicated hooking package design (diana, issue #655) and MGPUSim migration planning (iris, issue #654). Immediate next milestone priority is the human-requested MGPUSim V5 migration plan document (#649).
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
@@ -232,35 +232,35 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - CI green
 
 **M68: Tracing cleanup + frontend hygiene** ✅ COMPLETE (PRs #99-#102 merged)
-- Completed code cleanup and React quality fixes on main
-- **Correction needed**: M68 deleted 5 library tracers (BusyTime, AverageTime, TotalTime, StepCount, BackTrace) in violation of human directive to keep library-compatible APIs. These must be restored in M68.1.
+- Completed code cleanup and React quality fixes on main.
 
-**M68.1: Restore deleted tracer APIs for library compatibility** — NEXT
-- Restore `BusyTimeTracer`, `AverageTimeTracer`, `TotalTimeTracer`, `StepCountTracer`, `BackTraceTracer` from tracing package.
-- Restore `TaskFilter` type (used by tracers as filter callback).
-- Restore `example_tracer_test.go` and `busytimetracer_test.go`, `backtracetracer_test.go` test files.
-- Update time types to use `sim.VTimeInSec` (uint64 picoseconds, already the correct type in V5).
-- All CI checks must pass.
-- Addresses human directive #595 (preserve library APIs).
-- Also satisfies MGPUSim migration prerequisite: BusyTimeTracer/AverageTimeTracer are heavily used by mgpusim performance reporting.
+**M68.1: Restore deleted tracer APIs for library compatibility** ✅ COMPLETE (PR #103 merged)
+- Restored `BusyTimeTracer`, `AverageTimeTracer`, `TotalTimeTracer`, `StepCountTracer`, `BackTraceTracer`.
+- Restored `TaskFilter` and associated tracer tests.
+- Fixed CI/lint fallout from restore and re-merged with all checks green.
+- Resolves the compatibility correction required by human directive #595.
+
+**M70: MGPUSim V5 porting plan (human issue #649)** — NEXT
+- Write a concrete phased migration plan for `sarchlab/mgpusim` and `sarchlab/mgpusim-dev` to Akita V5.
+- Include explicit recommendation on whether porting should use a subfolder in this repository.
+- Base the document on iris's completed research (`workspace/iris/mgpusim_v5_migration_plan.md`) but publish a cleaned, repo-committed plan.
+- Planning only; no implementation changes.
 
 **M69.1: Introduce dedicated `hooking` package (Stage 0 — additive only)** — PLANNED
 - Create `v5/hooking` package with core generic hook primitives (HookPos, HookCtx, Hook, Hookable, HookableBase, NewHookableBase).
 - Keep all existing `sim` hook symbols as compatibility aliases/re-exports (no breakage).
-- Add no-cycle-violation test. Add package docs.
+- Add no-cycle-violation test and package docs.
 - Based on diana's Option B analysis (staged extraction with sim shims).
 
 **M69.2: Release preparation — move v5/ to repo root** — PLANNED
 - Move `v5/` content to repo root, update all import paths.
 - Create `v5` branch on upstream `sarchlab/akita`.
 - Cut beta release from V5 code.
-- Prerequisite: M68.1 and M69.1 complete.
+- Prerequisite: M68.1 and release-readiness docs complete (M70 + DRAM validation README follow-up).
 
-**M70: MGPUSim V5 porting plan (human issue #649)** — PLANNED
-- Write concrete phased migration plan for `sarchlab/mgpusim` and `sarchlab/mgpusim-dev` to Akita V5.
-- Based on iris's research in `workspace/iris/mgpusim_v5_migration_plan.md`.
-- Commit the plan as a document to the repo.
-- No implementation in this milestone.
+**M71: DRAM validation README follow-up (issue #484)** — PLANNED
+- Update DRAM README with explicit cross-validation coverage and observed match/limits vs DRAMSim3 and Ramulator2.
+- Keep content user-facing and release-ready.
 
 ---
 

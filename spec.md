@@ -29,6 +29,11 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Decide whether porting should happen in a subfolder in this repository.
    - No implementation yet.
 
+4. **Document DRAM validation in README** (issue #484 follow-up comment):
+   - Add a clear section explaining what was validated.
+   - State how Akita DRAM behavior compares with DRAMSim3 and Ramulator2.
+   - Keep the explanation concrete (coverage + observed accuracy/limits).
+
 ### Core Component Model
 
 A component is exactly 5 things: **Spec, State, Ports, Middleware, Hooks**. Nothing else.
