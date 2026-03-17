@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (Cycle 488)
+## Current State (2026-03-17)
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -14,7 +14,9 @@ All 50 milestones from the original component model refactoring are complete. Al
 
 All 14 human topics have been researched. Findings summarized below. Human gave green light on: #477, #478, #479, #480, #483, #486, #487, #484, #501.
 
-### Phase 2 Implementation: ✅ ALL AUTHORIZED WORK COMPLETE
+### Phase 2 Implementation: ✅ Core authorized work complete
+
+Latest update: M68 merged, but human requested preserving library-facing tracer APIs; release-prep work is now re-scoped into smaller compatibility-first milestones after a missed 5-cycle implementation deadline.
 
 **M51**: ✅ COMPLETE — Double buffering residue cleanup (3 cycles budgeted, 3 used)
 **M52**: ✅ COMPLETE — Component-engine decoupling (4 cycles budgeted, ~4 used)
@@ -179,11 +181,12 @@ Based on dependency analysis and human authorization (green light on: #477, #478
 - **Scope**: component_guide.md updated, migration.md (876 lines), docs.md (874 lines), 20 README.md files
 - **Human issues addressed**: #587 (migration guide), #588 (comprehensive docs)
 
-### Human Requests Status (Cycle 474)
+### Human Requests Status (2026-03-17)
 
-- **Hook/tracing merge (#595)**: Research COMPLETE. Two independent researchers (Iris, Diana) both recommend: keep separate, clean up dead code. Recommendation posted to human. Awaiting response — NO implementation until authorized.
-- **Merge AkitaRTM/Daisen (#482)** — Full merge **AUTHORIZED** (green light on #586). One Go server, one React frontend, one SQLite DB.
-- **React rewrite (#488)** — **AUTHORIZED** as part of Daisen merge effort.
+- **Hook/tracing merge (#595)**: Research complete. Human response: do **not** remove tracer APIs as dead code for now; explore package-organization improvements (e.g., dedicated hooking package) instead.
+- **Release prep (#645)**: Authorized and pending — flatten `v5/` to repo root, create upstream `v5` branch, and cut beta release.
+- **MGPUSim port planning (#649)**: New request — create a concrete migration plan for `mgpusim` and `mgpusim-dev` to Akita V5 (planning only, no implementation).
+- **Merge AkitaRTM/Daisen (#482)** and **React rewrite (#488)**: ✅ complete.
 
 ### Daisen/AkitaRTM Merge — Implementation Plan
 
@@ -228,21 +231,26 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Removed old vanilla TS frontend code
 - CI green
 
-**M68: Tracing Dead Code Removal + Repo Hygiene** (~3 cycles) — NEXT
-- Delete `v5/mem/vm/tlbtracer.go` (broken signature, zero consumers)
-- Remove 4 dead `HookPosConn*` values from `v5/sim/connection.go`
-- Delete 5 unused tracer implementations (BusyTimeTracer, AverageTimeTracer, TotalTimeTracer, StepCountTracer, BackTraceTracer)
-- Remove deprecated `mem/trace.NewTracer`
-- Fix GanttChart prop mutation, dead smartValue.ts check
-- Remove dead NewMySQLTracer comments from NOC acceptance tests
-- Remove deprecated builder methods in vm/tlb, vm/addresstranslator
-- Addresses human issue #595 (hook/tracing dead code)
-- CI green
+**M68: Tracing cleanup + frontend hygiene** ✅ COMPLETE (PRs #99-#102 merged)
+- Completed code cleanup and React quality fixes on main
+- **Post-merge human direction changed**: keep library-compatible tracer APIs and avoid dead-code-driven API removals for external users
+- Follow-up compatibility milestone required before release prep
 
-**M69: Release Preparation** (~3 cycles) — PLANNED (human issue #645)
-- Move v5/ content to repo root (flatten directory structure)
-- Create `v5` branch on upstream sarchlab/akita repo
-- Make beta release from v5 code
+**M69.1: Library compatibility restore (missed deadline in prior 5-cycle run)** — NEXT
+- Restore externally consumable tracing APIs removed in M68 where needed for backward compatibility (per human comments on #595/#645)
+- Verify public API surface is preserved (or formally documented) before release work
+- Produce compatibility notes for downstream users
+
+**M69.2: Release preparation (human issue #645)** — PLANNED
+- Move `v5/` content to repo root (flatten directory structure)
+- Create `v5` branch on upstream `sarchlab/akita`
+- Cut beta release from V5 code after compatibility is settled
+
+**M70: MGPUSim V5 porting plan (human issue #649, planning only)** — PLANNED
+- Analyze `sarchlab/mgpusim` and `sarchlab/mgpusim-dev`
+- Produce phased migration plan to Akita V5
+- Decide whether to add a subfolder in this repo during porting
+- **No implementation in this milestone**
 
 ---
 

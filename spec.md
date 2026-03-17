@@ -11,6 +11,24 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
 3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
 4. **No compromise in performance** — must match original akita repo performance.
 
+### Current Human Directives (2026-03-17)
+
+1. **Preserve library compatibility while evolving tracing/hooking**.
+   - Do not remove tracer APIs solely because they are unused in this repo.
+   - Treat Akita as a library with external downstream users.
+   - For issue #595, explore packaging improvements (e.g., dedicated hooking package) rather than dead-code removal.
+
+2. **Prepare a V5 beta release flow** (issue #645):
+   - Move `v5/` contents to repository root.
+   - Create a `v5` branch on upstream `sarchlab/akita`.
+   - Cut a beta release from the V5 codebase.
+
+3. **Produce (only) a migration plan for MGPUSim** (issue #649):
+   - Analyze `sarchlab/mgpusim` and `sarchlab/mgpusim-dev`.
+   - Define phased porting plan to Akita V5.
+   - Decide whether porting should happen in a subfolder in this repository.
+   - No implementation yet.
+
 ### Core Component Model
 
 A component is exactly 5 things: **Spec, State, Ports, Middleware, Hooks**. Nothing else.
@@ -142,26 +160,24 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 **Human decision on sim package**: Keep sim package as-is. Do NOT split.
 
+### Resolved (Recent)
+
+21. ~~**Integer-based IDs**~~ (issue #501): **DONE in M61.**
+22. ~~**Merge AkitaRTM and Daisen**~~ (issue #482): **DONE in M64-M67.**
+23. ~~**React rewrite**~~ (issue #488): **DONE in M65-M67.**
+24. ~~**DRAM cross-validation**~~ (issue #484): **DONE in M62.**
+25. ~~**Comprehensive documentation**~~ (issue #588): **DONE in M63.**
+26. ~~**Migration guide update**~~ (issue #587): **DONE in M63.**
+
 ### Active (Authorized)
 
-### Resolved
+28. **V5 release preparation** (issue #645): move `v5/` to repo root, create upstream `v5` branch, and make a beta release.
 
-21. ~~**Integer-based IDs**~~ (issue #501): **DONE in M61.** All entity IDs migrated from string to uint64 across all 7 subsystems (66 files).
-24. ~~**DRAM cross-validation**~~ (issue #484): **DONE in M62.** 4-tier cross-validation against DRAMSim3/Ramulator2 timing formulas. 158 total DRAM tests passing.
-
-### Active (Authorized)
-
-22. **Merge AkitaRTM and Daisen** (issue #482): Full merge into unified frontend with live/replay modes, single SQLite interface. **Human authorized** (green light on issue #586).
-
-23. **React rewrite** (issue #488): Rewrite merged frontend with React. Part of #482 merge effort. **Authorized** as part of Daisen merge.
-
-25. ~~**Comprehensive documentation**~~ (issue #588): **DONE in M63.** Extensive framework docs (docs.md, 874 lines), component_guide.md updated, 20 README.md files.
-
-26. ~~**Migration guide update**~~ (issue #587): **DONE in M63.** migration.md covers all V4→V5 changes (876 lines, 11 sections).
+29. **MGPUSim V5 porting plan** (issue #649): create a concrete migration plan for `mgpusim` and `mgpusim-dev`; planning only (no implementation).
 
 ### Discussion (No Implementation Yet)
 
-27. **Merge hooking and tracing code** (issue #595): Human asks to discuss merging into one package or fully removing tracing and relying on hooking. Research needed.
+27. **Hooking/tracing package direction** (issue #595): human asked to avoid dead-code elimination for library APIs and requested exploration of a dedicated hooking package.
 
 ### Deferred
 
