@@ -4,18 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/dram"
-	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-
 	"os"
 	"time"
 
-	"log"
-
+	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
+	"github.com/sarchlab/akita/v5/mem/dram"
 	"github.com/sarchlab/akita/v5/mem/trace"
+	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -56,9 +53,8 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	agent.LowModule = memCtrl.GetPortByName("Top")
 
 	if *traceFileFlag != "" {
-		traceFile, _ := os.Create(*traceFileFlag)
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
+		recorder := datarecording.NewDataRecorder(*traceFileFlag)
+		tracer := trace.NewDBTracer(recorder, engine)
 		tracing.CollectTrace(memCtrl, tracer)
 	}
 

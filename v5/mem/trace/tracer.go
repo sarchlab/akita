@@ -2,8 +2,6 @@
 package trace
 
 import (
-	"log"
-
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim"
@@ -29,71 +27,12 @@ type memoryStepEntry struct {
 	What   string  `json:"what" akita_data:"index"`
 }
 
-// A tracer is a hook that can record the actions of a memory model into
-// traces.
-type tracer struct {
-	timeTeller sim.TimeTeller
-	logger     *log.Logger
-}
-
 // A dbTracer is a hook that can record the actions of a memory model into
 // a database using the data recorder.
 type dbTracer struct {
 	timeTeller         sim.TimeTeller
 	dataRecorder       datarecording.DataRecorder
 	pendingTransactions map[uint64]*memoryTransactionEntry
-}
-
-// StartTask marks the start of a memory transaction
-func (t *tracer) StartTask(task tracing.Task) {
-	task.StartTime = t.timeTeller.CurrentTime()
-
-	req, ok := task.Detail.(mem.AccessReq)
-	if !ok {
-		return
-	}
-
-	t.logger.Printf(
-		"start, %d, %s, %d, %s, 0x%x, %d\n",
-		task.StartTime,
-		task.Location,
-		task.ID,
-		task.What,
-		req.GetAddress(),
-		req.GetByteSize(),
-	)
-}
-
-// StepTask marks the memory transaction has completed a milestone
-func (t *tracer) StepTask(task tracing.Task) {
-	task.Steps[0].Time = t.timeTeller.CurrentTime()
-
-	t.logger.Printf("step, %d, %d, %s\n",
-		task.Steps[0].Time,
-		task.ID,
-		task.Steps[0].What)
-}
-
-// AddMilestone adds a milestone to the task
-func (t *tracer) AddMilestone(milestone tracing.Milestone) {
-	// Do nothing
-}
-
-// EndTask marks the end of a memory transaction
-func (t *tracer) EndTask(task tracing.Task) {
-	task.EndTime = t.timeTeller.CurrentTime()
-
-	t.logger.Printf("end, %d, %d\n", task.EndTime, task.ID)
-}
-
-// NewTracer creates a new Tracer.
-// Deprecated: Use NewDBTracer instead for structured database storage.
-func NewTracer(logger *log.Logger, timeTeller sim.TimeTeller) tracing.Tracer {
-	t := new(tracer)
-	t.logger = logger
-	t.timeTeller = timeTeller
-
-	return t
 }
 
 // NewDBTracer creates a new database-based Tracer.

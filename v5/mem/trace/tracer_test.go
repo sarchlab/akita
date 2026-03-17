@@ -2,7 +2,6 @@ package trace
 
 import (
 	"database/sql"
-	"log"
 	"os"
 	"testing"
 
@@ -351,14 +350,21 @@ func TestTracerTestSuite(t *testing.T) {
 	suite.Run(t, new(TracerTestSuite))
 }
 
-// Test compatibility with existing logger-based tracer
-func TestLoggerTracerStillWorks(t *testing.T) {
+// Test DBTracer with fixedTimeTeller
+func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 	// Create a simple time teller that returns the current time
 	timeTeller := &fixedTimeTeller{time: 100.0}
-	
-	// Create logger-based tracer - use discard to avoid output during tests
-	logger := log.New(os.Stdout, "", 0)
-	tracer := NewTracer(logger, timeTeller)
+
+	// Create a temp DB file
+	tmpFile, err := os.CreateTemp(t.TempDir(), "tracer-compat-*.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.Close()
+
+	recorder := datarecording.NewDataRecorder(tmpFile.Name())
+	defer recorder.Close()
+	tracer := NewDBTracer(recorder, timeTeller)
 
 	// Create a mock request
 	req := &MockAccessReq{
@@ -367,7 +373,7 @@ func TestLoggerTracerStillWorks(t *testing.T) {
 		pid:      4,
 	}
 
-	// Test that the logger tracer still works
+	// Test that the DB tracer works
 	task := tracing.Task{
 		ID:       20,
 		Location: "test_loc",

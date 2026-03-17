@@ -3,26 +3,24 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/tracing"
-
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/simulation"
-
-	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
-	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
+	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
@@ -263,13 +261,8 @@ func setupTracing(engine sim.EventScheduler, memCtrl *idealmemcontroller.Comp) {
 		return
 	}
 
-	traceFile, err := os.Create(*traceFileFlag)
-	if err != nil {
-		panic(err)
-	}
-
-	logger := log.New(traceFile, "", 0)
-	tracer := trace.NewTracer(logger, engine)
+	recorder := datarecording.NewDataRecorder(*traceFileFlag)
+	tracer := trace.NewDBTracer(recorder, engine)
 	tracing.CollectTrace(memCtrl, tracer)
 }
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 
 	"time"
@@ -11,13 +10,13 @@ import (
 
 	"os"
 
+	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/noc/directconnection"
-
 	"github.com/sarchlab/akita/v5/mem/trace"
+	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -114,13 +113,17 @@ func buildEnvironment() {
 
 func setupTracing(comp tracing.NamedHookable) {
 	if *traceWithStdoutFlag {
-		logger := log.New(os.Stdout, "", 0)
-		tracer := trace.NewTracer(logger, engine)
+		tmpFile, err := os.CreateTemp("", "trace-stdout-*.db")
+		if err != nil {
+			panic(err)
+		}
+		tmpFile.Close()
+		recorder := datarecording.NewDataRecorder(tmpFile.Name())
+		tracer := trace.NewDBTracer(recorder, engine)
 		tracing.CollectTrace(comp, tracer)
 	} else if *traceFileFlag != "" {
-		traceFile, _ := os.Create(*traceFileFlag)
-		logger := log.New(traceFile, "", 0)
-		tracer := trace.NewTracer(logger, engine)
+		recorder := datarecording.NewDataRecorder(*traceFileFlag)
+		tracer := trace.NewDBTracer(recorder, engine)
 		tracing.CollectTrace(comp, tracer)
 	}
 }
