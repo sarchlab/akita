@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-17)
+## Current State (2026-03-18) — PROJECT COMPLETE
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -253,12 +253,13 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Added type aliases/shims in `v5/sim/hook.go` for backward compatibility.
 - No import cycles, CI green. Addresses human request in issue #595.
 
-**M69.2: Release preparation — move v5/ to repo root + beta release** — NEXT
-- Move `v5/` content to repo root, update CI workflow (remove `cd v5` references).
-- Create `v5` branch on upstream `sarchlab/akita`.
-- Cut beta release from V5 code.
-- Import paths stay the same (module path `github.com/sarchlab/akita/v5` unchanged).
-- Addresses human request in issue #645.
+**M69.2: Release preparation — move v5/ to repo root + beta release** ✅ COMPLETE (2026-03-18)
+- PR #107 merged: moved `v5/` contents to repo root, updated CI workflow (removed `cd v5` references).
+- CI green on main after root move.
+- Pushed akita-dev main → sarchlab/akita `v5` branch.
+- Created pre-release tag `v5.0.0-beta.1` on sarchlab/akita.
+- Module path `github.com/sarchlab/akita/v5` unchanged throughout.
+- Addresses all three items in human request issue #645.
 
 ---
 
