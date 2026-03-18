@@ -1,0 +1,19 @@
+name: Publish V5 to sarchlab/akita
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout akita-dev main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Push to sarchlab/akita v5 branch
+        run: |
+          git remote add upstream https://x-access-token:${{ secrets.AKITA_PAT }}@github.com/sarchlab/akita.git
+          git push upstream main:refs/heads/v5 --force
