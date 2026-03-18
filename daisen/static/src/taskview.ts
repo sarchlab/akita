@@ -521,19 +521,15 @@ class TaskView {
       return;
     }
 
-    const indentLevel = level * 20;
     const levelColors = ['#fefdca', '#f0f8e8', '#e8f2ff', '#ffeaa7', '#fab1a0', '#fd79a8', '#fdcb6e', '#6c5ce7', '#a29bfe'];
     const levelLabel = `Level ${level + 1}`;
-    
+
     const remainingCount = 100 - totalCount.count;
     const tasksToShow = subTasks.slice(0, Math.min(subTasks.length, remainingCount));
     totalCount.count += tasksToShow.length;
     const levelContainer = document.createElement('div');
     levelContainer.style.cssText = `
-      margin-left: ${indentLevel}px;
       margin-bottom: 15px;
-      border-left: ${level > 0 ? '2px solid #ddd' : 'none'};
-      padding-left: ${level > 0 ? '10px' : '0px'};
     `;
 
     const levelTitle = document.createElement('div');
@@ -566,18 +562,11 @@ class TaskView {
 
     levelContainer.appendChild(levelTitle);
     const timeAxisContainer = document.createElement('div');
-    // Calculate cumulative offset to compensate for all parent container indentations and paddings
-    // Also need to match the -20px offset used by current task and parent task sections
-    // Level 0: -20 (same as current task)
-    // Level 1: -20 - 30 = -50 (compensate Level 1: 20px margin + 10px padding)
-    // Level 2: -20 - 30 - 50 = -100 (compensate both levels)
-    const totalCumulativeOffset = level * (level + 2) * 10;
-    const compensationOffset = -20 - totalCumulativeOffset;
     timeAxisContainer.style.cssText = `
       position: relative;
       height: 36px;
       margin-bottom: 15px;
-      margin-left: ${compensationOffset}px;
+      margin-left: -20px;
       margin-right: -20px;
       border: 1px solid #ddd;
       border-radius: 6px;
