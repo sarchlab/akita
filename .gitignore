@@ -1,4 +1,41 @@
-v5/virtualmem
+# IDE files
+.idea
+
+# Editor files
+.*.swp
+*.*~
+
+# Coverage report
+*.coverprofile
+
+# Vendor
+vendor
+
+# Test file
 *.test
+debug
+*.out
+*.debug
+
+# Prof file
+*.prof
+
+.DS_Store
+
+.vscode/*.log
+
+__debug_bin*
+
+# Mock files
+mock_*_test.go
+
 *.sqlite3
-v5/cmd
+.history
+akitav5-lint
+writebackcache
+
+# Virtual memory
+virtualmem
+
+# Command builds
+cmd
