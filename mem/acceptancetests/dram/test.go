@@ -5,31 +5,31 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/dram"
-	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/tracing"
+	"github.com/sarchlab/akita/v5/simulation"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
 var numAccessFlag = flag.Int("num-access",
 	100000, "Number of accesses to generate")
 var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
-var traceFileFlag = flag.String("trace", "", "Trace file")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
-	var engine sim.Engine
+func setupTest() (*simulation.Simulation, sim.Engine, *memaccessagent.MemAccessAgent) {
+	simBuilder := simulation.MakeBuilder()
+
 	if *parallelFlag {
-		engine = sim.NewParallelEngine()
-	} else {
-		engine = sim.NewSerialEngine()
+		simBuilder = simBuilder.WithParallelEngine()
 	}
+
+	s := simBuilder.Build()
+	engine := s.GetEngine()
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
@@ -43,25 +43,21 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 		WithReadLeft(*numAccessFlag).
 		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
+	s.RegisterComponent(agent)
 
 	memCtrl := dram.MakeBuilder().
 		WithEngine(engine).
 		WithFreq(1 * sim.GHz).
 		WithTopPort(sim.NewPort(nil, 1024, 1024, "Mem.TopPort")).
 		Build("Mem")
+	s.RegisterComponent(memCtrl)
 
 	agent.LowModule = memCtrl.GetPortByName("Top")
-
-	if *traceFileFlag != "" {
-		recorder := datarecording.NewDataRecorder(*traceFileFlag)
-		tracer := trace.NewDBTracer(recorder, engine)
-		tracing.CollectTrace(memCtrl, tracer)
-	}
 
 	conn.PlugIn(agent.GetPortByName("Mem"))
 	conn.PlugIn(memCtrl.GetPortByName("Top"))
 
-	return engine, agent
+	return s, engine, agent
 }
 
 func main() {
@@ -75,7 +71,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 
-	engine, agent := setupTest()
+	s, engine, agent := setupTest()
 	agent.TickLater()
 
 	err := engine.Run()
@@ -89,5 +85,14 @@ func main() {
 
 	if agent.WriteLeft > 0 || agent.ReadLeft > 0 {
 		panic("more requests to send")
+	}
+
+	s.Terminate()
+
+	entries, _ := os.ReadDir(".")
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "akita_sim_") && strings.HasSuffix(entry.Name(), ".sqlite3") {
+			os.Remove(entry.Name())
+		}
 	}
 }
