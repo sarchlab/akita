@@ -4,7 +4,11 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-19) — PROJECT COMPLETE
+## Current State (2026-03-19) — Active: M73
+
+**New human directive (issue #670)**: Connect merged Daisen to memory acceptance tests.
+
+## Milestone Status Summary
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -254,6 +258,12 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - No import cycles, CI green. Addresses human request in issue #595.
 
 **M72: Remove debug event logger from idealmemcontroller acceptance test** ✅ COMPLETE (2026-03-19, PR #108)
+
+**M73: Connect Daisen to memory acceptance tests** ⏳ IN PROGRESS
+- **Goal**: Refactor 6 memory acceptance tests to use `simulation.MakeBuilder()` for Daisen live monitoring
+- **Scope**: `idealmemcontroller`, `dram`, `writebackcache`, `writearoundcache`, `writethroughcache`, `writeevictcache`
+- **Pattern**: Follow `mem/acceptancetests/virtualmem/test.go`
+- **Budget**: 3 cycles
 - Issue #669: `engine.AcceptHook(sim.NewEventLogger(...))` was accidentally left uncommented, printing all events to stdout.
 - Removed the line and unused `log` import. All other acceptance tests already had it commented out.
 

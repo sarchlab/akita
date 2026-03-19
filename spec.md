@@ -11,7 +11,7 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
 3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
 4. **No compromise in performance** — must match original akita repo performance.
 
-### Current Human Directives (2026-03-17)
+### Current Human Directives (updated 2026-03-19)
 
 1. **Preserve library compatibility while evolving tracing/hooking**.
    - Do not remove tracer APIs solely because they are unused in this repo.
@@ -28,6 +28,14 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Define phased porting plan to Akita V5.
    - Decide whether porting should happen in a subfolder in this repository.
    - No implementation yet.
+
+5. **Connect the merged Daisen to memory acceptance tests** (issue #670):
+   - Refactor the 6 memory acceptance tests that currently use bare `sim.Engine` instances to use `simulation.MakeBuilder()` instead.
+   - The tests are: `idealmemcontroller`, `dram`, `writebackcache`, `writearoundcache`, `writethroughcache`, `writeevictcache`.
+   - Follow the pattern established in `mem/acceptancetests/virtualmem/test.go`.
+   - Register all `sim.Component` instances with `s.RegisterComponent()` for Daisen monitoring.
+   - Call `s.Terminate()` at the end.
+   - CI must stay green.
 
 4. **Document DRAM validation in README** (issue #484 follow-up comment):
    - Add a clear section explaining what was validated.
