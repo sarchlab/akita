@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-18) — PROJECT COMPLETE
+## Current State (2026-03-19) — PROJECT COMPLETE
 
 ### Previous Phase: ✅ COMPLETE (M1-M50)
 
@@ -252,6 +252,10 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Created `v5/hooking` package with core generic hook primitives (HookPos, HookCtx, Hook, Hookable, HookableBase, NewHookableBase).
 - Added type aliases/shims in `v5/sim/hook.go` for backward compatibility.
 - No import cycles, CI green. Addresses human request in issue #595.
+
+**M72: Remove debug event logger from idealmemcontroller acceptance test** ✅ COMPLETE (2026-03-19, PR #108)
+- Issue #669: `engine.AcceptHook(sim.NewEventLogger(...))` was accidentally left uncommented, printing all events to stdout.
+- Removed the line and unused `log` import. All other acceptance tests already had it commented out.
 
 **M69.2: Release preparation — move v5/ to repo root + beta release** ✅ COMPLETE (2026-03-18)
 - PR #107 merged: moved `v5/` contents to repo root, updated CI workflow (removed `cd v5` references).
