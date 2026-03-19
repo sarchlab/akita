@@ -44,6 +44,7 @@ jobs:
         with:
           version: v2.4.0
           args: --timeout=10m
+          verify: false
       - name: Run tests
         run: ginkgo -r
 
