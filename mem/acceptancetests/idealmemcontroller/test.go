@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"time"
@@ -32,8 +31,6 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	} else {
 		engine = sim.NewSerialEngine()
 	}
-
-	engine.AcceptHook(sim.NewEventLogger(log.New(os.Stdout, "", 0)))
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
