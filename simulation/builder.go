@@ -1,11 +1,9 @@
 package simulation
 
 import (
-	"strconv"
-
 	"github.com/rs/xid"
-	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/datarecording"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -114,17 +112,16 @@ func (b Builder) createServer(s *Simulation) {
 		return
 	}
 
-	addr := "localhost:0"
+	monitor := monitoring.NewMonitor()
+
 	if b.monitorPort > 0 {
-		addr = "localhost:" + strconv.Itoa(b.monitorPort)
+		monitor.WithPortNumber(b.monitorPort)
 	}
 
-	s.server = daisen.NewLiveServer(s.engine, addr)
-	if b.monitorPort > 0 {
-		s.server.WithPortNumber(b.monitorPort)
-	}
-	s.server.RegisterEngine(s.engine)
-	s.server.RegisterVisTracer(s.visTracer)
-	s.server.SetTraceDBPath(s.outputPath + ".sqlite3")
-	s.server.StartServer()
+	monitor.RegisterEngine(s.engine)
+	monitor.RegisterVisTracer(s.visTracer)
+	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")
+	monitor.StartServer()
+
+	s.monitor = monitor
 }
