@@ -4,9 +4,12 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-19) — ALL MILESTONES COMPLETE
+## Current State (2026-03-20) — NEW HUMAN DIRECTIVE
 
-All human directives have been fulfilled. Project is complete.
+Human filed issue #674 requesting restoration of the `monitoring/` package (AkitaRTM).
+Human is also actively improving the React daisen UI (PRs #110, #112).
+
+**Next milestone: M74 — Restore monitoring/ package**
 
 ## Milestone Status Summary
 
@@ -258,6 +261,12 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - No import cycles, CI green. Addresses human request in issue #595.
 
 **M72: Remove debug event logger from idealmemcontroller acceptance test** ✅ COMPLETE (2026-03-19, PR #108)
+
+**M74: Restore monitoring/ package (issue #674)** — IN PROGRESS
+- Create monitoring/ package with Monitor type wrapping daisen.Server
+- Update simulation/builder.go to use monitoring.Monitor
+- Update NOC packages to accept *monitoring.Monitor
+- Target: 4 cycles
 
 **M73: Connect Daisen to memory acceptance tests** ✅ COMPLETE (2026-03-19, PR #109)
 - All 6 memory acceptance tests refactored to use `simulation.MakeBuilder()`.

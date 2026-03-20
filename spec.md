@@ -11,7 +11,7 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
 3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
 4. **No compromise in performance** — must match original akita repo performance.
 
-### Current Human Directives (updated 2026-03-19)
+### Current Human Directives (updated 2026-03-20)
 
 1. **Preserve library compatibility while evolving tracing/hooking**.
    - Do not remove tracer APIs solely because they are unused in this repo.
@@ -41,6 +41,13 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Add a clear section explaining what was validated.
    - State how Akita DRAM behavior compares with DRAMSim3 and Ramulator2.
    - Keep the explanation concrete (coverage + observed accuracy/limits).
+
+6. **Restore monitoring/ package** (issue #674):
+   - Human does not like the merged AkitaRTM and Daisen — wants monitoring package restored as a separate Go library.
+   - Create `monitoring/` package with Monitor type (wrapping daisen.Server internally).
+   - Update simulation/builder.go to use monitoring.Monitor instead of daisen.Server directly.
+   - Update NOC packages to accept *monitoring.Monitor.
+   - Keep the React daisen frontend (human is actively improving it, see PR #110).
 
 ### Core Component Model
 
