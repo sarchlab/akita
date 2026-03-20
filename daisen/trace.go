@@ -207,12 +207,15 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 
 	rows, err := r.QueryContext(ctx, "SELECT DISTINCT Location FROM trace")
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
 		panic(err)
 	}
 
 	defer func() {
 		err := rows.Close()
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			panic(err)
 		}
 	}()
@@ -222,6 +225,9 @@ func (r *SQLiteTraceReader) ListComponents(ctx context.Context) []string {
 
 		err := rows.Scan(&component)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
 			panic(err)
 		}
 

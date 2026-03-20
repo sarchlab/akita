@@ -124,7 +124,37 @@ func (s *Server) registerBuffers(c sim.Component) {
 	s.registerComponentOrPortBuffers(c)
 	for _, p := range c.Ports() {
 		s.registerComponentOrPortBuffers(p)
+		s.registerPortBuffers(p)
 	}
+}
+
+// portBufferAdapter wraps a port to expose one of its internal buffers
+// (incoming or outgoing) as a bufferState for the hang detector.
+type portBufferAdapter struct {
+	port      sim.Port
+	direction string // "in" or "out"
+}
+
+func (a *portBufferAdapter) Name() string {
+	return a.port.Name() + "." + a.direction
+}
+
+func (a *portBufferAdapter) Size() int {
+	if a.direction == "in" {
+		return a.port.NumIncoming()
+	}
+	return a.port.NumOutgoing()
+}
+
+func (a *portBufferAdapter) Capacity() int {
+	return a.Size()
+}
+
+func (s *Server) registerPortBuffers(p sim.Port) {
+	s.buffers = append(s.buffers,
+		&portBufferAdapter{port: p, direction: "in"},
+		&portBufferAdapter{port: p, direction: "out"},
+	)
 }
 
 func (s *Server) registerComponentOrPortBuffers(c any) {
@@ -433,6 +463,9 @@ func (s *Server) listComponentDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.engine.Pause()
+	defer s.engine.Continue()
+
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)
 	serializer.SetMaxDepth(1)
@@ -461,6 +494,9 @@ func (s *Server) listFieldValue(w http.ResponseWriter, r *http.Request) {
 	if component == nil {
 		return
 	}
+
+	s.engine.Pause()
+	defer s.engine.Continue()
 
 	serializer := goseth.NewSerializer()
 	serializer.SetRoot(component)

@@ -4,7 +4,6 @@ import PanelLayout from "../components/layout/PanelLayout";
 import ComponentTree from "../components/live/ComponentTree";
 import ComponentDetailView from "../components/live/ComponentDetailView";
 import HangAnalyzer from "../components/live/HangAnalyzer";
-import ResourceMonitor from "../components/live/ResourceMonitor";
 import MonitorPanel from "../components/live/MonitorPanel";
 import ProgressBars from "../components/live/ProgressBars";
 
@@ -21,6 +20,7 @@ import ProgressBars from "../components/live/ProgressBars";
 export default function LivePage() {
   const { mode, loading } = useMode();
   const [selected, setSelected] = useState<string | null>(null);
+  const [hasMonitors, setHasMonitors] = useState(false);
 
   const handleSelect = useCallback((fullName: string) => {
     setSelected(fullName);
@@ -86,19 +86,19 @@ export default function LivePage() {
 
   const rightPanel = (
     <div className="p-2">
-      <div className="mb-3">
-        <HangAnalyzer />
-      </div>
-      <div>
-        <ResourceMonitor />
-      </div>
+      <HangAnalyzer />
     </div>
   );
 
   const bottomPanel = (
-    <div className="p-2">
+    <div className="px-2 py-1 d-flex flex-column" style={{ height: "100%" }}>
+      <MonitorPanel onCountChange={(n) => setHasMonitors(n > 0)} />
+    </div>
+  );
+
+  const footer = (
+    <div className="px-2 py-1">
       <ProgressBars />
-      <MonitorPanel />
     </div>
   );
 
@@ -108,7 +108,8 @@ export default function LivePage() {
       center={centerPanel}
       right={rightPanel}
       bottom={bottomPanel}
-      showBottom={true}
+      showBottom={hasMonitors}
+      footer={footer}
     />
   );
 }

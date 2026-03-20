@@ -1,12 +1,16 @@
-import { useState } from "react";
 import type { TraceInformation, UnitContent } from "../../types/chat";
 import { useChat } from "../../hooks/useChat";
 import ChatHeader from "./ChatHeader";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 
-export default function ChatPanel() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function ChatPanel({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
   const {
     messages,
     chatHistory,
@@ -38,17 +42,6 @@ export default function ChatPanel() {
 
   return (
     <>
-      {!isOpen && (
-        <button
-          className="btn btn-primary rounded-pill shadow"
-          onClick={() => setIsOpen(true)}
-          style={{ bottom: "1rem", position: "fixed", right: "1rem", zIndex: 1035 }}
-          type="button"
-        >
-          AI Chat
-        </button>
-      )}
-
       <aside
         className="bg-white border-start shadow d-flex flex-column"
         style={{
@@ -67,7 +60,7 @@ export default function ChatPanel() {
         <ChatHeader
           chatHistory={chatHistory}
           currentChatId={currentChatId}
-          onClose={() => setIsOpen(false)}
+          onClose={onClose}
           onDeleteChat={deleteChat}
           onLoadChat={loadChat}
           onNewChat={newChat}

@@ -83,8 +83,13 @@ export default function ComponentPage() {
     } else if (simTasks.length > 0) {
       setStartTime(simTasks[0].start_time);
       setEndTime(simTasks[0].end_time);
+    } else if (segments.length > 0) {
+      const minT = Math.min(...segments.map((s) => s.start_time));
+      const maxT = Math.max(...segments.map((s) => s.end_time));
+      setStartTime(minT);
+      setEndTime(maxT);
     }
-  }, [urlStart, urlEnd, simTasks]);
+  }, [urlStart, urlEnd, simTasks, segments]);
 
   // Chart container width state for responsiveness
   const [chartWidth, setChartWidth] = useState(560);

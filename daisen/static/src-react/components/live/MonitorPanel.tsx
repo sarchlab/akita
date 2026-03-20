@@ -13,7 +13,11 @@ interface WidgetDef {
  * Widgets are laid out horizontally and auto-sized to fill width.
  * Only visible in live mode when at least one widget exists.
  */
-export default function MonitorPanel() {
+export default function MonitorPanel({
+  onCountChange,
+}: {
+  onCountChange?: (count: number) => void;
+}) {
   const { mode } = useMode();
   const [widgets, setWidgets] = useState<WidgetDef[]>([]);
 
@@ -57,13 +61,16 @@ export default function MonitorPanel() {
     };
   }, [mode, addWidget, removeWidget]);
 
+  useEffect(() => {
+    onCountChange?.(widgets.length);
+  }, [widgets.length, onCountChange]);
+
   if (mode !== "live") return null;
   if (widgets.length === 0) return null;
 
   return (
-    <div className="border-top mt-3 pt-2">
-      <h6 className="mb-2">Field Monitors</h6>
-      <div className="d-flex gap-2 flex-wrap">
+    <div className="flex-grow-1 d-flex flex-column" style={{ minHeight: 0 }}>
+      <div className="d-flex gap-2 flex-grow-1" style={{ minHeight: 0 }}>
         {widgets.map((w) => (
           <MonitorWidget
             key={`${w.component}:${w.field}`}

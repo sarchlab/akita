@@ -17,6 +17,32 @@ interface MonitorWidgetProps {
 /** Max data points kept in the rolling window. */
 const MAX_POINTS = 300;
 
+/** Format a number with SI prefixes (n, u, m, K, M, G, T). */
+function siFormat(v: number): string {
+  if (v === 0) return "0";
+  const abs = Math.abs(v);
+  const prefixes: [number, string][] = [
+    [1e12, "T"],
+    [1e9, "G"],
+    [1e6, "M"],
+    [1e3, "K"],
+    [1, ""],
+    [1e-3, "m"],
+    [1e-6, "u"],
+    [1e-9, "n"],
+  ];
+  for (const [threshold, suffix] of prefixes) {
+    if (abs >= threshold) {
+      const scaled = v / threshold;
+      const str = Number.isInteger(scaled)
+        ? scaled.toString()
+        : scaled.toPrecision(3);
+      return str + suffix;
+    }
+  }
+  return v.toExponential(1);
+}
+
 /**
  * MonitorWidget — polls a component field every second and renders
  * a D3 bar chart with rolling 300-point history.
@@ -81,34 +107,30 @@ export default function MonitorWidget({
     const canvasWidth = svgEl.clientWidth || 300;
     const canvasHeight = svgEl.clientHeight || 120;
 
-    const padding = 8;
-    const yAxisWidth = 30;
-    const xAxisHeight = 18;
-    const contentWidth = canvasWidth - yAxisWidth - padding * 2;
-    const contentHeight = canvasHeight - xAxisHeight - padding * 2;
+    const marginLeft = 40;
+    const marginRight = 4;
+    const marginTop = 4;
+    const marginBottom = 20;
+    const plotW = canvasWidth - marginLeft - marginRight;
+    const plotH = canvasHeight - marginTop - marginBottom;
 
     const xMin = d3.min(data, (d) => d.time) ?? 0;
     const xMax = d3.max(data, (d) => d.time) ?? 1;
     const yMax = d3.max(data, (d) => d.value) ?? 1;
 
-    const xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, contentWidth]);
-    const yScale = d3.scaleLinear().domain([0, yMax]).range([contentHeight, 0]);
-    const x = (v: number) => xScale(v) ?? 0;
-    const y = (v: number) => yScale(v) ?? 0;
+    const xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, plotW]);
+    const yScale = d3.scaleLinear().domain([0, yMax]).range([plotH, 0]);
 
     // Axes
     const xAxisG = svg
       .select<SVGGElement>(".x-axis")
-      .attr(
-        "transform",
-        `translate(${yAxisWidth + padding}, ${contentHeight + padding})`,
-      );
+      .attr("transform", `translate(${marginLeft}, ${marginTop + plotH})`);
     const yAxisG = svg
       .select<SVGGElement>(".y-axis")
-      .attr("transform", `translate(${yAxisWidth + padding}, ${padding})`);
+      .attr("transform", `translate(${marginLeft}, ${marginTop})`);
 
-    xAxisG.call(d3.axisBottom(xScale).ticks(4));
-    yAxisG.call(d3.axisLeft(yScale).ticks(4));
+    xAxisG.call(d3.axisBottom(xScale).ticks(3).tickFormat((d) => siFormat(d as number)));
+    yAxisG.call(d3.axisLeft(yScale).ticks(4).tickFormat((d) => siFormat(d as number)));
 
     // Bars
     const barGroup = svg.select(".bar-group");
@@ -116,13 +138,13 @@ export default function MonitorWidget({
       .selectAll<SVGRectElement, DataPoint>("rect")
       .data(data, (d: DataPoint) => d.time);
 
-    const barWidth = Math.max(contentWidth / data.length, 1);
+    const barWidth = Math.max(plotW / data.length, 1);
 
     const enterBars = bars
       .enter()
       .append("rect")
-      .attr("x", (d: DataPoint) => x(d.time) + padding + yAxisWidth)
-      .attr("y", padding + contentHeight)
+      .attr("x", (d: DataPoint) => marginLeft + (xScale(d.time) ?? 0))
+      .attr("y", marginTop + plotH)
       .attr("width", barWidth)
       .attr("height", 0)
       .attr("fill", "#666");
@@ -131,10 +153,10 @@ export default function MonitorWidget({
       .merge(enterBars)
       .transition()
       .duration(200)
-      .attr("x", (d: DataPoint) => x(d.time) + padding + yAxisWidth)
-      .attr("y", (d: DataPoint) => padding + y(d.value))
+      .attr("x", (d: DataPoint) => marginLeft + (xScale(d.time) ?? 0))
+      .attr("y", (d: DataPoint) => marginTop + (yScale(d.value) ?? 0))
       .attr("width", barWidth)
-      .attr("height", (d: DataPoint) => contentHeight - y(d.value))
+      .attr("height", (d: DataPoint) => plotH - (yScale(d.value) ?? 0))
       .attr("fill", "#666");
 
     bars.exit().remove();
@@ -144,7 +166,7 @@ export default function MonitorWidget({
 
   return (
     <div
-      className="border rounded p-2"
+      className="border rounded p-2 d-flex flex-column"
       style={{ flex: "1 1 0", minWidth: 200 }}
     >
       <div className="d-flex justify-content-between align-items-center mb-1">
@@ -159,7 +181,7 @@ export default function MonitorWidget({
           style={{ fontSize: 10 }}
         />
       </div>
-      <svg ref={svgRef} width="100%" height={120}>
+      <svg ref={svgRef} style={{ width: "100%", flex: "1 1 0", minHeight: 80 }}>
         <g className="x-axis" />
         <g className="y-axis" />
         <g className="bar-group" />

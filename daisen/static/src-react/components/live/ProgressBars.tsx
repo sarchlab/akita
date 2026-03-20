@@ -19,7 +19,11 @@ const MAX_BAR_MODE = 2;
  * Bootstrap progress bars (≤2 items) or pie charts (>2 items).
  * Only renders when the simulation mode is "live".
  */
-export default function ProgressBars() {
+export default function ProgressBars({
+  onCountChange,
+}: {
+  onCountChange?: (count: number) => void;
+}) {
   const { mode } = useMode();
   const [bars, setBars] = useState<ProgressBar[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -49,13 +53,16 @@ export default function ProgressBars() {
     };
   }, [mode]);
 
+  useEffect(() => {
+    onCountChange?.(bars.length);
+  }, [bars.length, onCountChange]);
+
   if (mode !== "live" || bars.length === 0) return null;
 
   const usePie = bars.length > MAX_BAR_MODE;
 
   return (
-    <div className="mb-3">
-      <h6 className="mb-2">Progress</h6>
+    <div>
       {usePie ? (
         <div className="d-flex flex-wrap gap-3">
           {bars.map((b) => (
@@ -63,7 +70,7 @@ export default function ProgressBars() {
           ))}
         </div>
       ) : (
-        <div className="d-flex flex-column gap-2">
+        <div className="d-flex flex-column gap-1">
           {bars.map((b) => (
             <BarItem key={b.id} bar={b} />
           ))}
@@ -87,32 +94,29 @@ function BarItem({ bar }: { bar: ProgressBar }) {
 
   return (
     <div className="d-flex align-items-center gap-2">
-      <label className="mb-0 text-nowrap" style={{ minWidth: 100 }}>
+      <label className="mb-0 text-nowrap" style={{ minWidth: 60 }}>
         {bar.name}
       </label>
       <div className="progress flex-grow-1" style={{ height: 20 }}>
         <div
           className="progress-bar bg-success"
-          style={{ width: `${pctFinished}%` }}
+          style={{ width: `${pctFinished}%`, fontSize: 12 }}
         >
-          {finished > 0 ? finished : ""}
+          {pctFinished > 10 ? finished.toLocaleString() : ""}
         </div>
         <div
           className="progress-bar progress-bar-striped bg-primary"
-          style={{ width: `${pctInProgress}%` }}
+          style={{ width: `${pctInProgress}%`, fontSize: 12 }}
         >
-          {inProgress > 0 ? inProgress : ""}
+          {pctInProgress > 5 ? inProgress.toLocaleString() : ""}
         </div>
         <div
           className="progress-bar bg-secondary"
-          style={{ width: `${pctUnfinished}%` }}
+          style={{ width: `${pctUnfinished}%`, fontSize: 12 }}
         >
-          {unfinished > 0 ? unfinished : ""}
+          {pctUnfinished > 10 ? unfinished.toLocaleString() : ""}
         </div>
       </div>
-      <small className="text-muted text-nowrap">
-        {finished}/{total}
-      </small>
     </div>
   );
 }

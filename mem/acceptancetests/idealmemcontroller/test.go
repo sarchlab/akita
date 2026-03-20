@@ -75,6 +75,14 @@ func main() {
 	rand.Seed(seed)
 
 	s, engine, agent := setupTest()
+
+	if server := s.GetServer(); server != nil {
+		agent.WriteProgressBar = server.CreateProgressBar(
+			"Writes", uint64(*numAccessFlag))
+		agent.ReadProgressBar = server.CreateProgressBar(
+			"Reads", uint64(*numAccessFlag))
+	}
+
 	agent.TickLater()
 
 	err := engine.Run()

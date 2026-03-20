@@ -117,7 +117,7 @@ function TreeNodeView({
         tabIndex={0}
       >
         <i
-          className={`fa-solid fa-xs me-1 ${
+          className={`fas fa-xs me-1 ${
             expanded ? "fa-chevron-down" : "fa-chevron-right"
           }`}
         />

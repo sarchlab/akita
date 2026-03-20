@@ -8,8 +8,10 @@ import (
 	"math/rand"
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 var dumpLog = false
@@ -34,6 +36,9 @@ type MemAccessAgent struct {
 	// Rand is the random source used by the agent. If nil, the global
 	// math/rand functions are used (non-deterministic in Go 1.22+).
 	Rand *rand.Rand
+
+	WriteProgressBar *daisen.ProgressBar
+	ReadProgressBar  *daisen.ProgressBar
 }
 
 func (a *MemAccessAgent) checkReadResult(read *mem.ReadReq,
@@ -105,12 +110,16 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 				a.CurrentTime(), write.Address)
 		}
 
+		tracing.TraceReqFinalize(a.PendingWriteReq[msg.RspTo], a)
 		delete(a.PendingWriteReq, msg.RspTo)
+
+		if a.WriteProgressBar != nil {
+			a.WriteProgressBar.MoveInProgressToFinished(1)
+		}
 
 		return true
 	case *mem.DataReadyRsp:
 		req := a.PendingReadReq[msg.RspTo]
-		delete(a.PendingReadReq, msg.RspTo)
 
 		if dumpLog {
 			log.Printf("%d, agent, read complete, 0x%X, %v\n",
@@ -118,6 +127,13 @@ func (a *MemAccessAgent) processMsgRsp() bool {
 		}
 
 		a.checkReadResult(req, msg)
+
+		tracing.TraceReqFinalize(req, a)
+		delete(a.PendingReadReq, msg.RspTo)
+
+		if a.ReadProgressBar != nil {
+			a.ReadProgressBar.MoveInProgressToFinished(1)
+		}
 
 		return true
 	default:
@@ -187,6 +203,12 @@ func (a *MemAccessAgent) doRead() bool {
 	if err == nil {
 		a.PendingReadReq[readReq.ID] = readReq
 		a.ReadLeft--
+
+		tracing.TraceReqInitiate(readReq, a, 0)
+
+		if a.ReadProgressBar != nil {
+			a.ReadProgressBar.IncrementInProgress(1)
+		}
 
 		if dumpLog {
 			log.Printf("%d, agent, read, 0x%X\n", a.CurrentTime(), address)
@@ -266,6 +288,12 @@ func (a *MemAccessAgent) doWrite() bool {
 		a.WriteLeft--
 		a.addKnownValue(address, data)
 		a.PendingWriteReq[writeReq.ID] = writeReq
+
+		tracing.TraceReqInitiate(writeReq, a, 0)
+
+		if a.WriteProgressBar != nil {
+			a.WriteProgressBar.IncrementInProgress(1)
+		}
 
 		if dumpLog {
 			log.Printf("%d, agent, write, 0x%X, %v\n",

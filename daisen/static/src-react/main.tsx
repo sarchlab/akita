@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router";
 import App from "./App";
 
 import "bootstrap/dist/css/bootstrap.min.css";
+import "@fortawesome/fontawesome-free/css/all.min.css";
 
 const root = document.getElementById("root");
 if (!root) {

@@ -25,10 +25,12 @@ interface PanelLayoutProps {
   center: React.ReactNode;
   /** Content for the right panel (e.g. tools). */
   right: React.ReactNode;
-  /** Content for the bottom panel (e.g. monitor widgets). */
+  /** Content for the collapsible bottom tray (e.g. field monitors). */
   bottom?: React.ReactNode;
-  /** Whether the bottom panel is visible. */
+  /** Whether the bottom tray is visible. */
   showBottom?: boolean;
+  /** Content always pinned at the very bottom (e.g. progress bars). */
+  footer?: React.ReactNode;
   /** Height available for the layout (excluding the navbar). */
   navBarHeight?: number;
 }
@@ -60,6 +62,7 @@ export default function PanelLayout({
   right,
   bottom,
   showBottom = false,
+  footer,
   navBarHeight = 56,
 }: PanelLayoutProps) {
   /* ------ sizes --------------------------------------------------- */
@@ -150,11 +153,11 @@ export default function PanelLayout({
       {/* ── Top area: three-pane ───────────────────────────── */}
       <div
         style={{
-          height: mainHeight,
+          flex: "1 1 0",
+          minHeight: 0,
           display: "flex",
           flexDirection: "row",
           overflow: "hidden",
-          flexShrink: 0,
         }}
       >
         {/* Left panel */}
@@ -212,22 +215,27 @@ export default function PanelLayout({
 
       {/* ── Bottom area: monitor widgets ───────────────────── */}
       {showBottom && (
-        <>
-          <ResizableDivider
-            orientation="horizontal"
-            size={DIVIDER_SIZE}
-            onDrag={onDragBottom}
-          />
-          <div
-            style={{
-              height: bottomHeight,
-              overflow: "auto",
-              flexShrink: 0,
-            }}
-          >
-            {bottom}
-          </div>
-        </>
+        <ResizableDivider
+          orientation="horizontal"
+          size={DIVIDER_SIZE}
+          onDrag={onDragBottom}
+        />
+      )}
+      <div
+        style={{
+          height: showBottom ? bottomHeight : 0,
+          overflow: showBottom ? "auto" : "hidden",
+          flexShrink: 0,
+        }}
+      >
+        {bottom}
+      </div>
+
+      {/* ── Footer: always visible at the very bottom ──────── */}
+      {footer && (
+        <div style={{ flexShrink: 0 }}>
+          {footer}
+        </div>
       )}
     </div>
   );

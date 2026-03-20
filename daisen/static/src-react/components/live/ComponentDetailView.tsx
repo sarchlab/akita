@@ -145,7 +145,7 @@ function FieldRow({
             </span>
           ) : (
             <i
-              className={`fa-solid fa-xs ${
+              className={`fas fa-xs ${
                 expanded ? "fa-chevron-down" : "fa-chevron-right"
               }`}
               style={{ width: 14, textAlign: "center" }}
@@ -160,7 +160,7 @@ function FieldRow({
               role="button"
               style={{ cursor: "pointer" }}
             >
-              <i className={`fa-flag ${flagged ? "fa-solid text-warning" : "fa-regular text-muted"}`} />
+              <i className={`fa-flag ${flagged ? "fas text-warning" : "far text-muted"}`} />
             </span>
           )}
 
