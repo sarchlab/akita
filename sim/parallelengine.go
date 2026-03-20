@@ -4,15 +4,16 @@ import (
 	"log"
 	"math"
 	"reflect"
+	"runtime"
 	"sync"
 
-	"runtime"
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // A ParallelEngine is an event engine that is capable for scheduling event
 // in a parallel fashion
 type ParallelEngine struct {
-	HookableBase
+	hooking.HookableBase
 
 	pauseLock              sync.Mutex
 	nowLock                sync.RWMutex
@@ -79,7 +80,7 @@ func (e *ParallelEngine) RegisterHandler(name string, handler Handler) {
 // 	for evt := range e.eventChan {
 // 		now := e.readNow()
 
-// 		hookCtx := HookCtx{
+// 		hookCtx := hooking.HookCtx{
 // 			Domain: e,
 // 			Now:    now,
 // 			Pos:    HookPosBeforeEvent,
@@ -282,7 +283,7 @@ func (e *ParallelEngine) tempWorkerRun(evt Event) {
 		log.Panic("running event in the past")
 	}
 
-	hookCtx := HookCtx{
+	hookCtx := hooking.HookCtx{
 		Domain: e,
 		Pos:    HookPosBeforeEvent,
 		Item:   evt,

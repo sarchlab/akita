@@ -1,5 +1,7 @@
 package sim
 
+import "github.com/sarchlab/akita/v5/hooking"
+
 // TimeTeller can be used to get the current time.
 type TimeTeller interface {
 	CurrentTime() VTimeInSec
@@ -19,7 +21,7 @@ type HandlerRegistrar interface {
 
 // An Engine is a unit that keeps the discrete event simulation run.
 type Engine interface {
-	Hookable
+	hooking.Hookable
 	EventScheduler
 
 	// Run will process all the events until the simulation finishes

@@ -3,22 +3,24 @@ package tracing
 import (
 	"reflect"
 
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
 // NamedHookable represent something both have a name and can be hooked
 type NamedHookable interface {
-	sim.Named
-	sim.Hookable
-	InvokeHook(sim.HookCtx)
+	naming.Named
+	hooking.Hookable
+	InvokeHook(hooking.HookCtx)
 }
 
 // A list of hook poses for the hooks to apply to
 var (
-	HookPosTaskStart = &sim.HookPos{Name: "HookPosTaskStart"}
-	HookPosTaskStep  = &sim.HookPos{Name: "HookPosTaskStep"}
-	HookPosMilestone = &sim.HookPos{Name: "HookPosMilestone"}
-	HookPosTaskEnd   = &sim.HookPos{Name: "HookPosTaskEnd"}
+	HookPosTaskStart = &hooking.HookPos{Name: "HookPosTaskStart"}
+	HookPosTaskStep  = &hooking.HookPos{Name: "HookPosTaskStep"}
+	HookPosMilestone = &hooking.HookPos{Name: "HookPosMilestone"}
+	HookPosTaskEnd   = &hooking.HookPos{Name: "HookPosTaskEnd"}
 )
 
 // StartTask notifies the hooks that hook to the domain about the start of a
@@ -98,7 +100,7 @@ func StartTaskWithSpecificLocation(
 		Location: location,
 		Detail:   detail,
 	}
-	ctx := sim.HookCtx{
+	ctx := hooking.HookCtx{
 		Domain: domain,
 		Item:   task,
 		Pos:    HookPosTaskStart,
@@ -123,7 +125,7 @@ func AddTaskStep(
 		ID:    id,
 		Steps: []TaskStep{step},
 	}
-	ctx := sim.HookCtx{
+	ctx := hooking.HookCtx{
 		Domain: domain,
 		Item:   task,
 		Pos:    HookPosTaskStep,
@@ -147,7 +149,7 @@ func AddMilestone(
 		Location: location,
 	}
 
-	ctx := sim.HookCtx{
+	ctx := hooking.HookCtx{
 		Domain: domain,
 		Item:   milestone,
 		Pos:    HookPosMilestone,
@@ -167,7 +169,7 @@ func EndTask(
 	task := Task{
 		ID: id,
 	}
-	ctx := sim.HookCtx{
+	ctx := hooking.HookCtx{
 		Domain: domain,
 		Item:   task,
 		Pos:    HookPosTaskEnd,

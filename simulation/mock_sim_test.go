@@ -11,6 +11,7 @@ package simulation
 import (
 	reflect "reflect"
 
+	hooking "github.com/sarchlab/akita/v5/hooking"
 	sim "github.com/sarchlab/akita/v5/sim"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -40,7 +41,7 @@ func (m *MockPort) EXPECT() *MockPortMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockPort) AcceptHook(hook sim.Hook) {
+func (m *MockPort) AcceptHook(hook hooking.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -108,10 +109,10 @@ func (mr *MockPortMockRecorder) Deliver(msg any) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockPort) Hooks() []sim.Hook {
+func (m *MockPort) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]sim.Hook)
+	ret0, _ := ret[0].([]hooking.Hook)
 	return ret0
 }
 
@@ -308,7 +309,7 @@ func (m *MockComponent) EXPECT() *MockComponentMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockComponent) AcceptHook(hook sim.Hook) {
+func (m *MockComponent) AcceptHook(hook hooking.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -360,10 +361,10 @@ func (mr *MockComponentMockRecorder) Handle(e any) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockComponent) Hooks() []sim.Hook {
+func (m *MockComponent) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]sim.Hook)
+	ret0, _ := ret[0].([]hooking.Hook)
 	return ret0
 }
 

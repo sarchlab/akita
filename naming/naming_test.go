@@ -1,11 +1,18 @@
-package sim
+package naming
 
 import (
+	"testing"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("TokeniedName", func() {
+func TestNaming(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Naming Suite")
+}
+
+var _ = Describe("Naming", func() {
 	It("should parse name", func() {
 		name := ParseName("GPU[0].Core[0]")
 		Expect(name.Tokens[0].ElemName).To(Equal("GPU"))
@@ -23,31 +30,31 @@ var _ = Describe("TokeniedName", func() {
 	})
 
 	It("should panic if the name is empty", func() {
-		Expect(func() { NameMustBeValid("") }).To(Panic())
+		Expect(func() { MustBeValid("") }).To(Panic())
 	})
 
 	It("should panic if name include underscore", func() {
-		Expect(func() { NameMustBeValid("GPU_0") }).To(Panic())
+		Expect(func() { MustBeValid("GPU_0") }).To(Panic())
 	})
 
 	It("should panic if name include dash", func() {
-		Expect(func() { NameMustBeValid("GPU-0") }).To(Panic())
+		Expect(func() { MustBeValid("GPU-0") }).To(Panic())
 	})
 
 	It("should panic if name is not capitalized CamelCase", func() {
-		Expect(func() { NameMustBeValid("gpu0") }).To(Panic())
+		Expect(func() { MustBeValid("gpu0") }).To(Panic())
 	})
 
 	It("should have paired square brackets", func() {
-		Expect(func() { NameMustBeValid("GPU[0") }).To(Panic())
+		Expect(func() { MustBeValid("GPU[0") }).To(Panic())
 	})
 
 	It("should have paired square brackets", func() {
-		Expect(func() { NameMustBeValid("GPU0]") }).To(Panic())
+		Expect(func() { MustBeValid("GPU0]") }).To(Panic())
 	})
 
 	It("should be panic if element name is empty", func() {
-		Expect(func() { NameMustBeValid("GPU..0") }).To(Panic())
+		Expect(func() { MustBeValid("GPU..0") }).To(Panic())
 	})
 
 	It("should build name", func() {

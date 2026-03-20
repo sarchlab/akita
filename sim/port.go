@@ -3,23 +3,26 @@ package sim
 import (
 	"fmt"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
 )
 
 // HookPosPortMsgSend marks when a message is sent out from the port.
-var HookPosPortMsgSend = &HookPos{Name: "Port Msg Send"}
+var HookPosPortMsgSend = &hooking.HookPos{Name: "Port Msg Send"}
 
 // HookPosPortMsgRecvd marks when an inbound message arrives at a the given port
-var HookPosPortMsgRecvd = &HookPos{Name: "Port Msg Recv"}
+var HookPosPortMsgRecvd = &hooking.HookPos{Name: "Port Msg Recv"}
 
 // HookPosPortMsgRetrieveIncoming marks when an inbound message is retrieved
 // from the incoming buffer.
-var HookPosPortMsgRetrieveIncoming = &HookPos{
+var HookPosPortMsgRetrieveIncoming = &hooking.HookPos{
 	Name: "Port Msg Retrieve Incoming",
 }
 
 // HookPosPortMsgRetrieveOutgoing marks when an outbound message is retrieved
 // from the outgoing buffer.
-var HookPosPortMsgRetrieveOutgoing = &HookPos{
+var HookPosPortMsgRetrieveOutgoing = &hooking.HookPos{
 	Name: "Port Msg Retrieve Outgoing",
 }
 
@@ -28,8 +31,8 @@ type RemotePort string
 
 // A Port is owned by a component and is used to plugin connections
 type Port interface {
-	Named
-	Hookable
+	naming.Named
+	hooking.Hookable
 
 	AsRemote() RemotePort
 
@@ -56,7 +59,7 @@ type Port interface {
 
 // DefaultPort implements the port interface.
 type defaultPort struct {
-	HookableBase
+	hooking.HookableBase
 
 	lock sync.Mutex
 	name string
@@ -126,7 +129,7 @@ func (p *defaultPort) Send(msg Msg) *SendError {
 	wasEmpty := (p.outgoingBuf.Size() == 0)
 	p.outgoingBuf.Push(msg)
 
-	hookCtx := HookCtx{
+	hookCtx := hooking.HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgSend,
 		Item:   msg,
@@ -152,7 +155,7 @@ func (p *defaultPort) Deliver(msg Msg) *SendError {
 
 	wasEmpty := (p.incomingBuf.Size() == 0)
 
-	hookCtx := HookCtx{
+	hookCtx := hooking.HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRecvd,
 		Item:   msg,
@@ -186,7 +189,7 @@ func (p *defaultPort) RetrieveIncoming() Msg {
 
 	p.lock.Unlock()
 
-	hookCtx := HookCtx{
+	hookCtx := hooking.HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRetrieveIncoming,
 		Item:   msg,
@@ -213,7 +216,7 @@ func (p *defaultPort) RetrieveOutgoing() Msg {
 
 	p.lock.Unlock()
 
-	hookCtx := HookCtx{
+	hookCtx := hooking.HookCtx{
 		Domain: p,
 		Pos:    HookPosPortMsgRetrieveOutgoing,
 		Item:   msg,

@@ -1,5 +1,10 @@
 package sim
 
+import (
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
+)
+
 // SendError marks a failure send or receive
 type SendError struct{}
 
@@ -11,8 +16,8 @@ func NewSendError() *SendError {
 
 // A Connection is responsible for delivering messages to its destination.
 type Connection interface {
-	Named
-	Hookable
+	naming.Named
+	hooking.Hookable
 
 	PlugIn(port Port)
 	Unplug(port Port)

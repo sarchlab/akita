@@ -3,6 +3,7 @@ package simplebankedmemory
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/sim"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type loopbackConnection struct {
-	sim.HookableBase
+	hooking.HookableBase
 
 	name  string
 	ports []sim.Port

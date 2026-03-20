@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
@@ -207,8 +209,8 @@ func (c *Connector) AddSwitchWithName(swName string) (switchID int) {
 
 type namedHookableConnection interface {
 	sim.Connection
-	sim.Named
-	sim.Hookable
+	naming.Named
+	hooking.Hookable
 	sim.Component
 }
 

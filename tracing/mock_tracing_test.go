@@ -11,7 +11,7 @@ package tracing
 import (
 	reflect "reflect"
 
-	sim "github.com/sarchlab/akita/v5/sim"
+	hooking "github.com/sarchlab/akita/v5/hooking"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -40,7 +40,7 @@ func (m *MockNamedHookable) EXPECT() *MockNamedHookableMockRecorder {
 }
 
 // AcceptHook mocks base method.
-func (m *MockNamedHookable) AcceptHook(hook sim.Hook) {
+func (m *MockNamedHookable) AcceptHook(hook hooking.Hook) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AcceptHook", hook)
 }
@@ -52,10 +52,10 @@ func (mr *MockNamedHookableMockRecorder) AcceptHook(hook any) *gomock.Call {
 }
 
 // Hooks mocks base method.
-func (m *MockNamedHookable) Hooks() []sim.Hook {
+func (m *MockNamedHookable) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Hooks")
-	ret0, _ := ret[0].([]sim.Hook)
+	ret0, _ := ret[0].([]hooking.Hook)
 	return ret0
 }
 
@@ -66,7 +66,7 @@ func (mr *MockNamedHookableMockRecorder) Hooks() *gomock.Call {
 }
 
 // InvokeHook mocks base method.
-func (m *MockNamedHookable) InvokeHook(arg0 sim.HookCtx) {
+func (m *MockNamedHookable) InvokeHook(arg0 hooking.HookCtx) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "InvokeHook", arg0)
 }

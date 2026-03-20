@@ -3,6 +3,8 @@ package sim
 import (
 	"log"
 	"reflect"
+
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // EventLogger is an hook that prints the event information
@@ -19,7 +21,7 @@ func NewEventLogger(logger *log.Logger) *EventLogger {
 }
 
 // Func writes the event information into the logger
-func (h *EventLogger) Func(ctx HookCtx) {
+func (h *EventLogger) Func(ctx hooking.HookCtx) {
 	if ctx.Pos != HookPosBeforeEvent {
 		return
 	}

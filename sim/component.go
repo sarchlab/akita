@@ -2,12 +2,10 @@ package sim
 
 import (
 	"sync"
-)
 
-// A Named object is an object that has a name.
-type Named interface {
-	Name() string
-}
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/naming"
+)
 
 // A Component is an element being simulated in Akita.
 //
@@ -16,8 +14,8 @@ type Named interface {
 // (Handler interface) is intentionally NOT part of Component —
 // event dispatch is handled by the Engine via Event.HandlerID().
 type Component interface {
-	Named
-	Hookable
+	naming.Named
+	hooking.Hookable
 	PortOwner
 
 	NotifyRecv(port Port)
@@ -27,7 +25,7 @@ type Component interface {
 // ComponentBase provides some functions that other component can use.
 type ComponentBase struct {
 	sync.Mutex
-	HookableBase
+	hooking.HookableBase
 	*PortOwnerBase
 
 	name string
@@ -35,7 +33,7 @@ type ComponentBase struct {
 
 // NewComponentBase creates a new ComponentBase
 func NewComponentBase(name string) *ComponentBase {
-	NameMustBeValid(name)
+	naming.MustBeValid(name)
 
 	c := new(ComponentBase)
 	c.name = name

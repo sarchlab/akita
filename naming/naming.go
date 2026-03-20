@@ -1,9 +1,16 @@
-package sim
+// Package naming provides the naming conventions and utilities for Akita
+// simulation components.
+package naming
 
 import (
 	"strconv"
 	"strings"
 )
+
+// A Named object is an object that has a name.
+type Named interface {
+	Name() string
+}
 
 // A Name is a hierarchical name that includes a series of tokens separated
 // by dots.
@@ -68,7 +75,7 @@ func bracketMustMatch(name string) {
 	}
 }
 
-// NameMustBeValid panics if the name does not follow the naming convention.
+// MustBeValid panics if the name does not follow the naming convention.
 // There are several rules that a name must follow.
 //  1. It must be organized in a hierarchical structure. For example, a name
 //     "A.B.C" is valid, but "A.B.C." is not.
@@ -76,7 +83,7 @@ func bracketMustMatch(name string) {
 //  3. Individual names must be named as capitalized CamelCase style.
 //     For example, "A.b" is not valid.
 //  4. Elements in a series must be named using square-bracket notation.
-func NameMustBeValid(name string) {
+func MustBeValid(name string) {
 	defer func() {
 		if r := recover(); r != nil {
 			panic("Name " + name + " is not valid: " + r.(string))

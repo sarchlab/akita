@@ -28,7 +28,6 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen/static"
-	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/shirou/gopsutil/process"
@@ -48,7 +47,7 @@ type Server struct {
 	// Live mode fields (from monitoring.Monitor)
 	engine     sim.Engine
 	components []sim.Component
-	buffers    []queueing.BufferState
+	buffers    []bufferState
 	tracer     *tracing.DBTracer
 
 	progressBarsLock sync.Mutex
@@ -108,6 +107,13 @@ func (s *Server) RegisterEngine(e sim.Engine) {
 	s.engine = e
 }
 
+// bufferState is a minimal interface for buffer inspection by the hang detector.
+type bufferState interface {
+	Name() string
+	Size() int
+	Capacity() int
+}
+
 // RegisterComponent registers a component to be monitored (live mode only).
 func (s *Server) RegisterComponent(c sim.Component) {
 	s.components = append(s.components, c)
@@ -126,12 +132,13 @@ func (s *Server) registerComponentOrPortBuffers(c any) {
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
 		fieldType := field.Type()
-		bufferType := reflect.TypeOf((*queueing.BufferState)(nil)).Elem()
-		if fieldType == bufferType {
+		bufferType := reflect.TypeOf((*bufferState)(nil)).Elem()
+		if fieldType.Implements(bufferType) ||
+			reflect.PointerTo(fieldType).Implements(bufferType) {
 			fieldRef := reflect.NewAt(
 				field.Type(),
 				unsafe.Pointer(field.UnsafeAddr()),
-			).Elem().Interface().(queueing.BufferState)
+			).Elem().Interface().(bufferState)
 			s.buffers = append(s.buffers, fieldRef)
 		}
 	}
@@ -527,15 +534,15 @@ func (*Server) buffersParseParams(
 	return sortMethod, limitNumber, offsetNumber, nil
 }
 
-func bufferPercent(b queueing.BufferState) float64 {
+func bufferPercent(b bufferState) float64 {
 	return float64(b.Size()) / float64(b.Capacity())
 }
 
 func (s *Server) sortAndSelectBuffers(
 	sortMethod string,
 	limit, offset int,
-) []queueing.BufferState {
-	sortedBuffers := make([]queueing.BufferState, len(s.buffers))
+) []bufferState {
+	sortedBuffers := make([]bufferState, len(s.buffers))
 	copy(sortedBuffers, s.buffers)
 
 	if sortMethod == "level" {
@@ -571,7 +578,7 @@ func (s *Server) sortAndSelectBuffers(
 	}
 
 	if offset >= len(sortedBuffers) {
-		return []queueing.BufferState{}
+		return []bufferState{}
 	}
 
 	if offset+limit > len(sortedBuffers) {

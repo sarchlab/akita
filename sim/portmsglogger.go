@@ -2,6 +2,8 @@ package sim
 
 import (
 	"log"
+
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // PortMsgLogger is a hook for logging messages as they go across a Port
@@ -23,7 +25,7 @@ func NewPortMsgLogger(
 }
 
 // Func writes the message information into the logger
-func (h *PortMsgLogger) Func(ctx HookCtx) {
+func (h *PortMsgLogger) Func(ctx hooking.HookCtx) {
 	msg, ok := ctx.Item.(Msg)
 	if !ok {
 		return

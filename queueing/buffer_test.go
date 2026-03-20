@@ -125,6 +125,3 @@ func TestBufferFIFOOrder(t *testing.T) {
 		assert.Equal(t, i, b.Elements[i])
 	}
 }
-
-// Compile-time check: *Buffer[int] must satisfy BufferState.
-var _ BufferState = (*Buffer[int])(nil)

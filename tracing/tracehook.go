@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // CollectTrace let the tracer to collect trace from a domain
@@ -29,7 +29,7 @@ type traceHook struct {
 }
 
 // Func calls the tracer interfaces when the hook is triggered
-func (h *traceHook) Func(ctx sim.HookCtx) {
+func (h *traceHook) Func(ctx hooking.HookCtx) {
 	switch ctx.Pos {
 	case HookPosTaskStart:
 		h.t.StartTask(ctx.Item.(Task))

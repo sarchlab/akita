@@ -4,11 +4,13 @@ import (
 	"log"
 	"reflect"
 	"sync"
+
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // A SerialEngine is an Engine that always run events one after another.
 type SerialEngine struct {
-	HookableBase
+	hooking.HookableBase
 
 	timeLock       sync.RWMutex
 	time           VTimeInSec
@@ -95,7 +97,7 @@ func (e *SerialEngine) Run() error {
 
 		e.writeNow(evt.Time())
 
-		hookCtx := HookCtx{
+		hookCtx := hooking.HookCtx{
 			Domain: e,
 			Pos:    HookPosBeforeEvent,
 			Item:   evt,

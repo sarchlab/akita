@@ -3,6 +3,7 @@ package tracing_test
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -16,7 +17,7 @@ func (t *SampleTimeTeller) CurrentTime() sim.VTimeInSec {
 }
 
 type SampleDomain struct {
-	*sim.HookableBase
+	*hooking.HookableBase
 
 	timeTeller sim.TimeTeller
 	taskIDs    []uint64
@@ -55,7 +56,7 @@ func (d *SampleDomain) End() {
 func ExampleTracer() {
 	timeTeller := &SampleTimeTeller{}
 	domain := &SampleDomain{
-		HookableBase: sim.NewHookableBase(),
+		HookableBase: hooking.NewHookableBase(),
 		timeTeller:   timeTeller,
 	}
 

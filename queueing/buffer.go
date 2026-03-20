@@ -3,30 +3,19 @@ package queueing
 import (
 	"log"
 
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/hooking"
 )
 
 // HookPosBufPush marks when an element is pushed into the buffer.
-var HookPosBufPush = &sim.HookPos{Name: "Buffer Push"}
+var HookPosBufPush = &hooking.HookPos{Name: "Buffer Push"}
 
 // HookPosBufPop marks when an element is popped from the buffer.
-var HookPosBufPop = &sim.HookPos{Name: "Buffer Pop"}
-
-// BufferState is a minimal interface for buffer inspection. It is satisfied
-// by *Buffer[T] and can be used by analysis, monitoring, and arbitration
-// packages that need to query buffer metadata without knowing the element type.
-type BufferState interface {
-	sim.Named
-	sim.Hookable
-	CanPush() bool
-	Capacity() int
-	Size() int
-}
+var HookPosBufPop = &hooking.HookPos{Name: "Buffer Pop"}
 
 // Buffer is a generic FIFO queue. It is JSON-serializable via exported fields
 // with json tags.
 type Buffer[T any] struct {
-	sim.HookableBase `json:"-"`
+	hooking.HookableBase `json:"-"`
 
 	BufferName string `json:"buffer_name"`
 	Cap        int    `json:"cap"`
@@ -64,7 +53,7 @@ func (b *Buffer[T]) Push(e interface{}) {
 	b.Elements = append(b.Elements, typed)
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
+		b.InvokeHook(hooking.HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPush,
 			Item:   e,
@@ -87,7 +76,7 @@ func (b *Buffer[T]) PushTyped(e T) {
 	b.Elements = append(b.Elements, e)
 
 	if b.NumHooks() > 0 {
-		b.InvokeHook(sim.HookCtx{
+		b.InvokeHook(hooking.HookCtx{
 			Domain: b,
 			Pos:    HookPosBufPush,
 			Item:   e,
