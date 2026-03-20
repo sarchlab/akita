@@ -3,7 +3,7 @@ package networkconnector
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/monitoring"
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/naming"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
@@ -70,7 +70,7 @@ type PortFactory func(
 type Connector struct {
 	name         string
 	engine       sim.EventScheduler
-	monitor      *daisen.Server
+	monitor      *monitoring.Monitor
 	defaultFreq  sim.Freq
 	flitSize     int
 	router       Router
@@ -102,7 +102,7 @@ func (c Connector) WithEngine(e sim.EventScheduler) Connector {
 
 // WithMonitor sets the monitor that monitors all the components in the
 // connection.
-func (c Connector) WithMonitor(m *daisen.Server) Connector {
+func (c Connector) WithMonitor(m *monitoring.Monitor) Connector {
 	c.monitor = m
 	return c
 }
