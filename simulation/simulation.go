@@ -15,7 +15,6 @@ type Simulation struct {
 	engine       sim.Engine
 	dataRecorder datarecording.DataRecorder
 	monitor      *monitoring.Monitor
-	server       *daisen.Server
 	visTracer    *tracing.DBTracer
 
 	components    []sim.Component
@@ -46,12 +45,14 @@ func (s *Simulation) GetMonitor() *monitoring.Monitor {
 }
 
 // GetServer returns the daisen server used in the simulation.
-// If the simulation uses a Monitor, this returns the underlying daisen.Server.
+// When monitoring is enabled, this returns the underlying replay server
+// from the monitor. Returns nil if monitoring is disabled.
 func (s *Simulation) GetServer() *daisen.Server {
 	if s.monitor != nil {
 		return s.monitor.GetServer()
 	}
-	return s.server
+
+	return nil
 }
 
 // GetVisTracer returns the tracer used in the simulation.
@@ -77,8 +78,6 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 
 	if s.monitor != nil {
 		s.monitor.RegisterComponent(c)
-	} else if s.server != nil {
-		s.server.RegisterComponent(c)
 	}
 
 	if hookable, ok := c.(tracing.NamedHookable); ok {
@@ -115,8 +114,6 @@ func (s *Simulation) GetPortByName(name string) sim.Port {
 func (s *Simulation) Terminate() {
 	if s.monitor != nil {
 		s.monitor.StopServer()
-	} else if s.server != nil {
-		s.server.StopServer()
 	}
 
 	if s.visTracer != nil {

@@ -76,10 +76,10 @@ func main() {
 
 	s, engine, agent := setupTest()
 
-	if server := s.GetServer(); server != nil {
-		agent.WriteProgressBar = server.CreateProgressBar(
+	if monitor := s.GetMonitor(); monitor != nil {
+		agent.WriteProgressBar = monitor.CreateProgressBar(
 			"Writes", uint64(*numAccessFlag))
-		agent.ReadProgressBar = server.CreateProgressBar(
+		agent.ReadProgressBar = monitor.CreateProgressBar(
 			"Reads", uint64(*numAccessFlag))
 	}
 
