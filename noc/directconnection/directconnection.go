@@ -4,6 +4,7 @@ package directconnection
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
@@ -26,7 +27,6 @@ func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
 	if !found {
 		panic(fmt.Sprintf("port %s not found", name))
 	}
-
 	return p.ports[portIndex]
 }
 
@@ -38,13 +38,13 @@ func (p *ports) len() int {
 	return len(p.ports)
 }
 
-// Comp is a DirectConnection connects two components without latency
+// Comp is a DirectConnection that connects components without latency.
 type Comp struct {
-	*sim.TickingComponent
-	sim.MiddlewareHolder
+	*modeling.Component[Spec, State]
+}
 
-	ports      ports
-	nextPortID int
+func (c *Comp) mw() *middleware {
+	return c.Middlewares()[0].(*middleware)
 }
 
 // PlugIn marks the port connects to this DirectConnection.
@@ -52,8 +52,7 @@ func (c *Comp) PlugIn(port sim.Port) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.ports.addPort(port)
-
+	c.mw().ports.addPort(port)
 	port.SetConnection(c)
 }
 
@@ -62,72 +61,58 @@ func (c *Comp) Unplug(_ sim.Port) {
 	panic("not implemented")
 }
 
-// NotifyAvailable is called by a port to notify that the connection can
-// deliver to the port again.
+// NotifyAvailable is called by a port to notify the connection can deliver again.
 func (c *Comp) NotifyAvailable(p sim.Port) {
-	for _, port := range c.ports.list() {
+	for _, port := range c.mw().ports.list() {
 		if port == p {
 			continue
 		}
-
 		port.NotifyAvailable()
 	}
-
 	c.TickNow()
 }
 
-// NotifySend is called by a port to notify that the connection can start
-// to tick now
+// NotifySend is called by a port to notify the connection can start ticking.
 func (c *Comp) NotifySend() {
 	c.TickNow()
 }
 
-func (c *Comp) Tick() bool {
-	return c.MiddlewareHolder.Tick()
-}
-
 type middleware struct {
-	*Comp
+	comp  *modeling.Component[Spec, State]
+	ports ports
 }
 
-// Tick updates the states of the connection and delivers messages.
 func (m *middleware) Tick() bool {
+	state := m.comp.GetState()
+	numPorts := m.ports.len()
 	madeProgress := false
 
-	for i := range m.ports.len() {
-		portID := (i + m.nextPortID) % m.ports.len()
+	for i := range numPorts {
+		portID := (i + state.NextPortID) % numPorts
 		port := m.ports.getPortIndex(portID)
 		madeProgress = m.forwardMany(port) || madeProgress
 	}
 
-	m.nextPortID = (m.nextPortID + 1) % m.ports.len()
+	m.comp.GetNextState().NextPortID = (state.NextPortID + 1) % numPorts
 
 	return madeProgress
 }
 
-func (m *middleware) forwardMany(
-	port sim.Port,
-) bool {
+func (m *middleware) forwardMany(port sim.Port) bool {
 	madeProgress := false
-
 	for {
 		head := port.PeekOutgoing()
 		if head == nil {
 			break
 		}
-
 		dst := head.Meta().Dst
 		dstPort := m.ports.getPortByName(dst)
-
 		err := dstPort.Deliver(head)
 		if err != nil {
 			break
 		}
-
 		madeProgress = true
-
 		port.RetrieveOutgoing()
 	}
-
 	return madeProgress
 }
