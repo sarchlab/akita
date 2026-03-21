@@ -4,13 +4,16 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-21) — NEW DIRECTIVE
+## Current State (2026-03-21)
 
-**M75 COMPLETE**: MemAccessAgent refactored to `modeling.Component[Spec, State]` (PR #114 merged, CI green).
+**M76 COMPLETE**: Daisen recovered to pre-AkitaRTM-merge state (PR #115 merged, CI green).
+- daisen/server.go: 197 lines, replay-only
+- monitoring/monitor.go: 758 lines, absorbs live monitoring
+- Vanilla TS frontend restored with picoseconds fix; src-react removed
 
-**New human directive (issue #680):** Recover Daisen to pre-AkitaRTM-merge state. The M64–M67 work merged AkitaRTM live monitoring into Daisen (package daisen, React frontend). Human wants Daisen to return to a standalone trace viewer (original vanilla TS frontend, replay-only server) with live monitoring remaining in `monitoring/`.
+**Next milestone**: M77 — Migrate directconnection.Comp to modeling.Component[Spec, State] pattern (issue #688).
 
-**Next milestone**: M76 — Recover Daisen to trace-viewer-only state.
+**One remaining gap**: `noc/directconnection.Comp` still uses the old `*sim.TickingComponent` + `sim.MiddlewareHolder` pattern. This is the only first-party component not using `modeling.Component[Spec, State]`, which violates success criteria 3 and 13.
 
 Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅
@@ -20,7 +23,7 @@ Previously completed human directives:
 - #670 (Daisen + memory acceptance tests) → M73 ✅
 - #674 (restore monitoring/ package) → M74 ✅
 - #678 (refactor MemAccessAgent) → M75 ✅
-- #680 (recover Daisen) → M76 (IN PROGRESS)
+- #680 (recover Daisen) → M76 ✅
 
 ## Milestone Status Summary
 
@@ -275,13 +278,17 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 
 **M75: Refactor MemAccessAgent to standard component structure (issue #678)** ✅ COMPLETE (PR #114 merged, 2026-03-21)
 
-**M76: Recover Daisen to pre-AkitaRTM-merge state (issue #680)** — IN PROGRESS
-- Strip all live-monitoring handlers from daisen/server.go (~500 lines) → move to monitoring/
-- Keep daisen.Server as replay-only library (trace viewer)
-- Restore original vanilla TypeScript frontend from git b04cdf8 (adapted for uint64 picoseconds)
-- monitoring.Monitor absorbs live-monitoring HTTP handlers; still embeds daisen replay endpoints
-- ProgressBar stays in daisen (used by memaccessagent)
-- Budget: 5 cycles
+**M76: Recover Daisen to pre-AkitaRTM-merge state (issue #680)** ✅ COMPLETE (PR #115 merged, 2026-03-21)
+- daisen/server.go: 197 lines, replay-only (removed ~500 lines of live-mode code)
+- monitoring/monitor.go: 758 lines, absorbs all live monitoring handlers
+- Vanilla TS frontend restored from git b04cdf8; smartvalue.ts adapted for uint64 picoseconds
+- src-react/ removed; CI green on main
+
+**M77: Migrate directconnection.Comp to modeling.Component pattern (issue #688)** — PLANNED
+- Convert directconnection.Comp from old sim.TickingComponent+MiddlewareHolder to modeling.Component[Spec, State]
+- Spec: { Freq sim.Freq }; State: { NextPortID int }
+- Ports (connection registry) held as middleware struct fields (analogous to routing.Table for Switch)
+- Budget: 3 cycles
 
 **M74: Restore monitoring/ package (issue #674)** ✅ COMPLETE (PR #113 merged, 2026-03-20)
 - Created monitoring/ package with Monitor type wrapping daisen.Server
