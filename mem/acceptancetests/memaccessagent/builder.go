@@ -2,93 +2,116 @@
 package memaccessagent
 
 import (
+	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/sim"
 )
 
+// Builder constructs MemAccessAgent instances.
 type Builder struct {
-	name              string
-	engine            sim.EventScheduler
-	freq              sim.Freq
-	maxAddress        uint64
-	writeLeft         int
-	readLeft          int
-	useVirtualAddress bool
-	lowModule         sim.Port
-	memPort           sim.Port
+	spec      Spec
+	writeLeft int
+	readLeft  int
+	engine    sim.EventScheduler
+	lowModule sim.Port
+	memPort   sim.Port
 }
 
+// MakeBuilder returns a new Builder with sensible defaults.
 func MakeBuilder() *Builder {
 	return &Builder{
-		name:       "MemAccessAgent",
-		freq:       1 * sim.GHz,
-		maxAddress: 1024 * 1024,
-		writeLeft:  1000,
-		readLeft:   1000,
+		spec: Spec{
+			Freq:       1 * sim.GHz,
+			MaxAddress: 1024 * 1024,
+		},
+		writeLeft: 1000,
+		readLeft:  1000,
 	}
 }
 
+// WithEngine sets the simulation engine.
 func (b *Builder) WithEngine(engine sim.EventScheduler) *Builder {
 	b.engine = engine
 	return b
 }
 
-func (b *Builder) WithName(name string) *Builder {
-	b.name = name
+// WithName is a no-op kept for backward compatibility; name is passed to Build.
+func (b *Builder) WithName(_ string) *Builder {
 	return b
 }
 
+// WithFreq sets the tick frequency.
 func (b *Builder) WithFreq(freq sim.Freq) *Builder {
-	b.freq = freq
+	b.spec.Freq = freq
 	return b
 }
 
+// WithMaxAddress sets the address space size.
 func (b *Builder) WithMaxAddress(addr uint64) *Builder {
-	b.maxAddress = addr
+	b.spec.MaxAddress = addr
 	return b
 }
 
+// WithWriteLeft sets the initial number of writes to perform.
 func (b *Builder) WithWriteLeft(write int) *Builder {
 	b.writeLeft = write
 	return b
 }
 
+// WithReadLeft sets the initial number of reads to perform.
 func (b *Builder) WithReadLeft(read int) *Builder {
 	b.readLeft = read
 	return b
 }
 
+// UseVirtualAddress configures whether virtual addresses are used.
 func (b *Builder) UseVirtualAddress(use bool) *Builder {
-	b.useVirtualAddress = use
+	b.spec.UseVirtualAddress = use
 	return b
 }
 
+// WithLowModule sets the downstream module port.
 func (b *Builder) WithLowModule(port sim.Port) *Builder {
 	b.lowModule = port
 	return b
 }
 
+// WithMemPort sets the port used to send/receive memory messages.
 func (b *Builder) WithMemPort(port sim.Port) *Builder {
 	b.memPort = port
 	return b
 }
 
+// Build creates a new MemAccessAgent with the given name.
 func (b *Builder) Build(name string) *MemAccessAgent {
-	agent := NewMemAccessAgent(b.engine)
+	initialState := State{
+		WriteLeft:       b.writeLeft,
+		ReadLeft:        b.readLeft,
+		KnownMemValue:   make(map[uint64][]uint32),
+		PendingReadReq:  make(map[uint64]mem.ReadReq),
+		PendingWriteReq: make(map[uint64]mem.WriteReq),
+	}
 
-	agent.TickingComponent = sim.NewTickingComponent(name, b.engine, b.freq, agent)
-	agent.MaxAddress = b.maxAddress
-	agent.WriteLeft = b.writeLeft
-	agent.ReadLeft = b.readLeft
+	modelComp := modeling.NewBuilder[Spec, State]().
+		WithEngine(b.engine).
+		WithFreq(b.spec.Freq).
+		WithSpec(b.spec).
+		Build(name)
+	modelComp.SetState(initialState)
 
-	agent.UseVirtualAddress = b.useVirtualAddress
-
-	agent.memPort = b.memPort
-	agent.memPort.SetComponent(agent)
-	agent.AddPort("Mem", agent.memPort)
+	agent := &MemAccessAgent{
+		Component: modelComp,
+	}
 
 	if b.lowModule != nil {
 		agent.LowModule = b.lowModule
 	}
+
+	mw := &agentMiddleware{agent: agent}
+	modelComp.AddMiddleware(mw)
+
+	b.memPort.SetComponent(agent)
+	modelComp.AddPort("Mem", b.memPort)
 
 	return agent
 }

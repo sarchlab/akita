@@ -90,11 +90,11 @@ func main() {
 		panic(err)
 	}
 
-	if len(agent.PendingWriteReq) > 0 || len(agent.PendingReadReq) > 0 {
+	if len(agent.GetState().PendingWriteReq) > 0 || len(agent.GetState().PendingReadReq) > 0 {
 		panic("Not all req returned")
 	}
 
-	if agent.WriteLeft > 0 || agent.ReadLeft > 0 {
+	if agent.GetState().WriteLeft > 0 || agent.GetState().ReadLeft > 0 {
 		panic("more requests to send")
 	}
 

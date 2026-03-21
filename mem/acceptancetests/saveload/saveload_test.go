@@ -74,16 +74,17 @@ type agentResult struct {
 }
 
 func captureResult(agent *memaccessagent.MemAccessAgent) agentResult {
-	kmv := make(map[uint64][]uint32, len(agent.KnownMemValue))
-	for k, v := range agent.KnownMemValue {
+	state := agent.GetState()
+	kmv := make(map[uint64][]uint32, len(state.KnownMemValue))
+	for k, v := range state.KnownMemValue {
 		dup := make([]uint32, len(v))
 		copy(dup, v)
 		kmv[k] = dup
 	}
 
 	return agentResult{
-		WriteLeft:     agent.WriteLeft,
-		ReadLeft:      agent.ReadLeft,
+		WriteLeft:     state.WriteLeft,
+		ReadLeft:      state.ReadLeft,
 		KnownMemValue: kmv,
 	}
 }
@@ -140,7 +141,7 @@ func runPhaseA(
 	runEngine(t, sA, "Phase A")
 
 	t.Logf("Phase A done: WriteLeft=%d ReadLeft=%d keys=%d engineTime=%v idNext=%d",
-		agentA.WriteLeft, agentA.ReadLeft, len(agentA.KnownMemValue),
+		agentA.GetState().WriteLeft, agentA.GetState().ReadLeft, len(agentA.GetState().KnownMemValue),
 		sA.GetEngine().CurrentTime(), sim.GetIDGeneratorNextID())
 
 	checkpointDir := t.TempDir()
@@ -163,8 +164,8 @@ func runPhaseB(
 
 	rngB := rand.New(rand.NewSource(seed + 1))
 	agentA.Rand = rngB
-	agentA.WriteLeft = 50
-	agentA.ReadLeft = 100
+	agentA.GetNextState().WriteLeft = 50
+	agentA.GetNextState().ReadLeft = 100
 	agentA.TickLater()
 
 	runEngine(t, sA, "Phase B")
@@ -208,11 +209,11 @@ func runPhaseC(
 	}
 
 	t.Logf("Phase C loaded: WriteLeft=%d ReadLeft=%d keys=%d idNext=%d engineTime=%v",
-		agentC.WriteLeft, agentC.ReadLeft, len(agentC.KnownMemValue),
+		agentC.GetState().WriteLeft, agentC.GetState().ReadLeft, len(agentC.GetState().KnownMemValue),
 		sim.GetIDGeneratorNextID(), sC.GetEngine().CurrentTime())
 
-	agentC.WriteLeft = 50
-	agentC.ReadLeft = 100
+	agentC.GetNextState().WriteLeft = 50
+	agentC.GetNextState().ReadLeft = 100
 	agentC.TickLater()
 
 	runEngine(t, sC, "Phase C")
