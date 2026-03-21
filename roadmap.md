@@ -4,11 +4,13 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-21) — PROJECT COMPLETE ✅
+## Current State (2026-03-21) — NEW HUMAN REQUEST
 
-All known human directives have been addressed. M74 (restore monitoring/ package) is complete (PR #113 merged). CI is green on main. Human is actively improving the React daisen UI.
+Human filed issue #678: MemAccessAgent in `mem/acceptancetests/memaccessagent/` does not use the standard component structure (`modeling.Component[Spec, State]`). It still uses the legacy `*sim.TickingComponent` pattern with custom SaveState/LoadState.
 
-**Final audit (issue #677) completed by Elena: All 16 success criteria confirmed PASS. PROJECT IS COMPLETE.**
+**M75 planned: Refactor MemAccessAgent to standard component structure.**
+
+Previous status: M74 (restore monitoring/ package) complete (PR #113 merged). CI green on main.
 
 ### Final Audit Summary
 - All 16 success criteria verified PASS
@@ -267,6 +269,8 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - No import cycles, CI green. Addresses human request in issue #595.
 
 **M72: Remove debug event logger from idealmemcontroller acceptance test** ✅ COMPLETE (2026-03-19, PR #108)
+
+**M75: Refactor MemAccessAgent to standard component structure (issue #678)** — NEXT
 
 **M74: Restore monitoring/ package (issue #674)** ✅ COMPLETE (PR #113 merged, 2026-03-20)
 - Created monitoring/ package with Monitor type wrapping daisen.Server

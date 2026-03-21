@@ -42,6 +42,15 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - State how Akita DRAM behavior compares with DRAMSim3 and Ramulator2.
    - Keep the explanation concrete (coverage + observed accuracy/limits).
 
+7. **Refactor MemAccessAgent to standard component structure** (issue #678):
+   - `mem/acceptancetests/memaccessagent/` currently uses `*sim.TickingComponent` with public fields — the old pre-M29 pattern.
+   - Refactor to `modeling.Component[Spec, State]` with proper Spec, State, and Middleware.
+   - Spec: `Freq`, `MaxAddress`, `UseVirtualAddress`.
+   - State: `WriteLeft`, `ReadLeft`, `KnownMemValue`, `PendingReadReq`, `PendingWriteReq`.
+   - Remove `saveload.go` — state is automatically serialized by the standard model.
+   - Builder and all acceptance test callers must be updated accordingly.
+   - CI must stay green (including the saveload acceptance test).
+
 6. **Restore monitoring/ package** (issue #674):
    - Human does not like the merged AkitaRTM and Daisen — wants monitoring package restored as a separate Go library.
    - Create `monitoring/` package with Monitor type (wrapping daisen.Server internally).
