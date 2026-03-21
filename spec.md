@@ -11,7 +11,7 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
 3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
 4. **No compromise in performance** — must match original akita repo performance.
 
-### Current Human Directives (updated 2026-03-20)
+### Current Human Directives (updated 2026-03-21)
 
 1. **Preserve library compatibility while evolving tracing/hooking**.
    - Do not remove tracer APIs solely because they are unused in this repo.
@@ -29,7 +29,14 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Decide whether porting should happen in a subfolder in this repository.
    - No implementation yet.
 
-5. ~~**Connect the merged Daisen to memory acceptance tests** (issue #670)~~: **DONE in M73** (PR #109 merged, 2026-03-19) — All 6 memory acceptance tests refactored to use `simulation.MakeBuilder()` with `RegisterComponent()` and `Terminate()`.
+5. **Recover Daisen to pre-AkitaRTM-merge state** (issue #680):
+   - Restore Daisen as a standalone trace viewer (replay-only).
+   - Strip all live-monitoring code from `daisen/` and move it to `monitoring/`.
+   - Restore the original vanilla TypeScript frontend (from pre-merge commit b04cdf8), adapted for uint64 picoseconds.
+   - `daisen.Server` stays as a library (no breaking changes to simulation/ and memaccessagent).
+   - Live monitoring capability remains via `monitoring/` package.
+
+6. ~~**Connect the merged Daisen to memory acceptance tests** (issue #670)~~: **DONE in M73** (PR #109 merged, 2026-03-19) — All 6 memory acceptance tests refactored to use `simulation.MakeBuilder()` with `RegisterComponent()` and `Terminate()`.
 
 4. ~~**Document DRAM validation in README** (issue #484 follow-up comment)~~: **DONE in M71** (PR #105 merged, 2026-03-17) — Added 175-line validation section to `mem/dram/README.md`.
 

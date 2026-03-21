@@ -4,11 +4,15 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-21) — ALL MILESTONES COMPLETE
+## Current State (2026-03-21) — NEW DIRECTIVE
 
 **M75 COMPLETE**: MemAccessAgent refactored to `modeling.Component[Spec, State]` (PR #114 merged, CI green).
 
-All human directives have been addressed:
+**New human directive (issue #680):** Recover Daisen to pre-AkitaRTM-merge state. The M64–M67 work merged AkitaRTM live monitoring into Daisen (package daisen, React frontend). Human wants Daisen to return to a standalone trace viewer (original vanilla TS frontend, replay-only server) with live monitoring remaining in `monitoring/`.
+
+**Next milestone**: M76 — Recover Daisen to trace-viewer-only state.
+
+Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅
 - #645 (V5 beta release) → M69.2 ✅
 - #649 (MGPUSim migration plan) → M70 ✅
@@ -16,12 +20,7 @@ All human directives have been addressed:
 - #670 (Daisen + memory acceptance tests) → M73 ✅
 - #674 (restore monitoring/ package) → M74 ✅
 - #678 (refactor MemAccessAgent) → M75 ✅
-
-### Final Audit Summary (2026-03-21)
-- All 16 success criteria verified PASS
-- CI green on main
-- All human directives addressed and completed
-- No outstanding open issues
+- #680 (recover Daisen) → M76 (IN PROGRESS)
 
 ## Milestone Status Summary
 
@@ -275,6 +274,14 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 **M72: Remove debug event logger from idealmemcontroller acceptance test** ✅ COMPLETE (2026-03-19, PR #108)
 
 **M75: Refactor MemAccessAgent to standard component structure (issue #678)** ✅ COMPLETE (PR #114 merged, 2026-03-21)
+
+**M76: Recover Daisen to pre-AkitaRTM-merge state (issue #680)** — IN PROGRESS
+- Strip all live-monitoring handlers from daisen/server.go (~500 lines) → move to monitoring/
+- Keep daisen.Server as replay-only library (trace viewer)
+- Restore original vanilla TypeScript frontend from git b04cdf8 (adapted for uint64 picoseconds)
+- monitoring.Monitor absorbs live-monitoring HTTP handlers; still embeds daisen replay endpoints
+- ProgressBar stays in daisen (used by memaccessagent)
+- Budget: 5 cycles
 
 **M74: Restore monitoring/ package (issue #674)** ✅ COMPLETE (PR #113 merged, 2026-03-20)
 - Created monitoring/ package with Monitor type wrapping daisen.Server
