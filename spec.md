@@ -29,34 +29,13 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Decide whether porting should happen in a subfolder in this repository.
    - No implementation yet.
 
-5. **Connect the merged Daisen to memory acceptance tests** (issue #670):
-   - Refactor the 6 memory acceptance tests that currently use bare `sim.Engine` instances to use `simulation.MakeBuilder()` instead.
-   - The tests are: `idealmemcontroller`, `dram`, `writebackcache`, `writearoundcache`, `writethroughcache`, `writeevictcache`.
-   - Follow the pattern established in `mem/acceptancetests/virtualmem/test.go`.
-   - Register all `sim.Component` instances with `s.RegisterComponent()` for Daisen monitoring.
-   - Call `s.Terminate()` at the end.
-   - CI must stay green.
+5. ~~**Connect the merged Daisen to memory acceptance tests** (issue #670)~~: **DONE in M73** (PR #109 merged, 2026-03-19) — All 6 memory acceptance tests refactored to use `simulation.MakeBuilder()` with `RegisterComponent()` and `Terminate()`.
 
-4. **Document DRAM validation in README** (issue #484 follow-up comment):
-   - Add a clear section explaining what was validated.
-   - State how Akita DRAM behavior compares with DRAMSim3 and Ramulator2.
-   - Keep the explanation concrete (coverage + observed accuracy/limits).
+4. ~~**Document DRAM validation in README** (issue #484 follow-up comment)~~: **DONE in M71** (PR #105 merged, 2026-03-17) — Added 175-line validation section to `mem/dram/README.md`.
 
-7. **Refactor MemAccessAgent to standard component structure** (issue #678):
-   - `mem/acceptancetests/memaccessagent/` currently uses `*sim.TickingComponent` with public fields — the old pre-M29 pattern.
-   - Refactor to `modeling.Component[Spec, State]` with proper Spec, State, and Middleware.
-   - Spec: `Freq`, `MaxAddress`, `UseVirtualAddress`.
-   - State: `WriteLeft`, `ReadLeft`, `KnownMemValue`, `PendingReadReq`, `PendingWriteReq`.
-   - Remove `saveload.go` — state is automatically serialized by the standard model.
-   - Builder and all acceptance test callers must be updated accordingly.
-   - CI must stay green (including the saveload acceptance test).
+7. ~~**Refactor MemAccessAgent to standard component structure** (issue #678)~~: **DONE in M75** (PR #114 merged, 2026-03-21) — Refactored to `modeling.Component[Spec, State]` with spec.go, state.go, middleware.go. saveload.go removed. CI green.
 
-6. **Restore monitoring/ package** (issue #674):
-   - Human does not like the merged AkitaRTM and Daisen — wants monitoring package restored as a separate Go library.
-   - Create `monitoring/` package with Monitor type (wrapping daisen.Server internally).
-   - Update simulation/builder.go to use monitoring.Monitor instead of daisen.Server directly.
-   - Update NOC packages to accept *monitoring.Monitor.
-   - Keep the React daisen frontend (human is actively improving it, see PR #110).
+6. ~~**Restore monitoring/ package** (issue #674)~~: **DONE in M74** (PR #113 merged, 2026-03-20) — monitoring/ package created with Monitor type wrapping daisen.Server. simulation/builder.go and NOC packages updated.
 
 ### Core Component Model
 
@@ -200,7 +179,7 @@ The `simplecache` package was renamed to `writethroughcache` to reflect its writ
 
 ### Active (Authorized)
 
-28. **V5 release preparation** (issue #645): move `v5/` to repo root, create upstream `v5` branch, and make a beta release. [M69.2 — NEXT]
+28. ~~**V5 release preparation** (issue #645)~~: **DONE in M69.2** — `v5/` moved to repo root, upstream `v5` branch created, beta tag `v5.0.0-beta.1` released.
 
 29. ~~**MGPUSim V5 porting plan** (issue #649)~~: **DONE in M70** — `mgpusim_v5_migration_plan.md` committed to repo root.
 
