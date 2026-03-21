@@ -4,16 +4,15 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-21)
+## Current State (2026-03-21) — PROJECT COMPLETE
 
-**M76 COMPLETE**: Daisen recovered to pre-AkitaRTM-merge state (PR #115 merged, CI green).
-- daisen/server.go: 197 lines, replay-only
-- monitoring/monitor.go: 758 lines, absorbs live monitoring
-- Vanilla TS frontend restored with picoseconds fix; src-react removed
+**M77 COMPLETE**: directconnection.Comp migrated to modeling.Component[Spec, State] (PR #116 merged, CI green).
+- noc/directconnection/directconnection.go: Comp embeds *modeling.Component[Spec, State]
+- spec.go: Spec{Freq sim.Freq}, state.go: State{NextPortID int}
+- Ports held as middleware struct fields (analogous to routing.Table for Switch)
+- Apollo verified: all 8 acceptance criteria PASS, CI run 23381321413 success
 
-**Next milestone**: M77 — Migrate directconnection.Comp to modeling.Component[Spec, State] pattern (issue #688).
-
-**One remaining gap**: `noc/directconnection.Comp` still uses the old `*sim.TickingComponent` + `sim.MiddlewareHolder` pattern. This is the only first-party component not using `modeling.Component[Spec, State]`, which violates success criteria 3 and 13.
+**All 16 success criteria now met. All human directives complete. PROJECT IS DONE.**
 
 Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅
@@ -24,6 +23,7 @@ Previously completed human directives:
 - #674 (restore monitoring/ package) → M74 ✅
 - #678 (refactor MemAccessAgent) → M75 ✅
 - #680 (recover Daisen) → M76 ✅
+- #688 (directconnection migration) → M77 ✅
 
 ## Milestone Status Summary
 
@@ -284,11 +284,12 @@ Based on Mara's detailed analysis (issue #586, ~500 lines). Three phases:
 - Vanilla TS frontend restored from git b04cdf8; smartvalue.ts adapted for uint64 picoseconds
 - src-react/ removed; CI green on main
 
-**M77: Migrate directconnection.Comp to modeling.Component pattern (issue #688)** — PLANNED
-- Convert directconnection.Comp from old sim.TickingComponent+MiddlewareHolder to modeling.Component[Spec, State]
+**M77: Migrate directconnection.Comp to modeling.Component pattern (issue #688)** ✅ COMPLETE (PR #116 merged, CI run 23381321413 success)
+- Comp now embeds *modeling.Component[Spec, State]; spec.go + state.go created
 - Spec: { Freq sim.Freq }; State: { NextPortID int }
-- Ports (connection registry) held as middleware struct fields (analogous to routing.Table for Switch)
-- Budget: 3 cycles
+- Ports held as middleware struct fields (analogous to routing.Table for Switch)
+- Apollo verified: all 8 acceptance criteria PASS
+- Budget: 3 cycles (used ~2)
 
 **M74: Restore monitoring/ package (issue #674)** ✅ COMPLETE (PR #113 merged, 2026-03-20)
 - Created monitoring/ package with Monitor type wrapping daisen.Server
