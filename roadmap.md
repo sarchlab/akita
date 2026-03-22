@@ -4,15 +4,35 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-21) — PROJECT COMPLETE
+## Current State (2026-03-22) — NEW DIRECTIVE
 
-**M77 COMPLETE**: directconnection.Comp migrated to modeling.Component[Spec, State] (PR #116 merged, CI green).
-- noc/directconnection/directconnection.go: Comp embeds *modeling.Component[Spec, State]
-- spec.go: Spec{Freq sim.Freq}, state.go: State{NextPortID int}
-- Ports held as middleware struct fields (analogous to routing.Table for Switch)
-- Apollo verified: all 8 acceptance criteria PASS, CI run 23381321413 success
+**M77 COMPLETE** (previous cycle): directconnection.Comp migrated to modeling.Component[Spec, State] (PR #116 merged, CI green).
+All 16 original success criteria met.
 
-**All 16 success criteria now met. All human directives complete. PROJECT IS DONE.**
+**New directive (issue #691)**: Create `daisen2` and `monitoring2` packages with React frontends.
+- `daisen2/` = duplicate of `daisen/` with React frontend instead of vanilla TS
+- `monitoring2/` = duplicate of `monitoring/` with React frontend
+- React UIs must look exactly the same as current vanilla TS versions
+
+## Phase 3: React Frontend Duplication
+
+### M78: Research + Architecture + daisen2/monitoring2 scaffold (2 cycles)
+- Elena researches scope, recovers M65-M66 React code from git history
+- Define daisen2/ and monitoring2/ package structures
+- Scaffold React apps
+
+### M79: daisen2 React frontend — Trace Viewer pages (3-4 cycles)
+- Dashboard page (list of simulations/segments)
+- Task Chart page (Gantt chart visualization)
+- Component page (tasks for specific component)
+- Build and embed in Go
+
+### M80: monitoring2 React frontend — Live Monitoring pages (3-4 cycles)  
+- Engine controls (pause/continue/run/tick)
+- Component tree + detail inspector
+- Progress bars, hang analyzer, resource monitor
+- Tracing controls
+- Build and verify CI passes
 
 Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅

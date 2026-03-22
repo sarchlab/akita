@@ -11,7 +11,7 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
 3. **Developers focus only on component logic** — ideally, only middleware Tick functions need to be implemented. No boilerplate.
 4. **No compromise in performance** — must match original akita repo performance.
 
-### Current Human Directives (updated 2026-03-21)
+### Current Human Directives (updated 2026-03-22)
 
 1. **Preserve library compatibility while evolving tracing/hooking**.
    - Do not remove tracer APIs solely because they are unused in this repo.
@@ -28,6 +28,13 @@ We are evolving the Akita V5 simulation framework toward a clean, minimal compon
    - Define phased porting plan to Akita V5.
    - Decide whether porting should happen in a subfolder in this repository.
    - No implementation yet.
+
+7. **Create daisen2 and monitoring2 with React frontends** (issue #691):
+   - Duplicate `daisen/` as `daisen2/` with a React-based frontend instead of vanilla TypeScript.
+   - Duplicate `monitoring/` as `monitoring2/` with a React-based frontend.
+   - The React frontends must have exactly the same UI and functionality as the current vanilla TS versions.
+   - React components must be properly structured and divided (not monolithic).
+   - The original `daisen/` and `monitoring/` packages remain unchanged.
 
 5. **Recover Daisen to pre-AkitaRTM-merge state** (issue #680):
    - Restore Daisen as a standalone trace viewer (replay-only).
