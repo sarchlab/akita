@@ -4,7 +4,7 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-22) — NEW DIRECTIVE
+## Current State (2026-03-22) — Phase 3: React Frontend Duplication
 
 **M77 COMPLETE** (previous cycle): directconnection.Comp migrated to modeling.Component[Spec, State] (PR #116 merged, CI green).
 All 16 original success criteria met.
@@ -13,26 +13,33 @@ All 16 original success criteria met.
 - `daisen2/` = duplicate of `daisen/` with React frontend instead of vanilla TS
 - `monitoring2/` = duplicate of `monitoring/` with React frontend
 - React UIs must look exactly the same as current vanilla TS versions
+- 55 React files already exist in git history at commit 3966648 — can be recovered directly
+
+**Research complete (M78 research, Elena)**: Full scope analysis done. Only 1 missing component (TaskColorLegend.tsx). 2 known bugs to fix. See `workspace/elena/daisen2_plan.md`.
 
 ## Phase 3: React Frontend Duplication
 
-### M78: Research + Architecture + daisen2/monitoring2 scaffold (2 cycles)
-- Elena researches scope, recovers M65-M66 React code from git history
-- Define daisen2/ and monitoring2/ package structures
-- Scaffold React apps
+### M78: Create daisen2 package with React frontend (ACTIVE — 4 cycles budget)
+- Create daisen2/ Go package (copy from daisen/, update package names) 
+- Set up daisen2/static/ with React project (package.json, tsconfig.json, vite.config.mjs, index.html)
+- Recover all 55 React files from commit 3966648 into daisen2/static/src/
+- Fix GanttChart.tsx prop mutation bug + smartValue.ts dead check
+- Add TaskColorLegend.tsx component
+- Build React app (npm install + npm run build) → commit dist/
+- Add daisen2_compile CI job, verify Go builds
+- Issue #693 assigned to Hugo
 
-### M79: daisen2 React frontend — Trace Viewer pages (3-4 cycles)
-- Dashboard page (list of simulations/segments)
-- Task Chart page (Gantt chart visualization)
-- Component page (tasks for specific component)
-- Build and embed in Go
+### M79: Create monitoring2 package (1-2 cycles)
+- Copy monitoring/monitor.go + doc.go to monitoring2/
+- Update imports: daisen → daisen2
+- Update package name to monitoring2
+- Verify Go compilation + CI passes
 
-### M80: monitoring2 React frontend — Live Monitoring pages (3-4 cycles)  
-- Engine controls (pause/continue/run/tick)
-- Component tree + detail inspector
-- Progress bars, hang analyzer, resource monitor
-- Tracing controls
-- Build and verify CI passes
+### M80: Integration validation (1-2 cycles)
+- Run daisen2 replay server against test trace
+- Verify all pages render correctly
+- Verify CI passes end-to-end
+- Close human issue #691
 
 Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅
