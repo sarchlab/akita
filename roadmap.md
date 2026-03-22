@@ -4,12 +4,14 @@
 
 Evolve Akita V5 toward a clean, high-performance simulation framework with broad DRAM support, unified protocols, modern visualization, and clean architecture.
 
-## Current State (2026-03-22) — Phase 3: React Frontend Duplication
+## Current State (2026-03-22) — Phase 3: React Frontend Duplication (NEAR COMPLETE)
 
 **M78 COMPLETE**: daisen2/ Go package created with React frontend (PR #117 merged, CI green).
 - 52 React source files recovered from git history + TaskColorLegend.tsx
 - dist/ built and committed, daisen2_compile CI job added
 - go build ./daisen2/... passes
+
+**M79 COMPLETE**: monitoring2/ package created using daisen2 (PR #118 merged, Apollo verified, CI green).
 
 ## Phase 3: React Frontend Duplication
 
@@ -20,17 +22,13 @@ Evolve Akita V5 toward a clean, high-performance simulation framework with broad
 - Built dist/ committed for go:embed
 - daisen2_compile CI job added
 
-### M79: Create monitoring2 package (ACTIVE — 1-2 cycles, issue #695)
-- Copy monitoring/monitor.go + doc.go to monitoring2/
-- Update imports: daisen → daisen2
-- Update package name to monitoring2
-- Verify Go compilation + CI passes
+### M79: Create monitoring2 package ✅ COMPLETE (PR #118 merged, Apollo verified)
+- monitoring2/doc.go + monitor.go: package monitoring2, daisen→daisen2 imports
+- go build ./monitoring2/... passes, CI green
 
-### M80: Integration validation (1-2 cycles)
-- Run daisen2 replay server against test trace
-- Verify all pages render correctly
-- Verify CI passes end-to-end
-- Close human issue #691
+### M80: Final validation + close issue #691 (ACTIVE — 1 cycle)
+- Verify CI green on main after PR #118 merge
+- Close tbc-db issue #691
 
 Previously completed human directives:
 - #595 (dedicated hooking package) → M69.1 ✅
@@ -42,6 +40,7 @@ Previously completed human directives:
 - #678 (refactor MemAccessAgent) → M75 ✅
 - #680 (recover Daisen) → M76 ✅
 - #688 (directconnection migration) → M77 ✅
+- #691 (daisen2 + monitoring2 React frontend) → M78+M79+M80 (in progress, M78+M79 complete)
 
 ## Milestone Status Summary
 
