@@ -6,30 +6,21 @@ Evolve Akita V5 toward a clean, high-performance simulation framework with broad
 
 ## Current State (2026-03-22) — Phase 3: React Frontend Duplication
 
-**M77 COMPLETE** (previous cycle): directconnection.Comp migrated to modeling.Component[Spec, State] (PR #116 merged, CI green).
-All 16 original success criteria met.
-
-**New directive (issue #691)**: Create `daisen2` and `monitoring2` packages with React frontends.
-- `daisen2/` = duplicate of `daisen/` with React frontend instead of vanilla TS
-- `monitoring2/` = duplicate of `monitoring/` with React frontend
-- React UIs must look exactly the same as current vanilla TS versions
-- 55 React files already exist in git history at commit 3966648 — can be recovered directly
-
-**Research complete (M78 research, Elena)**: Full scope analysis done. Only 1 missing component (TaskColorLegend.tsx). 2 known bugs to fix. See `workspace/elena/daisen2_plan.md`.
+**M78 COMPLETE**: daisen2/ Go package created with React frontend (PR #117 merged, CI green).
+- 52 React source files recovered from git history + TaskColorLegend.tsx
+- dist/ built and committed, daisen2_compile CI job added
+- go build ./daisen2/... passes
 
 ## Phase 3: React Frontend Duplication
 
-### M78: Create daisen2 package with React frontend (ACTIVE — 4 cycles budget)
-- Create daisen2/ Go package (copy from daisen/, update package names) 
-- Set up daisen2/static/ with React project (package.json, tsconfig.json, vite.config.mjs, index.html)
-- Recover all 55 React files from commit 3966648 into daisen2/static/src/
-- Fix GanttChart.tsx prop mutation bug + smartValue.ts dead check
-- Add TaskColorLegend.tsx component
-- Build React app (npm install + npm run build) → commit dist/
-- Add daisen2_compile CI job, verify Go builds
-- Issue #693 assigned to Hugo
+### M78: Create daisen2 package with React frontend ✅ COMPLETE (PR #117 merged)
+- Created daisen2/ Go package (copy from daisen/, package daisen2)
+- React project in daisen2/static/ with all 55 source files
+- Fixed GanttChart.tsx prop mutation bug
+- Built dist/ committed for go:embed
+- daisen2_compile CI job added
 
-### M79: Create monitoring2 package (1-2 cycles)
+### M79: Create monitoring2 package (ACTIVE — 1-2 cycles, issue #695)
 - Copy monitoring/monitor.go + doc.go to monitoring2/
 - Update imports: daisen → daisen2
 - Update package name to monitoring2
