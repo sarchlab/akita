@@ -6,10 +6,13 @@ import html2canvas from "html2canvas";
 type ChatContent = UnitContent[];
 
 const MODE_MAP: { [key: string]: string } = {
-  "ss+q": "Mode 1: Screenshot and Question",
-  "ss+q+bp+cot": "Mode 2: Screenshot, Question and Background Prompt",
-  "ss+q+bp+auto+cot": "Mode 3: Screenshot, Question, Background Prompt and Auto-attachments",
+  // "ss+q": "Mode 1: Screenshot and Question",
+  // "ss+q+bp+cot": "Mode 2: Screenshot, Question and Background Prompt",
+  // "ss+q+bp+auto+cot": "Mode 3: Screenshot, Question, Background Prompt and Auto-attachments",
   // "ss+q+bp+auto+cot": "Mode 4: Screenshot, Question, Background Prompt, Auto-attachments and Chain-of-thought (default)",
+  "ss+q": "Mode 1: Screenshot and Question",
+  "ss+q+bp+cot": "Mode 2: User-selected Attachments",
+  "ss+q+bp+auto+cot": "Mode 3: Automatic attachments",
 };
 
 
@@ -868,7 +871,7 @@ GPU.CommandProcessor,9
 
     // Label matching "DaisenBot:" font/style but 16px size
     const modeLabel = document.createElement("div");
-    modeLabel.innerHTML = '<b>DaisenBot Mode:</b>';
+    modeLabel.innerHTML = '<b>Attachment Mode:</b>';
     modeLabel.style.fontSize = "16px";
     modeLabel.style.lineHeight = "1";
     modeLabel.style.display = "inline-block";
@@ -876,7 +879,7 @@ GPU.CommandProcessor,9
 
     const modeSelector = document.createElement("select");
     modeSelector.id = "modeSelector";
-    modeSelector.style.width = "40%";
+    modeSelector.style.width = "45%";
     modeSelector.style.padding = "8px";
     modeSelector.style.borderRadius = "6px";
     modeSelector.style.border = "1px solid #ccc";
@@ -887,8 +890,8 @@ GPU.CommandProcessor,9
 
     const truncateDisplay = (full: string) => {
       if (!full) return "";
-      if (full.length <= 24) return full;
-      return full.substring(0, 24) + "...";
+      if (full.length <= 34) return full;
+      return full.substring(0, 34) + "...";
     };
 
     for (const key of Object.keys(MODE_MAP)) {
@@ -935,8 +938,8 @@ GPU.CommandProcessor,9
     // ensure collapsed view initially
     collapseOptionsToTruncated();
 
-    modeRow.appendChild(modeSelector);
-    chatContent.appendChild(modeRow);
+    // modeRow.appendChild(modeSelector);
+    // chatContent.appendChild(modeRow);
 
     // Function to update attachment buttons state (will be called after buttons are created)
     const updateAttachmentButtonsState = () => {
@@ -1230,6 +1233,8 @@ GPU.CommandProcessor,9
     this._screenshotUploadBtn = screenshotUploadBtn;
     // Update attachment buttons state based on current mode
     try { updateAttachmentButtonsState(); } catch (e) {}
+
+    
     chatContent.appendChild(actionRow);
 
 
@@ -2079,6 +2084,8 @@ GPU.CommandProcessor,9
     actionRow.style.position = "relative";
     actionRow.appendChild(attachRepoDiv);
 
+    
+
     // Toggle logic
     attachRepoBtn.onclick = () => {
       this._attachRepoVisible = !this._attachRepoVisible;
@@ -2182,8 +2189,10 @@ GPU.CommandProcessor,9
     });
 
 
-    actionRow.appendChild(graphTestBtn);
-    actionRow.appendChild(subpageTestBtn);
+    // actionRow.appendChild(graphTestBtn);
+    // actionRow.appendChild(subpageTestBtn);
+
+    actionRow.appendChild(modeSelector); // move mode selector here if needed
 
 
     // Make test buttons appear on hover over
