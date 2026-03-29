@@ -141,6 +141,10 @@ func AddMilestone(
 	location string,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	milestone := Milestone{
 		ID:       sim.GetIDGenerator().Generate(),
 		TaskID:   taskID,
@@ -193,6 +197,10 @@ func TraceReqInitiate(
 	domain NamedHookable,
 	taskParentID uint64,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	if msg.Meta().SendTaskID == 0 {
 		msg.Meta().SendTaskID = sim.GetIDGenerator().Generate()
 	}
@@ -212,6 +220,10 @@ func TraceReqReceive(
 	msg sim.Msg,
 	domain NamedHookable,
 ) {
+	if domain.NumHooks() == 0 {
+		return
+	}
+
 	StartTask(
 		MsgIDAtReceiver(msg, domain),
 		msg.Meta().SendTaskID,

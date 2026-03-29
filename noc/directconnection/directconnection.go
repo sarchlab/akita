@@ -78,8 +78,9 @@ func (c *Comp) NotifySend() {
 }
 
 type middleware struct {
-	comp  *modeling.Component[Spec, State]
-	ports ports
+	comp    *modeling.Component[Spec, State]
+	ports   ports
+	stalled map[int][]sim.Msg // per-port index → stalled messages
 }
 
 func (m *middleware) Tick() bool {
@@ -90,7 +91,7 @@ func (m *middleware) Tick() bool {
 	for i := range numPorts {
 		portID := (i + state.NextPortID) % numPorts
 		port := m.ports.getPortIndex(portID)
-		madeProgress = m.forwardMany(port) || madeProgress
+		madeProgress = m.forwardMany(port, portID) || madeProgress
 	}
 
 	m.comp.GetNextState().NextPortID = (state.NextPortID + 1) % numPorts
@@ -98,8 +99,26 @@ func (m *middleware) Tick() bool {
 	return madeProgress
 }
 
-func (m *middleware) forwardMany(port sim.Port) bool {
+func (m *middleware) forwardMany(port sim.Port, portIdx int) bool {
 	madeProgress := false
+
+	// First, try to deliver previously stalled messages for this port.
+	if stalledMsgs := m.stalled[portIdx]; len(stalledMsgs) > 0 {
+		remaining := stalledMsgs[:0] // reuse slice
+		for _, msg := range stalledMsgs {
+			dst := msg.Meta().Dst
+			dstPort := m.ports.getPortByName(dst)
+			err := dstPort.Deliver(msg)
+			if err != nil {
+				remaining = append(remaining, msg)
+			} else {
+				madeProgress = true
+			}
+		}
+		m.stalled[portIdx] = remaining
+	}
+
+	// Then, drain the outgoing buffer, delivering or stalling each message.
 	for {
 		head := port.PeekOutgoing()
 		if head == nil {
@@ -109,10 +128,31 @@ func (m *middleware) forwardMany(port sim.Port) bool {
 		dstPort := m.ports.getPortByName(dst)
 		err := dstPort.Deliver(head)
 		if err != nil {
-			break
+			// Cannot deliver — pop from outgoing and stall it.
+			port.RetrieveOutgoing()
+			if m.stalled == nil {
+				m.stalled = make(map[int][]sim.Msg)
+			}
+			m.stalled[portIdx] = append(m.stalled[portIdx], head)
+			continue
 		}
 		madeProgress = true
 		port.RetrieveOutgoing()
 	}
+
 	return madeProgress
+}
+
+// StalledCount returns the total number of stalled messages for debugging.
+func (m *middleware) StalledCount() int {
+	total := 0
+	for _, msgs := range m.stalled {
+		total += len(msgs)
+	}
+	return total
+}
+
+// StalledCountForPort returns stalled messages for a specific port index.
+func (m *middleware) StalledCountForPort(portIdx int) int {
+	return len(m.stalled[portIdx])
 }
