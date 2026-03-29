@@ -4,6 +4,7 @@ import (
 	"log"
 	"reflect"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sarchlab/akita/v5/hooking"
 )
@@ -12,14 +13,13 @@ import (
 type SerialEngine struct {
 	hooking.HookableBase
 
-	timeLock       sync.RWMutex
 	time           VTimeInSec
-	queue          EventQueue
-	secondaryQueue EventQueue
+	queue          *unsafeEventQueue
+	secondaryQueue *unsafeEventQueue
 
-	isPaused     bool
-	isPausedLock sync.Mutex
-	pauseLock    sync.Mutex
+	paused    int32 // atomic: 0 = running, 1 = paused
+	pauseMu   sync.Mutex
+	pauseCond *sync.Cond
 
 	singleRunLock sync.Mutex
 
@@ -30,10 +30,10 @@ type SerialEngine struct {
 func NewSerialEngine() *SerialEngine {
 	e := new(SerialEngine)
 
-	e.queue = NewEventQueue()
-	e.secondaryQueue = NewEventQueue()
+	e.queue = newUnsafeEventQueue()
+	e.secondaryQueue = newUnsafeEventQueue()
 	e.registry = make(map[string]Handler)
-	//e.queue = NewInsertionQueue()
+	e.pauseCond = sync.NewCond(&e.pauseMu)
 
 	return e
 }
@@ -45,8 +45,7 @@ func (e *SerialEngine) RegisterHandler(name string, handler Handler) {
 
 // Schedule register an event to be happen in the future
 func (e *SerialEngine) Schedule(evt Event) {
-	now := e.readNow()
-	if evt.Time() < now {
+	if evt.Time() < e.time {
 		log.Panic("scheduling an event earlier than current time")
 	}
 
@@ -59,59 +58,61 @@ func (e *SerialEngine) Schedule(evt Event) {
 	e.queue.Push(evt)
 }
 
-func (e *SerialEngine) readNow() VTimeInSec {
-	e.timeLock.RLock()
-	t := e.time
-	e.timeLock.RUnlock()
-
-	return t
-}
-
-func (e *SerialEngine) writeNow(t VTimeInSec) {
-	e.timeLock.Lock()
-	e.time = t
-	e.timeLock.Unlock()
-}
-
 // Run processes all the events scheduled in the SerialEngine
 func (e *SerialEngine) Run() error {
 	e.singleRunLock.Lock()
 	defer e.singleRunLock.Unlock()
+
+	hasHooks := e.NumHooks() > 0
 
 	for {
 		if e.noMoreEvent() {
 			return nil
 		}
 
-		e.pauseLock.Lock()
+		// Lightweight pause check: atomic load is ~1ns when not paused
+		if atomic.LoadInt32(&e.paused) != 0 {
+			e.waitForResume()
+		}
 
 		evt := e.nextEvent()
-		now := e.readNow()
 
-		if evt.Time() < now {
+		if evt.Time() < e.time {
 			log.Panicf(
 				"cannot run event in the past, evt %s @ %d, now %d",
-				reflect.TypeOf(evt), evt.Time(), now,
+				reflect.TypeOf(evt), evt.Time(), e.time,
 			)
 		}
 
-		e.writeNow(evt.Time())
+		e.time = evt.Time()
 
-		hookCtx := hooking.HookCtx{
-			Domain: e,
-			Pos:    HookPosBeforeEvent,
-			Item:   evt,
+		if hasHooks {
+			hookCtx := hooking.HookCtx{
+				Domain: e,
+				Pos:    HookPosBeforeEvent,
+				Item:   evt,
+			}
+			e.InvokeHook(hookCtx)
+
+			handler := e.registry[evt.HandlerID()]
+			_ = handler.Handle(evt)
+
+			hookCtx.Pos = HookPosAfterEvent
+			e.InvokeHook(hookCtx)
+		} else {
+			handler := e.registry[evt.HandlerID()]
+			_ = handler.Handle(evt)
 		}
-		e.InvokeHook(hookCtx)
-
-		handler := e.registry[evt.HandlerID()]
-		_ = handler.Handle(evt)
-
-		hookCtx.Pos = HookPosAfterEvent
-		e.InvokeHook(hookCtx)
-
-		e.pauseLock.Unlock()
 	}
+}
+
+// waitForResume blocks until the engine is unpaused.
+func (e *SerialEngine) waitForResume() {
+	e.pauseMu.Lock()
+	for atomic.LoadInt32(&e.paused) != 0 {
+		e.pauseCond.Wait()
+	}
+	e.pauseMu.Unlock()
 }
 
 func (e *SerialEngine) noMoreEvent() bool {
@@ -142,37 +143,28 @@ func (e *SerialEngine) nextEvent() Event {
 
 // Pause prevents the SerialEngine to trigger more events.
 func (e *SerialEngine) Pause() {
-	e.isPausedLock.Lock()
-	defer e.isPausedLock.Unlock()
+	e.pauseMu.Lock()
+	defer e.pauseMu.Unlock()
 
-	if e.isPaused {
-		return
-	}
-
-	e.pauseLock.Lock()
-	e.isPaused = true
+	atomic.StoreInt32(&e.paused, 1)
 }
 
 // Continue allows the SerialEngine to trigger more events.
 func (e *SerialEngine) Continue() {
-	e.isPausedLock.Lock()
-	defer e.isPausedLock.Unlock()
+	e.pauseMu.Lock()
+	defer e.pauseMu.Unlock()
 
-	if !e.isPaused {
-		return
-	}
-
-	e.pauseLock.Unlock()
-	e.isPaused = false
+	atomic.StoreInt32(&e.paused, 0)
+	e.pauseCond.Broadcast()
 }
 
 // CurrentTime returns the current time at which the engine is at.
 // Specifically, the run time of the current event.
 func (e *SerialEngine) CurrentTime() VTimeInSec {
-	return e.readNow()
+	return e.time
 }
 
 // SetCurrentTime sets the current time of the engine.
 func (e *SerialEngine) SetCurrentTime(t VTimeInSec) {
-	e.writeNow(t)
+	e.time = t
 }

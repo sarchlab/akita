@@ -99,6 +99,42 @@ func (h *eventHeap) Pop() interface{} {
 	return event
 }
 
+// unsafeEventQueue is a lock-free event queue for single-threaded use.
+// It implements the EventQueue interface but without mutex overhead.
+// Used by SerialEngine where the Run loop is inherently single-threaded.
+type unsafeEventQueue struct {
+	events eventHeap
+}
+
+// newUnsafeEventQueue creates an unsafeEventQueue for single-threaded use.
+func newUnsafeEventQueue() *unsafeEventQueue {
+	q := new(unsafeEventQueue)
+	q.events = make([]Event, 0)
+	heap.Init(&q.events)
+
+	return q
+}
+
+// Push adds an event to the event queue without locking.
+func (q *unsafeEventQueue) Push(evt Event) {
+	heap.Push(&q.events, evt)
+}
+
+// Pop returns the next earliest event without locking.
+func (q *unsafeEventQueue) Pop() Event {
+	return heap.Pop(&q.events).(Event)
+}
+
+// Len returns the number of events in the queue without locking.
+func (q *unsafeEventQueue) Len() int {
+	return q.events.Len()
+}
+
+// Peek returns the event in front of the queue without removing it.
+func (q *unsafeEventQueue) Peek() Event {
+	return q.events[0]
+}
+
 // InsertionQueue is a queue that is based on insertion sort
 type InsertionQueue struct {
 	lock sync.RWMutex
