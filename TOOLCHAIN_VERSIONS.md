@@ -4,11 +4,12 @@ This document describes the locked versions of all external tools used in the Ak
 
 ## Go Toolchain
 
-- **Go Version**: 1.24 (latest patch: 1.24.7)
-- **Rationale**: Following the n-1 versioning policy - stick with 1.24 and only upgrade to 1.25 when 1.26 is released
+- **Go language version**: 1.26.0
+- **Go toolchain version**: go1.26.2
+- **Rationale**: Keep the module language version, local toolchain pin, and CI toolchain aligned with the current security-remediated baseline.
 - **Configuration**:
-  - `go.mod`: `go 1.24` and `toolchain go1.24.7`
-  - GitHub Actions: `go-version: "1.24.7"`
+  - `go.mod`: `go 1.26.0` and `toolchain go1.26.2`
+  - GitHub Actions: `go-version: 1.26.2`
 
 ## Go Tools
 
@@ -44,9 +45,9 @@ This document describes the locked versions of all external tools used in the Ak
 To verify all tools are correctly locked:
 
 ```bash
-# Go version
+# Go toolchain version
 go version
-# Should output: go version go1.24.x linux/amd64
+# Should output: go version go1.26.2 <os>/<arch>
 
 # Node.js version (in monitoring/web or daisen/static)
 node --version
