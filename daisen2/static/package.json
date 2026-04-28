@@ -24,11 +24,11 @@
     "katex": "^0.16.38",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router": "^7.6.1"
+    "react-router": "^6.30.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.5.2",
     "typescript": "^5.8.3",
-    "vite": "^7.0.8"
+    "vite": "^6.4.2"
   }
 }

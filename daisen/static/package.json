@@ -17,7 +17,7 @@
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.8.3",
-    "vite": "^7.0.8"
+    "vite": "^6.4.2"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^5.15.4",
