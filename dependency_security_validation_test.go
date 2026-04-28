@@ -60,6 +60,10 @@ case "${1:-}" in
     echo "ok github.com/sarchlab/akita/v5 0.001s"
     ;;
   install)
+    if [[ "${AKITA_FAKE_GO_FAIL_INSTALL:-}" == "1" ]]; then
+      echo "fake govulncheck install failure" >&2
+      exit 43
+    fi
     if [[ -z "${GOBIN:-}" ]]; then
       echo "GOBIN is required" >&2
       exit 2
@@ -70,9 +74,17 @@ case "${1:-}" in
 set -euo pipefail
 case "${1:-}" in
   -version)
+    if [[ "${AKITA_FAKE_GOVULNCHECK_FAIL_VERSION:-}" == "1" ]]; then
+      echo "fake govulncheck version failure" >&2
+      exit 44
+    fi
     echo "govulncheck v1.3.0 fake"
     ;;
   -test)
+    if [[ "${AKITA_FAKE_GOVULNCHECK_FAIL_TEST:-}" == "1" ]]; then
+      echo "fake govulncheck test failure" >&2
+      exit 45
+    fi
     echo "No vulnerabilities found."
     ;;
   *)
@@ -207,6 +219,82 @@ func TestDependencySecurityScriptStopsOnRequiredCommandFailure(t *testing.T) {
 	}
 }
 
+func TestDependencySecurityScriptPropagatesGovulncheckFailures(t *testing.T) {
+	testCases := []struct {
+		name       string
+		env        string
+		check      string
+		message    string
+		exitCode   int
+		absentLogs []string
+	}{
+		{
+			name:       "install",
+			env:        "AKITA_FAKE_GO_FAIL_INSTALL=1",
+			check:      "govulncheck_install",
+			message:    "fake govulncheck install failure",
+			exitCode:   43,
+			absentLogs: []string{"govulncheck_version.log", "govulncheck_test.log"},
+		},
+		{
+			name:       "version",
+			env:        "AKITA_FAKE_GOVULNCHECK_FAIL_VERSION=1",
+			check:      "govulncheck_version",
+			message:    "fake govulncheck version failure",
+			exitCode:   44,
+			absentLogs: []string{"govulncheck_test.log"},
+		},
+		{
+			name:     "test",
+			env:      "AKITA_FAKE_GOVULNCHECK_FAIL_TEST=1",
+			check:    "govulncheck_test",
+			message:  "fake govulncheck test failure",
+			exitCode: 45,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			toolsDir := writeDependencySecurityFakeTools(t)
+			reportDir := filepath.Join(t.TempDir(), "report")
+
+			output, err := runDependencySecurityScript(t, toolsDir, reportDir, tc.env)
+			if err == nil {
+				t.Fatalf("%s should fail when %s fails\n%s",
+					dependencySecurityScriptPath, tc.check, output)
+			}
+			if code := dependencySecurityExitCode(err); code != tc.exitCode {
+				t.Fatalf("%s should exit with %d from %s; got %d (%v)\n%s",
+					dependencySecurityScriptPath, tc.exitCode, tc.check, code, err, output)
+			}
+
+			failureLine := "Dependency security validation failed during " + tc.check
+			if !strings.Contains(output, failureLine) {
+				t.Fatalf("failure output should name %s; got:\n%s", tc.check, output)
+			}
+			if !strings.Contains(output, tc.message) {
+				t.Fatalf("failure output should include fake tool failure %q; got:\n%s",
+					tc.message, output)
+			}
+			if strings.Contains(output, "Dependency security validation completed successfully") {
+				t.Fatalf("failure output must not include the final success message:\n%s", output)
+			}
+
+			failingLog := readTextFile(t, filepath.Join(reportDir, "logs", tc.check+".log"))
+			if !strings.Contains(failingLog, tc.message) {
+				t.Fatalf("%s log should include fake tool failure %q; got:\n%s",
+					tc.check, tc.message, failingLog)
+			}
+			for _, logName := range tc.absentLogs {
+				if _, err := os.Stat(filepath.Join(reportDir, "logs", logName)); !os.IsNotExist(err) {
+					t.Fatalf("script should stop before %s after %s failure; stat err=%v",
+						logName, tc.check, err)
+				}
+			}
+		})
+	}
+}
+
 func TestDependencySecurityScriptCanonicalizesReportDirForGOBIN(t *testing.T) {
 	toolsDir := writeDependencySecurityFakeTools(t)
 	tempDir := t.TempDir()
@@ -266,6 +354,14 @@ func runDependencySecurityScript(t *testing.T, toolsDir, reportDir string, extra
 
 	output, err := cmd.CombinedOutput()
 	return string(output), err
+}
+
+func dependencySecurityExitCode(err error) int {
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode()
+	}
+
+	return -1
 }
 
 func writeDependencySecurityFakeTools(t *testing.T) string {
