@@ -58,6 +58,35 @@ func TestMigrationPlanPackageDiscoveryCommandResolves(t *testing.T) {
 	}
 }
 
+func TestMigrationPlanStatusRefreshDoesNotCarryStaleBaselineClaims(t *testing.T) {
+	plan := string(readMigrationPlan(t))
+
+	requiredClaims := []string{
+		"Historical M2 audit finding (report-only)",
+		"current Akita checkout passes `go test ./...`",
+		"Akita baseline-health gate (currently green)",
+		"Downstream mgpusim validation gate (future)",
+	}
+	for _, claim := range requiredClaims {
+		if !strings.Contains(plan, claim) {
+			t.Errorf("%s should include refreshed status claim %q", migrationPlanPath, claim)
+		}
+	}
+
+	staleClaims := []string{
+		"Report-only test-status conflict",
+		"origin/main does not contain that repair",
+		"making `go test ./...` pass here would require",
+		"current `go test ./...` is blocked",
+		"this M3 branch carries the generated mock repair",
+	}
+	for _, claim := range staleClaims {
+		if strings.Contains(plan, claim) {
+			t.Errorf("%s still contains stale status claim %q", migrationPlanPath, claim)
+		}
+	}
+}
+
 type localCitation struct {
 	planLine int
 	text     string

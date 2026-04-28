@@ -6,12 +6,12 @@ This document defines a **planning-only** migration strategy for porting both `s
 
 > **Out of scope for this milestone:** no production code migration is performed here. This is sequencing and risk planning only.
 
-## Audit status against current Akita V5 repository
+## Current status and historical audit notes
 
-- **Audit baseline:** the report branch `e2-m2-audit-migration-report-against-akita-v5-reality` is based on Akita V5 source baseline `0b80658` (`git merge-base main HEAD`) and carries a documentation-only diff (`git diff --name-only main...HEAD` returns only `mgpusim_v5_migration_plan.md`). The module is `github.com/sarchlab/akita/v5` (`go.mod:1`) with Go toolchain `go1.24.7` (`go.mod:51-53`, `TOOLCHAIN_VERSIONS.md:5-17`).
-- **Release-readiness risk:** no V5 tag was visible from `git ls-remote --tags origin 'v5*'` (command returned no rows), so downstream migration planning should assume a moving branch or explicit pseudo-version until a tag/freeze point exists.
-- **Baseline-health history:** before generated mock repair, `go test ./...` failed on build errors from missing generated mocks in packages including `mem/cache/writeback`, `mem/cache/writethroughcache`, `mem/trace`, `mem/vm/gmmu`, `mem/vm/mmu`, `mem/vm/mmuCache`, `mem/vm/tlb`, and `noc/networking/switching/switches`; representative errors included `undefined: MockPort`, `undefined: MockEngine`, `undefined: MockTimeTeller`, and `undefined: MockTable`. The repository has mock generation hooks (`run_before_merge.sh:9-18`; examples: `mem/cache/writeback/writebackcache_test.go:18`, `mem/vm/mmu/mmu_suite_test.go:10-12`, `noc/networking/switching/switches/switches_suite_test.go:11-12`), and this M3 branch carries the generated mock repair without folding issue #5 `.gitignore` hygiene into the migration plan.
-- **Report-only test-status conflict:** the only verified green Akita baseline found during this audit is closed TBC PR #1 / branch `e1-m1-restore-baseline-go-test-build-health` at `ba50cfd`, where `go test ./...` passes after non-report changes. Its diff against `origin/main` is not documentation-only: `git diff --name-status origin/main..origin/e1-m1-restore-baseline-go-test-build-health` lists `.gitignore`, `README.md`, `mem/vm/gmmu/generate_mocks.go`, modified generated mocks, and new `mock_*_test.go` files. Because `origin/main` does not contain that repair (`git merge-base --is-ancestor origin/e1-m1-restore-baseline-go-test-build-health origin/main` exits 1) and this M2 branch is intentionally documentation-only, making `go test ./...` pass here would require folding non-report baseline repair into this milestone or waiting for an equivalent main-baseline fix.
+- **Current Akita V5 baseline:** the module remains `github.com/sarchlab/akita/v5` (`go.mod:1`) with Go toolchain `go1.24.7` (`go.mod:51-53`, `TOOLCHAIN_VERSIONS.md:5-17`). The current Akita checkout passes `go test ./...`; keep that command green as the local baseline before handing a downstream migration branch to mgpusim validation.
+- **Release/tag readiness:** no V5 tag is currently visible from `git ls-remote --tags origin 'v5*'` (command returns no rows), so downstream migration planning should still assume a moving branch or explicit pseudo-version until a tag/freeze point exists.
+- **Historical M2 audit finding (report-only):** the M2 report branch `e2-m2-audit-migration-report-against-akita-v5-reality` was based on Akita V5 source baseline `0b80658` (`git merge-base main HEAD`) and carried a documentation-only diff (`git diff --name-only main...HEAD` returned only `mgpusim_v5_migration_plan.md`). At that time, before generated mock repair, `go test ./...` failed on missing generated mocks in packages including `mem/cache/writeback`, `mem/cache/writethroughcache`, `mem/trace`, `mem/vm/gmmu`, `mem/vm/mmu`, `mem/vm/mmuCache`, `mem/vm/tlb`, and `noc/networking/switching/switches`; representative errors included `undefined: MockPort`, `undefined: MockEngine`, `undefined: MockTimeTeller`, and `undefined: MockTable`. Treat those failures as historical audit context, not as current branch status.
+- **Generated-mock status:** generated mocks and generation hooks are now present in the checkout (`run_before_merge.sh:9-18`; `mem/vm/gmmu/generate_mocks.go:1-6`; examples: `mem/cache/writeback/mock_sim_test.go:1-20`, `mem/vm/gmmu/mock_port_test.go:1-20`, `noc/networking/switching/switches/mock_sim_test.go:1-20`). Migration work should preserve these generated fixtures or run generation before validation.
 - **Package reality checked:** `go list ./sim ./mem ./noc/directconnection ./queueing ./monitoring ./daisen ./simulation ./tracing ./modeling` resolves all listed packages, so these are valid Akita V5 planning targets.
 
 ---
@@ -75,14 +75,14 @@ The port should be tracked by category, not by file, to reduce regressions:
 
 | Phase | Goal | Rough effort | Risk | Akita V5 audit adjustment |
 |---|---|---:|---|---|
-| **P0. Preconditions** | Confirm V5 readiness gates and migration branch strategy | 0-1 week (parallel prep) | Blocker if unmet | Must include tag/freeze decision and current Akita baseline-health decision (`git ls-remote --tags origin 'v5*'`; `go test ./...`). |
+| **P0. Preconditions** | Confirm V5 readiness gates and migration branch strategy | 0-1 week (parallel prep) | Blocker if unmet | Must include tag/freeze decision, current green Akita baseline evidence (`go test ./...`), and downstream mgpusim validation criteria. |
 | **P1. Mechanical foundation** | `go.mod` + import path conversion + package discovery + compile triage | 2-4 weeks | Medium | Import paths resolve, but builder/component/package shape changes make this more than a low-risk rename (`go list ...`; `sim/component.go:10-23`; `mem/cache/writeback/builder.go:216-220`). |
 | **P2. Type and message core** | Time/ID conversions + response/message metadata migration | 4-6 weeks | Medium | Confirm all string/float task/message assumptions are converted to `uint64`/picosecond semantics (`sim/msg.go:8-17`, `sim/freq.go:5-24`). |
 | **P3. Protocol and dataflow** | Control protocol rewrite + queueing/pipeline conversion + event model fixes | 3-5 weeks | Medium-high | Queueing and control are API and behavior migrations, not only symbol renames (`mem/protocol.go:84-112`, `queueing/pipeline.go:70-94`). |
 | **P4. Integration wiring** | Component interface alignment, cache/system builder updates, monitoring/tracing integration | 3-5 weeks | High | Raised from medium because V5 uses mixed wrapper/generic component builder returns and monitoring/tracing split APIs (`mem/idealmemcontroller/builder.go:105-146`, `monitoring/monitor.go:53-104`). |
-| **P5. Validation and parity** | Test repair, benchmark sanity checks, behavior/perf comparison vs V4 | 2-3 weeks | Medium-high | Must first restore/define Akita baseline signal, then run mgpusim parity; current `go test ./...` is blocked by generated mock failures. |
+| **P5. Validation and parity** | Test repair, benchmark sanity checks, behavior/perf comparison vs V4 | 2-3 weeks | Medium-high | Preserve the current green Akita `go test ./...` baseline, then prove downstream mgpusim compile, smoke, and parity behavior against V4 references. |
 
-**Expected total:** still ~14-24 person-weeks, but treat the low end as reachable only after P0 baseline/tag and generated-mock gates are green.
+**Expected total:** still ~14-24 person-weeks, but treat the low end as reachable only after P0 release/tag readiness is settled and downstream mgpusim validation gates are defined.
 
 ---
 
@@ -113,15 +113,16 @@ Use **Option B (separate repos with temporary `replace` to local Akita V5)** as 
 
 ## 5) Preconditions / Gates Before Implementation Starts
 
-Migration implementation should not begin until these are true:
+Migration implementation should not begin until these are true or explicitly accepted as ongoing gates:
 
-1. **Akita V5 release readiness gate:** migration target API is stable enough for downstream ports (beta/tag or equivalent freeze point). Evidence need: visible tag/freeze commit; current audit found no `v5*` tags via `git ls-remote --tags origin 'v5*'`.
-2. **Akita baseline-health gate:** agree whether downstream migration requires `go test ./...` green on Akita first, or a documented exception. Generated mocks are part of the repo merge script (`run_before_merge.sh:9-18`) and several package `//go:generate mockgen` directives exist (`mem/trace/generate.go:3`, `mem/vm/tlb/tlb_suite_test.go:12`), so downstream migration branches should preserve generated test fixtures or run generation before validation.
+1. **Akita V5 release readiness gate (future):** migration target API is stable enough for downstream ports (beta/tag or equivalent freeze point). Evidence need: visible tag/freeze commit; current status still has no `v5*` tags via `git ls-remote --tags origin 'v5*'`.
+2. **Akita baseline-health gate (currently green):** preserve the current `go test ./...` Akita baseline before and during downstream migration work. Generated mocks are part of the repo merge script (`run_before_merge.sh:9-18`) and package `//go:generate mockgen` directives exist (`mem/trace/generate.go:3`, `mem/vm/gmmu/generate_mocks.go:1-6`, `mem/vm/tlb/tlb_suite_test.go:12`), so downstream migration branches should keep generated test fixtures present or run generation before validation.
 3. **Tracing/monitoring compatibility gate:** required mgpusim tracer/reporting/live-monitor capabilities must be mapped explicitly across `tracing`, `monitoring`, and `daisen`, not assumed to be a direct `monitoring` -> `daisen` rename (`tracing/api.go:26-45`, `monitoring/monitor.go:90-104`, `daisen/trace.go:122-129`).
 4. **Control/cache API gate:** CP/runner cache-control flows must be rewritten around `mem.ControlReq`/`ControlRsp` (`mem/protocol.go:84-112`) and validated against both wrapper-returning and generic-returning memory builders (`mem/idealmemcontroller/builder.go:105-146`, `mem/cache/writethroughcache/builder.go:202-220`).
-5. **Tooling/CI gate:** migration branch strategy, test matrix, and baseline validation criteria are defined in advance. Required commands should include at least `go list` package discovery, `go test ./...` or documented equivalent after mock generation, and downstream mgpusim smoke/acceptance tests.
-6. **Checkpoint gate if applicable:** if mgpusim uses checkpoint/save-load, define quiescence, topology rebuild, storage ownership, and SerialEngine constraints before porting (`simulation/saveload.go:54-60`, `simulation/saveload.go:169-210`, `simulation/saveload.go:292-307`).
-7. **Scope gate:** agreement that migration starts in `mgpusim-dev` first, then lands in public `mgpusim` after stabilization.
+5. **Tooling/CI gate:** migration branch strategy, test matrix, and baseline validation criteria are defined in advance. Required commands should include at least `go list` package discovery, current Akita `go test ./...`, generated-mock preservation/regeneration checks, and downstream mgpusim smoke/acceptance tests.
+6. **Downstream mgpusim validation gate (future):** mgpusim compile, smoke, representative benchmark, and timing-memory acceptance criteria are selected before import/API conversion begins, then executed after each migration phase.
+7. **Checkpoint gate if applicable:** if mgpusim uses checkpoint/save-load, define quiescence, topology rebuild, storage ownership, and SerialEngine constraints before porting (`simulation/saveload.go:54-60`, `simulation/saveload.go:169-210`, `simulation/saveload.go:292-307`).
+8. **Scope gate:** agreement that migration starts in `mgpusim-dev` first, then lands in public `mgpusim` after stabilization.
 
 ---
 
@@ -130,7 +131,7 @@ Migration implementation should not begin until these are true:
 The follow-on implementation milestone should record command evidence separately for Akita and mgpusim:
 
 1. **Akita package/API discovery:** `go list ./sim ./mem ./noc/directconnection ./queueing ./monitoring ./daisen ./simulation ./tracing ./modeling` (passes in this audit).
-2. **Akita baseline:** `go test ./...` after generated mocks are present or after an explicit baseline exception is approved.
+2. **Akita baseline:** `go test ./...` is expected to pass in the current checkout and should stay green before downstream handoff.
 3. **Akita merge-equivalent check:** `./run_before_merge.sh` or a scoped equivalent if full merge checks are too expensive; this script runs `go generate ./...`, `go build ./...`, `golangci-lint run ./...`, and `ginkgo -r` (`run_before_merge.sh:5-18`).
 4. **mgpusim compile gate:** all downstream packages compile after import/API conversion.
 5. **mgpusim behavior gate:** representative GPU kernels/benchmarks and timing-memory acceptance tests pass against V4 reference outputs within agreed tolerances.
