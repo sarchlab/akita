@@ -14,6 +14,7 @@ import (
 
 const (
 	dependencySecurityDocPath    = "DEPENDENCY_SECURITY_VALIDATION.md"
+	dependencySecurityGoModPath  = "go.mod"
 	dependencySecurityScriptPath = "run_dependency_security_validation.sh"
 )
 
@@ -154,6 +155,49 @@ func TestDependencySecurityValidationDocNamesRequiredChecks(t *testing.T) {
 	for _, text := range required {
 		if !strings.Contains(doc, text) {
 			t.Errorf("%s should document %q", dependencySecurityDocPath, text)
+		}
+	}
+}
+
+func TestDependencySecurityDocumentsRetainedModuleExcludes(t *testing.T) {
+	goMod := readTextFile(t, dependencySecurityGoModPath)
+	doc := readTextFile(t, dependencySecurityDocPath)
+
+	testCases := []struct {
+		module      string
+		version     string
+		goModReason string
+		docEvidence string
+	}{
+		{
+			module:      "golang.org/x/crypto",
+			version:     "v0.44.0",
+			goModReason: "golang.org/x/net@v0.47.0",
+			docEvidence: "go list -mod=readonly -m all",
+		},
+		{
+			module:      "gopkg.in/yaml.v2",
+			version:     "v2.2.2",
+			goModReason: "go mod tidy -diff",
+			docEvidence: "gopkg.in/yaml.v2 v2.2.2/go.mod",
+		},
+	}
+
+	for _, tc := range testCases {
+		directive := fmt.Sprintf("exclude %s %s", tc.module, tc.version)
+		for name, text := range map[string]string{
+			dependencySecurityGoModPath: goMod,
+			dependencySecurityDocPath:   doc,
+		} {
+			if !strings.Contains(text, directive) {
+				t.Errorf("%s should retain and document %q", name, directive)
+			}
+		}
+		if !strings.Contains(goMod, tc.goModReason) {
+			t.Errorf("%s should explain why %q is retained", dependencySecurityGoModPath, directive)
+		}
+		if !strings.Contains(doc, tc.docEvidence) {
+			t.Errorf("%s should include regression evidence for %q", dependencySecurityDocPath, directive)
 		}
 	}
 }

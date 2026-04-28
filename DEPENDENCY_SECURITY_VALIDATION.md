@@ -55,6 +55,15 @@ What each check contributes:
 - `govulncheck -test ./...` evaluates reachable vulnerable symbols in packages and tests using the pinned local govulncheck binary.
 - `cd daisen/static && npm audit --audit-level=high --omit=optional` and `cd daisen2/static && npm audit --audit-level=high --omit=optional` make checked-in frontend package audit findings visible and fail validation for high-or-worse non-optional npm advisories. The audits also report lower-severity findings in their output, but the validation threshold is intentionally high to match the maintained gate.
 
+## Retained Go module excludes
+
+`go.mod:55-63` intentionally retains two dependency-security guards even though `go mod why -m golang.org/x/crypto gopkg.in/yaml.v2` currently reports that the main module does not need either module. They are retained because removing them changes reproducible module-security evidence:
+
+- `exclude golang.org/x/crypto v0.44.0` prevents `golang.org/x/crypto v0.44.0` from reappearing in `go list -mod=readonly -m all`. A local removal of only this exclude selected `golang.org/x/crypto v0.44.0`; `go mod graph` then showed `golang.org/x/net@v0.47.0 -> golang.org/x/crypto@v0.44.0`.
+- `exclude gopkg.in/yaml.v2 v2.2.2` prevents stale `gopkg.in/yaml.v2 v2.2.2` module metadata from returning. A local removal of only this exclude made `go mod tidy -diff` fail with a diff adding `gopkg.in/yaml.v2 v2.2.2/go.mod` to `go.sum`; `go mod graph` then showed `github.com/stretchr/testify@v1.5.1 -> gopkg.in/yaml.v2@v2.2.2` through the older `github.com/tebeka/atexit@v0.3.0` test dependency path.
+
+Only remove either exclude in a future dependency refresh after repeating the one-exclude-at-a-time checks above and confirming that `go list -mod=readonly -m all`, `go mod graph`, and `go mod tidy -diff` no longer reintroduce the excluded module/version or checksum.
+
 If the script is unavailable, install and run the same govulncheck version locally before executing the manual sequence above, then run both frontend audits explicitly:
 
 ```bash
