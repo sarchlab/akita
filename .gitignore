@@ -4,38 +4,41 @@
 # Editor files
 .*.swp
 *.*~
-
-# Coverage report
-*.coverprofile
-
-# Vendor
-vendor
-
-# Test file
-*.test
-debug
-*.out
-*.debug
-
-# Prof file
-*.prof
-
 .DS_Store
-
 .vscode/*.log
 
+# Coverage reports
+*.coverprofile
+
+# Vendor dependencies
+vendor
+
+# Go test/debug artifacts
+*.test
+*.out
+*.debug
+*.prof
 __debug_bin*
+
+# Root-level executable outputs. Re-include directories with the same names so
+# source trees such as akita/cmd and future */debug packages remain visible.
+/debug
+!/debug/
+!/debug/**
+/cmd
+!/cmd/
+!/cmd/**
+/virtualmem
+!/virtualmem/
+!/virtualmem/**
+/writebackcache
+!/writebackcache/
+!/writebackcache/**
+/akitav5-lint
 
 # Mock files
 mock_*_test.go
 
+# Local databases and shell history
 *.sqlite3
 .history
-akitav5-lint
-writebackcache
-
-# Virtual memory
-virtualmem
-
-# Command builds
-cmd
