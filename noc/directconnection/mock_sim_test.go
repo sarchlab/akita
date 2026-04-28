@@ -666,20 +666,6 @@ func (mr *MockComponentMockRecorder) GetPortByName(name any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPortByName", reflect.TypeOf((*MockComponent)(nil).GetPortByName), name)
 }
 
-// Handle mocks base method.
-func (m *MockComponent) Handle(e sim.Event) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Handle", e)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Handle indicates an expected call of Handle.
-func (mr *MockComponentMockRecorder) Handle(e any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockComponent)(nil).Handle), e)
-}
-
 // Hooks mocks base method.
 func (m *MockComponent) Hooks() []hooking.Hook {
 	m.ctrl.T.Helper()
