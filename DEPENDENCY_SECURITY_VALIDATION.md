@@ -55,6 +55,16 @@ What each check contributes:
 - `govulncheck -test ./...` evaluates reachable vulnerable symbols in packages and tests using the pinned local govulncheck binary.
 - `cd daisen/static && npm audit --audit-level=high --omit=optional` and `cd daisen2/static && npm audit --audit-level=high --omit=optional` make checked-in frontend package audit findings visible and fail validation for high-or-worse non-optional npm advisories. The audits also report lower-severity findings in their output, but the validation threshold is intentionally high to match the maintained gate.
 
+## Frontend Node engine reconciliation evidence
+
+The documented frontend Node baseline is intentionally kept at Node 18.20.7. The baseline appears in `TOOLCHAIN_VERSIONS.md:30-40`, `daisen/static/.nvmrc:1`, both frontend workflow jobs (`.github/workflows/akita_test.yml:14-18` and `.github/workflows/akita_test.yml:30-34`), both frontend package roots (`daisen/static/package.json:7-10` and `daisen2/static/package.json:7`), and both package-lock root entries (`daisen/static/package-lock.json:25-28` and `daisen2/static/package-lock.json:31-34`).
+
+The selected Daisen frontend direct dependencies that declare Node engines are compatible with Node 18.20.7: `@fortawesome/fontawesome-free@5.15.4` requires `>=6` (`daisen/static/package-lock.json:472-479`), `d3@7.9.0` requires `>=12` (`daisen/static/package-lock.json:1174-1212`), `html2canvas@1.4.1` requires `>=8.0.0` (`daisen/static/package-lock.json:1659-1669`), `typescript@5.9.3` requires `>=14.17` (`daisen/static/package-lock.json:1885-1896`), and `vite@6.4.2` requires `^18.0.0 || ^20.0.0 || >=22.0.0` (`daisen/static/package-lock.json:1908-1926`).
+
+The selected Daisen2 frontend direct dependencies that declare Node engines are also compatible with Node 18.20.7: `@fortawesome/fontawesome-free@5.15.4` requires `>=6` (`daisen2/static/package-lock.json:760-767`), `@vitejs/plugin-react@4.7.0` requires `^14.18.0 || >=16.0.0` (`daisen2/static/package-lock.json:1545-1560`), `d3@7.9.0` requires `>=12` (`daisen2/static/package-lock.json:1699-1737`), `html2canvas@1.4.1` requires `>=8.0.0` (`daisen2/static/package-lock.json:2229-2239`), `react@19.2.4` requires `>=0.10.0` (`daisen2/static/package-lock.json:2413-2419`), `react-router@6.30.3` requires `>=14.0.0` (`daisen2/static/package-lock.json:2444-2453`), `typescript@5.9.3` requires `>=14.17` (`daisen2/static/package-lock.json:2574-2585`), and `vite@6.4.2` requires `^18.0.0 || ^20.0.0 || >=22.0.0` (`daisen2/static/package-lock.json:2628-2646`). Direct dependencies with no `engines.node` field impose no stricter package-lock Node requirement.
+
+`frontend_node_baseline_test.go` keeps this reconciliation executable by checking the checked-in Node baseline locations and every selected direct frontend dependency engine expression against Node 18.20.7.
+
 ## Retained Go module excludes
 
 `go.mod:55-63` intentionally retains two dependency-security guards even though `go mod why -m golang.org/x/crypto gopkg.in/yaml.v2` currently reports that the main module does not need either module. They are retained because removing them changes reproducible module-security evidence:
