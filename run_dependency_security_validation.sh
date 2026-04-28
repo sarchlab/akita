@@ -32,18 +32,43 @@ mkdir -p -- "${log_dir}" "${bin_dir}"
 
 cd "${root_dir}"
 
-run_logged() {
-  local name="$1"
+write_command_log() {
+  local log_file="$1"
   shift
-  local log_file="${log_dir}/${name}.log"
 
   {
     printf '+'
     printf ' %q' "$@"
     printf '\n'
   } | tee "${log_file}.cmd"
+}
+
+run_logged() {
+  local name="$1"
+  shift
+  local log_file="${log_dir}/${name}.log"
+
+  write_command_log "${log_file}" "$@"
 
   if "$@" >"${log_file}" 2>&1; then
+    cat "${log_file}"
+    return 0
+  else
+    local status=$?
+    cat "${log_file}"
+    return "${status}"
+  fi
+}
+
+run_logged_in() {
+  local name="$1"
+  local work_dir="$2"
+  shift 2
+  local log_file="${log_dir}/${name}.log"
+
+  write_command_log "${log_file}" cd "${work_dir}" "&&" "$@"
+
+  if (cd "${work_dir}" && "$@") >"${log_file}" 2>&1; then
     cat "${log_file}"
     return 0
   else
@@ -68,6 +93,22 @@ run_required() {
   fi
 }
 
+run_required_in() {
+  local name="$1"
+  local work_dir="$2"
+  shift 2
+  local status
+
+  if run_logged_in "${name}" "${work_dir}" "$@"; then
+    return 0
+  else
+    status=$?
+    printf 'Dependency security validation failed during %s. Logs: %s\n' \
+      "${name}" "${log_dir}" >&2
+    return "${status}"
+  fi
+}
+
 printf 'Dependency security validation report: %s\n' "${report_dir}"
 
 run_required go_version go version
@@ -82,5 +123,10 @@ run_required govulncheck_install \
   env GOBIN="${bin_dir}" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 run_required govulncheck_version "${bin_dir}/govulncheck" -version
 run_required govulncheck_test "${bin_dir}/govulncheck" -test ./...
+
+run_required_in daisen_static_npm_audit daisen/static \
+  npm audit --audit-level=high --omit=optional
+run_required_in daisen2_static_npm_audit daisen2/static \
+  npm audit --audit-level=high --omit=optional
 
 printf 'Dependency security validation completed successfully. Logs: %s\n' "${log_dir}"

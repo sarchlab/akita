@@ -6,7 +6,8 @@ This is the maintainer path for rerunning Akita dependency and Go toolchain secu
 
 - Run from a clean checkout of the branch being triaged.
 - Use the checked-in Go baseline: `go.mod:51-53` pins `go 1.26.0` with `toolchain go1.26.2`, and `TOOLCHAIN_VERSIONS.md:5-12` records the same security-remediated toolchain baseline.
-- Allow network access for module metadata, module downloads if the cache is cold, and the Go vulnerability database used by govulncheck.
+- Allow network access for module metadata, module downloads if the cache is cold, the Go vulnerability database used by govulncheck, and the npm advisory registry used by frontend audits.
+- Frontend dependency-security validation is in scope for the checked-in `daisen/static` and `daisen2/static` packages.
 - Do not treat this path as an MGPUSim migration implementation; it only validates the current Akita repository's dependency and toolchain evidence.
 
 ## One-command validation
@@ -27,7 +28,7 @@ When `DEPENDENCY_SECURITY_REPORT_DIR` is set, the script creates it if needed an
 
 The script installs a pinned local `govulncheck` binary in the canonical report directory (`golang.org/x/vuln/cmd/govulncheck@v1.3.0`) before running the scan. It does not modify the repository or rely on an unpinned tool already on `PATH`.
 
-Each required command is wrapped by the failure-safe logger in `run_dependency_security_validation.sh:35-68`. On the first command failure, the script prints that command's captured output, reports the failing check name, exits non-zero, and does not print the final `Dependency security validation completed successfully` message.
+Each required command is wrapped by the failure-safe logger in `run_dependency_security_validation.sh:35-110`. On the first command failure, including a frontend npm audit failure, the script prints that command's captured output, reports the failing check name, exits non-zero, and does not print the final `Dependency security validation completed successfully` message.
 
 ## Checks performed
 
@@ -40,6 +41,8 @@ go mod tidy -diff
 go test ./...
 git diff --check
 govulncheck -test ./...
+(cd daisen/static && npm audit --audit-level=high --omit=optional)
+(cd daisen2/static && npm audit --audit-level=high --omit=optional)
 ```
 
 What each check contributes:
@@ -50,12 +53,15 @@ What each check contributes:
 - `go test ./...` preserves the baseline repository test signal while dependency changes are triaged.
 - `git diff --check` catches whitespace/conflict-marker issues before evidence is reported.
 - `govulncheck -test ./...` evaluates reachable vulnerable symbols in packages and tests using the pinned local govulncheck binary.
+- `cd daisen/static && npm audit --audit-level=high --omit=optional` and `cd daisen2/static && npm audit --audit-level=high --omit=optional` make checked-in frontend package audit findings visible and fail validation for high-or-worse non-optional npm advisories. The audits also report lower-severity findings in their output, but the validation threshold is intentionally high to match the maintained gate.
 
-If the script is unavailable, install and run the same govulncheck version locally before executing the manual sequence above:
+If the script is unavailable, install and run the same govulncheck version locally before executing the manual sequence above, then run both frontend audits explicitly:
 
 ```bash
 GOBIN="$(mktemp -d)/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
 "${GOBIN}/govulncheck" -test ./...
+(cd daisen/static && npm audit --audit-level=high --omit=optional)
+(cd daisen2/static && npm audit --audit-level=high --omit=optional)
 ```
 
 ## Interpreting local evidence versus GitHub/Dependabot notices
@@ -64,11 +70,12 @@ GitHub and Dependabot notices are asynchronous, default-branch-oriented signals.
 
 Use the local report to make the comparison explicit:
 
-1. Record the branch, commit SHA, `go version`, pinned govulncheck version, `go list -mod=readonly -m all`, and `go mod graph` logs.
-2. Compare the alerted module or Go toolchain version with the selected versions in the local module list and with the checked-in toolchain baseline.
+1. Record the branch, commit SHA, `go version`, pinned govulncheck version, `go list -mod=readonly -m all`, `go mod graph`, and frontend `npm audit --audit-level=high --omit=optional` logs.
+2. Compare the alerted module, Go toolchain, or npm package version with the selected versions in the local module list, checked-in frontend lockfiles, and checked-in toolchain baseline.
 3. If `govulncheck -test ./...` reports a reachable vulnerability, update the affected dependency or toolchain and rerun the full script.
-4. If local govulncheck is clean but GitHub/Dependabot still reports a default-branch alert, report the clean local evidence, note the possible asynchronous/default-branch lag, and recheck after the default branch has the same dependency state.
-5. If the alert only identifies a vulnerable module version but govulncheck reports no reachable symbols, keep the module graph evidence with the triage note so maintainers can decide whether policy still requires an update.
+4. If either frontend npm audit reports a high-or-worse non-optional vulnerability, update `package-lock.json`/`package.json` where safe and rerun both exact frontend audit commands. If a finding cannot be safely remediated, document the exact residual risk and scope in version-controlled files and keep the validation gate visibly failing or explicitly gated rather than silently bypassing it.
+5. If local govulncheck and frontend audits are clean but GitHub/Dependabot still reports a default-branch alert, report the clean local evidence, note the possible asynchronous/default-branch lag, and recheck after the default branch has the same dependency state.
+6. If the alert only identifies a vulnerable Go module version but govulncheck reports no reachable symbols, keep the module graph evidence with the triage note so maintainers can decide whether policy still requires an update.
 
 ## Why this is local/manual instead of CI
 

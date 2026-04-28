@@ -115,6 +115,22 @@ echo "unexpected git command: $*" >&2
 exit 2
 `
 
+const fakeDependencySecurityNpmScript = `#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "audit" && "${2:-}" == "--audit-level=high" && "${3:-}" == "--omit=optional" && "$#" -eq 3 ]]; then
+  if [[ "${AKITA_FAKE_NPM_FAIL_AUDIT:-}" == "1" ]]; then
+    echo "fake npm audit failure in ${PWD}" >&2
+    exit 46
+  fi
+  echo "found 0 vulnerabilities in ${PWD}"
+  exit 0
+fi
+
+echo "unexpected npm command: $*" >&2
+exit 2
+`
+
 func TestDependencySecurityValidationDocNamesRequiredChecks(t *testing.T) {
 	doc := readTextFile(t, dependencySecurityDocPath)
 
@@ -126,6 +142,9 @@ func TestDependencySecurityValidationDocNamesRequiredChecks(t *testing.T) {
 		"go test ./...",
 		"git diff --check",
 		"govulncheck -test ./...",
+		"npm audit --audit-level=high --omit=optional",
+		"daisen/static",
+		"daisen2/static",
 		"GitHub/Dependabot",
 		"asynchronous",
 		"default-branch",
@@ -152,6 +171,9 @@ func TestDependencySecurityScriptRunsRequiredChecks(t *testing.T) {
 		"git diff --check",
 		"golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}",
 		"govulncheck\" -test ./...",
+		"run_required_in daisen_static_npm_audit daisen/static",
+		"npm audit --audit-level=high --omit=optional",
+		"run_required_in daisen2_static_npm_audit daisen2/static",
 	}
 	for _, text := range required {
 		if !strings.Contains(script, text) {
@@ -295,6 +317,34 @@ func TestDependencySecurityScriptPropagatesGovulncheckFailures(t *testing.T) {
 	}
 }
 
+func TestDependencySecurityScriptPropagatesFrontendAuditFailures(t *testing.T) {
+	toolsDir := writeDependencySecurityFakeTools(t)
+	reportDir := filepath.Join(t.TempDir(), "report")
+
+	output, err := runDependencySecurityScript(t, toolsDir, reportDir,
+		"AKITA_FAKE_NPM_FAIL_AUDIT=1")
+	if err == nil {
+		t.Fatalf("%s should fail when frontend npm audit fails\n%s",
+			dependencySecurityScriptPath, output)
+	}
+	if code := dependencySecurityExitCode(err); code != 46 {
+		t.Fatalf("%s should exit with fake npm audit status 46; got %d (%v)\n%s",
+			dependencySecurityScriptPath, code, err, output)
+	}
+	if !strings.Contains(output, "Dependency security validation failed during daisen_static_npm_audit") {
+		t.Fatalf("failure output should name daisen_static_npm_audit; got:\n%s", output)
+	}
+	if !strings.Contains(output, "fake npm audit failure") {
+		t.Fatalf("failure output should include npm audit failure detail; got:\n%s", output)
+	}
+	if strings.Contains(output, "Dependency security validation completed successfully") {
+		t.Fatalf("failure output must not include the final success message:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(reportDir, "logs", "daisen2_static_npm_audit.log")); !os.IsNotExist(err) {
+		t.Fatalf("script should stop before daisen2 audit after daisen audit failure; stat err=%v", err)
+	}
+}
+
 func TestDependencySecurityScriptCanonicalizesReportDirForGOBIN(t *testing.T) {
 	toolsDir := writeDependencySecurityFakeTools(t)
 	tempDir := t.TempDir()
@@ -370,6 +420,7 @@ func writeDependencySecurityFakeTools(t *testing.T) string {
 	toolsDir := t.TempDir()
 	writeDependencySecurityFakeTool(t, toolsDir, "go", fakeDependencySecurityGoScript)
 	writeDependencySecurityFakeTool(t, toolsDir, "git", fakeDependencySecurityGitScript)
+	writeDependencySecurityFakeTool(t, toolsDir, "npm", fakeDependencySecurityNpmScript)
 	return toolsDir
 }
 
