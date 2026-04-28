@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,6 +18,90 @@ const (
 )
 
 var dependencySecurityCitationPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./-])((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([1-9][0-9]*)(?:-([1-9][0-9]*))?`)
+
+const fakeDependencySecurityGoScript = `#!/usr/bin/env bash
+set -euo pipefail
+
+case "${1:-}" in
+  version)
+    echo "go version go1.26.2 fake"
+    ;;
+  env)
+    echo "GOVERSION=go1.26.2"
+    echo "GOTOOLCHAIN=go1.26.2"
+    echo "GOMOD=/fake/go.mod"
+    ;;
+  list)
+    echo "github.com/sarchlab/akita/v5"
+    echo "golang.org/x/vuln v1.3.0"
+    ;;
+  mod)
+    case "${2:-}" in
+      graph)
+        echo "github.com/sarchlab/akita/v5 golang.org/x/vuln@v1.3.0"
+        ;;
+      tidy)
+        if [[ "${3:-}" != "-diff" ]]; then
+          echo "unexpected go mod tidy arguments: $*" >&2
+          exit 2
+        fi
+        ;;
+      *)
+        echo "unexpected go mod command: $*" >&2
+        exit 2
+        ;;
+    esac
+    ;;
+  test)
+    if [[ "${AKITA_FAKE_GO_FAIL_TEST:-}" == "1" ]]; then
+      echo "fake go test failure" >&2
+      exit 42
+    fi
+    echo "ok github.com/sarchlab/akita/v5 0.001s"
+    ;;
+  install)
+    if [[ -z "${GOBIN:-}" ]]; then
+      echo "GOBIN is required" >&2
+      exit 2
+    fi
+    mkdir -p "${GOBIN}"
+    cat >"${GOBIN}/govulncheck" <<'GOVULNCHECK'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  -version)
+    echo "govulncheck v1.3.0 fake"
+    ;;
+  -test)
+    echo "No vulnerabilities found."
+    ;;
+  *)
+    echo "unexpected govulncheck arguments: $*" >&2
+    exit 2
+    ;;
+esac
+GOVULNCHECK
+    chmod +x "${GOBIN}/govulncheck"
+    echo "GOBIN=${GOBIN}"
+    ;;
+  *)
+    echo "unexpected go command: $*" >&2
+    exit 2
+    ;;
+esac
+`
+
+const fakeDependencySecurityGitScript = `#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "diff" && "${2:-}" == "--check" ]]; then
+  echo "git diff clean"
+  exit 0
+fi
+
+echo "unexpected git command: $*" >&2
+exit 2
+`
 
 func TestDependencySecurityValidationDocNamesRequiredChecks(t *testing.T) {
 	doc := readTextFile(t, dependencySecurityDocPath)
@@ -101,12 +186,104 @@ func TestDependencySecurityScriptSyntax(t *testing.T) {
 	}
 }
 
+func TestDependencySecurityScriptStopsOnRequiredCommandFailure(t *testing.T) {
+	toolsDir := writeDependencySecurityFakeTools(t)
+	reportDir := filepath.Join(t.TempDir(), "report")
+
+	output, err := runDependencySecurityScript(t, toolsDir, reportDir,
+		"AKITA_FAKE_GO_FAIL_TEST=1")
+	if err == nil {
+		t.Fatalf("%s should fail when a required command fails\n%s",
+			dependencySecurityScriptPath, output)
+	}
+	if !strings.Contains(output, "Dependency security validation failed during go_test") {
+		t.Fatalf("failure output should name the failing check; got:\n%s", output)
+	}
+	if strings.Contains(output, "Dependency security validation completed successfully") {
+		t.Fatalf("failure output must not include the final success message:\n%s", output)
+	}
+	if _, err := os.Stat(filepath.Join(reportDir, "logs", "govulncheck_test.log")); !os.IsNotExist(err) {
+		t.Fatalf("script should stop before govulncheck_test after go_test failure; stat err=%v", err)
+	}
+}
+
+func TestDependencySecurityScriptCanonicalizesReportDirForGOBIN(t *testing.T) {
+	toolsDir := writeDependencySecurityFakeTools(t)
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "target")
+	if err := os.Mkdir(targetDir, 0o755); err != nil {
+		t.Fatalf("mkdir target report dir: %v", err)
+	}
+
+	linkDir := filepath.Join(tempDir, "report-link")
+	if err := os.Symlink(targetDir, linkDir); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	output, err := runDependencySecurityScript(t, toolsDir, linkDir)
+	if err != nil {
+		t.Fatalf("%s should succeed with fake tools: %v\n%s",
+			dependencySecurityScriptPath, err, output)
+	}
+
+	canonicalReportDir, err := filepath.EvalSymlinks(linkDir)
+	if err != nil {
+		t.Fatalf("resolve report symlink: %v", err)
+	}
+	if !strings.Contains(output, "Dependency security validation report: "+canonicalReportDir) {
+		t.Fatalf("output should use canonical report directory %q; got:\n%s",
+			canonicalReportDir, output)
+	}
+
+	installLog := readTextFile(t, filepath.Join(canonicalReportDir, "logs", "govulncheck_install.log"))
+	canonicalGOBIN := filepath.Join(canonicalReportDir, "bin")
+	if !strings.Contains(installLog, "GOBIN="+canonicalGOBIN) {
+		t.Fatalf("govulncheck install should receive canonical GOBIN %q; log:\n%s",
+			canonicalGOBIN, installLog)
+	}
+	if _, err := os.Stat(filepath.Join(canonicalGOBIN, "govulncheck")); err != nil {
+		t.Fatalf("govulncheck should be installed under canonical GOBIN: %v", err)
+	}
+}
+
 type dependencySecurityCitation struct {
 	docLine int
 	text    string
 	path    string
 	start   int
 	end     int
+}
+
+func runDependencySecurityScript(t *testing.T, toolsDir, reportDir string, extraEnv ...string) (string, error) {
+	t.Helper()
+
+	cmd := exec.Command("bash", dependencySecurityScriptPath)
+	cmd.Env = append(os.Environ(),
+		"PATH="+toolsDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"DEPENDENCY_SECURITY_REPORT_DIR="+reportDir,
+	)
+	cmd.Env = append(cmd.Env, extraEnv...)
+
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func writeDependencySecurityFakeTools(t *testing.T) string {
+	t.Helper()
+
+	toolsDir := t.TempDir()
+	writeDependencySecurityFakeTool(t, toolsDir, "go", fakeDependencySecurityGoScript)
+	writeDependencySecurityFakeTool(t, toolsDir, "git", fakeDependencySecurityGitScript)
+	return toolsDir
+}
+
+func writeDependencySecurityFakeTool(t *testing.T, dir, name, content string) {
+	t.Helper()
+
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatalf("write fake %s: %v", name, err)
+	}
 }
 
 func readTextFile(t *testing.T, path string) string {

@@ -23,7 +23,11 @@ By default the script writes logs under a temporary `akita-dependency-security.*
 DEPENDENCY_SECURITY_REPORT_DIR=/tmp/akita-security-report ./run_dependency_security_validation.sh
 ```
 
-The script installs a pinned local `govulncheck` binary in the report directory (`golang.org/x/vuln/cmd/govulncheck@v1.3.0`) before running the scan. It does not modify the repository or rely on an unpinned tool already on `PATH`.
+When `DEPENDENCY_SECURITY_REPORT_DIR` is set, the script creates it if needed and resolves it to a physical, canonical path before deriving `logs/` and the local `GOBIN` directory (`run_dependency_security_validation.sh:10-31`). If the report directory cannot be created or resolved, the script rejects it and exits non-zero before running validation commands.
+
+The script installs a pinned local `govulncheck` binary in the canonical report directory (`golang.org/x/vuln/cmd/govulncheck@v1.3.0`) before running the scan. It does not modify the repository or rely on an unpinned tool already on `PATH`.
+
+Each required command is wrapped by the failure-safe logger in `run_dependency_security_validation.sh:35-68`. On the first command failure, the script prints that command's captured output, reports the failing check name, exits non-zero, and does not print the final `Dependency security validation completed successfully` message.
 
 ## Checks performed
 
