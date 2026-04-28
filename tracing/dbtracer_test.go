@@ -28,18 +28,21 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 		timeTeller   *testTimeTeller
 		dataRecorder datarecording.DataRecorder
 		tracer       *DBTracer
+		dbPath       string
 	)
 
 	BeforeEach(func() {
 		timeTeller = &testTimeTeller{}
-		dataRecorder = datarecording.NewDataRecorder("/tmp/test_trace_milestone")
+		dbPath = "test_trace_milestone"
+		os.Remove(dbPath + ".sqlite3")
+		dataRecorder = datarecording.NewDataRecorder(dbPath)
 		tracer = NewDBTracer(timeTeller, dataRecorder)
 	})
 
 	AfterEach(func() {
 		if dataRecorder != nil {
 			dataRecorder.Close()
-			os.Remove("/tmp/test_trace_milestone.sqlite3")
+			os.Remove(dbPath + ".sqlite3")
 		}
 	})
 
