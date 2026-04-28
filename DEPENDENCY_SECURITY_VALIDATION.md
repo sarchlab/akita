@@ -1,0 +1,71 @@
+# Dependency Security Validation
+
+This is the maintainer path for rerunning Akita dependency and Go toolchain security validation after a future GitHub/Dependabot alert, Go advisory, or dependency bump. It is intentionally local/manual evidence collection rather than a new required CI job.
+
+## Scope and prerequisites
+
+- Run from a clean checkout of the branch being triaged.
+- Use the checked-in Go baseline: `go.mod:51-53` pins `go 1.26.0` with `toolchain go1.26.2`, and `TOOLCHAIN_VERSIONS.md:5-12` records the same security-remediated toolchain baseline.
+- Allow network access for module metadata, module downloads if the cache is cold, and the Go vulnerability database used by govulncheck.
+- Do not treat this path as an MGPUSim migration implementation; it only validates the current Akita repository's dependency and toolchain evidence.
+
+## One-command validation
+
+Run the version-controlled script:
+
+```bash
+./run_dependency_security_validation.sh
+```
+
+By default the script writes logs under a temporary `akita-dependency-security.*` directory and prints the exact path. To keep logs in a chosen location, set `DEPENDENCY_SECURITY_REPORT_DIR`:
+
+```bash
+DEPENDENCY_SECURITY_REPORT_DIR=/tmp/akita-security-report ./run_dependency_security_validation.sh
+```
+
+The script installs a pinned local `govulncheck` binary in the report directory (`golang.org/x/vuln/cmd/govulncheck@v1.3.0`) before running the scan. It does not modify the repository or rely on an unpinned tool already on `PATH`.
+
+## Checks performed
+
+The script records the Go version and then runs these repository checks:
+
+```bash
+go list -mod=readonly -m all
+go mod graph
+go mod tidy -diff
+go test ./...
+git diff --check
+govulncheck -test ./...
+```
+
+What each check contributes:
+
+- `go list -mod=readonly -m all` records the selected module versions without allowing implicit edits to `go.mod` or `go.sum`.
+- `go mod graph` records the full module graph used to interpret transitive dependency alerts.
+- `go mod tidy -diff` confirms that module metadata is reproducible and already tidy.
+- `go test ./...` preserves the baseline repository test signal while dependency changes are triaged.
+- `git diff --check` catches whitespace/conflict-marker issues before evidence is reported.
+- `govulncheck -test ./...` evaluates reachable vulnerable symbols in packages and tests using the pinned local govulncheck binary.
+
+If the script is unavailable, install and run the same govulncheck version locally before executing the manual sequence above:
+
+```bash
+GOBIN="$(mktemp -d)/bin" go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+"${GOBIN}/govulncheck" -test ./...
+```
+
+## Interpreting local evidence versus GitHub/Dependabot notices
+
+GitHub and Dependabot notices are asynchronous, default-branch-oriented signals. They may lag behind a branch update, refer to an advisory payload that is not visible locally, or continue to show a default-branch dependency state after a security branch has already updated `go.mod` or the Go toolchain. When an exact alert payload is unavailable, do not claim the notice is false solely because local output is clean.
+
+Use the local report to make the comparison explicit:
+
+1. Record the branch, commit SHA, `go version`, pinned govulncheck version, `go list -mod=readonly -m all`, and `go mod graph` logs.
+2. Compare the alerted module or Go toolchain version with the selected versions in the local module list and with the checked-in toolchain baseline.
+3. If `govulncheck -test ./...` reports a reachable vulnerability, update the affected dependency or toolchain and rerun the full script.
+4. If local govulncheck is clean but GitHub/Dependabot still reports a default-branch alert, report the clean local evidence, note the possible asynchronous/default-branch lag, and recheck after the default branch has the same dependency state.
+5. If the alert only identifies a vulnerable module version but govulncheck reports no reachable symbols, keep the module graph evidence with the triage note so maintainers can decide whether policy still requires an update.
+
+## Why this is local/manual instead of CI
+
+The existing CI workflow keeps the main build, lint, and test signal focused on deterministic repository readiness (`.github/workflows/akita_test.yml:41-65`). govulncheck depends on an external vulnerability database whose contents change asynchronously, and GitHub/Dependabot alerts are generated for default-branch state outside the timing of a local branch test. Running this path manually after an alert gives maintainers reproducible, version-controlled commands and saved logs without making routine CI fail because an external advisory feed changed between otherwise identical commits.
