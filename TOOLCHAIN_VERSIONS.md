@@ -1,15 +1,17 @@
 # Toolchain Version Lock
 
-This document describes the locked versions of all external tools used in the Akita project.
+This document describes the toolchain versions and requirements that are checked into
+this repository or configured in GitHub Actions.
 
 ## Go Toolchain
 
 - **Go language version**: 1.26.0
 - **Go toolchain version**: go1.26.2
-- **Rationale**: Keep the module language version, local toolchain pin, and CI toolchain aligned with the current security-remediated baseline.
+- **Rationale**: Keep the module language version, local toolchain pin, and CI
+  toolchain aligned with the current security-remediated baseline.
 - **Configuration**:
   - `go.mod`: `go 1.26.0` and `toolchain go1.26.2`
-  - GitHub Actions: `go-version: 1.26.2`
+  - `.github/workflows/akita_test.yml`: `go-version: 1.26.2`
 
 ## Go Tools
 
@@ -19,53 +21,69 @@ This document describes the locked versions of all external tools used in the Ak
 
 - **ginkgo**: v2.25.1
   - BDD testing framework
-  - Already locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
+  - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
 - **golangci-lint**: v2.4.0
   - Go linter aggregator
-  - Already locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
+  - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
 ## Node.js Toolchain
 
 - **Node.js Version**: 18.20.7
 - **npm Version**: >=10.0.0
 - **Configuration**:
-  - `.nvmrc` files in `monitoring/web/` and `daisen/static/`
-  - `package.json` engines field in both directories
-  - GitHub Actions: `node-version: 18.20.7`
+  - `daisen/static/.nvmrc`: `18.20.7`
+  - `daisen/static/package.json` and `daisen2/static/package.json`: `engines.node`
+    is `18.20.7` and `engines.npm` is `>=10.0.0`
+  - `.github/workflows/akita_test.yml`: `node-version: 18.20.7` for the
+    `daisen/static` and `daisen2/static` build jobs
+  - No `.nvmrc` is currently checked in for `daisen2/static`
 
 ## Python Toolchain
 
-- **Python Version**: 3.10.15
+- **Python Version**: no exact Python version is currently pinned in the repository
+  or GitHub Actions.
 - **Configuration**:
-  - GitHub Actions: `python-version: "3.10.15"`
+  - `.github/workflows/akita_test.yml` ensures `python3` is available before
+    running the acceptance tests.
+  - The workflow does not use `actions/setup-python` and does not configure a
+    `python-version` value.
 
 ## Verification
 
-To verify all tools are correctly locked:
+To verify all checked-in toolchain settings:
 
 ```bash
-# Go toolchain version
-go version
-# Should output: go version go1.26.2 <os>/<arch>
+# Go toolchain settings
+grep -nE '^(go|toolchain) ' go.mod
+# Should show: go 1.26.0 and toolchain go1.26.2
 
-# Node.js version (in monitoring/web or daisen/static)
-node --version
-# Should output: v18.20.7
+# GitHub Actions Go and Node settings
+grep -nE 'go-version|node-version' .github/workflows/akita_test.yml
+# Should show: go-version: 1.26.2 and node-version: 18.20.7
 
-# Python version
-python --version
-# Should output: Python 3.10.15
+# Node.js version lock and package engine requirements
+cat daisen/static/.nvmrc
+grep -nE '"engines"|"node"|"npm"' daisen/static/package.json daisen2/static/package.json
+# daisen/static/.nvmrc should contain 18.20.7; both package files should define
+# Node/npm engines.
+
+# Python workflow behavior
+grep -nE 'setup-python|python-version|python3' .github/workflows/akita_test.yml
+# Should show python3 checks/runs, and no setup-python or python-version entries.
 ```
 
 ## Updating Locked Versions
 
 When updating to new versions, follow these steps:
 
-1. Update `go.mod` with new Go version and toolchain
-2. Update all occurrences in `.github/workflows/akita_test.yml`
-3. Update `run_before_merge.sh` if applicable
-4. Update `.nvmrc` files for Node.js
-5. Update `package.json` engines fields
-6. Run full test suite to verify compatibility
-7. Update this document with the new versions
+1. Update `go.mod` with the new Go language version and toolchain when applicable.
+2. Update all Go and Node version pins in `.github/workflows/akita_test.yml`.
+3. Update `run_before_merge.sh` if Go tool installation versions change.
+4. Update `daisen/static/.nvmrc` if the Node version changes.
+5. Update the `engines` fields in `daisen/static/package.json` and
+   `daisen2/static/package.json`.
+6. Add or update Python version pins only if the repository or workflow starts
+   enforcing one.
+7. Run the relevant test suite to verify compatibility.
+8. Update this document with the new checked-in facts.
