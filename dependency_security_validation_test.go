@@ -124,6 +124,12 @@ if [[ "${1:-}" == "audit" && "${2:-}" == "--audit-level=high" && "${3:-}" == "--
     echo "fake npm audit failure in ${PWD}" >&2
     exit 46
   fi
+  if [[ -n "${AKITA_FAKE_NPM_FAIL_AUDIT_IN:-}" ]]; then
+    if [[ "${PWD}" == "${AKITA_FAKE_NPM_FAIL_AUDIT_IN}" || "${PWD}" == *"${AKITA_FAKE_NPM_FAIL_AUDIT_IN}" ]]; then
+      echo "fake npm audit failure in ${PWD}" >&2
+      exit 46
+    fi
+  fi
   echo "found 0 vulnerabilities in ${PWD}"
   exit 0
 fi
@@ -389,6 +395,42 @@ func TestDependencySecurityScriptPropagatesFrontendAuditFailures(t *testing.T) {
 	}
 }
 
+func TestDependencySecurityScriptPropagatesDaisen2FrontendAuditFailure(t *testing.T) {
+	toolsDir := writeDependencySecurityFakeTools(t)
+	reportDir := filepath.Join(t.TempDir(), "report")
+
+	output, err := runDependencySecurityScript(t, toolsDir, reportDir,
+		"AKITA_FAKE_NPM_FAIL_AUDIT_IN=daisen2/static")
+	if err == nil {
+		t.Fatalf("%s should fail when daisen2/static npm audit fails\n%s",
+			dependencySecurityScriptPath, output)
+	}
+	if code := dependencySecurityExitCode(err); code != 46 {
+		t.Fatalf("%s should exit with fake npm audit status 46; got %d (%v)\n%s",
+			dependencySecurityScriptPath, code, err, output)
+	}
+
+	if !strings.Contains(output, "Dependency security validation failed during daisen2_static_npm_audit") {
+		t.Fatalf("failure output should name daisen2_static_npm_audit; got:\n%s", output)
+	}
+	if !strings.Contains(output, "fake npm audit failure") || !strings.Contains(output, "daisen2/static") {
+		t.Fatalf("failure output should include daisen2/static npm audit detail; got:\n%s", output)
+	}
+	if strings.Contains(output, "Dependency security validation completed successfully") {
+		t.Fatalf("failure output must not include the final success message:\n%s", output)
+	}
+
+	daisenLog := readTextFile(t, filepath.Join(reportDir, "logs", "daisen_static_npm_audit.log"))
+	if !strings.Contains(daisenLog, "found 0 vulnerabilities") || !strings.Contains(daisenLog, "daisen/static") {
+		t.Fatalf("daisen/static audit log should record the earlier successful audit; got:\n%s", daisenLog)
+	}
+
+	daisen2Log := readTextFile(t, filepath.Join(reportDir, "logs", "daisen2_static_npm_audit.log"))
+	if !strings.Contains(daisen2Log, "fake npm audit failure") || !strings.Contains(daisen2Log, "daisen2/static") {
+		t.Fatalf("daisen2/static audit log should record the fake audit failure; got:\n%s", daisen2Log)
+	}
+}
+
 func TestDependencySecurityScriptCanonicalizesReportDirForGOBIN(t *testing.T) {
 	toolsDir := writeDependencySecurityFakeTools(t)
 	tempDir := t.TempDir()
@@ -425,6 +467,16 @@ func TestDependencySecurityScriptCanonicalizesReportDirForGOBIN(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(canonicalGOBIN, "govulncheck")); err != nil {
 		t.Fatalf("govulncheck should be installed under canonical GOBIN: %v", err)
+	}
+	for logName, auditDir := range map[string]string{
+		"daisen_static_npm_audit.log":  "daisen/static",
+		"daisen2_static_npm_audit.log": "daisen2/static",
+	} {
+		auditLog := readTextFile(t, filepath.Join(canonicalReportDir, "logs", logName))
+		if !strings.Contains(auditLog, "found 0 vulnerabilities") || !strings.Contains(auditLog, auditDir) {
+			t.Fatalf("%s should record a successful audit for %s; got:\n%s",
+				logName, auditDir, auditLog)
+		}
 	}
 }
 
