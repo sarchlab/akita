@@ -368,6 +368,9 @@ GPU.CommandProcessor,9
         const files = e.dataTransfer?.files;
         if (files && files.length > 0) {
           const file = files[0];
+          // Drag-and-drop intentionally accepts image candidates through the
+          // same image upload path as the image picker; other files keep the
+          // generic file upload path.
           if (isImageUploadCandidate(file)) {
             handleImageUpload(file);
           } else {

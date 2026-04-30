@@ -421,7 +421,7 @@ test("chat panel renders assistant markdown and math through the shared helper m
   }
 });
 
-test("chat panel validates inputs and dispatches dropped images through shared upload helpers", async () => {
+test("chat panel applies the explicit drag-drop image upload policy through shared helpers", async () => {
   const tempDir = await mkdtemp(join(tmpdir(), "daisen-production-utils-"));
   const browser = installBrowserHarness();
 
@@ -490,19 +490,26 @@ test("chat panel validates inputs and dispatches dropped images through shared u
     assert.deepEqual(browser.alerts, ["blocked image: bad-image.png"]);
     assert.equal(panel._uploadedFiles.length, 1, "rejected uploads should not be added");
 
-    const droppedFile = { name: "diagram-image-by-helper.bin", size: 1024, type: "application/octet-stream" };
     const chatPanelElement = browser.document.getElementById("chat-panel");
-    let prevented = false;
-    chatPanelElement.dispatchEvent({
-      type: "drop",
-      dataTransfer: { files: [droppedFile] },
-      preventDefault() {
-        prevented = true;
-        this.defaultPrevented = true;
-      },
-    });
+    const dispatchDrop = (file) => {
+      let prevented = false;
+      chatPanelElement.dispatchEvent({
+        type: "drop",
+        dataTransfer: { files: [file] },
+        preventDefault() {
+          prevented = true;
+          this.defaultPrevented = true;
+        },
+      });
+      return prevented;
+    };
 
-    assert.equal(prevented, true);
+    const droppedImage = {
+      name: "diagram-image-by-helper.bin",
+      size: 1024,
+      type: "application/octet-stream",
+    };
+    assert.equal(dispatchDrop(droppedImage), true);
     assert.deepEqual(uploadValidation.candidateCalls, ["diagram-image-by-helper.bin"]);
     assert.deepEqual(uploadValidation.validationCalls.at(-1), {
       name: "diagram-image-by-helper.bin",
@@ -510,6 +517,19 @@ test("chat panel validates inputs and dispatches dropped images through shared u
     });
     assert.equal(panel._uploadedFiles.at(-1).type, "image");
     assert.equal(panel._uploadedFiles.at(-1).content, "data:diagram-image-by-helper.bin");
+
+    const droppedGenericFile = { name: "notes.txt", size: 512, type: "text/plain" };
+    assert.equal(dispatchDrop(droppedGenericFile), true);
+    assert.deepEqual(uploadValidation.candidateCalls, [
+      "diagram-image-by-helper.bin",
+      "notes.txt",
+    ]);
+    assert.deepEqual(uploadValidation.validationCalls.at(-1), {
+      name: "notes.txt",
+      type: "file",
+    });
+    assert.equal(panel._uploadedFiles.at(-1).type, "file");
+    assert.equal(panel._uploadedFiles.at(-1).content, "text:notes.txt");
   } finally {
     browser.restore();
     await rm(tempDir, { force: true, recursive: true });
