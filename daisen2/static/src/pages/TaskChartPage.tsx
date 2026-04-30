@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "react-router-dom";
 import GanttChart from "../components/charts/GanttChart";
 import TaskDetail from "../components/TaskDetail";
 import { useTraceData } from "../hooks/useTraceData";

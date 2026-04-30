@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from "react-router";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useMode } from "../hooks/useMode";
 import EngineControlPanel from "./live/EngineControlPanel";
 import TracingControls from "./live/TracingControls";

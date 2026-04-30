@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 interface ComponentListProps {
   /** Component names from /api/compnames. */

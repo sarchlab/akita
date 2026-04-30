@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams, Link } from "react-router";
+import { useSearchParams, Link } from "react-router-dom";
 import LineChart from "../components/charts/LineChart";
 import type { DataPoint } from "../components/charts/LineChart";
 import { useCompInfo, type ComponentInfo } from "../hooks/useCompInfo";
