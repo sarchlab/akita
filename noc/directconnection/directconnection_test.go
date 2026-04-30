@@ -91,6 +91,20 @@ var _ = Describe("DirectConnection", func() {
 
 		connection.Handle(tick)
 	})
+
+	It("should keep outgoing messages queued when delivery is blocked", func() {
+		tick := sim.MakeTickEvent(connection.Name(), sim.VTimeInSec(10000))
+
+		msg := newTestMsg()
+		msg.Src = port1.AsRemote()
+		msg.Dst = port2.AsRemote()
+
+		port1.EXPECT().PeekOutgoing().Return(msg)
+		port2.EXPECT().Deliver(msg).Return(sim.NewSendError())
+		port2.EXPECT().PeekOutgoing().Return(nil)
+
+		connection.Handle(tick)
+	})
 })
 
 type agent struct {
