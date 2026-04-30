@@ -2,9 +2,7 @@ name: Akita Test
 
 on:
   push:
-    branches:
-      - main
-      - e15-m19-1-enable-akita-test-branch-run-evidence
+    branches: [main]
   pull_request:
 
 jobs:
