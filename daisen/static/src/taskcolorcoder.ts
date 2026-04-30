@@ -1,5 +1,6 @@
-import * as chroma from "chroma-js";
+import chroma from "chroma-js";
 import { Task } from "./task";
+import { buildTaskColorMap } from "./taskColorMap.mjs";
 
 export class TaskColorCoder {
   private _colorMap: Object;
@@ -7,31 +8,7 @@ export class TaskColorCoder {
   constructor() { }
 
   recode(tasks: Array<Task>) {
-    this._colorMap = {};
-
-    let taskTypes = {};
-    taskTypes = tasks.reduce((types, task) => {
-      let kindWhat = task.kind + "-" + task.what;
-      if (!(kindWhat in taskTypes)) {
-        taskTypes[kindWhat] = true;
-      }
-      return taskTypes;
-    }, taskTypes);
-    let taskTypeArray = Object.keys(taskTypes);
-    taskTypeArray.sort();
-
-    console.log("typeof chroma.cubehelix", typeof chroma.cubehelix);
-
-    const colors = chroma
-      .cubehelix()
-      .gamma(0.7)
-      .lightness([0.1, 0.7])
-      .scale()
-      .colors(taskTypeArray.length + 1);
-
-    taskTypeArray.forEach((t, i) => {
-      this._colorMap[t] = colors[i + 1];
-    });
+    this._colorMap = buildTaskColorMap(tasks, chroma);
   }
 
   lookup(task: Task): string {
