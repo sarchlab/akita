@@ -321,7 +321,7 @@ class Dashboard extends ChatPanel {
       <div class="input-group-prepend">
         <span class="input-group-text" id="basic-addon1">Filter</span>
       </div>
-      <input id="dashboard-filter-input" type="text" class="form-control" 
+      <input id="dashboard-filter-input" type="text" class="form-control"
         placeholder="Component Name" aria-label="Filter" aria-describedby="basic-addon1">
     `;
     container.appendChild(filterGroup);
