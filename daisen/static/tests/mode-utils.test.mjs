@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseModeResponse } from "../.tmp-tests/hooks/useMode.js";
+import { parseModeResponse } from "../src/utils/mode.mjs";
 
 test("parseModeResponse parses JSON mode contract", () => {
   assert.equal(parseModeResponse('{"mode":"live"}'), "live");

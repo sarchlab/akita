@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseMarkdown } from "../.tmp-tests/utils/chatMarkdown.js";
+import { parseMarkdown } from "../src/utils/chatMarkdown.mjs";
 import {
   isImageUploadCandidate,
   validateUploadedFile,
-} from "../.tmp-tests/utils/uploadValidation.js";
+} from "../src/utils/uploadValidation.mjs";
 
 test("parseMarkdown supports legacy inline \\( ... \\) delimiters", () => {
   const html = parseMarkdown("Inline math: \\(x^2 + y^2\\).");
