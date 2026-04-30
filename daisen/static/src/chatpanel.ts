@@ -1,7 +1,13 @@
 import { sendGetGitHubIsAvailable, sendPostGPT, GPTRequest, UnitContent } from "./chatpanelrequests";
-import katex from "katex";
 import "katex/dist/katex.min.css";
 import html2canvas from "html2canvas";
+import { renderChatMarkdown, renderMathInElement } from "./utils/chatMarkdown.mjs";
+import {
+  FILE_UPLOAD_ACCEPT,
+  IMAGE_UPLOAD_ACCEPT,
+  isImageUploadCandidate,
+  validateUploadedFile,
+} from "./utils/uploadValidation.mjs";
 
 type ChatContent = UnitContent[];
 
@@ -361,7 +367,12 @@ GPU.CommandProcessor,9
         chatPanel.style.background = "rgba(255,255,255,0.7)";
         const files = e.dataTransfer?.files;
         if (files && files.length > 0) {
-          handleFileUpload(files[0]);
+          const file = files[0];
+          if (isImageUploadCandidate(file)) {
+            handleImageUpload(file);
+          } else {
+            handleFileUpload(file);
+          }
         }
       });
 
@@ -621,7 +632,7 @@ GPU.CommandProcessor,9
           const botDiv = document.createElement("div");
           const firstContent = m.content[0];
           if (firstContent.type === "text") {
-            botDiv.innerHTML = "<b>Daisen Bot:</b> " + convertMarkdownToHTML(autoWrapMath(firstContent.text));
+            botDiv.innerHTML = "<b>Daisen Bot:</b> " + renderChatMarkdown(firstContent.text);
           } else if (firstContent.type === "image_url") {
             botDiv.innerHTML = "<b>Daisen Bot:</b> " + "Something went wrong, I can't display history right now.";
           }
@@ -631,18 +642,7 @@ GPU.CommandProcessor,9
           
         }
       });
-    // apply KaTeX rendering for math
-    messagesDiv.querySelectorAll('.math').forEach(el => {
-      try {
-        const tex = el.textContent || "";
-        const displayMode = el.getAttribute("data-display") === "block";
-        console.log("Rendering math:", tex, "Display mode:", displayMode);
-        el.innerHTML = katex.renderToString(tex, { displayMode });
-      } catch (e) {
-        el.innerHTML = "<span style='color:red'>Invalid math</span>";
-        console.log("KaTeX error:", e, "for tex:", el.textContent);
-      }
-    });
+    renderMathInElement(messagesDiv);
 
     // Show welcome message only if there are no messages (new empty chat)
     const hasMessages = messages.some(m => m.role === "user" || m.role === "assistant");
@@ -672,17 +672,9 @@ GPU.CommandProcessor,9
 
     // File upload functionality
     const handleFileUpload = (file: File) => {
-      const allowed = [".sqlite", ".sqlite3", ".csv", ".txt", ".json", ".py", ".js", ".c", ".cpp", ".java"];
-      const name = file.name.toLowerCase();
-      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
-      if (!validSuffix) {
-        window.alert("Invalid file type. Allowed: .sqlite, .sqlite3, .csv, .txt, .json, .py, .js, .c, .cpp, .java");
-        return;
-      }
-
-      // Check size
-      if (file.size > 32 * 1024) {
-        window.alert("File too large. Max size is 32 KB.");
+      const validation = validateUploadedFile(file, "file");
+      if (!validation.valid) {
+        window.alert(validation.error);
         return;
       }
 
@@ -725,7 +717,7 @@ GPU.CommandProcessor,9
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.style.display = "none";
-    fileInput.accept = ".sqlite,.sqlite3,.csv,.txt,.json,.py,.js,.c,.cpp,.java";
+    fileInput.accept = FILE_UPLOAD_ACCEPT;
     fileUploadBtn.onclick = () => fileInput.click();
 
     fileInput.onchange = () => {
@@ -747,17 +739,9 @@ GPU.CommandProcessor,9
 
     // File upload functionality
     const handleImageUpload = (file: File) => {
-      const allowed = [".png", ".jpg", ".jpeg"];
-      const name = file.name.toLowerCase();
-      const validSuffix = allowed.some(suffix => name.endsWith(suffix));
-      if (!validSuffix) {
-        window.alert("Invalid file type. Allowed: .png, .jpg, .jpeg");
-        return;
-      }
-
-      // Check size
-      if (file.size > 256 * 1024) {
-        window.alert("File too large. Max size is 256 KB.");
+      const validation = validateUploadedFile(file, "image");
+      if (!validation.valid) {
+        window.alert(validation.error);
         return;
       }
 
@@ -801,7 +785,7 @@ GPU.CommandProcessor,9
     const imageInput = document.createElement("input");
     imageInput.type = "file";
     imageInput.style.display = "none";
-    imageInput.accept = ".png,.jpg,.jpeg";
+    imageInput.accept = IMAGE_UPLOAD_ACCEPT;
     imageUploadBtn.onclick = () => imageInput.click();
 
     imageInput.onchange = () => {
@@ -2168,7 +2152,7 @@ GPU.CommandProcessor,9
         // botDiv.innerHTML = `<b>Daisen Bot:</b> ${responseContent}`;
         botDiv.innerHTML =
           `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(1,923 tokens)</span> ` +
-          convertMarkdownToHTML(autoWrapMath(responseContent));
+          renderChatMarkdown(responseContent);
 
         const userDivSecond = document.createElement("div");
         userDivSecond.style.display = "flex";
@@ -2208,7 +2192,7 @@ Kernel Execution,76.68,84.65,7.97`);
 
         botDivSecond.innerHTML =
           `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(2,341 tokens)</span> ` +
-          convertMarkdownToHTML(autoWrapMath(responseContentSecond));
+          renderChatMarkdown(responseContentSecond);
         
         // Add bot message to chat history
         messages.push({ role: "assistant", content: [{ type: "text", text: responseContent }] });
@@ -2345,7 +2329,7 @@ Kernel Execution,76.68,84.65,7.97`);
           `<b>Daisen Bot:</b> <span style="color:#aaa;font-size:0.95em;">(${
             gptResponseTotalTokens === -1 ? "no tokens" : gptResponseTotalTokens.toLocaleString() + " tokens"
           })</span> ` +
-          convertMarkdownToHTML(autoWrapMath(gptResponseContent));
+          renderChatMarkdown(gptResponseContent);
 
         messages.push({ role: "assistant", content: [{"type": "text", "text": gptResponseContent}] });
         this._chatMessages = messages; // Update the instance messages
@@ -2353,18 +2337,7 @@ Kernel Execution,76.68,84.65,7.97`);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
         console.log("[Received from GPT]", gptResponse);
 
-        // Apply KaTeX rendering for math in the new messages
-        botDiv.querySelectorAll('.math').forEach(el => {
-          try {
-            const tex = el.textContent || "";
-            const displayMode = el.getAttribute("data-display") === "block";
-            console.log("Rendering math:", tex, "Display mode:", displayMode);
-            el.innerHTML = katex.renderToString(tex, { displayMode });
-          } catch (e) {
-            el.innerHTML = "<span style='color:red'>Invalid math</span>";
-            console.log("KaTeX error:", e, "for tex:", el.textContent);
-          }
-        });
+        renderMathInElement(botDiv);
         
         // Re-enable send button
         sendBtn.disabled = false;
@@ -2513,117 +2486,6 @@ Kernel Execution,76.68,84.65,7.97`);
   _getCurrentFrontendURL(): string {
     return window.location.href;
   }
-}
-
-
-function convertMarkdownToHTML(text: string): string {
-  // // Headings: ###, ##, #
-  // text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  // text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  // text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  // // Horizontal rule: ---
-  // text = text.replace(/^-{3,}$/gm, '<hr>');
-  // // Bold: **text**
-  // text = text.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-  // // Italic: *text*
-  // text = text.replace(/\*(.+?)\*/g, "<i>$1</i>");
-  // // // Inline code: `code`
-  // // text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
-  // // Math: \[ ... \] (block)
-  // text = text.replace(/\\\[(.+?)\\\]/gs, '<span class="math" data-display="block">$1</span>');
-  // // Math: \( ... \) (inline)
-  // text = text.replace(/\\\((.+?)\\\)/gs, '<span class="math" data-display="inline">$1</span>');
-  // // Line breaks
-  // text = text.replace(/\n/g, "<br>");
-  // return text;
-  text = text.replace(/```html\n([\s\S]*?)```/g, (match, code) => {
-    // Remove leading/trailing empty lines
-    let trimmed = code.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '').replace(/(<br>\s*){1,}/g, "<br>");
-    trimmed = trimmed.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
-    trimmed = trimmed.replace(/(<br>\s*)+(<table)/g, "$2");
-    // Remove leading <br> at the very start
-    trimmed = trimmed.replace(/^(<br>\s*)+/, "");
-    return trimmed;
-  });
-  
-  // Code blocks: ```lang\ncode\n```
-  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-    // Remove leading/trailing empty lines (including multiple)
-    const trimmed = code.replace(/^\s*\n+/, '').replace(/\n+\s*$/, '');
-    // Escape HTML special chars in code
-    const escaped = trimmed.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<pre class="code-block"><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`;
-  });
-
-  // Inline code: `code`
-  text = text.replace(/`([^`]+)`/g, (match, code) => {
-    const escaped = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return `<code class="inline-code">${escaped}</code>`;
-  });
-
-  // Headings: ###, ##, #
-  text = text.replace(/^### (.+)$/gm, (match, p1) => {
-    console.log("Matched h3:", match);
-    return `<h5>${p1}</h5>`;
-  });
-  text = text.replace(/^## (.+)$/gm, (match, p1) => {
-    console.log("Matched h2:", match);
-    return `<h4>${p1}</h4>`;
-  });
-  text = text.replace(/^# (.+)$/gm, (match, p1) => {
-    console.log("Matched h1:", match);
-    return `<h3>${p1}</h3>`;
-  });
-  // Horizontal rule: ---
-  text = text.replace(/^-{3,}$/gm, (match) => {
-    console.log("Matched hr:", match);
-    return '<hr>';
-  });
-  // Bold: **text**
-  text = text.replace(/\*\*(.+?)\*\*/g, (match, p1) => {
-    console.log("Matched bold:", match);
-    return `<b>${p1}</b>`;
-  });
-
-  // Italic: *text*
-  text = text.replace(/\*(.+?)\*/g, (match, p1) => {
-    console.log("Matched italic:", match);
-    return `<i>${p1}</i>`;
-  });
-  // Math: \[ ... \] (block)
-  text = text.replace(/\\\[(.+?)\\\]/gs, (match, p1) => {
-    console.log("Matched block math:", match);
-    // Remove any stray \[ or \] inside p1
-    const clean = p1.replace(/\\\[|\\\]/g, '').trim();
-    return `<span class="math" data-display="block">${clean}</span>`;
-  });
-  // Math: \( ... \) (inline)
-  text = text.replace(/\\\((.+?)\\\)/gs, (match, p1) => {
-    console.log("Matched inline math:", match);
-    return `<span class="math" data-display="inline">${p1}</span>`;
-  });
-  // Line breaks
-  text = text.replace(/\n/g, "<br>");
-  // Remove any line that is just \] or \[
-  text = text.replace(/(<br>)*\\\](<br>)*/g, "");
-  text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
-  // Remove multiple consecutive <br> (leave only one)
-  text = text.replace(/(<br>\s*){2,}/g, "<br>");
-  // Remove <br> right after block elements that already imply a newline
-  text = text.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
-  // Remove <br> right before a table
-  text = text.replace(/(<br>\s*)+(<table)/g, "$2");
-  // Remove leading <br> at the very start
-  text = text.replace(/^(<br>\s*)+/, "");
-  return text;
-}
-
-function autoWrapMath(text: string): string {
-  // Only wrap lines that are just math, not sentences, and not already wrapped
-  return text.replace(
-    /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
-    '\\[$1\\]'
-  );
 }
 
 function renderFileList() {

@@ -8,11 +8,13 @@ const escapeHtml = (value) =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-const renderMath = (expression, displayMode) =>
+export const renderMathToString = (expression, displayMode) =>
   katex.renderToString(expression.trim(), {
     displayMode,
     throwOnError: false,
   });
+
+const renderMath = renderMathToString;
 
 export const parseMarkdown = (input) => {
   const tokens = [];
@@ -123,3 +125,68 @@ export const parseMarkdown = (input) => {
   closeList();
   return htmlLines.join("");
 };
+
+export function autoWrapMath(text) {
+  return text.replace(
+    /^(?!\\\[)([0-9\.\+\-\*/\(\)\s×÷]+=[0-9\.\+\-\*/\(\)\s×÷]+)(?!\\\])$/gm,
+    "\\[$1\\]",
+  );
+}
+
+export function convertMarkdownToHTML(text) {
+  text = text.replace(/```html\n([\s\S]*?)```/g, (_match, code) => {
+    let trimmed = code.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "").replace(/(<br>\s*){1,}/g, "<br>");
+    trimmed = trimmed.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
+    trimmed = trimmed.replace(/(<br>\s*)+(<table)/g, "$2");
+    trimmed = trimmed.replace(/^(<br>\s*)+/, "");
+    return trimmed;
+  });
+
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_match, lang, code) => {
+    const trimmed = code.replace(/^\s*\n+/, "").replace(/\n+\s*$/, "");
+    const escaped = trimmed.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<pre class="code-block"><code${lang ? ` class="language-${lang}"` : ""}>${escaped}</code></pre>`;
+  });
+
+  text = text.replace(/`([^`]+)`/g, (_match, code) => {
+    const escaped = code.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return `<code class="inline-code">${escaped}</code>`;
+  });
+
+  text = text.replace(/^### (.+)$/gm, (_match, p1) => `<h5>${p1}</h5>`);
+  text = text.replace(/^## (.+)$/gm, (_match, p1) => `<h4>${p1}</h4>`);
+  text = text.replace(/^# (.+)$/gm, (_match, p1) => `<h3>${p1}</h3>`);
+  text = text.replace(/^-{3,}$/gm, () => "<hr>");
+  text = text.replace(/\*\*(.+?)\*\*/g, (_match, p1) => `<b>${p1}</b>`);
+  text = text.replace(/\*(.+?)\*/g, (_match, p1) => `<i>${p1}</i>`);
+  text = text.replace(/\\\[(.+?)\\\]/gs, (_match, p1) => {
+    const clean = p1.replace(/\\\[|\\\]/g, "").trim();
+    return `<span class="math" data-display="block">${clean}</span>`;
+  });
+  text = text.replace(/\\\((.+?)\\\)/gs, (_match, p1) =>
+    `<span class="math" data-display="inline">${p1}</span>`,
+  );
+  text = text.replace(/\n/g, "<br>");
+  text = text.replace(/(<br>)*\\\](<br>)*/g, "");
+  text = text.replace(/(<br>)*\\\[(<br>)*/g, "");
+  text = text.replace(/(<br>\s*){2,}/g, "<br>");
+  text = text.replace(/(<\/h[1-6]>|<\/hr>|<\/p>|<\/table>|<\/ul>|<\/ol>|<\/pre>|<\/div>|<\/span>)(<br>)+/g, "$1");
+  text = text.replace(/(<br>\s*)+(<table)/g, "$2");
+  text = text.replace(/^(<br>\s*)+/, "");
+  return text;
+}
+
+export const renderChatMarkdown = (text) => convertMarkdownToHTML(autoWrapMath(text));
+
+export function renderMathInElement(root) {
+  root.querySelectorAll(".math").forEach((el) => {
+    try {
+      const tex = el.textContent || "";
+      const displayMode = el.getAttribute("data-display") === "block";
+      el.innerHTML = katex.renderToString(tex, { displayMode });
+    } catch (e) {
+      el.innerHTML = "<span style='color:red'>Invalid math</span>";
+      console.log("KaTeX error:", e, "for tex:", el.textContent);
+    }
+  });
+}

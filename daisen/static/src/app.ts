@@ -1,16 +1,20 @@
 import DashboardPage from "./dashboardpage";
 import { TaskPage } from "./taskpage";
 import { MouseEventHandler } from "./mouseeventhandler";
+import { parseModeResponse } from "./utils/mode.mjs";
 
 interface View {
   layout(): void;
 }
+
+type DaisenMode = "live" | "replay";
 
 class App {
   _view: string;
   _dashboardPage: DashboardPage;
   _taskPage: TaskPage;
   _currentView: View;
+  _mode: DaisenMode | null;
 
   constructor() {
     this._view = "landing_page";
@@ -19,6 +23,7 @@ class App {
     this._taskPage = new TaskPage();
 
     this._currentView = null;
+    this._mode = null;
   }
 
   start() {
@@ -34,7 +39,17 @@ class App {
       this._currentView.layout();
     });
 
+    void this._refreshMode();
     this.route();
+  }
+
+  async _refreshMode() {
+    try {
+      const response = await fetch("/api/mode");
+      this._mode = parseModeResponse(await response.text());
+    } catch {
+      this._mode = null;
+    }
   }
 
   route() {
