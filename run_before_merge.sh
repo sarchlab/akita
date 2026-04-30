@@ -11,8 +11,8 @@ go generate ./...
 
 go build ./...
 
-curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s -- -b $(go env GOPATH)/bin v2.4.0 
-golangci-lint run ./...
+curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.9.0
+golangci-lint run ./... --timeout=10m
 
 go install github.com/onsi/ginkgo/v2/ginkgo@v2.25.1
 ginkgo -r

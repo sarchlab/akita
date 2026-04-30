@@ -23,9 +23,11 @@ this repository or configured in GitHub Actions.
   - BDD testing framework
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
 
-- **golangci-lint**: v2.4.0
+- **golangci-lint**: v2.9.0
   - Go linter aggregator
   - Locked in `run_before_merge.sh` and `.github/workflows/akita_test.yml`
+  - The checked-in `.golangci.yml` keeps the established linter set stable
+    across the v2.9.0 compatibility update.
 
 ## Node.js Toolchain
 

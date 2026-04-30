@@ -41,10 +41,22 @@ func TestGitignoreStillCoversExpectedBuildOutputs(t *testing.T) {
 		{path: "debug", wantMatch: ".gitignore"},
 		{path: "virtualmem", wantMatch: ".gitignore"},
 		{path: "writebackcache", wantMatch: ".gitignore"},
-		{path: "mem/acceptancetests/virtualmem/virtualmem", wantMatch: "mem/acceptancetests/virtualmem/.gitignore"},
-		{path: "mem/acceptancetests/virtualmem/virtualmem.exe", wantMatch: "mem/acceptancetests/virtualmem/.gitignore"},
-		{path: "mem/acceptancetests/writebackcache/writebackcache", wantMatch: "mem/acceptancetests/writebackcache/.gitignore"},
-		{path: "mem/acceptancetests/writebackcache/writebackcache.exe", wantMatch: "mem/acceptancetests/writebackcache/.gitignore"},
+		{
+			path:      "mem/acceptancetests/virtualmem/virtualmem",
+			wantMatch: "mem/acceptancetests/virtualmem/.gitignore",
+		},
+		{
+			path:      "mem/acceptancetests/virtualmem/virtualmem.exe",
+			wantMatch: "mem/acceptancetests/virtualmem/.gitignore",
+		},
+		{
+			path:      "mem/acceptancetests/writebackcache/writebackcache",
+			wantMatch: "mem/acceptancetests/writebackcache/.gitignore",
+		},
+		{
+			path:      "mem/acceptancetests/writebackcache/writebackcache.exe",
+			wantMatch: "mem/acceptancetests/writebackcache/.gitignore",
+		},
 	}
 
 	for _, tc := range testCases {

@@ -58,4 +58,7 @@ linters:
     - errorlint
     - usestdlibvars
     - predeclared
-
+    - godoclint
+    - iotamixing
+    - modernize
+    - unqueryvet

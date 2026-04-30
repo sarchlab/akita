@@ -18,7 +18,11 @@ const (
 	dependencySecurityScriptPath = "run_dependency_security_validation.sh"
 )
 
-var dependencySecurityCitationPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./-])((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([1-9][0-9]*)(?:-([1-9][0-9]*))?`)
+var dependencySecurityCitationPattern = regexp.MustCompile(
+	`(?:^|[^A-Za-z0-9_./-])` +
+		`((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):` +
+		`([1-9][0-9]*)(?:-([1-9][0-9]*))?`,
+)
 
 const fakeDependencySecurityGoScript = `#!/usr/bin/env bash
 set -euo pipefail
@@ -291,15 +295,17 @@ func TestDependencySecurityScriptStopsOnRequiredCommandFailure(t *testing.T) {
 	}
 }
 
+type dependencySecurityFailureCase struct {
+	name       string
+	env        string
+	check      string
+	message    string
+	exitCode   int
+	absentLogs []string
+}
+
 func TestDependencySecurityScriptPropagatesGovulncheckFailures(t *testing.T) {
-	testCases := []struct {
-		name       string
-		env        string
-		check      string
-		message    string
-		exitCode   int
-		absentLogs []string
-	}{
+	testCases := []dependencySecurityFailureCase{
 		{
 			name:       "install",
 			env:        "AKITA_FAKE_GO_FAIL_INSTALL=1",
@@ -327,43 +333,52 @@ func TestDependencySecurityScriptPropagatesGovulncheckFailures(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			toolsDir := writeDependencySecurityFakeTools(t)
-			reportDir := filepath.Join(t.TempDir(), "report")
-
-			output, err := runDependencySecurityScript(t, toolsDir, reportDir, tc.env)
-			if err == nil {
-				t.Fatalf("%s should fail when %s fails\n%s",
-					dependencySecurityScriptPath, tc.check, output)
-			}
-			if code := dependencySecurityExitCode(err); code != tc.exitCode {
-				t.Fatalf("%s should exit with %d from %s; got %d (%v)\n%s",
-					dependencySecurityScriptPath, tc.exitCode, tc.check, code, err, output)
-			}
-
-			failureLine := "Dependency security validation failed during " + tc.check
-			if !strings.Contains(output, failureLine) {
-				t.Fatalf("failure output should name %s; got:\n%s", tc.check, output)
-			}
-			if !strings.Contains(output, tc.message) {
-				t.Fatalf("failure output should include fake tool failure %q; got:\n%s",
-					tc.message, output)
-			}
-			if strings.Contains(output, "Dependency security validation completed successfully") {
-				t.Fatalf("failure output must not include the final success message:\n%s", output)
-			}
-
-			failingLog := readTextFile(t, filepath.Join(reportDir, "logs", tc.check+".log"))
-			if !strings.Contains(failingLog, tc.message) {
-				t.Fatalf("%s log should include fake tool failure %q; got:\n%s",
-					tc.check, tc.message, failingLog)
-			}
-			for _, logName := range tc.absentLogs {
-				if _, err := os.Stat(filepath.Join(reportDir, "logs", logName)); !os.IsNotExist(err) {
-					t.Fatalf("script should stop before %s after %s failure; stat err=%v",
-						logName, tc.check, err)
-				}
-			}
+			assertDependencySecurityGovulncheckFailure(t, tc)
 		})
+	}
+}
+
+func assertDependencySecurityGovulncheckFailure(
+	t *testing.T,
+	tc dependencySecurityFailureCase,
+) {
+	t.Helper()
+
+	toolsDir := writeDependencySecurityFakeTools(t)
+	reportDir := filepath.Join(t.TempDir(), "report")
+
+	output, err := runDependencySecurityScript(t, toolsDir, reportDir, tc.env)
+	if err == nil {
+		t.Fatalf("%s should fail when %s fails\n%s",
+			dependencySecurityScriptPath, tc.check, output)
+	}
+	if code := dependencySecurityExitCode(err); code != tc.exitCode {
+		t.Fatalf("%s should exit with %d from %s; got %d (%v)\n%s",
+			dependencySecurityScriptPath, tc.exitCode, tc.check, code, err, output)
+	}
+
+	failureLine := "Dependency security validation failed during " + tc.check
+	if !strings.Contains(output, failureLine) {
+		t.Fatalf("failure output should name %s; got:\n%s", tc.check, output)
+	}
+	if !strings.Contains(output, tc.message) {
+		t.Fatalf("failure output should include fake tool failure %q; got:\n%s",
+			tc.message, output)
+	}
+	if strings.Contains(output, "Dependency security validation completed successfully") {
+		t.Fatalf("failure output must not include the final success message:\n%s", output)
+	}
+
+	failingLog := readTextFile(t, filepath.Join(reportDir, "logs", tc.check+".log"))
+	if !strings.Contains(failingLog, tc.message) {
+		t.Fatalf("%s log should include fake tool failure %q; got:\n%s",
+			tc.check, tc.message, failingLog)
+	}
+	for _, logName := range tc.absentLogs {
+		if _, err := os.Stat(filepath.Join(reportDir, "logs", logName)); !os.IsNotExist(err) {
+			t.Fatalf("script should stop before %s after %s failure; stat err=%v",
+				logName, tc.check, err)
+		}
 	}
 }
 

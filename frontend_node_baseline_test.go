@@ -28,7 +28,11 @@ func TestFrontendNodeBaselineIsConsistent(t *testing.T) {
 	workflow := readTextFile(t, ".github/workflows/akita_test.yml")
 	workflowNodeVersions := regexp.MustCompile(`node-version:\s*([^\s]+)`).FindAllStringSubmatch(workflow, -1)
 	if len(workflowNodeVersions) != 2 {
-		t.Fatalf("workflow should pin both frontend jobs to Node %s; found %d node-version entries", documentedNodeBaseline, len(workflowNodeVersions))
+		t.Fatalf(
+			"workflow should pin both frontend jobs to Node %s; found %d node-version entries",
+			documentedNodeBaseline,
+			len(workflowNodeVersions),
+		)
 	}
 	for _, match := range workflowNodeVersions {
 		if match[1] != documentedNodeBaseline {

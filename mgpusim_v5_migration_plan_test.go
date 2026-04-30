@@ -15,7 +15,11 @@ import (
 const migrationPlanPath = "mgpusim_v5_migration_plan.md"
 
 var (
-	citationPattern = regexp.MustCompile(`(?:^|[^A-Za-z0-9_./-])((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):([1-9][0-9]*)(?:-([1-9][0-9]*))?`)
+	citationPattern = regexp.MustCompile(
+		`(?:^|[^A-Za-z0-9_./-])` +
+			`((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+):` +
+			`([1-9][0-9]*)(?:-([1-9][0-9]*))?`,
+	)
 
 	packageDiscoveryTargets = []string{
 		"./sim",
