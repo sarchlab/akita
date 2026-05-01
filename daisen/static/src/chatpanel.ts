@@ -2058,7 +2058,7 @@ GPU.CommandProcessor,9
           const csvData = await this._fetchGraphTestCSV();
           const tableHTML = this._csvToHTMLTable(csvData);
           localStorage.setItem("visualization_data", JSON.stringify(csvData));
-          const graphLink = '<a href="http://localhost:5173/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/datavisualization.html</a>';
+          const graphLink = '<a href="/datavisualization.html" target="_blank" style="color: #0d6efd; text-decoration: underline;">/datavisualization.html</a>';
           const responseContent =
             `Got it! I've processed the trace file and summarized the event counts for each unique component class. Here's the table:<br>${tableHTML}` +
             `I've also generated a graph visualization of the distribution, which you can access here: ${graphLink}.<br>` +

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DaisenBot Data Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            display: flex;
+            height: 100vh;
+        }
+        .left-half {
+            width: 47%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(255,255,255,0.7);
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .right-half {
+            width: 47%;
+            padding: 20px;
+            background: rgba(255,255,255,0.5);
+            display: flex;
+            flex-direction: column;
+        }
+        /* .csv-editor {
+            width: 100%;
+            height: 80vh;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+            margin-bottom: 15px;
+        } */
+        .csv-editor {
+            width: 100%;
+            height: 80vh;
+            padding: 15px;
+            border: 1px solid #222;
+            border-radius: 6px;
+            background: #23272e; /* code-like dark grey */
+            color: #eaeaea;
+            font-family: 'Fira Mono', 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+        .csv-editor:focus {
+            outline: 2px solid #0d6efd;
+            outline-offset: -2px;
+        }
+        .csv-label {
+            margin-bottom: 10px;
+            color: #333;
+            font-weight: normal;
+        }
+        .update-button {
+            padding: 10px 20px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .update-button:hover {
+            background-color: #0b5ed7;
+        }
+        .update-button:active {
+            background-color: #0a58ca;
+            transform: translateY(1px);
+        }
+        .chart-container {
+            width: 100%;
+            height: 60vh;
+            position: relative;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .chart-controls {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .chart-type-selector {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            outline: none;
+        }
+        .chart-type-selector:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: normal;
+        }
+    </style>
+  <script type="module" crossorigin src="/assets/datavisualization-CGXTOa0J.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
+</head>
+<body>
+    <div class="left-half">
+        <h2>DaisenBot Data Visualization</h2>
+        <div class="chart-controls">
+            <label for="chartType" style="margin-right: 10px; color: #333;">Chart Type:</label>
+            <select id="chartType" class="chart-type-selector">
+                <option value="bar">Bar Chart</option>
+                <option value="line">Line Chart</option>
+                <option value="pie">Pie Chart</option>
+            </select>
+        </div>
+        <div class="chart-container">
+            <canvas id="barChart"></canvas>
+        </div>
+    </div>
+    <div class="right-half">
+        <h3 class="csv-label">Edit Data:</h3>
+        <textarea id="csvEditor" class="csv-editor" placeholder="Enter CSV data here..."></textarea>
+        <!-- <div id="csvRainbowPreview" style="font-family: 'Fira Mono', 'Consolas', monospace; font-size: 14px; margin-top: 8px;"></div> -->
+        <button id="updateButton" class="update-button">Update Graph</button>
+    </div>
+
+</body>
+</html>

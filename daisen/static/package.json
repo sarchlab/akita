@@ -25,6 +25,7 @@
     "@types/chroma-js": "^2.0.0",
     "@types/d3": "^5.7.2",
     "bootstrap": "^5.0.0",
+    "chart.js": "4.5.1",
     "chroma-js": "^2.4.0",
     "d3": "^7.8.4",
     "html2canvas": "^1.4.1",
