@@ -2142,7 +2142,8 @@ GPU.CommandProcessor,9
         messagesDiv.appendChild(botDiv);
         
 
-        const subLink = '<a href="http://localhost:5173/task?id=d240btg3fvio1hp2d3eg" target="_blank" style="color: #0d6efd; text-decoration: underline;">http://localhost:5173/task?id=d240btg3fvio1hp2d3eg</a>';
+        const subpageTaskPath = "/task?id=d240btg3fvio1hp2d3eg";
+        const subLink = `<a href="${subpageTaskPath}" target="_blank" style="color: #0d6efd; text-decoration: underline;">${subpageTaskPath}</a>`;
         const responseContent =
             `In MGPUSim, the host-to-GPU memory transfer is recorded as **"MemCopyH2D"**. ` +
             `From this simulation, the duration of MemCopyH2D is **76.68 µs** (0 → 76.68 µs), ` +
