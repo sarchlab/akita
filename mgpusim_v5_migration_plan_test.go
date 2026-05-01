@@ -78,6 +78,7 @@ func TestMigrationPlanValidationGateScopeIsLocalAkitaGoOnly(t *testing.T) {
 		"ginkgo -r --mod=readonly",
 		"does not run Daisen frontend Node jobs",
 		"NOC/MEM Python acceptance tests",
+		"dependency-security validation",
 		"downstream `mgpusim`/`mgpusim-dev` compile/smoke/benchmark validation",
 		"CI/frontend/acceptance coverage (separate from the local gate)",
 	}

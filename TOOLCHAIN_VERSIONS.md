@@ -35,8 +35,9 @@ with full CI, frontend, acceptance, or downstream MGPUSim coverage.
 
 `./run_before_merge.sh` is a **local Akita Go build/lint/test gate**. It is
 not a full merge-equivalent CI run and does not run frontend Node jobs,
-NOC/MEM Python acceptance tests, dependency-security validation, or downstream
-`mgpusim`/`mgpusim-dev` compile/smoke/benchmark validation.
+NOC/MEM Python acceptance tests, dependency-security validation (the separate
+`./run_dependency_security_validation.sh` path), or downstream `mgpusim`/
+`mgpusim-dev` compile/smoke/benchmark validation.
 
 The local gate currently performs this Go-only scope:
 
