@@ -62,6 +62,42 @@ func TestMigrationPlanPackageDiscoveryCommandResolves(t *testing.T) {
 	}
 }
 
+func TestMigrationPlanValidationGateScopeIsLocalAkitaGoOnly(t *testing.T) {
+	plan := string(readMigrationPlan(t))
+
+	requiredClaims := []string{
+		"M25 validation-command scope",
+		"local Akita Go build/lint/test gate",
+		"not a full merge-equivalent CI or downstream validation gate",
+		"go list -mod=readonly -m all",
+		"go mod tidy -diff",
+		"mockgen` v0.6.0",
+		"golangci-lint` v2.9.0",
+		"ginkgo` v2.25.1",
+		"golangci-lint run --modules-download-mode=readonly ./...",
+		"ginkgo -r --mod=readonly",
+		"does not run Daisen frontend Node jobs",
+		"NOC/MEM Python acceptance tests",
+		"downstream `mgpusim`/`mgpusim-dev` compile/smoke/benchmark validation",
+		"CI/frontend/acceptance coverage (separate from the local gate)",
+	}
+	for _, claim := range requiredClaims {
+		if !strings.Contains(plan, claim) {
+			t.Errorf("%s should document validation-gate scope claim %q", migrationPlanPath, claim)
+		}
+	}
+
+	staleOrOverstatedClaims := []string{
+		"Akita merge-equivalent check",
+		"repo merge script",
+	}
+	for _, claim := range staleOrOverstatedClaims {
+		if strings.Contains(plan, claim) {
+			t.Errorf("%s should not overstate local validation scope with %q", migrationPlanPath, claim)
+		}
+	}
+}
+
 func TestMigrationPlanStatusRefreshDoesNotCarryStaleBaselineClaims(t *testing.T) {
 	plan := string(readMigrationPlan(t))
 

@@ -82,6 +82,27 @@ func TestRunBeforeMergeUsesReadOnlyDependencyAndTidyChecks(t *testing.T) {
 	}
 }
 
+func TestRunBeforeMergeScopeIsDocumentedAsLocalGoGate(t *testing.T) {
+	doc := readTextFile(t, "TOOLCHAIN_VERSIONS.md")
+
+	required := []string{
+		"local Akita Go build/lint/test gate",
+		"not a full merge-equivalent CI run",
+		"does not run frontend Node jobs",
+		"NOC/MEM Python acceptance tests",
+		"downstream\n`mgpusim`/`mgpusim-dev` compile/smoke/benchmark validation",
+		"go list -mod=readonly -m all",
+		"go mod tidy -diff",
+		"golangci-lint run --modules-download-mode=readonly ./...",
+		"ginkgo -r --mod=readonly",
+	}
+	for _, text := range required {
+		if !strings.Contains(doc, text) {
+			t.Errorf("TOOLCHAIN_VERSIONS.md should document local gate scope text %q", text)
+		}
+	}
+}
+
 func TestRunBeforeMergeToolPinsMatchRepositoryDocs(t *testing.T) {
 	script := readTextFile(t, runBeforeMergeScriptPath)
 	doc := readTextFile(t, "TOOLCHAIN_VERSIONS.md")
