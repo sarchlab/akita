@@ -57,7 +57,7 @@ What each check contributes:
 
 ## Frontend Node engine reconciliation evidence
 
-The documented frontend Node baseline is intentionally kept at Node 18.20.7. The baseline appears in `TOOLCHAIN_VERSIONS.md:57-66`, `daisen/static/.nvmrc:1`, both frontend workflow jobs (`.github/workflows/akita_test.yml:14-18` and `.github/workflows/akita_test.yml:33-37`), both frontend package roots (`daisen/static/package.json:7-10` and `daisen2/static/package.json:7`), and both package-lock root entries (`daisen/static/package-lock.json:25-28` and `daisen2/static/package-lock.json:31-34`).
+The documented frontend Node baseline is intentionally kept at Node 18.20.7. The baseline appears in `TOOLCHAIN_VERSIONS.md:62-69`, `daisen/static/.nvmrc:1`, both frontend workflow jobs (`.github/workflows/akita_test.yml:14-18` and `.github/workflows/akita_test.yml:33-37`), both frontend package roots (`daisen/static/package.json:7-10` and `daisen2/static/package.json:7`), and both package-lock root entries (`daisen/static/package-lock.json:25-28` and `daisen2/static/package-lock.json:31-34`).
 
 The selected Daisen frontend direct dependencies that declare Node engines are compatible with Node 18.20.7: `@fortawesome/fontawesome-free@5.15.4` requires `>=6` (`daisen/static/package-lock.json:472-479`), `d3@7.9.0` requires `>=12` (`daisen/static/package-lock.json:1174-1212`), `html2canvas@1.4.1` requires `>=8.0.0` (`daisen/static/package-lock.json:1659-1669`), `typescript@5.9.3` requires `>=14.17` (`daisen/static/package-lock.json:1885-1896`), and `vite@6.4.2` requires `^18.0.0 || ^20.0.0 || >=22.0.0` (`daisen/static/package-lock.json:1908-1926`).
 

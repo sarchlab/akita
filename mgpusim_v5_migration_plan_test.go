@@ -98,6 +98,38 @@ func TestMigrationPlanValidationGateScopeIsLocalAkitaGoOnly(t *testing.T) {
 	}
 }
 
+func TestMigrationPlanRunBeforeMergeCitationsTrackCurrentScript(t *testing.T) {
+	plan := string(readMigrationPlan(t))
+	script := readTextFile(t, runBeforeMergeScriptPath)
+
+	commandStart := lineNumberContaining(t, script, "Running local Akita Go build/lint/test gate.")
+	commandEnd := lineNumberContaining(t, script, "\"${bin_dir}/ginkgo\" -r --mod=readonly")
+	fullGateEnd := lineNumberContaining(t, script, "Local Akita Go build/lint/test gate completed successfully.")
+
+	requiredCitations := []string{
+		fmt.Sprintf("%s:%d-%d", runBeforeMergeScriptPath,
+			lineNumberContaining(t, script, "MOCKGEN_VERSION=\""),
+			lineNumberContaining(t, script, "GOLANGCI_LINT_VERSION=\"")),
+		fmt.Sprintf("%s:%d", runBeforeMergeScriptPath,
+			lineNumberContaining(t, script, "go.uber.org/mock/mockgen@${MOCKGEN_VERSION}")),
+		fmt.Sprintf("%s:%d", runBeforeMergeScriptPath,
+			lineNumberContaining(t, script, "go generate -mod=readonly ./...")),
+		fmt.Sprintf("%s:%d-%d", runBeforeMergeScriptPath, commandStart, commandEnd),
+		fmt.Sprintf("%s:%d-%d", runBeforeMergeScriptPath,
+			lineNumberContaining(t, script, "verify_go_mod_sum_clean() {"),
+			lineNumberContaining(t, script, "verify_tracked_clean \"startup\"")),
+		fmt.Sprintf("%s:%d-%d", runBeforeMergeScriptPath,
+			lineNumberContaining(t, script, "verify_go_mod_sum_clean \"validation\""),
+			lineNumberContaining(t, script, "verify_tracked_clean \"validation\"")),
+		fmt.Sprintf("%s:%d-%d", runBeforeMergeScriptPath, commandStart, fullGateEnd),
+	}
+	for _, citation := range requiredCitations {
+		if !strings.Contains(plan, citation) {
+			t.Errorf("%s should cite current %s line span %q", migrationPlanPath, runBeforeMergeScriptPath, citation)
+		}
+	}
+}
+
 func TestMigrationPlanStatusRefreshDoesNotCarryStaleBaselineClaims(t *testing.T) {
 	plan := string(readMigrationPlan(t))
 
@@ -144,6 +176,19 @@ func readMigrationPlan(t *testing.T) []byte {
 	}
 
 	return content
+}
+
+func lineNumberContaining(t *testing.T, text, needle string) int {
+	t.Helper()
+
+	for index, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, needle) {
+			return index + 1
+		}
+	}
+
+	t.Fatalf("text did not contain line with %q", needle)
+	return 0
 }
 
 func findLocalCitations(plan []byte) []localCitation {

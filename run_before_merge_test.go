@@ -115,9 +115,12 @@ func TestRunBeforeMergeScopeIsDocumentedAsLocalGoGate(t *testing.T) {
 		"downstream\n`mgpusim`/`mgpusim-dev` compile/smoke/benchmark validation",
 		"go list -mod=readonly -m all",
 		"go mod tidy -diff",
+		"go.uber.org/mock/mockgen@v0.6.0",
+		"github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0",
+		"github.com/onsi/ginkgo/v2/ginkgo@v2.25.1",
 		"golangci-lint run --modules-download-mode=readonly ./...",
 		"ginkgo -r --mod=readonly",
-		"does not mutate a developer's\n   shared Go dependency or build caches",
+		"does not mutate a developer's shared Go\n   dependency or build caches",
 	}
 	for _, text := range required {
 		if !strings.Contains(doc, text) {

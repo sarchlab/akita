@@ -43,11 +43,13 @@ The local gate currently performs this Go-only scope:
 1. Prints `go version` and `go env GOVERSION GOTOOLCHAIN GOMOD`.
 2. Runs read-only dependency checks: `go list -mod=readonly -m all` and
    `go mod tidy -diff`.
-3. Installs repository-pinned tools into a temporary `GOBIN`: `mockgen` v0.6.0,
-   `golangci-lint` v2.9.0, and `ginkgo` v2.25.1. The gate also points
-   `GOPATH`, `GOMODCACHE`, `GOCACHE`, and the golangci-lint cache at the
-   temporary validation directory so validation does not mutate a developer's
-   shared Go dependency or build caches.
+3. Installs repository-pinned tools into a temporary `GOBIN`:
+   `go.uber.org/mock/mockgen@v0.6.0`,
+   `github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0`, and
+   `github.com/onsi/ginkgo/v2/ginkgo@v2.25.1`. The gate also points `GOPATH`,
+   `GOMODCACHE`, `GOCACHE`, and the golangci-lint cache at the temporary
+   validation directory so validation does not mutate a developer's shared Go
+   dependency or build caches.
 4. Runs read-only validation commands: `go generate -mod=readonly ./...`,
    `go build -mod=readonly ./...`, `golangci-lint run --modules-download-mode=readonly ./...`,
    and `ginkgo -r --mod=readonly`.
