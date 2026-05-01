@@ -82,6 +82,28 @@ func TestRunBeforeMergeUsesReadOnlyDependencyAndTidyChecks(t *testing.T) {
 	}
 }
 
+func TestRunBeforeMergeIsolatesWritableGoCaches(t *testing.T) {
+	script := readTextFile(t, runBeforeMergeScriptPath)
+
+	required := []string{
+		"temp_parent_dir=\"${AKITA_RUN_BEFORE_MERGE_TMPDIR:-${TMPDIR:-/tmp}}\"",
+		"go_path_dir=\"${temp_dir}/gopath\"",
+		"go_mod_cache_dir=\"${go_path_dir}/pkg/mod\"",
+		"go_build_cache_dir=\"${temp_dir}/go-build-cache\"",
+		"GOPATH=${go_path_dir}",
+		"GOMODCACHE=${go_mod_cache_dir}",
+		"GOCACHE=${go_build_cache_dir}",
+		"chmod -R u+w -- \"${temp_dir}\"",
+		"run env \"${go_env[@]}\" go list -mod=readonly -m all",
+		"run env \"${go_env[@]}\" go mod tidy -diff",
+	}
+	for _, text := range required {
+		if !strings.Contains(script, text) {
+			t.Errorf("%s should isolate writable Go state with %q", runBeforeMergeScriptPath, text)
+		}
+	}
+}
+
 func TestRunBeforeMergeScopeIsDocumentedAsLocalGoGate(t *testing.T) {
 	doc := readTextFile(t, "TOOLCHAIN_VERSIONS.md")
 
@@ -95,6 +117,7 @@ func TestRunBeforeMergeScopeIsDocumentedAsLocalGoGate(t *testing.T) {
 		"go mod tidy -diff",
 		"golangci-lint run --modules-download-mode=readonly ./...",
 		"ginkgo -r --mod=readonly",
+		"does not mutate a developer's\n   shared Go dependency or build caches",
 	}
 	for _, text := range required {
 		if !strings.Contains(doc, text) {
