@@ -74,6 +74,85 @@ func TestSelectedFrontendPackageEnginesSupportNodeBaseline(t *testing.T) {
 	}
 }
 
+func TestDependencySecurityFrontendNodeEngineEvidenceMatchesLockfiles(t *testing.T) {
+	doc := readTextFile(t, dependencySecurityDocPath)
+	section := frontendNodeEngineEvidenceSection(t, doc)
+	actualEvidence := parseFrontendNodeEngineEvidence(t, section)
+	expectedEvidence := expectedFrontendNodeEngineEvidence(t)
+
+	if len(actualEvidence) != len(expectedEvidence) {
+		t.Errorf(
+			"%s frontend engine evidence entries = %d, want %d",
+			dependencySecurityDocPath,
+			len(actualEvidence),
+			len(expectedEvidence),
+		)
+	}
+
+	for key, expected := range expectedEvidence {
+		actual, ok := actualEvidence[key]
+		if !ok {
+			t.Errorf(
+				"%s should document %s/%s@%s engines.node %q",
+				dependencySecurityDocPath,
+				key.dir,
+				key.pkg,
+				expected.version,
+				expected.engine,
+			)
+			continue
+		}
+
+		if actual.version != expected.version {
+			t.Errorf(
+				"%s documents %s/%s version %s, want %s from lockfile",
+				dependencySecurityDocPath,
+				key.dir,
+				key.pkg,
+				actual.version,
+				expected.version,
+			)
+		}
+		if actual.engine != expected.engine {
+			t.Errorf(
+				"%s documents %s/%s engines.node %q, want %q from lockfile",
+				dependencySecurityDocPath,
+				key.dir,
+				key.pkg,
+				actual.engine,
+				expected.engine,
+			)
+		}
+		if actual.path != expected.path {
+			t.Errorf(
+				"%s documents %s/%s citation path %s, want %s",
+				dependencySecurityDocPath,
+				key.dir,
+				key.pkg,
+				actual.path,
+				expected.path,
+			)
+			continue
+		}
+
+		assertFrontendNodeEngineCitationRange(t, actual)
+	}
+
+	for key, actual := range actualEvidence {
+		if _, ok := expectedEvidence[key]; ok {
+			continue
+		}
+		t.Errorf(
+			"%s documents %s/%s@%s engines.node %q, but that package is not a direct dependency with engines.node",
+			dependencySecurityDocPath,
+			key.dir,
+			key.pkg,
+			actual.version,
+			actual.engine,
+		)
+	}
+}
+
 func assertFrontendRootEngines(t *testing.T, source string, engines nodeEngines) {
 	t.Helper()
 	if engines.Node != documentedNodeBaseline {
@@ -138,6 +217,161 @@ func directFrontendDependencyNames(root lockedPackage) []string {
 		names[name] = true
 	}
 	return slices.Sorted(maps.Keys(names))
+}
+
+type frontendNodeEngineEvidenceKey struct {
+	dir string
+	pkg string
+}
+
+type frontendNodeEngineEvidence struct {
+	dir     string
+	pkg     string
+	version string
+	engine  string
+	path    string
+	start   int
+	end     int
+}
+
+func frontendNodeEngineEvidenceSection(t *testing.T, doc string) string {
+	t.Helper()
+
+	heading := "## Frontend Node engine reconciliation evidence"
+	start := strings.Index(doc, heading)
+	if start < 0 {
+		t.Fatalf("%s should contain %q", dependencySecurityDocPath, heading)
+	}
+
+	remaining := doc[start+len(heading):]
+	end := strings.Index(remaining, "\n## ")
+	if end < 0 {
+		return remaining
+	}
+
+	return remaining[:end]
+}
+
+func parseFrontendNodeEngineEvidence(
+	t *testing.T,
+	section string,
+) map[frontendNodeEngineEvidenceKey]frontendNodeEngineEvidence {
+	t.Helper()
+
+	recordPattern := regexp.MustCompile(
+		"`([^`]+)@([^`]+)` requires `([^`]+)` " +
+			"\\(`((?:daisen|daisen2)/static/package-lock\\.json):" +
+			"([1-9][0-9]*)-([1-9][0-9]*)`\\)",
+	)
+	matches := recordPattern.FindAllStringSubmatch(section, -1)
+	if len(matches) == 0 {
+		t.Fatalf("%s frontend Node engine section has no package-lock evidence records", dependencySecurityDocPath)
+	}
+
+	evidence := map[frontendNodeEngineEvidenceKey]frontendNodeEngineEvidence{}
+	for _, match := range matches {
+		path := match[4]
+		dir := strings.TrimSuffix(path, "/package-lock.json")
+		pkg := match[1]
+		key := frontendNodeEngineEvidenceKey{dir: dir, pkg: pkg}
+		if existing, ok := evidence[key]; ok {
+			t.Fatalf(
+				"%s duplicates frontend Node engine evidence for %s/%s at %s and %s",
+				dependencySecurityDocPath,
+				key.dir,
+				key.pkg,
+				existing.path,
+				path,
+			)
+		}
+
+		start, _ := strconv.Atoi(match[5])
+		end, _ := strconv.Atoi(match[6])
+		evidence[key] = frontendNodeEngineEvidence{
+			dir:     dir,
+			pkg:     pkg,
+			version: match[2],
+			engine:  match[3],
+			path:    path,
+			start:   start,
+			end:     end,
+		}
+	}
+
+	return evidence
+}
+
+func expectedFrontendNodeEngineEvidence(
+	t *testing.T,
+) map[frontendNodeEngineEvidenceKey]frontendNodeEngineEvidence {
+	t.Helper()
+
+	expected := map[frontendNodeEngineEvidenceKey]frontendNodeEngineEvidence{}
+	for _, dir := range []string{"daisen/static", "daisen2/static"} {
+		lock := readPackageLock(t, dir+"/package-lock.json")
+		root := lock.Packages[""]
+		for _, pkgName := range directFrontendDependencyNames(root) {
+			pkg, ok := lock.Packages["node_modules/"+pkgName]
+			if !ok {
+				t.Fatalf("%s package-lock is missing direct dependency %s", dir, pkgName)
+			}
+			if pkg.Engines.Node == "" {
+				continue
+			}
+			expected[frontendNodeEngineEvidenceKey{dir: dir, pkg: pkgName}] = frontendNodeEngineEvidence{
+				dir:     dir,
+				pkg:     pkgName,
+				version: pkg.Version,
+				engine:  pkg.Engines.Node,
+				path:    dir + "/package-lock.json",
+			}
+		}
+	}
+
+	return expected
+}
+
+func assertFrontendNodeEngineCitationRange(t *testing.T, evidence frontendNodeEngineEvidence) {
+	t.Helper()
+
+	if evidence.start > evidence.end {
+		t.Fatalf("%s cites descending package-lock range %s:%d-%d",
+			dependencySecurityDocPath, evidence.path, evidence.start, evidence.end)
+	}
+
+	rangeText := readFrontendNodeEngineCitationRange(t, evidence)
+	requiredFragments := map[string]string{
+		"dependency name": fmt.Sprintf(`"node_modules/%s": {`, evidence.pkg),
+		"version":         fmt.Sprintf(`"version": "%s"`, evidence.version),
+		"engines.node":    fmt.Sprintf(`"node": "%s"`, evidence.engine),
+	}
+	for label, fragment := range requiredFragments {
+		if !strings.Contains(rangeText, fragment) {
+			t.Errorf(
+				"%s cites %s:%d-%d for %s@%s, but the range does not contain the %s fragment %q",
+				dependencySecurityDocPath,
+				evidence.path,
+				evidence.start,
+				evidence.end,
+				evidence.pkg,
+				evidence.version,
+				label,
+				fragment,
+			)
+		}
+	}
+}
+
+func readFrontendNodeEngineCitationRange(t *testing.T, evidence frontendNodeEngineEvidence) string {
+	t.Helper()
+
+	lines := strings.Split(readTextFile(t, evidence.path), "\n")
+	if evidence.end > len(lines) {
+		t.Fatalf("%s cites %s:%d-%d, but the file has %d lines",
+			dependencySecurityDocPath, evidence.path, evidence.start, evidence.end, len(lines))
+	}
+
+	return strings.Join(lines[evidence.start-1:evidence.end], "\n")
 }
 
 func nodeVersionSatisfies(version, expression string) bool {
