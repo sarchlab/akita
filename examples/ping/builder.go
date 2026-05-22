@@ -1,8 +1,9 @@
 package ping
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Comp is the ping component built on EventDrivenComponent.
@@ -10,8 +11,8 @@ type Comp = modeling.EventDrivenComponent[PingSpec, PingState]
 
 // Builder builds ping components.
 type Builder struct {
-	engine  sim.EventScheduler
-	outPort sim.Port
+	engine  timing.EventScheduler
+	outPort messaging.Port
 }
 
 // MakeBuilder creates a new Builder.
@@ -20,13 +21,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithOutPort sets the output port.
-func (b Builder) WithOutPort(port sim.Port) Builder {
+func (b Builder) WithOutPort(port messaging.Port) Builder {
 	b.outPort = port
 	return b
 }
@@ -48,10 +49,10 @@ func (b Builder) Build(name string) *Comp {
 // destination.
 func SchedulePing(
 	comp *Comp,
-	sendAt sim.VTimeInSec,
-	dst sim.RemotePort,
+	sendAt timing.VTimeInSec,
+	dst messaging.RemotePort,
 ) {
-	state := comp.GetStatePtr()
+	state := &comp.State
 	state.ScheduledPings = append(state.ScheduledPings, ScheduledPing{
 		SendAt: sendAt,
 		Dst:    dst,

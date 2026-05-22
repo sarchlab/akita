@@ -3,20 +3,22 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type respondMW struct {
 	comp    *modeling.Component[Spec, State]
-	topPort sim.Port
+	topPort messaging.Port
 	storage *mem.Storage
 }
 
 // Tick runs the respond stage twice (matching original execution order).
 func (m *respondMW) Tick() bool {
-	next := m.comp.GetNextState()
-	spec := m.comp.GetSpec()
+	next := &m.comp.State
+	spec := m.comp.Spec
 
 	progress := m.respond(&spec, next)
 	progress = m.respond(&spec, next) || progress
@@ -70,7 +72,7 @@ func (m *respondMW) finalizeWriteTrans(
 	}
 
 	writeDone := &mem.WriteDoneRsp{}
-	writeDone.ID = sim.GetIDGenerator().Generate()
+	writeDone.ID = timing.GetIDGenerator().Generate()
 	writeDone.Src = m.topPort.AsRemote()
 	writeDone.Dst = t.WriteMsg.Src
 	writeDone.RspTo = t.WriteMsg.ID
@@ -101,7 +103,7 @@ func (m *respondMW) finalizeReadTrans(
 	}
 
 	dataReady := &mem.DataReadyRsp{}
-	dataReady.ID = sim.GetIDGenerator().Generate()
+	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = m.topPort.AsRemote()
 	dataReady.Dst = t.ReadMsg.Src
 	dataReady.Data = data

@@ -12,7 +12,8 @@ import (
 	reflect "reflect"
 
 	hooking "github.com/sarchlab/akita/v5/hooking"
-	sim "github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -53,10 +54,10 @@ func (mr *MockPortMockRecorder) AcceptHook(hook any) *gomock.Call {
 }
 
 // AsRemote mocks base method.
-func (m *MockPort) AsRemote() sim.RemotePort {
+func (m *MockPort) AsRemote() messaging.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AsRemote")
-	ret0, _ := ret[0].(sim.RemotePort)
+	ret0, _ := ret[0].(messaging.RemotePort)
 	return ret0
 }
 
@@ -81,10 +82,10 @@ func (mr *MockPortMockRecorder) CanSend() *gomock.Call {
 }
 
 // Component mocks base method.
-func (m *MockPort) Component() sim.Component {
+func (m *MockPort) Component() messaging.Component {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Component")
-	ret0, _ := ret[0].(sim.Component)
+	ret0, _ := ret[0].(messaging.Component)
 	return ret0
 }
 
@@ -95,10 +96,10 @@ func (mr *MockPortMockRecorder) Component() *gomock.Call {
 }
 
 // Deliver mocks base method.
-func (m *MockPort) Deliver(msg sim.Msg) *sim.SendError {
+func (m *MockPort) Deliver(msg messaging.Msg) *messaging.SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Deliver", msg)
-	ret0, _ := ret[0].(*sim.SendError)
+	ret0, _ := ret[0].(*messaging.SendError)
 	return ret0
 }
 
@@ -191,10 +192,10 @@ func (mr *MockPortMockRecorder) NumOutgoing() *gomock.Call {
 }
 
 // PeekIncoming mocks base method.
-func (m *MockPort) PeekIncoming() sim.Msg {
+func (m *MockPort) PeekIncoming() messaging.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekIncoming")
-	ret0, _ := ret[0].(sim.Msg)
+	ret0, _ := ret[0].(messaging.Msg)
 	return ret0
 }
 
@@ -205,10 +206,10 @@ func (mr *MockPortMockRecorder) PeekIncoming() *gomock.Call {
 }
 
 // PeekOutgoing mocks base method.
-func (m *MockPort) PeekOutgoing() sim.Msg {
+func (m *MockPort) PeekOutgoing() messaging.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PeekOutgoing")
-	ret0, _ := ret[0].(sim.Msg)
+	ret0, _ := ret[0].(messaging.Msg)
 	return ret0
 }
 
@@ -219,10 +220,10 @@ func (mr *MockPortMockRecorder) PeekOutgoing() *gomock.Call {
 }
 
 // RetrieveIncoming mocks base method.
-func (m *MockPort) RetrieveIncoming() sim.Msg {
+func (m *MockPort) RetrieveIncoming() messaging.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveIncoming")
-	ret0, _ := ret[0].(sim.Msg)
+	ret0, _ := ret[0].(messaging.Msg)
 	return ret0
 }
 
@@ -233,10 +234,10 @@ func (mr *MockPortMockRecorder) RetrieveIncoming() *gomock.Call {
 }
 
 // RetrieveOutgoing mocks base method.
-func (m *MockPort) RetrieveOutgoing() sim.Msg {
+func (m *MockPort) RetrieveOutgoing() messaging.Msg {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RetrieveOutgoing")
-	ret0, _ := ret[0].(sim.Msg)
+	ret0, _ := ret[0].(messaging.Msg)
 	return ret0
 }
 
@@ -247,10 +248,10 @@ func (mr *MockPortMockRecorder) RetrieveOutgoing() *gomock.Call {
 }
 
 // Send mocks base method.
-func (m *MockPort) Send(msg sim.Msg) *sim.SendError {
+func (m *MockPort) Send(msg messaging.Msg) *messaging.SendError {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Send", msg)
-	ret0, _ := ret[0].(*sim.SendError)
+	ret0, _ := ret[0].(*messaging.SendError)
 	return ret0
 }
 
@@ -261,7 +262,7 @@ func (mr *MockPortMockRecorder) Send(msg any) *gomock.Call {
 }
 
 // SetComponent mocks base method.
-func (m *MockPort) SetComponent(comp sim.Component) {
+func (m *MockPort) SetComponent(comp messaging.Component) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetComponent", comp)
 }
@@ -273,7 +274,7 @@ func (mr *MockPortMockRecorder) SetComponent(comp any) *gomock.Call {
 }
 
 // SetConnection mocks base method.
-func (m *MockPort) SetConnection(conn sim.Connection) {
+func (m *MockPort) SetConnection(conn messaging.Connection) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetConnection", conn)
 }
@@ -321,7 +322,7 @@ func (mr *MockComponentMockRecorder) AcceptHook(hook any) *gomock.Call {
 }
 
 // AddPort mocks base method.
-func (m *MockComponent) AddPort(name string, port sim.Port) {
+func (m *MockComponent) AddPort(name string, port messaging.Port) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "AddPort", name, port)
 }
@@ -333,10 +334,10 @@ func (mr *MockComponentMockRecorder) AddPort(name, port any) *gomock.Call {
 }
 
 // GetPortByName mocks base method.
-func (m *MockComponent) GetPortByName(name string) sim.Port {
+func (m *MockComponent) GetPortByName(name string) messaging.Port {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPortByName", name)
-	ret0, _ := ret[0].(sim.Port)
+	ret0, _ := ret[0].(messaging.Port)
 	return ret0
 }
 
@@ -375,7 +376,7 @@ func (mr *MockComponentMockRecorder) Name() *gomock.Call {
 }
 
 // NotifyPortFree mocks base method.
-func (m *MockComponent) NotifyPortFree(port sim.Port) {
+func (m *MockComponent) NotifyPortFree(port messaging.Port) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyPortFree", port)
 }
@@ -387,7 +388,7 @@ func (mr *MockComponentMockRecorder) NotifyPortFree(port any) *gomock.Call {
 }
 
 // NotifyRecv mocks base method.
-func (m *MockComponent) NotifyRecv(port sim.Port) {
+func (m *MockComponent) NotifyRecv(port messaging.Port) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "NotifyRecv", port)
 }
@@ -413,10 +414,10 @@ func (mr *MockComponentMockRecorder) NumHooks() *gomock.Call {
 }
 
 // Ports mocks base method.
-func (m *MockComponent) Ports() []sim.Port {
+func (m *MockComponent) Ports() []messaging.Port {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Ports")
-	ret0, _ := ret[0].([]sim.Port)
+	ret0, _ := ret[0].([]messaging.Port)
 	return ret0
 }
 

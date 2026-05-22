@@ -12,8 +12,7 @@ import (
 	"strings"
 
 	_ "github.com/glebarez/go-sqlite"
-
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 func (s *Server) httpTrace(w http.ResponseWriter, r *http.Request) {
@@ -100,23 +99,23 @@ type TaskQuery struct {
 
 // TaskStep represents a milestone/step in a task.
 type TaskStep struct {
-	Time sim.VTimeInSec `json:"time"`
-	What string         `json:"what"`
-	Kind string         `json:"kind"`
+	Time timing.VTimeInSec `json:"time"`
+	What string            `json:"what"`
+	Kind string            `json:"kind"`
 }
 
 // Task represents a traced task.
 type Task struct {
-	ID         uint64         `json:"id"`
-	ParentID   uint64         `json:"parent_id"`
-	Kind       string         `json:"kind"`
-	What       string         `json:"what"`
-	Location   string         `json:"location"`
-	StartTime  sim.VTimeInSec `json:"start_time"`
-	EndTime    sim.VTimeInSec `json:"end_time"`
-	Steps      []TaskStep     `json:"steps"`
-	Detail     interface{}    `json:"-"`
-	ParentTask *Task          `json:"-"`
+	ID         uint64            `json:"id"`
+	ParentID   uint64            `json:"parent_id"`
+	Kind       string            `json:"kind"`
+	What       string            `json:"what"`
+	Location   string            `json:"location"`
+	StartTime  timing.VTimeInSec `json:"start_time"`
+	EndTime    timing.VTimeInSec `json:"end_time"`
+	Steps      []TaskStep        `json:"steps"`
+	Detail     interface{}       `json:"-"`
+	ParentTask *Task             `json:"-"`
 }
 
 // TraceReader can parse a trace file.
@@ -311,7 +310,7 @@ func (r *SQLiteTraceReader) loadMilestonesForTasks(tasks []Task) {
 
 		if task, exists := taskMap[taskID]; exists {
 			step := TaskStep{
-				Time: sim.VTimeInSec(uint64(time)),
+				Time: timing.VTimeInSec(uint64(time)),
 				What: what,
 				Kind: kind,
 			}
@@ -362,8 +361,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
-	t.StartTime = sim.VTimeInSec(uint64(startTime))
-	t.EndTime = sim.VTimeInSec(uint64(endTime))
+	t.StartTime = timing.VTimeInSec(uint64(startTime))
+	t.EndTime = timing.VTimeInSec(uint64(endTime))
 
 	if ptID.Valid {
 		t.ParentTask.ID = uint64(ptID.Int64)
@@ -371,8 +370,8 @@ func (r *SQLiteTraceReader) scanTaskWithParent(rows *sql.Rows, t *Task) {
 		t.ParentTask.Kind = ptKind.String
 		t.ParentTask.What = ptWhat.String
 		t.ParentTask.Location = ptLocation.String
-		t.ParentTask.StartTime = sim.VTimeInSec(uint64(ptStartTime.Float64))
-		t.ParentTask.EndTime = sim.VTimeInSec(uint64(ptEndTime.Float64))
+		t.ParentTask.StartTime = timing.VTimeInSec(uint64(ptStartTime.Float64))
+		t.ParentTask.EndTime = timing.VTimeInSec(uint64(ptEndTime.Float64))
 	}
 }
 
@@ -392,8 +391,8 @@ func (r *SQLiteTraceReader) scanTaskWithoutParent(rows *sql.Rows, t *Task) {
 		panic(err)
 	}
 
-	t.StartTime = sim.VTimeInSec(uint64(startTime))
-	t.EndTime = sim.VTimeInSec(uint64(endTime))
+	t.StartTime = timing.VTimeInSec(uint64(startTime))
+	t.EndTime = timing.VTimeInSec(uint64(endTime))
 }
 
 func (r *SQLiteTraceReader) prepareTaskQueryStr(query TaskQuery) string {

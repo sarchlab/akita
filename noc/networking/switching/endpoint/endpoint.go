@@ -1,8 +1,8 @@
 package endpoint
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // Comp is an akita component(Endpoint) that delegates sending and receiving
@@ -22,35 +22,35 @@ func (c *Comp) incomingMW() *incomingMW {
 }
 
 // NetworkPort returns the network port of the endpoint.
-func (c *Comp) NetworkPort() sim.Port {
+func (c *Comp) NetworkPort() messaging.Port {
 	return c.outgoingMW().networkPort
 }
 
 // SetNetworkPort sets the network port of the endpoint.
-func (c *Comp) SetNetworkPort(p sim.Port) {
+func (c *Comp) SetNetworkPort(p messaging.Port) {
 	c.outgoingMW().networkPort = p
 	c.incomingMW().networkPort = p
 }
 
 // DefaultSwitchDst returns the default switch destination.
-func (c *Comp) DefaultSwitchDst() sim.RemotePort {
+func (c *Comp) DefaultSwitchDst() messaging.RemotePort {
 	return c.outgoingMW().defaultSwitchDst
 }
 
 // SetDefaultSwitchDst sets the default switch destination.
-func (c *Comp) SetDefaultSwitchDst(dst sim.RemotePort) {
+func (c *Comp) SetDefaultSwitchDst(dst messaging.RemotePort) {
 	c.outgoingMW().defaultSwitchDst = dst
 }
 
 // PlugIn connects a port to the endpoint.
-func (c *Comp) PlugIn(port sim.Port) {
+func (c *Comp) PlugIn(port messaging.Port) {
 	port.SetConnection(c)
 	c.outgoingMW().devicePorts = append(c.outgoingMW().devicePorts, port)
 	c.incomingMW().devicePorts = append(c.incomingMW().devicePorts, port)
 }
 
 // NotifyAvailable triggers the endpoint to continue to tick.
-func (c *Comp) NotifyAvailable(_ sim.Port) {
+func (c *Comp) NotifyAvailable(_ messaging.Port) {
 	c.TickLater()
 }
 
@@ -61,6 +61,6 @@ func (c *Comp) NotifySend() {
 }
 
 // Unplug removes the association of a port and an endpoint.
-func (c *Comp) Unplug(_ sim.Port) {
+func (c *Comp) Unplug(_ messaging.Port) {
 	panic("not implemented")
 }

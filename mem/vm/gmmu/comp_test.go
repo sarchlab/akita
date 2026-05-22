@@ -6,8 +6,9 @@ import (
 	gomock "go.uber.org/mock/gomock"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Builder", func() {
@@ -32,23 +33,23 @@ var _ = Describe("Builder", func() {
 
 		upperComponentPort = NewMockPort(mockCtrl)
 		upperComponentPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("UpperComponentPort")).
+			Return(messaging.RemotePort("UpperComponentPort")).
 			AnyTimes()
 
 		lowerComponentPort = NewMockPort(mockCtrl)
 		lowerComponentPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("LowerComponentPort")).
+			Return(messaging.RemotePort("LowerComponentPort")).
 			AnyTimes()
 
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 		topPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
@@ -72,17 +73,17 @@ var _ = Describe("Builder", func() {
 	Context("GMMU Builder", func() {
 		It("should build GMMU correctly", func() {
 			Expect(gmmuComp.Engine).To(Equal(engine))
-			Expect(gmmuComp.Freq).To(Equal(1 * sim.GHz))
-			Expect(gmmuComp.GetSpec().MaxRequestsInFlight).To(Equal(16))
+			Expect(gmmuComp.Freq).To(Equal(1 * timing.GHz))
+			Expect(gmmuComp.Spec.MaxRequestsInFlight).To(Equal(16))
 			Expect(mw.pageTable).To(Equal(pageTable))
-			Expect(gmmuComp.GetSpec().DeviceID).To(Equal(uint64(0)))
+			Expect(gmmuComp.Spec.DeviceID).To(Equal(uint64(0)))
 		})
 	})
 
 	Context("GMMU parse from top", func() {
 		It("should process translation request", func() {
 			req := &vm.TranslationReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Dst = topPort.AsRemote()
 			req.PID = 1
 			req.VAddr = 0x00000001
@@ -95,13 +96,13 @@ var _ = Describe("Builder", func() {
 
 			mw.Tick()
 
-			nextState := gmmuComp.GetNextState()
+			nextState := &gmmuComp.State
 			Expect(len(nextState.WalkingTranslations)).To(Equal(1))
 		})
 
 		It("should walk page table", func() {
 			req := &vm.TranslationReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
@@ -140,15 +141,14 @@ var _ = Describe("Builder", func() {
 			var sentRsp *vm.TranslationRsp
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					sentRsp = msg.(*vm.TranslationRsp)
 				}).
 				Return(nil)
 
-			// Tick 1: parseFromTop adds translation to next; walkPageTable
-			// sees empty cur. After tick, next becomes cur.
+			// Tick 1: parseFromTop accepts the request into component state.
 			gmmuComp.Tick()
-			// Tick 2: walkPageTable sees the translation in cur, decrements
+			// Tick 2: walkPageTable sees the translation and decrements
 			// CycleLeft (latency=1 → 0).
 			gmmuComp.Tick()
 			// Tick 3: CycleLeft==0, page walk completes and sends response.
@@ -161,7 +161,7 @@ var _ = Describe("Builder", func() {
 
 		It("should send request remotely", func() {
 			req := &vm.TranslationReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
@@ -216,7 +216,7 @@ var _ = Describe("Builder", func() {
 
 		It("should return response from remote page table", func() {
 			req := &vm.TranslationReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Dst = topPort.AsRemote()
 			req.Src = upperComponentPort.AsRemote()
 			req.PID = 1
@@ -256,7 +256,7 @@ var _ = Describe("Builder", func() {
 			var sentReqToBottom *vm.TranslationReq
 			bottomPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					sentReqToBottom = msg.(*vm.TranslationReq)
 				}).
 				Return(nil)
@@ -277,12 +277,12 @@ var _ = Describe("Builder", func() {
 			// Now set up the response from the bottom port.
 			bottomPort.EXPECT().
 				RetrieveIncoming().
-				DoAndReturn(func() sim.Msg {
+				DoAndReturn(func() messaging.Msg {
 					rsp := &vm.TranslationRsp{
 						Page: page,
 					}
-					rsp.ID = sim.GetIDGenerator().Generate()
-					rsp.Src = gmmuComp.GetSpec().LowModule
+					rsp.ID = timing.GetIDGenerator().Generate()
+					rsp.Src = gmmuComp.Spec.LowModule
 					rsp.Dst = bottomPort.AsRemote()
 					rsp.RspTo = sentReqToBottom.ID
 					rsp.TrafficClass = "vm.TranslationRsp"
@@ -292,7 +292,7 @@ var _ = Describe("Builder", func() {
 			var sentRsp *vm.TranslationRsp
 			topPort.EXPECT().
 				Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					sentRsp = msg.(*vm.TranslationRsp)
 				}).
 				Return(nil)

@@ -7,13 +7,15 @@ import (
 
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 
 	// Need SQLite driver for tests
 	_ "github.com/glebarez/go-sqlite"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type TracerTestSuite struct {
@@ -63,7 +65,7 @@ func (suite *TracerTestSuite) TearDownTest() {
 
 // MockAccessReq implements mem.AccessReq for testing
 type MockAccessReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	address  uint64
 	byteSize uint64
 	pid      vm.PID
@@ -103,8 +105,8 @@ func (suite *TracerTestSuite) TestStartAndEndTask() {
 
 func (suite *TracerTestSuite) runBasicTrace(task tracing.Task) {
 	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(100.0)).Times(1) // StartTask
-	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(200.0)).Times(1) // EndTask
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(100.0)).Times(1) // StartTask
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(200.0)).Times(1) // EndTask
 
 	// Start the task
 	suite.tracer.StartTask(task)
@@ -175,7 +177,7 @@ func (suite *TracerTestSuite) TestStepTask() {
 	}
 
 	// Set up mock expectations
-	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(150.0)).Times(1)
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(150.0)).Times(1)
 
 	// Record the step
 	suite.tracer.StepTask(task)
@@ -232,9 +234,9 @@ func (suite *TracerTestSuite) TestCompleteMemoryTrace() {
 func (suite *TracerTestSuite) runCompleteTrace(task tracing.Task) {
 	// Set up mock expectations in order
 	gomock.InOrder(
-		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(50.0)).Times(1),  // StartTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(75.0)).Times(1),  // StepTask
-		suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(100.0)).Times(1), // EndTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(50.0)).Times(1),  // StartTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(75.0)).Times(1),  // StepTask
+		suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(100.0)).Times(1), // EndTask
 	)
 
 	// Start task at time 50
@@ -302,11 +304,11 @@ func (suite *TracerTestSuite) TestTaskWithoutAccessReq() {
 	}
 
 	// Set up mock expectations - CurrentTime should be called for StartTask but not EndTask since no AccessReq
-	suite.timeTeller.EXPECT().CurrentTime().Return(sim.VTimeInSec(10.0)).Times(1)
+	suite.timeTeller.EXPECT().CurrentTime().Return(timing.VTimeInSec(10.0)).Times(1)
 
 	// Start the task (this will not create a pending transaction due to no AccessReq)
 	suite.tracer.StartTask(task)
-	
+
 	// End the task (this should not call CurrentTime since no pending transaction exists)
 	suite.tracer.EndTask(task)
 
@@ -406,9 +408,9 @@ func TestDBTracerWithFixedTimeTeller(t *testing.T) {
 
 // fixedTimeTeller is a simple implementation for testing
 type fixedTimeTeller struct {
-	time sim.VTimeInSec
+	time timing.VTimeInSec
 }
 
-func (f *fixedTimeTeller) CurrentTime() sim.VTimeInSec {
+func (f *fixedTimeTeller) CurrentTime() timing.VTimeInSec {
 	return f.time
 }

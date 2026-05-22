@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 func TestValidateState(t *testing.T) {
@@ -31,7 +31,7 @@ func TestStateWithTable(t *testing.T) {
 		Table:                  table,
 		InflightFlushReqActive: true,
 		InflightFlushReqID:     123,
-		InflightFlushReqSrc:    sim.RemotePort("ctrl.port"),
+		InflightFlushReqSrc:    messaging.RemotePort("ctrl.port"),
 	}
 
 	// Verify state
@@ -47,7 +47,7 @@ func TestStateWithTable(t *testing.T) {
 	if s.InflightFlushReqID != 123 {
 		t.Errorf("InflightFlushReqID = %d, want %d", s.InflightFlushReqID, 123)
 	}
-	if s.InflightFlushReqSrc != sim.RemotePort("ctrl.port") {
+	if s.InflightFlushReqSrc != messaging.RemotePort("ctrl.port") {
 		t.Errorf("InflightFlushReqSrc = %q, want %q", s.InflightFlushReqSrc, "ctrl.port")
 	}
 

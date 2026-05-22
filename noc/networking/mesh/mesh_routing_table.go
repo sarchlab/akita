@@ -1,21 +1,21 @@
 package mesh
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // meshRoutingTable is a routing table that can find the next-hop port according
 // to the coordinate of the final destination.
 type meshRoutingTable struct {
 	x, y, z                               int
-	top, left, bottom, right, front, back sim.RemotePort
-	local                                 sim.RemotePort
-	dstTable                              map[sim.RemotePort]*tile
+	top, left, bottom, right, front, back messaging.RemotePort
+	local                                 messaging.RemotePort
+	dstTable                              map[messaging.RemotePort]*tile
 }
 
 // FindPort finds the next-hop port according to the coordinate of the final
 // destination.
-func (t *meshRoutingTable) FindPort(dst sim.RemotePort) sim.RemotePort {
+func (t *meshRoutingTable) FindPort(dst messaging.RemotePort) messaging.RemotePort {
 	dstTile := t.dstTable[dst]
 	dstX, dstY, dstZ := dstTile.rt.x, dstTile.rt.y, dstTile.rt.z
 
@@ -40,11 +40,11 @@ func (t *meshRoutingTable) FindPort(dst sim.RemotePort) sim.RemotePort {
 }
 
 // DefineRoute does noting
-func (t *meshRoutingTable) DefineRoute(finalDst, outputPort sim.RemotePort) {
+func (t *meshRoutingTable) DefineRoute(finalDst, outputPort messaging.RemotePort) {
 	// Do nothing.
 }
 
 // DefineDefaultRoute sets the local port.
-func (t *meshRoutingTable) DefineDefaultRoute(outputPort sim.RemotePort) {
+func (t *meshRoutingTable) DefineDefaultRoute(outputPort messaging.RemotePort) {
 	t.local = outputPort
 }

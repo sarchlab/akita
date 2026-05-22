@@ -1,7 +1,7 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 func getCacheLineID(
@@ -19,7 +19,7 @@ func bankID(setID, wayID, wayAssociativity, numBanks int) int {
 	return (setID*wayAssociativity + wayID) % numBanks
 }
 
-func clearPort(p sim.Port) {
+func clearPort(p messaging.Port) {
 	for {
 		item := p.RetrieveIncoming()
 		if item == nil {

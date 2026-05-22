@@ -1,13 +1,14 @@
 package mmuCache
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for mmuCache components.
 var DefaultSpec = Spec{
-	Freq:            1 * sim.GHz,
+	Freq:            1 * timing.GHz,
 	NumReqPerCycle:  4,
 	NumLevels:       5,
 	NumBlocks:       1,
@@ -18,12 +19,12 @@ var DefaultSpec = Spec{
 
 // A Builder can build mmuCache
 type Builder struct {
-	engine sim.EventScheduler
+	engine timing.EventScheduler
 	spec   Spec
 
-	topPort     sim.Port
-	bottomPort  sim.Port
-	controlPort sim.Port
+	topPort     messaging.Port
+	bottomPort  messaging.Port
+	controlPort messaging.Port
 }
 
 // MakeBuilder returns a Builder
@@ -40,7 +41,7 @@ func (b Builder) WithLatencyPerLevel(latency uint64) Builder {
 }
 
 // WithUpperModule sets the upper module remote port
-func (b Builder) WithUpperModule(m sim.RemotePort) Builder {
+func (b Builder) WithUpperModule(m messaging.RemotePort) Builder {
 	b.spec.UpModulePort = m
 	return b
 }
@@ -52,13 +53,13 @@ func (b Builder) WithNumLevels(n int) Builder {
 }
 
 // WithEngine sets the engine that the mmuCache to use
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the freq the mmuCache use
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -84,25 +85,25 @@ func (b Builder) WithNumReqPerCycle(n int) Builder {
 
 // WithLowModule sets the port that can provide the address translation in case
 // of mmuCache miss.
-func (b Builder) WithLowModule(lowModule sim.RemotePort) Builder {
+func (b Builder) WithLowModule(lowModule messaging.RemotePort) Builder {
 	b.spec.LowModulePort = lowModule
 	return b
 }
 
 // WithTopPort sets the top port for the mmuCache
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithBottomPort sets the bottom port for the mmuCache
-func (b Builder) WithBottomPort(port sim.Port) Builder {
+func (b Builder) WithBottomPort(port messaging.Port) Builder {
 	b.bottomPort = port
 	return b
 }
 
 // WithControlPort sets the control port for the mmuCache
-func (b Builder) WithControlPort(port sim.Port) Builder {
+func (b Builder) WithControlPort(port messaging.Port) Builder {
 	b.controlPort = port
 	return b
 }
@@ -125,7 +126,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)

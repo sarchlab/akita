@@ -4,11 +4,13 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -29,17 +31,17 @@ var _ = Describe("Control Stage", func() {
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlPort")).
+			Return(messaging.RemotePort("ControlPort")).
 			AnyTimes()
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 
 		initialState := State{
@@ -60,7 +62,7 @@ var _ = Describe("Control Stage", func() {
 		}
 		pmw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				NumSets:          16,
 				WayAssociativity: 4,
@@ -71,7 +73,7 @@ var _ = Describe("Control Stage", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		pmw.comp.SetState(initialState)
+		pmw.comp.State = initialState
 
 		s = &controlStage{
 			ctrlPort: ctrlPort,
@@ -92,11 +94,11 @@ var _ = Describe("Control Stage", func() {
 	})
 
 	It("should wait for the cache to finish transactions", func() {
-		next := pmw.comp.GetNextState()
+		next := &pmw.comp.State
 		next.Transactions = append(next.Transactions, transactionState{})
 
 		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
-		flushReq.ID = sim.GetIDGenerator().Generate()
+		flushReq.ID = timing.GetIDGenerator().Generate()
 		flushReq.TrafficBytes = 0
 		flushReq.TrafficClass = "mem.ControlReq"
 		flushReq.DiscardInflight = false
@@ -118,7 +120,7 @@ var _ = Describe("Control Stage", func() {
 
 	It("should reset directory", func() {
 		flushReq := &mem.ControlReq{Command: mem.CmdFlush}
-		flushReq.ID = sim.GetIDGenerator().Generate()
+		flushReq.ID = timing.GetIDGenerator().Generate()
 		flushReq.InvalidateAfter = true
 		flushReq.DiscardInflight = true
 		flushReq.PauseAfter = true
@@ -126,7 +128,7 @@ var _ = Describe("Control Stage", func() {
 		flushReq.TrafficClass = "mem.ControlReq"
 
 		// Store flush request in State instead of controlStage field
-		next := pmw.comp.GetNextState()
+		next := &pmw.comp.State
 		next.HasProcessingFlush = true
 		next.ProcessingFlush = flushReqState{
 			MsgMeta:         flushReq.MsgMeta,
@@ -134,7 +136,7 @@ var _ = Describe("Control Stage", func() {
 			PauseAfter:      flushReq.PauseAfter,
 		}
 
-		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+		ctrlPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
 			Expect(msg.Meta().RspTo).To(Equal(flushReq.ID))
 		})
 
@@ -146,7 +148,7 @@ var _ = Describe("Control Stage", func() {
 		madeProgress := s.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		next = pmw.comp.GetNextState()
+		next = &pmw.comp.State
 		Expect(next.HasProcessingFlush).To(BeFalse())
 	})
 

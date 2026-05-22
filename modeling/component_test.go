@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // --- Test Spec and State types ---
@@ -26,8 +26,8 @@ type TestState struct {
 
 // --- Component tests ---
 
-func TestComponentGetSpec(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestComponentSpec(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	spec := TestSpec{
 		Frequency: 1.0,
 		BufferLen: 4,
@@ -37,34 +37,34 @@ func TestComponentGetSpec(t *testing.T) {
 
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
 		Build("TestComp")
 
-	got := comp.GetSpec()
+	got := comp.Spec
 	if got != spec {
-		t.Errorf("GetSpec() = %v, want %v", got, spec)
+		t.Errorf("Spec() = %v, want %v", got, spec)
 	}
 }
 
-func TestComponentGetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestComponentState(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	state := comp.GetState()
+	state := comp.State
 	if state.Counter != 0 {
-		t.Errorf("GetState().Counter = %d, want 0", state.Counter)
+		t.Errorf("State().Counter = %d, want 0", state.Counter)
 	}
 }
 
-func TestComponentSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestComponentStateAssignment(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
 	newState := TestState{
@@ -73,22 +73,22 @@ func TestComponentSetState(t *testing.T) {
 		LastStatus: "running",
 		Tags:       []string{"a", "b"},
 	}
-	comp.SetState(newState)
+	comp.State = newState
 
-	got := comp.GetState()
+	got := comp.State
 	if got.Counter != 42 {
-		t.Errorf("GetState().Counter = %d, want 42", got.Counter)
+		t.Errorf("State().Counter = %d, want 42", got.Counter)
 	}
 	if got.LastStatus != "running" {
-		t.Errorf("GetState().LastStatus = %q, want %q", got.LastStatus, "running")
+		t.Errorf("State().LastStatus = %q, want %q", got.LastStatus, "running")
 	}
 	if len(got.Values) != 3 {
-		t.Errorf("GetState().Values len = %d, want 3", len(got.Values))
+		t.Errorf("State().Values len = %d, want 3", len(got.Values))
 	}
 }
 
 func TestComponentSpecImmutableAfterCreation(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	spec := TestSpec{
 		Frequency: 2.0,
 		BufferLen: 8,
@@ -98,7 +98,7 @@ func TestComponentSpecImmutableAfterCreation(t *testing.T) {
 
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
 		Build("TestComp")
 
@@ -106,7 +106,7 @@ func TestComponentSpecImmutableAfterCreation(t *testing.T) {
 	// a value copy.
 	spec.Name = "modified"
 
-	got := comp.GetSpec()
+	got := comp.Spec
 	if got.Name != "original" {
 		t.Errorf("spec was mutated: got %q, want %q", got.Name, "original")
 	}
@@ -178,10 +178,10 @@ func (m *countMiddleware) Tick() bool {
 }
 
 func TestComponentMiddlewareTick(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
 	count := 0
@@ -210,17 +210,17 @@ func TestComponentMiddlewareTick(t *testing.T) {
 // --- Builder tests ---
 
 func TestBuilderWithSpec(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	spec := TestSpec{Frequency: 5.0, BufferLen: 2, Name: "b", Enabled: true}
 
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
 		Build("BuilderComp")
 
-	if comp.GetSpec() != spec {
-		t.Errorf("builder spec = %v, want %v", comp.GetSpec(), spec)
+	if comp.Spec != spec {
+		t.Errorf("builder spec = %v, want %v", comp.Spec, spec)
 	}
 
 	if comp.Name() != "BuilderComp" {
@@ -361,176 +361,142 @@ func TestValidateStateInvalid(t *testing.T) {
 	}
 }
 
-// --- A-B double-buffered state tests ---
+// --- Single-state mutation tests ---
 
-func TestGetStateReturnsCurrentBuffer(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestStateReturnsState(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(TestState{Counter: 10, LastStatus: "init"})
+	comp.State = TestState{Counter: 10, LastStatus: "init"}
 
-	got := comp.GetState()
+	got := comp.State
 	if got.Counter != 10 {
-		t.Errorf("GetState().Counter = %d, want 10", got.Counter)
+		t.Errorf("State().Counter = %d, want 10", got.Counter)
 	}
 	if got.LastStatus != "init" {
-		t.Errorf("GetState().LastStatus = %q, want %q", got.LastStatus, "init")
+		t.Errorf("State().LastStatus = %q, want %q", got.LastStatus, "init")
 	}
 }
 
-func TestGetNextStateReturnsWritablePointer(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestStatePtrReturnsWritablePointer(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(TestState{Counter: 5})
+	comp.State = TestState{Counter: 5}
 
-	next := comp.GetNextState()
-	next.Counter = 99
-	next.LastStatus = "modified"
+	state := &comp.State
+	state.Counter = 99
+	state.LastStatus = "modified"
 
-	// GetNextState should reflect the mutation.
-	got := comp.GetNextState()
+	got := comp.State
 	if got.Counter != 99 {
-		t.Errorf("GetNextState().Counter = %d, want 99", got.Counter)
+		t.Errorf("State().Counter = %d, want 99", got.Counter)
 	}
 	if got.LastStatus != "modified" {
-		t.Errorf("GetNextState().LastStatus = %q, want %q", got.LastStatus, "modified")
+		t.Errorf("State().LastStatus = %q, want %q", got.LastStatus, "modified")
 	}
 }
 
-func TestSetNextStateSetsNextBuffer(t *testing.T) {
-	engine := sim.NewSerialEngine()
-	comp := modeling.NewBuilder[TestSpec, TestState]().
-		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
-		Build("TestComp")
-
-	comp.SetState(TestState{Counter: 1})
-	comp.SetNextState(TestState{Counter: 42, LastStatus: "next"})
-
-	// Current should still be the original.
-	if comp.GetState().Counter != 1 {
-		t.Errorf("GetState().Counter = %d, want 1", comp.GetState().Counter)
-	}
-
-	// Next should be the new value.
-	if comp.GetNextState().Counter != 42 {
-		t.Errorf("GetNextState().Counter = %d, want 42", comp.GetNextState().Counter)
-	}
-}
-
-// stateModifyMiddleware modifies the next buffer during Tick via GetNextState.
+// stateModifyMiddleware modifies component state during Tick via StatePtr.
 type stateModifyMiddleware struct {
 	comp *modeling.Component[TestSpec, TestState]
 }
 
 func (m *stateModifyMiddleware) Tick() bool {
-	next := m.comp.GetNextState()
-	next.Counter += 10
-	next.LastStatus = "ticked"
+	state := &m.comp.State
+	state.Counter += 10
+	state.LastStatus = "ticked"
 
 	return true
 }
 
-func TestTickPromotesNextToCurrent(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestTickMutatesStateInPlace(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(TestState{Counter: 5, LastStatus: "init"})
+	comp.State = TestState{Counter: 5, LastStatus: "init"}
 	comp.AddMiddleware(&stateModifyMiddleware{comp: comp})
 
 	comp.Tick()
 
-	got := comp.GetState()
+	got := comp.State
 	if got.Counter != 15 {
-		t.Errorf("after Tick, GetState().Counter = %d, want 15", got.Counter)
+		t.Errorf("after Tick, State().Counter = %d, want 15", got.Counter)
 	}
 	if got.LastStatus != "ticked" {
-		t.Errorf("after Tick, GetState().LastStatus = %q, want %q", got.LastStatus, "ticked")
+		t.Errorf("after Tick, State().LastStatus = %q, want %q", got.LastStatus, "ticked")
 	}
 }
 
-// currentCheckMiddleware verifies that current is unchanged during tick
-// while next is being modified.
-type currentCheckMiddleware struct {
+type stateCheckMiddleware struct {
 	comp           *modeling.Component[TestSpec, TestState]
-	currentDuTick  int
-	nextDuringTick int
+	beforeMutation int
+	afterMutation  int
 }
 
-func (m *currentCheckMiddleware) Tick() bool {
-	// Read current (should be unmodified snapshot).
-	m.currentDuTick = m.comp.GetState().Counter
+func (m *stateCheckMiddleware) Tick() bool {
+	m.beforeMutation = m.comp.State.Counter
 
-	// Modify next.
-	next := m.comp.GetNextState()
-	next.Counter = 999
-	m.nextDuringTick = next.Counter
+	state := &m.comp.State
+	state.Counter = 999
+	m.afterMutation = m.comp.State.Counter
 
 	return true
 }
 
-func TestChangesToNextDontAffectCurrentDuringTick(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestStatePtrMutationAffectsStateDuringTick(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(TestState{Counter: 42})
+	comp.State = TestState{Counter: 42}
 
-	mw := &currentCheckMiddleware{comp: comp}
+	mw := &stateCheckMiddleware{comp: comp}
 	comp.AddMiddleware(mw)
 
 	comp.Tick()
 
-	// During tick, current should have been 42 (unchanged).
-	if mw.currentDuTick != 42 {
-		t.Errorf("current during tick = %d, want 42", mw.currentDuTick)
+	if mw.beforeMutation != 42 {
+		t.Errorf("state before mutation = %d, want 42", mw.beforeMutation)
 	}
-
-	// During tick, next was set to 999.
-	if mw.nextDuringTick != 999 {
-		t.Errorf("next during tick = %d, want 999", mw.nextDuringTick)
+	if mw.afterMutation != 999 {
+		t.Errorf("state after mutation = %d, want 999", mw.afterMutation)
 	}
-
-	// After tick, current should be 999 (promoted from next).
-	if comp.GetState().Counter != 999 {
-		t.Errorf("after Tick, GetState().Counter = %d, want 999", comp.GetState().Counter)
+	if comp.State.Counter != 999 {
+		t.Errorf("after Tick, State().Counter = %d, want 999", comp.State.Counter)
 	}
 }
 
 func TestInPlaceSliceUpdate(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(TestState{
+	comp.State = TestState{
 		Counter: 1,
 		Values:  []int{10, 20, 30},
 		Tags:    []string{"a", "b"},
-	})
+	}
 
-	// Modify via next state.
-	next := comp.GetNextState()
-	next.Tags[0] = "modified"
+	state := &comp.State
+	state.Tags[0] = "modified"
 
-	// With in-place semantics, current and next share underlying slice data
-	// for in-place element modifications.
-	current := comp.GetState()
-	if current.Tags[0] != "modified" {
-		t.Errorf("current Tags[0] = %q, want %q", current.Tags[0], "modified")
+	got := comp.State
+	if got.Tags[0] != "modified" {
+		t.Errorf("state Tags[0] = %q, want %q", got.Tags[0], "modified")
 	}
 }
 
@@ -539,51 +505,47 @@ func TestInPlaceMapUpdate(t *testing.T) {
 		Counts map[string]int `json:"counts"`
 	}
 
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, MapState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
-	comp.SetState(MapState{Counts: map[string]int{"a": 1, "b": 2}})
+	comp.State = MapState{Counts: map[string]int{"a": 1, "b": 2}}
 
-	// Modify via next state.
-	next := comp.GetNextState()
-	next.Counts["c"] = 3
-	next.Counts["a"] = 100
+	state := &comp.State
+	state.Counts["c"] = 3
+	state.Counts["a"] = 100
 
-	// With in-place semantics, current and next share the map.
-	current := comp.GetState()
-	if len(current.Counts) != 3 {
-		t.Errorf("current Counts len = %d, want 3", len(current.Counts))
+	got := comp.State
+	if len(got.Counts) != 3 {
+		t.Errorf("state Counts len = %d, want 3", len(got.Counts))
 	}
-	if current.Counts["a"] != 100 {
-		t.Errorf("current Counts[a] = %d, want 100", current.Counts["a"])
+	if got.Counts["a"] != 100 {
+		t.Errorf("state Counts[a] = %d, want 100", got.Counts["a"])
 	}
 }
 
-func TestSetStateSyncsBothBuffers(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestStateAssignmentReplacesState(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("TestComp")
 
 	state := TestState{Counter: 77, Values: []int{1, 2}, LastStatus: "synced"}
-	comp.SetState(state)
+	comp.State = state
 
-	// Both buffers should agree.
-	if comp.GetState().Counter != 77 {
-		t.Errorf("GetState().Counter = %d, want 77", comp.GetState().Counter)
+	if comp.State.Counter != 77 {
+		t.Errorf("State().Counter = %d, want 77", comp.State.Counter)
 	}
-	if comp.GetNextState().Counter != 77 {
-		t.Errorf("GetNextState().Counter = %d, want 77", comp.GetNextState().Counter)
+	if (&comp.State).Counter != 77 {
+		t.Errorf("StatePtr().Counter = %d, want 77", (&comp.State).Counter)
 	}
 
-	// They should be independent copies.
-	comp.GetNextState().Counter = 88
-	if comp.GetState().Counter != 77 {
-		t.Errorf("modifying next changed current: GetState().Counter = %d, want 77",
-			comp.GetState().Counter)
+	(&comp.State).Counter = 88
+	if comp.State.Counter != 88 {
+		t.Errorf("State().Counter = %d, want 88",
+			comp.State.Counter)
 	}
 }

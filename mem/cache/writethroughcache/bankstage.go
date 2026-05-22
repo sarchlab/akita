@@ -11,7 +11,7 @@ type bankStage struct {
 }
 
 func (s *bankStage) Reset() {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	next.BankPostBufs[s.bankID].Elements = nil
 	next.BankPipelines[s.bankID].Stages = nil
 }
@@ -33,7 +33,7 @@ func (s *bankStage) Tick() bool {
 }
 
 func (s *bankStage) tickPipeline() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	bankPipeline := &next.BankPipelines[s.bankID]
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 
@@ -41,7 +41,7 @@ func (s *bankStage) tickPipeline() bool {
 }
 
 func (s *bankStage) extractFromBuf() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	bankBuf := &next.BankBufs[s.bankID]
 
 	if bankBuf.Size() == 0 {
@@ -61,7 +61,7 @@ func (s *bankStage) extractFromBuf() bool {
 }
 
 func (s *bankStage) finalizeTrans() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 
 	if bankPostBuf.Size() == 0 {
@@ -86,9 +86,9 @@ func (s *bankStage) finalizeTrans() bool {
 func (s *bankStage) finalizeReadHitTrans(
 	trans *transactionState, transIdx int,
 ) bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := uint64(1 << s.cache.GetSpec().Log2BlockSize)
+	blockSize := uint64(1 << s.cache.comp.Spec.Log2BlockSize)
 
 	data, err := s.cache.storage.Read(
 		nextBlock.CacheAddress, blockSize)
@@ -113,9 +113,9 @@ func (s *bankStage) finalizeReadHitTrans(
 func (s *bankStage) finalizeWriteTrans(
 	trans *transactionState, transIdx int,
 ) bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
-	blockSize := 1 << s.cache.GetSpec().Log2BlockSize
+	blockSize := 1 << s.cache.comp.Spec.Log2BlockSize
 
 	data, err := s.cache.storage.Read(nextBlock.CacheAddress, uint64(blockSize))
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *bankStage) finalizeWriteTrans(
 	bankPostBuf := &next.BankPostBufs[s.bankID]
 	bankPostBuf.Elements = bankPostBuf.Elements[1:]
 
-	spec := s.cache.GetSpec()
+	spec := s.cache.comp.Spec
 	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BankDone = true
 
@@ -156,7 +156,7 @@ func (s *bankStage) finalizeWriteTrans(
 }
 
 func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	nextBlock := &next.DirectoryState.Sets[trans.BlockSetID].Blocks[trans.BlockWayID]
 
 	err := s.cache.storage.Write(nextBlock.CacheAddress, trans.Data)
@@ -183,5 +183,3 @@ func (s *bankStage) finalizeWriteFetchedTrans(trans *transactionState) bool {
 
 	return true
 }
-
-

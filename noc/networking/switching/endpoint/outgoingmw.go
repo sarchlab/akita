@@ -4,18 +4,21 @@ import (
 	"math"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/messaging"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/noc/packetization"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// msgMetaToFlits converts a MsgMeta into a slice of packetization.Flit entries.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// msgMetaToFlits converts a MsgMeta into a slice of messaging.Flit entries.
 func msgMetaToFlits(
-	meta sim.MsgMeta,
+	meta messaging.MsgMeta,
 	spec Spec,
-	networkPortRemote sim.RemotePort,
-	defaultSwitchDst sim.RemotePort,
-) []messaging.Flit {
+	networkPortRemote messaging.RemotePort,
+	defaultSwitchDst messaging.RemotePort,
+) []packetization.Flit {
 	numFlit := 1
 	if meta.TrafficBytes > 0 {
 		trafficByte := meta.TrafficBytes
@@ -24,17 +27,17 @@ func msgMetaToFlits(
 		numFlit = (trafficByte-1)/spec.FlitByteSize + 1
 	}
 
-	flits := make([]messaging.Flit, numFlit)
+	flits := make([]packetization.Flit, numFlit)
 	for i := 0; i < numFlit; i++ {
-		flits[i] = messaging.Flit{
-			MsgMeta: sim.MsgMeta{
-				ID:  sim.GetIDGenerator().Generate(),
+		flits[i] = packetization.Flit{
+			MsgMeta: messaging.MsgMeta{
+				ID:  timing.GetIDGenerator().Generate(),
 				Src: networkPortRemote,
 				Dst: defaultSwitchDst,
 			},
 			SeqID:        i,
 			NumFlitInMsg: numFlit,
-			Msg: sim.MsgMeta{
+			Msg: messaging.MsgMeta{
 				ID:           meta.ID,
 				Src:          meta.Src,
 				Dst:          meta.Dst,
@@ -54,9 +57,9 @@ func msgMetaToFlits(
 // sendFlitOut, prepareMsg, prepareFlits.
 type outgoingMW struct {
 	comp             *modeling.Component[Spec, State]
-	devicePorts      []sim.Port
-	networkPort      sim.Port
-	defaultSwitchDst sim.RemotePort
+	devicePorts      []messaging.Port
+	networkPort      messaging.Port
+	defaultSwitchDst messaging.RemotePort
 }
 
 // Tick runs the outgoing stages.
@@ -72,8 +75,8 @@ func (m *outgoingMW) Tick() bool {
 
 func (m *outgoingMW) sendFlitOut() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	numSent := 0
 
@@ -111,7 +114,7 @@ const maxMsgOutBufSize = 16
 
 func (m *outgoingMW) prepareMsg() bool {
 	madeProgress := false
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i := 0; i < len(m.devicePorts); i++ {
 		// Backpressure: stop accepting new messages when the outgoing
@@ -140,8 +143,8 @@ const maxFlitsToBuffer = 64
 
 func (m *outgoingMW) prepareFlits() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 	networkPortRemote := m.networkPort.AsRemote()
 
 	for {
@@ -159,9 +162,9 @@ func (m *outgoingMW) prepareFlits() bool {
 		state.MsgOutBuf = state.MsgOutBuf[1:]
 		flits := msgMetaToFlits(meta, spec, networkPortRemote, m.defaultSwitchDst)
 
-		msgE2ETaskID := sim.GetIDGenerator().Generate()
+		msgE2ETaskID := timing.GetIDGenerator().Generate()
 		for i := range flits {
-			flits[i].MsgMeta.SendTaskID = sim.GetIDGenerator().Generate()
+			flits[i].MsgMeta.SendTaskID = timing.GetIDGenerator().Generate()
 			flits[i].Msg.SendTaskID = msgE2ETaskID
 		}
 
@@ -176,7 +179,7 @@ func (m *outgoingMW) prepareFlits() bool {
 }
 
 func (m *outgoingMW) logFlitE2ETask(
-	fs messaging.Flit, isEnd bool, meta *sim.MsgMeta, msgE2ETaskID uint64,
+	fs packetization.Flit, isEnd bool, meta *messaging.MsgMeta, msgE2ETaskID uint64,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
@@ -187,7 +190,7 @@ func (m *outgoingMW) logFlitE2ETask(
 		return
 	}
 
-	flit := &messaging.Flit{
+	flit := &packetization.Flit{
 		MsgMeta:      fs.MsgMeta,
 		SeqID:        fs.SeqID,
 		NumFlitInMsg: fs.NumFlitInMsg,

@@ -1,7 +1,7 @@
 package datamover
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // DataMovePort is the port name that either serves as a source or destination.
@@ -15,12 +15,12 @@ const (
 
 // DataMoveResponse is sent when a data move operation completes.
 type DataMoveResponse struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 }
 
 // DataMoveRequest is a data move request.
 type DataMoveRequest struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SrcAddress uint64
 	DstAddress uint64
 	ByteSize   uint64

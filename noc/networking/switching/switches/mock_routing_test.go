@@ -11,7 +11,7 @@ package switches
 import (
 	reflect "reflect"
 
-	sim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -40,7 +40,7 @@ func (m *MockTable) EXPECT() *MockTableMockRecorder {
 }
 
 // DefineDefaultRoute mocks base method.
-func (m *MockTable) DefineDefaultRoute(outputPort sim.RemotePort) {
+func (m *MockTable) DefineDefaultRoute(outputPort messaging.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineDefaultRoute", outputPort)
 }
@@ -52,7 +52,7 @@ func (mr *MockTableMockRecorder) DefineDefaultRoute(outputPort any) *gomock.Call
 }
 
 // DefineRoute mocks base method.
-func (m *MockTable) DefineRoute(finalDst, outputPort sim.RemotePort) {
+func (m *MockTable) DefineRoute(finalDst, outputPort messaging.RemotePort) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "DefineRoute", finalDst, outputPort)
 }
@@ -64,10 +64,10 @@ func (mr *MockTableMockRecorder) DefineRoute(finalDst, outputPort any) *gomock.C
 }
 
 // FindPort mocks base method.
-func (m *MockTable) FindPort(dst sim.RemotePort) sim.RemotePort {
+func (m *MockTable) FindPort(dst messaging.RemotePort) messaging.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindPort", dst)
-	ret0, _ := ret[0].(sim.RemotePort)
+	ret0, _ := ret[0].(messaging.RemotePort)
 	return ret0
 }
 

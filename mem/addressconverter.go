@@ -43,5 +43,3 @@ func (c InterleavingConverter) ConvertExternalToInternal(
 
 	return internal
 }
-
-

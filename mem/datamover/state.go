@@ -1,9 +1,8 @@
 package datamover
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"log"
-
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // dataChunk wraps a single []byte slot. This avoids [][]byte which fails
@@ -22,27 +21,27 @@ type bufferState struct {
 
 // pendingReadState captures the serializable fields of a pending read request.
 type pendingReadState struct {
-	ID      uint64         `json:"id"`
-	Src     sim.RemotePort `json:"src"`
-	Dst     sim.RemotePort `json:"dst"`
-	Address uint64         `json:"address"`
+	ID      uint64               `json:"id"`
+	Src     messaging.RemotePort `json:"src"`
+	Dst     messaging.RemotePort `json:"dst"`
+	Address uint64               `json:"address"`
 }
 
 // pendingWriteState captures the serializable fields of a pending write request.
 type pendingWriteState struct {
-	ID      uint64         `json:"id"`
-	Src     sim.RemotePort `json:"src"`
-	Dst     sim.RemotePort `json:"dst"`
-	Address uint64         `json:"address"`
-	Data    []byte         `json:"data"`
+	ID      uint64               `json:"id"`
+	Src     messaging.RemotePort `json:"src"`
+	Dst     messaging.RemotePort `json:"dst"`
+	Address uint64               `json:"address"`
+	Data    []byte               `json:"data"`
 }
 
 // dataMoverTransactionState is the serializable representation of a
 // dataMoverTransaction.
 type dataMoverTransactionState struct {
-	ReqID         uint64                        `json:"req_id"`
-	ReqSrc        sim.RemotePort               `json:"req_src"`
-	ReqDst        sim.RemotePort               `json:"req_dst"`
+	ReqID         uint64                       `json:"req_id"`
+	ReqSrc        messaging.RemotePort         `json:"req_src"`
+	ReqDst        messaging.RemotePort         `json:"req_dst"`
 	SrcAddress    uint64                       `json:"src_address"`
 	DstAddress    uint64                       `json:"dst_address"`
 	ByteSize      uint64                       `json:"byte_size"`
@@ -78,10 +77,10 @@ func addressMustBeAligned(addr, granularity uint64) {
 // findPort resolves a port mapper lookup from Spec fields.
 func findPort(
 	kind string,
-	ports []sim.RemotePort,
+	ports []messaging.RemotePort,
 	interleavingSize uint64,
 	addr uint64,
-) sim.RemotePort {
+) messaging.RemotePort {
 	switch kind {
 	case "single":
 		return ports[0]

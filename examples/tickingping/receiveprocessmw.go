@@ -39,7 +39,7 @@ func (m *receiveProcessMW) processInput() bool {
 }
 
 func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	trans := pingTransactionState{
 		SeqID:     msg.SeqID,
@@ -53,7 +53,7 @@ func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
 }
 
 func (m *receiveProcessMW) processingPingRsp(msg *PingRsp) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	seqID := msg.SeqID
 	startTime := state.StartTimes[seqID]
@@ -65,7 +65,7 @@ func (m *receiveProcessMW) processingPingRsp(msg *PingRsp) {
 }
 
 func (m *receiveProcessMW) countDown() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	madeProgress := false
 
 	for i := range state.CurrentTransactions {

@@ -1,22 +1,22 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Spec contains immutable configuration for the writethroughcache.
 type Spec struct {
-	Freq                  sim.Freq `json:"freq"`
-	NumReqPerCycle        int      `json:"num_req_per_cycle"`
-	Log2BlockSize         uint64 `json:"log2_block_size"`
-	BankLatency           int    `json:"bank_latency"`
-	WayAssociativity      int    `json:"way_associativity"`
-	MaxNumConcurrentTrans int    `json:"max_num_concurrent_trans"`
-	NumBanks              int    `json:"num_banks"`
-	NumMSHREntry          int    `json:"num_mshr_entry"`
-	NumSets               int    `json:"num_sets"`
-	TotalByteSize         uint64 `json:"total_byte_size"`
-	DirLatency            int    `json:"dir_latency"`
+	Freq                  timing.Freq `json:"freq"`
+	NumReqPerCycle        int         `json:"num_req_per_cycle"`
+	Log2BlockSize         uint64      `json:"log2_block_size"`
+	BankLatency           int         `json:"bank_latency"`
+	WayAssociativity      int         `json:"way_associativity"`
+	MaxNumConcurrentTrans int         `json:"max_num_concurrent_trans"`
+	NumBanks              int         `json:"num_banks"`
+	NumMSHREntry          int         `json:"num_mshr_entry"`
+	NumSets               int         `json:"num_sets"`
+	TotalByteSize         uint64      `json:"total_byte_size"`
+	DirLatency            int         `json:"dir_latency"`
 
 	// WritePolicyType selects the write-policy strategy.
 	// Valid values: "write-around" (default), "write-evict", "write-through".

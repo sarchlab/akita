@@ -5,7 +5,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"go.uber.org/mock/gomock"
 )
 
@@ -37,7 +38,7 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should register a component", func() {
-		comp.EXPECT().Ports().Return([]sim.Port{port}).AnyTimes()
+		comp.EXPECT().Ports().Return([]messaging.Port{port}).AnyTimes()
 
 		simulation.RegisterComponent(comp)
 
@@ -46,7 +47,7 @@ var _ = Describe("Simulation", func() {
 	})
 
 	It("should return all registered components", func() {
-		comp.EXPECT().Ports().Return([]sim.Port{port}).AnyTimes()
+		comp.EXPECT().Ports().Return([]messaging.Port{port}).AnyTimes()
 
 		simulation.RegisterComponent(comp)
 

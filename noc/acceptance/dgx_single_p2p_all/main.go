@@ -12,7 +12,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/nvlink"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -38,7 +40,7 @@ func main() {
 			fmt.Printf("Testing P2P between agent %v and agent %v\n", i, j)
 			rand.Seed(1)
 
-			engine := sim.NewSerialEngine()
+			engine := timing.NewSerialEngine()
 			t := acceptance.NewTest()
 
 			agents := createNetwork(engine, t)
@@ -60,7 +62,7 @@ func main() {
 }
 
 func createNetwork(
-	engine sim.EventScheduler,
+	engine timing.EventScheduler,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
 	agents := createAgents(engine, test)
@@ -79,17 +81,17 @@ func createNetwork(
 }
 
 func createAgents(
-	engine sim.EventScheduler,
+	engine timing.EventScheduler,
 	test *acceptance.Test,
 ) []*acceptance.Agent {
-	freq := 1.0 * sim.GHz
+	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 9; i++ {
 		name := fmt.Sprintf("Agent%d", i)
-		ports := []sim.Port{
-			sim.NewPort(nil, 1, 1, name+".Port0"),
+		ports := []messaging.Port{
+			messaging.NewPort(nil, 1, 1, name+".Port0"),
 		}
 		agent := acceptance.NewAgent(engine, freq, name, ports, test)
 		agent.TickLater()

@@ -3,17 +3,20 @@ package writethroughcache
 import (
 	"fmt"
 
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// DefaultSpec provides default configuration for the writethroughcache.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// DefaultSpec provides default configuration for the writethroughcache.
 var DefaultSpec = Spec{
-	Freq:                  1 * sim.GHz,
+	Freq:                  1 * timing.GHz,
 	NumReqPerCycle:        4,
 	Log2BlockSize:         6,
 	BankLatency:           20,
@@ -28,7 +31,7 @@ var DefaultSpec = Spec{
 
 // A Builder can build a writethroughcache cache
 type Builder struct {
-	engine                sim.EventScheduler
+	engine                timing.EventScheduler
 	spec                  Spec
 	log2BlockSize         uint64
 	totalByteSize         uint64
@@ -42,12 +45,12 @@ type Builder struct {
 	visTracer             tracing.Tracer
 
 	addressMapperType string
-	remotePorts       []sim.RemotePort
+	remotePorts       []messaging.RemotePort
 	interleavingSize  uint64
 	legacyMapper      mem.AddressToPortMapper // set by WithAddressToPortMapper, read at Build time
-	topPort           sim.Port
-	bottomPort        sim.Port
-	controlPort       sim.Port
+	topPort           messaging.Port
+	bottomPort        messaging.Port
+	controlPort       messaging.Port
 }
 
 // MakeBuilder creates a builder with default parameter setting.
@@ -69,13 +72,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the event driven simulation engine that the cache uses
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the cache works at
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -152,7 +155,7 @@ func (b Builder) WithAddressMapperType(t string) Builder {
 
 // WithRemotePorts sets the remote ports that the cache can use to send
 // requests to other components.
-func (b Builder) WithRemotePorts(ports ...sim.RemotePort) Builder {
+func (b Builder) WithRemotePorts(ports ...messaging.RemotePort) Builder {
 	b.remotePorts = ports
 	return b
 }
@@ -164,19 +167,19 @@ func (b Builder) WithInterleavingSize(size uint64) Builder {
 }
 
 // WithTopPort sets the top port for the cache
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithBottomPort sets the bottom port for the cache
-func (b Builder) WithBottomPort(port sim.Port) Builder {
+func (b Builder) WithBottomPort(port messaging.Port) Builder {
 	b.bottomPort = port
 	return b
 }
 
 // WithControlPort sets the control port for the cache
-func (b Builder) WithControlPort(port sim.Port) Builder {
+func (b Builder) WithControlPort(port messaging.Port) Builder {
 	b.controlPort = port
 	return b
 }
@@ -217,7 +220,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithSpec(spec).
 		Build(name)
 
-	comp.SetState(initialState)
+	comp.State = initialState
 
 	pmw := b.buildPipelineMW(comp)
 	b.buildStages(pmw)
@@ -390,7 +393,7 @@ func (b *Builder) resolveLegacyMapper() {
 	switch m := b.legacyMapper.(type) {
 	case *mem.SinglePortMapper:
 		b.addressMapperType = "single"
-		b.remotePorts = []sim.RemotePort{m.Port}
+		b.remotePorts = []messaging.RemotePort{m.Port}
 	case *mem.InterleavedAddressPortMapper:
 		b.addressMapperType = "interleaved"
 		b.remotePorts = m.LowModules

@@ -7,8 +7,10 @@ import (
 
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/tebeka/atexit"
 )
 
@@ -16,7 +18,7 @@ func main() {
 	flag.Parse()
 	rand.Seed(1)
 
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	t := acceptance.NewTest()
 
 	createNetwork(engine, t)
@@ -32,16 +34,16 @@ func main() {
 	atexit.Exit(0)
 }
 
-func createNetwork(engine sim.EventScheduler, test *acceptance.Test) {
-	freq := 1.0 * sim.GHz
+func createNetwork(engine timing.EventScheduler, test *acceptance.Test) {
+	freq := 1.0 * timing.GHz
 
 	var agents []*acceptance.Agent
 
 	for i := 0; i < 2; i++ {
 		name := fmt.Sprintf("Agent%d", i)
-		ports := make([]sim.Port, 5)
+		ports := make([]messaging.Port, 5)
 		for j := 0; j < 5; j++ {
-			ports[j] = sim.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
+			ports[j] = messaging.NewPort(nil, 1, 1, fmt.Sprintf("%s.Port%d", name, j))
 		}
 		agent := acceptance.NewAgent(engine, freq, name, ports, test)
 		agent.TickLater()
@@ -53,7 +55,7 @@ func createNetwork(engine sim.EventScheduler, test *acceptance.Test) {
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[0].AgentPorts).
-		WithNetworkPort(sim.NewPort(nil, 4, 4, "EP1.NetworkPort")).
+		WithNetworkPort(messaging.NewPort(nil, 4, 4, "EP1.NetworkPort")).
 		Build("EP1")
 
 	ep2 := endpoint.MakeBuilder().
@@ -61,7 +63,7 @@ func createNetwork(engine sim.EventScheduler, test *acceptance.Test) {
 		WithFreq(freq).
 		WithFlitByteSize(8).
 		WithDevicePorts(agents[1].AgentPorts).
-		WithNetworkPort(sim.NewPort(nil, 4, 4, "EP2.NetworkPort")).
+		WithNetworkPort(messaging.NewPort(nil, 4, 4, "EP2.NetworkPort")).
 		Build("EP2")
 
 	ep1.SetDefaultSwitchDst(ep2.NetworkPort().AsRemote())

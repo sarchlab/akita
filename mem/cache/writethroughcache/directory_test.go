@@ -1,15 +1,17 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -27,7 +29,7 @@ var _ = Describe("Directory", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 
 		c = &pipelineMW{
@@ -62,7 +64,7 @@ var _ = Describe("Directory", func() {
 
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:     6,
 				NumReqPerCycle:    4,
@@ -76,7 +78,7 @@ var _ = Describe("Directory", func() {
 			}).
 			Build("Cache")
 
-		c.comp.SetState(initialState)
+		c.comp.State = initialState
 
 		d = &directory{
 			cache: c,
@@ -95,10 +97,10 @@ var _ = Describe("Directory", func() {
 
 	Context("read mshr hit", func() {
 		It("Should add to mshr entry", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -130,10 +132,10 @@ var _ = Describe("Directory", func() {
 
 	Context("read hit", func() {
 		It("should send transaction to bank", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -172,10 +174,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if cannot send to bank", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -206,10 +208,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if block is locked", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -239,10 +241,10 @@ var _ = Describe("Directory", func() {
 
 	Context("read miss", func() {
 		It("should send request to bottom", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -257,7 +259,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
+			bottomPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
 				readToBottom := msg.(*mem.ReadReq)
 				Expect(readToBottom.Address).To(Equal(uint64(0x100)))
 				Expect(readToBottom.AccessByteSize).To(Equal(uint64(64)))
@@ -288,10 +290,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if victim block is locked", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -315,10 +317,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if victim block is being read", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -342,10 +344,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if mshr is full", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -371,10 +373,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if send to bottom failed", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -389,7 +391,7 @@ var _ = Describe("Directory", func() {
 			)
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
 			madeProgress := d.Tick()
 
@@ -399,10 +401,10 @@ var _ = Describe("Directory", func() {
 
 	Context("write mshr hit", func() {
 		It("should add to mshr entry", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -421,7 +423,7 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					writeToBottom := msg.(*mem.WriteReq)
 					Expect(writeToBottom.Address).To(Equal(uint64(0x104)))
 					Expect(writeToBottom.Data).To(Equal([]byte{1, 2, 3, 4}))
@@ -440,10 +442,10 @@ var _ = Describe("Directory", func() {
 
 	Context("write hit", func() {
 		It("should send to bank", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -467,7 +469,7 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					w := msg.(*mem.WriteReq)
 					Expect(w.Address).To(Equal(uint64(0x104)))
 					Expect(w.Data).To(Equal([]byte{1, 2, 3, 4}))
@@ -485,10 +487,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if the block is locked", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -517,10 +519,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if the block is being read", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -549,10 +551,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if bank buf is full", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -582,10 +584,10 @@ var _ = Describe("Directory", func() {
 		})
 
 		It("should stall if send to bottom failed", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 4 + 12,
 				TrafficClass: "req",
 			}
@@ -607,7 +609,7 @@ var _ = Describe("Directory", func() {
 
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
-			bottomPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			bottomPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
 			madeProgress := d.Tick()
 
@@ -617,10 +619,10 @@ var _ = Describe("Directory", func() {
 
 	Context("write miss", func() {
 		It("should send to bottom", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -636,7 +638,7 @@ var _ = Describe("Directory", func() {
 			next.DirPostBuf.Elements = append(next.DirPostBuf.Elements, 0)
 
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					w := msg.(*mem.WriteReq)
 					Expect(w.Address).To(Equal(uint64(0x100)))
 					Expect(w.Data).To(HaveLen(64))

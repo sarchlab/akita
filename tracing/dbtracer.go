@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Table names for tracing data.
@@ -58,12 +58,12 @@ type segmentTableEntry struct {
 // in different types of databases (e.g., CSV files, SQL databases, etc.)
 type DBTracer struct {
 	mu         sync.Mutex
-	timeTeller sim.TimeTeller
+	timeTeller timing.TimeTeller
 	backend    datarecording.DataRecorder
 
 	tracingTasks     map[uint64]*runningTask
 	isTracing        bool
-	tracingStartTime sim.VTimeInSec
+	tracingStartTime timing.VTimeInSec
 
 	terminated              bool
 	firstTerminateBacktrace string
@@ -278,7 +278,7 @@ func (t *DBTracer) StopTracing() {
 
 // NewDBTracer creates a new DBTracer.
 func NewDBTracer(
-	timeTeller sim.TimeTeller,
+	timeTeller timing.TimeTeller,
 	dataRecorder datarecording.DataRecorder,
 ) *DBTracer {
 	dataRecorder.CreateTable(traceTableName, taskTableEntry{})

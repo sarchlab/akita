@@ -5,11 +5,14 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// blockRef is a set+way pair referencing a block in the directory.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// blockRef is a set+way pair referencing a block in the directory.
 type blockRef struct {
 	SetID int `json:"set_id"`
 	WayID int `json:"way_id"`
@@ -17,11 +20,11 @@ type blockRef struct {
 
 type flusher struct {
 	pipeline *pipelineMW
-	ctrlPort sim.Port
+	ctrlPort messaging.Port
 }
 
 func (f *flusher) Tick() bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 
 	if next.HasProcessingFlush && cacheState(next.CacheState) == cacheStatePreFlushing {
 		return f.processPreFlushing()
@@ -44,14 +47,14 @@ func (f *flusher) processPreFlushing() bool {
 	}
 
 	f.prepareBlockToFlushList()
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 	next.CacheState = int(cacheStateFlushing)
 
 	return true
 }
 
 func (f *flusher) existInflightTransaction() bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 	for _, t := range next.Transactions {
 		if !t.Removed {
 			return true
@@ -61,7 +64,7 @@ func (f *flusher) existInflightTransaction() bool {
 }
 
 func (f *flusher) prepareBlockToFlushList() {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 	for setID, set := range next.DirectoryState.Sets {
 		for wayID, block := range set.Blocks {
 			if block.ReadCount > 0 || block.IsLocked {
@@ -77,13 +80,13 @@ func (f *flusher) prepareBlockToFlushList() {
 }
 
 func (f *flusher) processFlush() bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 
 	if len(next.FlusherBlockToEvictRefs) == 0 {
 		return false
 	}
 
-	spec := f.pipeline.comp.GetSpec()
+	spec := f.pipeline.comp.Spec
 	ref := next.FlusherBlockToEvictRefs[0]
 	block := &next.DirectoryState.Sets[ref.SetID].Blocks[ref.WayID]
 	bankNum := bankID(
@@ -147,7 +150,7 @@ func (f *flusher) extractFromPort() bool {
 }
 
 func (f *flusher) startProcessingFlush(msg *mem.ControlReq) bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 
 	next.HasProcessingFlush = true
 	next.ProcessingFlush = flushReqState{
@@ -177,11 +180,11 @@ func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
 	clearPort(f.pipeline.topPort)
 	clearPort(f.pipeline.bottomPort)
 
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 	next.CacheState = int(cacheStateRunning)
 
 	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -194,7 +197,7 @@ func (f *flusher) handleCacheRestart(msg *mem.ControlReq) bool {
 }
 
 func (f *flusher) finalizeFlushing() bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 
 	if len(next.FlusherBlockToEvictRefs) > 0 {
 		return false
@@ -208,10 +211,10 @@ func (f *flusher) finalizeFlushing() bool {
 		return false
 	}
 
-	spec := f.pipeline.comp.GetSpec()
+	spec := f.pipeline.comp.Spec
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = f.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
@@ -242,7 +245,7 @@ func (f *flusher) finalizeFlushing() bool {
 }
 
 func (f *flusher) flushCompleted() bool {
-	next := f.pipeline.comp.GetNextState()
+	next := &f.pipeline.comp.State
 
 	for i := range next.DirToBankBufs {
 		if next.DirToBankBufs[i].Size() > 0 {

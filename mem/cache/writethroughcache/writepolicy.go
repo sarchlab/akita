@@ -25,7 +25,7 @@ func (d *directory) handleWriteHit(
 	setID, wayID int,
 	postCoalesceIdx int,
 ) bool {
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	switch spec.WritePolicyType {
 	case "write-around":
 		return d.writearoundWriteHit(trans, setID, wayID, postCoalesceIdx)
@@ -44,7 +44,7 @@ func (d *directory) handleWriteMiss(
 	trans *transactionState,
 	postCoalesceIdx int,
 ) bool {
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	switch spec.WritePolicyType {
 	case "write-around":
 		return d.writearoundWriteMiss(trans, postCoalesceIdx)
@@ -64,7 +64,7 @@ func (d *directory) writearoundWriteHit(
 	setID, wayID int,
 	postCoalesceIdx int,
 ) bool {
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
@@ -83,7 +83,7 @@ func (d *directory) writearoundWriteHit(
 	}
 
 	addr := trans.WriteAddress
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -115,7 +115,7 @@ func (d *directory) writearoundWriteMiss(
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
-		next := d.cache.comp.GetNextState()
+		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
 		dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
@@ -132,7 +132,7 @@ func (d *directory) writeevictWriteHit(
 	setID, wayID int,
 	postCoalesceIdx int,
 ) bool {
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
@@ -168,7 +168,7 @@ func (d *directory) writeevictWriteMiss(
 	if ok := d.writeBottom(trans); ok {
 		tracing.AddTaskStep(trans.ID, d.cache.comp, "write-miss")
 
-		next := d.cache.comp.GetNextState()
+		next := &d.cache.comp.State
 		dirPostBuf := &next.DirPostBuf
 		dirPostBuf.Elements = dirPostBuf.Elements[1:]
 
@@ -185,7 +185,7 @@ func (d *directory) writethroughWriteHit(
 	setID, wayID int,
 	postCoalesceIdx int,
 ) bool {
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked || block.ReadCount > 0 {
 		return false
@@ -204,7 +204,7 @@ func (d *directory) writethroughWriteHit(
 	}
 
 	addr := trans.WriteAddress
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 
@@ -246,7 +246,7 @@ func (d *directory) writethroughWriteMiss(
 func (d *directory) writethroughIsPartialWrite(
 	trans *transactionState,
 ) bool {
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	if len(trans.WriteData) < (1 << spec.Log2BlockSize) {
 		return true
 	}
@@ -267,12 +267,12 @@ func (d *directory) writethroughPartialWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	addr := trans.WriteAddress
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
 	trans.FetchAndWrite = true
 
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	if cache.MSHRIsFull(&next.MSHRState, spec.NumMSHREntry) {
 		return false
@@ -313,10 +313,10 @@ func (d *directory) writethroughFullLineWriteMiss(
 	postCoalesceIdx int,
 ) bool {
 	addr := trans.WriteAddress
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)

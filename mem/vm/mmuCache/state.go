@@ -3,7 +3,7 @@ package mmuCache
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 const (
@@ -15,11 +15,11 @@ const (
 
 // State contains mutable runtime data for the mmuCache.
 type State struct {
-	CurrentState           string         `json:"current_state"`
-	Table                  []setState     `json:"table"`
-	InflightFlushReqID     uint64         `json:"inflight_flush_req_id"`
-	InflightFlushReqSrc    sim.RemotePort `json:"inflight_flush_req_src"`
-	InflightFlushReqActive bool           `json:"inflight_flush_req_active"`
+	CurrentState           string               `json:"current_state"`
+	Table                  []setState           `json:"table"`
+	InflightFlushReqID     uint64               `json:"inflight_flush_req_id"`
+	InflightFlushReqSrc    messaging.RemotePort `json:"inflight_flush_req_src"`
+	InflightFlushReqActive bool                 `json:"inflight_flush_req_active"`
 }
 
 // blockState is a serializable snapshot of a single cache block.

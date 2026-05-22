@@ -65,7 +65,7 @@ connector := networkconnector.NewConnector().
 
 ## Messaging
 
-Package `noc/messaging` defines the `Flit` type — the smallest transfer
+Package `noc/packetization` defines the `Flit` type — the smallest transfer
 unit on a network:
 
 ```go

@@ -5,7 +5,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -23,7 +25,7 @@ var _ = Describe("Respond Stage", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 
 		mw = &pipelineMW{
@@ -31,7 +33,7 @@ var _ = Describe("Respond Stage", func() {
 		}
 		mw.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{}).
 			Build("Cache")
 
@@ -43,13 +45,13 @@ var _ = Describe("Respond Stage", func() {
 	})
 
 	Context("read", func() {
-		var readMeta sim.MsgMeta
+		var readMeta messaging.MsgMeta
 
 		BeforeEach(func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 
-			readMeta = sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta = messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -67,10 +69,10 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should stall if cannot send to top", func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			topPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
 			madeProgress := s.Tick()
 
@@ -78,11 +80,11 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should send data ready to top", func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.RspTo).To(Equal(readMeta.ID))
 					Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
@@ -96,13 +98,13 @@ var _ = Describe("Respond Stage", func() {
 	})
 
 	Context("write", func() {
-		var writeMeta sim.MsgMeta
+		var writeMeta messaging.MsgMeta
 
 		BeforeEach(func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 
-			writeMeta = sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta = messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				Src:          "SomeSrc",
 				TrafficBytes: 12,
 				TrafficClass: "req",
@@ -119,9 +121,9 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should stall if cannot send to top", func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 			next.Transactions[0].Done = true
-			topPort.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+			topPort.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 
 			madeProgress := s.Tick()
 
@@ -129,11 +131,11 @@ var _ = Describe("Respond Stage", func() {
 		})
 
 		It("should send data ready to top", func() {
-			next := mw.comp.GetNextState()
+			next := &mw.comp.State
 			next.Transactions[0].Data = []byte{1, 2, 3, 4}
 			next.Transactions[0].Done = true
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					Expect(msg.Meta().RspTo).To(Equal(writeMeta.ID))
 				})
 

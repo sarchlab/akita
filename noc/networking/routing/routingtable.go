@@ -1,29 +1,31 @@
 package routing
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/messaging"
+)
 
 // Table is a routing table that can find the next-hop port according to the
 // final destination.
 type Table interface {
-	FindPort(dst sim.RemotePort) sim.RemotePort
-	DefineRoute(finalDst, outputPort sim.RemotePort)
-	DefineDefaultRoute(outputPort sim.RemotePort)
+	FindPort(dst messaging.RemotePort) messaging.RemotePort
+	DefineRoute(finalDst, outputPort messaging.RemotePort)
+	DefineDefaultRoute(outputPort messaging.RemotePort)
 }
 
 // NewTable creates a new Table.
 func NewTable() Table {
 	t := &table{}
-	t.t = make(map[sim.RemotePort]sim.RemotePort)
+	t.t = make(map[messaging.RemotePort]messaging.RemotePort)
 
 	return t
 }
 
 type table struct {
-	t           map[sim.RemotePort]sim.RemotePort
-	defaultPort sim.RemotePort
+	t           map[messaging.RemotePort]messaging.RemotePort
+	defaultPort messaging.RemotePort
 }
 
-func (t table) FindPort(dst sim.RemotePort) sim.RemotePort {
+func (t table) FindPort(dst messaging.RemotePort) messaging.RemotePort {
 	out, found := t.t[dst]
 	if found {
 		return out
@@ -32,10 +34,10 @@ func (t table) FindPort(dst sim.RemotePort) sim.RemotePort {
 	return t.defaultPort
 }
 
-func (t *table) DefineRoute(finalDst, outputPort sim.RemotePort) {
+func (t *table) DefineRoute(finalDst, outputPort messaging.RemotePort) {
 	t.t[finalDst] = outputPort
 }
 
-func (t *table) DefineDefaultRoute(outputPort sim.RemotePort) {
+func (t *table) DefineDefaultRoute(outputPort messaging.RemotePort) {
 	t.defaultPort = outputPort
 }

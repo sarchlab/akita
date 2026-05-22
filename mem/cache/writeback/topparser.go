@@ -2,7 +2,8 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -11,7 +12,7 @@ type topParser struct {
 }
 
 func (p *topParser) Tick() bool {
-	next := p.cache.comp.GetNextState()
+	next := &p.cache.comp.State
 
 	if cacheState(next.CacheState) != cacheStateRunning {
 		return false
@@ -27,7 +28,7 @@ func (p *topParser) Tick() bool {
 	}
 
 	trans := transactionState{
-		ID: sim.GetIDGenerator().Generate(),
+		ID: timing.GetIDGenerator().Generate(),
 	}
 
 	switch msg := msg.(type) {

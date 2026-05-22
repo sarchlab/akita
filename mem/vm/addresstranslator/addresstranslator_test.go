@@ -8,7 +8,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -30,7 +32,7 @@ var _ = Describe("Address Translator", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 		topPort.EXPECT().
 			Name().
@@ -39,7 +41,7 @@ var _ = Describe("Address Translator", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 		bottomPort.EXPECT().
 			Name().
@@ -48,12 +50,12 @@ var _ = Describe("Address Translator", func() {
 		ctrlPort = NewMockPort(mockCtrl)
 		ctrlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("CtrlPort")).
+			Return(messaging.RemotePort("CtrlPort")).
 			AnyTimes()
 		translationPort = NewMockPort(mockCtrl)
 		translationPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TranslationPort")).
+			Return(messaging.RemotePort("TranslationPort")).
 			AnyTimes()
 		translationPort.EXPECT().
 			Name().
@@ -69,9 +71,9 @@ var _ = Describe("Address Translator", func() {
 			WithLog2PageSize(12).
 			WithFreq(1).
 			WithMemoryProviderType("single").
-			WithMemoryProviders(sim.RemotePort("MemPort")).
+			WithMemoryProviders(messaging.RemotePort("MemPort")).
 			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(sim.RemotePort("TranslationPort")).
+			WithTranslationProviders(messaging.RemotePort("TranslationPort")).
 			WithTopPort(topPort).
 			WithBottomPort(bottomPort).
 			WithTranslationPort(translationPort).
@@ -94,7 +96,7 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			req = &mem.ReadReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Address = 0x100
 			req.AccessByteSize = 4
 			req.PID = 1
@@ -111,14 +113,14 @@ var _ = Describe("Address Translator", func() {
 		It("should send translation", func() {
 			var transReqReturn *vm.TranslationReq
 			transReq := &vm.TranslationReq{}
-			transReq.ID = sim.GetIDGenerator().Generate()
+			transReq.ID = timing.GetIDGenerator().Generate()
 			transReq.PID = 1
 			transReq.VAddr = 0x100
 			transReq.DeviceID = 1
 			transReq.TrafficClass = "vm.TranslationReq"
 
 			// Set initial state with an existing transaction
-			nextState := t.GetNextState()
+			nextState := &t.State
 			nextState.Transactions = append(nextState.Transactions, transactionState{
 				TranslationReqID: transReq.ID,
 			})
@@ -128,7 +130,7 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			topPort.EXPECT().RetrieveIncoming()
 			translationPort.EXPECT().Send(gomock.Any()).
-				DoAndReturn(func(msg sim.Msg) *sim.SendError {
+				DoAndReturn(func(msg messaging.Msg) *messaging.SendError {
 					transReqReturn = msg.(*vm.TranslationReq)
 					return nil
 				})
@@ -136,7 +138,7 @@ var _ = Describe("Address Translator", func() {
 			needTick := tParseTransMW.translate()
 
 			Expect(needTick).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.Transactions).To(HaveLen(2))
 			Expect(updatedState.Transactions[1].TranslationReqID).
 				To(Equal(transReqReturn.ID))
@@ -146,12 +148,12 @@ var _ = Describe("Address Translator", func() {
 			topPort.EXPECT().PeekIncoming().Return(req)
 			translationPort.EXPECT().
 				Send(gomock.Any()).
-				Return(&sim.SendError{})
+				Return(&messaging.SendError{})
 
 			needTick := tParseTransMW.translate()
 
 			Expect(needTick).To(BeFalse())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.Transactions).To(HaveLen(0))
 		})
 	})
@@ -163,24 +165,24 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			transReq1 = &vm.TranslationReq{}
-			transReq1.ID = sim.GetIDGenerator().Generate()
+			transReq1.ID = timing.GetIDGenerator().Generate()
 			transReq1.PID = 1
 			transReq1.VAddr = 0x100
 			transReq1.DeviceID = 1
 			transReq1.TrafficClass = "vm.TranslationReq"
 			transReq2 = &vm.TranslationReq{}
-			transReq2.ID = sim.GetIDGenerator().Generate()
+			transReq2.ID = timing.GetIDGenerator().Generate()
 			transReq2.PID = 1
 			transReq2.VAddr = 0x100
 			transReq2.DeviceID = 1
 			transReq2.TrafficClass = "vm.TranslationReq"
 
-			t.SetState(State{
+			t.State = State{
 				Transactions: []transactionState{
 					{TranslationReqID: transReq1.ID},
 					{TranslationReqID: transReq2.ID},
 				},
-			})
+			}
 		})
 
 		It("should do nothing if there is no translation return", func() {
@@ -191,7 +193,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should stall if send failed", func() {
 			req := &mem.ReadReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -203,11 +205,11 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			t.SetState(State{
+			t.State = State{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -218,10 +220,10 @@ var _ = Describe("Address Translator", func() {
 					},
 					{TranslationReqID: transReq2.ID},
 				},
-			})
+			}
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
-			bottomPort.EXPECT().Send(gomock.Any()).Return(sim.NewSendError())
+			bottomPort.EXPECT().Send(gomock.Any()).Return(messaging.NewSendError())
 
 			madeProgress := tRespondPipeMW.parseTranslation()
 
@@ -230,7 +232,7 @@ var _ = Describe("Address Translator", func() {
 
 		It("should forward read request", func() {
 			req := &mem.ReadReq{}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.Address = 0x10040
 			req.AccessByteSize = 4
 			req.TrafficBytes = 12
@@ -242,11 +244,11 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			t.SetState(State{
+			t.State = State{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -257,12 +259,12 @@ var _ = Describe("Address Translator", func() {
 					},
 					{TranslationReqID: transReq2.ID},
 				},
-			})
+			}
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					read := msg.(*mem.ReadReq)
 					Expect(read.PID).To(Equal(vm.PID(0)))
 					Expect(read.Address).To(Equal(uint64(0x20040)))
@@ -274,7 +276,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.Transactions).NotTo(
 				ContainElement(
 					WithTransform(
@@ -290,7 +292,7 @@ var _ = Describe("Address Translator", func() {
 			data := []byte{1, 2, 3, 4}
 			dirty := []bool{false, true, false, true}
 			write := &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
+			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x10040
 			write.Data = data
 			write.DirtyMask = dirty
@@ -303,11 +305,11 @@ var _ = Describe("Address Translator", func() {
 					PAddr: 0x20000,
 				},
 			}
-			translationRsp.ID = sim.GetIDGenerator().Generate()
+			translationRsp.ID = timing.GetIDGenerator().Generate()
 			translationRsp.RspTo = transReq1.ID
 			translationRsp.TrafficClass = "vm.TranslationRsp"
 
-			t.SetState(State{
+			t.State = State{
 				Transactions: []transactionState{
 					{
 						TranslationReqID: transReq1.ID,
@@ -318,12 +320,12 @@ var _ = Describe("Address Translator", func() {
 					},
 					{TranslationReqID: transReq2.ID},
 				},
-			})
+			}
 
 			translationPort.EXPECT().PeekIncoming().Return(translationRsp)
 			translationPort.EXPECT().RetrieveIncoming()
 			bottomPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					writeMsg := msg.(*mem.WriteReq)
 					Expect(writeMsg.PID).To(Equal(vm.PID(0)))
 					Expect(writeMsg.Address).To(Equal(uint64(0x20040)))
@@ -336,7 +338,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tRespondPipeMW.parseTranslation()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 	})
@@ -351,29 +353,29 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = &mem.ReadReq{}
-			readFromTop.ID = sim.GetIDGenerator().Generate()
+			readFromTop.ID = timing.GetIDGenerator().Generate()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "mem.ReadReq"
 			readToBottom = &mem.ReadReq{}
-			readToBottom.ID = sim.GetIDGenerator().Generate()
+			readToBottom.ID = timing.GetIDGenerator().Generate()
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "mem.ReadReq"
 			writeFromTop = &mem.WriteReq{}
-			writeFromTop.ID = sim.GetIDGenerator().Generate()
+			writeFromTop.ID = timing.GetIDGenerator().Generate()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "mem.WriteReq"
 			writeToBottom = &mem.WriteReq{}
-			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.ID = timing.GetIDGenerator().Generate()
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
 
-			t.SetState(State{
+			t.State = State{
 				InflightReqToBottom: []reqToBottomState{
 					{
 						ReqFromTopID:    readFromTop.ID,
@@ -396,7 +398,7 @@ var _ = Describe("Address Translator", func() {
 						ReqToBottomType: fmt.Sprintf("%T", writeToBottom),
 					},
 				},
-			})
+			}
 		})
 
 		It("should do nothing if there is no response to process", func() {
@@ -407,13 +409,13 @@ var _ = Describe("Address Translator", func() {
 
 		It("should respond data ready", func() {
 			dataReady := &mem.DataReadyRsp{}
-			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "mem.DataReadyRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.RspTo).To(Equal(readFromTop.ID))
 					Expect(dr.Data).To(Equal(dataReady.Data))
@@ -424,19 +426,19 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should respond write done", func() {
 			done := &mem.WriteDoneRsp{}
-			done.ID = sim.GetIDGenerator().Generate()
+			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottom.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "mem.WriteDoneRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(done)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					doneMsg := msg.(*mem.WriteDoneRsp)
 					Expect(doneMsg.RspTo).To(Equal(writeFromTop.ID))
 				}).
@@ -446,29 +448,29 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(1))
 		})
 
 		It("should stall if TopPort is busy", func() {
 			dataReady := &mem.DataReadyRsp{}
-			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottom.ID
 			dataReady.TrafficBytes = 4
 			dataReady.TrafficClass = "mem.DataReadyRsp"
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.RspTo).To(Equal(readFromTop.ID))
 					Expect(dr.Data).To(Equal(dataReady.Data))
 				}).
-				Return(&sim.SendError{})
+				Return(&messaging.SendError{})
 
 			madeProgress := tRespondPipeMW.respond()
 
 			Expect(madeProgress).To(BeFalse())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.InflightReqToBottom).To(HaveLen(2))
 		})
 	})
@@ -492,43 +494,43 @@ var _ = Describe("Address Translator", func() {
 
 		BeforeEach(func() {
 			readFromTop = &mem.ReadReq{}
-			readFromTop.ID = sim.GetIDGenerator().Generate()
+			readFromTop.ID = timing.GetIDGenerator().Generate()
 			readFromTop.Address = 0x10040
 			readFromTop.AccessByteSize = 4
 			readFromTop.TrafficBytes = 12
 			readFromTop.TrafficClass = "mem.ReadReq"
 			readToBottom = &mem.ReadReq{}
-			readToBottom.ID = sim.GetIDGenerator().Generate()
+			readToBottom.ID = timing.GetIDGenerator().Generate()
 			readToBottom.Address = 0x20040
 			readToBottom.AccessByteSize = 4
 			readToBottom.TrafficBytes = 12
 			readToBottom.TrafficClass = "mem.ReadReq"
 			writeFromTop = &mem.WriteReq{}
-			writeFromTop.ID = sim.GetIDGenerator().Generate()
+			writeFromTop.ID = timing.GetIDGenerator().Generate()
 			writeFromTop.Address = 0x10040
 			writeFromTop.TrafficBytes = 12
 			writeFromTop.TrafficClass = "mem.WriteReq"
 			writeToBottom = &mem.WriteReq{}
-			writeToBottom.ID = sim.GetIDGenerator().Generate()
+			writeToBottom.ID = timing.GetIDGenerator().Generate()
 			writeToBottom.Address = 0x10040
 			writeToBottom.TrafficBytes = 12
 			writeToBottom.TrafficClass = "mem.WriteReq"
 			flushReq = &mem.ControlReq{
 				Command: mem.CmdFlush,
 			}
-			flushReq.ID = sim.GetIDGenerator().Generate()
+			flushReq.ID = timing.GetIDGenerator().Generate()
 			flushReq.Dst = ctrlPort.AsRemote()
 			flushReq.TrafficBytes = 4
 			flushReq.TrafficClass = "mem.ControlReq"
 			restartReq = &mem.ControlReq{
 				Command: mem.CmdReset,
 			}
-			restartReq.ID = sim.GetIDGenerator().Generate()
+			restartReq.ID = timing.GetIDGenerator().Generate()
 			restartReq.Dst = ctrlPort.AsRemote()
 			restartReq.TrafficBytes = 4
 			restartReq.TrafficClass = "mem.ControlReq"
 
-			nextState := t.GetNextState()
+			nextState := &t.State
 			nextState.InflightReqToBottom = []reqToBottomState{
 				{
 					ReqFromTopID:    readFromTop.ID,
@@ -561,7 +563,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.IsFlushing).To(BeTrue())
 			Expect(updatedState.InflightReqToBottom).To(BeNil())
 		})
@@ -577,7 +579,7 @@ var _ = Describe("Address Translator", func() {
 			madeProgress := tParseTransMW.handleCtrlRequest()
 
 			Expect(madeProgress).To(BeTrue())
-			updatedState := t.GetNextState()
+			updatedState := &t.State
 			Expect(updatedState.IsFlushing).To(BeFalse())
 		})
 

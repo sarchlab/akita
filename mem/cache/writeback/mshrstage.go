@@ -2,7 +2,8 @@ package writeback
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -11,7 +12,7 @@ type mshrStage struct {
 }
 
 func (s *mshrStage) Tick() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 
 	if next.HasProcessingMSHREntry {
 		return s.processOneReq()
@@ -36,7 +37,7 @@ func (s *mshrStage) Tick() bool {
 }
 
 func (s *mshrStage) Reset() {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	next.HasProcessingMSHREntry = false
 	next.ProcessingMSHREntryIdx = 0
 	next.MSHRStageBuf.Clear()
@@ -47,7 +48,7 @@ func (s *mshrStage) processOneReq() bool {
 		return false
 	}
 
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	processingTrans := &next.Transactions[next.ProcessingMSHREntryIdx]
 
 	if len(processingTrans.MSHRTransactionIndices) == 0 {
@@ -68,7 +69,7 @@ func (s *mshrStage) processOneReq() bool {
 
 	transactionPresent := trans != nil && s.findTransaction(transIdx)
 
-	spec := s.cache.comp.GetSpec()
+	spec := s.cache.comp.Spec
 
 	if transactionPresent {
 		next.Transactions[transIdx].Removed = true
@@ -103,7 +104,7 @@ func (s *mshrStage) respondRead(
 	_, offset := getCacheLineID(trans.ReadAddress, log2BlockSize)
 	respondData := data[offset : offset+trans.ReadAccessByteSize]
 	dataReady := &mem.DataReadyRsp{}
-	dataReady.ID = sim.GetIDGenerator().Generate()
+	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -117,7 +118,7 @@ func (s *mshrStage) respondRead(
 
 func (s *mshrStage) respondWrite(trans *transactionState) {
 	writeDoneRsp := &mem.WriteDoneRsp{}
-	writeDoneRsp.ID = sim.GetIDGenerator().Generate()
+	writeDoneRsp.ID = timing.GetIDGenerator().Generate()
 	writeDoneRsp.Src = s.cache.topPort.AsRemote()
 	writeDoneRsp.Dst = trans.WriteMeta.Src
 	writeDoneRsp.RspTo = trans.WriteMeta.ID
@@ -129,7 +130,7 @@ func (s *mshrStage) respondWrite(trans *transactionState) {
 }
 
 func (s *mshrStage) findTransaction(transIdx int) bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	if transIdx < 0 || transIdx >= len(next.Transactions) {
 		return false
 	}

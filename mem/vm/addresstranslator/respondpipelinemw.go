@@ -7,24 +7,27 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// respondPipelineMW handles translation responses and bottom-port responses.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// respondPipelineMW handles translation responses and bottom-port responses.
 type respondPipelineMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *respondPipelineMW) topPort() sim.Port {
+func (m *respondPipelineMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *respondPipelineMW) bottomPort() sim.Port {
+func (m *respondPipelineMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *respondPipelineMW) translationPort() sim.Port {
+func (m *respondPipelineMW) translationPort() messaging.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
@@ -32,7 +35,7 @@ func (m *respondPipelineMW) translationPort() sim.Port {
 func (m *respondPipelineMW) Tick() bool {
 	madeProgress := false
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respond() || madeProgress
@@ -52,7 +55,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 	}
 
 	rsp := rspI.(*vm.TranslationRsp)
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 	transIdx := findTransactionByReqID(nextState.Transactions, rsp.RspTo)
 
 	if transIdx < 0 {
@@ -62,7 +65,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 
 	nextTrans := &nextState.Transactions[transIdx]
 	reqState := nextTrans.IncomingReqs[0]
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	translatedReq := createTranslatedReq(reqState, rsp.Page,
 		spec.Log2PageSize, m.bottomPort().AsRemote(), spec)
 
@@ -96,7 +99,7 @@ func (m *respondPipelineMW) parseTranslation() bool {
 func (m *respondPipelineMW) traceTranslationComplete(
 	trans *transactionState,
 	reqState incomingReqState,
-	translatedReq sim.Msg,
+	translatedReq messaging.Msg,
 ) {
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(translatedReq, m.comp),
@@ -134,11 +137,11 @@ func (m *respondPipelineMW) respond() bool {
 		return false
 	}
 
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 
 	var (
 		reqFromTopState reqToBottomState
-		rspToTop        sim.Msg
+		rspToTop        messaging.Msg
 	)
 
 	reqInBottom := false
@@ -151,7 +154,7 @@ func (m *respondPipelineMW) respond() bool {
 			rspToTop = &mem.DataReadyRsp{
 				Data: rsp.Data,
 			}
-			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
+			rspToTop.Meta().ID = timing.GetIDGenerator().Generate()
 			rspToTop.Meta().Src = m.topPort().AsRemote()
 			rspToTop.Meta().Dst = reqFromTopState.ReqFromTopSrc
 			rspToTop.Meta().RspTo = reqFromTopState.ReqFromTopID
@@ -178,7 +181,7 @@ func (m *respondPipelineMW) respond() bool {
 		if reqInBottom {
 			reqFromTopState = findReqToBottomByID(nextState.InflightReqToBottom, rsp.RspTo)
 			rspToTop = &mem.WriteDoneRsp{}
-			rspToTop.Meta().ID = sim.GetIDGenerator().Generate()
+			rspToTop.Meta().ID = timing.GetIDGenerator().Generate()
 			rspToTop.Meta().Src = m.topPort().AsRemote()
 			rspToTop.Meta().Dst = reqFromTopState.ReqFromTopSrc
 			rspToTop.Meta().RspTo = reqFromTopState.ReqFromTopID

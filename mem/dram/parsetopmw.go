@@ -3,19 +3,20 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type parseTopMW struct {
 	comp    *modeling.Component[Spec, State]
-	topPort sim.Port
+	topPort messaging.Port
 }
 
 // Tick runs the parseTop stage.
 func (m *parseTopMW) Tick() bool {
-	next := m.comp.GetNextState()
-	spec := m.comp.GetSpec()
+	next := &m.comp.State
+	spec := m.comp.Spec
 
 	return m.parseTop(&spec, next)
 }

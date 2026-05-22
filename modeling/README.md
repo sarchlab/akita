@@ -47,8 +47,8 @@ comp.AddMiddleware(&myMiddleware{comp: comp})
 
 Key methods:
 
-- `GetSpec() S` — returns the immutable spec.
-- `GetState() T` / `GetNextState() *T` — read/write the current state.
+- `Spec S` — returns the immutable spec.
+- `State T` / ``State` field *T` — read/write the current state.
 - `Tick() bool` — runs the middleware pipeline (returns true if progress made).
 - `SaveState(w) / LoadState(r)` — JSON checkpoint/restore.
 
@@ -106,6 +106,5 @@ comp.SaveState(writer)
 
 // Load
 comp.LoadState(reader)
-comp.ResetTick()          // for Component[S,T]
 comp.ResetWakeup()        // for EventDrivenComponent[S,T]
 ```

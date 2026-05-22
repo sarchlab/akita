@@ -2,13 +2,13 @@ package mem
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // AccessReq abstracts read and write requests sent to cache modules or memory
 // controllers.
 type AccessReq interface {
-	sim.Msg
+	messaging.Msg
 	GetAddress() uint64
 	GetByteSize() uint64
 	GetPID() vm.PID
@@ -16,12 +16,12 @@ type AccessReq interface {
 
 // AccessRsp abstracts response messages in the memory system.
 type AccessRsp interface {
-	sim.Msg
+	messaging.Msg
 }
 
 // ReadReq is a read request sent to a memory controller.
 type ReadReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Address            uint64
 	AccessByteSize     uint64
 	PID                vm.PID
@@ -46,7 +46,7 @@ func (r *ReadReq) GetPID() vm.PID {
 
 // WriteReq is a write request sent to a memory controller.
 type WriteReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Address            uint64
 	Data               []byte
 	DirtyMask          []bool
@@ -72,13 +72,13 @@ func (r *WriteReq) GetPID() vm.PID {
 
 // DataReadyRsp is a response carrying data loaded from memory.
 type DataReadyRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Data []byte
 }
 
 // WriteDoneRsp is a response indicating a write request is completed.
 type WriteDoneRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 }
 
 // ControlCommand enumerates control operations for memory components.
@@ -95,7 +95,7 @@ const (
 
 // ControlReq is a unified control request for all memory components.
 type ControlReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Command         ControlCommand
 	DiscardInflight bool     // For Flush: discard vs wait for in-flight
 	InvalidateAfter bool     // For Flush: invalidate lines after writeback
@@ -106,7 +106,7 @@ type ControlReq struct {
 
 // ControlRsp is the unified response to a ControlReq.
 type ControlRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Command ControlCommand
 	Success bool
 }

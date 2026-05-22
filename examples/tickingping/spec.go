@@ -1,22 +1,23 @@
 package tickingping
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // PingReq is a ping request message.
 type PingReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
 // PingRsp is a ping response message.
 type PingRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
 // Spec contains immutable configuration for the tickingping component.
 type Spec struct {
-	Freq sim.Freq `json:"freq"`
+	Freq timing.Freq `json:"freq"`
 }

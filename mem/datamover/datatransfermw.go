@@ -5,26 +5,29 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// dataTransferMW handles data read/write operations between source and
+	// destination ports.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// dataTransferMW handles data read/write operations between source and
-// destination ports.
 type dataTransferMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *dataTransferMW) insidePort() sim.Port {
+func (m *dataTransferMW) insidePort() messaging.Port {
 	return m.comp.GetPortByName("Inside")
 }
 
-func (m *dataTransferMW) outsidePort() sim.Port {
+func (m *dataTransferMW) outsidePort() messaging.Port {
 	return m.comp.GetPortByName("Outside")
 }
 
-func (m *dataTransferMW) srcPort() sim.Port {
-	state := m.comp.GetNextState()
+func (m *dataTransferMW) srcPort() messaging.Port {
+	state := &m.comp.State
 	switch state.SrcSide {
 	case "inside":
 		return m.insidePort()
@@ -35,8 +38,8 @@ func (m *dataTransferMW) srcPort() sim.Port {
 	}
 }
 
-func (m *dataTransferMW) dstPort() sim.Port {
-	state := m.comp.GetNextState()
+func (m *dataTransferMW) dstPort() messaging.Port {
+	state := &m.comp.State
 	switch state.DstSide {
 	case "inside":
 		return m.insidePort()
@@ -47,9 +50,9 @@ func (m *dataTransferMW) dstPort() sim.Port {
 	}
 }
 
-func (m *dataTransferMW) findSrcPort(addr uint64) sim.RemotePort {
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+func (m *dataTransferMW) findSrcPort(addr uint64) messaging.RemotePort {
+	spec := m.comp.Spec
+	state := &m.comp.State
 	switch state.SrcSide {
 	case "inside":
 		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
@@ -63,9 +66,9 @@ func (m *dataTransferMW) findSrcPort(addr uint64) sim.RemotePort {
 	}
 }
 
-func (m *dataTransferMW) findDstPort(addr uint64) sim.RemotePort {
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+func (m *dataTransferMW) findDstPort(addr uint64) messaging.RemotePort {
+	spec := m.comp.Spec
+	state := &m.comp.State
 	switch state.DstSide {
 	case "inside":
 		return findPort(spec.InsideMapperKind, spec.InsideMapperPorts,
@@ -93,7 +96,7 @@ func (m *dataTransferMW) Tick() bool {
 
 // readFromSrc reads data from source.
 func (m *dataTransferMW) readFromSrc() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if !state.CurrentTransaction.Active {
 		return false
 	}
@@ -101,7 +104,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	trans := &state.CurrentTransaction
 	addr := alignAddress(trans.NextReadAddr, state.SrcByteGranularity)
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	bufEndAddr := state.Buffer.Offset + spec.BufferSize
 	if addr >= bufEndAddr {
 		return false
@@ -115,7 +118,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 	srcP := m.srcPort()
 
 	req := &mem.ReadReq{}
-	req.ID = sim.GetIDGenerator().Generate()
+	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = addr
 	req.Src = srcP.AsRemote()
 	req.Dst = m.findSrcPort(addr)
@@ -145,7 +148,7 @@ func (m *dataTransferMW) readFromSrc() bool {
 
 // processDataReadyFromSrc processes data ready from source.
 func (m *dataTransferMW) processDataReadyFromSrc() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if !state.CurrentTransaction.Active {
 		return false
 	}
@@ -186,7 +189,7 @@ func (m *dataTransferMW) processDataReadyFromSrc() bool {
 
 // writeToDst sends data to destination.
 func (m *dataTransferMW) writeToDst() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if !state.CurrentTransaction.Active {
 		return false
 	}
@@ -202,7 +205,7 @@ func (m *dataTransferMW) writeToDst() bool {
 	dstP := m.dstPort()
 
 	req := &mem.WriteReq{}
-	req.ID = sim.GetIDGenerator().Generate()
+	req.ID = timing.GetIDGenerator().Generate()
 	req.Address = trans.NextWriteAddr
 	req.Data = data
 	req.Src = dstP.AsRemote()
@@ -234,7 +237,7 @@ func (m *dataTransferMW) writeToDst() bool {
 
 // processWriteDoneFromDst processes write done from destination.
 func (m *dataTransferMW) processWriteDoneFromDst() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if !state.CurrentTransaction.Active {
 		return false
 	}

@@ -5,7 +5,9 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -19,8 +21,8 @@ func (s *intake) Tick() bool {
 		return false
 	}
 
-	next := s.cache.comp.GetNextState()
-	if s.countActive(next) >= s.cache.GetSpec().MaxNumConcurrentTrans {
+	next := &s.cache.comp.State
+	if s.countActive(next) >= s.cache.comp.Spec.MaxNumConcurrentTrans {
 		return false
 	}
 
@@ -50,14 +52,14 @@ func (s *intake) countActive(state *State) int {
 	return count
 }
 
-func (s *intake) createTransaction(msg sim.Msg) int {
-	next := s.cache.comp.GetNextState()
+func (s *intake) createTransaction(msg messaging.Msg) int {
+	next := &s.cache.comp.State
 
 	var t transactionState
 	switch m := msg.(type) {
 	case *mem.ReadReq:
 		t = transactionState{
-			ID:                 sim.GetIDGenerator().Generate(),
+			ID:                 timing.GetIDGenerator().Generate(),
 			HasRead:            true,
 			ReadMeta:           m.MsgMeta,
 			ReadAddress:        m.Address,
@@ -72,7 +74,7 @@ func (s *intake) createTransaction(msg sim.Msg) int {
 			nil)
 	case *mem.WriteReq:
 		t = transactionState{
-			ID:             sim.GetIDGenerator().Generate(),
+			ID:             timing.GetIDGenerator().Generate(),
 			HasWrite:       true,
 			WriteMeta:      m.MsgMeta,
 			WriteAddress:   m.Address,

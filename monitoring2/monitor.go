@@ -24,24 +24,27 @@ import (
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/daisen2/static"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 	"github.com/shirou/gopsutil/process"
 	"github.com/syifan/goseth"
+
+	// Monitor provides live simulation monitoring capabilities. It serves HTTP
+	// endpoints for engine control, component inspection, progress bars,
+	// resource monitoring, and embeds Daisen's trace replay functionality.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// Monitor provides live simulation monitoring capabilities. It serves HTTP
-// endpoints for engine control, component inspection, progress bars,
-// resource monitoring, and embeds Daisen's trace replay functionality.
 type Monitor struct {
 	// Configuration (set before StartServer).
 	port        int
-	engine      sim.Engine
+	engine      timing.Engine
 	traceDBPath string
 	visTracer   *tracing.DBTracer
 
 	// Internal state.
-	components       []sim.Component
+	components       []messaging.Component
 	buffers          []bufferState
 	progressBarsLock sync.Mutex
 	progressBars     []*daisen2.ProgressBar
@@ -76,13 +79,13 @@ func (m *Monitor) WithPortNumber(port int) *Monitor {
 }
 
 // RegisterEngine registers the simulation engine with the monitor.
-func (m *Monitor) RegisterEngine(e sim.Engine) {
+func (m *Monitor) RegisterEngine(e timing.Engine) {
 	m.engine = e
 }
 
 // RegisterComponent registers a component with the monitor so its internal
 // state can be inspected via the monitoring server.
-func (m *Monitor) RegisterComponent(c sim.Component) {
+func (m *Monitor) RegisterComponent(c messaging.Component) {
 	m.components = append(m.components, c)
 	m.registerBuffers(c)
 }
@@ -108,7 +111,7 @@ func (m *Monitor) GetServer() *daisen2.Server {
 // CreateProgressBar creates a new progress bar tracked by the monitor.
 func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
 	bar := &daisen2.ProgressBar{
-		ID:    sim.GetIDGenerator().Generate(),
+		ID:    timing.GetIDGenerator().Generate(),
 		Name:  name,
 		Total: total,
 	}
@@ -244,7 +247,7 @@ type bufferState interface {
 // portBufferAdapter wraps a port to expose one of its internal buffers
 // (incoming or outgoing) as a bufferState for the hang detector.
 type portBufferAdapter struct {
-	port      sim.Port
+	port      messaging.Port
 	direction string // "in" or "out"
 }
 
@@ -264,7 +267,7 @@ func (a *portBufferAdapter) Capacity() int {
 	return a.Size()
 }
 
-func (m *Monitor) registerBuffers(c sim.Component) {
+func (m *Monitor) registerBuffers(c messaging.Component) {
 	m.registerComponentOrPortBuffers(c)
 
 	for _, p := range c.Ports() {
@@ -273,7 +276,7 @@ func (m *Monitor) registerBuffers(c sim.Component) {
 	}
 }
 
-func (m *Monitor) registerPortBuffers(p sim.Port) {
+func (m *Monitor) registerPortBuffers(p messaging.Port) {
 	m.buffers = append(m.buffers,
 		&portBufferAdapter{port: p, direction: "in"},
 		&portBufferAdapter{port: p, direction: "out"},
@@ -585,8 +588,8 @@ func (m *Monitor) sortAndSelectBuffers(
 func (m *Monitor) findComponentOr404(
 	w http.ResponseWriter,
 	name string,
-) sim.Component {
-	var component sim.Component
+) messaging.Component {
+	var component messaging.Component
 
 	for _, c := range m.components {
 		if c.Name() == name {

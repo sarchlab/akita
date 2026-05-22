@@ -1,14 +1,16 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -52,7 +54,7 @@ var _ = Describe("Bankstage", func() {
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
 				Log2BlockSize:    6,
@@ -67,7 +69,7 @@ var _ = Describe("Bankstage", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.SetState(initialState)
+		c.comp.State = initialState
 
 		s = &bankStage{
 			cache:          c,
@@ -87,7 +89,7 @@ var _ = Describe("Bankstage", func() {
 	})
 
 	It("should insert transactions into pipeline", func() {
-		next := c.comp.GetNextState()
+		next := &c.comp.State
 
 		// Add a transaction
 		next.Transactions = append(next.Transactions, transactionState{})
@@ -108,7 +110,7 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			// Set up the block in directoryState
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
@@ -127,8 +129,8 @@ var _ = Describe("Bankstage", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			})
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -153,7 +155,7 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should read", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			madeProgress := s.Tick()
 
@@ -174,15 +176,15 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsLocked = true
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 64 + 12,
 				TrafficClass: "req",
 			}
@@ -228,7 +230,7 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should write", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			madeProgress := s.Tick()
 
@@ -257,7 +259,7 @@ var _ = Describe("Bankstage", func() {
 			blockSetID = 0
 			blockWayID = 0
 
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].CacheAddress = 0x400
@@ -292,7 +294,7 @@ var _ = Describe("Bankstage", func() {
 		})
 
 		It("should write fetched", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			madeProgress := s.Tick()
 

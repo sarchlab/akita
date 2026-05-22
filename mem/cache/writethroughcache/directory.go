@@ -1,10 +1,11 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/mem/cache"
+
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -13,8 +14,8 @@ type directory struct {
 }
 
 func (d *directory) Tick() (madeProgress bool) {
-	spec := d.cache.GetSpec()
-	next := d.cache.comp.GetNextState()
+	spec := d.cache.comp.Spec
+	next := &d.cache.comp.State
 	dirBuf := &next.DirBuf
 	dirPipeline := &next.DirPipeline
 	dirPostBuf := &next.DirPostBuf
@@ -68,10 +69,10 @@ func (d *directory) Tick() (madeProgress bool) {
 func (d *directory) processRead(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
 	pid := trans.ReadPID
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	entryIdx, mshrFound := cache.MSHRQuery(
 		&next.MSHRState, pid, cacheLineID)
@@ -94,7 +95,7 @@ func (d *directory) processMSHRHit(
 	entryIdx int,
 	transIdx int,
 ) bool {
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	next.MSHRState.Entries[entryIdx].TransactionIndices =
 		append(next.MSHRState.Entries[entryIdx].TransactionIndices,
@@ -117,7 +118,7 @@ func (d *directory) processReadHit(
 	setID, wayID int,
 	transIdx int,
 ) bool {
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 	block := &next.DirectoryState.Sets[setID].Blocks[wayID]
 	if block.IsLocked {
 		return false
@@ -148,10 +149,10 @@ func (d *directory) processReadHit(
 
 func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool {
 	addr := trans.ReadAddress
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	victimSetID, victimWayID := cache.DirectoryFindVictim(
 		&next.DirectoryState, spec.NumSets, int(blockSize), cacheLineID)
@@ -178,10 +179,10 @@ func (d *directory) processReadMiss(trans *transactionState, transIdx int) bool 
 func (d *directory) processWrite(trans *transactionState, transIdx int) bool {
 	addr := trans.WriteAddress
 	pid := trans.WritePID
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	entryIdx, mshrFound := cache.MSHRQuery(
 		&next.MSHRState, pid, cacheLineID)
@@ -208,7 +209,7 @@ func (d *directory) writeBottom(trans *transactionState) bool {
 	addr := trans.WriteAddress
 
 	writeToBottom := &mem.WriteReq{}
-	writeToBottom.ID = sim.GetIDGenerator().Generate()
+	writeToBottom.ID = timing.GetIDGenerator().Generate()
 	writeToBottom.Src = d.cache.bottomPort.AsRemote()
 	writeToBottom.Dst = d.cache.findPort(addr)
 	writeToBottom.Address = addr
@@ -241,10 +242,10 @@ func (d *directory) fetchFromBottom(
 ) bool {
 	addr := trans.Address()
 	pid := trans.PID()
-	spec := d.cache.GetSpec()
+	spec := d.cache.comp.Spec
 	blockSize := uint64(1 << spec.Log2BlockSize)
 	cacheLineID := addr / blockSize * blockSize
-	next := d.cache.comp.GetNextState()
+	next := &d.cache.comp.State
 
 	bottomModule := d.cache.findPort(cacheLineID)
 	readToBottom := &mem.ReadReq{
@@ -252,7 +253,7 @@ func (d *directory) fetchFromBottom(
 		PID:            pid,
 		AccessByteSize: blockSize,
 	}
-	readToBottom.ID = sim.GetIDGenerator().Generate()
+	readToBottom.ID = timing.GetIDGenerator().Generate()
 	readToBottom.Src = d.cache.bottomPort.AsRemote()
 	readToBottom.Dst = bottomModule
 	readToBottom.TrafficBytes, readToBottom.TrafficClass = 12, "req"
@@ -293,8 +294,8 @@ func (d *directory) fetchFromBottom(
 }
 
 func (d *directory) getBankBuf(setID, wayID int) *queueing.Buffer[int] {
-	next := d.cache.comp.GetNextState()
-	numWaysPerSet := d.cache.GetSpec().WayAssociativity
+	next := &d.cache.comp.State
+	numWaysPerSet := d.cache.comp.Spec.WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

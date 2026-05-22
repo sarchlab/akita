@@ -11,7 +11,7 @@ package trace
 import (
 	reflect "reflect"
 
-	sim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -40,10 +40,10 @@ func (m *MockTimeTeller) EXPECT() *MockTimeTellerMockRecorder {
 }
 
 // CurrentTime mocks base method.
-func (m *MockTimeTeller) CurrentTime() sim.VTimeInSec {
+func (m *MockTimeTeller) CurrentTime() timing.VTimeInSec {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CurrentTime")
-	ret0, _ := ret[0].(sim.VTimeInSec)
+	ret0, _ := ret[0].(timing.VTimeInSec)
 	return ret0
 }
 

@@ -4,22 +4,22 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/sim"
 	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
-var endTime = sim.VTimeInSec(10_000_000_000_000) // 10 seconds in picoseconds
-var engine sim.Engine
+var endTime = timing.VTimeInSec(10_000_000_000_000) // 10 seconds in picoseconds
+var engine timing.Engine
 var randGen *rand.Rand
 
 // splitEvent is an event that splits a cell into two cells.
 type splitEvent struct {
-	time      sim.VTimeInSec
+	time      timing.VTimeInSec
 	handlerID string
 	id        int
 }
 
-func (e splitEvent) Time() sim.VTimeInSec {
+func (e splitEvent) Time() timing.VTimeInSec {
 	return e.time
 }
 
@@ -35,7 +35,7 @@ type handler struct {
 	count int
 }
 
-func (h *handler) Handle(e sim.Event) error {
+func (h *handler) Handle(e timing.Event) error {
 	h.count += 1
 
 	evt := e.(splitEvent)
@@ -48,8 +48,8 @@ func (h *handler) Handle(e sim.Event) error {
 	return nil
 }
 
-func (h *handler) scheduleNextSplitEvent(now sim.VTimeInSec, id int) {
-	timeUntilNextSplit := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+func (h *handler) scheduleNextSplitEvent(now timing.VTimeInSec, id int) {
+	timeUntilNextSplit := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	nextEvt := splitEvent{
 		time:      now + timeUntilNextSplit,
 		handlerID: "splitter",
@@ -70,11 +70,11 @@ func main() {
 		count: 1,
 	}
 
-	if registrar, ok := engine.(sim.HandlerRegistrar); ok {
+	if registrar, ok := engine.(timing.HandlerRegistrar); ok {
 		registrar.RegisterHandler("splitter", &h)
 	}
 
-	firstEvtTime := sim.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
+	firstEvtTime := timing.VTimeInSec(uint64((randGen.Float64() + 1) * 1e12))
 	firstEvt := splitEvent{
 		time:      firstEvtTime,
 		handlerID: "splitter",

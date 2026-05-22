@@ -4,17 +4,20 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/messaging"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/noc/packetization"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// incomingMW handles the network→device path:
+	// tryDeliver, assemble, recv.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// incomingMW handles the network→device path:
-// tryDeliver, assemble, recv.
 type incomingMW struct {
 	comp        *modeling.Component[Spec, State]
-	devicePorts []sim.Port
-	networkPort sim.Port
+	devicePorts []messaging.Port
+	networkPort messaging.Port
 }
 
 // Tick runs the incoming stages.
@@ -30,8 +33,8 @@ func (m *incomingMW) Tick() bool {
 
 func (m *incomingMW) recv() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	for i := 0; i < spec.NumInputChannels; i++ {
 		receivedI := m.networkPort.PeekIncoming()
@@ -39,7 +42,7 @@ func (m *incomingMW) recv() bool {
 			return madeProgress
 		}
 
-		flit := receivedI.(*messaging.Flit)
+		flit := receivedI.(*packetization.Flit)
 		msg := &flit.Msg
 
 		var assemblingIdx int = -1
@@ -77,7 +80,7 @@ func (m *incomingMW) recv() bool {
 
 func (m *incomingMW) assemble() bool {
 	madeProgress := false
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	if len(state.AssemblingMsgs) == 0 {
 		return false
@@ -96,7 +99,7 @@ func (m *incomingMW) assemble() bool {
 			continue
 		}
 
-		assembled := sim.MsgMeta{
+		assembled := messaging.MsgMeta{
 			ID:           a.MsgID,
 			Src:          a.Src,
 			Dst:          a.Dst,
@@ -115,7 +118,7 @@ func (m *incomingMW) assemble() bool {
 
 func (m *incomingMW) tryDeliver() bool {
 	madeProgress := false
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	numDelivered := 0
 
@@ -123,7 +126,7 @@ func (m *incomingMW) tryDeliver() bool {
 		meta := state.AssembledMsgs[i]
 		dst := meta.Dst
 
-		var dstPort sim.Port
+		var dstPort messaging.Port
 
 		for _, port := range m.devicePorts {
 			if port.AsRemote() == dst {
@@ -136,7 +139,7 @@ func (m *incomingMW) tryDeliver() bool {
 			panic(fmt.Sprintf("no dst port found for %s", dst))
 		}
 
-		msg := &sim.MsgMeta{
+		msg := &messaging.MsgMeta{
 			ID:           meta.ID,
 			Src:          meta.Src,
 			Dst:          meta.Dst,
@@ -164,7 +167,7 @@ func (m *incomingMW) tryDeliver() bool {
 }
 
 func (m *incomingMW) logFlitE2ETaskFromFlit(
-	flit *messaging.Flit, isEnd bool,
+	flit *packetization.Flit, isEnd bool,
 ) {
 	if m.comp.NumHooks() == 0 {
 		return
@@ -181,7 +184,7 @@ func (m *incomingMW) logFlitE2ETaskFromFlit(
 	)
 }
 
-func (m *incomingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
+func (m *incomingMW) logMsgE2ETask(msg messaging.Msg, isEnd bool) {
 	if m.comp.NumHooks() == 0 {
 		return
 	}
@@ -196,10 +199,10 @@ func (m *incomingMW) logMsgE2ETask(msg sim.Msg, isEnd bool) {
 	m.logMsgReq(isEnd, msg)
 }
 
-func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
+func (m *incomingMW) logMsgReq(isEnd bool, msg messaging.Msg) {
 	meta := msg.Meta()
 	if meta.RecvTaskID == 0 {
-		meta.RecvTaskID = sim.GetIDGenerator().Generate()
+		meta.RecvTaskID = timing.GetIDGenerator().Generate()
 	}
 	if isEnd {
 		tracing.EndTask(meta.RecvTaskID, m.comp)
@@ -212,10 +215,10 @@ func (m *incomingMW) logMsgReq(isEnd bool, msg sim.Msg) {
 	}
 }
 
-func (m *incomingMW) logMsgRsp(isEnd bool, msg sim.Msg) {
+func (m *incomingMW) logMsgRsp(isEnd bool, msg messaging.Msg) {
 	meta := msg.Meta()
 	if meta.RecvTaskID == 0 {
-		meta.RecvTaskID = sim.GetIDGenerator().Generate()
+		meta.RecvTaskID = timing.GetIDGenerator().Generate()
 	}
 	if isEnd {
 		tracing.EndTask(meta.RecvTaskID, m.comp)

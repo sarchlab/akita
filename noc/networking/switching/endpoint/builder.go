@@ -1,13 +1,14 @@
 package endpoint
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for endpoint components.
 var DefaultSpec = Spec{
-	Freq:              1 * sim.GHz,
+	Freq:              1 * timing.GHz,
 	NumInputChannels:  1,
 	NumOutputChannels: 1,
 	FlitByteSize:      32,
@@ -16,12 +17,12 @@ var DefaultSpec = Spec{
 
 // Builder can help building End Points.
 type Builder struct {
-	engine                   sim.EventScheduler
+	engine                   timing.EventScheduler
 	spec                     Spec
 	flitAssemblingBufferSize int
 	networkPortBufferSize    int
-	devicePorts              []sim.Port
-	networkPort              sim.Port
+	devicePorts              []messaging.Port
+	networkPort              messaging.Port
 }
 
 // MakeBuilder creates a new EndPointBuilder with default
@@ -35,13 +36,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine of the End Point to build.
-func (b Builder) WithEngine(e sim.EventScheduler) Builder {
+func (b Builder) WithEngine(e timing.EventScheduler) Builder {
 	b.engine = e
 	return b
 }
 
 // WithFreq sets the frequency of the End Point to built.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -80,13 +81,13 @@ func (b Builder) WithNetworkPortBufferSize(n int) Builder {
 
 // WithDevicePorts sets a list of ports that communicate directly through the
 // End Point.
-func (b Builder) WithDevicePorts(ports []sim.Port) Builder {
+func (b Builder) WithDevicePorts(ports []messaging.Port) Builder {
 	b.devicePorts = ports
 	return b
 }
 
 // WithNetworkPort sets the network port of the End Point.
-func (b Builder) WithNetworkPort(port sim.Port) Builder {
+func (b Builder) WithNetworkPort(port messaging.Port) Builder {
 	b.networkPort = port
 	return b
 }

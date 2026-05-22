@@ -4,8 +4,9 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/naming"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // NamedHookable represent something both have a name and can be hooked
@@ -146,7 +147,7 @@ func AddMilestone(
 	}
 
 	milestone := Milestone{
-		ID:       sim.GetIDGenerator().Generate(),
+		ID:       timing.GetIDGenerator().Generate(),
 		TaskID:   taskID,
 		Kind:     kind,
 		What:     what,
@@ -182,9 +183,9 @@ func EndTask(
 }
 
 // MsgIDAtReceiver returns the RecvTaskID for the message, generating one if needed.
-func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) uint64 {
+func MsgIDAtReceiver(msg messaging.Msg, domain NamedHookable) uint64 {
 	if msg.Meta().RecvTaskID == 0 {
-		msg.Meta().RecvTaskID = sim.GetIDGenerator().Generate()
+		msg.Meta().RecvTaskID = timing.GetIDGenerator().Generate()
 	}
 	return msg.Meta().RecvTaskID
 }
@@ -193,7 +194,7 @@ func MsgIDAtReceiver(msg sim.Msg, domain NamedHookable) uint64 {
 // What=[the type name of the message]. This function is to be called by the
 // sender of the message.
 func TraceReqInitiate(
-	msg sim.Msg,
+	msg messaging.Msg,
 	domain NamedHookable,
 	taskParentID uint64,
 ) {
@@ -202,7 +203,7 @@ func TraceReqInitiate(
 	}
 
 	if msg.Meta().SendTaskID == 0 {
-		msg.Meta().SendTaskID = sim.GetIDGenerator().Generate()
+		msg.Meta().SendTaskID = timing.GetIDGenerator().Generate()
 	}
 	StartTask(
 		msg.Meta().SendTaskID,
@@ -217,7 +218,7 @@ func TraceReqInitiate(
 // TraceReqReceive generates a new task for the message handling. The kind of
 // the task is always "req_in".
 func TraceReqReceive(
-	msg sim.Msg,
+	msg messaging.Msg,
 	domain NamedHookable,
 ) {
 	if domain.NumHooks() == 0 {
@@ -236,7 +237,7 @@ func TraceReqReceive(
 
 // TraceReqComplete terminates the message handling task.
 func TraceReqComplete(
-	msg sim.Msg,
+	msg messaging.Msg,
 	domain NamedHookable,
 ) {
 	EndTask(MsgIDAtReceiver(msg, domain), domain)
@@ -245,7 +246,7 @@ func TraceReqComplete(
 // TraceReqFinalize terminates the message task. This function should be called
 // when the sender receives the response.
 func TraceReqFinalize(
-	msg sim.Msg,
+	msg messaging.Msg,
 	domain NamedHookable,
 ) {
 	EndTask(msg.Meta().SendTaskID, domain)

@@ -4,25 +4,25 @@ package directconnection
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 type ports struct {
-	ports   []sim.Port
-	portMap map[sim.RemotePort]int
+	ports   []messaging.Port
+	portMap map[messaging.RemotePort]int
 }
 
-func (p *ports) addPort(port sim.Port) {
+func (p *ports) addPort(port messaging.Port) {
 	p.ports = append(p.ports, port)
 	p.portMap[port.AsRemote()] = len(p.ports) - 1
 }
 
-func (p *ports) getPortIndex(index int) sim.Port {
+func (p *ports) getPortIndex(index int) messaging.Port {
 	return p.ports[index]
 }
 
-func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
+func (p *ports) getPortByName(name messaging.RemotePort) messaging.Port {
 	portIndex, found := p.portMap[name]
 	if !found {
 		panic(fmt.Sprintf("port %s not found", name))
@@ -30,7 +30,7 @@ func (p *ports) getPortByName(name sim.RemotePort) sim.Port {
 	return p.ports[portIndex]
 }
 
-func (p *ports) list() []sim.Port {
+func (p *ports) list() []messaging.Port {
 	return p.ports
 }
 
@@ -48,7 +48,7 @@ func (c *Comp) mw() *middleware {
 }
 
 // PlugIn marks the port connects to this DirectConnection.
-func (c *Comp) PlugIn(port sim.Port) {
+func (c *Comp) PlugIn(port messaging.Port) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -57,12 +57,12 @@ func (c *Comp) PlugIn(port sim.Port) {
 }
 
 // Unplug marks the port no longer connects to this DirectConnection.
-func (c *Comp) Unplug(_ sim.Port) {
+func (c *Comp) Unplug(_ messaging.Port) {
 	panic("not implemented")
 }
 
 // NotifyAvailable is called by a port to notify the connection can deliver again.
-func (c *Comp) NotifyAvailable(p sim.Port) {
+func (c *Comp) NotifyAvailable(p messaging.Port) {
 	for _, port := range c.mw().ports.list() {
 		if port == p {
 			continue
@@ -83,7 +83,7 @@ type middleware struct {
 }
 
 func (m *middleware) Tick() bool {
-	state := m.comp.GetState()
+	state := m.comp.State
 	numPorts := m.ports.len()
 	madeProgress := false
 
@@ -93,12 +93,12 @@ func (m *middleware) Tick() bool {
 		madeProgress = m.forwardMany(port) || madeProgress
 	}
 
-	m.comp.GetNextState().NextPortID = (state.NextPortID + 1) % numPorts
+	(&m.comp.State).NextPortID = (state.NextPortID + 1) % numPorts
 
 	return madeProgress
 }
 
-func (m *middleware) forwardMany(port sim.Port) bool {
+func (m *middleware) forwardMany(port messaging.Port) bool {
 	madeProgress := false
 	for {
 		head := port.PeekOutgoing()

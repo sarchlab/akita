@@ -2,13 +2,14 @@ package addresstranslator
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for address translators.
 var DefaultSpec = Spec{
-	Freq:           1 * sim.GHz,
+	Freq:           1 * timing.GHz,
 	NumReqPerCycle: 4,
 	Log2PageSize:   12,
 	DeviceID:       1,
@@ -16,20 +17,20 @@ var DefaultSpec = Spec{
 
 // A Builder can create address translators
 type Builder struct {
-	engine sim.EventScheduler
+	engine timing.EventScheduler
 	spec   Spec
 
-	topPort sim.Port
-	bottomPort      sim.Port
-	translationPort sim.Port
-	ctrlPort        sim.Port
+	topPort         messaging.Port
+	bottomPort      messaging.Port
+	translationPort messaging.Port
+	ctrlPort        messaging.Port
 
 	memPortMapper             mem.AddressToPortMapper
 	memPortMapperType         string
-	memRemotePorts            []sim.RemotePort
+	memRemotePorts            []messaging.RemotePort
 	translationPortMapper     mem.AddressToPortMapper
 	translationPortMapperType string
-	translationRemotePorts    []sim.RemotePort
+	translationRemotePorts    []messaging.RemotePort
 }
 
 // MakeBuilder creates a new builder
@@ -40,13 +41,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used by the address translators
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency of the address translators
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -71,25 +72,25 @@ func (b Builder) WithDeviceID(n uint64) Builder {
 }
 
 // WithTopPort sets the top port of the address translator
-func (b Builder) WithTopPort(p sim.Port) Builder {
+func (b Builder) WithTopPort(p messaging.Port) Builder {
 	b.topPort = p
 	return b
 }
 
 // WithBottomPort sets the bottom port of the address translator
-func (b Builder) WithBottomPort(p sim.Port) Builder {
+func (b Builder) WithBottomPort(p messaging.Port) Builder {
 	b.bottomPort = p
 	return b
 }
 
 // WithTranslationPort sets the translation port of the address translator
-func (b Builder) WithTranslationPort(p sim.Port) Builder {
+func (b Builder) WithTranslationPort(p messaging.Port) Builder {
 	b.translationPort = p
 	return b
 }
 
 // WithCtrlPort sets the port of the component that can send ctrl reqs to AT
-func (b Builder) WithCtrlPort(p sim.Port) Builder {
+func (b Builder) WithCtrlPort(p messaging.Port) Builder {
 	b.ctrlPort = p
 	return b
 }
@@ -116,7 +117,7 @@ func (b Builder) WithMemoryProviderType(t string) Builder {
 //   - "single": exactly one port must be provided.
 //   - "interleaved": the number of ports must be a power of two; requests are
 //     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithMemoryProviders(ports ...sim.RemotePort) Builder {
+func (b Builder) WithMemoryProviders(ports ...messaging.RemotePort) Builder {
 	b.memRemotePorts = ports
 	return b
 }
@@ -147,7 +148,7 @@ func (b Builder) WithTranslationProviderMapperType(t string) Builder {
 //   - "single": exactly one port must be provided.
 //   - "interleaved": the number of ports must be a power of two; requests are
 //     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
+func (b Builder) WithTranslationProviders(ports ...messaging.RemotePort) Builder {
 	b.translationRemotePorts = ports
 	return b
 }
@@ -181,7 +182,7 @@ func (b Builder) populateMemMapperSpec(spec *Spec) {
 		switch m := b.memPortMapper.(type) {
 		case *mem.SinglePortMapper:
 			spec.MemMapperKind = "single"
-			spec.MemMapperPorts = []sim.RemotePort{m.Port}
+			spec.MemMapperPorts = []messaging.RemotePort{m.Port}
 		case *mem.InterleavedAddressPortMapper:
 			spec.MemMapperKind = "interleaved"
 			spec.MemMapperPorts = m.LowModules
@@ -216,7 +217,7 @@ func (b Builder) populateTransMapperSpec(spec *Spec) {
 		switch m := b.translationPortMapper.(type) {
 		case *mem.SinglePortMapper:
 			spec.TransMapperKind = "single"
-			spec.TransMapperPorts = []sim.RemotePort{m.Port}
+			spec.TransMapperPorts = []messaging.RemotePort{m.Port}
 		case *mem.InterleavedAddressPortMapper:
 			spec.TransMapperKind = "interleaved"
 			spec.TransMapperPorts = m.LowModules
@@ -246,7 +247,7 @@ func (b Builder) populateTransMapperSpec(spec *Spec) {
 	}
 }
 
-func (b Builder) createPorts(c sim.Component, modelComp *modeling.Component[Spec, State]) {
+func (b Builder) createPorts(c messaging.Component, modelComp *modeling.Component[Spec, State]) {
 	b.topPort.SetComponent(c)
 	modelComp.AddPort("Top", b.topPort)
 

@@ -1,26 +1,25 @@
 package tracing
 
 import (
+	"github.com/sarchlab/akita/v5/timing"
 	"sync"
-
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // AverageTimeTracer can collect the total time of executing a certain type of
 // task. If the execution of two tasks overlaps, this tracer will simply add
 // the two task processing time together.
 type AverageTimeTracer struct {
-	timeTeller    sim.TimeTeller
+	timeTeller    timing.TimeTeller
 	filter        TaskFilter
 	lock          sync.Mutex
-	averageTime   sim.VTimeInSec
+	averageTime   timing.VTimeInSec
 	inflightTasks map[uint64]Task
 	taskCount     uint64
 }
 
 // NewAverageTimeTracer creates a new AverageTimeTracer
 func NewAverageTimeTracer(
-	timeTeller sim.TimeTeller,
+	timeTeller timing.TimeTeller,
 	filter TaskFilter,
 ) *AverageTimeTracer {
 	t := &AverageTimeTracer{
@@ -33,7 +32,7 @@ func NewAverageTimeTracer(
 }
 
 // AverageTime returns the total time has been spent on a certain type of tasks.
-func (t *AverageTimeTracer) AverageTime() sim.VTimeInSec {
+func (t *AverageTimeTracer) AverageTime() timing.VTimeInSec {
 	t.lock.Lock()
 	time := t.averageTime
 	t.lock.Unlock()
@@ -85,8 +84,8 @@ func (t *AverageTimeTracer) EndTask(task Task) {
 	}
 
 	taskTime := task.EndTime - originalTask.StartTime
-	t.averageTime = (t.averageTime*sim.VTimeInSec(t.taskCount) + taskTime) /
-		sim.VTimeInSec(t.taskCount+1)
+	t.averageTime = (t.averageTime*timing.VTimeInSec(t.taskCount) + taskTime) /
+		timing.VTimeInSec(t.taskCount+1)
 
 	delete(t.inflightTasks, task.ID)
 

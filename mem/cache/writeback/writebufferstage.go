@@ -1,10 +1,11 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -23,7 +24,7 @@ func (wb *writeBufferStage) Tick() bool {
 }
 
 func (wb *writeBufferStage) processNewTransaction() bool {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 	wbBuf := &next.WriteBufferBuf
 
 	if wbBuf.Size() == 0 {
@@ -59,7 +60,7 @@ func (wb *writeBufferStage) processWriteBufferFetch(
 }
 
 func (wb *writeBufferStage) findDataLocally(trans *transactionState) bool {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	for _, eIdx := range next.InflightEvictionIndices {
 		e := &next.Transactions[eIdx]
@@ -84,8 +85,8 @@ func (wb *writeBufferStage) sendFetchedDataToBank(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := wb.cache.comp.GetSpec()
-	next := wb.cache.comp.GetNextState()
+	spec := wb.cache.comp.Spec
+	next := &wb.cache.comp.State
 	bankNum := bankID(trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
 		len(next.WriteBufferToBankBufs))
@@ -125,7 +126,7 @@ func (wb *writeBufferStage) fetchFromBottom(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	if wb.tooManyInflightFetches() {
 		return false
@@ -135,10 +136,10 @@ func (wb *writeBufferStage) fetchFromBottom(
 		return false
 	}
 
-	spec := wb.cache.comp.GetSpec()
+	spec := wb.cache.comp.Spec
 	lowModulePort := wb.cache.findPort(trans.FetchAddress)
 	read := &mem.ReadReq{}
-	read.ID = sim.GetIDGenerator().Generate()
+	read.ID = timing.GetIDGenerator().Generate()
 	read.Src = wb.cache.bottomPort.AsRemote()
 	read.Dst = lowModulePort
 	read.PID = trans.FetchPID
@@ -169,8 +170,8 @@ func (wb *writeBufferStage) processWriteBufferEvictAndWrite(
 		return false
 	}
 
-	spec := wb.cache.comp.GetSpec()
-	next := wb.cache.comp.GetNextState()
+	spec := wb.cache.comp.Spec
+	next := &wb.cache.comp.State
 	bankNum := bankID(
 		trans.BlockSetID, trans.BlockWayID,
 		spec.WayAssociativity,
@@ -213,7 +214,7 @@ func (wb *writeBufferStage) processWriteBufferFlush(
 		return false
 	}
 
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 	next.PendingEvictionIndices = append(next.PendingEvictionIndices, transIdx)
 
 	if popAfterDone {
@@ -224,7 +225,7 @@ func (wb *writeBufferStage) processWriteBufferFlush(
 }
 
 func (wb *writeBufferStage) write() bool {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	if len(next.PendingEvictionIndices) == 0 {
 		return false
@@ -243,7 +244,7 @@ func (wb *writeBufferStage) write() bool {
 
 	lowModulePort := wb.cache.findPort(trans.EvictingAddr)
 	write := &mem.WriteReq{}
-	write.ID = sim.GetIDGenerator().Generate()
+	write.ID = timing.GetIDGenerator().Generate()
 	write.Src = wb.cache.bottomPort.AsRemote()
 	write.Dst = lowModulePort
 	write.PID = trans.EvictingPID
@@ -285,8 +286,8 @@ func (wb *writeBufferStage) processReturnRsp() bool {
 func (wb *writeBufferStage) processDataReadyRsp(
 	msg *mem.DataReadyRsp,
 ) bool {
-	spec := wb.cache.comp.GetSpec()
-	next := wb.cache.comp.GetNextState()
+	spec := wb.cache.comp.Spec
+	next := &wb.cache.comp.State
 
 	transIdx := wb.findInflightFetchIdxByFetchReadReqID(msg.RspTo)
 	trans := &next.Transactions[transIdx]
@@ -331,8 +332,8 @@ func (wb *writeBufferStage) processDataReadyRsp(
 }
 
 func (wb *writeBufferStage) combineData(mshrIdx int) {
-	spec := wb.cache.comp.GetSpec()
-	next := wb.cache.comp.GetNextState()
+	spec := wb.cache.comp.Spec
+	next := &wb.cache.comp.State
 	mshrEntry := &next.MSHRState.Entries[mshrIdx]
 	block := &next.DirectoryState.Sets[mshrEntry.BlockSetID].Blocks[mshrEntry.BlockWayID]
 
@@ -364,7 +365,7 @@ func (wb *writeBufferStage) combineData(mshrIdx int) {
 func (wb *writeBufferStage) findInflightFetchIdxByFetchReadReqID(
 	id uint64,
 ) int {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	for _, tIdx := range next.InflightFetchIndices {
 		t := &next.Transactions[tIdx]
@@ -377,7 +378,7 @@ func (wb *writeBufferStage) findInflightFetchIdxByFetchReadReqID(
 }
 
 func (wb *writeBufferStage) removeInflightFetch(transIdx int) {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	for i, idx := range next.InflightFetchIndices {
 		if idx == transIdx {
@@ -396,7 +397,7 @@ func (wb *writeBufferStage) removeInflightFetch(transIdx int) {
 func (wb *writeBufferStage) processWriteDoneRsp(
 	msg *mem.WriteDoneRsp,
 ) bool {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 
 	for i := len(next.InflightEvictionIndices) - 1; i >= 0; i-- {
 		eIdx := next.InflightEvictionIndices[i]
@@ -417,26 +418,26 @@ func (wb *writeBufferStage) processWriteDoneRsp(
 }
 
 func (wb *writeBufferStage) writeBufferFull() bool {
-	next := wb.cache.comp.GetNextState()
-	spec := wb.cache.comp.GetSpec()
+	next := &wb.cache.comp.State
+	spec := wb.cache.comp.Spec
 	numEntry := len(next.PendingEvictionIndices) + len(next.InflightEvictionIndices)
 	return numEntry >= spec.WriteBufferCapacity
 }
 
 func (wb *writeBufferStage) tooManyInflightFetches() bool {
-	next := wb.cache.comp.GetNextState()
-	spec := wb.cache.comp.GetSpec()
+	next := &wb.cache.comp.State
+	spec := wb.cache.comp.Spec
 	return len(next.InflightFetchIndices) >= spec.MaxInflightFetch
 }
 
 func (wb *writeBufferStage) tooManyInflightEvictions() bool {
-	next := wb.cache.comp.GetNextState()
-	spec := wb.cache.comp.GetSpec()
+	next := &wb.cache.comp.State
+	spec := wb.cache.comp.Spec
 	return len(next.InflightEvictionIndices) >= spec.MaxInflightEviction
 }
 
 func (wb *writeBufferStage) Reset() {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 	next.WriteBufferBuf.Clear()
 }
 
@@ -444,7 +445,7 @@ func (wb *writeBufferStage) Reset() {
 // transaction.  The stored MSHREntryIndex may be stale because MSHRRemove
 // shifts entries, so we re-query by PID+Address.
 func (wb *writeBufferStage) lookupMSHRIndex(trans *transactionState) int {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 	idx, found := cache.MSHRQuery(&next.MSHRState, trans.FetchPID, trans.FetchAddress)
 	if !found {
 		panic("lookupMSHRIndex: MSHR entry not found")
@@ -457,7 +458,7 @@ func (wb *writeBufferStage) lookupMSHRIndex(trans *transactionState) int {
 func (wb *writeBufferStage) resolveEntryTransactionIndices(
 	entry *cache.MSHREntryState,
 ) []int {
-	next := wb.cache.comp.GetNextState()
+	next := &wb.cache.comp.State
 	result := make([]int, 0, len(entry.TransactionIndices))
 	for _, transIdx := range entry.TransactionIndices {
 		if transIdx >= 0 && transIdx < len(next.Transactions) {

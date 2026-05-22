@@ -2,14 +2,15 @@ package simplebankedmemory
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides default configuration for the simple banked memory.
 var DefaultSpec = Spec{
-	Freq:                           1 * sim.GHz,
+	Freq:                           1 * timing.GHz,
 	NumBanks:                       4,
 	BankPipelineWidth:              1,
 	BankPipelineDepth:              1,
@@ -21,7 +22,7 @@ var DefaultSpec = Spec{
 
 // Builder constructs SimpleBankedMemory components.
 type Builder struct {
-	engine sim.EventScheduler
+	engine timing.EventScheduler
 	spec   Spec
 
 	numBanks            int
@@ -42,7 +43,7 @@ type Builder struct {
 
 	capacity uint64
 	storage  *mem.Storage
-	topPort  sim.Port
+	topPort  messaging.Port
 }
 
 // MakeBuilder creates a builder with reasonable defaults.
@@ -62,13 +63,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the simulation engine.
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the component frequency.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -151,7 +152,7 @@ func (b Builder) WithAddressConverter(
 }
 
 // WithTopPort sets the top port of the memory component.
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
@@ -169,7 +170,7 @@ func (b Builder) Build(name string) *Comp {
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	c := &Comp{
 		Component: modelComp,

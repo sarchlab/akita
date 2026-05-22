@@ -119,7 +119,7 @@ ctrl := dram.MakeBuilder().
 The `State` tracks runtime statistics, accessible via helper functions:
 
 ```go
-state := ctrl.GetState()
+state := ctrl.State
 hitRate := dram.RowBufferHitRate(&state)
 avgRead := dram.AverageReadLatency(&state)
 avgWrite := dram.AverageWriteLatency(&state)

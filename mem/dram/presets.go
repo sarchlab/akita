@@ -1,10 +1,12 @@
 package dram
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/timing"
+)
 
 // DDR4Spec provides a predefined Spec for DDR4-2400.
 var DDR4Spec = Spec{
-	Freq:                 1200 * sim.MHz,
+	Freq:                 1200 * timing.MHz,
 	Protocol:             int(DDR4),
 	BurstLength:          8,
 	NumBankGroup:         4,
@@ -45,7 +47,7 @@ var DDR4Spec = Spec{
 
 // DDR5Spec provides a predefined Spec for DDR5-4800.
 var DDR5Spec = Spec{
-	Freq:                 2400 * sim.MHz,
+	Freq:                 2400 * timing.MHz,
 	Protocol:             int(DDR5),
 	BurstLength:          16,
 	NumBankGroup:         8,
@@ -86,7 +88,7 @@ var DDR5Spec = Spec{
 
 // HBM2Spec provides a predefined Spec for HBM2-2Gbps.
 var HBM2Spec = Spec{
-	Freq:                 1000 * sim.MHz,
+	Freq:                 1000 * timing.MHz,
 	Protocol:             int(HBM2),
 	BurstLength:          4,
 	NumBankGroup:         4,
@@ -126,7 +128,7 @@ var HBM2Spec = Spec{
 
 // HBM3Spec provides a predefined Spec for HBM3-6.4Gbps.
 var HBM3Spec = Spec{
-	Freq:                 3200 * sim.MHz,
+	Freq:                 3200 * timing.MHz,
 	Protocol:             int(HBM3),
 	BurstLength:          8,
 	NumBankGroup:         4,
@@ -166,7 +168,7 @@ var HBM3Spec = Spec{
 
 // GDDR6Spec provides a predefined Spec for GDDR6-14Gbps.
 var GDDR6Spec = Spec{
-	Freq:                 1750 * sim.MHz,
+	Freq:                 1750 * timing.MHz,
 	Protocol:             int(GDDR6),
 	BurstLength:          16,
 	NumBankGroup:         4,

@@ -2,12 +2,11 @@ package tracing
 
 import (
 	"container/list"
-
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type taskTimeStartEnd struct {
-	start, end sim.VTimeInSec
+	start, end timing.VTimeInSec
 	completed  bool
 }
 
@@ -15,16 +14,16 @@ type taskTimeStartEnd struct {
 // task processing time overlaps, this tracer only consider one instance of the
 // overlapped time.
 type BusyTimeTracer struct {
-	timeTeller    sim.TimeTeller
+	timeTeller    timing.TimeTeller
 	filter        TaskFilter
 	inflightTasks map[uint64]*list.Element
 	taskTimes     *list.List
-	busyTime      sim.VTimeInSec
+	busyTime      timing.VTimeInSec
 }
 
 // NewBusyTimeTracer creates a new BusyTimeTracer
 func NewBusyTimeTracer(
-	timeTeller sim.TimeTeller,
+	timeTeller timing.TimeTeller,
 	filter TaskFilter,
 ) *BusyTimeTracer {
 	t := &BusyTimeTracer{
@@ -40,12 +39,12 @@ func NewBusyTimeTracer(
 }
 
 // BusyTime returns the total time has been spent on a certain type of tasks.
-func (t *BusyTimeTracer) BusyTime() sim.VTimeInSec {
+func (t *BusyTimeTracer) BusyTime() timing.VTimeInSec {
 	return t.busyTime
 }
 
 // TerminateAllTasks will mark all the tasks as completed.
-func (t *BusyTimeTracer) TerminateAllTasks(now sim.VTimeInSec) {
+func (t *BusyTimeTracer) TerminateAllTasks(now timing.VTimeInSec) {
 	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*taskTimeStartEnd)
 		if !task.completed {
@@ -112,7 +111,7 @@ func (t *BusyTimeTracer) EndTask(task Task) {
 	t.collapse(task.EndTime)
 }
 
-func (t *BusyTimeTracer) collapse(now sim.VTimeInSec) {
+func (t *BusyTimeTracer) collapse(now timing.VTimeInSec) {
 	time, found := t.startTimeOfFirstImcompleteTask()
 	if found && time < now {
 		return
@@ -140,7 +139,7 @@ func (t *BusyTimeTracer) collapse(now sim.VTimeInSec) {
 }
 
 func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
-	sim.VTimeInSec, bool,
+	timing.VTimeInSec, bool,
 ) {
 	for e := t.taskTimes.Front(); e != nil; e = e.Next() {
 		task := e.Value.(*taskTimeStartEnd)
@@ -154,8 +153,8 @@ func (t *BusyTimeTracer) startTimeOfFirstImcompleteTask() (
 
 func (t *BusyTimeTracer) taskBusyTime(
 	tasks []*taskTimeStartEnd,
-) sim.VTimeInSec {
-	busyTime := sim.VTimeInSec(0)
+) timing.VTimeInSec {
+	busyTime := timing.VTimeInSec(0)
 	coveredMask := make(map[int]bool)
 
 	for i, t1 := range tasks {

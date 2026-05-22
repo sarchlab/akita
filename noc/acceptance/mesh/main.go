@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"math/rand"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/acceptance"
 	"github.com/sarchlab/akita/v5/noc/networking/mesh"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 func main() {
@@ -27,9 +28,9 @@ func main() {
 	numMessages := 100
 
 	test := acceptance.NewTest()
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 
-	freq := 1 * sim.GHz
+	freq := 1 * timing.GHz
 	connector := mesh.NewConnector().
 		WithEngine(engine).
 		WithFreq(freq)
@@ -39,8 +40,8 @@ func main() {
 	for x := 0; x < meshWidth; x++ {
 		for y := 0; y < meshHeight; y++ {
 			name := fmt.Sprintf("Agent[%d][%d]", x, y)
-			ports := []sim.Port{
-				sim.NewPort(nil, 1, 1, name+".Port0"),
+			ports := []messaging.Port{
+				messaging.NewPort(nil, 1, 1, name+".Port0"),
 			}
 			agent := acceptance.NewAgent(engine, freq, name, ports, test)
 			agent.TickLater()

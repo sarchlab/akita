@@ -13,7 +13,8 @@ import (
 	reflect "reflect"
 
 	hooking "github.com/sarchlab/akita/v5/hooking"
-	sim "github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -66,10 +67,10 @@ func (mr *MockEngineMockRecorder) Continue() *gomock.Call {
 }
 
 // CurrentTime mocks base method.
-func (m *MockEngine) CurrentTime() sim.VTimeInSec {
+func (m *MockEngine) CurrentTime() timing.VTimeInSec {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CurrentTime")
-	ret0, _ := ret[0].(sim.VTimeInSec)
+	ret0, _ := ret[0].(timing.VTimeInSec)
 	return ret0
 }
 
@@ -134,7 +135,7 @@ func (mr *MockEngineMockRecorder) Run() *gomock.Call {
 }
 
 // Schedule mocks base method.
-func (m *MockEngine) Schedule(e sim.Event) {
+func (m *MockEngine) Schedule(e timing.Event) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Schedule", e)
 }

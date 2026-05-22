@@ -5,8 +5,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/dram"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("DRAM Statistics", func() {
@@ -74,27 +75,27 @@ var _ = Describe("DRAM Statistics", func() {
 
 	// Integration test: verify stats accumulate during real simulation
 	It("should accumulate statistics during simulation", func() {
-		engine := sim.NewSerialEngine()
+		engine := timing.NewSerialEngine()
 		conn := directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("StatsConn")
 
-		topPort := sim.NewPort(nil, 1024, 1024, "StatsDRAM.Top")
+		topPort := messaging.NewPort(nil, 1024, 1024, "StatsDRAM.Top")
 		dramComp := dram.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithTopPort(topPort).
 			Build("StatsDRAM")
 		_ = dramComp
 
-		srcPort := sim.NewPort(nil, 1024, 1024, "SrcPort")
+		srcPort := messaging.NewPort(nil, 1024, 1024, "SrcPort")
 		conn.PlugIn(topPort)
 		conn.PlugIn(srcPort)
 
 		// Send a write request
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x40
 		write.Data = []byte{1, 2, 3, 4}
 		write.Src = srcPort.AsRemote()
@@ -105,7 +106,7 @@ var _ = Describe("DRAM Statistics", func() {
 
 		// Send a read request
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x40
 		read.AccessByteSize = 4
 		read.Src = srcPort.AsRemote()
@@ -116,7 +117,7 @@ var _ = Describe("DRAM Statistics", func() {
 
 		engine.Run()
 
-		state := dramComp.GetNextState()
+		state := &dramComp.State
 		Expect(state.CompletedReads).To(BeNumerically(">=", 1))
 		Expect(state.CompletedWrites).To(BeNumerically(">=", 1))
 		Expect(state.TotalReadLatencyCycles).To(BeNumerically(">", 0))

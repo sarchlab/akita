@@ -12,13 +12,13 @@ type componentSnapshot[S any, T any] struct {
 	State T `json:"state"`
 }
 
-// SaveState marshals the component's spec and current state as JSON and writes
+// SaveState marshals the component's spec and state as JSON and writes
 // it to w. Both S and T must be JSON-serializable (which is guaranteed by the
 // Spec/State constraints).
 func (c *Component[S, T]) SaveState(w io.Writer) error {
 	snap := componentSnapshot[S, T]{
-		Spec:  c.spec,
-		State: c.current,
+		Spec:  c.Spec,
+		State: c.State,
 	}
 
 	data, err := json.Marshal(snap)
@@ -32,7 +32,6 @@ func (c *Component[S, T]) SaveState(w io.Writer) error {
 }
 
 // LoadState reads JSON from r and restores the component's spec and state.
-// The loaded state is written to both current and next.
 func (c *Component[S, T]) LoadState(r io.Reader) error {
 	data, err := io.ReadAll(r)
 	if err != nil {
@@ -44,9 +43,8 @@ func (c *Component[S, T]) LoadState(r io.Reader) error {
 		return err
 	}
 
-	c.spec = snap.Spec
-	c.current = snap.State
-	c.next = snap.State
+	c.Spec = snap.Spec
+	c.State = snap.State
 
 	return nil
 }

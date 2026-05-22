@@ -5,7 +5,9 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -13,7 +15,7 @@ type agentMiddleware struct {
 	agent *MemAccessAgent
 }
 
-func (m *agentMiddleware) memPort() sim.Port {
+func (m *agentMiddleware) memPort() messaging.Port {
 	return m.agent.GetPortByName("Mem")
 }
 
@@ -23,7 +25,7 @@ func (m *agentMiddleware) Tick() bool {
 
 	madeProgress = m.processMsgRsp() || madeProgress
 
-	state := m.agent.GetNextState()
+	state := &m.agent.State
 	if state.ReadLeft == 0 && state.WriteLeft == 0 {
 		return madeProgress
 	}
@@ -43,7 +45,7 @@ func (m *agentMiddleware) processMsgRsp() bool {
 		return false
 	}
 
-	state := m.agent.GetNextState()
+	state := &m.agent.State
 
 	switch msg := msgI.(type) {
 	case *mem.WriteDoneRsp:
@@ -137,7 +139,7 @@ func (m *agentMiddleware) uint32r() uint32 {
 }
 
 func (m *agentMiddleware) shouldRead() bool {
-	state := m.agent.GetNextState()
+	state := &m.agent.State
 
 	if len(state.KnownMemValue) == 0 {
 		return false
@@ -157,17 +159,17 @@ func (m *agentMiddleware) shouldRead() bool {
 }
 
 func (m *agentMiddleware) doRead() bool {
-	state := m.agent.GetNextState()
+	state := &m.agent.State
 	address := m.randomReadAddress(state)
 
 	if m.isAddressInPendingReq(state, address) {
 		return false
 	}
 
-	spec := m.agent.GetSpec()
+	spec := m.agent.Spec
 
 	readReq := &mem.ReadReq{}
-	readReq.ID = sim.GetIDGenerator().Generate()
+	readReq.ID = timing.GetIDGenerator().Generate()
 	readReq.Src = m.memPort().AsRemote()
 	readReq.Dst = m.agent.LowModule.AsRemote()
 	readReq.Address = address
@@ -202,7 +204,7 @@ func (m *agentMiddleware) doRead() bool {
 }
 
 func (m *agentMiddleware) randomReadAddress(state *State) uint64 {
-	spec := m.agent.GetSpec()
+	spec := m.agent.Spec
 
 	var addr uint64
 
@@ -240,8 +242,8 @@ func (m *agentMiddleware) isAddressInPendingRead(state *State, addr uint64) bool
 }
 
 func (m *agentMiddleware) doWrite() bool {
-	state := m.agent.GetNextState()
-	spec := m.agent.GetSpec()
+	state := &m.agent.State
+	spec := m.agent.Spec
 
 	address := m.uint64() % (spec.MaxAddress / 4) * 4
 
@@ -253,7 +255,7 @@ func (m *agentMiddleware) doWrite() bool {
 
 	writeData := uint32ToBytes(data)
 	writeReq := &mem.WriteReq{}
-	writeReq.ID = sim.GetIDGenerator().Generate()
+	writeReq.ID = timing.GetIDGenerator().Generate()
 	writeReq.Src = m.memPort().AsRemote()
 	writeReq.Dst = m.agent.LowModule.AsRemote()
 	writeReq.Address = address

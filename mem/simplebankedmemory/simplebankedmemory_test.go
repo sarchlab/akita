@@ -5,17 +5,19 @@ import (
 
 	"github.com/sarchlab/akita/v5/hooking"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type loopbackConnection struct {
 	hooking.HookableBase
 
 	name  string
-	ports []sim.Port
+	ports []messaging.Port
 }
 
 func newLoopbackConnection(name string) *loopbackConnection {
@@ -28,16 +30,16 @@ func (c *loopbackConnection) Name() string {
 	return c.name
 }
 
-func (c *loopbackConnection) PlugIn(port sim.Port) {
+func (c *loopbackConnection) PlugIn(port messaging.Port) {
 	c.ports = append(c.ports, port)
 	port.SetConnection(c)
 }
 
-func (c *loopbackConnection) Unplug(sim.Port) {
+func (c *loopbackConnection) Unplug(messaging.Port) {
 	panic("not implemented")
 }
 
-func (c *loopbackConnection) NotifyAvailable(sim.Port) {
+func (c *loopbackConnection) NotifyAvailable(messaging.Port) {
 	// No-op for the tests.
 }
 
@@ -56,7 +58,7 @@ func (c *loopbackConnection) transfer() {
 	c.forward(dst, src)
 }
 
-func (c *loopbackConnection) forward(src, dst sim.Port) {
+func (c *loopbackConnection) forward(src, dst messaging.Port) {
 	for {
 		msg := src.PeekOutgoing()
 		if msg == nil {
@@ -72,24 +74,33 @@ func (c *loopbackConnection) forward(src, dst sim.Port) {
 }
 
 type testAgent struct {
-	*sim.ComponentBase
+	hooking.HookableBase
+	*messaging.PortOwnerBase
 
-	port     sim.Port
-	received []sim.Msg
+	name     string
+	port     messaging.Port
+	received []messaging.Msg
 }
 
 func newTestAgent(name string) *testAgent {
+	naming.MustBeValid(name)
+
 	a := &testAgent{
-		ComponentBase: sim.NewComponentBase(name),
+		PortOwnerBase: messaging.NewPortOwnerBase(),
+		name:          name,
 	}
 
-	a.port = sim.NewPort(a, 4, 4, fmt.Sprintf("%s.Port", name))
+	a.port = messaging.NewPort(a, 4, 4, fmt.Sprintf("%s.Port", name))
 	a.AddPort("Port", a.port)
 
 	return a
 }
 
-func (a *testAgent) NotifyRecv(port sim.Port) {
+func (a *testAgent) Name() string {
+	return a.name
+}
+
+func (a *testAgent) NotifyRecv(port messaging.Port) {
 	for {
 		msg := port.RetrieveIncoming()
 		if msg == nil {
@@ -100,39 +111,48 @@ func (a *testAgent) NotifyRecv(port sim.Port) {
 	}
 }
 
-func (a *testAgent) NotifyPortFree(sim.Port) {
+func (a *testAgent) NotifyPortFree(messaging.Port) {
 	// No-op.
 }
 
-func (a *testAgent) Handle(sim.Event) error {
+func (a *testAgent) Handle(timing.Event) error {
 	return nil
 }
 
-func (a *testAgent) send(msg sim.Msg) {
+func (a *testAgent) send(msg messaging.Msg) {
 	sendErr := a.port.Send(msg)
 	Expect(sendErr).To(BeNil())
 }
 
 type bandwidthAgent struct {
-	*sim.ComponentBase
+	hooking.HookableBase
+	*messaging.PortOwnerBase
 
-	port         sim.Port
+	name         string
+	port         messaging.Port
 	completed    int
 	completedIDs []uint64
 }
 
 func newBandwidthAgent(name string) *bandwidthAgent {
+	naming.MustBeValid(name)
+
 	a := &bandwidthAgent{
-		ComponentBase: sim.NewComponentBase(name),
+		PortOwnerBase: messaging.NewPortOwnerBase(),
+		name:          name,
 	}
 
-	a.port = sim.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
+	a.port = messaging.NewPort(a, 8, 8, fmt.Sprintf("%s.Port", name))
 	a.AddPort("Port", a.port)
 
 	return a
 }
 
-func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
+func (a *bandwidthAgent) Name() string {
+	return a.name
+}
+
+func (a *bandwidthAgent) NotifyRecv(port messaging.Port) {
 	for {
 		msg := port.RetrieveIncoming()
 		if msg == nil {
@@ -146,9 +166,9 @@ func (a *bandwidthAgent) NotifyRecv(port sim.Port) {
 	}
 }
 
-func (a *bandwidthAgent) NotifyPortFree(sim.Port) {}
+func (a *bandwidthAgent) NotifyPortFree(messaging.Port) {}
 
-func (a *bandwidthAgent) Handle(sim.Event) error {
+func (a *bandwidthAgent) Handle(timing.Event) error {
 	return nil
 }
 
@@ -157,9 +177,9 @@ const (
 	readSize    = 64
 )
 
-func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq) {
-	engine := sim.NewSerialEngine()
-	freq := 1 * sim.GHz
+func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, timing.Freq) {
+	engine := timing.NewSerialEngine()
+	freq := 1 * timing.GHz
 
 	memComp := MakeBuilder().
 		WithEngine(engine).
@@ -168,7 +188,7 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 		WithStageLatency(6).
 		WithTopPortBufferSize(32).
 		WithPostPipelineBufferSize(32).
-		WithTopPort(sim.NewPort(nil, 32, 32, "Mem.TopPort")).
+		WithTopPort(messaging.NewPort(nil, 32, 32, "Mem.TopPort")).
 		Build("Mem")
 
 	topPort := memComp.GetPortByName("Top")
@@ -180,10 +200,10 @@ func setupExampleSystem() (*Comp, *bandwidthAgent, *loopbackConnection, sim.Freq
 	return memComp, agent, conn, freq
 }
 
-func makeReadReq(src, dst sim.RemotePort, index int) *mem.ReadReq {
+func makeReadReq(src, dst messaging.RemotePort, index int) *mem.ReadReq {
 	addr := uint64(index * readSize)
 	r := &mem.ReadReq{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
 	r.Address = addr
@@ -213,21 +233,21 @@ func collectLatency(
 
 var _ = Describe("SimpleBankedMemory", func() {
 	var (
-		engine  sim.EventScheduler
+		engine  timing.EventScheduler
 		memComp *Comp
 		agent   *testAgent
 		conn    *loopbackConnection
 	)
 
 	BeforeEach(func() {
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		memComp = MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithNumBanks(2).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
-			WithTopPort(sim.NewPort(nil, 4, 4, "Mem.TopPort")).
+			WithTopPort(messaging.NewPort(nil, 4, 4, "Mem.TopPort")).
 			Build("Mem")
 
 		topPort := memComp.GetPortByName("Top")
@@ -248,7 +268,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		topPort := memComp.GetPortByName("Top")
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x0
@@ -279,7 +299,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		topPort := memComp.GetPortByName("Top")
 
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = addr
@@ -288,7 +308,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		write.TrafficClass = "mem.WriteReq"
 
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = addr
@@ -330,12 +350,12 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		memComp = MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithNumBanks(2).
 			WithStageLatency(2).
 			WithTopPortBufferSize(4).
 			WithAddressConverter(converter).
-			WithTopPort(sim.NewPort(nil, 4, 4, "MemConv.TopPort")).
+			WithTopPort(messaging.NewPort(nil, 4, 4, "MemConv.TopPort")).
 			Build("MemConv")
 
 		topPort := memComp.GetPortByName("Top")
@@ -347,7 +367,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 		// Write 4 bytes at external address 0x0 → internal 0x0.
 		convWriteData := []byte{1, 2, 3, 4}
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = agent.port.AsRemote()
 		write.Dst = topPort.AsRemote()
 		write.Address = 0x0
@@ -357,7 +377,7 @@ var _ = Describe("SimpleBankedMemory", func() {
 
 		// Read 4 bytes at external address 0x0 → internal 0x0.
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = agent.port.AsRemote()
 		read.Dst = topPort.AsRemote()
 		read.Address = 0x0

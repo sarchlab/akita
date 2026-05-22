@@ -4,29 +4,32 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// parseTranslateMW handles incoming requests from topPort and initiates
+	// address translation. It also handles control messages (flush/restart).
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// parseTranslateMW handles incoming requests from topPort and initiates
-// address translation. It also handles control messages (flush/restart).
 type parseTranslateMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *parseTranslateMW) topPort() sim.Port {
+func (m *parseTranslateMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *parseTranslateMW) bottomPort() sim.Port {
+func (m *parseTranslateMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *parseTranslateMW) translationPort() sim.Port {
+func (m *parseTranslateMW) translationPort() messaging.Port {
 	return m.comp.GetPortByName("Translation")
 }
 
-func (m *parseTranslateMW) ctrlPort() sim.Port {
+func (m *parseTranslateMW) ctrlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
@@ -34,9 +37,9 @@ func (m *parseTranslateMW) ctrlPort() sim.Port {
 func (m *parseTranslateMW) Tick() bool {
 	madeProgress := false
 
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 	if !nextState.IsFlushing {
-		spec := m.comp.GetSpec()
+		spec := m.comp.Spec
 		for i := 0; i < spec.NumReqPerCycle; i++ {
 			madeProgress = m.translate() || madeProgress
 		}
@@ -55,11 +58,11 @@ func (m *parseTranslateMW) translate() bool {
 
 	item := itemI.(mem.AccessReq)
 	vAddr := item.GetAddress()
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	vPageID := addrToPageID(vAddr, spec.Log2PageSize)
 
 	transReq := &vm.TranslationReq{}
-	transReq.ID = sim.GetIDGenerator().Generate()
+	transReq.ID = timing.GetIDGenerator().Generate()
 	transReq.Src = m.translationPort().AsRemote()
 	transReq.Dst = findTranslationPort(spec, vAddr)
 	transReq.PID = item.GetPID()
@@ -74,7 +77,7 @@ func (m *parseTranslateMW) translate() bool {
 
 	incoming := msgToIncomingReqState(itemI)
 
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 
 	tracing.TraceReqReceive(itemI, m.comp)
 	tracing.TraceReqInitiate(
@@ -84,10 +87,10 @@ func (m *parseTranslateMW) translate() bool {
 	)
 
 	// Update incoming state with recv task ID after tracing
-	incoming.RecvTaskID = itemI.(sim.Msg).Meta().RecvTaskID
+	incoming.RecvTaskID = itemI.(messaging.Msg).Meta().RecvTaskID
 
 	trans := transactionState{
-		IncomingReqs:              []incomingReqState{incoming},
+		IncomingReqs:             []incomingReqState{incoming},
 		TranslationReqID:         transReq.ID,
 		TranslationReqSendTaskID: transReq.SendTaskID,
 		TranslationReqSrc:        transReq.Src,
@@ -120,7 +123,7 @@ func (m *parseTranslateMW) handleCtrlRequest() bool {
 
 func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
@@ -133,7 +136,7 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 
 	m.ctrlPort().RetrieveIncoming()
 
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 	nextState.Transactions = nil
 	nextState.InflightReqToBottom = nil
 	nextState.IsFlushing = true
@@ -143,7 +146,7 @@ func (m *parseTranslateMW) handleFlushReq(msg *mem.ControlReq) bool {
 
 func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
 	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 4
@@ -164,7 +167,7 @@ func (m *parseTranslateMW) handleRestartReq(msg *mem.ControlReq) bool {
 	for m.translationPort().RetrieveIncoming() != nil {
 	}
 
-	nextState := m.comp.GetNextState()
+	nextState := &m.comp.State
 	nextState.IsFlushing = false
 
 	m.ctrlPort().RetrieveIncoming()

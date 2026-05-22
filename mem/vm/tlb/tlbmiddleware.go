@@ -4,7 +4,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -12,21 +14,21 @@ type tlbMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *tlbMiddleware) topPort() sim.Port {
+func (m *tlbMiddleware) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *tlbMiddleware) bottomPort() sim.Port {
+func (m *tlbMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *tlbMiddleware) controlPort() sim.Port {
+func (m *tlbMiddleware) controlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
 func (m *tlbMiddleware) Tick() bool {
 	madeProgress := false
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 
 	switch next.TLBState {
 	case tlbStateDrain:
@@ -52,7 +54,7 @@ func (m *tlbMiddleware) processPipeline() bool {
 }
 
 func (m *tlbMiddleware) tickPipeline() bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	return next.Pipeline.TickFunc(func(item pipelineTLBReqState) bool {
 		next.BufferItems = append(next.BufferItems, item)
 		return true
@@ -61,8 +63,8 @@ func (m *tlbMiddleware) tickPipeline() bool {
 
 func (m *tlbMiddleware) insertIntoPipeline() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if !next.Pipeline.CanAccept() {
@@ -89,8 +91,8 @@ func (m *tlbMiddleware) insertIntoPipeline() bool {
 
 func (m *tlbMiddleware) extractFromPipeline() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		if len(next.BufferItems) == 0 {
@@ -114,7 +116,7 @@ func (m *tlbMiddleware) extractFromPipeline() bool {
 
 func (m *tlbMiddleware) handleEnable() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -130,7 +132,7 @@ func (m *tlbMiddleware) handleEnable() bool {
 
 func (m *tlbMiddleware) handleDrain() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.respondMSHREntry() || madeProgress
 	}
@@ -141,11 +143,11 @@ func (m *tlbMiddleware) handleDrain() bool {
 
 	madeProgress = m.processPipeline() || madeProgress
 
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	if mshrIsEmpty(next.MSHREntries) && m.bottomPort().PeekIncoming() == nil {
 		next.TLBState = tlbStatePause
 		tracing.AddMilestone(
-			sim.GetIDGenerator().Generate(),
+			timing.GetIDGenerator().Generate(),
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".MSHR",
 			m.comp.Name(),
@@ -157,7 +159,7 @@ func (m *tlbMiddleware) handleDrain() bool {
 }
 
 func (m *tlbMiddleware) respondMSHREntry() bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	if !next.HasRespondingMSHR {
 		return false
 	}
@@ -171,7 +173,7 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 	rspToTop := &vm.TranslationRsp{
 		Page: page,
 	}
-	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqMsg.Src
 	rspToTop.RspTo = reqMsg.ID
@@ -201,8 +203,8 @@ func (m *tlbMiddleware) respondMSHREntry() bool {
 }
 
 func (m *tlbMiddleware) lookup(msg *vm.TranslationReq) bool {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 
 	_, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
 	if found {
@@ -228,7 +230,7 @@ func (m *tlbMiddleware) handleTranslationHit(
 		return false
 	}
 
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	setVisit(&next.Sets[setID], wayID)
 
 	tracing.AddMilestone(
@@ -247,8 +249,8 @@ func (m *tlbMiddleware) handleTranslationHit(
 }
 
 func (m *tlbMiddleware) handleTranslationMiss(msg *vm.TranslationReq) bool {
-	next := m.comp.GetNextState()
-	spec := m.comp.GetSpec()
+	next := &m.comp.State
+	spec := m.comp.Spec
 
 	if mshrIsFull(next.MSHREntries, spec.MSHRSize) {
 		return false
@@ -287,7 +289,7 @@ func (m *tlbMiddleware) sendRspToTop(
 	rsp := &vm.TranslationRsp{
 		Page: page,
 	}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -309,7 +311,7 @@ func (m *tlbMiddleware) sendRspToTop(
 func (m *tlbMiddleware) processTLBMSHRHit(
 	msg *vm.TranslationReq,
 ) bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	idx, found := mshrGetEntry(next.MSHREntries, msg.PID, msg.VAddr)
 	if !found {
 		return false
@@ -324,10 +326,10 @@ func (m *tlbMiddleware) processTLBMSHRHit(
 }
 
 func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	fetchBottom := &vm.TranslationReq{}
-	fetchBottom.ID = sim.GetIDGenerator().Generate()
+	fetchBottom.ID = timing.GetIDGenerator().Generate()
 	fetchBottom.Src = m.bottomPort().AsRemote()
 	fetchBottom.Dst = findTranslationPort(spec, msg.VAddr)
 	fetchBottom.PID = msg.PID
@@ -348,7 +350,7 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 		m.comp,
 	)
 
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	var idx int
 	next.MSHREntries, idx = mshrAdd(next.MSHREntries, spec.MSHRSize, msg.PID, msg.VAddr)
 	next.MSHREntries[idx].Requests = append(next.MSHREntries[idx].Requests, *msg)
@@ -362,7 +364,7 @@ func (m *tlbMiddleware) fetchBottom(msg *vm.TranslationReq) bool {
 }
 
 func (m *tlbMiddleware) parseBottom() bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	if next.HasRespondingMSHR {
 		return false
 	}
@@ -372,7 +374,7 @@ func (m *tlbMiddleware) parseBottom() bool {
 	}
 
 	item := itemI.(*vm.TranslationRsp)
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	tracing.AddMilestone(
 		tracing.MsgIDAtReceiver(item, m.comp),
 		tracing.MilestoneKindData,
@@ -416,13 +418,13 @@ func (m *tlbMiddleware) parseBottom() bool {
 }
 
 func (m *tlbMiddleware) handleFlush() bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	if !next.HasInflightFlushReq {
 		return false
 	}
 
 	madeProgress := false
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	if mshrIsEmpty(next.MSHREntries) && !next.HasRespondingMSHR && m.bottomPort().PeekIncoming() == nil {
 		madeProgress = m.processTLBFlush() || madeProgress
@@ -443,12 +445,12 @@ func (m *tlbMiddleware) handleFlush() bool {
 }
 
 func (m *tlbMiddleware) processTLBFlush() bool {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 	flush := next.InflightFlush
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = flush.Meta.Src
 	rsp.TrafficClass = "mem.ControlRsp"

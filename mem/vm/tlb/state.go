@@ -4,15 +4,15 @@ import (
 	"github.com/sarchlab/akita/v5/mem/mshr"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/lruset"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // inflightFlushState stores the flat fields needed during a TLB flush.
 type inflightFlushState struct {
-	VAddr []uint64        `json:"vaddr"`
-	PID   vm.PID          `json:"pid"`
-	Meta  sim.MsgMeta     `json:"meta"`
+	VAddr []uint64          `json:"vaddr"`
+	PID   vm.PID            `json:"pid"`
+	Meta  messaging.MsgMeta `json:"meta"`
 }
 
 const (
@@ -24,15 +24,15 @@ const (
 
 // State contains mutable runtime data for the TLB.
 type State struct {
-	TLBState            string                             `json:"tlb_state"`
-	Sets                []setState                         `json:"sets"`
-	MSHREntries         []mshrEntryState                   `json:"mshr_entries"`
-	HasRespondingMSHR   bool                               `json:"has_responding_mshr"`
-	RespondingMSHRData  mshrEntryState                     `json:"responding_mshr_data"`
+	TLBState            string                                 `json:"tlb_state"`
+	Sets                []setState                             `json:"sets"`
+	MSHREntries         []mshrEntryState                       `json:"mshr_entries"`
+	HasRespondingMSHR   bool                                   `json:"has_responding_mshr"`
+	RespondingMSHRData  mshrEntryState                         `json:"responding_mshr_data"`
 	Pipeline            queueing.Pipeline[pipelineTLBReqState] `json:"pipeline"`
-	BufferItems         []pipelineTLBReqState              `json:"buffer_items"`
-	HasInflightFlushReq bool                               `json:"has_inflight_flush_req"`
-	InflightFlush       inflightFlushState                 `json:"inflight_flush"`
+	BufferItems         []pipelineTLBReqState                  `json:"buffer_items"`
+	HasInflightFlushReq bool                                   `json:"has_inflight_flush_req"`
+	InflightFlush       inflightFlushState                     `json:"inflight_flush"`
 }
 
 // blockState is a serializable representation of an internal block.
@@ -154,7 +154,7 @@ func mshrIsEntryPresent(entries []mshrEntryState, pid vm.PID, vAddr uint64) bool
 
 // --- Free function for address mapping ---
 
-func findTranslationPort(spec Spec, vAddr uint64) sim.RemotePort {
+func findTranslationPort(spec Spec, vAddr uint64) messaging.RemotePort {
 	switch spec.AddrMapperKind {
 	case "single":
 		if len(spec.AddrMapperPorts) != 1 {

@@ -120,12 +120,9 @@ Key methods:
 
 | Method | Description |
 |--------|-------------|
-| `GetSpec() S` | Returns the immutable specification |
-| `GetState() T` | Returns the current state |
-| `GetNextState() *T` | Returns a **pointer** to the next state — **write target** |
-| `SetNextState(state T)` | Replaces the next state directly |
-| `SetState(state T)` | Sets **both** current and next (for initialization and save/load) |
-| `Tick() bool` | Assigns current→next, runs middleware pipeline, assigns next→current |
+| `Spec S` | Immutable specification |
+| `State T` | Mutable runtime state |
+| `Tick() bool` | Runs the middleware pipeline |
 | `AddMiddleware(mw)` | Appends a middleware to the pipeline |
 | `AddPort(name, port)` | Registers a port with the component |
 | `Name() string` | Returns the component's name |
@@ -133,8 +130,6 @@ Key methods:
 | `TickLater()` | Schedules a tick on the next cycle |
 | `SaveState(w)` | Serializes spec + current state to JSON |
 | `LoadState(r)` | Deserializes spec + state from JSON |
-| `ResetTick()` | Resets the tick scheduler (for checkpoint restore) |
-| `ResetAndRestartTick()` | Resets tick scheduler and schedules a new tick |
 
 ### 2.2 The Builder
 
@@ -161,37 +156,26 @@ Builder methods (all return a new `Builder` — immutable value-receiver pattern
 The `Build` method creates the underlying `sim.TickingComponent` and wires
 it into the simulation engine.
 
-### 2.3 In-Place State Update
+### 2.3 Single-State Update
 
-`Component[S, T]` uses **in-place state update**. The `current` and `next`
-fields hold the same state value during a tick:
+`Component[S, T]` stores one mutable state value:
 
-- **`current`** — the state visible via `GetState()`
-- **`next`** — the state accessible via `GetNextState()` (a pointer for mutation)
+- **`State`** — the mutable runtime state field
 
 The `Tick()` method implements the update cycle:
 
 ```go
 // From v5/modeling/component.go
 func (c *Component[S, T]) Tick() bool {
-    c.next = c.current                        // 1. Assign current → next
-    madeProgress := c.MiddlewareHolder.Tick() // 2. Run middleware pipeline
-    c.current = c.next                        // 3. Assign next → current
-
-    return madeProgress
+    return c.MiddlewareHolder.Tick()
 }
 ```
 
-1. **Before each tick:** `current` is assigned to `next` (shallow copy).
-2. **During the tick:** Middlewares read from `GetState()` and write to
-   `GetNextState()`. Since both refer to the same underlying data, reads
-   and writes are interchangeable.
-3. **After the tick:** `next` is assigned back to `current`.
+During the tick, middlewares run in registration order and mutate
+`comp.State` directly.
 
 **Key rules:**
-- **Write through `GetNextState()`** — it returns a pointer, enabling direct
-  mutation. `GetState()` returns a value copy of the struct (but slices and
-  maps inside share underlying data).
+- **Write through `State`** — mutate `comp.State` directly.
 - State types must be JSON-serializable (for checkpoint/restore) with no
   pointers, interfaces, functions, or channels.
 
@@ -346,7 +330,7 @@ designed for use inside State structs:
   It is also a concrete value type with exported, JSON-tagged fields.
 
 Both types serialize automatically as part of State JSON marshaling — **no
-custom `GetState`/`SetState` is needed**.
+custom state accessor methods are needed**.
 
 ### Why `Buffer[T]`, Not an Interface
 
@@ -601,7 +585,7 @@ type transactionState struct {
 ### Result
 
 With flat transactions and queueing containers, **no custom
-`GetState`/`SetState` logic is needed on middlewares.** The
+state accessor logic is needed on middlewares.** The
 `modeling.Component` handles serialization automatically — `SaveState` and
 `LoadState` marshal/unmarshal the entire State (including all transactions,
 buffers, and pipelines) via standard JSON.
@@ -691,16 +675,16 @@ This keeps tracing simple: the component is the hook domain, and
 middlewares just forward `m.comp` to any tracing call that needs a
 `NamedHookable`.
 
-### 5.5 Tick() Logic — GetState/GetNextState Pattern
+### 5.5 Tick() Logic — State/`State` field Pattern
 
-Inside a middleware's methods, use `GetNextState()` to read and write state.
-With in-place update semantics `GetState()` and `GetNextState()` refer to the
-same underlying data, so either can be used for reading:
+Inside a middleware's methods, use `State` field to read and write state.
+`State` returns a value copy for reads, while `State` field returns a
+pointer for direct mutation:
 
 ```go
 // From v5/examples/tickingping/sendmw.go — sendMW.sendRsp()
 func (m *sendMW) sendRsp() bool {
-    state := m.comp.GetNextState()
+    state := &m.comp.State
 
     if len(state.CurrentTransactions) == 0 {
         return false
@@ -732,7 +716,7 @@ func (m *sendMW) sendRsp() bool {
 }
 ```
 
-**Key pattern:** Use `GetNextState()` to read and mutate state within a middleware method. With in-place update semantics, `GetState()` and `GetNextState()` refer to the same underlying data.
+**Key pattern:** Use `State` field to read and mutate state within a middleware method.
 
 A typical `Tick()` method orchestrates multiple sub-operations:
 
@@ -749,7 +733,7 @@ func (m *sendMW) Tick() bool {
 ```
 
 Each sub-operation:
-1. Gets the state pointer via `m.comp.GetNextState()`
+1. Gets the state pointer via `&m.comp.State`
 2. Reads conditions and does the work (send messages, etc.)
 3. Mutates state through the same pointer
 4. Returns `true` if it did something, `false` otherwise
@@ -895,11 +879,10 @@ serialization of both Spec and State:
 ```go
 // From v5/modeling/saveload.go
 
-// SaveState marshals spec + current state as JSON to a writer.
+// SaveState marshals spec + state as JSON to a writer.
 func (c *Component[S, T]) SaveState(w io.Writer) error
 
 // LoadState reads JSON from a reader and restores spec + state.
-// The loaded state is written to both current and next.
 func (c *Component[S, T]) LoadState(r io.Reader) error
 ```
 
@@ -944,22 +927,6 @@ comp2 := modeling.NewBuilder[MySpec, MyState]().
 if err := comp2.LoadState(&buf); err != nil {
     log.Fatalf("load failed: %v", err)
 }
-
-// After loading, reset the tick scheduler
-comp2.ResetAndRestartTick()
-```
-
-### 7.5 After Loading: Reset Ticks
-
-After restoring state from a checkpoint, the tick scheduler must be reset
-so that future `TickLater()` calls can schedule new events:
-
-```go
-// Reset only — don't start ticking until triggered
-comp.ResetTick()
-
-// Or reset and immediately schedule a tick
-comp.ResetAndRestartTick()
 ```
 
 ---
@@ -1021,7 +988,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
         WithFreq(b.freq).
         WithSpec(Spec{}).
         Build(name)
-    comp.SetState(State{})
+    comp.State = State{}
 
     comp.AddMiddleware(&myMiddleware{comp: comp})
 
@@ -1042,7 +1009,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
         WithFreq(b.spec.Freq).
         WithSpec(b.spec).
         Build(name)
-    comp.SetState(State{})
+    comp.State = State{}
 
     comp.AddMiddleware(&sendMW{comp: comp})
     comp.AddMiddleware(&receiveProcessMW{comp: comp})
@@ -1086,7 +1053,7 @@ func (c *Comp) GetStorage() *mem.Storage {
 }
 
 func (c *Comp) StorageName() string {
-    return c.GetSpec().StorageRef
+    return c.Spec.StorageRef
 }
 ```
 
@@ -1212,7 +1179,7 @@ The `sendPing` method demonstrates the state mutation pattern:
 ```go
 // From v5/examples/tickingping/sendmw.go
 func (m *sendMW) sendPing() bool {
-    state := m.comp.GetNextState()
+    state := &m.comp.State
 
     if state.NumPingNeedToSend == 0 {
         return false
@@ -1281,7 +1248,7 @@ func (m *receiveProcessMW) processInput() bool {
 }
 
 func (m *receiveProcessMW) processingPingReq(msg *PingReq) {
-    next := m.comp.GetNextState()
+    next := &m.comp.State
 
     trans := pingTransactionState{
         SeqID:     msg.SeqID,
@@ -1339,7 +1306,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
         WithFreq(b.spec.Freq).
         WithSpec(b.spec).
         Build(name)
-    comp.SetState(State{})
+    comp.State = State{}
 
     comp.AddMiddleware(&sendMW{comp: comp})
     comp.AddMiddleware(&receiveProcessMW{comp: comp})
@@ -1384,10 +1351,10 @@ func Example() {
     conn.PlugIn(agentA.GetPortByName("Out"))
     conn.PlugIn(agentB.GetPortByName("Out"))
 
-    state := agentA.GetState()
+    state := agentA.State
     state.PingDst = agentB.GetPortByName("Out").AsRemote()
     state.NumPingNeedToSend = 2
-    agentA.SetState(state)
+    agentA.State = state
 
     agentA.TickLater()
 
@@ -1436,8 +1403,8 @@ type EventDrivenComponent[S any, T any] struct {
 Key differences from `Component[S, T]`:
 - No `sim.TickingComponent` — no fixed-frequency ticking.
 - No `MiddlewareHolder` — behavior is defined by an `EventProcessor`.
-- State is accessed via `GetState()`, `SetState()`, and `GetStatePtr()`
-  (pointer for direct mutation). There is no `GetNextState()`.
+- State is accessed through the exported `State` field
+  (pointer for direct mutation).
 - Scheduling uses `ScheduleWakeAt(t)` and `ScheduleWakeNow()` with a dedup
   guard (`pendingWakeup`) to prevent redundant events.
 
@@ -1445,10 +1412,8 @@ Key methods:
 
 | Method | Description |
 |--------|-------------|
-| `GetSpec() S` | Returns the immutable specification |
-| `GetState() T` | Returns the current state (value copy) |
-| `SetState(s T)` | Sets the current state |
-| `GetStatePtr() *T` | Returns a pointer to the current state for direct mutation |
+| `Spec S` | Immutable specification |
+| `State T` | Mutable runtime state |
 | `ScheduleWakeAt(t)` | Schedules a wakeup at time `t` (dedup guard prevents redundancy) |
 | `ScheduleWakeNow()` | Schedules a wakeup at the current engine time |
 | `Handle(e)` | Handles an event — resets dedup guard and calls the processor |
@@ -1525,8 +1490,8 @@ func (p *PingProcessor) Process(
     now sim.VTimeInSec,
 ) bool {
     progress := false
-    state := comp.GetStatePtr()
-    spec := comp.GetSpec()
+    state := &comp.State
+    spec := comp.Spec
 
     progress = p.sendScheduledPings(comp, state, spec, now) || progress
     progress = p.deliverPendingResponses(comp, state, spec, now) || progress
@@ -1537,7 +1502,7 @@ func (p *PingProcessor) Process(
 ```
 
 Key patterns:
-- `GetStatePtr()` returns a pointer for direct mutation (no `GetNextState`).
+- `State` field returns a pointer for direct mutation.
 - The processor handles all logic: sending pings, delivering responses, and
   processing incoming messages.
 - Future wakeups are scheduled with `comp.ScheduleWakeAt(time)`.
@@ -1675,7 +1640,7 @@ func (c *Comp) GetStorage() *mem.Storage {
 }
 
 func (c *Comp) StorageName() string {
-    return c.GetSpec().StorageRef
+    return c.Spec.StorageRef
 }
 ```
 
@@ -1708,13 +1673,13 @@ func (m *ctrlMiddleware) ctrlPort() sim.Port {
 }
 ```
 
-The `handleDrainState` method shows using `GetNextState()` for both reading
+The `handleDrainState` method shows using `State` field for both reading
 and writing state:
 
 ```go
 // From v5/mem/idealmemcontroller/ctrlmiddleware.go
 func (m *ctrlMiddleware) handleDrainState() bool {
-    state := m.comp.GetNextState()
+    state := &m.comp.State
     if len(state.InflightTransactions) != 0 {
         return false
     }
@@ -1770,18 +1735,18 @@ This middleware:
 5. When countdown reaches 0, performs the actual storage read/write and sends
    a response
 
-The `takeNewReqs` method demonstrates using `GetNextState()` and
-`GetSpec()`:
+The `takeNewReqs` method demonstrates using `State` field and
+`Spec`:
 
 ```go
 // From v5/mem/idealmemcontroller/memmiddleware.go
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-    state := m.comp.GetNextState()
+    state := &m.comp.State
     if state.CurrentState != "enable" {
         return false
     }
 
-    spec := m.comp.GetSpec()
+    spec := m.comp.Spec
 
     for i := 0; i < spec.Width; i++ {
         msgI := m.topPort().RetrieveIncoming()
@@ -1828,7 +1793,7 @@ func (b Builder) Build(name string) *Comp {
         WithFreq(spec.Freq).
         WithSpec(spec).
         Build(name)
-    modelComp.SetState(initialState)
+    modelComp.State = initialState
 
     var storage *mem.Storage
     if b.storage == nil {
@@ -1913,7 +1878,7 @@ When creating a new V5 component, follow these steps:
 - [ ] **Implement Builder** — `MakeBuilder()`, `With...()` methods,
   `Build(name)` that:
   - Creates `modeling.Component` via inner builder
-  - Sets initial state via `SetState()`
+  - Sets initial state via `comp.State = initialState`
   - Adds middlewares (passing `comp` directly)
   - Wires ports (`SetComponent` + `AddPort`)
   - Returns `*modeling.Component[Spec, State]` by default

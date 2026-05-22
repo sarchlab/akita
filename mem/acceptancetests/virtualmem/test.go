@@ -18,12 +18,14 @@ import (
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
-	"github.com/sarchlab/akita/v5/simulation"
-	"github.com/sarchlab/akita/v5/tracing"
+
 	"github.com/sarchlab/akita/v5/mem/vm/mmu"
 	"github.com/sarchlab/akita/v5/mem/vm/tlb"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/timing"
+	"github.com/sarchlab/akita/v5/tracing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -35,7 +37,7 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
 
-func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
+func setupTest() (timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -58,26 +60,26 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 
 	at := addresstranslator.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
 		WithMemoryProviderMapper(atMemoryMapper).
 		WithTranslationProviderMapper(atTranslationMapper).
-		WithTopPort(sim.NewPort(nil, 4, 4, "AT.TopPort")).
-		WithBottomPort(sim.NewPort(nil, 4, 4, "AT.BottomPort")).
-		WithTranslationPort(sim.NewPort(nil, 4, 4, "AT.TranslationPort")).
-		WithCtrlPort(sim.NewPort(nil, 1, 1, "AT.CtrlPort")).
+		WithTopPort(messaging.NewPort(nil, 4, 4, "AT.TopPort")).
+		WithBottomPort(messaging.NewPort(nil, 4, 4, "AT.BottomPort")).
+		WithTranslationPort(messaging.NewPort(nil, 4, 4, "AT.TranslationPort")).
+		WithCtrlPort(messaging.NewPort(nil, 1, 1, "AT.CtrlPort")).
 		Build("AT")
 	s.RegisterComponent(at)
 
 	agent = memaccessagent.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithMaxAddress(*maxAddressFlag).
 		WithReadLeft(*numAccessFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithLowModule(at.GetPortByName("Top")).
-		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 
@@ -89,7 +91,7 @@ func setupTest() (sim.Engine, *memaccessagent.MemAccessAgent) {
 	return engine, agent
 }
 
-func buildMemoryHierarchy(engine sim.EventScheduler, s *simulation.Simulation) (
+func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation) (
 	*modeling.Component[writethroughcache.Spec, writethroughcache.State],
 	*modeling.Component[writeback.Spec, writeback.State],
 	*idealmemcontroller.Comp,
@@ -98,34 +100,34 @@ func buildMemoryHierarchy(engine sim.EventScheduler, s *simulation.Simulation) (
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
 		WithSpec(idealmemcontroller.Spec{Width: 1, Latency: 100, CacheLineSize: 64}).
-		WithTopPort(sim.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
-		WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
+		WithTopPort(messaging.NewPort(nil, 16, 16, "MemCtrl.TopPort")).
+		WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 		Build("MemCtrl")
 	s.RegisterComponent(memCtrl)
 
 	L2Cache := writeback.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithWayAssociativity(4).
 		WithNumReqPerCycle(2).
 		WithAddressMapperType("single").
 		WithRemotePorts(memCtrl.GetPortByName("Top").AsRemote()).
-		WithTopPort(sim.NewPort(nil, 4, 4, "L2Cache.ToTop")).
-		WithBottomPort(sim.NewPort(nil, 4, 4, "L2Cache.BottomPort")).
-		WithControlPort(sim.NewPort(nil, 4, 4, "L2Cache.ControlPort")).
+		WithTopPort(messaging.NewPort(nil, 4, 4, "L2Cache.ToTop")).
+		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2Cache.BottomPort")).
+		WithControlPort(messaging.NewPort(nil, 4, 4, "L2Cache.ControlPort")).
 		Build("L2Cache")
 	s.RegisterComponent(L2Cache)
 
 	L1Cache := writethroughcache.MakeBuilder().
 		WithWritePolicyType("write-through").
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithWayAssociativity(2).
 		WithAddressMapperType("single").
 		WithRemotePorts(L2Cache.GetPortByName("Top").AsRemote()).
-		WithTopPort(sim.NewPort(nil, 4, 4, "L1Cache.TopPort")).
-		WithBottomPort(sim.NewPort(nil, 4, 4, "L1Cache.BottomPort")).
-		WithControlPort(sim.NewPort(nil, 4, 4, "L1Cache.ControlPort")).
+		WithTopPort(messaging.NewPort(nil, 4, 4, "L1Cache.TopPort")).
+		WithBottomPort(messaging.NewPort(nil, 4, 4, "L1Cache.BottomPort")).
+		WithControlPort(messaging.NewPort(nil, 4, 4, "L1Cache.ControlPort")).
 		Build("L1Cache")
 	s.RegisterComponent(L1Cache)
 
@@ -133,7 +135,7 @@ func buildMemoryHierarchy(engine sim.EventScheduler, s *simulation.Simulation) (
 }
 
 func buildTranslationHierarchy(
-	engine sim.EventScheduler, s *simulation.Simulation,
+	engine timing.EventScheduler, s *simulation.Simulation,
 ) (
 	*modeling.Component[mmu.Spec, mmu.State],
 	*modeling.Component[tlb.Spec, tlb.State],
@@ -143,13 +145,13 @@ func buildTranslationHierarchy(
 
 	IoMMU := mmu.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithLog2PageSize(12).
 		WithMaxNumReqInFlight(16).
 		WithPageWalkingLatency(10).
 		WithPageTable(pageTable).
-		WithTopPort(sim.NewPort(nil, 4096, 4096, "IoMMU.ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, "IoMMU.MigrationPort")).
+		WithTopPort(messaging.NewPort(nil, 4096, 4096, "IoMMU.ToTop")).
+		WithMigrationPort(messaging.NewPort(nil, 1, 1, "IoMMU.MigrationPort")).
 		Build("IoMMU")
 	s.RegisterComponent(IoMMU)
 
@@ -159,15 +161,15 @@ func buildTranslationHierarchy(
 
 	L2TLB := tlb.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithNumWays(64).
 		WithNumSets(64).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(4).
 		WithTranslationProviderMapper(L2TLBMapper).
-		WithTopPort(sim.NewPort(nil, 4, 4, "L2TLB.TopPort")).
-		WithBottomPort(sim.NewPort(nil, 4, 4, "L2TLB.BottomPort")).
-		WithControlPort(sim.NewPort(nil, 1, 1, "L2TLB.ControlPort")).
+		WithTopPort(messaging.NewPort(nil, 4, 4, "L2TLB.TopPort")).
+		WithBottomPort(messaging.NewPort(nil, 4, 4, "L2TLB.BottomPort")).
+		WithControlPort(messaging.NewPort(nil, 1, 1, "L2TLB.ControlPort")).
 		Build("L2TLB")
 	s.RegisterComponent(L2TLB)
 
@@ -177,15 +179,15 @@ func buildTranslationHierarchy(
 
 	TLB := tlb.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithNumWays(8).
 		WithNumSets(8).
 		WithLog2PageSize(12).
 		WithNumReqPerCycle(2).
 		WithTranslationProviderMapper(TLBMapper).
-		WithTopPort(sim.NewPort(nil, 2, 2, "TLB.TopPort")).
-		WithBottomPort(sim.NewPort(nil, 2, 2, "TLB.BottomPort")).
-		WithControlPort(sim.NewPort(nil, 1, 1, "TLB.ControlPort")).
+		WithTopPort(messaging.NewPort(nil, 2, 2, "TLB.TopPort")).
+		WithBottomPort(messaging.NewPort(nil, 2, 2, "TLB.BottomPort")).
+		WithControlPort(messaging.NewPort(nil, 1, 1, "TLB.ControlPort")).
 		Build("TLB")
 	s.RegisterComponent(TLB)
 
@@ -215,16 +217,16 @@ func setupPageTable(maxAddress uint64) vm.PageTable {
 	return pageTable
 }
 
-func connect(engine sim.EventScheduler, name string, p1, p2 sim.Port) {
-	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build(name)
+func connect(engine timing.EventScheduler, name string, p1, p2 messaging.Port) {
+	conn := directconnection.MakeBuilder().WithEngine(engine).WithFreq(1 * timing.GHz).Build(name)
 	conn.PlugIn(p1)
 	conn.PlugIn(p2)
 }
 
 func setupConnection(
-	engine sim.EventScheduler,
+	engine timing.EventScheduler,
 	agent *memaccessagent.MemAccessAgent,
-	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl sim.Component,
+	AT, TLB, L2TLB, IoMMU, L1Cache, L2Cache, memCtrl messaging.Component,
 ) {
 	connect(engine, "Conn1",
 		agent.GetPortByName("Mem"),
@@ -256,7 +258,7 @@ func setupConnection(
 	)
 }
 
-func setupTracing(engine sim.EventScheduler, memCtrl *idealmemcontroller.Comp) {
+func setupTracing(engine timing.EventScheduler, memCtrl *idealmemcontroller.Comp) {
 	if *traceFileFlag == "" {
 		return
 	}
@@ -285,11 +287,11 @@ func main() {
 		panic(err)
 	}
 
-	if len(agent.GetState().PendingWriteReq) > 0 || len(agent.GetState().PendingReadReq) > 0 {
+	if len(agent.State.PendingWriteReq) > 0 || len(agent.State.PendingReadReq) > 0 {
 		panic("Not all req returned")
 	}
 
-	if agent.GetState().WriteLeft > 0 || agent.GetState().ReadLeft > 0 {
+	if agent.State.WriteLeft > 0 || agent.State.ReadLeft > 0 {
 		panic("more requests to send")
 	}
 

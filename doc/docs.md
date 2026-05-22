@@ -169,8 +169,8 @@ func (m *processMW) Tick() bool {
         return false
     }
 
-    state := m.comp.GetNextState()
-    spec := m.comp.GetSpec()
+    state := &m.comp.State
+    spec := m.comp.Spec
 
     newValue := state.Value + req.Delta
     if newValue > spec.MaxValue {
@@ -241,7 +241,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
         WithFreq(b.spec.Freq).
         WithSpec(b.spec).
         Build(name)
-    comp.SetState(State{})
+    comp.State = State{}
 
     comp.AddMiddleware(&processMW{comp: comp})
 
@@ -334,7 +334,7 @@ Every V5 component is built from five orthogonal parts:
 |---|---|---|
 | Scheduling | Periodic ticks at frequency | On-demand via `ScheduleWakeAt`/`ScheduleWakeNow` |
 | Behavior | Middleware pipeline (`Tick() bool`) | Single `EventProcessor.Process()` |
-| State update | In-place: `next = current` → middlewares → `current = next` | Direct mutation via `GetStatePtr()` |
+| State update | Direct mutation via `State` field | Direct mutation via `State` field |
 | Good for | Pipeline-style components, caches | Latency-scheduled components, simple protocols |
 
 ---
@@ -401,7 +401,6 @@ err := sim.Save("/path/to/checkpoint")
 **Loading** (the simulation must be fully built first):
 ```go
 err := sim.Load("/path/to/checkpoint")
-// Components' tick schedulers are automatically reset.
 // Trigger ticks on components that should resume:
 comp.TickLater()
 err = sim.GetEngine().Run()
@@ -413,7 +412,6 @@ For individual components:
 comp.SaveState(writer)
 // Load
 comp.LoadState(reader)
-comp.ResetAndRestartTick()  // reset tick scheduler + schedule immediate tick
 ```
 
 ---
@@ -426,9 +424,7 @@ Middlewares implement the per-tick behavioral logic of a `modeling.Component`.
 
 1. The engine fires a `TickEvent` for the component.
 2. `Component.Tick()` is called:
-   - `next = current` (shallow copy)
    - Each middleware's `Tick()` is called **in registration order**
-   - `current = next` (commit)
 3. If **any** middleware returned `true` (progress), a new tick is scheduled
    via `TickLater()`.
 4. If **no** middleware made progress, ticking stops. The component is woken
@@ -440,8 +436,8 @@ Middlewares implement the per-tick behavioral logic of a `modeling.Component`.
 Inside a middleware:
 ```go
 func (m *myMW) Tick() bool {
-    state := m.comp.GetNextState()  // pointer to next state — mutate directly
-    spec  := m.comp.GetSpec()       // read-only spec
+    state := &m.comp.State  // pointer to state — mutate directly
+    spec  := m.comp.Spec       // read-only spec
 
     // Read from state, mutate *state, read spec
     state.Counter++
@@ -450,9 +446,8 @@ func (m *myMW) Tick() bool {
 }
 ```
 
-Because Akita V5 uses **in-place state update** (current and next refer to the
-same underlying value), `GetState()` and `GetNextState()` see the same data.
-The `next = current` assignment at tick start is a shallow copy for consistency.
+Akita V5 components store a single mutable state value. Mutations via
+`State` field are immediately visible through `State`.
 
 ### Multiple Middlewares
 
@@ -493,8 +488,8 @@ func (p *MyProcessor) Process(
     comp *modeling.EventDrivenComponent[MySpec, MyState],
     now sim.VTimeInSec,
 ) bool {
-    state := comp.GetStatePtr()
-    spec := comp.GetSpec()
+    state := &comp.State
+    spec := comp.Spec
 
     // Process incoming messages, schedule future work, etc.
     // Use comp.ScheduleWakeAt(futureTime) for delayed actions.
@@ -787,7 +782,7 @@ use the `noc/networking` subpackages:
 | `networking/routing` | Routing table construction |
 | `networking/networkconnector` | Connector utilities |
 
-The `noc/messaging` package defines the `Flit` (flow control digit) structure
+The `noc/packetization` package defines the `Flit` (flow control digit) structure
 used by the network switches.
 
 **Switching components** are full-featured Akita V5 components with Spec/State

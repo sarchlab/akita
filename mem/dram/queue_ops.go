@@ -1,7 +1,7 @@
 package dram
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // splitTransaction breaks a transaction into sub-transactions based on
@@ -32,7 +32,7 @@ func splitTransaction(
 
 	for a := alignedAddr; a < alignedEnd; a += unitSize {
 		st := subTransState{
-			ID:               sim.GetIDGenerator().Generate(),
+			ID:               timing.GetIDGenerator().Generate(),
 			Address:          a,
 			Completed:        false,
 			TransactionIndex: transIdx,
@@ -96,7 +96,7 @@ func createClosePageCommand(
 	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:      sim.GetIDGenerator().Generate(),
+		ID:      timing.GetIDGenerator().Generate(),
 		Address: st.Address,
 		SubTransRef: subTransRef{
 			TransIndex: ref.TransIndex,
@@ -129,7 +129,7 @@ func createOpenPageCommand(
 	st := &state.Transactions[ref.TransIndex].SubTransactions[ref.SubIndex]
 
 	cmd := &commandState{
-		ID:      sim.GetIDGenerator().Generate(),
+		ID:      timing.GetIDGenerator().Generate(),
 		Address: st.Address,
 		SubTransRef: subTransRef{
 			TransIndex: ref.TransIndex,

@@ -5,16 +5,19 @@ import (
 	"reflect"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// ctrlParseMW handles control port parsing and transaction completion.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// ctrlParseMW handles control port parsing and transaction completion.
 type ctrlParseMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *ctrlParseMW) ctrlPort() sim.Port {
+func (m *ctrlParseMW) ctrlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
@@ -40,12 +43,12 @@ func (m *ctrlParseMW) parseFromCP() bool {
 		log.Panicf("can't process request of type %s", reflect.TypeOf(reqI))
 	}
 
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if state.CurrentTransaction.Active {
 		return false
 	}
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	srcByteGranularity := resolveByteGranularity(spec, req.SrcSide)
 	addressMustBeAligned(req.SrcAddress, srcByteGranularity)
@@ -85,7 +88,7 @@ func (m *ctrlParseMW) parseFromCP() bool {
 
 // finishTransaction finishes the current transaction.
 func (m *ctrlParseMW) finishTransaction() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if !state.CurrentTransaction.Active {
 		return false
 	}
@@ -97,8 +100,8 @@ func (m *ctrlParseMW) finishTransaction() bool {
 	}
 
 	rsp := &DataMoveResponse{
-		MsgMeta: sim.MsgMeta{
-			ID:    sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID:    timing.GetIDGenerator().Generate(),
 			Src:   trans.ReqDst,
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
@@ -124,4 +127,3 @@ func (m *ctrlParseMW) finishTransaction() bool {
 
 	return true
 }
-

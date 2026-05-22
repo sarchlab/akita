@@ -1,21 +1,22 @@
 package switches
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/messaging"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
+	"github.com/sarchlab/akita/v5/noc/packetization"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for switch components.
 var DefaultSpec = Spec{
-	Freq: 1 * sim.GHz,
+	Freq: 1 * timing.GHz,
 }
 
 // Builder can help building switches
 type Builder struct {
-	engine       sim.EventScheduler
+	engine       timing.EventScheduler
 	spec         Spec
 	routingTable routing.Table
 }
@@ -27,13 +28,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the switch to build uses.
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the switch to build works at.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -57,7 +58,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithSpec(spec).
 		Build(name)
 
-	portIndex := make(map[sim.RemotePort]int)
+	portIndex := make(map[messaging.RemotePort]int)
 
 	rfsMW := &routeForwardSendMW{
 		comp:         modelComp,
@@ -99,10 +100,10 @@ func (b Builder) routingTableMustBeGiven() {
 // addPort registers a port complex.
 func addPort(
 	comp *modeling.Component[Spec, State],
-	ports *[]sim.Port,
-	portIndex map[sim.RemotePort]int,
-	port sim.Port,
-	remotePort sim.RemotePort,
+	ports *[]messaging.Port,
+	portIndex map[messaging.RemotePort]int,
+	port messaging.Port,
+	remotePort messaging.RemotePort,
 	pcs portComplexState,
 ) {
 	idx := len(*ports)
@@ -121,7 +122,7 @@ func addPort(
 		BufferName: pcs.LocalPortName + "FwdBuf",
 		Cap:        pcs.NumInputChannel,
 	}
-	pcs.SendOutBuffer = queueing.Buffer[messaging.Flit]{
+	pcs.SendOutBuffer = queueing.Buffer[packetization.Flit]{
 		BufferName: pcs.LocalPortName + "SendBuf",
 		Cap:        pcs.NumOutputChannel,
 	}
@@ -130,17 +131,15 @@ func addPort(
 		NumStages: pcs.Latency,
 	}
 
-	// Initialize state in both current and next buffers
-	next := comp.GetNextState()
-	next.PortComplexes = append(next.PortComplexes, pcs)
-	comp.SetState(*next)
+	state := &comp.State
+	state.PortComplexes = append(state.PortComplexes, pcs)
 }
 
 // SwitchPortAdder can add a port to a switch.
 type SwitchPortAdder struct {
 	sw               *modeling.Component[Spec, State]
-	localPort        sim.Port
-	remotePort       sim.Port
+	localPort        messaging.Port
+	remotePort       messaging.Port
 	latency          int
 	numInputChannel  int
 	numOutputChannel int
@@ -159,7 +158,7 @@ func MakeSwitchPortAdder(sw *modeling.Component[Spec, State]) SwitchPortAdder {
 
 // WithPorts defines the ports to add. The local port is part of the switch.
 // The remote port is the port on an endpoint or on another switch.
-func (a SwitchPortAdder) WithPorts(local, remote sim.Port) SwitchPortAdder {
+func (a SwitchPortAdder) WithPorts(local, remote messaging.Port) SwitchPortAdder {
 	a.localPort = local
 	a.remotePort = remote
 

@@ -1,25 +1,24 @@
 package tracing
 
 import (
+	"github.com/sarchlab/akita/v5/timing"
 	"sync"
-
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // TotalTimeTracer can collect the total time of executing a certain type of
 // task. If the execution of two tasks overlaps, this tracer will simply add
 // the two task processing time together.
 type TotalTimeTracer struct {
-	timeTeller    sim.TimeTeller
+	timeTeller    timing.TimeTeller
 	filter        TaskFilter
 	lock          sync.Mutex
-	totalTime     sim.VTimeInSec
+	totalTime     timing.VTimeInSec
 	inflightTasks map[uint64]Task
 }
 
 // NewTotalTimeTracer creates a new TotalTimeTracer
 func NewTotalTimeTracer(
-	timeTeller sim.TimeTeller,
+	timeTeller timing.TimeTeller,
 	filter TaskFilter,
 ) *TotalTimeTracer {
 	t := &TotalTimeTracer{
@@ -32,7 +31,7 @@ func NewTotalTimeTracer(
 }
 
 // TotalTime returns the total time has been spent on a certain type of tasks.
-func (t *TotalTimeTracer) TotalTime() sim.VTimeInSec {
+func (t *TotalTimeTracer) TotalTime() timing.VTimeInSec {
 	t.lock.Lock()
 	time := t.totalTime
 	t.lock.Unlock()

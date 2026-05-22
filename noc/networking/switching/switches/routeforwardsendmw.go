@@ -5,7 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -24,8 +25,8 @@ func GetRoutingTable(c *modeling.Component[Spec, State]) routing.Table {
 
 type routeForwardSendMW struct {
 	comp         *modeling.Component[Spec, State]
-	ports        []sim.Port
-	portIndex    map[sim.RemotePort]int // remotePort → index in State.PortComplexes
+	ports        []messaging.Port
+	portIndex    map[messaging.RemotePort]int // remotePort → index in State.PortComplexes
 	routingTable routing.Table
 	nextArbPort  int
 }
@@ -42,7 +43,7 @@ func (m *routeForwardSendMW) Tick() bool {
 }
 
 func (m *routeForwardSendMW) route() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i := range m.ports {
 		pcs := &state.PortComplexes[i]
@@ -70,7 +71,7 @@ func (m *routeForwardSendMW) route() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst sim.RemotePort) int {
+func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst messaging.RemotePort) int {
 	outPort := m.routingTable.FindPort(msgDst)
 	if outPort == "" {
 		panic(fmt.Sprintf("%s: no output port for %s",
@@ -87,7 +88,7 @@ func (m *routeForwardSendMW) resolveOutputBufIdx(msgDst sim.RemotePort) int {
 }
 
 func (m *routeForwardSendMW) forward() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	occupiedOutputPort := make([]bool, len(m.ports))
 
 	for offset := 0; offset < len(m.ports); offset++ {
@@ -123,7 +124,7 @@ func (m *routeForwardSendMW) forward() (madeProgress bool) {
 }
 
 func (m *routeForwardSendMW) sendOut() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i, port := range m.ports {
 		pcs := &state.PortComplexes[i]

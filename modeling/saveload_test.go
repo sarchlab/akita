@@ -7,17 +7,17 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 func makeTestComponent(spec TestSpec, state TestState) *modeling.Component[TestSpec, TestState] {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		WithSpec(spec).
 		Build("SaveLoadComp")
-	comp.SetState(state)
+	comp.State = state
 
 	return comp
 }
@@ -111,18 +111,18 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 
 	// Create a new component and load the state into it.
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp2 := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("LoadedComp")
 
 	if err := comp2.LoadState(&buf); err != nil {
 		t.Fatalf("LoadState() error: %v", err)
 	}
 
-	verifySpec(t, comp2.GetSpec(), spec)
-	verifyState(t, comp2.GetState(), state)
+	verifySpec(t, comp2.Spec, spec)
+	verifyState(t, comp2.State, state)
 }
 
 func TestLoadStateWithZeroState(t *testing.T) {
@@ -135,30 +135,30 @@ func TestLoadStateWithZeroState(t *testing.T) {
 		t.Fatalf("SaveState() error: %v", err)
 	}
 
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp2 := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("ZeroComp")
 
 	if err := comp2.LoadState(&buf); err != nil {
 		t.Fatalf("LoadState() error: %v", err)
 	}
 
-	if comp2.GetSpec() != spec {
+	if comp2.Spec != spec {
 		t.Errorf("spec mismatch after loading zero state")
 	}
 
-	if comp2.GetState().Counter != 0 {
-		t.Errorf("state.Counter = %d, want 0", comp2.GetState().Counter)
+	if comp2.State.Counter != 0 {
+		t.Errorf("state.Counter = %d, want 0", comp2.State.Counter)
 	}
 }
 
 func TestLoadStateInvalidJSON(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("InvalidComp")
 
 	r := bytes.NewReader([]byte("not valid json"))
@@ -195,10 +195,10 @@ func (e *errReader) Read([]byte) (int, error) {
 }
 
 func TestLoadStateReadError(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 	comp := modeling.NewBuilder[TestSpec, TestState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("ReadErrComp")
 
 	err := comp.LoadState(&errReader{})

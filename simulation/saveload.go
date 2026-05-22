@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // StateSaver is implemented by components that can save their state to a
@@ -30,15 +30,6 @@ type StorageOwner interface {
 	StorageName() string
 }
 
-// TickResetter is implemented by components that can reset their tick
-// scheduler after loading. This only resets the internal guard so that
-// future TickLater calls can schedule new events. It does NOT schedule
-// a tick by itself — ticks are triggered naturally via port notifications
-// or explicit TickLater calls by the user.
-type TickResetter interface {
-	ResetTick()
-}
-
 // WakeupResetter is implemented by event-driven components that need to
 // reset their pending wakeup guard after loading state from a checkpoint.
 type WakeupResetter interface {
@@ -47,8 +38,8 @@ type WakeupResetter interface {
 
 // checkpointMetadata is the top-level metadata saved with a checkpoint.
 type checkpointMetadata struct {
-	EngineTime      sim.VTimeInSec `json:"engine_time"`
-	IDGeneratorNext uint64         `json:"id_generator_next"`
+	EngineTime      timing.VTimeInSec `json:"engine_time"`
+	IDGeneratorNext uint64            `json:"id_generator_next"`
 }
 
 // Save persists the simulation state to the given directory path.
@@ -95,7 +86,7 @@ func (s *Simulation) createCheckpointDirs(path string) error {
 func (s *Simulation) saveMetadata(path string) error {
 	meta := checkpointMetadata{
 		EngineTime:      s.engine.CurrentTime(),
-		IDGeneratorNext: sim.GetIDGeneratorNextID(),
+		IDGeneratorNext: timing.GetIDGeneratorNextID(),
 	}
 
 	metaData, err := json.Marshal(meta)
@@ -169,8 +160,7 @@ func (s *Simulation) saveStorages(storageDir string) error {
 // Load restores simulation state from the given directory path.
 //
 // The simulation must already be built (topology and connections reconstructed
-// from build code) before calling Load. After loading, TickResetter components
-// will have their tick schedulers reset and a new tick scheduled.
+// from build code) before calling Load.
 func (s *Simulation) Load(path string) error {
 	if err := s.loadMetadata(path); err != nil {
 		return err
@@ -184,7 +174,7 @@ func (s *Simulation) Load(path string) error {
 		return err
 	}
 
-	s.resetTickSchedulers()
+	s.resetWakeups()
 
 	return nil
 }
@@ -200,13 +190,13 @@ func (s *Simulation) loadMetadata(path string) error {
 		return fmt.Errorf("unmarshal metadata: %w", err)
 	}
 
-	se, ok := s.engine.(*sim.SerialEngine)
+	se, ok := s.engine.(*timing.SerialEngine)
 	if !ok {
 		return fmt.Errorf("Load requires SerialEngine")
 	}
 
 	se.SetCurrentTime(meta.EngineTime)
-	sim.SetIDGeneratorNextID(meta.IDGeneratorNext)
+	timing.SetIDGeneratorNextID(meta.IDGeneratorNext)
 
 	return nil
 }
@@ -273,16 +263,8 @@ func (s *Simulation) loadStorages(storageDir string) error {
 	return nil
 }
 
-// resetTickSchedulers resets tick schedulers so future TickLater calls can
-// schedule events. We only reset the scheduler guard — we do NOT auto-schedule
-// ticks. Components will be ticked naturally when ports receive messages or
-// when the caller explicitly calls TickLater on specific components.
-func (s *Simulation) resetTickSchedulers() {
+func (s *Simulation) resetWakeups() {
 	for _, comp := range s.components {
-		if resetter, ok := comp.(TickResetter); ok {
-			resetter.ResetTick()
-		}
-
 		if resetter, ok := comp.(WakeupResetter); ok {
 			resetter.ResetWakeup()
 		}

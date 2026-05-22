@@ -1,15 +1,15 @@
 package acceptance
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"log"
 	"math/rand"
-
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 // TrafficMsg is a concrete message type used in acceptance tests.
 type TrafficMsg struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 }
 
 // Test is a test case.
@@ -52,8 +52,8 @@ func (t *Test) GenerateMsgs(n uint64) {
 		dstPort := dstAgent.AgentPorts[dstPortID]
 
 		msg := &TrafficMsg{
-			MsgMeta: sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			MsgMeta: messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				Src:          srcPort.AsRemote(),
 				Dst:          dstPort.AsRemote(),
 				TrafficBytes: rand.Intn(4096),
@@ -69,7 +69,7 @@ func (t *Test) registerMsg(msg *TrafficMsg) {
 }
 
 // receiveMsgMeta marks that a message (identified by its MsgMeta) is received.
-func (t *Test) receiveMsgMeta(meta *sim.MsgMeta, recvPort sim.Port) {
+func (t *Test) receiveMsgMeta(meta *messaging.MsgMeta, recvPort messaging.Port) {
 	if meta.Dst != recvPort.AsRemote() {
 		panic("msg delivered to a wrong destination")
 	}
@@ -99,7 +99,7 @@ func (t *Test) MustHaveReceivedAllMsgs() {
 }
 
 // ReportBandwidthAchieved dumps the bandwidth observed by each agents.
-func (t *Test) ReportBandwidthAchieved(now sim.VTimeInSec) {
+func (t *Test) ReportBandwidthAchieved(now timing.VTimeInSec) {
 	for _, a := range t.agents {
 		nowSec := float64(now) / 1e12
 		log.Printf(

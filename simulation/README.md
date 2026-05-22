@@ -89,7 +89,6 @@ err := sim.Load("/path/to/checkpoint")
 | `StateSaver` | `SaveState(w io.Writer)` | Serialize component state |
 | `StateLoader` | `LoadState(r io.Reader)` | Deserialize component state |
 | `StorageOwner` | `GetStorage() *mem.Storage` | Access storage for binary save |
-| `TickResetter` | `ResetTick()` | Reset tick scheduler after load |
 | `WakeupResetter` | `ResetWakeup()` | Reset wakeup guard after load |
 
 `modeling.Component[S,T]` and `modeling.EventDrivenComponent[S,T]` satisfy

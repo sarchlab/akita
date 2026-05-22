@@ -4,19 +4,21 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/timing"
+
+	// --- Concrete message types ---
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// --- Concrete message types ---
-
 type PingReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
 type PingRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
@@ -27,10 +29,10 @@ type PingSpec struct {
 }
 
 type PingState struct {
-	NumPingNeedToSend int              `json:"num_ping_need_to_send"`
-	NextSeqID         int              `json:"next_seq_id"`
-	StartTimes        []sim.VTimeInSec `json:"start_times"`
-	CompletedPings    int              `json:"completed_pings"`
+	NumPingNeedToSend int                 `json:"num_ping_need_to_send"`
+	NextSeqID         int                 `json:"next_seq_id"`
+	StartTimes        []timing.VTimeInSec `json:"start_times"`
+	CompletedPings    int                 `json:"completed_pings"`
 }
 
 type pingTransaction struct {
@@ -42,8 +44,8 @@ type pingTransaction struct {
 
 type pingMiddleware struct {
 	comp                *modeling.Component[PingSpec, PingState]
-	outPort             sim.Port
-	pingDst             sim.RemotePort
+	outPort             messaging.Port
+	pingDst             messaging.RemotePort
 	currentTransactions []*pingTransaction
 }
 
@@ -70,7 +72,7 @@ func (m *pingMiddleware) processInput() bool {
 		m.currentTransactions = append(m.currentTransactions, trans)
 		m.outPort.RetrieveIncoming()
 	case *PingRsp:
-		state := m.comp.GetState()
+		state := m.comp.State
 		state.CompletedPings++
 		seqID := msg.SeqID
 		startTime := state.StartTimes[seqID]
@@ -78,7 +80,7 @@ func (m *pingMiddleware) processInput() bool {
 		duration := currentTime - startTime
 
 		fmt.Printf("Ping %d, %d\n", seqID, duration)
-		m.comp.SetState(state)
+		m.comp.State = state
 		m.outPort.RetrieveIncoming()
 	default:
 		panic("unknown message type")
@@ -109,8 +111,8 @@ func (m *pingMiddleware) sendRsp() bool {
 	}
 
 	rsp := &PingRsp{
-		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID:  timing.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: trans.req.Src,
 		},
@@ -127,14 +129,14 @@ func (m *pingMiddleware) sendRsp() bool {
 }
 
 func (m *pingMiddleware) sendPing() bool {
-	state := m.comp.GetState()
+	state := m.comp.State
 	if state.NumPingNeedToSend == 0 {
 		return false
 	}
 
 	req := &PingReq{
-		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID:  timing.GetIDGenerator().Generate(),
 			Src: m.outPort.AsRemote(),
 			Dst: m.pingDst,
 		},
@@ -149,7 +151,7 @@ func (m *pingMiddleware) sendPing() bool {
 	state.StartTimes = append(state.StartTimes, m.comp.CurrentTime())
 	state.NumPingNeedToSend--
 	state.NextSeqID++
-	m.comp.SetState(state)
+	m.comp.State = state
 
 	return true
 }
@@ -157,17 +159,17 @@ func (m *pingMiddleware) sendPing() bool {
 // Example demonstrates building a ping-pong simulation using
 // modeling.Component with Spec and State.
 func Example() {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 
 	specA := PingSpec{NumPingsToSend: 2}
 	specB := PingSpec{NumPingsToSend: 0}
 
-	portA := sim.NewPort(nil, 4, 4, "AgentA.OutPort")
-	portB := sim.NewPort(nil, 4, 4, "AgentB.OutPort")
+	portA := messaging.NewPort(nil, 4, 4, "AgentA.OutPort")
+	portB := messaging.NewPort(nil, 4, 4, "AgentB.OutPort")
 
 	agentA := modeling.NewBuilder[PingSpec, PingState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.Hz).
+		WithFreq(1 * timing.Hz).
 		WithSpec(specA).
 		Build("AgentA")
 
@@ -181,7 +183,7 @@ func Example() {
 
 	agentB := modeling.NewBuilder[PingSpec, PingState]().
 		WithEngine(engine).
-		WithFreq(1 * sim.Hz).
+		WithFreq(1 * timing.Hz).
 		WithSpec(specB).
 		Build("AgentB")
 
@@ -196,7 +198,7 @@ func Example() {
 	conn := directconnection.
 		MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	conn.PlugIn(portA)
@@ -206,7 +208,7 @@ func Example() {
 	stateA := PingState{
 		NumPingNeedToSend: specA.NumPingsToSend,
 	}
-	agentA.SetState(stateA)
+	agentA.State = stateA
 
 	agentA.TickLater()
 

@@ -5,9 +5,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"go.uber.org/mock/gomock"
 
-	"github.com/sarchlab/akita/v5/sim"
-
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Ideal Memory Controller", func() {
@@ -26,7 +26,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port = NewMockPort(mockCtrl)
 		port.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("Port")).
+			Return(messaging.RemotePort("Port")).
 			AnyTimes()
 		port.EXPECT().
 			SetComponent(gomock.Any()).
@@ -37,9 +37,9 @@ var _ = Describe("Ideal Memory Controller", func() {
 			WithNewStorage(1 * mem.MB).
 			WithSpec(Spec{Width: 1, Latency: 10, CacheLineSize: 64}).
 			WithTopPort(port).
-			WithCtrlPort(sim.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
+			WithCtrlPort(messaging.NewPort(nil, 16, 16, "MemCtrl.CtrlPort")).
 			Build("MemCtrl")
-		memController.Freq = 1000 * sim.MHz
+		memController.Freq = 1000 * timing.MHz
 	})
 
 	AfterEach(func() {
@@ -48,7 +48,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should accept read request and add to inflight transactions", func() {
 		readReq := &mem.ReadReq{}
-		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.ID = timing.GetIDGenerator().Generate()
 		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
@@ -59,7 +59,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		madeProgress := memController.Tick()
 
 		Expect(madeProgress).To(BeTrue())
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].IsRead).To(BeTrue())
 		// After first tick: latency=10, decrement once → 9
@@ -69,7 +69,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 	It("should accept write request and add to inflight transactions", func() {
 		writeData1 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
-		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData1
@@ -80,7 +80,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		madeProgress := memController.Tick()
 		Expect(madeProgress).To(BeTrue())
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].IsRead).To(BeFalse())
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(9))
@@ -88,7 +88,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should send read response after latency ticks", func() {
 		readReq := &mem.ReadReq{}
-		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.ID = timing.GetIDGenerator().Generate()
 		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
@@ -105,7 +105,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 			memController.Tick()
 		}
 
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(1))
 
@@ -114,14 +114,14 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state = memController.Component.GetState()
+		state = memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 	})
 
 	It("should send write response after latency ticks", func() {
 		writeData2 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
-		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData2
@@ -143,7 +143,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 
 		// Verify data was written to storage
@@ -154,7 +154,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 	It("should retry send when port is busy", func() {
 		readReq := &mem.ReadReq{}
-		readReq.ID = sim.GetIDGenerator().Generate()
+		readReq.ID = timing.GetIDGenerator().Generate()
 		readReq.Dst = port.AsRemote()
 		readReq.Address = 0
 		readReq.AccessByteSize = 4
@@ -173,10 +173,10 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		// Tick 10: CycleLeft 1→0, send fails
 		port.EXPECT().RetrieveIncoming().Return(nil)
-		port.EXPECT().Send(gomock.Any()).Return(&sim.SendError{})
+		port.EXPECT().Send(gomock.Any()).Return(&messaging.SendError{})
 		memController.Tick()
 
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(1))
 		Expect(state.InflightTransactions[0].CycleLeft).To(Equal(0))
 
@@ -185,7 +185,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 		port.EXPECT().Send(gomock.Any()).Return(nil)
 		memController.Tick()
 
-		state = memController.Component.GetState()
+		state = memController.Component.State
 		Expect(state.InflightTransactions).To(HaveLen(0))
 	})
 
@@ -196,7 +196,7 @@ var _ = Describe("Ideal Memory Controller", func() {
 
 		writeData3 := []byte{0, 1, 2, 3}
 		writeReq := &mem.WriteReq{}
-		writeReq.ID = sim.GetIDGenerator().Generate()
+		writeReq.ID = timing.GetIDGenerator().Generate()
 		writeReq.Dst = port.AsRemote()
 		writeReq.Address = 0
 		writeReq.Data = writeData3
@@ -226,13 +226,13 @@ var _ = Describe("Ideal Memory Controller", func() {
 	})
 
 	It("should use Spec for latency and width", func() {
-		spec := memController.Component.GetSpec()
+		spec := memController.Component.Spec
 		Expect(spec.Latency).To(Equal(10))
 		Expect(spec.Width).To(Equal(1))
 	})
 
 	It("should use State for current state", func() {
-		state := memController.Component.GetState()
+		state := memController.Component.State
 		Expect(state.CurrentState).To(Equal("enable"))
 	})
 })

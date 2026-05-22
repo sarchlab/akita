@@ -6,8 +6,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -27,17 +29,17 @@ var _ = Describe("Flusher", func() {
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlPort")).
+			Return(messaging.RemotePort("ControlPort")).
 			AnyTimes()
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 
 		initialState := State{
@@ -76,7 +78,7 @@ var _ = Describe("Flusher", func() {
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
 				NumReqPerCycle:   4,
@@ -86,8 +88,8 @@ var _ = Describe("Flusher", func() {
 			}).
 			Build("Cache")
 
-		m.comp.SetState(initialState)
-		next := m.comp.GetNextState()
+		m.comp.State = initialState
+		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
@@ -111,7 +113,6 @@ var _ = Describe("Flusher", func() {
 
 	It("should do nothing if no request", func() {
 		controlPort.EXPECT().PeekIncoming().Return(nil)
-		m.syncForTest()
 
 		ret := f.Tick()
 		Expect(ret).To(BeFalse())
@@ -120,34 +121,30 @@ var _ = Describe("Flusher", func() {
 	Context("flush without reset", func() {
 		It("should start flushing", func() {
 			req := &mem.ControlReq{Command: mem.CmdFlush}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
-			m.syncForTest()
-
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(next.HasProcessingFlush).To(BeTrue())
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
 		})
 
 		It("should do nothing if there is inflight transaction", func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			next.CacheState = int(cacheStatePreFlushing)
 			next.Transactions = append(
 				next.Transactions, transactionState{})
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: sim.MsgMeta{
-					ID: sim.GetIDGenerator().Generate(),
+				MsgMeta: messaging.MsgMeta{
+					ID: timing.GetIDGenerator().Generate(),
 				},
 			}
-
-			m.syncForTest()
 
 			ret := f.Tick()
 
@@ -155,12 +152,12 @@ var _ = Describe("Flusher", func() {
 		})
 
 		It("should move to flush stage if no inflight transaction", func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			next.CacheState = int(cacheStatePreFlushing)
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: sim.MsgMeta{
-					ID: sim.GetIDGenerator().Generate(),
+				MsgMeta: messaging.MsgMeta{
+					ID: timing.GetIDGenerator().Generate(),
 				},
 			}
 
@@ -169,39 +166,35 @@ var _ = Describe("Flusher", func() {
 			next.DirectoryState.Sets[0].Blocks[0].IsDirty = true
 			next.DirectoryState.Sets[0].Blocks[0].IsValid = true
 
-			m.syncForTest()
-
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			next = m.comp.GetNextState()
+			next = &m.comp.State
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStateFlushing))
 			Expect(next.FlusherBlockToEvictRefs).To(HaveLen(1))
 		})
 
 		It("should send response if all the blocks are evicted", func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			next.CacheState = int(cacheStateFlushing)
 			next.HasProcessingFlush = true
 			next.ProcessingFlush = flushReqState{
-				MsgMeta: sim.MsgMeta{
-					ID: sim.GetIDGenerator().Generate(),
+				MsgMeta: messaging.MsgMeta{
+					ID: timing.GetIDGenerator().Generate(),
 				},
 			}
 			next.FlusherBlockToEvictRefs = []blockRef{}
 
 			controlPort.EXPECT().CanSend().Return(true)
 			controlPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					Expect(msg.Meta().RspTo).To(Equal(next.ProcessingFlush.MsgMeta.ID))
 				})
-
-			m.syncForTest()
 
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			next = m.comp.GetNextState()
+			next = &m.comp.State
 			Expect(next.HasProcessingFlush).To(BeFalse())
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
 		})
@@ -210,7 +203,7 @@ var _ = Describe("Flusher", func() {
 	Context("flush with reset", func() {
 		It("should remove inflight state", func() {
 			req := &mem.ControlReq{Command: mem.CmdFlush}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.DiscardInflight = true
 			req.TrafficClass = "mem.ControlReq"
 
@@ -218,12 +211,10 @@ var _ = Describe("Flusher", func() {
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
-			m.syncForTest()
-
 			ret := f.Tick()
 
 			Expect(ret).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(next.HasProcessingFlush).To(BeTrue())
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStatePreFlushing))
 		})
@@ -232,12 +223,10 @@ var _ = Describe("Flusher", func() {
 	Context("restarting", func() {
 		It("should stall if cannot send to control port", func() {
 			req := &mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().CanSend().Return(false)
-
-			m.syncForTest()
 
 			madeProgress := f.Tick()
 
@@ -246,7 +235,7 @@ var _ = Describe("Flusher", func() {
 
 		It("should restart", func() {
 			req := &mem.ControlReq{Command: mem.CmdEnable}
-			req.ID = sim.GetIDGenerator().Generate()
+			req.ID = timing.GetIDGenerator().Generate()
 			req.TrafficClass = "mem.ControlReq"
 			controlPort.EXPECT().PeekIncoming().Return(req)
 			controlPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
@@ -255,12 +244,10 @@ var _ = Describe("Flusher", func() {
 			topPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 			bottomPort.EXPECT().RetrieveIncoming().Return(nil).AnyTimes()
 
-			m.syncForTest()
-
 			madeProgress := f.Tick()
 
 			Expect(madeProgress).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(cacheState(next.CacheState)).To(Equal(cacheStateRunning))
 		})
 	})

@@ -2,25 +2,26 @@ package gmmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for GMMU components.
 var DefaultSpec = Spec{
-	Freq:                1 * sim.GHz,
+	Freq:                1 * timing.GHz,
 	Log2PageSize:        12,
 	MaxRequestsInFlight: 16,
 }
 
 // A Builder can build GMMU component
 type Builder struct {
-	engine             sim.EventScheduler
+	engine             timing.EventScheduler
 	spec               Spec
 	pageTable          vm.PageTable
 	pageWalkingLatency int
-	topPort            sim.Port
-	bottomPort         sim.Port
+	topPort            messaging.Port
+	bottomPort         messaging.Port
 }
 
 // MakeBuilder creates a new builder
@@ -31,13 +32,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used with the GMMU
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency at which the GMMU works.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -74,19 +75,19 @@ func (b Builder) WithDeviceID(deviceID uint64) Builder {
 }
 
 // WithLowModule sets the low module of the GMMU
-func (b Builder) WithLowModule(p sim.RemotePort) Builder {
+func (b Builder) WithLowModule(p messaging.RemotePort) Builder {
 	b.spec.LowModule = p
 	return b
 }
 
 // WithTopPort sets the top port of the GMMU
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithBottomPort sets the bottom port of the GMMU
-func (b Builder) WithBottomPort(port sim.Port) Builder {
+func (b Builder) WithBottomPort(port messaging.Port) Builder {
 	b.bottomPort = port
 	return b
 }
@@ -105,7 +106,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	initialState := State{
 		RemoteMemReqs: make(map[uint64]transactionState),
 	}
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	pt := b.pageTable
 	if pt == nil {

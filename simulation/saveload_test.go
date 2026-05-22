@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -73,12 +73,12 @@ var _ = Describe("Save/Load", func() {
 		})
 
 		It("should save metadata when quiescent", func() {
-			sim.ResetIDGenerator()
-			sim.UseSequentialIDGenerator()
+			timing.ResetIDGenerator()
+			timing.UseSequentialIDGenerator()
 
 			// Generate a few IDs to advance the counter.
-			sim.GetIDGenerator().Generate()
-			sim.GetIDGenerator().Generate()
+			timing.GetIDGenerator().Generate()
+			timing.GetIDGenerator().Generate()
 
 			dir := GinkgoT().TempDir()
 			err := s.Save(dir)
@@ -98,14 +98,14 @@ var _ = Describe("Save/Load", func() {
 
 	Context("Load", func() {
 		It("should restore metadata", func() {
-			sim.ResetIDGenerator()
-			sim.UseSequentialIDGenerator()
+			timing.ResetIDGenerator()
+			timing.UseSequentialIDGenerator()
 
 			// Advance ID generator.
-			sim.GetIDGenerator().Generate()
-			sim.GetIDGenerator().Generate()
-			sim.GetIDGenerator().Generate()
-			savedNextID := sim.GetIDGeneratorNextID()
+			timing.GetIDGenerator().Generate()
+			timing.GetIDGenerator().Generate()
+			timing.GetIDGenerator().Generate()
+			savedNextID := timing.GetIDGeneratorNextID()
 
 			dir := GinkgoT().TempDir()
 			err := s.Save(dir)
@@ -119,12 +119,12 @@ var _ = Describe("Save/Load", func() {
 			}()
 
 			// Reset ID to a different value.
-			sim.SetIDGeneratorNextID(999)
+			timing.SetIDGeneratorNextID(999)
 
 			err = s2.Load(dir)
 			Expect(err).To(Succeed())
 
-			Expect(sim.GetIDGeneratorNextID()).To(Equal(savedNextID))
+			Expect(timing.GetIDGeneratorNextID()).To(Equal(savedNextID))
 		})
 	})
 })

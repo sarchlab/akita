@@ -2,12 +2,13 @@
 package vm
 
 import (
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // TranslationReq is a translation request.
 type TranslationReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	VAddr        uint64
 	PID          PID
 	DeviceID     uint64
@@ -16,7 +17,7 @@ type TranslationReq struct {
 
 // TranslationRsp is a translation response carrying the physical address.
 type TranslationRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	Page Page
 }
 
@@ -28,9 +29,9 @@ type PageMigrationInfo struct {
 
 // PageMigrationReqToDriver is a page migration request from MMU to the driver.
 type PageMigrationReqToDriver struct {
-	sim.MsgMeta
-	StartTime         sim.VTimeInSec
-	EndTime           sim.VTimeInSec
+	messaging.MsgMeta
+	StartTime         timing.VTimeInSec
+	EndTime           timing.VTimeInSec
 	MigrationInfo     *PageMigrationInfo
 	CurrAccessingGPUs []uint64
 	PID               PID
@@ -41,10 +42,10 @@ type PageMigrationReqToDriver struct {
 
 // NewPageMigrationReqToDriver creates a new PageMigrationReqToDriver.
 func NewPageMigrationReqToDriver(
-	src, dst sim.RemotePort,
+	src, dst messaging.RemotePort,
 ) *PageMigrationReqToDriver {
 	r := &PageMigrationReqToDriver{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
 	r.TrafficClass = "vm.PageMigrationReqToDriver"
@@ -53,20 +54,20 @@ func NewPageMigrationReqToDriver(
 
 // PageMigrationRspFromDriver is a page migration response from driver to MMU.
 type PageMigrationRspFromDriver struct {
-	sim.MsgMeta
-	StartTime sim.VTimeInSec
-	EndTime   sim.VTimeInSec
+	messaging.MsgMeta
+	StartTime timing.VTimeInSec
+	EndTime   timing.VTimeInSec
 	VAddr     []uint64
 	RspToTop  bool
 }
 
 // NewPageMigrationRspFromDriver creates a new PageMigrationRspFromDriver.
 func NewPageMigrationRspFromDriver(
-	src, dst sim.RemotePort,
+	src, dst messaging.RemotePort,
 	originalReqID uint64,
 ) *PageMigrationRspFromDriver {
 	r := &PageMigrationRspFromDriver{}
-	r.ID = sim.GetIDGenerator().Generate()
+	r.ID = timing.GetIDGenerator().Generate()
 	r.Src = src
 	r.Dst = dst
 	r.RspTo = originalReqID

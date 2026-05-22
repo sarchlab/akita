@@ -19,7 +19,7 @@ func (c *Comp) GetStorage() *mem.Storage {
 
 // StorageName returns the name used to identify this component's storage.
 func (c *Comp) StorageName() string {
-	return c.GetSpec().StorageRef
+	return c.Spec.StorageRef
 }
 
 // --- Free functions for pipeline / buffer / bank-selection / address conversion ---

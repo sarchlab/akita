@@ -12,8 +12,8 @@ type bankTickMW struct {
 
 // Tick runs tickBanks, issue, and tickSubTransQueue.
 func (m *bankTickMW) Tick() bool {
-	next := m.comp.GetNextState()
-	spec := m.comp.GetSpec()
+	next := &m.comp.State
+	spec := m.comp.Spec
 	next.TickCount++
 	next.TotalCycles++
 

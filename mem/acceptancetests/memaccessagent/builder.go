@@ -3,8 +3,9 @@ package memaccessagent
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Builder constructs MemAccessAgent instances.
@@ -12,16 +13,16 @@ type Builder struct {
 	spec      Spec
 	writeLeft int
 	readLeft  int
-	engine    sim.EventScheduler
-	lowModule sim.Port
-	memPort   sim.Port
+	engine    timing.EventScheduler
+	lowModule messaging.Port
+	memPort   messaging.Port
 }
 
 // MakeBuilder returns a new Builder with sensible defaults.
 func MakeBuilder() *Builder {
 	return &Builder{
 		spec: Spec{
-			Freq:       1 * sim.GHz,
+			Freq:       1 * timing.GHz,
 			MaxAddress: 1024 * 1024,
 		},
 		writeLeft: 1000,
@@ -30,7 +31,7 @@ func MakeBuilder() *Builder {
 }
 
 // WithEngine sets the simulation engine.
-func (b *Builder) WithEngine(engine sim.EventScheduler) *Builder {
+func (b *Builder) WithEngine(engine timing.EventScheduler) *Builder {
 	b.engine = engine
 	return b
 }
@@ -41,7 +42,7 @@ func (b *Builder) WithName(_ string) *Builder {
 }
 
 // WithFreq sets the tick frequency.
-func (b *Builder) WithFreq(freq sim.Freq) *Builder {
+func (b *Builder) WithFreq(freq timing.Freq) *Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -71,13 +72,13 @@ func (b *Builder) UseVirtualAddress(use bool) *Builder {
 }
 
 // WithLowModule sets the downstream module port.
-func (b *Builder) WithLowModule(port sim.Port) *Builder {
+func (b *Builder) WithLowModule(port messaging.Port) *Builder {
 	b.lowModule = port
 	return b
 }
 
 // WithMemPort sets the port used to send/receive memory messages.
-func (b *Builder) WithMemPort(port sim.Port) *Builder {
+func (b *Builder) WithMemPort(port messaging.Port) *Builder {
 	b.memPort = port
 	return b
 }
@@ -97,7 +98,7 @@ func (b *Builder) Build(name string) *MemAccessAgent {
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	agent := &MemAccessAgent{
 		Component: modelComp,

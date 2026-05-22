@@ -2,15 +2,17 @@ package switches
 
 import (
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/noc/messaging"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/noc/packetization"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type receivePipelineMW struct {
 	comp      *modeling.Component[Spec, State]
-	ports     []sim.Port
-	portIndex map[sim.RemotePort]int
+	ports     []messaging.Port
+	portIndex map[messaging.RemotePort]int
 }
 
 // Tick runs movePipeline → startProcessing.
@@ -23,12 +25,12 @@ func (m *receivePipelineMW) Tick() bool {
 	return madeProgress
 }
 
-func (m *receivePipelineMW) flitParentTaskID(flit *messaging.Flit) uint64 {
+func (m *receivePipelineMW) flitParentTaskID(flit *packetization.Flit) uint64 {
 	return flit.MsgMeta.SendTaskID
 }
 
 func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i, port := range m.ports {
 		pcs := &state.PortComplexes[i]
@@ -39,8 +41,8 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 				break
 			}
 
-			flit := itemI.(*messaging.Flit)
-			taskID := sim.GetIDGenerator().Generate()
+			flit := itemI.(*packetization.Flit)
+			taskID := timing.GetIDGenerator().Generate()
 			item := routedFlit{
 				Flit:    *flit,
 				TaskID:  taskID,
@@ -76,7 +78,7 @@ func (m *receivePipelineMW) startProcessing() (madeProgress bool) {
 }
 
 func (m *receivePipelineMW) movePipeline() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i := range m.ports {
 		pcs := &state.PortComplexes[i]

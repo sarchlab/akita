@@ -2,25 +2,26 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for MMU components.
 var DefaultSpec = Spec{
-	Freq:                1 * sim.GHz,
+	Freq:                1 * timing.GHz,
 	Log2PageSize:        12,
 	MaxRequestsInFlight: 16,
 }
 
 // A Builder can build MMU component
 type Builder struct {
-	engine             sim.EventScheduler
+	engine             timing.EventScheduler
 	spec               Spec
 	pageTable          vm.PageTable
 	pageWalkingLatency int
-	topPort            sim.Port
-	migrationPort      sim.Port
+	topPort            messaging.Port
+	migrationPort      messaging.Port
 }
 
 // MakeBuilder creates a new builder
@@ -31,13 +32,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine to be used with the MMU
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency that the MMU to work at
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -56,7 +57,7 @@ func (b Builder) WithPageTable(pageTable vm.PageTable) Builder {
 
 // WithMigrationServiceProvider sets the destination port that can perform
 // page migration.
-func (b Builder) WithMigrationServiceProvider(p sim.RemotePort) Builder {
+func (b Builder) WithMigrationServiceProvider(p messaging.RemotePort) Builder {
 	b.spec.MigrationServiceProvider = p
 	return b
 }
@@ -84,13 +85,13 @@ func (b Builder) WithAutoPageAllocation(enabled bool) Builder {
 }
 
 // WithTopPort sets the top port of the MMU
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithMigrationPort sets the migration port of the MMU
-func (b Builder) WithMigrationPort(port sim.Port) Builder {
+func (b Builder) WithMigrationPort(port messaging.Port) Builder {
 	b.migrationPort = port
 	return b
 }

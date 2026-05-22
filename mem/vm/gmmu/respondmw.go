@@ -6,21 +6,24 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// respondMW handles the bottom→top response path:
+	// fetchFromBottom, handleTranslationRsp.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// respondMW handles the bottom→top response path:
-// fetchFromBottom, handleTranslationRsp.
 type respondMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *respondMW) topPort() sim.Port {
+func (m *respondMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *respondMW) bottomPort() sim.Port {
+func (m *respondMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
@@ -51,7 +54,7 @@ func (m *respondMW) fetchFromBottom() bool {
 }
 
 func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	reqTransaction, exists := state.RemoteMemReqs[rsp.RspTo]
 
@@ -66,7 +69,7 @@ func (m *respondMW) handleTranslationRsp(rsp *vm.TranslationRsp) bool {
 	rspToTop := &vm.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = reqTransaction.ReqSrc
 	rspToTop.RspTo = rsp.ID

@@ -2,14 +2,15 @@ package tlb
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 	"github.com/sarchlab/akita/v5/queueing"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides the default configuration for TLB components.
 var DefaultSpec = Spec{
-	Freq:           1 * sim.GHz,
+	Freq:           1 * timing.GHz,
 	NumReqPerCycle: 4,
 	NumSets:        1,
 	NumWays:        32,
@@ -20,14 +21,14 @@ var DefaultSpec = Spec{
 
 // A Builder can build TLBs
 type Builder struct {
-	engine            sim.EventScheduler
+	engine            timing.EventScheduler
 	spec              Spec
 	log2PageSize      uint64
 	addressMapperType string
-	remotePorts       []sim.RemotePort
-	topPort           sim.Port
-	bottomPort        sim.Port
-	controlPort       sim.Port
+	remotePorts       []messaging.RemotePort
+	topPort           messaging.Port
+	bottomPort        messaging.Port
+	controlPort       messaging.Port
 
 	// Legacy support for WithTranslationProviderMapper
 	legacyMapper mem.AddressToPortMapper
@@ -41,13 +42,13 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine that the TLBs to use
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the freq the TLBs use
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -119,25 +120,25 @@ func (b Builder) WithTranslationProviderMapperType(t string) Builder {
 //   - "single": exactly one port must be provided.
 //   - "interleaved": the number of ports must be a power of two; requests are
 //     interleaved at page granularity (4 KiB by default).
-func (b Builder) WithTranslationProviders(ports ...sim.RemotePort) Builder {
+func (b Builder) WithTranslationProviders(ports ...messaging.RemotePort) Builder {
 	b.remotePorts = ports
 	return b
 }
 
 // WithTopPort sets the top port for the TLB
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithBottomPort sets the bottom port for the TLB
-func (b Builder) WithBottomPort(port sim.Port) Builder {
+func (b Builder) WithBottomPort(port messaging.Port) Builder {
 	b.bottomPort = port
 	return b
 }
 
 // WithControlPort sets the control port for the TLB
-func (b Builder) WithControlPort(port sim.Port) Builder {
+func (b Builder) WithControlPort(port messaging.Port) Builder {
 	b.controlPort = port
 	return b
 }
@@ -166,7 +167,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithFreq(b.spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	b.topPort.SetComponent(modelComp)
 	modelComp.AddPort("Top", b.topPort)
@@ -186,12 +187,12 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 	return modelComp
 }
 
-func (b Builder) resolveAddressMapper() (string, []sim.RemotePort, uint64) {
+func (b Builder) resolveAddressMapper() (string, []messaging.RemotePort, uint64) {
 	if b.legacyMapper != nil {
 		// Convert legacy mapper to spec fields
 		switch m := b.legacyMapper.(type) {
 		case *mem.SinglePortMapper:
-			return "single", []sim.RemotePort{m.Port}, 0
+			return "single", []messaging.RemotePort{m.Port}, 0
 		case *mem.InterleavedAddressPortMapper:
 			return "interleaved", m.LowModules, m.InterleavingSize
 		default:

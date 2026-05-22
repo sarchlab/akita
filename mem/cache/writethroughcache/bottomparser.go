@@ -1,9 +1,10 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/mem/cache"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -28,8 +29,8 @@ func (p *bottomParser) Tick() bool {
 	}
 }
 
-func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
-	next := p.cache.comp.GetNextState()
+func (p *bottomParser) processDoneRsp(msg messaging.Msg) bool {
+	next := &p.cache.comp.State
 	transIdx := p.findTransactionByWriteToBottomID(msg.Meta().RspTo)
 	if transIdx < 0 {
 		p.cache.bottomPort.RetrieveIncoming()
@@ -44,7 +45,7 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 
 	trans.Done = true
 
-	spec := p.cache.GetSpec()
+	spec := p.cache.comp.Spec
 	if needsDualCompletion(spec.WritePolicyType) {
 		trans.BottomWriteDone = true
 
@@ -69,8 +70,8 @@ func (p *bottomParser) processDoneRsp(msg sim.Msg) bool {
 	return true
 }
 
-func (p *bottomParser) processDataReady(msg sim.Msg) bool {
-	next := p.cache.comp.GetNextState()
+func (p *bottomParser) processDataReady(msg messaging.Msg) bool {
+	next := &p.cache.comp.State
 	transIdx := p.findTransactionByReadToBottomID(msg.Meta().RspTo)
 	if transIdx < 0 {
 		p.cache.bottomPort.RetrieveIncoming()
@@ -86,7 +87,7 @@ func (p *bottomParser) processDataReady(msg sim.Msg) bool {
 
 	pid := trans.ReadToBottomPID
 	addr := trans.Address()
-	spec := p.cache.GetSpec()
+	spec := p.cache.comp.Spec
 	cachelineID := (addr >> spec.Log2BlockSize) << spec.Log2BlockSize
 	drMsg := msg.(*mem.DataReadyRsp)
 	data := drMsg.Data
@@ -183,7 +184,7 @@ func (p *bottomParser) finalizeMSHRTransExcept(
 func (p *bottomParser) findTransactionByWriteToBottomID(
 	id uint64,
 ) int {
-	next := p.cache.comp.GetNextState()
+	next := &p.cache.comp.State
 
 	for i := 0; i < len(next.Transactions); i++ {
 		trans := &next.Transactions[i]
@@ -199,7 +200,7 @@ func (p *bottomParser) findTransactionByWriteToBottomID(
 func (p *bottomParser) findTransactionByReadToBottomID(
 	id uint64,
 ) int {
-	next := p.cache.comp.GetNextState()
+	next := &p.cache.comp.State
 
 	for i := 0; i < len(next.Transactions); i++ {
 		trans := &next.Transactions[i]
@@ -215,8 +216,8 @@ func (p *bottomParser) findTransactionByReadToBottomID(
 func (p *bottomParser) getBankBuf(
 	setID, wayID int,
 ) *queueing.Buffer[int] {
-	next := p.cache.comp.GetNextState()
-	numWaysPerSet := p.cache.GetSpec().WayAssociativity
+	next := &p.cache.comp.State
+	numWaysPerSet := p.cache.comp.Spec.WayAssociativity
 	blockID := setID*numWaysPerSet + wayID
 	bankID := blockID % len(next.BankBufs)
 

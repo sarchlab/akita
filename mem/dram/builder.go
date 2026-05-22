@@ -3,13 +3,16 @@ package dram
 import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// DefaultSpec provides default configuration for the DRAM memory controller.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// DefaultSpec provides default configuration for the DRAM memory controller.
 var DefaultSpec = Spec{
-	Freq:                 1600 * sim.MHz,
+	Freq:                 1600 * timing.MHz,
 	Protocol:             int(DDR3),
 	TAL:                  0,
 	TCL:                  11,
@@ -49,7 +52,7 @@ var DefaultSpec = Spec{
 
 // Builder can build new memory controllers.
 type Builder struct {
-	engine           sim.EventScheduler
+	engine           timing.EventScheduler
 	spec             Spec
 	useGlobalStorage bool
 	storage          *mem.Storage
@@ -105,7 +108,7 @@ type Builder struct {
 	tXS        int
 
 	tracers []tracing.Tracer
-	topPort sim.Port
+	topPort messaging.Port
 }
 
 // MakeBuilder creates a builder with default configuration.
@@ -198,13 +201,13 @@ func (b Builder) WithSpec(spec Spec) Builder {
 }
 
 // WithEngine sets the engine that the builder uses.
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency of the builder.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -335,7 +338,7 @@ func (b Builder) WithWriteLowWatermark(n int) Builder {
 }
 
 // WithTopPort sets the top port.
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
@@ -502,7 +505,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	var storage *mem.Storage
 	if b.useGlobalStorage {
@@ -1027,4 +1030,3 @@ func log2(n uint64) (uint64, bool) {
 
 	return onePos, oneCount == 1
 }
-

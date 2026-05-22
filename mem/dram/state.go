@@ -94,17 +94,17 @@ type bankState struct {
 
 // rankActivateHistory stores the last 4 activate timestamps for a rank.
 type rankActivateHistory struct {
-	Rank       int    `json:"rank"`
+	Rank       int      `json:"rank"`
 	Timestamps []uint64 `json:"timestamps"`
 }
 
 // bankStatesFlat is a flattened representation of the 3D bank array.
 type bankStatesFlat struct {
-	NumRanks           int                    `json:"num_ranks"`
-	NumBankGroups      int                    `json:"num_bank_groups"`
-	NumBanks           int                    `json:"num_banks"`
-	Entries            []bankEntry            `json:"entries"`
-	ActivateHistories  []rankActivateHistory  `json:"activate_histories"`
+	NumRanks          int                   `json:"num_ranks"`
+	NumBankGroups     int                   `json:"num_bank_groups"`
+	NumBanks          int                   `json:"num_banks"`
+	Entries           []bankEntry           `json:"entries"`
+	ActivateHistories []rankActivateHistory `json:"activate_histories"`
 }
 
 // queueEntry is a command state tagged with its queue index.

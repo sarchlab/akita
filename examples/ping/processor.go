@@ -3,19 +3,20 @@ package ping
 import (
 	"fmt"
 
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // PingReq is a ping request message.
 type PingReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
 // PingRsp is a ping response message.
 type PingRsp struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	SeqID int
 }
 
@@ -26,11 +27,11 @@ type PingProcessor struct{}
 // matured responses, and processing incoming messages.
 func (p *PingProcessor) Process(
 	comp *modeling.EventDrivenComponent[PingSpec, PingState],
-	now sim.VTimeInSec,
+	now timing.VTimeInSec,
 ) bool {
 	progress := false
-	state := comp.GetStatePtr()
-	spec := comp.GetSpec()
+	state := &comp.State
+	spec := comp.Spec
 
 	progress = p.sendScheduledPings(comp, state, spec, now) || progress
 	progress = p.deliverPendingResponses(comp, state, spec, now) || progress
@@ -43,7 +44,7 @@ func (p *PingProcessor) sendScheduledPings(
 	comp *modeling.EventDrivenComponent[PingSpec, PingState],
 	state *PingState,
 	spec PingSpec,
-	now sim.VTimeInSec,
+	now timing.VTimeInSec,
 ) bool {
 	progress := false
 	remaining := make([]ScheduledPing, 0, len(state.ScheduledPings))
@@ -51,8 +52,8 @@ func (p *PingProcessor) sendScheduledPings(
 	for _, sp := range state.ScheduledPings {
 		if sp.SendAt <= now {
 			pingMsg := &PingReq{
-				MsgMeta: sim.MsgMeta{
-					ID:  sim.GetIDGenerator().Generate(),
+				MsgMeta: messaging.MsgMeta{
+					ID:  timing.GetIDGenerator().Generate(),
 					Src: spec.OutPort.AsRemote(),
 					Dst: sp.Dst,
 				},
@@ -79,7 +80,7 @@ func (p *PingProcessor) deliverPendingResponses(
 	comp *modeling.EventDrivenComponent[PingSpec, PingState],
 	state *PingState,
 	spec PingSpec,
-	now sim.VTimeInSec,
+	now timing.VTimeInSec,
 ) bool {
 	progress := false
 	remaining := make([]PendingResponse, 0, len(state.PendingResponses))
@@ -87,8 +88,8 @@ func (p *PingProcessor) deliverPendingResponses(
 	for _, pr := range state.PendingResponses {
 		if pr.DeliverAt <= now {
 			rsp := &PingRsp{
-				MsgMeta: sim.MsgMeta{
-					ID:    sim.GetIDGenerator().Generate(),
+				MsgMeta: messaging.MsgMeta{
+					ID:    timing.GetIDGenerator().Generate(),
 					Src:   spec.OutPort.AsRemote(),
 					Dst:   pr.Dst,
 					RspTo: pr.OrigMsgID,
@@ -113,7 +114,7 @@ func (p *PingProcessor) processIncoming(
 	comp *modeling.EventDrivenComponent[PingSpec, PingState],
 	state *PingState,
 	spec PingSpec,
-	now sim.VTimeInSec,
+	now timing.VTimeInSec,
 ) bool {
 	progress := false
 

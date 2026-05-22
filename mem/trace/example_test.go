@@ -8,26 +8,29 @@ import (
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// SimpleTimeTeller implements sim.TimeTeller for example
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// SimpleTimeTeller implements sim.TimeTeller for example
 type SimpleTimeTeller struct {
-	currentTime sim.VTimeInSec
+	currentTime timing.VTimeInSec
 }
 
-func (t *SimpleTimeTeller) CurrentTime() sim.VTimeInSec {
+func (t *SimpleTimeTeller) CurrentTime() timing.VTimeInSec {
 	return t.currentTime
 }
 
-func (t *SimpleTimeTeller) AdvanceTime(duration sim.VTimeInSec) {
+func (t *SimpleTimeTeller) AdvanceTime(duration timing.VTimeInSec) {
 	t.currentTime += duration
 }
 
 // ExampleReadReq implements mem.AccessReq for example
 type ExampleReadReq struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 	address  uint64
 	byteSize uint64
 	pid      vm.PID

@@ -5,7 +5,8 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -13,7 +14,7 @@ type dispatchMW struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *dispatchMW) topPort() sim.Port {
+func (m *dispatchMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
@@ -23,8 +24,8 @@ func (m *dispatchMW) Tick() bool {
 
 func (m *dispatchMW) dispatchFromTopPort() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 
 	for {
 		msgI := m.topPort().PeekIncoming()
@@ -68,7 +69,7 @@ func (m *dispatchMW) dispatchFromTopPort() bool {
 	return madeProgress
 }
 
-func (m *dispatchMW) msgToItem(msg sim.Msg) bankPipelineItemState {
+func (m *dispatchMW) msgToItem(msg messaging.Msg) bankPipelineItemState {
 	switch r := msg.(type) {
 	case *mem.ReadReq:
 		return bankPipelineItemState{

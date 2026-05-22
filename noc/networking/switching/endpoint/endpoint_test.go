@@ -5,8 +5,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/noc/messaging"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/noc/packetization"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -26,17 +28,17 @@ var _ = Describe("End Point", func() {
 		devicePort = NewMockPort(mockCtrl)
 		devicePort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("DevicePort")).
+			Return(messaging.RemotePort("DevicePort")).
 			AnyTimes()
 		networkPort = NewMockPort(mockCtrl)
 		networkPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("NetworkPort")).
+			Return(messaging.RemotePort("NetworkPort")).
 			AnyTimes()
 		defaultSwitchPort = NewMockPort(mockCtrl)
 		defaultSwitchPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("DefaultSwitchPort")).
+			Return(messaging.RemotePort("DefaultSwitchPort")).
 			AnyTimes()
 
 		devicePort.EXPECT().SetConnection(gomock.Any())
@@ -45,8 +47,8 @@ var _ = Describe("End Point", func() {
 			WithEngine(engine).
 			WithFreq(1).
 			WithFlitByteSize(32).
-			WithDevicePorts([]sim.Port{devicePort}).
-			WithNetworkPort(sim.NewPort(nil, 4, 4, "EndPoint.NetworkPort")).
+			WithDevicePorts([]messaging.Port{devicePort}).
+			WithNetworkPort(messaging.NewPort(nil, 4, 4, "EndPoint.NetworkPort")).
 			Build("EndPoint")
 		endPoint.SetNetworkPort(networkPort)
 		endPoint.SetDefaultSwitchDst(defaultSwitchPort.AsRemote())
@@ -57,8 +59,8 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should send flits", func() {
-		msg := &sim.MsgMeta{
-			ID:           sim.GetIDGenerator().Generate(),
+		msg := &messaging.MsgMeta{
+			ID:           timing.GetIDGenerator().Generate(),
 			Src:          devicePort.AsRemote(),
 			TrafficBytes: 33,
 		}
@@ -72,8 +74,8 @@ var _ = Describe("End Point", func() {
 		madeProgress := endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
-			flit := msg.(*messaging.Flit)
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
+			flit := msg.(*packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(0))
@@ -84,8 +86,8 @@ var _ = Describe("End Point", func() {
 		madeProgress = endPoint.Tick()
 		Expect(madeProgress).To(BeTrue())
 
-		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg sim.Msg) {
-			flit := msg.(*messaging.Flit)
+		networkPort.EXPECT().Send(gomock.Any()).Do(func(msg messaging.Msg) {
+			flit := msg.(*packetization.Flit)
 			Expect(flit.Src).To(Equal(networkPort.AsRemote()))
 			Expect(flit.Dst).To(Equal(defaultSwitchPort.AsRemote()))
 			Expect(flit.SeqID).To(Equal(1))
@@ -102,19 +104,19 @@ var _ = Describe("End Point", func() {
 	})
 
 	It("should receive message", func() {
-		msg := &sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
+		msg := &messaging.MsgMeta{
+			ID:  timing.GetIDGenerator().Generate(),
 			Dst: devicePort.AsRemote(),
 		}
 
-		flit0 := &messaging.Flit{}
-		flit0.ID = sim.GetIDGenerator().Generate()
+		flit0 := &packetization.Flit{}
+		flit0.ID = timing.GetIDGenerator().Generate()
 		flit0.TrafficClass = reflect.TypeOf(msg).String()
 		flit0.SeqID = 0
 		flit0.NumFlitInMsg = 2
 		flit0.Msg = *msg
-		flit1 := &messaging.Flit{}
-		flit1.ID = sim.GetIDGenerator().Generate()
+		flit1 := &packetization.Flit{}
+		flit1.ID = timing.GetIDGenerator().Generate()
 		flit1.TrafficClass = reflect.TypeOf(msg).String()
 		flit1.SeqID = 1
 		flit1.NumFlitInMsg = 2

@@ -5,7 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -14,7 +16,7 @@ type memMiddleware struct {
 	storage *mem.Storage
 }
 
-func (m *memMiddleware) topPort() sim.Port {
+func (m *memMiddleware) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
@@ -28,12 +30,12 @@ func (m *memMiddleware) Tick() bool {
 }
 
 func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if state.CurrentState != "enable" {
 		return false
 	}
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	for i := 0; i < spec.Width; i++ {
 		msgI := m.topPort().RetrieveIncoming()
@@ -41,7 +43,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 			break
 		}
 
-		msg := msgI.(sim.Msg)
+		msg := msgI.(messaging.Msg)
 		tracing.TraceReqReceive(msg, m.comp)
 
 		tx := m.msgToInflightTransaction(msg)
@@ -55,7 +57,7 @@ func (m *memMiddleware) takeNewReqs() (madeProgress bool) {
 }
 
 func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransaction {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	switch payload := msg.(type) {
 	case *mem.ReadReq:
@@ -87,7 +89,7 @@ func (m *memMiddleware) msgToInflightTransaction(msg interface{}) inflightTransa
 }
 
 func (m *memMiddleware) processCountdowns() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if state.CurrentState == "pause" {
 		return false
 	}
@@ -128,7 +130,7 @@ func (m *memMiddleware) sendResponse(tx *inflightTransaction) bool {
 }
 
 func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	addr := mem.ConvertAddress(
 		spec.AddrConvKind, spec.AddrOffset,
 		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
@@ -141,7 +143,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 	}
 
 	rsp := &mem.DataReadyRsp{}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -161,7 +163,7 @@ func (m *memMiddleware) sendReadResponse(tx *inflightTransaction) bool {
 
 func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 	rsp := &mem.WriteDoneRsp{}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = tx.Src
 	rsp.RspTo = tx.ReqID
@@ -173,7 +175,7 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 		return false
 	}
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	addr := mem.ConvertAddress(
 		spec.AddrConvKind, spec.AddrOffset,
 		spec.AddrInterleavingSize, spec.AddrTotalNumOfElements,
@@ -211,4 +213,3 @@ func (m *memMiddleware) sendWriteResponse(tx *inflightTransaction) bool {
 func (m *memMiddleware) traceReqComplete(recvTaskID uint64) {
 	tracing.EndTask(recvTaskID, m.comp)
 }
-

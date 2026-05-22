@@ -1,10 +1,12 @@
 package memaccessagent
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/timing"
+)
 
 // Spec contains the immutable configuration for the MemAccessAgent.
 type Spec struct {
-	Freq              sim.Freq `json:"freq"`
-	MaxAddress        uint64   `json:"max_address"`
-	UseVirtualAddress bool     `json:"use_virtual_address"`
+	Freq              timing.Freq `json:"freq"`
+	MaxAddress        uint64      `json:"max_address"`
+	UseVirtualAddress bool        `json:"use_virtual_address"`
 }

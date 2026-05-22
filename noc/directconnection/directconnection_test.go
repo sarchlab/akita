@@ -7,18 +7,20 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/modeling"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
 type testMsg struct {
-	sim.MsgMeta
+	messaging.MsgMeta
 }
 
 func newTestMsg() *testMsg {
 	return &testMsg{
-		MsgMeta: sim.MsgMeta{
-			ID: sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID: timing.GetIDGenerator().Generate(),
 		},
 	}
 }
@@ -37,15 +39,15 @@ var _ = Describe("DirectConnection", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		port1 = NewMockPort(mockCtrl)
-		port1.EXPECT().AsRemote().Return(sim.RemotePort("port1")).AnyTimes()
+		port1.EXPECT().AsRemote().Return(messaging.RemotePort("port1")).AnyTimes()
 
 		port2 = NewMockPort(mockCtrl)
-		port2.EXPECT().AsRemote().Return(sim.RemotePort("port2")).AnyTimes()
+		port2.EXPECT().AsRemote().Return(messaging.RemotePort("port2")).AnyTimes()
 
 		engine = NewMockEngine(mockCtrl)
 		connection = MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Direct")
 
 		port1.EXPECT().SetConnection(connection)
@@ -60,9 +62,9 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should forward when handling tick event", func() {
-		engine.EXPECT().CurrentTime().Return(sim.VTimeInSec(10000))
+		engine.EXPECT().CurrentTime().Return(timing.VTimeInSec(10000))
 
-		tick := sim.MakeTickEvent(connection.Name(), sim.VTimeInSec(10000))
+		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInSec(10000))
 
 		msg1 := newTestMsg()
 		msg1.Src = port1.AsRemote()
@@ -84,8 +86,8 @@ var _ = Describe("DirectConnection", func() {
 
 		engine.EXPECT().
 			Schedule(gomock.Any()).
-			Do(func(evt sim.TickEvent) {
-				Expect(evt.Time()).To(Equal(sim.VTimeInSec(11000)))
+			Do(func(evt modeling.TickEvent) {
+				Expect(evt.Time()).To(Equal(timing.VTimeInSec(11000)))
 				Expect(evt.IsSecondary()).To(BeTrue())
 			})
 
@@ -93,14 +95,14 @@ var _ = Describe("DirectConnection", func() {
 	})
 
 	It("should keep outgoing messages queued when delivery is blocked", func() {
-		tick := sim.MakeTickEvent(connection.Name(), sim.VTimeInSec(10000))
+		tick := modeling.MakeTickEvent(connection.Name(), timing.VTimeInSec(10000))
 
 		msg := newTestMsg()
 		msg.Src = port1.AsRemote()
 		msg.Dst = port2.AsRemote()
 
 		port1.EXPECT().PeekOutgoing().Return(msg)
-		port2.EXPECT().Deliver(msg).Return(sim.NewSendError())
+		port2.EXPECT().Deliver(msg).Return(messaging.NewSendError())
 		port2.EXPECT().PeekOutgoing().Return(nil)
 
 		connection.Handle(tick)
@@ -108,17 +110,17 @@ var _ = Describe("DirectConnection", func() {
 })
 
 type agent struct {
-	*sim.TickingComponent
+	*modeling.TickingComponent
 
 	msgsOut []*testMsg
-	msgsIn  []sim.Msg
+	msgsIn  []messaging.Msg
 
-	OutPort sim.Port
+	OutPort messaging.Port
 }
 
-func newAgent(engine sim.EventScheduler, freq sim.Freq, name string, outPort sim.Port) *agent {
+func newAgent(engine timing.EventScheduler, freq timing.Freq, name string, outPort messaging.Port) *agent {
 	a := new(agent)
-	a.TickingComponent = sim.NewTickingComponent(name, engine, freq, a)
+	a.TickingComponent = modeling.NewTickingComponent(name, engine, freq, a)
 	a.OutPort = outPort
 	a.OutPort.SetComponent(a)
 
@@ -148,7 +150,7 @@ func (a *agent) Tick() bool {
 var _ = Describe("Direct Connection Integration", func() {
 	var (
 		mockCtrl        *gomock.Controller
-		engine          sim.Engine
+		engine          timing.Engine
 		connection      *Comp
 		agents          []*agent
 		numAgents       = 10
@@ -157,12 +159,12 @@ var _ = Describe("Direct Connection Integration", func() {
 
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
-		engine = sim.NewSerialEngine()
-		connection = MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+		engine = timing.NewSerialEngine()
+		connection = MakeBuilder().WithEngine(engine).WithFreq(1 * timing.GHz).Build("Conn")
 		agents = nil
 		for i := 0; i < numAgents; i++ {
-			a := newAgent(engine, 1*sim.GHz, fmt.Sprintf("Agent[%d]", i),
-				sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent[%d].OutPort", i)))
+			a := newAgent(engine, 1*timing.GHz, fmt.Sprintf("Agent[%d]", i),
+				messaging.NewPort(nil, 4, 4, fmt.Sprintf("Agent[%d].OutPort", i)))
 			agents = append(agents, a)
 			connection.PlugIn(a.OutPort)
 		}
@@ -181,7 +183,7 @@ var _ = Describe("Direct Connection Integration", func() {
 				for msg.Dst == msg.Src {
 					msg.Dst = agents[rand.Intn(len(agents))].OutPort.AsRemote()
 				}
-				msg.ID = sim.GetIDGenerator().Generate()
+				msg.ID = timing.GetIDGenerator().Generate()
 				agent.msgsOut = append(agent.msgsOut, msg)
 			}
 			agent.TickLater()
@@ -206,18 +208,18 @@ var _ = Describe("Direct Connection Integration", func() {
 	})
 })
 
-func directConnectionTest(seed int64) sim.VTimeInSec {
+func directConnectionTest(seed int64) timing.VTimeInSec {
 	r := rand.New(rand.NewSource(seed))
 
 	numAgents := 100
 	numMsgsPerAgent := 1000
-	engine := sim.NewSerialEngine()
-	connection := MakeBuilder().WithEngine(engine).WithFreq(1 * sim.GHz).Build("Conn")
+	engine := timing.NewSerialEngine()
+	connection := MakeBuilder().WithEngine(engine).WithFreq(1 * timing.GHz).Build("Conn")
 	agents := make([]*agent, 0, numAgents)
 
 	for i := 0; i < numAgents; i++ {
-		a := newAgent(engine, 1*sim.GHz, fmt.Sprintf("Agent%d", i),
-			sim.NewPort(nil, 4, 4, fmt.Sprintf("Agent%d.OutPort", i)))
+		a := newAgent(engine, 1*timing.GHz, fmt.Sprintf("Agent%d", i),
+			messaging.NewPort(nil, 4, 4, fmt.Sprintf("Agent%d.OutPort", i)))
 		agents = append(agents, a)
 		connection.PlugIn(a.OutPort)
 	}
@@ -232,7 +234,7 @@ func directConnectionTest(seed int64) sim.VTimeInSec {
 				msg.Dst = agents[r.Intn(len(agents))].OutPort.AsRemote()
 			}
 
-			msg.ID = sim.GetIDGenerator().Generate()
+			msg.ID = timing.GetIDGenerator().Generate()
 
 			agent.msgsOut = append(agent.msgsOut, msg)
 		}

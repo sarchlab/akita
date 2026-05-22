@@ -7,19 +7,20 @@ import (
 	"github.com/sarchlab/akita/v5/noc/networking/routing"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/endpoint"
 	"github.com/sarchlab/akita/v5/noc/networking/switching/switches"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 )
 
 // Remote records the link between two nodes.
 type Remote struct {
 	LocalNode Node
-	LocalPort sim.Port
+	LocalPort messaging.Port
 
 	RemoteNode Node
-	RemotePort sim.Port
+	RemotePort messaging.Port
 
-	Link sim.Connection
+	Link messaging.Connection
 }
 
 // Bandwidth returns the bandwidth of the link.
@@ -59,7 +60,7 @@ func (sn *switchNode) Table() routing.Table {
 }
 
 type deviceNode struct {
-	ports    []sim.Port
+	ports    []messaging.Port
 	endPoint *endpoint.Comp
 	sw       *switchNode
 	remote   Remote

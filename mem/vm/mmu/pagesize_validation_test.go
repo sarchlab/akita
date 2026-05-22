@@ -4,12 +4,13 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // TestPageSizeValidation tests that the MMU validates page table page size consistency
 func TestPageSizeValidation(t *testing.T) {
-	engine := sim.NewSerialEngine()
+	engine := timing.NewSerialEngine()
 
 	// Test case 1: Matching page sizes should work
 	pageTable := vm.NewPageTable(12) // 4KB pages
@@ -17,8 +18,8 @@ func TestPageSizeValidation(t *testing.T) {
 		WithEngine(engine).
 		WithPageTable(pageTable).
 		WithLog2PageSize(12). // 4KB pages
-		WithTopPort(sim.NewPort(nil, 4096, 4096, "MatchingPageSizes.ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, "MatchingPageSizes.MigrationPort"))
+		WithTopPort(messaging.NewPort(nil, 4096, 4096, "MatchingPageSizes.ToTop")).
+		WithMigrationPort(messaging.NewPort(nil, 1, 1, "MatchingPageSizes.MigrationPort"))
 
 	// This should not panic
 	mmu := builder.Build("MatchingPageSizes")
@@ -32,8 +33,8 @@ func TestPageSizeValidation(t *testing.T) {
 		WithEngine(engine).
 		WithPageTable(pageTable2).
 		WithLog2PageSize(16). // 64KB pages
-		WithTopPort(sim.NewPort(nil, 4096, 4096, "MismatchedPageSizes.ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, "MismatchedPageSizes.MigrationPort"))
+		WithTopPort(messaging.NewPort(nil, 4096, 4096, "MismatchedPageSizes.ToTop")).
+		WithMigrationPort(messaging.NewPort(nil, 1, 1, "MismatchedPageSizes.MigrationPort"))
 
 	// This should panic
 	defer func() {

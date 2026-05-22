@@ -5,8 +5,9 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -57,14 +58,14 @@ var _ = Describe("TopParser", func() {
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				NumReqPerCycle: 4,
 				Log2BlockSize:  6,
 			}).
 			Build("Cache")
 
-		m.comp.SetState(initialState)
+		m.comp.State = initialState
 
 		parser = &topParser{
 			cache: m,
@@ -77,16 +78,14 @@ var _ = Describe("TopParser", func() {
 
 	It("should return if no req to parse", func() {
 		port.EXPECT().PeekIncoming().Return(nil)
-		m.syncForTest()
 
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
 	})
 
 	It("should return if the cache is not in running stage", func() {
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		next.CacheState = int(cacheStateFlushing)
-		m.syncForTest()
 
 		ret := parser.Tick()
 		Expect(ret).To(BeFalse())
@@ -94,7 +93,7 @@ var _ = Describe("TopParser", func() {
 
 	It("should parse read from top", func() {
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x100
 		read.AccessByteSize = 64
 		read.TrafficBytes = 12
@@ -103,11 +102,9 @@ var _ = Describe("TopParser", func() {
 		port.EXPECT().PeekIncoming().Return(read)
 		port.EXPECT().RetrieveIncoming().Return(read)
 
-		m.syncForTest()
-
 		parser.Tick()
 
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		Expect(next.Transactions).To(HaveLen(1))
 		Expect(next.Transactions[0].HasRead).To(BeTrue())
 		Expect(next.Transactions[0].ReadAddress).To(Equal(uint64(0x100)))
@@ -116,7 +113,7 @@ var _ = Describe("TopParser", func() {
 
 	It("should parse write from top", func() {
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Address = 0x100
 		write.TrafficBytes = 12
 		write.TrafficClass = "mem.WriteReq"
@@ -124,11 +121,9 @@ var _ = Describe("TopParser", func() {
 		port.EXPECT().PeekIncoming().Return(write)
 		port.EXPECT().RetrieveIncoming().Return(write)
 
-		m.syncForTest()
-
 		parser.Tick()
 
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		Expect(next.Transactions).To(HaveLen(1))
 		Expect(next.Transactions[0].HasWrite).To(BeTrue())
 		Expect(next.Transactions[0].WriteAddress).To(Equal(uint64(0x100)))

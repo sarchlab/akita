@@ -6,7 +6,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,7 +30,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomPort = NewMockPort(mockCtrl)
 		bottomPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 		controlPort = NewMockPort(mockCtrl)
-		controlPort.EXPECT().AsRemote().Return(sim.RemotePort("ControlPort")).AnyTimes()
+		controlPort.EXPECT().AsRemote().Return(messaging.RemotePort("ControlPort")).AnyTimes()
 		controlPort.EXPECT().Name().Return("ControlPort").AnyTimes()
 		controlPort.EXPECT().SetComponent(gomock.Any()).AnyTimes()
 
@@ -49,7 +51,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		comp = modeling.NewBuilder[Spec, State]().
 			WithSpec(spec).
 			Build("MMUCache")
-		comp.SetState(initialState)
+		comp.State = initialState
 
 		comp.AddPort("Top", topPort)
 		comp.AddPort("Bottom", bottomPort)
@@ -72,12 +74,12 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should restart and drain ports", func() {
 		req := &mem.ControlReq{Command: mem.CmdReset}
-		req.ID = sim.GetIDGenerator().Generate()
-		req.Src = sim.RemotePort("Requester")
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Requester")
 		req.TrafficClass = "mem.ControlReq"
 
 		topMsg := &vm.TranslationReq{}
-		topMsg.ID = sim.GetIDGenerator().Generate()
+		topMsg.ID = timing.GetIDGenerator().Generate()
 		topMsg.PID = 1
 		topMsg.VAddr = 0x1000
 		topMsg.DeviceID = 1
@@ -85,16 +87,16 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 		bottomMsg := &vm.TranslationRsp{
 			Page: vm.Page{},
 		}
-		bottomMsg.ID = sim.GetIDGenerator().Generate()
-		bottomMsg.RspTo = sim.GetIDGenerator().Generate()
+		bottomMsg.ID = timing.GetIDGenerator().Generate()
+		bottomMsg.RspTo = timing.GetIDGenerator().Generate()
 		bottomMsg.TrafficClass = "vm.TranslationRsp"
 
-		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent sim.Msg) {
+		controlPort.EXPECT().Send(gomock.Any()).Do(func(sent messaging.Msg) {
 			rsp := sent.(*mem.ControlRsp)
 			Expect(rsp.Command).To(Equal(mem.CmdReset))
 			Expect(rsp.Success).To(BeTrue())
-			Expect(rsp.Dst).To(Equal(sim.RemotePort("Requester")))
-			Expect(rsp.Src).To(Equal(sim.RemotePort("ControlPort")))
+			Expect(rsp.Dst).To(Equal(messaging.RemotePort("Requester")))
+			Expect(rsp.Src).To(Equal(messaging.RemotePort("ControlPort")))
 		}).Return(nil)
 		controlPort.EXPECT().RetrieveIncoming()
 
@@ -108,28 +110,28 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		madeProgress := ctrl.handleMMUCacheRestart(req)
 
-		next := comp.GetNextState()
+		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 		Expect(next.CurrentState).To(Equal(mmuCacheStateEnable))
 	})
 
 	It("should accept flush request in enable state", func() {
 		// Set state to enable (both base and next)
-		spec := comp.GetSpec()
-		comp.SetState(State{
+		spec := comp.Spec
+		comp.State = State{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
-		})
+		}
 
 		req := &mem.ControlReq{Command: mem.CmdFlush}
-		req.ID = sim.GetIDGenerator().Generate()
-		req.Src = sim.RemotePort("Requester")
+		req.ID = timing.GetIDGenerator().Generate()
+		req.Src = messaging.RemotePort("Requester")
 		req.TrafficClass = "mem.ControlReq"
 		controlPort.EXPECT().RetrieveIncoming()
 
 		madeProgress := ctrl.handleMMUCacheFlush(req)
 
-		next := comp.GetNextState()
+		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 		Expect(next.InflightFlushReqActive).To(BeTrue())
 		Expect(next.InflightFlushReqID).To(Equal(req.ID))
@@ -139,17 +141,17 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 	It("should handle control pause", func() {
 		// Set state to enable (both base and next)
-		spec := comp.GetSpec()
-		comp.SetState(State{
+		spec := comp.Spec
+		comp.State = State{
 			CurrentState: mmuCacheStateEnable,
 			Table:        initSets(spec.NumLevels, spec.NumBlocks),
-		})
+		}
 
 		msg := &mem.ControlReq{
 			Command: mem.CmdPause,
 		}
-		msg.ID = sim.GetIDGenerator().Generate()
-		msg.Dst = sim.RemotePort("ControlPort")
+		msg.ID = timing.GetIDGenerator().Generate()
+		msg.Dst = messaging.RemotePort("ControlPort")
 		msg.TrafficBytes = 4
 		msg.TrafficClass = "mem.ControlReq"
 
@@ -158,7 +160,7 @@ var _ = Describe("MMUCacheCtrlMiddleware", func() {
 
 		madeProgress := ctrl.handleIncomingCommands()
 
-		next := comp.GetNextState()
+		next := &comp.State
 		Expect(madeProgress).To(BeTrue())
 		Expect(next.CurrentState).To(Equal(mmuCacheStatePause))
 	})

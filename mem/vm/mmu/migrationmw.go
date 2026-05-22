@@ -2,8 +2,9 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // migrationMW handles migration: sending migration requests to the driver,
@@ -15,11 +16,11 @@ type migrationMW struct {
 
 // Port helpers.
 
-func (m *migrationMW) topPort() sim.Port {
+func (m *migrationMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *migrationMW) migrationPort() sim.Port {
+func (m *migrationMW) migrationPort() messaging.Port {
 	return m.comp.GetPortByName("Migration")
 }
 
@@ -34,7 +35,7 @@ func (m *migrationMW) Tick() bool {
 }
 
 func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	if len(state.MigrationQueue) == 0 {
 		return false
@@ -89,7 +90,7 @@ func (m *migrationMW) sendMigrationToDriver() (madeProgress bool) {
 func (m *migrationMW) markPageAsNotMigratingIfNotInTheMigrationQueue(
 	page vm.Page,
 ) vm.Page {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	inQueue := false
 
 	for _, t := range state.MigrationQueue {
@@ -115,7 +116,7 @@ func (m *migrationMW) sendTranslationRsp(
 	rsp := &vm.TranslationRsp{
 		Page: trans.Page,
 	}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = trans.ReqSrc
 	rsp.RspTo = trans.ReqID
@@ -135,7 +136,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 		return false
 	}
 
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	trans := state.CurrentOnDemandMigration
 
 	page, found := m.pageTable.Find(
@@ -148,7 +149,7 @@ func (m *migrationMW) processMigrationReturn() bool {
 	rsp := &vm.TranslationRsp{
 		Page: page,
 	}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = trans.ReqSrc
 	rsp.RspTo = trans.ReqID
@@ -170,8 +171,8 @@ func (m *migrationMW) createMigrationRequest(
 	trans transactionState,
 	page vm.Page,
 ) *vm.PageMigrationReqToDriver {
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	migrationInfo := new(vm.PageMigrationInfo)
 	migrationInfo.GPUReqToVAddrMap = make(map[uint64][]uint64)

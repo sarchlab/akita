@@ -7,19 +7,19 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // Simple test time teller implementation
 type testTimeTeller struct {
-	currentTime sim.VTimeInSec
+	currentTime timing.VTimeInSec
 }
 
-func (t *testTimeTeller) CurrentTime() sim.VTimeInSec {
+func (t *testTimeTeller) CurrentTime() timing.VTimeInSec {
 	return t.currentTime
 }
 
-func (t *testTimeTeller) SetCurrentTime(time sim.VTimeInSec) {
+func (t *testTimeTeller) SetCurrentTime(time timing.VTimeInSec) {
 	t.currentTime = time
 }
 
@@ -82,7 +82,7 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(1), "Only first milestone should be recorded at same time")
 			Expect(task.Milestones[0].ID).To(Equal(uint64(10)))
-			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100)))
+			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInSec(100)))
 		})
 
 		It("should allow milestones for different tasks at the same time", func() {
@@ -144,8 +144,8 @@ var _ = Describe("DBTracer Milestone Deduplication", func() {
 
 			task := tracer.tracingTasks[uint64(1)]
 			Expect(task.Milestones).To(HaveLen(2))
-			Expect(task.Milestones[0].Time).To(Equal(sim.VTimeInSec(100)))
-			Expect(task.Milestones[1].Time).To(Equal(sim.VTimeInSec(200)))
+			Expect(task.Milestones[0].Time).To(Equal(timing.VTimeInSec(100)))
+			Expect(task.Milestones[1].Time).To(Equal(timing.VTimeInSec(200)))
 		})
 
 		It("should still prevent identical milestones from being recorded twice", func() {

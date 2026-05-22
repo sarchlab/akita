@@ -3,7 +3,9 @@ package modeling
 import (
 	"math"
 
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/naming"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // EventDrivenBuilder constructs [EventDrivenComponent] instances.
@@ -11,7 +13,7 @@ import (
 // S is the Spec type (immutable configuration).
 // T is the State type (mutable runtime data).
 type EventDrivenBuilder[S any, T any] struct {
-	engine    sim.EventScheduler
+	engine    timing.EventScheduler
 	spec      S
 	processor EventProcessor[S, T]
 }
@@ -22,7 +24,7 @@ func NewEventDrivenBuilder[S any, T any]() EventDrivenBuilder[S, T] {
 }
 
 // WithEngine sets the simulation engine.
-func (b EventDrivenBuilder[S, T]) WithEngine(engine sim.EventScheduler) EventDrivenBuilder[S, T] {
+func (b EventDrivenBuilder[S, T]) WithEngine(engine timing.EventScheduler) EventDrivenBuilder[S, T] {
 	b.engine = engine
 	return b
 }
@@ -43,15 +45,18 @@ func (b EventDrivenBuilder[S, T]) WithProcessor(
 
 // Build creates the EventDrivenComponent with the given name.
 func (b EventDrivenBuilder[S, T]) Build(name string) *EventDrivenComponent[S, T] {
+	naming.MustBeValid(name)
+
 	comp := &EventDrivenComponent[S, T]{
-		ComponentBase: sim.NewComponentBase(name),
+		PortOwnerBase: messaging.NewPortOwnerBase(),
 		Engine:        b.engine,
-		spec:          b.spec,
+		name:          name,
+		Spec:          b.spec,
 		processor:     b.processor,
 		pendingWakeup: math.MaxUint64,
 	}
 
-	if registrar, ok := b.engine.(sim.HandlerRegistrar); ok {
+	if registrar, ok := b.engine.(timing.HandlerRegistrar); ok {
 		registrar.RegisterHandler(name, comp)
 	}
 

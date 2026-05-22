@@ -1,12 +1,13 @@
 package tickingping
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // outPort is a helper that returns the "Out" port from the component.
-func outPort(comp *modeling.Component[Spec, State]) sim.Port {
+func outPort(comp *modeling.Component[Spec, State]) messaging.Port {
 	return comp.GetPortByName("Out")
 }
 
@@ -25,7 +26,7 @@ func (m *sendMW) Tick() bool {
 }
 
 func (m *sendMW) sendRsp() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	if len(state.CurrentTransactions) == 0 {
 		return false
@@ -37,8 +38,8 @@ func (m *sendMW) sendRsp() bool {
 	}
 
 	rsp := &PingRsp{
-		MsgMeta: sim.MsgMeta{
-			ID:    sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID:    timing.GetIDGenerator().Generate(),
 			Src:   outPort(m.comp).AsRemote(),
 			Dst:   trans.ReqSrc,
 			RspTo: trans.ReqID,
@@ -57,15 +58,15 @@ func (m *sendMW) sendRsp() bool {
 }
 
 func (m *sendMW) sendPing() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	if state.NumPingNeedToSend == 0 {
 		return false
 	}
 
 	pingMsg := &PingReq{
-		MsgMeta: sim.MsgMeta{
-			ID:  sim.GetIDGenerator().Generate(),
+		MsgMeta: messaging.MsgMeta{
+			ID:  timing.GetIDGenerator().Generate(),
 			Src: outPort(m.comp).AsRemote(),
 			Dst: state.PingDst,
 		},

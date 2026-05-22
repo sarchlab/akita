@@ -5,12 +5,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 const (
@@ -32,7 +33,7 @@ func buildSimulation(
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent := memaccessagent.MakeBuilder().
@@ -40,7 +41,7 @@ func buildSimulation(
 		WithMaxAddress(maxAddress).
 		WithWriteLeft(writeLeft).
 		WithReadLeft(readLeft).
-		WithMemPort(sim.NewPort(nil, 4, 4, "Agent.Mem")).
+		WithMemPort(messaging.NewPort(nil, 4, 4, "Agent.Mem")).
 		Build("Agent")
 	agent.Rand = rng
 
@@ -52,8 +53,8 @@ func buildSimulation(
 			Latency:       10,
 			CacheLineSize: 64,
 		}).
-		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
+		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
 	agent.LowModule = dram.GetPortByName("Top")
 
@@ -74,7 +75,7 @@ type agentResult struct {
 }
 
 func captureResult(agent *memaccessagent.MemAccessAgent) agentResult {
-	state := agent.GetState()
+	state := agent.State
 	kmv := make(map[uint64][]uint32, len(state.KnownMemValue))
 	for k, v := range state.KnownMemValue {
 		dup := make([]uint32, len(v))
@@ -122,7 +123,7 @@ func cleanupSim(s *simulation.Simulation) {
 func runEngine(t *testing.T, s *simulation.Simulation, phase string) {
 	t.Helper()
 
-	err := s.GetEngine().(*sim.SerialEngine).Run()
+	err := s.GetEngine().(*timing.SerialEngine).Run()
 	if err != nil {
 		t.Fatalf("%s run failed: %v", phase, err)
 	}
@@ -141,8 +142,8 @@ func runPhaseA(
 	runEngine(t, sA, "Phase A")
 
 	t.Logf("Phase A done: WriteLeft=%d ReadLeft=%d keys=%d engineTime=%v idNext=%d",
-		agentA.GetState().WriteLeft, agentA.GetState().ReadLeft, len(agentA.GetState().KnownMemValue),
-		sA.GetEngine().CurrentTime(), sim.GetIDGeneratorNextID())
+		agentA.State.WriteLeft, agentA.State.ReadLeft, len(agentA.State.KnownMemValue),
+		sA.GetEngine().CurrentTime(), timing.GetIDGeneratorNextID())
 
 	checkpointDir := t.TempDir()
 
@@ -164,8 +165,8 @@ func runPhaseB(
 
 	rngB := rand.New(rand.NewSource(seed + 1))
 	agentA.Rand = rngB
-	agentA.GetNextState().WriteLeft = 50
-	agentA.GetNextState().ReadLeft = 100
+	(&agentA.State).WriteLeft = 50
+	(&agentA.State).ReadLeft = 100
 	agentA.TickLater()
 
 	runEngine(t, sA, "Phase B")
@@ -193,8 +194,8 @@ func runPhaseC(
 ) agentResult {
 	t.Helper()
 
-	sim.ResetIDGenerator()
-	sim.UseSequentialIDGenerator()
+	timing.ResetIDGenerator()
+	timing.UseSequentialIDGenerator()
 
 	rngC := rand.New(rand.NewSource(seed + 1))
 	sC, agentC, _ := buildSimulation(t, 50, 0, rngC)
@@ -209,11 +210,11 @@ func runPhaseC(
 	}
 
 	t.Logf("Phase C loaded: WriteLeft=%d ReadLeft=%d keys=%d idNext=%d engineTime=%v",
-		agentC.GetState().WriteLeft, agentC.GetState().ReadLeft, len(agentC.GetState().KnownMemValue),
-		sim.GetIDGeneratorNextID(), sC.GetEngine().CurrentTime())
+		agentC.State.WriteLeft, agentC.State.ReadLeft, len(agentC.State.KnownMemValue),
+		timing.GetIDGeneratorNextID(), sC.GetEngine().CurrentTime())
 
-	agentC.GetNextState().WriteLeft = 50
-	agentC.GetNextState().ReadLeft = 100
+	(&agentC.State).WriteLeft = 50
+	(&agentC.State).ReadLeft = 100
 	agentC.TickLater()
 
 	runEngine(t, sC, "Phase C")
@@ -277,8 +278,8 @@ func reportDiff(t *testing.T, orig, loaded agentResult) {
 //   - Phase B: Set additional work (50 writes, 100 reads), new rand seed → run to completion → record result
 //   - Phase C: Build NEW sim, load checkpoint, set same additional work + seed → run to completion → compare
 func TestSaveLoadDeterminism(t *testing.T) {
-	sim.ResetIDGenerator()
-	sim.UseSequentialIDGenerator()
+	timing.ResetIDGenerator()
+	timing.UseSequentialIDGenerator()
 
 	sA, agentA, checkpointDir := runPhaseA(t)
 	resultOriginal := runPhaseB(t, sA, agentA)

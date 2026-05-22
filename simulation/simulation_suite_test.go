@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim Port,Component
+//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/messaging Port,Component
 
 func TestSimulation(t *testing.T) {
 	RegisterFailHandler(Fail)

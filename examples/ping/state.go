@@ -1,24 +1,27 @@
 package ping
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
+	// ScheduledPing represents a ping that should be initiated at a given time.
+)
 
-// ScheduledPing represents a ping that should be initiated at a given time.
 type ScheduledPing struct {
-	SendAt sim.VTimeInSec
-	Dst    sim.RemotePort
+	SendAt timing.VTimeInSec
+	Dst    messaging.RemotePort
 }
 
 // PendingResponse represents a ping response that will be sent after a delay.
 type PendingResponse struct {
-	DeliverAt sim.VTimeInSec
-	Dst       sim.RemotePort
+	DeliverAt timing.VTimeInSec
+	Dst       messaging.RemotePort
 	OrigMsgID uint64
 	SeqID     int
 }
 
 // PingState is the mutable runtime state for a ping component.
 type PingState struct {
-	StartTimes       []sim.VTimeInSec
+	StartTimes       []timing.VTimeInSec
 	NextSeqID        int
 	PendingResponses []PendingResponse
 	ScheduledPings   []ScheduledPing

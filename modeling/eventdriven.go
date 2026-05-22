@@ -4,20 +4,23 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"sync"
 
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/hooking"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // EventProcessor defines the processing logic for an EventDrivenComponent.
 // S is the Spec type, T is the State type.
 type EventProcessor[S any, T any] interface {
-	Process(comp *EventDrivenComponent[S, T], now sim.VTimeInSec) bool
+	Process(comp *EventDrivenComponent[S, T], now timing.VTimeInSec) bool
 }
 
 // TimerFiredEvent is the event scheduled by EventDrivenComponent to wake
 // itself up at a future time.
 type TimerFiredEvent struct {
-	*sim.EventBase
+	*timing.EventBase
 }
 
 // EventDrivenComponent is a generic component that reacts to events rather
@@ -30,39 +33,27 @@ type TimerFiredEvent struct {
 // via [ScheduleWakeAt] or [ScheduleWakeNow]. A dedup guard (pendingWakeup)
 // prevents redundant event scheduling.
 type EventDrivenComponent[S any, T any] struct {
-	*sim.ComponentBase
+	sync.Mutex
+	hooking.HookableBase
+	*messaging.PortOwnerBase
 
-	Engine    sim.EventScheduler
-	spec      S
-	current   T
+	Engine    timing.EventScheduler
+	name      string
+	Spec      S
+	State     T
 	processor EventProcessor[S, T]
 
-	pendingWakeup sim.VTimeInSec
+	pendingWakeup timing.VTimeInSec
 }
 
-// GetSpec returns the immutable specification.
-func (c *EventDrivenComponent[S, T]) GetSpec() S {
-	return c.spec
-}
-
-// GetState returns the current state.
-func (c *EventDrivenComponent[S, T]) GetState() T {
-	return c.current
-}
-
-// SetState sets the current state.
-func (c *EventDrivenComponent[S, T]) SetState(s T) {
-	c.current = s
-}
-
-// GetStatePtr returns a pointer to the current state for direct mutation.
-func (c *EventDrivenComponent[S, T]) GetStatePtr() *T {
-	return &c.current
+// Name returns the component name.
+func (c *EventDrivenComponent[S, T]) Name() string {
+	return c.name
 }
 
 // ScheduleWakeAt schedules a wakeup at time t. If a wakeup is already
 // pending at the same or earlier time, this is a no-op (dedup guard).
-func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t sim.VTimeInSec) {
+func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t timing.VTimeInSec) {
 	if c.pendingWakeup != math.MaxUint64 && c.pendingWakeup <= t {
 		return
 	}
@@ -70,7 +61,7 @@ func (c *EventDrivenComponent[S, T]) ScheduleWakeAt(t sim.VTimeInSec) {
 	c.pendingWakeup = t
 
 	evt := &TimerFiredEvent{
-		EventBase: sim.NewEventBase(t, c.Name()),
+		EventBase: timing.NewEventBase(t, c.Name()),
 	}
 	c.Engine.Schedule(evt)
 }
@@ -82,7 +73,7 @@ func (c *EventDrivenComponent[S, T]) ScheduleWakeNow() {
 
 // Handle processes an event. For TimerFiredEvent, it resets the dedup guard
 // and calls the processor.
-func (c *EventDrivenComponent[S, T]) Handle(e sim.Event) error {
+func (c *EventDrivenComponent[S, T]) Handle(e timing.Event) error {
 	c.Lock()
 	defer c.Unlock()
 
@@ -94,13 +85,13 @@ func (c *EventDrivenComponent[S, T]) Handle(e sim.Event) error {
 
 // NotifyRecv is called when a port receives a message. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyRecv(port sim.Port) {
+func (c *EventDrivenComponent[S, T]) NotifyRecv(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
 
 // NotifyPortFree is called when a port becomes free. It schedules an
 // immediate wakeup.
-func (c *EventDrivenComponent[S, T]) NotifyPortFree(port sim.Port) {
+func (c *EventDrivenComponent[S, T]) NotifyPortFree(port messaging.Port) {
 	c.ScheduleWakeNow()
 }
 
@@ -111,12 +102,12 @@ func (c *EventDrivenComponent[S, T]) ResetWakeup() {
 	c.pendingWakeup = math.MaxUint64
 }
 
-// SaveState marshals the component's spec and current state as JSON and writes
+// SaveState marshals the component's spec and state as JSON and writes
 // it to w.
 func (c *EventDrivenComponent[S, T]) SaveState(w io.Writer) error {
 	snap := componentSnapshot[S, T]{
-		Spec:  c.spec,
-		State: c.current,
+		Spec:  c.Spec,
+		State: c.State,
 	}
 
 	data, err := json.Marshal(snap)
@@ -141,8 +132,8 @@ func (c *EventDrivenComponent[S, T]) LoadState(r io.Reader) error {
 		return err
 	}
 
-	c.spec = snap.Spec
-	c.current = snap.State
+	c.Spec = snap.Spec
+	c.State = snap.State
 
 	return nil
 }

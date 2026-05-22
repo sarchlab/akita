@@ -4,8 +4,9 @@ import (
 	"testing"
 
 	"github.com/sarchlab/akita/v5/mem/vm"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 func TestValidateState(t *testing.T) {
@@ -14,13 +15,13 @@ func TestValidateState(t *testing.T) {
 	}
 }
 
-func buildTestMMU(engine sim.EventScheduler, name string) *modeling.Component[Spec, State] {
+func buildTestMMU(engine timing.EventScheduler, name string) *modeling.Component[Spec, State] {
 	return MakeBuilder().
 		WithEngine(engine).
 		WithAutoPageAllocation(true).
-		WithTopPort(sim.NewPort(nil, 4096, 4096, name+".ToTop")).
-		WithMigrationPort(sim.NewPort(nil, 1, 1, name+".MigrationPort")).
-		WithMigrationServiceProvider(sim.RemotePort("MigrationService")).
+		WithTopPort(messaging.NewPort(nil, 4096, 4096, name+".ToTop")).
+		WithMigrationPort(messaging.NewPort(nil, 1, 1, name+".MigrationPort")).
+		WithMigrationServiceProvider(messaging.RemotePort("MigrationService")).
 		Build(name)
 }
 
@@ -29,8 +30,8 @@ func makeTestState(reqID uint64) State {
 		WalkingTranslations: []transactionState{
 			{
 				ReqID:    reqID,
-				ReqSrc:   sim.RemotePort("Agent"),
-				ReqDst:   sim.RemotePort("TestMMU.ToTop"),
+				ReqSrc:   messaging.RemotePort("Agent"),
+				ReqDst:   messaging.RemotePort("TestMMU.ToTop"),
 				PID:      1,
 				VAddr:    0x1000,
 				DeviceID: 2,
@@ -44,8 +45,8 @@ func makeTestState(reqID uint64) State {
 		MigrationQueue: []transactionState{
 			{
 				ReqID:    reqID,
-				ReqSrc:   sim.RemotePort("Agent"),
-				ReqDst:   sim.RemotePort("TestMMU.ToTop"),
+				ReqSrc:   messaging.RemotePort("Agent"),
+				ReqDst:   messaging.RemotePort("TestMMU.ToTop"),
 				PID:      1,
 				VAddr:    0x3000,
 				DeviceID: 3,
@@ -101,15 +102,15 @@ func verifyState(t *testing.T, got State, reqID uint64) {
 	}
 }
 
-func TestGetStateAndSetState(t *testing.T) {
-	engine := sim.NewSerialEngine()
+func TestStateAndStateAssignment(t *testing.T) {
+	engine := timing.NewSerialEngine()
 	mmu := buildTestMMU(engine, "TestMMU")
 
-	reqID := sim.GetIDGenerator().Generate()
+	reqID := timing.GetIDGenerator().Generate()
 	state := makeTestState(reqID)
 
-	mmu.SetState(state)
-	got := mmu.GetState()
+	mmu.State = state
+	got := mmu.State
 
 	verifyState(t, got, reqID)
 }

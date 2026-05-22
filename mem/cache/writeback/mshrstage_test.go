@@ -5,8 +5,10 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -23,7 +25,7 @@ var _ = Describe("MSHR Stage", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 
 		initialState := State{
@@ -61,14 +63,14 @@ var _ = Describe("MSHR Stage", func() {
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:  6,
 				NumReqPerCycle: 4,
 			}).
 			Build("Cache")
 
-		m.comp.SetState(initialState)
+		m.comp.State = initialState
 
 		ms = &mshrStage{
 			cache: m,
@@ -80,7 +82,6 @@ var _ = Describe("MSHR Stage", func() {
 	})
 
 	It("should do nothing if there is no entry in input buffer", func() {
-		m.syncForTest()
 
 		ret := ms.Tick()
 		Expect(ret).To(BeFalse())
@@ -88,7 +89,7 @@ var _ = Describe("MSHR Stage", func() {
 
 	It("should stall if topSender is busy", func() {
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
@@ -115,7 +116,7 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		next.Transactions = []transactionState{trans, mshrTrans}
 
 		// Push mshrTrans to the MSHR stage buffer
@@ -123,18 +124,16 @@ var _ = Describe("MSHR Stage", func() {
 
 		topPort.EXPECT().CanSend().Return(false)
 
-		m.syncForTest()
-
 		ret := ms.Tick()
 
 		Expect(ret).To(BeFalse())
-		next = m.comp.GetNextState()
+		next = &m.comp.State
 		Expect(next.HasProcessingMSHREntry).To(BeTrue())
 	})
 
 	It("should send data ready to top", func() {
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Address = 0x104
 		read.AccessByteSize = 4
 		read.TrafficBytes = 12
@@ -161,23 +160,21 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		next.Transactions = []transactionState{trans, mshrTrans}
 		next.MSHRStageBuf.Elements = []int{1}
 
 		topPort.EXPECT().CanSend().Return(true)
 		topPort.EXPECT().Send(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
 
-		m.syncForTest()
-
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		next = m.comp.GetNextState()
+		next = &m.comp.State
 		Expect(next.HasProcessingMSHREntry).To(BeFalse())
 		Expect(next.Transactions[0].Removed).To(BeTrue())
 	})
@@ -197,18 +194,16 @@ var _ = Describe("MSHR Stage", func() {
 			},
 		}
 
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		next.Transactions = []transactionState{mshrTrans}
 		next.MSHRStageBuf.Elements = []int{0}
 
 		topPort.EXPECT().CanSend().Return(true)
 
-		m.syncForTest()
-
 		ret := ms.Tick()
 
 		Expect(ret).To(BeTrue())
-		next = m.comp.GetNextState()
+		next = &m.comp.State
 		Expect(next.HasProcessingMSHREntry).To(BeFalse())
 	})
 })

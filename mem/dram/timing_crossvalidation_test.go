@@ -196,7 +196,7 @@ func computeExpectedTimings(spec Spec) expectedTimings {
 		writeToPrecharge:    wtoPre,
 		readToPrecharge:     spec.TAL + spec.TRTP,
 		prechargeToActivate: spec.TRP,
-		activateToRead: aR, activateToWrite: aW,
+		activateToRead:      aR, activateToWrite: aW,
 		activateToActivate: aA, activateToActivateL: aAL,
 		activateToActivateS: aAS, activateToPrecharge: aP,
 	}

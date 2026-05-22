@@ -1,20 +1,21 @@
 package tickingping
 
 import (
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides default configuration for the tickingping component.
 var DefaultSpec = Spec{
-	Freq: 1 * sim.GHz,
+	Freq: 1 * timing.GHz,
 }
 
 // Builder builds tickingping components.
 type Builder struct {
-	engine  sim.EventScheduler
+	engine  timing.EventScheduler
 	spec    Spec
-	outPort sim.Port
+	outPort messaging.Port
 }
 
 // MakeBuilder returns a new Builder.
@@ -25,19 +26,19 @@ func MakeBuilder() Builder {
 }
 
 // WithEngine sets the engine.
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
 
 // WithFreq sets the frequency.
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
 
 // WithOutPort sets the output port.
-func (b Builder) WithOutPort(port sim.Port) Builder {
+func (b Builder) WithOutPort(port messaging.Port) Builder {
 	b.outPort = port
 	return b
 }
@@ -49,7 +50,7 @@ func (b Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithFreq(b.spec.Freq).
 		WithSpec(b.spec).
 		Build(name)
-	comp.SetState(State{})
+	comp.State = State{}
 
 	comp.AddMiddleware(&sendMW{comp: comp})
 	comp.AddMiddleware(&receiveProcessMW{comp: comp})

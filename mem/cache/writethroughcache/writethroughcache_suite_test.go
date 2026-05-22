@@ -9,7 +9,7 @@ import (
 	"github.com/sarchlab/akita/v5/modeling"
 )
 
-//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/sim Port
+//go:generate mockgen -destination "mock_sim_test.go" -package $GOPACKAGE -write_package_comment=false github.com/sarchlab/akita/v5/messaging Port
 func TestWriteThroughCache(t *testing.T) {
 	log.SetOutput(GinkgoWriter)
 	RegisterFailHandler(Fail)

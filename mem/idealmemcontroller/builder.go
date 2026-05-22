@@ -2,13 +2,14 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides default configuration for the ideal memory controller.
 var DefaultSpec = Spec{
-	Freq:          1 * sim.GHz,
+	Freq:          1 * timing.GHz,
 	Latency:       100,
 	Width:         1,
 	CacheLineSize: 64,
@@ -18,11 +19,11 @@ var DefaultSpec = Spec{
 type Builder struct {
 	spec       Spec
 	capacity   uint64
-	engine     sim.EventScheduler
+	engine     timing.EventScheduler
 	topBufSize int
 	storage    *mem.Storage
-	topPort    sim.Port
-	ctrlPort   sim.Port
+	topPort    messaging.Port
+	ctrlPort   messaging.Port
 }
 
 // MakeBuilder returns a new Builder
@@ -46,7 +47,7 @@ func (b Builder) WithSpec(spec Spec) Builder {
 }
 
 // WithFreq sets the frequency of the memory controller
-func (b Builder) WithFreq(freq sim.Freq) Builder {
+func (b Builder) WithFreq(freq timing.Freq) Builder {
 	b.spec.Freq = freq
 	return b
 }
@@ -58,7 +59,7 @@ func (b Builder) WithNewStorage(capacity uint64) Builder {
 }
 
 // WithEngine sets the engine of the memory controller
-func (b Builder) WithEngine(engine sim.EventScheduler) Builder {
+func (b Builder) WithEngine(engine timing.EventScheduler) Builder {
 	b.engine = engine
 	return b
 }
@@ -91,13 +92,13 @@ func (b Builder) WithAddressConverter(
 }
 
 // WithTopPort sets the top port of the memory controller
-func (b Builder) WithTopPort(port sim.Port) Builder {
+func (b Builder) WithTopPort(port messaging.Port) Builder {
 	b.topPort = port
 	return b
 }
 
 // WithCtrlPort sets the control port of the memory controller
-func (b Builder) WithCtrlPort(port sim.Port) Builder {
+func (b Builder) WithCtrlPort(port messaging.Port) Builder {
 	b.ctrlPort = port
 	return b
 }
@@ -118,7 +119,7 @@ func (b Builder) Build(
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	var storage *mem.Storage
 	if b.storage == nil {

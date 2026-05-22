@@ -8,17 +8,19 @@ import (
 	. "github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var _ = Describe("Cache", func() {
 	var (
 		mockCtrl            *gomock.Controller
-		engine              sim.Engine
-		connection          sim.Connection
+		engine              timing.Engine
+		connection          messaging.Connection
 		addressToPortMapper mem.AddressToPortMapper
 		dram                *idealmemcontroller.Comp
 		cuPort              *MockPort
@@ -30,19 +32,19 @@ var _ = Describe("Cache", func() {
 
 		cuPort = NewMockPort(mockCtrl)
 		cuPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		cuPort.EXPECT().AsRemote().Return(sim.RemotePort("cuPort")).AnyTimes()
+		cuPort.EXPECT().AsRemote().Return(messaging.RemotePort("cuPort")).AnyTimes()
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		connection = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 
 		dram = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
 			WithNewStorage(4 * mem.GB).
-			WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
-			WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+			WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
+			WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 			Build("DRAM")
 		addressToPortMapper = &mem.SinglePortMapper{
 			Port: dram.GetPortByName("Top").AsRemote(),
@@ -51,9 +53,9 @@ var _ = Describe("Cache", func() {
 		c = MakeBuilder().
 			WithEngine(engine).
 			WithAddressToPortMapper(addressToPortMapper).
-			WithTopPort(sim.NewPort(nil, 4, 4, "Cache.TopPort")).
-			WithBottomPort(sim.NewPort(nil, 4, 4, "Cache.BottomPort")).
-			WithControlPort(sim.NewPort(nil, 4, 4, "Cache.ControlPort")).
+			WithTopPort(messaging.NewPort(nil, 4, 4, "Cache.TopPort")).
+			WithBottomPort(messaging.NewPort(nil, 4, 4, "Cache.BottomPort")).
+			WithControlPort(messaging.NewPort(nil, 4, 4, "Cache.ControlPort")).
 			Build("Cache")
 
 		connection.PlugIn(dram.GetPortByName("Top"))
@@ -70,7 +72,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss", func() {
 		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4})
 		read := &mem.ReadReq{}
-		read.ID = sim.GetIDGenerator().Generate()
+		read.ID = timing.GetIDGenerator().Generate()
 		read.Src = cuPort.AsRemote()
 		read.Dst = c.GetPortByName("Top").AsRemote()
 		read.Address = 0x100
@@ -80,7 +82,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read)
 
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -91,7 +93,7 @@ var _ = Describe("Cache", func() {
 	It("should do read miss coalesce", func() {
 		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
-		read1.ID = sim.GetIDGenerator().Generate()
+		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -101,7 +103,7 @@ var _ = Describe("Cache", func() {
 		c.GetPortByName("Top").Deliver(read1)
 
 		read2 := &mem.ReadReq{}
-		read2.ID = sim.GetIDGenerator().Generate()
+		read2.ID = timing.GetIDGenerator().Generate()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -115,7 +117,7 @@ var _ = Describe("Cache", func() {
 		// any order as long as both data values are received.
 		received := make(map[string]bool)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
 				if string(dr.Data) == string([]byte{1, 2, 3, 4}) {
 					received["1234"] = true
@@ -133,7 +135,7 @@ var _ = Describe("Cache", func() {
 	It("should do read hit", func() {
 		dram.GetStorage().Write(0x100, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 		read1 := &mem.ReadReq{}
-		read1.ID = sim.GetIDGenerator().Generate()
+		read1.ID = timing.GetIDGenerator().Generate()
 		read1.Src = cuPort.AsRemote()
 		read1.Dst = c.GetPortByName("Top").AsRemote()
 		read1.Address = 0x100
@@ -142,7 +144,7 @@ var _ = Describe("Cache", func() {
 		read1.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read1)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
 				Expect(dr.Data).To(Equal([]byte{1, 2, 3, 4}))
 			})
@@ -150,7 +152,7 @@ var _ = Describe("Cache", func() {
 		t1 := engine.CurrentTime()
 
 		read2 := &mem.ReadReq{}
-		read2.ID = sim.GetIDGenerator().Generate()
+		read2.ID = timing.GetIDGenerator().Generate()
 		read2.Src = cuPort.AsRemote()
 		read2.Dst = c.GetPortByName("Top").AsRemote()
 		read2.Address = 0x104
@@ -159,7 +161,7 @@ var _ = Describe("Cache", func() {
 		read2.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(read2)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				dr := msg.(*mem.DataReadyRsp)
 				Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 			})
@@ -171,7 +173,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write partial line", func() {
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -180,7 +182,7 @@ var _ = Describe("Cache", func() {
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				Expect(msg.Meta().RspTo).To(Equal(write.ID))
 			})
 
@@ -192,7 +194,7 @@ var _ = Describe("Cache", func() {
 
 	It("should write full line", func() {
 		write := &mem.WriteReq{}
-		write.ID = sim.GetIDGenerator().Generate()
+		write.ID = timing.GetIDGenerator().Generate()
 		write.Src = cuPort.AsRemote()
 		write.Dst = c.GetPortByName("Top").AsRemote()
 		write.Address = 0x100
@@ -210,7 +212,7 @@ var _ = Describe("Cache", func() {
 		write.TrafficClass = "req"
 		c.GetPortByName("Top").Deliver(write)
 		cuPort.EXPECT().Deliver(gomock.Any()).
-			Do(func(msg sim.Msg) {
+			Do(func(msg messaging.Msg) {
 				Expect(msg.Meta().RspTo).To(Equal(write.ID))
 			})
 		engine.Run()

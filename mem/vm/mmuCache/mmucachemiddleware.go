@@ -7,7 +7,9 @@ import (
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -15,21 +17,21 @@ type mmuCacheMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *mmuCacheMiddleware) topPort() sim.Port {
+func (m *mmuCacheMiddleware) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *mmuCacheMiddleware) bottomPort() sim.Port {
+func (m *mmuCacheMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *mmuCacheMiddleware) controlPort() sim.Port {
+func (m *mmuCacheMiddleware) controlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
 func (m *mmuCacheMiddleware) Tick() bool {
 	madeProgress := false
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 
 	switch next.CurrentState {
 	case mmuCacheStateDrain:
@@ -48,10 +50,10 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 	madeProgress := m.processRequests()
 
 	if m.bottomPort().PeekIncoming() == nil && m.topPort().PeekIncoming() == nil {
-		next := m.comp.GetNextState()
+		next := &m.comp.State
 		next.CurrentState = mmuCacheStatePause
 		tracing.AddMilestone(
-			sim.GetIDGenerator().Generate(),
+			timing.GetIDGenerator().Generate(),
 			tracing.MilestoneKindHardwareResource,
 			m.comp.Name()+".",
 			m.comp.Name(),
@@ -63,7 +65,7 @@ func (m *mmuCacheMiddleware) handleDrain() bool {
 }
 
 func (m *mmuCacheMiddleware) handleFlush() bool {
-	next := m.comp.GetNextState()
+	next := &m.comp.State
 	if !next.InflightFlushReqActive {
 		return false
 	}
@@ -83,7 +85,7 @@ func (m *mmuCacheMiddleware) handleEnable() bool {
 // processRequests handles both incoming lookup requests and bottom port responses.
 func (m *mmuCacheMiddleware) processRequests() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = m.lookup() || madeProgress
 	}
@@ -114,7 +116,7 @@ func (m *mmuCacheMiddleware) lookup() bool {
 func (m *mmuCacheMiddleware) walkCacheLevels(
 	msg *vm.TranslationReq,
 ) bool {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	totalLatency := spec.LatencyPerLevel * uint64(spec.NumLevels)
 
 	for level := spec.NumLevels - 1; level >= 0; level-- {
@@ -135,8 +137,8 @@ func (m *mmuCacheMiddleware) walkCacheLevels(
 func (m *mmuCacheMiddleware) lookupLevel(
 	level int, req *vm.TranslationReq,
 ) bool {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 	vAddr := req.VAddr
 	pid := req.PID
 
@@ -160,10 +162,10 @@ func (m *mmuCacheMiddleware) sendReqToBottom(
 		return false
 	}
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	reqToBottom := &vm.TranslationReq{}
-	reqToBottom.ID = sim.GetIDGenerator().Generate()
+	reqToBottom.ID = timing.GetIDGenerator().Generate()
 	reqToBottom.Src = m.bottomPort().AsRemote()
 	reqToBottom.Dst = spec.LowModulePort
 	reqToBottom.PID = req.PID
@@ -206,12 +208,12 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 	m.updateCacheLevels(rsp)
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	rspToTop := &vm.TranslationRsp{
 		Page: rsp.Page,
 	}
-	rspToTop.ID = sim.GetIDGenerator().Generate()
+	rspToTop.ID = timing.GetIDGenerator().Generate()
 	rspToTop.Src = m.topPort().AsRemote()
 	rspToTop.Dst = spec.UpModulePort
 	rspToTop.RspTo = rsp.RspTo
@@ -229,14 +231,14 @@ func (m *mmuCacheMiddleware) handleRsp(rsp *vm.TranslationRsp) bool {
 
 // segToSetID maps a segment to a cache set ID using modulo hashing.
 func (m *mmuCacheMiddleware) segToSetID(seg uint64) int {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	return int(seg % uint64(spec.NumBlocks))
 }
 
 // updateCacheLevels updates all cache levels with the translation response.
 func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
-	spec := m.comp.GetSpec()
-	next := m.comp.GetNextState()
+	spec := m.comp.Spec
+	next := &m.comp.State
 	page := rsp.Page
 	vAddr := page.VAddr
 	pid := page.PID
@@ -260,11 +262,11 @@ func (m *mmuCacheMiddleware) updateCacheLevels(rsp *vm.TranslationRsp) bool {
 }
 
 func (m *mmuCacheMiddleware) processMMUCacheFlush() bool {
-	next := m.comp.GetNextState()
-	spec := m.comp.GetSpec()
+	next := &m.comp.State
+	spec := m.comp.Spec
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = next.InflightFlushReqSrc
 	rsp.TrafficClass = "mem.ControlRsp"

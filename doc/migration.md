@@ -404,12 +404,11 @@ evt := sim.NewEventBase(now, "MyComponent") // pass handler name
 
 ---
 
-## 5. In-Place State Update
+## 5. Single-State Update
 
 **Motivation:** V4 used a double-buffered model where `current` and `next`
 were deep copies. This was expensive and error-prone. V5 simplifies to
-in-place updates where `current` and `next` refer to the same data during
-a tick.
+one mutable state value per component.
 
 ### V5 Tick Cycle
 
@@ -417,30 +416,26 @@ From `v5/modeling/component.go`:
 
 ```go
 func (c *Component[S, T]) Tick() bool {
-    c.next = c.current         // 1. Assign current to next (shallow copy)
-    madeProgress := c.MiddlewareHolder.Tick()  // 2. Middlewares modify next
-    c.current = c.next         // 3. Promote next back to current
-    return madeProgress
+    return c.MiddlewareHolder.Tick()
 }
 ```
 
-Because both `current` and `next` are the **same value** (shallow copy of
-a struct), middlewares can read from `GetState()` or `GetNextState()`
-interchangeably. Mutations via `GetNextState()` are immediately visible
-through `GetState()`.
+Components store one state value. Middlewares can read a value copy with
+`State` or mutate the state directly with `State` field. Mutations via
+`State` field are immediately visible through `State`.
 
 ### State Access
 
 ```go
-// Read current state (same data as next during a tick).
-state := comp.GetState()
+// Read current state value.
+state := comp.State
 
-// Get pointer to next state for mutation.
-next := comp.GetNextState()
-next.Counter++
+// Get pointer to state for mutation.
+statePtr := &comp.State
+statePtr.Counter++
 
-// SetState sets both current and next (for init / checkpoint restore).
-comp.SetState(initialState)
+// direct state assignment replaces the state.
+comp.State = initialState
 ```
 
 ### Before / After
@@ -450,28 +445,27 @@ comp.SetState(initialState)
 // V4: current and next were separate deep copies.
 // Reading current gave the pre-tick snapshot.
 // Writing next didn't affect current until commit.
-state := comp.GetState()     // snapshot from start of tick
-next := comp.GetNextState()  // separate copy
+state := comp.State     // snapshot from start of tick
+next := &comp.State  // separate copy
 next.Value = state.Value + 1 // must read from state, write to next
 comp.CommitNextState()        // deep copy next → current
 ```
 
-**After (V5) — in-place update:**
+**After (V5) — single-state update:**
 ```go
-// V5: current and next are the same data.
-// Read and write through GetNextState pointer.
-next := comp.GetNextState()
-next.Value++                  // direct mutation, visible immediately
+// Read and write through `State` field pointer.
+state := &comp.State
+state.Value++                  // direct mutation, visible immediately
 
-// No explicit commit needed — Tick() handles it.
+// No explicit commit needed.
 ```
 
 ### Migration Checklist
 
 - Remove any deep-copy logic between current/next state.
-- `GetState()` and `GetNextState()` return the same underlying data during a tick — choose one and be consistent.
-- For initialization, use `comp.SetState(initialState)` to set both current and next.
-- For checkpoint restore, call `SetState()` followed by `ResetAndRestartTick()`.
+- Use `State` for value reads and `State` field for direct mutation.
+- For initialization, use `comp.State = initialState`.
+- For checkpoint restore, assign `comp.State`.
 
 ---
 
@@ -487,7 +481,7 @@ V5 unifies component structure into five orthogonal parts. See the
 | **Spec** | Immutable configuration | Primitives only. JSON-friendly. No pointers. |
 | **State** | Mutable runtime data | Pure data. No ports, functions, channels. Use IDs for cross-references. |
 | **Ports** | Communication endpoints | Created externally, injected via `AddPort(name, port)`. Never constructed internally. |
-| **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `GetNextState()`. Stateless w.r.t. external deps. |
+| **Middlewares** | Per-tick behavior pipeline | Ordered. Operate on State via `State` field. Stateless w.r.t. external deps. |
 | **Hooks** | Observation/tracing | Attached via `HookableBase`. Don't affect simulation logic. |
 
 ### Generic Component
@@ -515,7 +509,7 @@ comp := modeling.NewBuilder[MySpec, MyState]().
     WithSpec(mySpec).
     Build("MyComponent")
 
-comp.SetState(initialState)
+comp.State = initialState
 comp.AddMiddleware(&myMiddleware{comp: comp})
 
 port := sim.NewPort(nil, 4, 4, "MyComponent.Top")
@@ -686,7 +680,7 @@ ctrl := dram.MakeBuilder().
 The DRAM state tracks runtime statistics:
 
 ```go
-state := ctrl.GetState()
+state := ctrl.State
 
 // Latency
 avgRead := dram.AverageReadLatency(&state)   // cycles
@@ -850,7 +844,7 @@ type MyComponentState struct {
 }
 ```
 
-This aligns with V5 principles: State fields are value types with `json` tags, making them easily serializable and restorable without deep-copy complications.
+This aligns with V5 principles: `State` fields are value types with `json` tags, making them easily serializable and restorable without deep-copy complications.
 
 ---
 

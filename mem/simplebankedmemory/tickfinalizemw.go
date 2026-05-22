@@ -5,7 +5,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -14,7 +16,7 @@ type tickFinalizeMW struct {
 	storage *mem.Storage
 }
 
-func (m *tickFinalizeMW) topPort() sim.Port {
+func (m *tickFinalizeMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
@@ -26,7 +28,7 @@ func (m *tickFinalizeMW) Tick() bool {
 
 func (m *tickFinalizeMW) finalizeBanks() bool {
 	madeProgress := false
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	for i := range state.Banks {
 		for {
@@ -59,7 +61,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	readReq := &item.ReadMsg
 
 	if !item.Committed {
@@ -86,7 +88,7 @@ func (m *tickFinalizeMW) finalizeRead(
 	}
 
 	rsp := &mem.DataReadyRsp{}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = readReq.Src
 	rsp.RspTo = readReq.ID
@@ -109,7 +111,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	b *bankState,
 	item *bankPipelineItemState,
 ) bool {
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	writeReq := &item.WriteMsg
 
 	if !item.Committed {
@@ -149,7 +151,7 @@ func (m *tickFinalizeMW) finalizeWrite(
 	}
 
 	rsp := &mem.WriteDoneRsp{}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = writeReq.Src
 	rsp.RspTo = writeReq.ID
@@ -169,8 +171,8 @@ func (m *tickFinalizeMW) finalizeWrite(
 
 func (m *tickFinalizeMW) tickPipelines() bool {
 	madeProgress := false
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	for i := range state.Banks {
 		madeProgress = pipelineTick(&state.Banks[i], spec) || madeProgress

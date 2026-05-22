@@ -6,7 +6,9 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -14,15 +16,15 @@ type ctrlMiddleware struct {
 	comp *modeling.Component[Spec, State]
 }
 
-func (m *ctrlMiddleware) topPort() sim.Port {
+func (m *ctrlMiddleware) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *ctrlMiddleware) bottomPort() sim.Port {
+func (m *ctrlMiddleware) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
-func (m *ctrlMiddleware) controlPort() sim.Port {
+func (m *ctrlMiddleware) controlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
@@ -69,7 +71,7 @@ func (m *ctrlMiddleware) handleControlReq(msg *mem.ControlReq) bool {
 }
 
 func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
 
 	m.controlPort().RetrieveIncoming()
@@ -85,7 +87,7 @@ func (m *ctrlMiddleware) performCtrlEnable(msg *mem.ControlReq) bool {
 }
 
 func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = mmuCacheStateDrain
 
 	m.controlPort().RetrieveIncoming()
@@ -101,7 +103,7 @@ func (m *ctrlMiddleware) performCtrlDrain(msg *mem.ControlReq) bool {
 }
 
 func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = mmuCacheStatePause
 
 	m.controlPort().RetrieveIncoming()
@@ -119,7 +121,7 @@ func (m *ctrlMiddleware) performCtrlPause(msg *mem.ControlReq) bool {
 func (m *ctrlMiddleware) handleMMUCacheFlush(msg *mem.ControlReq) bool {
 	m.flushMsgMustBeValidInCurrentStage(msg)
 
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.InflightFlushReqActive = true
 	state.InflightFlushReqID = msg.ID
 	state.InflightFlushReqSrc = msg.Src
@@ -129,8 +131,8 @@ func (m *ctrlMiddleware) handleMMUCacheFlush(msg *mem.ControlReq) bool {
 	return true
 }
 
-func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
-	state := m.comp.GetNextState()
+func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg messaging.Msg) {
+	state := &m.comp.State
 	switch s := state.CurrentState; s {
 	case mmuCacheStateEnable:
 		// valid
@@ -147,7 +149,7 @@ func (m *ctrlMiddleware) flushMsgMustBeValidInCurrentStage(msg sim.Msg) {
 
 func (m *ctrlMiddleware) handleMMUCacheRestart(msg *mem.ControlReq) bool {
 	rsp := &mem.ControlRsp{Command: mem.CmdReset, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.controlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficClass = "mem.ControlRsp"
@@ -164,7 +166,7 @@ func (m *ctrlMiddleware) handleMMUCacheRestart(msg *mem.ControlReq) bool {
 		m.comp,
 	)
 
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = mmuCacheStateEnable
 
 	for m.topPort().PeekIncoming() != nil {

@@ -4,7 +4,8 @@ package trace
 import (
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -30,13 +31,13 @@ type memoryStepEntry struct {
 // A dbTracer is a hook that can record the actions of a memory model into
 // a database using the data recorder.
 type dbTracer struct {
-	timeTeller         sim.TimeTeller
-	dataRecorder       datarecording.DataRecorder
+	timeTeller          timing.TimeTeller
+	dataRecorder        datarecording.DataRecorder
 	pendingTransactions map[uint64]*memoryTransactionEntry
 }
 
 // NewDBTracer creates a new database-based Tracer.
-func NewDBTracer(dataRecorder datarecording.DataRecorder, timeTeller sim.TimeTeller) tracing.Tracer {
+func NewDBTracer(dataRecorder datarecording.DataRecorder, timeTeller timing.TimeTeller) tracing.Tracer {
 	t := &dbTracer{
 		timeTeller:          timeTeller,
 		dataRecorder:        dataRecorder,
@@ -81,7 +82,7 @@ func (t *dbTracer) StepTask(task tracing.Task) {
 	task.Steps[0].Time = t.timeTeller.CurrentTime()
 
 	entry := memoryStepEntry{
-		ID:     sim.GetIDGenerator().Generate(),
+		ID:     timing.GetIDGenerator().Generate(),
 		TaskID: task.ID,
 		Time:   float64(task.Steps[0].Time),
 		What:   task.Steps[0].What,

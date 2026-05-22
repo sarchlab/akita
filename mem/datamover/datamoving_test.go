@@ -3,18 +3,20 @@ package datamover
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("DataMover", func() {
 	var (
 		mockCtrl   *gomock.Controller
-		engine     sim.Engine
+		engine     timing.Engine
 		dataMover  *modeling.Component[Spec, State]
 		insideMem  *idealmemcontroller.Comp
 		outsideMem *idealmemcontroller.Comp
@@ -25,34 +27,34 @@ var _ = Describe("DataMover", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
-		engine = sim.NewSerialEngine()
+		engine = timing.NewSerialEngine()
 		srcPort = NewMockPort(mockCtrl)
 		srcPort.EXPECT().SetConnection(gomock.Any()).AnyTimes()
 		srcPort.EXPECT().PeekOutgoing().Return(nil).AnyTimes()
-		srcPort.EXPECT().AsRemote().Return(sim.RemotePort("SrcPort")).AnyTimes()
+		srcPort.EXPECT().AsRemote().Return(messaging.RemotePort("SrcPort")).AnyTimes()
 		insideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(idealmemcontroller.Spec{
 				Latency:       100,
 				Width:         1,
 				CacheLineSize: 64,
 			}).
 			WithNewStorage(1 * mem.MB).
-			WithTopPort(sim.NewPort(nil, 16, 16, "InsideMem.TopPort")).
-			WithCtrlPort(sim.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
+			WithTopPort(messaging.NewPort(nil, 16, 16, "InsideMem.TopPort")).
+			WithCtrlPort(messaging.NewPort(nil, 16, 16, "InsideMem.CtrlPort")).
 			Build("InsideMem")
 		outsideMem = idealmemcontroller.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(idealmemcontroller.Spec{
 				Latency:       100,
 				Width:         1,
 				CacheLineSize: 64,
 			}).
 			WithNewStorage(1 * mem.MB).
-			WithTopPort(sim.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
-			WithCtrlPort(sim.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).
+			WithTopPort(messaging.NewPort(nil, 16, 16, "OutsideMem.TopPort")).
+			WithCtrlPort(messaging.NewPort(nil, 16, 16, "OutsideMem.CtrlPort")).
 			Build("OutsideMem")
 		dataMover = MakeBuilder().
 			WithEngine(engine).
@@ -65,14 +67,14 @@ var _ = Describe("DataMover", func() {
 			}).
 			WithInsideByteGranularity(64).
 			WithOutsideByteGranularity(256).
-			WithCtrlPort(sim.NewPort(nil, 40960000, 40960000, "DataMover.CtrlPort")).
-			WithInsidePort(sim.NewPort(nil, 64, 64, "DataMover.SrcPort")).
-			WithOutsidePort(sim.NewPort(nil, 64, 64, "DataMover.DstPort")).
+			WithCtrlPort(messaging.NewPort(nil, 40960000, 40960000, "DataMover.CtrlPort")).
+			WithInsidePort(messaging.NewPort(nil, 64, 64, "DataMover.SrcPort")).
+			WithOutsidePort(messaging.NewPort(nil, 64, 64, "DataMover.DstPort")).
 			Build("DataMover")
 
 		conn = directconnection.MakeBuilder().
 			WithEngine(engine).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			Build("Conn")
 		conn.PlugIn(srcPort)
 		conn.PlugIn(dataMover.GetPortByName("Control"))
@@ -93,7 +95,7 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.Any())
 
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
@@ -121,7 +123,7 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.Any())
 
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
@@ -149,7 +151,7 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.Any())
 
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
@@ -177,7 +179,7 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.Any())
 
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
@@ -197,7 +199,7 @@ var _ = Describe("DataMover", func() {
 
 	It("should handle zero-size transfers", func() {
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0
@@ -223,7 +225,7 @@ var _ = Describe("DataMover", func() {
 			Deliver(gomock.Any())
 
 		req := &DataMoveRequest{}
-		req.ID = sim.GetIDGenerator().Generate()
+		req.ID = timing.GetIDGenerator().Generate()
 		req.Src = srcPort.AsRemote()
 		req.Dst = dataMover.GetPortByName("Control").AsRemote()
 		req.SrcAddress = 0

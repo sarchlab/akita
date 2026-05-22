@@ -4,22 +4,23 @@ import (
 	"fmt"
 
 	"github.com/sarchlab/akita/v5/hooking"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
 type SampleTimeTeller struct {
-	time sim.VTimeInSec
+	time timing.VTimeInSec
 }
 
-func (t *SampleTimeTeller) CurrentTime() sim.VTimeInSec {
+func (t *SampleTimeTeller) CurrentTime() timing.VTimeInSec {
 	return t.time
 }
 
 type SampleDomain struct {
 	*hooking.HookableBase
 
-	timeTeller sim.TimeTeller
+	timeTeller timing.TimeTeller
 	taskIDs    []uint64
 	nextID     uint64
 }

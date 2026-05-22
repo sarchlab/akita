@@ -3,12 +3,13 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -55,7 +56,7 @@ var _ = Describe("DirectoryStage", func() {
 		m = &pipelineMW{}
 		m.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
 				NumReqPerCycle:   4,
@@ -66,8 +67,8 @@ var _ = Describe("DirectoryStage", func() {
 			}).
 			Build("Cache")
 
-		m.comp.SetState(initialState)
-		next := m.comp.GetNextState()
+		m.comp.State = initialState
+		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
@@ -84,7 +85,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("read", func() {
 		BeforeEach(func() {
 			read := &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
+			read.ID = timing.GetIDGenerator().Generate()
 			read.Address = 0x100
 			read.PID = 1
 			read.AccessByteSize = 64
@@ -98,31 +99,30 @@ var _ = Describe("DirectoryStage", func() {
 				ReadPID:            read.PID,
 			}
 
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Elements = []int{0}
 		})
 
 		Context("mshr hit", func() {
 			BeforeEach(func() {
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				cache.MSHRAdd(&next.MSHRState, 16, vm.PID(1), 0x100)
 			})
 
 			It("should add to MSHR", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				Expect(next.MSHRState.Entries[0].TransactionIndices).To(HaveLen(1))
 			})
 		})
 
 		Context("hit", func() {
 			BeforeEach(func() {
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				setID := int(0x100 / uint64(64) % uint64(64))
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
@@ -131,12 +131,11 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should pass transaction to bank", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				setID := int(0x100 / uint64(64) % uint64(64))
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				Expect(block.ReadCount).To(Equal(1))
@@ -146,19 +145,18 @@ var _ = Describe("DirectoryStage", func() {
 
 		Context("miss, mshr miss, no need to evict", func() {
 			It("should create mshr entry and fetch", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				Expect(next.MSHRState.Entries).To(HaveLen(1))
 			})
 		})
 
 		Context("miss, mshr miss, need eviction", func() {
 			BeforeEach(func() {
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				setID := int(0x100 / uint64(64) % uint64(64))
 				for i := range 4 {
 					block := &next.DirectoryState.Sets[setID].Blocks[i]
@@ -171,12 +169,11 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should do evict", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				Expect(next.Transactions[0].Action).To(Equal(bankEvictAndFetch))
 			})
 		})
@@ -185,7 +182,7 @@ var _ = Describe("DirectoryStage", func() {
 	Context("write", func() {
 		BeforeEach(func() {
 			write := &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
+			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x100
 			write.PID = 1
 			write.TrafficBytes = 12
@@ -197,14 +194,14 @@ var _ = Describe("DirectoryStage", func() {
 				WritePID:     write.PID,
 			}
 
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			next.Transactions = []transactionState{trans}
 			next.DirPostPipelineBuf.Elements = []int{0}
 		})
 
 		Context("hit", func() {
 			BeforeEach(func() {
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				setID := int(0x100 / uint64(64) % uint64(64))
 				block := &next.DirectoryState.Sets[setID].Blocks[0]
 				block.Tag = 0x100
@@ -213,29 +210,27 @@ var _ = Describe("DirectoryStage", func() {
 			})
 
 			It("should send to bank", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
 			})
 		})
 
 		Context("miss, write full line, no eviction", func() {
 			BeforeEach(func() {
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				next.Transactions[0].WriteData = make([]byte, 64)
 			})
 
 			It("should send to bank", func() {
-				m.syncForTest()
 
 				ret := ds.Tick()
 
 				Expect(ret).To(BeTrue())
-				next := m.comp.GetNextState()
+				next := &m.comp.State
 				Expect(next.Transactions[0].Action).To(Equal(bankWriteHit))
 			})
 		})

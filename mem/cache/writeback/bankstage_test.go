@@ -3,11 +3,13 @@ package writeback
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/queueing"
+	"github.com/sarchlab/akita/v5/timing"
 	"go.uber.org/mock/gomock"
 )
 
@@ -26,7 +28,7 @@ var _ = Describe("Bank Stage", func() {
 		topPort = NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 
 		storage = mem.NewStorage(4 * mem.KB)
@@ -66,8 +68,8 @@ var _ = Describe("Bank Stage", func() {
 			topPort: topPort,
 		}
 		m.comp = modeling.NewBuilder[Spec, State]().
-			WithEngine(sim.NewSerialEngine()).
-			WithFreq(1 * sim.GHz).
+			WithEngine(timing.NewSerialEngine()).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				BankLatency:      10,
 				Log2BlockSize:    6,
@@ -78,8 +80,8 @@ var _ = Describe("Bank Stage", func() {
 			}).
 			Build("Cache")
 
-		m.comp.SetState(initialState)
-		next := m.comp.GetNextState()
+		m.comp.State = initialState
+		next := &m.comp.State
 
 		cache.DirectoryReset(&next.DirectoryState, 64, 4, 64)
 
@@ -97,7 +99,7 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a read hit transaction", func() {
 		BeforeEach(func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.ReadCount = 1
@@ -105,7 +107,7 @@ var _ = Describe("Bank Stage", func() {
 			storage.Write(0x40, []byte{1, 2, 3, 4, 5, 6, 7, 8})
 
 			read := &mem.ReadReq{}
-			read.ID = sim.GetIDGenerator().Generate()
+			read.ID = timing.GetIDGenerator().Generate()
 			read.Address = 0x104
 			read.AccessByteSize = 4
 			read.TrafficBytes = 12
@@ -131,29 +133,25 @@ var _ = Describe("Bank Stage", func() {
 		It("should stall if send buffer is full", func() {
 			topPort.EXPECT().CanSend().Return(false).AnyTimes()
 
-			m.syncForTest()
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
 		})
 
 		It("should read and send response", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {
+				Do(func(msg messaging.Msg) {
 					dr := msg.(*mem.DataReadyRsp)
 					Expect(dr.Data).To(Equal([]byte{5, 6, 7, 8}))
 				})
 
-			m.syncForTest()
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.ReadCount).To(Equal(0))
 			Expect(next.Transactions[0].Removed).To(BeTrue())
@@ -163,14 +161,14 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a write-hit transaction", func() {
 		BeforeEach(func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.ReadCount = 1
 			block.IsLocked = true
 
 			write := &mem.WriteReq{}
-			write.ID = sim.GetIDGenerator().Generate()
+			write.ID = timing.GetIDGenerator().Generate()
 			write.Address = 0x104
 			write.Data = []byte{5, 6, 7, 8}
 			write.TrafficBytes = len([]byte{5, 6, 7, 8}) + 12
@@ -194,28 +192,24 @@ var _ = Describe("Bank Stage", func() {
 		It("should stall if send buffer is full", func() {
 			topPort.EXPECT().CanSend().Return(false).AnyTimes()
 
-			m.syncForTest()
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeFalse())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(next.BankInflightTransCounts[0]).To(Equal(1))
 		})
 
 		It("should write and send response", func() {
 			topPort.EXPECT().CanSend().Return(true)
 			topPort.EXPECT().Send(gomock.Any()).
-				Do(func(msg sim.Msg) {})
-
-			m.syncForTest()
+				Do(func(msg messaging.Msg) {})
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
 			data, _ := storage.Read(0x44, 4)
 			Expect(data).To(Equal([]byte{5, 6, 7, 8}))
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			Expect(block.IsValid).To(BeTrue())
 			Expect(block.IsLocked).To(BeFalse())
@@ -227,7 +221,7 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("completing a write fetched transaction", func() {
 		BeforeEach(func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			block := &next.DirectoryState.Sets[0].Blocks[0]
 			block.CacheAddress = 0x40
 			block.IsLocked = true
@@ -257,12 +251,11 @@ var _ = Describe("Bank Stage", func() {
 		})
 
 		It("should write to storage and send to mshr stage", func() {
-			m.syncForTest()
 
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			writtenData, _ := storage.Read(0x40, 64)
 			Expect(writtenData).To(Equal(next.Transactions[0].MSHRData))
 			block := &next.DirectoryState.Sets[0].Blocks[0]
@@ -274,7 +267,7 @@ var _ = Describe("Bank Stage", func() {
 
 	Context("finalizing a read for eviction action", func() {
 		BeforeEach(func() {
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			trans := transactionState{
 				HasVictim:          true,
 				VictimTag:          0x200,
@@ -310,12 +303,10 @@ var _ = Describe("Bank Stage", func() {
 			}
 			storage.Write(0x300, data)
 
-			m.syncForTest()
-
 			ret := bs.Tick()
 
 			Expect(ret).To(BeTrue())
-			next := m.comp.GetNextState()
+			next := &m.comp.State
 			Expect(next.Transactions[0].Action).To(Equal(writeBufferEvictAndFetch))
 			Expect(next.Transactions[0].EvictingData).To(Equal(data))
 			Expect(next.BankInflightTransCounts[0]).To(Equal(0))

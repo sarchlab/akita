@@ -1,15 +1,17 @@
 package writethroughcache
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
 	"github.com/sarchlab/akita/v5/queueing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -53,7 +55,7 @@ var _ = Describe("Bottom Parser", func() {
 		}
 		c.comp = modeling.NewBuilder[Spec, State]().
 			WithEngine(nil).
-			WithFreq(1 * sim.GHz).
+			WithFreq(1 * timing.GHz).
 			WithSpec(Spec{
 				Log2BlockSize:    6,
 				WayAssociativity: 4,
@@ -67,7 +69,7 @@ var _ = Describe("Bottom Parser", func() {
 		// Initialize directoryState before SetState so both buffers match
 		cache.DirectoryReset(&initialState.DirectoryState, 16, 4, 64)
 
-		c.comp.SetState(initialState)
+		c.comp.State = initialState
 
 		p = &bottomParser{cache: c}
 	})
@@ -84,16 +86,16 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("write done", func() {
 		It("should handle write done", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			writeToBottomMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeToBottomMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
 
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -112,7 +114,7 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			done := &mem.WriteDoneRsp{}
-			done.ID = sim.GetIDGenerator().Generate()
+			done.ID = timing.GetIDGenerator().Generate()
 			done.RspTo = writeToBottomMeta.ID
 			done.TrafficBytes = 4
 			done.TrafficClass = "rsp"
@@ -132,16 +134,16 @@ var _ = Describe("Bottom Parser", func() {
 
 	Context("data ready", func() {
 		var (
-			readToBottomMeta       sim.MsgMeta
+			readToBottomMeta       messaging.MsgMeta
 			dataReady              *mem.DataReadyRsp
 			blockSetID, blockWayID int
 		)
 
 		BeforeEach(func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
-			readToBottomMeta = sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readToBottomMeta = messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -157,7 +159,7 @@ var _ = Describe("Bottom Parser", func() {
 				1, 2, 3, 4, 5, 6, 7, 8,
 			}
 			dataReady = &mem.DataReadyRsp{}
-			dataReady.ID = sim.GetIDGenerator().Generate()
+			dataReady.ID = timing.GetIDGenerator().Generate()
 			dataReady.RspTo = readToBottomMeta.ID
 			dataReady.Data = drData
 			dataReady.TrafficBytes = len(drData) + 4
@@ -170,8 +172,8 @@ var _ = Describe("Bottom Parser", func() {
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].Tag = 0x100
 			next.DirectoryState.Sets[blockSetID].Blocks[blockWayID].IsValid = true
 
-			readMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			readMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -203,7 +205,7 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should stall if bank is busy", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 			next.BankBufs[0].Cap = 0
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
@@ -214,7 +216,7 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should send transaction to bank", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			bottomPort.EXPECT().PeekIncoming().Return(dataReady)
 			bottomPort.EXPECT().RetrieveIncoming()
@@ -243,11 +245,11 @@ var _ = Describe("Bottom Parser", func() {
 		})
 
 		It("should combine write", func() {
-			next := c.comp.GetNextState()
+			next := &c.comp.State
 
 			// Add another read transaction (index 1) that is in the MSHR
-			read2Meta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			read2Meta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 12,
 				TrafficClass: "req",
 			}
@@ -262,8 +264,8 @@ var _ = Describe("Bottom Parser", func() {
 			)
 
 			// Add a write transaction (index 2)
-			writeMeta := sim.MsgMeta{
-				ID:           sim.GetIDGenerator().Generate(),
+			writeMeta := messaging.MsgMeta{
+				ID:           timing.GetIDGenerator().Generate(),
 				TrafficBytes: 16 + 12,
 				TrafficClass: "req",
 			}

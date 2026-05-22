@@ -4,7 +4,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"go.uber.org/mock/gomock"
 )
 
@@ -24,7 +25,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		controlPort = NewMockPort(mockCtrl)
 		controlPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("ControlPort")).
+			Return(messaging.RemotePort("ControlPort")).
 			AnyTimes()
 		controlPort.EXPECT().
 			Name().
@@ -37,7 +38,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		topPort := NewMockPort(mockCtrl)
 		topPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("TopPort")).
+			Return(messaging.RemotePort("TopPort")).
 			AnyTimes()
 		topPort.EXPECT().
 			Name().
@@ -50,7 +51,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		bottomPort := NewMockPort(mockCtrl)
 		bottomPort.EXPECT().
 			AsRemote().
-			Return(sim.RemotePort("BottomPort")).
+			Return(messaging.RemotePort("BottomPort")).
 			AnyTimes()
 		bottomPort.EXPECT().
 			Name().
@@ -63,7 +64,7 @@ var _ = Describe("TLB CtrlMiddleware", func() {
 		comp = MakeBuilder().
 			WithEngine(engine).
 			WithTranslationProviderMapperType("single").
-			WithTranslationProviders(sim.RemotePort("RemotePort")).
+			WithTranslationProviders(messaging.RemotePort("RemotePort")).
 			WithTopPort(topPort).
 			WithBottomPort(bottomPort).
 			WithControlPort(controlPort).

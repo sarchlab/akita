@@ -2,8 +2,9 @@ package idealmemcontroller
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type ctrlMiddleware struct {
@@ -16,12 +17,12 @@ func (m *ctrlMiddleware) Tick() (madeProgress bool) {
 	return madeProgress
 }
 
-func (m *ctrlMiddleware) ctrlPort() sim.Port {
+func (m *ctrlMiddleware) ctrlPort() messaging.Port {
 	return m.comp.GetPortByName("Control")
 }
 
 func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if state.CurrentState == "drain" {
 		madeProgress = m.handleDrainState() || madeProgress
 	}
@@ -30,13 +31,13 @@ func (m *ctrlMiddleware) handleStateUpdate() (madeProgress bool) {
 }
 
 func (m *ctrlMiddleware) handleDrainState() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	if len(state.InflightTransactions) != 0 {
 		return false
 	}
 
 	rsp := &mem.ControlRsp{Command: mem.CmdDrain, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = state.CurrentCmdSrc
 	rsp.RspTo = state.CurrentCmdID
@@ -79,11 +80,11 @@ func (m *ctrlMiddleware) handleIncomingCommands() (madeProgress bool) {
 func (m *ctrlMiddleware) handleEnable(
 	msg *mem.ControlReq,
 ) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = "enable"
 
 	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -101,11 +102,11 @@ func (m *ctrlMiddleware) handleEnable(
 func (m *ctrlMiddleware) handlePause(
 	msg *mem.ControlReq,
 ) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = "pause"
 
 	rsp := &mem.ControlRsp{Command: mem.CmdPause, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.ctrlPort().AsRemote()
 	rsp.Dst = msg.Src
 	rsp.RspTo = msg.ID
@@ -123,7 +124,7 @@ func (m *ctrlMiddleware) handlePause(
 func (m *ctrlMiddleware) handleDrain(
 	msg *mem.ControlReq,
 ) bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 	state.CurrentState = "drain"
 	state.CurrentCmdID = msg.ID
 	state.CurrentCmdSrc = msg.Src

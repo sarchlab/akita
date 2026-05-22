@@ -14,11 +14,11 @@ func buildDDR4TimingAndCycles() (Timing, map[CommandKind]int) {
 	// Replicate the computed fields that Build() would calculate.
 	// DDR4 burstCycle = burstLength / 2 = 8 / 2 = 4
 	b.burstCycle = b.burstLength / 2
-	b.tRL = b.tAL + b.tCL     // 0 + 16 = 16
-	b.tWL = b.tAL + b.tCWL    // 0 + 12 = 12
+	b.tRL = b.tAL + b.tCL               // 0 + 16 = 16
+	b.tWL = b.tAL + b.tCWL              // 0 + 12 = 12
 	b.readDelay = b.tRL + b.burstCycle  // 16 + 4 = 20
 	b.writeDelay = b.tRL + b.burstCycle // 16 + 4 = 20
-	b.tRC = b.tRAS + b.tRP    // 39 + 16 = 55
+	b.tRC = b.tRAS + b.tRP              // 39 + 16 = 55
 
 	timing := b.generateTiming()
 	cmdCycles := b.buildCmdCycles()

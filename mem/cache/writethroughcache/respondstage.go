@@ -2,7 +2,8 @@ package writethroughcache
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -11,7 +12,7 @@ type respondStage struct {
 }
 
 func (s *respondStage) Tick() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	if len(next.Transactions) == 0 {
 		return false
 	}
@@ -34,7 +35,7 @@ func (s *respondStage) Tick() bool {
 
 func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 	dr := &mem.DataReadyRsp{}
-	dr.ID = sim.GetIDGenerator().Generate()
+	dr.ID = timing.GetIDGenerator().Generate()
 	dr.Src = s.cache.topPort.AsRemote()
 	dr.Dst = trans.ReadMeta.Src
 	dr.RspTo = trans.ReadMeta.ID
@@ -63,7 +64,7 @@ func (s *respondStage) respondReadTrans(trans *transactionState) bool {
 
 func (s *respondStage) respondWriteTrans(trans *transactionState) bool {
 	done := &mem.WriteDoneRsp{}
-	done.ID = sim.GetIDGenerator().Generate()
+	done.ID = timing.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort.AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID

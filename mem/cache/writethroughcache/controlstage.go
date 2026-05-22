@@ -6,11 +6,12 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/cache"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 type controlStage struct {
-	ctrlPort   sim.Port
+	ctrlPort   messaging.Port
 	pipeline   *pipelineMW
 	bankStages []*bankStage
 }
@@ -25,7 +26,7 @@ func (s *controlStage) Tick() bool {
 }
 
 func (s *controlStage) processCurrentFlush() bool {
-	next := s.pipeline.comp.GetNextState()
+	next := &s.pipeline.comp.State
 	if !next.HasProcessingFlush {
 		return false
 	}
@@ -35,7 +36,7 @@ func (s *controlStage) processCurrentFlush() bool {
 	}
 
 	rsp := &mem.ControlRsp{Command: mem.CmdFlush, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = next.ProcessingFlush.MsgMeta.Src
 	rsp.RspTo = next.ProcessingFlush.MsgMeta.ID
@@ -58,7 +59,7 @@ func (s *controlStage) hardResetCache() {
 	s.flushPort(s.pipeline.topPort)
 	s.flushPort(s.pipeline.bottomPort)
 
-	next := s.pipeline.comp.GetNextState()
+	next := &s.pipeline.comp.State
 
 	// Clear buffers directly
 	next.DirBuf.Clear()
@@ -66,7 +67,7 @@ func (s *controlStage) hardResetCache() {
 		next.BankBufs[i].Clear()
 	}
 
-	spec := s.pipeline.GetSpec()
+	spec := s.pipeline.comp.Spec
 	blockSize := int(1 << spec.Log2BlockSize)
 	cache.DirectoryReset(
 		&next.DirectoryState,
@@ -85,7 +86,7 @@ func (s *controlStage) hardResetCache() {
 	}
 }
 
-func (s *controlStage) flushPort(port sim.Port) {
+func (s *controlStage) flushPort(port messaging.Port) {
 	for port.PeekIncoming() != nil {
 		port.RetrieveIncoming()
 	}
@@ -116,7 +117,7 @@ func (s *controlStage) processNewRequest() bool {
 }
 
 func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
-	next := s.pipeline.comp.GetNextState()
+	next := &s.pipeline.comp.State
 	if next.HasProcessingFlush {
 		return false
 	}
@@ -134,7 +135,7 @@ func (s *controlStage) startCacheFlush(msg *mem.ControlReq) bool {
 }
 
 func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
-	next := s.pipeline.comp.GetNextState()
+	next := &s.pipeline.comp.State
 	next.IsPaused = false
 
 	s.ctrlPort.RetrieveIncoming()
@@ -148,7 +149,7 @@ func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
 	}
 
 	rsp := &mem.ControlRsp{Command: mem.CmdEnable, Success: true}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = s.ctrlPort.AsRemote()
 	rsp.Dst = msg.Src
 	rsp.TrafficBytes = 0
@@ -163,7 +164,7 @@ func (s *controlStage) doCacheRestart(msg *mem.ControlReq) bool {
 }
 
 func (s *controlStage) shouldWaitForInFlightTransactions() bool {
-	next := s.pipeline.comp.GetNextState()
+	next := &s.pipeline.comp.State
 	if next.ProcessingFlush.DiscardInflight {
 		return false
 	}

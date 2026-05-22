@@ -2,26 +2,26 @@ package mmu
 
 import (
 	"github.com/sarchlab/akita/v5/mem/vm"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
 // transactionState is the canonical transaction representation.
 type transactionState struct {
-	ReqID        uint64         `json:"req_id"`
-	RecvTaskID   uint64         `json:"recv_task_id"`
-	ReqSrc       sim.RemotePort `json:"req_src"`
-	ReqDst       sim.RemotePort `json:"req_dst"`
-	PID          uint32         `json:"pid"`
-	VAddr        uint64         `json:"vaddr"`
-	DeviceID     uint64         `json:"device_id"`
-	TransLatency uint64         `json:"trans_latency"`
-	Page         vm.Page        `json:"page"`
-	CycleLeft    int            `json:"cycle_left"`
+	ReqID        uint64               `json:"req_id"`
+	RecvTaskID   uint64               `json:"recv_task_id"`
+	ReqSrc       messaging.RemotePort `json:"req_src"`
+	ReqDst       messaging.RemotePort `json:"req_dst"`
+	PID          uint32               `json:"pid"`
+	VAddr        uint64               `json:"vaddr"`
+	DeviceID     uint64               `json:"device_id"`
+	TransLatency uint64               `json:"trans_latency"`
+	Page         vm.Page              `json:"page"`
+	CycleLeft    int                  `json:"cycle_left"`
 
-	MigrationReqID  uint64         `json:"migration_req_id"`
-	MigrationReqSrc sim.RemotePort `json:"migration_req_src"`
-	MigrationReqDst sim.RemotePort `json:"migration_req_dst"`
-	HasMigration    bool           `json:"has_migration"`
+	MigrationReqID  uint64               `json:"migration_req_id"`
+	MigrationReqSrc messaging.RemotePort `json:"migration_req_src"`
+	MigrationReqDst messaging.RemotePort `json:"migration_req_dst"`
+	HasMigration    bool                 `json:"has_migration"`
 }
 
 // devicePageAccess is a serializable replacement for map[uint64][]uint64,

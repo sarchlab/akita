@@ -13,8 +13,10 @@ import (
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
 	"github.com/sarchlab/akita/v5/noc/directconnection"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/simulation"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
@@ -23,7 +25,7 @@ var numAccessFlag = flag.Int("num-access", 100000,
 var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
-func buildEnvironment() (*simulation.Simulation, sim.Engine, *memaccessagent.MemAccessAgent) {
+func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -35,7 +37,7 @@ func buildEnvironment() (*simulation.Simulation, sim.Engine, *memaccessagent.Mem
 
 	conn := directconnection.MakeBuilder().
 		WithEngine(engine).
-		WithFreq(1 * sim.GHz).
+		WithFreq(1 * timing.GHz).
 		Build("Conn")
 
 	agent := memaccessagent.MakeBuilder().
@@ -43,15 +45,15 @@ func buildEnvironment() (*simulation.Simulation, sim.Engine, *memaccessagent.Mem
 		WithMaxAddress(*maxAddressFlag).
 		WithWriteLeft(*numAccessFlag).
 		WithReadLeft(*numAccessFlag).
-		WithMemPort(sim.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
+		WithMemPort(messaging.NewPort(nil, 1, 1, "MemAccessAgent.Mem")).
 		Build("MemAccessAgent")
 	s.RegisterComponent(agent)
 
 	dram := idealmemcontroller.MakeBuilder().
 		WithEngine(engine).
 		WithNewStorage(4 * mem.GB).
-		WithTopPort(sim.NewPort(nil, 16, 16, "DRAM.TopPort")).
-		WithCtrlPort(sim.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
+		WithTopPort(messaging.NewPort(nil, 16, 16, "DRAM.TopPort")).
+		WithCtrlPort(messaging.NewPort(nil, 16, 16, "DRAM.CtrlPort")).
 		Build("DRAM")
 	s.RegisterComponent(dram)
 
@@ -68,9 +70,9 @@ func buildEnvironment() (*simulation.Simulation, sim.Engine, *memaccessagent.Mem
 		WithTotalByteSize(4 * mem.KB).
 		WithNumBanks(1).
 		WithBankLatency(20).
-		WithTopPort(sim.NewPort(nil, 4, 4, "Cache.TopPort")).
-		WithBottomPort(sim.NewPort(nil, 4, 4, "Cache.BottomPort")).
-		WithControlPort(sim.NewPort(nil, 4, 4, "Cache.ControlPort")).
+		WithTopPort(messaging.NewPort(nil, 4, 4, "Cache.TopPort")).
+		WithBottomPort(messaging.NewPort(nil, 4, 4, "Cache.BottomPort")).
+		WithControlPort(messaging.NewPort(nil, 4, 4, "Cache.ControlPort")).
 		Build("Cache")
 	s.RegisterComponent(writeEvictCache)
 
@@ -105,11 +107,11 @@ func main() {
 		panic(err)
 	}
 
-	if len(agent.GetState().PendingWriteReq) > 0 || len(agent.GetState().PendingReadReq) > 0 {
+	if len(agent.State.PendingWriteReq) > 0 || len(agent.State.PendingReadReq) > 0 {
 		panic("Not all req returned")
 	}
 
-	if agent.GetState().WriteLeft > 0 || agent.GetState().ReadLeft > 0 {
+	if agent.State.WriteLeft > 0 || agent.State.ReadLeft > 0 {
 		panic("more requests to send")
 	}
 

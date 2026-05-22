@@ -1,8 +1,10 @@
 package directconnection
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/timing"
+)
 
 // Spec holds immutable configuration for the DirectConnection.
 type Spec struct {
-	Freq sim.Freq `json:"freq"`
+	Freq timing.Freq `json:"freq"`
 }

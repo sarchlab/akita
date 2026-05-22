@@ -2,21 +2,22 @@ package datamover
 
 import (
 	"github.com/sarchlab/akita/v5/mem"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/timing"
 )
 
 // DefaultSpec provides default configuration for the data mover.
 var DefaultSpec = Spec{
-	Freq: 1 * sim.GHz,
+	Freq: 1 * timing.GHz,
 }
 
 // A Builder for StreamingDataMover
 type Builder struct {
-	engine      sim.EventScheduler
-	ctrlPort    sim.Port
-	insidePort  sim.Port
-	outsidePort sim.Port
+	engine      timing.EventScheduler
+	ctrlPort    messaging.Port
+	insidePort  messaging.Port
+	outsidePort messaging.Port
 	spec        Spec
 }
 
@@ -29,14 +30,14 @@ func MakeBuilder() Builder {
 
 // WithEngine sets StreamingDataMover's engine
 func (sdmBuilder Builder) WithEngine(
-	inputEngine sim.EventScheduler,
+	inputEngine timing.EventScheduler,
 ) Builder {
 	sdmBuilder.engine = inputEngine
 	return sdmBuilder
 }
 
 // WithFreq sets the frequency of StreamingDataMover
-func (sdmBuilder Builder) WithFreq(freq sim.Freq) Builder {
+func (sdmBuilder Builder) WithFreq(freq timing.Freq) Builder {
 	sdmBuilder.spec.Freq = freq
 	return sdmBuilder
 }
@@ -92,19 +93,19 @@ func (sdmBuilder Builder) WithOutsideByteGranularity(
 }
 
 // WithCtrlPort sets the control port of StreamingDataMover
-func (sdmBuilder Builder) WithCtrlPort(port sim.Port) Builder {
+func (sdmBuilder Builder) WithCtrlPort(port messaging.Port) Builder {
 	sdmBuilder.ctrlPort = port
 	return sdmBuilder
 }
 
 // WithInsidePort sets the inside port of StreamingDataMover
-func (sdmBuilder Builder) WithInsidePort(port sim.Port) Builder {
+func (sdmBuilder Builder) WithInsidePort(port messaging.Port) Builder {
 	sdmBuilder.insidePort = port
 	return sdmBuilder
 }
 
 // WithOutsidePort sets the outside port of StreamingDataMover
-func (sdmBuilder Builder) WithOutsidePort(port sim.Port) Builder {
+func (sdmBuilder Builder) WithOutsidePort(port messaging.Port) Builder {
 	sdmBuilder.outsidePort = port
 	return sdmBuilder
 }
@@ -119,7 +120,7 @@ func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
 		WithFreq(spec.Freq).
 		WithSpec(spec).
 		Build(name)
-	modelComp.SetState(initialState)
+	modelComp.State = initialState
 
 	ctrlMW := &ctrlParseMW{comp: modelComp}
 	modelComp.AddMiddleware(ctrlMW)
@@ -143,17 +144,17 @@ func (sdmBuilder Builder) Build(name string) *modeling.Component[Spec, State] {
 func inlineMapper(
 	mapper mem.AddressToPortMapper,
 	kind *string,
-	ports *[]sim.RemotePort,
+	ports *[]messaging.RemotePort,
 	interleavingSize *uint64,
 ) {
 	switch m := mapper.(type) {
 	case *mem.SinglePortMapper:
 		*kind = "single"
-		*ports = []sim.RemotePort{m.Port}
+		*ports = []messaging.RemotePort{m.Port}
 		*interleavingSize = 0
 	case *mem.InterleavedAddressPortMapper:
 		*kind = "interleaved"
-		*ports = make([]sim.RemotePort, len(m.LowModules))
+		*ports = make([]messaging.RemotePort, len(m.LowModules))
 		copy(*ports, m.LowModules)
 		*interleavingSize = m.InterleavingSize
 	default:

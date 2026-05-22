@@ -6,23 +6,26 @@ import (
 
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// walkMW handles the top→page-table walk path:
+	// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
+	// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// walkMW handles the top→page-table walk path:
-// parseFromTop, startWalking, walkPageTable, removeCompletedTranslations,
-// processRemoteMemReq, finalizePageWalk, doPageWalkHit.
 type walkMW struct {
 	comp      *modeling.Component[Spec, State]
 	pageTable vm.PageTable
 }
 
-func (m *walkMW) topPort() sim.Port {
+func (m *walkMW) topPort() messaging.Port {
 	return m.comp.GetPortByName("Top")
 }
 
-func (m *walkMW) bottomPort() sim.Port {
+func (m *walkMW) bottomPort() messaging.Port {
 	return m.comp.GetPortByName("Bottom")
 }
 
@@ -37,8 +40,8 @@ func (m *walkMW) Tick() bool {
 }
 
 func (m *walkMW) parseFromTop() bool {
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	if len(state.WalkingTranslations) >= spec.MaxRequestsInFlight {
 		return false
@@ -62,8 +65,8 @@ func (m *walkMW) parseFromTop() bool {
 }
 
 func (m *walkMW) startWalking(req *vm.TranslationReq) {
-	spec := m.comp.GetSpec()
-	state := m.comp.GetNextState()
+	spec := m.comp.Spec
+	state := &m.comp.State
 
 	ts := transactionState{
 		ReqID:      req.ID,
@@ -81,14 +84,14 @@ func (m *walkMW) startWalking(req *vm.TranslationReq) {
 }
 
 func (m *walkMW) walkPageTable() bool {
-	state := m.comp.GetNextState()
+	state := &m.comp.State
 
 	if len(state.WalkingTranslations) == 0 {
 		return false
 	}
 
 	madeProgress := false
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 
 	for i := 0; i < len(state.WalkingTranslations); i++ {
 		if state.WalkingTranslations[i].CycleLeft > 0 {
@@ -147,11 +150,11 @@ func (m *walkMW) processRemoteMemReq(
 		return false
 	}
 
-	spec := m.comp.GetSpec()
+	spec := m.comp.Spec
 	walking := state.WalkingTranslations[walkingIndex]
 
 	req := &vm.TranslationReq{}
-	req.ID = sim.GetIDGenerator().Generate()
+	req.ID = timing.GetIDGenerator().Generate()
 	req.Src = m.bottomPort().AsRemote()
 	req.Dst = spec.LowModule
 	req.PID = vm.PID(walking.PID)
@@ -195,7 +198,7 @@ func (m *walkMW) doPageWalkHit(
 	rsp := &vm.TranslationRsp{
 		Page: pageFromPageState(walking.Page),
 	}
-	rsp.ID = sim.GetIDGenerator().Generate()
+	rsp.ID = timing.GetIDGenerator().Generate()
 	rsp.Src = m.topPort().AsRemote()
 	rsp.Dst = walking.ReqSrc
 	rsp.RspTo = walking.ReqID
@@ -207,7 +210,7 @@ func (m *walkMW) doPageWalkHit(
 
 	tracing.TraceReqComplete(
 		&vm.TranslationReq{
-			MsgMeta: sim.MsgMeta{
+			MsgMeta: messaging.MsgMeta{
 				ID:         walking.ReqID,
 				Src:        walking.ReqSrc,
 				Dst:        walking.ReqDst,

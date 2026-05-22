@@ -1,9 +1,10 @@
 package writeback
 
 import (
-	"github.com/sarchlab/akita/v5/mem/cache"
 	"github.com/sarchlab/akita/v5/mem"
-	"github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/mem/cache"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
 
@@ -15,7 +16,7 @@ type bankStage struct {
 }
 
 func (s *bankStage) Tick() (madeProgress bool) {
-	spec := s.cache.comp.GetSpec()
+	spec := s.cache.comp.Spec
 
 	for i := 0; i < spec.NumReqPerCycle; i++ {
 		madeProgress = s.finalizeTrans() || madeProgress
@@ -31,14 +32,14 @@ func (s *bankStage) Tick() (madeProgress bool) {
 }
 
 func (s *bankStage) tickPipeline() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	bankPipeline := &next.BankPipelines[s.bankID]
 	bankPostBuf := &next.BankPostPipelineBufs[s.bankID]
 	return bankPipeline.Tick(bankPostBuf)
 }
 
 func (s *bankStage) Reset() {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	next.DirToBankBufs[s.bankID].Clear()
 	next.BankPipelines[s.bankID].Stages = nil
 	next.BankPostPipelineBufs[s.bankID].Clear()
@@ -46,8 +47,8 @@ func (s *bankStage) Reset() {
 }
 
 func (s *bankStage) pullFromBuf() bool {
-	next := s.cache.comp.GetNextState()
-	spec := s.cache.comp.GetSpec()
+	next := &s.cache.comp.State
+	spec := s.cache.comp.Spec
 
 	if !s.canAcceptIntoPipeline(*next) {
 		return false
@@ -77,7 +78,7 @@ func (s *bankStage) pullFromBuf() bool {
 }
 
 func (s *bankStage) canAcceptIntoPipeline(cur State) bool {
-	spec := s.cache.comp.GetSpec()
+	spec := s.cache.comp.Spec
 
 	if spec.BankLatency > 0 {
 		return cur.BankPipelines[s.bankID].CanAccept()
@@ -123,7 +124,7 @@ func (s *bankStage) acceptIntoPipeline(next *State, spec Spec, transIdx int) {
 }
 
 func (s *bankStage) finalizeTrans() bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	postBuf := &next.BankPostPipelineBufs[s.bankID]
 
 	for i, idx := range postBuf.Elements {
@@ -158,8 +159,8 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 		return false
 	}
 
-	spec := s.cache.comp.GetSpec()
-	next := s.cache.comp.GetNextState()
+	spec := s.cache.comp.Spec
+	next := &s.cache.comp.State
 
 	addr := trans.ReadAddress
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
@@ -179,7 +180,7 @@ func (s *bankStage) finalizeReadHit(transIdx int, trans *transactionState) bool 
 	nextBlock.ReadCount--
 
 	dataReady := &mem.DataReadyRsp{}
-	dataReady.ID = sim.GetIDGenerator().Generate()
+	dataReady.ID = timing.GetIDGenerator().Generate()
 	dataReady.Src = s.cache.topPort.AsRemote()
 	dataReady.Dst = trans.ReadMeta.Src
 	dataReady.RspTo = trans.ReadMeta.ID
@@ -198,8 +199,8 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 		return false
 	}
 
-	spec := s.cache.comp.GetSpec()
-	next := s.cache.comp.GetNextState()
+	spec := s.cache.comp.Spec
+	next := &s.cache.comp.State
 
 	addr := trans.WriteAddress
 	_, offset := getCacheLineID(addr, spec.Log2BlockSize)
@@ -218,7 +219,7 @@ func (s *bankStage) finalizeWriteHit(transIdx int, trans *transactionState) bool
 	next.BankDownwardInflightTransCounts[s.bankID]--
 
 	done := &mem.WriteDoneRsp{}
-	done.ID = sim.GetIDGenerator().Generate()
+	done.ID = timing.GetIDGenerator().Generate()
 	done.Src = s.cache.topPort.AsRemote()
 	done.Dst = trans.WriteMeta.Src
 	done.RspTo = trans.WriteMeta.ID
@@ -268,7 +269,7 @@ func (s *bankStage) finalizeBankWriteFetched(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	next := s.cache.comp.GetNextState()
+	next := &s.cache.comp.State
 	mshrBuf := &next.MSHRStageBuf
 
 	if !mshrBuf.CanPush() {
@@ -295,8 +296,8 @@ func (s *bankStage) finalizeBankEviction(
 	transIdx int,
 	trans *transactionState,
 ) bool {
-	spec := s.cache.comp.GetSpec()
-	next := s.cache.comp.GetNextState()
+	spec := s.cache.comp.Spec
+	next := &s.cache.comp.State
 	wbBuf := &next.WriteBufferBuf
 
 	if !wbBuf.CanPush() {
@@ -331,4 +332,3 @@ func (s *bankStage) finalizeBankEviction(
 
 	return true
 }
-

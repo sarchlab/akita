@@ -1,6 +1,8 @@
 package dram
 
-import "github.com/sarchlab/akita/v5/sim"
+import (
+	"github.com/sarchlab/akita/v5/timing"
+)
 
 // Protocol defines the category of the memory controller.
 type Protocol int
@@ -44,7 +46,7 @@ const (
 // Spec contains immutable configuration for the DRAM memory controller.
 type Spec struct {
 	// Frequency
-	Freq sim.Freq `json:"freq"`
+	Freq timing.Freq `json:"freq"`
 
 	// Protocol
 	Protocol int `json:"protocol"`
@@ -216,4 +218,3 @@ type Timing struct {
 	SameRank              TimeTable
 	OtherRanks            TimeTable
 }
-

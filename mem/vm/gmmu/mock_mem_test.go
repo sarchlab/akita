@@ -12,7 +12,7 @@ package gmmu
 import (
 	reflect "reflect"
 
-	sim "github.com/sarchlab/akita/v5/sim"
+	"github.com/sarchlab/akita/v5/messaging"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,10 +41,10 @@ func (m *MockAddressToPortMapper) EXPECT() *MockAddressToPortMapperMockRecorder 
 }
 
 // Find mocks base method.
-func (m *MockAddressToPortMapper) Find(address uint64) sim.RemotePort {
+func (m *MockAddressToPortMapper) Find(address uint64) messaging.RemotePort {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Find", address)
-	ret0, _ := ret[0].(sim.RemotePort)
+	ret0, _ := ret[0].(messaging.RemotePort)
 	return ret0
 }
 

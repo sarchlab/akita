@@ -7,8 +7,8 @@ import (
 	"math/rand"
 
 	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
-	"github.com/sarchlab/akita/v5/sim"
 )
 
 var dumpLog = false
@@ -20,7 +20,7 @@ type MemAccessAgent struct {
 
 	// LowModule is the downstream port to which memory requests are sent.
 	// It is not serialized as part of the state.
-	LowModule sim.Port
+	LowModule messaging.Port
 
 	// Rand is the random source used by the agent. If nil, the global
 	// math/rand functions are used (non-deterministic in Go 1.22+).

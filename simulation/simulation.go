@@ -4,22 +4,25 @@ import (
 	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/monitoring"
-	"github.com/sarchlab/akita/v5/sim"
+
+	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
+
+	// A Simulation provides the service requires to define a simulation.
+	"github.com/sarchlab/akita/v5/messaging"
 )
 
-// A Simulation provides the service requires to define a simulation.
 type Simulation struct {
 	id           string
 	outputPath   string
-	engine       sim.Engine
+	engine       timing.Engine
 	dataRecorder datarecording.DataRecorder
 	monitor      *monitoring.Monitor
 	visTracer    *tracing.DBTracer
 
-	components    []sim.Component
+	components    []messaging.Component
 	compNameIndex map[string]int
-	ports         []sim.Port
+	ports         []messaging.Port
 	portNameIndex map[string]int
 }
 
@@ -30,7 +33,7 @@ func (s *Simulation) ID() string {
 }
 
 // GetEngine returns the engine used in the simulation.
-func (s *Simulation) GetEngine() sim.Engine {
+func (s *Simulation) GetEngine() timing.Engine {
 	return s.engine
 }
 
@@ -62,12 +65,12 @@ func (s *Simulation) GetVisTracer() *tracing.DBTracer {
 
 // Components returns all the components registered in the simulation. The
 // returned slice should be treated as read-only.
-func (s *Simulation) Components() []sim.Component {
+func (s *Simulation) Components() []messaging.Component {
 	return s.components
 }
 
 // RegisterComponent registers a component with the simulation.
-func (s *Simulation) RegisterComponent(c sim.Component) {
+func (s *Simulation) RegisterComponent(c messaging.Component) {
 	compName := c.Name()
 	if s.compNameIndex[compName] != 0 {
 		panic("component " + compName + " already registered")
@@ -90,7 +93,7 @@ func (s *Simulation) RegisterComponent(c sim.Component) {
 }
 
 // registerPort registers a port with the simulation.
-func (s *Simulation) registerPort(p sim.Port) {
+func (s *Simulation) registerPort(p messaging.Port) {
 	portName := p.Name()
 	if s.portNameIndex[portName] != 0 {
 		panic("port " + portName + " already registered")
@@ -101,12 +104,12 @@ func (s *Simulation) registerPort(p sim.Port) {
 }
 
 // GetComponentByName returns the component with the given name.
-func (s *Simulation) GetComponentByName(name string) sim.Component {
+func (s *Simulation) GetComponentByName(name string) messaging.Component {
 	return s.components[s.compNameIndex[name]]
 }
 
 // GetPortByName returns the port with the given name.
-func (s *Simulation) GetPortByName(name string) sim.Port {
+func (s *Simulation) GetPortByName(name string) messaging.Port {
 	return s.ports[s.portNameIndex[name]]
 }
 
