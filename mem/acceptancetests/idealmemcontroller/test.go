@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/sarchlab/akita/v5/mem"
@@ -101,11 +100,4 @@ func main() {
 	}
 
 	s.Terminate()
-
-	entries, _ := os.ReadDir(".")
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "akita_sim_") && strings.HasSuffix(entry.Name(), ".sqlite3") {
-			os.Remove(entry.Name())
-		}
-	}
 }

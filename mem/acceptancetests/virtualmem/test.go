@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/sarchlab/akita/v5/datarecording"
@@ -37,7 +36,7 @@ var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
 
-func setupTest() (timing.Engine, *memaccessagent.MemAccessAgent) {
+func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
@@ -88,7 +87,7 @@ func setupTest() (timing.Engine, *memaccessagent.MemAccessAgent) {
 		l1Cache, l2Cache, memCtrl)
 	setupTracing(engine, memCtrl)
 
-	return engine, agent
+	return s, engine, agent
 }
 
 func buildMemoryHierarchy(engine timing.EventScheduler, s *simulation.Simulation) (
@@ -279,7 +278,7 @@ func main() {
 	fmt.Fprintf(os.Stderr, "Seed %d\n", seed)
 	rand.Seed(seed)
 
-	engine, agent := setupTest()
+	s, engine, agent := setupTest()
 	agent.TickLater()
 
 	err := engine.Run()
@@ -295,10 +294,5 @@ func main() {
 		panic("more requests to send")
 	}
 
-	entries, _ := os.ReadDir(".")
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "akita_sim_") && strings.HasSuffix(entry.Name(), ".sqlite3") {
-			os.Remove(entry.Name())
-		}
-	}
+	s.Terminate()
 }

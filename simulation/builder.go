@@ -70,6 +70,7 @@ func (b Builder) Build() *Simulation {
 
 	b.createDataRecorder(s)
 	b.createEngine(s)
+	b.createMetaRecorder(s)
 	b.createVisTracer(s)
 	b.createServer(s)
 
@@ -98,6 +99,10 @@ func (b Builder) createEngine(s *Simulation) {
 	if b.parallelEngine {
 		s.engine = timing.NewParallelEngine()
 	}
+}
+
+func (b Builder) createMetaRecorder(s *Simulation) {
+	s.metaRecorder = newMetaRecorder(s.dataRecorder, s.engine)
 }
 
 func (b Builder) createVisTracer(s *Simulation) {

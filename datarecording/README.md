@@ -25,9 +25,9 @@ recorder := datarecording.NewDataRecorder("my_simulation")
 defer recorder.Close()
 ```
 
-This creates a SQLite file `my_simulation.sqlite3`. An execution info table
-(`exec_info`) is automatically created to record start time, command, and
-working directory.
+This creates a SQLite file `my_simulation.sqlite3`. Simulation-level metadata
+such as `exec_info` is recorded by the `simulation` package, not by the generic
+data recorder.
 
 ### Defining Tables
 

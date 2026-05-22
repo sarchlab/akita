@@ -44,8 +44,6 @@ func NewDataRecorder(path string) DataRecorder {
 
 	w.Init()
 
-	createExecRecorder(w)
-
 	atexit.Register(func() {
 		w.Flush()
 	})
@@ -61,16 +59,7 @@ func NewDataRecorderWithDB(db *sql.DB) DataRecorder {
 		tables:    make(map[string]*table),
 	}
 
-	createExecRecorder(w)
-
 	return w
-}
-
-func createExecRecorder(w *sqliteWriter) {
-	execRecorder := newExecRecorderWithWriter(w)
-	execRecorder.Start()
-
-	w.execRecorder = execRecorder
 }
 
 // Feed to location table when inserting data
@@ -95,7 +84,6 @@ type sqliteWriter struct {
 	locationInfo map[string]int
 	batchSize    int
 	entryCount   int
-	execRecorder *execRecorder
 }
 
 // Init establishes a connection to the database.
@@ -520,10 +508,6 @@ func (t *sqliteWriter) mustExecute(query string) sql.Result {
 }
 
 func (t *sqliteWriter) Close() error {
-	if t.execRecorder != nil {
-		t.execRecorder.End()
-	}
-
 	t.Flush()
 
 	err := t.DB.Close()

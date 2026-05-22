@@ -84,7 +84,7 @@ func Example() {
 	// Started memory read at time 100.0 ns
 	// Cache miss recorded at time 150.0 ns
 	// Completed memory read at time 200.0 ns
-	// Tables created: [exec_info memory_steps memory_transactions]
+	// Tables created: [memory_steps memory_transactions]
 	// Memory trace example completed successfully!
 	// Database saved to: memory_trace_example.sqlite3
 }

@@ -19,6 +19,7 @@ type Simulation struct {
 	dataRecorder datarecording.DataRecorder
 	monitor      *monitoring.Monitor
 	visTracer    *tracing.DBTracer
+	metaRecorder *metaRecorder
 
 	components    []messaging.Component
 	compNameIndex map[string]int
@@ -121,6 +122,10 @@ func (s *Simulation) Terminate() {
 
 	if s.visTracer != nil {
 		s.visTracer.Terminate()
+	}
+
+	if s.metaRecorder != nil {
+		s.metaRecorder.End()
 	}
 
 	s.dataRecorder.Close()
