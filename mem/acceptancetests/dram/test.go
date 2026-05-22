@@ -21,12 +21,16 @@ var numAccessFlag = flag.Int("num-access",
 	100000, "Number of accesses to generate")
 var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
+var traceFlag = flag.Bool("trace", false, "Collect trace")
 
 func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
+	}
+	if *traceFlag {
+		simBuilder = simBuilder.WithVisTracingOnStart()
 	}
 
 	s := simBuilder.Build()

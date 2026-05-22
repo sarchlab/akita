@@ -7,13 +7,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/sarchlab/akita/v5/datarecording"
 	"github.com/sarchlab/akita/v5/mem"
 	"github.com/sarchlab/akita/v5/mem/acceptancetests/memaccessagent"
 	"github.com/sarchlab/akita/v5/mem/cache/writeback"
 	"github.com/sarchlab/akita/v5/mem/cache/writethroughcache"
 	"github.com/sarchlab/akita/v5/mem/idealmemcontroller"
-	"github.com/sarchlab/akita/v5/mem/trace"
 	"github.com/sarchlab/akita/v5/mem/vm"
 	"github.com/sarchlab/akita/v5/mem/vm/addresstranslator"
 	"github.com/sarchlab/akita/v5/modeling"
@@ -24,14 +22,13 @@ import (
 	"github.com/sarchlab/akita/v5/noc/directconnection"
 	"github.com/sarchlab/akita/v5/simulation"
 	"github.com/sarchlab/akita/v5/timing"
-	"github.com/sarchlab/akita/v5/tracing"
 )
 
 var seedFlag = flag.Int64("seed", 0, "Random Seed")
 var numAccessFlag = flag.Int("num-access", 10000, "Number of accesses")
 var maxAddressFlag = flag.Uint64("max-address", 1*mem.GB, "Max memory address")
 
-var traceFileFlag = flag.String("trace", "", "Trace file")
+var traceFlag = flag.Bool("trace", false, "Collect trace")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 
 var agent *memaccessagent.MemAccessAgent
@@ -41,6 +38,9 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 
 	if *parallelFlag {
 		simBuilder = simBuilder.WithParallelEngine()
+	}
+	if *traceFlag {
+		simBuilder = simBuilder.WithVisTracingOnStart()
 	}
 
 	s := simBuilder.Build()
@@ -85,7 +85,6 @@ func setupTest() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAcce
 	setupConnection(engine, agent,
 		at, tlb, l2TLB, ioMMU,
 		l1Cache, l2Cache, memCtrl)
-	setupTracing(engine, memCtrl)
 
 	return s, engine, agent
 }
@@ -255,16 +254,6 @@ func setupConnection(
 		L2Cache.GetPortByName("Bottom"),
 		memCtrl.GetPortByName("Top"),
 	)
-}
-
-func setupTracing(engine timing.EventScheduler, memCtrl *idealmemcontroller.Comp) {
-	if *traceFileFlag == "" {
-		return
-	}
-
-	recorder := datarecording.NewDataRecorder(*traceFileFlag)
-	tracer := trace.NewDBTracer(recorder, engine)
-	tracing.CollectTrace(memCtrl, tracer)
 }
 
 func main() {

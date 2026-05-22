@@ -184,10 +184,10 @@ func (m *agentMiddleware) doRead() bool {
 
 	err := m.memPort().Send(readReq)
 	if err == nil {
+		tracing.TraceReqInitiate(readReq, m.agent, 0)
+
 		state.PendingReadReq[readReq.ID] = *readReq
 		state.ReadLeft--
-
-		tracing.TraceReqInitiate(readReq, m.agent, 0)
 
 		if m.agent.ReadProgressBar != nil {
 			m.agent.ReadProgressBar.IncrementInProgress(1)
@@ -266,11 +266,11 @@ func (m *agentMiddleware) doWrite() bool {
 
 	err := m.memPort().Send(writeReq)
 	if err == nil {
+		tracing.TraceReqInitiate(writeReq, m.agent, 0)
+
 		state.WriteLeft--
 		m.addKnownValue(state, address, data)
 		state.PendingWriteReq[writeReq.ID] = *writeReq
-
-		tracing.TraceReqInitiate(writeReq, m.agent, 0)
 
 		if m.agent.WriteProgressBar != nil {
 			m.agent.WriteProgressBar.IncrementInProgress(1)
