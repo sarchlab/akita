@@ -25,7 +25,7 @@ var maxAddressFlag = flag.Uint64("max-address", 1048576, "Address range to use")
 var parallelFlag = flag.Bool("parallel", false, "Test with parallel engine")
 var traceFlag = flag.Bool("trace", false, "Collect trace")
 
-func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) {
+func buildEnvironment() (*simulation.Simulation, timing.Engine, *memaccessagent.MemAccessAgent) { //nolint:funlen
 	simBuilder := simulation.MakeBuilder()
 
 	if *parallelFlag {

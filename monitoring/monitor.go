@@ -22,8 +22,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/google/pprof/profile"
-	"github.com/sarchlab/akita/v5/daisen"
-	"github.com/sarchlab/akita/v5/daisen/static"
+	"github.com/sarchlab/akita/v5/daisen2"
+	"github.com/sarchlab/akita/v5/daisen2/static"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -47,9 +47,9 @@ type Monitor struct {
 	components       []messaging.Component
 	buffers          []bufferState
 	progressBarsLock sync.Mutex
-	progressBars     []*daisen.ProgressBar
+	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
-	replayServer     *daisen.Server // for trace endpoints
+	replayServer     *daisen2.Server // for trace endpoints
 	fs               http.FileSystem
 }
 
@@ -103,14 +103,14 @@ func (m *Monitor) SetTraceDBPath(path string) {
 
 // GetServer returns the underlying Daisen replay server. This can be used to
 // access advanced server functionality (e.g., CreateProgressBar) or to pass
-// to components that require a *daisen.Server directly.
-func (m *Monitor) GetServer() *daisen.Server {
+// to components that require a *daisen2.Server directly.
+func (m *Monitor) GetServer() *daisen2.Server {
 	return m.replayServer
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
-func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen.ProgressBar {
-	bar := &daisen.ProgressBar{
+func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen2.ProgressBar {
+	bar := &daisen2.ProgressBar{
 		ID:    timing.GetIDGenerator().Generate(),
 		Name:  name,
 		Total: total,
@@ -125,11 +125,11 @@ func (m *Monitor) CreateProgressBar(name string, total uint64) *daisen.ProgressB
 }
 
 // CompleteProgressBar removes a bar from the progress list.
-func (m *Monitor) CompleteProgressBar(pb *daisen.ProgressBar) {
+func (m *Monitor) CompleteProgressBar(pb *daisen2.ProgressBar) {
 	m.progressBarsLock.Lock()
 	defer m.progressBarsLock.Unlock()
 
-	newBars := make([]*daisen.ProgressBar, 0, len(m.progressBars)-1)
+	newBars := make([]*daisen2.ProgressBar, 0, len(m.progressBars)-1)
 
 	for _, b := range m.progressBars {
 		if b != pb {
@@ -145,7 +145,7 @@ func (m *Monitor) CompleteProgressBar(pb *daisen.ProgressBar) {
 func (m *Monitor) StartServer() {
 	// Create replay server for trace endpoints (if traceDBPath set).
 	if m.traceDBPath != "" {
-		m.replayServer = daisen.NewReplayServerReadOnly(m.traceDBPath)
+		m.replayServer = daisen2.NewReplayServerReadOnly(m.traceDBPath)
 	}
 
 	// Build combined mux.
@@ -169,7 +169,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
 
-	// Register trace/replay endpoints (from daisen.Server), excluding /api/mode.
+	// Register trace/replay endpoints (from daisen2.Server), excluding /api/mode.
 	if m.replayServer != nil {
 		m.replayServer.RegisterTraceRoutes(mux)
 	} else {

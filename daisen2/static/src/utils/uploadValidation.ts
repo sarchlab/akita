@@ -1,5 +1,3 @@
-import type { UploadedFile } from "../types/chat";
-
 export const FILE_UPLOAD_EXTENSIONS = [
   ".sqlite",
   ".sqlite3",
@@ -11,78 +9,46 @@ export const FILE_UPLOAD_EXTENSIONS = [
   ".c",
   ".cpp",
   ".java",
-] as const;
-
-export const IMAGE_UPLOAD_EXTENSIONS = [".png", ".jpg", ".jpeg"] as const;
-
-export const FILE_UPLOAD_MAX_SIZE_BYTES = 32 * 1024;
-export const IMAGE_UPLOAD_MAX_SIZE_BYTES = 256 * 1024;
-
+];
+export const IMAGE_UPLOAD_EXTENSIONS = [".png", ".jpg", ".jpeg"];
 export const FILE_UPLOAD_ACCEPT = FILE_UPLOAD_EXTENSIONS.join(",");
 export const IMAGE_UPLOAD_ACCEPT = IMAGE_UPLOAD_EXTENSIONS.join(",");
 
-export interface UploadValidationResult {
-  valid: boolean;
-  error?: string;
+const MAX_FILE_BYTES = 32 * 1024;
+const MAX_IMAGE_BYTES = 256 * 1024;
+
+function hasAllowedExtension(name: string, extensions: string[]): boolean {
+  const lowerName = name.toLowerCase();
+  return extensions.some((extension) => lowerName.endsWith(extension));
 }
 
-export interface UploadFileLike {
-  name: string;
-  size: number;
-  type?: string;
+export function isImageUploadCandidate(file: Pick<File, "name" | "type">): boolean {
+  return file.type?.toLowerCase().startsWith("image/") || hasAllowedExtension(file.name, IMAGE_UPLOAD_EXTENSIONS);
 }
 
-const hasAllowedExtension = (fileName: string, allowed: readonly string[]): boolean => {
-  const lowerName = fileName.toLowerCase();
-  return allowed.some((suffix) => lowerName.endsWith(suffix));
-};
-
-export const isImageUploadCandidate = (file: Pick<UploadFileLike, "name" | "type">): boolean => {
-  const mimeType = file.type?.toLowerCase() ?? "";
-  if (mimeType.startsWith("image/")) return true;
-  return hasAllowedExtension(file.name, IMAGE_UPLOAD_EXTENSIONS);
-};
-
-export const validateUploadedFile = (
-  file: Pick<UploadFileLike, "name" | "size">,
-  type: UploadedFile["type"],
-): UploadValidationResult => {
+export function validateUploadedFile(
+  file: Pick<File, "name" | "size">,
+  type: "file" | "image" | "image-screenshot",
+): { valid: true } | { valid: false; error: string } {
   if (type === "image-screenshot") {
     return { valid: true };
   }
 
   if (type === "file") {
     if (!hasAllowedExtension(file.name, FILE_UPLOAD_EXTENSIONS)) {
-      return {
-        valid: false,
-        error:
-          "Invalid file type. Allowed: .sqlite, .sqlite3, .csv, .txt, .json, .py, .js, .c, .cpp, .java",
-      };
+      return { valid: false, error: `Invalid file type. Allowed: ${FILE_UPLOAD_EXTENSIONS.join(", ")}` };
     }
-
-    if (file.size > FILE_UPLOAD_MAX_SIZE_BYTES) {
-      return {
-        valid: false,
-        error: "File too large. Max size is 32 KB.",
-      };
+    if (file.size > MAX_FILE_BYTES) {
+      return { valid: false, error: "File too large. Max size is 32 KB." };
     }
-
     return { valid: true };
   }
 
   if (!hasAllowedExtension(file.name, IMAGE_UPLOAD_EXTENSIONS)) {
-    return {
-      valid: false,
-      error: "Invalid file type. Allowed: .png, .jpg, .jpeg",
-    };
+    return { valid: false, error: `Invalid file type. Allowed: ${IMAGE_UPLOAD_EXTENSIONS.join(", ")}` };
   }
-
-  if (file.size > IMAGE_UPLOAD_MAX_SIZE_BYTES) {
-    return {
-      valid: false,
-      error: "File too large. Max size is 256 KB.",
-    };
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { valid: false, error: "File too large. Max size is 256 KB." };
   }
-
   return { valid: true };
-};
+}

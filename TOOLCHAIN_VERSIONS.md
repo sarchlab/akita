@@ -58,19 +58,18 @@ The local gate currently performs this Go-only scope:
    staged, or post-validation changes.
 
 GitHub Actions remains broader than this local gate: `.github/workflows/akita_test.yml`
-separately defines the Daisen frontend jobs and NOC/MEM acceptance jobs.
+separately defines the Daisen2 frontend job and NOC/MEM acceptance jobs.
 
 ## Node.js Toolchain
 
 - **Node.js Version**: 18.20.7
 - **npm Version**: >=10.0.0
 - **Configuration**:
-  - `daisen/static/.nvmrc`: `18.20.7`
-  - `daisen/static/package.json` and `daisen2/static/package.json`: `engines.node`
-    is `18.20.7` and `engines.npm` is `>=10.0.0`
+  - `daisen2/static/.nvmrc`: `18.20.7`
+  - `daisen2/static/package.json`: `engines.node` is `18.20.7` and
+    `engines.npm` is `>=10.0.0`
   - `.github/workflows/akita_test.yml`: `node-version: 18.20.7` for the
-    `daisen/static` and `daisen2/static` build jobs
-  - No `.nvmrc` is currently checked in for `daisen2/static`
+    `daisen2/static` build job
 
 ## Python Toolchain
 
@@ -96,9 +95,9 @@ grep -nE 'go-version|node-version' .github/workflows/akita_test.yml
 # Should show: go-version: 1.26.2 and node-version: 18.20.7
 
 # Node.js version lock and package engine requirements
-cat daisen/static/.nvmrc
-grep -nE '"engines"|"node"|"npm"' daisen/static/package.json daisen2/static/package.json
-# daisen/static/.nvmrc should contain 18.20.7; both package files should define
+cat daisen2/static/.nvmrc
+grep -nE '"engines"|"node"|"npm"' daisen2/static/package.json
+# daisen2/static/.nvmrc should contain 18.20.7; package.json should define
 # Node/npm engines.
 
 # Python workflow behavior
@@ -118,9 +117,8 @@ When updating to new versions, follow these steps:
 1. Update `go.mod` with the new Go language version and toolchain when applicable.
 2. Update all Go and Node version pins in `.github/workflows/akita_test.yml`.
 3. Update `run_before_merge.sh` if Go tool installation versions change.
-4. Update `daisen/static/.nvmrc` if the Node version changes.
-5. Update the `engines` fields in `daisen/static/package.json` and
-   `daisen2/static/package.json`.
+4. Update `daisen2/static/.nvmrc` if the Node version changes.
+5. Update the `engines` fields in `daisen2/static/package.json`.
 6. Add or update Python version pins only if the repository or workflow starts
    enforcing one.
 7. Run the relevant validation scope to verify compatibility: `./run_before_merge.sh` for the local Akita Go gate, plus separate frontend, acceptance, dependency-security, or downstream MGPUSim checks when those scopes are required.

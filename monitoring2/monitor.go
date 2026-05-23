@@ -169,7 +169,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
 
-	// Register trace/replay endpoints (from daisen.Server), excluding /api/mode.
+	// Register trace/replay endpoints (from daisen2.Server), excluding /api/mode.
 	if m.replayServer != nil {
 		m.replayServer.RegisterTraceRoutes(mux)
 	} else {

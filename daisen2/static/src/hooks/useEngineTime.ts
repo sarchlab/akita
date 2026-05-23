@@ -1,49 +1,25 @@
 import { useEffect, useState } from "react";
 
-interface EngineTimeState {
-  now: string | null;
-  loading: boolean;
-  error: string | null;
-}
-
-/**
- * Polls /api/now every `intervalMs` milliseconds (default 1 000)
- * and returns the current simulation time.
- */
-export function useEngineTime(intervalMs = 1000): EngineTimeState {
-  const [now, setNow] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useEngineTime(pollMs = 1000) {
+  const [time, setTime] = useState<number | null>(null);
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    const fetchTime = () => {
-      fetch("/api/now", { signal: controller.signal })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
+    let cancelled = false;
+    const tick = () => {
+      fetch("/api/now")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((json) => {
+          if (!cancelled && typeof json?.now === "number") setTime(json.now);
         })
-        .then((data: { now: string }) => {
-          setNow(data.now);
-          setLoading(false);
-          setError(null);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          setError(err instanceof Error ? err.message : String(err));
-          setLoading(false);
-        });
+        .catch(() => {});
     };
-
-    fetchTime();
-    const id = window.setInterval(fetchTime, intervalMs);
-
+    tick();
+    const id = window.setInterval(tick, pollMs);
     return () => {
-      controller.abort();
+      cancelled = true;
       window.clearInterval(id);
     };
-  }, [intervalMs]);
+  }, [pollMs]);
 
-  return { now, loading, error };
+  return time;
 }

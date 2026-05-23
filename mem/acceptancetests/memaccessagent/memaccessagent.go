@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"math/rand"
 
-	"github.com/sarchlab/akita/v5/daisen"
+	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/messaging"
 	"github.com/sarchlab/akita/v5/modeling"
 )
@@ -26,8 +26,8 @@ type MemAccessAgent struct {
 	// math/rand functions are used (non-deterministic in Go 1.22+).
 	Rand *rand.Rand
 
-	WriteProgressBar *daisen.ProgressBar
-	ReadProgressBar  *daisen.ProgressBar
+	WriteProgressBar *daisen2.ProgressBar
+	ReadProgressBar  *daisen2.ProgressBar
 }
 
 func bytesToUint32(data []byte) uint32 {

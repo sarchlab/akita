@@ -7,20 +7,12 @@ export interface ChatMessage {
   content: UnitContent[];
 }
 
-export interface GPTRequest {
-  messages: ChatMessage[];
-  traceInfo: TraceInformation;
-  selectedGitHubRoutineKeys: string[];
-}
-
-export interface GPTResponse {
+export interface UploadedFile {
+  id: number;
+  name: string;
   content: string;
-  totalTokens: number;
-}
-
-export interface GitHubIsAvailableResponse {
-  available: number;
-  routine_keys: string[];
+  type: "file" | "image" | "image-screenshot";
+  size: string;
 }
 
 export interface TraceInformation {
@@ -30,17 +22,13 @@ export interface TraceInformation {
   selectedComponentNameList: string[];
 }
 
-export interface UploadedFile {
-  id: number;
-  name: string;
-  content: string;
-  type: "file" | "image" | "image-screenshot";
-  size: string;
+export interface GPTRequest {
+  messages: ChatMessage[];
+  traceInfo: TraceInformation;
+  selectedGitHubRoutineKeys: string[];
 }
 
-export interface ChatConversation {
-  id: string;
-  title: string;
-  messages: ChatMessage[];
-  timestamp: number;
+export interface GPTResponse {
+  content: string;
+  totalTokens: number;
 }

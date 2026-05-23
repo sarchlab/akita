@@ -1,88 +1,71 @@
 import type { Task } from "../types/task";
 import { smartString } from "../utils/smartValue";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface TaskDetailProps {
   task: Task | null;
-  onNavigateToTask?: (taskId: string) => void;
+  onNavigateToTask?: (id: string) => void;
 }
 
 export default function TaskDetail({ task, onNavigateToTask }: TaskDetailProps) {
   if (!task) {
     return (
-      <div className="p-3 text-muted">
-        <em>Click a task bar to see details.</em>
+      <div className="p-4 text-sm text-muted-foreground">
+        Select a task to inspect its timing, location, and milestones.
       </div>
     );
   }
 
-  const duration = task.end_time - task.start_time;
-
   return (
-    <div className="p-3" style={{ fontSize: 14 }}>
-      <h5 className="mb-3">
-        {task.kind} – {task.what}
-      </h5>
+    <Card className="m-3 rounded-md shadow-none">
+      <CardHeader className="pb-2">
+        <CardTitle className="break-all text-sm">{task.kind}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-2">
+          <dt className="text-muted-foreground">ID</dt>
+          <dd className="break-all">{task.id}</dd>
+          <dt className="text-muted-foreground">What</dt>
+          <dd className="break-all">{task.what || "-"}</dd>
+          <dt className="text-muted-foreground">Location</dt>
+          <dd className="break-all">{task.location || "-"}</dd>
+          <dt className="text-muted-foreground">Start</dt>
+          <dd>{smartString(task.start_time)}</dd>
+          <dt className="text-muted-foreground">End</dt>
+          <dd>{smartString(task.end_time)}</dd>
+          <dt className="text-muted-foreground">Duration</dt>
+          <dd>{smartString(task.end_time - task.start_time)}</dd>
+          <dt className="text-muted-foreground">Parent</dt>
+          <dd className="break-all">{task.parent_id || "-"}</dd>
+        </dl>
 
-      <dl className="row mb-2" style={{ fontSize: 13 }}>
-        <dt className="col-4">ID</dt>
-        <dd className="col-8 text-break" style={{ fontSize: 12 }}>
-          {task.id}
-        </dd>
-
-        <dt className="col-4">Kind</dt>
-        <dd className="col-8">{task.kind}</dd>
-
-        <dt className="col-4">What</dt>
-        <dd className="col-8">{task.what}</dd>
-
-        <dt className="col-4">Location</dt>
-        <dd className="col-8">{task.location}</dd>
-
-        <dt className="col-4">Start</dt>
-        <dd className="col-8">{smartString(task.start_time)}</dd>
-
-        <dt className="col-4">End</dt>
-        <dd className="col-8">{smartString(task.end_time)}</dd>
-
-        <dt className="col-4">Duration</dt>
-        <dd className="col-8">{smartString(duration)}</dd>
-      </dl>
-
-      {task.parent_id && (
-        <div className="mb-3">
-          <strong>Parent:</strong>{" "}
-          <button
-            className="btn btn-link btn-sm p-0"
-            onClick={() => onNavigateToTask?.(task.parent_id)}
+        {task.parent_id ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigateToTask?.(String(task.parent_id))}
           >
-            {task.parent_id}
-          </button>
-        </div>
-      )}
+            Open Parent
+          </Button>
+        ) : null}
 
-      {task.steps && task.steps.length > 0 && (
-        <>
-          <h6>Milestones ({task.steps.length})</h6>
-          <table className="table table-sm table-bordered" style={{ fontSize: 12 }}>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Kind</th>
-                <th>What</th>
-              </tr>
-            </thead>
-            <tbody>
-              {task.steps.map((s, i) => (
-                <tr key={i}>
-                  <td>{smartString(s.time)}</td>
-                  <td>{s.kind || "N/A"}</td>
-                  <td>{s.what || "N/A"}</td>
-                </tr>
+        {task.steps?.length ? (
+          <div>
+            <div className="mb-2 font-medium">Milestones</div>
+            <div className="space-y-2">
+              {task.steps.map((step, index) => (
+                <div key={`${step.time}-${index}`} className="rounded-md border bg-muted/40 p-2">
+                  <div className="font-medium">{step.kind}</div>
+                  <div className="text-muted-foreground">{step.what}</div>
+                  <div className="text-xs text-muted-foreground">{smartString(step.time)}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </>
-      )}
-    </div>
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

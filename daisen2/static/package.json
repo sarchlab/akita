@@ -1,33 +1,46 @@
 {
   "name": "daisen2",
   "version": "1.0.0",
-  "description": "Daisen2 - React frontend for Akita simulators",
+  "description": "Daisen2 is the React frontend for simulators built with Akita.",
   "private": true,
   "type": "module",
-  "engines": { "node": "18.20.7", "npm": ">=10.0.0" },
+  "engines": {
+    "node": "18.20.7",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
+  "author": "Yifan Sun",
+  "license": "MIT",
   "dependencies": {
-    "@fortawesome/fontawesome-free": "^5.15.4",
-    "@types/chroma-js": "^2.0.0",
-    "@types/d3": "^5.7.2",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@types/katex": "^0.16.8",
-    "bootstrap": "^5.0.0",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
     "chroma-js": "^2.4.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "d3": "^7.8.4",
     "html2canvas": "^1.4.1",
     "katex": "^0.16.38",
+    "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^6.30.3"
+    "react-router-dom": "^6.30.3",
+    "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
+    "@types/chroma-js": "^2.0.0",
+    "@types/d3": "^5.7.2",
+    "@types/katex": "^0.16.8",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.5.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^3.4.17",
     "typescript": "^5.8.3",
     "vite": "^6.4.2"
   }

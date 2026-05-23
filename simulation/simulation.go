@@ -1,9 +1,7 @@
 package simulation
 
 import (
-	"github.com/sarchlab/akita/v5/daisen"
 	"github.com/sarchlab/akita/v5/datarecording"
-	"github.com/sarchlab/akita/v5/monitoring"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -17,7 +15,6 @@ type Simulation struct {
 	outputPath   string
 	engine       timing.Engine
 	dataRecorder datarecording.DataRecorder
-	monitor      *monitoring.Monitor
 	visTracer    *tracing.DBTracer
 	metaRecorder *metaRecorder
 
@@ -43,19 +40,15 @@ func (s *Simulation) GetDataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
-// GetMonitor returns the monitoring.Monitor used in the simulation.
-func (s *Simulation) GetMonitor() *monitoring.Monitor {
-	return s.monitor
+// GetMonitor returns nil while the simulation package is temporarily
+// decoupled from the legacy monitoring/Daisen stack.
+func (s *Simulation) GetMonitor() any {
+	return nil
 }
 
-// GetServer returns the daisen server used in the simulation.
-// When monitoring is enabled, this returns the underlying replay server
-// from the monitor. Returns nil if monitoring is disabled.
-func (s *Simulation) GetServer() *daisen.Server {
-	if s.monitor != nil {
-		return s.monitor.GetServer()
-	}
-
+// GetServer returns nil while the simulation package is temporarily decoupled
+// from the legacy monitoring/Daisen stack.
+func (s *Simulation) GetServer() any {
 	return nil
 }
 
@@ -79,10 +72,6 @@ func (s *Simulation) RegisterComponent(c messaging.Component) {
 
 	s.components = append(s.components, c)
 	s.compNameIndex[compName] = len(s.components) - 1
-
-	if s.monitor != nil {
-		s.monitor.RegisterComponent(c)
-	}
 
 	if hookable, ok := c.(tracing.NamedHookable); ok {
 		tracing.CollectTrace(hookable, s.visTracer)
@@ -116,10 +105,6 @@ func (s *Simulation) GetPortByName(name string) messaging.Port {
 
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
-	if s.monitor != nil {
-		s.monitor.StopServer()
-	}
-
 	if s.visTracer != nil {
 		s.visTracer.Terminate()
 	}

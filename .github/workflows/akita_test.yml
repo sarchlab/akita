@@ -6,25 +6,6 @@ on:
   pull_request:
 
 jobs:
-  daisen_compile:
-    runs-on: self-hosted
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - name: Use Node.js
-        uses: actions/setup-node@v1
-        with:
-          node-version: 18.20.7
-      - name: npm install
-        working-directory: ./daisen/static
-        run: npm install
-      - name: npm test
-        working-directory: ./daisen/static
-        run: npm test
-      - name: npm run build
-        working-directory: ./daisen/static
-        run: npm run build
-
   daisen2_compile:
     runs-on: self-hosted
     timeout-minutes: 10

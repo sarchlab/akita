@@ -1,48 +1,28 @@
-import "katex/dist/katex.min.css";
+import { useEffect, useRef } from "react";
 import type { ChatMessage } from "../../types/chat";
-import { parseMarkdown } from "../../utils/chatMarkdown";
+import { renderChatMarkdown, renderMathInElement } from "../../utils/chatMarkdown";
+import { cn } from "../../lib/utils";
 
-interface MessageBubbleProps {
-  message: ChatMessage;
-}
+export default function MessageBubble({ message }: { message: ChatMessage }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const text = message.content
+    .map((unit) => (unit.type === "text" ? unit.text : "[image]"))
+    .join("\n");
 
-const bubbleClassByRole: Record<ChatMessage["role"], string> = {
-  user: "bg-primary text-white",
-  assistant: "bg-light border",
-  system: "bg-warning-subtle border",
-};
-
-export default function MessageBubble({ message }: MessageBubbleProps) {
-  const isUser = message.role === "user";
+  useEffect(() => {
+    if (ref.current) renderMathInElement(ref.current);
+  }, [text]);
 
   return (
-    <div className={`d-flex mb-2 ${isUser ? "justify-content-end" : "justify-content-start"}`}>
+    <div className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
       <div
-        className={`rounded px-3 py-2 ${bubbleClassByRole[message.role]}`}
-        style={{ maxWidth: "90%", overflowWrap: "anywhere" }}
-      >
-        {message.content.map((content, index) => {
-          if (content.type === "image_url") {
-            return (
-              <img
-                key={`${message.role}-img-${index}`}
-                alt="Uploaded"
-                className="img-fluid rounded"
-                src={content.image_url.url}
-                style={{ maxHeight: "240px" }}
-              />
-            );
-          }
-
-          return (
-            <div
-              key={`${message.role}-text-${index}`}
-              className={index > 0 ? "mt-2" : undefined}
-              dangerouslySetInnerHTML={{ __html: parseMarkdown(content.text) }}
-            />
-          );
-        })}
-      </div>
+        ref={ref}
+        className={cn(
+          "chat-markdown max-w-[92%] rounded-2xl px-3 py-2 text-sm leading-relaxed",
+          message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+        )}
+        dangerouslySetInnerHTML={{ __html: renderChatMarkdown(text) }}
+      />
     </div>
   );
 }

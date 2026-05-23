@@ -1,67 +1,37 @@
-import { useMode } from "../hooks/useMode";
-import ProgressBars from "../components/live/ProgressBars";
-import HangAnalyzer from "../components/live/HangAnalyzer";
-import ResourceMonitor from "../components/live/ResourceMonitor";
-import MonitorPanel from "../components/live/MonitorPanel";
+import { Play, Pause, StepForward } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { useEngineTime } from "../hooks/useEngineTime";
+import { smartString } from "../utils/smartValue";
 
-/**
- * Live Dashboard — shows progress bars and hang analyzer.
- * Only accessible in "live" mode.
- */
-export default function LiveDashboardPage() {
-  const { mode, loading } = useMode();
+function post(path: string) {
+  void fetch(path, { method: "POST" });
+}
 
-  if (loading) {
-    return <p className="text-muted">Loading…</p>;
-  }
-
-  if (mode !== "live") {
-    return (
-      <div className="container-fluid">
-        <p className="text-muted">
-          Live dashboard is only available in live mode.
-        </p>
-      </div>
-    );
-  }
-
+export default function LiveDashboardPage({ compact = false }: { compact?: boolean }) {
+  const now = useEngineTime();
   return (
-    <div className="container-fluid">
-      <h4 className="mb-3">Live Dashboard</h4>
-
-      <div className="row">
-        {/* Progress bars section */}
-        <div className="col-lg-6 col-md-12 mb-3">
-          <div className="card">
-            <div className="card-body">
-              <ProgressBars />
-            </div>
+    <div className={compact ? "min-h-0" : "h-full overflow-auto bg-slate-50 p-4"}>
+      <Card className="rounded-md shadow-none">
+        <CardHeader>
+          <CardTitle>Live Execution</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">Engine time</div>
+          <div className="text-2xl font-semibold">{now == null ? "-" : smartString(now)}</div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" onClick={() => post("/api/continue")}>
+              <Play /> Continue
+            </Button>
+            <Button type="button" variant="outline" onClick={() => post("/api/pause")}>
+              <Pause /> Pause
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => post("/api/tick/1")}>
+              <StepForward /> Tick
+            </Button>
           </div>
-        </div>
-
-        {/* Hang analyzer section */}
-        <div className="col-lg-6 col-md-12 mb-3">
-          <div className="card">
-            <div className="card-body">
-              <HangAnalyzer />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Resource monitor section */}
-      <div className="row">
-        <div className="col-12 mb-3">
-          <div className="card">
-            <div className="card-body">
-              <ResourceMonitor />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Field monitor widgets */}
-      <MonitorPanel />
+        </CardContent>
+      </Card>
     </div>
   );
 }

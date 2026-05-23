@@ -81,13 +81,6 @@ func main() {
 
 	s, engine, agent := setupTest()
 
-	if monitor := s.GetMonitor(); monitor != nil {
-		agent.WriteProgressBar = monitor.CreateProgressBar(
-			"Writes", uint64(*numAccessFlag))
-		agent.ReadProgressBar = monitor.CreateProgressBar(
-			"Reads", uint64(*numAccessFlag))
-	}
-
 	agent.TickLater()
 
 	err := engine.Run()

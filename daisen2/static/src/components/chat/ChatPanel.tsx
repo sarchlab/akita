@@ -1,89 +1,214 @@
-import { useState } from "react";
-import type { TraceInformation, UnitContent } from "../../types/chat";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bot, ImagePlus, Paperclip, Plus, Send, X } from "lucide-react";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
+import { Alert, AlertDescription } from "../ui/alert";
 import { useChat } from "../../hooks/useChat";
-import ChatHeader from "./ChatHeader";
-import MessageList from "./MessageList";
-import ChatInput from "./ChatInput";
+import { useComponentNames } from "../../hooks/useComponentNames";
+import { useSimulationRange } from "../../hooks/useSimulationRange";
+import type { TraceInformation, UploadedFile, UnitContent } from "../../types/chat";
+import {
+  FILE_UPLOAD_ACCEPT,
+  IMAGE_UPLOAD_ACCEPT,
+  isImageUploadCandidate,
+  validateUploadedFile,
+} from "../../utils/uploadValidation";
+import MessageBubble from "./MessageBubble";
+
+function humanSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function readFileAsText(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
 
 export default function ChatPanel() {
-  const [isOpen, setIsOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const { names } = useComponentNames();
+  const { startTime, endTime } = useSimulationRange();
   const {
     messages,
-    chatHistory,
-    currentChatId,
-    uploadedFiles,
     loading,
     error,
-    sendMessage,
-    newChat,
-    loadChat,
-    deleteChat,
+    uploadedFiles,
     addUploadedFiles,
     removeUploadedFile,
     clearUploadedFiles,
+    sendMessage,
+    newChat,
   } = useChat();
 
-  const handleSend = async (
-    content: UnitContent[],
-    traceInfo: TraceInformation,
-    selectedGitHubRoutineKeys: string[],
-  ) => {
-    try {
-      await sendMessage(content, traceInfo, selectedGitHubRoutineKeys);
-      clearUploadedFiles();
-    } catch {
-      // Error state is managed in useChat.
+  useEffect(() => {
+    const openHandler = () => setOpen(true);
+    window.addEventListener("daisen:open-chat", openHandler);
+    return () => window.removeEventListener("daisen:open-chat", openHandler);
+  }, []);
+
+  const traceInfo: TraceInformation = useMemo(
+    () => ({
+      selected: names.length,
+      startTime,
+      endTime,
+      selectedComponentNameList: names,
+    }),
+    [endTime, names, startTime],
+  );
+
+  async function handleFiles(files: FileList | null, forcedType?: "file" | "image") {
+    if (!files) return;
+    setUploadError(null);
+    const nextFiles: UploadedFile[] = [];
+    for (const file of Array.from(files)) {
+      const type = forcedType ?? (isImageUploadCandidate(file) ? "image" : "file");
+      const validation = validateUploadedFile(file, type);
+      if (validation.valid === false) {
+        setUploadError(validation.error);
+        continue;
+      }
+      const content = type === "image" ? await readFileAsDataUrl(file) : await readFileAsText(file);
+      nextFiles.push({
+        id: Date.now() + nextFiles.length,
+        name: file.name,
+        content,
+        type,
+        size: humanSize(file.size),
+      });
     }
-  };
+    addUploadedFiles(nextFiles);
+  }
+
+  async function submit() {
+    if (!input.trim() && !uploadedFiles.length) return;
+    const content: UnitContent[] = [];
+    const attachedText = uploadedFiles
+      .filter((file) => file.type === "file")
+      .map((file) => `\n\n[Attached file: ${file.name}]\n${file.content}`)
+      .join("");
+    content.push({ type: "text", text: `${input}${attachedText}` });
+    uploadedFiles
+      .filter((file) => file.type === "image" || file.type === "image-screenshot")
+      .forEach((file) => content.push({ type: "image_url", image_url: { url: file.content } }));
+
+    setInput("");
+    await sendMessage(content, traceInfo, []);
+    clearUploadedFiles();
+  }
 
   return (
     <>
-      {!isOpen && (
-        <button
-          className="btn btn-primary rounded-pill shadow"
-          onClick={() => setIsOpen(true)}
-          style={{ bottom: "1rem", position: "fixed", right: "1rem", zIndex: 1035 }}
-          type="button"
-        >
-          AI Chat
-        </button>
-      )}
-
       <aside
-        className="bg-white border-start shadow d-flex flex-column"
-        style={{
-          bottom: 0,
-          height: "calc(100vh - 56px)",
-          maxWidth: "100vw",
-          position: "fixed",
-          right: 0,
-          top: "56px",
-          transform: isOpen ? "translateX(0)" : "translateX(100%)",
-          transition: "transform 0.2s ease-in-out",
-          width: "400px",
-          zIndex: 1040,
-        }}
+        className={[
+          "fixed bottom-0 right-0 top-14 z-50 flex w-[min(600px,100vw)] flex-col border-l bg-white shadow-xl transition-transform duration-200",
+          open ? "translate-x-0" : "translate-x-full",
+        ].join(" ")}
       >
-        <ChatHeader
-          chatHistory={chatHistory}
-          currentChatId={currentChatId}
-          onClose={() => setIsOpen(false)}
-          onDeleteChat={deleteChat}
-          onLoadChat={loadChat}
-          onNewChat={newChat}
-        />
+        <header className="flex h-14 items-center justify-between border-b px-3">
+          <div className="flex items-center gap-2 font-semibold">
+            <Bot className="h-5 w-5 text-primary" />
+            Daisen Bot
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={newChat}>
+              <Plus />
+              New
+            </Button>
+            <Button type="button" size="icon" variant="ghost" onClick={() => setOpen(false)}>
+              <X />
+            </Button>
+          </div>
+        </header>
 
-        <MessageList loading={loading} messages={messages} />
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+          {messages.map((message, index) => (
+            <MessageBubble key={index} message={message} />
+          ))}
+          {loading ? <div className="text-sm text-muted-foreground">Daisen Bot is thinking...</div> : null}
+        </div>
 
-        {error && <div className="alert alert-danger rounded-0 mb-0 py-1 px-2 small">{error}</div>}
+        {error ? <div className="border-t bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div> : null}
 
-        <ChatInput
-          loading={loading}
-          onAddFiles={addUploadedFiles}
-          onRemoveFile={removeUploadedFile}
-          onSend={handleSend}
-          uploadedFiles={uploadedFiles}
-        />
+        {uploadError ? (
+          <div className="border-t px-3 py-2">
+            <Alert variant="destructive" className="pr-9">
+              <AlertDescription>{uploadError}</AlertDescription>
+              <button
+                type="button"
+                className="absolute right-3 top-3 text-destructive/70 hover:text-destructive"
+                onClick={() => setUploadError(null)}
+                aria-label="Dismiss upload error"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </Alert>
+          </div>
+        ) : null}
+
+        {uploadedFiles.length ? (
+          <div className="flex flex-wrap gap-2 border-t px-3 py-2">
+            {uploadedFiles.map((file) => (
+              <span key={file.id} className="inline-flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-xs">
+                {file.name} ({file.size})
+                <button type="button" onClick={() => removeUploadedFile(file.id)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        <footer className="space-y-2 border-t p-3">
+          <Textarea
+            value={input}
+            disabled={loading}
+            placeholder="Ask about this trace..."
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                void submit();
+              }
+            }}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Input ref={fileInputRef} className="hidden" type="file" multiple accept={FILE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "file")} />
+              <Input ref={imageInputRef} className="hidden" type="file" multiple accept={IMAGE_UPLOAD_ACCEPT} onChange={(event) => void handleFiles(event.target.files, "image")} />
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Paperclip />
+                File
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => imageInputRef.current?.click()}>
+                <ImagePlus />
+                Image
+              </Button>
+            </div>
+            <Button type="button" disabled={loading || (!input.trim() && !uploadedFiles.length)} onClick={() => void submit()}>
+              <Send />
+              Send
+            </Button>
+          </div>
+        </footer>
       </aside>
     </>
   );

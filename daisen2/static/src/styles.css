@@ -1,0 +1,224 @@
+@import url("https://fonts.googleapis.com/css?family=Asap&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 211 85% 38%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 28 88% 56%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 211 85% 38%;
+    --radius: 0.375rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+@layer components {
+  .daisen-top-nav {
+    @apply flex h-14 shrink-0 items-center border-b border-slate-700 bg-slate-950 px-4 text-white;
+  }
+
+  .daisen-brand {
+    @apply mr-5 select-none text-lg font-semibold tracking-normal;
+  }
+
+  .daisen-main {
+    height: calc(100vh - 3.5rem);
+    overflow: hidden;
+  }
+
+  .daisen-dashboard-grid {
+    display: grid;
+    gap: 5px;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .daisen-widget {
+    @apply overflow-hidden rounded border border-slate-400 bg-white p-2 pt-1;
+    min-height: 80px;
+  }
+
+  .daisen-widget-title {
+    @apply flex h-5 items-baseline gap-2 text-sm font-semibold underline decoration-slate-300 underline-offset-2;
+  }
+
+  .daisen-widget-update-indicator {
+    @apply ml-auto inline-flex h-5 shrink-0 items-center gap-1 rounded border border-amber-300 bg-amber-50 px-1.5 text-[10px] font-medium leading-none text-amber-700 no-underline;
+  }
+
+  .daisen-widget-update-spinner {
+    width: 0.625rem;
+    height: 0.625rem;
+    border: 1.5px solid rgb(251 191 36 / 0.45);
+    border-top-color: rgb(180 83 9);
+    border-radius: 9999px;
+    animation: daisen-widget-spin 0.8s linear infinite;
+  }
+
+  .daisen-side-column {
+    @apply m-3 h-[calc(100%-1.5rem)] overflow-auto rounded-xl border border-slate-300 bg-slate-100 p-4 shadow-sm;
+  }
+
+  .daisen-status-bar {
+    @apply h-5 shrink-0 border-t bg-white px-2 text-xs text-slate-600;
+  }
+
+  .daisen1-component-page {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    background: #ffffff;
+  }
+
+  .daisen1-component-left {
+    display: inline-block;
+    height: 100%;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+  }
+
+  .daisen1-component-left:active {
+    cursor: grabbing;
+  }
+
+  .daisen1-task-view,
+  .daisen1-component-view {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .daisen1-task-view-dividers text {
+    text-shadow:
+      -1px -1px 0 #ffffff,
+      1px -1px 0 #ffffff,
+      -1px 1px 0 #ffffff,
+      1px 1px 0 #ffffff;
+  }
+
+  .daisen1-side-column {
+    @apply m-3 shrink-0 select-none overflow-auto rounded-xl border border-[#dddddd] bg-[#eeeeee] p-4 shadow-sm;
+    height: calc(100% - 1.5rem);
+  }
+
+  .daisen1-location-label {
+    @apply break-all text-xl font-bold text-black;
+  }
+
+  .daisen1-data-status {
+    @apply mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700;
+  }
+
+  .daisen1-current-task-info {
+    width: 100%;
+    min-height: 20px;
+    background: #d9d9d9;
+    display: none;
+    border-radius: 4px;
+    box-shadow: 0 1px 6px -6px #dddddd;
+    padding: 8px;
+  }
+
+  .daisen1-current-task-info.showing {
+    display: block;
+    font-size: 16px;
+  }
+
+  .daisen1-current-task-title {
+    font-size: 1.5rem;
+    line-height: 1.2;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+
+  .daisen1-current-task-info dl {
+    display: grid;
+    grid-template-columns: 25% 75%;
+    row-gap: 0;
+    margin-bottom: 0;
+  }
+
+  .daisen1-current-task-info dt {
+    font-weight: 700;
+  }
+
+  .daisen1-current-task-info dd {
+    min-width: 0;
+    margin-bottom: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .daisen1-legend {
+    width: 100%;
+  }
+
+  .daisen1-legend-row {
+    cursor: pointer;
+  }
+
+  .chart-axis text {
+    font-size: 10px;
+    fill: #4b5563;
+  }
+
+  .chart-axis path,
+  .chart-axis line {
+    stroke: #94a3b8;
+  }
+
+  .chat-markdown pre {
+    @apply my-2 overflow-auto rounded-md bg-slate-950 p-3 text-xs text-slate-100;
+  }
+
+  .chat-markdown code {
+    @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.95em];
+  }
+
+  .chat-markdown pre code {
+    @apply bg-transparent p-0 text-slate-100;
+  }
+}
+
+@keyframes daisen-widget-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

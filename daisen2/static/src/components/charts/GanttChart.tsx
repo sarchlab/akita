@@ -1,534 +1,203 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useMemo, useState } from "react";
 import * as d3 from "d3";
-import type { Task, Segment } from "../../types/task";
+import type { Segment, Task } from "../../types/task";
 import { assignYIndices } from "../../utils/taskYIndexAssigner";
-import { buildColorMap, lookupColor, type ColorMap } from "../../utils/taskColorCoder";
+import { buildColorMap, lookupColor } from "../../utils/taskColorCoder";
 import { smartString } from "../../utils/smartValue";
 
-/* ------------------------------------------------------------------ */
-/*  Layout constants (mirroring original taskview.ts)                 */
-/* ------------------------------------------------------------------ */
-const MARGIN = { top: 30, right: 10, bottom: 30, left: 10 };
-const PARENT_SECTION_HEIGHT = 20;
-const MAIN_SECTION_HEIGHT = 20;
-const GROUP_GAP = 12;
-const MIN_BAR_HEIGHT = 3;
-const MAX_BAR_HEIGHT = 12;
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                           */
-/* ------------------------------------------------------------------ */
-
-/** Wraps a d3 scale call so the return is always a number (defaults to 0). */
-function sx(
-  scale: d3.ScaleLinear<number, number>,
-  value: number,
-): number {
-  return (scale(value) as number | undefined) ?? 0;
+interface GanttChartProps {
+  tasks: Task[];
+  mainTask?: Task | null;
+  parentTask?: Task | null;
+  segments?: Segment[];
+  segmentsEnabled?: boolean;
+  onSelectTask?: (task: Task) => void;
+  onOpenTask?: (task: Task) => void;
 }
 
-/** Compute non-traced (gap) periods between segments in a given view range. */
-function nonTracedPeriods(
-  segments: Segment[],
-  viewStart: number,
-  viewEnd: number,
-): { start: number; end: number }[] {
-  if (segments.length === 0) return [{ start: viewStart, end: viewEnd }];
+const MARGIN = { top: 28, right: 12, bottom: 28, left: 8 };
+const ROW_HEIGHT = 14;
+const HEADER_ROW_HEIGHT = 22;
 
+function safeScale(scale: d3.ScaleLinear<number, number>, value: number) {
+  return scale(value) ?? 0;
+}
+
+function gapSegments(segments: Segment[], startTime: number, endTime: number) {
+  if (!segments.length) return [];
   const sorted = [...segments].sort((a, b) => a.start_time - b.start_time);
-  const gaps: { start: number; end: number }[] = [];
-
-  if (sorted[0].start_time > viewStart) {
-    gaps.push({ start: viewStart, end: Math.min(sorted[0].start_time, viewEnd) });
+  const gaps: Segment[] = [];
+  if (sorted[0].start_time > startTime) {
+    gaps.push({ start_time: startTime, end_time: Math.min(sorted[0].start_time, endTime) });
   }
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const curEnd = sorted[i].end_time;
-    const nextStart = sorted[i + 1].start_time;
-    if (curEnd < nextStart) {
-      const s = Math.max(curEnd, viewStart);
-      const e = Math.min(nextStart, viewEnd);
-      if (s < e) gaps.push({ start: s, end: e });
-    }
+  for (let index = 0; index < sorted.length - 1; index++) {
+    const start = Math.max(sorted[index].end_time, startTime);
+    const end = Math.min(sorted[index + 1].start_time, endTime);
+    if (start < end) gaps.push({ start_time: start, end_time: end });
   }
   const last = sorted[sorted.length - 1];
-  if (last.end_time < viewEnd) {
-    gaps.push({ start: Math.max(last.end_time, viewStart), end: viewEnd });
+  if (last.end_time < endTime) {
+    gaps.push({ start_time: Math.max(last.end_time, startTime), end_time: endTime });
   }
   return gaps;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Props                                                             */
-/* ------------------------------------------------------------------ */
-export interface GanttChartProps {
-  /** The main task currently selected. */
-  mainTask: Task | null;
-  /** Parent of the main task (may be null). */
-  parentTask: Task | null;
-  /** Sub-tasks (children) of the main task. */
-  subTasks: Task[];
-  /** Traced segments for shading. */
-  segments: Segment[];
-  /** Whether segment shading is enabled. */
-  segmentsEnabled: boolean;
-  /** Called when the user clicks a task bar. */
-  onSelectTask?: (task: Task) => void;
-  /** Called when the user hovers on a task. */
-  onHoverTask?: (task: Task | null) => void;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Component                                                         */
-/* ------------------------------------------------------------------ */
 export default function GanttChart({
-  mainTask,
-  parentTask,
-  subTasks,
-  segments,
-  segmentsEnabled,
+  tasks,
+  mainTask = null,
+  parentTask = null,
+  segments = [],
+  segmentsEnabled = false,
   onSelectTask,
-  onHoverTask,
+  onOpenTask,
 }: GanttChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
+  const [selectedId, setSelectedId] = useState<string | number | null>(null);
 
-  // Zoom state kept in a ref so the D3 callbacks always see current values.
-  const zoomState = useRef({ startTime: 0, endTime: 1 });
-  const [, forceRender] = useState(0);
+  const layout = useMemo(() => {
+    const rows: Task[] = [];
+    if (parentTask) rows.push({ ...parentTask, isParentTask: true });
+    if (mainTask) rows.push({ ...mainTask, isMainTask: true });
+    const ordinaryTasks = tasks
+      .filter((task) => task.id !== parentTask?.id && task.id !== mainTask?.id)
+      .map((task) => ({ ...task }));
+    assignYIndices(ordinaryTasks);
+    rows.push(...ordinaryTasks);
+    return rows;
+  }, [tasks, mainTask, parentTask]);
 
-  /* ---------- Derive data ------------------------------------------ */
-  const allTasks: Task[] = [];
-  if (parentTask) {
-    allTasks.push({ ...parentTask, isParentTask: true, isMainTask: false });
+  const timeStart = layout.length ? Math.min(...layout.map((task) => task.start_time)) : 0;
+  const timeEnd = layout.length ? Math.max(...layout.map((task) => task.end_time)) : 1;
+  const padding = (timeEnd - timeStart) * 0.02 || 1e-12;
+  const startTime = timeStart - padding;
+  const endTime = timeEnd + padding;
+  const laneCount = Math.max(1, Math.max(...layout.map((task) => task.yIndex ?? 0), 0) + 1);
+  const height = MARGIN.top + MARGIN.bottom + HEADER_ROW_HEIGHT * (parentTask ? 2 : mainTask ? 1 : 0) + laneCount * ROW_HEIGHT + 28;
+  const width = 1200;
+  const innerWidth = width - MARGIN.left - MARGIN.right;
+  const xScale = d3.scaleLinear().domain([startTime, endTime]).range([MARGIN.left, width - MARGIN.right]);
+  const colorMap = buildColorMap(layout);
+  const xTicks = xScale.ticks(12);
+  const gaps = segmentsEnabled ? gapSegments(segments, startTime, endTime) : [];
+
+  const yForTask = (task: Task) => {
+    let y = MARGIN.top + 8;
+    if (parentTask) {
+      if (task.isParentTask) return y;
+      y += HEADER_ROW_HEIGHT + 8;
+    }
+    if (mainTask) {
+      if (task.isMainTask) return y;
+      y += HEADER_ROW_HEIGHT + 8;
+    }
+    return y + (task.yIndex ?? 0) * ROW_HEIGHT;
+  };
+
+  if (!layout.length) {
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No tasks to display.</div>;
   }
-  if (mainTask) {
-    allTasks.push({ ...mainTask, isMainTask: true, isParentTask: false });
-  }
-  const subs = subTasks.filter((t) => t && t.id).map(t => ({...t}));
-  const maxYIndex = subs.length > 0 ? assignYIndices(subs) : 0;
-  allTasks.push(...subs);
-
-  // Compute time domain from all tasks
-  useEffect(() => {
-    if (allTasks.length === 0) return;
-    const minT = Math.min(...allTasks.map((t) => t.start_time));
-    const maxT = Math.max(...allTasks.map((t) => t.end_time));
-    const pad = (maxT - minT) * 0.02 || 1e-12;
-    zoomState.current = { startTime: minT - pad, endTime: maxT + pad };
-    forceRender((n) => n + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainTask?.id, parentTask?.id, subTasks.length]);
-
-  const colorMap: ColorMap = buildColorMap(allTasks);
-
-  /* ---------- D3 rendering ---------------------------------------- */
-  const render = useCallback(() => {
-    const svg = svgRef.current;
-    const container = containerRef.current;
-    if (!svg || !container) return;
-
-    const width = container.clientWidth;
-    const headerRegion =
-      MARGIN.top +
-      GROUP_GAP +
-      PARENT_SECTION_HEIGHT +
-      GROUP_GAP +
-      MAIN_SECTION_HEIGHT +
-      GROUP_GAP;
-    const subRegionHeight = Math.max(
-      60,
-      (maxYIndex + 1) * Math.min(MAX_BAR_HEIGHT + 2, 14),
-    );
-    const height = headerRegion + subRegionHeight + MARGIN.bottom;
-
-    svg.setAttribute("width", String(width));
-    svg.setAttribute("height", String(height));
-
-    const { startTime, endTime } = zoomState.current;
-
-    const xScale = d3
-      .scaleLinear()
-      .domain([startTime, endTime])
-      .range([MARGIN.left, width - MARGIN.right]);
-
-    const sel = d3.select(svg);
-
-    // ─── clear everything ────────────────────────────────────────
-    sel.selectAll("*").remove();
-
-    // ─── defs (pattern for shading) ──────────────────────────────
-    const defs = sel.append("defs");
-    const pattern = defs
-      .append("pattern")
-      .attr("id", "gantt-shade-pattern")
-      .attr("patternUnits", "userSpaceOnUse")
-      .attr("width", 8)
-      .attr("height", 8)
-      .attr("patternTransform", "rotate(45)");
-    pattern
-      .append("rect")
-      .attr("width", 8)
-      .attr("height", 8)
-      .attr("fill", "rgba(128,128,128,0.15)");
-    pattern
-      .append("line")
-      .attr("x1", 0)
-      .attr("y1", 0)
-      .attr("x2", 0)
-      .attr("y2", 8)
-      .attr("stroke", "rgba(128,128,128,0.3)")
-      .attr("stroke-width", 4);
-
-    // ─── segment shading ─────────────────────────────────────────
-    if (segmentsEnabled && segments.length > 0) {
-      const gaps = nonTracedPeriods(segments, startTime, endTime);
-      const shadingG = sel.append("g").attr("class", "segment-shading");
-      gaps.forEach((g) => {
-        const gx = sx(xScale, g.start);
-        const gw = sx(xScale, g.end) - gx;
-        if (gw > 0) {
-          shadingG
-            .append("rect")
-            .attr("x", gx)
-            .attr("y", MARGIN.top)
-            .attr("width", gw)
-            .attr("height", height - MARGIN.top - MARGIN.bottom)
-            .attr("fill", "url(#gantt-shade-pattern)")
-            .attr("pointer-events", "none");
-        }
-      });
-    }
-
-    // ─── x-axis ──────────────────────────────────────────────────
-    const xAxis = d3.axisTop(xScale).ticks(12, "s");
-    sel
-      .append("g")
-      .attr("class", "x-axis")
-      .attr("transform", `translate(0,${MARGIN.top})`)
-      .call(xAxis);
-
-    // vertical grid lines
-    const tickVals = xScale.ticks(12);
-    const gridG = sel.append("g").attr("class", "grid");
-    tickVals.forEach((tv: number) => {
-      gridG
-        .append("line")
-        .attr("x1", sx(xScale, tv))
-        .attr("x2", sx(xScale, tv))
-        .attr("y1", MARGIN.top)
-        .attr("y2", height - MARGIN.bottom)
-        .attr("stroke", "#ccc")
-        .attr("stroke-dasharray", "3,3")
-        .attr("opacity", 0.5);
-    });
-
-    // ─── section labels & dividers ───────────────────────────────
-    const labelStyle =
-      "font-size:13px; font-weight:600; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;";
-
-    let y = MARGIN.top + GROUP_GAP;
-
-    // Parent
-    sel
-      .append("text")
-      .attr("x", 6)
-      .attr("y", y + 13)
-      .attr("style", labelStyle)
-      .text("Parent Task");
-
-    const parentY = y;
-    y += PARENT_SECTION_HEIGHT;
-
-    // divider
-    y += GROUP_GAP * 0.5;
-    sel
-      .append("line")
-      .attr("x1", 0)
-      .attr("x2", width)
-      .attr("y1", y)
-      .attr("y2", y)
-      .attr("stroke", "#000")
-      .attr("stroke-dasharray", "4");
-    y += GROUP_GAP * 0.5;
-
-    // Main
-    sel
-      .append("text")
-      .attr("x", 6)
-      .attr("y", y + 13)
-      .attr("style", labelStyle)
-      .text("Current Task");
-
-    const mainY = y;
-    y += MAIN_SECTION_HEIGHT;
-
-    y += GROUP_GAP * 0.5;
-    sel
-      .append("line")
-      .attr("x1", 0)
-      .attr("x2", width)
-      .attr("y1", y)
-      .attr("y2", y)
-      .attr("stroke", "#000")
-      .attr("stroke-dasharray", "4");
-    y += GROUP_GAP * 0.5;
-
-    sel
-      .append("text")
-      .attr("x", 6)
-      .attr("y", y + 13)
-      .attr("style", labelStyle + "pointer-events:none;")
-      .text("Subtasks");
-
-    const subBaseY = y;
-
-    // ─── bar height for subtasks ─────────────────────────────────
-    const subSpace = subRegionHeight;
-    let barH = maxYIndex > 0 ? subSpace / (maxYIndex + 1) : MAX_BAR_HEIGHT;
-    barH = Math.max(MIN_BAR_HEIGHT, Math.min(MAX_BAR_HEIGHT, barH));
-
-    // ─── task bars ───────────────────────────────────────────────
-    const barsG = sel.append("g").attr("class", "task-bars");
-
-    function taskBarY(t: Task): number {
-      if (t.isParentTask) return parentY;
-      if (t.isMainTask) return mainY;
-      return subBaseY + (t.yIndex ?? 0) * (barH + 1);
-    }
-
-    function taskBarH(t: Task): number {
-      if (t.isParentTask) return PARENT_SECTION_HEIGHT;
-      if (t.isMainTask) return MAIN_SECTION_HEIGHT;
-      return barH * 0.85;
-    }
-
-    allTasks.forEach((t) => {
-      const tx = sx(xScale, t.start_time);
-      const tw = sx(xScale, t.end_time) - tx;
-      if (tw < 0.2) return; // skip invisible bars
-
-      const rect = barsG
-        .append("rect")
-        .attr("x", tx)
-        .attr("y", taskBarY(t))
-        .attr("width", Math.max(1, tw))
-        .attr("height", taskBarH(t))
-        .attr("fill", lookupColor(colorMap, t))
-        .attr("stroke", "#000")
-        .attr("stroke-opacity", 0.2)
-        .attr("rx", 2)
-        .style("cursor", "pointer");
-
-      rect.on("click", () => onSelectTask?.(t));
-      rect.on("mouseenter", () => {
-        rect.attr("stroke-opacity", 0.8).attr("stroke-width", 1.5);
-        onHoverTask?.(t);
-      });
-      rect.on("mouseleave", () => {
-        rect.attr("stroke-opacity", 0.2).attr("stroke-width", 1);
-        onHoverTask?.(null);
-      });
-
-      // tooltip title
-      rect.append("title").text(
-        `${t.kind} - ${t.what}\n${t.location}\n${smartString(t.start_time)} → ${smartString(t.end_time)}  (${smartString(t.end_time - t.start_time)})`,
-      );
-    });
-
-    // ─── milestones (red dots) for main task ─────────────────────
-    if (mainTask && mainTask.steps && mainTask.steps.length > 0) {
-      const dotsG = sel.append("g").attr("class", "milestones");
-      const cy = mainY + MAIN_SECTION_HEIGHT / 2;
-      mainTask.steps.forEach((s) => {
-        const cx = sx(xScale, s.time);
-        dotsG
-          .append("circle")
-          .attr("cx", cx)
-          .attr("cy", cy)
-          .attr("r", 3)
-          .attr("fill", "red")
-          .attr("stroke", "#fff")
-          .attr("stroke-width", 1)
-          .append("title")
-          .text(`${s.kind}: ${s.what} @ ${smartString(s.time)}`);
-      });
-    }
-
-    // ─── bottom x-axis ──────────────────────────────────────────
-    const xAxisBottom = d3.axisBottom(xScale).ticks(12, "s");
-    sel
-      .append("g")
-      .attr("class", "x-axis-bottom")
-      .attr("transform", `translate(0,${height - MARGIN.bottom})`)
-      .call(xAxisBottom);
-  }, [
-    allTasks,
-    mainTask,
-    maxYIndex,
-    colorMap,
-    segments,
-    segmentsEnabled,
-    onSelectTask,
-    onHoverTask,
-  ]);
-
-  /* ---------- Zoom / pan via mouse events (like MouseEventHandler) */
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let isDragging = false;
-    let dragStartX = 0;
-    let dragStartStart = 0;
-    let dragStartEnd = 0;
-    let scrollTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const scheduleRerender = () => {
-      if (scrollTimer) clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => forceRender((n) => n + 1), 16);
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const { startTime, endTime } = zoomState.current;
-      const w = container.clientWidth;
-      const duration = endTime - startTime;
-      const tpp = duration / (w - MARGIN.left - MARGIN.right);
-
-      if (e.deltaY !== 0) {
-        // Zoom around cursor
-        const pxLeft = e.offsetX - MARGIN.left;
-        const pxRight = w - MARGIN.right - e.offsetX;
-        const mouseTime = startTime + pxLeft * tpp;
-        let newTpp = tpp;
-        const steps = Math.abs(e.deltaY);
-        for (let i = 0; i < steps; i++) {
-          newTpp *= e.deltaY > 0 ? 1.001 : 1 / 1.001;
-        }
-        zoomState.current = {
-          startTime: mouseTime - newTpp * pxLeft,
-          endTime: mouseTime + newTpp * pxRight,
-        };
-        scheduleRerender();
-      }
-
-      if (e.deltaX !== 0) {
-        const shift = duration * e.deltaX * 0.001;
-        zoomState.current = {
-          startTime: startTime + shift,
-          endTime: endTime + shift,
-        };
-        scheduleRerender();
-      }
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-      isDragging = true;
-      dragStartX = e.offsetX;
-      const { startTime, endTime } = zoomState.current;
-      dragStartStart = startTime;
-      dragStartEnd = endTime;
-    };
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!isDragging) return;
-      const w = container.clientWidth;
-      const duration = dragStartEnd - dragStartStart;
-      const tpp = duration / (w - MARGIN.left - MARGIN.right);
-      const delta = e.offsetX - dragStartX;
-      const timeDelta = tpp * delta;
-      zoomState.current = {
-        startTime: dragStartStart - timeDelta,
-        endTime: dragStartEnd - timeDelta,
-      };
-      scheduleRerender();
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-    };
-
-    container.addEventListener("wheel", onWheel, { passive: false });
-    container.addEventListener("mousedown", onMouseDown);
-    container.addEventListener("mousemove", onMouseMove);
-    container.addEventListener("mouseup", onMouseUp);
-    container.addEventListener("mouseleave", onMouseUp);
-
-    return () => {
-      container.removeEventListener("wheel", onWheel);
-      container.removeEventListener("mousedown", onMouseDown);
-      container.removeEventListener("mousemove", onMouseMove);
-      container.removeEventListener("mouseup", onMouseUp);
-      container.removeEventListener("mouseleave", onMouseUp);
-      if (scrollTimer) clearTimeout(scrollTimer);
-    };
-  }, []);
-
-  /* ---------- Re-render when data or zoom changes ------------- */
-  useEffect(() => {
-    render();
-  }, [render]);
-
-  /* ---------- Resize observer --------------------------------- */
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      render();
-    });
-    ro.observe(container);
-    return () => ro.disconnect();
-  }, [render]);
-
-  /* ---------- Color legend ------------------------------------ */
-  const legendEntries = Object.entries(colorMap).sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          overflow: "hidden",
-          cursor: "grab",
-          minHeight: 200,
-          position: "relative",
-        }}
-      >
-        <svg ref={svgRef} style={{ display: "block" }} />
-      </div>
+    <div className="h-full overflow-auto bg-white">
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="min-w-[760px]">
+        <defs>
+          <pattern id="gantt-gap-pattern" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+            <rect width="8" height="8" fill="rgba(148, 163, 184, 0.12)" />
+            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(100, 116, 139, 0.28)" strokeWidth="3" />
+          </pattern>
+        </defs>
+        {gaps.map((gap, index) => {
+          const x = safeScale(xScale, gap.start_time);
+          const w = Math.max(0, safeScale(xScale, gap.end_time) - x);
+          return <rect key={index} x={x} y={MARGIN.top} width={w} height={height - MARGIN.top - MARGIN.bottom} fill="url(#gantt-gap-pattern)" />;
+        })}
 
-      {/* Color legend */}
-      {legendEntries.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 12,
-            padding: "6px 10px",
-            borderTop: "1px solid #dee2e6",
-            fontSize: 12,
-          }}
-        >
-          {legendEntries.map(([key, color]) => (
-            <span key={key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span
-                style={{
-                  display: "inline-block",
-                  width: 12,
-                  height: 12,
-                  background: color,
-                  borderRadius: 2,
-                  border: "1px solid #ccc",
-                }}
+        {xTicks.map((tick) => (
+          <g key={tick}>
+            <line x1={safeScale(xScale, tick)} x2={safeScale(xScale, tick)} y1={MARGIN.top} y2={height - MARGIN.bottom} stroke="#cbd5e1" strokeDasharray="3 3" />
+            <text x={safeScale(xScale, tick)} y={18} textAnchor="middle" fontSize="10" fill="#475569">
+              {smartString(tick)}
+            </text>
+            <text x={safeScale(xScale, tick)} y={height - 8} textAnchor="middle" fontSize="10" fill="#475569">
+              {smartString(tick)}
+            </text>
+          </g>
+        ))}
+
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={MARGIN.top} y2={MARGIN.top} stroke="#94a3b8" />
+        <line x1={MARGIN.left} x2={MARGIN.left + innerWidth} y1={height - MARGIN.bottom} y2={height - MARGIN.bottom} stroke="#94a3b8" />
+
+        {parentTask && (
+          <text x={12} y={yForTask({ ...parentTask, isParentTask: true }) + 13} fontSize="12" fontWeight="600" fill="#0f172a">
+            Parent Task
+          </text>
+        )}
+        {mainTask && (
+          <text x={12} y={yForTask({ ...mainTask, isMainTask: true }) + 13} fontSize="12" fontWeight="600" fill="#0f172a">
+            Current Task
+          </text>
+        )}
+        <text x={12} y={MARGIN.top + (parentTask ? HEADER_ROW_HEIGHT + 8 : 0) + (mainTask ? HEADER_ROW_HEIGHT + 8 : 0) + 16} fontSize="12" fontWeight="600" fill="#0f172a">
+          Tasks
+        </text>
+
+        {layout.map((task) => {
+          const x = safeScale(xScale, task.start_time);
+          const w = Math.max(1, safeScale(xScale, task.end_time) - x);
+          const selected = selectedId === task.id;
+          return (
+            <g
+              key={`${task.id}-${task.isParentTask ? "parent" : task.isMainTask ? "main" : "task"}`}
+              className="cursor-pointer"
+              onClick={() => {
+                setSelectedId(task.id);
+                onSelectTask?.(task);
+              }}
+              onDoubleClick={() => onOpenTask?.(task)}
+              onKeyDown={(event) => {
+                if ((event.key === "Enter" || event.key === " ") && onOpenTask) {
+                  event.preventDefault();
+                  onOpenTask(task);
+                }
+              }}
+              role={onOpenTask ? "link" : "button"}
+              tabIndex={0}
+            >
+              <rect
+                x={x}
+                y={yForTask(task)}
+                width={w}
+                height={task.isParentTask || task.isMainTask ? 18 : 9}
+                rx={2}
+                fill={lookupColor(colorMap, task)}
+                stroke={selected ? "#0f172a" : "rgba(15, 23, 42, 0.25)"}
+                strokeWidth={selected ? 2 : 1}
               />
-              {key}
-            </span>
-          ))}
-        </div>
-      )}
+              <title>
+                {task.kind} - {task.what}
+                {"\n"}
+                {task.location}
+                {"\n"}
+                {smartString(task.start_time)} to {smartString(task.end_time)}
+              </title>
+            </g>
+          );
+        })}
+
+        {mainTask?.steps?.map((step, index) => (
+          <circle
+            key={`${step.kind}-${index}`}
+            cx={safeScale(xScale, step.time)}
+            cy={yForTask({ ...mainTask, isMainTask: true }) + 9}
+            r={3}
+            fill="#dc2626"
+            stroke="#ffffff"
+          >
+            <title>
+              {step.kind}: {step.what} at {smartString(step.time)}
+            </title>
+          </circle>
+        ))}
+      </svg>
     </div>
   );
 }
