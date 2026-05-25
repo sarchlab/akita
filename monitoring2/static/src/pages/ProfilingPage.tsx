@@ -307,6 +307,7 @@ export default function ProfilingPage() {
               <dt className="text-muted-foreground">RSS</dt>
               <dd className="font-mono">{formatBytes(resources.memory_size)}</dd>
             </dl>
+            <ResourceTrendChart history={history} />
           </div>
 
           <div className="rounded border bg-white p-4">
@@ -319,8 +320,6 @@ export default function ProfilingPage() {
             )}
           </div>
         </section>
-
-        <ResourceTrendChart history={history} />
 
         <section className="rounded border bg-white p-4">
           <div className="mb-3 text-sm font-semibold">CPU Call Graph</div>
@@ -519,66 +518,90 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
   );
 }
 
+function formatChartTime(timestamp: number) {
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function ResourceTrendChart({ history }: { history: ResourcePoint[] }) {
   const points = history.length ? history : [{ cpu_percent: 0, memory_size: 0, timestamp: Date.now() }];
-  const width = 720;
-  const height = 260;
-  const chartLeft = 56;
-  const chartRight = 24;
-  const cpuTop = 28;
-  const cpuHeight = 76;
-  const memoryTop = 150;
-  const memoryHeight = 76;
+  const width = 420;
+  const height = 154;
+  const chartLeft = 42;
+  const chartRight = 14;
+  const chartTop = 18;
+  const chartHeight = 88;
+  const chartBottom = chartTop + chartHeight;
   const chartWidth = width - chartLeft - chartRight;
   const maxCPU = Math.max(100, ...points.map((point) => point.cpu_percent));
   const maxMemory = Math.max(1, ...points.map((point) => point.memory_size));
+  const tickIndexes = Array.from(
+    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
+  ).filter((index) => index >= 0);
 
   const xFor = (index: number) =>
     chartLeft + (points.length <= 1 ? chartWidth : (index / (points.length - 1)) * chartWidth);
-  const yFor = (value: number, max: number, top: number, graphHeight: number) =>
-    top + graphHeight - (Math.min(max, Math.max(0, value)) / max) * graphHeight;
+  const yFor = (value: number, max: number) =>
+    chartTop + chartHeight - (Math.min(max, Math.max(0, value)) / max) * chartHeight;
   const cpuPath = points
-    .map((point, index) => `${xFor(index)},${yFor(point.cpu_percent, maxCPU, cpuTop, cpuHeight)}`)
+    .map((point, index) => `${xFor(index)},${yFor(point.cpu_percent, maxCPU)}`)
     .join(" ");
   const memoryPath = points
-    .map((point, index) => `${xFor(index)},${yFor(point.memory_size, maxMemory, memoryTop, memoryHeight)}`)
+    .map((point, index) => `${xFor(index)},${yFor(point.memory_size, maxMemory)}`)
     .join(" ");
 
   return (
-    <div className="rounded border bg-white p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="text-sm font-semibold">Resource Trend</div>
+    <div className="mt-4 rounded border bg-slate-50 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold">Resource Trend</div>
         <div className="text-xs text-muted-foreground">Last {points.length} samples</div>
       </div>
-      <svg className="h-72 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="CPU and memory trend chart">
-        <line x1={chartLeft} x2={width - chartRight} y1={cpuTop + cpuHeight} y2={cpuTop + cpuHeight} stroke="#cbd5e1" />
-        <line x1={chartLeft} x2={width - chartRight} y1={memoryTop + memoryHeight} y2={memoryTop + memoryHeight} stroke="#cbd5e1" />
-        <text x="8" y={cpuTop + 12} className="fill-slate-500 text-[12px]">
-          CPU
+      <svg className="h-40 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="CPU and memory trend chart">
+        <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#cbd5e1" />
+        <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#cbd5e1" />
+        <text x="6" y={chartTop + 4} className="fill-slate-500 text-[10px]">
+          max
         </text>
-        <text x="8" y={cpuTop + cpuHeight} className="fill-slate-500 text-[11px]">
+        <text x="6" y={chartTop + 18} className="fill-sky-700 text-[10px]">
           {maxCPU.toFixed(0)}%
         </text>
-        <text x="8" y={memoryTop + 12} className="fill-slate-500 text-[12px]">
-          RSS
-        </text>
-        <text x="8" y={memoryTop + memoryHeight} className="fill-slate-500 text-[11px]">
+        <text x="6" y={chartTop + 32} className="fill-amber-700 text-[10px]">
           {formatBytes(maxMemory)}
         </text>
         <polyline points={cpuPath} fill="none" stroke="#0284c7" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={memoryPath} fill="none" stroke="#f59e0b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
         <circle
           cx={xFor(points.length - 1)}
-          cy={yFor(points[points.length - 1].cpu_percent, maxCPU, cpuTop, cpuHeight)}
+          cy={yFor(points[points.length - 1].cpu_percent, maxCPU)}
           r="4"
           fill="#0284c7"
         />
         <circle
           cx={xFor(points.length - 1)}
-          cy={yFor(points[points.length - 1].memory_size, maxMemory, memoryTop, memoryHeight)}
+          cy={yFor(points[points.length - 1].memory_size, maxMemory)}
           r="4"
           fill="#f59e0b"
         />
+        {tickIndexes.map((index) => {
+          const x = xFor(index);
+          const anchor = index === 0 ? "start" : index === points.length - 1 ? "end" : "middle";
+
+          return (
+            <g key={index}>
+              <line x1={x} x2={x} y1={chartBottom} y2={chartBottom + 4} stroke="#94a3b8" />
+              <text x={x} y={chartBottom + 18} textAnchor={anchor} className="fill-slate-500 text-[10px]">
+                {formatChartTime(points[index].timestamp)}
+              </text>
+            </g>
+          );
+        })}
+        <text x={chartLeft + chartWidth / 2} y={height - 4} textAnchor="middle" className="fill-slate-500 text-[10px]">
+          Time
+        </text>
       </svg>
       <div className="flex gap-4 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-2">
