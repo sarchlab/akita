@@ -16,10 +16,30 @@ interface ProfileSummary {
   locations: number;
   functions: number;
   topFunctions: ProfileFunctionStat[];
+  callGraph: ProfileCallGraph;
 }
 
 interface ProfileFunctionStat {
   name: string;
+  value: number;
+}
+
+interface ProfileCallGraph {
+  nodes: ProfileCallGraphNode[];
+  edges: ProfileCallGraphEdge[];
+}
+
+interface ProfileCallGraphNode {
+  id: string;
+  label: string;
+  value: number;
+  depth: number;
+}
+
+interface ProfileCallGraphEdge {
+  id: string;
+  from: string;
+  to: string;
   value: number;
 }
 
@@ -90,20 +110,13 @@ function getNumberArray(value: Record<string, unknown>, lower: string, upper: st
   return getArray(value, lower, upper).filter((item): item is number => typeof item === "number");
 }
 
-function profileFunctionName(sample: unknown) {
-  if (!sample || typeof sample !== "object") {
+function profileLocationName(location: unknown) {
+  if (!location || typeof location !== "object") {
     return "unknown";
   }
 
-  const sampleObject = sample as Record<string, unknown>;
-  const locations = getArray(sampleObject, "location", "Location");
-  const leaf = locations[0];
-  if (!leaf || typeof leaf !== "object") {
-    return "unknown";
-  }
-
-  const leafObject = leaf as Record<string, unknown>;
-  const lines = getArray(leafObject, "line", "Line");
+  const locationObject = location as Record<string, unknown>;
+  const lines = getArray(locationObject, "line", "Line");
   const line = lines[0];
   if (line && typeof line === "object") {
     const lineObject = line as Record<string, unknown>;
@@ -116,7 +129,7 @@ function profileFunctionName(sample: unknown) {
     }
   }
 
-  const address = leafObject.address ?? leafObject.Address;
+  const address = locationObject.address ?? locationObject.Address;
   if (typeof address === "number") {
     return `0x${address.toString(16)}`;
   }
@@ -124,9 +137,95 @@ function profileFunctionName(sample: unknown) {
   return "unknown";
 }
 
+function profileStackNames(sample: unknown) {
+  if (!sample || typeof sample !== "object") {
+    return [];
+  }
+
+  const sampleObject = sample as Record<string, unknown>;
+  const locations = getArray(sampleObject, "location", "Location");
+
+  return locations.map(profileLocationName).filter((name) => name !== "unknown");
+}
+
+function profileFunctionName(sample: unknown) {
+  return profileStackNames(sample)[0] ?? "unknown";
+}
+
+function sampleWeight(sample: Record<string, unknown>) {
+  const values = getNumberArray(sample, "value", "Value");
+  return Math.max(1, ...values.map((value) => Math.abs(value)));
+}
+
+function buildCallGraph(samples: unknown[]): ProfileCallGraph {
+  const nodeTotals = new Map<string, { value: number; depthTotal: number; count: number }>();
+  const edgeTotals = new Map<string, ProfileCallGraphEdge>();
+
+  samples.forEach((item) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+
+    const sample = item as Record<string, unknown>;
+    const weight = sampleWeight(sample);
+    const leafFirstStack = profileStackNames(sample);
+    const callerFirstStack = [...leafFirstStack].reverse().filter((name, index, stack) => {
+      return index === 0 || name !== stack[index - 1];
+    });
+
+    callerFirstStack.forEach((name, depth) => {
+      const node = nodeTotals.get(name) ?? { value: 0, depthTotal: 0, count: 0 };
+      node.value += weight;
+      node.depthTotal += depth;
+      node.count += 1;
+      nodeTotals.set(name, node);
+    });
+
+    for (let i = 0; i < callerFirstStack.length - 1; i += 1) {
+      const from = callerFirstStack[i];
+      const to = callerFirstStack[i + 1];
+      const id = `${from}->${to}`;
+      const edge = edgeTotals.get(id) ?? { id, from, to, value: 0 };
+      edge.value += weight;
+      edgeTotals.set(id, edge);
+    }
+  });
+
+  const selectedNodeIDs = new Set(
+    [...nodeTotals.entries()]
+      .sort((a, b) => b[1].value - a[1].value)
+      .slice(0, 24)
+      .map(([id]) => id),
+  );
+
+  const edges = [...edgeTotals.values()]
+    .filter((edge) => selectedNodeIDs.has(edge.from) && selectedNodeIDs.has(edge.to))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 40);
+
+  edges.forEach((edge) => {
+    selectedNodeIDs.add(edge.from);
+    selectedNodeIDs.add(edge.to);
+  });
+
+  const nodes = [...selectedNodeIDs]
+    .map((id) => {
+      const node = nodeTotals.get(id);
+      return {
+        id,
+        label: id,
+        value: node?.value ?? 0,
+        depth: node && node.count ? Math.round(node.depthTotal / node.count) : 0,
+      };
+    })
+    .sort((a, b) => a.depth - b.depth || b.value - a.value);
+
+  return { nodes, edges };
+}
+
 function summarizeProfile(profile: unknown): ProfileSummary {
   if (!profile || typeof profile !== "object") {
-    return { samples: 0, locations: 0, functions: 0, topFunctions: [] };
+    return { samples: 0, locations: 0, functions: 0, topFunctions: [], callGraph: { nodes: [], edges: [] } };
   }
 
   const p = profile as Record<string, unknown>;
@@ -141,8 +240,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
     }
 
     const sampleObject = item as Record<string, unknown>;
-    const values = getNumberArray(sampleObject, "value", "Value");
-    const weight = Math.max(1, ...values.map((value) => Math.abs(value)));
+    const weight = sampleWeight(sampleObject);
     const name = profileFunctionName(item);
 
     functionTotals.set(name, (functionTotals.get(name) ?? 0) + weight);
@@ -158,6 +256,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
     locations: location.length,
     functions: fn.length,
     topFunctions,
+    callGraph: buildCallGraph(sample),
   };
 }
 
@@ -224,6 +323,15 @@ export default function ProfilingPage() {
         <ResourceTrendChart history={history} />
 
         <section className="rounded border bg-white p-4">
+          <div className="mb-3 text-sm font-semibold">CPU Call Graph</div>
+          {profileSummary ? (
+            <CallGraph graph={profileSummary.callGraph} />
+          ) : (
+            <div className="text-sm text-muted-foreground">Capture a CPU profile to generate a call graph.</div>
+          )}
+        </section>
+
+        <section className="rounded border bg-white p-4">
           <div className="mb-3 text-sm font-semibold">Top Functions</div>
           {profileSummary ? (
             <TopFunctionBars functions={profileSummary.topFunctions} />
@@ -281,6 +389,132 @@ function TopFunctionBars({ functions }: { functions: ProfileFunctionStat[] }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function shortFunctionName(name: string) {
+  const parts = name.split("/");
+  const lastPath = parts[parts.length - 1] ?? name;
+  if (lastPath.length <= 26) {
+    return lastPath;
+  }
+
+  return `${lastPath.slice(0, 23)}...`;
+}
+
+function CallGraph({ graph }: { graph: ProfileCallGraph }) {
+  if (!graph.nodes.length) {
+    return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
+  }
+
+  const width = 1100;
+  const left = 40;
+  const top = 36;
+  const nodeWidth = 190;
+  const nodeHeight = 46;
+  const rowGap = 74;
+  const columnGap = 230;
+  const grouped = new Map<number, ProfileCallGraphNode[]>();
+
+  graph.nodes.forEach((node) => {
+    const depth = Math.max(0, Math.min(5, node.depth));
+    grouped.set(depth, [...(grouped.get(depth) ?? []), node]);
+  });
+
+  const depths = [...grouped.keys()].sort((a, b) => a - b);
+  const maxRows = Math.max(1, ...depths.map((depth) => grouped.get(depth)?.length ?? 0));
+  const height = Math.max(360, top * 2 + maxRows * rowGap);
+  const maxNodeValue = Math.max(1, ...graph.nodes.map((node) => node.value));
+  const maxEdgeValue = Math.max(1, ...graph.edges.map((edge) => edge.value));
+  const positions = new Map<string, { x: number; y: number }>();
+
+  depths.forEach((depth, columnIndex) => {
+    const nodes = [...(grouped.get(depth) ?? [])].sort((a, b) => b.value - a.value);
+    const columnHeight = (nodes.length - 1) * rowGap;
+    const startY = top + ((maxRows - 1) * rowGap - columnHeight) / 2;
+
+    nodes.forEach((node, rowIndex) => {
+      positions.set(node.id, {
+        x: left + columnIndex * columnGap,
+        y: startY + rowIndex * rowGap,
+      });
+    });
+  });
+
+  const visibleEdges = graph.edges.filter((edge) => positions.has(edge.from) && positions.has(edge.to));
+
+  return (
+    <div className="overflow-auto rounded border bg-slate-50 p-3">
+      <svg
+        className="min-h-96 min-w-[900px] overflow-visible"
+        viewBox={`0 0 ${Math.max(width, left * 2 + depths.length * columnGap + nodeWidth)} ${height}`}
+        role="img"
+        aria-label="CPU profile call graph"
+      >
+        <defs>
+          <marker id="call-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
+          </marker>
+        </defs>
+        {visibleEdges.map((edge) => {
+          const from = positions.get(edge.from)!;
+          const to = positions.get(edge.to)!;
+          const startX = from.x + nodeWidth;
+          const startY = from.y + nodeHeight / 2;
+          const endX = to.x;
+          const endY = to.y + nodeHeight / 2;
+          const bend = Math.max(60, (endX - startX) / 2);
+          const strokeWidth = 1 + (edge.value / maxEdgeValue) * 4;
+
+          return (
+            <path
+              key={edge.id}
+              d={`M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX - 6} ${endY}`}
+              fill="none"
+              stroke="#64748b"
+              strokeOpacity={0.25 + (edge.value / maxEdgeValue) * 0.55}
+              strokeWidth={strokeWidth}
+              markerEnd="url(#call-arrow)"
+            >
+              <title>
+                {edge.from} {"->"} {edge.to}: {edge.value}
+              </title>
+            </path>
+          );
+        })}
+        {graph.nodes.map((node) => {
+          const position = positions.get(node.id);
+          if (!position) {
+            return null;
+          }
+
+          const intensity = node.value / maxNodeValue;
+
+          return (
+            <g key={node.id} transform={`translate(${position.x} ${position.y})`}>
+              <rect
+                width={nodeWidth}
+                height={nodeHeight}
+                rx="6"
+                fill="#ffffff"
+                stroke={intensity > 0.66 ? "#0284c7" : "#cbd5e1"}
+                strokeWidth={1 + intensity * 2}
+              />
+              <rect width={Math.max(4, nodeWidth * intensity)} height="4" rx="2" fill="#0284c7" />
+              <text x="10" y="21" className="fill-slate-950 text-[12px] font-semibold">
+                {shortFunctionName(node.label)}
+              </text>
+              <text x="10" y="37" className="fill-slate-500 text-[11px]">
+                samples {node.value}
+              </text>
+              <title>
+                {node.label}: {node.value}
+              </title>
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

@@ -68,6 +68,8 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /\/api\/progress/);
   assert.match(profilingPage, /Profiling/);
   assert.match(profilingPage, /Capture CPU Profile/);
+  assert.match(profilingPage, /CPU Call Graph/);
+  assert.match(profilingPage, /CallGraph/);
   assert.match(profilingPage, /Resource Trend/);
   assert.match(profilingPage, /Top Functions/);
   assert.match(profilingPage, /ProfileMetricBars/);
