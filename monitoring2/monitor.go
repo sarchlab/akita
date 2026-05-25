@@ -23,7 +23,7 @@ import (
 
 	"github.com/google/pprof/profile"
 	"github.com/sarchlab/akita/v5/daisen2"
-	"github.com/sarchlab/akita/v5/daisen2/static"
+	"github.com/sarchlab/akita/v5/monitoring2/static"
 
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
@@ -31,17 +31,16 @@ import (
 	"github.com/syifan/goseth"
 
 	// Monitor provides live simulation monitoring capabilities. It serves HTTP
-	// endpoints for engine control, component inspection, progress bars,
-	// resource monitoring, and embeds Daisen's trace replay functionality.
+	// endpoints for engine control, component inspection, progress bars, and
+	// resource monitoring.
 	"github.com/sarchlab/akita/v5/messaging"
 )
 
 type Monitor struct {
 	// Configuration (set before StartServer).
-	port        int
-	engine      timing.Engine
-	traceDBPath string
-	visTracer   *tracing.DBTracer
+	port      int
+	engine    timing.Engine
+	visTracer *tracing.DBTracer
 
 	// Internal state.
 	components       []messaging.Component
@@ -49,7 +48,6 @@ type Monitor struct {
 	progressBarsLock sync.Mutex
 	progressBars     []*daisen2.ProgressBar
 	httpServer       *http.Server
-	replayServer     *daisen2.Server // for trace endpoints
 	fs               http.FileSystem
 }
 
@@ -57,7 +55,8 @@ type Monitor struct {
 // started until StartServer() is called.
 func NewMonitor() *Monitor {
 	return &Monitor{
-		fs: static.GetAssets(),
+		fs:           static.GetAssets(),
+		progressBars: []*daisen2.ProgressBar{},
 	}
 }
 
@@ -95,17 +94,15 @@ func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
 	m.visTracer = tr
 }
 
-// SetTraceDBPath sets the path to the SQLite trace database used to serve
-// trace data through the monitoring server.
+// SetTraceDBPath is kept for compatibility with older monitoring setup code.
+// Monitoring2 no longer serves replay trace data.
 func (m *Monitor) SetTraceDBPath(path string) {
-	m.traceDBPath = path
 }
 
-// GetServer returns the underlying Daisen replay server. This can be used to
-// access advanced server functionality (e.g., CreateProgressBar) or to pass
-// to components that require a *daisen2.Server directly.
+// GetServer is kept for compatibility with older monitoring setup code.
+// Monitoring2 no longer owns a Daisen replay server.
 func (m *Monitor) GetServer() *daisen2.Server {
-	return m.replayServer
+	return nil
 }
 
 // CreateProgressBar creates a new progress bar tracked by the monitor.
@@ -140,18 +137,12 @@ func (m *Monitor) CompleteProgressBar(pb *daisen2.ProgressBar) {
 	m.progressBars = newBars
 }
 
-// StartServer initializes and starts the monitoring HTTP server. It creates
-// a combined HTTP server with live monitoring and trace replay endpoints.
+// StartServer initializes and starts the monitoring HTTP server.
 func (m *Monitor) StartServer() {
-	// Create replay server for trace endpoints (if traceDBPath set).
-	if m.traceDBPath != "" {
-		m.replayServer = daisen2.NewReplayServerReadOnly(m.traceDBPath)
-	}
-
 	// Build combined mux.
 	mux := http.NewServeMux()
 
-	// Register live-mode endpoints (these override replay defaults).
+	// Register live-mode endpoints.
 	mux.HandleFunc("/api/mode", m.apiMode)
 	mux.HandleFunc("/api/pause", m.pauseEngine)
 	mux.HandleFunc("/api/continue", m.continueEngine)
@@ -169,13 +160,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
 
-	// Register trace/replay endpoints (from daisen2.Server), excluding /api/mode.
-	if m.replayServer != nil {
-		m.replayServer.RegisterTraceRoutes(mux)
-	} else {
-		// Serve static assets even without trace DB.
-		m.setupStaticRoutes(mux)
-	}
+	m.setupStaticRoutes(mux)
 
 	// Find port and start listener.
 	listener := m.findPort()
@@ -199,6 +184,10 @@ func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", m.serveIndex)
 	mux.HandleFunc("/component", m.serveIndex)
 	mux.HandleFunc("/task", m.serveIndex)
+	mux.HandleFunc("/progress", m.serveIndex)
+	mux.HandleFunc("/profiling", m.serveIndex)
+	mux.HandleFunc("/live", m.serveIndex)
+	mux.HandleFunc("/live/", m.serveIndex)
 	mux.Handle("/", fServer)
 }
 
@@ -613,7 +602,14 @@ func (m *Monitor) listProgressBars(
 	w http.ResponseWriter,
 	_ *http.Request,
 ) {
-	b, err := json.Marshal(m.progressBars)
+	m.progressBarsLock.Lock()
+	progressBars := m.progressBars
+	if progressBars == nil {
+		progressBars = []*daisen2.ProgressBar{}
+	}
+	m.progressBarsLock.Unlock()
+
+	b, err := json.Marshal(progressBars)
 	if err != nil {
 		log.Panic(err)
 	}

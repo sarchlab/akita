@@ -160,8 +160,7 @@ func (r *SQLiteTraceReader) Init() {
 		panic(err)
 	}
 
-	// Enable WAL mode for concurrent read access (important when a writer
-	// process is actively inserting trace data in live mode).
+	// Enable WAL mode for concurrent read access.
 	_, err = db.Exec("PRAGMA journal_mode=WAL")
 	if err != nil {
 		panic(err)
@@ -171,7 +170,6 @@ func (r *SQLiteTraceReader) Init() {
 }
 
 // InitReadOnly establishes a read-only connection to the database with WAL mode.
-// This is used in live mode to read trace data while the DBTracer is writing.
 func (r *SQLiteTraceReader) InitReadOnly() {
 	db, err := sql.Open("sqlite", r.filename+"?mode=ro")
 	if err != nil {

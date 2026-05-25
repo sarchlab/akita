@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Gauge, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import DashboardWidget from "../components/DashboardWidget";
-import DashboardNavigationWidget from "../components/DashboardNavigationWidget";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -12,7 +11,6 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import { useComponentNames } from "../hooks/useComponentNames";
-import { useMode } from "../hooks/useMode";
 import { useSegments } from "../hooks/useSegments";
 import { useSimulationRange } from "../hooks/useSimulationRange";
 
@@ -67,7 +65,6 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 }
 
 export default function DashboardPage() {
-  const { mode } = useMode();
   const { names, loading, error } = useComponentNames();
   const { startTime, endTime } = useSimulationRange();
   const { data: segmentsData } = useSegments();
@@ -89,22 +86,6 @@ export default function DashboardPage() {
   const widgetsPerPage = columns * rows;
   const widgetWidth = Math.max(180, Math.floor((size.width - (columns + 1) * 5) / columns));
   const widgetHeight = Math.max(120, Math.floor((size.height - 58 - (rows + 1) * 5) / rows));
-  const navigationWidgets = useMemo(
-    () => [
-      ...(mode === "live"
-        ? [
-            {
-              key: "live",
-              to: "/live",
-              title: "Live",
-              meta: "Engine controls",
-              icon: Gauge,
-            },
-          ]
-        : []),
-    ],
-    [mode],
-  );
 
   const filteredNames = useMemo(() => {
     if (!filter) return names;
@@ -116,15 +97,12 @@ export default function DashboardPage() {
     }
   }, [filter, names]);
 
-  const totalWidgetCount = navigationWidgets.length + filteredNames.length;
+  const totalWidgetCount = filteredNames.length;
   const pageCount = Math.max(1, Math.ceil(totalWidgetCount / widgetsPerPage));
   const currentPage = Math.min(page, pageCount - 1);
   const pageStart = currentPage * widgetsPerPage;
   const pageEnd = pageStart + widgetsPerPage;
-  const visibleNavigationWidgets = navigationWidgets.slice(pageStart, pageEnd);
-  const componentStart = Math.max(0, pageStart - navigationWidgets.length);
-  const componentEnd = Math.max(0, pageEnd - navigationWidgets.length);
-  const visibleNames = filteredNames.slice(componentStart, componentEnd);
+  const visibleNames = filteredNames.slice(pageStart, pageEnd);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -196,16 +174,6 @@ export default function DashboardPage() {
             className="daisen-dashboard-grid"
             style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: `${widgetHeight}px` }}
           >
-            {visibleNavigationWidgets.map((widget) => (
-              <DashboardNavigationWidget
-                key={widget.key}
-                to={widget.to}
-                title={widget.title}
-                meta={widget.meta}
-                icon={widget.icon}
-                height={widgetHeight}
-              />
-            ))}
             {visibleNames.map((name) => (
               <DashboardWidget
                 key={name}

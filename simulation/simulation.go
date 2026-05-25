@@ -1,8 +1,10 @@
 package simulation
 
 import (
+	"github.com/sarchlab/akita/v5/daisen2"
 	"github.com/sarchlab/akita/v5/datarecording"
 
+	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 
@@ -17,6 +19,7 @@ type Simulation struct {
 	dataRecorder datarecording.DataRecorder
 	visTracer    *tracing.DBTracer
 	metaRecorder *metaRecorder
+	monitor      *monitoring2.Monitor
 
 	components    []messaging.Component
 	compNameIndex map[string]int
@@ -40,16 +43,19 @@ func (s *Simulation) GetDataRecorder() datarecording.DataRecorder {
 	return s.dataRecorder
 }
 
-// GetMonitor returns nil while the simulation package is temporarily
-// decoupled from the legacy monitoring/Daisen stack.
-func (s *Simulation) GetMonitor() any {
-	return nil
+// GetMonitor returns the live monitor attached to the simulation, if enabled.
+func (s *Simulation) GetMonitor() *monitoring2.Monitor {
+	return s.monitor
 }
 
-// GetServer returns nil while the simulation package is temporarily decoupled
-// from the legacy monitoring/Daisen stack.
-func (s *Simulation) GetServer() any {
-	return nil
+// GetServer is kept for compatibility with older monitoring setup code.
+// Monitoring2 does not expose a Daisen2 replay server.
+func (s *Simulation) GetServer() *daisen2.Server {
+	if s.monitor == nil {
+		return nil
+	}
+
+	return s.monitor.GetServer()
 }
 
 // GetVisTracer returns the tracer used in the simulation.
@@ -75,6 +81,10 @@ func (s *Simulation) RegisterComponent(c messaging.Component) {
 
 	if hookable, ok := c.(tracing.NamedHookable); ok {
 		tracing.CollectTrace(hookable, s.visTracer)
+	}
+
+	if s.monitor != nil {
+		s.monitor.RegisterComponent(c)
 	}
 
 	for _, p := range c.Ports() {
@@ -105,6 +115,10 @@ func (s *Simulation) GetPortByName(name string) messaging.Port {
 
 // Terminate terminates the simulation.
 func (s *Simulation) Terminate() {
+	if s.monitor != nil {
+		s.monitor.StopServer()
+	}
+
 	if s.visTracer != nil {
 		s.visTracer.Terminate()
 	}

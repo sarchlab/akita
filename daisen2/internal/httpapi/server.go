@@ -1,6 +1,5 @@
 // Package httpapi provides a trace visualization server for Akita simulations.
-// In replay mode it serves trace data from a SQLite file. Live monitoring
-// functionality is provided by the monitoring package.
+// It serves replay data from a SQLite file.
 package httpapi
 
 import (
@@ -17,7 +16,7 @@ import (
 // Server is the Daisen replay server. It reads trace data from a SQLite file
 // and serves it over HTTP for the Daisen dashboard.
 type Server struct {
-	mode        string // always "replay" for standalone; overridden by monitoring
+	mode        string
 	addr        string
 	traceReader *SQLiteTraceReader
 	fs          http.FileSystem
@@ -43,7 +42,7 @@ func NewReplayServer(sqliteFile, addr string) *Server {
 }
 
 // NewReplayServerReadOnly creates a Server with a read-only SQLite connection.
-// Used by monitoring.Monitor for concurrent trace access while DBTracer writes.
+// Used for concurrent trace access while DBTracer writes.
 func NewReplayServerReadOnly(sqliteFile string) *Server {
 	if sqliteFile == "" {
 		panic("must specify a SQLite file")
@@ -94,44 +93,21 @@ func (s *Server) setupRoutes() *http.ServeMux {
 
 	s.RegisterReplayRoutes(mux)
 
-	// In replay mode, register monitoring endpoints with 503 response.
-	monitoringPaths := []string{
-		"/api/pause",
-		"/api/continue",
-		"/api/now",
-		"/api/run",
-		"/api/tick/",
-		"/api/list_components",
-		"/api/component/",
-		"/api/field/",
-		"/api/hangdetector/buffers",
-		"/api/progress",
-		"/api/resource",
-		"/api/profile",
-		"/api/trace/start",
-		"/api/trace/end",
-		"/api/trace/is_tracing",
-	}
-
-	for _, path := range monitoringPaths {
-		mux.HandleFunc(path, liveOnlyHandler)
-	}
-
 	return mux
 }
 
 // RegisterReplayRoutes registers all replay/trace routes on the provided mux.
 // This includes the mode endpoint, trace endpoints, GPT proxy, and static
-// assets. Used by the replay server itself and by monitoring.Monitor.
+// assets. Used by the replay server itself.
 func (s *Server) RegisterReplayRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/mode", s.apiMode)
 	s.RegisterTraceRoutes(mux)
 }
 
-// RegisterTraceRoutes registers trace/data routes on the provided mux,
-// excluding the /api/mode endpoint. Used by monitoring.Monitor so it can
-// provide its own /api/mode handler that returns "live".
-func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
+// RegisterTraceAPIRoutes registers only the trace/data and assistant API routes
+// on the provided mux. It intentionally does not register static SPA routes, so
+// callers can serve their own frontend while reusing Daisen's trace APIs.
+func (s *Server) RegisterTraceAPIRoutes(mux *http.ServeMux) {
 	// Trace endpoints
 	mux.HandleFunc("/api/trace", s.httpTrace)
 	mux.HandleFunc("/api/trace_range", s.httpTraceTimeRange)
@@ -143,6 +119,12 @@ func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/gpt", s.httpGPTProxy)
 	mux.HandleFunc("/api/githubisavailable", s.httpGithubIsAvailableProxy)
 	mux.HandleFunc("/api/checkenv", s.httpCheckEnvFile)
+}
+
+// RegisterTraceRoutes registers trace/data routes and Daisen's replay SPA
+// routes on the provided mux, excluding the /api/mode endpoint.
+func (s *Server) RegisterTraceRoutes(mux *http.ServeMux) {
+	s.RegisterTraceAPIRoutes(mux)
 
 	// Static assets / SPA fallback
 	fServer := http.FileServer(s.fs)
@@ -182,13 +164,6 @@ func (s *Server) serveIndex(w http.ResponseWriter, _ *http.Request) {
 
 	_, err = w.Write(p)
 	dieOnErr(err)
-}
-
-// liveOnlyHandler returns 503 Service Unavailable for monitoring endpoints
-// that are only available in live mode.
-func liveOnlyHandler(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "endpoint only available in live mode",
-		http.StatusServiceUnavailable)
 }
 
 func dieOnErr(err error) {

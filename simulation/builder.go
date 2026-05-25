@@ -4,6 +4,7 @@ import (
 	"github.com/rs/xid"
 	"github.com/sarchlab/akita/v5/datarecording"
 
+	"github.com/sarchlab/akita/v5/monitoring2"
 	"github.com/sarchlab/akita/v5/timing"
 	"github.com/sarchlab/akita/v5/tracing"
 )
@@ -117,6 +118,14 @@ func (b Builder) createServer(s *Simulation) {
 		return
 	}
 
-	// Monitoring is temporarily disabled while simulation is decoupled from the
-	// legacy Daisen-backed monitoring package.
+	monitor := monitoring2.NewMonitor()
+	if b.monitorPort != 0 {
+		monitor.WithPortNumber(b.monitorPort)
+	}
+
+	monitor.RegisterEngine(s.engine)
+	monitor.RegisterVisTracer(s.visTracer)
+	monitor.StartServer()
+
+	s.monitor = monitor
 }
