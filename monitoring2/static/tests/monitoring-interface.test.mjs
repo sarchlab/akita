@@ -10,14 +10,16 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
   assert.match(app, /<Route index element={<Navigate to="\/progress" replace/);
   assert.match(app, /path="progress" element={<ProgressPage/);
   assert.match(app, /path="monitor" element={<LivePage/);
+  assert.match(app, /path="analysis" element={<AnalysisPage/);
   assert.match(app, /path="debug" element={<DebugPage/);
   assert.match(app, /path="profiling" element={<ProfilingPage/);
   assert.match(app, /path="task" element={<LivePage/);
   assert.match(app, /path="component" element={<LivePage/);
   assert.match(app, /path="dashboard" element={<LivePage/);
-  assert.match(layout, /Progress[\s\S]*Monitor[\s\S]*Debug[\s\S]*Profiling/);
+  assert.match(layout, /Progress[\s\S]*Monitor[\s\S]*Analysis[\s\S]*Debug[\s\S]*Profiling/);
   assert.match(layout, /Monitor/);
   assert.match(layout, /Progress/);
+  assert.match(layout, /Analysis/);
   assert.match(layout, /Debug/);
   assert.match(layout, /Profiling/);
   assert.match(layout, /role="tablist"/);
@@ -52,12 +54,16 @@ test("monitoring2 debug page supports manual component ticks", async () => {
 
 test("monitoring2 page supports buffer analysis and profiling", async () => {
   const livePage = await readFile(new URL("../src/pages/LivePage.tsx", import.meta.url), "utf8");
+  const analysisPage = await readFile(new URL("../src/pages/AnalysisPage.tsx", import.meta.url), "utf8");
   const progressPage = await readFile(new URL("../src/pages/ProgressPage.tsx", import.meta.url), "utf8");
   const profilingPage = await readFile(new URL("../src/pages/ProfilingPage.tsx", import.meta.url), "utf8");
 
-  assert.match(livePage, /Buffer Level Analysis/);
-  assert.match(livePage, /\/api\/hangdetector\/buffers/);
+  assert.doesNotMatch(livePage, /Buffer Level Analysis/);
+  assert.doesNotMatch(livePage, /\/api\/hangdetector\/buffers/);
   assert.doesNotMatch(livePage, /monitorTab ===/);
+  assert.match(analysisPage, /Analysis/);
+  assert.match(analysisPage, /Aggregate Buffer Level/);
+  assert.match(analysisPage, /\/api\/hangdetector\/buffers/);
   assert.match(progressPage, /Progress/);
   assert.match(progressPage, /\/api\/progress/);
   assert.match(profilingPage, /Profiling/);
@@ -70,6 +76,7 @@ test("monitoring2 frontend avoids replay APIs", async () => {
   const sources = await Promise.all(
     [
       "../src/App.tsx",
+      "../src/pages/AnalysisPage.tsx",
       "../src/pages/DebugPage.tsx",
       "../src/pages/LivePage.tsx",
       "../src/pages/ProgressPage.tsx",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Gauge, Pause, Play, RefreshCcw, Search } from "lucide-react";
+import { Database, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
@@ -22,12 +22,6 @@ type SethPathSegment = string;
 interface SelectedNode {
   path: SethPathSegment[];
   node: SethNode;
-}
-
-interface BufferState {
-  buffer: string;
-  level: number;
-  cap: number;
 }
 
 function rootNode(snapshot: SethSnapshot | null): SethNode | null {
@@ -147,14 +141,6 @@ function childRows(snapshot: SethSnapshot, node: SethNode) {
   return [];
 }
 
-function bufferPercent(buffer: BufferState) {
-  if (!buffer.cap) {
-    return 0;
-  }
-
-  return Math.min(1, Math.max(0, buffer.level / buffer.cap));
-}
-
 function useComponentNames() {
   const [components, setComponents] = useState<string[]>([]);
 
@@ -174,40 +160,6 @@ function useComponentNames() {
   }, [refresh]);
 
   return { components, refresh };
-}
-
-function useBuffers(sortMethod: "percent" | "level") {
-  const [buffers, setBuffers] = useState<BufferState[]>([]);
-
-  const refresh = useCallback(() => {
-    fetch(`/api/hangdetector/buffers?sort=${sortMethod}&limit=12`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((json: unknown) => {
-        setBuffers(Array.isArray(json) ? json.filter(isBufferState) : []);
-      })
-      .catch(() => setBuffers([]));
-  }, [sortMethod]);
-
-  useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, 1500);
-    return () => window.clearInterval(id);
-  }, [refresh]);
-
-  return { buffers, refresh };
-}
-
-function isBufferState(value: unknown): value is BufferState {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const buffer = value as Partial<BufferState>;
-  return (
-    typeof buffer.buffer === "string" &&
-    typeof buffer.level === "number" &&
-    typeof buffer.cap === "number"
-  );
 }
 
 function useTraceStatus() {
@@ -325,8 +277,6 @@ export default function LivePage() {
   const now = useEngineTime(500);
   const { components, refresh: refreshComponents } = useComponentNames();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
-  const [bufferSort, setBufferSort] = useState<"percent" | "level">("percent");
-  const { buffers, refresh: refreshBuffers } = useBuffers(bufferSort);
   const [filter, setFilter] = useState("");
   const [selectedComponent, setSelectedComponent] = useState("");
   const [focusPath, setFocusPath] = useState<SethPathSegment[]>([]);
@@ -388,10 +338,6 @@ export default function LivePage() {
     } catch (err) {
       setStatus(err instanceof Error ? err.message : `${label} failed`);
     }
-  };
-
-  const refreshAnalysis = () => {
-    refreshBuffers();
   };
 
   const chooseComponent = (component: string) => {
@@ -532,58 +478,6 @@ export default function LivePage() {
                     Open Field
                   </Button>
                 ) : null}
-              </section>
-
-              <section className="border-b p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <Gauge className="h-4 w-4 text-muted-foreground" />
-                  <div className="text-sm font-semibold">Buffer Level Analysis</div>
-                  <Button type="button" size="icon" variant="outline" className="ml-auto" onClick={refreshAnalysis}>
-                    <RefreshCcw />
-                  </Button>
-                </div>
-                <div className="mb-3 flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={bufferSort === "percent" ? "default" : "outline"}
-                    onClick={() => setBufferSort("percent")}
-                  >
-                    Percent
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={bufferSort === "level" ? "default" : "outline"}
-                    onClick={() => setBufferSort("level")}
-                  >
-                    Level
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {buffers.length ? (
-                    buffers.map((buffer) => {
-                      const percent = bufferPercent(buffer);
-                      return (
-                        <div key={buffer.buffer} className="rounded border bg-white p-2">
-                          <div className="flex items-center justify-between gap-2 text-xs">
-                            <span className="min-w-0 truncate font-medium">{buffer.buffer}</span>
-                            <span className="shrink-0 text-muted-foreground">
-                              {buffer.level}/{buffer.cap}
-                            </span>
-                          </div>
-                          <div className="mt-2 h-1.5 rounded-full bg-slate-200">
-                            <div className="h-1.5 rounded-full bg-amber-500" style={{ width: `${percent * 100}%` }} />
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="rounded border bg-slate-50 p-3 text-center text-xs text-muted-foreground">
-                      No buffers reported.
-                    </div>
-                  )}
-                </div>
               </section>
 
             </aside>
