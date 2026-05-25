@@ -7,13 +7,18 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
   const layout = await readFile(new URL("../src/components/Layout.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../src/pages/LivePage.tsx", import.meta.url), "utf8");
 
-  assert.match(app, /path="dashboard" element={<LivePage/);
+  assert.match(app, /<Route index element={<Navigate to="\/progress" replace/);
+  assert.match(app, /path="progress" element={<ProgressPage/);
+  assert.match(app, /path="monitor" element={<LivePage/);
+  assert.match(app, /path="debug" element={<DebugPage/);
+  assert.match(app, /path="profiling" element={<ProfilingPage/);
   assert.match(app, /path="task" element={<LivePage/);
   assert.match(app, /path="component" element={<LivePage/);
-  assert.match(app, /path="progress" element={<ProgressPage/);
-  assert.match(app, /path="profiling" element={<ProfilingPage/);
+  assert.match(app, /path="dashboard" element={<LivePage/);
+  assert.match(layout, /Progress[\s\S]*Monitor[\s\S]*Debug[\s\S]*Profiling/);
   assert.match(layout, /Monitor/);
   assert.match(layout, /Progress/);
+  assert.match(layout, /Debug/);
   assert.match(layout, /Profiling/);
   assert.match(layout, /role="tablist"/);
   assert.doesNotMatch(layout, /Dashboard|Task|Component/);
@@ -32,6 +37,17 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /\/api\/trace\/start/);
   assert.match(page, /\/api\/trace\/end/);
   assert.match(page, /\/api\/trace\/is_tracing/);
+  assert.doesNotMatch(page, /Tick Selected/);
+});
+
+test("monitoring2 debug page supports manual component ticks", async () => {
+  const page = await readFile(new URL("../src/pages/DebugPage.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /Debug/);
+  assert.match(page, /\/api\/list_components/);
+  assert.match(page, /Tick Selected/);
+  assert.match(page, /Schedule Tick/);
+  assert.match(page, /\/api\/tick\//);
 });
 
 test("monitoring2 page supports buffer analysis and profiling", async () => {
@@ -54,6 +70,7 @@ test("monitoring2 frontend avoids replay APIs", async () => {
   const sources = await Promise.all(
     [
       "../src/App.tsx",
+      "../src/pages/DebugPage.tsx",
       "../src/pages/LivePage.tsx",
       "../src/pages/ProgressPage.tsx",
       "../src/pages/ProfilingPage.tsx",

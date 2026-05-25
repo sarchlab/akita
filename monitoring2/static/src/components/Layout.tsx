@@ -1,9 +1,10 @@
-import { Activity, ListChecks, Monitor as MonitorIcon } from "lucide-react";
+import { Activity, Bug, ListChecks, Monitor as MonitorIcon } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
-  { to: "/", label: "Monitor", icon: MonitorIcon },
   { to: "/progress", label: "Progress", icon: ListChecks },
+  { to: "/monitor", label: "Monitor", icon: MonitorIcon },
+  { to: "/debug", label: "Debug", icon: Bug },
   { to: "/profiling", label: "Profiling", icon: Activity },
 ];
 
@@ -19,7 +20,7 @@ export default function Layout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === "/"}
+                end
                 role="tab"
                 className={({ isActive }) =>
                   `monitor-nav-link ${isActive ? "monitor-nav-link-active" : ""}`

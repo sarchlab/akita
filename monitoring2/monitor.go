@@ -185,6 +185,8 @@ func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/component", m.serveIndex)
 	mux.HandleFunc("/task", m.serveIndex)
 	mux.HandleFunc("/progress", m.serveIndex)
+	mux.HandleFunc("/monitor", m.serveIndex)
+	mux.HandleFunc("/debug", m.serveIndex)
 	mux.HandleFunc("/profiling", m.serveIndex)
 	mux.HandleFunc("/live", m.serveIndex)
 	mux.HandleFunc("/live/", m.serveIndex)

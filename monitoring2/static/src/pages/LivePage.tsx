@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Gauge, Pause, Play, RefreshCcw, Search, StepForward } from "lucide-react";
+import { Database, Gauge, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
@@ -416,15 +416,6 @@ export default function LivePage() {
         </Button>
         <Button type="button" size="sm" variant="outline" onClick={() => runAction("Pause", () => post("/api/pause"))}>
           <Pause /> Pause
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={!selectedComponent}
-          onClick={() => runAction("Tick", () => post(`/api/tick/${encodeURIComponent(selectedComponent)}`))}
-        >
-          <StepForward /> Tick Selected
         </Button>
         <div className="mx-2 h-6 w-px bg-border" />
         <Button
