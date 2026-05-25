@@ -68,14 +68,17 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /\/api\/progress/);
   assert.match(profilingPage, /Profiling/);
   assert.match(profilingPage, /Capture CPU Profile/);
+  assert.match(profilingPage, /Latest CPU Profile/);
+  assert.match(profilingPage, /Seconds/);
   assert.match(profilingPage, /CPU Call Graph/);
   assert.match(profilingPage, /CallGraph/);
   assert.match(profilingPage, /Resource Trend/);
   assert.match(profilingPage, /Top Functions/);
   assert.match(profilingPage, /ProfileMetricBars/);
   assert.match(profilingPage, /ResourceTrendChart/);
-  assert.match(profilingPage, /\/api\/profile/);
+  assert.match(profilingPage, /\/api\/profile\?seconds=/);
   assert.match(profilingPage, /\/api\/resource/);
+  assert.doesNotMatch(profilingPage, /RefreshCcw|Refresh/);
 });
 
 test("monitoring2 frontend avoids replay APIs", async () => {

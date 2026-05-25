@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, RefreshCcw } from "lucide-react";
+import { Activity } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 interface ResourceResponse {
@@ -93,7 +93,7 @@ function useResourceUsage() {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  return { resources, history, refresh };
+  return { resources, history };
 }
 
 function getArray(value: Record<string, unknown>, lower: string, upper: string): unknown[] {
@@ -261,14 +261,17 @@ function summarizeProfile(profile: unknown): ProfileSummary {
 }
 
 export default function ProfilingPage() {
-  const { resources, history, refresh } = useResourceUsage();
+  const { resources, history } = useResourceUsage();
+  const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   const captureProfile = async () => {
-    setProfileStatus("Capturing CPU profile...");
+    setIsCapturing(true);
+    setProfileStatus(`Capturing ${profileSeconds}s CPU profile...`);
     try {
-      const response = await fetch("/api/profile");
+      const response = await fetch(`/api/profile?seconds=${profileSeconds}`);
       if (!response.ok) {
         throw new Error(`${response.status} ${response.statusText}`);
       }
@@ -278,26 +281,14 @@ export default function ProfilingPage() {
       setProfileStatus("Profile captured");
     } catch (err) {
       setProfileStatus(err instanceof Error ? err.message : "Profile capture failed");
+    } finally {
+      setIsCapturing(false);
     }
   };
 
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
-        <header className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
-          <Activity className="h-5 w-5 text-muted-foreground" />
-          <div className="min-w-0 flex-1">
-            <h1 className="text-base font-semibold">Profiling</h1>
-            <div className="text-xs text-muted-foreground">CPU, memory, and on-demand CPU profile capture</div>
-          </div>
-          <Button type="button" size="sm" variant="outline" onClick={refresh}>
-            <RefreshCcw /> Refresh
-          </Button>
-          <Button type="button" size="sm" onClick={captureProfile}>
-            <Activity /> Capture CPU Profile
-          </Button>
-        </header>
-
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded border bg-white p-4">
             <div className="mb-3 text-sm font-semibold">Resource Usage</div>
@@ -311,7 +302,30 @@ export default function ProfilingPage() {
           </div>
 
           <div className="rounded border bg-white p-4">
-            <div className="mb-3 text-sm font-semibold">Latest CPU Profile</div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm font-semibold">Latest CPU Profile</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="text-xs text-muted-foreground" htmlFor="profile-seconds">
+                  Seconds
+                </label>
+                <select
+                  id="profile-seconds"
+                  className="h-8 rounded border border-input bg-background px-2 text-sm"
+                  value={profileSeconds}
+                  onChange={(event) => setProfileSeconds(Number(event.target.value))}
+                  disabled={isCapturing}
+                >
+                  {[1, 2, 5, 10, 30].map((seconds) => (
+                    <option key={seconds} value={seconds}>
+                      {seconds}
+                    </option>
+                  ))}
+                </select>
+                <Button type="button" size="sm" onClick={captureProfile} disabled={isCapturing}>
+                  <Activity /> Capture CPU Profile
+                </Button>
+              </div>
+            </div>
             {profileStatus ? <div className="mb-3 text-sm text-muted-foreground">{profileStatus}</div> : null}
             {profileSummary ? (
               <ProfileMetricBars summary={profileSummary} />

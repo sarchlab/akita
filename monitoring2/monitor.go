@@ -662,7 +662,22 @@ func (m *Monitor) listResources(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (m *Monitor) collectProfile(w http.ResponseWriter, _ *http.Request) {
+func (m *Monitor) collectProfile(w http.ResponseWriter, r *http.Request) {
+	seconds := 1
+	if secondsStr := r.URL.Query().Get("seconds"); secondsStr != "" {
+		secondsNumber, err := strconv.Atoi(secondsStr)
+		if err != nil || secondsNumber < 1 {
+			http.Error(w, "seconds must be a positive integer", http.StatusBadRequest)
+			return
+		}
+
+		if secondsNumber > 60 {
+			secondsNumber = 60
+		}
+
+		seconds = secondsNumber
+	}
+
 	buf := bytes.NewBuffer(nil)
 
 	err := pprof.StartCPUProfile(buf)
@@ -670,7 +685,7 @@ func (m *Monitor) collectProfile(w http.ResponseWriter, _ *http.Request) {
 		log.Panic(err)
 	}
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Duration(seconds) * time.Second)
 
 	pprof.StopCPUProfile()
 
