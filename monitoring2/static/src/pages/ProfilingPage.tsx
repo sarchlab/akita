@@ -57,7 +57,9 @@ const MAX_SECOND_SAMPLES = 60;
 const MAX_MINUTE_SAMPLES = 60;
 const CALL_GRAPH_MIN_SCALE = 0.35;
 const CALL_GRAPH_MAX_SCALE = 4;
-const CALL_GRAPH_ZOOM_STEP = 1.2;
+const CALL_GRAPH_BUTTON_ZOOM_STEP = 1.2;
+const CALL_GRAPH_WHEEL_ZOOM_RATE = 0.0012;
+const CALL_GRAPH_MAX_WHEEL_DELTA = 80;
 
 interface CallGraphViewport {
   scale: number;
@@ -612,7 +614,11 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
     const rect = wheelTarget.getBoundingClientRect();
     const anchorX = ((event.clientX - rect.left) / rect.width) * width;
     const anchorY = ((event.clientY - rect.top) / rect.height) * height;
-    const factor = event.deltaY < 0 ? CALL_GRAPH_ZOOM_STEP : 1 / CALL_GRAPH_ZOOM_STEP;
+    const wheelDelta = Math.max(
+      -CALL_GRAPH_MAX_WHEEL_DELTA,
+      Math.min(CALL_GRAPH_MAX_WHEEL_DELTA, event.deltaY),
+    );
+    const factor = Math.exp(-wheelDelta * CALL_GRAPH_WHEEL_ZOOM_RATE);
 
     zoomAround(anchorX, anchorY, factor);
   };
@@ -657,7 +663,7 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
           className="h-7 w-7"
           title="Zoom out"
           aria-label="Zoom out call graph"
-          onClick={() => zoomAround(width / 2, height / 2, 1 / CALL_GRAPH_ZOOM_STEP)}
+          onClick={() => zoomAround(width / 2, height / 2, 1 / CALL_GRAPH_BUTTON_ZOOM_STEP)}
         >
           <ZoomOut />
         </Button>
@@ -668,7 +674,7 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
           className="h-7 w-7"
           title="Zoom in"
           aria-label="Zoom in call graph"
-          onClick={() => zoomAround(width / 2, height / 2, CALL_GRAPH_ZOOM_STEP)}
+          onClick={() => zoomAround(width / 2, height / 2, CALL_GRAPH_BUTTON_ZOOM_STEP)}
         >
           <ZoomIn />
         </Button>
