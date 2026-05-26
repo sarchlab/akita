@@ -636,30 +636,24 @@ function ResourceTrendChart({
   const minutes = minuteHistory.length ? minuteHistory : [{ ...fallback, samples: 1 }];
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-300 pb-2">
-        <div className="text-xs font-semibold text-slate-950">Resource Trend</div>
-        <div className="text-xs text-slate-700">1s samples and 1min averages</div>
-      </div>
-      <div className="grid gap-3">
-        <MetricTrendFigure
-          title="CPU"
-          color="#0369a1"
-          secondHistory={seconds}
-          minuteHistory={minutes}
-          minimumMax={100}
-          valueFor={(point) => point.cpu_percent}
-          formatValue={(value) => `${value.toFixed(1)}%`}
-        />
-        <MetricTrendFigure
-          title="RSS"
-          color="#b45309"
-          secondHistory={seconds}
-          minuteHistory={minutes}
-          valueFor={(point) => point.memory_size}
-          formatValue={formatBytes}
-        />
-      </div>
+    <div className="grid gap-3">
+      <MetricTrendFigure
+        title="CPU"
+        color="#0369a1"
+        secondHistory={seconds}
+        minuteHistory={minutes}
+        minimumMax={100}
+        valueFor={(point) => point.cpu_percent}
+        formatValue={(value) => `${value.toFixed(1)}%`}
+      />
+      <MetricTrendFigure
+        title="RSS"
+        color="#b45309"
+        secondHistory={seconds}
+        minuteHistory={minutes}
+        valueFor={(point) => point.memory_size}
+        formatValue={formatBytes}
+      />
     </div>
   );
 }
