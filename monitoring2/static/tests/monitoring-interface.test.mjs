@@ -32,8 +32,14 @@ test("monitoring2 page supports component selection and tracing controls", async
   const smartValue = await readFile(new URL("../src/utils/smartValue.ts", import.meta.url), "utf8");
 
   assert.match(page, /\/api\/list_components/);
-  assert.match(page, /\/api\/component\//);
   assert.match(page, /\/api\/field\//);
+  assert.match(page, /MONITOR_SECTIONS/);
+  assert.match(page, /Ports/);
+  assert.match(page, /Spec/);
+  assert.match(page, /State/);
+  assert.match(page, /TickingComponent\.PortOwnerBase\.ports/);
+  assert.match(page, /grid h-full min-h-0 grid-rows-3 gap-3/);
+  assert.doesNotMatch(page, /\/api\/component\//);
   assert.match(page, /chooseComponent/);
   assert.match(page, /formatPicosecondsAsNanoseconds\(now\)/);
   assert.doesNotMatch(page, /smartString\(now\)/);

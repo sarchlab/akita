@@ -22,7 +22,33 @@ type SethPathSegment = string;
 interface SelectedNode {
   path: SethPathSegment[];
   node: SethNode;
+  sectionID?: MonitorSectionID;
 }
+
+type MonitorSectionID = "ports" | "spec" | "state";
+
+interface MonitorSectionConfig {
+  id: MonitorSectionID;
+  title: string;
+  fieldPaths: string[];
+}
+
+interface MonitorSectionState {
+  fieldName: string;
+  snapshot: SethSnapshot | null;
+  loading: boolean;
+  error: string | null;
+}
+
+const MONITOR_SECTIONS: MonitorSectionConfig[] = [
+  {
+    id: "ports",
+    title: "Ports",
+    fieldPaths: ["TickingComponent.PortOwnerBase.ports", "PortOwnerBase.ports"],
+  },
+  { id: "spec", title: "Spec", fieldPaths: ["Spec", "Component.Spec"] },
+  { id: "state", title: "State", fieldPaths: ["State", "Component.State"] },
+];
 
 function rootNode(snapshot: SethSnapshot | null): SethNode | null {
   if (!snapshot) {
@@ -104,6 +130,21 @@ function fieldRequestPath(componentName: string, fieldName: string) {
   return `/api/field/${encodeURIComponent(
     JSON.stringify({ comp_name: componentName, field_name: fieldName }),
   )}`;
+}
+
+function emptyMonitorSections(loading = false): Record<MonitorSectionID, MonitorSectionState> {
+  return MONITOR_SECTIONS.reduce(
+    (sections, section) => {
+      sections[section.id] = {
+        fieldName: section.fieldPaths[0],
+        snapshot: null,
+        loading,
+        error: null,
+      };
+      return sections;
+    },
+    {} as Record<MonitorSectionID, MonitorSectionState>,
+  );
 }
 
 function childRows(snapshot: SethSnapshot, node: SethNode) {
@@ -208,6 +249,7 @@ function SethRows({
   onSelect,
   onFocus,
   depth = 0,
+  framed = true,
 }: {
   snapshot: SethSnapshot;
   node: SethNode;
@@ -215,19 +257,20 @@ function SethRows({
   onSelect: (selection: SelectedNode) => void;
   onFocus: (path: SethPathSegment[]) => void;
   depth?: number;
+  framed?: boolean;
 }) {
   const rows = childRows(snapshot, node);
 
   if (!rows.length) {
     return (
-      <div className="rounded border bg-white px-3 py-2 text-sm">
+      <div className={`${framed ? "rounded border bg-white" : ""} px-3 py-2 text-sm`}>
         <span className="font-mono text-muted-foreground">{primitivePreview(node)}</span>
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded border bg-white">
+    <div className={framed ? "overflow-hidden rounded border bg-white" : "overflow-hidden"}>
       {rows.map((row) => {
         const child = nodeByID(snapshot, row.valueID);
         const childPath = [...path, row.path];
@@ -273,17 +316,60 @@ function SethRows({
   );
 }
 
+function MonitorSectionView({
+  config,
+  state,
+  onSelect,
+  onFocus,
+}: {
+  config: MonitorSectionConfig;
+  state: MonitorSectionState;
+  onSelect: (selection: SelectedNode) => void;
+  onFocus: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
+}) {
+  const root = rootNode(state.snapshot);
+
+  return (
+    <section className="flex min-h-0 flex-col overflow-hidden rounded border bg-white">
+      <div className="flex min-h-10 items-center justify-between gap-3 border-b px-3 py-2">
+        <div className="text-sm font-semibold">{config.title}</div>
+        <div className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">{state.fieldName}</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto">
+        {state.loading ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading...</div>
+        ) : state.error ? (
+          <div className="p-3 text-sm text-muted-foreground">{state.error}</div>
+        ) : root && state.snapshot ? (
+          <SethRows
+            snapshot={state.snapshot}
+            node={root}
+            path={state.fieldName.split(".")}
+            onSelect={(selection) => onSelect({ ...selection, sectionID: config.id })}
+            onFocus={(path) => onFocus(config.id, path)}
+            framed={false}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No {config.title.toLowerCase()} data.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function LivePage() {
   const now = useEngineTime(500);
   const { components, refresh: refreshComponents } = useComponentNames();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const [filter, setFilter] = useState("");
   const [selectedComponent, setSelectedComponent] = useState("");
-  const [focusPath, setFocusPath] = useState<SethPathSegment[]>([]);
-  const [snapshot, setSnapshot] = useState<SethSnapshot | null>(null);
+  const [sectionRefreshID, setSectionRefreshID] = useState(0);
+  const [sections, setSections] = useState<Record<MonitorSectionID, MonitorSectionState>>(() =>
+    emptyMonitorSections(),
+  );
   const [selected, setSelected] = useState<SelectedNode | null>(null);
-  const [loadingSnapshot, setLoadingSnapshot] = useState(false);
-  const [snapshotError, setSnapshotError] = useState<string | null>(null);
   const [status, setStatus] = useState("");
 
   useEffect(() => {
@@ -300,35 +386,89 @@ export default function LivePage() {
     return components.filter((component) => component.includes(filter));
   }, [components, filter]);
 
-  const loadComponent = useCallback((component: string, path: SethPathSegment[] = []) => {
-    if (!component) {
-      setSnapshot(null);
+  useEffect(() => {
+    if (!selectedComponent) {
+      setSections(emptyMonitorSections());
       return;
     }
 
-    setLoadingSnapshot(true);
-    setSnapshotError(null);
+    let cancelled = false;
     setSelected(null);
+    setSections(emptyMonitorSections(true));
 
-    const requestPath = path.length
-      ? fieldRequestPath(component, fieldPath(path))
-      : `/api/component/${encodeURIComponent(component)}`;
+    MONITOR_SECTIONS.forEach((section) => {
+      const loadSection = async () => {
+        let lastError: unknown = null;
 
-    fetchSnapshot(requestPath)
-      .then((nextSnapshot) => {
-        setSnapshot(nextSnapshot);
-        setFocusPath(path);
-      })
-      .catch((err: unknown) => {
-        setSnapshot(null);
-        setSnapshotError(err instanceof Error ? err.message : "Failed to load component");
-      })
-      .finally(() => setLoadingSnapshot(false));
-  }, []);
+        for (const fieldName of section.fieldPaths) {
+          try {
+            const nextSnapshot = await fetchSnapshot(fieldRequestPath(selectedComponent, fieldName));
+            if (!cancelled) {
+              setSections((previous) => ({
+                ...previous,
+                [section.id]: { fieldName, snapshot: nextSnapshot, loading: false, error: null },
+              }));
+            }
+            return;
+          } catch (err) {
+            lastError = err;
+          }
+        }
 
-  useEffect(() => {
-    loadComponent(selectedComponent, focusPath);
-  }, [focusPath, loadComponent, selectedComponent]);
+        if (!cancelled) {
+          setSections((previous) => ({
+            ...previous,
+            [section.id]: {
+              fieldName: section.fieldPaths[0],
+              snapshot: null,
+              loading: false,
+              error: lastError instanceof Error ? lastError.message : `${section.title} unavailable`,
+            },
+          }));
+        }
+      };
+
+      loadSection();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sectionRefreshID, selectedComponent]);
+
+  const loadSectionField = useCallback(
+    (sectionID: MonitorSectionID, path: SethPathSegment[]) => {
+      if (!selectedComponent) {
+        return;
+      }
+
+      const fieldName = fieldPath(path);
+      setSections((previous) => ({
+        ...previous,
+        [sectionID]: { ...previous[sectionID], fieldName, snapshot: null, loading: true, error: null },
+      }));
+
+      fetchSnapshot(fieldRequestPath(selectedComponent, fieldName))
+        .then((nextSnapshot) => {
+          setSections((previous) => ({
+            ...previous,
+            [sectionID]: { fieldName, snapshot: nextSnapshot, loading: false, error: null },
+          }));
+          setSelected(null);
+        })
+        .catch((err: unknown) => {
+          setSections((previous) => ({
+            ...previous,
+            [sectionID]: {
+              ...previous[sectionID],
+              loading: false,
+              error: err instanceof Error ? err.message : `Failed to load ${fieldName}`,
+            },
+          }));
+        });
+    },
+    [selectedComponent],
+  );
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setStatus(`${label}...`);
@@ -342,13 +482,11 @@ export default function LivePage() {
 
   const chooseComponent = (component: string) => {
     setSelectedComponent(component);
-    setFocusPath([]);
     setSelected(null);
   };
 
-  const root = rootNode(snapshot);
-  const selectedPath = selected ? fieldPath(selected.path) : fieldPath(focusPath);
-  const selectedNode = selected?.node ?? root;
+  const selectedPath = selected ? fieldPath(selected.path) : "";
+  const selectedNode = selected?.node ?? null;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-slate-50">
@@ -426,35 +564,33 @@ export default function LivePage() {
           <div className="flex min-h-12 items-center gap-3 border-b bg-white px-4 py-2">
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold">{selectedComponent || "No component selected"}</div>
-              <div className="truncate text-xs text-muted-foreground">{selectedPath || "root"}</div>
+              <div className="truncate text-xs text-muted-foreground">Ports / Spec / State</div>
             </div>
             <Button
               type="button"
               size="sm"
               variant="outline"
               disabled={!selectedComponent}
-              onClick={() => loadComponent(selectedComponent, focusPath)}
+              onClick={() => setSectionRefreshID((previous) => previous + 1)}
             >
               <RefreshCcw /> Refresh
             </Button>
           </div>
 
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_24rem] overflow-hidden">
-            <div className="min-h-0 overflow-auto bg-slate-50 p-3">
-              {loadingSnapshot ? (
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Loading...</div>
-              ) : snapshotError ? (
-                <div className="rounded border border-destructive/30 bg-white p-4 text-sm text-destructive">
-                  {snapshotError}
+            <div className="min-h-0 bg-slate-50 p-3">
+              {selectedComponent ? (
+                <div className="grid h-full min-h-0 grid-rows-3 gap-3">
+                  {MONITOR_SECTIONS.map((section) => (
+                    <MonitorSectionView
+                      key={section.id}
+                      config={section}
+                      state={sections[section.id]}
+                      onSelect={setSelected}
+                      onFocus={loadSectionField}
+                    />
+                  ))}
                 </div>
-              ) : root && snapshot ? (
-                <SethRows
-                  snapshot={snapshot}
-                  node={root}
-                  path={focusPath}
-                  onSelect={setSelected}
-                  onFocus={(path) => setFocusPath(path)}
-                />
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   Select a component.
@@ -467,14 +603,22 @@ export default function LivePage() {
                 <div className="text-sm font-semibold">Selection</div>
                 <dl className="mt-3 grid grid-cols-[5rem_1fr] gap-y-2 text-sm">
                   <dt className="text-muted-foreground">Path</dt>
-                  <dd className="min-w-0 break-all font-mono text-xs">{selectedPath || "root"}</dd>
+                  <dd className="min-w-0 break-all font-mono text-xs">{selectedPath || "-"}</dd>
                   <dt className="text-muted-foreground">Type</dt>
                   <dd className="min-w-0 break-all font-mono text-xs">{typeLabel(selectedNode)}</dd>
                   <dt className="text-muted-foreground">Value</dt>
                   <dd className="min-w-0 break-all font-mono text-xs">{primitivePreview(selectedNode)}</dd>
                 </dl>
                 {selected && isExpandableNode(selected.node) ? (
-                  <Button type="button" className="mt-4 w-full" onClick={() => setFocusPath(selected.path)}>
+                  <Button
+                    type="button"
+                    className="mt-4 w-full"
+                    onClick={() => {
+                      if (selected.sectionID) {
+                        loadSectionField(selected.sectionID, selected.path);
+                      }
+                    }}
+                  >
                     Open Field
                   </Button>
                 ) : null}
