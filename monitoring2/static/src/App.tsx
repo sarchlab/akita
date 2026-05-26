@@ -10,7 +10,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/progress" replace />} />
+        <Route index element={<Navigate to="/execution" replace />} />
+        <Route path="execution" element={<ProgressPage />} />
         <Route path="progress" element={<ProgressPage />} />
         <Route path="monitor" element={<LivePage />} />
         <Route path="analysis" element={<AnalysisPage />} />
@@ -22,11 +23,12 @@ export default function App() {
         <Route path="live" element={<LivePage />} />
         <Route path="live/dashboard" element={<LivePage />} />
         <Route path="live/components" element={<LivePage />} />
+        <Route path="live/execution" element={<ProgressPage />} />
         <Route path="live/progress" element={<ProgressPage />} />
         <Route path="live/analysis" element={<AnalysisPage />} />
         <Route path="live/debug" element={<DebugPage />} />
         <Route path="live/profiling" element={<ProfilingPage />} />
-        <Route path="*" element={<Navigate to="/progress" replace />} />
+        <Route path="*" element={<Navigate to="/execution" replace />} />
       </Route>
     </Routes>
   );

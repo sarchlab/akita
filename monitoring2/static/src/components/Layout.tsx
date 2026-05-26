@@ -2,7 +2,7 @@ import { Activity, Bug, Gauge, ListChecks, Monitor as MonitorIcon } from "lucide
 import { NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
-  { to: "/progress", label: "Progress", icon: ListChecks },
+  { to: "/execution", label: "Execution", icon: ListChecks },
   { to: "/monitor", label: "Monitor", icon: MonitorIcon },
   { to: "/analysis", label: "Analysis", icon: Gauge },
   { to: "/debug", label: "Debug", icon: Bug },

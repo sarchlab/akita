@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Database, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
@@ -216,29 +216,6 @@ function useComponentNames() {
   return { components, refresh };
 }
 
-function useTraceStatus() {
-  const [isTracing, setIsTracing] = useState(false);
-
-  const refresh = useCallback(() => {
-    fetch("/api/trace/is_tracing")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((json: unknown) => {
-        if (json && typeof json === "object" && "isTracing" in json) {
-          setIsTracing(Boolean((json as { isTracing: unknown }).isTracing));
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const id = window.setInterval(refresh, 1000);
-    return () => window.clearInterval(id);
-  }, [refresh]);
-
-  return { isTracing, refresh };
-}
-
 async function post(path: string) {
   const response = await fetch(path, { method: "POST" });
   if (!response.ok) {
@@ -438,7 +415,6 @@ function MonitorSectionView({
 export default function LivePage() {
   const now = useEngineTime(500);
   const { components, refresh: refreshComponents } = useComponentNames();
-  const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
   const [filter, setFilter] = useState("");
   const [selectedComponent, setSelectedComponent] = useState("");
   const [sectionRefreshID, setSectionRefreshID] = useState(0);
@@ -612,26 +588,8 @@ export default function LivePage() {
         <Button type="button" size="sm" variant="outline" onClick={() => runAction("Pause", () => post("/api/pause"))}>
           <Pause /> Pause
         </Button>
-        <div className="mx-2 h-6 w-px bg-border" />
-        <Button
-          type="button"
-          size="sm"
-          variant={isTracing ? "outline" : "default"}
-          onClick={() => runAction("Start tracing", () => post("/api/trace/start").then(refreshTraceStatus))}
-        >
-          <Database /> Start Tracing
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => runAction("Pause tracing", () => post("/api/trace/end").then(refreshTraceStatus))}
-        >
-          <Pause /> Pause Tracing
-        </Button>
         <div className="ml-auto text-xs text-muted-foreground">
-          Tracing: <span className="font-semibold text-foreground">{isTracing ? "on" : "off"}</span>
-          {status ? <span className="ml-3">{status}</span> : null}
+          {status ? <span>{status}</span> : null}
         </div>
       </div>
 

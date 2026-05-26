@@ -7,7 +7,8 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
   const layout = await readFile(new URL("../src/components/Layout.tsx", import.meta.url), "utf8");
   const page = await readFile(new URL("../src/pages/LivePage.tsx", import.meta.url), "utf8");
 
-  assert.match(app, /<Route index element={<Navigate to="\/progress" replace/);
+  assert.match(app, /<Route index element={<Navigate to="\/execution" replace/);
+  assert.match(app, /path="execution" element={<ProgressPage/);
   assert.match(app, /path="progress" element={<ProgressPage/);
   assert.match(app, /path="monitor" element={<LivePage/);
   assert.match(app, /path="analysis" element={<AnalysisPage/);
@@ -16,9 +17,9 @@ test("monitoring2 presents one monitor surface without product tabs", async () =
   assert.match(app, /path="task" element={<LivePage/);
   assert.match(app, /path="component" element={<LivePage/);
   assert.match(app, /path="dashboard" element={<LivePage/);
-  assert.match(layout, /Progress[\s\S]*Monitor[\s\S]*Analysis[\s\S]*Debug[\s\S]*Profiling/);
+  assert.match(layout, /Execution[\s\S]*Monitor[\s\S]*Analysis[\s\S]*Debug[\s\S]*Profiling/);
   assert.match(layout, /Monitor/);
-  assert.match(layout, /Progress/);
+  assert.match(layout, /Execution/);
   assert.match(layout, /Analysis/);
   assert.match(layout, /Debug/);
   assert.match(layout, /Profiling/);
@@ -60,11 +61,10 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(smartValue, /formatPicosecondsAsNanoseconds/);
   assert.match(smartValue, /value \/ 1000/);
   assert.match(smartValue, /ns/);
-  assert.match(page, /Start Tracing/);
-  assert.match(page, /Pause Tracing/);
-  assert.match(page, /\/api\/trace\/start/);
-  assert.match(page, /\/api\/trace\/end/);
-  assert.match(page, /\/api\/trace\/is_tracing/);
+  assert.doesNotMatch(page, /Start Tracing/);
+  assert.doesNotMatch(page, /Stop Tracing/);
+  assert.doesNotMatch(page, /Pause Tracing/);
+  assert.doesNotMatch(page, /\/api\/trace\//);
   assert.doesNotMatch(page, /Tick Selected/);
 });
 
@@ -90,8 +90,14 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(analysisPage, /Analysis/);
   assert.match(analysisPage, /Aggregate Buffer Level/);
   assert.match(analysisPage, /\/api\/hangdetector\/buffers/);
-  assert.match(progressPage, /Progress/);
+  assert.match(progressPage, /Execution/);
   assert.match(progressPage, /\/api\/progress/);
+  assert.match(progressPage, /Tracing/);
+  assert.match(progressPage, /Start Tracing/);
+  assert.match(progressPage, /Stop Tracing/);
+  assert.match(progressPage, /\/api\/trace\/start/);
+  assert.match(progressPage, /\/api\/trace\/end/);
+  assert.match(progressPage, /\/api\/trace\/is_tracing/);
   assert.match(profilingPage, /Profiling/);
   assert.match(profilingPage, /Capture CPU Profile/);
   assert.doesNotMatch(profilingPage, /Latest CPU Profile/);

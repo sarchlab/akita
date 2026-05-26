@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ListChecks, RefreshCcw } from "lucide-react";
+import { Database, ListChecks, RefreshCcw, Square } from "lucide-react";
 import { Button } from "../components/ui/button";
 
 interface ProgressBarState {
@@ -46,6 +46,36 @@ function useProgressBars() {
   return { progressBars, refresh };
 }
 
+function useTraceStatus() {
+  const [isTracing, setIsTracing] = useState(false);
+
+  const refresh = useCallback(() => {
+    fetch("/api/trace/is_tracing")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json: unknown) => {
+        if (json && typeof json === "object" && "isTracing" in json) {
+          setIsTracing(Boolean((json as { isTracing: unknown }).isTracing));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  return { isTracing, refresh };
+}
+
+async function post(path: string) {
+  const response = await fetch(path, { method: "POST" });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+}
+
 function clampPercent(value: number) {
   return Math.min(1, Math.max(0, value));
 }
@@ -68,6 +98,8 @@ function activePercent(progress: ProgressBarState) {
 
 export default function ProgressPage() {
   const { progressBars, refresh } = useProgressBars();
+  const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
+  const [traceStatus, setTraceStatus] = useState("");
 
   const totals = useMemo(
     () =>
@@ -82,13 +114,23 @@ export default function ProgressPage() {
     [progressBars],
   );
 
+  const runTraceAction = async (label: string, action: () => Promise<void>) => {
+    setTraceStatus(`${label}...`);
+    try {
+      await action();
+      setTraceStatus(`${label} complete`);
+    } catch (err) {
+      setTraceStatus(err instanceof Error ? err.message : `${label} failed`);
+    }
+  };
+
   return (
     <div className="h-full overflow-auto bg-slate-50 p-4">
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <header className="flex flex-wrap items-center gap-3 border-b bg-white px-4 py-3">
           <ListChecks className="h-5 w-5 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <h1 className="text-base font-semibold">Progress</h1>
+            <h1 className="text-base font-semibold">Execution</h1>
             <div className="text-xs text-muted-foreground">
               {progressBars.length} bars, {totals.finished}/{totals.total} finished, {totals.inProgress} in progress
             </div>
@@ -97,6 +139,34 @@ export default function ProgressPage() {
             <RefreshCcw /> Refresh
           </Button>
         </header>
+
+        <section className="rounded border bg-white p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold">Tracing</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Status: <span className="font-semibold text-foreground">{isTracing ? "on" : "off"}</span>
+                {traceStatus ? <span className="ml-3">{traceStatus}</span> : null}
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant={isTracing ? "outline" : "default"}
+              onClick={() => runTraceAction("Start tracing", () => post("/api/trace/start").then(refreshTraceStatus))}
+            >
+              <Database /> Start Tracing
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => runTraceAction("Stop tracing", () => post("/api/trace/end").then(refreshTraceStatus))}
+            >
+              <Square /> Stop Tracing
+            </Button>
+          </div>
+        </section>
 
         <section className="overflow-hidden rounded border bg-white">
           {progressBars.length ? (
