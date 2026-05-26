@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { Activity, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { Button } from "../components/ui/button";
 
@@ -483,6 +483,8 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
   const [viewport, setViewport] = useState<CallGraphViewport>(INITIAL_CALL_GRAPH_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const wheelTargetRef = useRef<HTMLDivElement | null>(null);
+  const wheelHandlerRef = useRef<((event: WheelEvent) => void) | null>(null);
 
   useEffect(() => {
     setViewport(INITIAL_CALL_GRAPH_VIEWPORT);
@@ -490,7 +492,25 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
     dragStartRef.current = null;
   }, [graph]);
 
+  useEffect(() => {
+    const wheelTarget = wheelTargetRef.current;
+    if (!wheelTarget) {
+      return;
+    }
+
+    const handleNativeWheel = (event: WheelEvent) => {
+      wheelHandlerRef.current?.(event);
+    };
+
+    wheelTarget.addEventListener("wheel", handleNativeWheel, { passive: false });
+
+    return () => {
+      wheelTarget.removeEventListener("wheel", handleNativeWheel);
+    };
+  }, [graph]);
+
   if (!graph.nodes.length) {
+    wheelHandlerRef.current = null;
     return <div className="text-sm text-muted-foreground">No call graph samples in the captured profile.</div>;
   }
 
@@ -580,10 +600,16 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
       };
     });
   };
-  const handleWheel = (event: WheelEvent<SVGSVGElement>) => {
+  wheelHandlerRef.current = (event: WheelEvent) => {
     event.preventDefault();
+    event.stopPropagation();
 
-    const rect = event.currentTarget.getBoundingClientRect();
+    const wheelTarget = wheelTargetRef.current;
+    if (!wheelTarget) {
+      return;
+    }
+
+    const rect = wheelTarget.getBoundingClientRect();
     const anchorX = ((event.clientX - rect.left) / rect.width) * width;
     const anchorY = ((event.clientY - rect.top) / rect.height) * height;
     const factor = event.deltaY < 0 ? CALL_GRAPH_ZOOM_STEP : 1 / CALL_GRAPH_ZOOM_STEP;
@@ -658,13 +684,12 @@ function CallGraph({ graph }: { graph: ProfileCallGraph }) {
           <RotateCcw />
         </Button>
       </div>
-      <div className="h-[32rem] overflow-hidden rounded border bg-white">
+      <div ref={wheelTargetRef} className="h-[32rem] overscroll-contain overflow-hidden rounded border bg-white">
         <svg
           className={`h-full w-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
           viewBox={`0 0 ${width} ${height}`}
           role="img"
           aria-label="CPU profile call graph"
-          onWheel={handleWheel}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={finishPointerPan}

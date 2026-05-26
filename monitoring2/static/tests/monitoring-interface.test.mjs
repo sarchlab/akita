@@ -77,7 +77,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /h-\[32rem\]/);
   assert.match(profilingPage, /formatSampleCount/);
   assert.match(profilingPage, /CALL_GRAPH_ZOOM_STEP/);
-  assert.match(profilingPage, /onWheel/);
+  assert.match(profilingPage, /addEventListener\("wheel"/);
+  assert.match(profilingPage, /passive: false/);
+  assert.match(profilingPage, /overscroll-contain/);
   assert.match(profilingPage, /onPointerDown/);
   assert.match(profilingPage, /ZoomIn/);
   assert.match(profilingPage, /ZoomOut/);
