@@ -91,6 +91,8 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /addEventListener\("wheel"/);
   assert.match(profilingPage, /passive: false/);
   assert.match(profilingPage, /overscroll-contain/);
+  assert.doesNotMatch(profilingPage, /rounded border bg-slate-50 p-2/);
+  assert.doesNotMatch(profilingPage, /h-\[32rem\] overscroll-contain overflow-hidden rounded border bg-white/);
   assert.match(profilingPage, /onPointerDown/);
   assert.match(profilingPage, /ZoomIn/);
   assert.match(profilingPage, /ZoomOut/);

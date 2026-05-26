@@ -892,14 +892,16 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
   };
 
   return (
-    <div className="rounded border bg-slate-50 p-2">
-      <div className="mb-2 flex items-center justify-end gap-1">
-        <div className="mr-1 font-mono text-xs text-slate-700">{Math.round(viewport.scale * 100)}%</div>
+    <div className="relative">
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+        <div className="mr-1 rounded bg-white/85 px-1.5 py-0.5 font-mono text-xs text-slate-700 shadow-sm">
+          {Math.round(viewport.scale * 100)}%
+        </div>
         <Button
           type="button"
           size="icon"
           variant="outline"
-          className="h-7 w-7"
+          className="h-7 w-7 bg-white/90"
           title="Zoom out"
           aria-label="Zoom out call graph"
           onClick={() => zoomAround(width / 2, height / 2, 1 / CALL_GRAPH_BUTTON_ZOOM_STEP)}
@@ -910,7 +912,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
           type="button"
           size="icon"
           variant="outline"
-          className="h-7 w-7"
+          className="h-7 w-7 bg-white/90"
           title="Zoom in"
           aria-label="Zoom in call graph"
           onClick={() => zoomAround(width / 2, height / 2, CALL_GRAPH_BUTTON_ZOOM_STEP)}
@@ -921,7 +923,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
           type="button"
           size="icon"
           variant="outline"
-          className="h-7 w-7"
+          className="h-7 w-7 bg-white/90"
           title="Reset view"
           aria-label="Reset call graph view"
           onClick={() => setViewport(INITIAL_CALL_GRAPH_VIEWPORT)}
@@ -929,7 +931,7 @@ function CallGraph({ graph, valueInfo }: { graph: ProfileCallGraph; valueInfo: P
           <RotateCcw />
         </Button>
       </div>
-      <div ref={wheelTargetRef} className="h-[32rem] overscroll-contain overflow-hidden rounded border bg-white">
+      <div ref={wheelTargetRef} className="h-[32rem] overscroll-contain overflow-hidden bg-white">
         <svg
           className={`h-full w-full select-none touch-none ${isPanning ? "cursor-grabbing" : "cursor-grab"}`}
           viewBox={`0 0 ${width} ${height}`}
