@@ -75,7 +75,6 @@ function formatBytes(bytes: number | null | undefined) {
 }
 
 function useResourceUsage() {
-  const [resources, setResources] = useState<ResourceResponse>({ cpu_percent: 0, memory_size: 0 });
   const [history, setHistory] = useState<ResourceHistory>({ seconds: [], minutes: [] });
 
   const refresh = useCallback(() => {
@@ -93,7 +92,6 @@ function useResourceUsage() {
         };
         const nextPoint = { ...nextResources, timestamp: Date.now() };
 
-        setResources(nextResources);
         setHistory((previous) => {
           const seconds = [...previous.seconds, nextPoint].slice(-MAX_SECOND_SAMPLES);
           const minuteTimestamp = Math.floor(nextPoint.timestamp / 60000) * 60000;
@@ -133,7 +131,7 @@ function useResourceUsage() {
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  return { resources, history };
+  return { history };
 }
 
 function getArray(value: Record<string, unknown>, lower: string, upper: string): unknown[] {
@@ -301,7 +299,7 @@ function summarizeProfile(profile: unknown): ProfileSummary {
 }
 
 export default function ProfilingPage() {
-  const { resources, history } = useResourceUsage();
+  const { history } = useResourceUsage();
   const [profileSeconds, setProfileSeconds] = useState(1);
   const [profileStatus, setProfileStatus] = useState("");
   const [profileSummary, setProfileSummary] = useState<ProfileSummary | null>(null);
@@ -331,13 +329,7 @@ export default function ProfilingPage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-4">
         <section className="grid gap-4 md:grid-cols-2">
           <div className="rounded border bg-white p-4">
-            <div className="mb-3 text-sm font-semibold">Resource Usage</div>
-            <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-sm">
-              <dt className="text-muted-foreground">CPU</dt>
-              <dd className="font-mono">{resources.cpu_percent.toFixed(1)}%</dd>
-              <dt className="text-muted-foreground">RSS</dt>
-              <dd className="font-mono">{formatBytes(resources.memory_size)}</dd>
-            </dl>
+            <div className="mb-2 text-sm font-semibold text-slate-950">Resource Usage</div>
             <ResourceTrendChart secondHistory={history.seconds} minuteHistory={history.minutes} />
           </div>
 
@@ -644,15 +636,15 @@ function ResourceTrendChart({
   const minutes = minuteHistory.length ? minuteHistory : [{ ...fallback, samples: 1 }];
 
   return (
-    <div className="mt-4 border-t pt-4">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="text-xs font-semibold">Resource Trend</div>
-        <div className="text-xs text-muted-foreground">1s samples and 1min averages</div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-300 pb-2">
+        <div className="text-xs font-semibold text-slate-950">Resource Trend</div>
+        <div className="text-xs text-slate-700">1s samples and 1min averages</div>
       </div>
       <div className="grid gap-3">
         <MetricTrendFigure
           title="CPU"
-          color="#0284c7"
+          color="#0369a1"
           secondHistory={seconds}
           minuteHistory={minutes}
           minimumMax={100}
@@ -661,7 +653,7 @@ function ResourceTrendChart({
         />
         <MetricTrendFigure
           title="RSS"
-          color="#f59e0b"
+          color="#b45309"
           secondHistory={seconds}
           minuteHistory={minutes}
           valueFor={(point) => point.memory_size}
@@ -700,13 +692,13 @@ function MetricTrendFigure({
   const chartMax = title === "CPU" ? maxValue : maxValue * 1.12;
 
   return (
-    <div className="rounded border bg-slate-50 p-3">
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="inline-flex items-center gap-2 text-xs font-semibold">
-          <span className="h-2 w-4 rounded-full" style={{ backgroundColor: color }} />
+    <section className="border-b border-slate-300 pb-3 last:border-b-0 last:pb-0">
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
+          <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
           {title}
         </div>
-        <div className="font-mono text-xs text-muted-foreground">{latestPoint?.formattedValue ?? "-"}</div>
+        <div className="font-mono text-sm font-semibold text-slate-800">{latestPoint?.formattedValue ?? "-"}</div>
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
         <TrendSegmentChart
@@ -725,7 +717,7 @@ function MetricTrendFigure({
           maxValue={chartMax}
         />
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -746,11 +738,11 @@ function TrendSegmentChart({
 }) {
   const [activePoint, setActivePoint] = useState<ActiveTrendPoint | null>(null);
   const width = 360;
-  const height = 138;
-  const chartLeft = 36;
-  const chartRight = 12;
-  const chartTop = 18;
-  const chartHeight = 74;
+  const height = 96;
+  const chartLeft = 34;
+  const chartRight = 10;
+  const chartTop = 10;
+  const chartHeight = 48;
   const chartBottom = chartTop + chartHeight;
   const chartWidth = width - chartLeft - chartRight;
   const yMax = Math.max(1, maxValue);
@@ -763,14 +755,14 @@ function TrendSegmentChart({
   const path = points.map((point, index) => `${xFor(index)},${yFor(point.value)}`).join(" ");
 
   return (
-    <div className="relative rounded border bg-white p-2">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="text-xs font-medium">{title}</div>
-        <div className="text-[10px] text-muted-foreground">{detail}</div>
+    <div className="relative min-w-0">
+      <div className="mb-0.5 flex items-center justify-between gap-2">
+        <div className="text-xs font-semibold text-slate-950">{title}</div>
+        <div className="text-[10px] text-slate-700">{detail}</div>
       </div>
       {activePoint ? (
         <div
-          className="pointer-events-none absolute z-10 min-w-40 rounded border bg-white px-2 py-1 text-xs shadow"
+          className="pointer-events-none absolute z-10 min-w-40 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 shadow"
           style={{
             left: `${Math.min(88, Math.max(12, activePoint.leftPercent))}%`,
             top: `${Math.min(85, Math.max(18, activePoint.topPercent))}%`,
@@ -778,19 +770,19 @@ function TrendSegmentChart({
           }}
         >
           <div className="font-mono font-semibold">{activePoint.formattedValue}</div>
-          <div className="text-muted-foreground">{formatTooltipTime(activePoint.timestamp)}</div>
+          <div className="text-slate-700">{formatTooltipTime(activePoint.timestamp)}</div>
           {activePoint.samples ? (
-            <div className="text-muted-foreground">{activePoint.samples} samples averaged</div>
+            <div className="text-slate-700">{activePoint.samples} samples averaged</div>
           ) : null}
         </div>
       ) : null}
-      <svg className="h-36 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
-        <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#cbd5e1" />
-        <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#cbd5e1" />
-        <text x="6" y={chartTop + 4} className="fill-slate-500 text-[10px]">
+      <svg className="h-24 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
+        <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#64748b" />
+        <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#64748b" />
+        <text x="6" y={chartTop + 4} className="fill-slate-700 text-[10px]">
           max
         </text>
-        <text x="6" y={chartTop + 18} className="fill-slate-500 text-[10px]">
+        <text x="6" y={chartTop + 17} className="fill-slate-700 text-[10px]">
           {points[0]?.formattedValue.includes("%") ? `${yMax.toFixed(0)}%` : formatBytes(yMax)}
         </text>
         {points.length > 1 ? (
@@ -798,7 +790,7 @@ function TrendSegmentChart({
             points={path}
             fill="none"
             stroke={color}
-            strokeWidth="2.5"
+            strokeWidth="2"
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -813,10 +805,10 @@ function TrendSegmentChart({
               key={`${point.timestamp}-${index}`}
               cx={x}
               cy={y}
-              r={isActive ? 4 : 2.7}
+              r={isActive ? 3.3 : 2}
               fill="#ffffff"
               stroke={color}
-              strokeWidth={isActive ? 2.5 : 2}
+              strokeWidth={isActive ? 2.4 : 1.8}
               tabIndex={0}
               aria-label={`${title} ${point.formattedValue} at ${formatTooltipTime(point.timestamp)}`}
               onFocus={() =>
@@ -849,16 +841,13 @@ function TrendSegmentChart({
 
           return (
             <g key={index}>
-              <line x1={x} x2={x} y1={chartBottom} y2={chartBottom + 4} stroke="#94a3b8" />
-              <text x={x} y={chartBottom + 18} textAnchor={anchor} className="fill-slate-500 text-[10px]">
+              <line x1={x} x2={x} y1={chartBottom} y2={chartBottom + 4} stroke="#64748b" />
+              <text x={x} y={chartBottom + 16} textAnchor={anchor} className="fill-slate-700 text-[10px]">
                 {formatChartTime(points[index].timestamp, includeSeconds)}
               </text>
             </g>
           );
         })}
-        <text x={chartLeft + chartWidth / 2} y={height - 4} textAnchor="middle" className="fill-slate-500 text-[10px]">
-          Time
-        </text>
       </svg>
     </div>
   );
