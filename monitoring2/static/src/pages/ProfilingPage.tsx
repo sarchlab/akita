@@ -1199,11 +1199,11 @@ function TrendSegmentChart({
 }) {
   const [activePoint, setActivePoint] = useState<ActiveTrendPoint | null>(null);
   const width = 360;
-  const height = 84;
+  const height = 74;
   const chartLeft = 34;
   const chartRight = 10;
-  const chartTop = 10;
-  const chartHeight = 38;
+  const chartTop = 18;
+  const chartHeight = 34;
   const chartBottom = chartTop + chartHeight;
   const chartWidth = width - chartLeft - chartRight;
   const yMax = Math.max(1, maxValue);
@@ -1237,7 +1237,7 @@ function TrendSegmentChart({
           ) : null}
         </div>
       ) : null}
-      <svg className="h-20 w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
+      <svg className="h-[4.5rem] w-full" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} resource trend`}>
         <line x1={chartLeft} x2={width - chartRight} y1={chartBottom} y2={chartBottom} stroke="#64748b" />
         <line x1={chartLeft} x2={chartLeft} y1={chartTop} y2={chartBottom} stroke="#64748b" />
         <text x="6" y={chartTop + 4} className="fill-slate-700 text-[10px]">

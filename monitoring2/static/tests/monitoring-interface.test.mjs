@@ -106,7 +106,9 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /per-minute averages/);
   assert.match(profilingPage, /TrendSegmentChart/);
   assert.match(profilingPage, /onMouseEnter/);
-  assert.match(profilingPage, /h-20 w-full/);
+  assert.match(profilingPage, /h-\[4\.5rem\] w-full/);
+  assert.match(profilingPage, /const chartTop = 18/);
+  assert.match(profilingPage, /const chartHeight = 34/);
   assert.match(profilingPage, /lg:grid-cols-2/);
   assert.match(profilingPage, /cpuActions/);
   assert.doesNotMatch(profilingPage, /Resource Trend|1s samples and 1min averages/);
