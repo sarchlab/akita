@@ -9,12 +9,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -41,6 +43,7 @@ type Monitor struct {
 	port      int
 	engine    timing.Engine
 	visTracer *tracing.DBTracer
+	tracePath string
 
 	// Internal state.
 	components       []messaging.Component
@@ -94,9 +97,9 @@ func (m *Monitor) RegisterVisTracer(tr *tracing.DBTracer) {
 	m.visTracer = tr
 }
 
-// SetTraceDBPath is kept for compatibility with older monitoring setup code.
-// Monitoring2 no longer serves replay trace data.
+// SetTraceDBPath sets the SQLite trace database path used for storage status.
 func (m *Monitor) SetTraceDBPath(path string) {
+	m.tracePath = path
 }
 
 // GetServer is kept for compatibility with older monitoring setup code.
@@ -159,6 +162,7 @@ func (m *Monitor) StartServer() {
 	mux.HandleFunc("/api/trace/start", m.apiTraceStart)
 	mux.HandleFunc("/api/trace/end", m.apiTraceEnd)
 	mux.HandleFunc("/api/trace/is_tracing", m.apiTraceIsTracing)
+	mux.HandleFunc("/api/trace/storage", m.apiTraceStorage)
 
 	m.setupStaticRoutes(mux)
 
@@ -184,6 +188,7 @@ func (m *Monitor) setupStaticRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/dashboard", m.serveIndex)
 	mux.HandleFunc("/component", m.serveIndex)
 	mux.HandleFunc("/task", m.serveIndex)
+	mux.HandleFunc("/execution", m.serveIndex)
 	mux.HandleFunc("/progress", m.serveIndex)
 	mux.HandleFunc("/monitor", m.serveIndex)
 	mux.HandleFunc("/analysis", m.serveIndex)
@@ -760,6 +765,75 @@ func (m *Monitor) apiTraceIsTracing(
 		http.Error(w, "Internal Server Error",
 			http.StatusInternalServerError)
 	}
+}
+
+type traceStorageRsp struct {
+	Path               string `json:"path"`
+	FileSizeBytes      uint64 `json:"file_size_bytes"`
+	SidecarSizeBytes   uint64 `json:"sidecar_size_bytes"`
+	TotalSizeBytes     uint64 `json:"total_size_bytes"`
+	DiskAvailableBytes uint64 `json:"disk_available_bytes"`
+	DiskTotalBytes     uint64 `json:"disk_total_bytes"`
+}
+
+func (m *Monitor) apiTraceStorage(w http.ResponseWriter, _ *http.Request) {
+	dbPath := m.tracePath
+	if dbPath == "" {
+		dbPath = "."
+	}
+
+	absPath, err := filepath.Abs(dbPath)
+	if err != nil {
+		absPath = dbPath
+	}
+
+	fileSize := pathFileSize(absPath)
+	sidecarSize := pathFileSize(absPath+"-wal") + pathFileSize(absPath+"-shm")
+	availableBytes, totalBytes := diskSpace(filepath.Dir(absPath))
+
+	response := traceStorageRsp{
+		Path:               absPath,
+		FileSizeBytes:      fileSize,
+		SidecarSizeBytes:   sidecarSize,
+		TotalSizeBytes:     fileSize + sidecarSize,
+		DiskAvailableBytes: availableBytes,
+		DiskTotalBytes:     totalBytes,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+		http.Error(w, "Internal Server Error",
+			http.StatusInternalServerError)
+	}
+}
+
+func pathFileSize(path string) uint64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+
+	if info.IsDir() {
+		return 0
+	}
+
+	return uint64(info.Size())
+}
+
+func diskSpace(path string) (availableBytes, totalBytes uint64) {
+	var stat syscall.Statfs_t
+
+	err := syscall.Statfs(path, &stat)
+	if err != nil {
+		return 0, 0
+	}
+
+	blockSize := uint64(stat.Bsize)
+
+	return stat.Bavail * blockSize, stat.Blocks * blockSize
 }
 
 // readAll is a helper to read all bytes from an http.File.

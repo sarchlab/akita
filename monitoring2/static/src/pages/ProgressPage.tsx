@@ -10,6 +10,15 @@ interface ProgressBarState {
   in_progress: number;
 }
 
+interface TraceStorageState {
+  path: string;
+  file_size_bytes: number;
+  sidecar_size_bytes: number;
+  total_size_bytes: number;
+  disk_available_bytes: number;
+  disk_total_bytes: number;
+}
+
 function isProgressBarState(value: unknown): value is ProgressBarState {
   if (!value || typeof value !== "object") {
     return false;
@@ -22,6 +31,22 @@ function isProgressBarState(value: unknown): value is ProgressBarState {
     typeof progress.total === "number" &&
     typeof progress.finished === "number" &&
     typeof progress.in_progress === "number"
+  );
+}
+
+function isTraceStorageState(value: unknown): value is TraceStorageState {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const storage = value as Partial<TraceStorageState>;
+  return (
+    typeof storage.path === "string" &&
+    typeof storage.file_size_bytes === "number" &&
+    typeof storage.sidecar_size_bytes === "number" &&
+    typeof storage.total_size_bytes === "number" &&
+    typeof storage.disk_available_bytes === "number" &&
+    typeof storage.disk_total_bytes === "number"
   );
 }
 
@@ -69,6 +94,27 @@ function useTraceStatus() {
   return { isTracing, refresh };
 }
 
+function useTraceStorage() {
+  const [storage, setStorage] = useState<TraceStorageState | null>(null);
+
+  const refresh = useCallback(() => {
+    fetch("/api/trace/storage")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((json: unknown) => {
+        setStorage(isTraceStorageState(json) ? json : null);
+      })
+      .catch(() => setStorage(null));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const id = window.setInterval(refresh, 1000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
+
+  return { storage, refresh };
+}
+
 async function post(path: string) {
   const response = await fetch(path, { method: "POST" });
   if (!response.ok) {
@@ -96,12 +142,33 @@ function activePercent(progress: ProgressBarState) {
   return clampPercent((progress.finished + progress.in_progress) / progress.total);
 }
 
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes)) {
+    return "-";
+  }
+
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unit = 0;
+
+  while (Math.abs(value) >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  return `${value.toLocaleString(undefined, {
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  })} ${units[unit]}`;
+}
+
 export default function ProgressPage() {
   const { progressBars, refresh } = useProgressBars();
   const { isTracing, refresh: refreshTraceStatus } = useTraceStatus();
+  const { storage, refresh: refreshTraceStorage } = useTraceStorage();
   const [traceStatus, setTraceStatus] = useState("");
   const traceActionLabel = isTracing ? "Stop tracing" : "Start tracing";
   const TraceActionIcon = isTracing ? Square : Play;
+  const sqliteBytes = storage?.total_size_bytes ?? storage?.file_size_bytes;
 
   const totals = useMemo(
     () =>
@@ -157,12 +224,40 @@ export default function ProgressPage() {
               variant={isTracing ? "outline" : "default"}
               onClick={() =>
                 runTraceAction(traceActionLabel, () =>
-                  post(isTracing ? "/api/trace/end" : "/api/trace/start").then(refreshTraceStatus),
+                  post(isTracing ? "/api/trace/end" : "/api/trace/start").then(() => {
+                    refreshTraceStatus();
+                    refreshTraceStorage();
+                  }),
                 )
               }
             >
               <TraceActionIcon /> {isTracing ? "Stop Tracing" : "Start Tracing"}
             </Button>
+          </div>
+          <div className="mt-4 grid gap-4 border-t pt-3 sm:grid-cols-2">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-muted-foreground">SQLite file</div>
+              <div className="mt-1 font-mono text-lg font-semibold">
+                {sqliteBytes == null ? "-" : formatBytes(sqliteBytes)}
+              </div>
+              {storage && storage.sidecar_size_bytes > 0 ? (
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Main {formatBytes(storage.file_size_bytes)}, WAL/SHM {formatBytes(storage.sidecar_size_bytes)}
+                </div>
+              ) : null}
+              <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground" title={storage?.path ?? ""}>
+                {storage?.path ?? "No trace database reported"}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">Available disk</div>
+              <div className="mt-1 font-mono text-lg font-semibold">
+                {storage ? formatBytes(storage.disk_available_bytes) : "-"}
+              </div>
+              <div className="mt-1 text-[11px] text-muted-foreground">
+                {storage ? `${formatBytes(storage.disk_total_bytes)} total` : "Filesystem unavailable"}
+              </div>
+            </div>
           </div>
         </section>
 

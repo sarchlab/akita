@@ -101,6 +101,11 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(progressPage, /\/api\/trace\/start/);
   assert.match(progressPage, /\/api\/trace\/end/);
   assert.match(progressPage, /\/api\/trace\/is_tracing/);
+  assert.match(progressPage, /\/api\/trace\/storage/);
+  assert.match(progressPage, /TraceStorageState/);
+  assert.match(progressPage, /SQLite file/);
+  assert.match(progressPage, /Available disk/);
+  assert.match(progressPage, /formatBytes/);
   assert.match(profilingPage, /Profiling/);
   assert.match(profilingPage, /Capture CPU Profile/);
   assert.doesNotMatch(profilingPage, /Latest CPU Profile/);

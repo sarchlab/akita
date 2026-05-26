@@ -125,6 +125,7 @@ func (b Builder) createServer(s *Simulation) {
 
 	monitor.RegisterEngine(s.engine)
 	monitor.RegisterVisTracer(s.visTracer)
+	monitor.SetTraceDBPath(s.outputPath + ".sqlite3")
 	monitor.StartServer()
 
 	s.monitor = monitor
