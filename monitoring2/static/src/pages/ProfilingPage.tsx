@@ -1151,7 +1151,7 @@ function MetricTrendFigure({
 
   return (
     <section className="min-w-0 border-b border-slate-300 pb-3 last:border-b-0 last:pb-0 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3 lg:last:border-r-0 lg:last:pr-0">
-      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-950">
             <span className="h-2 w-5 rounded-full" style={{ backgroundColor: color }} />
@@ -1163,19 +1163,19 @@ function MetricTrendFigure({
       </div>
       <div className="grid gap-3 xl:grid-cols-2">
         <TrendSegmentChart
+          title="Last 60 minutes"
+          detail={`${minutePoints.length}/${MAX_MINUTE_SAMPLES} per-minute averages`}
+          points={minutePoints}
+          color={color}
+          maxValue={chartMax}
+        />
+        <TrendSegmentChart
           title="Last minute"
           detail={`${secondPoints.length}/${MAX_SECOND_SAMPLES} per-second samples`}
           points={secondPoints}
           color={color}
           maxValue={chartMax}
           includeSeconds
-        />
-        <TrendSegmentChart
-          title="Last 60 minutes"
-          detail={`${minutePoints.length}/${MAX_MINUTE_SAMPLES} per-minute averages`}
-          points={minutePoints}
-          color={color}
-          maxValue={chartMax}
         />
       </div>
     </section>

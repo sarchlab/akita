@@ -104,6 +104,8 @@ test("monitoring2 page supports buffer analysis and profiling", async () => {
   assert.match(profilingPage, /per-second samples/);
   assert.match(profilingPage, /Last 60 minutes/);
   assert.match(profilingPage, /per-minute averages/);
+  assert.match(profilingPage, /mb-2 flex flex-wrap items-center justify-between gap-2/);
+  assert.match(profilingPage, /title="Last 60 minutes"[\s\S]*title="Last minute"/);
   assert.match(profilingPage, /TrendSegmentChart/);
   assert.match(profilingPage, /onMouseEnter/);
   assert.match(profilingPage, /h-\[4\.5rem\] w-full/);
