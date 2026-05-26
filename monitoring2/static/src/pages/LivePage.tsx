@@ -33,11 +33,18 @@ interface MonitorSectionConfig {
   fieldPaths: string[];
 }
 
+interface ExpandedFieldState {
+  snapshot: SethSnapshot | null;
+  loading: boolean;
+  error: string | null;
+}
+
 interface MonitorSectionState {
   fieldName: string;
   snapshot: SethSnapshot | null;
   loading: boolean;
   error: string | null;
+  expanded: Record<string, ExpandedFieldState>;
 }
 
 const MONITOR_SECTIONS: MonitorSectionConfig[] = [
@@ -140,6 +147,7 @@ function emptyMonitorSections(loading = false): Record<MonitorSectionID, Monitor
         snapshot: null,
         loading,
         error: null,
+        expanded: {},
       };
       return sections;
     },
@@ -248,6 +256,7 @@ function SethRows({
   path,
   onSelect,
   onFocus,
+  expandedFields = {},
   depth = 0,
   framed = true,
 }: {
@@ -256,6 +265,7 @@ function SethRows({
   path: SethPathSegment[];
   onSelect: (selection: SelectedNode) => void;
   onFocus: (path: SethPathSegment[]) => void;
+  expandedFields?: Record<string, ExpandedFieldState>;
   depth?: number;
   framed?: boolean;
 }) {
@@ -274,6 +284,9 @@ function SethRows({
       {rows.map((row) => {
         const child = nodeByID(snapshot, row.valueID);
         const childPath = [...path, row.path];
+        const childPathID = fieldPath(childPath);
+        const expandedField = expandedFields[childPathID];
+        const expandedRoot = rootNode(expandedField?.snapshot ?? null);
         const expandable = isExpandableNode(child);
         const nested = child && isContainerNode(child) && child.v !== undefined && depth < 2;
 
@@ -290,13 +303,33 @@ function SethRows({
                 {typeLabel(child)}
               </span>
               {expandable ? (
-                <span className="text-xs font-medium text-primary">Open</span>
+                <span className="text-xs font-medium text-primary">{expandedField ? "Opened" : "Open"}</span>
               ) : (
                 <span className="max-w-64 truncate text-right font-mono text-xs text-slate-700">
                   {primitivePreview(child)}
                 </span>
               )}
             </button>
+            {expandedField ? (
+              <div className="border-t bg-slate-50/60 p-2 pl-6">
+                {expandedField.loading ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+                ) : expandedField.error ? (
+                  <div className="px-3 py-2 text-sm text-muted-foreground">{expandedField.error}</div>
+                ) : expandedRoot && expandedField.snapshot ? (
+                  <SethRows
+                    snapshot={expandedField.snapshot}
+                    node={expandedRoot}
+                    path={childPath}
+                    onSelect={onSelect}
+                    onFocus={onFocus}
+                    expandedFields={expandedFields}
+                    depth={depth + 1}
+                    framed={framed}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             {nested ? (
               <div className="border-t bg-slate-50/60 p-2 pl-6">
                 <SethRows
@@ -305,6 +338,7 @@ function SethRows({
                   path={childPath}
                   onSelect={onSelect}
                   onFocus={onFocus}
+                  expandedFields={expandedFields}
                   depth={depth + 1}
                   framed={framed}
                 />
@@ -321,12 +355,12 @@ function MonitorSectionView({
   config,
   state,
   onSelect,
-  onFocus,
+  onOpenField,
 }: {
   config: MonitorSectionConfig;
   state: MonitorSectionState;
   onSelect: (selection: SelectedNode) => void;
-  onFocus: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
+  onOpenField: (sectionID: MonitorSectionID, path: SethPathSegment[]) => void;
 }) {
   const root = rootNode(state.snapshot);
 
@@ -347,7 +381,8 @@ function MonitorSectionView({
             node={root}
             path={state.fieldName.split(".")}
             onSelect={(selection) => onSelect({ ...selection, sectionID: config.id })}
-            onFocus={(path) => onFocus(config.id, path)}
+            onFocus={(path) => onOpenField(config.id, path)}
+            expandedFields={state.expanded}
             framed={false}
           />
         ) : (
@@ -407,7 +442,7 @@ export default function LivePage() {
             if (!cancelled) {
               setSections((previous) => ({
                 ...previous,
-                [section.id]: { fieldName, snapshot: nextSnapshot, loading: false, error: null },
+                [section.id]: { fieldName, snapshot: nextSnapshot, loading: false, error: null, expanded: {} },
               }));
             }
             return;
@@ -424,6 +459,7 @@ export default function LivePage() {
               snapshot: null,
               loading: false,
               error: lastError instanceof Error ? lastError.message : `${section.title} unavailable`,
+              expanded: {},
             },
           }));
         }
@@ -437,7 +473,7 @@ export default function LivePage() {
     };
   }, [sectionRefreshID, selectedComponent]);
 
-  const loadSectionField = useCallback(
+  const openSectionField = useCallback(
     (sectionID: MonitorSectionID, path: SethPathSegment[]) => {
       if (!selectedComponent) {
         return;
@@ -446,24 +482,41 @@ export default function LivePage() {
       const fieldName = fieldPath(path);
       setSections((previous) => ({
         ...previous,
-        [sectionID]: { ...previous[sectionID], fieldName, snapshot: null, loading: true, error: null },
+        [sectionID]: {
+          ...previous[sectionID],
+          expanded: {
+            ...previous[sectionID].expanded,
+            [fieldName]: { snapshot: null, loading: true, error: null },
+          },
+        },
       }));
 
       fetchSnapshot(fieldRequestPath(selectedComponent, fieldName))
         .then((nextSnapshot) => {
           setSections((previous) => ({
             ...previous,
-            [sectionID]: { fieldName, snapshot: nextSnapshot, loading: false, error: null },
+            [sectionID]: {
+              ...previous[sectionID],
+              expanded: {
+                ...previous[sectionID].expanded,
+                [fieldName]: { snapshot: nextSnapshot, loading: false, error: null },
+              },
+            },
           }));
-          setSelected(null);
         })
         .catch((err: unknown) => {
           setSections((previous) => ({
             ...previous,
             [sectionID]: {
               ...previous[sectionID],
-              loading: false,
-              error: err instanceof Error ? err.message : `Failed to load ${fieldName}`,
+              expanded: {
+                ...previous[sectionID].expanded,
+                [fieldName]: {
+                  snapshot: null,
+                  loading: false,
+                  error: err instanceof Error ? err.message : `Failed to load ${fieldName}`,
+                },
+              },
             },
           }));
         });
@@ -587,7 +640,7 @@ export default function LivePage() {
                       config={section}
                       state={sections[section.id]}
                       onSelect={setSelected}
-                      onFocus={loadSectionField}
+                      onOpenField={openSectionField}
                     />
                   ))}
                 </div>
@@ -615,7 +668,7 @@ export default function LivePage() {
                     className="mt-4 w-full"
                     onClick={() => {
                       if (selected.sectionID) {
-                        loadSectionField(selected.sectionID, selected.path);
+                        openSectionField(selected.sectionID, selected.path);
                       }
                     }}
                   >
