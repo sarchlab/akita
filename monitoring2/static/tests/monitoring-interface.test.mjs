@@ -45,7 +45,10 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /openSectionField/);
   assert.match(page, /withoutExpandedSubtree/);
   assert.match(page, /disabled=\{!canToggle\}/);
-  assert.match(page, /\? "Close"/);
+  assert.match(page, /ChevronRight/);
+  assert.match(page, /ChevronDown/);
+  assert.match(page, /ActionIcon/);
+  assert.match(page, /aria-label=\{`\$\{actionLabel\}/);
   assert.doesNotMatch(page, /Open Field/);
   assert.doesNotMatch(page, /onDoubleClick/);
   assert.doesNotMatch(page, /grid h-full min-h-0 grid-rows-3 gap-3/);

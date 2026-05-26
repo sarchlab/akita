@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Database, Pause, Play, RefreshCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Database, LoaderCircle, Pause, Play, RefreshCcw, Search } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useEngineTime } from "../hooks/useEngineTime";
@@ -294,13 +294,20 @@ function SethRows({
         const expandedRoot = rootNode(expandedField?.snapshot ?? null);
         const expandable = isExpandableNode(child);
         const nested = child && isContainerNode(child) && child.v !== undefined && depth < 2;
-        const openLabel = expandedField?.loading
-          ? "Loading..."
+        const actionLabel = expandedField?.loading
+          ? "Loading"
           : expandedField?.error
             ? "Retry"
             : expandedField
               ? "Close"
               : "Open";
+        const ActionIcon = expandedField?.loading
+          ? LoaderCircle
+          : expandedField?.error
+            ? RefreshCcw
+            : expandedField
+              ? ChevronDown
+              : ChevronRight;
         const canToggle = expandable && !expandedField?.loading;
 
         return (
@@ -328,7 +335,9 @@ function SethRows({
               {expandable ? (
                 <button
                   type="button"
-                  className="justify-self-end rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+                  aria-label={`${actionLabel} ${childPathID}`}
+                  title={actionLabel}
+                  className="inline-flex h-7 w-7 items-center justify-center justify-self-end rounded text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
                   disabled={!canToggle}
                   onClick={() => {
                     if (child) {
@@ -337,7 +346,7 @@ function SethRows({
                     }
                   }}
                 >
-                  {openLabel}
+                  <ActionIcon className={`h-4 w-4 ${expandedField?.loading ? "animate-spin" : ""}`} />
                 </button>
               ) : null}
             </div>
