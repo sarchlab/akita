@@ -39,7 +39,10 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /State/);
   assert.doesNotMatch(page, /Ports \/ Spec \/ State/);
   assert.match(page, /TickingComponent\.PortOwnerBase\.ports/);
-  assert.match(page, /grid h-full min-h-0 grid-rows-3 gap-3/);
+  assert.match(page, /border-b last:border-b-0/);
+  assert.match(page, /min-h-0 overflow-auto bg-white/);
+  assert.doesNotMatch(page, /grid h-full min-h-0 grid-rows-3 gap-3/);
+  assert.doesNotMatch(page, /flex min-h-0 flex-col overflow-hidden rounded border bg-white/);
   assert.doesNotMatch(page, /\/api\/component\//);
   assert.match(page, /chooseComponent/);
   assert.match(page, /formatPicosecondsAsNanoseconds\(now\)/);
