@@ -43,6 +43,9 @@ test("monitoring2 page supports component selection and tracing controls", async
   assert.match(page, /min-h-0 overflow-auto bg-white/);
   assert.match(page, /expandedFields/);
   assert.match(page, /openSectionField/);
+  assert.match(page, /disabled=\{!canOpen\}/);
+  assert.doesNotMatch(page, /Open Field/);
+  assert.doesNotMatch(page, /onDoubleClick/);
   assert.doesNotMatch(page, /grid h-full min-h-0 grid-rows-3 gap-3/);
   assert.doesNotMatch(page, /flex min-h-0 flex-col overflow-hidden rounded border bg-white/);
   assert.doesNotMatch(page, /\/api\/component\//);

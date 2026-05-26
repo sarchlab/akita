@@ -22,7 +22,6 @@ type SethPathSegment = string;
 interface SelectedNode {
   path: SethPathSegment[];
   node: SethNode;
-  sectionID?: MonitorSectionID;
 }
 
 type MonitorSectionID = "ports" | "spec" | "state";
@@ -289,27 +288,53 @@ function SethRows({
         const expandedRoot = rootNode(expandedField?.snapshot ?? null);
         const expandable = isExpandableNode(child);
         const nested = child && isContainerNode(child) && child.v !== undefined && depth < 2;
+        const openLabel = expandedField?.loading
+          ? "Loading..."
+          : expandedField?.error
+            ? "Retry"
+            : expandedField
+              ? "Opened"
+              : "Open";
+        const canOpen = expandable && !expandedField?.loading && (!expandedField || expandedField.error);
 
         return (
           <div key={`${fieldPath(childPath)}-${row.valueID}`} className="border-b last:border-b-0">
-            <button
-              type="button"
-              className="grid w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_auto] items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
-              onClick={() => child && onSelect({ path: childPath, node: child })}
-              onDoubleClick={() => expandable && onFocus(childPath)}
-            >
-              <span className="min-w-0 truncate font-medium">{row.label}</span>
-              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                {typeLabel(child)}
-              </span>
-              {expandable ? (
-                <span className="text-xs font-medium text-primary">{expandedField ? "Opened" : "Open"}</span>
-              ) : (
-                <span className="max-w-64 truncate text-right font-mono text-xs text-slate-700">
-                  {primitivePreview(child)}
+            <div className="grid w-full grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_auto] items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
+              <button
+                type="button"
+                className={`grid min-w-0 items-center gap-3 text-left ${
+                  expandable
+                    ? "col-span-2 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)]"
+                    : "col-span-3 grid-cols-[minmax(8rem,16rem)_minmax(10rem,1fr)_auto]"
+                }`}
+                onClick={() => child && onSelect({ path: childPath, node: child })}
+              >
+                <span className="min-w-0 truncate font-medium">{row.label}</span>
+                <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
+                  {typeLabel(child)}
                 </span>
-              )}
-            </button>
+                {!expandable ? (
+                  <span className="max-w-64 truncate text-right font-mono text-xs text-slate-700">
+                    {primitivePreview(child)}
+                  </span>
+                ) : null}
+              </button>
+              {expandable ? (
+                <button
+                  type="button"
+                  className="justify-self-end rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+                  disabled={!canOpen}
+                  onClick={() => {
+                    if (child) {
+                      onSelect({ path: childPath, node: child });
+                      onFocus(childPath);
+                    }
+                  }}
+                >
+                  {openLabel}
+                </button>
+              ) : null}
+            </div>
             {expandedField ? (
               <div className="border-t bg-slate-50/60 p-2 pl-6">
                 {expandedField.loading ? (
@@ -380,7 +405,7 @@ function MonitorSectionView({
             snapshot={state.snapshot}
             node={root}
             path={state.fieldName.split(".")}
-            onSelect={(selection) => onSelect({ ...selection, sectionID: config.id })}
+            onSelect={onSelect}
             onFocus={(path) => onOpenField(config.id, path)}
             expandedFields={state.expanded}
             framed={false}
@@ -662,19 +687,6 @@ export default function LivePage() {
                   <dt className="text-muted-foreground">Value</dt>
                   <dd className="min-w-0 break-all font-mono text-xs">{primitivePreview(selectedNode)}</dd>
                 </dl>
-                {selected && isExpandableNode(selected.node) ? (
-                  <Button
-                    type="button"
-                    className="mt-4 w-full"
-                    onClick={() => {
-                      if (selected.sectionID) {
-                        openSectionField(selected.sectionID, selected.path);
-                      }
-                    }}
-                  >
-                    Open Field
-                  </Button>
-                ) : null}
               </section>
 
             </aside>
